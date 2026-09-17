@@ -1,0 +1,130 @@
+.message-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  min-height: 24px;
+  margin-top: 4px;
+}
+/* Reserve the row so revealing actions never shifts the conversation. */
+.message-actions[data-visibility="on-hover"] {
+  opacity: 0;
+  pointer-events: none;
+}
+.message-body:is(:hover, :focus-within) > .message-actions,
+.office-bubble-body:is(:hover, :focus-within) > .message-actions,
+.message-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .message-actions[data-visibility="on-hover"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.message-actions[data-user="true"] {
+  justify-content: flex-end;
+}
+.message[data-kind="userMessage"] .message-body,
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .message-body {
+  flex-direction: column;
+  align-items: flex-end;
+}
+.message-actions button.message-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.message-actions button:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+.message-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.message-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.message-actions button svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.6;
+}
+.message-action-status {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.message-action-status:empty {
+  display: none;
+}
+.message-replay-failure {
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.message-inline-editor {
+  width: min(560px, 100%);
+  min-width: 0;
+  margin-inline-start: auto;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  color: var(--text);
+}
+.message-inline-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  max-height: min(320px, 45dvh);
+  resize: vertical;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.message-inline-editor textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.message-inline-editor footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.message-inline-editor [role="alert"] {
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.message-inline-editor .message-edit-hint {
+  margin: 10px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: left;
+}

@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { installProcessShutdown } from "@crewon/process-lifecycle";
 
 import {
   createDeviceGatewayDispatchStoresFromEnvironment,
@@ -150,15 +151,16 @@ const server = new DeviceGatewayServer({
 });
 const listen = resolveDeviceGatewayListenConfig(process.env, runtimeIdentity);
 const address = await server.listen(listen.host, listen.port);
+installProcessShutdown({
+  host: process,
+  close: () => server.close(),
+  reportFailure: () => {
+    process.stderr.write("CrewON Device Gateway shutdown failed\n");
+  },
+});
 process.stdout.write(
   `${deviceGatewayReadinessLine(address, runtimeIdentity)}\n`,
 );
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
-    void server.close().finally(() => process.exit(0));
-  });
-}
-
 async function readBoundedFile(
   path: string,
   maxBytes: number,

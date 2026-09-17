@@ -58,6 +58,11 @@ export class InMemoryOfficeStore implements OfficeDefinitionStore {
   }
 
   async loadOfficeDefinition(locator: OfficeLocator) {
+    return this.loadWithinCommit(locator);
+  }
+
+  /** In-memory compound commits must not yield between validation and publication. */
+  loadWithinCommit(locator: OfficeLocator): OfficeDefinition | null {
     const value = this.#definitions.get(locator.officeVersionId);
     return value?.tenantId === locator.tenantId &&
       value.spaceId === locator.spaceId

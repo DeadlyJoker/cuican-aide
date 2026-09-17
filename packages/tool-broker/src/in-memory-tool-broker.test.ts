@@ -7,6 +7,8 @@ import { canonicalActionIntent } from "@crewon/contracts";
 import { InMemoryToolBroker } from "./in-memory-tool-broker.ts";
 import {
   ToolBrokerError,
+  ToolExecutionUnknownOutcomeError,
+  type ToolExecutionResultAcknowledgement,
   type ToolExecutionCommand,
   type ToolExecutionPolicy,
   type ToolInvocation,
@@ -343,6 +345,153 @@ test("requires a digest-bound approval proof for every per-action Provider call"
   };
   assert.equal((await broker.execute(approved, signal())).status, "completed");
 });
+
+test("releases committed results across thousands of executions without retaining tombstones", async () => {
+  let executions = 0;
+  const broker = new InMemoryToolBroker(
+    [definition("fixture_reader")],
+    new Map([
+      [
+        "function:fixture_reader",
+        async () => {
+          executions += 1;
+          return { output: "x".repeat(64 * 1024) };
+        },
+      ],
+    ]),
+    new Map([["function:fixture_reader", policy("readOnly", "replaySafe")]]),
+  );
+  for (let index = 0; index < 2_000; index += 1) {
+    const execution = command({
+      name: "fixture_reader",
+      runId: `run-${index}`,
+      executionId: `execution-${index}`,
+      idempotencyKey: `key-${index}`,
+      callId: `call-${index}`,
+    });
+    const result = await broker.execute(execution, signal());
+    assert.equal(broker.retainedExecutionCount, 1);
+    assert.deepEqual(await broker.reconcile(execution, signal()), result);
+    assert.deepEqual(
+      broker.retainedExecutionResults({ runId: execution.runId, limit: 1 }),
+      [
+        {
+          executionId: execution.executionId,
+          idempotencyKey: execution.idempotencyKey,
+          actionDigest: execution.actionDigest,
+          kind: execution.kind,
+          name: execution.name,
+          status: "completed",
+        },
+      ],
+    );
+    const acknowledgement = committedResult(
+      execution,
+      result.providerReceiptId,
+    );
+    broker.acknowledgeExecutionResult(acknowledgement);
+    broker.acknowledgeExecutionResult(acknowledgement);
+    assert.equal(broker.retainedExecutionCount, 0);
+    assert.deepEqual(
+      broker.retainedExecutionResults({ runId: execution.runId, limit: 1 }),
+      [],
+    );
+  }
+  assert.equal(executions, 2_000);
+});
+
+test("rejects premature or mismatched acknowledgements and keeps the original result", async () => {
+  let finish!: () => void;
+  const broker = new InMemoryToolBroker(
+    [definition("fixture_reader")],
+    new Map([
+      [
+        "function:fixture_reader",
+        async () => {
+          await new Promise<void>((resolve) => {
+            finish = resolve;
+          });
+          return { output: "retained" };
+        },
+      ],
+    ]),
+    new Map([["function:fixture_reader", policy("readOnly", "replaySafe")]]),
+  );
+  const execution = command({ name: "fixture_reader" });
+  const waiting = broker.execute(execution, signal());
+  const acknowledgement = committedResult(execution, "in-memory:execution-1");
+  assert.throws(
+    () => broker.acknowledgeExecutionResult(acknowledgement),
+    hasCode("tool_result_acknowledgement_mismatch"),
+  );
+  finish();
+  const result = await waiting;
+  for (const patch of [
+    { executionId: "different" },
+    { providerReceiptId: "different" },
+    { status: "canceled" as const },
+  ]) {
+    assert.throws(
+      () => broker.acknowledgeExecutionResult({ ...acknowledgement, ...patch }),
+      hasCode("tool_result_acknowledgement_mismatch"),
+    );
+    assert.equal(broker.retainedExecutionCount, 1);
+  }
+  assert.throws(
+    () =>
+      broker.acknowledgeExecutionResult({
+        ...acknowledgement,
+        actionDigest: `sha256:${"0".repeat(64)}`,
+      }),
+    hasCode("tool_result_acknowledgement_invalid"),
+  );
+  assert.deepEqual(await broker.reconcile(execution, signal()), result);
+  broker.acknowledgeExecutionResult(acknowledgement);
+  assert.equal(broker.retainedExecutionCount, 0);
+});
+
+test("does not discard unknown mutation outcomes as canceled or completed", async () => {
+  const mutation = policy("mutation", "reconcilable");
+  const broker = new InMemoryToolBroker(
+    [definition("fixture_writer")],
+    new Map([
+      [
+        "function:fixture_writer",
+        async () => {
+          throw new ToolExecutionUnknownOutcomeError();
+        },
+      ],
+    ]),
+    new Map([["function:fixture_writer", mutation]]),
+  );
+  const execution = command({ name: "fixture_writer" }, mutation);
+  const result = await broker.execute(execution, signal());
+  assert.equal(result.status, "unknownOutcome");
+  assert.throws(
+    () =>
+      broker.acknowledgeExecutionResult({
+        ...committedResult(execution, null),
+        status: "canceled",
+      }),
+    hasCode("tool_result_acknowledgement_mismatch"),
+  );
+  assert.equal(broker.retainedExecutionCount, 1);
+  assert.deepEqual(await broker.reconcile(execution, signal()), result);
+});
+
+function committedResult(
+  execution: ToolExecutionCommand,
+  providerReceiptId: string | null,
+): ToolExecutionResultAcknowledgement {
+  return {
+    executionId: execution.executionId,
+    idempotencyKey: execution.idempotencyKey,
+    actionDigest: execution.actionDigest,
+    actionIntent: execution.actionIntent,
+    status: "completed",
+    providerReceiptId,
+  };
+}
 
 function invocation(overrides: Partial<ToolInvocation> = {}): ToolInvocation {
   return {

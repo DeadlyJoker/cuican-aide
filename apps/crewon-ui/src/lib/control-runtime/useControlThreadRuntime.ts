@@ -27,6 +27,10 @@ import {
   type ControlRunPlanProjectionState,
 } from "./controlRunPlanProjection";
 import type { ControlToolApprovalRequest } from "./controlToolApprovalPresentation";
+import { createControlTeamGuiObservationCollector } from "./controlTeamGuiObservation";
+import type { ControlTeamProgress } from "./controlTeamProgress";
+import { mergeThreadMetadata } from "../thread/threadCatalogWorkingSet";
+import { transcriptWindow } from "./controlTranscriptWindow";
 
 type ThreadSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
@@ -37,15 +41,13 @@ export function useControlThreadRuntime(params: {
   onExecutionIntentMismatch?: (threadId: string, runId: string) => void;
   onToolApprovalRequired?: (request: ControlToolApprovalRequest) => void;
   onToolApprovalResolved?: (threadId: string, runId: string) => void;
+  resetStreamingText: (threadId: string) => void;
   selectedThreadId: string | null;
   selectedThreadIdRef: MutableRefObject<string | null>;
   setActiveTurnByThread: (
     updater: (current: Record<string, string>) => Record<string, string>,
   ) => void;
   setSelectedThreadId: (threadId: string | null) => void;
-  setStreamingTextByThread: (
-    updater: (current: Record<string, string>) => Record<string, string>,
-  ) => void;
   setThreadGoal: (goal: ThreadGoalView | null) => void;
   setNotice: (notice: NoticeState | null) => void;
   setThreads: ThreadSetter;
@@ -59,6 +61,7 @@ export function useControlThreadRuntime(params: {
   runPlanByRunId: ControlRunPlanProjectionState;
   runtime: ControlThreadRuntime | null;
   threadGoal: ThreadGoalView | null;
+  teamProgressByThread: Readonly<Record<string, ControlTeamProgress>>;
 }> {
   const manageThreadsRef = useRef(params.manageThreads);
   manageThreadsRef.current = params.manageThreads;
@@ -73,7 +76,11 @@ export function useControlThreadRuntime(params: {
     useState<ControlRunPlanProjectionState>({});
   const runPlanByRunIdRef = useRef<ControlRunPlanProjectionState>({});
   const [runtime, setRuntime] = useState<ControlThreadRuntime | null>(null);
+  const [teamProgressByThread, setTeamProgressByThread] = useState<
+    Record<string, ControlTeamProgress>
+  >({});
   useEffect(() => {
+    setTeamProgressByThread({});
     runPlanByRunIdRef.current = {};
     setRunPlanByRunId({});
     if (params.client === null) {
@@ -83,18 +90,51 @@ export function useControlThreadRuntime(params: {
     // React StrictMode replays effect setup and cleanup in development. Construct the runtime
     // inside the effect so the replay gets a fresh instance instead of reconnecting one that the
     // preceding cleanup permanently closed.
+    const teamObservation = createControlTeamGuiObservationCollector({
+      client: params.client,
+    });
     let control: ControlThreadRuntime;
     control = new ControlThreadRuntime(
       { client: params.client },
       {
+        onTeamProgress: (threadId, progress) => {
+          if (!manageThreadsRef.current) return;
+          setTeamProgressByThread((current) => {
+            const next = { ...current };
+            if (progress === null) delete next[threadId];
+            else next[threadId] = progress;
+            return next;
+          });
+        },
         onThread: (thread) => {
           if (!manageThreadsRef.current) return;
-          params.setThreads((current) => upsertThread(current, thread));
+          params.setThreads((current) =>
+            upsertThread(
+              current,
+              mergeThreadMetadata(current.find((item) => item.id === thread.id), thread),
+            ),
+          );
         },
         onTurnStarted: (threadId, turn) => {
           if (!manageThreadsRef.current) return;
           params.setThreads((current) =>
             upsertTurnInThread(current, threadId, turn),
+          );
+        },
+        onTurnSettled: (threadId, turn) => {
+          if (!manageThreadsRef.current) return;
+          params.setThreads((current) =>
+            current.map((thread) =>
+              thread.id !== threadId ||
+              !thread.turns.some((item) => item.id === turn.id)
+                ? thread
+                : {
+                    ...thread,
+                    turns: thread.turns.map((item) =>
+                      item.id === turn.id ? turn : item,
+                    ),
+                  },
+            ),
           );
         },
         onThreadDeleted: (threadId) => {
@@ -118,6 +158,10 @@ export function useControlThreadRuntime(params: {
         onTextDelta: (threadId, delta) => {
           if (!manageThreadsRef.current) return;
           params.appendStreamingTextDelta(threadId, delta);
+        },
+        onTextReset: (threadId) => {
+          if (!manageThreadsRef.current) return;
+          params.resetStreamingText(threadId);
         },
         onBeforeRunSettled: async (threadId) => {
           if (!manageThreadsRef.current) return;
@@ -143,11 +187,14 @@ export function useControlThreadRuntime(params: {
                 ? thread
                 : {
                     ...thread,
+                    ...(coverage.complete === false && transcriptWindow(thread)
+                      ? { controlTranscriptWindow: { ...transcriptWindow(thread)!, toolHistory: "partial" as const } }
+                      : {}),
                     turns: thread.turns.map((turn) =>
                       turn.id === runId
                         ? {
                             ...turn,
-                            itemsView: coverage.complete ? "full" : "summary",
+                            itemsView: coverage.complete && !transcriptWindow(thread) ? "full" : "summary",
                           }
                         : turn,
                     ),
@@ -177,24 +224,18 @@ export function useControlThreadRuntime(params: {
             ),
           );
         },
-        onRunSettled: (threadId) => {
+        onRunSettled: (threadId, runId) => {
           params.setActiveTurnByThread((current) => {
+            if (current[threadId] !== runId) return current;
             const next = { ...current };
             delete next[threadId];
             return next;
           });
-          params.setStreamingTextByThread((current) => {
-            const next = { ...current };
-            delete next[threadId];
-            return next;
-          });
-          if (!manageThreadsRef.current) return;
-          void control
-            .readThread(threadId)
-            .then((thread) => {
-              params.setThreads((current) => upsertThread(current, thread));
-            })
-            .catch(() => undefined);
+          // The settlement/rollback owner publishes canonical state. A
+          // nested read can supersede the refresh that is retiring this stream.
+        },
+        onTeamRunAccepted: (threadId, event) => {
+          teamObservation?.observeRunAccepted(threadId, event);
         },
         onRunPlan: (projection) => {
           if (!manageThreadsRef.current) return;
@@ -225,23 +266,13 @@ export function useControlThreadRuntime(params: {
             setRunPlanByRunId(nextPlans);
           }
         },
-        onStreamError: (threadId, _runId, _error) => {
-          params.setStreamingTextByThread((current) => {
-            const next = { ...current };
-            delete next[threadId];
-            return next;
-          });
+        onStreamError: () => {
           params.setNotice({
             text: "任务流中断，正在尝试恢复…",
             tone: "warning",
           });
-          if (!manageThreadsRef.current) return;
-          void control
-            .readThread(threadId)
-            .then((thread) => {
-              params.setThreads((current) => upsertThread(current, thread));
-            })
-            .catch(() => undefined);
+          // The Run consumer owns status reconciliation, cursor-based reconnect
+          // and terminal refresh. An error notice must not cancel a page read.
         },
         onThreadStreamError: (_threadId, _error) => {
           params.setNotice({
@@ -261,11 +292,7 @@ export function useControlThreadRuntime(params: {
             delete next[threadId];
             return next;
           });
-          params.setStreamingTextByThread((current) => {
-            const next = { ...current };
-            delete next[threadId];
-            return next;
-          });
+          params.resetStreamingText(threadId);
         },
         onThreadGoal: (snapshot) => {
           if (!manageThreadsRef.current) return;
@@ -288,8 +315,14 @@ export function useControlThreadRuntime(params: {
         },
       },
     );
+    // Establish the selected-thread boundary before React exposes the runtime.
+    // The follow-up effect keeps it current as navigation changes.
+    control.setThreadEventStreamFocus(params.selectedThreadIdRef.current);
     setRuntime(control);
-    return () => control.close();
+    return () => {
+      teamObservation?.close();
+      control.close();
+    };
   }, [params.client]);
   const automationRuntime = useMemo(
     () =>
@@ -304,6 +337,9 @@ export function useControlThreadRuntime(params: {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
   const connected = connectionState === "connected";
+  useEffect(() => {
+    runtime?.setThreadEventStreamFocus(params.selectedThreadId);
+  }, [params.selectedThreadId, runtime]);
   const rehydrateThreadAuthority = useCallback(
     async (threadId: string) => {
       if (runtime === null) {
@@ -340,34 +376,6 @@ export function useControlThreadRuntime(params: {
     };
   }, [runtime]);
 
-  useEffect(() => {
-    if (!connected || runtime === null || !params.manageThreads) {
-      return undefined;
-    }
-    let current = true;
-    void runtime
-      .listThreads(params.showArchivedThreadsRef.current)
-      .then(async (threads) => {
-        if (!current) return;
-        const selected =
-          threads.find(
-            (thread) => thread.id === params.selectedThreadIdRef.current,
-          ) ?? threads[0];
-        const hydrated =
-          selected === undefined
-            ? null
-            : await runtime.readThread(selected.id).catch(() => selected);
-        if (!current) return;
-        params.setThreads(() =>
-          hydrated === null ? threads : upsertThread(threads, hydrated),
-        );
-        params.setSelectedThreadId(selected?.id ?? threads[0]?.id ?? null);
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [connected, params.manageThreads, runtime]);
 
   useEffect(() => {
     if (!connected || runtime === null || !params.manageThreads) {
@@ -404,5 +412,6 @@ export function useControlThreadRuntime(params: {
     runPlanByRunId,
     runtime,
     threadGoal,
+    teamProgressByThread,
   };
 }

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@crewon/contracts": "workspace:*",
+    "@crewon/process-lifecycle": "workspace:*",
     "pg": "8.22.0",
     "ws": "8.21.1"
   },

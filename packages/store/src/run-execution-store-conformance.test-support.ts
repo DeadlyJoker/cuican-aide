@@ -1,3 +1,9 @@
+import { registerRunExecutionProgressConformance } from "./run-execution-progress-store.test-support.ts";
+import { registerEmptyAssistantContinuationConformance } from "./empty-assistant-continuation.test-support.ts";
+import { registerCompactionCheckpointConformance } from "./compaction-checkpoint-store.test-support.ts";
+import { registerModelCallStoreConformance } from "./model-call-store.test-support.ts";
+import { registerReconciliationCancellationWakeConformance } from "./reconciliation-cancellation-wake.test-support.ts";
+import { registerModelUsageStoreConformance, modelUsageInput } from "./model-usage-store.test-support.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { describe, test, type TestContext } from "node:test";
@@ -31,6 +37,8 @@ import {
   ManualLeaseClock,
 } from "./run-store-conformance.test-support.ts";
 import { seedThread } from "./thread-store-conformance.test-support.ts";
+import { registerRunOutputStoreConformance } from "./run-output-store-conformance.test-support.ts";
+import { registerToolSampleStoreConformance, toolSampleFixtureInput } from "./tool-sample-commit.test-support.ts";
 import { turnStartCommit } from "./turn-start-store-conformance.test-support.ts";
 
 const STEP = {
@@ -45,6 +53,78 @@ export function registerRunExecutionStoreConformance(
   createStore: (clock: LeaseClock) => DomainStore | Promise<DomainStore>,
   options: ExecutionConformanceOptions = {},
 ): void {
+  registerRunOutputStoreConformance(name, createStore);
+  registerRunExecutionProgressConformance(name, async context => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "progress-reader", "progress-lease");
+    const scope = { tenantId: claim.workItem.tenantId, runId: claim.workItem.runId };
+    const events = await fixture.store.listRunEvents(scope, 0, 100);
+    const source = events.at(-1)!;
+    return { store: fixture.store, input: { scope, lease: leaseFor(claim), expectedThroughSequence: 0,
+      checkpoint: { throughSequence: source.sequence, sourceEventId: source.eventId, payload: '{"schemaVersion":"test-progress.v1","completed":0}' },
+    }, expire: () => expireWorkItem(fixture, options), cancel: async () => {
+      const current = await fixture.store.loadRun(scope);
+      assert.ok(current);
+      const event: RunLifecycleEvent = {schemaVersion: "crewon.run-event.v0", identity: {runId: current.runId}, eventId: "progress-cancel-request", sequence: current.lastSequence + 1, occurredAt: "2026-08-08T00:02:00Z", type: "run.cancel.requested", data: {actorId: current.createdByActorId}};
+      await fixture.store.commitRun({tenantId: scope.tenantId, idempotency: {scope: "run.cancel", key: "progress-cancel", requestFingerprint: "progress-cancel"}, expectedRevision: current.revision, events: [event], outbox: [toolOutbox("progress-cancel", event)], workItems: []});
+    } };
+  });
+  registerEmptyAssistantContinuationConformance(name, async context => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "empty-sample", "empty-sample-lease");
+    await prepareTextCompletion(fixture.store, claim, { history: { expectedLastSequence: 0, items: [contextSourceHistory()] } });
+    const base = assistantSampleContinuationInput(claim);
+    const events = base.commit.events.filter(event => event.type !== "model.output.delta").map((event, index) => ({
+      ...event, sequence: index + 4, data: event.type === "segment.provider_continuation"
+        ? { ...event.data, segmentSequence: 3, emptyContinuation: { stepId: base.attempt.stepId, attemptId: base.attempt.attemptId, contextRevision: base.modelState.contextRevision } }
+        : { ...event.data, segmentSequence: 2, outputTokens: 0, totalTokens: 4 },
+    })) as RunLifecycleEvent[];
+    const input: CommitAssistantSampleContinuationInput = { ...base,
+      commit: { ...base.commit, events, outbox: events.map((event, index) => toolOutbox(`empty-boundary-${index}`, event)) },
+      history: { expectedLastSequence: 1, items: [] },
+      modelState: { ...base.modelState, latestUsage: { inputTokens: 4, outputTokens: 0, totalTokens: 4 } },
+    };
+    return { store: fixture.store, input, expire: () => expireWorkItem(fixture, options) };
+  });
+  registerCompactionCheckpointConformance(name, async context => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "compaction-setup", "compaction-setup");
+    await fixture.store.renewWorkItemLease({ ...leaseFor(claim), leaseDurationMs: 30_000 });
+    const started = await fixture.store.beginRunAttempt({ ...beginInput(claim, "compaction-attempt", "2026-08-08T00:01:01Z"), stepId: `compaction:${claim.workItem.workItemId}:1` });
+    return { store: fixture.store, input: { lease: leaseFor(claim), scope: { tenantId: claim.workItem.tenantId, runId: claim.workItem.runId, stepId: started.step.stepId, attemptId: started.attempt.attemptId }, contextDigest: "a".repeat(64) } };
+  });
+  registerArtifactRetentionGuardConformance(name, async context => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "artifact-guard", "artifact-guard-lease");
+    const { receipt } = await prepareAtomicToolCompletion(fixture.store, claim);
+    return { store: fixture.store, claim, receipt };
+  });
+  registerModelUsageStoreConformance(name, async (context) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "usage-setup", "usage-setup");
+    await fixture.store.renewWorkItemLease({ ...leaseFor(claim), leaseDurationMs: 30_000 });
+    const started = await fixture.store.beginRunAttempt(beginInput(claim, "usage-attempt", "2026-08-08T00:01:01Z"));
+    return { store: fixture.store, input: modelUsageInput(claim, started.step.stepId, started.attempt.attemptId) };
+  });
+  registerModelCallStoreConformance(name, async (context) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "usage-setup", "usage-setup");
+    await fixture.store.renewWorkItemLease({ ...leaseFor(claim), leaseDurationMs: 30_000 });
+    const started = await fixture.store.beginRunAttempt(beginInput(claim, "usage-attempt", "2026-08-08T00:01:01Z"));
+    return { store: fixture.store, input: modelUsageInput(claim, started.step.stepId, started.attempt.attemptId) };
+  });
+  registerReconciliationCancellationWakeConformance(name, async (context) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "cancel-setup", "cancel-setup-lease");
+    const prepared = await prepareAtomicToolCompletion(fixture.store, claim);
+    return { store: fixture.store, input: atomicToolUnknownOutcomeInput(claim, prepared.receipt.revision) };
+  });
+  registerToolSampleStoreConformance(name, async (context, includeAssistant) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "worker-tool-sample", "lease-tool-sample");
+    await prepareTextCompletion(fixture.store, claim);
+    return { store: fixture.store, input: toolSampleFixtureInput(mixedAssistantToolContinuationInput(claim), includeAssistant), expire: () => expireWorkItem(fixture, options) };
+  });
   describe(name, () => {
     test("persists the first model Attempt independently from queue claim counts", async (context) => {
       const fixture = await executionFixture(context, createStore);
@@ -470,6 +550,10 @@ export function registerRunExecutionStoreConformance(
 
       const completed = await fixture.store.commitTextRunCompletion(input);
       const replayed = await fixture.store.commitTextRunCompletion(input);
+      assert.deepEqual((await fixture.store.messageWindows!.readWindow({
+        tenantId: "tenant-1", spaceId: "space-1", threadId: "thread-1",
+        position: null, limit: 1, view: "transcript",
+      })).runBindings, [{ messageId: input.thread.messages[0]!.messageId, runId: completed.runState.runId, source: "messageCompletedEvent" }]);
 
       assert.equal(completed.runState.status, "completed");
       assert.equal(completed.threadState.lastMessageSequence, 1);
@@ -2638,6 +2722,7 @@ export function contextCompactionInput(
       replacesThroughSequence: 1,
       inputTokens: 10,
       cachedInputTokens: 3,
+      cachedInputTokensReported: true,
       outputTokens: 2,
       totalTokens: 12,
     },
@@ -2770,6 +2855,7 @@ export function contextSourceHistory() {
 export async function prepareTextCompletion(
   store: DomainStore,
   claim: WorkItemClaim,
+  options: { history?: import("@crewon/application").ModelHistoryAppend } = {},
 ): Promise<void> {
   await store.commitLeasedRun({
     lease: leaseFor(claim),
@@ -2785,7 +2871,7 @@ export async function prepareTextCompletion(
       outbox: [],
       workItems: [],
     },
-    history: null,
+    history: options.history ?? null,
   });
   await store.beginRunAttempt({
     tenantId: "tenant-1",
@@ -3927,3 +4013,4 @@ function approvalCommit(
 function hasStoreCode(code: string): (error: unknown) => boolean {
   return (error) => error instanceof RunStoreError && error.code === code;
 }
+import { registerArtifactRetentionGuardConformance } from "./artifact-retention-guard.test-support.ts";

@@ -4,6 +4,11 @@ import {
 } from "@crewon/agent-version";
 import type { AgentVersionStore, ContentDigester } from "@crewon/application";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
+import type { FailedRuntimeCreationCleanup } from "./agent-runtime-capacity.ts";
+import {
+  createAdmittedAgentRuntime,
+  closeAdmittedAgentRuntime,
+} from "./admitted-agent-runtime-creation.ts";
 
 import {
   AgentVersionRuntimeError,
@@ -12,9 +17,22 @@ import {
 } from "./agent-version-runtime.ts";
 
 export interface AgentVersionRuntimeFactoryPort {
+  /**
+   * Owner of Tool results that outlive cacheable projections. Unless ownership
+   * is selected per version below, every produced runtime must be a projection
+   * with no owned resources or close hook. Active callers may keep using an
+   * evicted projection; this owner maintains its Tool results independently.
+   */
+  readonly sharedResourceOwner?: ToolRuntimePort;
+  /** Optional for mixed factories; selection is synchronous and performs no I/O. */
+  runtimeOwnership?(input: {
+    tenantId: string;
+    version: CompiledAgentVersion;
+  }): "sharedProjection" | "ownedRuntime";
   create(input: {
     tenantId: string;
     version: CompiledAgentVersion;
+    failedCreationCleanup?: FailedRuntimeCreationCleanup;
   }): AgentVersionRuntime | Promise<AgentVersionRuntime>;
   bindSharedToolRuntime?(
     runtime: ToolRuntimePort,
@@ -62,6 +80,17 @@ export class DurableAgentVersionRuntimeLoader {
       existing: number;
     }>
   > {
+    const creation = this.#registry.capacity.beginCreation();
+    try {
+      return await this.#loadTenant(tenantId);
+    } finally {
+      creation.release();
+    }
+  }
+
+  async #loadTenant(
+    tenantId: string,
+  ): Promise<Readonly<{ loaded: number; existing: number }>> {
     let afterAgentVersionId: string | null = null;
     let loaded = 0;
     let existing = 0;
@@ -90,12 +119,32 @@ export class DurableAgentVersionRuntimeLoader {
           );
         }
         const version = parseAgentVersionAsset(asset, this.#digester);
-        const runtime = await this.#factory.create({ tenantId, version });
+        const resident = this.#registry.resolve({
+          tenantId,
+          agentVersionId: version.agentVersionId,
+        });
+        if (resident !== null) {
+          if (resident.version.contentDigest !== version.contentDigest)
+            throw new AgentVersionRuntimeError(
+              "agent_version_runtime_id_conflict",
+            );
+          existing++;
+          afterAgentVersionId = asset.agentVersionId;
+          continue;
+        }
+        const admitted = await createAdmittedAgentRuntime({
+          capacity: this.#registry.capacity,
+          factory: this.#factory,
+          tenantId,
+          version,
+          ownership: "ownedRuntime",
+        });
+        const { runtime } = admitted;
         if (
           runtime.version.agentVersionId !== version.agentVersionId ||
           runtime.version.contentDigest !== version.contentDigest
         ) {
-          await runtime.close?.();
+          await closeAdmittedAgentRuntime(admitted);
           throw new AgentVersionRuntimeError(
             "agent_version_runtime_factory_mismatch",
           );
@@ -105,16 +154,25 @@ export class DurableAgentVersionRuntimeLoader {
           disposition = this.#registry.register({
             tenantId,
             runtime,
+            reservation: admitted.reservation!,
           }).disposition;
         } catch (error) {
-          await runtime.close?.();
+          await closeAdmittedAgentRuntime(admitted);
           throw error;
         }
         if (disposition === "registered") {
           loaded += 1;
         } else {
           existing += 1;
-          await runtime.close?.();
+          if (
+            runtime ===
+            this.#registry.peekResident({
+              tenantId,
+              agentVersionId: version.agentVersionId,
+            })
+          )
+            admitted.reservation?.release();
+          else await closeAdmittedAgentRuntime(admitted);
         }
         afterAgentVersionId = asset.agentVersionId;
       }

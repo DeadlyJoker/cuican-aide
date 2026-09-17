@@ -20,6 +20,7 @@ import {
   seedWorkspaceThread,
 } from "./workspace-operation-store-conformance.test-support.ts";
 import { workspaceOperationResultDigest } from "./workspace-operation-store-support.ts";
+import { holdAdvisoryFence } from "./postgres-advisory-fence.test-support.ts";
 
 import {
   TestPostgresDomainStore,
@@ -252,15 +253,19 @@ if (connectionString !== undefined) {
             providerReceiptId: "cancel-receipt",
           },
         };
-        const blocker = await first.admin.connect();
-        await blocker.query("BEGIN");
-        const xid = await blocker.query<{ xid: string }>(
-          "SELECT txid_current()::text AS xid",
-        );
-        await blocker.query(
-          `SELECT execution_id FROM ${first.quotedSchema}.workspace_operations
-           WHERE tenant_id = $1 AND execution_id = $2 FOR UPDATE`,
-          [executeAttempt.tenantId, executeAttempt.executionId],
+        // A waiter being first in a row-lock queue does not guarantee which
+        // transaction completes its later writes first. Hold the intended
+        // winner after its actual UPDATE, then observe the loser blocked by it.
+        await first.admin
+          .query(`CREATE FUNCTION ${first.quotedSchema}.test_hold_settlement()
+          RETURNS trigger LANGUAGE plpgsql AS $body$
+          BEGIN PERFORM pg_advisory_xact_lock(hashtext(TG_TABLE_SCHEMA || ':settlement')); RETURN NEW; END
+          $body$;
+          CREATE TRIGGER test_hold_settlement AFTER UPDATE ON ${first.quotedSchema}.workspace_operations
+          FOR EACH ROW EXECUTE FUNCTION ${first.quotedSchema}.test_hold_settlement()`);
+        const fence = await holdAdvisoryFence(
+          first.admin,
+          `${first.schemaName}:settlement`,
         );
         const winnerStore: TestPostgresDomainStore =
           winnerPhase === "execute" ? first : second;
@@ -270,19 +275,28 @@ if (connectionString !== undefined) {
           winnerPhase === "execute" ? executeInput : cancelInput;
         const loserInput =
           winnerPhase === "execute" ? cancelInput : executeInput;
-        let winner: Promise<WorkspaceDeliverySettlementResult>;
-        let loser: Promise<WorkspaceDeliverySettlementResult>;
+        let winner: Promise<WorkspaceDeliverySettlementResult> | undefined;
+        let loser: Promise<WorkspaceDeliverySettlementResult> | undefined;
         try {
           winner = winnerStore.settleWorkspaceOperationDelivery(winnerInput);
-          await waitForTransactionWaiters(first.admin, xid.rows[0]!.xid, 1);
+          void winner.catch(() => {});
+          await fence.waitForWaiters(1);
+          const xid = await first.admin.query<{ xid: string }>(
+            `SELECT backend_xid::text AS xid FROM pg_stat_activity
+             WHERE $1 = ANY(pg_blocking_pids(pid)) AND backend_xid IS NOT NULL`,
+            [fence.pid],
+          );
+          assert.equal(xid.rows.length, 1);
           loser = loserStore.settleWorkspaceOperationDelivery(loserInput);
-          await blocker.query("COMMIT");
+          void loser.catch(() => {});
+          await waitForTransactionWaiters(first.admin, xid.rows[0]!.xid, 1);
+          await fence.release();
         } catch (error) {
-          await blocker.query("ROLLBACK");
-          blocker.release();
+          await fence.release();
+          await Promise.allSettled([winner, loser]);
           throw error;
         }
-        blocker.release();
+        assert.ok(winner !== undefined && loser !== undefined);
         const results: WorkspaceDeliverySettlementResult[] = await Promise.all([
           winner,
           loser,

@@ -10,6 +10,53 @@ import {
 
 import { ResponsesProtocolDecoder } from "./responses-protocol.ts";
 
+test("preserves whether cached tokens were actually reported, including an explicit zero", () => {
+  for (const [details, tokens, reported] of [
+    [undefined, 0, false],
+    [{}, 0, false],
+    [{ cached_tokens: 0 }, 0, true],
+    [{ cached_tokens: 8 }, 8, true],
+  ] as const) {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy: "required",
+      completedCheckpoint: () => null,
+    });
+    decoder.accept({
+      type: "response.created",
+      sequence_number: 0,
+      response: { id: "resp-1" },
+    });
+    const events = decoder.accept({
+      type: "response.completed",
+      sequence_number: 1,
+      response: {
+        id: "resp-1",
+        status: "completed",
+        output: [],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 0,
+          total_tokens: 10,
+          ...(details === undefined ? {} : { input_tokens_details: details }),
+        },
+      },
+    });
+    assert.deepEqual(
+      events.find((event) => event.type === "usage"),
+      {
+        type: "usage",
+        providerResponseId: "resp-1",
+        inputTokens: 10,
+        cachedInputTokens: tokens,
+        cachedInputTokensReported: reported,
+        outputTokens: 0,
+        totalTokens: 10,
+      },
+    );
+    decoder.finish();
+  }
+});
+
 type Fixture = Readonly<{
   caseId: string;
   cases: readonly Readonly<{
@@ -437,7 +484,14 @@ for (const sequencePolicy of ["required", "whenPresent"] as const) {
       ),
     );
     decoder.finish();
-    assert.deepEqual(events, reasoningFixture.expected.transportEvents);
+    assert.deepEqual(
+      events,
+      reasoningFixture.expected.transportEvents.map((event) =>
+        event.type === "usage"
+          ? { ...event, cachedInputTokensReported: false, providerResponseId: "resp-ar-042" }
+          : event,
+      ),
+    );
     assert.deepEqual(
       decoder.completedHistoryItems,
       reasoningFixture.expected.completedHistory,

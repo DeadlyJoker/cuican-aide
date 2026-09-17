@@ -1,4 +1,5 @@
 import type { JsonValue } from "@crewon/contracts";
+import type { OutboxRetentionStore } from "./outbox-retention-port.ts";
 import type {
   AutomationInvocationBinding,
   FrozenWorkflowVersionBinding,
@@ -116,10 +117,12 @@ export type WorkItemRetryInput = WorkItemLeaseInput &
  * performing any model, Tool, or Device side effect.
  */
 export interface DurableQueueStore {
+  readonly outboxRetention?: OutboxRetentionStore;
   listPendingOutbox(limit: number): Promise<readonly OutboxMessage[]>;
   claimNextOutbox(input: QueueClaimInput): Promise<OutboxClaim | null>;
   acknowledgeOutbox(input: OutboxLeaseInput): Promise<void>;
   retryOutbox(input: OutboxRetryInput): Promise<void>;
+  /** Oldest readiness first (pending availability or expired lease), then original enqueue order. */
   listPendingWorkItems(limit: number): Promise<readonly WorkItem[]>;
   claimNextWorkItem(input: QueueClaimInput): Promise<WorkItemClaim | null>;
   renewWorkItemLease(input: WorkItemRenewInput): Promise<QueueLease>;

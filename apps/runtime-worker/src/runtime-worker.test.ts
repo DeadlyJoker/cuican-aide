@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -55,6 +61,7 @@ import {
 import {
   createArtifactRecord,
   type AutomationInvocationBinding,
+  type ToolExecutionReceiptState,
 } from "@crewon/domain";
 import {
   InMemoryRunStore,
@@ -81,7 +88,10 @@ import {
 } from "./runtime-worker.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import type { PriorModelCompactionResolverPort } from "./model-switch-compaction.ts";
-import type { AgentVersionRuntimeResolverPort } from "./agent-version-runtime.ts";
+import type {
+  AgentVersionRuntime,
+  AgentVersionRuntimeResolverPort,
+} from "./agent-version-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import type { ThreadSandboxPort } from "../../control-api/src/pim-sandbox-client.ts";
 import { createPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
@@ -494,7 +504,13 @@ test("durably continues AR-031 assistant output without a phantom Message", asyn
         threadId: fixture.threadId,
       })
     )?.latestUsage,
-    { inputTokens: 5, cachedInputTokens: 0, outputTokens: 1, totalTokens: 6 },
+    {
+      inputTokens: 5,
+      cachedInputTokens: 0,
+      cachedInputTokensReported: true,
+      outputTokens: 1,
+      totalTokens: 6,
+    },
   );
   const messages = await fixture.messages();
   assert.deepEqual(
@@ -518,6 +534,51 @@ test("durably continues AR-031 assistant output without a phantom Message", asyn
       .filter((event) => event.type === "segment.provider_continuation")
       .map((event) => event.data.sampleIndex),
     [1, 2],
+  );
+  await worker.close();
+});
+
+test("uses the provider continuation's canonical segment sequence after streaming a delta", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  let samples = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "continuation-sequence-adapter",
+    adapterVersion: "1",
+    modelId: "continuation-sequence-model",
+    async *stream() {
+      samples += 1;
+      if (samples === 1) {
+        yield { type: "output.delta", delta: "working" };
+        yield {
+          type: "output.item.completed",
+          item: { type: "message", role: "assistant", content: "working" },
+        };
+        yield { type: "completed", checkpoint: null, endTurn: false };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const worker = fixture.worker({ transport });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  const continuation = (await fixture.events()).find(
+    (event) => event.type === "segment.provider_continuation",
+  );
+  assert.equal(continuation?.data.segmentSequence, 3);
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "done" },
+    ],
   );
   await worker.close();
 });
@@ -1478,6 +1539,8 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
     0,
     100,
   );
+  const expectedSummary = "Context checkpoints in chronological source order (earlier to later):\n\ndurable handoff\n\n---\n\ndurable handoff";
+  assert.equal(compactionRequest, 3);
   const compaction = history.find((item) => item.type === "compaction");
   assert.ok(compaction?.type === "compaction");
   assert.deepEqual(
@@ -1494,7 +1557,7 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
       sequence: 6,
       mode: "auto",
       replacesThroughSequence: 5,
-      summary: "durable handoff",
+      summary: expectedSummary,
       retainedUserMessages: ["second turn", "third turn"],
     },
   );
@@ -1513,10 +1576,11 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
         compactionItemId: compaction.itemId,
         mode: "auto",
         replacesThroughSequence: 5,
-        inputTokens: 10,
+        inputTokens: 20,
         cachedInputTokens: 0,
-        outputTokens: 2,
-        totalTokens: 12,
+        cachedInputTokensReported: false,
+        outputTokens: 4,
+        totalTokens: 24,
       },
     ],
   );
@@ -1545,26 +1609,10 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
     ).map(({ status }) => status),
     ["completed"],
   );
-  assert.equal(requests[2]?.input.strategy, "manual");
-  assert.equal(requests[3]?.input.strategy, "manual");
-  assert.equal(requests[4]?.input.strategy, "manual");
-  assert.equal(
-    requests[3]?.input.items.length,
-    (requests[2]?.input.items.length ?? 0) - 1,
-  );
-  assert.deepEqual(
-    requests[2]?.input.items.at(-1),
-    requests[3]?.input.items.at(-1),
-  );
-  assert.equal(
-    requests[4]?.input.items.some(
-      (item) =>
-        item.type === "message" &&
-        item.content ===
-          `${CONTEXT_COMPACTION_SUMMARY_PREFIX}\ndurable handoff`,
-    ),
-    true,
-  );
+  for (const request of requests.slice(2, 6)) assert.equal(request.input.strategy, "manual");
+  assert.deepEqual(requests.slice(3, 5).flatMap(request => request.input.items.slice(0, -1)), requests[2]!.input.items.slice(0, -1));
+  for (const request of requests.slice(3, 5)) assert.deepEqual(request.input.items.at(-1), requests[2]!.input.items.at(-1));
+  assert.equal(requests[5]?.input.items.some(item => item.type === "message" && item.content === `${CONTEXT_COMPACTION_SUMMARY_PREFIX}\n${expectedSummary}`), true);
   const checkpoint = await fixture.store.loadThreadContinuation({
     tenantId: actor().tenantId,
     threadId: fixture.threadId,
@@ -1620,7 +1668,7 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
     kind: "completed",
     runId: forkRun.state.runId,
   });
-  assert.deepEqual(requests[5]?.input, {
+  assert.deepEqual(requests[6]?.input, {
     strategy: "manual",
     items: [
       { type: "message", role: "user", content: "second turn" },
@@ -1628,7 +1676,7 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
       {
         type: "message",
         role: "user",
-        content: `${CONTEXT_COMPACTION_SUMMARY_PREFIX}\ndurable handoff`,
+        content: `${CONTEXT_COMPACTION_SUMMARY_PREFIX}\n${expectedSummary}`,
       },
       { type: "message", role: "assistant", content: "answer 3" },
       { type: "message", role: "user", content: "fork turn" },
@@ -1675,7 +1723,7 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
     kind: "completed",
     runId: fourth.state.runId,
   });
-  assert.deepEqual(requests[6]?.input, {
+  assert.deepEqual(requests[7]?.input, {
     strategy: "providerCheckpoint",
     checkpoint: compactionCheckpoint(3),
     items: [
@@ -1684,7 +1732,7 @@ test("durably compacts context and reuses only a revision-matched checkpoint aft
       {
         type: "message",
         role: "user",
-        content: `${CONTEXT_COMPACTION_SUMMARY_PREFIX}\ndurable handoff`,
+        content: `${CONTEXT_COMPACTION_SUMMARY_PREFIX}\n${expectedSummary}`,
       },
       { type: "message", role: "assistant", content: "answer 3" },
       { type: "message", role: "user", content: "fourth turn" },
@@ -2647,7 +2695,7 @@ test("matches AR-024 by compacting prior history with the previous model before 
     modelSwitchCompactionResolver: {
       resolve: (prior) => {
         assert.equal(prior.modelId, reference.previous.modelId);
-        return { compactor };
+        return { executionAuthority: "crewonKernel", compactor };
       },
     },
     transport: {
@@ -3673,6 +3721,7 @@ test("routes a claimed Run through its registered AgentVersion runtime", async (
       locator.agentVersionId === version.agentVersionId
         ? {
             version,
+            executionAuthority: "crewonKernel",
             kernel,
             policy: new PinnedRunExecutionPolicy(ROUTE),
             toolRuntime,
@@ -3693,6 +3742,577 @@ test("routes a claimed Run through its registered AgentVersion runtime", async (
   assert.equal(routedRequests, 1);
   assert.equal((await fixture.messages()).at(-1)?.content, "routed");
   await worker.close();
+});
+
+test("does not inject CrewON runtime tools into a provider-owned Agent", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+  );
+  let observedTools: readonly ToolDefinition[] | null = null;
+  const transport: ModelTransportPort = {
+    adapterName: "cloud-agent",
+    adapterVersion: "1",
+    modelId: "cloud-model",
+    async *stream(request) {
+      observedTools = request.tools;
+      yield { type: "output.delta", delta: "cloud result" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const kernel = new CrewONAgentKernel({ transport });
+  const version = compileAgentVersion(
+    {
+      schemaVersion: "crewon.agent-version-source.v0",
+      agentVersionId: route.agentVersionId,
+      runtimeGeneration: route.runtimeGeneration,
+      policySnapshotId: route.policySnapshotId,
+      instructions: null,
+      model: {
+        ...kernel.modelIdentity,
+        contextWindowTokens: 128_000,
+        autoCompactAtTokens: 96_000,
+      },
+      execution: { streamMaxRetries: 0, maxToolRounds: 8 },
+      resources: {
+        workspaceRequired: false,
+        governedContextDigest: null,
+      },
+      tools: [],
+    },
+    new Sha256Digester(),
+  );
+  const resolver: AgentVersionRuntimeResolverPort = {
+    resolve: () => ({
+      version,
+      executionAuthority: "providerAgent",
+      kernel,
+      policy: new PinnedRunExecutionPolicy(route),
+      toolRuntime: new InMemoryToolBroker(),
+      contextCompactor: new KernelContextCompactor(kernel),
+    }),
+  };
+  const worker = fixture.worker({
+    transport,
+    agentVersionRuntimeResolver: resolver,
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.deepEqual(observedTools, []);
+  await worker.close();
+});
+
+test("rejects CrewON governed context on a provider-owned Agent before sampling", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+  );
+  let samples = 0;
+  const transport = countingTransport("cloud-model", () => {
+    samples += 1;
+  });
+  const runtime: AgentVersionRuntime = {
+    ...providerAgentRuntime(route, transport),
+    governedContext: governedContextBundle(1),
+  };
+  const worker = fixture.worker({
+    transport,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "failed",
+    runId: fixture.runId,
+    code: "agent_version_provider_authority_mismatch",
+  });
+  assert.equal(samples, 0);
+  assert.deepEqual(await fixture.attempts(), []);
+  await worker.close();
+});
+
+test("fails provider-owned Agent plan mode before sampling", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+    "plan",
+  );
+  let samples = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "cloud-agent",
+    adapterVersion: "1",
+    modelId: "cloud-model",
+    async *stream() {
+      samples += 1;
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const kernel = new CrewONAgentKernel({ transport });
+  const version = compileAgentVersion(
+    {
+      schemaVersion: "crewon.agent-version-source.v0",
+      agentVersionId: route.agentVersionId,
+      runtimeGeneration: route.runtimeGeneration,
+      policySnapshotId: route.policySnapshotId,
+      instructions: null,
+      model: {
+        ...kernel.modelIdentity,
+        contextWindowTokens: 128_000,
+        autoCompactAtTokens: 96_000,
+      },
+      execution: { streamMaxRetries: 0, maxToolRounds: 8 },
+      resources: {
+        workspaceRequired: false,
+        governedContextDigest: null,
+      },
+      tools: [],
+    },
+    new Sha256Digester(),
+  );
+  const worker = fixture.worker({
+    transport,
+    agentVersionRuntimeResolver: {
+      resolve: () => ({
+        version,
+        executionAuthority: "providerAgent",
+        kernel,
+        policy: new PinnedRunExecutionPolicy(route),
+        toolRuntime: new InMemoryToolBroker(),
+        contextCompactor: new KernelContextCompactor(kernel),
+      }),
+    },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "failed",
+    runId: fixture.runId,
+    code: "provider_agent_collaboration_mode_unsupported",
+  });
+  assert.equal(samples, 0);
+  assert.deepEqual(await fixture.attempts(), []);
+  await worker.close();
+});
+
+test("fails a provider-owned Agent Goal before sampling or continuation", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+    "goal",
+  );
+  let samples = 0;
+  const transport = countingTransport("cloud-model", () => {
+    samples += 1;
+  });
+  const runtime = providerAgentRuntime(route, transport);
+  const worker = fixture.worker({
+    transport,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "failed",
+    runId: fixture.runId,
+    code: "provider_agent_goal_unsupported",
+  });
+  assert.equal(samples, 0);
+  assert.deepEqual(await fixture.attempts(), []);
+  assert.equal((await fixture.loadRun()).status, "failed");
+  assert.equal((await fixture.store.listPendingWorkItems(10)).length, 0);
+  await worker.close();
+});
+
+test("fails provider-owned automatic context compaction before opening the compactor", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+  );
+  const directTransport = countingTransport("cloud-model");
+  const directWorker = fixture.worker({
+    transport: directTransport,
+    policy: new PinnedRunExecutionPolicy(route),
+    autoCompactAtContextItems: null,
+    autoCompactAtContextBytes: null,
+  });
+  assert.deepEqual(await directWorker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  const second = await appendUserTurnAndRun(
+    fixture.store,
+    fixture.threads,
+    fixture.runs,
+    fixture.threadId,
+    "second",
+    "provider-auto-second",
+    route,
+  );
+  assert.deepEqual(await directWorker.wake(), {
+    kind: "completed",
+    runId: second.state.runId,
+  });
+  await directWorker.close();
+
+  const third = await appendUserTurnAndRun(
+    fixture.store,
+    fixture.threads,
+    fixture.runs,
+    fixture.threadId,
+    "third",
+    "provider-auto-third",
+    route,
+  );
+  let compactions = 0;
+  let samples = 0;
+  const providerTransport = countingTransport("cloud-model", () => {
+    samples += 1;
+  });
+  const runtime = providerAgentRuntime(route, providerTransport, {
+    contextCompactor: {
+      compact: async () => {
+        compactions += 1;
+        throw new Error("must not compact");
+      },
+    },
+  });
+  const providerWorker = fixture.worker({
+    transport: providerTransport,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+    maxContextItems: 8,
+    autoCompactAtContextItems: 4,
+    autoCompactAtContextBytes: null,
+  });
+
+  assert.deepEqual(await providerWorker.wake(), {
+    kind: "failed",
+    runId: third.state.runId,
+    code: "provider_agent_context_compaction_unsupported",
+  });
+  assert.equal(compactions, 0);
+  assert.equal(samples, 0);
+  const thirdWorkItem = third.workItems[0];
+  assert.ok(thirdWorkItem !== undefined);
+  assert.deepEqual(
+    await fixture.store.listRunAttempts(
+      {
+        tenantId: actor().tenantId,
+        runId: third.state.runId,
+        stepId: thirdWorkItem.workItemId,
+      },
+      0,
+      100,
+    ),
+    [],
+  );
+  await providerWorker.close();
+});
+
+test("fails provider-owned manual context compaction before opening the compactor", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+  );
+  const directWorker = fixture.worker({
+    transport: countingTransport("cloud-model"),
+    policy: new PinnedRunExecutionPolicy(route),
+    autoCompactAtContextItems: null,
+    autoCompactAtContextBytes: null,
+  });
+  assert.deepEqual(await directWorker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await directWorker.close();
+  const thread = await fixture.store.loadThread({
+    tenantId: actor().tenantId,
+    threadId: fixture.threadId,
+  });
+  assert.ok(thread !== null);
+  const manual = await fixture.compactions.start(actor(), {
+    kind: "thread.compact",
+    idempotencyKey: "provider-manual-compaction",
+    threadId: fixture.threadId,
+    expectedThreadRevision: thread.revision,
+    requestedAgentVersionId: route.agentVersionId,
+    route,
+  });
+  let compactions = 0;
+  const providerTransport = countingTransport("cloud-model");
+  const runtime = providerAgentRuntime(route, providerTransport, {
+    contextCompactor: {
+      compact: async () => {
+        compactions += 1;
+        throw new Error("must not compact");
+      },
+    },
+  });
+  const worker = fixture.worker({
+    transport: providerTransport,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "failed",
+    runId: manual.state.runId,
+    code: "provider_agent_context_compaction_unsupported",
+  });
+  assert.equal(compactions, 0);
+  const manualWorkItem = manual.workItems[0];
+  assert.ok(manualWorkItem !== undefined);
+  assert.deepEqual(
+    await fixture.store.listRunAttempts(
+      {
+        tenantId: actor().tenantId,
+        runId: manual.state.runId,
+        stepId: manualWorkItem.workItemId,
+      },
+      0,
+      100,
+    ),
+    [],
+  );
+  await worker.close();
+});
+
+test("fails prior provider-owned model-switch compaction before either model is called", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const priorWorker = fixture.worker({
+    transport: usageTransport("prior-cloud-model", 100),
+    modelContextWindowTokens: 1_000,
+    autoCompactAtTokens: 500,
+    autoCompactAtContextItems: null,
+    autoCompactAtContextBytes: null,
+  });
+  assert.deepEqual(await priorWorker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await priorWorker.close();
+
+  const nextRoute = { ...ROUTE, agentVersionId: "agent-version-next" };
+  const next = await appendUserTurnAndRun(
+    fixture.store,
+    fixture.threads,
+    fixture.runs,
+    fixture.threadId,
+    "switch",
+    "provider-prior-switch",
+    nextRoute,
+  );
+  let compactions = 0;
+  let currentSamples = 0;
+  const currentTransport = countingTransport("current-model", () => {
+    currentSamples += 1;
+  });
+  const worker = fixture.worker({
+    transport: currentTransport,
+    policy: new PinnedRunExecutionPolicy(nextRoute),
+    modelContextWindowTokens: 100,
+    autoCompactAtTokens: 50,
+    autoCompactAtContextItems: null,
+    autoCompactAtContextBytes: null,
+    modelSwitchCompactionResolver: {
+      resolve: () => ({
+        executionAuthority: "providerAgent",
+        compactor: {
+          compact: async () => {
+            compactions += 1;
+            throw new Error("must not compact");
+          },
+        },
+      }),
+    },
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "failed",
+    runId: next.state.runId,
+    code: "provider_agent_context_compaction_unsupported",
+  });
+  assert.equal(compactions, 0);
+  assert.equal(currentSamples, 0);
+  const nextWorkItem = next.workItems[0];
+  assert.ok(nextWorkItem !== undefined);
+  assert.deepEqual(
+    await fixture.store.listRunAttempts(
+      {
+        tenantId: actor().tenantId,
+        runId: next.state.runId,
+        stepId: nextWorkItem.workItemId,
+      },
+      0,
+      100,
+    ),
+    [],
+  );
+  await worker.close();
+});
+
+test("allows a prior CrewON model to compact before a current provider-owned Agent", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const priorWorker = fixture.worker({
+    transport: usageTransport("prior-direct-model", 100),
+    modelContextWindowTokens: 1_000,
+    autoCompactAtTokens: 500,
+    autoCompactAtContextItems: null,
+    autoCompactAtContextBytes: null,
+  });
+  assert.deepEqual(await priorWorker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await priorWorker.close();
+
+  const nextRoute = {
+    ...ROUTE,
+    agentVersionId: "provider-agent-next",
+    workspaceBindingId: null,
+  };
+  const next = await appendUserTurnAndRun(
+    fixture.store,
+    fixture.threads,
+    fixture.runs,
+    fixture.threadId,
+    "switch to provider",
+    "direct-prior-switch",
+    nextRoute,
+  );
+  let compactions = 0;
+  let providerSamples = 0;
+  const providerTransport = usageTransport("provider-model", 10, () => {
+    providerSamples += 1;
+  });
+  const runtime = providerAgentRuntime(nextRoute, providerTransport, {
+    contextWindowTokens: 100,
+    autoCompactAtTokens: 50,
+  });
+  const worker = fixture.worker({
+    transport: providerTransport,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+    modelSwitchCompactionResolver: {
+      resolve: () => ({
+        executionAuthority: "crewonKernel",
+        compactor: {
+          compact: async () => {
+            compactions += 1;
+            return {
+              summary: "prior direct summary",
+              usage: {
+                inputTokens: 8,
+                cachedInputTokens: 0,
+                outputTokens: 2,
+                totalTokens: 10,
+              },
+            };
+          },
+        },
+      }),
+    },
+    autoCompactAtContextItems: null,
+    autoCompactAtContextBytes: null,
+  });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: next.state.runId,
+  });
+  assert.equal(compactions, 1);
+  assert.equal(providerSamples, 1);
+  await worker.close();
+});
+
+test("never replays a provider-owned Agent after an earlier durable Attempt", async (context) => {
+  const route = { ...ROUTE, workspaceBindingId: null };
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    route,
+  );
+  let samples = 0;
+  const transport = countingTransport("cloud-model", () => {
+    samples += 1;
+  });
+  const baseRuntime = providerAgentRuntime(route, transport);
+  let interruptAfterFirstDelta = true;
+  const runtime: AgentVersionRuntime = {
+    ...baseRuntime,
+    kernel: {
+      modelIdentity: baseRuntime.kernel.modelIdentity,
+      async *runSegment(contract, signal, options) {
+        for await (const event of baseRuntime.kernel.runSegment(
+          contract,
+          signal,
+          options,
+        )) {
+          yield event;
+          if (interruptAfterFirstDelta && event.type === "model.output.delta") {
+            interruptAfterFirstDelta = false;
+            throw new Error("provider_attempt_interrupted");
+          }
+        }
+      },
+    },
+  };
+  const first = fixture.worker({
+    transport,
+    retryAfterMs: 0,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+  });
+  assert.deepEqual(await first.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "provider_attempt_interrupted",
+  });
+  assert.equal(samples, 1);
+  await first.close();
+
+  const second = fixture.worker({
+    transport,
+    agentVersionRuntimeResolver: { resolve: () => runtime },
+  });
+  assert.deepEqual(await second.wake(), {
+    kind: "failed",
+    runId: fixture.runId,
+    code: "provider_agent_recovery_unsupported",
+  });
+  assert.equal(samples, 1);
+  assert.deepEqual((await fixture.attempts()).map(attemptSummary), [
+    {
+      attemptNumber: 1,
+      retryOfAttemptId: null,
+      status: "failed",
+      failure: { code: "provider_attempt_interrupted", retryable: true },
+    },
+    {
+      attemptNumber: 2,
+      retryOfAttemptId: "attempt-1",
+      status: "failed",
+      failure: {
+        code: "provider_agent_recovery_unsupported",
+        retryable: false,
+      },
+    },
+  ]);
+  await second.close();
 });
 
 test("releases an unavailable AgentVersion runtime without failing the Run", async (context) => {
@@ -5056,6 +5676,7 @@ test("reconciles a completed mutation after process loss without executing it tw
       dispatchedReceipt = receipt;
     },
     afterToolProviderResolved: async () => {
+      assert.equal(toolRuntime.retainedExecutionCount, 1);
       throw new Error("simulated_process_loss_after_tool");
     },
   });
@@ -5088,6 +5709,7 @@ test("reconciles a completed mutation after process loss without executing it tw
 
   assert.equal(toolExecutions, 1);
   assert.equal(modelRequests, 2);
+  assert.equal(toolRuntime.retainedExecutionCount, 0);
   const receipt = await fixture.store.loadToolExecutionReceipt({
     tenantId: actor().tenantId,
     runId: fixture.runId,
@@ -5167,6 +5789,7 @@ test("replays a committed Tool receipt after process loss without calling the pr
     toolRuntime,
     retryAfterMs: 0,
     afterToolReceiptCommitted: async () => {
+      assert.equal(toolRuntime.retainedExecutionCount, 0);
       throw new Error("simulated_process_loss_after_receipt");
     },
   });
@@ -5189,6 +5812,130 @@ test("replays a committed Tool receipt after process loss without calling the pr
 
   assert.equal(toolExecutions, 1);
   assert.equal(modelRequests, 2);
+  assert.equal(
+    (await fixture.events()).filter((event) => event.type === "tool.completed")
+      .length,
+    1,
+  );
+});
+
+test("releases a SQLite-committed result on recovery when acknowledgement was interrupted", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-tool-result-ack-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(join(directory, "runtime.sqlite"), { clock }),
+  );
+  let modelRequests = 0;
+  let executions = 0;
+  let acknowledgements = 0;
+  let dispatched: ToolExecutionReceiptState | undefined;
+  const transport: ModelTransportPort = {
+    adapterName: "ack-recovery",
+    adapterVersion: "1",
+    modelId: "fixture",
+    async *stream() {
+      modelRequests += 1;
+      if (modelRequests === 1) {
+        yield {
+          type: "tool.call",
+          kind: "function",
+          callId: "write-once",
+          name: "fixture_writer",
+          input: "{}",
+        };
+      } else {
+        yield { type: "output.delta", delta: "done" };
+        yield {
+          type: "usage",
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          cachedInputTokensReported: true,
+          outputTokens: 1,
+          totalTokens: 11,
+        };
+      }
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const broker = new InMemoryToolBroker(
+    [
+      {
+        schemaVersion: "crewon.tool-definition.v0",
+        kind: "function",
+        name: "fixture_writer",
+        description: "Write once.",
+        execution: "serial",
+        inputSchema: { type: "object" },
+      },
+    ],
+    new Map([
+      [
+        "function:fixture_writer",
+        async () => {
+          executions += 1;
+          return { output: "written" };
+        },
+      ],
+    ]),
+    new Map([
+      ["function:fixture_writer", toolPolicy("mutation", "reconcilable")],
+    ]),
+  );
+  const toolRuntime: ToolRuntimePort = {
+    definitions: () => broker.definitions(),
+    executionPolicy: (kind, name) => broker.executionPolicy(kind, name),
+    execute: (command, signal) => broker.execute(command, signal),
+    reconcile: (command, signal) => broker.reconcile(command, signal),
+    cancel: (command, signal) => broker.cancel(command, signal),
+    retainedExecutionResults: (query) => broker.retainedExecutionResults(query),
+    acknowledgeExecutionResult: (acknowledgement) => {
+      acknowledgements += 1;
+      if (acknowledgements === 1)
+        throw new Error("interrupted_before_memory_release");
+      broker.acknowledgeExecutionResult(acknowledgement);
+    },
+  };
+  const first = fixture.worker({
+    transport,
+    toolRuntime,
+    retryAfterMs: 0,
+    afterToolDispatched: async (receipt) => {
+      dispatched = receipt;
+    },
+  });
+  assert.deepEqual(await first.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "interrupted_before_memory_release",
+  });
+  await first.close();
+  assert.ok(dispatched);
+  assert.equal(
+    (
+      await fixture.store.loadToolExecutionReceipt({
+        tenantId: actor().tenantId,
+        runId: fixture.runId,
+        receiptId: dispatched.receiptId,
+      })
+    )?.status,
+    "completed",
+  );
+  assert.equal(broker.retainedExecutionCount, 1);
+  const recovered = fixture.worker({ transport, toolRuntime });
+  assert.deepEqual(await recovered.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await recovered.close();
+  assert.equal(acknowledgements, 2);
+  assert.equal(broker.retainedExecutionCount, 0);
+  assert.equal(executions, 1);
+  const usage = (await fixture.events()).filter(
+    (event) => event.type === "usage.recorded",
+  );
+  assert.equal(usage.length, 1);
+  assert.equal(usage[0]?.data.cachedInputTokensReported, true);
   assert.equal(
     (await fixture.events()).filter((event) => event.type === "tool.completed")
       .length,
@@ -5843,6 +6590,192 @@ test("keeps a cancel-requested unknown mutation reconciling until the provider c
   assert.equal((await fixture.loadRun()).status, "canceled");
 });
 
+test("batches durable output without changing subsequent model input or source event cursors", async (context) => {
+  const runs: Array<{
+    requests: ModelRequest[];
+    deltas: unknown[];
+    receipts: number;
+    notifications: number;
+    receiptBytes: number;
+    databasePagesBytes: number;
+    walBytes: number;
+  }> = [];
+  for (const strategy of ["legacy", "batch"] as const) {
+    const directory = mkdtempSync(join(tmpdir(), `crewon-output-${strategy}-`));
+    const path = join(directory, "runtime.sqlite");
+    const fixture = await createFixture(
+      context,
+      (clock) => new SqliteRunStore(path, { clock }),
+    );
+    context.after(() => rmSync(directory, { recursive: true, force: true }));
+    if (strategy === "legacy") fixture.store.appendRunOutputEvents = undefined;
+    const requests: ModelRequest[] = [];
+    const transport: ModelTransportPort = {
+      adapterName: "batch-comparison",
+      adapterVersion: "1",
+      modelId: "batch-comparison",
+      async *stream(request) {
+        requests.push(structuredClone(request));
+        if (requests.length === 1) {
+          yield {
+            type: "reasoning.delta",
+            channel: "summary",
+            index: 0,
+            delta: " \n\t",
+          };
+          for (let index = 0; index < 1025; index += 1)
+            yield {
+              type: "output.delta",
+              delta: index % 2 === 0 ? "x" : " \n\t",
+            };
+        } else yield { type: "output.delta", delta: "next" };
+        yield { type: "completed", checkpoint: null };
+      },
+    };
+    const worker = fixture.worker({ transport });
+    assert.equal((await worker.wake()).kind, "completed");
+    const deltaEvents: Extract<
+      import("@crewon/domain").RunLifecycleEvent,
+      { type: "model.output.delta" }
+    >[] = [];
+    let cursor = 0;
+    while (true) {
+      const page = await fixture.store.listRunEvents(
+        { tenantId: actor().tenantId, runId: fixture.runId },
+        cursor,
+        128,
+      );
+      if (page.length === 0) break;
+      deltaEvents.push(
+        ...page.filter((event) => event.type === "model.output.delta"),
+      );
+      cursor = page.at(-1)!.sequence;
+    }
+    assert.equal(deltaEvents.length, 1025);
+    assert.equal(
+      deltaEvents.map((event) => event.data.delta).join(""),
+      "x \n\t".repeat(512) + "x",
+    );
+    const database = new DatabaseSync(path, { readOnly: true });
+    const receipt = database
+      .prepare(
+        "SELECT COUNT(*) AS count, COALESCE(SUM(length(fingerprint)+length(result_json)),0) AS bytes FROM idempotency_receipts WHERE run_id=?",
+      )
+      .get(fixture.runId)!;
+    const compact = database
+      .prepare(
+        `SELECT COUNT(*) AS count, COALESCE(SUM(length(receipts.fingerprint)),0) AS bytes,
+          COALESCE(SUM(CASE WHEN json_extract(events.event_json, '$.type')='model.output.delta' THEN 1 ELSE 0 END),0) AS output_count
+         FROM run_output_receipts AS receipts JOIN run_events AS events
+           ON events.run_id=receipts.run_id AND events.sequence=receipts.run_sequence
+         WHERE receipts.run_id=?`,
+      )
+      .get(fixture.runId)!;
+    const notification = database
+      .prepare("SELECT COUNT(*) AS count FROM outbox WHERE run_id=?")
+      .get(fixture.runId)!;
+    const databasePagesBytes =
+      Number(database.prepare("PRAGMA page_count").get()?.page_count) *
+      Number(database.prepare("PRAGMA page_size").get()?.page_size);
+    const walBytes = existsSync(`${path}-wal`)
+      ? statSync(`${path}-wal`).size
+      : 0;
+    database.close();
+    await appendUserTurnAndRun(
+      fixture.store,
+      fixture.threads,
+      fixture.runs,
+      fixture.threadId,
+      "continue",
+      "batch-next",
+    );
+    fixture.leaseClock.advance(3_600_000);
+    assert.equal((await worker.wake()).kind, "completed");
+    await worker.close();
+    runs.push({
+      requests,
+      deltas: deltaEvents.map(({ sequence, data }) => ({ sequence, data })),
+      receipts: Number(receipt.count),
+      notifications: Number(notification.count),
+      receiptBytes: Number(receipt.bytes) + Number(compact.bytes),
+      databasePagesBytes,
+      walBytes,
+    });
+    assert.equal(Number(compact.output_count), strategy === "batch" ? 1025 : 0);
+  }
+  const [legacy, batch] = runs;
+  assert.ok(legacy !== undefined && batch !== undefined);
+  assert.deepEqual(batch.requests, legacy.requests);
+  assert.deepEqual(batch.deltas, legacy.deltas);
+  assert.equal(legacy.receipts - batch.receipts, 1025);
+  assert.equal(legacy.notifications - batch.notifications, 1025 - 33);
+  assert.ok(batch.receiptBytes < legacy.receiptBytes / 4);
+  context.diagnostic(
+    JSON.stringify(
+      Object.fromEntries(
+        runs.map(
+          ({ requests: _requests, deltas: _deltas, ...metrics }, index) => [
+            index === 0 ? "legacy" : "batch",
+            metrics,
+          ],
+        ),
+      ),
+    ),
+  );
+});
+
+test("persists output deltas while the provider stream is still active", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-live-delta-"));
+  const databasePath = join(directory, "runtime.sqlite");
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(databasePath, { clock }),
+  );
+  const deltaHandled = deferred<void>();
+  const releaseProvider = deferred<void>();
+  context.after(() => releaseProvider.resolve());
+  const transport: ModelTransportPort = {
+    adapterName: "live-delta-adapter",
+    adapterVersion: "1",
+    modelId: "live-delta-model",
+    async *stream() {
+      yield { type: "output.delta", delta: "live" };
+      deltaHandled.resolve();
+      await releaseProvider.promise;
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const worker = fixture.worker({ transport });
+  const outcome = worker.wake();
+
+  await deltaHandled.promise;
+  assert.equal((await fixture.loadRun()).status, "running");
+  assert.deepEqual(
+    (await fixture.events())
+      .filter((event) => event.type === "model.output.delta")
+      .map((event) => event.data.delta),
+    ["live"],
+  );
+  assert.deepEqual(
+    (
+      await fixture.store.listModelHistoryItems(
+        { tenantId: actor().tenantId, threadId: fixture.threadId },
+        0,
+        100,
+      )
+    ).map(({ type }) => type),
+    ["message"],
+  );
+
+  releaseProvider.resolve();
+  assert.deepEqual(await outcome, {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await worker.close();
+});
+
 test("retries an early-closed sample inside one durable Attempt", async (context) => {
   const fixture = await createFixture(
     context,
@@ -5895,9 +6828,32 @@ test("retries an early-closed sample inside one durable Attempt", async (context
       { role: "assistant", content: "done" },
     ],
   );
-  assert.equal(retryDelays.length, 1);
   assert.deepEqual(
-    (await fixture.events()).map((event) => event.type),
+    (
+      await fixture.store.listModelHistoryItems(
+        { tenantId: actor().tenantId, threadId: fixture.threadId },
+        0,
+        100,
+      )
+    ).map((item) =>
+      item.type === "message"
+        ? { type: item.type, role: item.role, content: item.content }
+        : { type: item.type },
+    ),
+    [
+      { type: "message", role: "user", content: "hello" },
+      { type: "message", role: "assistant", content: "done" },
+    ],
+  );
+  assert.equal(retryDelays.length, 1);
+  const events = await fixture.events();
+  assert.equal(
+    events.find((event) => event.type === "model.sampling.retry")?.data
+      .discardedOutput,
+    true,
+  );
+  assert.deepEqual(
+    events.map((event) => event.type),
     [
       "run.created",
       "run.started",
@@ -6441,7 +7397,7 @@ test("retrieves the same provider response after terminal rollback", async (cont
                   content: [{ type: "output_text", text: "done" }],
                 },
               ],
-              usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+              usage: { input_tokens: 4, output_tokens: 1, total_tokens: 5 },
             });
       },
     },
@@ -6490,6 +7446,14 @@ test("retrieves the same provider response after terminal rollback", async (cont
     kind: "completed",
     runId: fixture.runId,
   });
+  const usage = await fixture.store.listModelUsage({
+    tenantId: actor().tenantId,
+    runId: fixture.runId,
+    afterOrder: 0,
+    limit: 128,
+  });
+  assert.equal(usage.length, 1);
+  assert.equal(usage[0]?.record.observation.usage.inputTokens, 4);
   const checkpoint = await fixture.store.loadThreadContinuation({
     tenantId: actor().tenantId,
     threadId: fixture.threadId,
@@ -6549,6 +7513,8 @@ if (postgresConnectionString === undefined) {
       databaseTime: {
         expireWorkItem: (store, workItemId) =>
           (store as RuntimePostgresStore).expireWorkItem(workItemId),
+        makeWorkItemDue: (store, workItemId) =>
+          (store as RuntimePostgresStore).makeWorkItemDue(workItemId),
       },
     },
   );
@@ -8783,7 +9749,7 @@ function registerRuntimeWorkerConformance(
       const recovered = fixture.worker({
         transport,
         toolRuntime,
-        approvalRecheckMs: 1,
+        approvalRecheckMs: options.databaseTime === undefined ? 1 : 60_000,
       });
       const adopted = await recovered.wake();
       assert.equal(adopted.kind, "waitingApproval");
@@ -8817,7 +9783,12 @@ function registerRuntimeWorkerConformance(
       );
       assert.equal(requiredEvents.length, 2);
 
-      fixture.leaseClock.advance(1);
+      if (options.databaseTime === undefined) fixture.leaseClock.advance(1);
+      else
+        await options.databaseTime.makeWorkItemDue(
+          fixture.store,
+          fixture.workItemId,
+        );
       assert.deepEqual(await recovered.wake(), {
         kind: "waitingApproval",
         runId: fixture.runId,
@@ -8935,7 +9906,13 @@ function registerRuntimeWorkerConformance(
       const lost = fixture.worker({
         transport,
         afterProviderResponseCheckpointed: async () => {
-          fixture.leaseClock.advance(10_000);
+          if (options.databaseTime === undefined)
+            fixture.leaseClock.advance(10_000);
+          else
+            await options.databaseTime.expireWorkItem(
+              fixture.store,
+              fixture.workItemId,
+            );
           throw new Error("simulated_worker_loss");
         },
       });
@@ -9064,6 +10041,87 @@ function registerRuntimeWorkerConformance(
       await second.close();
     });
   });
+}
+
+function countingTransport(
+  modelId: string,
+  onSample: () => void = () => {},
+): ModelTransportPort {
+  return {
+    adapterName: "cloud-agent",
+    adapterVersion: "1",
+    modelId,
+    async *stream() {
+      onSample();
+      yield { type: "output.delta", delta: "answer" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+}
+
+function usageTransport(
+  modelId: string,
+  totalTokens: number,
+  onSample: () => void = () => {},
+): ModelTransportPort {
+  return {
+    adapterName: "cloud-agent",
+    adapterVersion: "1",
+    modelId,
+    async *stream() {
+      onSample();
+      yield { type: "output.delta", delta: "answer" };
+      yield {
+        type: "usage",
+        inputTokens: Math.max(0, totalTokens - 1),
+        outputTokens: 1,
+        totalTokens,
+      };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+}
+
+function providerAgentRuntime(
+  route: RunRoute,
+  transport: ModelTransportPort,
+  options: Readonly<{
+    contextCompactor?: ContextCompactorPort;
+    contextWindowTokens?: number;
+    autoCompactAtTokens?: number;
+  }> = {},
+): AgentVersionRuntime {
+  const kernel = new CrewONAgentKernel({ transport, streamMaxRetries: 0 });
+  const version = compileAgentVersion(
+    {
+      schemaVersion: "crewon.agent-version-source.v0",
+      agentVersionId: route.agentVersionId,
+      runtimeGeneration: route.runtimeGeneration,
+      policySnapshotId: route.policySnapshotId,
+      instructions: null,
+      model: {
+        ...kernel.modelIdentity,
+        contextWindowTokens: options.contextWindowTokens ?? 128_000,
+        autoCompactAtTokens: options.autoCompactAtTokens ?? 96_000,
+      },
+      execution: { streamMaxRetries: 0, maxToolRounds: 8 },
+      resources: {
+        workspaceRequired: false,
+        governedContextDigest: null,
+      },
+      tools: [],
+    },
+    new Sha256Digester(),
+  );
+  return {
+    version,
+    executionAuthority: "providerAgent",
+    kernel,
+    policy: new PinnedRunExecutionPolicy(route),
+    toolRuntime: new InMemoryToolBroker(),
+    contextCompactor:
+      options.contextCompactor ?? new KernelContextCompactor(kernel),
+  };
 }
 
 async function createFixture(
@@ -9306,6 +10364,7 @@ async function createFixture(
 type RuntimeWorkerConformanceOptions = Readonly<{
   databaseTime?: Readonly<{
     expireWorkItem(store: DomainStore, workItemId: string): Promise<void>;
+    makeWorkItemDue(store: DomainStore, workItemId: string): Promise<void>;
   }>;
 }>;
 
@@ -9330,6 +10389,13 @@ class RuntimePostgresStore extends PostgresDomainStore {
       `UPDATE ${this.#schemaSql}.work_items
        SET lease_expires_at=clock_timestamp()-interval '1 millisecond'
        WHERE work_item_id=$1`,
+      [workItemId],
+    );
+  }
+
+  async makeWorkItemDue(workItemId: string): Promise<void> {
+    await this.#admin.query(
+      `UPDATE ${this.#schemaSql}.work_items SET available_at=clock_timestamp()-interval '1 millisecond' WHERE work_item_id=$1`,
       [workItemId],
     );
   }

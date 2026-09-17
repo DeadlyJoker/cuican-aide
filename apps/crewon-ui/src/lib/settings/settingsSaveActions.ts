@@ -14,6 +14,7 @@ import {
   settingsSaveSuccessPanel,
 } from "./settingsSavePayloads";
 import type { Theme } from "../theme";
+import type { NoticeState } from "../shared/noticeState";
 import {
   personalizationSettingsFromFields,
   type PersonalizationSettingsStore,
@@ -30,6 +31,7 @@ type SetCapabilityPanel = (
 ) => void;
 
 export type SettingsSaveHandlersParams = {
+  setNotice?: (notice: NoticeState) => void;
   client: SettingsSaveClient | null | undefined;
   fieldValue: (fieldId: string) => string;
   isConnected: boolean;
@@ -189,6 +191,17 @@ function savePersonalizationSettings(params: SettingsSaveHandlersParams) {
         }),
       );
       await params.refreshPersonalizationSettingsPanel();
+      params.setNotice?.({
+        tone: "success",
+        text:
+          locale === "zh"
+            ? personalizationStore
+              ? "助理偏好已保存到当前设备，将用于后续助理消息。"
+              : "助理设置已保存。"
+            : personalizationStore
+              ? "Assistant preferences saved on this device for later messages."
+              : "Assistant settings saved.",
+      });
     } catch (error) {
       setCapabilityPanel((currentPanel) =>
         settingsSaveFailurePanel(

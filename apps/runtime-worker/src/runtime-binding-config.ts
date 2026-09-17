@@ -32,6 +32,12 @@ import {
   type RemoteMcpCompositionDependencies,
 } from "./remote-mcp-composition.ts";
 
+import {
+  RuntimeCreationCleanup,
+  createWithoutExternalAllocation,
+  type RuntimeCreationOptions,
+} from "./runtime-creation-cleanup.ts";
+
 const MAX_BINDINGS = 1_000;
 const MAX_CONFIG_BYTES = 1024 * 1024;
 
@@ -201,6 +207,16 @@ function parseBinding(
   ) {
     throw new Error("agent_version_runtime_binding_invalid");
   }
+  if (
+    provider.kind === "cloudAgent" &&
+    (value.workspaceBindingId !== null ||
+      value.mcpStdioConfigPath !== null ||
+      value.deviceToolConfigPath !== null ||
+      value.remoteMcpConfigPath !== null ||
+      toolRuntimeMode === "shared")
+  ) {
+    throw new Error("agent_version_runtime_provider_authority_invalid");
+  }
   return {
     tenantId: bounded(value.tenantId, 256),
     agentVersionId: bounded(value.agentVersionId, 512),
@@ -351,18 +367,21 @@ function runtimeBindings(
   nativeProviderApiKey: string | null | undefined,
 ): readonly AgentVersionRuntimeBinding[] {
   return config.bindings.map((binding) => {
-    const apiKey =
-      binding.provider.apiKeyEnvironment === null
-        ? null
-        : environment[binding.provider.apiKeyEnvironment]?.trim() ||
-          nativeProviderApiKey ||
-          requiredEnvironment(environment, binding.provider.apiKeyEnvironment);
+    const executionAuthority =
+      binding.provider.kind === "cloudAgent"
+        ? ("providerAgent" as const)
+        : ("crewonKernel" as const);
+    const apiKey = runtimeBindingApiKey(
+      binding.provider,
+      environment,
+      nativeProviderApiKey,
+    );
     const expectedMaterializationDigest = materializationDigest(binding);
     const createTransport = (() => {
       if (binding.provider.kind === "cloudAgent") {
         const provider = binding.provider;
-        return (version: CompiledAgentVersion) =>
-          createCloudAgentTransport(provider, version, apiKey);
+        return (_version: CompiledAgentVersion) =>
+          createCloudAgentTransport(provider, apiKey);
       }
       const provider = binding.provider;
       return (version: CompiledAgentVersion) =>
@@ -375,18 +394,44 @@ function runtimeBindings(
       authorityId: binding.authorityId,
       workspaceBindingId: binding.workspaceBindingId,
       materializationDigest: expectedMaterializationDigest,
+      executionAuthority,
       toolRuntimeMode: binding.toolRuntimeMode,
-      createTransport,
-      createToolRuntime: (version) =>
-        createBoundToolRuntime(
-          binding,
-          version,
-          expectedMaterializationDigest,
-          environment,
-          remoteMcpDependencies,
+      ...(binding.provider.kind === "directResponses"
+        ? { transportOwnership: "request" as const }
+        : {}),
+      createTransport: (version, options = {}) =>
+        createWithoutExternalAllocation(
+          () => createTransport(version),
+          options,
         ),
+      createToolRuntime:
+        executionAuthority === "providerAgent"
+          ? () => new InMemoryToolBroker()
+          : (version, options = {}) =>
+              createBoundToolRuntime(
+                binding,
+                version,
+                expectedMaterializationDigest,
+                environment,
+                remoteMcpDependencies,
+                options,
+              ),
     };
   });
+}
+
+function runtimeBindingApiKey(
+  provider: RuntimeBindingConfig["bindings"][number]["provider"],
+  environment: Readonly<Record<string, string | undefined>>,
+  nativeProviderApiKey: string | null | undefined,
+): string | null {
+  if (provider.apiKeyEnvironment === null) return null;
+  const configured = environment[provider.apiKeyEnvironment]?.trim();
+  if (configured) return configured;
+  if (provider.kind === "directResponses" && nativeProviderApiKey) {
+    return nativeProviderApiKey;
+  }
+  return requiredEnvironment(environment, provider.apiKeyEnvironment);
 }
 
 function sha256(value: string): string {
@@ -449,62 +494,73 @@ async function createBoundToolRuntime(
   expectedMaterializationDigest: string,
   environment: Readonly<Record<string, string | undefined>>,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
+  options: RuntimeCreationOptions,
 ): Promise<ToolRuntimePort> {
-  const remoteMcpConfig =
-    binding.remoteMcpConfigPath === null
-      ? null
-      : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath);
-  if (
-    materializationDigest(binding, { remoteMcpConfig }) !==
-    expectedMaterializationDigest
-  ) {
-    throw new Error("agent_version_runtime_materialization_drift");
-  }
-  if (
-    binding.remoteMcpConfigPath !== null &&
-    remoteMcpDependencies === undefined
-  ) {
-    throw new Error("remote_mcp_runtime_not_composed");
-  }
-  const runtimes: ToolRuntimePort[] = [];
+  const creation = new RuntimeCreationCleanup(options.failedCreationCleanup);
   try {
+    const remoteMcpConfig =
+      binding.remoteMcpConfigPath === null
+        ? null
+        : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath);
+    if (
+      materializationDigest(binding, { remoteMcpConfig }) !==
+      expectedMaterializationDigest
+    ) {
+      throw new Error("agent_version_runtime_materialization_drift");
+    }
+    if (
+      binding.remoteMcpConfigPath !== null &&
+      remoteMcpDependencies === undefined
+    ) {
+      throw new Error("remote_mcp_runtime_not_composed");
+    }
+    const runtimes: ToolRuntimePort[] = [];
     const pimSandbox = createConfiguredPimSandboxToolRuntime(environment);
     if (pimSandbox !== undefined) {
-      runtimes.push(pimSandbox);
+      runtimes.push(creation.own(pimSandbox));
     }
     if (binding.mcpStdioConfigPath !== null) {
       runtimes.push(
-        await createConnectedMcpRuntime(binding.mcpStdioConfigPath),
+        await creation.create((child) =>
+          createConnectedMcpRuntime(binding.mcpStdioConfigPath!, child),
+        ),
       );
     }
     if (binding.deviceToolConfigPath !== null) {
       runtimes.push(
-        loadDeviceToolRuntime(binding.deviceToolConfigPath, version.tools),
+        creation.own(
+          loadDeviceToolRuntime(binding.deviceToolConfigPath, version.tools),
+        ),
       );
     }
     if (binding.remoteMcpConfigPath !== null) {
       runtimes.push(
-        await composeRemoteMcpRuntime(
-          remoteMcpConfig!,
-          {
-            tenantId: binding.tenantId,
-            workspaceBindingId: binding.workspaceBindingId,
-            agentVersionId: binding.agentVersionId,
-            contentDigest: binding.contentDigest,
-            materializationDigest: expectedMaterializationDigest,
-          },
-          remoteMcpDependencies!,
+        await creation.create((child) =>
+          composeRemoteMcpRuntime(
+            remoteMcpConfig!,
+            {
+              tenantId: binding.tenantId,
+              workspaceBindingId: binding.workspaceBindingId,
+              agentVersionId: binding.agentVersionId,
+              contentDigest: binding.contentDigest,
+              materializationDigest: expectedMaterializationDigest,
+            },
+            remoteMcpDependencies!,
+            child,
+          ),
         ),
       );
     }
-    if (runtimes.length === 0) {
-      return new InMemoryToolBroker();
-    }
-    return runtimes.length === 1
-      ? runtimes[0]!
-      : new CompositeToolRuntime(runtimes);
+    const runtime =
+      runtimes.length === 0
+        ? new InMemoryToolBroker()
+        : runtimes.length === 1
+          ? runtimes[0]!
+          : new CompositeToolRuntime(runtimes);
+    creation.transfer();
+    return runtime;
   } catch (error) {
-    await Promise.allSettled(runtimes.map((runtime) => runtime.close?.()));
+    await creation.cleanup();
     throw error;
   }
 }
@@ -521,6 +577,7 @@ function directResponsesTransport(
     endpoint: provider.endpoint,
     apiKey,
     model: version.model.modelId,
+    maxOutputTokens: version.model.maxOutputTokens,
     storeResponses: provider.storeResponses,
     requestProfile: provider.requestProfile,
     idleTimeoutMs: provider.idleTimeoutMs,
@@ -550,43 +607,37 @@ function createCloudAgentTransport(
     RuntimeBindingConfig["bindings"][number]["provider"],
     { kind: "cloudAgent" }
   >,
-  version: CompiledAgentVersion,
   apiKey: string | null,
 ): CloudAgentTransport {
-  return new CloudAgentTransport(
-    {
-      invocationUrl: provider.invocationUrl,
-      apiKey: apiKey ?? "",
-      model: provider.modelId,
-      agentId: provider.agentId,
-      idleTimeoutMs: provider.idleTimeoutMs,
-    },
-    {
-      identity: {
-        adapterName: version.model.adapterName,
-        adapterVersion: baseAdapterVersion(
-          version.model.adapterVersion,
-          provider.requestProfile,
-        ),
-      },
-    },
-  );
+  return new CloudAgentTransport({
+    invocationUrl: provider.invocationUrl,
+    apiKey: apiKey ?? "",
+    model: provider.modelId,
+    agentId: provider.agentId,
+    idleTimeoutMs: provider.idleTimeoutMs,
+  });
 }
 
 async function createConnectedMcpRuntime(
   path: string,
+  options: RuntimeCreationOptions,
 ): Promise<ToolRuntimePort> {
-  const input = readBoundedJson(
-    path,
-    512 * 1024,
-    "agent_version_mcp_config_invalid",
-  );
-  const runtime = createStdioMcpRuntimeGroup(parseMcpStdioConfig(input));
+  const creation = new RuntimeCreationCleanup(options.failedCreationCleanup);
   try {
+    const input = readBoundedJson(
+      path,
+      512 * 1024,
+      "agent_version_mcp_config_invalid",
+    );
+    // Constructors only create local objects; no process starts until connect.
+    const runtime = creation.own(
+      createStdioMcpRuntimeGroup(parseMcpStdioConfig(input)),
+    );
     await runtime.connect(new AbortController().signal);
+    creation.transfer();
     return runtime;
   } catch (error) {
-    await runtime.close();
+    await creation.cleanup();
     throw error;
   }
 }

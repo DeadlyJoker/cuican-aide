@@ -13,13 +13,9 @@ exports[`final Provider control actions > keeps native model setup available bef
       "label": "Refresh",
     },
   ],
-  "body": "Runtime: Unavailable
+  "body": "Model source status: Unavailable
 
-Notes
-- LiteLLM Gateway is recommended. LiteLLM adapts OpenAI, Anthropic, Gemini, Bedrock, DeepSeek, and other major vendors or local models; CrewON does not duplicate vendor protocols.
-- CrewON calls the Responses API. Connect directly only when the service supports Responses; route other models through LiteLLM's Responses bridge.
-- An API key entered here is stored only in the OS credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service. The desktop catalog stores only provider identity and endpoint.
-- Saving or switching performs a supervised Worker restart only while no task is active; an active task rejects the switch instead of being interrupted.",
+Wait for running tasks to finish before saving or switching model sources.",
   "rows": [
     {
       "actions": [

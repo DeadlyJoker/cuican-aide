@@ -16,6 +16,7 @@ import {
   type OutboxMessage,
   type WorkItem,
 } from "@crewon/application";
+import { scheduledAutomationQuery } from "./scheduled-automation-query.ts";
 import {
   type ModelHistoryItem,
   type RunLifecycleEvent,
@@ -185,27 +186,14 @@ export async function listPostgresScheduledAutomations(
   schema: string,
   query: ScheduledAutomationListQuery,
 ): Promise<readonly AutomationDefinitionRecord[]> {
-  if (
-    !Number.isSafeInteger(query.limit) ||
-    query.limit < 1 ||
-    query.limit > 100
-  ) {
-    throw new AutomationStoreError("automation_limit_invalid");
-  }
   try {
+    const statement = scheduledAutomationQuery(query, {
+      kind: "postgres",
+      schema,
+    });
     const rows = await pool.query<AutomationRow>(
-      `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-              definition_digest, definition_json, updated_at
-       FROM ${schema}.automations
-       WHERE definition_json ->> 'executionMode' = 'scheduled'
-         AND ($1::timestamptz IS NULL OR updated_at < $1::timestamptz
-           OR (updated_at = $1::timestamptz AND automation_id < $2))
-       ORDER BY updated_at DESC, automation_id DESC LIMIT $3`,
-      [
-        query.before?.updatedAt ?? null,
-        query.before?.automationId ?? null,
-        query.limit,
-      ],
+      statement.sql,
+      statement.parameters,
     );
     return rows.rows.map(decodeAutomationRow);
   } catch (error) {

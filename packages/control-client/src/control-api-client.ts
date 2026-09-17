@@ -1,3 +1,17 @@
+import { MAX_OFFICE_THREAD_RESPONSE_BYTES, parseOfficeThreadResponse, parseOfficeThreadMutationResponse, parseBindOfficeThreadRequest, type OfficeThreadResponse, type OfficeThreadMutationResponse, type BindOfficeThreadRequest } from "@crewon/contracts";
+import { MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES, type GetThreadActiveRunResponse } from "@crewon/contracts";
+import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
+import { MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES, parseThreadTranscriptWindowResponse, type GetThreadTranscriptWindowResponse } from "@crewon/contracts";
+import {
+  MAX_THREAD_CATALOG_RESPONSE_BYTES, parseThreadCatalogQuery, parseThreadCatalogResponse,
+  threadCatalogPath, type ThreadCatalogRequest, type ThreadCatalogResponse,
+} from "@crewon/contracts";
+import {
+  MAX_THREAD_MESSAGE_WINDOW_RESPONSE_BYTES,
+  parseThreadMessageWindowQuery,
+  parseThreadMessageWindowResponse,
+  type GetThreadMessageWindowResponse,
+} from "@crewon/contracts";
 import type {
   ActiveAgentVersionCatalogResponse,
   AgentVersionMutationResponse,
@@ -300,6 +314,30 @@ export class ControlApiClient {
       ...options,
       expectedStatuses: [200],
     });
+  }
+
+  async getThreadCatalog(
+    query: ThreadCatalogRequest = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ThreadCatalogResponse> {
+    const parsedQuery = parseThreadCatalogQuery(query);
+    const response = await this.#json<unknown>(
+      "GET",
+      threadCatalogPath(query),
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_CATALOG_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadCatalogResponse(response, parsedQuery);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_thread_catalog_invalid",
+      );
+    }
   }
 
   async getThread(
@@ -767,6 +805,47 @@ export class ControlApiClient {
     );
   }
 
+  async getThreadMessageWindow(
+    threadId: string,
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetThreadMessageWindowResponse> {
+    const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
+    const response = await this.#json<unknown>(
+      "GET",
+      withQuery(
+        `/api/v1/threads/${resourceId(threadId)}/message-window`,
+        query,
+      ),
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_MESSAGE_WINDOW_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadMessageWindowResponse(response, threadId, parsedQuery);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_message_window_invalid",
+      );
+    }
+  }
+
+  async getThreadTranscriptWindow(
+    threadId: string,
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetThreadTranscriptWindowResponse> {
+    const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
+    const response = await this.#json<unknown>("GET", withQuery(
+      `/api/v1/threads/${resourceId(threadId)}/transcript-window`, query,
+    ), null, { ...options, expectedStatuses: [200], maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES });
+    try { return parseThreadTranscriptWindowResponse(response, threadId, parsedQuery); }
+    catch { throw new ControlApiProtocolError("control_client_transcript_window_invalid"); }
+  }
+
   listThreadMessages(
     threadId: string,
     query: {
@@ -796,6 +875,27 @@ export class ControlApiClient {
       body,
       { ...options, idempotencyKey, expectedStatuses: [200, 201] },
     );
+  }
+
+  async getThreadActiveRun(
+    threadId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetThreadActiveRunResponse> {
+    const response = await this.#json<unknown>(
+      "GET",
+      `/api/v1/threads/${resourceId(threadId)}/active-run`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadActiveRunResponse(response, threadId);
+    } catch {
+      throw new ControlApiProtocolError("control_client_active_run_invalid");
+    }
   }
 
   async listThreadRuns(
@@ -869,6 +969,81 @@ export class ControlApiClient {
     });
   }
 
+  async getOfficeThread(
+    officeVersionId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<OfficeThreadResponse> {
+    const response = await this.#json<unknown>(
+      "GET",
+      `/api/v1/offices/${resourceId(officeVersionId)}/thread`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_OFFICE_THREAD_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseOfficeThreadResponse(response, officeVersionId);
+    } catch {
+      throw new ControlApiProtocolError("control_client_office_thread_invalid");
+    }
+  }
+
+  async createOfficeThread(
+    officeVersionId: string,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<OfficeThreadMutationResponse> {
+    const response = await this.#json<unknown>(
+      "POST",
+      `/api/v1/offices/${resourceId(officeVersionId)}/thread`,
+      {},
+      {
+        ...options,
+        idempotencyKey,
+        requireCsrf: true,
+        requireIdempotency: true,
+        expectedStatuses: [200, 201],
+        maximumResponseBytes: MAX_OFFICE_THREAD_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseOfficeThreadMutationResponse(response, {
+        officeVersionId,
+        operation: "create",
+      });
+    } catch {
+      throw new ControlApiProtocolError("control_client_office_thread_invalid");
+    }
+  }
+
+  async bindOfficeThread(
+    officeVersionId: string,
+    body: BindOfficeThreadRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<OfficeThreadMutationResponse> {
+    const response = await this.#json<unknown>(
+      "POST",
+      `/api/v1/offices/${resourceId(officeVersionId)}/thread-binding`,
+      parseBindOfficeThreadRequest(body),
+      {
+        ...options,
+        requireCsrf: true,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_OFFICE_THREAD_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseOfficeThreadMutationResponse(response, {
+        officeVersionId,
+        operation: "bind",
+      });
+    } catch {
+      throw new ControlApiProtocolError("control_client_office_thread_invalid");
+    }
+  }
+
   createOffice(
     body: CreateOfficeRequest,
     idempotencyKey: string,
@@ -937,7 +1112,19 @@ export class ControlApiClient {
     return this.#json("GET", `/api/v1/runs/${resourceId(runId)}`, null, {
       ...options,
       expectedStatuses: [200],
+      maximumResponseBytes: 1024 * 1024,
     });
+  }
+
+  async getRunInThread(threadId: string, runId: string, options: ControlApiRequestOptions = {}): Promise<GetRunResponse> {
+    const response = await this.getRun(runId, options);
+    try {
+      const run = parseRunView(response.run, threadId);
+      if (run.runId !== runId) throw new Error("run_identity_invalid");
+      return { run };
+    } catch {
+      throw new ControlApiProtocolError("control_client_thread_run_invalid");
+    }
   }
 
   async getRunPlan(

@@ -46,6 +46,7 @@ const record: ControlOfficeDefinitionRecordReference = {
     subtitle: "交付组长 · 审阅成员",
   },
   definition: {
+    officeId: "office-1",
     officeVersionId: "office-version-1",
     revision: 2,
     members: office.members,

@@ -22,7 +22,20 @@ export async function* parseResponsesSse(
   let buffer = "";
   try {
     while (true) {
-      const result = await reader.read();
+      let result: ReadableStreamReadResult<Uint8Array>;
+      try {
+        result = await reader.read();
+      } catch (cause) {
+        // A failed body read is a transport interruption, not malformed UTF-8.
+        // The owning transport still gives cancellation and idle deadlines priority.
+        if (cause instanceof ModelTransportError) throw cause;
+        throw new ModelTransportError({
+          category: "unavailable",
+          code: "responses_stream_read_failed",
+          retryable: true,
+          cause,
+        });
+      }
       if (result.done) {
         break;
       }

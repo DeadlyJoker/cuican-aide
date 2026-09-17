@@ -105,7 +105,8 @@ describe("App Workspace Control composition", () => {
     expect(end).toBeGreaterThan(start);
     expect(runtimeLifetime).toContain("new ControlThreadRuntime(");
     expect(runtimeLifetime).toContain("setRuntime(control)");
-    expect(runtimeLifetime).toContain("return () => control.close()");
+    expect(runtimeLifetime).toContain("teamObservation?.close()");
+    expect(runtimeLifetime).toContain("control.close()");
     expect(source).not.toContain("runtime.close()");
   });
 

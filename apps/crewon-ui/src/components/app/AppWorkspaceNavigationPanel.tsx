@@ -1,3 +1,4 @@
+import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 
 import { AppWorkspaceNavigation } from "./AppWorkspaceNavigation";
@@ -10,6 +11,7 @@ import type { PlatformKind } from "../../lib/platform";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 
 type AppWorkspaceNavigationPanelProps = {
+  threadCatalogNavigation?: ThreadCatalogNavigation;
   activeLibraryKind: LibraryKind | null;
   activeSection: SettingsSection;
   appView: AppView;
@@ -37,6 +39,7 @@ type AppWorkspaceNavigationPanelProps = {
 };
 
 export function AppWorkspaceNavigationPanel({
+  threadCatalogNavigation,
   activeLibraryKind,
   activeSection,
   appView,
@@ -68,6 +71,7 @@ export function AppWorkspaceNavigationPanel({
 
   return (
     <AppWorkspaceNavigation
+      threadCatalogNavigation={threadCatalogNavigation}
       activeLibraryKind={activeLibraryKind}
       activeSection={activeSection}
       appView={appView}
@@ -76,10 +80,10 @@ export function AppWorkspaceNavigationPanel({
       clearSearchLabel={t.clearSearch}
       deleteThreadLabel={locale === "zh" ? "删除会话" : "Delete session"}
       archiveWorkspaceLabel={
-        locale === "zh" ? "归档工作空间会话" : "Archive workspace sessions"
+        threadCatalogNavigation ? (locale === "zh" ? "归档本页空间会话" : "Archive workspace sessions on this page") : (locale === "zh" ? "归档工作空间会话" : "Archive workspace sessions")
       }
       deleteWorkspaceLabel={
-        locale === "zh" ? "删除工作空间会话" : "Delete workspace sessions"
+        threadCatalogNavigation ? (locale === "zh" ? "删除本页空间会话" : "Delete workspace sessions on this page") : (locale === "zh" ? "删除工作空间会话" : "Delete workspace sessions")
       }
       isLoading={connectionState === "connecting" || isSearchingThreads}
       loadingThreadsLabel={t.loadingThreads}

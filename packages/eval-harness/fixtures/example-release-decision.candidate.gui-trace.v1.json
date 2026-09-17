@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "crewon.team-effect-gui-trace.v1",
+  "caseId": "example-release-decision",
+  "caseRevision": "revision-1",
+  "traceId": "example-candidate-001",
+  "submittedPrompt": "请基于 rollback、monitoring、owner 和 rehearsal 证据判断本次发布是否放行；明确列出冲突、门禁、两项行动和未知项，并严格使用约定标签。",
+  "capture": {
+    "source": "gui",
+    "collector": "browser-e2e-fixture",
+    "capturedAt": "2026-09-03T12:21:00.000Z"
+  },
+  "variant": {
+    "variantId": "role-directed",
+    "promptVariantId": "team-role-directed-v1",
+    "harnessVersion": "team-effect-v1",
+    "buildRevision": "fixture-candidate",
+    "agents": [
+      {
+        "memberId": "manager",
+        "agentVersionId": "candidate-manager-v1",
+        "agentVersionDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "providerId": "fixture-provider-a",
+        "modelId": "fixture-manager-model",
+        "reasoningEffort": "high",
+        "capabilityProfileId": "portable-text-v1"
+      },
+      {
+        "memberId": "planner",
+        "agentVersionId": "candidate-planner-v1",
+        "agentVersionDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "providerId": "fixture-provider-a",
+        "modelId": "fixture-planner-model",
+        "reasoningEffort": "high",
+        "capabilityProfileId": "portable-text-v1"
+      },
+      {
+        "memberId": "verifier",
+        "agentVersionId": "candidate-verifier-v1",
+        "agentVersionDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "providerId": "fixture-provider-b",
+        "modelId": "fixture-verifier-model",
+        "reasoningEffort": "medium",
+        "capabilityProfileId": "portable-text-v1"
+      }
+    ]
+  },
+  "answer": {
+    "text": "结论: NO-GO\n证据A: rollback 证据仍缺失。\n证据B: monitoring 告警链路已经验证。\n证据C: owner 已指定但未确认值班。\n证据D: rehearsal 尚未覆盖恢复阶段。\n冲突: planner 支持发布，verifier 要求先补齐回滚证据。\n门禁: rollback drill 必须成功。\n行动1: owner 完成值班确认。\n行动2: monitoring 负责人补充复核记录。\n未知: 生产故障的实际恢复时长。"
+  },
+  "ui": {
+    "userMessageCopies": 1,
+    "errorText": null,
+    "pending": false
+  },
+  "efficiency": {
+    "modelRunCount": 3,
+    "logicalPhaseCount": 2,
+    "timeToFirstVisibleOutputMs": null,
+    "settledDurationMs": 45683
+  }
+}

@@ -51,6 +51,10 @@ export function registerTurnStartStoreConformance(
       assert.equal(committed.threadState.lastMessageSequence, 1);
       assert.equal(committed.runState.status, "queued");
       assert.equal(committed.goalState, null);
+      assert.deepEqual((await store.messageWindows!.readWindow({
+        tenantId: "tenant-1", spaceId: "space-1", threadId: "thread-1",
+        position: null, limit: 1, view: "transcript",
+      })).runBindings, [{ messageId: input.thread.messages[0]!.messageId, runId: committed.runState.runId, source: "turnStartReceipt" }]);
       assert.deepEqual(
         await store.loadThread({ tenantId: "tenant-1", threadId: "thread-1" }),
         committed.threadState,
@@ -92,6 +96,10 @@ export function registerTurnStartStoreConformance(
         ...committed,
         disposition: "replayed",
       });
+      assert.equal((await store.messageWindows!.readWindow({
+        tenantId: "tenant-1", spaceId: "space-1", threadId: "thread-1",
+        position: null, limit: 1, view: "transcript",
+      })).runBindings?.length, 1);
       assert.deepEqual(
         await store.loadTurnStartReceipt({
           tenantId: input.tenantId,

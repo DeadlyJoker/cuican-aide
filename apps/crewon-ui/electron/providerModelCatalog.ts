@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 
 import type { ProviderCredentialStore } from "./providerCredentials.ts";
 import { nodeArguments, type RuntimePaths } from "./runtimeSupervisor.ts";
+import { processRuntimeLogs } from "./processRuntimeLogs.ts";
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
 const MAX_MODELS = 32;
@@ -132,10 +133,7 @@ function parseEndpoint(value: unknown): string {
 }
 
 function parseEnvironmentVariable(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    !ENVIRONMENT_VARIABLE_PATTERN.test(value)
-  ) {
+  if (typeof value !== "string" || !ENVIRONMENT_VARIABLE_PATTERN.test(value)) {
     throw new Error("provider_model_catalog_request_invalid");
   }
   return value;
@@ -197,7 +195,7 @@ function runCatalogProbe(
       }
     });
     child.stderr?.on("data", (chunk: Buffer) =>
-      process.stderr.write(`[Model catalog] ${chunk}`),
+      processRuntimeLogs().write("stderr", "Model catalog", chunk),
     );
     child.once("error", () =>
       finish(() => reject(new Error("provider_model_catalog_failed"))),

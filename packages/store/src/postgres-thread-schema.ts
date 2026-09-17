@@ -1,4 +1,8 @@
-export const POSTGRES_THREAD_SCHEMA_VERSION = 5;
+import { officeThreadSchemaSql } from "./office-thread-binding.ts";
+import { postgresModelHistoryContextSchemaSql } from "./postgres-model-history-context-schema.ts";
+import { postgresModelHistoryAppendSchemaSql } from "./postgres-model-history-append-schema.ts";
+
+export const POSTGRES_THREAD_SCHEMA_VERSION = 8;
 
 export function postgresThreadSchemaSql(schema: string): string {
   return `
@@ -6,6 +10,14 @@ export function postgresThreadSchemaSql(schema: string): string {
       component text PRIMARY KEY,
       version integer NOT NULL CHECK (version >= 1)
     );
+    DO $office_binding_guard$ BEGIN
+      IF EXISTS (SELECT 1 FROM ${schema}.schema_migrations
+                 WHERE component = 'thread_authority' AND version >= 7)
+         AND to_regclass('${schema}.office_thread_bindings') IS NULL THEN
+        RAISE EXCEPTION 'office_thread_binding_schema_missing';
+      END IF;
+    END $office_binding_guard$;
+    ${officeThreadSchemaSql(schema)}
     INSERT INTO ${schema}.schema_migrations(component, version)
       VALUES ('thread_authority', ${POSTGRES_THREAD_SCHEMA_VERSION})
       ON CONFLICT (component) DO NOTHING;
@@ -244,7 +256,7 @@ export function postgresThreadSchemaSql(schema: string): string {
           );
 
         UPDATE ${schema}.schema_migrations
-          SET version = ${POSTGRES_THREAD_SCHEMA_VERSION}
+          SET version = 5
           WHERE component = 'thread_authority' AND version = 4;
       END IF;
     END
@@ -268,5 +280,11 @@ export function postgresThreadSchemaSql(schema: string): string {
       WHERE item_type = 'tool_call';
     CREATE UNIQUE INDEX IF NOT EXISTS model_history_tool_result_key_idx
       ON ${schema}.model_history_items(thread_id, run_id, call_id)
-      WHERE item_type = 'tool_result';`;
+      WHERE item_type = 'tool_result';
+    ${postgresModelHistoryContextSchemaSql(schema)}
+    UPDATE ${schema}.schema_migrations SET version = 7
+      WHERE component = 'thread_authority' AND version = 6;
+    ${postgresModelHistoryAppendSchemaSql(schema)}
+    UPDATE ${schema}.schema_migrations SET version = 8
+      WHERE component = 'thread_authority' AND version = 7;`;
 }

@@ -12,10 +12,16 @@ const repositoryRoot = path.resolve(
 type Boundary = Readonly<{
   packageName: string;
   allowedBareImports: readonly string[];
+  allowedFileImports?: Readonly<Record<string, readonly string[]>>;
   allowedRuntimeDependencies: readonly string[];
 }>;
 
 const boundaries: readonly Boundary[] = [
+  {
+    packageName: "capability-packs",
+    allowedBareImports: [],
+    allowedRuntimeDependencies: [],
+  },
   {
     packageName: "artifacts",
     allowedBareImports: ["node:", "@crewon/application", "@crewon/domain"],
@@ -23,8 +29,21 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "agent-kernel",
-    allowedBareImports: ["@crewon/contracts", "@crewon/tool-broker"],
-    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/tool-broker"],
+    allowedBareImports: [
+      "@crewon/contracts",
+      "@crewon/domain",
+      "@crewon/tool-broker",
+    ],
+    // Durable accounting and continuation limits are core domain values.
+    allowedRuntimeDependencies: [
+      "@crewon/contracts",
+      "@crewon/domain",
+      "@crewon/tool-broker",
+    ],
+    allowedFileImports: {
+      "model-call-observer.ts": ["node:crypto"],
+      "model-usage-observer.ts": ["node:crypto"],
+    },
   },
   {
     packageName: "agent-responses",
@@ -71,6 +90,11 @@ const boundaries: readonly Boundary[] = [
     allowedRuntimeDependencies: [],
   },
   {
+    packageName: "eval-harness",
+    allowedBareImports: ["node:fs"],
+    allowedRuntimeDependencies: [],
+  },
+  {
     packageName: "device-dispatch",
     allowedBareImports: [
       "node:crypto",
@@ -82,6 +106,10 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "mcp-runtime",
+    // Stable remote mutation identity is computed at the transport adapter.
+    allowedFileImports: {
+      "crewon-remote-mutation-provider.ts": ["node:crypto"],
+    },
     allowedBareImports: [
       "node:path",
       "@crewon/tool-broker",
@@ -103,10 +131,26 @@ const boundaries: readonly Boundary[] = [
       "node:crypto",
       "node:sqlite",
       "@crewon/application",
+      "@crewon/contracts",
       "@crewon/domain",
       "pg",
     ],
-    allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain", "pg"],
+    allowedRuntimeDependencies: [
+      "@crewon/application",
+      "@crewon/contracts",
+      "@crewon/domain",
+      "pg",
+    ],
+    // Storage owns protocol validation, bounded disk probes and physical codecs.
+    allowedFileImports: {
+      "assistant-sample-continuation.ts": ["node:util"],
+      "filesystem-storage-admission.ts": ["node:fs/promises", "node:path"],
+      "in-memory-thread-message-window.ts": ["node:buffer"],
+      "model-accounting-reader.ts": ["node:timers/promises"],
+      "sqlite-canonical-tool-output-codec.ts": ["node:zlib"],
+      "sqlite-execution-receipt-codec.ts": ["node:zlib"],
+      "sqlite-tool-result-codec.ts": ["node:zlib"],
+    },
   },
   {
     packageName: "tool-broker",
@@ -121,6 +165,12 @@ const boundaries: readonly Boundary[] = [
 ];
 
 const controlApiBoundary = {
+  // Native activation types and sandbox path normalization stay in adapters.
+  allowedFileImports: {
+    "main.ts": ["node:net"],
+    "paused-admission.ts": ["node:stream"],
+    "pim-sandbox-client.ts": ["node:path"],
+  },
   allowedBareImports: [
     "node:crypto",
     "node:http",
@@ -224,8 +274,10 @@ test("new architecture packages respect dependency direction", () => {
           continue;
         }
         if (
-          boundary.allowedBareImports.some((allowed) =>
-            matchesAllowedImport(specifier, allowed),
+          boundaryAllowsImport(
+            boundary,
+            path.relative(sourceDirectory, file),
+            specifier,
           )
         ) {
           continue;
@@ -238,6 +290,70 @@ test("new architecture packages respect dependency direction", () => {
   }
 
   assert.deepEqual(violations, []);
+});
+
+test("core values and application ports cannot acquire runtime or outward dependencies", () => {
+  for (const name of ["domain", "contracts", "application"]) {
+    const boundary = boundaries.find((value) => value.packageName === name)!;
+    for (const specifier of [
+      "node:crypto",
+      "node:fs",
+      "@crewon/store",
+      "@crewon/agent-kernel",
+      "fastify",
+      "pg",
+    ]) {
+      assert.equal(
+        boundaryAllowsImport(boundary, "new-service.ts", specifier),
+        false,
+        `${name} -> ${specifier}`,
+      );
+    }
+  }
+  assert.equal(
+    boundaryAllowsImport(
+      boundaries.find((value) => value.packageName === "domain")!,
+      "execution-lifecycle.ts",
+      "@crewon/contracts",
+    ),
+    false,
+  );
+});
+
+test("adapter import exceptions do not authorize neighboring files, nested files or subpaths", () => {
+  for (const boundary of [...boundaries, controlApiBoundary]) {
+    for (const [file, imports] of Object.entries(
+      boundary.allowedFileImports ?? {},
+    )) {
+      for (const specifier of imports) {
+        assert.equal(boundaryAllowsImport(boundary, file, specifier), true);
+        assert.equal(
+          boundaryAllowsImport(boundary, `nested/${file}`, specifier),
+          false,
+        );
+        assert.equal(
+          boundaryAllowsImport(boundary, `other-${file}`, specifier),
+          false,
+        );
+        assert.equal(
+          boundaryAllowsImport(boundary, file, `${specifier}/unapproved`),
+          false,
+        );
+      }
+    }
+  }
+});
+
+test("boundary inspection includes type imports, dynamic imports and re-exports", () => {
+  assert.deepEqual(
+    importSpecifiers(`
+    import type { AddressInfo } from "node:net";
+    const driver = import("pg");
+    export { service } from "@crewon/application";
+    import "node:fs";
+  `).sort(),
+    ["@crewon/application", "node:fs", "node:net", "pg"],
+  );
 });
 
 test("new architecture packages only use allowed runtime dependencies", () => {
@@ -295,7 +411,7 @@ test("new architecture runtime dependency graph is acyclic", () => {
 test("Control API composition only imports approved ports and open runtime adapters", () => {
   const violations = importViolations(
     path.join(repositoryRoot, "apps", "control-api", "src"),
-    controlApiBoundary.allowedBareImports,
+    controlApiBoundary,
   );
   assert.deepEqual(violations, []);
 
@@ -314,7 +430,7 @@ test("Control API composition only imports approved ports and open runtime adapt
 test("Runtime Worker composition only imports owned Kernel and application ports", () => {
   const violations = importViolations(
     path.join(repositoryRoot, "apps", "runtime-worker", "src"),
-    runtimeWorkerBoundary.allowedBareImports,
+    runtimeWorkerBoundary,
   );
   assert.deepEqual(violations, []);
 
@@ -333,7 +449,7 @@ test("Runtime Worker composition only imports owned Kernel and application ports
 test("Device Gateway only imports protocol contracts, PostgreSQL authority and its open WebSocket transport", () => {
   const violations = importViolations(
     path.join(repositoryRoot, "apps", "device-gateway", "src"),
-    deviceGatewayBoundary.allowedBareImports,
+    deviceGatewayBoundary,
   );
   assert.deepEqual(violations, []);
 
@@ -415,7 +531,7 @@ function sourceFiles(directory: string): string[] {
 
 function importViolations(
   directory: string,
-  allowedBareImports: readonly string[],
+  boundary: Pick<Boundary, "allowedBareImports" | "allowedFileImports">,
 ): string[] {
   return sourceFiles(directory).flatMap((file) => {
     if (isTestSource(file)) {
@@ -424,8 +540,10 @@ function importViolations(
     return importSpecifiers(readFileSync(file, "utf8")).flatMap((specifier) => {
       if (
         specifier.startsWith(".") ||
-        allowedBareImports.some((allowed) =>
-          matchesAllowedImport(specifier, allowed),
+        boundaryAllowsImport(
+          boundary,
+          path.relative(directory, file),
+          specifier,
         )
       ) {
         return [];
@@ -433,6 +551,22 @@ function importViolations(
       return [`${path.relative(repositoryRoot, file)} -> ${specifier}`];
     });
   });
+}
+
+function boundaryAllowsImport(
+  boundary: Pick<Boundary, "allowedBareImports" | "allowedFileImports">,
+  relativeFile: string,
+  specifier: string,
+): boolean {
+  return (
+    boundary.allowedBareImports.some((allowed) =>
+      matchesAllowedImport(specifier, allowed),
+    ) ||
+    (
+      boundary.allowedFileImports?.[relativeFile.split(path.sep).join("/")] ??
+      []
+    ).includes(specifier)
+  );
 }
 
 function isTestSource(file: string): boolean {

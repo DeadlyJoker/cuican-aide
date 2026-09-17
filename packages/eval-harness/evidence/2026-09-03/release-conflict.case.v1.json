@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "crewon.team-effect-case.v1",
+  "caseId": "gui-release-conflict-8f31",
+  "caseRevision": "2026-09-03.1",
+  "title": "GUI Team contradictory release evidence",
+  "prompt": "仅使用以下材料，禁止联网、工具或任何 API：A=构建 commit 8f31、digest AA11、tests 184/184；B=制品清单同为 commit 8f31、digest BB22；C=refund 端到端测试 failed；D=变更说明声称“不影响退款”。团队需要分别完成发布规划与独立验证，组长最终裁决。最终回答必须不超过 900 字，并严格包含：DECISION: NO-GO；EVIDENCE-A、EVIDENCE-B、EVIDENCE-C、EVIDENCE-D 各一行；CONFLICT 一行；GATE 一行；ACTION-1、ACTION-2 各一行；UNRESOLVED 一行。不得把 184/184 当成抵消冲突或退款失败的证据。",
+  "expectedMemberIds": ["member-1", "member-2", "member-3"],
+  "efficiencyGate": {
+    "modelRunCount": {
+      "maxRegressionPercent": 0,
+      "minImprovementPercent": 20
+    },
+    "logicalPhaseCount": {
+      "maxRegressionPercent": 0,
+      "minImprovementPercent": 20
+    },
+    "timeToFirstVisibleOutputMs": {
+      "maxRegressionPercent": null,
+      "minImprovementPercent": null
+    },
+    "settledDurationMs": {
+      "maxRegressionPercent": null,
+      "minImprovementPercent": null
+    }
+  },
+  "qualityGate": {
+    "authoredOrder": [
+      "decision",
+      "evidence-a",
+      "evidence-b",
+      "evidence-c",
+      "evidence-d",
+      "conflict",
+      "gate",
+      "action-one",
+      "action-two",
+      "unknown"
+    ],
+    "maxAnswerCharacters": 900,
+    "allowUnlabelledText": false,
+    "labels": [
+      {
+        "id": "decision",
+        "kind": "decision",
+        "label": "DECISION:",
+        "expectedFragments": [],
+        "exactContent": "NO-GO",
+        "minContentCharacters": 5
+      },
+      {
+        "id": "evidence-a",
+        "kind": "evidence",
+        "label": "EVIDENCE-A:",
+        "expectedFragments": ["8f31", "AA11", "184/184"],
+        "exactContent": null,
+        "minContentCharacters": 30
+      },
+      {
+        "id": "evidence-b",
+        "kind": "evidence",
+        "label": "EVIDENCE-B:",
+        "expectedFragments": ["8f31", "BB22"],
+        "exactContent": null,
+        "minContentCharacters": 25
+      },
+      {
+        "id": "evidence-c",
+        "kind": "evidence",
+        "label": "EVIDENCE-C:",
+        "expectedFragments": ["refund", "failed"],
+        "exactContent": null,
+        "minContentCharacters": 18
+      },
+      {
+        "id": "evidence-d",
+        "kind": "evidence",
+        "label": "EVIDENCE-D:",
+        "expectedFragments": ["不影响退款"],
+        "exactContent": null,
+        "minContentCharacters": 12
+      },
+      {
+        "id": "conflict",
+        "kind": "conflict",
+        "label": "CONFLICT:",
+        "expectedFragments": ["digest", "退款", "不影响退款", "冲突"],
+        "exactContent": null,
+        "minContentCharacters": 55
+      },
+      {
+        "id": "gate",
+        "kind": "decision",
+        "label": "GATE:",
+        "expectedFragments": ["digest", "通过"],
+        "exactContent": null,
+        "minContentCharacters": 30
+      },
+      {
+        "id": "action-one",
+        "kind": "decision",
+        "label": "ACTION-1:",
+        "expectedFragments": ["冻结", "制品"],
+        "exactContent": null,
+        "minContentCharacters": 35
+      },
+      {
+        "id": "action-two",
+        "kind": "decision",
+        "label": "ACTION-2:",
+        "expectedFragments": ["refund", "验证"],
+        "exactContent": null,
+        "minContentCharacters": 40
+      },
+      {
+        "id": "unknown",
+        "kind": "unknown",
+        "label": "UNRESOLVED:",
+        "expectedFragments": ["refund", "依据"],
+        "exactContent": null,
+        "minContentCharacters": 50
+      }
+    ]
+  }
+}

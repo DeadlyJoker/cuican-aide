@@ -179,3 +179,55 @@ function sha256(value: string): string {
 function hasCode(code: string): (error: unknown) => boolean {
   return (error) => error instanceof AgentVersionError && error.code === code;
 }
+
+test("pins an optional output ceiling into the digest and preserves old assets byte for byte", () => {
+  const source = agentVersionSource();
+  const legacy = compileAgentVersion(source, { sha256 });
+  const capped = compileAgentVersion(
+    { ...source, model: { ...source.model, maxOutputTokens: 128 } },
+    { sha256 },
+  );
+  const other = compileAgentVersion(
+    { ...source, model: { ...source.model, maxOutputTokens: 256 } },
+    { sha256 },
+  );
+  assert.notEqual(capped.contentDigest, legacy.contentDigest);
+  assert.notEqual(capped.contentDigest, other.contentDigest);
+  assert.equal(Object.hasOwn(legacy.model, "maxOutputTokens"), false);
+  for (const version of [legacy, capped]) {
+    const asset = createAgentVersionAsset({
+      tenantId: "tenant-1",
+      version,
+      createdAt: "2026-09-15T00:00:00Z",
+    });
+    assert.deepEqual(parseAgentVersionAsset(asset, { sha256 }), version);
+  }
+  assert.deepEqual(capped.tools, legacy.tools);
+  assert.equal(capped.instructions, legacy.instructions);
+});
+
+test("rejects output ceilings outside the model window and non-integer or explicit unknown values", () => {
+  const source = agentVersionSource();
+  for (const bad of [
+    undefined,
+    null,
+    0,
+    -1,
+    1.5,
+    NaN,
+    Infinity,
+    "128",
+    source.model.contextWindowTokens + 1,
+  ])
+    assert.throws(
+      () =>
+        compileAgentVersion(
+          {
+            ...source,
+            model: { ...source.model, maxOutputTokens: bad as number },
+          },
+          { sha256 },
+        ),
+      hasCode("agent_version_model_output_limit_invalid"),
+    );
+});

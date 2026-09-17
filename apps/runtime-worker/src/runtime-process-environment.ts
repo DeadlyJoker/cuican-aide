@@ -53,6 +53,14 @@ export function createModelTransport(
       apiKey:
         native.apiKey ?? (process.env.CREWON_MODEL_API_KEY?.trim() || null),
       model: requiredEnvironment("CREWON_MODEL_ID"),
+      ...(process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS === undefined
+        ? {}
+        : {
+            maxOutputTokens: parsePositiveInteger(
+              process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS,
+              "CREWON_RESPONSES_MAX_OUTPUT_TOKENS_invalid",
+            ),
+          }),
       storeResponses: parseBoolean(
         compatibility === null
           ? (process.env.CREWON_RESPONSES_STORE ?? "false")
@@ -194,7 +202,11 @@ export async function createConfiguredToolRuntime(
       ? runtimes[0]
       : new CompositeToolRuntime(runtimes);
   } catch (error) {
-    await Promise.allSettled(runtimes.map((runtime) => runtime.close?.()));
+    await Promise.allSettled(
+      runtimes.map((runtime) =>
+        Promise.resolve().then(() => runtime.close?.()),
+      ),
+    );
     throw error;
   }
 }
@@ -221,7 +233,7 @@ async function createConfiguredMcpRuntime(
     await runtime.connect(new AbortController().signal);
     return runtime;
   } catch (error) {
-    await runtime.close();
+    await runtime.close().catch(() => {});
     throw error;
   }
 }

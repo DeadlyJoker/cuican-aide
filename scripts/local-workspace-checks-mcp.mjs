@@ -1,25 +1,19 @@
-import { spawn } from "node:child_process";
-import {
-  chmod,
-  readFile,
-  readdir,
-  realpath,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, realpath, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { fileURLToPath } from "node:url";
+import { runWorkspaceCommandGuard } from "./local-workspace-command-guard.mts";
 import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+  createWorkspaceCommands,
+  WORKSPACE_COMMAND_TIMEOUT_MS,
+} from "./local-workspace-commands.mts";
+import {
+  listWorkspaceDirectory,
+  readWorkspaceFilePrefix,
+} from "./local-workspace-reads.mts";
 
-const MAX_OUTPUT_BYTES = 60 * 1024;
-const MAX_FILE_BYTES = 24 * 1024;
-const MAX_DIRECTORY_ENTRIES = 200;
-const COMMAND_TIMEOUT_MS = 2 * 60 * 1_000;
+const COMMAND_TIMEOUT_MS = WORKSPACE_COMMAND_TIMEOUT_MS;
+
+if (process.argv[2] === "--command-guard") await runWorkspaceCommandGuard();
 
 if (process.argv[2] === "--write-config") {
   await writeConfig({
@@ -45,6 +39,17 @@ const gitPath = requireExecutablePath(
   "local_git_path_invalid",
 );
 
+const [
+  { Server },
+  { StdioServerTransport },
+  { CallToolRequestSchema, ListToolsRequestSchema },
+] = await Promise.all([
+  import("@modelcontextprotocol/sdk/server/index.js"),
+  import("@modelcontextprotocol/sdk/server/stdio.js"),
+  import("@modelcontextprotocol/sdk/types.js"),
+]);
+const commands = createWorkspaceCommands(fileURLToPath(import.meta.url));
+
 const server = new Server(
   { name: "crewon-local-workspace-checks", version: "1.0.0" },
   { capabilities: { tools: {} } },
@@ -55,7 +60,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "list_files",
       description:
-        "List a bounded directory inside the current local workspace. Use a relative path such as . or apps/crewon-ui.",
+        "List up to 200 sorted entries inside the current local workspace. Scans exceeding 10,000 entries or the work deadline are rejected; choose a narrower relative directory such as apps/crewon-ui.",
       inputSchema: {
         type: "object",
         additionalProperties: false,
@@ -114,7 +119,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
   if (request.params.name === "list_files") {
     const input = request.params.arguments ?? {};
     if (!hasExactKeys(input, ["path"]) || typeof input.path !== "string") {
@@ -126,24 +131,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         input.path,
         "directory",
       );
-      const entries = await readdir(directory, { withFileTypes: true });
-      const visible = entries
-        .filter((entry) => entry.isDirectory() || entry.isFile())
-        .map((entry) => ({
-          name: entry.name,
-          kind: entry.isDirectory() ? "directory" : "file",
-        }))
-        .sort((left, right) =>
-          left.kind === right.kind
-            ? left.name.localeCompare(right.name)
-            : left.kind === "directory"
-              ? -1
-              : 1,
-        );
       return toolValue({
         path: input.path,
-        entries: visible.slice(0, MAX_DIRECTORY_ENTRIES),
-        truncated: visible.length > MAX_DIRECTORY_ENTRIES,
+        ...(await listWorkspaceDirectory(directory, { signal: extra.signal })),
       });
     } catch (error) {
       return toolError(
@@ -158,12 +148,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     try {
       const file = await resolveWorkspacePath(repoRoot, input.path, "file");
-      const bytes = await readFile(file);
       return toolValue({
         path: input.path,
-        content: bytes.subarray(0, MAX_FILE_BYTES).toString("utf8"),
-        byteLength: bytes.byteLength,
-        truncated: bytes.byteLength > MAX_FILE_BYTES,
+        ...(await readWorkspaceFilePrefix(file, { signal: extra.signal })),
       });
     } catch (error) {
       return toolError(
@@ -175,9 +162,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     if (!hasExactKeys(request.params.arguments ?? {}, [])) {
       return toolError("git_status_input_invalid");
     }
-    return toolResult(
-      await runCommand(gitPath, ["status", "--short"], repoRoot),
-    );
+    return executeCommand({
+      command: gitPath,
+      args: ["status", "--short"],
+      cwd: repoRoot,
+      signal: extra.signal,
+    });
   }
   if (request.params.name === "run_ui_test") {
     const input = request.params.arguments ?? {};
@@ -195,18 +185,36 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         error instanceof Error ? error.message : "ui_test_path_invalid",
       );
     }
-    return toolResult(
-      await runCommand(
-        pnpmPath,
-        ["--filter", "@crewon/ui", "exec", "vitest", "run", testFile],
-        repoRoot,
-      ),
-    );
+    return executeCommand({
+      command: pnpmPath,
+      args: ["--filter", "@crewon/ui", "exec", "vitest", "run", testFile],
+      cwd: repoRoot,
+      signal: extra.signal,
+    });
   }
   return toolError("local_workspace_tool_not_found");
 });
 
 await server.connect(new StdioServerTransport());
+
+let shutdownPromise;
+const shutdown = () =>
+  (shutdownPromise ??= (async () => {
+    await commands.close();
+    await server.close();
+  })());
+server.onclose = () => {
+  void shutdown();
+};
+process.stdin.once("end", () => {
+  void shutdown();
+});
+process.once("SIGTERM", () => {
+  void shutdown().finally(() => process.exit(0));
+});
+process.once("SIGINT", () => {
+  void shutdown().finally(() => process.exit(0));
+});
 
 async function writeConfig({
   outputPath,
@@ -343,69 +351,23 @@ async function resolveWorkspacePath(root, input, expectedKind) {
   return candidate;
 }
 
-function runCommand(command, args, cwd) {
-  return new Promise((resolveRun) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env },
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout = [];
-    const stderr = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    let timedOut = false;
-    const collect = (chunks, chunk, currentBytes) => {
-      const remaining = Math.max(0, MAX_OUTPUT_BYTES - currentBytes);
-      if (remaining > 0) chunks.push(chunk.subarray(0, remaining));
-      return currentBytes + chunk.byteLength;
-    };
-    child.stdout.on("data", (chunk) => {
-      stdoutBytes = collect(stdout, chunk, stdoutBytes);
-    });
-    child.stderr.on("data", (chunk) => {
-      stderrBytes = collect(stderr, chunk, stderrBytes);
-    });
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGTERM");
-    }, COMMAND_TIMEOUT_MS);
-    child.once("error", (error) => {
-      clearTimeout(timeout);
-      resolveRun({
-        command: [command, ...args],
-        exitCode: null,
-        signal: null,
-        timedOut,
-        stdout: "",
-        stderr: error.message,
-        outputTruncated: false,
-      });
-    });
-    child.once("close", (exitCode, signal) => {
-      clearTimeout(timeout);
-      resolveRun({
-        command: [command, ...args],
-        exitCode,
-        signal,
-        timedOut,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        outputTruncated:
-          stdoutBytes > MAX_OUTPUT_BYTES || stderrBytes > MAX_OUTPUT_BYTES,
-      });
-    });
-  });
-}
-
 function toolResult(result) {
   const text = JSON.stringify(result, null, 2);
   return {
     content: [{ type: "text", text }],
     structuredContent: result,
-    isError: result.exitCode !== 0,
+    isError: result.timedOut || result.exitCode !== 0,
   };
+}
+
+async function executeCommand(request) {
+  try {
+    return toolResult(await commands.run(request));
+  } catch (error) {
+    return toolError(
+      error instanceof Error ? error.message : "workspace_command_failed",
+    );
+  }
 }
 
 function toolValue(value) {

@@ -1,3 +1,9 @@
+import { ModelPricingApplicationService } from "@crewon/application";
+import { ModelSpendingApplicationService } from "@crewon/application";
+import { OfficeThreadApplicationService } from "@crewon/application";
+import type { StorageAdmissionPort } from "@crewon/application";
+import { createLocalStorageAdmissionOwner } from "@crewon/store";
+import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
@@ -48,6 +54,8 @@ import {
 } from "./provider-probe-worker-client.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
+  storageAdmission?: StorageAdmissionPort;
+  localStoragePaths?: readonly string[];
   connectionString: string;
   schema?: string;
   maxPoolSize?: number;
@@ -56,6 +64,8 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   authorization: AuthorizationPort & AutomationAuthorizationPort;
   heartbeatIntervalMs?: number | null;
   outboxScanIntervalMs?: number | null;
+  outboxRetention?: OutboxRetentionPolicy | null;
+  artifactRetention?: ArtifactRetentionPolicy | null;
   automationScanIntervalMs?: number | null;
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
@@ -88,6 +98,10 @@ async function composeProductionControlApi(
   store: PostgresDomainStore,
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
+  const storageCapacity = createLocalStorageAdmissionOwner({
+    configured: config.storageAdmission,
+    paths: config.localStoragePaths ?? [],
+  });
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
@@ -96,9 +110,12 @@ async function composeProductionControlApi(
       ownerId: `outbox:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
       scanIntervalMs: config.outboxScanIntervalMs,
+      retention: config.outboxRetention,
     },
   );
+  let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   try {
+    artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
     const workflowVersionStore = store.workflowVersionStore(digester);
@@ -114,9 +131,19 @@ async function composeProductionControlApi(
       authorization: config.authorization,
       clock,
       ids,
+      digester,
     });
     const threads = new ThreadApplicationService({
       store,
+      authorization: config.authorization,
+      clock,
+      ids,
+      digester,
+    });
+    const officeThreads = new OfficeThreadApplicationService({
+      store,
+      offices,
+      threads,
       authorization: config.authorization,
       clock,
       ids,
@@ -175,6 +202,7 @@ async function composeProductionControlApi(
     });
     const automationScheduler = new AutomationScheduler(
       {
+        storageAdmission: storageCapacity.admission,
         automations,
         store,
         threads,
@@ -224,6 +252,7 @@ async function composeProductionControlApi(
     const app = buildControlApi({
       application,
       offices,
+      officeThreads,
       threads,
       taskChanges,
       goals,
@@ -239,6 +268,11 @@ async function composeProductionControlApi(
       workspaceLists: null,
       workspaceQueries,
       providerSettings,
+      modelPricing: new ModelPricingApplicationService({
+        store,
+        authorization: config.authorization,
+      }),
+      modelSpending: new ModelSpendingApplicationService({ store, authorization: config.authorization }),
       providerProbes,
       // Team remains fail closed until its coordinator, tenant egress policy,
       // and authenticated Worker transport are deployed together.
@@ -252,10 +286,14 @@ async function composeProductionControlApi(
       eventHub,
       outboxWakeup: outboxDispatcher,
       heartbeatIntervalMs: config.heartbeatIntervalMs,
+      storageAdmission: storageCapacity.admission,
     });
     outboxDispatcher.start();
     automationScheduler.start();
+    artifactMaintenance.start();
     app.addHook("onClose", async () => {
+      storageCapacity.close();
+      await artifactMaintenance!.close();
       await automationScheduler.close();
       await outboxDispatcher.close();
       eventHub.close();
@@ -266,12 +304,15 @@ async function composeProductionControlApi(
       app,
       eventHub,
       outboxDispatcher,
+      artifactMaintenance,
       automationScheduler,
       providerProbes,
       workspaceLists: null,
       workspaceQueries,
     };
   } catch (error) {
+    storageCapacity.close();
+    void artifactMaintenance?.close();
     void outboxDispatcher.close();
     eventHub.close();
     void config.artifactStore.close();
@@ -333,3 +374,5 @@ function requireBounded(value: unknown, maximum: number, code: string): void {
     throw new Error(code);
   }
 }
+import { ArtifactRetentionMaintenance } from "./artifact-retention-maintenance.ts";
+import type { ArtifactRetentionPolicy } from "@crewon/application";

@@ -17,6 +17,11 @@ import type {
   RemoteMcpServerConfig,
 } from "./remote-mcp-runtime-config.ts";
 
+import {
+  RuntimeCreationCleanup,
+  type RuntimeCreationOptions,
+} from "./runtime-creation-cleanup.ts";
+
 export type RemoteMcpBindingIdentity = Readonly<{
   mode: RemoteMcpServerConfig["mode"];
   tenantId: string;
@@ -60,21 +65,30 @@ export async function composeRemoteMcpRuntime(
   config: RemoteMcpRuntimeConfig,
   release: ReleaseBinding,
   dependencies: RemoteMcpCompositionDependencies,
+  options: RuntimeCreationOptions = {},
 ): Promise<McpRuntimeGroup> {
-  assertReleaseBinding(release);
-  if (config.servers.some((server) => server.mode !== dependencies.mode)) {
-    throw new Error("remote_mcp_composition_mode_mismatch");
-  }
-  const runtimes: McpToolRuntime[] = [];
+  const creation = new RuntimeCreationCleanup(options.failedCreationCleanup);
   try {
+    assertReleaseBinding(release);
+    if (config.servers.some((server) => server.mode !== dependencies.mode)) {
+      throw new Error("remote_mcp_composition_mode_mismatch");
+    }
+    const runtimes: McpToolRuntime[] = [];
     for (const server of config.servers) {
-      runtimes.push(createServerRuntime(server, release, dependencies));
+      // Dependency callbacks are external. A throw without returning their
+      // borrowed ports cannot prove that an internal allocation was cleaned.
+      const dependency = creation.requireConfirmation();
+      runtimes.push(
+        creation.own(createServerRuntime(server, release, dependencies)),
+      );
+      dependency.confirmReleased();
     }
     const group = new McpRuntimeGroup(runtimes);
     await group.connect(new AbortController().signal);
+    creation.transfer();
     return group;
   } catch (error) {
-    await Promise.allSettled(runtimes.map((runtime) => runtime.close()));
+    await creation.cleanup();
     throw error;
   }
 }

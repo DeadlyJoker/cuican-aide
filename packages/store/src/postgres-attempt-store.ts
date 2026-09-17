@@ -1,5 +1,39 @@
+import { PostgresModelPricingStore } from "./postgres-model-pricing-store.ts";
+import { PostgresModelSpendingStore } from "./postgres-model-spending-store.ts";
+import { assertPostgresSpendingSchema } from "./model-spending-schema.ts";
+import { PostgresRunExecutionProgressStore } from "./postgres-run-execution-progress-store.ts";
+import { validateRunExecutionProgressRun } from "./run-execution-progress-support.ts";
+import {
+  isEmptyAssistantSample,
+  validateAssistantSampleAuthority,
+  validateAssistantSampleReplay,
+} from "./assistant-sample-continuation.ts";
+import { validateCheckpointRun } from "./compaction-checkpoint-support.ts";
+import { PostgresCompactionCheckpointStore } from "./postgres-compaction-checkpoint-store.ts";
+import type {
+  AppendRunProgressEventsInput,
+  AppendRunProgressEventsResult,
+  AppendRunStreamEventsInput,
+  AppendRunStreamEventsResult,
+  RunStreamEvent,
+} from "@crewon/application";
+import { PostgresModelCallStore } from "./postgres-model-call-store.ts";
+import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
+import { PostgresModelUsageStore } from "./postgres-model-usage-store.ts";
+import type {
+  RecordModelUsageInput,
+  RecordModelCallInput,
+  ModelUsagePageQuery,
+} from "@crewon/application";
+import {
+  validateToolSampleCommit,
+  validateToolSampleAuthority,
+  validateToolSampleReplay,
+} from "./tool-sample-commit.ts";
 import {
   RunStoreError,
+  type AppendRunOutputEventsInput,
+  type AppendRunOutputEventsResult,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
   type CheckpointRunAttemptInput,
@@ -9,6 +43,7 @@ import {
   type CommitContextCompactionInput,
   type CommitContextCompactionResult,
   type CommitAssistantSampleContinuationInput,
+  type CommitToolSampleInput,
   type CommitAssistantSampleContinuationResult,
   type CommitRunResult,
   type CompleteRunAttemptInput,
@@ -46,6 +81,8 @@ import {
   type PostgresRunReceiptRow,
 } from "./postgres-run-codec.ts";
 import { PostgresRunStore } from "./postgres-run-store.ts";
+import { appendPostgresRunStreamEventsWithin } from "./postgres-run-output-store.ts";
+import { validateRunOutputAppend } from "./run-output-append.ts";
 import {
   writePostgresOutbox,
   writePostgresRunEvents,
@@ -82,6 +119,70 @@ import {
 
 /** PostgreSQL Step/Attempt authority; compound terminal transactions follow separately. */
 export class PostgresAttemptStore extends PostgresRunStore {
+  readonly executionProgress = new PostgresRunExecutionProgressStore(this.pool, this.schemaSql(), async (client, input) => {
+    this.assertOpen();
+    validateRunExecutionProgressRun(input, await this.loadRunWithin(client, input.scope, true));
+    await this.validateExecutionLeaseWithin(client, input.scope.tenantId, input.scope.runId, input.lease);
+  });
+  readonly compactionCheckpoints = new PostgresCompactionCheckpointStore(this.pool, this.schemaSql(), async (client, input) => {
+    this.assertOpen();
+    validateCheckpointRun(input, await this.loadRunWithin(client, input.scope, true));
+    await this.validateExecutionLeaseWithin(client, input.scope.tenantId, input.scope.runId, input.lease);
+  });
+  async canRetireArtifact(
+    input: ArtifactRetentionCandidate,
+    options?: ArtifactRetentionReadOptions,
+  ): Promise<boolean> {
+    this.assertOpen();
+    return canRetirePostgresArtifact(this.pool, this.schemaSql(), input, options);
+  }
+  readonly #modelUsage = new PostgresModelUsageStore(
+    this.pool,
+    this.schemaSql(),
+    (client, input) =>
+      this.validateExecutionLeaseWithin(
+        client,
+        input.record.tenantId,
+        input.record.runId,
+        input.lease,
+      ),
+  );
+
+  recordModelUsage(input: RecordModelUsageInput) {
+    this.assertOpen();
+    return this.#modelUsage.recordModelUsage(input);
+  }
+
+  listModelUsage(query: ModelUsagePageQuery) {
+    this.assertOpen();
+    return this.#modelUsage.listModelUsage(query);
+  }
+
+  readonly modelPricing = new PostgresModelPricingStore(this.pool, this.schemaSql(), () => this.assertOpen());
+  readonly modelSpending = new PostgresModelSpendingStore(this.pool, this.schemaSql(), () => this.assertOpen());
+  readonly #modelCalls = new PostgresModelCallStore(
+    this.pool,
+    this.schemaSql(),
+    (client, input) =>
+      this.validateExecutionLeaseWithin(
+        client,
+        input.record.tenantId,
+        input.record.runId,
+        input.lease,
+      ),
+    (client, input) => this.loadRunWithin(client, input.record, true),
+  );
+
+  recordModelCall(input: RecordModelCallInput) {
+    this.assertOpen();
+    return this.#modelCalls.recordModelCall(input);
+  }
+
+  listModelCalls(query: ModelUsagePageQuery) {
+    this.assertOpen();
+    return this.#modelCalls.listModelCalls(query);
+  }
+
   static override async open(
     options: PostgresThreadStoreOptions,
   ): Promise<PostgresAttemptStore> {
@@ -107,6 +208,30 @@ export class PostgresAttemptStore extends PostgresRunStore {
         "execution_authority",
         POSTGRES_EXECUTION_SCHEMA_VERSION,
       );
+      const current = await client.query<{ version: number }>(
+        `SELECT version FROM ${this.schemaSql()}.schema_migrations WHERE component='execution_authority'`,
+      );
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION)
+        await assertPostgresSpendingSchema(client, this.schemaSql());
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION)
+        await client.query(`SELECT tenant_id,agent_version_id,revision,price_json FROM ${this.schemaSql()}.model_token_pricing LIMIT 0`);
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION)
+        await client.query(`SELECT response_key,call_key,ambiguous FROM ${this.schemaSql()}.model_generation_responses LIMIT 0`);
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION)
+        await client.query(
+          `SELECT call_key,usage_order FROM ${this.schemaSql()}.model_usage_call_aliases LIMIT 0`,
+        );
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION)
+        await client.query(`SELECT tenant_id,run_id,step_id,context_digest,revision,payload,payload_digest FROM ${this.schemaSql()}.context_compaction_checkpoints LIMIT 0`);
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION) {
+        const trigger = await client.query("SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname='run_snapshots' AND t.tgname='retire_terminal_compaction_checkpoint' AND NOT t.tgisinternal", [this.schema]);
+        if (trigger.rows.length !== 1) throw new RunStoreError("postgres_compaction_checkpoint_schema_invalid");
+      }
+      if (current.rows[0]?.version === POSTGRES_EXECUTION_SCHEMA_VERSION) {
+        await client.query(`SELECT tenant_id,run_id,through_sequence,source_event_id,payload,payload_digest FROM ${this.schemaSql()}.run_execution_progress LIMIT 0`);
+        const trigger = await client.query("SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname='run_snapshots' AND t.tgname='retire_terminal_run_execution_progress' AND NOT t.tgisinternal", [this.schema]);
+        if (trigger.rows.length !== 1) throw new RunStoreError("postgres_execution_progress_schema_invalid");
+      }
       await client.query(postgresExecutionSchemaSql(this.schemaSql()));
       const result = await client.query<{ version: number }>(
         `SELECT version FROM ${this.schemaSql()}.schema_migrations
@@ -341,6 +466,62 @@ export class PostgresAttemptStore extends PostgresRunStore {
       );
       await client.query("COMMIT");
       return run;
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  async appendRunOutputEvents(
+    input: AppendRunOutputEventsInput,
+  ): Promise<AppendRunOutputEventsResult> {
+    return this.#appendRunStreamEvents(input, "output");
+  }
+
+  async appendRunProgressEvents(
+    input: AppendRunProgressEventsInput,
+  ): Promise<AppendRunProgressEventsResult> {
+    return this.#appendRunStreamEvents(input, "progress");
+  }
+
+  async #appendRunStreamEvents<E extends RunStreamEvent>(
+    input: AppendRunStreamEventsInput<E>,
+    mode: "output" | "progress",
+  ): Promise<AppendRunStreamEventsResult<E>> {
+    this.assertOpen();
+    validateRunOutputAppend(input, mode);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await advisoryLock(client, `run:${input.tenantId}:${input.runId}`);
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      const current = await this.loadRunWithin(
+        client,
+        { tenantId: input.tenantId, runId: input.runId },
+        true,
+      );
+      if (current === null) throw new RunStoreError("run_not_found");
+      const result = await appendPostgresRunStreamEventsWithin(
+        client,
+        this.schemaSql(),
+        current,
+        input,
+      );
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      await client.query("COMMIT");
+      return result;
     } catch (error) {
       await rollbackPostgres(client);
       throw normalizePostgresError(error);
@@ -631,6 +812,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
           input.lease,
         );
       }
+      await client.query(`DELETE FROM ${this.schemaSql()}.context_compaction_checkpoints WHERE tenant_id=$1 AND run_id=$2 AND step_id=$3`, [input.commit.tenantId, runId, input.attempt.stepId]);
       await client.query("COMMIT");
       return structuredClone({
         run,
@@ -649,7 +831,29 @@ export class PostgresAttemptStore extends PostgresRunStore {
     input: CommitAssistantSampleContinuationInput,
   ): Promise<CommitAssistantSampleContinuationResult> {
     this.assertOpen();
-    const runId = validateAssistantSampleContinuationInput(input);
+    return this.#commitModelSample(
+      input,
+      validateAssistantSampleContinuationInput(input),
+      "assistant",
+    );
+  }
+
+  async commitToolSample(
+    input: CommitToolSampleInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    this.assertOpen();
+    return this.#commitModelSample(
+      input,
+      validateToolSampleCommit(input),
+      "tool",
+    );
+  }
+
+  async #commitModelSample(
+    input: CommitToolSampleInput,
+    runId: string,
+    boundary: "assistant" | "tool",
+  ): Promise<CommitAssistantSampleContinuationResult> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -681,6 +885,11 @@ export class PostgresAttemptStore extends PostgresRunStore {
         );
         if (step === null || attempt?.status !== "completed") {
           throw new RunStoreError("assistant_sample_replay_conflict");
+        }
+        if (boundary === "tool") {
+          validateToolSampleReplay(input, run, step, attempt);
+        } else {
+          validateAssistantSampleReplay(input, run, step, attempt);
         }
         await client.query("COMMIT");
         return structuredClone({
@@ -734,6 +943,27 @@ export class PostgresAttemptStore extends PostgresRunStore {
           attempt: { ...input.attempt, status: "completed" },
         },
       );
+      if (boundary === "tool") {
+        validateToolSampleAuthority(
+          input,
+          await this.loadRunWithin(
+            client,
+            { tenantId: input.commit.tenantId, runId },
+            true,
+          ),
+          execution.step,
+        );
+      } else {
+        validateAssistantSampleAuthority(
+          input,
+          await this.loadRunWithin(
+            client,
+            { tenantId: input.commit.tenantId, runId },
+            true,
+          ),
+          execution.step,
+        );
+      }
       const run = await this.commitRunWithin(client, input.commit, {
         executionLease: input.lease,
         history: input.history,
@@ -743,7 +973,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
         this.schemaSql(),
         input.modelState,
       );
-      if (input.continuation !== null) {
+      if (input.continuation !== null && !isEmptyAssistantSample(input)) {
         await client.query(
           `INSERT INTO ${this.schemaSql()}.thread_continuations
              (tenant_id, thread_id, agent_version_id, adapter_name,
@@ -809,7 +1039,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
       });
       const retried = await client.query(
         `UPDATE ${this.schemaSql()}.work_items
-         SET status='pending', available_at=clock_timestamp()+$2*interval '1 millisecond',
+         SET status='pending', available_at=clock_timestamp()+CASE WHEN last_error_code='${RECONCILIATION_CANCEL_WAKE}' THEN 0 ELSE $2 END*interval '1 millisecond',
              lease_owner_id=NULL, lease_id=NULL, lease_expires_at=NULL,
              last_error_code=$3
          WHERE work_item_id=$1 AND lease_expires_at>clock_timestamp()`,
@@ -1008,3 +1238,8 @@ async function advisoryLock(client: PoolClient, key: string): Promise<void> {
     key,
   ]);
 }
+import type {
+  ArtifactRetentionCandidate,
+  ArtifactRetentionReadOptions,
+} from "@crewon/application";
+import { canRetirePostgresArtifact } from "./artifact-retention-guard.ts";

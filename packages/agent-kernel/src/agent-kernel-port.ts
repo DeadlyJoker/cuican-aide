@@ -1,9 +1,11 @@
+import type { ModelCallObservationSink } from "@crewon/domain";
 import type {
   CanonicalAgentEvent,
   ProviderCheckpoint,
   RateLimitSnapshot,
 } from "@crewon/contracts";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
+import type { ModelUsageObservationSink } from "@crewon/domain";
 
 export type AgentHistoryItem =
   | Readonly<{
@@ -131,8 +133,10 @@ export type KernelAgentEvent =
       type: "usage.recorded";
       data: Readonly<{
         inputTokens: number;
-        /** Normalized to zero at the Provider transport boundary when absent. */
+        /** Numeric compatibility value; reporting metadata distinguishes missing from zero. */
         cachedInputTokens: number;
+        /** Absent on legacy events; absence does not prove a cache report. */
+        cachedInputTokensReported?: boolean;
         outputTokens: number;
         totalTokens: number;
       }>;
@@ -166,6 +170,10 @@ export type KernelAgentEvent =
  * `segment.completed`; that is the durable Tool boundary owned by the Worker.
  */
 export interface AgentKernelPort {
+  /** Declared transport output ceiling; no inference from output byte limits. */
+  readonly maxOutputTokens?: number | undefined;
+  /** Stable Tool-free compaction configuration digest; absence disables durable summary reuse. */
+  compactionContextDigest?(): Promise<string>;
   readonly modelIdentity: Readonly<{
     adapterName: string;
     adapterVersion: string;
@@ -184,7 +192,11 @@ export interface AgentSegmentControlSink {
 }
 
 export type AgentSegmentRunOptions = Readonly<{
+  /** The caller commits an empty Provider continuation before starting another Segment. */
+  emptyResponseContinuation?: "durableBoundary";
   controlSink?: AgentSegmentControlSink;
+  usageSink?: ModelUsageObservationSink;
+  callSink?: ModelCallObservationSink;
 }>;
 
 /** Waits between same-Turn sampling attempts and remains abortable. */

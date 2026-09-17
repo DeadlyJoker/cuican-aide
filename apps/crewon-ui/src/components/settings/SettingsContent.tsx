@@ -32,10 +32,14 @@ import {
 import { presentSettingsPanel } from "../../lib/settings/settingsProductPresentation";
 import { SettingsFieldControl } from "./SettingsFieldControl";
 import { SettingsIcon } from "./SettingsIcon";
+import { SettingsSectionHelp } from "./SettingsSectionHelp";
 
 export type SettingsDataMode = "demo" | "disconnected" | "live";
 
 type SettingsContentProps = {
+  children?: ReactNode;
+  presentation?: "legacy" | "authored";
+  onSectionChange?: (section: SettingsSection) => void;
   activeSection: SettingsSection;
   dataMode?: SettingsDataMode;
   disabled?: boolean;
@@ -54,6 +58,9 @@ type SettingsSummarySection = {
 };
 
 export function SettingsContent({
+  children,
+  presentation = "legacy",
+  onSectionChange,
   activeSection,
   dataMode = "live",
   disabled = false,
@@ -66,7 +73,10 @@ export function SettingsContent({
   const copy = settingsContentCopy(locale);
   const headingTitle = settingsSectionLabel(activeSection, locale);
   const headingDescription = settingsSectionDescription(activeSection, locale);
-  const presentedPanel = presentSettingsPanel(activeSection, panel, locale);
+  const presentedPanel =
+    presentation === "authored"
+      ? panel
+      : presentSettingsPanel(activeSection, panel, locale);
   const controlsDisabled = disabled || dataMode !== "live";
   const fields = presentedPanel?.fields ?? [];
   const actions = presentedPanel?.actions ?? [];
@@ -93,6 +103,7 @@ export function SettingsContent({
       className="settings-page"
       aria-label={copy.title}
       data-mode={dataMode}
+      data-presentation={presentation}
       data-section={activeSection}
     >
       <main className="settings-content">
@@ -108,6 +119,12 @@ export function SettingsContent({
             <p>{headingDescription}</p>
           </span>
         </header>
+
+        <SettingsSectionHelp
+          section={activeSection}
+          locale={locale}
+          onSectionChange={onSectionChange}
+        />
 
         {dataMode !== "live" ? (
           <AlertCard
@@ -259,6 +276,7 @@ export function SettingsContent({
 
         {dataMode === "live" &&
         !presentedPanel?.error &&
+        !children &&
         summarySections.length === 0 &&
         !hasFields &&
         !hasRows ? (
@@ -270,6 +288,7 @@ export function SettingsContent({
             </span>
           </Card>
         ) : null}
+        {children}
       </main>
     </section>
   );

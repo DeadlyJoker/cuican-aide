@@ -1,3 +1,7 @@
+import {
+  appendPostgresModelHistoryContext,
+  lockPostgresHistoryThread,
+} from "./postgres-model-history-context.ts";
 import { RunStoreError, type MessageRecord } from "@crewon/application";
 import {
   type ModelHistoryItem,
@@ -120,30 +124,48 @@ export async function writePostgresModelHistory(
   schema: string,
   items: readonly ModelHistoryItem[],
 ): Promise<void> {
-  for (const item of items) {
+  const first = items[0];
+  if (first === undefined) return;
+  if (
+    items.some(
+      (item) =>
+        item.tenantId !== first.tenantId || item.threadId !== first.threadId,
+    )
+  ) {
+    throw new RunStoreError("model_history_identity_mismatch");
+  }
+  await lockPostgresHistoryThread(client, schema, first);
+  for (let offset = 0; offset < items.length; offset += 100) {
+    const batch = items.slice(offset, offset + 100);
     await client.query(
       `INSERT INTO ${table(schema, "model_history_items")}
          (tenant_id, thread_id, sequence, item_id, run_id, segment_id,
           call_id, tool_kind, item_type, item_json, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+       SELECT $1, $2, * FROM unnest($3::bigint[], $4::text[], $5::text[], $6::text[],
+         $7::text[], $8::text[], $9::text[], $10::jsonb[], $11::timestamptz[])`,
       [
-        item.tenantId,
-        item.threadId,
-        item.sequence,
-        item.itemId,
-        item.runId,
-        item.segmentId,
-        item.type === "tool_call" || item.type === "tool_result"
-          ? item.callId
-          : null,
-        item.type === "tool_call" || item.type === "tool_result"
-          ? item.kind
-          : null,
-        item.type,
-        stableJson(item),
-        item.createdAt,
+        first.tenantId,
+        first.threadId,
+        batch.map((item) => item.sequence),
+        batch.map((item) => item.itemId),
+        batch.map((item) => item.runId),
+        batch.map((item) => item.segmentId),
+        batch.map((item) =>
+          item.type === "tool_call" || item.type === "tool_result"
+            ? item.callId
+            : null,
+        ),
+        batch.map((item) =>
+          item.type === "tool_call" || item.type === "tool_result"
+            ? item.kind
+            : null,
+        ),
+        batch.map((item) => item.type),
+        batch.map((item) => stableJson(item)),
+        batch.map((item) => item.createdAt),
       ],
     );
+    await appendPostgresModelHistoryContext(client, schema, batch);
   }
 }
 

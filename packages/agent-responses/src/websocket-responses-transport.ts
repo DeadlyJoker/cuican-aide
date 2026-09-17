@@ -1,5 +1,7 @@
+import { parseResponsesOutputTokenLimit } from "./responses-output-budget.ts";
 import {
   ModelTransportError,
+  beginModelCall,
   type ModelInputItem,
   type ModelRequest,
   type ModelTransportStreamOptions,
@@ -7,7 +9,8 @@ import {
   type ModelTransportPort,
 } from "@crewon/agent-kernel";
 import type { ClientRequest, IncomingMessage } from "node:http";
-import WebSocket, { type ClientOptions, type RawData } from "ws";
+import WebSocket, { type ClientOptions } from "ws";
+import { WebSocketMessageQueue } from "./websocket-message-queue.ts";
 
 import {
   DirectResponsesTransport,
@@ -26,6 +29,7 @@ import {
   validateResponsesRequest,
 } from "./direct-responses-transport.ts";
 import { protocolError, transportError } from "./responses-errors.ts";
+import { recoverResponsesContinuation } from "./responses-continuation-recovery.ts";
 import { ResponsesProtocolDecoder } from "./responses-protocol.ts";
 import {
   parseTurnStateHeader,
@@ -53,6 +57,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
+  readonly maxOutputTokens: number | undefined;
   readonly #endpoint: URL;
   readonly #apiKey: string | null;
   readonly #storeResponses: boolean;
@@ -98,6 +103,9 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       "responses_model_invalid",
     );
     this.#endpoint = websocketEndpoint(parseResponsesEndpoint(config.endpoint));
+    this.maxOutputTokens = parseResponsesOutputTokenLimit(
+      config.maxOutputTokens,
+    );
     this.#apiKey = parseResponsesApiKey(config.apiKey ?? null);
     if (
       config.storeResponses !== undefined &&
@@ -138,15 +146,41 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
     options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
+    if (this.#active) {
+      throw protocolError("responses_websocket_concurrent_stream");
+    }
+    this.#active = true;
+    let reusablePrefix = false;
+    try {
+      yield* recoverResponsesContinuation({
+        request,
+        signal,
+        transport: "websocket",
+        canReplay: () => reusablePrefix,
+        stream: (next) =>
+          this.#streamOnce(next, signal, options, (plan) => {
+            reusablePrefix =
+              plan.previousResponseId !== null &&
+              plan.inputItems.length < next.input.items.length;
+          }),
+        beforeReplay: () => this.#dropSocket(this.#socket),
+      });
+    } finally {
+      this.#active = false;
+    }
+  }
+
+  async *#streamOnce(
+    request: ModelRequest,
+    signal: AbortSignal,
+    options: ModelTransportStreamOptions | undefined,
+    onRequestPlan: (plan: RequestPlan) => void,
+  ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
     if (request.providerTurnState !== undefined) {
       this.#dropSocket(this.#socket);
     }
     this.#turnStates.seed(request.runId, request.providerTurnState ?? null);
-    if (this.#active) {
-      throw protocolError("responses_websocket_concurrent_stream");
-    }
-    this.#active = true;
     let controlSinkFailure: Readonly<{ failed: boolean; value: unknown }> = {
       failed: false,
       value: undefined,
@@ -170,22 +204,39 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
               },
       });
       const plan = this.#requestPlan(request, socket);
+      let call: Awaited<ReturnType<typeof beginModelCall>> = null;
       const decoder = new ResponsesProtocolDecoder({
         sequencePolicy: this.#sequencePolicy,
-        completedCheckpoint: (responseId) =>
-          this.#storeResponses
+        onResponseIdentity: (id) => call?.responseIdentity(id),
+        completedCheckpoint: (responseId) => {
+          return this.#storeResponses
             ? responsesCheckpoint(responseId, this.modelIdentity())
-            : null,
+            : null;
+        },
       });
-      const queue = new WebSocketMessageQueue(
+      const queue = new WebSocketMessageQueue({
         socket,
         signal,
-        this.#idleTimeoutMs,
-        this.#maxMessageBytes,
-        this.#scheduler,
-      );
+        idleTimeoutMs: this.#idleTimeoutMs,
+        maxMessageBytes: this.#maxMessageBytes,
+        scheduler: this.#scheduler,
+      });
       let completed = false;
+      let outcome: "completed" | "failed" | "canceled" | "interrupted" =
+        "interrupted";
       try {
+        onRequestPlan(plan);
+        call = await beginModelCall({
+          options,
+          identity: {
+            ...this.modelIdentity(),
+            agentVersionId: request.agentVersionId,
+          },
+          transport: "websocket",
+          operation: "generate",
+          maxOutputTokens: this.maxOutputTokens,
+          signal,
+        });
         await sendFrame(
           socket,
           JSON.stringify({
@@ -197,6 +248,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
               storeResponses: this.#storeResponses,
               requestProfile: this.#requestProfile,
               inputItems: plan.inputItems,
+              maxOutputTokens: this.maxOutputTokens,
             }),
           }),
         );
@@ -213,12 +265,14 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
             if (event.type === "completed") {
               completed = true;
               const providerTurnState = this.#turnStates.get(request.runId);
-              yield providerTurnState === null
-                ? event
-                : { ...event, providerTurnState };
+              const terminal =
+                providerTurnState === null
+                  ? event
+                  : { ...event, providerTurnState };
+              yield call?.event(terminal) ?? terminal;
               continue;
             }
-            yield event;
+            yield call?.event(event) ?? event;
           }
         }
         decoder.finish();
@@ -239,11 +293,18 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
         } else {
           this.#baseline = null;
         }
+        outcome = "completed";
+      } catch (error) {
+        outcome = signal.aborted ? "canceled" : "failed";
+        throw error;
       } finally {
         queue.close();
         if (!decoder.terminal) {
           this.#dropSocket(socket);
         }
+        await call?.finish(
+          outcome === "interrupted" && signal.aborted ? "canceled" : outcome,
+        );
       }
     } catch (error) {
       this.#dropSocket(this.#socket);
@@ -267,8 +328,6 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
         undefined,
         error,
       );
-    } finally {
-      this.#active = false;
     }
   }
 
@@ -408,6 +467,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
+  readonly maxOutputTokens: number | undefined;
   readonly #websocket: WebSocketResponsesTransport;
   readonly #http: DirectResponsesTransport;
   readonly #turnStates = new ResponsesTurnStateAuthority();
@@ -427,6 +487,9 @@ export class ResilientResponsesTransport implements ModelTransportPort {
     } = {},
   ) {
     this.modelId = config.model;
+    this.maxOutputTokens = parseResponsesOutputTokenLimit(
+      config.maxOutputTokens,
+    );
     this.#websocketMaxRetries = nonNegativeInteger(
       config.websocketMaxRetries ?? DEFAULT_WEBSOCKET_RETRIES,
       "responses_websocket_retries_invalid",
@@ -480,6 +543,15 @@ export class ResilientResponsesTransport implements ModelTransportPort {
         options,
       )) {
         if (
+          event.type === "transport.fallback" &&
+          event.inputStrategy === "manual"
+        ) {
+          request = {
+            ...request,
+            input: { strategy: "manual", items: request.input.items },
+          };
+        }
+        if (
           event.type === "output.delta" ||
           event.type === "reasoning.delta" ||
           event.type === "reasoning.part.added"
@@ -504,6 +576,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
             signal,
             error.code,
             emittedObservation,
+            options,
           );
           return;
         }
@@ -584,139 +657,6 @@ type RequestPlan = Readonly<{
   previousResponseId: string | null;
   inputItems: readonly ModelInputItem[];
 }>;
-
-class WebSocketMessageQueue {
-  readonly #socket: WebSocket;
-  readonly #signal: AbortSignal;
-  readonly #idleTimeoutMs: number;
-  readonly #maxMessageBytes: number;
-  readonly #scheduler: ResponsesTimerScheduler;
-  readonly #values: unknown[] = [];
-  #failure: unknown = null;
-  #resolve: (() => void) | null = null;
-  #cancelTimer: (() => void) | null = null;
-
-  constructor(
-    socket: WebSocket,
-    signal: AbortSignal,
-    idleTimeoutMs: number,
-    maxMessageBytes: number,
-    scheduler: ResponsesTimerScheduler,
-  ) {
-    this.#socket = socket;
-    this.#signal = signal;
-    this.#idleTimeoutMs = idleTimeoutMs;
-    this.#maxMessageBytes = maxMessageBytes;
-    this.#scheduler = scheduler;
-    socket.on("message", this.#onMessage);
-    socket.on("error", this.#onError);
-    socket.on("close", this.#onClose);
-    signal.addEventListener("abort", this.#onAbort, { once: true });
-    this.#touch();
-  }
-
-  async next(): Promise<unknown> {
-    while (this.#values.length === 0 && this.#failure === null) {
-      await new Promise<void>((resolve) => {
-        this.#resolve = resolve;
-      });
-    }
-    if (this.#failure !== null) {
-      throw this.#failure;
-    }
-    return this.#values.shift();
-  }
-
-  get pendingCount(): number {
-    return this.#values.length;
-  }
-
-  close(): void {
-    this.#cancelTimer?.();
-    this.#socket.off("message", this.#onMessage);
-    this.#socket.off("error", this.#onError);
-    this.#socket.off("close", this.#onClose);
-    this.#signal.removeEventListener("abort", this.#onAbort);
-  }
-
-  readonly #onMessage = (data: RawData, isBinary: boolean): void => {
-    if (isBinary) {
-      this.#fail(protocolError("responses_websocket_binary_unsupported"));
-      return;
-    }
-    const bytes = rawDataBuffer(data);
-    if (bytes.byteLength > this.#maxMessageBytes) {
-      this.#fail(protocolError("responses_websocket_message_too_large"));
-      return;
-    }
-    let value: unknown;
-    try {
-      value = JSON.parse(bytes.toString("utf8"));
-    } catch (error) {
-      this.#fail(protocolError("responses_websocket_json_invalid", error));
-      return;
-    }
-    this.#values.push(value);
-    this.#touch();
-    this.#wake();
-  };
-
-  readonly #onError = (error: Error): void => {
-    if ("code" in error && error.code === "WS_ERR_UNSUPPORTED_MESSAGE_LENGTH") {
-      this.#fail(protocolError("responses_websocket_message_too_large", error));
-      return;
-    }
-    this.#fail(
-      transportError(
-        "unavailable",
-        "responses_websocket_unavailable",
-        true,
-        undefined,
-        error,
-      ),
-    );
-  };
-
-  readonly #onClose = (): void => {
-    this.#fail(
-      transportError("unavailable", "responses_websocket_closed", true),
-    );
-  };
-
-  readonly #onAbort = (): void => {
-    this.#fail(
-      transportError(
-        "canceled",
-        "segment_canceled",
-        false,
-        undefined,
-        this.#signal.reason,
-      ),
-    );
-  };
-
-  #touch(): void {
-    this.#cancelTimer?.();
-    this.#cancelTimer = this.#scheduler.schedule(() => {
-      this.#fail(
-        transportError("timeout", "responses_websocket_idle_timeout", true),
-      );
-    }, this.#idleTimeoutMs);
-  }
-
-  #fail(error: unknown): void {
-    if (this.#failure === null) {
-      this.#failure = error;
-      this.#wake();
-    }
-  }
-
-  #wake(): void {
-    const resolve = this.#resolve;
-    this.#resolve = null;
-    resolve?.();
-  }
-}
 
 async function waitForOpen(
   socket: WebSocket,
@@ -842,16 +782,6 @@ function websocketEndpoint(endpoint: URL): URL {
   const websocket = new URL(endpoint);
   websocket.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
   return websocket;
-}
-
-function rawDataBuffer(data: RawData): Buffer {
-  if (Buffer.isBuffer(data)) {
-    return data;
-  }
-  if (Array.isArray(data)) {
-    return Buffer.concat(data);
-  }
-  return Buffer.from(data);
 }
 
 function historyHasPrefix(

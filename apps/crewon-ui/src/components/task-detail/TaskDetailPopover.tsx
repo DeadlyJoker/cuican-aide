@@ -7,7 +7,6 @@ import {
   FileText,
   GitBranch,
   GitCommitHorizontal,
-  Laptop,
   Link2,
   LoaderCircle,
   Package,
@@ -30,7 +29,7 @@ import "./TaskDetailPopover.css";
 export const DEFAULT_TASK_DETAIL_POPOVER_ID = "task-detail-popover";
 
 export type TaskDetailLoadable<T> = {
-  status: "loading" | "ready" | "error" | "unavailable";
+  status: "loading" | "ready" | "error" | "forbidden" | "unavailable";
   data?: T;
   error?: string | null;
   unavailableReason?: string | null;
@@ -125,7 +124,6 @@ const COPY = {
     environment: "环境信息",
     changes: "变更",
     files: "个文件",
-    workspace: "工作区",
     branch: "分支",
     status: "状态",
     review: "查看变更",
@@ -165,7 +163,6 @@ const COPY = {
     environment: "Environment",
     changes: "Changes",
     files: "files",
-    workspace: "Workspace",
     branch: "Branch",
     status: "Status",
     review: "Review changes",
@@ -291,6 +288,7 @@ function Section({
   title,
   loadable,
   hasContent,
+  hideWhenEmpty = false,
   empty,
   countLabel,
   action,
@@ -300,12 +298,21 @@ function Section({
   title: string;
   loadable: TaskDetailLoadable<unknown>;
   hasContent: boolean;
+  hideWhenEmpty?: boolean;
   empty: string;
   countLabel?: number | string | null;
   action?: ReactNode;
   children?: ReactNode;
   copy: Copy;
 }) {
+  if (
+    hideWhenEmpty &&
+    !hasContent &&
+    (loadable.status === "ready" || loadable.status === "unavailable")
+  ) {
+    return null;
+  }
+
   return (
     <section className="task-detail-section" data-status={loadable.status}>
       <header>
@@ -317,8 +324,14 @@ function Section({
               className="task-detail-spin"
             />
           ) : null}
-          {loadable.status === "error" ? (
-            <CircleAlert aria-label={loadable.error ?? "Error"} />
+          {loadable.status === "error" || loadable.status === "forbidden" ? (
+            <CircleAlert
+              aria-label={
+                loadable.status === "forbidden"
+                  ? (loadable.unavailableReason ?? copy.unavailable)
+                  : (loadable.error ?? "Error")
+              }
+            />
           ) : null}
           {countLabel !== null && countLabel !== undefined ? (
             <span>{countLabel}</span>
@@ -340,6 +353,12 @@ function Section({
         <p className="task-detail-feedback is-error" role="status">
           <CircleAlert aria-hidden="true" />
           {loadable.error}
+        </p>
+      ) : null}
+      {loadable.status === "forbidden" ? (
+        <p className="task-detail-feedback is-error" role="status">
+          <CircleAlert aria-hidden="true" />
+          {loadable.unavailableReason ?? copy.unavailable}
         </p>
       ) : null}
       {loadable.status === "unavailable" ? (
@@ -368,12 +387,7 @@ function environmentHasData(
 ) {
   return Boolean(
     value &&
-      (value.branch ||
-        value.changes ||
-        value.reviewLabel ||
-        value.status ||
-        value.target ||
-        value.workspace),
+      (value.branch || value.changes || value.reviewLabel || value.status),
   );
 }
 
@@ -498,6 +512,7 @@ export function TaskDetailPopover({
           title={copy.environment}
           loadable={presentation.environment}
           hasContent={environmentHasData(environment)}
+          hideWhenEmpty
           empty={copy.emptyEnvironment}
         >
           {environment?.changes ? (
@@ -527,13 +542,6 @@ export function TaskDetailPopover({
                   {onOpenReview ? <ChevronRight /> : null}
                 </span>
               }
-            />
-          ) : null}
-          {environment?.target || environment?.workspace ? (
-            <Row
-              icon={<Laptop />}
-              label={environment.target ?? copy.workspace}
-              detail={environment.workspace}
             />
           ) : null}
           {environment?.branch ? (
@@ -570,6 +578,7 @@ export function TaskDetailPopover({
           title={copy.agents}
           loadable={presentation.agents}
           hasContent={Boolean(agents?.items.length)}
+          hideWhenEmpty
           empty={copy.emptyAgents}
           countLabel={count(presentation.agents)}
         >
@@ -603,6 +612,7 @@ export function TaskDetailPopover({
           title={copy.processes}
           loadable={processes}
           hasContent={Boolean(processData?.items.length)}
+          hideWhenEmpty
           empty={copy.emptyProcesses}
           countLabel={count(processes)}
           action={
@@ -671,6 +681,7 @@ export function TaskDetailPopover({
           title={copy.sources}
           loadable={presentation.sources}
           hasContent={Boolean(sources?.items.length)}
+          hideWhenEmpty
           empty={copy.emptySources}
           countLabel={count(presentation.sources)}
         >

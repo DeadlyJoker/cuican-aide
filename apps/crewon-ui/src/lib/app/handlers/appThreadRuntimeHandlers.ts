@@ -118,6 +118,7 @@ export type AppThreadRuntimeHandlers = {
 };
 
 export type AppThreadRuntimeHandlersParams = {
+  runSelectionRead?: SelectThreadActionParams["runSelectionRead"];
   activeTurnByThread?: Record<string, string>;
   activeTurnId: string | null;
   busyToolId: ToolId | null;
@@ -345,6 +346,7 @@ export function createAppThreadRuntimeHandlers(
       }),
     selectThread: async (threadId) => {
       await selectThreadAction({
+        runSelectionRead: params.runSelectionRead,
         client: params.client,
         isConnected: params.isConnected,
         locale: params.locale,

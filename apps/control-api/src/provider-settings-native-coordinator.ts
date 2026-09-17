@@ -1,4 +1,4 @@
-import { createInterface } from "node:readline";
+import { readNativeProviderCommand } from "./native-provider-command-input.ts";
 
 import {
   ApplicationError,
@@ -14,7 +14,6 @@ import {
   StandaloneAuthorization,
 } from "./standalone-adapters.ts";
 
-const MAX_COMMAND_BYTES = 64 * 1024;
 const TENANT_ID = "standalone-tenant";
 
 type NativeProviderCoordinatorCommand =
@@ -361,7 +360,7 @@ function standaloneActor(): ActorContext {
 async function main(): Promise<void> {
   const databasePath = process.env.CREWON_CONTROL_DB_PATH?.trim();
   if (!databasePath) throw new Error("CREWON_CONTROL_DB_PATH_required");
-  const input = await readOneCommand();
+  const input = await readNativeProviderCommand(process.stdin);
   const store = new SqliteRunStore(databasePath);
   try {
     const result = await runNativeProviderCoordinator(input, { store });
@@ -369,22 +368,6 @@ async function main(): Promise<void> {
   } finally {
     await store.close();
   }
-}
-
-async function readOneCommand(): Promise<unknown> {
-  const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
-  try {
-    for await (const line of lines) {
-      if (Buffer.byteLength(line) > MAX_COMMAND_BYTES) {
-        throw new Error("provider_native_command_invalid");
-      }
-      lines.close();
-      return JSON.parse(line);
-    }
-  } catch (error) {
-    throw new Error("provider_native_command_invalid", { cause: error });
-  }
-  throw new Error("provider_native_command_invalid");
 }
 
 if (process.argv[1]?.endsWith("provider-settings-coordinator.mjs")) {

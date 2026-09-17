@@ -1,0 +1,5 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshots explicit adoption and unavailable-association recovery 1`] = `"<div class="office-chat-empty" data-office-thread-choice=""><strong>Choose the Office conversation</strong><p>Found “💬 Read lifecycle”. Choose it to continue its history.</p><button class="office-back" type="button">Use existing conversation</button><button class="office-back" type="button">Retry lookup</button><button class="office-back" type="button">Create separate conversation</button></div>"`;
+
+exports[`snapshots explicit adoption and unavailable-association recovery 2`] = `"<div class="office-chat-empty" data-office-thread-choice=""><strong>Conversation unavailable</strong><p>Retry to load the Office conversation.</p><button class="office-back" type="button">Retry lookup</button></div>"`;

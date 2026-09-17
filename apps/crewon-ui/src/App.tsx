@@ -1,3 +1,6 @@
+import { StreamingTextScope } from "./components/StreamingTextScope";
+import { useControlThreadCatalog } from "./lib/control-runtime/useControlThreadCatalog";
+import { useThreadSelectionRead } from "./lib/thread/useThreadSelectionRead";
 import {
   AppCommandShellRoute,
   AppConfirmDialog,
@@ -10,6 +13,7 @@ import {
 } from "./components/app";
 import type { ControlApiClient } from "@crewon/control-client";
 import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRoute";
+import { prepareTaskPackDraft } from "./lib/plugin/prepareTaskPackDraft";
 import {
   isMissingThreadError,
   isUnsupportedRpcError,
@@ -101,6 +105,7 @@ import {
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
+import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
 import { selectThreadRunPlanProjection } from "./lib/control-runtime/controlRunPlanProjection";
 import type { ControlToolApprovalRequest } from "./lib/control-runtime/controlToolApprovalPresentation";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
@@ -224,6 +229,7 @@ export function App({
     runPlanByRunId: controlRunPlanByRunId,
     runtime: controlThreadRuntime,
     threadGoal: controlThreadGoal,
+    teamProgressByThread,
   } = useControlThreadRuntime({
     appendStreamingTextDelta: threadState.appendStreamingTextDelta,
     client: controlClient,
@@ -250,12 +256,12 @@ export function App({
       }
     },
     onToolApprovalResolved: controlToolApprovals.resolveApproval,
+    resetStreamingText: threadState.resetStreamingText,
     selectedThreadId,
     selectedThreadIdRef,
     setActiveTurnByThread: threadState.setActiveTurnByThread,
     setNotice,
     setSelectedThreadId,
-    setStreamingTextByThread: threadState.setStreamingTextByThread,
     setThreadGoal: workspaceStatus.setThreadGoal,
     setThreads: threadState.setThreads,
     showArchivedThreadsRef,
@@ -293,6 +299,7 @@ export function App({
     composerFocusSignal,
     composerValue,
     isSending,
+    setIsSending,
     officeAttachmentConsumerRef,
     pendingComposerMentions,
     pendingContextFile,
@@ -335,6 +342,22 @@ export function App({
     controlConnectionState: controlRuntimeConnectionState,
     controlRuntime: controlThreadRuntime,
   });
+  const runSelectionRead = useThreadSelectionRead({
+    identity: threadAuthority.client,
+    selectedThreadId: threadAuthority.connected ? selectedThreadId : null,
+  });
+  const threadCatalogNavigation = useControlThreadCatalog({
+    runSelectionRead,
+    runtime: controlThreadRuntime,
+    connected: controlRuntimeConnected,
+    search: threadSearchTerm,
+    archived: showArchivedThreads,
+    preserveEmptySelection: draftWorkspaceCwd !== undefined,
+    selectedThreadId,
+    setSelectedThreadId,
+    setThreadCatalogPage: threadState.setThreadCatalogPage,
+    setThreads: threadState.setThreads,
+  });
   const threadRuntimeClient = threadAuthority.client;
   const threadRuntimeConnected = threadAuthority.connected;
   const threadConnectionState = threadAuthority.connectionState;
@@ -363,7 +386,15 @@ export function App({
       mentionsWithSlashCommand(mentions, command),
     );
   };
-  const conversationThreads = threads.filter(isSingleConversationThread);
+  const catalogVisibleIds =
+    threadState.threadCatalogIds === null
+      ? null
+      : new Set(threadState.threadCatalogIds);
+  const conversationThreads = threads.filter(
+    (thread) =>
+      isSingleConversationThread(thread) &&
+      (catalogVisibleIds === null || catalogVisibleIds.has(thread.id)),
+  );
   const assistantThread = latestAssistantThread(threads);
   const sidebarSelectedThreadId = conversationThreads.some(
     (thread) => thread.id === selectedThreadId,
@@ -426,10 +457,10 @@ export function App({
   });
 
   useAppThreadListEffects({
-    client: threadRuntimeClient,
+    client: controlThreadRuntime === null ? threadRuntimeClient : null,
     emptySelectionBehavior:
       draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
-    isConnected: threadRuntimeConnected,
+    isConnected: controlThreadRuntime === null && threadRuntimeConnected,
     isDemoPreview,
     localeRef,
     searchTerm: threadSearchTerm,
@@ -736,6 +767,7 @@ export function App({
     toggleArchivedThreads,
   } = createAppThreadRuntimeHandlers({
     ...threadState,
+    runSelectionRead,
     activeTurnId,
     ...workspaceStatus,
     client: threadRuntimeClient,
@@ -858,6 +890,7 @@ export function App({
     settingsSaveHandlers,
     settingsSectionRefreshHandlers,
   } = createAppSettingsCoordinator({
+    setNotice,
     ...workspaceStatus,
     capabilityPanel,
     client: clientRef.current,
@@ -1162,8 +1195,10 @@ export function App({
             },
           },
           client: controlClient,
+          liveThreads: threads,
           locale,
           runtime: controlThreadRuntime,
+          streamingTextByThread,
         })
       : null;
   if (appView === "settings") {
@@ -1173,6 +1208,20 @@ export function App({
       (settingsSection === "personalization" && personalizationStore !== null);
     return (
       <CommandSettingsLazyRoute
+        onPrepareTaskPack={(prompt) =>
+          prepareTaskPackDraft({
+            prompt,
+            isSending,
+            currentDraft: composerValue,
+            hasAttachments:
+              pendingComposerMentions.length > 0 || pendingContextFile !== null,
+            locale,
+            startDraft: () => startCommandShellDraftThread(null),
+            setComposerValue,
+          })
+        }
+        controlClient={controlClient}
+        platformUser={platformAccount?.user ?? null}
         activeSection={settingsSection}
         dataMode={
           isDemo
@@ -1208,406 +1257,456 @@ export function App({
   }
   if (renderCommandShell)
     return (
-      <AppCommandShellRoute
-        activeTurnId={commandShellRuntime.activeTurnId}
-        assistantActiveTurnId={assistantRuntime.activeTurnId}
-        assistantStreamingText={assistantRuntime.streamingText}
-        assistantThread={assistantThread}
-        committedExecutionIntent={committedExecutionIntent}
-        composerValue={composerValue}
-        connectionState={threadConnectionState}
-        cwd={cwd}
-        isSending={isSending}
-        linkedThreads={conversationThreads}
-        platform={platform}
-        locale={locale}
-        selectedThread={commandShellRuntime.selectedThread}
-        selectedThreadId={commandShellRuntime.selectedThreadId}
-        slashCommands={slashCommands}
-        streamingText={commandShellRuntime.streamingText}
-        threadGoal={authoritativeThreadGoal}
-        threadGoalBusy={threadGoalBusy}
-        workMode={workMode}
-        modelOptions={commandModelOptions}
-        runPlan={commandRunPlan}
-        toolApproval={
-          commandShellRuntime.selectedThread?.id
-            ? (controlToolApprovals.approvals.get(
-                commandShellRuntime.selectedThread.id,
-              ) ?? null)
-            : null
-        }
-        executionTargetClient={clientRef.current}
-        taskDetailClient={
-          workspaceUiAuthority === "control" ? null : clientRef.current
-        }
-        taskDetailWorkspaceGitClient={
-          workspaceUiAuthority === "control" ? controlSandboxClient : null
-        }
-        officeControlClient={
-          workspaceUiAuthority === "control" ? controlClient : null
-        }
-        controlOfficeRoomAdapter={
-          workspaceUiAuthority === "control" ? controlOfficeRoomAdapter : null
-        }
-        workflowControlClient={
-          workspaceUiAuthority === "control" ? controlClient : null
-        }
-        automationRuntime={controlAutomationRuntime}
-        automationControlConfigured={controlClient !== null}
-        automationControlConnected={controlRuntimeConnected}
-        workspaceAuthority={workspaceUiAuthority}
-        controlWorkspaceNav={
-          controlClient === null
-            ? null
-            : {
-                name: controlWorkspace.nativeWorkspace?.displayName ?? null,
-                busy: controlWorkspace.nativeBusy,
-                revisionKey: controlWorkspace.nativeWorkspaceRevision,
-                error: workspaceSelectError,
-                onSelect:
-                  controlWorkspace.mutationAuthority === "desktop"
-                    ? () => {
-                        setWorkspaceSelectError(null);
-                        controlWorkspace
-                          .selectNativeWorkspace()
-                          .catch((error: unknown) => {
-                            setWorkspaceSelectError(
-                              error instanceof Error
-                                ? error.message
-                                : String(error),
-                            );
-                            /*
-                             * A failed mutation flips the authority projection to
-                             * unavailable and would hide the picker button until
-                             * reload; re-reading the native status restores it when
-                             * the underlying authority is still healthy.
-                             */
-                            void controlWorkspace
-                              .refreshNativeAuthority()
-                              .catch(() => undefined);
-                          });
-                      }
-                    : undefined,
-                onClear:
-                  controlWorkspace.mutationAuthority === "desktop" &&
-                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !==
-                    null
-                    ? controlWorkspace.clearNativeWorkspace
-                    : undefined,
-              }
-        }
-        capabilityDrawer={{
-          busyToolId,
-          commandValue: terminalCommand,
-          disabled:
-            workspaceUiAuthority === "control"
-              ? !controlRuntimeConnected
-              : !isConnected && !isDemo,
-          locale,
-          open: capabilityDockOpen,
-          panel: capabilityPanel,
-          onClose: () => setCapabilityDockOpen(false),
-          onCommandChange: setTerminalCommand,
-          onCommandSubmit:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.runTerminalStatus
-              : runTerminalStatus,
-          onFiles: readWorkspaceFiles,
-          onOpen: () => setCapabilityDockOpen(true),
-          onPanelAction: handleCapabilityPanelAction,
-          onPanelFieldChange: handleCapabilityPanelFieldChange,
-          onPanelItem: handleComposerCapabilityPanelItem,
-          scene: commandScene,
-          onReview: readWorkspaceDiff,
-          onSideChat: startSideChat,
-          onTerminal:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.runTerminalStatus
-              : runTerminalStatus,
-          onTerminalResize:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.resizeTerminal
-              : resizeWorkbenchTerminal,
-          onTerminalStart:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.startTerminal
-              : startWorkbenchTerminal,
-          onTerminalStop:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.stopTerminal
-              : stopWorkbenchTerminal,
-          onTerminalWrite:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.writeTerminal
-              : writeWorkbenchTerminalInput,
-          terminalCwd:
-            workspaceUiAuthority === "control"
-              ? controlSandbox.terminalCwd
-              : workspaceCwdForAuthority(workspaceUiAuthority, cwd),
-          terminalOutput,
-          terminalProcessId,
-        }}
-        officeRoomAdapter={commandOfficeRoomAdapter}
-        pendingComposerMentions={pendingComposerMentions}
-        providerResource={providerResourceComposer.commandShellResource}
-        confirmDialog={{
-          locale,
-          request: confirmRequest,
-          onCancel: () => resolveConfirm(false),
-          onConfirm: () => resolveConfirm(true),
-        }}
-        onAttachContext={(workspaceCwd) => {
-          officeAttachmentConsumerRef.current = null;
-          void attachWorkspaceContext(workspaceCwd);
-        }}
-        onAddLocalResources={(files, kind) =>
-          addLocalComposerResources({
-            client: clientRef.current,
-            connected: isConnected,
-            cwd,
-            files,
-            kind,
-            useInlineContent: workspaceUiAuthority === "control",
-            resolveBackendCwd,
-            setNotice,
-            onStaged: (mentions) => {
-              setPendingComposerMentions((current) => [
-                ...current,
-                ...mentions,
-              ]);
-              setComposerFocusSignal((signal) => signal + 1);
-            },
-          })
-        }
-        onArchiveThread={archiveThread}
-        onChangeComposerValue={setComposerValue}
-        onComposerResourceSelect={({
-          content,
-          kind,
-          name,
-          platformResource,
-        }) => {
-          setPendingComposerMentions((current) =>
-            withPlatformResourceMention(current, {
-              ...(content ? { content } : {}),
+      <StreamingTextScope presentation={threadState.streamingTextPresentation}>
+        <TranscriptNavigationScope runtime={controlThreadRuntime}>
+          <AppCommandShellRoute
+            teamProgress={
+              commandShellRuntime.selectedThreadId
+                ? (teamProgressByThread[commandShellRuntime.selectedThreadId] ??
+                  null)
+                : null
+            }
+            activeTurnId={commandShellRuntime.activeTurnId}
+            assistantActiveTurnId={assistantRuntime.activeTurnId}
+            assistantStreamingText={assistantRuntime.streamingText}
+            assistantThread={assistantThread}
+            committedExecutionIntent={committedExecutionIntent}
+            composerValue={composerValue}
+            connectionState={threadConnectionState}
+            cwd={cwd}
+            isSending={isSending}
+            linkedThreads={conversationThreads}
+            backgroundRunActive={
+              Object.keys(activeTurnByThread).length > 0 ||
+              threads.some(
+                (thread) =>
+                  thread.status.type === "active" ||
+                  thread.turns.some((turn) => turn.status === "inProgress"),
+              )
+            }
+            threadCatalogNavigation={threadCatalogNavigation}
+            threadCatalogSearch={threadSearchTerm}
+            onThreadCatalogSearchChange={setThreadSearchTerm}
+            platform={platform}
+            locale={locale}
+            selectedThread={commandShellRuntime.selectedThread}
+            selectedThreadId={commandShellRuntime.selectedThreadId}
+            slashCommands={slashCommands}
+            streamingText={commandShellRuntime.streamingText}
+            threadGoal={authoritativeThreadGoal}
+            threadGoalBusy={threadGoalBusy}
+            workMode={workMode}
+            modelOptions={commandModelOptions}
+            runPlan={commandRunPlan}
+            toolApproval={
+              commandShellRuntime.selectedThread?.id
+                ? (controlToolApprovals.approvals.get(
+                    commandShellRuntime.selectedThread.id,
+                  ) ?? null)
+                : null
+            }
+            executionTargetClient={clientRef.current}
+            taskDetailClient={
+              workspaceUiAuthority === "control" ? null : clientRef.current
+            }
+            taskDetailWorkspaceGitClient={
+              workspaceUiAuthority === "control" ? controlSandboxClient : null
+            }
+            officeControlClient={
+              workspaceUiAuthority === "control" ? controlClient : null
+            }
+            controlOfficeRoomAdapter={
+              workspaceUiAuthority === "control"
+                ? controlOfficeRoomAdapter
+                : null
+            }
+            workflowControlClient={
+              workspaceUiAuthority === "control" ? controlClient : null
+            }
+            automationRuntime={controlAutomationRuntime}
+            automationControlConfigured={controlClient !== null}
+            automationControlConnected={controlRuntimeConnected}
+            workspaceAuthority={workspaceUiAuthority}
+            controlWorkspaceNav={
+              controlClient === null
+                ? null
+                : {
+                    name: controlWorkspace.nativeWorkspace?.displayName ?? null,
+                    busy: controlWorkspace.nativeBusy,
+                    revisionKey: controlWorkspace.nativeWorkspaceRevision,
+                    error: workspaceSelectError,
+                    onSelect:
+                      controlWorkspace.mutationAuthority === "desktop"
+                        ? () => {
+                            setWorkspaceSelectError(null);
+                            controlWorkspace
+                              .selectNativeWorkspace()
+                              .catch((error: unknown) => {
+                                setWorkspaceSelectError(
+                                  error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                                );
+                                /*
+                                 * A failed mutation flips the authority projection to
+                                 * unavailable and would hide the picker button until
+                                 * reload; re-reading the native status restores it when
+                                 * the underlying authority is still healthy.
+                                 */
+                                void controlWorkspace
+                                  .refreshNativeAuthority()
+                                  .catch(() => undefined);
+                              });
+                          }
+                        : undefined,
+                    onClear:
+                      controlWorkspace.mutationAuthority === "desktop" &&
+                      (controlWorkspace.nativeWorkspace?.displayName ??
+                        null) !== null
+                        ? controlWorkspace.clearNativeWorkspace
+                        : undefined,
+                  }
+            }
+            capabilityDrawer={{
+              busyToolId,
+              commandValue: terminalCommand,
+              disabled:
+                workspaceUiAuthority === "control"
+                  ? !controlRuntimeConnected
+                  : !isConnected && !isDemo,
+              locale,
+              open: capabilityDockOpen,
+              panel: capabilityPanel,
+              onClose: () => setCapabilityDockOpen(false),
+              onCommandChange: setTerminalCommand,
+              onCommandSubmit:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.runTerminalStatus
+                  : runTerminalStatus,
+              onFiles: readWorkspaceFiles,
+              onOpen: () => setCapabilityDockOpen(true),
+              onPanelAction: handleCapabilityPanelAction,
+              onPanelFieldChange: handleCapabilityPanelFieldChange,
+              onPanelItem: handleComposerCapabilityPanelItem,
+              scene: commandScene,
+              onReview: readWorkspaceDiff,
+              onSideChat: startSideChat,
+              onTerminal:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.runTerminalStatus
+                  : runTerminalStatus,
+              onTerminalResize:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.resizeTerminal
+                  : resizeWorkbenchTerminal,
+              onTerminalStart:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.startTerminal
+                  : startWorkbenchTerminal,
+              onTerminalStop:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.stopTerminal
+                  : stopWorkbenchTerminal,
+              onTerminalWrite:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.writeTerminal
+                  : writeWorkbenchTerminalInput,
+              terminalCwd:
+                workspaceUiAuthority === "control"
+                  ? controlSandbox.terminalCwd
+                  : workspaceCwdForAuthority(workspaceUiAuthority, cwd),
+              terminalOutput,
+              terminalProcessId,
+            }}
+            officeRoomAdapter={commandOfficeRoomAdapter}
+            pendingComposerMentions={pendingComposerMentions}
+            providerResource={providerResourceComposer.commandShellResource}
+            confirmDialog={{
+              locale,
+              request: confirmRequest,
+              onCancel: () => resolveConfirm(false),
+              onConfirm: () => resolveConfirm(true),
+            }}
+            onAttachContext={(workspaceCwd) => {
+              officeAttachmentConsumerRef.current = null;
+              void attachWorkspaceContext(workspaceCwd);
+            }}
+            onAddLocalResources={(files, kind) =>
+              addLocalComposerResources({
+                client: clientRef.current,
+                connected: isConnected,
+                cwd,
+                files,
+                kind,
+                useInlineContent: workspaceUiAuthority === "control",
+                resolveBackendCwd,
+                setNotice,
+                onStaged: (mentions) => {
+                  setPendingComposerMentions((current) => [
+                    ...current,
+                    ...mentions,
+                  ]);
+                  setComposerFocusSignal((signal) => signal + 1);
+                },
+              })
+            }
+            onArchiveThread={archiveThread}
+            onChangeComposerValue={setComposerValue}
+            onComposerResourceSelect={({
+              content,
               kind,
               name,
-              path: platformResourceMentionPath(platformResource),
-            }),
-          );
-        }}
-        onClearAssistantThread={() => {
-          if (assistantThread) {
-            void clearAssistantThread(assistantThread);
-          }
-        }}
-        onEnsureAssistantThread={() =>
-          assistantThread
-            ? Promise.resolve(assistantThread)
-            : createThread(
-                undefined,
-                "assistant",
-                assistantThreadRuntimeSettings(
-                  {},
-                  personalizationStore?.read(),
-                ),
-                null,
-              )
-        }
-        onModeChange={setWorkMode}
-        onSaveCapability={saveCapability}
-        onSceneChange={setCommandScene}
-        onOpenSettings={openSettings}
-        onRemoveComposerMention={(path) => {
-          setPendingComposerMentions((mentions) =>
-            mentions.filter((mention) => mention.path !== path),
-          );
-          if (pendingContextFile?.path === path) {
-            setPendingContextFile(null);
-          }
-        }}
-        onRetryConnection={retryConnection}
-        onChangeWorkspaceCwd={undefined}
-        onSelectLinkedThread={openCommandShellThread}
-        onSendAssistant={(text, threadSettings, images) => {
-          const settings = assistantThreadRuntimeSettings(
-            threadSettings,
-            personalizationStore?.read(),
-          );
-          if (assistantThread) {
-            void sendMessageToThread(text, assistantThread, settings, images);
-            return;
-          }
-          void sendMessageInNewThread(text, settings, null, images);
-        }}
-        onSend={sendMessage}
-        onSendNewThread={sendCommandShellMessage}
-        onSlashCommandSelect={handleComposerSlashCommand}
-        onStop={interruptActiveTurn}
-        onToolApprovalDecision={handleControlToolApprovalDecision}
-        onClearThreadGoal={goalComposerHandlers.clearThreadGoal}
-        onSetThreadGoalObjective={goalComposerHandlers.setThreadGoalObjective}
-        onSetThreadGoalStatus={goalComposerHandlers.setThreadGoalStatus}
-      />
+              platformResource,
+            }) => {
+              setPendingComposerMentions((current) =>
+                withPlatformResourceMention(current, {
+                  ...(content ? { content } : {}),
+                  kind,
+                  name,
+                  path: platformResourceMentionPath(platformResource),
+                }),
+              );
+            }}
+            onClearAssistantThread={() => {
+              if (assistantThread) {
+                void clearAssistantThread(assistantThread);
+              }
+            }}
+            onEnsureAssistantThread={() =>
+              assistantThread
+                ? Promise.resolve(assistantThread)
+                : createThread(
+                    undefined,
+                    "assistant",
+                    assistantThreadRuntimeSettings(
+                      {},
+                      personalizationStore?.read(),
+                    ),
+                    null,
+                  )
+            }
+            onModeChange={setWorkMode}
+            onSaveCapability={saveCapability}
+            onSceneChange={setCommandScene}
+            onOpenSettings={openSettings}
+            onRemoveComposerMention={(path) => {
+              setPendingComposerMentions((mentions) =>
+                mentions.filter((mention) => mention.path !== path),
+              );
+              if (pendingContextFile?.path === path) {
+                setPendingContextFile(null);
+              }
+            }}
+            onRetryConnection={retryConnection}
+            onChangeWorkspaceCwd={undefined}
+            onSelectLinkedThread={openCommandShellThread}
+            onSendAssistant={(text, threadSettings, images) => {
+              const settings = assistantThreadRuntimeSettings(
+                threadSettings,
+                personalizationStore?.read(),
+              );
+              if (assistantThread) {
+                void sendMessageToThread(
+                  text,
+                  assistantThread,
+                  settings,
+                  images,
+                );
+                return;
+              }
+              void sendMessageInNewThread(text, settings, null, images);
+            }}
+            onSend={sendMessage}
+            onReplayMessage={
+              controlThreadRuntime && controlRuntimeConnected
+                ? async (request) => {
+                    setIsSending(true);
+                    try {
+                      await controlThreadRuntime.replayMessage(request);
+                    } finally {
+                      setIsSending(false);
+                    }
+                  }
+                : undefined
+            }
+            onSendNewThread={sendCommandShellMessage}
+            onSlashCommandSelect={handleComposerSlashCommand}
+            onStop={interruptActiveTurn}
+            onToolApprovalDecision={handleControlToolApprovalDecision}
+            onClearThreadGoal={goalComposerHandlers.clearThreadGoal}
+            onSetThreadGoalObjective={
+              goalComposerHandlers.setThreadGoalObjective
+            }
+            onSetThreadGoalStatus={goalComposerHandlers.setThreadGoalStatus}
+          />
+        </TranscriptNavigationScope>
+      </StreamingTextScope>
     );
   return (
-    <AppShellChromeFrame
-      appView={appView}
-      capabilityDockOpen={capabilityDockOpen}
-      hasCapabilityPanel={Boolean(capabilityPanel)}
-      inspectorOpen={inspectorOpen}
-      locale={locale}
-      notice={notice}
-      platform={platform}
-      sidebarOpen={sidebarOpen}
-      theme={theme}
-      title={titlebarTitle}
-      onCloseSidebar={() => setSidebarOpen(false)}
-      onDismissNotice={() => setNotice(null)}
-      onLocaleChange={changeLocale}
-      onToggleCapabilityDock={toggleCapabilityDock}
-      onToggleInspector={toggleInspector}
-      onToggleSidebar={() => setSidebarOpen((open) => !open)}
-      onToggleTheme={toggleTheme}
-    >
-      <AppWorkspaceNavigationPanel
-        activeLibraryKind={
-          appView === "library" ? (libraryPanel?.kind ?? null) : null
-        }
-        activeSection={settingsSection}
-        appView={appView}
-        connectionState={connectionState}
-        isSearchingThreads={isSearchingThreads}
-        locale={locale}
-        platform={platform}
-        searchValue={threadSearchTerm}
-        selectedThreadId={sidebarSelectedThreadId}
-        showArchived={showArchivedThreads}
-        threads={conversationThreads}
-        onArchiveThread={archiveThread}
-        onArchiveWorkspaceThreads={(group) =>
-          archiveWorkspaceThreads(group.threads, group.name)
-        }
-        onBackSettings={closeSettings}
-        onDeleteThread={deleteArchivedThread}
-        onDeleteWorkspaceThreads={(group) =>
-          deleteWorkspaceThreads(group.threads, group.name)
-        }
-        onLibrary={(kind) => {
-          setWorkMode("code");
-          void openLibrary(kind);
-        }}
-        onNewThread={() => {
-          startCommandShellDraftThread(
-            workspaceCwdForAuthority(workspaceUiAuthority, cwd),
-          );
-        }}
-        onRenameThread={renameThread}
-        onSearchChange={setThreadSearchTerm}
-        onSelectThread={(threadId) => {
-          setWorkMode("code");
-          void selectThread(threadId);
-        }}
-        onSettings={openSettings}
-        onSettingsSectionChange={openSettingsSection}
-        onToggleArchived={toggleArchivedThreads}
-      />
-      <AppWorkspaceContent
-        activeTurnByThread={activeTurnByThread}
-        activeTurnId={activeTurnId}
-        appView={appView}
-        capabilityPanel={capabilityPanel}
-        composerFocusSignal={composerFocusSignal}
-        composerValue={composerValue}
-        connectionState={connectionState}
-        cwd={cwd}
-        disabled={!isConnected && !isDemo}
-        isDemo={isDemo}
-        isSending={isSending}
-        libraryPanel={libraryPanel}
-        locale={locale}
-        modelOptions={commandModelOptions}
-        platform={platform}
-        selectedThread={selectedThread}
-        selectedThreadId={selectedThreadId}
-        slashCommands={slashCommands}
-        settingsSection={settingsSection}
-        streamingTextByThread={streamingTextByThread}
-        workMode={workMode}
-        onApprovalDecision={handleApprovalDecision}
-        onArtifact={handleOfficeArtifact}
-        onAttachContext={attachWorkspaceContext}
-        onBackLibrary={() => {
-          setWorkMode("code");
-          closeLibrary();
-        }}
-        onChangeComposerValue={setComposerValue}
-        onItemAction={openLibraryItem}
-        onLibraryPanelAction={handleLibraryPanelAction}
-        onModeChange={setWorkMode}
-        onSaveCapability={saveCapability}
-        onOfficeDelegationDispatch={handleOfficeDelegationDispatch}
-        onOfficeDelegationCancel={handleOfficeDelegationCancel}
-        onOfficeDelegationRetry={handleOfficeDelegationRetry}
-        onOfficeDelegationDispatchNext={handleOfficeDelegationDispatchNext}
-        onOfficeVerificationCancel={handleOfficeVerificationCancel}
-        onOfficeVerificationRetry={handleOfficeVerificationRetry}
-        onOfficeMemoryDecision={async (memoryId, status) =>
-          (await decideOfficeMemory(memoryId, status))?.response?.memory ?? null
-        }
-        onOfficeMemoryList={async (status, cursor) =>
-          (await listOfficeMemories(status, cursor))?.response ?? null
-        }
-        onOfficeMemberContextPreview={async (run, member) =>
-          (await previewOfficeMemberContext(run, member))?.response ?? null
-        }
-        onRecruitableAgentList={listRecruitableAgentConfigs}
-        onOfficeRunCancel={handleOfficeRunCancel}
-        onOfficeRunRetry={handleOfficeRunRetry}
-        onPanelAction={handleCapabilityPanelAction}
-        onPanelFieldCommit={handleSettingsFieldCommit}
-        onPanelFieldChange={handleCapabilityPanelFieldChange}
-        onRetryConnection={retryConnection}
-        onSaveAgentConfig={saveAgentConfig}
-        onSend={sendMessage}
-        onSlashCommandSelect={handleComposerSlashCommand}
-        onSendOfficeMessage={sendOfficeMessage}
-        onStop={interruptActiveTurn}
-        onThreadSettings={openThreadSettingsPanel}
-        onToggleAgentCapability={toggleAgentCapability}
-        onUpdateAgentConfig={updateAgentConfig}
-      />
-      <AppWorkspaceSidePanels
-        {...workspaceStatus}
-        appView={appView}
-        capabilityDockOpen={capabilityDockOpen}
-        capabilityPanel={capabilityPanel}
-        disabled={!isConnected && !isDemo}
-        inspectorOpen={inspectorOpen}
-        loadedThreadIds={loadedThreadIds}
-        locale={locale}
-        serverUrl={serverUrl}
-        terminalCommand={terminalCommand}
-        thread={selectedThread}
-        threadGoal={authoritativeThreadGoal}
-        onCommandChange={setTerminalCommand}
-        onCommandSubmit={runTerminalStatus}
-        onFiles={readWorkspaceFiles}
-        onPanelAction={handleCapabilityPanelAction}
-        onPanelFieldChange={handleCapabilityPanelFieldChange}
-        onPanelItem={handleComposerCapabilityPanelItem}
-        onReview={readWorkspaceDiff}
-        onSideChat={startSideChat}
-        onTerminal={runTerminalStatus}
-        onWeb={loadBrowserApps}
-      />
-      <AppConfirmDialog
-        locale={locale}
-        request={confirmRequest}
-        onCancel={() => resolveConfirm(false)}
-        onConfirm={() => resolveConfirm(true)}
-      />
-    </AppShellChromeFrame>
+    <StreamingTextScope presentation={threadState.streamingTextPresentation}>
+      <TranscriptNavigationScope runtime={controlThreadRuntime}>
+        <AppShellChromeFrame
+          appView={appView}
+          capabilityDockOpen={capabilityDockOpen}
+          hasCapabilityPanel={Boolean(capabilityPanel)}
+          inspectorOpen={inspectorOpen}
+          locale={locale}
+          notice={notice}
+          platform={platform}
+          sidebarOpen={sidebarOpen}
+          theme={theme}
+          title={titlebarTitle}
+          onCloseSidebar={() => setSidebarOpen(false)}
+          onDismissNotice={() => setNotice(null)}
+          onLocaleChange={changeLocale}
+          onToggleCapabilityDock={toggleCapabilityDock}
+          onToggleInspector={toggleInspector}
+          onToggleSidebar={() => setSidebarOpen((open) => !open)}
+          onToggleTheme={toggleTheme}
+        >
+          <AppWorkspaceNavigationPanel
+            activeLibraryKind={
+              appView === "library" ? (libraryPanel?.kind ?? null) : null
+            }
+            activeSection={settingsSection}
+            appView={appView}
+            connectionState={connectionState}
+            isSearchingThreads={
+              threadCatalogNavigation?.loading ?? isSearchingThreads
+            }
+            locale={locale}
+            platform={platform}
+            threadCatalogNavigation={threadCatalogNavigation}
+            searchValue={threadSearchTerm}
+            selectedThreadId={sidebarSelectedThreadId}
+            showArchived={showArchivedThreads}
+            threads={conversationThreads}
+            onArchiveThread={archiveThread}
+            onArchiveWorkspaceThreads={(group) =>
+              archiveWorkspaceThreads(group.threads, group.name)
+            }
+            onBackSettings={closeSettings}
+            onDeleteThread={deleteArchivedThread}
+            onDeleteWorkspaceThreads={(group) =>
+              deleteWorkspaceThreads(group.threads, group.name)
+            }
+            onLibrary={(kind) => {
+              setWorkMode("code");
+              void openLibrary(kind);
+            }}
+            onNewThread={() => {
+              startCommandShellDraftThread(
+                workspaceCwdForAuthority(workspaceUiAuthority, cwd),
+              );
+            }}
+            onRenameThread={renameThread}
+            onSearchChange={setThreadSearchTerm}
+            onSelectThread={(threadId) => {
+              setWorkMode("code");
+              void selectThread(threadId);
+            }}
+            onSettings={openSettings}
+            onSettingsSectionChange={openSettingsSection}
+            onToggleArchived={toggleArchivedThreads}
+          />
+          <AppWorkspaceContent
+            activeTurnByThread={activeTurnByThread}
+            activeTurnId={activeTurnId}
+            appView={appView}
+            capabilityPanel={capabilityPanel}
+            composerFocusSignal={composerFocusSignal}
+            composerValue={composerValue}
+            connectionState={connectionState}
+            cwd={cwd}
+            disabled={!isConnected && !isDemo}
+            isDemo={isDemo}
+            isSending={isSending}
+            libraryPanel={libraryPanel}
+            locale={locale}
+            modelOptions={commandModelOptions}
+            platform={platform}
+            selectedThread={selectedThread}
+            selectedThreadId={selectedThreadId}
+            slashCommands={slashCommands}
+            settingsSection={settingsSection}
+            streamingTextByThread={streamingTextByThread}
+            workMode={workMode}
+            onApprovalDecision={handleApprovalDecision}
+            onArtifact={handleOfficeArtifact}
+            onAttachContext={attachWorkspaceContext}
+            onBackLibrary={() => {
+              setWorkMode("code");
+              closeLibrary();
+            }}
+            onChangeComposerValue={setComposerValue}
+            onItemAction={openLibraryItem}
+            onLibraryPanelAction={handleLibraryPanelAction}
+            onModeChange={setWorkMode}
+            onSaveCapability={saveCapability}
+            onOfficeDelegationDispatch={handleOfficeDelegationDispatch}
+            onOfficeDelegationCancel={handleOfficeDelegationCancel}
+            onOfficeDelegationRetry={handleOfficeDelegationRetry}
+            onOfficeDelegationDispatchNext={handleOfficeDelegationDispatchNext}
+            onOfficeVerificationCancel={handleOfficeVerificationCancel}
+            onOfficeVerificationRetry={handleOfficeVerificationRetry}
+            onOfficeMemoryDecision={async (memoryId, status) =>
+              (await decideOfficeMemory(memoryId, status))?.response?.memory ??
+              null
+            }
+            onOfficeMemoryList={async (status, cursor) =>
+              (await listOfficeMemories(status, cursor))?.response ?? null
+            }
+            onOfficeMemberContextPreview={async (run, member) =>
+              (await previewOfficeMemberContext(run, member))?.response ?? null
+            }
+            onRecruitableAgentList={listRecruitableAgentConfigs}
+            onOfficeRunCancel={handleOfficeRunCancel}
+            onOfficeRunRetry={handleOfficeRunRetry}
+            onPanelAction={handleCapabilityPanelAction}
+            onPanelFieldCommit={handleSettingsFieldCommit}
+            onPanelFieldChange={handleCapabilityPanelFieldChange}
+            onRetryConnection={retryConnection}
+            onSaveAgentConfig={saveAgentConfig}
+            onSend={sendMessage}
+            onSlashCommandSelect={handleComposerSlashCommand}
+            onSendOfficeMessage={sendOfficeMessage}
+            onStop={interruptActiveTurn}
+            onThreadSettings={openThreadSettingsPanel}
+            onToggleAgentCapability={toggleAgentCapability}
+            onUpdateAgentConfig={updateAgentConfig}
+          />
+          <AppWorkspaceSidePanels
+            {...workspaceStatus}
+            appView={appView}
+            capabilityDockOpen={capabilityDockOpen}
+            capabilityPanel={capabilityPanel}
+            disabled={!isConnected && !isDemo}
+            inspectorOpen={inspectorOpen}
+            loadedThreadIds={loadedThreadIds}
+            locale={locale}
+            serverUrl={serverUrl}
+            terminalCommand={terminalCommand}
+            thread={selectedThread}
+            threadGoal={authoritativeThreadGoal}
+            onCommandChange={setTerminalCommand}
+            onCommandSubmit={runTerminalStatus}
+            onFiles={readWorkspaceFiles}
+            onPanelAction={handleCapabilityPanelAction}
+            onPanelFieldChange={handleCapabilityPanelFieldChange}
+            onPanelItem={handleComposerCapabilityPanelItem}
+            onReview={readWorkspaceDiff}
+            onSideChat={startSideChat}
+            onTerminal={runTerminalStatus}
+            onWeb={loadBrowserApps}
+          />
+          <AppConfirmDialog
+            locale={locale}
+            request={confirmRequest}
+            onCancel={() => resolveConfirm(false)}
+            onConfirm={() => resolveConfirm(true)}
+          />
+        </AppShellChromeFrame>
+      </TranscriptNavigationScope>
+    </StreamingTextScope>
   );
 }

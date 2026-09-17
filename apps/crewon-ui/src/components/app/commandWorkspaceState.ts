@@ -202,6 +202,17 @@ function validStoredExecutionTarget(value: unknown): value is string {
   );
 }
 
+export function executionTargetCatalogStatus(input: {
+  executionTarget: string;
+  catalogStatus: "loading" | "ready" | "unavailable";
+  expertTeamsStatus: "loading" | "ready" | "unavailable";
+}): "loading" | "ready" | "unavailable" {
+  // Expert definitions load independently of the Agent/Office catalog.
+  return input.executionTarget.startsWith("experts:")
+    ? input.expertTeamsStatus
+    : input.catalogStatus;
+}
+
 export function shouldResetExecutionTarget(input: {
   catalogStatus: "loading" | "ready" | "unavailable";
   optionAvailable: boolean;

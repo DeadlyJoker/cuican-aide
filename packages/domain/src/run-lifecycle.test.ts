@@ -635,6 +635,52 @@ test("aggregates sampling and compaction usage without losing safe-integer bound
   );
 });
 
+test("cache reporting metadata preserves legacy token budgets and rejects contradictory reports", () => {
+  for (const reported of [true, false, undefined]) {
+    const data = {
+      segmentId: "segment-1",
+      segmentSequence: 1,
+      inputTokens: 7,
+      cachedInputTokens: 0,
+      outputTokens: 3,
+      totalTokens: 10,
+      ...(reported === undefined
+        ? {}
+        : { cachedInputTokensReported: reported }),
+    };
+    const state = replayRunLifecycle([
+      created(),
+      event(2, "run.started", {}),
+      event(3, "usage.recorded", data),
+    ]);
+    assert.deepEqual(state.usage, {
+      inputTokens: 7,
+      cachedInputTokens: 0,
+      outputTokens: 3,
+      totalTokens: 10,
+    });
+  }
+  for (const invalid of ["true", null, 1]) {
+    assert.throws(
+      () =>
+        replayRunLifecycle([
+          created(),
+          event(2, "run.started", {}),
+          event(3, "usage.recorded", {
+            segmentId: "segment-1",
+            segmentSequence: 1,
+            inputTokens: 1,
+            cachedInputTokens: 0,
+            cachedInputTokensReported: invalid,
+            outputTokens: 0,
+            totalTokens: 1,
+          }),
+        ]),
+      hasCode("usage_cache_reporting_invalid"),
+    );
+  }
+});
+
 test("rejects cross-run events, sequence gaps, unrequested cancel and terminal mutation", () => {
   const queued = reduceRunLifecycleEvent(null, created());
   assert.throws(

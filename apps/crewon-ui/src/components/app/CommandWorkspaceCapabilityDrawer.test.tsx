@@ -324,6 +324,7 @@ describe("CommandWorkspaceCapabilityDrawer", () => {
           locale="zh"
           output={{
             generation: 1,
+            startOffset: 0,
             processId: "pty-1",
             text: "pwd\r\n/repo\r\n",
           }}

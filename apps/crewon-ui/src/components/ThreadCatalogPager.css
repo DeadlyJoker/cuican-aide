@@ -1,0 +1,36 @@
+.thread-catalog-pager {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+.thread-catalog-pager p {
+  margin: 0 0 6px;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.thread-catalog-pager nav {
+  display: flex;
+  gap: 6px;
+}
+
+.thread-catalog-pager button {
+  flex: 1;
+  min-height: 30px;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.thread-catalog-pager button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.thread-catalog-pager button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}

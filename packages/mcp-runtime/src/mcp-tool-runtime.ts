@@ -10,6 +10,11 @@ import {
   type ToolExecutionCommand,
   type ToolExecutionPolicy,
   type ToolExecutionResolution,
+  type ToolExecutionResultAcknowledgement,
+  type RetainedToolExecutionResultQuery,
+  type RetainedToolExecutionResultLookup,
+  type ToolExecutionReservationOptions,
+  type RetainedToolExecutionResultScan,
   type ToolJsonValue,
   type ToolRuntimePort,
 } from "@crewon/tool-broker";
@@ -21,6 +26,9 @@ import type {
   McpToolCallResult,
   McpToolDescriptor,
 } from "./mcp-client-port.ts";
+import { McpControlFlight } from "./mcp-control-flight.ts";
+import { McpRuntimeError } from "./mcp-runtime-error.ts";
+export { McpRuntimeError } from "./mcp-runtime-error.ts";
 
 const MAX_MCP_TOOLS = 128;
 const MAX_MCP_TOOL_PAGES = 32;
@@ -28,21 +36,16 @@ const MAX_MCP_DESCRIPTION_BYTES = 2 * 1024;
 const MAX_MCP_SCHEMA_BYTES = 32 * 1024;
 const MAX_MCP_RESULT_PARTS = 128;
 
-export class McpRuntimeError extends Error {
-  readonly code: string;
-
-  constructor(code: string, options?: ErrorOptions) {
-    super(code, options);
-    this.name = "McpRuntimeError";
-    this.code = code;
-  }
-}
-
 export class McpToolRuntime implements ToolRuntimePort {
   readonly #serverId: string;
   readonly #client: McpClientPort;
   readonly #configuredPolicies: ReadonlyMap<string, ToolExecutionPolicy>;
   #broker: ToolRuntimePort = new InMemoryToolBroker();
+  #definitions: readonly ToolDefinition[] = [];
+  #initialized = false;
+  readonly #catalog = new McpControlFlight();
+  readonly #lifetime = new AbortController();
+  #closePromise: Promise<void> | null = null;
   #connected = false;
   #closed = false;
 
@@ -72,22 +75,38 @@ export class McpToolRuntime implements ToolRuntimePort {
     this.#configuredPolicies = policies;
   }
 
-  async connect(signal: AbortSignal): Promise<void> {
-    this.#assertOpen();
-    if (!this.#connected) {
-      await this.#client.connect(signal);
-      this.#connected = true;
-    }
-    await this.refresh(signal);
+  connect(signal: AbortSignal): Promise<void> {
+    if (this.#closed)
+      return Promise.reject(new McpRuntimeError("mcp_runtime_closed"));
+    return this.#catalog.run(signal, async (operationSignal) => {
+      this.#assertOpen();
+      if (!this.#connected) {
+        await this.#client.connect(operationSignal);
+        this.#assertOpen();
+        operationSignal.throwIfAborted();
+        this.#connected = true;
+      }
+      await this.#refresh(operationSignal);
+    });
   }
 
-  async refresh(signal: AbortSignal): Promise<void> {
-    this.#assertConnected();
+  refresh(signal: AbortSignal): Promise<void> {
+    if (this.#closed)
+      return Promise.reject(new McpRuntimeError("mcp_runtime_closed"));
+    return this.#catalog.run(signal, async (operationSignal) => {
+      this.#assertConnected();
+      await this.#refresh(operationSignal);
+    });
+  }
+
+  async #refresh(signal: AbortSignal): Promise<void> {
     const discovered: McpToolDescriptor[] = [];
     const cursors = new Set<string>();
     let cursor: string | undefined;
     for (let pageNumber = 0; pageNumber < MAX_MCP_TOOL_PAGES; pageNumber += 1) {
       const page = await this.#client.listTools(cursor, signal);
+      this.#assertOpen();
+      signal.throwIfAborted();
       discovered.push(...page.tools);
       if (discovered.length > MAX_MCP_TOOLS) {
         throw new McpRuntimeError("mcp_tool_count_exceeded");
@@ -104,17 +123,25 @@ export class McpToolRuntime implements ToolRuntimePort {
         throw new McpRuntimeError("mcp_tool_page_limit_exceeded");
       }
     }
-    this.#broker = buildBroker(
+    const candidate = buildBroker(
       this.#serverId,
       discovered,
       this.#configuredPolicies,
       this.#client,
     );
+    // Policies, tool routes and client are immutable for this runtime's lifetime.
+    // Refresh the reviewed catalog without replacing its execution/result owner.
+    const definitions = candidate.definitions();
+    if (!this.#initialized) {
+      this.#broker = candidate;
+      this.#initialized = true;
+    }
+    this.#definitions = definitions;
   }
 
   definitions(): readonly ToolDefinition[] {
     this.#assertConnected();
-    return this.#broker.definitions();
+    return structuredClone(this.#definitions);
   }
 
   executionPolicy(
@@ -130,7 +157,23 @@ export class McpToolRuntime implements ToolRuntimePort {
     signal: AbortSignal,
   ): Promise<ToolExecutionResolution> {
     this.#assertConnected();
-    return this.#broker.execute(command, signal);
+    return this.#broker.execute(
+      command,
+      AbortSignal.any([signal, this.#lifetime.signal]),
+    );
+  }
+
+  reserveExecution(
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+    options?: ToolExecutionReservationOptions,
+  ) {
+    this.#assertConnected();
+    return this.#broker.reserveExecution?.(
+      command,
+      AbortSignal.any([signal, this.#lifetime.signal]),
+      options,
+    );
   }
 
   reconcile(
@@ -138,7 +181,10 @@ export class McpToolRuntime implements ToolRuntimePort {
     signal: AbortSignal,
   ): Promise<ToolExecutionResolution> {
     this.#assertConnected();
-    return this.#broker.reconcile(command, signal);
+    return this.#broker.reconcile(
+      command,
+      AbortSignal.any([signal, this.#lifetime.signal]),
+    );
   }
 
   cancel(
@@ -146,17 +192,51 @@ export class McpToolRuntime implements ToolRuntimePort {
     signal: AbortSignal,
   ): Promise<ToolExecutionResolution> {
     this.#assertConnected();
-    return this.#broker.cancel(command, signal);
+    return this.#broker.cancel(
+      command,
+      AbortSignal.any([signal, this.#lifetime.signal]),
+    );
   }
 
-  async close(): Promise<void> {
-    if (this.#closed) {
-      return;
-    }
+  scanRetainedExecutionResults(query: RetainedToolExecutionResultScan) {
+    return this.#broker.scanRetainedExecutionResults?.(query) ?? [];
+  }
+
+  retainedExecutionResults(query: RetainedToolExecutionResultQuery) {
+    return this.#broker.retainedExecutionResults?.(query) ?? [];
+  }
+
+  cancelRetainedExecution(lookup: RetainedToolExecutionResultLookup) {
+    return this.#broker.cancelRetainedExecution?.(lookup) ?? null;
+  }
+
+  readRetainedExecutionResult(lookup: RetainedToolExecutionResultLookup) {
+    return this.#broker.readRetainedExecutionResult?.(lookup) ?? null;
+  }
+
+  acknowledgeExecutionResult(
+    acknowledgement: ToolExecutionResultAcknowledgement,
+  ): boolean | void {
+    return this.#broker.acknowledgeExecutionResult?.(acknowledgement);
+  }
+
+  close(): Promise<void> {
+    if (this.#closePromise !== null) return this.#closePromise;
     this.#closed = true;
     this.#connected = false;
-    this.#broker = new InMemoryToolBroker();
-    await this.#client.close();
+    this.#definitions = [];
+    this.#catalog.close();
+    this.#lifetime.abort(new McpRuntimeError("mcp_runtime_closed"));
+    this.#closePromise = Promise.resolve().then(() => this.#client.close());
+    return this.#closePromise;
+  }
+
+  canRetire(): boolean {
+    return (
+      !this.#closed &&
+      !this.#catalog.pending &&
+      this.#broker.canRetire?.() === true
+    );
   }
 
   #assertOpen(): void {
@@ -167,7 +247,7 @@ export class McpToolRuntime implements ToolRuntimePort {
 
   #assertConnected(): void {
     this.#assertOpen();
-    if (!this.#connected) {
+    if (!this.#connected || !this.#initialized) {
       throw new McpRuntimeError("mcp_runtime_not_connected");
     }
   }
@@ -305,12 +385,53 @@ class McpMutationRuntime implements ToolRuntimePort {
     return this.#resolve("execute", command, signal);
   }
 
+  reserveExecution(
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+    options?: ToolExecutionReservationOptions,
+  ) {
+    return this.#routes.has(`${command.kind}:${command.name}`)
+      ? undefined
+      : this.#readOnlyRuntime.reserveExecution(command, signal, options);
+  }
+
   reconcile(command: ToolExecutionCommand, signal: AbortSignal) {
     return this.#resolve("reconcile", command, signal);
   }
 
   cancel(command: ToolExecutionCommand, signal: AbortSignal) {
     return this.#resolve("cancel", command, signal);
+  }
+
+  scanRetainedExecutionResults(query: RetainedToolExecutionResultScan) {
+    return this.#readOnlyRuntime.scanRetainedExecutionResults(query);
+  }
+
+  retainedExecutionResults(query: RetainedToolExecutionResultQuery) {
+    return this.#readOnlyRuntime.retainedExecutionResults(query);
+  }
+
+  cancelRetainedExecution(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    return this.#routes.has(`${tool.kind}:${tool.name}`)
+      ? null
+      : this.#readOnlyRuntime.cancelRetainedExecution(lookup);
+  }
+
+  readRetainedExecutionResult(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    return this.#routes.has(`${tool.kind}:${tool.name}`)
+      ? null
+      : this.#readOnlyRuntime.readRetainedExecutionResult(lookup);
+  }
+
+  acknowledgeExecutionResult(
+    acknowledgement: ToolExecutionResultAcknowledgement,
+  ): boolean | void {
+    const tool = acknowledgement.actionIntent.tool;
+    if (!this.#routes.has(`${tool.kind}:${tool.name}`)) {
+      return this.#readOnlyRuntime.acknowledgeExecutionResult(acknowledgement);
+    }
   }
 
   async #resolve(

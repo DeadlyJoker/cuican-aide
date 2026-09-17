@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "crewon.team-effect-gui-trace.v1",
+  "caseId": "example-release-decision",
+  "caseRevision": "revision-1",
+  "traceId": "example-baseline-001",
+  "submittedPrompt": "请基于 rollback、monitoring、owner 和 rehearsal 证据判断本次发布是否放行；明确列出冲突、门禁、两项行动和未知项，并严格使用约定标签。",
+  "capture": {
+    "source": "gui",
+    "collector": "browser-e2e-fixture",
+    "capturedAt": "2026-09-03T12:20:00.000Z"
+  },
+  "variant": {
+    "variantId": "manager-generated",
+    "promptVariantId": "team-manager-v1",
+    "harnessVersion": "team-effect-v1",
+    "buildRevision": "fixture-baseline",
+    "agents": [
+      {
+        "memberId": "manager",
+        "agentVersionId": "baseline-manager-v1",
+        "agentVersionDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "providerId": "fixture-provider-a",
+        "modelId": "fixture-manager-model",
+        "reasoningEffort": "high",
+        "capabilityProfileId": "portable-text-v1"
+      },
+      {
+        "memberId": "planner",
+        "agentVersionId": "baseline-planner-v1",
+        "agentVersionDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "providerId": "fixture-provider-a",
+        "modelId": "fixture-planner-model",
+        "reasoningEffort": "high",
+        "capabilityProfileId": "portable-text-v1"
+      },
+      {
+        "memberId": "verifier",
+        "agentVersionId": "baseline-verifier-v1",
+        "agentVersionDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "providerId": "fixture-provider-b",
+        "modelId": "fixture-verifier-model",
+        "reasoningEffort": "medium",
+        "capabilityProfileId": "portable-text-v1"
+      }
+    ]
+  },
+  "answer": {
+    "text": "结论: NO-GO\n证据A: rollback 演练尚未完成。\n证据B: monitoring 告警链路已有截图。\n证据C: owner 已明确，但值班确认待补。\n证据D: rehearsal 记录缺少恢复阶段。\n冲突: planner 建议发布，verifier 因回滚证据不足反对。\n门禁: rollback drill 通过后才能放行。\n行动1: owner 补齐值班确认。\n行动2: monitoring 负责人复核告警。\n未知: 故障后的实际恢复时长。"
+  },
+  "ui": {
+    "userMessageCopies": 1,
+    "errorText": null,
+    "pending": false
+  },
+  "efficiency": {
+    "modelRunCount": 4,
+    "logicalPhaseCount": 3,
+    "timeToFirstVisibleOutputMs": null,
+    "settledDurationMs": 50524
+  }
+}

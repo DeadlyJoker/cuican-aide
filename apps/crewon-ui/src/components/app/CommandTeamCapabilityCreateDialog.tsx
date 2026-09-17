@@ -301,7 +301,7 @@ export function CommandTeamCapabilityCreateDialog({
                 <strong id="workflow-node-builder-title">执行节点</strong>
                 <p>
                   {workflowRequiresVerification
-                    ? "Agent 节点自动执行；Human Gate 会持久等待批准或驳回。最后必须由独立 Verification 节点验收输出。"
+                    ? "Agent 节点自动执行；Human Gate 会持久等待批准或驳回。最后必须由独立 Verification 节点验收输出。验收只给出通过或不通过，不负责改稿；如需根据审批意见修改交付物，请在人工确认后添加 Agent 产出节点。"
                     : "Agent 节点自动执行；Human Gate 会持久等待批准或驳回，再决定是否继续。"}
                 </p>
               </div>

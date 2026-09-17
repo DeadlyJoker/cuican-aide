@@ -18,6 +18,7 @@ import "./styles/tailwind.css";
 import "./styles/neutral-scale.css";
 import "./styles/app.css";
 import "./styles/original-shell-overrides.css";
+import "./styles/team-workspace.css";
 // Loaded last: settles the shared control surface and user appearance vars.
 import "./styles/appearance.css";
 

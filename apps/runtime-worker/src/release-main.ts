@@ -7,6 +7,7 @@ import {
 } from "./agent-version-release-composition.ts";
 import { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 import {
+  compileDevelopmentAgentProfileVersion,
   developmentAgentRuntimeBindings,
   parseDevelopmentAgentProfiles,
 } from "./development-agent-profiles.ts";
@@ -87,11 +88,7 @@ try {
   );
   const bootstrapVersion = compileRuntimeAgentVersion(common);
   const profileAgentVersions = profiles.map((profile) =>
-    compileRuntimeAgentVersion({
-      ...common,
-      route: { ...route, agentVersionId: profile.agentVersionId },
-      agentInstructions: profile.instructions,
-    }),
+    compileDevelopmentAgentProfileVersion(common, profile),
   );
   const modelIds = runtimeModelCatalog(
     process.env.CREWON_MODEL_CATALOG_JSON,
@@ -178,7 +175,7 @@ try {
             : process.env.CREWON_MCP_STDIO_CONFIG_PATH?.trim() || null,
           ...(ownsBindingsManifest
             ? {
-                apiKeyEnvironment:
+                directApiKeyEnvironment:
                   process.env.CREWON_MODEL_CREDENTIAL_REQUIRED === "0"
                     ? null
                     : "CREWON_MODEL_API_KEY",

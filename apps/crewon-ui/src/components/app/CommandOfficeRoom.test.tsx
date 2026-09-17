@@ -119,6 +119,7 @@ describe("CommandOfficeRoom", () => {
         subtitle: "Control · r1",
       },
       definition: {
+        officeId: "office-1",
         officeVersionId: "office-version-1",
         revision: 1,
         members: [

@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 
 import type { Locale } from "../../lib/i18n";
 import type { TerminalOutputStream } from "../../lib/terminal/terminalOutputStream";
+import { TerminalOutputWriter } from "../../lib/terminal/terminalOutputWriter";
 
 export function CommandWorkbenchTerminal({
   active,
@@ -33,8 +34,7 @@ export function CommandWorkbenchTerminal({
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const writtenLengthRef = useRef(0);
-  const writtenGenerationRef = useRef(output.generation);
+  const outputWriterRef = useRef<TerminalOutputWriter | null>(null);
   const lastSizeRef = useRef("");
   const startedRef = useRef(false);
   const onResizeRef = useRef(onResize);
@@ -78,8 +78,11 @@ export function CommandWorkbenchTerminal({
     terminal.open(host);
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
-    // A fresh xterm holds none of the stream, so the replay effect starts over.
-    writtenLengthRef.current = 0;
+    const outputWriter = new TerminalOutputWriter({
+      reset: () => terminal.reset(),
+      write: (text, onWritten) => terminal.write(text, onWritten),
+    });
+    outputWriterRef.current = outputWriter;
     const inputSubscription = terminal.onData((data) =>
       onWriteRef.current(data),
     );
@@ -95,6 +98,8 @@ export function CommandWorkbenchTerminal({
     return () => {
       resizeObserver.disconnect();
       inputSubscription.dispose();
+      outputWriter.dispose();
+      outputWriterRef.current = null;
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -132,27 +137,9 @@ export function CommandWorkbenchTerminal({
     onStart();
   }, [disabled, onStart, processId]);
 
-  /*
-   * The stream is the source of truth, so a remounted xterm replays the buffer
-   * it missed instead of showing a blank screen. A generation bump means the
-   * text is no longer an append (restart or scrollback trim), so reset first.
-   */
   useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) {
-      return;
-    }
-    if (output.generation !== writtenGenerationRef.current) {
-      terminal.reset();
-      writtenGenerationRef.current = output.generation;
-      writtenLengthRef.current = 0;
-    }
-    if (output.text.length <= writtenLengthRef.current) {
-      return;
-    }
-    terminal.write(output.text.slice(writtenLengthRef.current));
-    writtenLengthRef.current = output.text.length;
-  }, [output.generation, output.text]);
+    outputWriterRef.current?.update(output);
+  }, [output]);
 
   const running = Boolean(processId);
   return (

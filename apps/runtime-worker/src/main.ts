@@ -1,3 +1,5 @@
+import { RuntimeCompositionLifetime } from "./runtime-composition-lifetime.ts";
+import { installRuntimeProcessShutdown } from "./runtime-process-shutdown.ts";
 import {
   FilesystemArtifactStore,
   loadArtifactEncryptionKey,
@@ -145,13 +147,15 @@ const initialized = await (async () => {
       transport,
     };
   } catch (error) {
-    await Promise.allSettled([
-      artifactAuthority?.store.close(),
-      toolRuntime?.close?.(),
-      transport?.close?.(),
-    ]);
-    nativeBootstrap?.credentialBindings?.destroy();
-    remoteMcpOwner?.destroy();
+    await Promise.allSettled(
+      [
+        () => artifactAuthority?.store.close(),
+        () => toolRuntime?.close?.(),
+        () => transport?.close?.(),
+        () => nativeBootstrap?.credentialBindings?.destroy(),
+        () => remoteMcpOwner?.destroy(),
+      ].map((close) => Promise.resolve().then(close)),
+    );
     throw error;
   }
 })();
@@ -169,6 +173,7 @@ const {
 
 let runtime: StandaloneRuntimeWorker;
 let nativeWorkspaceResources: RuntimeNativeWorkspaceResources | undefined;
+let compositionOwnsResources = false;
 try {
   nativeWorkspaceResources =
     nativeBootstrap?.workspace === null ||
@@ -180,6 +185,13 @@ try {
           route,
         });
   const config = {
+    localStoragePaths:
+      artifactAuthority === undefined
+        ? []
+        : [
+            requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+            requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
+          ],
     runtimeTenantId,
     route,
     transport,
@@ -238,13 +250,12 @@ try {
       ? {}
       : {
           agentVersionRuntimeFactory,
-          agentVersionDeployments:
-            agentVersionRuntimeFactory
-              .deploymentBindings(runtimeTenantId)
-              .filter(
-                (deployment) =>
-                  deployment.agentVersionId !== route.agentVersionId,
-              ),
+          agentVersionDeployments: agentVersionRuntimeFactory
+            .deploymentBindings(runtimeTenantId)
+            .filter(
+              (deployment) =>
+                deployment.agentVersionId !== route.agentVersionId,
+            ),
         }),
     ...(nativeBootstrap?.provider === null ||
     nativeBootstrap?.provider === undefined
@@ -276,6 +287,12 @@ try {
         }),
   };
   const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
+  // Resolve the remaining configuration before transferring resources. The
+  // composition owns every supplied closer from invocation, even on failure.
+  const databasePath = connectionString
+    ? undefined
+    : requiredEnvironment("CREWON_CONTROL_DB_PATH");
+  compositionOwnsResources = true;
   runtime = connectionString
     ? await createPostgresRuntimeWorker({
         ...config,
@@ -286,17 +303,23 @@ try {
       })
     : await createStandaloneRuntimeWorker({
         ...config,
-        databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
+        databasePath: databasePath!,
       });
 } catch (error) {
-  await Promise.allSettled([
-    nativeWorkspaceResources?.gateway.close(),
-    nativeWorkspaceResources?.readGateway.close(),
-  ]);
-  await artifactAuthority?.store.close();
-  await toolRuntime?.close?.();
-  await transport.close?.();
-  remoteMcpOwner?.destroy();
+  if (!compositionOwnsResources) {
+    await Promise.allSettled(
+      [
+        () => nativeWorkspaceResources?.gateway.close(),
+        () => nativeWorkspaceResources?.readGateway.close(),
+        () => artifactAuthority?.store.close(),
+        () => toolRuntime?.close?.(),
+        () => transport.close?.(),
+      ].map((close) => Promise.resolve().then(close)),
+    );
+  }
+  await Promise.resolve()
+    .then(() => remoteMcpOwner?.destroy())
+    .catch(() => {});
   throw error;
 }
 
@@ -330,11 +353,18 @@ function createConfiguredArtifactAuthority():
   };
 }
 
+const processLifetime = new RuntimeCompositionLifetime();
+processLifetime.own(runtime, { phase: "stop" });
+if (remoteMcpOwner !== undefined)
+  processLifetime.own(
+    { close: () => remoteMcpOwner.destroy() },
+    { phase: "resources" },
+  );
+
 try {
   await transport.prewarm?.(new AbortController().signal);
 } catch (error) {
-  await runtime.close();
-  remoteMcpOwner?.destroy();
+  await processLifetime.close().catch(() => {});
   throw error;
 }
 
@@ -342,11 +372,19 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   try {
     const outcome = await runtime.worker.wake();
     process.stdout.write(`${JSON.stringify(outcome)}\n`);
-  } finally {
-    await runtime.close();
-    remoteMcpOwner?.destroy();
+  } catch (error) {
+    await processLifetime.close().catch(() => {});
+    throw error;
   }
+  await processLifetime.close();
 } else {
+  installRuntimeProcessShutdown({
+    host: process,
+    close: () => processLifetime.close(),
+    reportFailure: () => {
+      process.stderr.write("CrewON Runtime Worker shutdown failed\n");
+    },
+  });
   runtime.worker.start();
   process.stdout.write("CrewON Runtime Worker started\n");
   for (const line of runtimeNativeReadinessLines({
@@ -357,13 +395,5 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
       nativeBootstrap?.workspace?.authority.runtimeBindingId ?? null,
   })) {
     process.stdout.write(`${line}\n`);
-  }
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => {
-      void runtime.close().finally(() => {
-        remoteMcpOwner?.destroy();
-        process.exit(0);
-      });
-    });
   }
 }

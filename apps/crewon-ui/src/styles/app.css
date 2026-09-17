@@ -8478,6 +8478,25 @@ button.library-item:hover .library-card-chevron {
   }
 }
 
+/*
+ * The authenticated account pill becomes a fixed top-right overlay at 840px.
+ * Between 721px and 840px the Control Office header otherwise stays on one row,
+ * placing its member-settings button underneath that pill. Move only this
+ * header's actions to row two; the existing <=720px layout already does so.
+ */
+@media (min-width: 721px) and (max-width: 840px) {
+  .control-office-chat-room .office-top {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .control-office-chat-room .office-top-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-end;
+  }
+}
+
 @media (max-width: 720px) {
   .office-top {
     grid-template-columns: auto minmax(0, 1fr);
@@ -9264,6 +9283,13 @@ button.library-item:hover .library-card-chevron {
   background: transparent;
   color: inherit;
   cursor: pointer;
+}
+
+@media (max-width: 840px) {
+  .screen-shell.command-screen .settings-command-notice {
+    /* The compact account controls occupy y=12..42; never overlap logout. */
+    top: 52px;
+  }
 }
 
 /* The main command workspace follows the same global theme preference. */

@@ -46,12 +46,12 @@ export function refreshThreadFromClientAction(params: {
 
 export function reloadThreadsFromClientAction(params: {
   archived: boolean;
-  client: Pick<NotificationRefreshClient, "listThreads"> | null | undefined;
+  client: (Pick<NotificationRefreshClient, "listThreads"> & { managesThreadList?: boolean }) | null | undefined;
   setThreads: ThreadListReplaceSetter;
 }): void {
   void params.client
     ?.listThreads(params.archived)
-    .then(params.setThreads)
+    .then(threads => { if (!params.client?.managesThreadList) params.setThreads(threads); })
     .catch(() => undefined);
 }
 

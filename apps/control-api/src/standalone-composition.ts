@@ -1,3 +1,9 @@
+import { ModelPricingApplicationService } from "@crewon/application";
+import { ModelSpendingApplicationService } from "@crewon/application";
+import { OfficeThreadApplicationService } from "@crewon/application";
+import type { StorageAdmissionPort } from "@crewon/application";
+import { createLocalStorageAdmissionOwner } from "@crewon/store";
+import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
@@ -50,6 +56,8 @@ import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 
 type ControlApiCompositionConfig = Readonly<{
+  storageAdmission?: StorageAdmissionPort;
+  localStoragePaths?: readonly string[];
   actor: ActorContext;
   defaultAgentVersionId: string;
   sessionToken: string;
@@ -57,6 +65,8 @@ type ControlApiCompositionConfig = Readonly<{
   allowedOrigins: readonly string[];
   heartbeatIntervalMs?: number | null;
   outboxScanIntervalMs?: number | null;
+  outboxRetention?: OutboxRetentionPolicy | null;
+  artifactRetention?: ArtifactRetentionPolicy | null;
   automationScanIntervalMs?: number | null;
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
@@ -85,6 +95,7 @@ export type StandaloneControlApiRuntime = Readonly<{
   app: FastifyInstance;
   eventHub: RunEventHub;
   outboxDispatcher: OutboxDispatcher;
+  artifactMaintenance: ArtifactRetentionMaintenance;
   automationScheduler: AutomationScheduler;
   providerProbes: ControlProviderProbeService;
   workspaceLists: WorkspaceListApplicationService | null;
@@ -95,7 +106,15 @@ export function createStandaloneControlApi(
   config: StandaloneControlApiConfig,
 ): StandaloneControlApiRuntime {
   const store = new SqliteRunStore(config.databasePath);
-  return composeControlApi(store, config);
+  try {
+    return composeControlApi(store, {
+      ...config,
+      localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
+    });
+  } catch (error) {
+    void store.close();
+    throw error;
+  }
 }
 
 export async function createPostgresControlApi(
@@ -119,6 +138,10 @@ function composeControlApi(
   store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
 ): StandaloneControlApiRuntime {
+  const storageCapacity = createLocalStorageAdmissionOwner({
+    configured: config.storageAdmission,
+    paths: config.localStoragePaths ?? [],
+  });
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
@@ -127,10 +150,13 @@ function composeControlApi(
       ownerId: `outbox:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
       scanIntervalMs: config.outboxScanIntervalMs,
+      retention: config.outboxRetention,
     },
   );
   let workspaceWorker: LoopbackRuntimeWorkspaceWorkerClient | null = null;
+  let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   try {
+    artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -145,9 +171,19 @@ function composeControlApi(
       authorization,
       clock,
       ids,
+      digester,
     });
     const threads = new ThreadApplicationService({
       store,
+      authorization,
+      clock,
+      ids,
+      digester,
+    });
+    const officeThreads = new OfficeThreadApplicationService({
+      store,
+      offices,
+      threads,
       authorization,
       clock,
       ids,
@@ -207,6 +243,7 @@ function composeControlApi(
     });
     const automationScheduler = new AutomationScheduler(
       {
+        storageAdmission: storageCapacity.admission,
         automations,
         store,
         threads,
@@ -272,6 +309,7 @@ function composeControlApi(
     const app = buildControlApi({
       application,
       offices,
+      officeThreads,
       threads,
       taskChanges,
       goals,
@@ -288,6 +326,11 @@ function composeControlApi(
       workspaceQueries,
       sandbox: config.sandbox,
       providerSettings,
+      modelPricing: new ModelPricingApplicationService({
+        store,
+        authorization,
+      }),
+      modelSpending: new ModelSpendingApplicationService({ store, authorization }),
       providerProbes,
       providerRuntimeAvailability:
         config.providerProbeWorkers === undefined ? "unavailable" : "available",
@@ -309,10 +352,14 @@ function composeControlApi(
       outboxWakeup: outboxDispatcher,
       heartbeatIntervalMs: config.heartbeatIntervalMs,
       activationGate: config.activationGate,
+      storageAdmission: storageCapacity.admission,
     });
     outboxDispatcher.start();
     automationScheduler.start();
+    artifactMaintenance.start();
     app.addHook("onClose", async () => {
+      storageCapacity.close();
+      await artifactMaintenance!.close();
       await automationScheduler.close();
       await outboxDispatcher.close();
       eventHub.close();
@@ -324,12 +371,15 @@ function composeControlApi(
       app,
       eventHub,
       outboxDispatcher,
+      artifactMaintenance,
       automationScheduler,
       providerProbes,
       workspaceLists,
       workspaceQueries,
     };
   } catch (error) {
+    storageCapacity.close();
+    void artifactMaintenance?.close();
     void outboxDispatcher.close();
     eventHub.close();
     void workspaceWorker?.close();
@@ -338,3 +388,5 @@ function composeControlApi(
     throw error;
   }
 }
+import { ArtifactRetentionMaintenance } from "./artifact-retention-maintenance.ts";
+import type { ArtifactRetentionPolicy } from "@crewon/application";

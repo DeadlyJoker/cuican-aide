@@ -1,6 +1,7 @@
 import { RunStoreError } from "@crewon/application";
 import { RunLifecycleError, ThreadLifecycleError } from "@crewon/domain";
 import { Pool, type PoolClient, type PoolConfig } from "pg";
+import { BoundedPostgresPool } from "./bounded-postgres-pool.ts";
 
 export type PostgresConnectionOptions = Readonly<{
   connectionString?: string;
@@ -23,7 +24,7 @@ export function createPostgresPool(
     return { pool: options.pool, ownsPool: false };
   }
   return {
-    pool: new Pool(
+    pool: new BoundedPostgresPool(
       postgresPoolConfig(
         options.connectionString as string,
         applicationName,
@@ -65,6 +66,13 @@ export async function assertPostgresSchemaNotNewer(
 }
 
 export function normalizePostgresError(error: unknown): Error {
+  if (
+    error instanceof Error &&
+    (error.message === "run_output_replay_requires_stream_append" ||
+      error.message === "outbox_message_conflict")
+  ) {
+    return new RunStoreError(error.message, { cause: error });
+  }
   if (
     error instanceof RunStoreError ||
     error instanceof RunLifecycleError ||

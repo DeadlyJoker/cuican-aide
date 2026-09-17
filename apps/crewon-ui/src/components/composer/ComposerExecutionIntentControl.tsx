@@ -1,23 +1,24 @@
-import { ListChecks, ShieldCheck, Target } from "lucide-react";
+import { ListChecks, ShieldCheck, Target, X } from "lucide-react";
 import { useId } from "react";
 
 import type { Locale } from "../../lib/i18n";
 import type { CommandExecutionIntent } from "../../lib/thread/threadRuntimeSettings";
-
-type SelectableExecutionIntent = Exclude<CommandExecutionIntent, "none">;
+import "./ComposerExecutionIntentControl.css";
 
 export function ComposerExecutionIntentControl({
   disabled = false,
   hasActiveGoal = false,
   locale,
   value,
-  onSelect,
+  blockedReason = null,
+  onClear,
 }: {
   disabled?: boolean;
   hasActiveGoal?: boolean;
   locale: Locale;
   value: CommandExecutionIntent;
-  onSelect: (intent: SelectableExecutionIntent) => void;
+  blockedReason?: string | null;
+  onClear: () => void;
 }) {
   const activeGoalNoticeId = `composer-plan-active-goal-notice-${useId()}`;
   const copy =
@@ -25,54 +26,56 @@ export function ComposerExecutionIntentControl({
       ? {
           activeGoalNotice: "发送后将清除当前目标",
           goal: "目标",
-          goalTitle: "持续推进一个可追踪目标",
+          goalTitle: "发送后创建或更新目标，持续推进",
           group: "执行方式",
           plan: "计划",
-          planTitle: "只读制定计划，确认后再执行",
+          planTitle: "本次发送先制定计划，不执行写操作",
         }
       : {
           activeGoalNotice: "Sending will clear the active goal",
           goal: "Goal",
-          goalTitle: "Keep working toward a trackable goal",
+          goalTitle:
+            "Create or update a goal when you send, then keep working toward it",
           group: "Execution intent",
           plan: "Plan",
           planTitle: "Draft a read-only plan before execution",
         };
-  return (
+  return value === "none" ? null : (
     <>
-      <div
-        aria-label={copy.group}
-        className="execution-intent-segmented"
-        role="group"
+      <span
+        aria-label={`${copy.group}：${value === "goal" ? copy.goal : copy.plan}`}
+        className="composer-intent-chip"
+        aria-describedby={
+          hasActiveGoal && value === "plan" ? activeGoalNoticeId : undefined
+        }
+        data-execution-intent={value}
+        data-blocked={blockedReason ? "true" : undefined}
+        title={value === "goal" ? copy.goalTitle : copy.planTitle}
       >
-        <button
-          aria-pressed={value === "goal"}
-          className="execution-intent-option"
-          data-execution-intent="goal"
-          disabled={disabled}
-          title={copy.goalTitle}
-          type="button"
-          onClick={() => onSelect("goal")}
-        >
+        {value === "goal" ? (
           <Target aria-hidden="true" />
-          <span>{copy.goal}</span>
-        </button>
-        <button
-          aria-describedby={
-            hasActiveGoal && value === "plan" ? activeGoalNoticeId : undefined
-          }
-          aria-pressed={value === "plan"}
-          className="execution-intent-option"
-          data-execution-intent="plan"
-          disabled={disabled}
-          title={copy.planTitle}
-          type="button"
-          onClick={() => onSelect("plan")}
-        >
+        ) : (
           <ListChecks aria-hidden="true" />
-          <span>{copy.plan}</span>
+        )}
+        <span>{value === "goal" ? copy.goal : copy.plan}</span>
+        <button
+          aria-label={
+            locale === "zh"
+              ? `取消${value === "goal" ? copy.goal : copy.plan}`
+              : `Remove ${value === "goal" ? copy.goal : copy.plan}`
+          }
+          disabled={disabled}
+          type="button"
+          onClick={onClear}
+        >
+          <X aria-hidden="true" />
         </button>
-      </div>
+      </span>
+      {blockedReason ? (
+        <span className="composer-intent-error" role="alert">
+          {blockedReason}
+        </span>
+      ) : null}
       {hasActiveGoal && value === "plan" ? (
         <span
           className="execution-intent-notice"

@@ -26,6 +26,23 @@ export type RunAttemptStatus =
   | "canceled"
   | "abandoned";
 
+type CheckpointJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | CheckpointJsonValue[]
+  | { [key: string]: CheckpointJsonValue };
+
+/** A durable value; protocol adapters validate its opaque contents before commit. */
+export type RunAttemptProviderCheckpoint = Readonly<{
+  schemaVersion: "crewon.provider-checkpoint.v0";
+  adapterName: string;
+  adapterVersion: string;
+  modelId: string;
+  opaquePayload: Readonly<Record<string, CheckpointJsonValue>>;
+}>;
+
 export type RunStepState = Readonly<{
   schemaVersion: "crewon.run-step.v0";
   stepId: string;
@@ -53,7 +70,7 @@ export type RunAttemptState = Readonly<{
   leaseEpoch: number;
   status: RunAttemptStatus;
   checkpointDigest: string | null;
-  providerCheckpoint: import("@crewon/contracts").ProviderCheckpoint | null;
+  providerCheckpoint: RunAttemptProviderCheckpoint | null;
   providerTurnState: string | null;
   failure: Readonly<{ code: string; retryable: boolean }> | null;
   startedAt: string;

@@ -1,5 +1,6 @@
 export const OFFICE_LIMITS = Object.freeze({
   title: 160,
+  responsibility: 240,
   members: 32,
   targets: 32,
   list: 100,
@@ -9,6 +10,7 @@ export type OfficeMember = Readonly<{
   memberId: string;
   displayName: string;
   agentVersionId: string;
+  responsibility?: string;
 }>;
 
 export type OfficeExecutionTarget = Readonly<{
@@ -84,13 +86,7 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
     throw new Error("office_definition_invalid");
   const memberIds = new Set<string>();
   for (const member of item.members) {
-    if (
-      !validFields(member, {
-        memberId: 128,
-        displayName: 160,
-        agentVersionId: 128,
-      })
-    )
+    if (!validOfficeMember(member))
       throw new Error("office_definition_invalid");
     const memberId = (member as Record<string, string>).memberId;
     if (memberIds.has(memberId)) throw new Error("office_definition_invalid");
@@ -105,6 +101,26 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
     targetIds.add(targetId);
   }
   return structuredClone(value) as OfficeDefinition;
+}
+
+function validOfficeMember(value: unknown): value is OfficeMember {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    return false;
+  const item = value as Record<string, unknown>;
+  const responsibility = item.responsibility;
+  const fields = {
+    memberId: 128,
+    displayName: 160,
+    agentVersionId: 128,
+    ...(responsibility === undefined
+      ? {}
+      : { responsibility: OFFICE_LIMITS.responsibility * 4 }),
+  };
+  return (
+    validFields(value, fields) &&
+    (responsibility === undefined ||
+      [...(responsibility as string)].length <= OFFICE_LIMITS.responsibility)
+  );
 }
 
 function validFields(value: unknown, fields: Readonly<Record<string, number>>) {

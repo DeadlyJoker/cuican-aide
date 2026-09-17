@@ -5,6 +5,9 @@ import type {
   ModelContextProjection,
 } from "@crewon/context";
 
+import type { AgentExecutionAuthority } from "./agent-version-runtime.ts";
+import type { RuntimeResourceLease } from "./runtime-resource-lease.ts";
+
 export type CurrentModelRuntime = Readonly<{
   agentVersionId: string;
   adapterName: string;
@@ -22,12 +25,19 @@ export type ModelSwitchCompactionDecision =
     }>;
 
 export type PriorModelCompactionRuntime = Readonly<{
+  executionAuthority: AgentExecutionAuthority;
   compactor: ContextCompactorPort;
   governedContext?: GovernedContextBundle;
 }>;
 
 /** Resolves the immutable prior AgentVersion runtime used for switch compaction. */
 export interface PriorModelCompactionResolverPort {
+  acquire?(
+    prior: ThreadModelState,
+  ):
+    | RuntimeResourceLease<PriorModelCompactionRuntime>
+    | null
+    | Promise<RuntimeResourceLease<PriorModelCompactionRuntime> | null>;
   resolve(
     prior: ThreadModelState,
   ):

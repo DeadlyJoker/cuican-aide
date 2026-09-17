@@ -1,4 +1,6 @@
 import { Pool, type PoolClient } from "pg";
+import { stableJson } from "./store-invariants.ts";
+import { createPostgresPool } from "./postgres-store-support.ts";
 
 import {
   RunStoreError,
@@ -48,7 +50,10 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
     if (typeof connectionString !== "string" || connectionString.length < 1)
       throw new RunStoreError("postgres_connection_string_invalid");
     const store = new PostgresWorkspaceReadFileStore(
-      new Pool({ connectionString }),
+      createPostgresPool(
+        { connectionString },
+        "crewon-workspace-read-store",
+      ).pool,
       options.schema ?? "crewon",
       true,
     );
@@ -141,8 +146,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       );
       if (existing !== null) {
         requireWorkspaceReadFileLocator(existing, locator);
-        if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen))
-          conflict();
+        if (stableJson(existing.frozen) !== stableJson(frozen)) conflict();
         await this.#insertReceipt(
           client,
           locator,
@@ -289,8 +293,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       if (current.resolution !== null) {
         if (receipt === null) conflict();
         const parsed = exactResolution(current, input.phase, input.resolution);
-        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
-          conflict();
+        if (stableJson(parsed) !== stableJson(current.resolution)) conflict();
         return result("replayed", current);
       }
       if (current.revision !== input.expectedRevision) conflict();

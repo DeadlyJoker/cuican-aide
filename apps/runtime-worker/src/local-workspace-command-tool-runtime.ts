@@ -1,3 +1,4 @@
+import { ToolResultScanRouter } from "@crewon/tool-broker";
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
@@ -115,8 +116,25 @@ export function createLocalWorkspaceCommandToolRuntime(
   };
   const workspaceRuntime = broker(WORKSPACE_SANDBOX_MODE);
   const fullAccessRuntime = broker(FULL_ACCESS_SANDBOX_MODE);
+  const resultScanner = new ToolResultScanRouter([
+    workspaceRuntime,
+    fullAccessRuntime,
+  ]);
   return {
     definitions: () => workspaceRuntime.definitions(),
+    scanRetainedExecutionResults: (query) => resultScanner.scan(query),
+    retainedExecutionResults: (query) => {
+      const results = workspaceRuntime.retainedExecutionResults(query);
+      return results.length >= query.limit
+        ? results
+        : [
+            ...results,
+            ...fullAccessRuntime.retainedExecutionResults({
+              ...query,
+              limit: query.limit - results.length,
+            }),
+          ];
+    },
     executionPolicy: (kind, name, context?: ToolExecutionPolicyContext) =>
       runtimeForPolicyContext(
         workspaceRuntime,
@@ -128,6 +146,12 @@ export function createLocalWorkspaceCommandToolRuntime(
         command,
         signal,
       ),
+    reserveExecution: (command, signal, options) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        command,
+      ).reserveExecution?.(command, signal, options),
     reconcile: (command, signal) =>
       runtimeForCommand(workspaceRuntime, fullAccessRuntime, command).reconcile(
         command,
@@ -138,6 +162,24 @@ export function createLocalWorkspaceCommandToolRuntime(
         command,
         signal,
       ),
+    cancelRetainedExecution: (lookup) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        lookup,
+      ).cancelRetainedExecution?.(lookup) ?? null,
+    readRetainedExecutionResult: (lookup) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        lookup,
+      ).readRetainedExecutionResult?.(lookup) ?? null,
+    acknowledgeExecutionResult: (acknowledgement) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        acknowledgement,
+      ).acknowledgeExecutionResult?.(acknowledgement),
   };
 }
 
@@ -154,7 +196,7 @@ function runtimeForPolicyContext(
 function runtimeForCommand(
   workspaceRuntime: ToolRuntimePort,
   fullAccessRuntime: ToolRuntimePort,
-  command: ToolExecutionCommand,
+  command: Pick<ToolExecutionCommand, "actionIntent">,
 ): ToolRuntimePort {
   return command.actionIntent.capability === fullAccessPolicy.capability
     ? fullAccessRuntime

@@ -1,0 +1,102 @@
+.bundled-task-packs {
+  display: grid;
+  gap: 16px;
+  color: var(--settings-fg);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.65;
+}
+.bundled-task-packs h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.bundled-task-packs h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.bundled-task-packs p {
+  margin: 4px 0 0;
+  color: var(--settings-muted);
+  overflow-wrap: anywhere;
+}
+.task-pack-card {
+  border: 1px solid var(--settings-border);
+  border-radius: var(--radius-lg);
+  background: var(--settings-card);
+  padding: 18px;
+}
+.task-pack-card > header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+.task-pack-card > header small {
+  color: var(--settings-muted);
+  overflow-wrap: anywhere;
+}
+.task-pack-card > header > span {
+  border: 1px solid var(--settings-border);
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+}
+.task-pack-preferences {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 18px 0;
+}
+.task-pack-preferences label,
+.task-pack-prepare label {
+  display: grid;
+  gap: 6px;
+}
+.task-pack-preferences select,
+.task-pack-prepare textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--radius-md);
+  background: var(--settings-bg, var(--settings-card));
+  color: var(--settings-fg);
+  font: inherit;
+}
+.task-pack-prepare textarea {
+  resize: vertical;
+  min-height: 140px;
+}
+.task-pack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.task-pack-actions button {
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+  text-align: left;
+}
+.task-pack-card .task-pack-save-state {
+  margin-top: 10px;
+}
+.task-pack-prepare {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--settings-border);
+}
+.task-pack-prepare [role="alert"] {
+  color: var(--danger);
+}
+.bundled-task-packs :is(select, textarea, button):focus-visible {
+  outline: 2px solid var(--settings-fg);
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .task-pack-preferences {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,4 +1,14 @@
-import { BookOpen, Check, Cloud, FolderOpen, ListChecks, Paperclip, Plug, Sparkles, Target } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Cloud,
+  FolderOpen,
+  ListChecks,
+  Paperclip,
+  Plug,
+  Sparkles,
+  Target,
+} from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import type { PaletteItemWithCommand } from "./CommandWorkspaceChrome";
 
@@ -62,7 +72,8 @@ export function Palette({
       ? [
           {
             id: "intent",
-            label: "执行方式",
+            label:
+              items.find((item) => item.kind === "intent")?.label ?? "执行方式",
             items: items.filter((item) => item.kind === "intent"),
           },
           {
@@ -123,9 +134,15 @@ export function Palette({
           data-active={item.active ? "true" : undefined}
           data-kind={item.kind}
           data-label={item.title}
+          aria-pressed={
+            item.kind === "intent" ? Boolean(item.active) : undefined
+          }
+          disabled={item.disabled}
           key={`${item.kind}-${item.title}-${item.token ?? ""}`}
           type="button"
-          onClick={() => onSelect(item)}
+          onClick={() => {
+            if (!item.disabled) onSelect(item);
+          }}
         >
           <span className="add-palette-item-icon">{addItemIcon(item)}</span>
           <span className="add-palette-item-copy">
@@ -184,13 +201,17 @@ export function Palette({
         value={query}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
-          const action = paletteSearchKeyAction(event.key, Boolean(items[0]));
+          const firstItem = firstSelectablePaletteItem(items);
+          const action = paletteSearchKeyAction(
+            event.key,
+            firstItem !== undefined,
+          );
           if (action === "close") {
             event.preventDefault();
             onClose();
           } else if (action === "selectFirst") {
             event.preventDefault();
-            onSelect(items[0]!);
+            onSelect(firstItem!);
           } else if (action === "blockSubmit") {
             event.preventDefault();
           }
@@ -217,6 +238,12 @@ export function Palette({
       </div>
     </div>
   );
+}
+
+export function firstSelectablePaletteItem(
+  items: readonly PaletteItemWithCommand[],
+): PaletteItemWithCommand | undefined {
+  return items.find((item) => !item.disabled);
 }
 
 export function paletteSearchKeyAction(

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { registerWorkItemFairness } from "./work-item-fairness.test-support.ts";
 import { describe, test, type TestContext } from "node:test";
 
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
@@ -25,6 +26,7 @@ export function registerRunStoreConformance(
   options: Readonly<{ databaseTimeQueue?: boolean }> = {},
 ): void {
   describe(name, () => {
+    registerWorkItemFairness(createStore, createRunningCommitFixture);
     test("atomically commits event, snapshot, queues and idempotency receipt", async (context) => {
       const store = await managedStore(context, createStore);
       const input = createRunningCommitFixture();

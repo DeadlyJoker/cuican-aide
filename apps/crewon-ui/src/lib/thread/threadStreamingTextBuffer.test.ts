@@ -82,6 +82,21 @@ describe("streaming text buffer", () => {
     expect(streamingTextByThread).toEqual({ "thread-1": "old" });
   });
 
+  it("clears one thread without dropping another thread's pending delta", () => {
+    const manualScheduler = createManualScheduler();
+    let streamingTextByThread: StreamingTextByThread = {};
+    const buffer = createStreamingTextBuffer((updater) => {
+      streamingTextByThread = updater(streamingTextByThread);
+    }, manualScheduler.scheduler);
+
+    buffer.append("discarded-thread", "stale");
+    buffer.append("active-thread", "keep");
+    buffer.clearPending("discarded-thread");
+    manualScheduler.flushNext();
+
+    expect(streamingTextByThread).toEqual({ "active-thread": "keep" });
+  });
+
   it("paces a gateway-sized burst long enough to remain visibly streaming", async () => {
     const manualScheduler = createManualScheduler();
     let streamingTextByThread: StreamingTextByThread = {};

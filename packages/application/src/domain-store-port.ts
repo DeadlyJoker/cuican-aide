@@ -1,4 +1,11 @@
+import type { ModelSpendingStore } from "./model-spending-store-port.ts";
+import type { ModelPricingStore } from "./model-pricing-store-port.ts";
+import type { RunExecutionProgressStore } from "./run-execution-progress-store-port.ts";
+import type { CompactionCheckpointStore } from "./compaction-checkpoint-store-port.ts";
+import type { OfficeThreadStore } from "./office-thread-store-port.ts";
+import type { ModelCallStore } from "./model-call-store-port.ts";
 import type { RunReceiptStore, RunStore } from "./run-store-port.ts";
+import type { ModelUsageStore } from "./model-usage-store-port.ts";
 import type { RunExecutionStore } from "./run-execution-store-port.ts";
 import type { ModelHistoryStore } from "./model-history-store-port.ts";
 import type {
@@ -23,8 +30,17 @@ import type { WorkspaceOperationStore } from "./workspace-operation-store-port.t
 import type { OfficeDefinitionStore } from "./office-store-port.ts";
 
 /** Combined authority implemented by local and Team composition roots. */
-export type DomainStore = RunStore &
+export type DomainStore = {
+  readonly modelPricing?: ModelPricingStore;
+  readonly modelSpending?: ModelSpendingStore;
+  readonly compactionCheckpoints?: CompactionCheckpointStore;
+  readonly executionProgress?: RunExecutionProgressStore;
+} & RunStore &
+  ArtifactRetentionGuard &
+  ModelUsageStore &
+  ModelCallStore &
   OfficeDefinitionStore &
+  OfficeThreadStore &
   RunReceiptStore &
   ThreadStore &
   SpaceScopedThreadStore &
@@ -43,3 +59,4 @@ export type DomainStore = RunStore &
   GoalToolStore &
   WorkspaceOperationStore &
   TurnStartStore;
+import type { ArtifactRetentionGuard } from "./artifact-retention-port.ts";

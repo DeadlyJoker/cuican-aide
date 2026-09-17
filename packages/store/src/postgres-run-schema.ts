@@ -1,4 +1,6 @@
-export const POSTGRES_RUN_SCHEMA_VERSION = 2;
+import { postgresActiveRunIndexSql } from "./active-run-read.ts";
+import { postgresMessageRunEvidenceIndexSql } from "./message-run-evidence-schema.ts";
+export const POSTGRES_RUN_SCHEMA_VERSION = 6;
 
 export function postgresRunSchemaSql(schema: string): string {
   return `
@@ -51,6 +53,55 @@ export function postgresRunSchemaSql(schema: string): string {
         REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS ${schema}.run_output_receipts (
+      tenant_id text NOT NULL,
+      run_id text NOT NULL,
+      segment_id text NOT NULL,
+      segment_sequence bigint NOT NULL CHECK (segment_sequence BETWEEN 1 AND 9007199254740991),
+      run_sequence bigint NOT NULL CHECK (run_sequence BETWEEN 1 AND 9007199254740991),
+      fingerprint text NOT NULL,
+      PRIMARY KEY (run_id, segment_id, segment_sequence),
+      UNIQUE (run_id, run_sequence),
+      FOREIGN KEY (tenant_id, run_id) REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE CASCADE,
+      FOREIGN KEY (run_id, run_sequence) REFERENCES ${schema}.run_events(run_id, sequence) ON DELETE CASCADE
+    );
+
+    CREATE OR REPLACE FUNCTION ${schema}.guard_run_output_duplicate() RETURNS trigger LANGUAGE plpgsql AS $guard$
+    BEGIN
+      IF NEW.event_json->>'type' = 'model.output.delta' AND EXISTS (
+        SELECT 1 FROM ${schema}.run_output_receipts
+        WHERE run_id=NEW.run_id AND segment_id=NEW.event_json->'data'->>'segmentId'
+          AND segment_sequence=(NEW.event_json->'data'->>'segmentSequence')::bigint
+      ) THEN
+        RAISE EXCEPTION 'run_output_replay_requires_stream_append' USING ERRCODE='23505';
+      END IF;
+      RETURN NEW;
+    END $guard$;
+    DO $trigger$
+    BEGIN
+      CREATE TRIGGER run_output_receipt_duplicate_guard BEFORE INSERT ON ${schema}.run_events
+        FOR EACH ROW EXECUTE FUNCTION ${schema}.guard_run_output_duplicate();
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $trigger$;
+
+    CREATE OR REPLACE FUNCTION ${schema}.guard_run_progress_duplicate() RETURNS trigger LANGUAGE plpgsql AS $progress$
+    BEGIN
+      IF NEW.event_json->>'type' IN ('segment.started', 'usage.recorded') AND EXISTS (
+        SELECT 1 FROM ${schema}.run_output_receipts
+        WHERE run_id=NEW.run_id AND segment_id=NEW.event_json->'data'->>'segmentId'
+          AND segment_sequence=(NEW.event_json->'data'->>'segmentSequence')::bigint
+      ) THEN
+        RAISE EXCEPTION 'run_output_replay_requires_stream_append' USING ERRCODE='23505';
+      END IF;
+      RETURN NEW;
+    END $progress$;
+    DO $progress_trigger$
+    BEGIN
+      CREATE TRIGGER run_progress_receipt_duplicate_guard BEFORE INSERT ON ${schema}.run_events
+        FOR EACH ROW EXECUTE FUNCTION ${schema}.guard_run_progress_duplicate();
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $progress_trigger$;
+
     CREATE INDEX IF NOT EXISTS run_events_tenant_run_idx
       ON ${schema}.run_events(tenant_id, run_id, sequence);
     CREATE INDEX IF NOT EXISTS run_thread_bindings_thread_idx
@@ -86,7 +137,10 @@ export function postgresRunSchemaSql(schema: string): string {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 
+    ${postgresActiveRunIndexSql(schema)}
+    ${postgresMessageRunEvidenceIndexSql(schema)}
+
     UPDATE ${schema}.schema_migrations
       SET version = ${POSTGRES_RUN_SCHEMA_VERSION}
-      WHERE component = 'run_authority' AND version = 1;`;
+      WHERE component = 'run_authority' AND version IN (1, 2, 3, 4, 5);`;
 }

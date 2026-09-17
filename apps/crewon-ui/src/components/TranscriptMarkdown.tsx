@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy, Maximize2, X } from "lucide-react";
+import { WorkbenchMarkdownLink } from "./workbench/TaskWorkbenchContext";
 
 type MarkdownSegment =
   | { type: "markdown"; text: string }
@@ -23,6 +24,7 @@ export type MarkdownMention = Readonly<{
 
 type RenderMarkdownOptions = Readonly<{
   mentions?: readonly MarkdownMention[];
+  softBreaks?: boolean;
   streaming?: boolean;
 }>;
 
@@ -957,6 +959,30 @@ function markdownMentionPlugin(mentions: readonly MarkdownMention[]) {
   };
 }
 
+function markdownSoftBreakPlugin() {
+  return () => (tree: MarkdownAstNode) => {
+    function visit(node: MarkdownAstNode) {
+      if (markdownMentionSkippedNodeTypes.has(node.type) || !node.children) {
+        return;
+      }
+      node.children = node.children.flatMap((child) => {
+        if (child.type !== "text" || !child.value?.includes("\n")) {
+          visit(child);
+          return [child];
+        }
+        return child.value
+          .split("\n")
+          .flatMap((value, index) => [
+            ...(index === 0 ? [] : [{ type: "break" }]),
+            ...(value ? [{ ...child, value }] : []),
+          ]);
+      });
+    }
+
+    visit(tree);
+  };
+}
+
 function markdownMentionId(href: string | undefined): string | null {
   if (!href?.startsWith(MARKDOWN_MENTION_FRAGMENT_PREFIX)) {
     return null;
@@ -977,6 +1003,11 @@ function renderMarkdownSegment(
 ): ReactNode {
   const mentions = options.mentions ?? [];
   const mentionPlugin = markdownMentionPlugin(mentions);
+  const remarkPlugins = [
+    remarkGfm,
+    ...(options.softBreaks ? [markdownSoftBreakPlugin()] : []),
+    ...(mentions.length > 0 ? [mentionPlugin] : []),
+  ];
   return (
     <ReactMarkdown
       components={{
@@ -991,16 +1022,14 @@ function renderMarkdownSegment(
               {children}
             </span>
           ) : (
-            <a {...props} href={href} rel="noreferrer" target="_blank">
+            <WorkbenchMarkdownLink {...props} href={href}>
               {children}
-            </a>
+            </WorkbenchMarkdownLink>
           );
         },
       }}
       key={key}
-      remarkPlugins={
-        mentions.length > 0 ? [remarkGfm, mentionPlugin] : [remarkGfm]
-      }
+      remarkPlugins={remarkPlugins}
     >
       {text}
     </ReactMarkdown>

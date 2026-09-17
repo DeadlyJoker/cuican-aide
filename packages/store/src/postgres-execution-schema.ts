@@ -1,4 +1,17 @@
-export const POSTGRES_EXECUTION_SCHEMA_VERSION = 5;
+import { modelPricingSchemaSql } from "./model-pricing-store-support.ts";
+import { modelSpendingSchemaSql } from "./model-spending-schema.ts";
+import { runExecutionProgressSchemaSql } from "./run-execution-progress-schema.ts";
+import { compactionCheckpointSchemaSql } from "./compaction-checkpoint-schema.ts";
+import { modelAccountingIndexSql } from "./model-accounting-index.ts";
+import {
+  modelUsageAliasesSchemaSql,
+  modelGenerationResponsesSchemaSql,
+} from "./model-usage-schema.ts";
+import {
+  postgresModelUsageSchemaSql,
+  postgresModelCallSchemaSql,
+} from "./model-usage-schema.ts";
+export const POSTGRES_EXECUTION_SCHEMA_VERSION = 14;
 
 export function postgresExecutionSchemaSql(schema: string): string {
   return `
@@ -166,7 +179,16 @@ export function postgresExecutionSchemaSql(schema: string): string {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 
+    ${postgresModelUsageSchemaSql(schema)}
+    ${postgresModelCallSchemaSql(schema)}
+    ${modelAccountingIndexSql(true, `${schema}.`)}
+    ${modelUsageAliasesSchemaSql(true, `${schema}.`)}
+    ${modelGenerationResponsesSchemaSql(true, `${schema}.`)}
+    ${modelPricingSchemaSql(true, `${schema}.`)}
+    ${modelSpendingSchemaSql({ postgres: true, schema })}
+    ${compactionCheckpointSchemaSql(true, `${schema}.`)}
+    ${runExecutionProgressSchemaSql(true, `${schema}.`)}
     UPDATE ${schema}.schema_migrations
       SET version = ${POSTGRES_EXECUTION_SCHEMA_VERSION}
-      WHERE component = 'execution_authority' AND version BETWEEN 1 AND 4;`;
+      WHERE component = 'execution_authority' AND version BETWEEN 1 AND 13;`;
 }

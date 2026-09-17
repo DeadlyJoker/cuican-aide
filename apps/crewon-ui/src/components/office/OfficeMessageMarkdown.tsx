@@ -8,5 +8,5 @@ export function OfficeMessageMarkdown({
   mentions: readonly MarkdownMention[];
   text: string;
 }) {
-  return renderMarkdown(text, { mentions });
+  return renderMarkdown(text, { mentions, softBreaks: true });
 }

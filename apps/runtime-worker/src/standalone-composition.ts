@@ -1,3 +1,11 @@
+import { isDeepStrictEqual } from "node:util";
+import {
+  RuntimeCompositionLifetime,
+  closeRuntimeResources,
+  type RuntimeCleanupHandle,
+} from "./runtime-composition-lifetime.ts";
+import type { StorageAdmissionPort } from "@crewon/application";
+import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import {
   CrewONAgentKernel,
   type ModelTransportPort,
@@ -31,12 +39,9 @@ import type { ToolRuntimePort } from "@crewon/tool-broker";
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
-import {
-  AgentVersionRuntimeError,
-  type AgentVersionRuntime,
-} from "./agent-version-runtime.ts";
+import { type AgentVersionRuntime } from "./agent-version-runtime.ts";
 import type { AgentVersionRuntimeFactoryPort } from "./durable-agent-version-runtime-loader.ts";
-import { scopeToolRuntimeToAgentVersion } from "./agent-version-tool-runtime.ts";
+import { sharedAgentVersionRuntimeFactory } from "./shared-agent-version-runtime-factory.ts";
 import type { PriorModelCompactionResolverPort } from "./model-switch-compaction.ts";
 import {
   NodeSha256ContentDigester,
@@ -80,7 +85,10 @@ import {
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
+/** Supplied closable resources transfer to this composition, including failed startup. */
 export type RuntimeWorkerCompositionConfig = Readonly<{
+  storageAdmission?: StorageAdmissionPort;
+  localStoragePaths?: readonly string[];
   runtimeTenantId: string;
   route: RunRoute;
   transport: ModelTransportPort;
@@ -159,37 +167,32 @@ export type StandaloneRuntimeWorker = Readonly<{
 export async function createStandaloneRuntimeWorker(
   config: StandaloneRuntimeWorkerConfig,
 ): Promise<StandaloneRuntimeWorker> {
-  let releasePlan: RuntimeAgentVersionReleasePlan;
-  let store: SqliteRunStore | undefined;
-  let workspaceReadStore: SqliteWorkspaceReadFileStore | undefined;
+  const inputs = ownCompositionInputs(config);
   try {
-    releasePlan = compileRuntimeAgentVersionRelease(config);
-    store = new SqliteRunStore(config.databasePath);
-    workspaceReadStore =
+    const releasePlan = compileRuntimeAgentVersionRelease(config);
+    const store = new SqliteRunStore(config.databasePath);
+    inputs.lifetime.own(store, { phase: "storage" });
+    const workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
         : SqliteWorkspaceReadFileStore.open(config.databasePath);
-  } catch (error) {
-    await Promise.allSettled([
-      workspaceReadStore?.close() ?? Promise.resolve(),
-      store?.close() ?? Promise.resolve(),
-      closeStartupResources(config),
-    ]);
-    throw error;
-  }
-  try {
+    if (workspaceReadStore !== undefined)
+      inputs.lifetime.own(workspaceReadStore, { phase: "storage" });
     return await composeRuntimeWorker(
       store,
       workspaceReadStore,
-      config,
+      {
+        ...config,
+        localStoragePaths: [
+          config.databasePath,
+          ...(config.localStoragePaths ?? []),
+        ],
+      },
       releasePlan,
+      inputs,
     );
   } catch (error) {
-    await Promise.allSettled([
-      workspaceReadStore?.close() ?? Promise.resolve(),
-      store.close(),
-      closeStartupResources(config),
-    ]);
+    await inputs.lifetime.close().catch(() => {});
     throw error;
   }
 }
@@ -197,47 +200,56 @@ export async function createStandaloneRuntimeWorker(
 export async function createPostgresRuntimeWorker(
   config: PostgresRuntimeWorkerConfig,
 ): Promise<StandaloneRuntimeWorker> {
-  let releasePlan: RuntimeAgentVersionReleasePlan;
-  let store: PostgresDomainStore | undefined;
-  let workspaceReadStore: PostgresWorkspaceReadFileStore | undefined;
+  const inputs = ownCompositionInputs(config);
   try {
-    releasePlan = compileRuntimeAgentVersionRelease(config);
-    store = await PostgresDomainStore.open({
+    const releasePlan = compileRuntimeAgentVersionRelease(config);
+    const store = await PostgresDomainStore.open({
       connectionString: config.connectionString,
       schema: config.schema,
       maxPoolSize: config.maxPoolSize,
       statementTimeoutMs: config.statementTimeoutMs,
     });
-    workspaceReadStore =
+    inputs.lifetime.own(store, { phase: "storage" });
+    const workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
-        : await PostgresWorkspaceReadFileStore.open(
-            config.connectionString,
-            { schema: config.schema },
-          );
-  } catch (error) {
-    await Promise.allSettled([
-      workspaceReadStore?.close() ?? Promise.resolve(),
-      store?.close() ?? Promise.resolve(),
-      closeStartupResources(config),
-    ]);
-    throw error;
-  }
-  try {
+        : await PostgresWorkspaceReadFileStore.open(config.connectionString, {
+            schema: config.schema,
+          });
+    if (workspaceReadStore !== undefined)
+      inputs.lifetime.own(workspaceReadStore, { phase: "storage" });
     return await composeRuntimeWorker(
       store,
       workspaceReadStore,
       config,
       releasePlan,
+      inputs,
     );
   } catch (error) {
-    await Promise.allSettled([
-      workspaceReadStore?.close() ?? Promise.resolve(),
-      store.close(),
-      closeStartupResources(config),
-    ]);
+    await inputs.lifetime.close().catch(() => {});
     throw error;
   }
+}
+
+function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
+  const lifetime = new RuntimeCompositionLifetime();
+  const transport = lifetime.own(config.transport, { phase: "resources" });
+  const tools =
+    config.toolRuntime === undefined
+      ? undefined
+      : lifetime.own(config.toolRuntime, { phase: "resources" });
+  for (const gateway of [
+    config.workspacePrivate?.gateway,
+    config.workspaceReadFile?.gateway,
+  ]) {
+    if (gateway !== undefined) lifetime.own(gateway, { phase: "resources" });
+  }
+  if (config.artifactStore !== undefined)
+    lifetime.own(config.artifactStore, { phase: "storage" });
+  const additional = new Map<AgentVersionRuntime, RuntimeCleanupHandle>();
+  for (const { runtime } of config.additionalAgentVersionRuntimes ?? [])
+    additional.set(runtime, lifetime.own(runtime, { phase: "resources" }));
+  return { lifetime, transport, tools, additional };
 }
 
 async function composeRuntimeWorker(
@@ -248,7 +260,9 @@ async function composeRuntimeWorker(
     | undefined,
   config: RuntimeWorkerCompositionConfig,
   releasePlan: RuntimeAgentVersionReleasePlan,
+  inputs: ReturnType<typeof ownCompositionInputs>,
 ): Promise<StandaloneRuntimeWorker> {
+  const { lifetime } = inputs;
   const ids = new UuidV7ApplicationIdGenerator();
   const digester = new NodeSha256ContentDigester();
   const clock = new SystemApplicationClock();
@@ -274,24 +288,22 @@ async function composeRuntimeWorker(
     digester,
     configuredRuntime: config.toolRuntime,
   });
+  const toolsOwner = lifetime.own(toolRuntime, { phase: "resources" });
+  if (toolRuntime !== config.toolRuntime) inputs.tools?.delegate();
   if (
-    JSON.stringify(toolRuntime.definitions()) !==
-    JSON.stringify(releasePlan.bootstrapVersion.tools)
+    !isDeepStrictEqual(
+      JSON.parse(JSON.stringify(toolRuntime.definitions())),
+      releasePlan.bootstrapVersion.tools,
+    )
   ) {
-    await toolRuntime.close?.();
     throw new Error("runtime_release_tool_catalog_mismatch");
   }
-  try {
-    await verifyRuntimeAgentVersionRelease({
-      tenantId: config.runtimeTenantId,
-      store,
-      plan: releasePlan,
-      digester,
-    });
-  } catch (error) {
-    await toolRuntime.close?.();
-    throw error;
-  }
+  await verifyRuntimeAgentVersionRelease({
+    tenantId: config.runtimeTenantId,
+    store,
+    plan: releasePlan,
+    digester,
+  });
   const artifacts =
     artifactStore === undefined
       ? undefined
@@ -321,36 +333,59 @@ async function composeRuntimeWorker(
   const agentVersionRegistry = new InMemoryAgentVersionRuntimeRegistry(
     digester,
   );
+  lifetime.own(agentVersionRegistry, { phase: "stop" });
+  const bootstrapRuntime: AgentVersionRuntime = {
+    version: agentVersion,
+    executionAuthority: "crewonKernel",
+    kernel,
+    policy,
+    toolRuntime,
+    contextCompactor: new KernelContextCompactor(kernel),
+    ...(config.governedContext === undefined
+      ? {}
+      : { governedContext: config.governedContext }),
+    close: () => closeRuntimeResources([toolsOwner, inputs.transport]),
+  };
   agentVersionRegistry.register({
     tenantId: config.runtimeTenantId,
-    runtime: {
-      version: agentVersion,
-      kernel,
-      policy,
-      toolRuntime,
-      contextCompactor: new KernelContextCompactor(kernel),
-      ...(config.governedContext === undefined
-        ? {}
-        : { governedContext: config.governedContext }),
-      close: async () => {
-        await toolRuntime.close?.();
-        await config.transport.close?.();
-      },
-    },
+    runtime: bootstrapRuntime,
   });
+  toolsOwner.delegate();
+  inputs.transport.delegate();
+  const registered = new Set<AgentVersionRuntime>([bootstrapRuntime]);
   for (const additional of config.additionalAgentVersionRuntimes ?? []) {
-    agentVersionRegistry.register(additional);
+    const disposition = agentVersionRegistry.register(additional).disposition;
+    const owner = inputs.additional.get(additional.runtime)!;
+    if (disposition === "registered") registered.add(additional.runtime);
+    else if (!registered.has(additional.runtime)) await owner.close();
+    owner.delegate();
   }
   const runtimeResolver = new StoreBackedAgentVersionRuntimeResolver({
     store,
     digester,
     registry: agentVersionRegistry,
+    acquireSharedOwner: () => {
+      const lease = agentVersionRegistry.acquire({
+        tenantId: config.runtimeTenantId,
+        agentVersionId: agentVersion.agentVersionId,
+      });
+      return lease === null
+        ? null
+        : { resource: toolRuntime, release: lease.release };
+    },
     factory:
       config.agentVersionRuntimeFactory?.bindSharedToolRuntime?.(toolRuntime) ??
       config.agentVersionRuntimeFactory ??
-      staticAgentVersionRuntimeFactory(config, toolRuntime),
+      sharedAgentVersionRuntimeFactory(config, toolRuntime),
   });
+  lifetime.own(runtimeResolver, { phase: "stop" });
+  const storageCapacity = createLocalStorageAdmissionOwner({
+    configured: config.storageAdmission,
+    paths: config.localStoragePaths ?? [],
+  });
+  lifetime.own(storageCapacity, { phase: "stop" });
   const execution = new RunExecutionService({
+    storageAdmission: storageCapacity.admission,
     store,
     clock,
     ids,
@@ -390,100 +425,67 @@ async function composeRuntimeWorker(
       afterToolReceiptCommitted: config.afterToolReceiptCommitted,
     },
   );
+  lifetime.own(worker, { phase: "stop" });
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
   let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
-  let workspaceDispatchService: RuntimeWorkspaceDispatchService | null = null;
-  try {
-    if (config.providerProbe !== undefined) {
-      providerProbeServer = await startRuntimeProviderProbeServer({
-        port: config.providerProbe.port,
-        token: config.providerProbe.token,
-        service: new RuntimeProviderProbeService(
-          {
-            store,
-            tenantId: config.runtimeTenantId,
-            runtimeBinding: config.providerProbe.runtimeBinding,
-            secrets: config.providerProbe.secrets,
-            egressPolicy: config.providerProbe.egressPolicy,
-          },
-          {
-            rateLimit: config.providerProbe.rateLimit,
-            rateWindowMs: config.providerProbe.rateWindowMs,
-            concurrencyLimit: config.providerProbe.concurrencyLimit,
-          },
-        ),
-      });
-    }
-    if (config.workspacePrivate !== undefined) {
-      const workspaceAuthority = new StoreBackedRuntimeWorkspaceAuthority({
-        store,
-        authority: config.workspacePrivate.authority,
-      });
-      const freeze = new RuntimeWorkspaceFreezeService({
-        bindings: workspaceAuthority,
-        ids: config.workspacePrivate.ids,
-        digester,
-      });
-      workspaceDispatchService = new RuntimeWorkspaceDispatchService({
-        authority: workspaceAuthority,
-        digester,
-        signer: config.workspacePrivate.signer,
-        gateway: config.workspacePrivate.gateway,
-      });
-      workspacePrivateServer = await startRuntimeWorkspacePrivateServer({
-        port: config.workspacePrivate.port,
-        authentication: {
-          kind: "loopbackToken",
-          token: config.workspacePrivate.token,
+  if (config.providerProbe !== undefined) {
+    providerProbeServer = await startRuntimeProviderProbeServer({
+      port: config.providerProbe.port,
+      token: config.providerProbe.token,
+      service: new RuntimeProviderProbeService(
+        {
+          store,
+          tenantId: config.runtimeTenantId,
+          runtimeBinding: config.providerProbe.runtimeBinding,
+          secrets: config.providerProbe.secrets,
+          egressPolicy: config.providerProbe.egressPolicy,
         },
-        freeze,
-        dispatch: workspaceDispatchService,
-        deadlineMs: config.workspacePrivate.deadlineMs,
-      });
-    }
-  } catch (error) {
-    await Promise.allSettled([
-      workspacePrivateServer?.close() ?? Promise.resolve(),
-      providerProbeServer?.close() ?? Promise.resolve(),
-      worker.close(),
-      agentVersionRegistry.close(),
-    ]);
-    throw error;
+        {
+          rateLimit: config.providerProbe.rateLimit,
+          rateWindowMs: config.providerProbe.rateWindowMs,
+          concurrencyLimit: config.providerProbe.concurrencyLimit,
+        },
+      ),
+    });
   }
-  let closed = false;
+  if (providerProbeServer !== null)
+    lifetime.own(providerProbeServer, { phase: "stop" });
+  if (config.workspacePrivate !== undefined) {
+    const workspaceAuthority = new StoreBackedRuntimeWorkspaceAuthority({
+      store,
+      authority: config.workspacePrivate.authority,
+    });
+    const freeze = new RuntimeWorkspaceFreezeService({
+      bindings: workspaceAuthority,
+      ids: config.workspacePrivate.ids,
+      digester,
+    });
+    const workspaceDispatchService = new RuntimeWorkspaceDispatchService({
+      authority: workspaceAuthority,
+      digester,
+      signer: config.workspacePrivate.signer,
+      gateway: config.workspacePrivate.gateway,
+    });
+    workspacePrivateServer = await startRuntimeWorkspacePrivateServer({
+      port: config.workspacePrivate.port,
+      authentication: {
+        kind: "loopbackToken",
+        token: config.workspacePrivate.token,
+      },
+      freeze,
+      dispatch: workspaceDispatchService,
+      deadlineMs: config.workspacePrivate.deadlineMs,
+    });
+  }
+  if (workspacePrivateServer !== null)
+    lifetime.own(workspacePrivateServer, { phase: "stop" });
   return {
     worker,
     agentVersion,
     agentVersionRegistry,
     providerProbeOrigin: providerProbeServer?.origin ?? null,
     workspacePrivateOrigin: workspacePrivateServer?.origin ?? null,
-    close: async () => {
-      if (closed) {
-        return;
-      }
-      closed = true;
-      const results = await Promise.allSettled([
-        workspacePrivateServer?.close() ?? Promise.resolve(),
-        providerProbeServer?.close() ?? Promise.resolve(),
-      ]);
-      results.push(...(await Promise.allSettled([worker.close()])));
-      results.push(
-        ...(await Promise.allSettled([
-          workspaceDispatchService?.close() ?? Promise.resolve(),
-          config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
-          agentVersionRegistry.close(),
-          artifactStore?.close() ?? Promise.resolve(),
-          workspaceReadStore?.close() ?? Promise.resolve(),
-          store.close(),
-        ])),
-      );
-      const failures = results.flatMap((result) =>
-        result.status === "rejected" ? [result.reason] : [],
-      );
-      if (failures.length > 0) {
-        throw new AggregateError(failures, "runtime_close_failed");
-      }
-    },
+    close: () => lifetime.close(),
   };
 }
 
@@ -505,66 +507,4 @@ function validateWorkspaceDeployment(
     readFile: config.workspaceReadFile,
     deployment: authority,
   });
-}
-
-async function closeStartupResources(
-  config: RuntimeWorkerCompositionConfig,
-): Promise<void> {
-  await Promise.allSettled([
-    config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
-    config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
-    config.artifactStore?.close() ?? Promise.resolve(),
-  ]);
-}
-
-function staticAgentVersionRuntimeFactory(
-  config: RuntimeWorkerCompositionConfig,
-  toolRuntime: ToolRuntimePort,
-): AgentVersionRuntimeFactoryPort {
-  return {
-    create: ({ version }) => {
-      if (
-        version.model.adapterName !== config.transport.adapterName ||
-        version.model.adapterVersion !== config.transport.adapterVersion ||
-        version.model.modelId !== config.transport.modelId
-      ) {
-        throw new AgentVersionRuntimeError(
-          "agent_version_transport_not_configured",
-        );
-      }
-      if (
-        version.resources.workspaceRequired !==
-        (config.route.workspaceBindingId !== null)
-      ) {
-        throw new AgentVersionRuntimeError(
-          "agent_version_workspace_binding_mismatch",
-        );
-      }
-      const kernel = new CrewONAgentKernel({
-        transport: config.transport,
-        instructions: version.instructions,
-        toolCatalog: { definitions: () => version.tools },
-        streamMaxRetries: version.execution.streamMaxRetries,
-      });
-      const versionToolRuntime = scopeToolRuntimeToAgentVersion(
-        toolRuntime,
-        version.tools,
-      );
-      return {
-        version,
-        kernel,
-        policy: new PinnedRunExecutionPolicy({
-          ...config.route,
-          runtimeGeneration: version.runtimeGeneration,
-          agentVersionId: version.agentVersionId,
-          policySnapshotId: version.policySnapshotId,
-        }),
-        toolRuntime: versionToolRuntime,
-        contextCompactor: new KernelContextCompactor(kernel),
-        ...(config.governedContext === undefined
-          ? {}
-          : { governedContext: config.governedContext }),
-      };
-    },
-  };
 }

@@ -1,3 +1,18 @@
+import { wakeOutbox, type OutboxWakeupPort } from "./outbox-wakeup.ts";
+export type { OutboxWakeupPort } from "./outbox-wakeup.ts";
+import { registerModelPricingRoutes } from "./model-pricing-route.ts";
+import { registerModelSpendingRoutes } from "./model-spending-route.ts";
+import type { ModelSpendingApplicationService } from "@crewon/application";
+import type { ModelPricingApplicationService } from "@crewon/application";
+import type { OfficeThreadApplicationService } from "@crewon/application";
+import { registerOfficeThreadRoutes } from "./office-thread-route.ts";
+import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
+import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
+import type { StorageAdmissionPort } from "@crewon/application";
+import { installStorageAdmission } from "./storage-admission.ts";
+import { registerThreadMessageWindowRoute } from "./thread-message-window-route.ts";
+import { registerThreadTranscriptWindowRoute } from "./thread-transcript-window-route.ts";
+import { withThreadListTitles } from "./thread-list-titles.ts";
 import type {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
@@ -204,6 +219,7 @@ import type {
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
+  officeThreads?: OfficeThreadApplicationService | null;
   threads: ThreadApplicationService;
   taskChanges: ThreadTaskChangeQueryService;
   goals: ThreadGoalApplicationService;
@@ -218,6 +234,8 @@ export type ControlApiDependencies = Readonly<{
   artifacts: ArtifactApplicationService;
   automations: AutomationApplicationService;
   providerSettings: Pick<ModelProviderSettingsApplicationService, "get">;
+  modelPricing?: ModelPricingApplicationService | null;
+  modelSpending?: ModelSpendingApplicationService | null;
   providerProbes: Pick<ControlProviderProbeService, "probe">;
   providerRuntimeAvailability: ProviderRuntimeRouteAvailability;
   workspaceQueries: WorkspaceOperationQueryService;
@@ -236,12 +254,8 @@ export type ControlApiDependencies = Readonly<{
   workspaceOperationEventPoller?: WorkspaceOperationEventPoller;
   heartbeatIntervalMs?: number | null;
   activationGate?: ProcessLocalActivationGate;
+  storageAdmission?: StorageAdmissionPort;
 }>;
-
-export interface OutboxWakeupPort {
-  /** Best-effort non-rejecting wake-up; durable scanning remains authoritative. */
-  wake(): Promise<void>;
-}
 
 const MANUAL_ONLY_AUTOMATION_SCHEDULE = {
   scheduleType: "once",
@@ -272,6 +286,7 @@ export function buildControlApi(
     trustProxy: false,
   });
 
+  installStorageAdmission(app, dependencies.storageAdmission);
   const activationGate = dependencies.activationGate;
   if (activationGate !== undefined) {
     app.addHook("onRequest", async (request, reply) => {
@@ -320,6 +335,9 @@ export function buildControlApi(
     const response: ExecutionIntentCapabilityResponse = { version: "v1" };
     return response;
   });
+
+  registerModelPricingRoutes(app, dependencies);
+  registerModelSpendingRoutes(app, dependencies);
 
   app.get("/api/v1/model-provider-settings", async (request) => {
     const actor = await dependencies.identity.resolveActor(
@@ -503,7 +521,15 @@ export function buildControlApi(
               },
         limit: query.limit,
       });
-      const data = threads.map(projectThread);
+      const data = await withThreadListTitles(
+        threads.map(projectThread),
+        (threadId) =>
+          dependencies.threads.listMessages(actor, {
+            threadId,
+            afterSequence: 0,
+            limit: 16,
+          }),
+      );
       const last = data.at(-1);
       const response: ListThreadsResponse = {
         data,
@@ -1236,6 +1262,17 @@ export function buildControlApi(
     return response;
   });
 
+  registerThreadMessageWindowRoute(app, dependencies);
+  registerThreadTranscriptWindowRoute(app, dependencies);
+  registerThreadCatalogRoute(app, dependencies);
+  if (dependencies.officeThreads) {
+    registerOfficeThreadRoutes(app, {
+      officeThreads: dependencies.officeThreads,
+      identity: dependencies.identity,
+    });
+  }
+  registerThreadActiveRunRoute(app, dependencies);
+
   app.post<{ Params: { threadId: string }; Body: unknown }>(
     "/api/v1/threads/:threadId/forks",
     async (request, reply) => {
@@ -1831,12 +1868,6 @@ function acceptsExecutionIntentAcknowledgement(
         ),
     ),
   );
-}
-
-function wakeOutbox(outboxWakeup: OutboxWakeupPort): void {
-  void outboxWakeup.wake().catch(() => {
-    // HTTP success is already durable; periodic scanning is the retry path.
-  });
 }
 
 function requireWorkspaceLists(

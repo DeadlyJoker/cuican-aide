@@ -4,6 +4,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { Readable } from "node:stream";
+import { installProcessShutdown } from "@crewon/process-lifecycle";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
 import { HttpIdentitySessionAdapter } from "./identity-session-adapter.ts";
@@ -61,15 +62,22 @@ server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
 
 const port = parsePort(process.env.CREWON_WEB_BFF_PORT ?? "3211");
+const shutdown = installProcessShutdown({
+  host: process,
+  close: () =>
+    new Promise<void>((resolve, reject) => {
+      server.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      );
+    }),
+  reportFailure: () => {
+    process.stderr.write("CrewON Web BFF shutdown failed\n");
+  },
+});
 server.listen(port, "127.0.0.1", () => {
+  if (shutdown.isRequested()) return;
   process.stdout.write(`CrewON Web BFF listening on 127.0.0.1:${port}\n`);
 });
-
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.once(signal, () => {
-    server.close(() => process.exit(0));
-  });
-}
 
 async function toFetchRequest(
   incoming: IncomingMessage,

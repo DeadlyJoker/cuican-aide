@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "crewon.team-effect-gui-trace.v1",
+  "caseId": "gui-release-conflict-8f31",
+  "caseRevision": "2026-09-03.1",
+  "traceId": "gui-a-01a0670f-bd42-765f-9853-67de8dba4eb6",
+  "submittedPrompt": "仅使用以下材料，禁止联网、工具或任何 API：A=构建 commit 8f31、digest AA11、tests 184/184；B=制品清单同为 commit 8f31、digest BB22；C=refund 端到端测试 failed；D=变更说明声称“不影响退款”。团队需要分别完成发布规划与独立验证，组长最终裁决。最终回答必须不超过 900 字，并严格包含：DECISION: NO-GO；EVIDENCE-A、EVIDENCE-B、EVIDENCE-C、EVIDENCE-D 各一行；CONFLICT 一行；GATE 一行；ACTION-1、ACTION-2 各一行；UNRESOLVED 一行。不得把 184/184 当成抵消冲突或退款失败的证据。",
+  "capture": {
+    "source": "gui",
+    "collector": "manual-codex-browser-gui+sqlite-readonly-v1",
+    "capturedAt": "2026-09-04T01:34:28.000Z"
+  },
+  "variant": {
+    "variantId": "manager-generated",
+    "promptVariantId": "team-manager-generated-v1",
+    "harnessVersion": "team-effect-v1",
+    "buildRevision": "500335f2efab+dirty.gui-a.manager-generated",
+    "agents": [
+      {
+        "memberId": "member-1",
+        "agentVersionId": "local-web-add525d1f284586274f55852",
+        "agentVersionDigest": "sha256:530f0e23008a7e1305da10c9ba8f0f6bcabad6004ca7e1ee6d7790fcd92e8d60",
+        "providerId": "aicuican",
+        "modelId": "gpt-5.5",
+        "reasoningEffort": null,
+        "capabilityProfileId": null
+      },
+      {
+        "memberId": "member-2",
+        "agentVersionId": "local-web-add525d1f284586274f55852-planner",
+        "agentVersionDigest": "sha256:c6b377ad5e4225159b478e4fd0b2adeaccd970dc1cd6ffa079c5765ad7d74424",
+        "providerId": "aicuican",
+        "modelId": "gpt-5.5",
+        "reasoningEffort": null,
+        "capabilityProfileId": null
+      },
+      {
+        "memberId": "member-3",
+        "agentVersionId": "local-web-add525d1f284586274f55852-verifier",
+        "agentVersionDigest": "sha256:b867c2ac7a58872f6beac622372bc545247453d0b246a41d56d1ede0e722c020",
+        "providerId": "aicuican",
+        "modelId": "gpt-5.5",
+        "reasoningEffort": null,
+        "capabilityProfileId": null
+      }
+    ]
+  },
+  "answer": {
+    "text": "DECISION: NO-GO\nEVIDENCE-A: A 显示构建为 commit 8f31、digest AA11、tests 184/184；该通过数仅限其自身记录，不用于抵消任何冲突或失败。\nEVIDENCE-B: B 显示制品清单同为 commit 8f31，但 digest 为 BB22，与 A 的 AA11 不一致。\nEVIDENCE-C: C 明确 refund 端到端测试 failed，构成退款链路发布阻断信号。\nEVIDENCE-D: D 仅为变更说明声称“不影响退款”，不能覆盖或否定 C 的失败结果。\nCONFLICT: 同一 commit 8f31 下 A/B digest 不一致；D 的“不影响退款”声明与 C 的 refund E2E failed 冲突。\nGATE: 发布门槛为待发布制品 digest 一致且退款端到端测试通过；当前均未满足。\nACTION-1: 冻结发布，不推进 digest 未对齐且 refund E2E failed 的制品。\nACTION-2: 对齐 AA11/BB22 来源与待发布制品，定位并修复 refund E2E 失败后重新验证评审。\nUNRESOLVED: AA11 与 BB22 谁为预期制品、184/184 测试覆盖范围、refund 失败根因及“不影响退款”依据均未明。"
+  },
+  "ui": {
+    "userMessageCopies": 1,
+    "errorText": null,
+    "pending": false
+  },
+  "efficiency": {
+    "modelRunCount": 4,
+    "logicalPhaseCount": 3,
+    "timeToFirstVisibleOutputMs": null,
+    "settledDurationMs": 50524
+  }
+}

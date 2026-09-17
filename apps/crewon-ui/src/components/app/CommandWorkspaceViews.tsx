@@ -17,7 +17,9 @@ import {
   type CommandOfficeRoomProps,
 } from "./CommandOfficeRoom";
 import { CommandExpertsPanel } from "./CommandExpertsPanel";
+import { CommandTeamOverview } from "./CommandTeamOverview";
 import { CommandWorkflowPanel } from "./CommandWorkflowPanel";
+import { WorkbenchVisibilityContext } from "../workbench/TaskWorkbenchContext";
 import { CommandTaskStatusIndicator } from "./CommandSidebarThreadRow";
 import type { CommandLinkedThread } from "./CommandWorkspaceChrome";
 import {
@@ -644,8 +646,7 @@ export function ProjectsView({
           <div className="compact-list">
             {visibleTasks.map((task) => {
               const state = task.state ?? "completedViewed";
-              const showsStatus =
-                commandSidebarThreadHasUnreadSignal(state);
+              const showsStatus = commandSidebarThreadHasUnreadSignal(state);
               return (
                 <button
                   className="capability-row command-task-page-row"
@@ -705,6 +706,7 @@ export function AgentsView({
   onCatalogFilterChange,
   onCatalogSearchChange,
   onAddAgent,
+  onConfigureAgentPlatformCredential,
   onSaveCapability,
 }: {
   active: boolean;
@@ -717,7 +719,8 @@ export function AgentsView({
   onReload: (category?: AgentPlatformResourceCategory) => Promise<void>;
   onCatalogFilterChange: (filter: string) => void;
   onCatalogSearchChange: (query: string) => void;
-  onAddAgent?: (agentId: number) => Promise<void>;
+  onAddAgent?: (agentId: number) => Promise<boolean | void>;
+  onConfigureAgentPlatformCredential?: () => void;
   onSaveCapability?: CapabilityEditorSaveHandler;
 }) {
   const [selectedResource, setSelectedResource] = useState<{
@@ -835,8 +838,10 @@ export function AgentsView({
     setAgentAddProgress((current) => ({ ...current, [key]: 1 }));
     setDownloadError(null);
     try {
-      await onAddAgent(resource.id);
-      setAddedAgents((current) => new Set(current).add(resource.id));
+      const added = await onAddAgent(resource.id);
+      if (added !== false) {
+        setAddedAgents((current) => new Set(current).add(resource.id));
+      }
     } catch (reason) {
       setDownloadError(
         reason instanceof Error ? reason.message : "智能体加入工作区失败",
@@ -974,6 +979,15 @@ export function AgentsView({
             >
               {refreshing ? "更新中…" : "刷新资源"}
             </button>
+            {onConfigureAgentPlatformCredential ? (
+              <button
+                className="button compact"
+                type="button"
+                onClick={onConfigureAgentPlatformCredential}
+              >
+                配置 PIM Key
+              </button>
+            ) : null}
             <button
               className="button compact"
               type="button"
@@ -1403,11 +1417,15 @@ export function TeamView({
         </header>
 
         {!officeRoomId && !workflowRoomOpen ? (
-          <TeamModeSummary
-            expertTeams={expertTeams}
+          <CommandTeamOverview
+            experts={expertTeams.length}
             mode={visibleTeamMode}
             offices={officeRuntime?.records.length ?? 0}
-            workflows={workflows}
+            workflows={workflows.length}
+            nodes={workflows.reduce(
+              (total, workflow) => total + workflow.config.nodes.length,
+              0,
+            )}
           />
         ) : null}
 
@@ -1424,6 +1442,21 @@ export function TeamView({
             {officeRuntime ? (
               <CommandOfficeRoom
                 {...officeRuntime}
+                room={
+                  officeRuntime.room ? (
+                    <WorkbenchVisibilityContext.Provider
+                      value={
+                        active &&
+                        visibleTeamMode === "office" &&
+                        Boolean(officeRoomId)
+                      }
+                    >
+                      {officeRuntime.room}
+                    </WorkbenchVisibilityContext.Provider>
+                  ) : (
+                    officeRuntime.room
+                  )
+                }
                 isOpen={Boolean(officeRoomId)}
                 query={searchQuery}
               />
@@ -1454,6 +1487,7 @@ export function TeamView({
           hidden={visibleTeamMode !== "workflow"}
         >
           <CommandWorkflowPanel
+            active={active && visibleTeamMode === "workflow"}
             status={workflowStatus}
             workflows={workflows}
             onCancel={onCancelWorkflow}
@@ -1482,41 +1516,6 @@ export function TeamView({
 
         <div id="team-log" className="sr-log" aria-live="polite" />
       </div>
-    </section>
-  );
-}
-
-function TeamModeSummary({
-  expertTeams,
-  mode,
-  offices,
-  workflows,
-}: {
-  expertTeams: ExpertTeamRecordReference[];
-  mode: TeamMode;
-  offices: number;
-  workflows: CrewonWorkflowRecord[];
-}) {
-  const detail =
-    mode === "office"
-      ? `${offices} 个办公室 · 可 @ 指定成员`
-      : mode === "workflow"
-        ? `${workflows.length} 条协作流 · ${workflows.reduce(
-            (total, workflow) => total + workflow.config.nodes.length,
-            0,
-          )} 个节点`
-        : `${expertTeams.length} 个专家团 · 仅团长对外回复`;
-
-  return (
-    <section
-      className="catalog-source-bar team-mode-summary"
-      aria-label="团队协作说明"
-      data-team-mode={mode}
-    >
-      <span className="catalog-context-note">
-        团队能力来自左侧智能体页 · 办公室可 @ 指定成员 · 专家团只由团长对外回复
-      </span>
-      <span className="team-mode-summary-detail">{detail}</span>
     </section>
   );
 }

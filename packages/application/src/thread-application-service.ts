@@ -1,5 +1,13 @@
+import { validateThreadListSelection, type ThreadListSelection } from "./thread-list-selection.ts";
+import type {
+  ThreadMessageWindow,
+  ThreadMessageWindowPosition,
+} from "./thread-message-window-store-port.ts";
+import { validateThreadMessageWindowQuery } from "./thread-message-window-query.ts";
+import { readThreadTranscriptWindow } from "./thread-transcript-window-query.ts";
 import {
   ThreadLifecycleError,
+  initialThreadTitleData,
   type MessageRole,
   type ThreadLifecycleEvent,
   type ThreadState,
@@ -154,6 +162,7 @@ export class ThreadApplicationService {
         messageSequence: message.sequence,
         role: message.role,
         contentDigest,
+        ...initialThreadTitleData(state, message),
       },
     };
     const result = await this.#commit({
@@ -595,10 +604,11 @@ export class ThreadApplicationService {
 
   async listThreads(
     actor: ActorContext,
-    query: { before: ThreadListCursor | null; limit: number },
+    query: ThreadListSelection,
   ): Promise<readonly ThreadState[]> {
     validateActor(actor);
     validateResourceListQuery(query, "thread_cursor_invalid");
+    validateThreadListSelection(query);
     await this.#authorize(actor, "thread:read", {
       kind: "thread",
       tenantId: actor.tenantId,
@@ -610,11 +620,60 @@ export class ThreadApplicationService {
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
         before: query.before,
+        ...(query.after === undefined ? {} : { after: query.after }),
+        ...(query.filter === undefined ? {} : { filter: query.filter }),
         limit: query.limit,
       });
     } catch (error) {
       throw mapThreadApplicationError(error);
     }
+  }
+
+  async readMessageWindow(
+    actor: ActorContext,
+    query: {
+      threadId: string;
+      position: ThreadMessageWindowPosition | null;
+      limit: number;
+    },
+  ): Promise<ThreadMessageWindow> {
+    validateActor(actor);
+    const { threadId, position, limit } = validateThreadMessageWindowQuery(query);
+    await this.getThread(actor, threadId);
+    if (this.#store.messageWindows === undefined) {
+      throw new ApplicationError("internal", "message_window_store_unavailable");
+    }
+    try {
+      return await this.#store.messageWindows.readWindow({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId,
+        position,
+        limit,
+      });
+    } catch (error) {
+      throw mapThreadApplicationError(error);
+    }
+  }
+
+  async readTranscriptWindow(
+    actor: ActorContext,
+    query: {
+      threadId: string;
+      position: ThreadMessageWindowPosition | null;
+      limit: number;
+    },
+  ) {
+    validateActor(actor);
+    return readThreadTranscriptWindow(
+      {
+        store: this.#store,
+        authorization: this.#authorization,
+        authorizeThread: (threadId) => this.getThread(actor, threadId),
+      },
+      actor,
+      query,
+    );
   }
 
   async listMessages(
@@ -1088,6 +1147,12 @@ function mapThreadApplicationError(error: unknown): ApplicationError {
     return error;
   }
   if (error instanceof RunStoreError) {
+    if (error.code === "thread_not_found") {
+      return new ApplicationError("notFound", error.code, { cause: error });
+    }
+    if (error.code === "thread_message_window_changed") {
+      return new ApplicationError("conflict", error.code, { cause: error });
+    }
     if (
       error.code === "idempotency_conflict" ||
       error.code === "revision_conflict" ||

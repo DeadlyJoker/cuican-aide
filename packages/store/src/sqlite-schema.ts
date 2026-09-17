@@ -1,4 +1,25 @@
+import { modelPricingSchemaSql } from "./model-pricing-store-support.ts";
+import { modelSpendingSchemaSql, assertSqliteSpendingSchema } from "./model-spending-schema.ts";
+import { runExecutionProgressSchemaSql } from "./run-execution-progress-schema.ts";
+import { compactionCheckpointSchemaSql } from "./compaction-checkpoint-schema.ts";
+import { officeThreadSchemaSql } from "./office-thread-binding.ts";
+import { migrateSqliteActiveRunIndex } from "./active-run-read.ts";
+import { modelAccountingIndexSql } from "./model-accounting-index.ts";
+import { modelUsageAliasesSchemaSql, modelGenerationResponsesSchemaSql } from "./model-usage-schema.ts";
+import { sqliteMessageRunEvidenceIndexSql } from "./message-run-evidence-schema.ts";
+import { sqliteOutboxRetentionSchemaSql } from "./sqlite-outbox-retention-schema.ts";
+import {
+  sqliteModelUsageSchemaSql,
+  sqliteModelCallSchemaSql,
+} from "./model-usage-schema.ts";
 import { DatabaseSync } from "node:sqlite";
+import {
+  sqliteAutomationScheduleIndexSql,
+  assertSqliteAutomationScheduleIndex,
+} from "./automation-schedule-index-schema.ts";
+import { sqliteRunOutputSchemaSql } from "./sqlite-run-output-schema.ts";
+import { sqliteModelHistoryAppendSchemaSql } from "./sqlite-model-history-append-schema.ts";
+import { sqliteModelHistoryContextSchemaSql } from "./sqlite-model-history-context-schema.ts";
 
 import { RunStoreError } from "@crewon/application";
 import {
@@ -10,7 +31,9 @@ import {
   sqliteWorkspaceOperationTablesSql,
 } from "./sqlite-workspace-operation-schema.ts";
 
-export const SQLITE_SCHEMA_VERSION = 23;
+// v44 permits lossless encoded tool output in canonical history and run events.
+// Existing rows stay untouched; older Store versions must not reopen this data.
+export const SQLITE_SCHEMA_VERSION = 44;
 
 type LegacyRunRow = Readonly<{
   tenant_id: string;
@@ -38,6 +61,22 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     throw new RunStoreError("sqlite_schema_too_new");
   }
   if (version === SQLITE_SCHEMA_VERSION) {
+    assertSqliteSpendingSchema(database);
+    database.prepare("SELECT tenant_id,agent_version_id,revision,price_json FROM model_token_pricing LIMIT 0").all();
+    database.prepare("SELECT response_key,call_key,ambiguous FROM model_generation_responses LIMIT 0").all();
+    database
+      .prepare(
+        "SELECT tenant_id, space_id, office_id, office_version_id, thread_id, bound_by_actor_id, bound_at FROM office_thread_bindings LIMIT 0",
+      )
+      .all();
+    assertSqliteAutomationScheduleIndex(database);
+    database
+      .prepare("SELECT call_key,usage_order FROM model_usage_call_aliases LIMIT 0")
+      .all();
+    database.prepare("SELECT tenant_id,run_id,step_id,context_digest,revision,payload,payload_digest FROM context_compaction_checkpoints LIMIT 0").all();
+    if (database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='retire_terminal_compaction_checkpoint'").get() === undefined) throw new RunStoreError("sqlite_compaction_checkpoint_schema_invalid");
+    database.prepare("SELECT tenant_id,run_id,through_sequence,source_event_id,payload,payload_digest FROM run_execution_progress LIMIT 0").all();
+    if (database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name='retire_terminal_run_execution_progress'").get() === undefined) throw new RunStoreError("sqlite_execution_progress_schema_invalid");
     migrateSqliteWorkspaceOperationAuthority(database);
     return;
   }
@@ -122,6 +161,48 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       // Version 21 has Automation authority but predates workspace operations.
     } else if (version === 22) {
       // Version 22 has workspace operation v1 but predates durable delivery leases.
+    } else if (version === 23) {
+      // Version 23 predates compact, event-identified output append receipts.
+    } else if (version === 24) {
+      // Version 24 predates incremental model-history append validation.
+    } else if (version === 25) {
+      // Version 25 predates resumable effective-context reference checkpoints.
+    } else if (version === 26) {
+      // Version 26 predates delivered outbox retention and identity registration.
+    } else if (version === 27) {
+      // Version 27 predates the global scheduled-automation seek index.
+    } else if (version === 28) {
+      // Version 28 predates independent, response-deduplicated model usage.
+    } else if (version === 29) {
+      // Version 29 predates the bounded live Run lookup index.
+    } else if (version === 30) {
+      // Version 30 predates immutable message/Run evidence indexes.
+    } else if (version === 31) {
+      // Version 31 predates provider call accounting intents.
+    } else if (version === 32) {
+      // Version 32 predates the bounded call-to-usage reconciliation index.
+    } else if (version === 33) {
+      // Version 33 predates bounded lossless internal execution receipt encoding.
+    } else if (version === 34) {
+      // Version 34 predates immutable, scoped Office/Thread associations.
+    } else if (version === 35) {
+      // Version 35 predates compact progress receipt duplicate guards.
+    } else if (version === 36) {
+      // Version 36 predates stable call aliases for enriched usage response identities.
+    } else if (version === 43) {
+      // Canonical tool output encoding applies only to future writes.
+    } else if (version === 42) {
+      // Spending begins only when explicitly configured; earlier calls stay outside coverage.
+    } else if (version === 41) {
+      // Prices start empty: never reprice earlier calls.
+    } else if (version === 40) {
+      // Generation response links are built on completion, never by scanning old calls.
+    } else if (version === 39) {
+      // Version 39 predates lossless encoding of Tool result bodies. No startup rewrite.
+    } else if (version === 38) {
+      // Version 38 predates the resumable Run execution progress checkpoint.
+    } else if (version === 37) {
+      // Version 37 predates bounded, resumable compaction staging.
     } else {
       throw new RunStoreError("sqlite_schema_version_unsupported");
     }
@@ -167,6 +248,24 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     if (version !== 0 && version <= 22) {
       migrateVersionTwentyTwo(database);
     }
+    database.exec(sqliteRunOutputSchemaSql());
+    database.exec(sqliteModelHistoryAppendSchemaSql());
+    database.exec(sqliteModelHistoryContextSchemaSql());
+    database.exec(sqliteOutboxRetentionSchemaSql());
+    database.exec(sqliteAutomationScheduleIndexSql());
+    database.exec(sqliteModelUsageSchemaSql());
+    database.exec(sqliteModelCallSchemaSql());
+    database.exec(modelAccountingIndexSql(false));
+    database.exec(modelUsageAliasesSchemaSql(false));
+    database.exec(modelGenerationResponsesSchemaSql(false));
+    database.exec(modelPricingSchemaSql(false));
+    database.exec(modelSpendingSchemaSql({ postgres: false }));
+    database.exec(compactionCheckpointSchemaSql(false));
+    database.exec(runExecutionProgressSchemaSql(false));
+    migrateSqliteActiveRunIndex(database);
+    database.exec(sqliteMessageRunEvidenceIndexSql());
+    database.exec(officeThreadSchemaSql());
+    assertSqliteAutomationScheduleIndex(database);
     database.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     database.exec("COMMIT");
   } catch (error) {

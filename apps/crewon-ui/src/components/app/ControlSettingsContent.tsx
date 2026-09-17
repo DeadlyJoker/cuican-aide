@@ -1,0 +1,79 @@
+import { useEffect, useState } from "react";
+import type { ControlApiClient } from "@crewon/control-client";
+import type { AgentPlatformUser } from "../../lib/agent-platform/agentPlatformSession";
+import type { Locale } from "../../lib/i18n";
+import { detectRuntimeSurface } from "../../lib/platform";
+import {
+  controlSettingsPanel,
+  type SettingsCatalogState,
+} from "../../lib/settings/controlSettingsPanels";
+import {
+  SETTINGS_SECTIONS,
+  type SettingsSection,
+} from "../../lib/settings/settingsCatalog";
+import { SettingsContent } from "../settings/SettingsContent";
+import { readControlSettingsCatalog } from "../../lib/settings/controlSettingsCatalog";
+import { BundledTaskPackSettings } from "../settings/BundledTaskPackSettings";
+import type { TaskPackDraftHandler } from "../../lib/plugin/prepareTaskPackDraft";
+
+export function ControlSettingsContent({
+  activeSection,
+  client,
+  locale,
+  platformUser,
+  onSectionChange,
+  onPrepareTaskPack,
+}: {
+  activeSection: SettingsSection;
+  client: Pick<ControlApiClient, "getActiveAgentVersionCatalog">;
+  locale: Locale;
+  platformUser: AgentPlatformUser | null;
+  onSectionChange: (section: SettingsSection) => void;
+  onPrepareTaskPack?: TaskPackDraftHandler;
+}) {
+  const [state, setState] = useState<SettingsCatalogState>({
+    status: "loading",
+  });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    if (activeSection !== "connections") return;
+    const controller = new AbortController();
+    void readControlSettingsCatalog({
+      client,
+      signal: controller.signal,
+      onState: setState,
+    });
+    return () => controller.abort();
+  }, [activeSection, client, revision]);
+  return (
+    <SettingsContent
+      activeSection={activeSection}
+      locale={locale}
+      presentation="authored"
+      panel={controlSettingsPanel({
+        section: activeSection,
+        locale,
+        state,
+        platformUser,
+        surface: detectRuntimeSurface(),
+      })}
+      onPanelFieldChange={() => {}}
+      onSectionChange={onSectionChange}
+      onPanelAction={(action) => {
+        if (action === "settings-refresh") setRevision((value) => value + 1);
+        const target = SETTINGS_SECTIONS.find(
+          (section) => action === `settings-open:${section}`,
+        );
+        if (target) onSectionChange(target);
+      }}
+    >
+      {activeSection === "mcp-servers" && platformUser && (
+        <BundledTaskPackSettings
+          locale={locale}
+          userId={platformUser.id}
+          onPrepare={onPrepareTaskPack}
+        />
+      )}
+    </SettingsContent>
+  );
+}

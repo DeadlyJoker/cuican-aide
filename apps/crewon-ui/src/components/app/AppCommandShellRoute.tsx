@@ -34,6 +34,10 @@ import {
   type TaskDetailWorkspaceGitClient,
 } from "../../lib/task-detail/useTaskDetailWorkspaceGit";
 import "./AppCommandShellRoute.css";
+import {
+  TaskWorkbenchActionsContext,
+  useTaskWorkbench,
+} from "../workbench/TaskWorkbenchContext";
 
 type AppCommandShellRouteProps = ComponentProps<typeof CommandWorkspace> & {
   capabilityDrawer: CommandWorkspaceCapabilityDrawerProps;
@@ -95,22 +99,25 @@ export function AppCommandShellRoute({
   taskDetailWorkspaceGitClient = null,
   ...commandWorkspaceProps
 }: AppCommandShellRouteProps) {
+  const compactWeb = commandWorkspaceProps.platform === "web";
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<CommandShellOverlay>(
-    capabilityDrawer.open ? "workbench" : null,
+    !compactWeb && capabilityDrawer.open ? "workbench" : null,
   );
   const [narrowOverlayMode, setNarrowOverlayMode] = useState(false);
   const [stoppingTurnKeys, setStoppingTurnKeys] = useState<string[]>([]);
-  const capabilityOpenRef = useRef(capabilityDrawer.open);
+  const capabilityOpenRef = useRef(!compactWeb && capabilityDrawer.open);
   const taskDetailLastFocusRef = useRef<HTMLElement | null>(null);
   const workbenchLastFocusRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const previousCapabilityOpenRef = useRef(capabilityDrawer.open);
+  const previousCapabilityOpenRef = useRef(
+    !compactWeb && capabilityDrawer.open,
+  );
   const stoppingTurnKeysRef = useRef(new Set<string>());
   const taskDetailAvailabilityCallbackRef = useRef(
     commandWorkspaceProps.onTaskDetailAvailabilityChange,
   );
-  capabilityOpenRef.current = capabilityDrawer.open;
+  capabilityOpenRef.current = !compactWeb && capabilityDrawer.open;
   taskDetailAvailabilityCallbackRef.current =
     commandWorkspaceProps.onTaskDetailAvailabilityChange;
   const selectedThread = commandWorkspaceProps.selectedThread ?? null;
@@ -118,10 +125,12 @@ export function AppCommandShellRoute({
   const locale = commandWorkspaceProps.locale ?? "zh";
   const authority = commandWorkspaceProps.workspaceAuthority ?? "legacy";
   const processAuthorityAvailable =
+    !compactWeb &&
     authority === "legacy" &&
     commandWorkspaceProps.connectionState === "connected" &&
     taskDetailClient !== null;
   const workspaceGitAuthorityAvailable =
+    !compactWeb &&
     authority === "control" &&
     commandWorkspaceProps.connectionState === "connected" &&
     commandWorkspaceProps.controlWorkspaceNav?.busy !== true &&
@@ -143,15 +152,15 @@ export function AppCommandShellRoute({
   ].join(":");
   const workspaceGit = useTaskDetailWorkspaceGit({
     client: taskDetailWorkspaceGitClient,
-    enabled: workspaceGitAuthorityAvailable,
-    open: taskDetailOpen,
+    enabled: !compactWeb && workspaceGitAuthorityAvailable,
+    open: !compactWeb && taskDetailOpen,
     refreshKey: workspaceGitRefreshKey,
     workspaceScopeKey: workspaceGitScopeKey,
   });
 
   const projection = useMemo(
     () =>
-      selectedThread
+      !compactWeb && selectedThread
         ? projectTaskDetail({
             linkedThreads,
             locale,
@@ -163,7 +172,7 @@ export function AppCommandShellRoute({
   );
   const presentation = useMemo(
     () =>
-      projection
+      !compactWeb && projection
         ? taskDetailPresentation({
             authority,
             connectionState: commandWorkspaceProps.connectionState,
@@ -182,8 +191,8 @@ export function AppCommandShellRoute({
   );
   const processRuntime = useTaskDetailProcesses({
     client: taskDetailClient,
-    enabled: processAuthorityAvailable,
-    open: taskDetailOpen,
+    enabled: !compactWeb && processAuthorityAvailable,
+    open: !compactWeb && taskDetailOpen,
     threadId: selectedThread?.id ?? null,
   });
   const processPresentation = useMemo(
@@ -252,10 +261,11 @@ export function AppCommandShellRoute({
     [],
   );
   const openCapability = useCallback(() => {
+    if (compactWeb) return;
     setActiveOverlay("workbench");
     capabilityDrawer.onOpen();
     window.requestAnimationFrame(() => focusOverlay("workbench"));
-  }, [capabilityDrawer.onOpen, focusOverlay]);
+  }, [capabilityDrawer.onOpen, compactWeb, focusOverlay]);
   const closeCapability = useCallback(() => {
     setActiveOverlay(taskDetailOpen ? "task-detail" : null);
     capabilityDrawer.onClose();
@@ -347,23 +357,22 @@ export function AppCommandShellRoute({
   }, []);
 
   useEffect(() => {
-    if (!selectedThread) {
+    if (compactWeb || !selectedThread) {
       setTaskDetailOpen(false);
-      setActiveOverlay(capabilityDrawer.open ? "workbench" : null);
+      setActiveOverlay(
+        !compactWeb && capabilityDrawer.open ? "workbench" : null,
+      );
     }
-  }, [capabilityDrawer.open, selectedThread]);
+  }, [capabilityDrawer.open, compactWeb, selectedThread]);
 
   useEffect(() => {
-    if (previousCapabilityOpenRef.current === capabilityDrawer.open) return;
-    previousCapabilityOpenRef.current = capabilityDrawer.open;
+    const workbenchOpen = !compactWeb && capabilityDrawer.open;
+    if (previousCapabilityOpenRef.current === workbenchOpen) return;
+    previousCapabilityOpenRef.current = workbenchOpen;
     setActiveOverlay(
-      capabilityDrawer.open
-        ? "workbench"
-        : taskDetailOpen
-          ? "task-detail"
-          : null,
+      workbenchOpen ? "workbench" : taskDetailOpen ? "task-detail" : null,
     );
-  }, [capabilityDrawer.open, taskDetailOpen]);
+  }, [capabilityDrawer.open, compactWeb, taskDetailOpen]);
 
   const handleEscape = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -381,7 +390,7 @@ export function AppCommandShellRoute({
       const target = resolveCommandShellEscapeTarget({
         activeOverlay,
         taskDetailOpen,
-        workbenchOpen: capabilityDrawer.open,
+        workbenchOpen: !compactWeb && capabilityDrawer.open,
       });
       if (!target) return;
       event.preventDefault();
@@ -397,6 +406,7 @@ export function AppCommandShellRoute({
       capabilityDrawer.open,
       closeCapabilityAndRestoreFocus,
       closeTaskDetail,
+      compactWeb,
       taskDetailOpen,
     ],
   );
@@ -404,11 +414,13 @@ export function AppCommandShellRoute({
   const taskDetailInactive =
     narrowOverlayMode &&
     taskDetailOpen &&
+    !compactWeb &&
     capabilityDrawer.open &&
     activeOverlay === "workbench";
   const workbenchInactive =
     narrowOverlayMode &&
     taskDetailOpen &&
+    !compactWeb &&
     capabilityDrawer.open &&
     activeOverlay === "task-detail";
   const switchOverlay = useCallback(() => {
@@ -417,106 +429,124 @@ export function AppCommandShellRoute({
     window.requestAnimationFrame(() => focusOverlay(next));
   }, [activeOverlay, focusOverlay]);
 
-  const taskDetailTrigger = selectedThread ? (
-    <button
-      ref={triggerRef}
-      aria-controls={DEFAULT_TASK_DETAIL_POPOVER_ID}
-      aria-expanded={taskDetailOpen}
-      aria-haspopup="dialog"
-      aria-label={locale === "zh" ? "任务详细信息" : "Task details"}
-      className="command-task-detail-trigger"
-      data-active={taskDetailOpen ? "true" : "false"}
-      type="button"
-      onClick={toggleTaskDetail}
-    >
-      <SlidersHorizontal aria-hidden="true" />
-    </button>
-  ) : null;
+  const taskDetailTrigger =
+    !compactWeb && selectedThread ? (
+      <button
+        ref={triggerRef}
+        aria-controls={DEFAULT_TASK_DETAIL_POPOVER_ID}
+        aria-expanded={taskDetailOpen}
+        aria-haspopup="dialog"
+        aria-label={locale === "zh" ? "任务详细信息" : "Task details"}
+        className="command-task-detail-trigger"
+        data-active={taskDetailOpen ? "true" : "false"}
+        type="button"
+        onClick={toggleTaskDetail}
+      >
+        <SlidersHorizontal aria-hidden="true" />
+      </button>
+    ) : null;
+  const taskWorkbench = useTaskWorkbench(openCapability);
 
   return (
-    <div
-      className="command-shell-route"
-      data-active-overlay={activeOverlay ?? "none"}
-      data-capability-sidebar-open={capabilityDrawer.open ? "true" : "false"}
-      data-task-detail-open={taskDetailOpen ? "true" : "false"}
-      onFocusCapture={(event) => activateOverlayFromTarget(event.target)}
-      onKeyDown={handleEscape}
-      onPointerDownCapture={(event) => activateOverlayFromTarget(event.target)}
+    <TaskWorkbenchActionsContext.Provider
+      value={compactWeb ? null : taskWorkbench.actions}
     >
-      <CommandWorkspace
-        {...commandWorkspaceProps}
-        onTaskDetailAvailabilityChange={handleTaskDetailAvailabilityChange}
-        taskChanges={
-          projection?.changes.complete && projection.changes.fileCount > 0
-            ? {
-                additions: projection.changes.recordedAdditions,
-                deletions: projection.changes.recordedDeletions,
-                files: projection.changes.fileCount,
-              }
-            : null
+      <div
+        className="command-shell-route"
+        data-active-overlay={activeOverlay ?? "none"}
+        data-capability-sidebar-open={
+          !compactWeb && capabilityDrawer.open ? "true" : "false"
         }
-        taskDetailTrigger={taskDetailTrigger}
-      />
-      {presentation ? (
-        <TaskDetailPopover
-          escapeOwner="route"
-          interactionInactive={taskDetailInactive}
-          locale={locale}
-          open={taskDetailOpen}
-          presentation={presentation}
-          processes={processPresentation}
-          onClose={closeTaskDetail}
-          onOpenReview={capabilityDrawer.disabled ? undefined : openReview}
-          onOpenTerminal={capabilityDrawer.disabled ? undefined : openTerminal}
-          onStopTask={
-            commandWorkspaceProps.activeTurnId &&
-            commandWorkspaceProps.connectionState === "connected" &&
-            commandWorkspaceProps.onStop
-              ? stopCurrentTask
-              : undefined
+        data-task-detail-open={taskDetailOpen ? "true" : "false"}
+        onFocusCapture={(event) => activateOverlayFromTarget(event.target)}
+        onKeyDown={handleEscape}
+        onPointerDownCapture={(event) =>
+          activateOverlayFromTarget(event.target)
+        }
+      >
+        <CommandWorkspace
+          {...commandWorkspaceProps}
+          onTaskDetailAvailabilityChange={
+            compactWeb ? undefined : handleTaskDetailAvailabilityChange
           }
-          stopTaskPending={stopTaskPending}
-          onTerminateProcess={
-            processAuthorityAvailable
-              ? (processId) => void processRuntime.terminate(processId)
-              : undefined
+          taskChanges={
+            !compactWeb &&
+            projection?.changes.complete &&
+            projection.changes.fileCount > 0
+              ? {
+                  additions: projection.changes.recordedAdditions,
+                  deletions: projection.changes.recordedDeletions,
+                  files: projection.changes.fileCount,
+                }
+              : null
           }
+          taskDetailTrigger={taskDetailTrigger}
         />
-      ) : null}
-      {taskDetailOpen && capabilityDrawer.open ? (
-        <button
-          aria-label={
-            activeOverlay === "workbench"
-              ? locale === "zh"
-                ? "显示任务详细信息"
-                : "Show task details"
-              : locale === "zh"
-                ? "显示工作台"
-                : "Show workbench"
-          }
-          aria-controls={
-            activeOverlay === "workbench"
-              ? DEFAULT_TASK_DETAIL_POPOVER_ID
-              : DEFAULT_COMMAND_WORKBENCH_ID
-          }
-          className="command-shell-overlay-switch"
-          type="button"
-          onClick={switchOverlay}
-        >
-          {activeOverlay === "workbench" ? (
-            <SlidersHorizontal aria-hidden="true" />
-          ) : (
-            <PanelRight aria-hidden="true" />
-          )}
-        </button>
-      ) : null}
-      <CommandWorkspaceCapabilityDrawer
-        {...capabilityDrawer}
-        interactionInactive={workbenchInactive}
-        onClose={closeCapabilityAndRestoreFocus}
-        onOpen={openCapability}
-      />
-      <AppConfirmDialog {...confirmDialog} />
-    </div>
+        {!compactWeb && presentation ? (
+          <TaskDetailPopover
+            escapeOwner="route"
+            interactionInactive={taskDetailInactive}
+            locale={locale}
+            open={taskDetailOpen}
+            presentation={presentation}
+            processes={processPresentation}
+            onClose={closeTaskDetail}
+            onOpenReview={capabilityDrawer.disabled ? undefined : openReview}
+            onOpenTerminal={
+              capabilityDrawer.disabled ? undefined : openTerminal
+            }
+            onStopTask={
+              commandWorkspaceProps.activeTurnId &&
+              commandWorkspaceProps.connectionState === "connected" &&
+              commandWorkspaceProps.onStop
+                ? stopCurrentTask
+                : undefined
+            }
+            stopTaskPending={stopTaskPending}
+            onTerminateProcess={
+              processAuthorityAvailable
+                ? (processId) => void processRuntime.terminate(processId)
+                : undefined
+            }
+          />
+        ) : null}
+        {!compactWeb && taskDetailOpen && capabilityDrawer.open ? (
+          <button
+            aria-label={
+              activeOverlay === "workbench"
+                ? locale === "zh"
+                  ? "显示任务详细信息"
+                  : "Show task details"
+                : locale === "zh"
+                  ? "显示工作台"
+                  : "Show workbench"
+            }
+            aria-controls={
+              activeOverlay === "workbench"
+                ? DEFAULT_TASK_DETAIL_POPOVER_ID
+                : DEFAULT_COMMAND_WORKBENCH_ID
+            }
+            className="command-shell-overlay-switch"
+            type="button"
+            onClick={switchOverlay}
+          >
+            {activeOverlay === "workbench" ? (
+              <SlidersHorizontal aria-hidden="true" />
+            ) : (
+              <PanelRight aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
+        {!compactWeb ? (
+          <CommandWorkspaceCapabilityDrawer
+            {...capabilityDrawer}
+            interactionInactive={workbenchInactive}
+            onClose={closeCapabilityAndRestoreFocus}
+            onOpen={openCapability}
+          />
+        ) : null}
+        <AppConfirmDialog {...confirmDialog} />
+      </div>
+    </TaskWorkbenchActionsContext.Provider>
   );
 }

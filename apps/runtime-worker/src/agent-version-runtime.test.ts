@@ -52,6 +52,9 @@ test("retains multiple immutable runtimes and resolves the prior compactor", asy
     null,
   );
 
+  assert.equal(registry.nextToolResultMaintenanceRuntime(), large.toolRuntime);
+  assert.equal(registry.nextToolResultMaintenanceRuntime(), small.toolRuntime);
+  assert.equal(registry.nextToolResultMaintenanceRuntime(), large.toolRuntime);
   const prior = await registry.priorModelCompactionResolver().resolve({
     schemaVersion: "crewon.thread-model-state.v0",
     tenantId: "tenant-1",
@@ -68,7 +71,9 @@ test("retains multiple immutable runtimes and resolves the prior compactor", asy
     updatedAt: "2026-08-09T00:00:00Z",
   });
   assert.equal(prior?.compactor, large.contextCompactor);
+  assert.equal(prior?.executionAuthority, "crewonKernel");
   await registry.close();
+  assert.equal(registry.nextToolResultMaintenanceRuntime(), null);
 });
 
 test("rejects runtime bindings that disagree with compiled model identity", () => {
@@ -109,18 +114,22 @@ test("loads, verifies and tenant-scopes durable AgentVersion runtimes", async ()
     }),
   );
   let closed = 0;
+  let created = 0;
   const loader = new DurableAgentVersionRuntimeLoader({
     store,
     digester: { sha256 },
     registry,
     pageSize: 1,
     factory: {
-      create: ({ version }) => ({
-        ...runtimeForVersion(version),
-        close: async () => {
-          closed += 1;
-        },
-      }),
+      create: ({ version }) => {
+        created++;
+        return {
+          ...runtimeForVersion(version),
+          close: async () => {
+            closed += 1;
+          },
+        };
+      },
     },
   });
 
@@ -141,9 +150,10 @@ test("loads, verifies and tenant-scopes durable AgentVersion runtimes", async ()
     loaded: 0,
     existing: 2,
   });
-  assert.equal(closed, 2);
+  assert.equal(created, 2);
+  assert.equal(closed, 0);
   await registry.close();
-  assert.equal(closed, 4);
+  assert.equal(closed, 2);
   await store.close();
 });
 
@@ -242,6 +252,7 @@ test("single-flights a tenant runtime from the Store on first Run resolution", a
     updatedAt: "2026-08-09T00:00:00Z",
   });
   assert.equal(prior?.compactor, first?.contextCompactor);
+  assert.equal(prior?.executionAuthority, "crewonKernel");
   await registry.close();
   await store.close();
 });
@@ -290,6 +301,7 @@ function runtimeForVersion(version: CompiledAgentVersion): AgentVersionRuntime {
   const toolRuntime = new InMemoryToolBroker();
   return {
     version,
+    executionAuthority: "crewonKernel",
     kernel: kernel(version.model.modelId),
     policy: allowPolicy,
     toolRuntime,

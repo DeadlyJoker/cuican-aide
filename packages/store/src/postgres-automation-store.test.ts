@@ -37,7 +37,7 @@ if (connectionString === undefined) {
     () => createTestStore(connectionString),
   );
 
-  test("installs independent Automation v1 with tenant-scoped receipts", async () => {
+  test("installs independent Automation v2 with tenant-scoped receipts", async () => {
     const store = await createTestStore(connectionString);
     try {
       const migration = await store.admin.query<{

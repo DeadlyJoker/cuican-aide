@@ -10,7 +10,10 @@ import {
   type ToolExecutionReceiptLocator,
 } from "@crewon/application";
 
-import { stableJson } from "./store-invariants.ts";
+import {
+  encodeSqliteToolReceiptState,
+  decodeSqliteToolReceiptState,
+} from "./sqlite-tool-result-codec.ts";
 
 type ToolExecutionReceiptRow = Readonly<{
   receipt_id: string;
@@ -125,7 +128,7 @@ export function insertSqliteToolExecutionReceipt(
       receipt.idempotencyKey,
       receipt.status,
       receipt.revision,
-      stableJson(receipt),
+      encodeSqliteToolReceiptState(receipt),
       receipt.preparedAt,
       receipt.updatedAt,
       receipt.resolvedAt,
@@ -146,7 +149,7 @@ export function updateSqliteToolExecutionReceipt(
     .run(
       next.status,
       next.revision,
-      stableJson(next),
+      encodeSqliteToolReceiptState(next),
       next.updatedAt,
       next.resolvedAt,
       next.tenantId,
@@ -162,7 +165,7 @@ export function updateSqliteToolExecutionReceipt(
 function decode(row: ToolExecutionReceiptRow): ToolExecutionReceiptState {
   let state: ToolExecutionReceiptState;
   try {
-    state = JSON.parse(row.state_json) as ToolExecutionReceiptState;
+    state = decodeSqliteToolReceiptState(row.state_json);
     validateToolExecutionReceipt(state);
   } catch (error) {
     throw new RunStoreError("stored_tool_receipt_invalid", { cause: error });

@@ -11,6 +11,16 @@ await mkdir(outputRoot, { recursive: true });
 
 await Promise.all([
   build({
+    entryPoints: [resolve(uiRoot, "electron/runtimeLogWriter.ts")],
+    outfile: resolve(outputRoot, "runtimeLogWriter.mjs"),
+    bundle: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    sourcemap: true,
+    legalComments: "none",
+  }),
+  build({
     entryPoints: [resolve(uiRoot, "electron/main.ts")],
     outfile: resolve(outputRoot, "main.mjs"),
     bundle: true,

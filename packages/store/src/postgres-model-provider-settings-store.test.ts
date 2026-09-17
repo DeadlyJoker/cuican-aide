@@ -1,3 +1,4 @@
+import { POSTGRES_THREAD_SCHEMA_VERSION } from "./postgres-thread-schema.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test, { type TestContext } from "node:test";
@@ -11,6 +12,7 @@ import {
 } from "@crewon/application";
 import { Pool } from "pg";
 
+import { holdAdvisoryFence } from "./postgres-advisory-fence.test-support.ts";
 import { PostgresDomainStore } from "./postgres-domain-store.ts";
 import { createRunningCommitFixture } from "./run-store-conformance.test-support.ts";
 import { PostgresThreadStore } from "./postgres-thread-store.ts";
@@ -31,7 +33,7 @@ test(
 );
 
 test(
-  "PostgresDomainStore adds Provider v1 after an existing Thread v5 schema",
+  "PostgresDomainStore adds Provider v1 after an existing Thread schema",
   { skip: connectionString === undefined },
   async (t) => {
     const fixture = postgresFixture(t);
@@ -49,7 +51,7 @@ test(
       );
       assert.deepEqual(versions.rows, [
         { component: "model_provider_settings_authority", version: 1 },
-        { component: "thread_authority", version: 5 },
+        { component: "thread_authority", version: POSTGRES_THREAD_SCHEMA_VERSION },
       ]);
     } finally {
       await store.close();
@@ -164,7 +166,7 @@ test(
       });
       await store.prepareModelProviderSettings(pending);
 
-      const release = await holdProviderFence(fixture, "tenant-1");
+      const replayFence = await holdProviderFence(fixture, "tenant-1");
       const replays = [
         store.prepareModelProviderSettings(pending),
         store.finalizeModelProviderSettings(finalized),
@@ -175,7 +177,7 @@ test(
         try {
           return await Promise.all(replays);
         } finally {
-          await release();
+          await replayFence.release();
         }
       })();
       assert.deepEqual(
@@ -269,42 +271,44 @@ test(
     const prepareWins = postgresFixture(t);
     const first = await PostgresDomainStore.open(prepareWins.options);
     const second = await PostgresDomainStore.open(prepareWins.options);
+    let barrier: Awaited<ReturnType<typeof holdProviderFence>> | undefined;
     try {
       await seedThread(first);
-      const barrier = await holdProviderFence(prepareWins, "tenant-1");
-      const baseline = await waitingAdvisoryLocks(prepareWins.admin);
+      barrier = await holdProviderFence(prepareWins, "tenant-1");
       const prepare = first.prepareModelProviderSettings(prepareInput());
-      await waitForAdvisoryLocks(prepareWins.admin, baseline + 1);
+      await barrier.waitForWaiters(1);
       const run = second.commitRun(createRunningCommitFixture());
-      await waitForAdvisoryLocks(prepareWins.admin, baseline + 2);
-      await barrier();
+      await barrier.waitForWaiters(2);
+      await barrier.release();
       assert.equal((await prepare).disposition, "prepared");
       await assert.rejects(
         run,
         hasStoreCode("model_provider_settings_switch_pending"),
       );
     } finally {
+      await barrier?.release();
       await Promise.all([first.close(), second.close()]);
     }
 
     const runWins = postgresFixture(t);
     const third = await PostgresDomainStore.open(runWins.options);
     const fourth = await PostgresDomainStore.open(runWins.options);
+    let runFence: Awaited<ReturnType<typeof holdProviderFence>> | undefined;
     try {
       await seedThread(third);
-      const barrier = await holdProviderFence(runWins, "tenant-1");
-      const baseline = await waitingAdvisoryLocks(runWins.admin);
+      runFence = await holdProviderFence(runWins, "tenant-1");
       const run = third.commitRun(createRunningCommitFixture());
-      await waitForAdvisoryLocks(runWins.admin, baseline + 1);
+      await runFence.waitForWaiters(1);
       const prepare = fourth.prepareModelProviderSettings(prepareInput());
-      await waitForAdvisoryLocks(runWins.admin, baseline + 2);
-      await barrier();
+      await runFence.waitForWaiters(2);
+      await runFence.release();
       assert.equal((await run).disposition, "committed");
       await assert.rejects(
         prepare,
         hasStoreCode("model_provider_settings_active_run"),
       );
     } finally {
+      await runFence?.release();
       await Promise.all([third.close(), fourth.close()]);
     }
   },
@@ -317,12 +321,12 @@ test(
     const fixture = postgresFixture(t);
     const first = await PostgresDomainStore.open(fixture.options);
     const second = await PostgresDomainStore.open(fixture.options);
+    let barrier: Awaited<ReturnType<typeof holdProviderFence>> | undefined;
     try {
       await seedThread(first);
-      const barrier = await holdProviderFence(fixture, "tenant-1");
-      const baseline = await waitingAdvisoryLocks(fixture.admin);
+      barrier = await holdProviderFence(fixture, "tenant-1");
       const prepare = first.prepareModelProviderSettings(prepareInput());
-      await waitForAdvisoryLocks(fixture.admin, baseline + 1);
+      await barrier.waitForWaiters(1);
       const goal = goalFixture();
       const activation = second.commitThreadGoalMutation(
         goalMutationInput({
@@ -332,8 +336,8 @@ test(
           continuation: goalActivation(goal, 1),
         }),
       );
-      await waitForAdvisoryLocks(fixture.admin, baseline + 2);
-      await barrier();
+      await barrier.waitForWaiters(2);
+      await barrier.release();
       assert.equal((await prepare).disposition, "prepared");
       await assert.rejects(
         activation,
@@ -353,6 +357,7 @@ test(
         "paused",
       );
     } finally {
+      await barrier?.release();
       await Promise.all([first.close(), second.close()]);
     }
   },
@@ -626,38 +631,11 @@ async function substitutePostgresCatalogHead(
 async function holdProviderFence(
   fixture: ReturnType<typeof postgresFixture>,
   tenantId: string,
-): Promise<() => Promise<void>> {
-  const client = await fixture.admin.connect();
-  await client.query("BEGIN");
-  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+) {
+  return holdAdvisoryFence(
+    fixture.admin,
     `provider-settings:${fixture.schemaSql}:${tenantId}`,
-  ]);
-  return async () => {
-    await client.query("COMMIT");
-    client.release();
-  };
-}
-
-async function waitingAdvisoryLocks(pool: Pool): Promise<number> {
-  return Number(
-    (
-      await pool.query<{ count: string }>(
-        `SELECT COUNT(*) AS count FROM pg_locks
-         WHERE locktype='advisory' AND NOT granted`,
-      )
-    ).rows[0]?.count ?? 0,
   );
-}
-
-async function waitForAdvisoryLocks(
-  pool: Pool,
-  expected: number,
-): Promise<void> {
-  for (let attempt = 0; attempt < 1_000; attempt += 1) {
-    if ((await waitingAdvisoryLocks(pool)) >= expected) return;
-    await new Promise<void>((resolve) => setImmediate(resolve));
-  }
-  throw new Error("provider_advisory_waiter_timeout");
 }
 
 function prepareInput(

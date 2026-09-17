@@ -1,54 +1,90 @@
+import { ToolResultScanRouter } from "@crewon/tool-broker";
 import type {
   ToolCallKind,
   ToolDefinition,
   ToolExecutionCommand,
   ToolExecutionPolicy,
   ToolExecutionResolution,
+  ToolExecutionResultAcknowledgement,
+  RetainedToolExecutionResult,
+  RetainedToolExecutionResultQuery,
+  RetainedToolExecutionResultLookup,
+  ToolExecutionReservationOptions,
+  RetainedToolExecutionResultScan,
   ToolRuntimePort,
 } from "@crewon/tool-broker";
 
 import { McpRuntimeError, McpToolRuntime } from "./mcp-tool-runtime.ts";
+import { McpControlFlight } from "./mcp-control-flight.ts";
 
 export class McpRuntimeGroup implements ToolRuntimePort {
+  readonly #resultScanner: ToolResultScanRouter;
   readonly #runtimes: readonly McpToolRuntime[];
   #definitions: readonly ToolDefinition[] = [];
   #routes = new Map<string, McpToolRuntime>();
   #connected = false;
   #closed = false;
+  readonly #catalog = new McpControlFlight();
+  #closePromise: Promise<void> | null = null;
 
   constructor(runtimes: readonly McpToolRuntime[]) {
     if (runtimes.length < 1 || runtimes.length > 32) {
       throw new McpRuntimeError("mcp_server_count_invalid");
     }
     this.#runtimes = [...runtimes];
+    this.#resultScanner = new ToolResultScanRouter(runtimes);
   }
 
-  async connect(signal: AbortSignal): Promise<void> {
+  connect(signal: AbortSignal): Promise<void> {
+    if (this.#closed)
+      return Promise.reject(new McpRuntimeError("mcp_runtime_group_closed"));
+    return this.#catalog.run(signal, (operationSignal) =>
+      this.#connect(operationSignal),
+    );
+  }
+
+  async #connect(signal: AbortSignal): Promise<void> {
     this.#assertOpen();
     try {
       await Promise.all(
         this.#runtimes.map((runtime) => runtime.connect(signal)),
       );
+      this.#assertOpen();
+      signal.throwIfAborted();
       this.#connected = true;
       this.#rebuildRoutes();
     } catch (error) {
-      await Promise.allSettled(
-        this.#runtimes.map((runtime) => runtime.close()),
-      );
-      this.#closed = true;
+      // Preserve the discovery failure while still waiting for every child's cleanup.
+      await this.#closeResources().catch(() => {});
       throw error;
     }
   }
 
-  async refresh(signal: AbortSignal): Promise<void> {
-    this.#assertConnected();
-    await Promise.all(this.#runtimes.map((runtime) => runtime.refresh(signal)));
-    this.#rebuildRoutes();
+  refresh(signal: AbortSignal): Promise<void> {
+    if (this.#closed)
+      return Promise.reject(new McpRuntimeError("mcp_runtime_group_closed"));
+    return this.#catalog.run(signal, async (operationSignal) => {
+      this.#assertConnected();
+      await Promise.all(
+        this.#runtimes.map((runtime) => runtime.refresh(operationSignal)),
+      );
+      this.#assertConnected();
+      operationSignal.throwIfAborted();
+      this.#rebuildRoutes();
+    });
   }
 
   definitions(): readonly ToolDefinition[] {
     this.#assertConnected();
     return structuredClone(this.#definitions);
+  }
+
+  canRetire(): boolean {
+    return (
+      !this.#closed &&
+      !this.#catalog.pending &&
+      this.#runtimes.every((runtime) => runtime.canRetire())
+    );
   }
 
   executionPolicy(
@@ -68,6 +104,18 @@ export class McpRuntimeGroup implements ToolRuntimePort {
     return this.#route(command.kind, command.name).execute(command, signal);
   }
 
+  reserveExecution(
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+    options?: ToolExecutionReservationOptions,
+  ) {
+    return this.#route(command.kind, command.name).reserveExecution(
+      command,
+      signal,
+      options,
+    );
+  }
+
   reconcile(
     command: ToolExecutionCommand,
     signal: AbortSignal,
@@ -82,15 +130,67 @@ export class McpRuntimeGroup implements ToolRuntimePort {
     return this.#route(command.kind, command.name).cancel(command, signal);
   }
 
-  async close(): Promise<void> {
-    if (this.#closed) {
-      return;
+  scanRetainedExecutionResults(query: RetainedToolExecutionResultScan) {
+    return this.#resultScanner.scan(query);
+  }
+
+  retainedExecutionResults(
+    query: RetainedToolExecutionResultQuery,
+  ): readonly RetainedToolExecutionResult[] {
+    const results: RetainedToolExecutionResult[] = [];
+    for (const runtime of this.#runtimes) {
+      if (results.length >= query.limit) break;
+      results.push(
+        ...runtime.retainedExecutionResults({
+          ...query,
+          limit: query.limit - results.length,
+        }),
+      );
     }
+    return results;
+  }
+
+  acknowledgeExecutionResult(
+    acknowledgement: ToolExecutionResultAcknowledgement,
+  ): boolean | void {
+    const tool = acknowledgement.actionIntent.tool;
+    return this.#resultOwner(tool.kind, tool.name).acknowledgeExecutionResult(
+      acknowledgement,
+    );
+  }
+
+  cancelRetainedExecution(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    return this.#resultOwner(tool.kind, tool.name).cancelRetainedExecution(
+      lookup,
+    );
+  }
+
+  readRetainedExecutionResult(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    return this.#resultOwner(tool.kind, tool.name).readRetainedExecutionResult(
+      lookup,
+    );
+  }
+
+  close(): Promise<void> {
+    this.#catalog.close();
+    return this.#closeResources();
+  }
+
+  #closeResources(): Promise<void> {
+    if (this.#closePromise !== null) return this.#closePromise;
     this.#closed = true;
     this.#connected = false;
     this.#definitions = [];
-    this.#routes.clear();
-    await Promise.all(this.#runtimes.map((runtime) => runtime.close()));
+    // Retain routing for the local result acknowledgement path after transport shutdown.
+    this.#closePromise = Promise.allSettled(
+      this.#runtimes.map((runtime) => runtime.close()),
+    ).then((results) => {
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    });
+    return this.#closePromise;
   }
 
   #rebuildRoutes(): void {
@@ -117,6 +217,10 @@ export class McpRuntimeGroup implements ToolRuntimePort {
 
   #route(kind: ToolCallKind, name: string): McpToolRuntime {
     this.#assertConnected();
+    return this.#resultOwner(kind, name);
+  }
+
+  #resultOwner(kind: ToolCallKind, name: string): McpToolRuntime {
     const runtime = this.#routes.get(toolKey(kind, name));
     if (runtime === undefined) {
       throw new McpRuntimeError("mcp_tool_route_not_found");

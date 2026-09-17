@@ -56,7 +56,8 @@ export type ModelProviderAction =
 type ProviderControlClient = Pick<
   ControlApiClient,
   "getModelProviderSettings" | "probeModelProvider"
->;
+> &
+  Partial<Pick<ControlApiClient, "getActiveAgentVersionCatalog">>;
 
 type SetCapabilityPanel = (
   panelOrUpdater:
@@ -112,10 +113,36 @@ async function readProviderState(
     return { catalog, settings: settingsFromCredentialCatalog(catalog) };
   }
   const [response, catalog] = await Promise.all([
-    params.controlClient.getModelProviderSettings(),
+    params.controlClient.getModelProviderSettings().catch((error: unknown) => {
+      // Native credentials are independently configurable before a model
+      // runtime exists. A failed public read must not hide the setup form.
+      if (store === null) throw error;
+      return null;
+    }),
     store?.catalog() ?? Promise.resolve(null),
   ]);
-  return { catalog, settings: response.settings };
+  if (response !== null) return { catalog, settings: response.settings };
+  if (catalog !== null) {
+    return { catalog, settings: settingsFromCredentialCatalog(catalog) };
+  }
+  throw new Error("model_provider_control_unavailable");
+}
+
+async function readDefaultTaskModel(
+  client: ProviderControlClient | null | undefined,
+): Promise<string | null> {
+  try {
+    const catalog = await client?.getActiveAgentVersionCatalog?.({
+      signal: AbortSignal.timeout(3_000),
+    });
+    const defaults = catalog?.data.filter(
+      (agent) => agent.agentVersionId === catalog.defaultAgentVersionId,
+    );
+    return defaults?.length === 1 ? defaults[0].model.modelId : null;
+  } catch {
+    // Task metadata is supplementary, never a prerequisite for model setup.
+    return null;
+  }
 }
 
 function settingsFromCredentialCatalog(
@@ -210,7 +237,10 @@ export async function refreshModelProvidersPanelAction(
   }
   params.setCapabilityPanel(modelProviderLoadingPanel(params.locale));
   try {
-    const { catalog, settings } = await readProviderState(params);
+    const [{ catalog, settings }, defaultTaskModel] = await Promise.all([
+      readProviderState(params),
+      readDefaultTaskModel(params.controlClient),
+    ]);
     params.setCapabilityPanel(
       modelProviderListPanel({
         settings,
@@ -220,6 +250,7 @@ export async function refreshModelProvidersPanelAction(
         mutationAvailable: catalog !== null,
         probeAvailable: settings.runtimeAvailability === "available",
         probeText,
+        defaultTaskModel,
       }),
     );
   } catch (error) {

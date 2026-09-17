@@ -1,5 +1,6 @@
 export * from "./model-switch-compaction.ts";
 export * from "./agent-version-runtime.ts";
+export type { RuntimeResourceLease } from "./runtime-resource-lease.ts";
 export * from "./durable-agent-version-runtime-loader.ts";
 export * from "./store-backed-agent-version-runtime-resolver.ts";
 export * from "./configured-agent-version-runtime-factory.ts";

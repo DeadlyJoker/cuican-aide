@@ -1,11 +1,10 @@
-import { createHash } from "node:crypto";
-
 import { OFFICE_LIMITS, type OfficeDefinition } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
 import type {
   ApplicationClock,
   ApplicationIdGenerator,
+  ContentDigester,
 } from "./application-runtime-ports.ts";
 import type {
   ActorContext,
@@ -13,6 +12,7 @@ import type {
   OfficeAuthorizationAction,
 } from "./authorization-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
+import { officeIdempotencyDigest } from "./office-idempotency-digest.ts";
 import type { AgentVersionStore } from "./agent-version-store-port.ts";
 import type {
   OfficeDefinitionStore,
@@ -33,6 +33,7 @@ type OfficeDependencies = Readonly<{
   authorization: AuthorizationPort;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
+  digester: ContentDigester;
 }>;
 
 export class OfficeApplicationService {
@@ -72,9 +73,10 @@ export class OfficeApplicationService {
       createdByActorId: actor.actorId,
       createdAt: this.#dependencies.clock.now(),
     };
-    const requestDigest = createHash("sha256")
-      .update(canonicalJson(command))
-      .digest("hex");
+    const requestDigest = officeIdempotencyDigest(
+      this.#dependencies.digester,
+      canonicalJson(command),
+    );
     try {
       return await this.#dependencies.store.commitOfficeDefinition({
         definition,
@@ -213,6 +215,19 @@ function validateCreate(command: CreateOfficeCommand) {
     requireText(member.memberId, 128, "office_member_invalid");
     requireText(member.displayName, 160, "office_member_invalid");
     requireText(member.agentVersionId, 128, "office_member_invalid");
+    if (member.responsibility !== undefined) {
+      requireText(
+        member.responsibility,
+        OFFICE_LIMITS.responsibility * 2,
+        "office_member_invalid",
+      );
+      if (
+        [...member.responsibility].length > OFFICE_LIMITS.responsibility ||
+        member.responsibility.normalize("NFC") !== member.responsibility
+      ) {
+        throw new ApplicationError("validation", "office_member_invalid");
+      }
+    }
     if (ids.has(member.memberId))
       throw new ApplicationError("validation", "office_member_duplicate");
     ids.add(member.memberId);

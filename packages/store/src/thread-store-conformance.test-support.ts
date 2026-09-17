@@ -439,7 +439,7 @@ export function threadStateFixture(): ThreadState {
   };
 }
 
-function appendMessageCommit(
+export function appendMessageCommit(
   messageSequence: number,
   eventSequence: number,
 ): CommitThreadInput {
@@ -498,7 +498,7 @@ function appendMessageCommit(
   };
 }
 
-function emptyForkCommit(
+export function emptyForkCommit(
   targetThreadId = "thread-2",
   idempotencyKey = "fork-thread-2",
 ): CommitThreadInput {

@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CommandWorkflowNodeOutputs > places the icon-only workbench action below its node output 1`] = `
+"<section class="workflow-node-outputs" aria-label="节点产出"><p>节点产出保留在下方，供你核对；执行完成不代表已经对外发送或发布。</p><details data-workbench-origin="workflow-node:meeting-1:draft" tabindex="-1" open=""><summary>通知草稿 · 查看产出</summary><div class="workflow-node-output-body"><div class="markdown-content"><h2>新版帮助页验收</h2>
+<p>9月10日14:00，会议链接待主持人补充。</p></div><div class="message-actions" data-user="false" data-visibility="always" role="group" aria-label="回复操作"><button type="button" aria-label="复制" class="message-action-button" data-state="closed" data-slot="tooltip-trigger"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></button><span class="message-action-status" role="status"></span></div></div></details></section>"
+`;
+
+exports[`CommandWorkflowNodeOutputs > retains the real deliverable when final verification only returns PASS 1`] = `
+"<section class="workflow-node-outputs" aria-label="节点产出"><p>节点产出保留在下方，供你核对；执行完成不代表已经对外发送或发布。</p><details open=""><summary>通知草稿 · 查看产出</summary><div class="workflow-node-output-body"><div class="markdown-content"><h2>新版帮助页验收</h2>
+<p>9月10日14:00，会议链接待主持人补充。</p></div><div class="message-actions" data-user="false" data-visibility="always" role="group" aria-label="回复操作"><button type="button" aria-label="复制" class="message-action-button" data-state="closed" data-slot="tooltip-trigger"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></button><span class="message-action-status" role="status"></span></div></div></details></section>"
+`;

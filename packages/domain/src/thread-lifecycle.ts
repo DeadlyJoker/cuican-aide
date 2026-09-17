@@ -31,6 +31,8 @@ export type ThreadLifecycleEvent =
         messageSequence: number;
         role: MessageRole;
         contentDigest: string;
+        /** Optional on legacy events; initialized atomically with the first user message. */
+        initialTitle?: string;
       }>;
     })
   | (ThreadEventBase & {
@@ -144,6 +146,7 @@ export function reduceThreadLifecycleEvent(
       requireDigest(event.data.contentDigest);
       return {
         ...next,
+        title: state.title ?? event.data.initialTitle ?? null,
         lastMessageSequence: event.data.messageSequence,
       };
     case "thread.forked":
@@ -280,6 +283,17 @@ export function validateThreadLifecycleEvent(
       requireNullableTitle(event.data.title);
       return;
     case "thread.message.appended":
+      if (event.data.initialTitle !== undefined) {
+        requireNullableTitle(event.data.initialTitle);
+        if (
+          event.data.role !== "user" ||
+          event.data.messageSequence !== 1 ||
+          typeof event.data.initialTitle !== "string" ||
+          Array.from(event.data.initialTitle).length > 48
+        ) {
+          throw new ThreadLifecycleError("thread_initial_title_invalid");
+        }
+      }
       requireNonEmpty(event.data.messageId, "message_id_invalid");
       if (
         !Number.isSafeInteger(event.data.messageSequence) ||

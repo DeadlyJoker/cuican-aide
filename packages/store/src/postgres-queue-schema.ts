@@ -1,6 +1,7 @@
+import { postgresOutboxRetentionSchemaSql } from "./postgres-outbox-retention-schema.ts";
 import { RunStoreError } from "@crewon/application";
 
-export const POSTGRES_QUEUE_SCHEMA_VERSION = 1;
+export const POSTGRES_QUEUE_SCHEMA_VERSION = 2;
 
 const SCHEMA_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
@@ -56,5 +57,7 @@ export function postgresQueueSchemaSql(schema: string): string {
         OR (status = 'completed' AND lease_owner_id IS NULL AND lease_id IS NULL AND lease_expires_at IS NULL AND completed_at IS NOT NULL))
     );
     CREATE INDEX IF NOT EXISTS work_items_claim_idx
-      ON ${schema}.work_items(status, available_at, lease_expires_at, work_item_order);`;
+      ON ${schema}.work_items(status, available_at, lease_expires_at, work_item_order);
+    ${postgresOutboxRetentionSchemaSql(schema)}
+    UPDATE ${schema}.schema_migrations SET version = 2 WHERE component = 'durable_queue' AND version = 1;`;
 }

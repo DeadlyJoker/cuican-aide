@@ -1,23 +1,24 @@
-import { spawn } from "node:child_process";
+import { writeDesktopConfigAtomically } from "./desktopConfigFile.ts";
 import {
-  chmodSync,
+  withWorkspaceProcesses,
+  type WorkspaceProcessRequest,
+} from "./localWorkspaceProcesses.ts";
+import {
+  listWorkspaceDirectory,
+  readWorkspaceFile,
+} from "./localWorkspaceReads.ts";
+import {
   existsSync,
   lstatSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   realpathSync,
-  renameSync,
   statSync,
-  writeFileSync,
 } from "node:fs";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 const VIRTUAL_ROOT = "/workspace";
-const MAX_DIRECTORY_ENTRIES = 120;
-const MAX_FILE_BYTES = 3_000;
 const MAX_COMMAND_BYTES = 16 * 1024;
-const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024;
 const MAX_COMMAND_TIMEOUT_SECONDS = 30;
 const MAX_DIFF_BYTES = 96 * 1024;
 const MAX_GIT_BRANCH_BYTES = 1_024;
@@ -82,12 +83,11 @@ export class LocalWorkspaceAuthority {
   select(root: string, request: unknown) {
     this.#requireMutation(request);
     const canonical = requireDirectory(root);
-    this.#state = {
+    this.#write({
       schemaVersion: "crewon.desktop-workspace-authority.v1",
       revision: this.#state.revision + 1,
       root: canonical,
-    };
-    this.#write();
+    });
     return { outcome: "committed", snapshot: this.status() } as const;
   }
 
@@ -98,12 +98,11 @@ export class LocalWorkspaceAuthority {
 
   clear(request: unknown) {
     this.#requireMutation(request);
-    this.#state = {
+    this.#write({
       schemaVersion: "crewon.desktop-workspace-authority.v1",
       revision: this.#state.revision + 1,
       root: null,
-    };
-    this.#write();
+    });
     return { outcome: "committed", snapshot: this.status() } as const;
   }
 
@@ -157,14 +156,9 @@ export class LocalWorkspaceAuthority {
     };
   }
 
-  #write(): void {
-    const temporary = `${this.#path}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(this.#state)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    chmodSync(temporary, 0o600);
-    renameSync(temporary, this.#path);
+  #write(state: WorkspaceState): void {
+    writeDesktopConfigAtomically(this.#path, `${JSON.stringify(state)}\n`);
+    this.#state = state;
   }
 }
 
@@ -172,56 +166,11 @@ export class LocalWorkspaceSandbox {
   constructor(private readonly authority: LocalWorkspaceAuthority) {}
 
   listDirectory(requestedPath = VIRTUAL_ROOT) {
-    const { target, virtualPath } = this.#resolve(requestedPath, "directory");
-    const root = this.authority.root();
-    const all = readdirSync(target)
-      .map((name) => {
-        const path = join(target, name);
-        const metadata = lstatSync(path);
-        const kind = metadata.isSymbolicLink()
-          ? "symlink"
-          : metadata.isDirectory()
-            ? "directory"
-            : metadata.isFile()
-              ? "file"
-              : null;
-        return kind === null
-          ? null
-          : {
-              kind,
-              name,
-              path: virtualPathFor(root, path),
-              size: metadata.size,
-            };
-      })
-      .filter((entry) => entry !== null)
-      .sort((left, right) =>
-        left.kind === right.kind
-          ? left.name.localeCompare(right.name)
-          : left.kind === "directory"
-            ? -1
-            : right.kind === "directory"
-              ? 1
-              : left.name.localeCompare(right.name),
-      );
-    return {
-      root: VIRTUAL_ROOT,
-      path: virtualPath,
-      entries: all.slice(0, MAX_DIRECTORY_ENTRIES),
-      truncated: all.length > MAX_DIRECTORY_ENTRIES,
-    };
+    return listWorkspaceDirectory(this.authority, requestedPath);
   }
 
   readFile(requestedPath: string) {
-    const { target, virtualPath } = this.#resolve(requestedPath, "file");
-    const metadata = statSync(target);
-    const bytes = readFileSync(target).subarray(0, MAX_FILE_BYTES);
-    return {
-      path: virtualPath,
-      content: bytes.toString("utf8"),
-      byteLength: metadata.size,
-      truncated: metadata.size > bytes.byteLength,
-    };
+    return readWorkspaceFile(this.authority, requestedPath);
   }
 
   async readGitSummary() {
@@ -245,269 +194,249 @@ export class LocalWorkspaceSandbox {
   async #readGit(includeDiff: boolean) {
     const workspace = this.authority.captureRoot();
     const root = workspace.root;
-    const repository = await runBounded(
-      "git",
-      ["rev-parse", "--is-inside-work-tree"],
-      root,
-      MAX_COMMAND_TIMEOUT_SECONDS,
-      128,
-    );
-    if (repository.exitCode !== 0) {
-      this.authority.assertRootCurrent(workspace);
-      return {
-        cwd: VIRTUAL_ROOT,
-        diff: "",
-        isGitRepository: false,
-        branch: null,
-        head: null,
-        changedFiles: 0,
-        additions: 0,
-        deletions: 0,
-        statsComplete: false,
-        diffTruncated: false,
-      } as const;
-    }
-    if (repository.stdout.trim() !== "true") {
-      throw new Error("desktop_sandbox_diff_failed");
-    }
-
-    const headResult = await runBounded(
-      "git",
-      ["rev-parse", "--verify", "HEAD"],
-      root,
-      MAX_COMMAND_TIMEOUT_SECONDS,
-      128,
-    );
-    const head =
-      headResult.exitCode === 0
-        ? requireGitHead(headResult.stdout.trim())
-        : headResult.exitCode === 128
-          ? null
-          : failGitDiff();
-    const branchResult = await runBounded(
-      "git",
-      ["symbolic-ref", "--quiet", "--short", "HEAD"],
-      root,
-      MAX_COMMAND_TIMEOUT_SECONDS,
-      MAX_GIT_BRANCH_BYTES + 1,
-    );
-    const branch =
-      branchResult.exitCode === 0
-        ? requireGitBranch(branchResult.stdout.replace(/[\r\n]+$/u, ""))
-        : branchResult.exitCode === 1 || branchResult.exitCode === 128
-          ? null
-          : failGitDiff();
-
-    let diff = "";
-    let diffTruncated = false;
-    let changedFiles = 0;
-    let additions = 0;
-    let deletions = 0;
-    let statsComplete = head !== null;
-    const appendDiff = (value: string) => {
-      const remaining = MAX_DIFF_BYTES - Buffer.byteLength(diff);
-      if (remaining > 0) diff += truncateUtf8(value, remaining);
-    };
-    const trackedArgs = [
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--no-color",
-      "--unified=3",
-    ];
-    if (head !== null) {
-      if (includeDiff) {
-        const tracked = await runBounded(
-          "git",
-          [...trackedArgs, "HEAD", "--", ...GIT_WORKSPACE_PATHSPEC],
-          root,
-          MAX_COMMAND_TIMEOUT_SECONDS,
-          MAX_DIFF_BYTES,
-        );
-        if (tracked.exitCode !== 0) failGitDiff();
-        appendDiff(tracked.stdout);
-        diffTruncated = tracked.stdoutTruncated;
+    return withWorkspaceProcesses(async (run) => {
+      const runGit = async (
+        request: Omit<WorkspaceProcessRequest, "command" | "cwd">,
+      ) => {
+        this.authority.assertRootCurrent(workspace);
+        const result = await run({ ...request, command: "git", cwd: root });
+        if (result.timedOut) throw new Error("desktop_sandbox_command_timeout");
+        return result;
+      };
+      const repository = await runGit({
+        args: ["rev-parse", "--is-inside-work-tree"],
+        maximumOutputBytes: 128,
+      });
+      if (repository.exitCode !== 0) {
+        this.authority.assertRootCurrent(workspace);
+        return {
+          cwd: VIRTUAL_ROOT,
+          diff: "",
+          isGitRepository: false,
+          branch: null,
+          head: null,
+          changedFiles: 0,
+          additions: 0,
+          deletions: 0,
+          statsComplete: false,
+          diffTruncated: false,
+        } as const;
       }
-      const trackedStatsResult = await runBounded(
-        "git",
-        [
-          "diff",
-          "--shortstat",
-          "--no-renames",
-          "--no-ext-diff",
-          "--no-textconv",
-          "HEAD",
+      if (repository.stdout.trim() !== "true") {
+        throw new Error("desktop_sandbox_diff_failed");
+      }
+
+      const headResult = await runGit({
+        args: ["rev-parse", "--verify", "HEAD"],
+        maximumOutputBytes: 128,
+      });
+      const head =
+        headResult.exitCode === 0
+          ? requireGitHead(headResult.stdout.trim())
+          : headResult.exitCode === 128
+            ? null
+            : failGitDiff();
+      const branchResult = await runGit({
+        args: ["symbolic-ref", "--quiet", "--short", "HEAD"],
+        maximumOutputBytes: MAX_GIT_BRANCH_BYTES + 1,
+      });
+      const branch =
+        branchResult.exitCode === 0
+          ? requireGitBranch(branchResult.stdout.replace(/[\r\n]+$/u, ""))
+          : branchResult.exitCode === 1 || branchResult.exitCode === 128
+            ? null
+            : failGitDiff();
+
+      let diff = "";
+      let diffTruncated = false;
+      let changedFiles = 0;
+      let additions = 0;
+      let deletions = 0;
+      let statsComplete = head !== null;
+      const appendDiff = (value: string) => {
+        const remaining = MAX_DIFF_BYTES - Buffer.byteLength(diff);
+        if (remaining > 0) diff += truncateUtf8(value, remaining);
+      };
+      const trackedArgs = [
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-color",
+        "--unified=3",
+      ];
+      if (head !== null) {
+        if (includeDiff) {
+          const tracked = await runGit({
+            args: [...trackedArgs, "HEAD", "--", ...GIT_WORKSPACE_PATHSPEC],
+            maximumOutputBytes: MAX_DIFF_BYTES,
+          });
+          if (tracked.exitCode !== 0) failGitDiff();
+          appendDiff(tracked.stdout);
+          diffTruncated = tracked.stdoutTruncated;
+        }
+        const trackedStatsResult = await runGit({
+          args: [
+            "diff",
+            "--shortstat",
+            "--no-renames",
+            "--no-ext-diff",
+            "--no-textconv",
+            "HEAD",
+            "--",
+            ...GIT_WORKSPACE_PATHSPEC,
+          ],
+          maximumOutputBytes: 1_024,
+          environment: gitLocaleEnvironment(),
+        });
+        if (trackedStatsResult.exitCode !== 0) failGitDiff();
+        const trackedStats = parseGitShortstat(trackedStatsResult.stdout);
+        changedFiles += trackedStats.changedFiles;
+        additions += trackedStats.additions;
+        deletions += trackedStats.deletions;
+        statsComplete =
+          statsComplete &&
+          !trackedStatsResult.stdoutTruncated &&
+          trackedStats.complete;
+      } else if (includeDiff) {
+        const staged = await runGit({
+          args: [...trackedArgs, "--cached", "--", ...GIT_WORKSPACE_PATHSPEC],
+          maximumOutputBytes: MAX_DIFF_BYTES,
+        });
+        if (staged.exitCode !== 0) failGitDiff();
+        appendDiff(staged.stdout);
+        diffTruncated = staged.stdoutTruncated;
+        const remaining = MAX_DIFF_BYTES - Buffer.byteLength(diff);
+        if (remaining > 0) {
+          const unstaged = await runGit({
+            args: [...trackedArgs, "--", ...GIT_WORKSPACE_PATHSPEC],
+            maximumOutputBytes: remaining,
+          });
+          if (unstaged.exitCode !== 0) failGitDiff();
+          appendDiff(unstaged.stdout);
+          diffTruncated ||= unstaged.stdoutTruncated;
+        }
+      }
+
+      const untracked = await runGit({
+        args: [
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+          "-z",
           "--",
           ...GIT_WORKSPACE_PATHSPEC,
         ],
-        root,
-        MAX_COMMAND_TIMEOUT_SECONDS,
-        1_024,
-        gitLocaleEnvironment(),
-      );
-      if (trackedStatsResult.exitCode !== 0) failGitDiff();
-      const trackedStats = parseGitShortstat(trackedStatsResult.stdout);
-      changedFiles += trackedStats.changedFiles;
-      additions += trackedStats.additions;
-      deletions += trackedStats.deletions;
-      statsComplete =
-        statsComplete &&
-        !trackedStatsResult.stdoutTruncated &&
-        trackedStats.complete;
-    } else if (includeDiff) {
-      const staged = await runBounded(
-        "git",
-        [...trackedArgs, "--cached", "--", ...GIT_WORKSPACE_PATHSPEC],
-        root,
-        MAX_COMMAND_TIMEOUT_SECONDS,
-        MAX_DIFF_BYTES,
-      );
-      if (staged.exitCode !== 0) failGitDiff();
-      appendDiff(staged.stdout);
-      diffTruncated = staged.stdoutTruncated;
-      const remaining = MAX_DIFF_BYTES - Buffer.byteLength(diff);
-      if (remaining > 0) {
-        const unstaged = await runBounded(
-          "git",
-          [...trackedArgs, "--", ...GIT_WORKSPACE_PATHSPEC],
-          root,
-          MAX_COMMAND_TIMEOUT_SECONDS,
-          remaining,
-        );
-        if (unstaged.exitCode !== 0) failGitDiff();
-        appendDiff(unstaged.stdout);
-        diffTruncated ||= unstaged.stdoutTruncated;
+        maximumOutputBytes: MAX_GIT_PATH_LIST_BYTES,
+      });
+      if (untracked.exitCode !== 0) failGitDiff();
+      const untrackedPaths = untracked.stdout.split("\0");
+      if (untracked.stdout && !untracked.stdout.endsWith("\0")) {
+        untrackedPaths.pop();
       }
-    }
-
-    const untracked = await runBounded(
-      "git",
-      [
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        "-z",
-        "--",
-        ...GIT_WORKSPACE_PATHSPEC,
-      ],
-      root,
-      MAX_COMMAND_TIMEOUT_SECONDS,
-      MAX_GIT_PATH_LIST_BYTES,
-    );
-    if (untracked.exitCode !== 0) failGitDiff();
-    const untrackedPaths = untracked.stdout.split("\0");
-    if (untracked.stdout && !untracked.stdout.endsWith("\0")) {
-      untrackedPaths.pop();
-    }
-    const allUntrackedPaths = untrackedPaths.filter(Boolean);
-    if (
-      untracked.stdoutTruncated ||
-      allUntrackedPaths.length > MAX_UNTRACKED_FILES
-    ) {
-      statsComplete = false;
-      diffTruncated = includeDiff;
-    }
-    for (const relativePath of allUntrackedPaths.slice(
-      0,
-      MAX_UNTRACKED_FILES,
-    )) {
+      const allUntrackedPaths = untrackedPaths.filter(Boolean);
       if (
-        isAbsolute(relativePath) ||
-        relativePath.split("/").some((segment) => segment === "..")
+        untracked.stdoutTruncated ||
+        allUntrackedPaths.length > MAX_UNTRACKED_FILES
       ) {
-        failGitDiff();
-      }
-      if (Number.isSafeInteger(changedFiles + 1)) {
-        changedFiles += 1;
-      } else {
         statsComplete = false;
+        diffTruncated = includeDiff;
       }
-      const fileStatsResult = await runBounded(
-        "git",
-        [
-          "diff",
-          "--shortstat",
-          "--no-renames",
-          "--no-ext-diff",
-          "--no-textconv",
-          "--no-index",
-          "--",
-          gitNullDevice(process.platform),
-          relativePath,
-        ],
-        root,
-        MAX_COMMAND_TIMEOUT_SECONDS,
-        1_024,
-        gitLocaleEnvironment(),
-      );
-      if (fileStatsResult.exitCode !== 0 && fileStatsResult.exitCode !== 1) {
-        failGitDiff();
-      }
-      if (fileStatsResult.stdout) {
-        const fileStats = parseGitShortstat(fileStatsResult.stdout);
-        const nextAdditions = additions + fileStats.additions;
-        const nextDeletions = deletions + fileStats.deletions;
+      for (const relativePath of allUntrackedPaths.slice(
+        0,
+        MAX_UNTRACKED_FILES,
+      )) {
         if (
-          Number.isSafeInteger(nextAdditions) &&
-          Number.isSafeInteger(nextDeletions)
+          isAbsolute(relativePath) ||
+          relativePath.split("/").some((segment) => segment === "..")
         ) {
-          additions = nextAdditions;
-          deletions = nextDeletions;
+          failGitDiff();
+        }
+        if (Number.isSafeInteger(changedFiles + 1)) {
+          changedFiles += 1;
         } else {
           statsComplete = false;
         }
-        statsComplete =
-          statsComplete &&
-          !fileStatsResult.stdoutTruncated &&
-          fileStats.complete &&
-          fileStats.changedFiles === 1;
-      } else {
-        try {
-          const metadata = lstatSync(join(root, relativePath));
-          statsComplete =
-            statsComplete && metadata.isFile() && metadata.size === 0;
-        } catch {
-          statsComplete = false;
+        const fileStatsResult = await runGit({
+          args: [
+            "diff",
+            "--shortstat",
+            "--no-renames",
+            "--no-ext-diff",
+            "--no-textconv",
+            "--no-index",
+            "--",
+            gitNullDevice(process.platform),
+            relativePath,
+          ],
+          maximumOutputBytes: 1_024,
+          environment: gitLocaleEnvironment(),
+        });
+        if (fileStatsResult.exitCode !== 0 && fileStatsResult.exitCode !== 1) {
+          failGitDiff();
         }
+        if (fileStatsResult.stdout) {
+          const fileStats = parseGitShortstat(fileStatsResult.stdout);
+          const nextAdditions = additions + fileStats.additions;
+          const nextDeletions = deletions + fileStats.deletions;
+          if (
+            Number.isSafeInteger(nextAdditions) &&
+            Number.isSafeInteger(nextDeletions)
+          ) {
+            additions = nextAdditions;
+            deletions = nextDeletions;
+          } else {
+            statsComplete = false;
+          }
+          statsComplete =
+            statsComplete &&
+            !fileStatsResult.stdoutTruncated &&
+            fileStats.complete &&
+            fileStats.changedFiles === 1;
+        } else {
+          try {
+            const metadata = lstatSync(join(root, relativePath));
+            statsComplete =
+              statsComplete && metadata.isFile() && metadata.size === 0;
+          } catch {
+            statsComplete = false;
+          }
+        }
+        if (!includeDiff) continue;
+        const remaining = MAX_DIFF_BYTES - Buffer.byteLength(diff);
+        if (remaining <= 0) {
+          diffTruncated = true;
+          continue;
+        }
+        const patch = await runGit({
+          args: [
+            ...trackedArgs,
+            "--no-index",
+            "--",
+            gitNullDevice(process.platform),
+            relativePath,
+          ],
+          maximumOutputBytes: remaining,
+        });
+        if (patch.exitCode !== 0 && patch.exitCode !== 1) failGitDiff();
+        diffTruncated ||= patch.stdoutTruncated;
+        if (diff && patch.stdout && !diff.endsWith("\n")) appendDiff("\n");
+        appendDiff(patch.stdout);
       }
-      if (!includeDiff) continue;
-      const remaining = MAX_DIFF_BYTES - Buffer.byteLength(diff);
-      if (remaining <= 0) {
-        diffTruncated = true;
-        continue;
-      }
-      const patch = await runBounded(
-        "git",
-        [
-          ...trackedArgs,
-          "--no-index",
-          "--",
-          gitNullDevice(process.platform),
-          relativePath,
-        ],
-        root,
-        MAX_COMMAND_TIMEOUT_SECONDS,
-        remaining,
-      );
-      if (patch.exitCode !== 0 && patch.exitCode !== 1) failGitDiff();
-      diffTruncated ||= patch.stdoutTruncated;
-      if (diff && patch.stdout && !diff.endsWith("\n")) appendDiff("\n");
-      appendDiff(patch.stdout);
-    }
 
-    this.authority.assertRootCurrent(workspace);
-    return {
-      cwd: VIRTUAL_ROOT,
-      diff,
-      isGitRepository: true,
-      branch,
-      head,
-      changedFiles,
-      additions,
-      deletions,
-      statsComplete,
-      diffTruncated,
-    } as const;
+      this.authority.assertRootCurrent(workspace);
+      return {
+        cwd: VIRTUAL_ROOT,
+        diff,
+        isGitRepository: true,
+        branch,
+        head,
+        changedFiles,
+        additions,
+        deletions,
+        statsComplete,
+        diffTruncated,
+      } as const;
+    });
   }
 
   async runCommand(value: unknown) {
@@ -534,11 +463,13 @@ export class LocalWorkspaceSandbox {
       process.platform === "win32"
         ? ["/D", "/S", "/C", value.command]
         : ["-lc", value.command];
-    const result = await runBounded(
-      shell,
-      args,
-      resolved.target,
-      timeoutSeconds,
+    const result = await withWorkspaceProcesses((run) =>
+      run({
+        command: shell,
+        args,
+        cwd: resolved.target,
+        timeoutMs: timeoutSeconds * 1_000,
+      }),
     );
     return {
       cwd: resolved.virtualPath,
@@ -596,60 +527,6 @@ function requireDirectory(path: string): string {
 function virtualPathFor(root: string, path: string): string {
   const suffix = relative(root, path).split(sep).filter(Boolean).join("/");
   return suffix ? `${VIRTUAL_ROOT}/${suffix}` : VIRTUAL_ROOT;
-}
-
-function runBounded(
-  command: string,
-  args: string[],
-  cwd: string,
-  timeoutSeconds: number,
-  maximumOutputBytes = MAX_COMMAND_OUTPUT_BYTES,
-  environment: NodeJS.ProcessEnv = process.env,
-) {
-  return new Promise<{
-    exitCode: number;
-    stdout: string;
-    stderr: string;
-    stdoutTruncated: boolean;
-    stderrTruncated: boolean;
-  }>((resolveRun, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: environment,
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let stdoutBytes = 0;
-    let stderrBytes = 0;
-    const collect = (target: Buffer[], chunk: Buffer, current: number) => {
-      const remaining = Math.max(0, maximumOutputBytes - current);
-      if (remaining > 0) target.push(chunk.subarray(0, remaining));
-      return current + chunk.byteLength;
-    };
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdoutBytes = collect(stdout, chunk, stdoutBytes);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrBytes = collect(stderr, chunk, stderrBytes);
-    });
-    const timeout = setTimeout(
-      () => child.kill("SIGTERM"),
-      timeoutSeconds * 1_000,
-    );
-    child.once("error", reject);
-    child.once("close", (code) => {
-      clearTimeout(timeout);
-      resolveRun({
-        exitCode: code ?? 124,
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-        stdoutTruncated: stdoutBytes > maximumOutputBytes,
-        stderrTruncated: stderrBytes > maximumOutputBytes,
-      });
-    });
-  });
 }
 
 export function gitNullDevice(platform: NodeJS.Platform): string {

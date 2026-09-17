@@ -161,6 +161,7 @@ describe("AppCommandShellRoute task detail integration", () => {
         isSending={false}
         linkedThreads={[selectedThread]}
         locale="zh"
+        platform="mac"
         selectedThread={selectedThread}
         selectedThreadId={selectedThread.id}
         workMode="code"
@@ -238,7 +239,7 @@ describe("AppCommandShellRoute task detail integration", () => {
     expect(routeStyles).toContain("z-index: 50");
     expect(detailStyles).toContain("grid-column: 1 / 2");
     expect(detailStyles).toContain("grid-row: 1 / 2");
-    expect(detailStyles).toContain("justify-self: stretch");
+    expect(detailStyles).toContain("width: min(336px, calc(100% - 16px))");
     expect(detailStyles).not.toContain(".command-workbench");
   });
 });

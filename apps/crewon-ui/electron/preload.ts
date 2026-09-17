@@ -1,20 +1,50 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import {
+  type AgentPlatformCredentialCatalog,
+  type AgentPlatformCredentialUpsertRequest,
   DESKTOP_BRIDGE_VERSION,
   type CloudAgentProfileEntry,
   type CrewonDesktopBridge,
-  type DesktopHttpBodyEvent,
   type DesktopHttpResponse,
   type DesktopUpdateInfo,
   type DesktopUpdateProgress,
 } from "../src/lib/desktop/desktopBridge.ts";
+import {
+  DESKTOP_HTTP_VERSION,
+  type DesktopHttpReadResult,
+  type DesktopHttpWireResult,
+} from "../src/lib/desktop/desktopHttpProtocol.ts";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>;
 
+const invokeHttp = async <T>(channel: string, value: unknown): Promise<T> => {
+  const result = await invoke<DesktopHttpWireResult<T>>(channel, value);
+  if (!result || typeof result.ok !== "boolean")
+    throw new Error("desktop_http_version_incompatible");
+  if (!result.ok) throw new Error(result.error);
+  return result.value;
+};
+
 const bridge: CrewonDesktopBridge = {
   version: DESKTOP_BRIDGE_VERSION,
+  agentPlatformCredentials: {
+    catalog: () =>
+      invoke<AgentPlatformCredentialCatalog>(
+        "crewon:agent-platform-credentials:catalog",
+      ),
+    upsert: (request: AgentPlatformCredentialUpsertRequest) =>
+      invoke<AgentPlatformCredentialCatalog>(
+        "crewon:agent-platform-credentials:upsert",
+        request,
+      ),
+    delete: (origin) =>
+      invoke<AgentPlatformCredentialCatalog>(
+        "crewon:agent-platform-credentials:delete",
+        origin,
+      ),
+  },
   runtime: {
     bootstrap: () => invoke<unknown>("crewon:runtime:bootstrap"),
     reloadProvider: () => invoke<void>("crewon:runtime:reload-provider"),
@@ -22,27 +52,12 @@ const bridge: CrewonDesktopBridge = {
       invoke<void>("crewon:runtime:update-cloud-agent-profiles", profiles),
   },
   http: {
-    fetch: (request, onBodyEvent) => {
-      const handler = (
-        _event: unknown,
-        requestId: string,
-        bodyEvent: DesktopHttpBodyEvent,
-      ) => {
-        if (requestId !== request.requestId) return;
-        onBodyEvent(bodyEvent);
-        if (bodyEvent.type === "end" || bodyEvent.type === "error") {
-          ipcRenderer.removeListener("crewon:http:body", handler);
-        }
-      };
-      ipcRenderer.on("crewon:http:body", handler);
-      return invoke<DesktopHttpResponse>("crewon:http:fetch", request).catch(
-        (error: unknown) => {
-          ipcRenderer.removeListener("crewon:http:body", handler);
-          throw error;
-        },
-      );
-    },
-    abort: (requestId) => invoke<void>("crewon:http:abort", requestId),
+    version: DESKTOP_HTTP_VERSION,
+    fetch: (request) =>
+      invokeHttp<DesktopHttpResponse>("crewon:http:open-v2", request),
+    read: (requestId) =>
+      invokeHttp<DesktopHttpReadResult>("crewon:http:read-v2", requestId),
+    abort: (requestId) => invokeHttp<void>("crewon:http:abort-v2", requestId),
   },
   sandbox: {
     listDirectory: (path) =>

@@ -792,6 +792,107 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/threads/{threadId}/message-window": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read a bounded standard-view message window in ascending order. Without a cursor returns the newest messages. Cursors are exclusive, thread-scoped and revision-bound; a concurrent append or rollback returns 409. A page may split a logical turn. No audit data is included. */
+    get: operations["getThreadMessageWindow"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/thread-catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Bounded live catalog, newest first. Scans at most limit candidates and returns literal Unicode lowercase display-title matches. Empty data with a cursor is not end-of-search. Cursors bind status, search and excludeForks. Concurrent changes can move rows; refresh starts at the current head. Existing /threads semantics are unchanged. */
+    get: operations["getThreadCatalog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/active-run": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the current non-terminal Run independently of history pagination */
+    get: operations["getThreadActiveRun"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/transcript-window": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read one revision-bound message window and its exact Run bindings from immutable admission receipts and completion events. Requires thread:read and run:read for each referenced Run. Missing legacy evidence is explicitly unassociated; timestamps are never used to infer a Run. A page may begin or end within a logical turn. */
+    get: operations["getThreadTranscriptWindow"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/offices/{officeVersionId}/thread": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getOfficeThread"];
+    put?: never;
+    post: operations["createOfficeThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/offices/{officeVersionId}/thread-binding": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Explicitly adopt an existing same-space thread with revision CAS. An association is immutable; the same association is idempotent without a command receipt. */
+    post: operations["bindOfficeThread"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -800,6 +901,8 @@ export interface components {
       memberId: string;
       displayName: string;
       agentVersionId: string;
+      /** @description Optional immutable responsibility used to coordinate this Office member without an extra planning round. */
+      responsibility?: string;
     };
     OfficeExecutionTarget: {
       targetId: string;
@@ -995,6 +1098,8 @@ export interface components {
     ThreadView: {
       threadId: string;
       title: string | null;
+      /** @description Optional bounded display-only fallback for historical unnamed conversations. Not an authoritative title or a thread revision change. */
+      displayTitle?: string;
       status: components["schemas"]["ThreadStatus"];
       revision: number;
       lastMessageSequence: number;
@@ -2022,6 +2127,60 @@ export interface components {
       credentialKind: components["schemas"]["ModelProviderCredentialKind"];
       environmentVariable: string | null;
       isActive: boolean;
+    };
+    GetThreadMessageWindowResponse: {
+      /** @constant */
+      schemaVersion: "crewon.message-window.v0";
+      threadId: string;
+      threadRevision: number;
+      eventSequence: number;
+      headMessageSequence: number;
+      data: components["schemas"]["MessageView"][];
+      olderCursor: string | null;
+      newerCursor: string | null;
+    };
+    ThreadCatalogResponse: {
+      /** @constant */
+      schemaVersion: "crewon.thread-catalog.v0";
+      data: components["schemas"]["ThreadView"][];
+      scannedCount: number;
+      olderCursor: string | null;
+      newerCursor: string | null;
+    };
+    GetThreadActiveRunResponse: {
+      /** @constant */
+      schemaVersion: "crewon.thread-active-run.v0";
+      threadId: string;
+      run: components["schemas"]["RunView"] | null;
+    };
+    GetThreadTranscriptWindowResponse: {
+      /** @constant */
+      schemaVersion: "crewon.transcript-window.v0";
+      messageWindow: components["schemas"]["GetThreadMessageWindowResponse"];
+      /** @description Exactly one entry per message, in the same order. */
+      runBindings: {
+        messageId: string;
+        runId: string | null;
+        /** @enum {string} */
+        source: "turnStartReceipt" | "messageCompletedEvent" | "unassociated";
+      }[];
+    };
+    OfficeThreadResponse: {
+      officeId: string;
+      officeVersionId: string;
+      thread: components["schemas"]["ThreadView"] | null;
+    };
+    OfficeThreadMutationResponse: {
+      officeId: string;
+      officeVersionId: string;
+      thread: components["schemas"]["ThreadView"];
+      /** @enum {string} */
+      disposition: "created" | "bound" | "existing";
+    };
+    CreateOfficeThreadRequest: Record<string, never>;
+    BindOfficeThreadRequest: {
+      threadId: string;
+      expectedRevision: number;
     };
   };
   responses: {
@@ -4033,6 +4192,233 @@ export interface operations {
         };
       };
       503: components["responses"]["Error"];
+    };
+  };
+  getThreadMessageWindow: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One consistent message window; body size may reduce the requested number of rows. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadMessageWindowResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadCatalog: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+        status?: "active" | "archived";
+        search?: string;
+        excludeForks?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded catalog with scanned candidate navigation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadCatalogResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadActiveRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current Run or null; multiple non-terminal Runs fail closed. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadActiveRunResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadTranscriptWindow: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One consistent message window; body size may reduce the requested number of rows. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadTranscriptWindowResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getOfficeThread: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        officeVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authoritative Office thread association, or unbound */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OfficeThreadResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createOfficeThread: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        officeVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateOfficeThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description Existing Office thread */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OfficeThreadMutationResponse"];
+        };
+      };
+      /** @description Atomically created and associated Office thread */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OfficeThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  bindOfficeThread: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        officeVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BindOfficeThreadRequest"];
+      };
+    };
+    responses: {
+      /** @description Bound or already associated Office thread */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OfficeThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
     };
   };
 }

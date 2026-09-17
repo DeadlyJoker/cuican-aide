@@ -1,3 +1,4 @@
+import type { ThreadCatalogNavigation } from "../lib/thread/threadCatalogNavigation";
 import { Settings2 } from "lucide-react";
 import {
   useEffect,
@@ -23,6 +24,7 @@ import { SidebarThreadList } from "./SidebarThreadList";
 import { sidebarNavItemClass } from "./sidebarStyles";
 
 type SidebarProps = {
+  threadCatalogNavigation?: ThreadCatalogNavigation;
   threads: Thread[];
   selectedThreadId: string | null;
   clearSearchLabel: string;
@@ -66,6 +68,7 @@ type SidebarProps = {
 };
 
 export function Sidebar({
+  threadCatalogNavigation,
   threads,
   selectedThreadId,
   clearSearchLabel,
@@ -198,6 +201,7 @@ export function Sidebar({
 
       {isSearchOpen || searchTerm ? (
         <SidebarSearchBox
+          maxLength={threadCatalogNavigation ? 256 : undefined}
           clearSearchLabel={clearSearchLabel}
           searchInputRef={searchInputRef}
           searchPlaceholder={searchPlaceholder}

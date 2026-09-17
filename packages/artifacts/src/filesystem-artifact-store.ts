@@ -4,18 +4,7 @@ import {
   createHash,
   randomBytes,
 } from "node:crypto";
-import {
-  chmodSync,
-  closeSync,
-  existsSync,
-  fsyncSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -26,19 +15,41 @@ import {
   type ArtifactStorePort,
   type PutArtifactInput,
   type PutArtifactResult,
+  type ArtifactRetentionStore,
 } from "@crewon/application";
 import { parseArtifactRecord, type ArtifactRecord } from "@crewon/domain";
+import { ArtifactRetentionQuery } from "./artifact-retention-query.ts";
+import {
+  configureArtifactRetention,
+  maintainFilesystemArtifacts,
+  artifactIsRetired,
+} from "./artifact-retention.ts";
+import {
+  artifactStagingPath,
+  discardArtifactStaging,
+  promoteArtifactBlob,
+  readBoundedArtifactBlob,
+  stageArtifactBlob,
+  validateArtifactDirectories,
+} from "./artifact-blob-file.ts";
 
 const FILE_MAGIC = Buffer.from("CRWARTV0", "ascii");
 const IV_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 const HEADER_BYTES = FILE_MAGIC.byteLength + IV_BYTES + AUTH_TAG_BYTES;
 const DEFAULT_MAX_INLINE_BYTES = 1024 * 1024;
+const ARTIFACT_ROW_COLUMNS = `
+  CASE WHEN length(CAST(tenant_id AS BLOB))<=512 THEN tenant_id ELSE NULL END AS tenant_id,
+  CASE WHEN length(CAST(artifact_id AS BLOB))<=512 THEN artifact_id ELSE NULL END AS artifact_id,
+  CASE WHEN length(CAST(fingerprint AS BLOB))<=128 THEN fingerprint ELSE NULL END AS fingerprint,
+  CASE WHEN length(CAST(record_json AS BLOB))<=16384 THEN record_json ELSE NULL END AS record_json,
+  state,
+  CASE WHEN length(CAST(relative_path AS BLOB))<=256 THEN relative_path ELSE NULL END AS relative_path,
+  CASE WHEN length(CAST(iv_base64 AS BLOB))<=64 THEN iv_base64 ELSE NULL END AS iv_base64`;
 
 type ArtifactRow = Readonly<{
   tenant_id: string;
   artifact_id: string;
-  idempotency_key: string;
   fingerprint: string;
   record_json: string;
   state: "writing" | "ready";
@@ -54,6 +65,42 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
   readonly #keyId: string;
   readonly #maxInlineBytes: number;
   #closed = false;
+  #maintenance: Promise<unknown> | null = null;
+  readonly #maintenanceAbort = new AbortController();
+  readonly #retentionQuery = new ArtifactRetentionQuery();
+  readonly retention: ArtifactRetentionStore = {
+    resourceSnapshot: () => this.#retentionQuery.resourceSnapshot(),
+    maintainArtifacts: async (input) => {
+      this.#assertOpen();
+      if (this.#maintenance !== null || !this.#retentionQuery.available)
+        return {
+          disposition: "deferred",
+          indexed: 0,
+          checked: 0,
+          deleted: 0,
+          deletedBytes: 0,
+          recovered: 0,
+          recoveredBytes: 0,
+          recoveryDeferred: 0,
+        };
+      const work = maintainFilesystemArtifacts({
+        ...input,
+        policy: { ...input.policy },
+        signal: AbortSignal.any([input.signal, this.#maintenanceAbort.signal]),
+        database: this.#database,
+        blobDirectory: this.#blobDirectory,
+        relativeBlobPath,
+        authorityQuery: this.#retentionQuery,
+        recoverWriting: (candidate) => this.#recoverWriting(candidate),
+      });
+      this.#maintenance = work;
+      try {
+        return await work;
+      } finally {
+        if (this.#maintenance === work) this.#maintenance = null;
+      }
+    },
+  };
 
   constructor(config: {
     rootDirectory: string;
@@ -160,6 +207,18 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
 
     const storedRecord = parseStoredRecord(row.record_json);
     try {
+      this.#validateRow(row, storedRecord);
+      if (
+        artifactIsRetired(
+          this.#database,
+          record.tenantId,
+          storedRecord.artifactId,
+        )
+      )
+        return {
+          disposition: "replayed",
+          record: structuredClone(storedRecord),
+        };
       if (row.state === "writing") {
         this.#finishWrite(row, storedRecord, input.content);
       } else {
@@ -176,9 +235,10 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     validateLocator(locator);
     try {
       const row = this.#loadByArtifactId(locator.tenantId, locator.artifactId);
-      return row?.state === "ready"
-        ? structuredClone(parseStoredRecord(row.record_json))
-        : null;
+      if (row?.state !== "ready") return null;
+      const record = parseStoredRecord(row.record_json);
+      this.#validateRow(row, record);
+      return structuredClone(record);
     } catch (error) {
       throw normalizeError(error);
     }
@@ -192,6 +252,10 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
       if (row === null || row.state !== "ready") {
         return null;
       }
+      if (
+        artifactIsRetired(this.#database, locator.tenantId, locator.artifactId)
+      )
+        return null;
       const record = parseStoredRecord(row.record_json);
       const content = this.#decrypt(row, record);
       this.#validateContent(record, content);
@@ -205,9 +269,16 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     if (this.#closed) {
       return;
     }
+    this.#closed = true;
+    this.#maintenanceAbort.abort("artifact_store_closed");
+    this.#retentionQuery.close();
+    try {
+      await this.#maintenance;
+    } catch {
+      /* maintenance cannot prevent normal close */
+    }
     this.#database.close();
     this.#encryptionKey.fill(0);
-    this.#closed = true;
   }
 
   #finishWrite(
@@ -215,40 +286,104 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     record: ArtifactRecord,
     content: Uint8Array,
   ): void {
-    const finalPath = this.#resolveBlobPath(row.relative_path);
-    if (existsSync(finalPath)) {
-      const recovered = this.#decrypt(row, record);
-      this.#validateContent(record, recovered);
-    } else {
-      mkdirSync(path.dirname(finalPath), { recursive: true, mode: 0o700 });
-      const encrypted = this.#encrypt(row, record, content);
-      writeAtomic(finalPath, encrypted);
-    }
-
+    // This separate artifact database lock owns the deterministic staging filename.
+    // It is released by process death; Run/event transactions use a different database.
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const result = this.#database
-        .prepare(
-          `UPDATE artifacts
-           SET state = 'ready'
-           WHERE tenant_id = ? AND artifact_id = ? AND state = 'writing'`,
-        )
-        .run(row.tenant_id, row.artifact_id);
-      if (result.changes !== 0 && result.changes !== 1) {
-        throw new ArtifactStoreError("artifact_finalize_failed");
-      }
-      const finalized = this.#requireByArtifactId(
-        row.tenant_id,
-        row.artifact_id,
-      );
-      if (finalized.state !== "ready") {
-        throw new ArtifactStoreError("artifact_finalize_failed");
+      const current = this.#requireByArtifactId(row.tenant_id, row.artifact_id);
+      if (
+        current.record_json !== row.record_json ||
+        current.iv_base64 !== row.iv_base64 ||
+        current.fingerprint !== row.fingerprint
+      )
+        throw new ArtifactStoreError("artifact_metadata_invalid");
+      this.#validateRow(current, record);
+      if (!artifactIsRetired(this.#database, row.tenant_id, row.artifact_id)) {
+        const finalPath = this.#resolveBlobPath(current.relative_path);
+        if (current.state === "ready" || existsSync(finalPath)) {
+          this.#validateContent(record, this.#decrypt(current, record));
+          discardArtifactStaging(finalPath);
+        } else {
+          mkdirSync(path.dirname(finalPath), { recursive: true, mode: 0o700 });
+          validateArtifactDirectories(this.#blobDirectory, finalPath);
+          stageArtifactBlob(finalPath, this.#encrypt(current, record, content));
+        }
+        this.#markReady(current);
       }
       this.#database.exec("COMMIT");
     } catch (error) {
       rollback(this.#database);
       throw error;
     }
+  }
+
+  #markReady(row: ArtifactRow): void {
+    const changed = this.#database
+      .prepare(
+        "UPDATE artifacts SET state = 'ready' WHERE tenant_id = ? AND artifact_id = ? AND state = 'writing'",
+      )
+      .run(row.tenant_id, row.artifact_id);
+    if (
+      (changed.changes !== 0 && changed.changes !== 1) ||
+      this.#requireByArtifactId(row.tenant_id, row.artifact_id).state !==
+        "ready"
+    )
+      throw new ArtifactStoreError("artifact_finalize_failed");
+  }
+
+  #recoverWriting(input: {
+    tenantId: string;
+    artifactId: string;
+    maxBytes: number;
+  }): boolean {
+    this.#assertOpen();
+    const prior = Number(
+      this.#database.prepare("PRAGMA busy_timeout").get()!.timeout,
+    );
+    this.#database.exec("PRAGMA busy_timeout=0");
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const row = this.#requireByArtifactId(input.tenantId, input.artifactId);
+      const record = parseStoredRecord(row.record_json);
+      this.#validateRow(row, record);
+      if (
+        row.state !== "writing" ||
+        record.byteLength > Math.min(input.maxBytes, this.#maxInlineBytes) ||
+        artifactIsRetired(this.#database, row.tenant_id, row.artifact_id)
+      ) {
+        this.#database.exec("COMMIT");
+        return false;
+      }
+      const finalPath = this.#resolveBlobPath(row.relative_path);
+      const location = existsSync(finalPath) ? "final" : "staging";
+      this.#validateContent(record, this.#decrypt(row, record, location));
+      if (location === "staging") promoteArtifactBlob(finalPath);
+      else discardArtifactStaging(finalPath);
+      this.#markReady(row);
+      this.#database.exec("COMMIT");
+      return true;
+    } catch {
+      // Busy writers, incomplete ciphertext, wrong keys and missing files never authorize loss.
+      // A failed metadata commit leaves a final blob that a later pass can authenticate again.
+      rollback(this.#database);
+      return false;
+    } finally {
+      this.#database.exec(`PRAGMA busy_timeout=${prior}`);
+    }
+  }
+
+  #validateRow(row: ArtifactRow, record: ArtifactRecord): void {
+    if (
+      row.tenant_id !== record.tenantId ||
+      row.artifact_id !== record.artifactId ||
+      row.relative_path !==
+        relativeBlobPath(record.tenantId, record.artifactId) ||
+      row.fingerprint !== artifactFingerprint(record)
+    )
+      throw new ArtifactStoreError("artifact_metadata_invalid");
+    if (typeof row.iv_base64 !== "string")
+      throw new ArtifactStoreError("artifact_iv_invalid");
+    parseIv(row.iv_base64);
   }
 
   #encrypt(
@@ -263,8 +398,20 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     return Buffer.concat([FILE_MAGIC, iv, cipher.getAuthTag(), ciphertext]);
   }
 
-  #decrypt(row: ArtifactRow, record: ArtifactRecord): Uint8Array {
-    const encrypted = readFileSync(this.#resolveBlobPath(row.relative_path));
+  #decrypt(
+    row: ArtifactRow,
+    record: ArtifactRecord,
+    location: "final" | "staging" = "final",
+  ): Uint8Array {
+    this.#validateRow(row, record);
+    if (record.byteLength > this.#maxInlineBytes)
+      throw new ArtifactStoreError("artifact_inline_content_too_large");
+    const finalPath = this.#resolveBlobPath(row.relative_path);
+    validateArtifactDirectories(this.#blobDirectory, finalPath);
+    const encrypted = readBoundedArtifactBlob(
+      location === "staging" ? artifactStagingPath(finalPath) : finalPath,
+      HEADER_BYTES + record.byteLength,
+    );
     if (
       encrypted.byteLength < HEADER_BYTES ||
       !encrypted.subarray(0, FILE_MAGIC.byteLength).equals(FILE_MAGIC)
@@ -321,8 +468,7 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     return (
       (this.#database
         .prepare(
-          `SELECT tenant_id, artifact_id, idempotency_key, fingerprint,
-                  record_json, state, relative_path, iv_base64
+          `SELECT ${ARTIFACT_ROW_COLUMNS}
            FROM artifacts
            WHERE tenant_id = ? AND idempotency_key = ?`,
         )
@@ -334,8 +480,7 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     return (
       (this.#database
         .prepare(
-          `SELECT tenant_id, artifact_id, idempotency_key, fingerprint,
-                  record_json, state, relative_path, iv_base64
+          `SELECT ${ARTIFACT_ROW_COLUMNS}
            FROM artifacts
            WHERE tenant_id = ? AND artifact_id = ?`,
         )
@@ -370,13 +515,66 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
 function configureDatabase(database: DatabaseSync): void {
   database.exec("PRAGMA busy_timeout = 5000");
   database.exec("PRAGMA journal_mode = WAL");
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS artifact_schema (
-      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-      version INTEGER NOT NULL CHECK (version = 1)
-    ) STRICT;
-    INSERT OR IGNORE INTO artifact_schema (singleton, version) VALUES (1, 1);
-
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const registry = database
+      .prepare(
+        "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='artifact_schema'",
+      )
+      .get();
+    const rows = registry
+      ? database.prepare("SELECT singleton,version FROM artifact_schema").all()
+      : [];
+    if (
+      registry &&
+      (rows.length !== 1 ||
+        rows[0]?.singleton !== 1 ||
+        ![1, 2].includes(Number(rows[0]?.version)))
+    )
+      throw new ArtifactStoreError("artifact_schema_unsupported");
+    const expected = registry
+      ? rows[0]?.version === 2
+        ? [
+            "artifacts",
+            "artifact_retention_queue",
+            "artifact_retention_due",
+            "artifact_maintenance",
+            "artifact_enqueue_retention",
+          ]
+        : ["artifacts"]
+      : [];
+    for (const name of expected) {
+      if (
+        database
+          .prepare("SELECT 1 FROM sqlite_schema WHERE name=?")
+          .get(name) === undefined
+      )
+        throw new ArtifactStoreError("artifact_schema_incomplete");
+    }
+    if (
+      !registry &&
+      database
+        .prepare(
+          "SELECT 1 FROM sqlite_schema WHERE name IN ('artifacts','artifact_retention_queue','artifact_maintenance') LIMIT 1",
+        )
+        .get()
+    )
+      throw new ArtifactStoreError("artifact_schema_incomplete");
+    if (rows[0]?.version === 2) {
+      const state = database
+        .prepare(
+          "SELECT singleton,indexed_tenant,indexed_artifact,indexing_complete,next_due_ms,owner FROM artifact_maintenance",
+        )
+        .all();
+      if (state.length !== 1 || state[0]?.singleton !== 1)
+        throw new ArtifactStoreError("artifact_schema_incomplete");
+    }
+    if (!registry || rows[0]?.version === 1) {
+      database.exec(
+        "DROP TABLE IF EXISTS artifact_schema; CREATE TABLE artifact_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL CHECK(version=2)) STRICT; INSERT INTO artifact_schema VALUES (1,2);",
+      );
+    }
+    database.exec(`
     CREATE TABLE IF NOT EXISTS artifacts (
       tenant_id TEXT NOT NULL,
       artifact_id TEXT NOT NULL,
@@ -390,11 +588,11 @@ function configureDatabase(database: DatabaseSync): void {
       UNIQUE (tenant_id, idempotency_key)
     ) STRICT;
   `);
-  const schema = database
-    .prepare("SELECT version FROM artifact_schema WHERE singleton = 1")
-    .get() as { version: number } | undefined;
-  if (schema?.version !== 1) {
-    throw new ArtifactStoreError("artifact_schema_unsupported");
+    configureArtifactRetention(database);
+    database.exec("COMMIT");
+  } catch (error) {
+    rollback(database);
+    throw error;
   }
 }
 
@@ -441,6 +639,8 @@ function aad(record: ArtifactRecord): Buffer {
 
 function parseStoredRecord(value: string): ArtifactRecord {
   try {
+    if (typeof value !== "string")
+      throw new ArtifactStoreError("artifact_metadata_invalid");
     return parseArtifactRecord(JSON.parse(value));
   } catch (error) {
     throw new ArtifactStoreError("artifact_metadata_invalid", { cause: error });
@@ -453,36 +653,6 @@ function parseIv(value: string): Buffer {
     throw new ArtifactStoreError("artifact_iv_invalid");
   }
   return iv;
-}
-
-function writeAtomic(filePath: string, content: Uint8Array): void {
-  const temporaryPath = `${filePath}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
-  let descriptor: number | null = null;
-  try {
-    descriptor = openSync(temporaryPath, "wx", 0o600);
-    let offset = 0;
-    while (offset < content.byteLength) {
-      offset += writeSync(descriptor, content, offset);
-    }
-    fsyncSync(descriptor);
-    closeSync(descriptor);
-    descriptor = null;
-    renameSync(temporaryPath, filePath);
-    const directory = openSync(path.dirname(filePath), "r");
-    try {
-      fsyncSync(directory);
-    } finally {
-      closeSync(directory);
-    }
-  } catch (error) {
-    if (descriptor !== null) {
-      closeSync(descriptor);
-    }
-    if (existsSync(temporaryPath)) {
-      unlinkSync(temporaryPath);
-    }
-    throw error;
-  }
 }
 
 function validateLocator(locator: ArtifactLocator): void {

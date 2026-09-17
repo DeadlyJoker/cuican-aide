@@ -1,3 +1,51 @@
+import { InMemoryModelPricingStore } from "./in-memory-model-pricing-store.ts";
+import { InMemoryModelSpendingStore } from "./in-memory-model-spending-store.ts";
+import { InMemoryRunExecutionProgressStore } from "./in-memory-run-execution-progress-store.ts";
+import { validateRunExecutionProgressRun } from "./run-execution-progress-support.ts";
+import {
+  isEmptyAssistantSample,
+  validateAssistantSampleAuthority,
+  validateAssistantSampleReplay,
+} from "./assistant-sample-continuation.ts";
+import { validateCheckpointRun } from "./compaction-checkpoint-support.ts";
+import { InMemoryCompactionCheckpointStore } from "./in-memory-compaction-checkpoint-store.ts";
+import type {
+  AppendRunProgressEventsInput,
+  AppendRunProgressEventsResult,
+  AppendRunStreamEventsInput,
+  AppendRunStreamEventsResult,
+  RunStreamEvent,
+} from "@crewon/application";
+import { InMemoryOfficeThreadStore } from "./in-memory-office-thread-store.ts";
+import { assertOfficeThreadReplay } from "./office-thread-binding.ts";
+import type {
+  BindOfficeThreadInput,
+  OfficeThreadLocator,
+} from "@crewon/application";
+import { InMemoryModelCallStore } from "./in-memory-model-call-store.ts";
+import { InMemoryRunMap } from "./in-memory-run-map.ts";
+import { activeRunFromRows } from "./active-run-read.ts";
+import { selectMemoryThreadList } from "./thread-list-query.ts";
+import { canceledReconciliationReceipt } from "./reconciliation-cancellation-wake.ts";
+import { InMemoryModelUsageStore } from "./in-memory-model-usage-store.ts";
+import { validateModelUsageAttempt } from "./model-usage-store-support.ts";
+import type {
+  RecordModelUsageInput,
+  RecordModelCallInput,
+  ModelUsagePageQuery,
+} from "@crewon/application";
+import {
+  validateToolSampleCommit,
+  validateToolSampleAuthority,
+  validateToolSampleReplay,
+} from "./tool-sample-commit.ts";
+import { InMemoryOutboxRetention } from "./in-memory-outbox-retention.ts";
+import type { OutboxRetentionStore } from "@crewon/application";
+import { InMemoryThreadMessageWindowStore } from "./in-memory-thread-message-window.ts";
+import { InMemoryMessageRunEvidence } from "./in-memory-message-run-evidence.ts";
+import type { ThreadMessageWindowStore } from "@crewon/application";
+import { InMemoryModelHistoryContextStore } from "./in-memory-model-history-context.ts";
+import { InMemoryModelHistoryAppendIndex } from "./in-memory-model-history-append.ts";
 import {
   reduceRunLifecycleEvent,
   reduceThreadLifecycleEvent,
@@ -19,6 +67,8 @@ import {
 
 import {
   RunStoreError,
+  type AppendRunOutputEventsInput,
+  type AppendRunOutputEventsResult,
   type ActivateAgentVersionReleaseResult,
   type ActiveAgentVersionRelease,
   type AgentVersionAsset,
@@ -41,6 +91,7 @@ import {
   type CommitLeasedRunTerminalInput,
   type CommitContextCompactionInput,
   type CommitAssistantSampleContinuationInput,
+  type CommitToolSampleInput,
   type CommitAssistantSampleContinuationResult,
   type CommitContextCompactionResult,
   type CommitToolExecutionCompletionInput,
@@ -71,6 +122,7 @@ import {
   type PrepareModelProviderSettingsInput,
   type PrepareModelProviderSettingsResult,
   type DomainStore,
+  type ModelHistoryContextStore,
   type MessageRecord,
   type MessageInvalidation,
   type MessageView,
@@ -223,7 +275,6 @@ import {
   validateLimit,
   validateMessagePage,
   validateMessageView,
-  validateModelHistoryAppend,
   validateModelHistoryPage,
   validateMessages,
   validateOutbox,
@@ -284,6 +335,12 @@ import {
   createThreadGoalEvent,
   validateStoredThreadGoalEventPage,
 } from "./thread-goal-event-support.ts";
+import {
+  legacyRunOutputReceipt,
+  prepareRunOutputAppend,
+  validateRunOutputAppend,
+  type RunOutputReceipt,
+} from "./run-output-append.ts";
 import { validateStoredThreadEventPage } from "./thread-event-support.ts";
 
 type IdempotencyReceipt = Readonly<{
@@ -345,6 +402,73 @@ type ModelProviderSettingsOperationRecord = Readonly<{
 }>;
 
 export class InMemoryRunStore implements DomainStore {
+  readonly executionProgress = new InMemoryRunExecutionProgressStore(input => {
+    validateRunExecutionProgressRun(input, this.#runs.get(input.scope.runId) ?? null);
+    this.#validateExecutionLease(input.scope.tenantId, input.scope.runId, input.lease);
+  }, (scope, sequence) => this.#events.get(scope.runId)?.[sequence - 1]?.eventId ?? null);
+  readonly compactionCheckpoints = new InMemoryCompactionCheckpointStore(input => {
+    validateCheckpointRun(input, this.#runs.get(input.scope.runId) ?? null);
+    this.#validateExecutionLease(input.scope.tenantId, input.scope.runId, input.lease);
+    validateModelUsageAttempt({ lease: input.lease, record: input.scope }, this.#executionAuthority.loadAttempt(input.scope), this.#executionAuthority.loadStep(input.scope));
+  });
+  readonly #modelUsage = new InMemoryModelUsageStore((input) => {
+    this.#validateExecutionLease(
+      input.record.tenantId,
+      input.record.runId,
+      input.lease,
+    );
+    validateModelUsageAttempt(
+      input,
+      this.#executionAuthority.loadAttempt(input.record),
+      this.#executionAuthority.loadStep(input.record),
+    );
+  }, (record) => this.#modelCalls.generationForUsage(record), { settleSpending: record => this.modelSpending.settle(record) });
+
+  recordModelUsage(input: RecordModelUsageInput) {
+    return this.#modelUsage.recordModelUsage(input);
+  }
+
+  listModelUsage(query: ModelUsagePageQuery) {
+    return this.#modelUsage.listModelUsage(query);
+  }
+
+  readonly modelPricing = new InMemoryModelPricingStore();
+  readonly modelSpending = new InMemoryModelSpendingStore({
+    goal: scope => this.#threadGoals.get(scope.threadId) ?? null,
+    model: call => {
+      const asset = this.#agentVersions.get(stableJson([call.tenantId, call.observation.agentVersionId]));
+      return asset === undefined ? null : JSON.parse(asset.definitionJson).model;
+    },
+  });
+  readonly #modelCalls = new InMemoryModelCallStore(
+    (input) => {
+      this.#validateExecutionLease(
+        input.record.tenantId,
+        input.record.runId,
+        input.lease,
+      );
+      validateModelUsageAttempt(
+        input,
+        this.#executionAuthority.loadAttempt(input.record),
+        this.#executionAuthority.loadStep(input.record),
+      );
+    },
+    {
+      completeUsage: (record) => this.#modelUsage.completeCallUsage(record),
+      pricing: (record) => this.modelPricing.snapshot({ tenantId: record.tenantId, agentVersionId: record.observation.agentVersionId }),
+      reserveSpending: (record, run) => this.modelSpending.reserve(record, run),
+      loadRun: (record) => this.#runs.get(record.runId) ?? null,
+    },
+  );
+
+  recordModelCall(input: RecordModelCallInput) {
+    return this.#modelCalls.recordModelCall(input);
+  }
+
+  listModelCalls(query: ModelUsagePageQuery) {
+    return this.#modelCalls.listModelCalls(query);
+  }
+
   readonly #agentVersions = new Map<string, AgentVersionAsset>();
   readonly #agentVersionDeployments = new Map<string, AgentVersionDeployment>();
   readonly #agentVersionReleaseBundles = new Map<
@@ -359,7 +483,7 @@ export class InMemoryRunStore implements DomainStore {
     string,
     ActiveAgentVersionRelease
   >();
-  readonly #runs = new Map<string, RunState>();
+  readonly #runs = new InMemoryRunMap();
   readonly #automations = new Map<string, AutomationDefinitionRecord>();
   readonly #automationCreateReceipts = new Map<
     string,
@@ -371,9 +495,13 @@ export class InMemoryRunStore implements DomainStore {
   >();
   readonly #events = new Map<string, RunLifecycleEvent[]>();
   readonly #eventIds = new Set<string>();
+  readonly #messageRunEvidence = new InMemoryMessageRunEvidence();
+  readonly #outboxRetirement = new InMemoryOutboxRetention();
   readonly #outbox = new Map<string, QueueRecord<OutboxMessage>>();
   readonly #workItems = new Map<string, QueueRecord<WorkItem>>();
   readonly #idempotency = new Map<string, IdempotencyReceipt>();
+  readonly #runOutputReceipts = new Map<string, RunOutputReceipt>();
+  readonly #runOutputHeads = new Map<string, number>();
   readonly #threads = new Map<string, ThreadState>();
   readonly #workspaceOperations = new InMemoryWorkspaceOperationStore(
     (tenantId, threadId) => {
@@ -393,6 +521,32 @@ export class InMemoryRunStore implements DomainStore {
   readonly #messageIds = new Set<string>();
   readonly #modelHistory = new Map<string, ModelHistoryItem[]>();
   readonly #modelHistoryItemIds = new Set<string>();
+  readonly #modelHistoryAppend = new InMemoryModelHistoryAppendIndex(
+    (threadId) => this.#modelHistory.get(threadId) ?? [],
+  );
+  readonly messageWindows: ThreadMessageWindowStore =
+    new InMemoryThreadMessageWindowStore((locator) => {
+      const thread = this.#threads.get(locator.threadId);
+      if (
+        thread?.tenantId !== locator.tenantId ||
+        thread.spaceId !== locator.spaceId
+      )
+        return null;
+      return {
+        thread,
+        messages: this.#messages.get(locator.threadId) ?? [],
+        invalidations: this.#messageInvalidations.get(locator.threadId),
+        runBindings: (messages) =>
+          this.#messageRunEvidence.read(locator, messages),
+      };
+    });
+  readonly modelHistoryContext: ModelHistoryContextStore =
+    new InMemoryModelHistoryContextStore((locator) => {
+      const thread = this.#threads.get(locator.threadId);
+      return thread?.tenantId === locator.tenantId
+        ? (this.#modelHistory.get(locator.threadId) ?? [])
+        : null;
+    });
   readonly #threadIdempotency = new Map<string, ThreadIdempotencyReceipt>();
   readonly #threadRollbackIdempotency = new Map<
     string,
@@ -456,6 +610,16 @@ export class InMemoryRunStore implements DomainStore {
   readonly #clock: LeaseClock;
   readonly #automationAuthority: InMemoryAutomationAuthority;
   readonly #officeAuthority = new InMemoryOfficeStore();
+  readonly #officeThreads = new InMemoryOfficeThreadStore(
+    (locator) => this.#officeAuthority.loadWithinCommit(locator),
+    (locator) => {
+      const state = this.#threads.get(locator.threadId);
+      return state?.tenantId === locator.tenantId &&
+        state.spaceId === locator.spaceId
+        ? state
+        : null;
+    },
+  );
 
   constructor(options: { clock?: LeaseClock } = {}) {
     this.#clock = options.clock ?? new SystemLeaseClock();
@@ -474,7 +638,11 @@ export class InMemoryRunStore implements DomainStore {
       messageIds: this.#messageIds,
       modelHistory: this.#modelHistory,
       modelHistoryItemIds: this.#modelHistoryItemIds,
+      modelHistoryAppendState: (locator, items) =>
+        this.#modelHistoryAppend.state(locator, items),
       outbox: this.#outbox,
+      retiredOutboxIds: this.#outboxRetirement.retiredIds,
+      outboxReplayAuthority: this.#outboxRetirement.replayMessages,
       workItems: this.#workItems,
       appendModelHistory: (threadId, items) =>
         this.#appendModelHistory(threadId, items),
@@ -482,6 +650,14 @@ export class InMemoryRunStore implements DomainStore {
   }
 
   async close(): Promise<void> {}
+
+  async loadOfficeThreadBinding(locator: OfficeThreadLocator) {
+    return this.#officeThreads.load(locator);
+  }
+
+  async bindOfficeThread(input: BindOfficeThreadInput) {
+    return this.#officeThreads.bind(input);
+  }
 
   commitOfficeDefinition(
     input: Parameters<InMemoryOfficeStore["commitOfficeDefinition"]>[0],
@@ -1314,7 +1490,9 @@ export class InMemoryRunStore implements DomainStore {
         input.queuedRunCancellation,
         activeRun,
         (eventId) => this.#eventIds.has(eventId),
-        (messageId) => this.#outbox.has(messageId),
+        (messageId) =>
+          this.#outbox.has(messageId) ||
+          this.#outboxRetirement.retiredIds.has(messageId),
       );
       for (const event of input.queuedRunCancellation.events) {
         pendingEventIds.add(event.eventId);
@@ -1348,7 +1526,9 @@ export class InMemoryRunStore implements DomainStore {
         (eventId) =>
           pendingEventIds.has(eventId) || this.#eventIds.has(eventId),
         (messageId) =>
-          pendingOutboxIds.has(messageId) || this.#outbox.has(messageId),
+          pendingOutboxIds.has(messageId) ||
+          this.#outbox.has(messageId) ||
+          this.#outboxRetirement.retiredIds.has(messageId),
       );
       for (const event of input.retainedRunUpdate.events) {
         pendingEventIds.add(event.eventId);
@@ -1368,10 +1548,9 @@ export class InMemoryRunStore implements DomainStore {
       if (nextGoal === null || input.continuation === null) {
         throw new RunStoreError("goal_activation_missing");
       }
-      validateModelHistoryAppend(
+      this.#modelHistoryAppend.validate(
         input.continuation.history,
         { tenantId: input.tenantId, threadId: input.threadId },
-        this.#modelHistory.get(input.threadId) ?? [],
         (itemId) => this.#modelHistoryItemIds.has(itemId),
       );
       const continuation = reduceThreadGoalContinuation(
@@ -1381,7 +1560,9 @@ export class InMemoryRunStore implements DomainStore {
         (eventId) =>
           pendingEventIds.has(eventId) || this.#eventIds.has(eventId),
         (messageId) =>
-          pendingOutboxIds.has(messageId) || this.#outbox.has(messageId),
+          pendingOutboxIds.has(messageId) ||
+          this.#outbox.has(messageId) ||
+          this.#outboxRetirement.retiredIds.has(messageId),
         (workItemId) => this.#workItems.has(workItemId),
       );
       if (continuation.runState.runId === activeRun?.runId) {
@@ -1442,13 +1623,13 @@ export class InMemoryRunStore implements DomainStore {
     };
     this.#applyThreadGoalWrite(nextGoal, preparedGoal);
     if (canceledRunState !== null && input.queuedRunCancellation !== null) {
-      this.#runs.set(canceledRunState.runId, clone(canceledRunState));
+      this.#storeRunState(canceledRunState.runId, clone(canceledRunState));
       this.#events.set(canceledRunState.runId, [
         ...(this.#events.get(canceledRunState.runId) ?? []),
         ...clone(input.queuedRunCancellation.events),
       ]);
       for (const event of input.queuedRunCancellation.events) {
-        this.#eventIds.add(event.eventId);
+        this.#rememberRunEvent(event);
       }
       for (const prepared of preparedCancellationOutbox) {
         this.#outbox.set(prepared.messageId, prepared.record);
@@ -1456,13 +1637,13 @@ export class InMemoryRunStore implements DomainStore {
       forceSettle(this.#workItems, canceledWorkItemId!);
     }
     if (retainedRunState !== null && input.retainedRunUpdate !== null) {
-      this.#runs.set(retainedRunState.runId, clone(retainedRunState));
+      this.#storeRunState(retainedRunState.runId, clone(retainedRunState));
       this.#events.set(retainedRunState.runId, [
         ...(this.#events.get(retainedRunState.runId) ?? []),
         ...clone(input.retainedRunUpdate.events),
       ]);
       for (const event of input.retainedRunUpdate.events) {
-        this.#eventIds.add(event.eventId);
+        this.#rememberRunEvent(event);
       }
       for (const prepared of preparedRetainedRunOutbox) {
         this.#outbox.set(prepared.messageId, prepared.record);
@@ -1473,7 +1654,7 @@ export class InMemoryRunStore implements DomainStore {
         input.threadId,
         input.continuation.history.items,
       );
-      this.#runs.set(
+      this.#storeRunState(
         continuationResult.runState.runId,
         clone(continuationResult.runState),
       );
@@ -1481,7 +1662,7 @@ export class InMemoryRunStore implements DomainStore {
         ...clone(input.continuation.events),
       ]);
       for (const event of input.continuation.events) {
-        this.#eventIds.add(event.eventId);
+        this.#rememberRunEvent(event);
       }
       for (const prepared of preparedContinuationOutbox) {
         this.#outbox.set(prepared.messageId, prepared.record);
@@ -1558,8 +1739,13 @@ export class InMemoryRunStore implements DomainStore {
     validateEvents(accounting.runEvents, run.runId, (eventId) =>
       this.#eventIds.has(eventId),
     );
-    validateOutbox(accounting.outbox, run.runId, run.tenantId, (messageId) =>
-      this.#outbox.has(messageId),
+    validateOutbox(
+      accounting.outbox,
+      run.runId,
+      run.tenantId,
+      (messageId) =>
+        this.#outbox.has(messageId) ||
+        this.#outboxRetirement.retiredIds.has(messageId),
     );
     const preparedOutbox = accounting.outbox.map((message) => ({
       messageId: message.messageId,
@@ -1572,13 +1758,13 @@ export class InMemoryRunStore implements DomainStore {
     );
     this.#applyThreadGoalWrite(next, preparedGoal);
     if (accounting.runEvents.length > 0) {
-      this.#runs.set(run.runId, clone(accounting.runState));
+      this.#storeRunState(run.runId, clone(accounting.runState));
       this.#events.set(run.runId, [
         ...(this.#events.get(run.runId) ?? []),
         ...clone(accounting.runEvents),
       ]);
       for (const event of accounting.runEvents) {
-        this.#eventIds.add(event.eventId);
+        this.#rememberRunEvent(event);
       }
       for (const prepared of preparedOutbox) {
         this.#outbox.set(prepared.messageId, prepared.record);
@@ -1603,18 +1789,7 @@ export class InMemoryRunStore implements DomainStore {
 
   async listThreads(query: ThreadListQuery): Promise<readonly ThreadState[]> {
     validateThreadListQuery(query);
-    return clone(
-      [...this.#threads.values()]
-        .filter(
-          (thread) =>
-            thread.tenantId === query.tenantId &&
-            thread.spaceId === query.spaceId &&
-            thread.status !== "deleted" &&
-            isBeforeThreadCursor(thread, query.before),
-        )
-        .sort(compareThreadsNewestFirst)
-        .slice(0, query.limit),
-    );
+    return clone(selectMemoryThreadList(this.#threads.values(), query));
   }
 
   async commitThread(input: CommitThreadInput): Promise<CommitThreadResult> {
@@ -1635,12 +1810,22 @@ export class InMemoryRunStore implements DomainStore {
         tenantId: input.tenantId,
         threadId: prior.threadId,
       });
+      if (input.officeBinding)
+        assertOfficeThreadReplay(
+          input.officeBinding,
+          this.#officeThreads.load(input.officeBinding),
+          prior.result.state,
+        );
       return clone({ ...prior.result, disposition: "replayed" });
     }
     if (this.#threadRollbackIdempotency.has(receiptKey)) {
       throw new RunStoreError("idempotency_conflict");
     }
 
+    if (input.officeBinding) {
+      this.#officeThreads.assertOffice(input.officeBinding);
+      this.#officeThreads.assertAvailable(input.officeBinding);
+    }
     if (input.sourceFence !== undefined) {
       const source = this.#threads.get(input.sourceFence.threadId);
       if (
@@ -1715,10 +1900,9 @@ export class InMemoryRunStore implements DomainStore {
       input.tenantId,
       (messageId) => this.#messageIds.has(messageId),
     );
-    validateModelHistoryAppend(
+    this.#modelHistoryAppend.validate(
       input.history,
       { tenantId: input.tenantId, threadId },
-      this.#modelHistory.get(threadId) ?? [],
       (itemId) => this.#modelHistoryItemIds.has(itemId),
     );
 
@@ -1729,6 +1913,7 @@ export class InMemoryRunStore implements DomainStore {
       messages: clone(input.messages),
       historyItems: clone(input.history.items),
     };
+    if (input.officeBinding) this.#officeThreads.insert(input.officeBinding);
     this.#threads.set(threadId, clone(next));
     this.#threadEvents.set(threadId, [
       ...(this.#threadEvents.get(threadId) ?? []),
@@ -1845,13 +2030,12 @@ export class InMemoryRunStore implements DomainStore {
     validateThreadEvents([input.event], threadId, (eventId) =>
       this.#threadEventIds.has(eventId),
     );
-    validateModelHistoryAppend(
+    this.#modelHistoryAppend.validate(
       {
         expectedLastSequence: input.expectedHistorySequence,
         items: [input.marker],
       },
       { tenantId: input.tenantId, threadId },
-      history,
       (itemId) => this.#modelHistoryItemIds.has(itemId),
     );
     const existingInvalidations = this.#messageInvalidations.get(threadId);
@@ -2163,10 +2347,9 @@ export class InMemoryRunStore implements DomainStore {
       input.tenantId,
       (messageId) => this.#messageIds.has(messageId),
     );
-    validateModelHistoryAppend(
+    this.#modelHistoryAppend.validate(
       input.thread.history,
       { tenantId: input.tenantId, threadId },
-      this.#modelHistory.get(threadId) ?? [],
       (itemId) => this.#modelHistoryItemIds.has(itemId),
     );
     let nextThread: ThreadState | null = currentThread;
@@ -2192,8 +2375,13 @@ export class InMemoryRunStore implements DomainStore {
     ) {
       throw new RunStoreError("turn_start_authority_mismatch");
     }
-    validateOutbox(input.run.outbox, runId, input.tenantId, (messageId) =>
-      this.#outbox.has(messageId),
+    validateOutbox(
+      input.run.outbox,
+      runId,
+      input.tenantId,
+      (messageId) =>
+        this.#outbox.has(messageId) ||
+        this.#outboxRetirement.retiredIds.has(messageId),
     );
     validateWorkItems(
       input.run.workItems,
@@ -2237,10 +2425,10 @@ export class InMemoryRunStore implements DomainStore {
     }
     this.#appendModelHistory(threadId, input.thread.history.items);
     this.#applyThreadGoalWrite(nextGoal, preparedGoal);
-    this.#runs.set(runId, clone(nextRun));
+    this.#storeRunState(runId, clone(nextRun));
     this.#events.set(runId, [...clone(input.run.events)]);
     for (const event of input.run.events) {
-      this.#eventIds.add(event.eventId);
+      this.#rememberRunEvent(event);
     }
     for (const message of input.run.outbox) {
       this.#outbox.set(
@@ -2254,12 +2442,24 @@ export class InMemoryRunStore implements DomainStore {
         queueRecord(workItem, workItem.createdAt),
       );
     }
-    this.#turnStartIdempotency.set(receiptKey, {
+    const receipt: TurnStartIdempotencyReceipt = {
       tenantId: input.tenantId,
       fingerprint: input.idempotency.requestFingerprint,
       result: clone(result),
-    });
+    };
+    this.#turnStartIdempotency.set(receiptKey, receipt);
+    this.#messageRunEvidence.recordTurnStart(receipt.result);
     return clone(result);
+  }
+
+  #rememberRunEvent(event: RunLifecycleEvent): void {
+    this.#eventIds.add(event.eventId);
+    if (event.type === "message.completed") {
+      this.#messageRunEvidence.recordEvent(
+        this.#runs.get(event.identity.runId)!,
+        clone(event),
+      );
+    }
   }
 
   async listMessages(
@@ -2338,9 +2538,10 @@ export class InMemoryRunStore implements DomainStore {
       return [];
     }
     return clone(
-      (this.#modelHistory.get(locator.threadId) ?? [])
-        .filter((item) => item.sequence > afterSequence)
-        .slice(0, limit),
+      (this.#modelHistory.get(locator.threadId) ?? []).slice(
+        afterSequence,
+        afterSequence + limit,
+      ),
     );
   }
 
@@ -2348,6 +2549,24 @@ export class InMemoryRunStore implements DomainStore {
     validateRunLocator(locator);
     const state = this.#runs.get(locator.runId) ?? null;
     return state?.tenantId === locator.tenantId ? clone(state) : null;
+  }
+
+  async canRetireArtifact(
+    input: ArtifactRetentionCandidate,
+    options?: ArtifactRetentionReadOptions,
+  ): Promise<boolean> {
+    validateArtifactRetentionReadOptions(options);
+    validateArtifactRetentionCandidate(input);
+    const receiptId = this.#toolExecutionIdempotency.get(
+      stableJson([input.record.tenantId, input.idempotencyKey]),
+    );
+    return artifactRecoveryFinished(
+      input,
+      this.#runs.get(input.record.source.runId) ?? null,
+      receiptId === undefined
+        ? null
+        : (this.#toolExecutionReceipts.get(receiptId) ?? null),
+    );
   }
 
   async loadRunInSpace(locator: RunScopedLocator): Promise<RunState | null> {
@@ -2377,6 +2596,18 @@ export class InMemoryRunStore implements DomainStore {
       throw new RunStoreError("idempotency_receipt_invalid");
     }
     return clone({ ...prior.result, disposition: "replayed" });
+  }
+
+  async loadActiveRunInThread(
+    locator: import("@crewon/application").ThreadScopedLocator,
+  ): Promise<RunState | null> {
+    validateThreadScopedLocator(locator);
+    const rows = this.#runs.activeInThread(locator).map((state) => ({
+      state,
+      stored_bytes: Buffer.byteLength(JSON.stringify(state)),
+    }));
+    const state = activeRunFromRows(rows, locator, (row) => row.state);
+    return state === null ? null : clone(state);
   }
 
   async listThreadRuns(
@@ -3038,6 +3269,24 @@ export class InMemoryRunStore implements DomainStore {
 
     const current = this.#runs.get(runId) ?? null;
     if (
+      input.events.some(
+        (event) =>
+          (event.type === "model.output.delta" ||
+            event.type === "segment.started" ||
+            event.type === "usage.recorded") &&
+          this.#runOutputReceipts.has(
+            stableJson([
+              input.tenantId,
+              runId,
+              event.data.segmentId,
+              event.data.segmentSequence,
+            ]),
+          ),
+      )
+    ) {
+      throw new RunStoreError("run_output_replay_requires_stream_append");
+    }
+    if (
       current === null &&
       this.#pendingModelProviderSettings.has(input.tenantId)
     ) {
@@ -3093,16 +3342,20 @@ export class InMemoryRunStore implements DomainStore {
       if (history.items.some((item) => item.runId !== runId)) {
         throw new RunStoreError("model_history_run_id_mismatch");
       }
-      validateModelHistoryAppend(
+      this.#modelHistoryAppend.validate(
         history,
         { tenantId: next.tenantId, threadId: next.threadId },
-        this.#modelHistory.get(next.threadId) ?? [],
         (itemId) => this.#modelHistoryItemIds.has(itemId),
       );
     }
     validateRunHistoryCorrelation(input.events, history);
-    validateOutbox(input.outbox, runId, input.tenantId, (messageId) =>
-      this.#outbox.has(messageId),
+    validateOutbox(
+      input.outbox,
+      runId,
+      input.tenantId,
+      (messageId) =>
+        this.#outbox.has(messageId) ||
+        this.#outboxRetirement.retiredIds.has(messageId),
     );
     validateWorkItems(
       input.workItems,
@@ -3113,6 +3366,26 @@ export class InMemoryRunStore implements DomainStore {
       input.threadAdmission === undefined ? "default" : "manualCompaction",
     );
 
+    const cancellationReceiptId = canceledReconciliationReceipt(
+      next,
+      input.events,
+    );
+    const cancellationReceipt =
+      cancellationReceiptId === null
+        ? undefined
+        : this.#toolExecutionReceipts.get(cancellationReceiptId);
+    const cancellationWork =
+      cancellationReceipt?.tenantId === next.tenantId &&
+      cancellationReceipt.runId === next.runId
+        ? this.#workItems.get(cancellationReceipt.workItemId)
+        : undefined;
+    const cancellationWakeAt =
+      cancellationWork !== undefined &&
+      cancellationWork.item.tenantId === next.tenantId &&
+      cancellationWork.item.runId === next.runId &&
+      cancellationWork.status !== "settled"
+        ? readLeaseClock(this.#clock)
+        : null;
     const committedEvents = clone(input.events);
     const committedOutbox = clone(input.outbox);
     const committedWorkItems = clone(input.workItems);
@@ -3136,19 +3409,26 @@ export class InMemoryRunStore implements DomainStore {
       workItems: committedWorkItems,
     };
 
-    this.#runs.set(runId, committedState);
+    this.#storeRunState(runId, committedState);
     this.#events.set(runId, [
       ...(this.#events.get(runId) ?? []),
       ...committedEvents,
     ]);
     for (const event of committedEvents) {
-      this.#eventIds.add(event.eventId);
+      this.#rememberRunEvent(event);
     }
     for (const [messageId, record] of outboxRecords) {
       this.#outbox.set(messageId, record);
     }
     for (const [workItemId, record] of workItemRecords) {
       this.#workItems.set(workItemId, record);
+    }
+    if (cancellationWork !== undefined && cancellationWakeAt !== null) {
+      cancellationWork.availableAtMs = Math.min(
+        cancellationWork.availableAtMs,
+        cancellationWakeAt,
+      );
+      cancellationWork.cancellationWakeRequested = true;
     }
     if (history !== null) {
       this.#appendModelHistory(next.threadId, history.items);
@@ -3168,6 +3448,93 @@ export class InMemoryRunStore implements DomainStore {
       input.lease,
     );
     return this.#commitRun(input.commit, input.history);
+  }
+
+  async appendRunOutputEvents(
+    input: AppendRunOutputEventsInput,
+  ): Promise<AppendRunOutputEventsResult> {
+    return this.#appendRunStreamEvents(input, "output");
+  }
+
+  async appendRunProgressEvents(
+    input: AppendRunProgressEventsInput,
+  ): Promise<AppendRunProgressEventsResult> {
+    return this.#appendRunStreamEvents(input, "progress");
+  }
+
+  async #appendRunStreamEvents<E extends RunStreamEvent>(
+    input: AppendRunStreamEventsInput<E>,
+    mode: "output" | "progress",
+  ): Promise<AppendRunStreamEventsResult<E>> {
+    validateRunOutputAppend(input, mode);
+    this.#validateExecutionLease(input.tenantId, input.runId, input.lease);
+    const current = this.#runs.get(input.runId);
+    if (current === undefined) throw new RunStoreError("run_not_found");
+    const keys = input.entries.map(({ event }) =>
+      stableJson([
+        input.tenantId,
+        input.runId,
+        event.data.segmentId,
+        event.data.segmentSequence,
+      ]),
+    );
+    const prior = input.entries.map((entry, index) => {
+      const compact = this.#runOutputReceipts.get(keys[index]!);
+      if (compact !== undefined) return compact;
+      const legacy = this.#idempotency.get(
+        stableJson([entry.idempotency.scope, entry.idempotency.key]),
+      );
+      return legacyRunOutputReceipt(
+        input,
+        entry,
+        legacy === undefined
+          ? null
+          : { ...legacy, runId: legacy.result.state.runId },
+      );
+    });
+    const headKey = stableJson([
+      input.tenantId,
+      input.runId,
+      input.entries[0]!.event.data.segmentId,
+    ]);
+    const lastSourceSequence = this.#runOutputHeads.get(headKey) ?? 0;
+    const plan = prepareRunOutputAppend(current, input, prior, {
+      eventId: (id) => this.#eventIds.has(id),
+      outboxId: (id) =>
+        this.#outbox.has(id) || this.#outboxRetirement.retiredIds.has(id),
+      lastSourceSequence,
+    });
+    const stored = clone({
+      state: plan.state,
+      events: plan.appendedEvents,
+      outbox: plan.outbox,
+    });
+    const outbox = stored.outbox.map(
+      (message) =>
+        [message.messageId, queueRecord(message, message.createdAt)] as const,
+    );
+    if (stored.events.length > 0) {
+      this.#storeRunState(input.runId, stored.state);
+      const events = this.#events.get(input.runId) ?? [];
+      events.push(...stored.events);
+      this.#events.set(input.runId, events);
+      for (const event of stored.events) this.#rememberRunEvent(event);
+      for (const [id, record] of outbox) this.#outbox.set(id, record);
+    }
+    for (const [index, { receipt }] of plan.receipts.entries())
+      this.#runOutputReceipts.set(keys[index]!, clone(receipt));
+    this.#runOutputHeads.set(
+      headKey,
+      Math.max(
+        lastSourceSequence,
+        input.entries.at(-1)!.event.data.segmentSequence,
+      ),
+    );
+    return clone({
+      state: plan.state,
+      appendedEvents: plan.appendedEvents,
+      replayedCount: plan.replayedCount,
+    });
   }
 
   async commitLeasedRunTerminal(
@@ -3197,10 +3564,9 @@ export class InMemoryRunStore implements DomainStore {
           input.commit.events,
         );
     if (input.history !== null) {
-      validateModelHistoryAppend(
+      this.#modelHistoryAppend.validate(
         input.history,
         { tenantId: currentRun.tenantId, threadId: currentRun.threadId },
-        this.#modelHistory.get(currentRun.threadId) ?? [],
         (itemId) => this.#modelHistoryItemIds.has(itemId),
       );
     }
@@ -3289,13 +3655,35 @@ export class InMemoryRunStore implements DomainStore {
       settle(this.#workItems, input.lease.workItemId, input.lease, now);
     }
     this.#executionAuthority.apply(execution);
+    this.compactionCheckpoints.complete({ tenantId: input.commit.tenantId, runId, stepId: input.attempt.stepId });
     return clone({ run, step: execution.step, attempt: execution.attempt });
   }
 
   async commitAssistantSampleContinuation(
     input: CommitAssistantSampleContinuationInput,
   ): Promise<CommitAssistantSampleContinuationResult> {
-    const runId = validateAssistantSampleContinuationInput(input);
+    return this.#commitModelSample(
+      input,
+      validateAssistantSampleContinuationInput(input),
+      "assistant",
+    );
+  }
+
+  async commitToolSample(
+    input: CommitToolSampleInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    return this.#commitModelSample(
+      input,
+      validateToolSampleCommit(input),
+      "tool",
+    );
+  }
+
+  async #commitModelSample(
+    input: CommitToolSampleInput,
+    runId: string,
+    boundary: "assistant" | "tool",
+  ): Promise<CommitAssistantSampleContinuationResult> {
     const receiptKey = stableJson([
       input.commit.idempotency.scope,
       input.commit.idempotency.key,
@@ -3320,6 +3708,11 @@ export class InMemoryRunStore implements DomainStore {
       });
       if (step === null || attempt?.status !== "completed") {
         throw new RunStoreError("assistant_sample_replay_conflict");
+      }
+      if (boundary === "tool") {
+        validateToolSampleReplay(input, prior.result, step, attempt);
+        } else {
+          validateAssistantSampleReplay(input, prior.result, step, attempt);
       }
       return clone({
         run: { ...prior.result, disposition: "replayed" },
@@ -3351,13 +3744,26 @@ export class InMemoryRunStore implements DomainStore {
             { ...input.attempt, status: "completed" },
             input.continuation.checkpoint,
           );
+    if (boundary === "tool") {
+      validateToolSampleAuthority(
+        input,
+        this.#runs.get(runId) ?? null,
+        execution.step,
+      );
+    } else {
+      validateAssistantSampleAuthority(
+        input,
+        this.#runs.get(runId) ?? null,
+        execution.step,
+      );
+    }
     const run = this.#commitRun(input.commit, input.history);
     this.#executionAuthority.apply(execution);
     this.#threadModelStates.set(
       stableJson([input.modelState.tenantId, input.modelState.threadId]),
       clone(input.modelState),
     );
-    if (input.continuation !== null) {
+    if (input.continuation !== null && !isEmptyAssistantSample(input)) {
       this.#threadContinuations.set(
         continuationKey(input.continuation),
         clone(input.continuation),
@@ -3423,16 +3829,20 @@ export class InMemoryRunStore implements DomainStore {
       input.tenantId,
       (messageId) => this.#messageIds.has(messageId),
     );
-    validateOutbox(input.run.outbox, runId, input.tenantId, (messageId) =>
-      this.#outbox.has(messageId),
+    validateOutbox(
+      input.run.outbox,
+      runId,
+      input.tenantId,
+      (messageId) =>
+        this.#outbox.has(messageId) ||
+        this.#outboxRetirement.retiredIds.has(messageId),
     );
     if (input.history.items.some((item) => item.runId !== runId)) {
       throw new RunStoreError("model_history_run_id_mismatch");
     }
-    validateModelHistoryAppend(
+    this.#modelHistoryAppend.validate(
       completionHistory,
       { tenantId: input.tenantId, threadId },
-      this.#modelHistory.get(threadId) ?? [],
       (itemId) => this.#modelHistoryItemIds.has(itemId),
     );
 
@@ -3478,7 +3888,9 @@ export class InMemoryRunStore implements DomainStore {
         input.goalContinuation!.outbox,
         nextContinuationRun.runId,
         input.tenantId,
-        (messageId) => this.#outbox.has(messageId),
+        (messageId) =>
+          this.#outbox.has(messageId) ||
+          this.#outboxRetirement.retiredIds.has(messageId),
       );
       validateWorkItems(
         input.goalContinuation!.workItems,
@@ -3529,13 +3941,13 @@ export class InMemoryRunStore implements DomainStore {
       attempt: clone(execution.attempt),
     };
     this.#executionAuthority.apply(execution);
-    this.#runs.set(runId, clone(nextRun));
+    this.#storeRunState(runId, clone(nextRun));
     this.#events.set(runId, [
       ...(this.#events.get(runId) ?? []),
       ...clone(input.run.events),
     ]);
     for (const event of input.run.events) {
-      this.#eventIds.add(event.eventId);
+      this.#rememberRunEvent(event);
     }
     this.#threads.set(threadId, clone(nextThread));
     this.#applyThreadGoalWrite(nextGoal, preparedGoal);
@@ -3562,13 +3974,13 @@ export class InMemoryRunStore implements DomainStore {
     }
     if (result.goalContinuation !== null) {
       const continuation = result.goalContinuation;
-      this.#runs.set(continuation.runState.runId, clone(continuation.runState));
+      this.#storeRunState(continuation.runState.runId, clone(continuation.runState));
       this.#events.set(
         continuation.runState.runId,
         clone([...continuation.runEvents]),
       );
       for (const event of continuation.runEvents) {
-        this.#eventIds.add(event.eventId);
+        this.#rememberRunEvent(event);
       }
       for (const message of continuation.outbox) {
         this.#outbox.set(
@@ -3625,6 +4037,16 @@ export class InMemoryRunStore implements DomainStore {
     );
   }
 
+  readonly outboxRetention: OutboxRetentionStore = {
+    pruneDeliveredOutbox: async (policy, options) =>
+      this.#outboxRetirement.prune(
+        this.#outbox,
+        policy,
+        readLeaseClock(this.#clock),
+        options,
+      ),
+  };
+
   async listPendingOutbox(limit: number): Promise<readonly OutboxMessage[]> {
     validateLimit(limit);
     return pendingItems(this.#outbox, readLeaseClock(this.#clock), limit);
@@ -3640,7 +4062,9 @@ export class InMemoryRunStore implements DomainStore {
 
   async acknowledgeOutbox(input: OutboxLeaseInput): Promise<void> {
     validateQueueLease(input, input.messageId, "outbox_message_id_invalid");
-    settle(this.#outbox, input.messageId, input, readLeaseClock(this.#clock));
+    const now = readLeaseClock(this.#clock);
+    settle(this.#outbox, input.messageId, input, now);
+    this.#outboxRetirement.acknowledged(input.messageId, now);
   }
 
   async retryOutbox(input: OutboxRetryInput): Promise<void> {
@@ -3651,7 +4075,7 @@ export class InMemoryRunStore implements DomainStore {
 
   async listPendingWorkItems(limit: number): Promise<readonly WorkItem[]> {
     validateLimit(limit);
-    return pendingItems(this.#workItems, readLeaseClock(this.#clock), limit);
+    return pendingItems(this.#workItems, readLeaseClock(this.#clock), limit, { order: "oldestReady" });
   }
 
   async claimNextWorkItem(
@@ -3662,6 +4086,7 @@ export class InMemoryRunStore implements DomainStore {
       this.#workItems,
       input,
       readLeaseClock(this.#clock),
+      { order: "oldestReady" },
     );
     return claimed === null
       ? null
@@ -3712,11 +4137,12 @@ export class InMemoryRunStore implements DomainStore {
     if (items.length === 0) {
       return;
     }
-    this.#modelHistory.set(threadId, [
-      ...(this.#modelHistory.get(threadId) ?? []),
-      ...clone(items),
-    ]);
-    for (const item of items) {
+    const history = this.#modelHistory.get(threadId) ?? [];
+    const committed = clone(items);
+    for (const item of committed) history.push(item);
+    this.#modelHistory.set(threadId, history);
+    this.#modelHistoryAppend.committed(committed);
+    for (const item of committed) {
       this.#modelHistoryItemIds.add(item.itemId);
     }
   }
@@ -3766,6 +4192,14 @@ export class InMemoryRunStore implements DomainStore {
       ...(this.#threadGoalEvents.get(threadId) ?? []),
       clone(event),
     ]);
+  }
+
+  #storeRunState(runId: string, state: RunState): void {
+    this.#runs.set(runId, state);
+    if (isTerminalRunStatus(state.status)) {
+      this.compactionCheckpoints.retireRun(state);
+      this.executionProgress.retireRun(state);
+    }
   }
 
   #validateExecutionLease(
@@ -3846,27 +4280,6 @@ function continuationKey(locator: ThreadContinuationLocator): string {
     locator.adapterVersion,
     locator.modelId,
   ]);
-}
-
-function compareThreadsNewestFirst(
-  left: ThreadState,
-  right: ThreadState,
-): number {
-  return (
-    right.updatedAt.localeCompare(left.updatedAt) ||
-    right.threadId.localeCompare(left.threadId)
-  );
-}
-
-function isBeforeThreadCursor(
-  thread: ThreadState,
-  cursor: ThreadListQuery["before"],
-): boolean {
-  return (
-    cursor === null ||
-    thread.updatedAt < cursor.updatedAt ||
-    (thread.updatedAt === cursor.updatedAt && thread.threadId < cursor.threadId)
-  );
 }
 
 function compareRunsNewestFirst(left: RunState, right: RunState): number {
@@ -3969,3 +4382,12 @@ function normalizeToolApprovalError(error: unknown): Error {
       ? error
       : new RunStoreError("tool_approval_error", { cause: error });
 }
+import type {
+  ArtifactRetentionCandidate,
+  ArtifactRetentionReadOptions,
+} from "@crewon/application";
+import {
+  artifactRecoveryFinished,
+  validateArtifactRetentionCandidate,
+  validateArtifactRetentionReadOptions,
+} from "./artifact-retention-guard.ts";

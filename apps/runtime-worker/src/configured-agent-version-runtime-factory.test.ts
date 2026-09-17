@@ -6,6 +6,7 @@ import type { ModelTransportPort } from "@crewon/agent-kernel";
 import {
   compileAgentVersion,
   type CompiledAgentVersion,
+  type AgentVersionSource,
 } from "@crewon/agent-version";
 import { InMemoryToolBroker } from "@crewon/tool-broker";
 
@@ -58,6 +59,7 @@ test("materializes independent digest-bound provider runtimes", async () => {
     adapterVersion: first.model.adapterVersion,
     modelId: first.model.modelId,
   });
+  assert.equal(firstRuntime.executionAuthority, "crewonKernel");
   assert.deepEqual(secondRuntime.kernel.modelIdentity, {
     adapterName: second.model.adapterName,
     adapterVersion: second.model.adapterVersion,
@@ -103,6 +105,65 @@ test("rejects undeployed tenants and digest drift before opening a provider", as
   assert.equal(opened, 0);
 });
 
+test("rejects provider-owned AgentVersion claims before opening a provider", async () => {
+  const base = source("cloud-agent", "cloud-agent", "cloud-model");
+  const candidates: readonly AgentVersionSource[] = [
+    { ...base, instructions: "This prompt would be ignored." },
+    {
+      ...base,
+      tools: [
+        {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "function",
+          name: "local_tool",
+          description: "This tool would be ignored.",
+          execution: "serial",
+          inputSchema: { type: "object", additionalProperties: false },
+        },
+      ],
+    },
+    {
+      ...base,
+      resources: {
+        workspaceRequired: false,
+        governedContextDigest: `sha256:${"a".repeat(64)}`,
+      },
+    },
+    {
+      ...base,
+      resources: {
+        workspaceRequired: true,
+        governedContextDigest: null,
+      },
+    },
+  ];
+
+  for (const candidate of candidates) {
+    const compiled = compileAgentVersion(candidate, { sha256 });
+    let opened = 0;
+    const configured = binding("tenant-1", compiled, new Map());
+    const factory = new ConfiguredAgentVersionRuntimeFactory([
+      {
+        ...configured,
+        executionAuthority: "providerAgent",
+        workspaceBindingId: compiled.resources.workspaceRequired
+          ? "workspace-1"
+          : null,
+        createTransport: (item) => {
+          opened += 1;
+          return configured.createTransport(item);
+        },
+      },
+    ]);
+
+    await assert.rejects(
+      factory.create({ tenantId: "tenant-1", version: compiled }),
+      hasRuntimeCode("agent_version_provider_authority_mismatch"),
+    );
+    assert.equal(opened, 0);
+  }
+});
+
 function binding(
   tenantId: string,
   compiled: CompiledAgentVersion,
@@ -116,6 +177,7 @@ function binding(
     authorityId: `authority-${compiled.agentVersionId}`,
     workspaceBindingId: null,
     materializationDigest: `sha256:${"d".repeat(64)}`,
+    executionAuthority: "crewonKernel",
     createTransport: () => {
       const state = observations.get(compiled.agentVersionId);
       assert.ok(state !== undefined);
@@ -180,3 +242,43 @@ function hasRuntimeCode(code: string): (error: unknown) => boolean {
   return (error) =>
     error instanceof AgentVersionRuntimeError && error.code === code;
 }
+
+test("rejects missing or changed output ceilings before executing and releases the created transport", async () => {
+  for (const [expected, actual] of [
+    [128, undefined],
+    [128, 256],
+    [undefined, 128],
+  ] as const) {
+    const value = source("agent-a", "adapter-a", "model-a");
+    const v = compileAgentVersion(
+      {
+        ...value,
+        model: {
+          ...value.model,
+          ...(expected === undefined ? {} : { maxOutputTokens: expected }),
+        },
+      },
+      { sha256 },
+    );
+    const observations = new Map<
+      string,
+      { prewarmed: number; closed: number }
+    >();
+    const original = binding("tenant-1", v, observations);
+    const factory = new ConfiguredAgentVersionRuntimeFactory([
+      {
+        ...original,
+        createTransport: async (version) => {
+          const transport = await original.createTransport(version);
+          return { ...transport, maxOutputTokens: actual };
+        },
+      },
+    ]);
+    await assert.rejects(
+      factory.create({ tenantId: "tenant-1", version: v }),
+      hasRuntimeCode("agent_version_runtime_model_mismatch"),
+    );
+    assert.equal(observations.get("agent-a")?.prewarmed, 0);
+    assert.equal(observations.get("agent-a")?.closed, 1);
+  }
+});

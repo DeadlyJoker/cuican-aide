@@ -71,6 +71,11 @@ export type TeamMemberRuntimeProfile = Readonly<{
   skills: readonly TeamMemberRuntimeCapability[];
   mcp: readonly TeamMemberRuntimeCapability[];
   knowledge: readonly TeamMemberRuntimeCapability[];
+  teamCoordination?: Readonly<{
+    assignmentMode: "roleDirected";
+    responsibility: string;
+    source: "officeDefinition";
+  }>;
 }>;
 
 export type ThreadSceneSelection = {

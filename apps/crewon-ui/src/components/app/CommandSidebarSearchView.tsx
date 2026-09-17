@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import type { CommandShellView } from "./commandWorkspaceState";
 
 type Result = { action:"thread";detail:string;key:string;kind:string;threadId:string;title:string } | { action:"view";detail:string;key:string;kind:string;title:string;view:CommandShellView };
-export function CommandSidebarSearchView({ isSearchOpen, noMatches, query, results, searchLabel, searchResultsLabel, onActivate, onClose, onQueryChange }: { isSearchOpen:boolean; noMatches:string; query:string; results:Result[]; searchLabel:string; searchResultsLabel:string; onActivate:(item:Result)=>void; onClose:()=>void; onQueryChange:(query:string)=>void }) { return (<>
+export function CommandSidebarSearchView({ footer, loading = false, canContinue = false, isSearchOpen, noMatches, query, results, searchLabel, searchResultsLabel, onActivate, onClose, onQueryChange }: { footer?: ReactNode; loading?: boolean; canContinue?: boolean; isSearchOpen:boolean; noMatches:string; query:string; results:Result[]; searchLabel:string; searchResultsLabel:string; onActivate:(item:Result)=>void; onClose:()=>void; onQueryChange:(query:string)=>void }) { return (<>
       <section
         className="sidebar-search-panel"
         data-od-id="sidebar-search-panel"
@@ -17,13 +18,14 @@ export function CommandSidebarSearchView({ isSearchOpen, noMatches, query, resul
             data-sidebar-search-input=""
             placeholder={searchLabel}
             type="search"
+            maxLength={footer ? 256 : undefined}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 event.preventDefault();
                 onClose();
-              } else if (event.key === "Enter" && results[0]) {
+              } else if (event.key === "Enter" && !loading && results[0]) {
                 event.preventDefault();
                 onActivate(results[0]);
               }
@@ -58,11 +60,12 @@ export function CommandSidebarSearchView({ isSearchOpen, noMatches, query, resul
           <p
             className="sidebar-search-empty"
             data-search-empty=""
-            hidden={results.length > 0}
+            hidden={loading || canContinue || results.length > 0}
           >
             {noMatches}
           </p>
         </div>
+        {footer}
       </section>
 
 </>); }

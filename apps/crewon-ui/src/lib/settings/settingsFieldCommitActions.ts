@@ -44,6 +44,7 @@ type SettingsFieldCommitClient = {
 export async function commitSettingsFieldAction(params: {
   /** Applies an appearance field to the live document; injected for tests. */
   applyAppearanceField?: (field: AppearanceField, value: string) => void;
+  persistLocalAppearanceField?: (field: AppearanceField, value: string) => void;
   client: SettingsFieldCommitClient | null | undefined;
   fieldId: string;
   isConnected: boolean;
@@ -57,6 +58,23 @@ export async function commitSettingsFieldAction(params: {
   const field = settingsConfigField(params.fieldId);
   if (!field) {
     throw new Error(`Unsupported settings field: ${params.fieldId}`);
+  }
+  if (
+    params.fieldId === "appearance-theme" &&
+    !["light", "dark", "system"].includes(params.value)
+  ) {
+    throw new Error(`Unsupported theme: ${params.value}`);
+  }
+
+  const appearanceField = appearanceFieldPreference(params.fieldId);
+  const value = appearanceField
+    ? normalizedAppearanceValue(appearanceField, params.value)
+    : params.value;
+  const localOnly =
+    !params.client && params.persistLocalAppearanceField !== undefined;
+  if (localOnly && appearanceField) {
+    // Persist before painting: a storage failure must not look like a saved edit.
+    params.persistLocalAppearanceField?.(appearanceField, value);
   }
 
   if (params.fieldId === "appearance-locale") {
@@ -88,12 +106,15 @@ export async function commitSettingsFieldAction(params: {
    * normalized first: typing 999 into a 10..18 field must persist and display
    * the clamped 18, not leave the panel showing a number that is not in effect.
    */
-  const appearanceField = appearanceFieldPreference(params.fieldId);
-  const value = appearanceField
-    ? normalizedAppearanceValue(appearanceField, params.value)
-    : params.value;
   if (appearanceField) {
     params.applyAppearanceField?.(appearanceField, value);
+  }
+
+  if (
+    localOnly &&
+    (appearanceField || params.fieldId === "appearance-locale")
+  ) {
+    return { normalized: value !== params.value };
   }
 
   if (!params.client || !params.isConnected) {

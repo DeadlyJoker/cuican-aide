@@ -2,8 +2,7 @@ import type { AgentVersionView } from "@crewon/contracts";
 
 import type { ControlAgentCatalogAdapter } from "../office/controlAgentCatalog";
 import type { PlatformAgent } from "./agentPlatformClient";
-
-const PLATFORM_AGENT_VERSION_ID = /^agent-platform:(\d+)(?::[a-f0-9]{32})?$/u;
+import { agentPlatformLogicalAgentVersionId } from "./agentPlatformAgentVersionIdentity";
 
 /** Presents active cloud Agent versions with their Agent Platform names. */
 export function agentPlatformControlAgentCatalogAdapter(
@@ -32,8 +31,8 @@ export function agentPlatformControlAgentCatalogAdapter(
 }
 
 function platformAgentId(version: AgentVersionView): number | null {
-  const match = PLATFORM_AGENT_VERSION_ID.exec(version.agentVersionId);
-  if (match?.[1] === undefined) return null;
-  const id = Number(match[1]);
+  const logicalId = agentPlatformLogicalAgentVersionId(version.agentVersionId);
+  if (logicalId === null) return null;
+  const id = Number(logicalId.slice("agent-platform:".length));
   return Number.isSafeInteger(id) ? id : null;
 }

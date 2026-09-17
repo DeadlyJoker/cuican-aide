@@ -1,3 +1,10 @@
+import { PostgresOfficeThreadStore } from "./postgres-office-thread-store.ts";
+import { assertOfficeThreadReplay, officeThreadLockKey } from "./office-thread-binding.ts";
+import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
+import type { BindOfficeThreadInput, OfficeThreadLocator } from "@crewon/application";
+import { threadListSql } from "./thread-list-query.ts";
+import { PostgresThreadMessageWindowStore } from "./postgres-thread-message-window.ts";
+import type { ThreadMessageWindowStore } from "@crewon/application";
 import {
   RunStoreError,
   type CommitThreadInput,
@@ -8,6 +15,7 @@ import {
   type MessageView,
   type InvalidatedMessage,
   type ModelHistoryStore,
+  type ModelHistoryContextStore,
   type ThreadLocator,
   type ThreadScopedLocator,
   type ThreadRollbackReceiptQuery,
@@ -43,7 +51,8 @@ import {
   type PostgresThreadReceiptRow,
   type PostgresThreadRow,
 } from "./postgres-thread-codec.ts";
-import { loadPostgresModelHistoryValidation } from "./postgres-model-history.ts";
+import { validatePostgresModelHistoryAppend } from "./postgres-model-history-append.ts";
+import { PostgresModelHistoryContextStore } from "./postgres-model-history-context.ts";
 import {
   POSTGRES_THREAD_SCHEMA_VERSION,
   postgresThreadSchemaSql,
@@ -71,9 +80,7 @@ import {
   validateMessagePage,
   validateMessageView,
   validateMessages,
-  validateModelHistoryAppendShape,
   validateModelHistoryPage,
-  validateModelHistoryPairing,
   validateThreadCommitInput,
   validateThreadEvents,
   validateThreadReceiptResult,
@@ -143,8 +150,11 @@ export class PostgresThreadStore
     ThreadGoalSnapshotStore,
     ModelHistoryStore
 {
+  readonly messageWindows: ThreadMessageWindowStore;
+  readonly modelHistoryContext: ModelHistoryContextStore;
   protected readonly pool: Pool;
   protected readonly schema: string;
+  readonly #officeThreads: PostgresOfficeThreadStore;
   readonly #ownsPool: boolean;
   #closed = false;
 
@@ -153,6 +163,27 @@ export class PostgresThreadStore
     const connection = createPostgresPool(options, "crewon-thread-store");
     this.pool = connection.pool;
     this.#ownsPool = connection.ownsPool;
+    this.#officeThreads = new PostgresOfficeThreadStore(this.pool, this.schemaSql(), async (client, locator) => {
+      const match = await client.query(`SELECT 1 FROM ${this.schemaSql()}.threads WHERE tenant_id = $1 AND space_id = $2 AND thread_id = $3 FOR UPDATE`, [locator.tenantId, locator.spaceId, locator.threadId]);
+      return match.rows.length === 0 ? null : this.loadThreadWithin(client, locator);
+    });
+    this.messageWindows = new PostgresThreadMessageWindowStore(
+      this.pool,
+      this.schemaSql(),
+      () => this.assertOpen(),
+    );
+    this.modelHistoryContext = new PostgresModelHistoryContextStore(this.pool, this.schemaSql(), () => this.assertOpen());
+  }
+
+  async loadOfficeThreadBinding(locator: OfficeThreadLocator) {
+    this.assertOpen();
+    try { return await this.#officeThreads.load(this.pool, locator); }
+    catch (error) { throw normalizePostgresError(error); }
+  }
+
+  async bindOfficeThread(input: BindOfficeThreadInput) {
+    this.assertOpen();
+    return this.#officeThreads.bind(input);
   }
 
   static async open(
@@ -247,27 +278,9 @@ export class PostgresThreadStore
     this.assertOpen();
     validateThreadListQuery(query);
     try {
-      const result = await this.pool.query<PostgresThreadRow>(
-        `SELECT tenant_id, space_id, thread_id, created_by_actor_id, title, status,
-                revision, last_event_sequence, last_message_sequence, state_json,
-                created_at, updated_at, archived_at, deleted_at,
-                deleted_by_actor_id
-         FROM ${this.#tableSql("threads")}
-         WHERE tenant_id = $1
-           AND space_id = $2
-           AND status != 'deleted'
-           AND ($3::timestamptz IS NULL OR updated_at < $3::timestamptz
-             OR (updated_at = $3::timestamptz AND thread_id < $4))
-         ORDER BY updated_at DESC, thread_id DESC
-         LIMIT $5`,
-        [
-          query.tenantId,
-          query.spaceId,
-          query.before?.updatedAt ?? null,
-          query.before?.threadId ?? null,
-          query.limit,
-        ],
-      );
+      const statement = threadListSql(query, this.#tableSql("threads"), "postgres");
+      const result = await this.pool.query<PostgresThreadRow>(statement.sql, statement.values);
+      if (query.after != null) result.rows.reverse();
       return result.rows.map((row) =>
         decodePostgresThreadState(row, {
           tenantId: query.tenantId,
@@ -376,11 +389,16 @@ export class PostgresThreadStore
           tenantId: prior.tenant_id,
           threadId: prior.thread_id,
         });
+        if (input.officeBinding) assertOfficeThreadReplay(input.officeBinding, await this.#officeThreads.load(client, input.officeBinding), result.state);
         await client.query("COMMIT");
         return {
           ...result,
           disposition: "replayed",
         };
+      }
+      if (input.officeBinding) {
+        await this.#officeThreads.assertOffice(client, input.officeBinding);
+        await this.#officeThreads.assertAvailable(client, input.officeBinding);
       }
       await this.#validateSourceFence(client, input);
       const locator = { tenantId: input.tenantId, threadId };
@@ -462,6 +480,7 @@ export class PostgresThreadStore
         );
       }
 
+      if (input.officeBinding) await this.#officeThreads.insert(client, input.officeBinding);
       const result: CommitThreadResult = {
         disposition: "committed",
         state: next,
@@ -947,6 +966,7 @@ export class PostgresThreadStore
       `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
     );
     const aggregateKeys = [threadLockKey(input.tenantId, threadId)];
+    if (input.officeBinding) aggregateKeys.push(officeThreadLockKey(input.officeBinding));
     if (input.sourceFence !== undefined) {
       aggregateKeys.push(
         threadLockKey(input.tenantId, input.sourceFence.threadId),
@@ -1200,30 +1220,13 @@ export class PostgresThreadStore
       "item_id",
       append.items.map((item) => item.itemId),
     );
-    const validation = await loadPostgresModelHistoryValidation(
+    await validatePostgresModelHistoryAppend(
       client,
       this.schemaSql(),
       locator,
-      append.items,
-    );
-    validateModelHistoryAppendShape(
       append,
-      locator,
-      validation.lastSequence,
       (id) => itemIds.has(id),
     );
-    for (const item of append.items) {
-      if (
-        item.type === "tool_call" &&
-        validation.existingToolCallKeys.has(toolCallKey(item))
-      ) {
-        throw new RunStoreError("model_history_tool_call_duplicate");
-      }
-    }
-    validateModelHistoryPairing([
-      ...validation.pendingToolCalls,
-      ...append.items,
-    ]);
   }
 
   async #loadModelHistory(
@@ -1338,20 +1341,4 @@ function decodePostgresThreadGoalEvent(
       cause: error,
     });
   }
-}
-
-async function advisoryLock(client: PoolClient, key: string): Promise<void> {
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-    key,
-  ]);
-}
-
-function threadLockKey(tenantId: string, threadId: string): string {
-  return `thread:${tenantId}:${threadId}`;
-}
-
-function toolCallKey(
-  item: Extract<ModelHistoryItem, { type: "tool_call" }>,
-): string {
-  return `${item.runId}\0${item.callId}`;
 }

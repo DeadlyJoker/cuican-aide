@@ -7,6 +7,8 @@ import { applyDesktopPreferencesAction } from "../appPreferenceActions";
 import { parseAppearancePreferences } from "../../appearance/appearanceSerialization";
 import { setAppliedAppearance } from "../../appearance/appearanceRuntime";
 import { systemPrefersDark } from "../../appearance/applyAppearance";
+import { readLocalAppearance } from "../../appearance/localAppearanceStore";
+import { resolveThemeMode } from "../../appearance/applyAppearance";
 import { persistLocale, type Locale } from "../../i18n";
 import { persistTheme, type Theme } from "../../theme";
 
@@ -53,6 +55,27 @@ export function useAppDocumentPreferenceEffects({
       untitledThreadLabel,
     });
   }, [composerValue, thread, untitledThreadLabel]);
+
+  useEffect(() => {
+    if (client) return;
+    const preferences = readLocalAppearance();
+    const themeOverride = new URLSearchParams(window.location.search).get(
+      "theme",
+    );
+    const applyLocalTheme = () => {
+      const saved = readLocalAppearance();
+      if (saved && themeOverride !== "light" && themeOverride !== "dark") {
+        setTheme(resolveThemeMode(saved.themeMode, systemPrefersDark()));
+      }
+    };
+    if (preferences) {
+      setAppliedAppearance(preferences);
+      applyLocalTheme();
+    }
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
+    media?.addEventListener("change", applyLocalTheme);
+    return () => media?.removeEventListener("change", applyLocalTheme);
+  }, [client, setTheme]);
 
   useEffect(() => {
     if (!isConnected) {

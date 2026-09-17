@@ -1,5 +1,7 @@
+import { parseResponsesOutputTokenLimit } from "./responses-output-budget.ts";
 import {
   ModelTransportError,
+  beginModelCall,
   type ModelInputItem,
   type ModelRequest,
   type ModelTransportStreamOptions,
@@ -16,6 +18,11 @@ import {
   protocolError,
   transportError,
 } from "./responses-errors.ts";
+import {
+  isPreviousResponseRejectedBody,
+  PREVIOUS_RESPONSE_REJECTED,
+  recoverResponsesContinuation,
+} from "./responses-continuation-recovery.ts";
 import {
   responsesProtocolEvents,
   type ResponsesIdentityPolicy,
@@ -53,6 +60,8 @@ export type DirectResponsesTransportConfig = Readonly<{
   endpoint: string;
   apiKey?: string | null;
   model: string;
+  /** Opt in only for endpoints that support Responses max_output_tokens. */
+  maxOutputTokens?: number | undefined;
   storeResponses?: boolean;
   requestProfile?: ResponsesRequestProfile;
   idleTimeoutMs?: number;
@@ -82,6 +91,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
+  readonly maxOutputTokens: number | undefined;
   readonly #endpoint: URL;
   readonly #apiKey: string | null;
   readonly #storeResponses: boolean;
@@ -120,6 +130,9 @@ export class DirectResponsesTransport implements ModelTransportPort {
       config.model,
       MAX_MODEL_LENGTH,
       "responses_model_invalid",
+    );
+    this.maxOutputTokens = parseResponsesOutputTokenLimit(
+      config.maxOutputTokens,
     );
     this.#apiKey = parseResponsesApiKey(config.apiKey ?? null);
     if (
@@ -166,6 +179,22 @@ export class DirectResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
     options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
+    yield* recoverResponsesContinuation({
+      request,
+      signal,
+      transport: "http",
+      canReplay: () =>
+        request.input.strategy === "providerCheckpoint" &&
+        request.input.newHistoryStartIndex > 0,
+      stream: (next) => this.#streamOnce(next, signal, options),
+    });
+  }
+
+  async *#streamOnce(
+    request: ModelRequest,
+    signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
+  ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
     this.#turnStates.seed(request.runId, request.providerTurnState ?? null);
     if (request.reconcileCheckpoint !== undefined) {
@@ -176,7 +205,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
           false,
         );
       }
-      yield* this.#retrieve(request.reconcileCheckpoint, signal);
+      yield* this.#retrieve(request, signal, options);
       return;
     }
     const previousResponseId =
@@ -201,9 +230,24 @@ export class DirectResponsesTransport implements ModelTransportPort {
       failed: false,
       value: undefined,
     };
+    let call: Awaited<ReturnType<typeof beginModelCall>> = null;
+    let outcome: "completed" | "failed" | "canceled" | "interrupted" =
+      "interrupted";
     try {
+      call = await beginModelCall({
+        options,
+        identity: {
+          ...this.modelIdentity(),
+          agentVersionId: request.agentVersionId,
+        },
+        transport: "http",
+        operation: "generate",
+        maxOutputTokens: this.maxOutputTokens,
+        signal: idle.signal,
+      });
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
+        redirect: "manual",
         headers: responsesHeaders(
           this.#apiKey,
           "text/event-stream",
@@ -216,6 +260,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
             modelId: this.modelId,
             storeResponses: this.#storeResponses,
             requestProfile: this.#requestProfile,
+            maxOutputTokens: this.maxOutputTokens,
           }),
         ),
         signal: idle.signal,
@@ -224,13 +269,24 @@ export class DirectResponsesTransport implements ModelTransportPort {
       if (!response.ok) {
         const rateLimit = parseResponsesRateLimitHeaders(response.headers);
         let errorBody: string | null = null;
-        if (response.status === 400 || response.status === 429) {
+        if (
+          response.status === 400 ||
+          response.status === 404 ||
+          response.status === 429
+        ) {
           errorBody = await readBoundedErrorBody(response.body);
         } else {
           await cancelBody(response.body);
         }
         if (rateLimit !== null) {
           yield { type: "rate_limit", snapshot: rateLimit };
+        }
+        if (
+          previousResponseId !== null &&
+          (response.status === 400 || response.status === 404) &&
+          isPreviousResponseRejectedBody(errorBody)
+        ) {
+          throw transportError("notFound", PREVIOUS_RESPONSE_REJECTED, false);
         }
         throw httpError(response.status, response.headers.get("retry-after"), {
           usageLimitReached: isUsageLimitReachedBody(errorBody),
@@ -263,6 +319,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         throw protocolError("responses_body_missing");
       }
       const events = responsesProtocolEvents(response.body, {
+        onResponseIdentity: (id) => call?.responseIdentity(id),
         sequencePolicy: this.#sequencePolicy,
         identityPolicy: this.#identityPolicy,
         finalOutputPolicy:
@@ -273,26 +330,32 @@ export class DirectResponsesTransport implements ModelTransportPort {
         ...(this.#outputDeltaFlushBytes === undefined
           ? {}
           : { outputDeltaFlushBytes: this.#outputDeltaFlushBytes }),
-        completedCheckpoint: (responseId) =>
-          this.#storeResponses
+        completedCheckpoint: (responseId) => {
+          return this.#storeResponses
             ? responsesCheckpoint(responseId, this.modelIdentity())
-            : null,
-        createdCheckpoint: (responseId) =>
-          this.#storeResponses
+            : null;
+        },
+        createdCheckpoint: (responseId) => {
+          return this.#storeResponses
             ? responsesCheckpoint(responseId, this.modelIdentity())
-            : null,
+            : null;
+        },
       });
       for await (const event of events) {
         if (event.type === "completed") {
           const providerTurnState = this.#turnStates.get(request.runId);
-          yield providerTurnState === null
-            ? event
-            : { ...event, providerTurnState };
+          const completed =
+            providerTurnState === null
+              ? event
+              : { ...event, providerTurnState };
+          yield call?.event(completed) ?? completed;
         } else {
-          yield event;
+          yield call?.event(event) ?? event;
         }
       }
+      outcome = "completed";
     } catch (error) {
+      outcome = signal.aborted ? "canceled" : "failed";
       if (controlSinkFailure.failed) throw controlSinkFailure.value;
       if (signal.aborted) {
         throw transportError(
@@ -324,6 +387,9 @@ export class DirectResponsesTransport implements ModelTransportPort {
       );
     } finally {
       idle.close();
+      await call?.finish(
+        outcome === "interrupted" && signal.aborted ? "canceled" : outcome,
+      );
     }
   }
 
@@ -332,9 +398,11 @@ export class DirectResponsesTransport implements ModelTransportPort {
   }
 
   async *#retrieve(
-    checkpoint: ProviderCheckpoint,
+    request: ModelRequest,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
+    const checkpoint = request.reconcileCheckpoint!;
     const responseId = responseIdFromResponsesCheckpoint(
       checkpoint,
       this.modelIdentity(),
@@ -344,9 +412,24 @@ export class DirectResponsesTransport implements ModelTransportPort {
       this.#endpoint,
     );
     const idle = new IdleWatch(this.#idleTimeoutMs, this.#scheduler, signal);
+    let call: Awaited<ReturnType<typeof beginModelCall>> = null;
+    let outcome: "completed" | "failed" | "canceled" | "interrupted" =
+      "interrupted";
     try {
+      call = await beginModelCall({
+        options,
+        identity: {
+          ...this.modelIdentity(),
+          agentVersionId: request.agentVersionId,
+        },
+        transport: "http",
+        operation: "retrieve",
+        signal: idle.signal,
+        providerResponseId: responseId,
+      });
       const response = await this.#fetch(url, {
         method: "GET",
+        redirect: "manual",
         headers: responsesHeaders(this.#apiKey, "application/json"),
         signal: idle.signal,
       });
@@ -366,8 +449,10 @@ export class DirectResponsesTransport implements ModelTransportPort {
           true,
         );
       }
-      yield* projected.events;
+      for (const event of projected.events) yield call?.event(event) ?? event;
+      outcome = "completed";
     } catch (error) {
+      outcome = signal.aborted ? "canceled" : "failed";
       if (signal.aborted) {
         throw transportError(
           "canceled",
@@ -396,6 +481,9 @@ export class DirectResponsesTransport implements ModelTransportPort {
       );
     } finally {
       idle.close();
+      await call?.finish(
+        outcome === "interrupted" && signal.aborted ? "canceled" : outcome,
+      );
     }
   }
 
@@ -866,6 +954,7 @@ export function responsesRequestBody(options: {
   storeResponses: boolean;
   requestProfile?: ResponsesRequestProfile;
   inputItems?: readonly ModelInputItem[];
+  maxOutputTokens?: number | undefined;
 }): Readonly<Record<string, unknown>> {
   const inputItems =
     options.inputItems ??
@@ -881,6 +970,10 @@ export function responsesRequestBody(options: {
     input: inputItems.map(toResponsesInputItem),
     tools: options.request.tools.map(toResponsesToolDefinition),
   };
+  const maxOutputTokens = parseResponsesOutputTokenLimit(
+    options.maxOutputTokens,
+  );
+  if (maxOutputTokens !== undefined) body.max_output_tokens = maxOutputTokens;
   if (options.request.instructions !== null) {
     body.instructions = options.request.instructions;
   }

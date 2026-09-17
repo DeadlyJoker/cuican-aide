@@ -1,3 +1,7 @@
+import { workItemCandidatesSql } from "./work-item-ready-order.ts";
+import { prunePostgresDeliveredOutbox } from "./postgres-outbox-retention.ts";
+import type { OutboxRetentionStore } from "@crewon/application";
+import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 import {
   RunStoreError,
   type DurableQueueStore,
@@ -113,6 +117,18 @@ export class PostgresQueueStore implements DurableQueueStore {
     this.#closed = true;
     if (this.#ownsPool) await this.#pool.end();
   }
+
+  readonly outboxRetention: OutboxRetentionStore = {
+    pruneDeliveredOutbox: async (policy, options) => {
+      this.#assertOpen();
+      return prunePostgresDeliveredOutbox(
+        this.#pool,
+        this.#schemaSql(),
+        policy,
+        options,
+      );
+    },
+  };
 
   async listPendingOutbox(limit: number): Promise<readonly OutboxMessage[]> {
     return this.#listPending("outbox", limit).then((rows) =>
@@ -238,16 +254,20 @@ export class PostgresQueueStore implements DurableQueueStore {
     this.#assertOpen();
     validateLimit(limit);
     try {
-      const result = await this.#pool.query<PostgresQueueItemRow>(
-        `SELECT tenant_id, run_id, ${kind === "outbox" ? "topic" : "kind"},
-                ${itemColumn(kind)} AS item_json, created_at
-         FROM ${this.#tableSql(kind)}
-         WHERE (status = 'pending' AND available_at <= clock_timestamp())
-            OR (status = 'leased' AND lease_expires_at <= clock_timestamp())
-         ORDER BY ${orderColumn(kind)} ASC
-         LIMIT $1`,
-        [limit],
-      );
+      const selection =
+        kind === "work_items"
+          ? `SELECT w.tenant_id,w.run_id,w.kind,w.work_item_json AS item_json,w.created_at
+           FROM (${workItemCandidatesSql({ table: this.#tableSql(kind), now: "statement_timestamp()", limit: "$1", dialect: "postgres", lock: "none" })}) c
+           JOIN ${this.#tableSql(kind)} w ON w.work_item_id=c.work_item_id
+           ORDER BY c.ready_at,c.work_item_order`
+          : `SELECT tenant_id,run_id,topic,${itemColumn(kind)} AS item_json,created_at
+           FROM ${this.#tableSql(kind)}
+           WHERE (status = 'pending' AND available_at <= clock_timestamp())
+              OR (status = 'leased' AND lease_expires_at <= clock_timestamp())
+           ORDER BY ${orderColumn(kind)} ASC LIMIT $1`;
+      const result = await this.#pool.query<PostgresQueueItemRow>(selection, [
+        limit,
+      ]);
       return result.rows;
     } catch (error) {
       throw normalizePostgresError(error);
@@ -264,19 +284,28 @@ export class PostgresQueueStore implements DurableQueueStore {
     try {
       const result = await this.#pool.query<PostgresQueueItemRow>(
         `WITH candidate AS (
-           SELECT ${id}
-           FROM ${this.#tableSql(kind)}
-           WHERE (status = 'pending' AND available_at <= clock_timestamp())
-              OR (status = 'leased' AND lease_expires_at <= clock_timestamp())
-           ORDER BY ${orderColumn(kind)} ASC
-           FOR UPDATE SKIP LOCKED
-           LIMIT 1
+           ${
+             kind === "work_items"
+               ? workItemCandidatesSql({
+                   table: this.#tableSql(kind),
+                   now: "statement_timestamp()",
+                   limit: "1",
+                   dialect: "postgres",
+                   lock: "skipLocked",
+                 })
+               : `SELECT ${id}
+             FROM ${this.#tableSql(kind)}
+             WHERE (status = 'pending' AND available_at <= clock_timestamp())
+                OR (status = 'leased' AND lease_expires_at <= clock_timestamp())
+             ORDER BY ${orderColumn(kind)} ASC FOR UPDATE SKIP LOCKED LIMIT 1`
+           }
          )
          UPDATE ${this.#tableSql(kind)} AS queue
          SET status = 'leased', lease_owner_id = $1, lease_id = $2,
              lease_epoch = queue.lease_epoch + 1,
              lease_expires_at = clock_timestamp() + $3 * interval '1 millisecond',
-             attempt_count = queue.attempt_count + 1
+             attempt_count = queue.attempt_count + 1,
+             last_error_code = CASE WHEN '${kind}' = 'work_items' AND queue.last_error_code = '${RECONCILIATION_CANCEL_WAKE}' THEN NULL ELSE queue.last_error_code END
          FROM candidate
          WHERE queue.${id} = candidate.${id}
          RETURNING queue.tenant_id, queue.run_id,
@@ -300,7 +329,7 @@ export class PostgresQueueStore implements DurableQueueStore {
       await expectOne(
         client.query(
           `UPDATE ${this.#tableSql(kind)}
-           SET status = 'pending', available_at = clock_timestamp() + $2 * interval '1 millisecond',
+           SET status = 'pending', available_at = clock_timestamp() + CASE WHEN '${kind}' = 'work_items' AND last_error_code = '${RECONCILIATION_CANCEL_WAKE}' THEN 0 ELSE $2 END * interval '1 millisecond',
                lease_owner_id = NULL, lease_id = NULL, lease_expires_at = NULL,
                last_error_code = $3
            WHERE ${idColumn(kind)} = $1 AND lease_expires_at > clock_timestamp()`,

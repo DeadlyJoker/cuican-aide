@@ -3,6 +3,7 @@ import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 
 import type { AppServerClient } from "../../app-server/appServer";
 import type { Locale } from "../../i18n";
+import type { StreamingTextActivity } from "../../thread/threadStreamingTextBuffer";
 import {
   clientOwnsModelResponseTimeout,
   markModelResponseTimedOut,
@@ -23,6 +24,7 @@ export type AppModelResponseTimeoutEffectParams = {
   setStreamingTextByThread: StateSetter<Record<string, string>>;
   setThreads: StateSetter<Thread[]>;
   streamingText: string;
+  streamingTextActivity: (threadId: string) => StreamingTextActivity;
 };
 
 export function useAppModelResponseTimeoutEffect({
@@ -37,13 +39,15 @@ export function useAppModelResponseTimeoutEffect({
   setStreamingTextByThread,
   setThreads,
   streamingText,
+  streamingTextActivity,
 }: AppModelResponseTimeoutEffectParams) {
   useEffect(() => {
     if (
       !clientOwnsModelResponseTimeout(runtimeAuthority) ||
       !isConnected ||
       !selectedThreadId ||
-      !activeTurnId
+      !activeTurnId ||
+      streamingTextActivity(selectedThreadId) !== "none"
     ) {
       return undefined;
     }
@@ -59,6 +63,9 @@ export function useAppModelResponseTimeoutEffect({
     }
 
     const timeoutId = window.setTimeout(() => {
+      // Hidden previews intentionally do not trigger React updates. Recheck
+      // received output before inferring a timeout from the old visible text.
+      if (streamingTextActivity(selectedThreadId) !== "none") return;
       const completedAt = Math.floor(Date.now() / 1000);
       setActiveTurnByThread((current) => {
         const { [selectedThreadId]: _removed, ...rest } = current;
@@ -95,5 +102,6 @@ export function useAppModelResponseTimeoutEffect({
     setStreamingTextByThread,
     setThreads,
     streamingText,
+    streamingTextActivity,
   ]);
 }

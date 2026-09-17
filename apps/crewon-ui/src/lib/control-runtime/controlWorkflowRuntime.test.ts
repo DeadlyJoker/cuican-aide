@@ -8,6 +8,7 @@ import type {
 } from "@crewon/contracts";
 
 import {
+  CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
   ControlWorkflowRuntime,
   isInternalControlWorkflowThread,
   type ControlWorkflowRuntimeClient,
@@ -53,6 +54,12 @@ describe("Control Workflow Runtime", () => {
       "Release approval",
       "Independent verification",
     ]);
+    expect(definition.config.nodes[2]?.instruction).toBe(
+      "Verify the final go/no-go decision",
+    );
+    expect(state.published?.nodes[2]?.instruction).toContain(
+      CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
+    );
     expect(state.published?.nodes[1]).toEqual(
       expect.objectContaining({
         kind: "humanGate",
@@ -157,6 +164,12 @@ describe("Control Workflow Runtime", () => {
     expect(verificationPrompt?.content).toContain(
       "agent-review completed node-01",
     );
+    expect(verificationPrompt?.content).toContain(
+      CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
+    );
+    expect(verificationPrompt?.content).toContain(
+      "该行必须逐字等于 `VERDICT: PASS` 或 `VERDICT: FAIL`",
+    );
     expect(verificationPrompt?.content).not.toContain(
       "Legacy assistant output",
     );
@@ -175,9 +188,314 @@ describe("Control Workflow Runtime", () => {
       state.threads.some((thread) => isInternalControlWorkflowThread(thread)),
     ).toBe(true);
   });
+
+  it("fails closed when a canceled Human Gate is resolved", async () => {
+    const state = workflowClient();
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createGatedWorkflow(runtime);
+    const waiting = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Review the release",
+    });
+
+    const canceled = await runtime.cancelWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      executionId: waiting.executionId,
+    });
+
+    expect(canceled.status).toBe("canceled");
+    expect(canceled.executedNodes.map((node) => node.status)).toEqual([
+      "completed",
+      "canceled",
+      "pending",
+    ]);
+    await expect(
+      runtime.resolveGate({
+        workflowVersionId: definition.config.workflowId,
+        executionId: waiting.executionId,
+        nodeId: "node-02",
+        decision: "approve",
+        comment: null,
+      }),
+    ).rejects.toThrow("control_workflow_execution_canceled");
+    expect(
+      [...state.messages.values()]
+        .flat()
+        .some((item) =>
+          item.content.startsWith("[Control Workflow · gate:node-02:approve]"),
+        ),
+    ).toBe(false);
+  });
+
+  it("fails the verification node and workflow on an explicit VERDICT: FAIL line", async () => {
+    const verificationOutput = [
+      "## Independent verification",
+      "Evidence was reviewed.",
+      "VERDICT: FAIL",
+      "Missing rollback proof.",
+      "Do not release.",
+    ].join("\n");
+    const state = workflowClient({
+      assistantOutput: ({ agentVersionId, nodeId }) =>
+        agentVersionId === "agent-verifier"
+          ? verificationOutput
+          : `${agentVersionId} completed ${nodeId}`,
+    });
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createVerifiedWorkflow(runtime);
+
+    const result = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Can this release proceed?",
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("control_workflow_verification_failed");
+    expect(result.output).toBe(verificationOutput);
+    expect(result.executedNodes.map((node) => node.status)).toEqual([
+      "completed",
+      "failed",
+    ]);
+    expect(result.executedNodes[1]?.output).toBe(verificationOutput);
+  });
+
+  it.each([
+    ["missing", "Evidence was reviewed, but no verdict was emitted."],
+    ["multiple", "VERDICT: PASS\nVERDICT: FAIL"],
+    ["malformed spacing", "VERDICT : PASS"],
+    ["malformed case", "verdict: PASS"],
+    ["malformed suffix", "VERDICT: PASS - evidence complete"],
+  ])("fails closed when the v1 verdict is %s", async (_label, output) => {
+    const state = workflowClient({
+      assistantOutput: ({ agentVersionId, nodeId }) =>
+        agentVersionId === "agent-verifier"
+          ? output
+          : `${agentVersionId} completed ${nodeId}`,
+    });
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createVerifiedWorkflow(runtime);
+
+    const result = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Can this release proceed?",
+    });
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("control_workflow_verification_invalid");
+    expect(result.executedNodes.at(-1)).toMatchObject({
+      error: "control_workflow_verification_invalid",
+      output,
+      status: "failed",
+    });
+  });
+
+  it("accepts exactly one strict PASS while ignoring prose that mentions FAIL", async () => {
+    const state = workflowClient({
+      assistantOutput: ({ agentVersionId, nodeId }) =>
+        agentVersionId === "agent-verifier"
+          ? [
+              "The instructions mention VERDICT: FAIL as an example.",
+              "VERDICT: PASS",
+              "All required evidence is present.",
+            ].join("\n")
+          : `${agentVersionId} completed ${nodeId}`,
+    });
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createVerifiedWorkflow(runtime);
+
+    const result = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Can this release proceed?",
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.error).toBeNull();
+    expect(result.executedNodes.at(-1)?.status).toBe("completed");
+  });
+
+  it("keeps marker-free persisted workflows on the explicit legacy parser", async () => {
+    const state = workflowClient({
+      legacyVerificationContract: true,
+      assistantOutput: ({ agentVersionId, nodeId }) =>
+        agentVersionId === "agent-verifier"
+          ? "Legacy verification report without a verdict"
+          : `${agentVersionId} completed ${nodeId}`,
+    });
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createVerifiedWorkflow(runtime);
+
+    const result = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Can this legacy workflow proceed?",
+    });
+
+    expect(state.published?.nodes.at(-1)?.instruction).not.toContain(
+      CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.error).toBeNull();
+  });
+
+  it("projects the verifier as running while an approved Gate is resolving", async () => {
+    const state = workflowClient({ heldAgentVersionIds: ["agent-verifier"] });
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createGatedWorkflow(runtime);
+    const waiting = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Review the release",
+    });
+
+    const resolving = runtime.resolveGate({
+      workflowVersionId: definition.config.workflowId,
+      executionId: waiting.executionId,
+      nodeId: "node-02",
+      decision: "approve",
+      comment: "Proceed to independent verification",
+    });
+    await vi.waitFor(() => {
+      expect(state.runAgents).toContain("agent-verifier");
+    });
+
+    const projected = (await runtime.listWorkflows())[0]?.config.runs?.[0];
+    expect(projected?.status).toBe("running");
+    expect(projected?.executedNodes.map((node) => node.status)).toEqual([
+      "completed",
+      "completed",
+      "running",
+    ]);
+
+    state.releaseAgent("agent-verifier");
+    await expect(resolving).resolves.toMatchObject({ status: "completed" });
+  });
+
+  it("keeps cancellation terminal when it races approved-Gate verification", async () => {
+    const state = workflowClient({ heldAgentVersionIds: ["agent-verifier"] });
+    const runtime = new ControlWorkflowRuntime({
+      client: state.client,
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+    const definition = await createGatedWorkflow(runtime);
+    const waiting = await runtime.runWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      threadId: "thread-main",
+      prompt: "Review the release",
+    });
+    const resolving = runtime.resolveGate({
+      workflowVersionId: definition.config.workflowId,
+      executionId: waiting.executionId,
+      nodeId: "node-02",
+      decision: "approve",
+      comment: null,
+    });
+    await vi.waitFor(() => {
+      expect(state.runAgents).toContain("agent-verifier");
+    });
+
+    const canceled = await runtime.cancelWorkflow({
+      workflowVersionId: definition.config.workflowId,
+      executionId: waiting.executionId,
+    });
+    expect(canceled.status).toBe("canceled");
+    await resolving;
+
+    const persisted = (await runtime.listWorkflows())[0]?.config.runs?.[0];
+    expect(persisted?.status).toBe("canceled");
+    expect(persisted?.executedNodes.map((node) => node.status)).toEqual([
+      "completed",
+      "completed",
+      "canceled",
+    ]);
+  });
 });
 
-function workflowClient() {
+async function createGatedWorkflow(runtime: ControlWorkflowRuntime) {
+  return runtime.createWorkflow({
+    title: "Release decision",
+    description: "Review evidence, wait for approval, then verify",
+    nodes: [
+      {
+        type: "agent",
+        title: "Evidence review",
+        instruction: "Summarize the release evidence",
+        agentVersionId: "agent-review",
+      },
+      {
+        type: "humanGate",
+        title: "Release approval",
+        instruction: "Approve only when the evidence is sufficient",
+      },
+      {
+        type: "verification",
+        title: "Independent verification",
+        instruction: "Verify the final go/no-go decision",
+        agentVersionId: "agent-verifier",
+      },
+    ],
+  });
+}
+
+async function createVerifiedWorkflow(runtime: ControlWorkflowRuntime) {
+  return runtime.createWorkflow({
+    title: "Verified release",
+    description: "Prepare and independently verify a release",
+    nodes: [
+      {
+        type: "agent",
+        title: "Prepare",
+        instruction: "Prepare the release evidence",
+        agentVersionId: "agent-builder",
+      },
+      {
+        type: "verification",
+        title: "Verify",
+        instruction: "Return an explicit verdict",
+        agentVersionId: "agent-verifier",
+      },
+    ],
+  });
+}
+
+function workflowClient(
+  options: {
+    assistantOutput?: (input: {
+      agentVersionId: string;
+      nodeId: string;
+    }) => string;
+    heldAgentVersionIds?: readonly string[];
+    legacyVerificationContract?: boolean;
+  } = {},
+) {
   const threads: ThreadView[] = [
     thread("thread-main", "Release task", { lastMessageSequence: 4 }),
   ];
@@ -218,6 +536,8 @@ function workflowClient() {
   ]);
   const runs = new Map<string, RunView[]>();
   const runAgents: string[] = [];
+  const runAgentById = new Map<string, string>();
+  const heldAgentVersionIds = new Set(options.heldAgentVersionIds ?? []);
   let published: WorkflowVersionView | null = null;
   let sequence = 0;
 
@@ -241,7 +561,17 @@ function workflowClient() {
         outputSchema: source.outputSchema,
         entryNodeIds: source.entryNodeIds,
         outputNodeIds: source.outputNodeIds,
-        nodes: source.nodes,
+        nodes: source.nodes.map((node: WorkflowVersionView["nodes"][number]) =>
+          node.kind === "verification" && options.legacyVerificationContract
+            ? {
+                ...node,
+                instruction: node.instruction.split(
+                  `\n\n${CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1}`,
+                  1,
+                )[0]!,
+              }
+            : node,
+        ),
         executionOrder: source.nodes.map(
           (node: WorkflowVersionView["nodes"][number]) => node.nodeId,
         ),
@@ -315,6 +645,7 @@ function workflowClient() {
     createRun: vi.fn(async (body) => {
       const runId = `run-${++sequence}`;
       runAgents.push(body.agentVersionId);
+      runAgentById.set(runId, body.agentVersionId);
       const created = run(runId, body.threadId, "queued");
       runs.set(body.threadId, [created, ...(runs.get(body.threadId) ?? [])]);
       return { disposition: "committed" as const, run: created };
@@ -325,6 +656,16 @@ function workflowClient() {
           (candidate) => candidate.runId === runId,
         );
         if (index === -1) continue;
+        const existing = threadRuns[index]!;
+        if (["canceled", "completed", "failed"].includes(existing.status)) {
+          return { run: existing };
+        }
+        const agentVersionId = runAgentById.get(runId) ?? "unknown-agent";
+        if (heldAgentVersionIds.has(agentVersionId)) {
+          const running = run(runId, threadId, "running");
+          threadRuns[index] = running;
+          return { run: running };
+        }
         const completed = run(runId, threadId, "completed");
         threadRuns[index] = completed;
         const current = messages.get(threadId) ?? [];
@@ -348,7 +689,16 @@ function workflowClient() {
             threadId,
             sequence: current.length + 1,
             role: "assistant",
-            content: `${runAgents.at(-1)} completed ${nodeId}`,
+            content:
+              options.assistantOutput?.({ agentVersionId, nodeId }) ??
+              [
+                `${agentVersionId} completed ${nodeId}`,
+                ...(prompt.content.includes(
+                  CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
+                )
+                  ? ["VERDICT: PASS"]
+                  : []),
+              ].join("\n"),
             proposedPlan: null,
             createdAt: now,
           };
@@ -368,13 +718,16 @@ function workflowClient() {
       nextCursor: null,
     })),
     cancelRun: vi.fn(async (runId: string) => {
-      const existing = [...runs.values()]
-        .flat()
-        .find((item) => item.runId === runId)!;
-      return {
-        disposition: "committed" as const,
-        run: run(runId, existing.threadId, "canceled"),
-      };
+      for (const threadRuns of runs.values()) {
+        const index = threadRuns.findIndex((item) => item.runId === runId);
+        if (index === -1) continue;
+        const existing = threadRuns[index]!;
+        const canceled = run(runId, existing.threadId, "canceled");
+        threadRuns[index] = canceled;
+        heldAgentVersionIds.delete(runAgentById.get(runId) ?? "");
+        return { disposition: "committed" as const, run: canceled };
+      }
+      throw new Error("run not found");
     }),
   } as unknown as ControlWorkflowRuntimeClient;
 
@@ -383,6 +736,9 @@ function workflowClient() {
     threads,
     messages,
     runAgents,
+    releaseAgent(agentVersionId: string) {
+      heldAgentVersionIds.delete(agentVersionId);
+    },
     get published() {
       return published;
     },

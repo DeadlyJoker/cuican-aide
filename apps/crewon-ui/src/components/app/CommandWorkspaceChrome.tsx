@@ -1,3 +1,4 @@
+import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import {
   BookOpen,
   Bot,
@@ -65,6 +66,7 @@ import {
 } from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
+  disabled?: boolean;
   action?:
     | "attach-files"
     | "attach-folder"
@@ -179,6 +181,7 @@ function workspaceName(path: string, emptyLabel = "工作空间"): string {
 }
 
 export function CommandSidebar({
+  threadCatalogNavigation,
   activeView,
   controlWorkspace,
   cwd,
@@ -201,6 +204,7 @@ export function CommandSidebar({
   onToggleCollapse,
   onToggleSearch,
 }: {
+  threadCatalogNavigation?: ThreadCatalogNavigation;
   activeView: CommandShellView;
   controlWorkspace?: CommandControlWorkspaceNav;
   cwd: string;
@@ -270,6 +274,8 @@ export function CommandSidebar({
             `工作空间切换失败：${detail}`,
           workspaceThreadsEmpty: "开始一次任务后，会话会出现在这个工作空间下。",
           workspaceTree: "工作空间和对话",
+          showMoreThreads: (count: number) => `展开更多（${count}）`,
+          showFewerThreads: "收起",
         }
       : {
           addWorkspace: "Add workspace",
@@ -313,6 +319,8 @@ export function CommandSidebar({
           workspaceThreadsEmpty:
             "Conversations will appear under this workspace after you start a task.",
           workspaceTree: "Workspaces and conversations",
+          showMoreThreads: (count: number) => `Show ${count} more`,
+          showFewerThreads: "Show less",
         };
   const {
     workspaceFormOpen,
@@ -439,6 +447,8 @@ export function CommandSidebar({
 
       <CommandSidebarSearchView
         isSearchOpen={isSearchOpen}
+        loading={threadCatalogNavigation?.loading}
+        canContinue={Boolean(threadCatalogNavigation?.hasOlder)}
         noMatches={copy.noMatches}
         query={query}
         results={sidebarSearchResults}

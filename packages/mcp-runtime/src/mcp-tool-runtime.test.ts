@@ -1,14 +1,21 @@
+import {
+  executionCommand,
+  readOnlyPolicy,
+  mutationPolicy,
+} from "./mcp-tool-runtime.test-support.ts";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { canonicalActionIntent } from "@crewon/contracts";
-import type {
-  ToolExecutionCommand,
-  ToolExecutionPolicy,
+import {
+  InMemoryToolBroker,
+  ToolBrokerError,
+  ToolResultCapacityError,
+  processToolResultCapacity,
+  type ToolExecutionResultAcknowledgement,
 } from "@crewon/tool-broker";
+import { McpRuntimeGroup } from "./mcp-runtime-group.ts";
 
 import type {
   McpClientPort,
@@ -40,18 +47,36 @@ const mcpSchedulingReference = JSON.parse(
   }>[];
 }>;
 
-test("discovers and invokes a real out-of-process stdio MCP server", async () => {
-  const runtime = new McpToolRuntime({
-    serverId: "fixture",
-    client: new StdioMcpClient({
-      command: process.execPath,
-      args: [
-        fileURLToPath(new URL("./fixtures/stdio-server.mjs", import.meta.url)),
-      ],
-      env: {},
+test("discovers, invokes and releases a real out-of-process stdio MCP result through its group", async (context) => {
+  const releases: number[] = [];
+  const acknowledge = InMemoryToolBroker.prototype.acknowledgeExecutionResult;
+  context.mock.method(
+    InMemoryToolBroker.prototype,
+    "acknowledgeExecutionResult",
+    function (
+      this: InMemoryToolBroker,
+      result: ToolExecutionResultAcknowledgement,
+    ) {
+      acknowledge.call(this, result);
+      releases.push(this.retainedExecutionCount);
+    },
+  );
+  const runtime = new McpRuntimeGroup([
+    new McpToolRuntime({
+      serverId: "fixture",
+      client: new StdioMcpClient({
+        command: process.execPath,
+        args: [
+          fileURLToPath(
+            new URL("./fixtures/stdio-server.mjs", import.meta.url),
+          ),
+        ],
+        env: {},
+      }),
+      policies: new Map([["echo", readOnlyPolicy()]]),
     }),
-    policies: new Map([["echo", readOnlyPolicy()]]),
-  });
+  ]);
+  context.after(() => runtime.close());
   const controller = new AbortController();
   await runtime.connect(controller.signal);
 
@@ -79,7 +104,29 @@ test("discovers and invokes a real out-of-process stdio MCP server", async () =>
     targetMcpScheduling("AR-018-reviewed-read-only-tool"),
   );
   const command = executionCommand();
-  const first = await runtime.execute(command, controller.signal);
+  const available = processToolResultCapacity.resourceSnapshot();
+  const occupied = processToolResultCapacity.reserve(
+    available.maximumBytes - available.reservedBytes,
+  );
+  context.after(() => occupied.release());
+  assert.throws(
+    () => runtime.reserveExecution(command, controller.signal),
+    ToolResultCapacityError,
+  );
+  occupied.release();
+  const reservation = runtime.reserveExecution(command, controller.signal, {
+    resultOwner: { tenantId: "tenant-1" },
+  });
+  assert.ok(reservation !== undefined);
+  const first = await reservation.execute();
+  reservation.release();
+  assert.equal(
+    runtime.scanRetainedExecutionResults({ limit: 1 })[0]?.tenantId,
+    "tenant-1",
+  );
+  const catalog = runtime.definitions();
+  await runtime.refresh(controller.signal);
+  assert.deepEqual(runtime.definitions(), catalog);
   const replayed = await runtime.reconcile(command, controller.signal);
   assert.deepEqual(first, replayed);
   assert.equal(first.status, "completed");
@@ -87,8 +134,112 @@ test("discovers and invokes a real out-of-process stdio MCP server", async () =>
     assert.match(first.result.output, /"echo":"hello"/u);
     assert.match(first.result.output, /"invocations":1/u);
     assert.match(first.result.output, /\[structured\]/u);
+    const acknowledgement = {
+      ...command,
+      status: "completed" as const,
+      providerReceiptId: first.providerReceiptId,
+    };
+    await runtime.close();
+    assert.deepEqual(runtime.readRetainedExecutionResult(command), first);
+    assert.equal(
+      runtime.scanRetainedExecutionResults({ limit: 1 })[0]?.runId,
+      command.runId,
+    );
+    assert.throws(
+      () => runtime.execute(command, controller.signal),
+      McpRuntimeError,
+    );
+    assert.throws(
+      () =>
+        runtime.acknowledgeExecutionResult({
+          ...acknowledgement,
+          providerReceiptId: "different",
+        }),
+      (error) =>
+        error instanceof ToolBrokerError &&
+        error.code === "tool_result_acknowledgement_mismatch",
+    );
+    runtime.acknowledgeExecutionResult(acknowledgement);
+    assert.equal(runtime.readRetainedExecutionResult(command), null);
+    assert.deepEqual(releases, [0]);
+    assert.deepEqual(runtime.scanRetainedExecutionResults({ limit: 1 }), []);
   }
   await runtime.close();
+});
+
+test("releases read-only results when the same MCP runtime also owns mutation routes", async (context) => {
+  const client = Object.assign(
+    new FakeMcpClient([
+      {
+        tools: [
+          {
+            name: "echo",
+            description: "Reads a fixture.",
+            inputSchema: { type: "object" },
+          },
+          {
+            name: "writer",
+            description: "Writes a fixture.",
+            inputSchema: { type: "object" },
+          },
+        ],
+      },
+    ]),
+    {
+      callTool: async () => ({
+        content: [{ type: "text" as const, text: "read once" }],
+      }),
+      mutationProvider: {
+        execute: async () => ({
+          status: "unknownOutcome" as const,
+          providerReceiptId: null,
+        }),
+        reconcile: async () => ({
+          status: "unknownOutcome" as const,
+          providerReceiptId: null,
+        }),
+        cancel: async () => ({
+          status: "unknownOutcome" as const,
+          providerReceiptId: null,
+        }),
+      },
+    },
+  );
+  const runtime = new McpToolRuntime({
+    serverId: "fixture",
+    client,
+    policies: new Map([
+      ["echo", readOnlyPolicy()],
+      ["writer", mutationPolicy()],
+    ]),
+  });
+  context.after(() => runtime.close());
+  await runtime.connect(new AbortController().signal);
+  const command = executionCommand();
+  const result = await runtime
+    .reserveExecution(command, new AbortController().signal, {
+      resultOwner: { tenantId: "tenant-1" },
+    })!
+    .execute();
+  assert.equal(
+    runtime.scanRetainedExecutionResults({ limit: 1 })[0]?.tenantId,
+    "tenant-1",
+  );
+  assert.equal(result.status, "completed");
+  assert.equal(
+    runtime.retainedExecutionResults({ runId: command.runId, limit: 128 })
+      .length,
+    1,
+  );
+  runtime.acknowledgeExecutionResult({
+    ...command,
+    status: "completed",
+    providerReceiptId: result.providerReceiptId,
+  });
+  assert.deepEqual(
+    runtime.retainedExecutionResults({ runId: command.runId, limit: 128 }),
+    [],
+  );
 });
 
 test("fails closed on unreviewed and mutation MCP tools", async () => {
@@ -324,88 +475,6 @@ test("parses strict explicit stdio configuration without ambient authority field
     hasCode("mcp_environment_invalid"),
   );
 });
-
-function executionCommand(
-  policy = readOnlyPolicy(),
-  originalName = "echo",
-): ToolExecutionCommand {
-  const input = '{"value":"hello"}';
-  const name = `mcp__fixture__${originalName}`;
-  const actionIntent = {
-    schemaVersion: "crewon.action-intent.v0" as const,
-    runId: "run-1",
-    segmentId: "segment-1",
-    callId: "call-1",
-    tool: {
-      kind: "function" as const,
-      name,
-      inputDigest: sha256(input),
-    },
-    effect: policy.effect,
-    recovery: policy.recovery,
-    policySnapshotId: "policy-1",
-    workspaceBindingId: "workspace-1",
-    resourceBindingId: policy.resourceBindingId,
-    credentialBindingId: policy.credentialBindingId,
-    executionTarget: policy.executionTarget,
-    capability: policy.capability,
-    approvalRequirement: policy.approvalRequirement,
-    limits: policy.limits,
-  };
-  return {
-    schemaVersion: "crewon.tool-invocation.v0",
-    executionId: "execution-1",
-    executionLease: {
-      workItemId: "work-item-1",
-      stepId: "step-1",
-      attemptId: "attempt-1",
-      leaseId: "lease-1",
-      leaseEpoch: 1,
-      expiresAt: "2099-08-09T00:00:00.000Z",
-    },
-    actionDigest: sha256(canonicalActionIntent(actionIntent)),
-    actionIntent,
-    approvalProof: null,
-    idempotencyKey: "run-1/tool/call-1",
-    runId: "run-1",
-    segmentId: "segment-1",
-    callId: "call-1",
-    kind: "function",
-    name,
-    input,
-  };
-}
-
-function mutationPolicy(): ToolExecutionPolicy {
-  return {
-    ...readOnlyPolicy(),
-    effect: "mutation",
-    recovery: "reconcilable",
-    capability: "mcp.tool.mutate",
-    approvalRequirement: "none",
-  };
-}
-
-function readOnlyPolicy(): ToolExecutionPolicy {
-  return {
-    effect: "readOnly",
-    recovery: "replaySafe",
-    resourceBindingId: "mcp-server-fixture",
-    credentialBindingId: null,
-    executionTarget: { kind: "control", bindingId: "mcp-runtime-fixture" },
-    capability: "mcp.tool.read",
-    approvalRequirement: "none",
-    limits: {
-      timeoutMs: 10_000,
-      maxOutputBytes: 64 * 1024,
-      maxArtifactBytes: 1024 * 1024,
-    },
-  };
-}
-
-function sha256(value: string): string {
-  return "sha256:" + createHash("sha256").update(value).digest("hex");
-}
 
 function hasCode(code: string): (error: unknown) => boolean {
   return (error) => error instanceof McpRuntimeError && error.code === code;

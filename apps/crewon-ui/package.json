@@ -21,13 +21,16 @@
     "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs"
   },
   "dependencies": {
+    "@crewon/capability-packs": "workspace:*",
     "@crewon/contracts": "workspace:*",
     "@crewon/control-client": "workspace:*",
+    "@crewon/domain": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "electron-updater": "6.8.9",
     "highlight.js": "^11.11.1",
     "lucide-react": "^0.468.0",
     "mammoth": "^1.12.0",
@@ -39,7 +42,6 @@
     "react-resizable-panels": "^4.12.2",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.8",
-    "electron-updater": "6.8.9",
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",
     "xlsx": "^0.18.5"
@@ -50,14 +52,17 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
+    "@types/ws": "8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
     "electron": "43.4.1",
     "electron-builder": "26.15.7",
     "esbuild": "0.27.7",
+    "happy-dom": "20.13.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.2.7",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "ws": "8.21.1"
   },
   "build": {
     "appId": "ai.crewon.desktop",

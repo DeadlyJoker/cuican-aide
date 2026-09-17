@@ -3,6 +3,10 @@ import type { ProviderCheckpoint } from "@crewon/contracts";
 
 import { protocolError, transportError } from "./responses-errors.ts";
 import { parseResponsesSse } from "./responses-sse.ts";
+import {
+  isPreviousResponseRejected,
+  PREVIOUS_RESPONSE_REJECTED,
+} from "./responses-continuation-recovery.ts";
 
 const MAX_RESPONSE_ID_LENGTH = 512;
 const MAX_REASONING_DELTA_BYTES = 16 * 1024;
@@ -21,6 +25,7 @@ export type ResponsesProtocolOptions = Readonly<{
   finalOutputPolicy?: ResponsesFinalOutputPolicy;
   completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
   createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
+  onResponseIdentity?: (responseId: string) => void;
 }>;
 
 /** Decodes one Responses event stream independently of its HTTP or WebSocket framing. */
@@ -56,10 +61,14 @@ export class ResponsesProtocolDecoder {
     if (this.#terminal) {
       throw protocolError("responses_event_after_terminal");
     }
+    const rejectedPrevious =
+      !this.#created &&
+      event.type === "error" &&
+      isPreviousResponseRejected(event);
     this.#lastSequence = validateSequence(
       event.sequence_number,
       this.#lastSequence,
-      this.#options.sequencePolicy,
+      rejectedPrevious ? "whenPresent" : this.#options.sequencePolicy,
     );
     const type = requireString(event.type, "responses_event_type_invalid");
     switch (type) {
@@ -72,6 +81,7 @@ export class ResponsesProtocolDecoder {
         if (this.#responseId === null) {
           return [];
         }
+        this.#options.onResponseIdentity?.(this.#responseId);
         const checkpoint =
           this.#options.createdCheckpoint?.(this.#responseId) ?? null;
         return checkpoint === null
@@ -109,6 +119,7 @@ export class ResponsesProtocolDecoder {
           this.#options.identityPolicy ?? "strict",
         );
         this.#responseId = response.id;
+        this.#options.onResponseIdentity?.(this.#responseId);
         requireStatus(response, "completed");
         if (
           response.end_turn !== undefined &&
@@ -142,7 +153,10 @@ export class ResponsesProtocolDecoder {
         };
         return usage === null
           ? [completed]
-          : [{ type: "usage", ...usage }, completed];
+          : [
+              { type: "usage", ...usage, providerResponseId: this.#responseId },
+              completed,
+            ];
       }
       case "response.failed": {
         const response = failureResponse(
@@ -153,8 +167,7 @@ export class ResponsesProtocolDecoder {
         );
         requireOptionalStatus(response, "failed");
         const failure = parseStreamFailure(response);
-        this.#terminal = true;
-        return [{ type: "failed", ...failure }];
+        return this.#failureWithUsage({ response, failure, status: "failed" });
       }
       case "response.incomplete": {
         const response = failureResponse(
@@ -165,11 +178,16 @@ export class ResponsesProtocolDecoder {
         );
         requireOptionalStatus(response, "incomplete");
         const failure = parseIncomplete(response);
-        this.#terminal = true;
-        return [{ type: "failed", ...failure }];
+        return this.#failureWithUsage({
+          response,
+          failure,
+          status: "incomplete",
+        });
       }
       case "error": {
-        const failure = parseProviderError(event);
+        const failure = rejectedPrevious
+          ? { code: PREVIOUS_RESPONSE_REJECTED, retryable: false }
+          : parseProviderError(event);
         this.#terminal = true;
         return [{ type: "failed", ...failure }];
       }
@@ -268,6 +286,35 @@ export class ResponsesProtocolDecoder {
     }
   }
 
+  #failureWithUsage(options: {
+    response: Record<string, unknown>;
+    failure: { code: string; retryable: boolean };
+    status: "failed" | "incomplete";
+  }): readonly ModelTransportEvent[] {
+    const usage = parseUsage(options.response.usage);
+    const responseId =
+      typeof options.response.id === "string"
+        ? options.response.id
+        : this.#responseId;
+    if (responseId !== null) this.#options.onResponseIdentity?.(responseId);
+    this.#terminal = true;
+    const terminal: ModelTransportEvent = {
+      type: "failed",
+      ...options.failure,
+    };
+    return usage === null
+      ? [terminal]
+      : [
+          {
+            type: "usage",
+            ...usage,
+            responseStatus: options.status,
+            ...(responseId === null ? {} : { providerResponseId: responseId }),
+          },
+          terminal,
+        ];
+  }
+
   #flushPendingOutputWhitespace(): void {
     if (this.#output.length > 0) {
       this.#output += this.#pendingOutputWhitespace;
@@ -338,6 +385,7 @@ export async function* responsesProtocolEvents(
     onActivity: () => void;
     completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
     createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
+    onResponseIdentity?: (responseId: string) => void;
   },
 ): AsyncIterable<ModelTransportEvent> {
   const decoder = new ResponsesProtocolDecoder(options);
@@ -479,6 +527,7 @@ function failureResponse(
 function parseUsage(value: unknown): {
   inputTokens: number;
   cachedInputTokens: number;
+  cachedInputTokensReported: boolean;
   outputTokens: number;
   totalTokens: number;
 } | null {
@@ -491,12 +540,13 @@ function parseUsage(value: unknown): {
     "responses_input_tokens_invalid",
   );
   const cachedInputTokens = parseCachedInputTokens(usage.input_tokens_details);
-  if (cachedInputTokens > inputTokens) {
+  if ((cachedInputTokens ?? 0) > inputTokens) {
     throw protocolError("responses_cached_input_tokens_exceeds_input");
   }
   const result = {
     inputTokens,
-    cachedInputTokens,
+    cachedInputTokens: cachedInputTokens ?? 0,
+    cachedInputTokensReported: cachedInputTokens !== undefined,
     outputTokens: nonNegativeInteger(
       usage.output_tokens,
       "responses_output_tokens_invalid",
@@ -512,14 +562,14 @@ function parseUsage(value: unknown): {
   return result;
 }
 
-function parseCachedInputTokens(value: unknown): number {
-  if (value === undefined) return 0;
+function parseCachedInputTokens(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
   const details = requireObject(
     value,
     "responses_input_tokens_details_invalid",
   );
   return details.cached_tokens === undefined
-    ? 0
+    ? undefined
     : nonNegativeInteger(
         details.cached_tokens,
         "responses_cached_input_tokens_invalid",
@@ -624,6 +674,7 @@ function providerFailure(value: unknown): {
       "cyber_policy",
       "server_is_overloaded",
       "slow_down",
+      "previous_response_not_found",
     ].includes(providerCode),
   };
 }

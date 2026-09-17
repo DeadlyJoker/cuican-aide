@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import { createSettingsSaveHandlers } from "./settingsSaveActions";
@@ -170,9 +170,11 @@ describe("settings save actions", () => {
   });
 
   it("persists personalization through the Control-local authority", async () => {
+    const setNotice = vi.fn();
     let saved: unknown = null;
     let refreshes = 0;
     const handlers = createSettingsSaveHandlers({
+      setNotice,
       client: null,
       fieldValue: (fieldId) =>
         ({
@@ -214,6 +216,10 @@ describe("settings save actions", () => {
       memoryMode: "on",
     });
     expect(refreshes).toBe(1);
+    expect(setNotice).toHaveBeenCalledWith({
+      tone: "success",
+      text: "Assistant preferences saved on this device for later messages.",
+    });
   });
 
   it("does not report a successful config save without a config client", () => {

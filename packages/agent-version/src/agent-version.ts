@@ -18,6 +18,8 @@ export type AgentVersionSource = Readonly<{
     adapterVersion: string;
     modelId: string;
     contextWindowTokens: number;
+    /** Optional declared provider output ceiling, including reasoning tokens. */
+    maxOutputTokens?: number;
     autoCompactAtTokens: number | null;
   }>;
   execution: Readonly<{
@@ -73,17 +75,20 @@ export function compileAgentVersion(
       throw new AgentVersionError("agent_version_digest_mismatch");
     }
   }
+  // Materialize from the digest input so freshly compiled and reopened versions
+  // expose identical tool-schema bytes, independent of source object key order.
+  const normalized = JSON.parse(canonical) as AgentVersionSource;
   return deepFreeze({
     schemaVersion: "crewon.agent-version.v0",
     contentDigest,
-    agentVersionId: source.agentVersionId,
-    runtimeGeneration: source.runtimeGeneration,
-    policySnapshotId: source.policySnapshotId,
-    instructions: source.instructions,
-    model: structuredClone(source.model),
-    execution: structuredClone(source.execution),
-    resources: structuredClone(source.resources),
-    tools: structuredClone(source.tools),
+    agentVersionId: normalized.agentVersionId,
+    runtimeGeneration: normalized.runtimeGeneration,
+    policySnapshotId: normalized.policySnapshotId,
+    instructions: normalized.instructions,
+    model: normalized.model,
+    execution: normalized.execution,
+    resources: normalized.resources,
+    tools: normalized.tools,
   });
 }
 
@@ -286,6 +291,7 @@ function validateModel(value: AgentVersionSource["model"]): void {
       "autoCompactAtTokens",
       "contextWindowTokens",
       "modelId",
+      ...(Object.hasOwn(value, "maxOutputTokens") ? ["maxOutputTokens"] : []),
     ])
   ) {
     throw new AgentVersionError("agent_version_model_invalid");
@@ -297,6 +303,13 @@ function validateModel(value: AgentVersionSource["model"]): void {
     "agent_version_adapter_version_invalid",
   );
   requireBounded(value.modelId, 256, "agent_version_model_id_invalid");
+  if (
+    Object.hasOwn(value, "maxOutputTokens") &&
+    (!Number.isSafeInteger(value.maxOutputTokens) ||
+      value.maxOutputTokens! < 1 ||
+      value.maxOutputTokens! > value.contextWindowTokens)
+  )
+    throw new AgentVersionError("agent_version_model_output_limit_invalid");
   if (
     !Number.isSafeInteger(value.contextWindowTokens) ||
     value.contextWindowTokens < 1 ||
@@ -441,7 +454,8 @@ function stabilize(
     throw new AgentVersionError("agent_version_json_invalid");
   }
   ancestors.add(value);
-  const result: Record<string, unknown> = {};
+  // JSON property names such as __proto__ are data, not prototype setters.
+  const result: Record<string, unknown> = Object.create(null);
   for (const key of Object.keys(value).sort()) {
     const item = value[key];
     if (item === undefined) {

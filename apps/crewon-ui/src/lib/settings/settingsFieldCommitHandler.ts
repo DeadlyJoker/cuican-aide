@@ -1,5 +1,7 @@
 import { commitSettingsFieldAction } from "./settingsFieldCommitActions";
 import { applyAppearanceField } from "../appearance/appearanceRuntime";
+import { persistLocalAppearanceField } from "../appearance/localAppearanceStore";
+import { systemPrefersDark } from "../appearance/applyAppearance";
 import { persistLocale } from "../i18n";
 import { persistTheme } from "../theme";
 import type { AppearancePreferences } from "../appearance/appearancePreferences";
@@ -28,9 +30,12 @@ export function commitSettingsField(params: {
   settingsSection: () => SettingsSection;
   value: string;
 }): void {
+  const section = params.settingsSection();
   void commitSettingsFieldAction({
     applyAppearanceField: (field: keyof AppearancePreferences, value: string) =>
       applyAppearanceField(field, value),
+    persistLocalAppearanceField,
+    systemPrefersDark: systemPrefersDark(),
     client: params.client,
     fieldId: params.fieldId,
     isConnected: params.isConnected,
@@ -49,7 +54,8 @@ export function commitSettingsField(params: {
        * rather than racing the state update it just triggered.
        */
       window.setTimeout(() => {
-        params.refreshSettingsSection(params.settingsSection());
+        if (params.settingsSection() === section)
+          params.refreshSettingsSection(section);
       }, 0);
     })
     .catch((error) => {
@@ -57,6 +63,8 @@ export function commitSettingsField(params: {
         text: settingsFieldCommitErrorText(error, params.locale),
         tone: "warning",
       });
+      if (params.settingsSection() === section)
+        params.refreshSettingsSection(section);
     });
 }
 
@@ -65,10 +73,15 @@ export function settingsFieldCommitErrorText(
   locale: Locale,
 ): string {
   const message = error instanceof Error ? error.message : "";
+  if (/appearance_storage/iu.test(message)) {
+    return locale === "zh"
+      ? "无法保存到本机存储，请检查存储权限后重试。"
+      : "Could not save locally. Check storage access and retry.";
+  }
   if (/app-server|not connected|unavailable|disconnected/iu.test(message)) {
     return locale === "zh"
-      ? "已应用到当前页面，暂时无法同步到其他设备。"
-      : "Applied on this page. It cannot sync to your other devices yet.";
+      ? "当前更改未确认保存，请检查连接后重试。"
+      : "Saving this change is unconfirmed. Check the connection and retry.";
   }
   return locale === "zh"
     ? "这项设置暂时无法保存，请稍后重试。"

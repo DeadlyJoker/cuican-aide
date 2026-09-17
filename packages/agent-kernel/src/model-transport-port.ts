@@ -1,3 +1,4 @@
+import type { ModelCallObservationSink } from "@crewon/domain";
 import type { ProviderCheckpoint, RateLimitSnapshot } from "@crewon/contracts";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
 import type { AgentHistoryItem } from "./agent-kernel-port.ts";
@@ -31,6 +32,7 @@ export type ModelRequest = Readonly<{
 }>;
 
 export type ModelTransportStreamOptions = Readonly<{
+  callSink?: ModelCallObservationSink & { purpose: "agent" | "compaction" };
   /** Persists newly observed Run-private control state before body events flow. */
   controlSink?: Readonly<{
     providerTurnStateObserved(providerTurnState: string): Promise<void>;
@@ -54,9 +56,17 @@ export type ModelTransportEvent =
   | Readonly<{ type: "output.item.completed"; item: ModelInputItem }>
   | Readonly<{
       type: "usage";
+      /** Physical adapter call identity; private accounting metadata. */
+      callId?: string;
+      /** Response identity for accounting deduplication; never model-visible context. */
+      providerResponseId?: string;
+      /** Failed-response usage belongs to accounting, not successful context projection. */
+      responseStatus?: "failed" | "incomplete";
       inputTokens: number;
-      /** Defaults to zero for legacy Provider transports. */
+      /** Omit when the Provider does not report cache reads. */
       cachedInputTokens?: number;
+      /** Explicitly false when an adapter supplied a compatibility zero. */
+      cachedInputTokensReported?: boolean;
       outputTokens: number;
       totalTokens: number;
     }>
@@ -74,6 +84,8 @@ export type ModelTransportEvent =
       toTransport: string;
       code: string;
       discardedOutput: boolean;
+      /** Rebuild from the supplied full effective history on subsequent retries too. */
+      inputStrategy?: "manual";
     }>
   | Readonly<{
       type: "completed";
@@ -89,6 +101,8 @@ export interface ModelTransportPort {
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
+  /** Configured provider ceiling, including reasoning; not a monetary reservation. */
+  readonly maxOutputTokens?: number | undefined;
   readonly supportsResponseRetrieve?: boolean;
   prewarm?(signal: AbortSignal): Promise<void>;
   stream(

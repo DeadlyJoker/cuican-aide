@@ -284,7 +284,7 @@ export function taskDetailProcessesPresentation(
 
   if (state.status === "forbidden") {
     return {
-      status: "unavailable",
+      status: "forbidden",
       unavailableReason: COPY[locale].processForbidden,
     };
   }

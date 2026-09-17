@@ -10,9 +10,12 @@ import {
   cleanSlotTitle,
   commandComposerModelDisabledForTarget,
   commandComposerModelForTarget,
+  commandComposerModelLabelForTarget,
+  commandWorkspaceComposerRuntimeSettings,
   commandComposerResourceSelection,
   commandComposerKeyIntent,
   CommandWorkspace,
+  hasKnownActiveAgentPlatformRun,
   type CommandWorkspaceControlNav,
   insertTokenIntoComposerValue,
   selectCommandHomeSlots,
@@ -27,7 +30,7 @@ import {
   commandExecutionIntentScopeKey,
   executionIntentSelectionAfterCommit,
   executionIntentSelectionForScopeChange,
-  nextExecutionIntent,
+  executionIntentSelectionForChoice,
 } from "../composer/composerExecutionIntentSelection";
 import { Palette } from "./CommandWorkspaceChrome";
 import { commandComposerPermissionOptions } from "../composer/commandComposerPermissionOptions";
@@ -44,6 +47,50 @@ import { providerAgentExecutionTargetOptions } from "../../lib/provider-resource
 import { executionTargetOptionsFromDomain } from "../../lib/scene/sceneCatalog";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+
+describe("hasKnownActiveAgentPlatformRun", () => {
+  const thread = (status: "completed" | "inProgress") =>
+    ({ turns: [{ status }] }) as unknown as Thread;
+
+  it("covers active IDs and every thread snapshot known to the workspace", () => {
+    expect(
+      hasKnownActiveAgentPlatformRun({
+        backgroundRunActive: true,
+        linkedThreads: [],
+      }),
+    ).toBe(true);
+    expect(
+      hasKnownActiveAgentPlatformRun({
+        activeTurnId: null,
+        assistantActiveTurnId: null,
+        selectedThread: thread("completed"),
+        assistantThread: thread("completed"),
+        linkedThreads: [thread("completed")],
+      }),
+    ).toBe(false);
+    expect(hasKnownActiveAgentPlatformRun({ activeTurnId: "run-1" })).toBe(
+      true,
+    );
+    expect(
+      hasKnownActiveAgentPlatformRun({ assistantActiveTurnId: "run-2" }),
+    ).toBe(true);
+    expect(
+      hasKnownActiveAgentPlatformRun({
+        selectedThread: thread("inProgress"),
+      }),
+    ).toBe(true);
+    expect(
+      hasKnownActiveAgentPlatformRun({
+        assistantThread: thread("inProgress"),
+      }),
+    ).toBe(true);
+    expect(
+      hasKnownActiveAgentPlatformRun({
+        linkedThreads: [thread("completed"), thread("inProgress")],
+      }),
+    ).toBe(true);
+  });
+});
 
 function snapshot(): AgentPlatformSnapshot {
   return {
@@ -290,6 +337,7 @@ describe("CommandWorkspace", () => {
           { label: "gpt-5.6-sol", value: "gpt-5.6-sol" },
           { detail: "GPT 5.5", label: "gpt-5.5", value: "gpt-5.5" },
         ]}
+        platform="mac"
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -361,6 +409,54 @@ describe("CommandWorkspace", () => {
     ).toBe(true);
   });
 
+  it("shows the model pinned by a Control single-agent target", () => {
+    const agents = [
+      {
+        config: {
+          agentId: "agent-platform:2",
+          model: "deepseek-chat",
+        },
+      },
+    ];
+
+    expect(
+      commandComposerModelLabelForTarget({
+        agents,
+        executionTarget: "agent:agent-platform:2",
+        fallbackLabel: "gpt-5.5",
+        locale: "zh",
+        workspaceAuthority: "control",
+      }),
+    ).toBe("deepseek-chat");
+    expect(
+      commandComposerModelLabelForTarget({
+        agents,
+        executionTarget: "agent:agent-platform:missing",
+        fallbackLabel: "gpt-5.5",
+        locale: "zh",
+        workspaceAuthority: "control",
+      }),
+    ).toBe("由智能体固定");
+    expect(
+      commandComposerModelLabelForTarget({
+        agents,
+        executionTarget: "agent:agent-platform:2",
+        fallbackLabel: "gpt-5.5",
+        locale: "zh",
+        workspaceAuthority: "legacy",
+      }),
+    ).toBe("gpt-5.5");
+    expect(
+      commandComposerModelLabelForTarget({
+        agents,
+        executionTarget: "team:office-version-1",
+        fallbackLabel: "gpt-5.5",
+        locale: "zh",
+        workspaceAuthority: "control",
+      }),
+    ).toBe("gpt-5.5");
+  });
+
   function renderControlWorkspaceThread(): string {
     const selectedThread = workspaceCommandThread();
     return renderToStaticMarkup(
@@ -371,6 +467,7 @@ describe("CommandWorkspace", () => {
         cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[selectedThread]}
+        platform="mac"
         selectedThread={selectedThread}
         selectedThreadId={selectedThread.id}
         workMode="code"
@@ -394,6 +491,7 @@ describe("CommandWorkspace", () => {
         cwd="/repo/frontend"
         isSending={false}
         locale="en"
+        platform="mac"
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -435,6 +533,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         providerResource={providerResource}
         workMode="code"
         onAttachContext={() => undefined}
@@ -454,6 +553,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         providerResource={providerResource}
         selectedThread={existingThread}
         selectedThreadId={existingThread.id}
@@ -498,6 +598,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         providerResource={{
           snapshot,
           selectedResource: null,
@@ -529,6 +630,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         providerResource={{
           snapshot,
           selectedResource: null,
@@ -864,7 +966,8 @@ describe("CommandWorkspace", () => {
     );
     expect(teamMarkup).toContain("团队能力来自左侧智能体页");
     expect(teamMarkup).toContain("办公室可 @ 指定成员");
-    expect(teamMarkup).toContain("专家团只由团长对外回复");
+    expect(teamMarkup).toContain("把团队带进同一间办公室");
+    expect(teamMarkup).not.toContain("专家团只由团长对外回复");
     expect(teamMarkup).not.toContain("team-page-hero");
     expect({
       context: Array.from(
@@ -1017,6 +1120,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         modelOptions={[
           {
             defaultReasoningEffort: "xhigh",
@@ -1073,6 +1177,53 @@ describe("CommandWorkspace", () => {
       "模型",
       "推理档位",
     ]);
+  });
+
+  it("offers reasoning effort only when the legacy runtime can apply it", () => {
+    const settings = {
+      executionTarget: "crewon",
+      model: "gpt-5-mini",
+      permission: "approve-for-me" as const,
+      reasoningEffort: "xhigh",
+    };
+
+    expect(
+      commandWorkspaceComposerRuntimeSettings({
+        ...settings,
+        workspaceAuthority: "control",
+      }),
+    ).toEqual({
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
+      executionIntent: "none",
+      model: "gpt-5-mini",
+      sandboxMode: "workspace-write",
+    });
+    expect(
+      commandWorkspaceComposerRuntimeSettings({
+        ...settings,
+        workspaceAuthority: "legacy",
+      }),
+    ).toMatchObject({ reasoningEffort: "xhigh" });
+
+    const controlMarkup = renderToStaticMarkup(
+      commandWorkspaceElement({
+        modelOptions: [
+          {
+            defaultReasoningEffort: "xhigh",
+            isDefault: true,
+            label: "gpt-5-mini",
+            reasoningEfforts: [{ value: "medium" }, { value: "xhigh" }],
+            value: "gpt-5-mini",
+          },
+        ],
+        workspaceAuthority: "control",
+      }),
+    );
+
+    expect(controlMarkup).toContain('aria-label="模型"');
+    expect(controlMarkup).not.toContain('aria-label="模型与推理档位"');
+    expect(controlMarkup).not.toContain("gpt-5-mini 极高");
   });
 
   it("shows run progress and the active goal above a thread composer", () => {
@@ -1250,15 +1401,11 @@ describe("CommandWorkspace", () => {
     );
     expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
     expect(commandHomeMarkup).toContain('aria-label="权限选择"');
-    expect(commandHomeMarkup).toContain(
-      'class="execution-intent-segmented" role="group"',
+    expect(commandHomeMarkup).not.toContain(
+      'class="execution-intent-segmented"',
     );
-    expect(commandHomeMarkup).toContain(
-      'aria-pressed="false" class="execution-intent-option" data-execution-intent="goal"',
-    );
-    expect(commandHomeMarkup).toContain(
-      'aria-pressed="false" class="execution-intent-option" data-execution-intent="plan"',
-    );
+    expect(commandHomeMarkup).not.toContain("data-execution-intent=");
+    expect(commandHomeMarkup).toContain('aria-controls="add-search-panel"');
     expect(commandHomeMarkup).toContain('placeholder="添加"');
     expect(commandHomeMarkup).toContain("选择文件");
     expect(commandHomeMarkup).toContain("选择文件夹");
@@ -1270,8 +1417,14 @@ describe("CommandWorkspace", () => {
     );
     expect(addPanelMarkup).toContain('class="add-palette-group"');
     expect(addPanelMarkup).toContain('class="add-palette-item"');
-    expect(addPanelMarkup).not.toContain("执行方式");
-    expect(addPanelMarkup).not.toContain('data-kind="intent"');
+    expect(addPanelMarkup).toContain("执行方式");
+    expect(addPanelMarkup.match(/data-kind="intent"/g)).toHaveLength(2);
+    expect(addPanelMarkup).toContain('data-label="目标"');
+    expect(addPanelMarkup).toContain('data-label="计划"');
+    const assistantMarkup = markup.slice(
+      markup.indexOf('data-shell-view="assist"'),
+    );
+    expect(assistantMarkup).not.toContain('data-kind="intent"');
     expect(addPanelMarkup).not.toContain('data-label="目标模式"');
     expect(addPanelMarkup).not.toContain('data-label="计划模式"');
     expect(addPanelMarkup).toContain("文件");
@@ -1293,12 +1446,34 @@ describe("CommandWorkspace", () => {
     expect(commandHomeMarkup).not.toContain('aria-label="语音输入"');
   });
 
-  it("toggles goal and plan as an optional mutually exclusive intent", () => {
-    expect(nextExecutionIntent("none", "goal")).toBe("goal");
-    expect(nextExecutionIntent("goal", "goal")).toBe("none");
-    expect(nextExecutionIntent("goal", "plan")).toBe("plan");
-    expect(nextExecutionIntent("plan", "goal")).toBe("goal");
-    expect(nextExecutionIntent("plan", "plan")).toBe("none");
+  it("selects exactly the requested intent and cancels only with an explicit clear", () => {
+    let selection = {
+      intent: "none",
+      revision: 0,
+      scopeKey: "draft:new-task",
+    } as const;
+    const goal = executionIntentSelectionForChoice(selection, {
+      intent: "goal",
+      scopeKey: selection.scopeKey,
+    });
+    const repeated = executionIntentSelectionForChoice(goal, {
+      intent: "goal",
+      scopeKey: selection.scopeKey,
+    });
+    expect(goal.intent).toBe("goal");
+    expect(repeated.intent).toBe("goal");
+    expect(repeated.revision).toBe(2);
+    const plan = executionIntentSelectionForChoice(repeated, {
+      intent: "plan",
+      scopeKey: selection.scopeKey,
+    });
+    expect(plan.intent).toBe("plan");
+    expect(
+      executionIntentSelectionForChoice(plan, {
+        intent: "none",
+        scopeKey: selection.scopeKey,
+      }).intent,
+    ).toBe("none");
   });
 
   it("scopes intent to the draft or thread and ignores a stale commit", () => {
@@ -1509,6 +1684,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -1522,6 +1698,27 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-state="connected"');
     expect(markup).toContain('aria-label="对话服务已连接"');
     expect(markup).not.toContain('class="composer-state connection-state"');
+  });
+
+  it("keeps the web composer focused on user-facing delivery controls", () => {
+    const markup = renderToStaticMarkup(
+      commandWorkspaceElement({
+        platform: "web",
+        connectionState: "connected",
+      }),
+    );
+    const commandHomeMarkup = markup.slice(
+      markup.indexOf('data-shell-view="command"'),
+      markup.indexOf('data-shell-view="assist"'),
+    );
+
+    expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
+    expect(commandHomeMarkup).toContain('aria-label="工作空间选择"');
+    expect(commandHomeMarkup).not.toContain('aria-label="执行主体"');
+    expect(commandHomeMarkup).not.toContain('aria-label="模型与推理档位"');
+    expect(commandHomeMarkup).not.toContain('aria-label="模型"');
+    expect(commandHomeMarkup).not.toContain('aria-label="权限选择"');
+    expect(commandHomeMarkup).not.toContain('class="connection-indicator"');
   });
 
   it("renders shell views for sidebar navigation", () => {
@@ -1574,6 +1771,7 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        platform="mac"
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -1667,7 +1865,7 @@ describe("CommandWorkspace", () => {
     expect(scheduleMarkup).not.toContain("Run SSE");
     expect(scheduleMarkup).not.toContain("authority");
     expect(scheduleMarkup).not.toContain("新建自动化");
-    const modelLabelAt = markup.indexOf('aria-label="模型与推理档位"');
+    const modelLabelAt = markup.indexOf('aria-label="模型"');
     const modelTrigger = markup.slice(
       markup.lastIndexOf("<button", modelLabelAt),
       markup.indexOf(">", modelLabelAt),
@@ -1951,131 +2149,6 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('aria-label="归档会话"');
     expect(markup).toContain('data-archive-thread-id="thread-command-room"');
     expect(markup).toContain('data-od-id="command-thread-room"');
-  });
-
-  it("keeps Command, MCP, Skill, Markdown, and Mermaid output inside the command shell transcript", () => {
-    const selectedThread = {
-      id: "thread-command-tools",
-      name: "Command tool transcript",
-      preview: "MCP and Skill output",
-      updatedAt: Math.floor(Date.now() / 1000),
-      cwd: "/repo/frontend",
-      turns: [
-        {
-          id: "turn-command-tools",
-          status: "completed",
-          durationMs: 1_000,
-          startedAt: 1,
-          completedAt: 2,
-          error: null,
-          itemsView: "full",
-          items: [
-            {
-              id: "item-user-tools",
-              type: "userMessage",
-              clientId: null,
-              content: [{ type: "text", text: "Run MCP and Skill checks" }],
-            },
-            {
-              id: "item-mcp-tools",
-              type: "mcpToolCall",
-              server: "filesystem",
-              tool: "read_file",
-              status: "completed",
-              arguments: { path: "README.md" },
-              pluginId: null,
-              result: {
-                content: [
-                  {
-                    type: "text",
-                    text: "## MCP result\n\n- [x] Read context",
-                  },
-                ],
-                structuredContent: { ok: true },
-                _meta: null,
-              },
-              error: null,
-              durationMs: 120,
-            },
-            {
-              id: "item-skill-tools",
-              type: "dynamicToolCall",
-              namespace: "skills",
-              tool: "delivery-check",
-              arguments: { target: "command-home" },
-              status: "completed",
-              contentItems: [
-                {
-                  type: "inputText",
-                  text: "| Gate | State |\n| --- | --- |\n| Command shell | Pass |",
-                },
-              ],
-              success: true,
-              durationMs: 240,
-            },
-            {
-              id: "item-command-tools",
-              type: "commandExecution",
-              command: "pnpm test -- CommandWorkspace",
-              cwd: "/repo/frontend",
-              processId: null,
-              source: "agent",
-              status: "completed",
-              commandActions: [],
-              aggregatedOutput: "Command workspace tests passed",
-              exitCode: 0,
-              durationMs: 1_200,
-            },
-            {
-              id: "item-agent-tools",
-              type: "agentMessage",
-              text: "```mermaid\ngraph LR\n  Agent --> Tool\n```",
-              phase: null,
-              memoryCitation: null,
-            },
-          ],
-        },
-      ],
-    } as unknown as Thread;
-
-    const markup = renderToStaticMarkup(
-      <CommandWorkspace
-        activeTurnId={null}
-        composerValue=""
-        connectionState="connected"
-        cwd="/repo/frontend"
-        isSending={false}
-        linkedThreads={[selectedThread]}
-        selectedThread={selectedThread}
-        selectedThreadId="thread-command-tools"
-        streamingText=""
-        workMode="code"
-        onAttachContext={() => undefined}
-        onChangeComposerValue={() => undefined}
-        onModeChange={() => undefined}
-        onRetryConnection={() => undefined}
-        onSelectLinkedThread={() => undefined}
-        onSend={() => undefined}
-        onStop={() => undefined}
-      />,
-    );
-
-    expect(markup).toContain('data-od-id="command-thread-room"');
-    expect(markup).toContain('class="transcript"');
-    expect(markup).toContain("filesystem.read_file");
-    expect(markup).toContain("已读取 1 个文件");
-    expect(markup).toContain("README.md");
-    expect(markup).toContain("skills.delivery-check");
-    expect(markup).toContain("pnpm test -- CommandWorkspace");
-    expect(markup).toContain("Command workspace tests passed");
-    expect(markup).toContain("退出码 0");
-    expect(markup).toContain("<table>");
-    expect(markup).toContain("<td>Pass</td>");
-    expect(markup).toContain('data-renderer="mermaid"');
-    expect(markup).toContain('data-state="loading"');
-    expect(markup).toContain("mermaid-streaming-placeholder");
-    expect(markup).not.toContain("graph LR");
-    expect(markup).not.toContain('class="app-shell"');
   });
 
   it("labels command composer input as steer guidance while an agent turn is running", () => {

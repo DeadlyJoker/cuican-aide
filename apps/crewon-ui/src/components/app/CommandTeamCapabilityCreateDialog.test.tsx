@@ -80,6 +80,8 @@ describe("CommandTeamCapabilityCreateDialog", () => {
 
     expect(markup).toContain("Verification · 独立验收");
     expect(markup).toContain("最后必须由独立 Verification 节点验收输出");
+    expect(markup).toContain("不负责改稿");
+    expect(markup).toContain("人工确认后添加 Agent 产出节点");
     expect(markup).toMatchSnapshot();
   });
 });

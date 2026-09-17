@@ -3,6 +3,11 @@ import {
   type ToolCallKind,
   type ToolDefinition,
   type ToolExecutionCommand,
+  type ToolExecutionResultAcknowledgement,
+  type RetainedToolExecutionResultQuery,
+  type RetainedToolExecutionResultLookup,
+  type ToolExecutionReservationOptions,
+  type RetainedToolExecutionResultScan,
   type ToolRuntimePort,
 } from "@crewon/tool-broker";
 
@@ -19,7 +24,10 @@ export function scopeToolRuntimeToAgentVersion(
   const available = new Map(
     runtime
       .definitions()
-      .map((definition) => [toolKey(definition.kind, definition.name), definition]),
+      .map((definition) => [
+        toolKey(definition.kind, definition.name),
+        definition,
+      ]),
   );
   for (const definition of definitions) {
     const current = available.get(toolKey(definition.kind, definition.name));
@@ -32,9 +40,7 @@ export function scopeToolRuntimeToAgentVersion(
       );
     }
   }
-  if (
-    JSON.stringify(runtime.definitions()) === JSON.stringify(definitions)
-  ) {
+  if (JSON.stringify(runtime.definitions()) === JSON.stringify(definitions)) {
     return runtime;
   }
   return new AgentVersionScopedToolRuntime(runtime, definitions);
@@ -52,7 +58,9 @@ class AgentVersionScopedToolRuntime implements ToolRuntimePort {
     this.#runtime = runtime;
     this.#definitions = structuredClone(definitions);
     this.#allowed = new Set(
-      definitions.map((definition) => toolKey(definition.kind, definition.name)),
+      definitions.map((definition) =>
+        toolKey(definition.kind, definition.name),
+      ),
     );
   }
 
@@ -71,6 +79,15 @@ class AgentVersionScopedToolRuntime implements ToolRuntimePort {
     return this.#runtime.execute(command, signal);
   }
 
+  reserveExecution(
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+    options?: ToolExecutionReservationOptions,
+  ) {
+    this.#requireAllowed(command.kind, command.name);
+    return this.#runtime.reserveExecution?.(command, signal, options);
+  }
+
   reconcile(command: ToolExecutionCommand, signal: AbortSignal) {
     this.#requireAllowed(command.kind, command.name);
     return this.#runtime.reconcile(command, signal);
@@ -79,6 +96,43 @@ class AgentVersionScopedToolRuntime implements ToolRuntimePort {
   cancel(command: ToolExecutionCommand, signal: AbortSignal) {
     this.#requireAllowed(command.kind, command.name);
     return this.#runtime.cancel(command, signal);
+  }
+
+  scanRetainedExecutionResults(query: RetainedToolExecutionResultScan) {
+    return (this.#runtime.scanRetainedExecutionResults?.(query) ?? []).filter(
+      (result) => this.#allowed.has(toolKey(result.kind, result.name)),
+    );
+  }
+
+  retainedExecutionResults(query: RetainedToolExecutionResultQuery) {
+    return (this.#runtime.retainedExecutionResults?.(query) ?? []).filter(
+      (result) => this.#allowed.has(toolKey(result.kind, result.name)),
+    );
+  }
+
+  acknowledgeExecutionResult(
+    acknowledgement: ToolExecutionResultAcknowledgement,
+  ): boolean | void {
+    const tool = acknowledgement.actionIntent.tool;
+    this.#requireAllowed(tool.kind, tool.name);
+    return this.#runtime.acknowledgeExecutionResult?.(acknowledgement);
+  }
+
+  cancelRetainedExecution(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    this.#requireAllowed(tool.kind, tool.name);
+    return this.#runtime.cancelRetainedExecution?.(lookup) ?? null;
+  }
+
+  readRetainedExecutionResult(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    this.#requireAllowed(tool.kind, tool.name);
+    return this.#runtime.readRetainedExecutionResult?.(lookup) ?? null;
+  }
+
+  canRetire(): boolean {
+    // The owning adapter may retain results outside this historical catalog.
+    return this.#runtime.canRetire?.() === true;
   }
 
   #requireAllowed(kind: ToolCallKind, name: string): void {

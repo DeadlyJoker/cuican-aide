@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { POSTGRES_EXECUTION_SCHEMA_VERSION } from "./postgres-execution-schema.ts";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 
@@ -126,7 +127,7 @@ test(
       await store.simulateExecutionV1();
       await store.migrate();
       assert.deepEqual(await store.executionSchemaState(), {
-        version: 5,
+        version: POSTGRES_EXECUTION_SCHEMA_VERSION,
         tables: [
           "thread_continuations",
           "thread_model_states",
@@ -146,13 +147,13 @@ test(
   async () => {
     const store = await createTestStore(requiredUrl());
     try {
-      await store.simulateExecutionSchema(6);
+      await store.simulateExecutionSchema(POSTGRES_EXECUTION_SCHEMA_VERSION + 1);
       await assert.rejects(
         store.migrate(),
         hasStoreCode("postgres_schema_too_new"),
       );
       assert.deepEqual(await store.executionSchemaState(), {
-        version: 6,
+        version: POSTGRES_EXECUTION_SCHEMA_VERSION + 1,
         tables: [],
       });
     } finally {

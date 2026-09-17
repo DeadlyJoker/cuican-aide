@@ -1782,8 +1782,12 @@
       "post": {
         "operationId": "startWorkflowRun",
         "parameters": [
-          { "$ref": "#/components/parameters/IdempotencyKey" },
-          { "$ref": "#/components/parameters/CsrfToken" }
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
         ],
         "requestBody": {
           "required": true,
@@ -1800,7 +1804,9 @@
             "description": "The exact idempotently replayed Workflow Run",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/RunMutationResponse"
+                }
               }
             }
           },
@@ -1808,16 +1814,30 @@
             "description": "A Workflow Run admitted with immutable version provenance and durable execution work",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/RunMutationResponse"
+                }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/Error" },
-          "401": { "$ref": "#/components/responses/Error" },
-          "403": { "$ref": "#/components/responses/Error" },
-          "404": { "$ref": "#/components/responses/Error" },
-          "409": { "$ref": "#/components/responses/Error" },
-          "500": { "$ref": "#/components/responses/Error" }
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
         }
       }
     },
@@ -2864,6 +2884,420 @@
           }
         }
       }
+    },
+    "/api/v1/threads/{threadId}/message-window": {
+      "get": {
+        "operationId": "getThreadMessageWindow",
+        "description": "Read a bounded standard-view message window in ascending order. Without a cursor returns the newest messages. Cursors are exclusive, thread-scoped and revision-bound; a concurrent append or rollback returns 409. A page may split a logical turn. No audit data is included.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One consistent message window; body size may reduce the requested number of rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetThreadMessageWindowResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/thread-catalog": {
+      "get": {
+        "operationId": "getThreadCatalog",
+        "description": "Bounded live catalog, newest first. Scans at most limit candidates and returns literal Unicode lowercase display-title matches. Empty data with a cursor is not end-of-search. Cursors bind status, search and excludeForks. Concurrent changes can move rows; refresh starts at the current head. Existing /threads semantics are unchanged.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "archived"],
+              "default": "active"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 256,
+              "default": ""
+            }
+          },
+          {
+            "name": "excludeForks",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded catalog with scanned candidate navigation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/active-run": {
+      "get": {
+        "operationId": "getThreadActiveRun",
+        "summary": "Read the current non-terminal Run independently of history pagination",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current Run or null; multiple non-terminal Runs fail closed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetThreadActiveRunResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/transcript-window": {
+      "get": {
+        "operationId": "getThreadTranscriptWindow",
+        "description": "Read one revision-bound message window and its exact Run bindings from immutable admission receipts and completion events. Requires thread:read and run:read for each referenced Run. Missing legacy evidence is explicitly unassociated; timestamps are never used to infer a Run. A page may begin or end within a logical turn.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One consistent message window; body size may reduce the requested number of rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetThreadTranscriptWindowResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/offices/{officeVersionId}/thread": {
+      "get": {
+        "operationId": "getOfficeThread",
+        "parameters": [
+          {
+            "name": "officeVersionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative Office thread association, or unbound",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeThreadResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOfficeThread",
+        "parameters": [
+          {
+            "name": "officeVersionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOfficeThreadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing Office thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Atomically created and associated Office thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/offices/{officeVersionId}/thread-binding": {
+      "post": {
+        "operationId": "bindOfficeThread",
+        "description": "Explicitly adopt an existing same-space thread with revision CAS. An association is immutable; the same association is idempotent without a command receipt.",
+        "parameters": [
+          {
+            "name": "officeVersionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindOfficeThreadRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bound or already associated Office thread",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeThreadMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3122,6 +3556,12 @@
           "agentVersionId": {
             "type": "string",
             "maxLength": 128
+          },
+          "responsibility": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "description": "Optional immutable responsibility used to coordinate this Office member without an extra planning round."
           }
         }
       },
@@ -3554,8 +3994,12 @@
           },
           "schedule": {
             "oneOf": [
-              { "$ref": "#/components/schemas/AutomationSchedule" },
-              { "type": "null" }
+              {
+                "$ref": "#/components/schemas/AutomationSchedule"
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         }
@@ -3857,6 +4301,12 @@
           },
           "title": {
             "type": ["string", "null"]
+          },
+          "displayTitle": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "description": "Optional bounded display-only fallback for historical unnamed conversations. Not an authoritative title or a thread revision change."
           },
           "status": {
             "$ref": "#/components/schemas/ThreadStatus"
@@ -4844,11 +5294,24 @@
       "WorkflowInput": {
         "description": "Bounded JSON input. Runtime validation additionally limits UTF-8 serialization to 32768 bytes, nesting depth to 8, and total values to 1024.",
         "oneOf": [
-          { "type": "null" },
-          { "type": "boolean" },
-          { "type": "number" },
-          { "type": "string", "maxLength": 8192 },
-          { "type": "array", "maxItems": 256, "items": {} },
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "maxLength": 8192
+          },
+          {
+            "type": "array",
+            "maxItems": 256,
+            "items": {}
+          },
           {
             "type": "object",
             "maxProperties": 256,
@@ -4866,8 +5329,14 @@
             "minLength": 1,
             "maxLength": 512
           },
-          "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "input": { "$ref": "#/components/schemas/WorkflowInput" }
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "input": {
+            "$ref": "#/components/schemas/WorkflowInput"
+          }
         }
       },
       "StartTurnRequest": {
@@ -7458,6 +7927,236 @@
           },
           "isActive": {
             "type": "boolean"
+          }
+        }
+      },
+      "GetThreadMessageWindowResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "threadId",
+          "threadRevision",
+          "eventSequence",
+          "headMessageSequence",
+          "data",
+          "olderCursor",
+          "newerCursor"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "crewon.message-window.v0"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "threadRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "eventSequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "headMessageSequence": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "data": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/MessageView"
+            }
+          },
+          "olderCursor": {
+            "type": ["string", "null"],
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          },
+          "newerCursor": {
+            "type": ["string", "null"],
+            "maxLength": 2048,
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      },
+      "ThreadCatalogResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "data",
+          "scannedCount",
+          "olderCursor",
+          "newerCursor"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.thread-catalog.v0"
+          },
+          "data": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/ThreadView"
+            }
+          },
+          "scannedCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "olderCursor": {
+            "type": ["string", "null"],
+            "maxLength": 4096
+          },
+          "newerCursor": {
+            "type": ["string", "null"],
+            "maxLength": 4096
+          }
+        }
+      },
+      "GetThreadActiveRunResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schemaVersion", "threadId", "run"],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.thread-active-run.v0"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "run": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RunView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GetThreadTranscriptWindowResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schemaVersion", "messageWindow", "runBindings"],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.transcript-window.v0"
+          },
+          "messageWindow": {
+            "$ref": "#/components/schemas/GetThreadMessageWindowResponse"
+          },
+          "runBindings": {
+            "type": "array",
+            "maxItems": 100,
+            "description": "Exactly one entry per message, in the same order.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["messageId", "runId", "source"],
+              "properties": {
+                "messageId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "runId": {
+                  "type": ["string", "null"],
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "turnStartReceipt",
+                    "messageCompletedEvent",
+                    "unassociated"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "OfficeThreadResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["officeId", "officeVersionId", "thread"],
+        "properties": {
+          "officeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "officeVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "thread": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThreadView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "OfficeThreadMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["officeId", "officeVersionId", "thread", "disposition"],
+        "properties": {
+          "officeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "officeVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadView"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["created", "bound", "existing"]
+          }
+        }
+      },
+      "CreateOfficeThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "BindOfficeThreadRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["threadId", "expectedRevision"],
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
           }
         }
       }

@@ -35,6 +35,7 @@ test("authorizes and prepares one atomic Message, history item, Run and queue ha
 
   assert.equal(result.disposition, "committed");
   assert.equal(result.threadState.revision, 2);
+  assert.equal(result.threadState.title, "do the work");
   assert.equal(result.runState.status, "queued");
   assert.equal(result.runState.toolPermissionMode, "approveForMe");
   assert.deepEqual(

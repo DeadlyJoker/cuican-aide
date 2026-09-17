@@ -3,6 +3,7 @@ import {
   RunLifecycleError,
   ThreadLifecycleError,
   isGoalRunnable,
+  initialThreadTitleData,
   type RunGoalBinding,
   type RunLifecycleEvent,
   type ThreadGoal,
@@ -120,6 +121,7 @@ export class TurnApplicationService {
         messageSequence: message.sequence,
         role: message.role,
         contentDigest,
+        ...initialThreadTitleData(thread, message),
       },
     };
     const runEvent: Extract<RunLifecycleEvent, { type: "run.created" }> = {

@@ -5,8 +5,10 @@ import {
   type ContextCompactionResult,
   type ContextCompactorPort,
 } from "@crewon/context";
+import { validateCompactionPrefix } from "./compaction-recovery-history.ts";
+import { CompactionProgress } from "./compaction-progress.ts";
 
-/** Executes one Tool-free bounded Kernel segment and returns only its compaction result. */
+/** Runs Tool-free compaction with bounded recovery from context overflow. */
 export class KernelContextCompactor implements ContextCompactorPort {
   readonly #kernel: AgentKernelPort;
 
@@ -17,23 +19,51 @@ export class KernelContextCompactor implements ContextCompactorPort {
   async compact(
     contract: ContextCompactionContract,
     signal: AbortSignal,
+    options?: Parameters<ContextCompactorPort["compact"]>[2],
   ): Promise<ContextCompactionResult> {
-    let history = [...contract.history];
-    while (true) {
-      try {
-        return await this.#compactOnce({ ...contract, history }, signal);
-      } catch (error) {
-        if (!isContextWindowExceeded(error) || history.length === 0) {
-          throw error;
-        }
-        history = history.slice(1);
-      }
+    signal.throwIfAborted();
+    const protectedPrefixLength = contract.protectedPrefixLength ?? 0;
+    validateCompactionPrefix(contract.history, protectedPrefixLength);
+    if (contract.history.length === protectedPrefixLength) {
+      throw new AgentKernelError("compaction_source_empty", false);
     }
+    const progress = await CompactionProgress.open(
+      contract,
+      this.#kernel,
+      options?.checkpoint,
+      signal,
+    );
+    while (progress.next() !== undefined) {
+      signal.throwIfAborted();
+      const next = progress.next()!;
+      let result: ContextCompactionResult;
+      try {
+        result = await this.#compactOnce(
+          {
+            ...contract,
+            history: progress.plan.history(next.range),
+            maxOutputBytes: next.outputBudget,
+          },
+          signal,
+          options,
+        );
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!isContextWindowExceeded(error)) throw error;
+        await progress.overflow(error as AgentKernelError);
+        continue;
+      }
+      // Persist outside model-error recovery: storage faults cannot be mistaken for a sampling error.
+      await progress.completed(result);
+    }
+    signal.throwIfAborted();
+    return progress.result();
   }
 
   async #compactOnce(
     contract: ContextCompactionContract,
     signal: AbortSignal,
+    options?: Parameters<ContextCompactorPort["compact"]>[2],
   ): Promise<ContextCompactionResult> {
     let output = "";
     let usage: ContextCompactionResult["usage"] | null = null;
@@ -61,6 +91,7 @@ export class KernelContextCompactor implements ContextCompactorPort {
         budget: { maxOutputBytes: contract.maxOutputBytes },
       },
       signal,
+      options,
     )) {
       switch (event.type) {
         case "segment.started":
@@ -82,6 +113,11 @@ export class KernelContextCompactor implements ContextCompactorPort {
           break;
         case "model.output.delta":
           output += event.data.delta;
+          if (Buffer.byteLength(output, "utf8") > contract.maxOutputBytes)
+            throw new AgentKernelError(
+              "compaction_output_limit_exceeded",
+              false,
+            );
           break;
         case "usage.recorded":
           usage = event.data;

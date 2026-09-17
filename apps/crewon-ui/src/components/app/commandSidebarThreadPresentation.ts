@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import { threadListEventSummary } from "../../lib/thread/threadListEventSummary";
 
 import type { Locale } from "../../lib/i18n";
 import type { CommandShellView } from "./commandWorkspaceState";
@@ -159,10 +160,9 @@ function initialSeenThreadEvents(
 }
 
 export function commandSidebarThreadEventFingerprint(thread: Thread): string {
-  const status = thread.status ?? { type: "idle" as const };
+  const { status, latestTurn } = threadListEventSummary(thread);
   const activeFlags =
     status.type === "active" ? [...status.activeFlags].sort() : [];
-  const latestTurn = thread.turns?.at(-1);
   return JSON.stringify([
     thread.updatedAt,
     status.type,
@@ -243,8 +243,7 @@ export function commandSidebarThreadState(
   thread: Thread,
   seenEventFingerprint: string | null | undefined,
 ): CommandSidebarThreadState {
-  const status = thread.status ?? { type: "idle" as const };
-  const latestTurn = thread.turns?.at(-1);
+  const { status, latestTurn } = threadListEventSummary(thread);
   const seen =
     seenEventFingerprint === commandSidebarThreadEventFingerprint(thread);
 
@@ -278,7 +277,7 @@ export function commandSidebarThreadState(
     return seen ? "failedViewed" : "failedUnread";
   }
 
-  if (status.type === "notLoaded" && latestTurn === undefined) {
+  if (status.type === "notLoaded" && latestTurn === null) {
     return "neutral";
   }
 

@@ -186,11 +186,14 @@ describe("app thread runtime handlers", () => {
   });
 
   it("wires thread list actions with current archived state and dialog dependencies", async () => {
+    const runSelectionRead: NonNullable<SelectThreadActionParams["runSelectionRead"]> =
+      (_threadId, read) => read(new AbortController().signal);
     const confirm = vi.fn(() => true);
     const prompt = vi.fn(() => "Renamed");
     const selected = thread("thread-2");
     const handlers = createAppThreadRuntimeHandlers(
       createParams({
+        runSelectionRead,
         confirm,
         getShowArchivedThreads: () => true,
         prompt,
@@ -203,6 +206,7 @@ describe("app thread runtime handlers", () => {
     await handlers.renameThread(selected);
 
     expect(threadListSpy.selectParams?.threadId).toBe("thread-2");
+    expect(threadListSpy.selectParams?.runSelectionRead).toBe(runSelectionRead);
     expect(threadListSpy.archiveParams?.showArchivedThreads).toBe(true);
     expect(threadListSpy.deleteParams?.confirm).toBe(confirm);
     expect(threadListSpy.deleteParams?.showArchivedThreads).toBe(true);

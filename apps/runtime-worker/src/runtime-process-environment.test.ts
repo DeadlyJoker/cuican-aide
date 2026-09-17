@@ -149,3 +149,57 @@ function restoreEnvironment(name: string, value: string | undefined): void {
     process.env[name] = value;
   }
 }
+
+test("pins an explicit environment output ceiling into the bootstrap AgentVersion", async () => {
+  const { compileRuntimeAgentVersion } = await import(
+    "./agent-version-release.ts"
+  );
+  const names = [
+    "CREWON_RESPONSES_ENDPOINT",
+    "CREWON_MODEL_ID",
+    "CREWON_RESPONSES_MAX_OUTPUT_TOKENS",
+    "CREWON_RESPONSES_WEBSOCKET_ENABLED",
+  ];
+  const prior = names.map((name) => process.env[name]);
+  try {
+    process.env.CREWON_RESPONSES_ENDPOINT =
+      "https://api.openai.com/v1/responses";
+    process.env.CREWON_MODEL_ID = "fixture-model";
+    process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED = "false";
+    const compile = () =>
+      compileRuntimeAgentVersion({
+        runtimeTenantId: "tenant-1",
+        transport: createModelTransport("responses"),
+        route: {
+          agentVersionId: "version-1",
+          runtimeGeneration: "ts-v0",
+          policySnapshotId: "policy-1",
+          authorityId: "authority-1",
+          workspaceBindingId: null,
+        },
+      });
+    delete process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS;
+    const legacy = compile();
+    assert.equal(Object.hasOwn(legacy.model, "maxOutputTokens"), false);
+    process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS = "128";
+    const capped = compile();
+    assert.equal(capped.model.maxOutputTokens, 128);
+    assert.notEqual(capped.contentDigest, legacy.contentDigest);
+    process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED = "true";
+    const hybrid = createModelTransport("responses");
+    assert.equal(hybrid.maxOutputTokens, 128);
+    await hybrid.close?.();
+    for (const invalid of ["", "0", "-1", "1.5", "NaN", "9007199254740992"]) {
+      process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS = invalid;
+      assert.throws(
+        () => createModelTransport("responses"),
+        /CREWON_RESPONSES_MAX_OUTPUT_TOKENS_invalid/,
+      );
+    }
+  } finally {
+    names.forEach((name, i) => {
+      if (prior[i] === undefined) delete process.env[name];
+      else process.env[name] = prior[i];
+    });
+  }
+});

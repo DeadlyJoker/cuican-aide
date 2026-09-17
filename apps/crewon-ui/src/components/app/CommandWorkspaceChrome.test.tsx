@@ -86,6 +86,62 @@ function linkedThread(
 }
 
 describe("CommandSidebar", () => {
+  it.each(["legacy", "control"] as const)(
+    "limits each %s workspace to five without limiting search",
+    (authority) => {
+      const threads = ["/repo/current", "/repo/other", null].flatMap(
+        (cwd, groupIndex) =>
+          Array.from({ length: 7 }, (_, index) => ({
+            cwd,
+            id: `group-${groupIndex}-thread-${index}`,
+            title: `group-${groupIndex}-thread-${index}`,
+            preview: "",
+            updatedAt: 100 - index,
+            updatedLabel: "刚刚",
+          })),
+      );
+      const markup = renderToStaticMarkup(
+        <CommandSidebar
+          activeView="command"
+          cwd="/repo/current"
+          controlWorkspace={{ name: "测试空间", busy: false }}
+          isSearchOpen
+          linkedThreads={threads}
+          locale="zh"
+          query="group-0-thread-6"
+          selectedLinkedThreadId={null}
+          slots={sidebarSlots}
+          workspaceAuthority={authority}
+          onCloseSearch={vi.fn()}
+          onNewThread={vi.fn()}
+          onOpenLinkedThread={vi.fn()}
+          onQueryChange={vi.fn()}
+          onSwitchView={vi.fn()}
+          onToggleCollapse={vi.fn()}
+          onToggleSearch={vi.fn()}
+        />,
+      );
+      const visibleIds = Array.from(
+        markup.matchAll(/data-linked-thread-id="([^"]+)"/g),
+        (match) => match[1],
+      );
+      expect(visibleIds).toEqual(
+        authority === "control"
+          ? threads.slice(0, 5).map((thread) => thread.id)
+          : threads
+              .filter(
+                (thread) =>
+                  !thread.id.endsWith("-5") && !thread.id.endsWith("-6"),
+              )
+              .map((thread) => thread.id),
+      );
+      expect(markup).toContain(
+        authority === "control" ? "展开更多（16）" : "展开更多（2）",
+      );
+      expect(markup).toContain('data-thread-id="group-0-thread-6"');
+    },
+  );
+
   it("keeps an explicit draft workspace visible beside conversation workspaces", () => {
     const markup = renderToStaticMarkup(
       <CommandSidebar

@@ -15,11 +15,11 @@ export type PendingCommandExecutionIntent = Omit<
   sourceThreadId: string | null;
 };
 
-export function nextExecutionIntent(
-  current: CommandExecutionIntent,
-  selected: Exclude<CommandExecutionIntent, "none">,
-): CommandExecutionIntent {
-  return current === selected ? "none" : selected;
+export function executionIntentSelectionForChoice(
+  current: CommandExecutionIntentSelection,
+  choice: { intent: CommandExecutionIntent; scopeKey: string },
+): CommandExecutionIntentSelection {
+  return { ...choice, revision: current.revision + 1 };
 }
 
 export function commandExecutionIntentScopeKey({

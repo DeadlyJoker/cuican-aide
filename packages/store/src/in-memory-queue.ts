@@ -19,6 +19,7 @@ export type QueueRecord<T> = {
   leaseId: string | null;
   leaseEpoch: number;
   leaseExpiresAtMs: number | null;
+  cancellationWakeRequested: boolean;
 };
 
 export function queueRecord<T>(item: T, createdAt: string): QueueRecord<T> {
@@ -30,6 +31,7 @@ export function queueRecord<T>(item: T, createdAt: string): QueueRecord<T> {
     leaseId: null,
     leaseEpoch: 0,
     leaseExpiresAtMs: null,
+    cancellationWakeRequested: false,
   };
 }
 
@@ -37,9 +39,12 @@ export function pendingItems<T>(
   records: ReadonlyMap<string, QueueRecord<T>>,
   now: number,
   limit: number,
+  options: { order: "insertion" | "oldestReady" } = { order: "insertion" },
 ): readonly T[] {
   const items: T[] = [];
-  for (const record of records.values()) {
+  for (const record of options.order === "oldestReady"
+    ? oldestReady(records, now, limit)
+    : records.values()) {
     if (!isClaimable(record, now)) {
       continue;
     }
@@ -55,8 +60,11 @@ export function claimNext<T>(
   records: ReadonlyMap<string, QueueRecord<T>>,
   input: QueueClaimInput,
   now: number,
+  options: { order: "insertion" | "oldestReady" } = { order: "insertion" },
 ): { item: T; lease: QueueLease } | null {
-  for (const record of records.values()) {
+  for (const record of options.order === "oldestReady"
+    ? oldestReady(records, now, 1)
+    : records.values()) {
     if (!isClaimable(record, now)) {
       continue;
     }
@@ -66,6 +74,7 @@ export function claimNext<T>(
     record.leaseId = input.leaseId;
     record.leaseEpoch += 1;
     record.leaseExpiresAtMs = expiry.expiresAtMs;
+    record.cancellationWakeRequested = false;
     return {
       item: clone(record.item),
       lease: {
@@ -121,7 +130,8 @@ export function retry(
     throw new RunStoreError("queue_retry_delay_invalid");
   }
   record.status = "pending";
-  record.availableAtMs = availableAtMs;
+  record.availableAtMs = record.cancellationWakeRequested ? now : availableAtMs;
+  record.cancellationWakeRequested = false;
   clearLease(record);
 }
 
@@ -178,6 +188,31 @@ function isClaimable(record: QueueRecord<unknown>, now: number): boolean {
       record.leaseExpiresAtMs !== null &&
       record.leaseExpiresAtMs <= now)
   );
+}
+
+/** Bounded result selection; equal readiness retains insertion order. */
+function oldestReady<T>(
+  records: ReadonlyMap<string, QueueRecord<T>>,
+  now: number,
+  limit: number,
+): QueueRecord<T>[] {
+  const selected: QueueRecord<T>[] = [];
+  const readyAt = (r: QueueRecord<T>) =>
+    r.status === "pending" ? r.availableAtMs : r.leaseExpiresAtMs!;
+  for (const record of records.values()) {
+    if (!isClaimable(record, now)) continue;
+    let low = 0,
+      high = selected.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (readyAt(selected[middle]!) <= readyAt(record)) low = middle + 1;
+      else high = middle;
+    }
+    if (low >= limit) continue;
+    selected.splice(low, 0, record);
+    if (selected.length > limit) selected.pop();
+  }
+  return selected;
 }
 
 function clone<T>(value: T): T {

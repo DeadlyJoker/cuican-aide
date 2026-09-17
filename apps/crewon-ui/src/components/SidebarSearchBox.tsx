@@ -6,6 +6,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
  * with the other sidebar rows (see `sidebarStyles.ts`).
  */
 export function SidebarSearchBox({
+  maxLength,
   clearSearchLabel,
   searchInputRef,
   searchPlaceholder,
@@ -15,6 +16,7 @@ export function SidebarSearchBox({
   onSearchChange,
   onSearchKeyDown,
 }: {
+  maxLength?: number;
   clearSearchLabel: string;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchPlaceholder: string;
@@ -29,6 +31,7 @@ export function SidebarSearchBox({
       <Search size={15} className="shrink-0 opacity-80" />
       <input
         ref={searchInputRef}
+        maxLength={maxLength}
         aria-label={searchPlaceholder}
         className="w-full min-w-0 border-0 bg-transparent text-[calc(13px_+_var(--user-ui-font-delta))] text-[var(--text)] outline-none placeholder:text-[var(--n-alpha-30)]"
         placeholder={searchPlaceholder}

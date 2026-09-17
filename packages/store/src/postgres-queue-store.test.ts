@@ -43,7 +43,7 @@ test(
         `SELECT version FROM ${fixture.schemaSql}.schema_migrations
          WHERE component = 'durable_queue'`,
       );
-      assert.equal(version.rows[0]?.version, 1);
+      assert.equal(version.rows[0]?.version, 2);
 
       const messages = [outbox("outbox-1"), outbox("outbox-2")];
       await Promise.all(
@@ -51,18 +51,29 @@ test(
       );
 
       const blocker = await fixture.admin.connect();
+      let lockedMessageId: string;
       try {
         await blocker.query("BEGIN");
-        await blocker.query(
+        const locked = await blocker.query<{ message_id: string }>(
           `SELECT message_id FROM ${fixture.schemaSql}.outbox
            ORDER BY outbox_order ASC FOR UPDATE LIMIT 1`,
+        );
+        assert.equal(locked.rows.length, 1);
+        lockedMessageId = locked.rows[0]!.message_id;
+        assert.ok(
+          messages.some((message) => message.messageId === lockedMessageId),
         );
         const skipped = await fixture.second.claimNextOutbox({
           ownerId: "dispatcher-b",
           leaseId: "lease-b",
           leaseDurationMs: 30_000,
         });
-        assert.equal(skipped?.message.messageId, "outbox-2");
+        // Concurrent inserts need not allocate sequence values in the input-array order.
+        assert.equal(
+          skipped?.message.messageId,
+          messages.find((message) => message.messageId !== lockedMessageId)!
+            .messageId,
+        );
       } finally {
         await blocker.query("ROLLBACK");
         blocker.release();
@@ -73,11 +84,11 @@ test(
         leaseId: "lease-a",
         leaseDurationMs: 30_000,
       });
-      assert.equal(first?.message.messageId, "outbox-1");
+      assert.equal(first?.message.messageId, lockedMessageId!);
       assert.deepEqual(await fixture.first.listPendingOutbox(10), []);
 
       await fixture.admin.query(
-        `UPDATE ${fixture.schemaSql}.schema_migrations SET version = 2
+        `UPDATE ${fixture.schemaSql}.schema_migrations SET version = 3
          WHERE component = 'durable_queue'`,
       );
       await assert.rejects(

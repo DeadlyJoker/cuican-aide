@@ -20,6 +20,18 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RUN_DEADLINE_MS = 15 * 60 * 1_000;
+const VERIFICATION_FAILED_ERROR = "control_workflow_verification_failed";
+const VERIFICATION_INVALID_ERROR = "control_workflow_verification_invalid";
+
+export const CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1 =
+  "[Control Workflow · verification-contract:v1]" as const;
+
+const VERIFICATION_CONTRACT_V1_INSTRUCTION = [
+  CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
+  "输出必须且只能包含一行独立 verdict；该行必须逐字等于 `VERDICT: PASS` 或 `VERDICT: FAIL`。",
+  "verdict 使用大写英文和 ASCII 冒号，不得缩进、加前缀、加后缀或输出第二行 VERDICT。",
+  "只有全部验收条件有可核验证据时才能 PASS；缺失、冲突或无法核验时必须 FAIL。",
+].join("\n");
 
 const promptSchema = {
   type: "object" as const,
@@ -128,7 +140,7 @@ export class ControlWorkflowRuntime {
               nodeId,
               kind: "verification" as const,
               title: node.title,
-              instruction: node.instruction,
+              instruction: verificationContractV1Instruction(node.instruction),
               dependsOn,
               inputSchema: upstreamSchema,
               outputSchema: resultSchema,
@@ -260,6 +272,9 @@ export class ControlWorkflowRuntime {
       input.executionId,
     );
     const messages = await this.#messages(located.thread.threadId);
+    if (hasMarker(messages, CANCEL_MARKER)) {
+      throw new Error("control_workflow_execution_canceled");
+    }
     const node = located.version.nodes.find(
       (candidate) => candidate.nodeId === input.nodeId,
     );
@@ -463,9 +478,16 @@ export class ControlWorkflowRuntime {
     ]);
     const canceled = hasMarker(messages, CANCEL_MARKER);
     const active = runs.find((run) => !isTerminalRun(run));
-    const failed = runs.find((run) => run.status === "failed");
-    const executedNodes = projectNodes(version, messages, active, failed);
+    const failedRun = runs.find((run) => run.status === "failed");
+    const executedNodes = projectNodes(
+      version,
+      messages,
+      active,
+      failedRun,
+      canceled,
+    );
     const rejected = executedNodes.some((node) => node.status === "rejected");
+    const failedNode = executedNodes.find((node) => node.status === "failed");
     const waiting = executedNodes.some(
       (node) => node.status === "waitingForApproval",
     );
@@ -474,7 +496,7 @@ export class ControlWorkflowRuntime {
       executedNodes.every((node) => node.status === "completed");
     const status = canceled
       ? "canceled"
-      : rejected || failed !== undefined
+      : rejected || failedRun !== undefined || failedNode !== undefined
         ? "failed"
         : waiting
           ? "waitingForApproval"
@@ -493,7 +515,9 @@ export class ControlWorkflowRuntime {
       executedNodes,
       error:
         status === "failed"
-          ? (failed?.failure?.code ?? "workflow_gate_rejected")
+          ? (failedRun?.failure?.code ??
+            failedNode?.error ??
+            "workflow_gate_rejected")
           : null,
     };
   }
@@ -631,7 +655,7 @@ function workflowRecord(
                   ? ("verification" as const)
                   : ("agent" as const),
               title: node.title,
-              instruction: node.instruction,
+              instruction: visibleWorkflowNodeInstruction(node),
               agentId: requireAgentVersionId(node),
               agentName: requireAgentVersionId(node),
             };
@@ -645,7 +669,8 @@ function projectNodes(
   version: WorkflowVersionView,
   messages: readonly MessageView[],
   active: RunView | undefined,
-  failed: RunView | undefined,
+  failedRun: RunView | undefined,
+  canceled: boolean,
 ): CrewonWorkflowNodeExecution[] {
   let terminalSeen = false;
   return version.executionOrder.map((nodeId) => {
@@ -674,14 +699,28 @@ function projectNodes(
                 ? "waitingForApproval"
                 : "pending";
       } else if (output !== null) {
-        status = "completed";
-      } else if (prompted && failed !== undefined) {
+        status =
+          node.kind === "verification" &&
+          verificationError(node, output) !== null
+            ? "failed"
+            : "completed";
+      } else if (prompted && failedRun !== undefined) {
         status = "failed";
       } else if (prompted && active !== undefined) {
         status = active.status === "queued" ? "queued" : "running";
       }
     }
-    if (["failed", "rejected", "waitingForApproval"].includes(status)) {
+    if (
+      canceled &&
+      !terminalSeen &&
+      prompted &&
+      ["pending", "queued", "running", "waitingForApproval"].includes(status)
+    ) {
+      status = "canceled";
+    }
+    if (
+      ["canceled", "failed", "rejected", "waitingForApproval"].includes(status)
+    ) {
       terminalSeen = true;
     }
     return {
@@ -699,9 +738,62 @@ function projectNodes(
       status,
       output: typeof output === "string" ? output : "",
       error:
-        status === "failed" ? (failed?.failure?.code ?? "run_failed") : null,
+        status === "failed"
+          ? node.kind === "verification" && typeof output === "string"
+            ? (verificationError(node, output) ??
+              failedRun?.failure?.code ??
+              "run_failed")
+            : (failedRun?.failure?.code ?? "run_failed")
+          : null,
     };
   });
+}
+
+function verificationError(
+  node: Pick<WorkflowVersionView["nodes"][number], "instruction">,
+  output: string,
+): string | null {
+  if (!hasVerificationContractV1(node.instruction)) {
+    return legacyVerificationVerdictFailed(output)
+      ? VERIFICATION_FAILED_ERROR
+      : null;
+  }
+
+  const candidates = output
+    .split(/\n/u)
+    .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
+    .filter((line) => /^VERDICT\b/iu.test(line.trim()));
+  if (candidates.length !== 1) return VERIFICATION_INVALID_ERROR;
+  if (candidates[0] === "VERDICT: PASS") return null;
+  if (candidates[0] === "VERDICT: FAIL") return VERIFICATION_FAILED_ERROR;
+  return VERIFICATION_INVALID_ERROR;
+}
+
+function legacyVerificationVerdictFailed(output: string): boolean {
+  return /^VERDICT\s*:\s*FAIL\b/imu.test(output);
+}
+
+function verificationContractV1Instruction(instruction: string): string {
+  return `${instruction.trim()}\n\n${VERIFICATION_CONTRACT_V1_INSTRUCTION}`;
+}
+
+function hasVerificationContractV1(instruction: string): boolean {
+  return instruction.endsWith(`\n\n${VERIFICATION_CONTRACT_V1_INSTRUCTION}`);
+}
+
+function visibleWorkflowNodeInstruction(
+  node: WorkflowVersionView["nodes"][number],
+): string {
+  if (
+    node.kind !== "verification" ||
+    !hasVerificationContractV1(node.instruction)
+  ) {
+    return node.instruction;
+  }
+  return node.instruction.slice(
+    0,
+    -`\n\n${VERIFICATION_CONTRACT_V1_INSTRUCTION}`.length,
+  );
 }
 
 function agentNodePrompt(

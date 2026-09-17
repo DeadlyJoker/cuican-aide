@@ -1,9 +1,19 @@
+import { ControlOfficeThreadChoice } from "./ControlOfficeThreadChoice";
+import { controlOfficeAssociatedThread } from "./controlOfficeThreadLookup";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import { TaskWorkbenchScope } from "../workbench/TaskWorkbenchContext";
+import { MessageActions } from "../messages/MessageActions";
+import { EditableMessageContent } from "../messages/MessageInlineEditor";
+import { MessageReplayScope } from "../messages/MessageReplayScope";
+import {
+  MessageReplayError,
+  replaySource,
+} from "../../lib/control-runtime/controlMessageReplay";
+import { projectThreadWorkbench } from "../../lib/workbench/taskWorkbenchProjection";
 import type { ControlApiClient } from "@crewon/control-client";
 import { Plus, Settings2, ShieldCheck } from "lucide-react";
 import {
   type ChangeEvent,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -38,10 +48,7 @@ import {
   controlOfficeMemberMentionsFromRenderedText,
   controlOfficeDirectMemberId,
 } from "../../lib/office/controlOfficeMemberMentions";
-import {
-  officeMemberAgentProfileId,
-  readOfficeMemberAgentProfile,
-} from "../../lib/office/officeMemberAgentProfile";
+import { controlOfficeRuntimeMemberProfiles } from "../../lib/office/controlOfficeRuntimeMemberProfiles";
 import type { PendingComposerMention } from "../../lib/shared/composerMentions";
 import {
   platformResourceMentionPath,
@@ -52,14 +59,12 @@ import {
   fallbackCommandModelOptions,
   type CommandComposerPermission,
   type CommandExecutionIntent,
-  type TeamMemberRuntimeProfile,
   type ThreadRuntimeSettings,
 } from "../../lib/thread/threadRuntimeSettings";
 import {
-  commandModelEffortLabel,
-  commandReasoningEffortOptions,
-  resolveReasoningEffort,
-} from "../../lib/thread/threadReasoningEffort";
+  modelEffortGroups,
+  modelEffortMenuOptions,
+} from "../composer/composerModelEffortMenu";
 import {
   CommandComposer,
   CommandComposerSelect,
@@ -80,17 +85,15 @@ import {
   commandComposerPermissionOptions,
 } from "../composer/commandComposerPermissionOptions";
 import {
-  effortFromOptionValue,
-  effortOptionValue,
-  modelEffortGroups,
-  modelEffortMenuOptions,
-} from "../composer/composerModelEffortMenu";
-import {
   commandComposerResourceSelection,
   type CommandOfficeComposerCapabilities,
   type CommandOfficeRoomAdapter,
 } from "./CommandWorkspace";
-import { nextExecutionIntent } from "../composer/composerExecutionIntentSelection";
+import {
+  composerExecutionIntentMenuItems,
+  executionIntentForMenuItem,
+  teamPlanDisabledReason,
+} from "../composer/composerExecutionIntentMenu";
 import { Palette, type PaletteItemWithCommand } from "./CommandWorkspaceChrome";
 import {
   ControlOfficeDefinitionRoom,
@@ -99,34 +102,28 @@ import {
 import {
   controlOfficeChatErrorMessage,
   controlOfficeChatMessages,
+  controlOfficeStreamingAuthor,
   controlOfficeThreadTitle,
+  controlOfficeThreadSearchTitle,
+  controlOfficeVisibleThread,
   legacyControlOfficeThreadTitle,
 } from "./controlOfficeChatPresentation";
+
+import { useControlOfficeThread } from "./useControlOfficeThread";
+
+export { controlOfficeRuntimeMemberProfiles };
+export { readControlOfficeActiveGoal } from "./useControlOfficeThread";
 
 type ControlOfficeChatClient = ControlOfficeClient &
   Pick<
     ControlApiClient,
-    "createThread" | "getExecutionIntentCapability" | "getThreadGoal"
+    "createOfficeThread" | "bindOfficeThread" | "getOfficeThread" | "getExecutionIntentCapability" | "getThreadGoal" | "getThreadCatalog"
   >;
 type ControlOfficeThreadRuntime = Pick<
   ControlThreadRuntime,
-  "interruptTurn" | "listThreads" | "readThread" | "renameThread" | "startTurn"
->;
-
-export async function readControlOfficeActiveGoal(
-  client: Pick<ControlApiClient, "getThreadGoal">,
-  threadId: string,
-  options?: Parameters<ControlApiClient["getThreadGoal"]>[1],
-): Promise<boolean | undefined> {
-  try {
-    const snapshot = await client.getThreadGoal(threadId, options);
-    return snapshot.goal?.status === "active";
-  } catch {
-    // Goal metadata decorates an already-authoritative Thread. Its read must
-    // never turn a successful send or Thread load into a retryable failure.
-    return undefined;
-  }
-}
+  "interruptTurn" | "readThread" | "startTurn"
+> &
+  Partial<Pick<ControlThreadRuntime, "replayMessage" | "turnUpdates">>;
 
 function createIdempotencyKey(operation: string) {
   const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
@@ -194,44 +191,15 @@ function mentionResources(
   });
 }
 
-export function controlOfficeRuntimeMemberProfiles(
-  record: ControlOfficeDefinitionRecordReference,
-): TeamMemberRuntimeProfile[] {
-  return record.definition.members.flatMap((member) => {
-    const profile = readOfficeMemberAgentProfile(
-      officeMemberAgentProfileId(
-        record.definition.officeVersionId,
-        member.memberId,
-      ),
-    );
-    if (!profile) return [];
-    const selected = (options: typeof profile.skills) =>
-      options
-        .filter((option) => option.enabled)
-        .map(({ name, description }) => ({ name, description }));
-    return [
-      {
-        memberId: member.memberId,
-        systemPrompt: profile.systemPrompt,
-        skills: selected(profile.skills),
-        mcp: selected(profile.mcp),
-        knowledge: selected(profile.knowledge),
-      },
-    ];
-  });
-}
-
 export function controlOfficeComposerRuntimeSettings({
   executionIntent,
   model,
   permission,
-  reasoningEffort,
   record,
 }: {
   executionIntent: CommandExecutionIntent;
   model: string;
   permission: CommandComposerPermission;
-  reasoningEffort: string | null;
   record: ControlOfficeDefinitionRecordReference;
 }): ThreadRuntimeSettings {
   return {
@@ -239,7 +207,6 @@ export function controlOfficeComposerRuntimeSettings({
       executionIntent,
       model,
       permission,
-      ...(reasoningEffort ? { reasoningEffort } : {}),
     }),
     teamMemberProfiles: controlOfficeRuntimeMemberProfiles(record),
     scene: {
@@ -262,6 +229,8 @@ function ControlOfficeChatRoom({
   onBack,
   record,
   runtime,
+  streamingTextByThread,
+  liveThreads,
 }: {
   agentSettings?: ControlOfficeMemberAgentSettingsBridge;
   client: ControlOfficeChatClient;
@@ -270,6 +239,8 @@ function ControlOfficeChatRoom({
   onBack: () => void;
   record: ControlOfficeDefinitionRecordReference;
   runtime: ControlOfficeThreadRuntime;
+  streamingTextByThread: Readonly<Record<string, string>>;
+  liveThreads: readonly Thread[];
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -282,9 +253,6 @@ function ControlOfficeChatRoom({
   const [draft, setDraft] = useState("");
   const [executionIntent, setExecutionIntent] =
     useState<CommandExecutionIntent>("none");
-  const [hasActiveGoal, setHasActiveGoal] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const [pendingMentions, setPendingMentions] = useState<
     PendingComposerMention[]
@@ -296,16 +264,14 @@ function ControlOfficeChatRoom({
       composer.modelOptions[0]?.value ??
       fallbackCommandModelOptions[0].value,
   );
-  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<
-    string | null
-  >(null);
   const [openPalette, setOpenPalette] = useState<
     "add" | "context" | "slash" | null
   >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [thread, setThread] = useState<Thread | null>(null);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [removedTurnIds, setRemovedTurnIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const title = useMemo(
     () => controlOfficeThreadTitle(activeRecord),
     [activeRecord],
@@ -314,6 +280,49 @@ function ControlOfficeChatRoom({
     () => legacyControlOfficeThreadTitle(activeRecord),
     [activeRecord],
   );
+  const threadCreateKey = useMemo(
+    () => createIdempotencyKey("thread.create"),
+    [client, runtime, title, legacyTitle],
+  );
+  const {
+    thread,
+    threadId,
+    setThreadId,
+    liveThread,
+    hasActiveGoal,
+    loading,
+    error,
+    setError,
+    refreshThread,
+    resolveThreadId,
+    legacyCandidate,
+    unbound,
+    reloadAssociation,
+  } = useControlOfficeThread({
+    client,
+    runtime,
+    locale,
+    title,
+    legacyTitle,
+    searchTitle: controlOfficeThreadSearchTitle(activeRecord),
+    officeId: activeRecord.definition.officeId,
+    officeVersionId: activeRecord.definition.officeVersionId,
+    enabled: !definitionOpen,
+    submitting,
+    liveThreads,
+  });
+  const visibleThread = useMemo(
+    () => controlOfficeVisibleThread(thread, liveThread, { removedTurnIds }),
+    [thread, liveThread, removedTurnIds],
+  );
+  const workbench = useMemo(
+    () =>
+      visibleThread
+        ? projectThreadWorkbench(visibleThread, activeRecord.config.title)
+        : null,
+    [visibleThread, activeRecord.config.title],
+  );
+  const visibleThreadId = threadId ?? liveThread?.id ?? null;
   const leaderName =
     (activeRecord.definition.members[0]
       ? officeMemberDisplayName(
@@ -326,27 +335,13 @@ function ControlOfficeChatRoom({
     composer.modelOptions.length > 0
       ? composer.modelOptions
       : fallbackCommandModelOptions;
-  const reasoningEffortOptions = commandReasoningEffortOptions(
-    effectiveModelOptions,
-    model,
-    locale,
-  );
-  const effectiveReasoningEffort = resolveReasoningEffort(
-    effectiveModelOptions,
-    model,
-    selectedReasoningEffort,
-  );
-  const modelTriggerLabel = commandModelEffortLabel({
-    effort: reasoningEffortOptions.length > 0 ? effectiveReasoningEffort : null,
-    locale,
-    modelLabel:
-      effectiveModelOptions.find((option) => option.value === model)?.label ??
-      model,
-  });
   const modelEffortOptions = modelEffortMenuOptions({
-    effortOptions: reasoningEffortOptions,
+    effortOptions: [],
     modelOptions: effectiveModelOptions,
   });
+  const modelTriggerLabel =
+    effectiveModelOptions.find((option) => option.value === model)?.label ??
+    model;
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
       {
@@ -373,6 +368,20 @@ function ControlOfficeChatRoom({
     ],
     [composer.contextItems, composer.slashItems, locale],
   );
+  const planDisabledReason = teamPlanDisabledReason({
+    memberCount: activeRecord.definition.members.length,
+    hasDirectMember:
+      controlOfficeDirectMemberId(
+        controlOfficeMemberMentionsFromRenderedText(
+          draft,
+          activeRecord.definition.members,
+          locale,
+        ),
+      ) !== null,
+    locale,
+  });
+  const executionIntentBlocked =
+    executionIntent === "plan" ? planDisabledReason : null;
   const memberContextItems = useMemo<PaletteItemWithCommand[]>(
     () =>
       activeRecord.definition.members.flatMap((member, index, members) => {
@@ -399,7 +408,19 @@ function ControlOfficeChatRoom({
       }),
     [activeRecord.definition.members, locale],
   );
-  const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
+  const visibleAddItems = paletteFilter(
+    [
+      ...composerExecutionIntentMenuItems({
+        locale,
+        value: executionIntent,
+        disabled: loading || submitting,
+        planDisabledReason,
+        hasActiveGoal,
+      }),
+      ...addPaletteItems,
+    ],
+    paletteQuery,
+  );
   const visibleContextItems = paletteFilter(memberContextItems, paletteQuery);
   const visibleSlashItems = paletteFilter(composer.slashItems, paletteQuery);
 
@@ -438,115 +459,12 @@ function ControlOfficeChatRoom({
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, [openPalette]);
 
-  const refreshThread = useCallback(
-    async (id: string) => {
-      const [nextThread, activeGoal] = await Promise.all([
-        runtime.readThread(id),
-        readControlOfficeActiveGoal(client, id),
-      ]);
-      setThread(nextThread);
-      if (activeGoal !== undefined) {
-        setHasActiveGoal(activeGoal);
-      }
-      return nextThread;
-    },
-    [client, runtime],
-  );
-
-  useEffect(() => {
-    let canceled = false;
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    setHasActiveGoal(false);
-    void runtime
-      .listThreads(false)
-      .then(async (threads) => {
-        const match =
-          threads.find((candidate) => candidate.name === title) ??
-          threads.find((candidate) => candidate.name === legacyTitle);
-        if (!match) {
-          return null;
-        }
-        if (match.name === legacyTitle) {
-          await runtime.renameThread(match.id, title).catch(() => undefined);
-        }
-        const [nextThread, activeGoal] = await Promise.all([
-          runtime.readThread(match.id, { signal: controller.signal }),
-          readControlOfficeActiveGoal(client, match.id, {
-            signal: controller.signal,
-          }),
-        ]);
-        return { activeGoal, id: match.id, thread: nextThread };
-      })
-      .then((result) => {
-        if (canceled) {
-          return;
-        }
-        setThreadId(result?.id ?? null);
-        setThread(result?.thread ?? null);
-        if (result?.activeGoal !== undefined) {
-          setHasActiveGoal(result.activeGoal);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (!canceled) {
-          setError(controlOfficeChatErrorMessage(reason, locale));
-        }
-      })
-      .finally(() => {
-        if (!canceled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      canceled = true;
-      controller.abort();
-    };
-  }, [client, legacyTitle, locale, runtime, title]);
-
-  useEffect(() => {
-    if (!threadId || (!submitting && thread?.status.type !== "active")) {
-      return;
-    }
-    const controller = new AbortController();
-    let timeoutId: number | null = null;
-    const refresh = async () => {
-      try {
-        const [nextThread, activeGoal] = await Promise.all([
-          runtime.readThread(threadId, { signal: controller.signal }),
-          readControlOfficeActiveGoal(client, threadId, {
-            signal: controller.signal,
-          }),
-        ]);
-        if (!controller.signal.aborted) {
-          setThread(nextThread);
-          if (activeGoal !== undefined) {
-            setHasActiveGoal(activeGoal);
-          }
-        }
-      } catch (reason) {
-        if (!controller.signal.aborted) {
-          setError(controlOfficeChatErrorMessage(reason, locale));
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          timeoutId = window.setTimeout(() => void refresh(), 1_500);
-        }
-      }
-    };
-    timeoutId = window.setTimeout(() => void refresh(), 1_500);
-    return () => {
-      controller.abort();
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [client, locale, runtime, submitting, thread?.status.type, threadId]);
-
   async function submitMessage() {
     const text = draft.trim();
-    if (!text || submitting || loading) {
+    if (
+      !text || submitting || loading || legacyCandidate !== null ||
+      executionIntentBlocked
+    ) {
       return;
     }
     setSubmitting(true);
@@ -580,13 +498,15 @@ function ControlOfficeChatRoom({
       if (executionIntent !== "none") {
         await requireControlExecutionIntentCapability(client);
       }
-      let activeThreadId = threadId;
+      let activeThreadId = threadId ?? (await resolveThreadId());
       if (!activeThreadId) {
-        const created = await client.createThread(
-          { title },
-          createIdempotencyKey("thread.create"),
+        const created = await client.createOfficeThread(
+          activeRecord.definition.officeVersionId,
+          threadCreateKey,
         );
-        activeThreadId = created.thread.threadId;
+        const associated = controlOfficeAssociatedThread(created, activeRecord.definition);
+        if (associated === null) throw new Error("control_office_binding_missing");
+        activeThreadId = associated.threadId;
         setThreadId(activeThreadId);
       }
       if (
@@ -604,13 +524,14 @@ function ControlOfficeChatRoom({
             executionIntent,
             model,
             permission,
-            reasoningEffort: effectiveReasoningEffort,
             record: runtimeRecord,
           }),
           ...(directMemberId ? { teamTargetMemberId: directMemberId } : {}),
         },
       );
-      await refreshThread(activeThreadId);
+      await refreshAcceptedControlOfficeTurn(() =>
+        refreshThread(activeThreadId),
+      );
       setAttachmentFiles([]);
       setAttachments([]);
       setExecutionIntent("none");
@@ -624,9 +545,48 @@ function ControlOfficeChatRoom({
     }
   }
 
+  async function retryOfficeThreadLookup() {
+    if (submitting || loading) return;
+    setSubmitting(true);
+    try {
+      await reloadAssociation();
+    } catch {
+      /* The read owner reports the current lookup failure. */
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function chooseOfficeThread(kind: "existing" | "new") {
+    if (
+      submitting || loading || !unbound || threadId !== null ||
+      (kind === "existing" && legacyCandidate === null)
+    ) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const response = kind === "existing"
+        ? await client.bindOfficeThread(activeRecord.definition.officeVersionId, {
+            threadId: legacyCandidate!.threadId,
+            expectedRevision: legacyCandidate!.revision,
+          })
+        : await client.createOfficeThread(
+            activeRecord.definition.officeVersionId, threadCreateKey,
+          );
+      const associated = controlOfficeAssociatedThread(response, activeRecord.definition);
+      if (associated === null) throw new Error("control_office_binding_missing");
+      setThreadId(associated.threadId);
+      await refreshAcceptedControlOfficeTurn(() => refreshThread(associated.threadId));
+    } catch (reason) {
+      setError(controlOfficeChatErrorMessage(reason, locale));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function stopActiveTurn() {
     if (!threadId || submitting) return;
-    const activeTurn = [...(thread?.turns ?? [])]
+    const activeTurn = [...(visibleThread?.turns ?? [])]
       .reverse()
       .find((turn) => turn.status === "inProgress");
     if (!activeTurn) return;
@@ -658,15 +618,6 @@ function ControlOfficeChatRoom({
       return;
     }
     openComposerPalette("add");
-  }
-
-  function selectModelOrEffort(nextValue: string) {
-    const effort = effortFromOptionValue(nextValue);
-    if (effort) {
-      setSelectedReasoningEffort(effort);
-      return;
-    }
-    setModel(nextValue);
   }
 
   function selectContextItem(item: PaletteItemWithCommand) {
@@ -726,6 +677,16 @@ function ControlOfficeChatRoom({
   }
 
   function selectAddItem(item: PaletteItemWithCommand) {
+    if (item.disabled) return;
+    const intent = executionIntentForMenuItem(item);
+    if (intent) {
+      if (loading || submitting || (intent === "plan" && planDisabledReason))
+        return;
+      setExecutionIntent(intent);
+      closeComposerPalette();
+      textareaRef.current?.focus();
+      return;
+    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -788,7 +749,22 @@ function ControlOfficeChatRoom({
   }
 
   const persistedMessages = controlOfficeChatMessages(
-    thread,
+    visibleThread,
+    leaderName,
+    activeRecord.definition.members,
+    locale,
+  );
+  const streamedText = visibleThreadId
+    ? (streamingTextByThread[visibleThreadId] ?? "")
+    : "";
+  const latestTurn = visibleThread?.turns.at(-1) ?? null;
+  const visibleStreamedText =
+    latestTurn !== null &&
+    ["completed", "failed", "interrupted"].includes(latestTurn.status)
+      ? ""
+      : streamedText;
+  const streamingAuthor = controlOfficeStreamingAuthor(
+    visibleThread,
     leaderName,
     activeRecord.definition.members,
     locale,
@@ -804,13 +780,17 @@ function ControlOfficeChatRoom({
             author: locale === "zh" ? "你" : "You",
             glyph: "@",
             id: "pending:user",
+            messageId: undefined,
             self: true,
             text: pendingMessage,
             time: "",
           },
         ]
       : persistedMessages;
-  const isActive = submitting || thread?.status.type === "active";
+  const latestResponseId = messages.findLast(
+    (message) => !message.self && message.text.trim(),
+  )?.id;
+  const isActive = submitting || visibleThread?.status.type === "active";
   const chatMemberNames = activeRecord.definition.members.map((member, index) =>
     officeMemberDisplayName(member.displayName, index, locale),
   );
@@ -833,379 +813,489 @@ function ControlOfficeChatRoom({
     0,
   );
   return (
-    <main
-      aria-label={activeRecord.config.title}
-      className="office-workspace control-office-chat-room"
-      data-control-office-chat=""
-    >
-      <header className="office-top">
-        <button className="office-back" type="button" onClick={onBack}>
-          {locale === "zh" ? "返回" : "Back"}
-        </button>
-        <div className="office-top-title" title={activeRecord.config.title}>
-          <h1>{activeRecord.config.title}</h1>
-          <p>
-            {locale === "zh" ? "办公室群聊" : "Office group chat"} ·{" "}
-            {leaderName} · {activeRecord.definition.members.length}{" "}
-            {locale === "zh" ? "名成员" : "members"}
-          </p>
-        </div>
-        <div className="office-top-actions">
-          <div
-            aria-label={`${locale === "zh" ? "群聊成员" : "Group chat members"}：${chatMemberNames.join(locale === "zh" ? "、" : ", ")}`}
-            className="control-office-chat-members"
-            role="img"
-            title={`${locale === "zh" ? "群聊" : "Group chat"} · ${chatMemberNames.join(locale === "zh" ? "、" : ", ")}`}
-          >
-            {visibleChatMembers.map((member, index) => {
-              const name = officeMemberDisplayName(
-                member.displayName,
-                index,
-                locale,
-              );
-              return (
-                <span key={member.memberId} aria-hidden="true">
-                  {Array.from(name.trim())[0] || (locale === "zh" ? "员" : "M")}
-                </span>
-              );
-            })}
-            {hiddenChatMemberCount > 0 ? (
-              <span
-                className="control-office-chat-member-count"
-                aria-hidden="true"
-              >
-                +{hiddenChatMemberCount}
-              </span>
-            ) : null}
-          </div>
-          <button
-            aria-label={locale === "zh" ? "成员设置" : "Member settings"}
-            className="control-office-member-settings-button"
-            title={locale === "zh" ? "成员设置" : "Member settings"}
-            type="button"
-            onClick={() => setDefinitionOpen(true)}
-          >
-            <Settings2 aria-hidden="true" />
-          </button>
-          {error || isActive ? (
-            <span
-              className="office-runtime-status"
-              data-runtime-status={error ? "error" : "running"}
-            >
-              {error
-                ? locale === "zh"
-                  ? "需要重试"
-                  : "Retry needed"
-                : locale === "zh"
-                  ? "协作中"
-                  : "Working"}
-            </span>
-          ) : null}
-        </div>
-      </header>
-
-      <div className="office-room-body">
-        <section
-          className="office-chat"
-          aria-label={locale === "zh" ? "群聊" : "Group chat"}
-        >
-          <div
-            aria-busy={isActive}
-            aria-live="polite"
-            aria-relevant="additions text"
-            className="office-chat-stream"
-            role="log"
-          >
-            {loading ? (
-              <div className="office-chat-empty" role="status">
-                <strong>
-                  {locale === "zh" ? "正在进入群聊" : "Opening group chat"}
-                </strong>
-                <p>
-                  {locale === "zh"
-                    ? "正在加载聊天记录。"
-                    : "Loading the chat history."}
-                </p>
-              </div>
-            ) : messages.length === 0 ? (
-              <div className="office-chat-empty">
-                <strong>
-                  {locale === "zh" ? "还没有消息" : "No messages yet"}
-                </strong>
-                <p>
-                  {locale === "zh"
-                    ? "在下方告诉组长一个真实目标，后续消息会继续留在这个办公室群聊中。"
-                    : "Give the manager a real goal below. Follow-up messages stay in this Office chat."}
-                </p>
-              </div>
-            ) : null}
-            {messages.map((message) => (
-              <div
-                className="office-bubble"
-                data-kind="message"
-                data-self={message.self}
-                key={message.id}
-              >
-                <span
-                  className="office-avatar office-avatar-sm"
-                  aria-hidden="true"
-                >
-                  {message.self
-                    ? locale === "zh"
-                      ? "你"
-                      : "You"
-                    : message.glyph}
-                </span>
-                <div className="office-bubble-body">
-                  <div className="office-bubble-head">
-                    <strong>{message.author}</strong>
-                    <span>{message.time}</span>
-                  </div>
-                  <OfficeMessageMarkdown
-                    mentions={chatMemberMentions}
-                    text={message.text}
-                  />
-                </div>
-              </div>
-            ))}
-            {isActive ? (
-              <div className="office-system" role="status">
-                {locale === "zh"
-                  ? "办公室正在协作，执行成员会直接在这里回复。"
-                  : "The Office is collaborating; the assigned member will reply here directly."}
-              </div>
-            ) : null}
-            {error ? (
-              <div className="control-office-chat-error" role="alert">
-                {error}
-              </div>
-            ) : null}
-          </div>
-
-          <input
-            ref={fileInputRef}
-            accept=".csv,.docx,.html,.js,.jsx,.json,.md,.py,.rs,.sql,.ts,.tsx,.txt,.xls,.xlsx,.xml,.yaml,.yml"
-            aria-label={locale === "zh" ? "选择文件" : "Choose files"}
-            hidden
-            multiple
-            type="file"
-            onChange={(event) => void addFiles(event)}
-          />
-          <input
-            ref={folderInputRef}
-            aria-label={locale === "zh" ? "选择文件夹" : "Choose a folder"}
-            hidden
-            multiple
-            type="file"
-            onChange={(event) => void addFiles(event)}
-          />
-          <CommandComposer
-            actions={
-              <CommandComposerSelect
-                activeValues={[
-                  model,
-                  ...(effectiveReasoningEffort
-                    ? [effortOptionValue(effectiveReasoningEffort)]
-                    : []),
-                ]}
-                ariaLabel={
-                  locale === "zh" ? "模型与推理档位" : "Model and effort"
+    <MessageReplayScope
+      key={visibleThreadId}
+      thread={visibleThread}
+      busy={isActive || loading}
+      locale={locale}
+      onReplay={
+        runtime.replayMessage
+          ? async (request) => {
+              setSubmitting(true);
+              const source =
+                visibleThread &&
+                replaySource(visibleThread, request.userMessageId);
+              const recordCommittedEdit = () => {
+                if (!source) return;
+                setRemovedTurnIds(
+                  (current) =>
+                    new Set([
+                      ...current,
+                      ...request.expectedTurnIds.slice(source.index),
+                    ]),
+                );
+              };
+              try {
+                const mentions = controlOfficeMemberMentionsFromRenderedText(
+                  request.text,
+                  activeRecord.definition.members,
+                  locale,
+                );
+                const directMemberId = controlOfficeDirectMemberId(mentions);
+                await runtime.replayMessage!({
+                  ...request,
+                  settings: {
+                    ...controlOfficeComposerRuntimeSettings({
+                      executionIntent: "none",
+                      model,
+                      permission,
+                      record: activeRecord,
+                    }),
+                    ...(directMemberId
+                      ? { teamTargetMemberId: directMemberId }
+                      : {}),
+                  },
+                });
+                recordCommittedEdit();
+              } catch (cause) {
+                if (
+                  cause instanceof MessageReplayError &&
+                  cause.historyChanged
+                ) {
+                  recordCommittedEdit();
                 }
-                className="max-w-[138px]"
-                groups={modelEffortGroups(locale)}
-                options={modelEffortOptions}
-                triggerLabel={modelTriggerLabel}
-                value={model}
-                onChange={selectModelOrEffort}
-              />
+                throw cause;
+              } finally {
+                try {
+                  await refreshAcceptedControlOfficeTurn(() =>
+                    refreshThread(request.threadId),
+                  );
+                } finally {
+                  setSubmitting(false);
+                }
+              }
             }
-            beforeTextarea={
-              <>
-                <ComposerResourceTags
-                  resources={[
-                    ...attachments.map((attachment) => ({
-                      id: attachment.id,
-                      kind: "file" as const,
-                      label: locale === "zh" ? "文件" : "File",
-                      name: attachment.name,
-                    })),
-                    ...mentionResources(pendingMentions, locale),
-                  ]}
-                  onRemove={(resource) => {
-                    if (
-                      attachments.some(
-                        (attachment) => attachment.id === resource.id,
-                      )
-                    ) {
-                      setAttachmentFiles((current) =>
-                        current.filter(
-                          (file) =>
-                            `${file.name}-${file.lastModified}-${file.size}` !==
-                            resource.id,
-                        ),
-                      );
-                      setAttachments((current) =>
-                        current.filter(
-                          (attachment) => attachment.id !== resource.id,
-                        ),
-                      );
-                      setAttachmentError(null);
-                      return;
-                    }
-                    setPendingMentions((current) =>
-                      current.filter((mention) => mention.path !== resource.id),
-                    );
-                  }}
-                />
-              </>
-            }
-            ariaDescribedBy="control-office-composer-status"
-            ariaLabel={locale === "zh" ? "群聊输入" : "Group chat input"}
-            className="command-input thread-command-input control-office-chat-composer"
-            controls={
-              <>
-                <button
-                  aria-label={locale === "zh" ? "添加上下文" : "Add context"}
-                  className="icon-action composer-plus-action"
-                  data-palette-trigger="add"
-                  type="button"
-                  onClick={toggleAddPalette}
-                >
-                  <Plus aria-hidden="true" />
-                </button>
-                <ComposerExecutionIntentControl
-                  disabled={loading || submitting}
-                  hasActiveGoal={hasActiveGoal}
-                  locale={locale}
-                  value={executionIntent}
-                  onSelect={(selected) =>
-                    setExecutionIntent((current) =>
-                      nextExecutionIntent(current, selected),
-                    )
-                  }
-                />
-                {executionIntent === "plan" ? (
-                  <ComposerPlanReadonlyStatus locale={locale} />
-                ) : (
-                  <CommandComposerSelect
-                    ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                    className="max-w-[180px]"
-                    contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
-                    icon={<ShieldCheck aria-hidden="true" />}
-                    menuHelp={{
-                      href: commandComposerPermissionLearnMoreUrl,
-                      label: commandComposerPermissionLearnMoreLabel(locale),
-                    }}
-                    menuTitle={commandComposerPermissionMenuTitle(locale)}
-                    options={commandComposerPermissionOptions(locale)}
-                    showChevron={false}
-                    value={permission}
-                    onChange={setPermission}
-                  />
-                )}
-              </>
-            }
-            disabled={loading}
-            id="control-office-message-input"
-            palettes={
-              <>
-                <Palette
-                  id="control-office-add-panel"
-                  inputId="control-office-add-search"
-                  items={visibleAddItems}
-                  kind="add"
-                  open={openPalette === "add"}
-                  placeholder={locale === "zh" ? "添加" : "Add"}
-                  query={paletteQuery}
-                  onClose={closeComposerPalette}
-                  onQueryChange={setPaletteQuery}
-                  onSelect={selectAddItem}
-                />
-                <Palette
-                  id="control-office-context-panel"
-                  inputId="control-office-context-search"
-                  items={visibleContextItems}
-                  kind="context"
-                  open={openPalette === "context"}
-                  placeholder={
-                    locale === "zh" ? "搜索办公室成员" : "Search Office members"
-                  }
-                  query={paletteQuery}
-                  onClose={closeComposerPalette}
-                  onQueryChange={setPaletteQuery}
-                  onSelect={selectContextItem}
-                />
-                <Palette
-                  id="control-office-slash-panel"
-                  inputId="control-office-slash-search"
-                  items={visibleSlashItems}
-                  kind="slash"
-                  open={openPalette === "slash"}
-                  placeholder={
-                    locale === "zh"
-                      ? "搜索 Skill 或 MCP"
-                      : "Search Skills or MCP"
-                  }
-                  query={paletteQuery}
-                  onClose={closeComposerPalette}
-                  onQueryChange={setPaletteQuery}
-                  onSelect={selectSlashItem}
-                />
-              </>
-            }
-            paletteOpen={Boolean(openPalette)}
-            placeholder={
-              locale === "zh"
-                ? "告诉组长目标、背景或下一步…"
-                : "Tell the manager the goal, context, or next step…"
-            }
-            running={thread?.status.type === "active"}
-            sendLabel={locale === "zh" ? "发送" : "Send"}
-            slashEnabled
-            state={
-              isActive ? (
-                <span
-                  aria-label={locale === "zh" ? "协作中" : "Working"}
-                  className="connection-indicator"
-                  data-state="connecting"
-                  role="status"
-                />
-              ) : null
-            }
-            stateId="control-office-composer-status"
-            stopLabel={locale === "zh" ? "协作中" : "Working"}
-            submitBehavior="enter"
-            submitBlocked={!draft.trim()}
-            submitting={submitting}
-            textareaRef={textareaRef}
-            value={draft}
-            onChange={setDraft}
-            onClosePalette={closeComposerPalette}
-            onOpenPalette={openComposerPalette}
-            onStop={() => void stopActiveTurn()}
-            onSubmit={submitMessage}
-          />
-          {attachmentError ? (
-            <div className="control-office-attachment-error" role="alert">
-              {attachmentError}
+          : undefined
+      }
+    >
+      <TaskWorkbenchScope snapshot={workbench}>
+        <main
+          aria-label={activeRecord.config.title}
+          className="office-workspace control-office-chat-room"
+          data-control-office-chat=""
+        >
+          <header className="office-top">
+            <button className="office-back" type="button" onClick={onBack}>
+              {locale === "zh" ? "返回" : "Back"}
+            </button>
+            <div className="office-top-title" title={activeRecord.config.title}>
+              <h1>{activeRecord.config.title}</h1>
+              <p>
+                {locale === "zh" ? "办公室群聊" : "Office group chat"} ·{" "}
+                {leaderName} · {activeRecord.definition.members.length}{" "}
+                {locale === "zh" ? "名成员" : "members"}
+              </p>
             </div>
-          ) : null}
-        </section>
-      </div>
-    </main>
+            <div className="office-top-actions">
+              <div
+                aria-label={`${locale === "zh" ? "群聊成员" : "Group chat members"}：${chatMemberNames.join(locale === "zh" ? "、" : ", ")}`}
+                className="control-office-chat-members"
+                role="img"
+                title={`${locale === "zh" ? "群聊" : "Group chat"} · ${chatMemberNames.join(locale === "zh" ? "、" : ", ")}`}
+              >
+                {visibleChatMembers.map((member, index) => {
+                  const name = officeMemberDisplayName(
+                    member.displayName,
+                    index,
+                    locale,
+                  );
+                  return (
+                    <span key={member.memberId} aria-hidden="true">
+                      {Array.from(name.trim())[0] ||
+                        (locale === "zh" ? "员" : "M")}
+                    </span>
+                  );
+                })}
+                {hiddenChatMemberCount > 0 ? (
+                  <span
+                    className="control-office-chat-member-count"
+                    aria-hidden="true"
+                  >
+                    +{hiddenChatMemberCount}
+                  </span>
+                ) : null}
+              </div>
+              <button
+                aria-label={locale === "zh" ? "成员设置" : "Member settings"}
+                className="control-office-member-settings-button"
+                title={locale === "zh" ? "成员设置" : "Member settings"}
+                type="button"
+                onClick={() => setDefinitionOpen(true)}
+              >
+                <Settings2 aria-hidden="true" />
+              </button>
+              {error || isActive ? (
+                <span
+                  className="office-runtime-status"
+                  data-runtime-status={error ? "error" : "running"}
+                >
+                  {error
+                    ? locale === "zh"
+                      ? "需要重试"
+                      : "Retry needed"
+                    : locale === "zh"
+                      ? "协作中"
+                      : "Working"}
+                </span>
+              ) : null}
+            </div>
+          </header>
+
+          <div className="office-room-body">
+            <section
+              className="office-chat"
+              aria-label={locale === "zh" ? "群聊" : "Group chat"}
+            >
+              <div
+                aria-busy={isActive}
+                aria-live="polite"
+                aria-relevant="additions text"
+                className="office-chat-stream"
+                role="log"
+              >
+                {loading ? (
+                  <div className="office-chat-empty" role="status">
+                    <strong>
+                      {locale === "zh" ? "正在进入群聊" : "Opening group chat"}
+                    </strong>
+                    <p>
+                      {locale === "zh"
+                        ? "正在加载聊天记录。"
+                        : "Loading the chat history."}
+                    </p>
+                  </div>
+                ) : threadId === null && (legacyCandidate !== null || error !== null) ? (
+                  <ControlOfficeThreadChoice
+                    unbound={unbound}
+                    candidate={legacyCandidate}
+                    locale={locale}
+                    busy={submitting}
+                    onClaim={() => void chooseOfficeThread("existing")}
+                    onCreate={() => void chooseOfficeThread("new")}
+                    onRetry={() => void retryOfficeThreadLookup()}
+                  />
+                ) : messages.length === 0 ? (
+                  <div className="office-chat-empty">
+                    <strong>
+                      {locale === "zh" ? "还没有消息" : "No messages yet"}
+                    </strong>
+                    <p>
+                      {locale === "zh"
+                        ? "在下方告诉组长一个真实目标，后续消息会继续留在这个办公室群聊中。"
+                        : "Give the manager a real goal below. Follow-up messages stay in this Office chat."}
+                    </p>
+                  </div>
+                ) : null}
+                {messages.map((message) => (
+                  <div
+                    className="office-bubble"
+                    data-kind="message"
+                    data-message-id={message.messageId}
+                    data-workbench-origin={
+                      message.self
+                        ? undefined
+                        : message.id.split(":assistant:")[0]
+                    }
+                    tabIndex={message.self ? undefined : -1}
+                    data-self={message.self}
+                    key={message.id}
+                  >
+                    <span
+                      className="office-avatar office-avatar-sm"
+                      aria-hidden="true"
+                    >
+                      {message.self
+                        ? locale === "zh"
+                          ? "你"
+                          : "You"
+                        : message.glyph}
+                    </span>
+                    <div className="office-bubble-body">
+                      <div className="office-bubble-head">
+                        <strong>{message.author}</strong>
+                        <span>{message.time}</span>
+                      </div>
+                      <EditableMessageContent
+                        messageId={
+                          message.self ? message.userMessageId : undefined
+                        }
+                        locale={locale}
+                      >
+                        <OfficeMessageMarkdown
+                          mentions={chatMemberMentions}
+                          text={message.text}
+                        />
+                      </EditableMessageContent>
+                      <MessageActions
+                        text={message.text}
+                        locale={locale}
+                        user={message.self}
+                        userMessageId={message.userMessageId}
+                        visibility={
+                          !message.self && message.id === latestResponseId
+                            ? "always"
+                            : "on-hover"
+                        }
+                      />
+                    </div>
+                  </div>
+                ))}
+                {latestTurn?.status === "failed" && !isActive && !loading ? (
+                  <p className="message-replay-failure" role="status">
+                    {locale === "zh"
+                      ? "这条消息未能完成回复，可编辑原消息后重新执行。"
+                      : "This reply could not be completed. Edit the original message to run it again."}
+                  </p>
+                ) : null}
+                {visibleStreamedText ? (
+                  <div
+                    className="office-bubble"
+                    data-kind="streaming"
+                    data-self="false"
+                  >
+                    <span
+                      className="office-avatar office-avatar-sm"
+                      aria-hidden="true"
+                    >
+                      {Array.from(streamingAuthor.trim())[0] || "组"}
+                    </span>
+                    <div className="office-bubble-body">
+                      <div className="office-bubble-head">
+                        <strong>{streamingAuthor}</strong>
+                        <span>{locale === "zh" ? "实时回复" : "Live"}</span>
+                      </div>
+                      <OfficeMessageMarkdown
+                        mentions={chatMemberMentions}
+                        text={visibleStreamedText}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {isActive ? (
+                  <div className="office-system" role="status">
+                    {locale === "zh"
+                      ? "办公室正在协作，执行成员会直接在这里回复。"
+                      : "The Office is collaborating; the assigned member will reply here directly."}
+                  </div>
+                ) : null}
+                {error ? (
+                  <div className="control-office-chat-error" role="alert">
+                    {error}
+                  </div>
+                ) : null}
+              </div>
+
+              <input
+                ref={fileInputRef}
+                accept=".csv,.docx,.html,.js,.jsx,.json,.md,.py,.rs,.sql,.ts,.tsx,.txt,.xls,.xlsx,.xml,.yaml,.yml"
+                aria-label={locale === "zh" ? "选择文件" : "Choose files"}
+                hidden
+                multiple
+                type="file"
+                onChange={(event) => void addFiles(event)}
+              />
+              <input
+                ref={folderInputRef}
+                aria-label={locale === "zh" ? "选择文件夹" : "Choose a folder"}
+                hidden
+                multiple
+                type="file"
+                onChange={(event) => void addFiles(event)}
+              />
+              <CommandComposer
+                actions={null}
+                beforeTextarea={
+                  <>
+                    <ComposerResourceTags
+                      resources={[
+                        ...attachments.map((attachment) => ({
+                          id: attachment.id,
+                          kind: "file" as const,
+                          label: locale === "zh" ? "文件" : "File",
+                          name: attachment.name,
+                        })),
+                        ...mentionResources(pendingMentions, locale),
+                      ]}
+                      onRemove={(resource) => {
+                        if (
+                          attachments.some(
+                            (attachment) => attachment.id === resource.id,
+                          )
+                        ) {
+                          setAttachmentFiles((current) =>
+                            current.filter(
+                              (file) =>
+                                `${file.name}-${file.lastModified}-${file.size}` !==
+                                resource.id,
+                            ),
+                          );
+                          setAttachments((current) =>
+                            current.filter(
+                              (attachment) => attachment.id !== resource.id,
+                            ),
+                          );
+                          setAttachmentError(null);
+                          return;
+                        }
+                        setPendingMentions((current) =>
+                          current.filter(
+                            (mention) => mention.path !== resource.id,
+                          ),
+                        );
+                      }}
+                    />
+                  </>
+                }
+                ariaDescribedBy="control-office-composer-status"
+                ariaLabel={locale === "zh" ? "群聊输入" : "Group chat input"}
+                className="command-input thread-command-input control-office-chat-composer"
+                controls={
+                  <>
+                    <button
+                      aria-label={
+                        locale === "zh" ? "添加上下文" : "Add context"
+                      }
+                      className="icon-action composer-plus-action"
+                      aria-expanded={openPalette === "add"}
+                      aria-controls="control-office-add-panel"
+                      data-palette-trigger="add"
+                      type="button"
+                      onClick={toggleAddPalette}
+                    >
+                      <Plus aria-hidden="true" />
+                    </button>
+                  </>
+                }
+                disabled={loading || legacyCandidate !== null}
+                id="control-office-message-input"
+                palettes={
+                  <>
+                    <Palette
+                      id="control-office-add-panel"
+                      inputId="control-office-add-search"
+                      items={visibleAddItems}
+                      kind="add"
+                      open={openPalette === "add"}
+                      placeholder={locale === "zh" ? "添加" : "Add"}
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={selectAddItem}
+                    />
+                    <Palette
+                      id="control-office-context-panel"
+                      inputId="control-office-context-search"
+                      items={visibleContextItems}
+                      kind="context"
+                      open={openPalette === "context"}
+                      placeholder={
+                        locale === "zh"
+                          ? "搜索办公室成员"
+                          : "Search Office members"
+                      }
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={selectContextItem}
+                    />
+                    <Palette
+                      id="control-office-slash-panel"
+                      inputId="control-office-slash-search"
+                      items={visibleSlashItems}
+                      kind="slash"
+                      open={openPalette === "slash"}
+                      placeholder={
+                        locale === "zh"
+                          ? "搜索 Skill 或 MCP"
+                          : "Search Skills or MCP"
+                      }
+                      query={paletteQuery}
+                      onClose={closeComposerPalette}
+                      onQueryChange={setPaletteQuery}
+                      onSelect={selectSlashItem}
+                    />
+                  </>
+                }
+                paletteOpen={Boolean(openPalette)}
+                placeholder={
+                  locale === "zh"
+                    ? "告诉组长目标、背景或下一步…"
+                    : "Tell the manager the goal, context, or next step…"
+                }
+                running={visibleThread?.status.type === "active"}
+                sendLabel={locale === "zh" ? "发送" : "Send"}
+                slashEnabled
+                state={
+                  isActive ? (
+                    <span
+                      aria-label={locale === "zh" ? "协作中" : "Working"}
+                      className="connection-indicator"
+                      data-state="connecting"
+                      role="status"
+                    />
+                  ) : null
+                }
+                stateId="control-office-composer-status"
+                stopLabel={locale === "zh" ? "协作中" : "Working"}
+                submitBehavior="enter"
+                submitBlocked={!draft.trim() || Boolean(executionIntentBlocked)}
+                submitting={submitting}
+                textareaRef={textareaRef}
+                value={draft}
+                onChange={setDraft}
+                onClosePalette={closeComposerPalette}
+                onOpenPalette={openComposerPalette}
+                onStop={() => void stopActiveTurn()}
+                onSubmit={submitMessage}
+              />
+              {attachmentError ? (
+                <div className="control-office-attachment-error" role="alert">
+                  {attachmentError}
+                </div>
+              ) : null}
+            </section>
+          </div>
+        </main>
+      </TaskWorkbenchScope>
+    </MessageReplayScope>
   );
+}
+
+export async function refreshAcceptedControlOfficeTurn(
+  refresh: () => Promise<unknown>,
+): Promise<void> {
+  try {
+    await refresh();
+  } catch {
+    // The mutation is already accepted. Live events and the polling loop own
+    // projection recovery; surfacing this as a send failure invites a duplicate.
+  }
 }
 
 export function createControlCommandOfficeRoomAdapter({
   agentSettings,
   client,
+  liveThreads = [],
   locale,
   runtime,
+  streamingTextByThread = {},
 }: {
   agentSettings?: ControlOfficeMemberAgentSettingsBridge;
   client: ControlOfficeChatClient;
+  liveThreads?: readonly Thread[];
   locale: Locale;
   runtime: ControlOfficeThreadRuntime;
+  streamingTextByThread?: Readonly<Record<string, string>>;
 }): CommandOfficeRoomAdapter {
   return {
     open: async (record) => {
@@ -1226,10 +1316,12 @@ export function createControlCommandOfficeRoomAdapter({
           client={client}
           composer={composer}
           key={officeRecordKey(record)}
+          liveThreads={liveThreads}
           locale={locale}
           onBack={onBack}
           record={record}
           runtime={runtime}
+          streamingTextByThread={streamingTextByThread}
         />
       ) : (
         <div className="team-office-room-error" role="alert">

@@ -159,6 +159,23 @@ test("rejects corrupt and digest-drift WorkflowVersions with zero writes", async
   }
 });
 
+test("maps occupied, inactive and provider-switching admission to user conflicts without preparing a Run", async () => {
+  for (const code of [
+    "thread_active_run_conflict",
+    "thread_not_active",
+    "model_provider_settings_switch_pending",
+  ]) {
+    const store = new RecordingStore();
+    store.error = new RunStoreError(code);
+    await assert.rejects(
+      service(store).startWorkflowRun(actor(), command()),
+      hasError("conflict", code),
+    );
+    assert.equal(store.prepareCalls, 0);
+    assert.equal(store.writeCount, 0);
+  }
+});
+
 class RecordingStore implements WorkflowRunAdmissionStore {
   readonly inputs: CommitWorkflowRunStartInput[] = [];
   lastPreparation: ReturnType<CommitWorkflowRunStartInput["prepare"]> | null =

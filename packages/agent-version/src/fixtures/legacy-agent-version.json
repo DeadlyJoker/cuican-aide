@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "crewon.agent-version-asset.v0",
+  "tenantId": "tenant-1",
+  "agentVersionId": "canonical-agent",
+  "contentDigest": "sha256:10ba6e7cd0a807ad1c02171d753ad33f4bb337b9b9159a2eb9f4c6e5464d63dc",
+  "definitionJson": "{\"agentVersionId\":\"canonical-agent\",\"contentDigest\":\"sha256:10ba6e7cd0a807ad1c02171d753ad33f4bb337b9b9159a2eb9f4c6e5464d63dc\",\"execution\":{\"maxToolRounds\":16,\"streamMaxRetries\":0},\"instructions\":\"Stable instructions\\n  preserve spacing: 中文 🧰\",\"model\":{\"adapterName\":\"direct-responses\",\"adapterVersion\":\"1\",\"autoCompactAtTokens\":96000,\"contextWindowTokens\":128000,\"modelId\":\"fixture-model\"},\"policySnapshotId\":\"canonical-policy\",\"resources\":{\"governedContextDigest\":null,\"workspaceRequired\":false},\"runtimeGeneration\":\"ts-v0\",\"schemaVersion\":\"crewon.agent-version.v0\",\"tools\":[{\"description\":\"Read one bounded file.\",\"execution\":\"parallel\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{\"mode\":{\"enum\":[\"z\",\"a\"],\"type\":\"string\"},\"path\":{\"description\":\"Path with exact spacing\",\"type\":\"string\"}},\"required\":[\"path\",\"mode\"],\"type\":\"object\"},\"kind\":\"function\",\"name\":\"z_read\",\"schemaVersion\":\"crewon.tool-definition.v0\"},{\"description\":\"Apply one bounded patch.\",\"execution\":\"serial\",\"inputFormat\":\"text\",\"kind\":\"custom\",\"name\":\"a_patch\",\"schemaVersion\":\"crewon.tool-definition.v0\"}]}",
+  "createdAt": "2026-09-15T00:00:00Z"
+}

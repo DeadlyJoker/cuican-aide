@@ -27,6 +27,7 @@ import {
 } from "./settingsPanelText";
 import type { PersonalizationSettingsStore } from "./personalizationSettingsStore";
 import type { Theme } from "../theme";
+import { readLocalAppearance } from "../appearance/localAppearanceStore";
 
 type SettingsConfigurationClient = {
   listModels(): Promise<ModelListResponse>;
@@ -140,6 +141,7 @@ export async function refreshAppearanceSettingsPanelAction(
   if (!client) {
     setCapabilityPanel(
       appearancePanel({
+        localPreferences: readLocalAppearance(),
         configRead: null,
         currentLocale,
         currentTheme,

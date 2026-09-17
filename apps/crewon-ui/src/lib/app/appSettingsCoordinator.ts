@@ -7,12 +7,14 @@ import {
   createSettingsSectionRefreshHandlers,
 } from "../settings/settingsRefreshHandlers";
 import type { Theme } from "../theme";
+import type { NoticeState } from "../shared/noticeState";
 
 type SettingsRefreshParams = Parameters<
   typeof createAppSettingsRefreshHandlers
 >[0];
 
 type AppSettingsCoordinatorParams = SettingsRefreshParams & {
+  setNotice?: (notice: NoticeState) => void;
   capabilityPanel: CapabilityPanel | null;
   persistLocale: (locale: Locale) => void;
   persistTheme: (theme: Theme) => void;
@@ -29,6 +31,25 @@ export function createAppSettingsCoordinator(
     refreshConfigPanel,
     refreshPersonalizationSettingsPanel,
   } = settingsRefreshBundle;
+  const sectionHandlers = createSettingsSectionRefreshHandlers(
+    settingsRefreshBundle,
+  );
+  if (params.controlClient && !params.isDemoPreview) {
+    // The Control route owns these reads and cancels them on navigation.
+    // Do not query the retired app-server or fabricate empty inventories.
+    const clearLegacyPanel = async () => params.setCapabilityPanel(null);
+    for (const section of [
+      "account",
+      "config",
+      "connections",
+      "environment",
+      "mcpServers",
+      "browser",
+      "computerControl",
+    ] as const) {
+      sectionHandlers[section] = clearLegacyPanel;
+    }
+  }
 
   return {
     ...settingsRefreshBundle,
@@ -49,10 +70,9 @@ export function createAppSettingsCoordinator(
       setCapabilityPanel: params.setCapabilityPanel,
       setLocale: params.setLocale,
       setTheme: params.setTheme,
+      setNotice: params.setNotice,
       theme: params.theme,
     }),
-    settingsSectionRefreshHandlers: createSettingsSectionRefreshHandlers(
-      settingsRefreshBundle,
-    ),
+    settingsSectionRefreshHandlers: sectionHandlers,
   };
 }

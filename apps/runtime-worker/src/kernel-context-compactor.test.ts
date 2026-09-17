@@ -37,6 +37,7 @@ test("turns one retrying Kernel segment into a bounded compaction result", async
     yield event(contract, 6, "usage.recorded", {
       inputTokens: 7,
       cachedInputTokens: 2,
+      cachedInputTokensReported: true,
       outputTokens: 1,
       totalTokens: 8,
     });
@@ -53,6 +54,7 @@ test("turns one retrying Kernel segment into a bounded compaction result", async
     usage: {
       inputTokens: 7,
       cachedInputTokens: 2,
+      cachedInputTokensReported: true,
       outputTokens: 1,
       totalTokens: 8,
     },
@@ -87,7 +89,7 @@ test("rejects Tool events from a compaction adapter", async () => {
   );
 });
 
-test("matches AR-025 by dropping one oldest item after a context-window failure", async () => {
+test("retains AR-025 error classification while replacing source trimming with complete coverage", async () => {
   const reference = JSON.parse(
     readFileSync(
       new URL(
@@ -98,7 +100,6 @@ test("matches AR-025 by dropping one oldest item after a context-window failure"
     ),
   ) as Readonly<{
     kernelFailureCode: string;
-    expected: Readonly<Record<string, unknown>>;
   }>;
   const captured: AgentSegmentContract[] = [];
   const kernel = fakeKernel(async function* (contract) {
@@ -129,29 +130,20 @@ test("matches AR-025 by dropping one oldest item after a context-window failure"
     },
     new AbortController().signal,
   );
-  const first = captured[0]?.history ?? [];
-  const second = captured[1]?.history ?? [];
-
-  assert.deepEqual(result, {
-    summary: "summary",
-    usage: {
-      inputTokens: 3,
-      cachedInputTokens: 0,
-      outputTokens: 1,
-      totalTokens: 4,
-    },
+  assert.ok(result.summary.includes("summary"));
+  assert.deepEqual(result.usage, {
+    inputTokens: 6,
+    cachedInputTokens: 0,
+    outputTokens: 2,
+    totalTokens: 8,
   });
+  assert.equal(captured.length, 3);
   assert.deepEqual(
-    {
-      compactionRequestCount: captured.length,
-      historyItemsDroppedPerContextError: first.length - second.length,
-      oldestItemChanged: JSON.stringify(first[0]) !== JSON.stringify(second[0]),
-      promptStable:
-        JSON.stringify(first.at(-1)) === JSON.stringify(second.at(-1)),
-      terminal: "completed",
-    },
-    reference.expected,
+    captured.slice(1).flatMap((request) => request.history.slice(0, -1)),
+    captured[0]!.history.slice(0, -1),
   );
+  for (const request of captured)
+    assert.deepEqual(request.history.at(-1), captured[0]!.history.at(-1));
 });
 
 function fakeKernel(

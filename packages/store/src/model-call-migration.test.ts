@@ -1,0 +1,107 @@
+import { SQLITE_SCHEMA_VERSION } from "./sqlite-schema.ts";
+import { POSTGRES_EXECUTION_SCHEMA_VERSION } from "./postgres-execution-schema.ts";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import test from "node:test";
+import { Pool } from "pg";
+import { SqliteRunStore } from "./sqlite-run-store.ts";
+import { PostgresDomainStore } from "./postgres-domain-store.ts";
+import { seedThread } from "./thread-store-conformance.test-support.ts";
+import { createRunningCommitFixture } from "./run-store-conformance.test-support.ts";
+
+test("SQLite v31 adds the call ledger without copying or changing legacy Run events", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-call-migration-"));
+  context.after(() => rmSync(directory, { recursive: true }));
+  const path = join(directory, "runtime.sqlite");
+  const store = new SqliteRunStore(path);
+  const locator = { tenantId: "tenant-1", runId: "run-store-1" };
+  await seedThread(store);
+  await store.commitRun(createRunningCommitFixture());
+  const before = await store.listRunEvents(locator, 0, 100);
+  await store.close();
+  const database = new DatabaseSync(path);
+  database.exec(
+    "DROP TABLE model_spending_reservations; DROP TABLE model_spending_accounts; DROP TABLE model_generation_responses; DROP TABLE model_call_observations; PRAGMA user_version=31;",
+  );
+  database.close();
+  const reopened = new SqliteRunStore(path);
+  try {
+    assert.deepEqual(
+      await reopened.listModelCalls({ ...locator, afterOrder: 0, limit: 128 }),
+      [],
+    );
+    assert.deepEqual(await reopened.listRunEvents(locator, 0, 100), before);
+  } finally {
+    await reopened.close();
+  }
+  const migrated = new DatabaseSync(path);
+  try {
+    assert.equal(
+      migrated.prepare("PRAGMA user_version").get()?.user_version,
+      SQLITE_SCHEMA_VERSION,
+    );
+    assert.deepEqual(migrated.prepare("PRAGMA foreign_key_check").all(), []);
+    const query = migrated
+      .prepare(
+        "EXPLAIN QUERY PLAN SELECT call_order FROM model_call_observations WHERE tenant_id=? AND run_id=? AND call_order>? ORDER BY call_order LIMIT 128",
+      )
+      .all(locator.tenantId, locator.runId, 0);
+    assert.match(JSON.stringify(query), /model_call_run_order/);
+  } finally {
+    migrated.close();
+  }
+});
+
+test(
+  "PostgreSQL execution v6 adds one call ledger under concurrent opens without backfilling old usage",
+  { skip: process.env.CREWON_TEST_POSTGRES_URL === undefined },
+  async (context) => {
+    const connectionString = process.env.CREWON_TEST_POSTGRES_URL!;
+    const schema = `crewon_call_migration_${randomUUID().replaceAll("-", "_")}`;
+    const admin = new Pool({ connectionString, max: 1 });
+    const stores: PostgresDomainStore[] = [];
+    context.after(async () => {
+      for (const store of stores) await store.close();
+      await admin.query(`DROP SCHEMA "${schema}" CASCADE`);
+      await admin.end();
+    });
+    const original = await PostgresDomainStore.open({
+      connectionString,
+      schema,
+      maxPoolSize: 2,
+    });
+    stores.push(original);
+    await seedThread(original);
+    await original.commitRun(createRunningCommitFixture());
+    const locator = { tenantId: "tenant-1", runId: "run-store-1" };
+    const before = await original.listRunEvents(locator, 0, 100);
+    await original.close();
+    await admin.query(
+      `DROP TABLE "${schema}".model_spending_reservations; DROP TABLE "${schema}".model_spending_accounts; DROP TABLE "${schema}".model_generation_responses; DROP TABLE "${schema}".model_call_observations; DROP FUNCTION "${schema}".model_spending_admission_guard(); UPDATE "${schema}".schema_migrations SET version=6 WHERE component='execution_authority'`,
+    );
+    const reopened = await Promise.all([
+      PostgresDomainStore.open({ connectionString, schema, maxPoolSize: 2 }),
+      PostgresDomainStore.open({ connectionString, schema, maxPoolSize: 2 }),
+    ]);
+    stores.push(...reopened);
+    for (const store of reopened) {
+      assert.deepEqual(
+        await store.listModelCalls({ ...locator, afterOrder: 0, limit: 128 }),
+        [],
+      );
+      assert.deepEqual(await store.listRunEvents(locator, 0, 100), before);
+    }
+    assert.equal(
+      (
+        await admin.query(
+          `SELECT version FROM "${schema}".schema_migrations WHERE component='execution_authority'`,
+        )
+      ).rows[0].version,
+      POSTGRES_EXECUTION_SCHEMA_VERSION,
+    );
+  },
+);

@@ -1,3 +1,5 @@
+import { readPostgresActiveRun } from "./postgres-active-run-read.ts";
+import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 import {
   RunStoreError,
   type CommitRunInput,
@@ -195,7 +197,14 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
       if (version > POSTGRES_RUN_SCHEMA_VERSION) {
         throw new RunStoreError("postgres_schema_too_new");
       }
-      if (version !== 1 && version !== POSTGRES_RUN_SCHEMA_VERSION) {
+      if (
+        version !== 1 &&
+        version !== 2 &&
+        version !== 3 &&
+        version !== 4 &&
+        version !== 5 &&
+        version !== POSTGRES_RUN_SCHEMA_VERSION
+      ) {
         throw new RunStoreError("postgres_schema_version_unsupported");
       }
       if (version === 1) {
@@ -337,6 +346,17 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
         throw new RunStoreError("idempotency_receipt_invalid");
       }
       return { ...receipt, disposition: "replayed" };
+    } catch (error) {
+      throw normalizePostgresError(error);
+    }
+  }
+
+  async loadActiveRunInThread(
+    locator: import("@crewon/application").ThreadScopedLocator,
+  ): Promise<RunState | null> {
+    this.assertOpen();
+    try {
+      return await readPostgresActiveRun(this.pool, this.schemaSql(), locator);
     } catch (error) {
       throw normalizePostgresError(error);
     }
@@ -1280,6 +1300,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     );
     await writePostgresOutbox(client, this.schemaSql(), input.outbox);
     await writePostgresWorkItems(client, this.schemaSql(), input.workItems);
+    await this.wakeCanceledReconciliationWithin(client, next, input.events);
     if (options.history !== undefined) {
       await writePostgresModelHistory(
         client,
@@ -1310,6 +1331,14 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     return structuredClone(result);
   }
 
+  protected async wakeCanceledReconciliationWithin(
+    _client: PoolClient,
+    _state: RunState,
+    _events: readonly RunLifecycleEvent[],
+  ): Promise<void> {
+    // Receipt storage is owned by PostgresExecutionStore, which implements this hook.
+  }
+
   async listRunEvents(
     locator: RunLocator,
     afterSequence: number,
@@ -1329,6 +1358,10 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     } catch (error) {
       throw normalizePostgresError(error);
     }
+  }
+
+  get outboxRetention() {
+    return this.#queue.outboxRetention;
   }
 
   listPendingOutbox(limit: number): Promise<readonly OutboxMessage[]> {
@@ -1426,7 +1459,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     const retried = await client.query(
       `UPDATE ${this.schemaSql()}.work_items
        SET status='pending',
-           available_at=clock_timestamp()+$2*interval '1 millisecond',
+           available_at=clock_timestamp()+CASE WHEN last_error_code='${RECONCILIATION_CANCEL_WAKE}' THEN 0 ELSE $2 END*interval '1 millisecond',
            lease_owner_id=NULL, lease_id=NULL, lease_expires_at=NULL,
            last_error_code=$3
        WHERE work_item_id=$1 AND lease_expires_at>clock_timestamp()`,

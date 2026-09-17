@@ -13,6 +13,12 @@ import type {
   WorkflowExecutionStore,
 } from "./workflow-execution-store-port.ts";
 
+import {
+  initialWorkflowExecution,
+  planWorkflowNodeClaims,
+  projectWorkflowExecution as projectState,
+} from "./workflow-execution-planning.ts";
+
 const MAX_CAS_RETRIES = 8;
 
 export type WorkflowNodeClaim = Readonly<{
@@ -49,25 +55,7 @@ export class WorkflowExecutionService {
     workflow: CompiledWorkflowVersion;
   }): Promise<WorkflowExecutionState> {
     assertFrozenBinding(input.binding, input.workflow);
-    const updatedAt = this.#now();
-    const state: WorkflowExecutionState = {
-      schemaVersion: "crewon.workflow-execution.v0",
-      tenantId: input.tenantId,
-      runId: input.runId,
-      workflowId: input.binding.workflowId,
-      workflowVersionId: input.workflow.workflowVersionId,
-      contentDigest: input.workflow.contentDigest,
-      revision: 1,
-      status: "running",
-      cancelRequested: false,
-      nodes: input.workflow.executionOrder.map((nodeId) => {
-        const node = input.workflow.nodes.find(
-          (candidate) => candidate.nodeId === nodeId,
-        )!;
-        return initialNode(node);
-      }),
-      updatedAt,
-    };
+    const state = initialWorkflowExecution({ ...input, now: this.#now() });
     const result = await this.#storeCall(() =>
       this.#store.createWorkflowExecution(state),
     );
@@ -114,65 +102,32 @@ export class WorkflowExecutionService {
       const current = await this.#load(input);
       if (current.cancelRequested || current.status !== "running") return [];
       const now = this.#now();
-      const recovered = recoverExpired(current.nodes, now);
-      const readyIds = input.workflow.executionOrder.filter((nodeId) => {
-        const state = recovered.find((node) => node.nodeId === nodeId)!;
-        const definition = input.workflow.nodes.find(
-          (node) => node.nodeId === nodeId,
-        )!;
-        return (
-          state.status === "pending" &&
-          definition.dependsOn.every(
-            (dependency) =>
-              recovered.find((node) => node.nodeId === dependency)?.status ===
-              "completed",
-          )
-        );
-      });
-      if (readyIds.length === 0 && sameNodes(current.nodes, recovered))
-        return [];
-      const claims: WorkflowNodeClaim[] = [];
-      const expiresAt = new Date(
-        Date.parse(now) + input.leaseDurationMs,
-      ).toISOString();
-      const nodes = recovered.map((state) => {
-        if (!readyIds.includes(state.nodeId)) return state;
-        const node = input.workflow.nodes.find(
-          (candidate) => candidate.nodeId === state.nodeId,
-        )!;
-        const claimId = this.#nextId();
-        const gateRequestId = node.kind === "humanGate" ? this.#nextId() : null;
-        const inputDigest = this.#sha256(
-          JSON.stringify({
-            nodeId: node.nodeId,
-            contentDigest: input.workflow.contentDigest,
-            dependencies: node.dependsOn.map((dependency) => {
-              const settled = recovered.find(
-                (candidate) => candidate.nodeId === dependency,
-              )!;
-              return { nodeId: dependency, resultDigest: settled.resultDigest };
+      const { next, claims } = planWorkflowNodeClaims({
+        current,
+        workflow: input.workflow,
+        now,
+        expiresAt: new Date(
+          Date.parse(now) + input.leaseDurationMs,
+        ).toISOString(),
+        operationId: input.operationId,
+        maximumClaims: input.workflow.nodes.length,
+        lostClaimIds: new Set(),
+        nextId: this.#nextId,
+        inputDigest: (node, recovered) =>
+          this.#sha256(
+            JSON.stringify({
+              nodeId: node.nodeId,
+              contentDigest: input.workflow.contentDigest,
+              dependencies: node.dependsOn.map((dependency) => ({
+                nodeId: dependency,
+                resultDigest: recovered.find(
+                  (candidate) => candidate.nodeId === dependency,
+                )!.resultDigest,
+              })),
             }),
-          }),
-        );
-        claims.push({
-          node,
-          claimId,
-          claimEpoch: state.claimEpoch + 1,
-          gateRequestId,
-          inputDigest,
-        });
-        return {
-          ...state,
-          status: node.kind === "humanGate" ? "waitingHuman" : "running",
-          claimId,
-          claimOperationId: input.operationId,
-          claimEpoch: state.claimEpoch + 1,
-          leaseExpiresAt: node.kind === "humanGate" ? null : expiresAt,
-          gateRequestId,
-          inputDigest,
-        } satisfies WorkflowExecutionNodeState;
+          ),
       });
-      const next = projectState(current, nodes, now);
+      if (next === current) return [];
       const fingerprint = claimFingerprint(input, current.revision);
       const result = await this.#storeCall(() =>
         this.#store.compareAndSwapWorkflowExecution({
@@ -381,72 +336,6 @@ export class WorkflowExecutionService {
   }
 }
 
-function initialNode(node: WorkflowNodeDefinition): WorkflowExecutionNodeState {
-  return {
-    nodeId: node.nodeId,
-    kind: node.kind,
-    agentVersionId:
-      node.kind === "agent"
-        ? node.agentVersionId
-        : node.kind === "verification"
-          ? node.verifierAgentVersionId
-          : null,
-    status: "pending",
-    claimId: null,
-    claimOperationId: null,
-    claimEpoch: 0,
-    leaseExpiresAt: null,
-    gateRequestId: null,
-    inputDigest: null,
-    resultDigest: null,
-    failureCode: null,
-  };
-}
-
-function recoverExpired(
-  nodes: readonly WorkflowExecutionNodeState[],
-  now: string,
-): readonly WorkflowExecutionNodeState[] {
-  return nodes.map((node) =>
-    node.status === "running" &&
-    node.leaseExpiresAt !== null &&
-    Date.parse(node.leaseExpiresAt) <= Date.parse(now)
-      ? { ...node, status: "unknown" as const, leaseExpiresAt: null }
-      : node,
-  );
-}
-
-function projectState(
-  current: WorkflowExecutionState,
-  nodes: readonly WorkflowExecutionNodeState[],
-  updatedAt: string,
-): WorkflowExecutionState {
-  const active = nodes.some(
-    (node) => node.status === "running" || node.status === "unknown",
-  );
-  const status =
-    current.cancelRequested && !active
-      ? "canceled"
-      : nodes.some((node) => node.status === "failed")
-        ? "failed"
-        : nodes.every((node) => node.status === "completed")
-          ? "completed"
-          : nodes.some((node) => node.status === "waitingHuman") &&
-              !nodes.some(
-                (node) =>
-                  node.status === "running" || node.status === "unknown",
-              )
-            ? "waitingHuman"
-            : "running";
-  return {
-    ...current,
-    revision: current.revision + 1,
-    status,
-    nodes,
-    updatedAt,
-  };
-}
-
 function claimFingerprint(
   input: {
     tenantId: string;
@@ -574,13 +463,6 @@ function assertFrozenBinding(
 
 function isTerminal(status: WorkflowExecutionNodeState["status"]): boolean {
   return status === "completed" || status === "failed" || status === "canceled";
-}
-
-function sameNodes(
-  left: readonly WorkflowExecutionNodeState[],
-  right: readonly WorkflowExecutionNodeState[],
-): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function requirePositiveDuration(value: number): void {

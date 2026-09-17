@@ -1,3 +1,4 @@
+import { POSTGRES_RUN_SCHEMA_VERSION } from "./postgres-run-schema.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -45,7 +46,7 @@ if (connectionString === undefined) {
     () => createTestStore(connectionString),
   );
 
-  test("migrates a drained Run authority from v1 to the Goal accounting v2 gate", async () => {
+  test("migrates a drained Run authority from v1 to the current schema while preserving the Goal accounting gate", async () => {
     const schema = testSchema();
     const admin = new Pool({ connectionString, max: 1 });
     let initialized: TestPostgresRunStore | null = null;
@@ -57,7 +58,7 @@ if (connectionString === undefined) {
       await initialized.commitTurnStart(input);
       const runId = input.run.events[0]!.identity.runId;
       const fresh = await runAuthoritySchemaState(admin, schema);
-      assert.equal(fresh.version, 2);
+      assert.equal(fresh.version, POSTGRES_RUN_SCHEMA_VERSION);
       assert.equal(
         fresh.constraints.includes("run_snapshots_goal_accounting_v2_ck"),
         true,
@@ -75,7 +76,7 @@ if (connectionString === undefined) {
       migrated = await createTestStore(connectionString, schema, false);
 
       const after = await runAuthoritySchemaState(admin, schema);
-      assert.equal(after.version, 2);
+      assert.equal(after.version, POSTGRES_RUN_SCHEMA_VERSION);
       assert.equal(
         after.constraints.includes("run_snapshots_goal_accounting_v2_ck"),
         true,
@@ -121,7 +122,7 @@ if (connectionString === undefined) {
         await downgradeThreadAuthorityToV2(admin, schema);
         const before = await runAuthoritySchemaState(admin, schema);
         assert.deepEqual(before.versions, [
-          { component: "durable_queue", version: 1 },
+          { component: "durable_queue", version: 2 },
           { component: "run_authority", version: 1 },
           { component: "thread_authority", version: 2 },
         ]);

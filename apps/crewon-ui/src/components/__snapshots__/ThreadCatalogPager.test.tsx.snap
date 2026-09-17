@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`catalog pagination > renders loading, empty continuation, error and navigation states 1`] = `"<div class="thread-catalog-pager"><nav aria-label="会话分页"><button type="button" disabled="">较新</button><button type="button" aria-label="刷新并回到最新会话">最新</button><button type="button">较早</button></nav></div>"`;
+
+exports[`catalog pagination > renders loading, empty continuation, error and navigation states 2`] = `"<div class="thread-catalog-pager"><p role="status" aria-live="polite">正在读取会话…</p><nav aria-label="会话分页"><button type="button" disabled="">较新</button><button type="button" disabled="" aria-label="刷新并回到最新会话">最新</button><button type="button" disabled="">较早</button></nav></div>"`;
+
+exports[`catalog pagination > renders loading, empty continuation, error and navigation states 3`] = `"<div class="thread-catalog-pager"><p role="status" aria-live="polite">本页没有会话，可以继续查找</p><nav aria-label="会话分页"><button type="button" disabled="">较新</button><button type="button" aria-label="刷新并回到最新会话">最新</button><button type="button">继续查找</button></nav></div>"`;
+
+exports[`catalog pagination > renders loading, empty continuation, error and navigation states 4`] = `"<div class="thread-catalog-pager"><p role="status" aria-live="polite">读取失败，可刷新重试</p><nav aria-label="会话分页"><button type="button" disabled="">较新</button><button type="button" aria-label="刷新并回到最新会话">最新</button><button type="button">较早</button></nav></div>"`;

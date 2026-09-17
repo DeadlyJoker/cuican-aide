@@ -1,6 +1,90 @@
+import { SqliteModelPricingStore } from "./sqlite-model-pricing-store.ts";
+import {
+  encodeSqliteModelHistoryItem,
+  decodeSqliteModelHistoryItem,
+  encodeSqliteRunEvent,
+  decodeSqliteRunEvent,
+} from "./sqlite-canonical-tool-output-codec.ts";
+import { SqliteModelSpendingStore } from "./sqlite-model-spending-store.ts";
+import { workItemCandidatesSql } from "./work-item-ready-order.ts";
+import { SqliteRunExecutionProgressStore } from "./sqlite-run-execution-progress-store.ts";
+import { validateRunExecutionProgressRun } from "./run-execution-progress-support.ts";
+import {
+  isEmptyAssistantSample,
+  validateAssistantSampleAuthority,
+  validateAssistantSampleReplay,
+} from "./assistant-sample-continuation.ts";
+import { validateCheckpointRun } from "./compaction-checkpoint-support.ts";
+import { SqliteCompactionCheckpointStore } from "./sqlite-compaction-checkpoint-store.ts";
+import type {
+  AppendRunProgressEventsInput,
+  AppendRunProgressEventsResult,
+  AppendRunStreamEventsInput,
+  AppendRunStreamEventsResult,
+  RunStreamEvent,
+} from "@crewon/application";
+import { SqliteOfficeThreadStore } from "./sqlite-office-thread-store.ts";
+import { assertOfficeThreadReplay } from "./office-thread-binding.ts";
+import type {
+  BindOfficeThreadInput,
+  OfficeThreadLocator,
+} from "@crewon/application";
+import {
+  encodeSqliteExecutionReceipt,
+  decodeSqliteExecutionReceipt,
+} from "./sqlite-execution-receipt-codec.ts";
+import {
+  recordSqliteModelCall,
+  listSqliteModelCalls,
+} from "./sqlite-model-call-store.ts";
+import { readSqliteActiveRun } from "./sqlite-active-run-read.ts";
+import { threadListSql } from "./thread-list-query.ts";
+import { wakeSqliteCanceledReconciliation } from "./sqlite-reconciliation-cancellation-wake.ts";
+import { signalSqliteWorkflowCancellationRequest } from "./sqlite-workflow-cancellation.ts";
+import {
+  recordSqliteModelUsage,
+  listSqliteModelUsage,
+} from "./sqlite-model-usage-store.ts";
+import type {
+  RecordModelUsageInput,
+  RecordModelCallInput,
+  ModelUsagePageQuery,
+} from "@crewon/application";
+import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
+import {
+  validateToolSampleCommit,
+  validateToolSampleAuthority,
+  validateToolSampleReplay,
+} from "./tool-sample-commit.ts";
+import { pruneSqliteDeliveredOutbox } from "./sqlite-outbox-retention.ts";
+import type { OutboxRetentionStore } from "@crewon/application";
+import { SqliteThreadMessageWindowStore } from "./sqlite-thread-message-window.ts";
+import type { ThreadMessageWindowStore } from "@crewon/application";
 import { DatabaseSync } from "node:sqlite";
+import {
+  SqliteModelHistoryContextStore,
+  appendSqliteModelHistoryContext,
+} from "./sqlite-model-history-context.ts";
+import type {
+  AppendRunOutputEventsInput,
+  AppendRunOutputEventsResult,
+} from "@crewon/application";
+import { appendSqliteRunStreamEvents } from "./sqlite-run-output-store.ts";
+import {
+  ensureSqliteModelHistoryAppendState,
+  validateSqliteModelHistoryAppend,
+} from "./sqlite-model-history-append.ts";
 import type { WorkflowContentDigester } from "@crewon/domain";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
+import {
+  ExperimentalSqliteWorkflowRunAdmissionStore,
+  type SqliteWorkflowRouteResolver,
+} from "./sqlite-workflow-run-admission.ts";
+import { validateWorkflowSchedulerWorkItems } from "./workflow-run-admission-validation.ts";
+import {
+  ExperimentalSqliteWorkflowRunCompositionStore,
+  type SqliteWorkflowCompositionOptions,
+} from "./sqlite-workflow-run-composition.ts";
 import {
   migrateSqliteOffices,
   SqliteOfficeStore,
@@ -57,6 +141,7 @@ import {
   type CommitContextCompactionInput,
   type CommitContextCompactionResult,
   type CommitAssistantSampleContinuationInput,
+  type CommitToolSampleInput,
   type CommitAssistantSampleContinuationResult,
   type CommitToolExecutionCompletionInput,
   type CommitToolExecutionCompletionResult,
@@ -86,6 +171,7 @@ import {
   type PrepareModelProviderSettingsInput,
   type PrepareModelProviderSettingsResult,
   type DomainStore,
+  type ModelHistoryContextStore,
   type MessageRecord,
   type MessageView,
   type InvalidatedMessage,
@@ -516,10 +602,55 @@ type AutomationRow = Readonly<{
 }>;
 
 export class SqliteRunStore implements DomainStore {
+  async recordModelUsage(input: RecordModelUsageInput) {
+    this.#assertOpen();
+    return recordSqliteModelUsage(this.#database, input, () =>
+      this.#validateExecutionLease(
+        input.record.tenantId,
+        input.record.runId,
+        input.lease,
+        readLeaseClock(this.#clock),
+      ),
+    );
+  }
+
+  async listModelUsage(query: ModelUsagePageQuery) {
+    this.#assertOpen();
+    return listSqliteModelUsage(this.#database, query);
+  }
+
+  async recordModelCall(input: RecordModelCallInput) {
+    this.#assertOpen();
+    return recordSqliteModelCall(
+      this.#database,
+      input,
+      () =>
+        this.#validateExecutionLease(
+          input.record.tenantId,
+          input.record.runId,
+          input.lease,
+          readLeaseClock(this.#clock),
+        ),
+      () => this.#loadRun(input.record),
+    );
+  }
+
+  async listModelCalls(query: ModelUsagePageQuery) {
+    this.#assertOpen();
+    return listSqliteModelCalls(this.#database, query);
+  }
+
+  readonly executionProgress: SqliteRunExecutionProgressStore;
+  readonly compactionCheckpoints: SqliteCompactionCheckpointStore;
+  readonly messageWindows: ThreadMessageWindowStore;
+  readonly modelHistoryContext: ModelHistoryContextStore;
   readonly #database: DatabaseSync;
+  readonly modelPricing: SqliteModelPricingStore;
+  readonly modelSpending: SqliteModelSpendingStore;
   readonly #clock: LeaseClock;
   readonly #automationAuthority: SqliteAutomationAuthority;
   readonly #officeAuthority: SqliteOfficeStore;
+  readonly #officeThreads: SqliteOfficeThreadStore;
   #closed = false;
 
   workflowVersionStore(
@@ -529,19 +660,101 @@ export class SqliteRunStore implements DomainStore {
     return new SqliteWorkflowVersionStore(this.#database, digester);
   }
 
+  /** Internal foundation only; production must keep Workflow routing disabled. */
+  experimentalWorkflowRunAdmissionStore(
+    resolveRouteWithinTransaction: SqliteWorkflowRouteResolver,
+  ) {
+    this.#assertOpen();
+    return new ExperimentalSqliteWorkflowRunAdmissionStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      loadThread: (locator) => this.#loadThread(locator),
+      hasActiveRun: (locator) =>
+        readSqliteActiveRun(this.#database, locator, (row) =>
+          decodeStoredRunState(row as unknown as SnapshotRow, {
+            tenantId: locator.tenantId,
+            runId: String(row.run_id),
+          }),
+        ) !== null,
+      hasPendingProviderSwitch: (tenantId) =>
+        this.#hasPendingProviderSwitch(tenantId),
+      resolveRouteWithinTransaction,
+      commitRunWithinTransaction: (input) =>
+        this.#commitRun(input, null, null, {
+          withinTransaction: true,
+          workflowSchedulerAdmission: true,
+        }),
+    });
+  }
+
+  experimentalWorkflowRunCompositionStore(
+    options: SqliteWorkflowCompositionOptions = {},
+  ) {
+    this.#assertOpen();
+    return new ExperimentalSqliteWorkflowRunCompositionStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      now: () => readLeaseClock(this.#clock),
+      loadRun: (input) => this.#loadRun(input),
+      commitChildThread: (input) => this.#commitThread(input, { withinTransaction: true }),
+      commitChildRun: (input) => this.#commitRun(input, null, null, { withinTransaction: true }),
+      loadRootThread: (input) => this.#loadThread(input),
+      commitRootThread: (input) => this.#commitThread(input, { withinTransaction: true }),
+      commitRootRun: (input, lease) => this.#commitRun(input, lease, null, { withinTransaction: true }),
+      settleRootWork: (lease, now) => this.#settleWorkItemWithinTransaction(lease, now),
+      hasPendingProviderSwitch: (tenantId) => this.#hasPendingProviderSwitch(tenantId),
+      validateLease: (input, now) => {
+        this.#validateExecutionLease(
+          input.tenantId, input.runId, input.lease, now,
+        );
+        return this.#loadWorkItemMetadata(input.lease.workItemId).lease_expires_at_ms!;
+      },
+      enqueue: (input) => {
+        validateWorkflowSchedulerWorkItems(
+          [input], input.runId, input.tenantId,
+          (id) => this.#workItemIdExists(id),
+        );
+        this.#writeWorkItems([input]);
+      },
+    }, options);
+  }
+
   constructor(path: string, options: { clock?: LeaseClock } = {}) {
     requireNonEmpty(path, "sqlite_path_invalid");
     this.#clock = options.clock ?? new SystemLeaseClock();
     this.#database = new DatabaseSync(path, {
       enableForeignKeyConstraints: true,
     });
+    this.modelPricing = new SqliteModelPricingStore(this.#database, () => this.#assertOpen());
+    this.modelSpending = new SqliteModelSpendingStore(this.#database, () => this.#assertOpen());
+    this.executionProgress = new SqliteRunExecutionProgressStore(this.#database, input => {
+      this.#assertOpen();
+      validateRunExecutionProgressRun(input, this.#loadRun(input.scope));
+      this.#validateExecutionLease(input.scope.tenantId, input.scope.runId, input.lease, readLeaseClock(this.#clock));
+    });
+    this.compactionCheckpoints = new SqliteCompactionCheckpointStore(this.#database, input => {
+      this.#assertOpen();
+      validateCheckpointRun(input, this.#loadRun(input.scope));
+      this.#validateExecutionLease(input.scope.tenantId, input.scope.runId, input.lease, readLeaseClock(this.#clock));
+    });
+    this.messageWindows = new SqliteThreadMessageWindowStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      loadThread: (locator) => this.#loadThreadInSpace(locator),
+      decodeMessage: (row, locator) =>
+        decodeStoredMessage(row as unknown as MessageRow, locator),
+    });
+    this.modelHistoryContext = new SqliteModelHistoryContextStore(
+      this.#database,
+      () => this.#assertOpen(),
+    );
     this.#automationAuthority = new SqliteAutomationAuthority(this.#database, {
       assertOpen: () => this.#assertOpen(),
       hasPendingProviderSwitch: (tenantId) =>
         this.#hasPendingProviderSwitch(tenantId),
       loadThread: (locator) => this.#loadThread(locator),
       loadRun: (locator) => this.#loadRun(locator),
-      loadHistory: (locator) => this.#loadAllModelHistoryItems(locator),
+      loadHistoryAppendState: (locator) => ({
+        ...ensureSqliteModelHistoryAppendState(this.#database, locator),
+        referencedToolCalls: new Map(),
+      }),
       threadEventIdExists: (id) => this.#threadEventIdExists(id),
       messageIdExists: (id) => this.#messageIdExists(id),
       historyItemIdExists: (id) => this.#modelHistoryItemIdExists(id),
@@ -565,6 +778,10 @@ export class SqliteRunStore implements DomainStore {
       writeWorkItems: (items) => this.#writeWorkItems(items),
     });
     this.#officeAuthority = new SqliteOfficeStore(this.#database);
+    this.#officeThreads = new SqliteOfficeThreadStore(
+      this.#database,
+      (locator) => this.#loadThreadInSpace(locator),
+    );
     try {
       configureAndMigrateSqlite(this.#database);
       migrateSqliteOffices(this.#database);
@@ -581,6 +798,24 @@ export class SqliteRunStore implements DomainStore {
     }
     this.#database.close();
     this.#closed = true;
+  }
+
+  async loadOfficeThreadBinding(locator: OfficeThreadLocator) {
+    this.#assertOpen();
+    try {
+      return this.#officeThreads.load(locator);
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async bindOfficeThread(input: BindOfficeThreadInput) {
+    this.#assertOpen();
+    try {
+      return this.#officeThreads.bind(input);
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
   }
 
   commitOfficeDefinition(
@@ -1457,14 +1692,10 @@ export class SqliteRunStore implements DomainStore {
         if (nextGoal === null || input.continuation === null) {
           throw new RunStoreError("goal_activation_missing");
         }
-        validateModelHistoryAppend(
-          input.continuation.history,
+        validateSqliteModelHistoryAppend(
+          this.#database,
           { tenantId: input.tenantId, threadId: input.threadId },
-          this.#loadAllModelHistoryItems({
-            tenantId: input.tenantId,
-            threadId: input.threadId,
-          }),
-          (itemId) => this.#modelHistoryItemIdExists(itemId),
+          input.continuation.history,
         );
         const continuation = reduceThreadGoalContinuation(
           input.continuation,
@@ -1702,41 +1933,11 @@ export class SqliteRunStore implements DomainStore {
     this.#assertOpen();
     validateThreadListQuery(query);
     try {
+      const statement = threadListSql(query, "threads", "sqlite");
       const rows = this.#database
-        .prepare(
-          `SELECT
-             tenant_id,
-             space_id,
-             thread_id,
-             created_by_actor_id,
-             title,
-             status,
-             revision,
-             last_event_sequence,
-             last_message_sequence,
-             state_json,
-             created_at,
-             updated_at,
-             archived_at,
-             deleted_at,
-             deleted_by_actor_id
-           FROM threads
-           WHERE tenant_id = ?
-             AND space_id = ?
-             AND status != 'deleted'
-             AND (? IS NULL OR updated_at < ? OR (updated_at = ? AND thread_id < ?))
-           ORDER BY updated_at DESC, thread_id DESC
-           LIMIT ?`,
-        )
-        .all(
-          query.tenantId,
-          query.spaceId,
-          query.before?.updatedAt ?? null,
-          query.before?.updatedAt ?? null,
-          query.before?.updatedAt ?? null,
-          query.before?.threadId ?? null,
-          query.limit,
-        ) as unknown as ThreadSnapshotRow[];
+        .prepare(statement.sql)
+        .all(...statement.values) as unknown as ThreadSnapshotRow[];
+      if (query.after != null) rows.reverse();
       return rows.map((row) =>
         decodeStoredThreadState(row, {
           tenantId: query.tenantId,
@@ -1749,12 +1950,16 @@ export class SqliteRunStore implements DomainStore {
   }
 
   async commitThread(input: CommitThreadInput): Promise<CommitThreadResult> {
+    return this.#commitThread(input);
+  }
+
+  #commitThread(input: CommitThreadInput, options: { withinTransaction?: boolean } = {}): CommitThreadResult {
     this.#assertOpen();
     const threadId = validateThreadCommitInput(input);
     const fingerprint = input.idempotency.requestFingerprint;
 
     try {
-      this.#database.exec("BEGIN IMMEDIATE");
+      if (!options.withinTransaction) this.#database.exec("BEGIN IMMEDIATE");
       const prior = this.#loadThreadReceipt(
         input.idempotency.scope,
         input.idempotency.key,
@@ -1774,10 +1979,20 @@ export class SqliteRunStore implements DomainStore {
           tenantId: prior.tenant_id,
           threadId: prior.thread_id,
         });
-        this.#database.exec("COMMIT");
+        if (input.officeBinding)
+          assertOfficeThreadReplay(
+            input.officeBinding,
+            this.#officeThreads.load(input.officeBinding),
+            result.state,
+          );
+        if (!options.withinTransaction) this.#database.exec("COMMIT");
         return clone({ ...result, disposition: "replayed" });
       }
 
+      if (input.officeBinding) {
+        this.#officeThreads.assertOffice(input.officeBinding);
+        this.#officeThreads.assertAvailable(input.officeBinding);
+      }
       if (input.sourceFence !== undefined) {
         const source = this.#loadThread({
           tenantId: input.tenantId,
@@ -1863,20 +2078,17 @@ export class SqliteRunStore implements DomainStore {
         input.tenantId,
         (messageId) => this.#messageIdExists(messageId),
       );
-      validateModelHistoryAppend(
-        input.history,
+      validateSqliteModelHistoryAppend(
+        this.#database,
         { tenantId: input.tenantId, threadId },
-        this.#loadAllModelHistoryItems({
-          tenantId: input.tenantId,
-          threadId,
-        }),
-        (itemId) => this.#modelHistoryItemIdExists(itemId),
+        input.history,
       );
 
       this.#writeThreadSnapshot(current, next, input.expectedRevision);
       this.#writeThreadEvents(input.events, input.tenantId);
       this.#writeMessages(input.messages);
       this.#writeModelHistoryItems(input.history.items);
+      if (input.officeBinding) this.#officeThreads.insert(input.officeBinding);
       if (input.tombstone !== undefined) {
         this.#writeTurnStartGoal(
           {
@@ -1915,10 +2127,10 @@ export class SqliteRunStore implements DomainStore {
           fingerprint,
           stableJson(result),
         );
-      this.#database.exec("COMMIT");
+      if (!options.withinTransaction) this.#database.exec("COMMIT");
       return clone(result);
     } catch (error) {
-      rollback(this.#database);
+      if (!options.withinTransaction) rollback(this.#database);
       throw normalizeSqliteError(error);
     }
   }
@@ -2269,14 +2481,10 @@ export class SqliteRunStore implements DomainStore {
         input.tenantId,
         (messageId) => this.#messageIdExists(messageId),
       );
-      validateModelHistoryAppend(
-        input.thread.history,
+      validateSqliteModelHistoryAppend(
+        this.#database,
         { tenantId: input.tenantId, threadId },
-        this.#loadAllModelHistoryItems({
-          tenantId: input.tenantId,
-          threadId,
-        }),
-        (itemId) => this.#modelHistoryItemIdExists(itemId),
+        input.thread.history,
       );
       let nextThread: ThreadState | null = currentThread;
       for (const event of input.thread.events) {
@@ -2570,6 +2778,22 @@ export class SqliteRunStore implements DomainStore {
         throw new RunStoreError("idempotency_receipt_invalid");
       }
       return clone({ ...result, disposition: "replayed" });
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async loadActiveRunInThread(
+    locator: import("@crewon/application").ThreadScopedLocator,
+  ): Promise<RunState | null> {
+    this.#assertOpen();
+    try {
+      return readSqliteActiveRun(this.#database, locator, (row) =>
+        decodeStoredRunState(row as unknown as SnapshotRow, {
+          tenantId: locator.tenantId,
+          runId: String(row.run_id),
+        }),
+      );
     } catch (error) {
       throw normalizeSqliteError(error);
     }
@@ -2870,7 +3094,7 @@ export class SqliteRunStore implements DomainStore {
       ) {
         throw new RunStoreError("tool_approval_conflict");
       }
-      const run = this.#commitRun(input.commit, input.lease, null, true);
+      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
       insertSqliteToolApproval(this.#database, input.approval);
       this.#retryWorkItemWithinTransaction(
         {
@@ -2936,7 +3160,7 @@ export class SqliteRunStore implements DomainStore {
       ) {
         throw new RunStoreError("approval_work_item_not_held");
       }
-      const run = this.#commitRun(input.commit, null, null, true);
+      const run = this.#commitRun(input.commit, null, null, { withinTransaction: true });
       updateSqliteToolApproval(this.#database, current, approval);
       const wake = this.#database
         .prepare(
@@ -2986,7 +3210,7 @@ export class SqliteRunStore implements DomainStore {
         throw normalizeToolApprovalError(error);
       }
       validateApprovalRunCommit(approval, input.commit, "decide");
-      const run = this.#commitRun(input.commit, input.lease, null, true);
+      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
       updateSqliteToolApproval(this.#database, current, approval);
       this.#database.exec("COMMIT");
       return clone({ approval, run });
@@ -3026,7 +3250,7 @@ export class SqliteRunStore implements DomainStore {
         throw normalizeToolApprovalError(error);
       }
       validateApprovalRunCommit(approval, input.commit, "decide");
-      const run = this.#commitRun(input.commit, input.lease, null, true);
+      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
       updateSqliteToolApproval(this.#database, current, approval);
       this.#database.exec("COMMIT");
       return clone({ approval, run });
@@ -3059,7 +3283,7 @@ export class SqliteRunStore implements DomainStore {
       );
       if (existing !== null) {
         validateToolApprovalReplacementReplay(current, existing, input);
-        const run = this.#commitRun(input.commit, null, null, true);
+        const run = this.#commitRun(input.commit, null, null, { withinTransaction: true });
         this.#database.exec("COMMIT");
         return clone({ approval: existing, run });
       }
@@ -3099,7 +3323,7 @@ export class SqliteRunStore implements DomainStore {
         input.replacement,
         input.commit,
       );
-      const run = this.#commitRun(input.commit, input.lease, null, true);
+      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
       updateSqliteToolApproval(this.#database, current, superseded);
       insertSqliteToolApproval(this.#database, input.replacement);
       this.#retryWorkItemWithinTransaction(
@@ -3297,7 +3521,7 @@ export class SqliteRunStore implements DomainStore {
         input.commit,
         input.lease,
         input.history,
-        true,
+        { withinTransaction: true },
       );
       if (run.disposition === "committed" && nextGoal !== currentGoal) {
         this.#writeTurnStartGoal(
@@ -3355,7 +3579,7 @@ export class SqliteRunStore implements DomainStore {
           failure: { code: "tool_outcome_unknown", retryable: true },
         },
       });
-      const run = this.#commitRun(input.commit, input.lease, null, true);
+      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
       if (receipt !== current) {
         updateSqliteToolExecutionReceipt(this.#database, current, receipt);
       }
@@ -3506,6 +3730,51 @@ export class SqliteRunStore implements DomainStore {
     return this.#commitRun(input.commit, input.lease, input.history);
   }
 
+  async appendRunOutputEvents(
+    input: AppendRunOutputEventsInput,
+  ): Promise<AppendRunOutputEventsResult> {
+    return this.#appendRunStreamEvents(input, "output");
+  }
+
+  async appendRunProgressEvents(
+    input: AppendRunProgressEventsInput,
+  ): Promise<AppendRunProgressEventsResult> {
+    return this.#appendRunStreamEvents(input, "progress");
+  }
+
+  async #appendRunStreamEvents<E extends RunStreamEvent>(
+    input: AppendRunStreamEventsInput<E>,
+    mode: "output" | "progress",
+  ): Promise<AppendRunStreamEventsResult<E>> {
+    this.#assertOpen();
+    try {
+      return appendSqliteRunStreamEvents(
+        this.#database,
+        input,
+        {
+          validateLease: () =>
+            this.#validateExecutionLease(
+              input.tenantId,
+              input.runId,
+              input.lease,
+              readLeaseClock(this.#clock),
+            ),
+          loadRun: () =>
+            this.#loadRun({ tenantId: input.tenantId, runId: input.runId }),
+          eventIdExists: (id) => this.#eventIdExists(id),
+          outboxIdExists: (id) => this.#outboxMessageIdExists(id),
+          writeSnapshot: (current, next) =>
+            this.#writeSnapshot(current, next, current.revision),
+          writeEvents: (events) => this.#writeEvents(events, input.tenantId),
+          writeOutbox: (messages) => this.#writeOutbox(messages),
+        },
+        mode,
+      );
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
+  }
+
   async commitLeasedRunTerminal(
     input: CommitLeasedRunTerminalInput,
   ): Promise<CommitLeasedRunTerminalResult> {
@@ -3542,14 +3811,10 @@ export class SqliteRunStore implements DomainStore {
             input.commit.events,
           );
       if (input.history !== null) {
-        validateModelHistoryAppend(
-          input.history,
+        validateSqliteModelHistoryAppend(
+          this.#database,
           { tenantId: currentRun.tenantId, threadId: currentRun.threadId },
-          this.#loadAllModelHistoryItems({
-            tenantId: currentRun.tenantId,
-            threadId: currentRun.threadId,
-          }),
-          (itemId) => this.#modelHistoryItemIdExists(itemId),
+          input.history,
         );
       }
       const execution =
@@ -3566,7 +3831,7 @@ export class SqliteRunStore implements DomainStore {
         input.commit,
         input.lease,
         input.history,
-        true,
+        { withinTransaction: true },
       );
       if (run.disposition === "committed" && nextGoal !== currentGoal) {
         this.#writeTurnStartGoal(
@@ -3660,11 +3925,12 @@ export class SqliteRunStore implements DomainStore {
         input.commit,
         input.lease,
         input.history,
-        true,
+        { withinTransaction: true },
       );
       if (input.completion === "completeRun") {
         this.#settleWorkItemWithinTransaction(input.lease, now);
       }
+      this.#database.prepare("DELETE FROM context_compaction_checkpoints WHERE tenant_id=? AND run_id=? AND step_id=?").run(input.commit.tenantId, runId, input.attempt.stepId);
       this.#database.exec("COMMIT");
       return clone({ run, step: execution.step, attempt: execution.attempt });
     } catch (error) {
@@ -3677,7 +3943,29 @@ export class SqliteRunStore implements DomainStore {
     input: CommitAssistantSampleContinuationInput,
   ): Promise<CommitAssistantSampleContinuationResult> {
     this.#assertOpen();
-    const runId = validateAssistantSampleContinuationInput(input);
+    return this.#commitModelSample(
+      input,
+      validateAssistantSampleContinuationInput(input),
+      "assistant",
+    );
+  }
+
+  async commitToolSample(
+    input: CommitToolSampleInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    this.#assertOpen();
+    return this.#commitModelSample(
+      input,
+      validateToolSampleCommit(input),
+      "tool",
+    );
+  }
+
+  async #commitModelSample(
+    input: CommitToolSampleInput,
+    runId: string,
+    boundary: "assistant" | "tool",
+  ): Promise<CommitAssistantSampleContinuationResult> {
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       const prior = this.#loadReceipt(
@@ -3709,6 +3997,11 @@ export class SqliteRunStore implements DomainStore {
         });
         if (step === null || attempt?.status !== "completed") {
           throw new RunStoreError("assistant_sample_replay_conflict");
+        }
+        if (boundary === "tool") {
+          validateToolSampleReplay(input, storedRun, step, attempt);
+        } else {
+          validateAssistantSampleReplay(input, storedRun, step, attempt);
         }
         this.#database.exec("COMMIT");
         return clone({
@@ -3756,11 +4049,24 @@ export class SqliteRunStore implements DomainStore {
         leaseEpoch: input.lease.leaseEpoch,
         attempt: { ...input.attempt, status: "completed" },
       });
+      if (boundary === "tool") {
+        validateToolSampleAuthority(
+          input,
+          this.#loadRun({ tenantId: input.commit.tenantId, runId }),
+          execution.step,
+        );
+      } else {
+        validateAssistantSampleAuthority(
+          input,
+          this.#loadRun({ tenantId: input.commit.tenantId, runId }),
+          execution.step,
+        );
+      }
       const run = this.#commitRun(
         input.commit,
         input.lease,
         input.history,
-        true,
+        { withinTransaction: true },
       );
       this.#database
         .prepare(
@@ -3775,7 +4081,7 @@ export class SqliteRunStore implements DomainStore {
           stableJson(input.modelState),
           input.modelState.updatedAt,
         );
-      if (input.continuation !== null) {
+      if (input.continuation !== null && !isEmptyAssistantSample(input)) {
         this.#database
           .prepare(
             `INSERT INTO thread_continuations (
@@ -3818,8 +4124,12 @@ export class SqliteRunStore implements DomainStore {
     input: CommitRunInput,
     executionLease: WorkItemLeaseInput | null,
     history: ModelHistoryAppend | null,
-    withinTransaction = false,
+    options: Readonly<{
+      withinTransaction?: boolean;
+      workflowSchedulerAdmission?: true;
+    }> = {},
   ): CommitRunResult {
+    const withinTransaction = options.withinTransaction === true;
     this.#assertOpen();
     const runId = validateCommitInput(input);
     const fingerprint = input.idempotency.requestFingerprint;
@@ -3927,34 +4237,48 @@ export class SqliteRunStore implements DomainStore {
         if (history.items.some((item) => item.runId !== runId)) {
           throw new RunStoreError("model_history_run_id_mismatch");
         }
-        validateModelHistoryAppend(
-          history,
+        validateSqliteModelHistoryAppend(
+          this.#database,
           { tenantId: next.tenantId, threadId: next.threadId },
-          this.#loadAllModelHistoryItems({
-            tenantId: next.tenantId,
-            threadId: next.threadId,
-          }),
-          (itemId) => this.#modelHistoryItemIdExists(itemId),
+          history,
         );
       }
       validateRunHistoryCorrelation(input.events, history);
       validateOutbox(input.outbox, runId, input.tenantId, (messageId) =>
         this.#outboxMessageIdExists(messageId),
       );
-      validateWorkItems(
-        input.workItems,
-        runId,
-        input.tenantId,
-        input.events.at(-1)?.sequence ?? 0,
-        (workItemId) => this.#workItemIdExists(workItemId),
-        input.threadAdmission === undefined ? "default" : "manualCompaction",
-      );
+      if (options.workflowSchedulerAdmission) {
+        validateWorkflowSchedulerWorkItems(
+          input.workItems, runId, input.tenantId,
+          (id) => this.#workItemIdExists(id),
+        );
+      } else {
+        validateWorkItems(
+          input.workItems,
+          runId,
+          input.tenantId,
+          input.events.at(-1)?.sequence ?? 0,
+          (workItemId) => this.#workItemIdExists(workItemId),
+          input.threadAdmission === undefined ? "default" : "manualCompaction",
+        );
+      }
 
       this.#writeSnapshot(current, next, input.expectedRevision);
       this.#writeRunThreadBinding(current, next);
       this.#writeEvents(input.events, input.tenantId);
       this.#writeOutbox(input.outbox);
       this.#writeWorkItems(input.workItems);
+      wakeSqliteCanceledReconciliation(
+        this.#database,
+        next,
+        input.events,
+        this.#clock,
+      );
+      signalSqliteWorkflowCancellationRequest(this.#database, next, input.events, {
+        loadRun: (locator) => this.#loadRun(locator),
+        commitChildRun: (commit) => this.#commitRun(commit, null, null, { withinTransaction: true }),
+        now: () => readLeaseClock(this.#clock),
+      });
       if (history !== null) {
         this.#writeModelHistoryItems(history.items);
       }
@@ -3966,6 +4290,15 @@ export class SqliteRunStore implements DomainStore {
         outbox: input.outbox,
         workItems: input.workItems,
       };
+      const stored = encodeSqliteExecutionReceipt(
+        {
+          tenant_id: input.tenantId,
+          run_id: runId,
+          fingerprint,
+          result_json: stableJson(result),
+        },
+        input.idempotency,
+      );
       this.#database
         .prepare(
           `INSERT INTO idempotency_receipts (
@@ -3982,8 +4315,8 @@ export class SqliteRunStore implements DomainStore {
           input.idempotency.scope,
           input.idempotency.key,
           runId,
-          fingerprint,
-          stableJson(result),
+          stored.fingerprint,
+          stored.result_json,
         );
       if (!withinTransaction) {
         this.#database.exec("COMMIT");
@@ -4077,14 +4410,10 @@ export class SqliteRunStore implements DomainStore {
       if (input.history.items.some((item) => item.runId !== runId)) {
         throw new RunStoreError("model_history_run_id_mismatch");
       }
-      validateModelHistoryAppend(
-        completionHistory,
+      validateSqliteModelHistoryAppend(
+        this.#database,
         { tenantId: input.tenantId, threadId },
-        this.#loadAllModelHistoryItems({
-          tenantId: input.tenantId,
-          threadId,
-        }),
-        (itemId) => this.#modelHistoryItemIdExists(itemId),
+        completionHistory,
       );
 
       let nextRun: RunState | null = currentRun;
@@ -4228,6 +4557,15 @@ export class SqliteRunStore implements DomainStore {
         step: execution.step,
         attempt: execution.attempt,
       };
+      const stored = encodeSqliteExecutionReceipt(
+        {
+          tenant_id: input.tenantId,
+          run_id: runId,
+          fingerprint: input.idempotency.requestFingerprint,
+          result_json: stableJson(result),
+        },
+        input.idempotency,
+      );
       this.#database
         .prepare(
           `INSERT INTO idempotency_receipts (
@@ -4244,8 +4582,8 @@ export class SqliteRunStore implements DomainStore {
           input.idempotency.scope,
           input.idempotency.key,
           runId,
-          input.idempotency.requestFingerprint,
-          stableJson(result),
+          stored.fingerprint,
+          stored.result_json,
         );
       this.#database.exec("COMMIT");
       return clone(result);
@@ -4281,6 +4619,30 @@ export class SqliteRunStore implements DomainStore {
     } catch (error) {
       throw normalizeSqliteError(error);
     }
+  }
+
+  readonly outboxRetention: OutboxRetentionStore = {
+    pruneDeliveredOutbox: async (policy, options) => {
+      this.#assertOpen();
+      try {
+        return pruneSqliteDeliveredOutbox(
+          this.#database,
+          policy,
+          readLeaseClock(this.#clock),
+          options,
+        );
+      } catch (error) {
+        throw normalizeSqliteError(error);
+      }
+    },
+  };
+
+  async canRetireArtifact(
+    input: ArtifactRetentionCandidate,
+    options?: ArtifactRetentionReadOptions,
+  ): Promise<boolean> {
+    this.#assertOpen();
+    return canRetireSqliteArtifact(this.#database, input, options);
   }
 
   async listPendingOutbox(limit: number): Promise<readonly OutboxMessage[]> {
@@ -4330,14 +4692,12 @@ export class SqliteRunStore implements DomainStore {
     try {
       const rows = this.#database
         .prepare(
-          `SELECT work_item_id, tenant_id, run_id, kind, created_at, work_item_json
-           FROM work_items
-           WHERE (status = 'pending' AND available_at_ms <= ?)
-              OR (status = 'leased' AND lease_expires_at_ms <= ?)
-           ORDER BY work_item_order ASC
-           LIMIT ?`,
+          `SELECT w.work_item_id, w.tenant_id, w.run_id, w.kind, w.created_at, w.work_item_json
+           FROM (${workItemCandidatesSql({ table: "work_items", now: "?1", limit: "?2", dialect: "sqlite", lock: "none" })}) c
+           JOIN work_items w ON w.work_item_id=c.work_item_id
+           ORDER BY c.ready_at,c.work_item_order`,
         )
-        .all(now, now, limit) as unknown as WorkItemRow[];
+        .all(now, limit) as unknown as WorkItemRow[];
       return rows.map(decodeStoredWorkItem);
     } catch (error) {
       throw normalizeSqliteError(error);
@@ -4528,12 +4888,11 @@ export class SqliteRunStore implements DomainStore {
              work_item_json,
              lease_epoch
            FROM work_items
-           WHERE (status = 'pending' AND available_at_ms <= ?)
-              OR (status = 'leased' AND lease_expires_at_ms <= ?)
-           ORDER BY work_item_order ASC
-           LIMIT 1`,
+           WHERE work_item_id = (
+             SELECT work_item_id FROM (${workItemCandidatesSql({ table: "work_items", now: "?1", limit: "1", dialect: "sqlite", lock: "none" })})
+           )`,
         )
-        .get(now, now) as (WorkItemRow & { lease_epoch: number }) | undefined;
+        .get(now) as (WorkItemRow & { lease_epoch: number }) | undefined;
       if (row === undefined) {
         this.#database.exec("COMMIT");
         return null;
@@ -4550,7 +4909,8 @@ export class SqliteRunStore implements DomainStore {
              lease_id = ?,
              lease_epoch = ?,
              lease_expires_at_ms = ?,
-             attempt_count = attempt_count + 1
+             attempt_count = attempt_count + 1,
+             last_error_code = CASE WHEN last_error_code = '${RECONCILIATION_CANCEL_WAKE}' THEN NULL ELSE last_error_code END
            WHERE work_item_id = ?`,
         )
         .run(
@@ -4631,14 +4991,14 @@ export class SqliteRunStore implements DomainStore {
         `UPDATE work_items
          SET
            status = 'pending',
-           available_at_ms = ?,
+           available_at_ms = CASE WHEN last_error_code = '${RECONCILIATION_CANCEL_WAKE}' THEN ? ELSE ? END,
            lease_owner_id = NULL,
            lease_id = NULL,
            lease_expires_at_ms = NULL,
            last_error_code = ?
          WHERE work_item_id = ?`,
       )
-      .run(availableAt, input.reasonCode, input.workItemId);
+      .run(now, availableAt, input.reasonCode, input.workItemId);
     if (update.changes !== 1) {
       throw new RunStoreError("queue_retry_conflict");
     }
@@ -5278,7 +5638,9 @@ export class SqliteRunStore implements DomainStore {
          WHERE scope = ? AND idempotency_key = ?`,
       )
       .get(scope, idempotencyKey) as ReceiptRow | undefined;
-    return row ?? null;
+    return row === undefined
+      ? null
+      : decodeSqliteExecutionReceipt(row, { scope, key: idempotencyKey });
   }
 
   #loadThreadReceipt(
@@ -5426,7 +5788,11 @@ export class SqliteRunStore implements DomainStore {
     const outboxRow = this.#database
       .prepare(
         `SELECT message_id, tenant_id, run_id, topic, created_at, message_json
-         FROM outbox WHERE tenant_id = ? AND message_id = ?`,
+         FROM outbox WHERE tenant_id = ?1 AND message_id = ?2
+         UNION ALL SELECT message_id, tenant_id, run_id,
+           json_extract(replay_message_json, '$.topic') AS topic,
+           json_extract(replay_message_json, '$.createdAt') AS created_at, replay_message_json AS message_json
+         FROM outbox_deduplication WHERE tenant_id = ?1 AND message_id = ?2 AND replay_message_json IS NOT NULL`,
       )
       .get(receipt.tenantId, result.outbox.messageId) as OutboxRow | undefined;
     const workItemRow = this.#database
@@ -5672,6 +6038,9 @@ export class SqliteRunStore implements DomainStore {
   }
 
   #writeModelHistoryItems(items: readonly ModelHistoryItem[]): void {
+    const first = items[0];
+    if (first !== undefined)
+      ensureSqliteModelHistoryAppendState(this.#database, first);
     const statement = this.#database.prepare(
       `INSERT INTO model_history_items (
         tenant_id,
@@ -5694,10 +6063,11 @@ export class SqliteRunStore implements DomainStore {
         item.runId,
         item.segmentId,
         item.type,
-        stableJson(item),
+        encodeSqliteModelHistoryItem(item),
         item.createdAt,
       );
     }
+    appendSqliteModelHistoryContext(this.#database, items);
   }
 
   #writeEvents(events: readonly RunLifecycleEvent[], tenantId: string): void {
@@ -5716,7 +6086,7 @@ export class SqliteRunStore implements DomainStore {
         event.identity.runId,
         event.sequence,
         event.eventId,
-        stableJson(event),
+        encodeSqliteRunEvent(event),
       );
     }
   }
@@ -6062,10 +6432,7 @@ function decodeStoredModelHistoryItem(
   row: ModelHistoryRow,
   locator: ThreadLocator,
 ): ModelHistoryItem {
-  const item = parseStoredJson<ModelHistoryItem>(
-    row.item_json,
-    "stored_model_history_item_invalid",
-  );
+  const item = decodeSqliteModelHistoryItem(row.item_json);
   try {
     validateModelHistoryItem(item);
   } catch (error) {
@@ -6094,10 +6461,7 @@ function decodeStoredEvent(
   row: EventRow,
   locator: RunLocator,
 ): RunLifecycleEvent {
-  const event = parseStoredJson<RunLifecycleEvent>(
-    row.event_json,
-    "stored_event_invalid",
-  );
+  const event = decodeSqliteRunEvent(row.event_json);
   if (
     !isPlainObject(event) ||
     !isPlainObject(event.identity) ||
@@ -6740,6 +7104,12 @@ function normalizeSqliteError(error: unknown): Error {
     return error;
   }
   const message = error instanceof Error ? error.message : String(error);
+  if (
+    message === "run_output_replay_requires_stream_append" ||
+    message === "outbox_message_conflict"
+  ) {
+    return new RunStoreError(message, { cause: error });
+  }
   if (/busy|locked/i.test(message)) {
     return new RunStoreError("sqlite_busy", { cause: error });
   }
@@ -6748,3 +7118,8 @@ function normalizeSqliteError(error: unknown): Error {
   }
   return new RunStoreError("sqlite_error", { cause: error });
 }
+import type {
+  ArtifactRetentionCandidate,
+  ArtifactRetentionReadOptions,
+} from "@crewon/application";
+import { canRetireSqliteArtifact } from "./artifact-retention-guard.ts";

@@ -1,0 +1,137 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`message action bar > offers copy and inline edit, with no direct rerun or response menus 1`] = `"<div class="message-actions" data-user="true" data-visibility="on-hover" role="group" aria-label="用户消息操作"><button type="button" aria-label="复制" class="message-action-button" data-state="closed" data-slot="tooltip-trigger"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></button><button id="message-edit-user-edit-fixture" type="button" aria-label="编辑消息" class="message-action-button" data-state="closed" data-slot="tooltip-trigger"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil-line" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path><path d="m15 5 3 3"></path></svg></button><span class="message-action-status" role="status"></span></div><div class="message-actions" data-user="false" data-visibility="always" role="group" aria-label="回复操作"><button type="button" aria-label="复制" class="message-action-button" data-state="closed" data-slot="tooltip-trigger"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg></button><span class="message-action-status" role="status"></span></div>"`;
+
+exports[`message action bar > snapshots compact horizontal actions and the bounded editor 1`] = `
+".message-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  min-height: 24px;
+  margin-top: 4px;
+}
+/* Reserve the row so revealing actions never shifts the conversation. */
+.message-actions[data-visibility="on-hover"] {
+  opacity: 0;
+  pointer-events: none;
+}
+.message-body:is(:hover, :focus-within) > .message-actions,
+.office-bubble-body:is(:hover, :focus-within) > .message-actions,
+.message-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .message-actions[data-visibility="on-hover"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.message-actions[data-user="true"] {
+  justify-content: flex-end;
+}
+.message[data-kind="userMessage"] .message-body,
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="userMessage"]
+  .message-body {
+  flex-direction: column;
+  align-items: flex-end;
+}
+.message-actions button.message-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.message-actions button:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+.message-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.message-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.message-actions button svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.6;
+}
+.message-action-status {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.message-action-status:empty {
+  display: none;
+}
+.message-replay-failure {
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.message-inline-editor {
+  width: min(560px, 100%);
+  min-width: 0;
+  margin-inline-start: auto;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  color: var(--text);
+}
+.message-inline-editor textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  max-height: min(320px, 45dvh);
+  resize: vertical;
+  padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.message-inline-editor textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.message-inline-editor footer {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.message-inline-editor [role="alert"] {
+  color: var(--danger);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.message-inline-editor .message-edit-hint {
+  margin: 10px 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: left;
+}
+"
+`;

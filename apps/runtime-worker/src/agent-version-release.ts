@@ -39,6 +39,11 @@ export type RuntimeAgentVersionReleaseConfig = Readonly<{
   maxToolRounds?: number;
   autoCompactAtTokens?: number | null;
   modelContextWindowTokens?: number;
+  modelIdentity?: Readonly<{
+    adapterName: string;
+    adapterVersion: string;
+    modelId: string;
+  }>;
   modelId?: string;
   expectedAgentVersionDigest?: string | null;
   agentVersionDeployments?: readonly AgentVersionDeploymentCandidate[];
@@ -61,6 +66,11 @@ export function compileRuntimeAgentVersionRelease(
   config: RuntimeAgentVersionReleaseConfig,
   digester: ContentDigester = new NodeSha256ContentDigester(),
 ): RuntimeAgentVersionReleasePlan {
+  if (config.modelIdentity !== undefined) {
+    throw new Error(
+      "runtime_release_bootstrap_model_identity_override_unsupported",
+    );
+  }
   const bootstrapVersion = compileRuntimeAgentVersion(config, digester);
   const compiledVersions = [
     bootstrapVersion,
@@ -81,9 +91,7 @@ export function compileRuntimeAgentVersionRelease(
     deploymentIds.add(deployment.agentVersionId);
   }
   const compiledById = new Map(
-    compiledVersions.map(
-      (version) => [version.agentVersionId, version],
-    ),
+    compiledVersions.map((version) => [version.agentVersionId, version]),
   );
   const deploymentById = new Map(
     deployments.map((deployment) => [deployment.agentVersionId, deployment]),
@@ -208,6 +216,10 @@ export function compileRuntimeAgentVersion(
   config: RuntimeAgentVersionReleaseConfig,
   digester: ContentDigester = new NodeSha256ContentDigester(),
 ): CompiledAgentVersion {
+  if (config.modelIdentity !== undefined && config.modelId !== undefined) {
+    throw new Error("runtime_release_model_identity_ambiguous");
+  }
+  const modelIdentity = runtimeModelIdentity(config);
   if (
     config.nativeWorkspaceReadCatalog === "enabled" &&
     config.route.workspaceBindingId === null
@@ -222,9 +234,10 @@ export function compileRuntimeAgentVersion(
       policySnapshotId: config.route.policySnapshotId,
       instructions: config.agentInstructions ?? null,
       model: {
-        adapterName: config.transport.adapterName,
-        adapterVersion: config.transport.adapterVersion,
-        modelId: config.modelId ?? config.transport.modelId,
+        ...modelIdentity,
+        ...(config.transport.maxOutputTokens === undefined
+          ? {}
+          : { maxOutputTokens: config.transport.maxOutputTokens }),
         contextWindowTokens: config.modelContextWindowTokens ?? 273_000,
         autoCompactAtTokens:
           config.autoCompactAtTokens === undefined
@@ -260,6 +273,7 @@ function staticAgentVersionDeployment(
   version: CompiledAgentVersion,
   digester: ContentDigester,
 ): AgentVersionDeploymentCandidate {
+  const modelIdentity = runtimeModelIdentity(config);
   return {
     schemaVersion: "crewon.agent-version-deployment.v0",
     tenantId: config.runtimeTenantId,
@@ -270,13 +284,24 @@ function staticAgentVersionDeployment(
         schemaVersion: "crewon.static-agent-materialization.v0",
         authorityId: config.route.authorityId,
         workspaceBindingId: config.route.workspaceBindingId,
-        adapterName: config.transport.adapterName,
-        adapterVersion: config.transport.adapterVersion,
-        modelId: config.modelId ?? config.transport.modelId,
+        ...modelIdentity,
       }),
     ),
     authorityId: config.route.authorityId,
     workspaceBindingId: config.route.workspaceBindingId,
+  };
+}
+
+function runtimeModelIdentity(
+  config: RuntimeAgentVersionReleaseConfig,
+): Readonly<{ adapterName: string; adapterVersion: string; modelId: string }> {
+  if (config.modelIdentity !== undefined) {
+    return config.modelIdentity;
+  }
+  return {
+    adapterName: config.transport.adapterName,
+    adapterVersion: config.transport.adapterVersion,
+    modelId: config.modelId ?? config.transport.modelId,
   };
 }
 

@@ -371,7 +371,14 @@ function idempotencyDescriptor(
 function mapStoreError(error: unknown): ApplicationError {
   if (error instanceof ApplicationError) return error;
   if (error instanceof RunStoreError) {
-    if (error.code === "idempotency_conflict")
+    if (
+      [
+        "idempotency_conflict",
+        "thread_not_active",
+        "thread_active_run_conflict",
+        "model_provider_settings_switch_pending",
+      ].includes(error.code)
+    )
       return new ApplicationError("conflict", error.code);
     if (["thread_not_found", "workflow_version_not_found"].includes(error.code))
       return new ApplicationError("notFound", error.code);

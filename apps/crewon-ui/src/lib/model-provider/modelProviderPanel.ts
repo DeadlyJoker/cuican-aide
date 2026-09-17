@@ -161,46 +161,33 @@ function modelProviderListBody(params: {
   const { entries, locale, mutationAvailable, probeText } = params;
   const sections: string[] = [];
 
-  if (entries.length === 0) {
+  if (!mutationAvailable) {
     sections.push(
       locale === "zh"
-        ? "还没有配置任何模型服务。点击下方“新增 Provider”填写服务地址和密钥。"
-        : "No model service is configured yet. Use \u201cAdd provider\u201d below to enter an address and credential.",
+        ? "当前网页版不支持添加或修改模型服务。\n\n如需配置桌面端，请打开「设置 → AI 模型 → 添加模型」。桌面端配置不会自动应用到当前网页版。"
+        : "Adding or editing model services is not supported on this web page.\n\nIn the desktop app, go to Settings → AI models → Add model. Desktop changes do not automatically apply to this web service.",
+    );
+  } else if (entries.length === 0) {
+    sections.push(
+      locale === "zh"
+        ? "尚未添加模型服务。点击“添加模型”填写服务地址和密钥。"
+        : "No model service added yet. Choose Add model to enter an address and access key.",
     );
   }
 
   if (probeText) {
     sections.push(probeText);
   }
-
-  /* Security and protocol boundaries are stated before the user saves. */
   sections.push(
-    [
-      locale === "zh" ? "说明" : "Notes",
-      locale === "zh"
-        ? "- 推荐使用开源 LiteLLM Gateway：由 LiteLLM 适配 OpenAI、Anthropic、Gemini、Bedrock、DeepSeek 等主流厂商和本地模型；CrewON 不复制各厂商协议。"
-        : "- LiteLLM Gateway is recommended. LiteLLM adapts OpenAI, Anthropic, Gemini, Bedrock, DeepSeek, and other major vendors or local models; CrewON does not duplicate vendor protocols.",
-      locale === "zh"
-        ? "- CrewON 调用 Responses 接口；只有原生支持 Responses 的服务才能直连，其他模型应由 LiteLLM 的 Responses bridge 转换。"
-        : "- CrewON calls the Responses API. Connect directly only when the service supports Responses; route other models through LiteLLM's Responses bridge.",
-      ...(mutationAvailable
-        ? [
-            locale === "zh"
-              ? "- 直接填写的 API Key 只保存在系统密钥库：macOS Keychain、Windows Credential Manager 或 Linux Secret Service；桌面 catalog 只保存 Provider ID 与地址。"
-              : "- An API key entered here is stored only in the OS credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service. The desktop catalog stores only provider identity and endpoint.",
-            locale === "zh"
-              ? "- 保存或切换后会在无活动任务时受监督重启 Worker；有任务运行时会拒绝切换，不会中断任务。"
-              : "- Saving or switching performs a supervised Worker restart only while no task is active; an active task rejects the switch instead of being interrupted.",
-          ]
-        : [
-            locale === "zh"
-              ? "- 此只读视图不接收 API Key，也不会把 Team 环境标记为已具备 Provider 切换能力。"
-              : "- This read-only view never accepts an API key or presents Team Provider switching as available.",
-          ]),
-    ].join("\n"),
+    locale === "zh"
+      ? mutationAvailable
+        ? "请等正在运行的任务结束后，再保存或切换模型来源。"
+        : ""
+      : mutationAvailable
+        ? "Wait for running tasks to finish before saving or switching model sources."
+        : "",
   );
-
-  return sections.join("\n\n");
+  return sections.filter(Boolean).join("\n\n");
 }
 
 export function modelProviderListPanel(params: {
@@ -212,6 +199,7 @@ export function modelProviderListPanel(params: {
   mutationAvailable?: boolean;
   probeAvailable?: boolean;
   probeText?: string | null;
+  defaultTaskModel?: string | null;
 }): CapabilityPanel {
   const {
     configRead = null,
@@ -222,6 +210,7 @@ export function modelProviderListPanel(params: {
     mutationAvailable = credentialCatalog !== null,
     probeAvailable = settings?.runtimeAvailability === "available",
     probeText = null,
+    defaultTaskModel = null,
   } = params;
   const authority = settings ?? configRead;
   const entries = modelProviderEntries(authority, credentialCatalog);
@@ -245,11 +234,11 @@ export function modelProviderListPanel(params: {
           ? "全局配置"
           : "Global config"),
     body: [
-      availability === null
+      availability === null || (!mutationAvailable && entries.length === 0)
         ? null
         : locale === "zh"
-          ? `运行状态: ${runtimeAvailabilityLabel(availability, locale)}`
-          : `Runtime: ${runtimeAvailabilityLabel(availability, locale)}`,
+          ? `模型来源状态: ${runtimeAvailabilityLabel(availability, locale)}`
+          : `Model source status: ${runtimeAvailabilityLabel(availability, locale)}`,
       modelProviderListBody({
         entries,
         locale,
@@ -259,54 +248,65 @@ export function modelProviderListPanel(params: {
     ]
       .filter(Boolean)
       .join("\n\n"),
-    rows: entries.map((entry) => {
-      const vendor = vendorForBaseUrl(entry.baseUrl);
-      const rowActions: CapabilityPanelAction[] = [];
-      if (probeAvailable && entry.id === selectedId) {
-        rowActions.push({
-          id: modelProviderRowActionId("test", entry.id),
-          label: rowLabels.test,
-        });
-      }
-      if (mutationAvailable) {
-        rowActions.push({
-          id: modelProviderRowActionId("edit", entry.id),
-          label: rowLabels.edit,
-        });
-        if (entry.id !== selectedId) {
+    rows: [
+      ...(defaultTaskModel === null
+        ? []
+        : [
+            {
+              id: "runtime:default-task-model",
+              title: locale === "zh" ? "默认任务模型" : "Default task model",
+              subtitle: defaultTaskModel,
+            },
+          ]),
+      ...entries.map((entry) => {
+        const vendor = vendorForBaseUrl(entry.baseUrl);
+        const rowActions: CapabilityPanelAction[] = [];
+        if (probeAvailable && entry.id === selectedId) {
           rowActions.push({
-            id: modelProviderRowActionId("select", entry.id),
-            label: rowLabels.use,
+            id: modelProviderRowActionId("test", entry.id),
+            label: rowLabels.test,
           });
         }
-        rowActions.push({
-          id: modelProviderRowActionId("delete", entry.id),
-          label: rowLabels.remove,
-          tone: "danger",
-        });
-      }
-      return {
-        id: entry.id,
-        title: entry.name,
-        subtitle: entry.baseUrl,
-        meta: [
-          vendor?.name ?? null,
-          entry.modelId
-            ? locale === "zh"
-              ? `模型 ${entry.modelId}`
-              : `model ${entry.modelId}`
-            : null,
-          credentialKindLabel(entry, locale),
-        ].filter((fact): fact is string => fact !== null),
-        badge:
-          entry.id === selectedId
-            ? locale === "zh"
-              ? "当前使用"
-              : "In use"
-            : undefined,
-        actions: rowActions,
-      };
-    }),
+        if (mutationAvailable) {
+          rowActions.push({
+            id: modelProviderRowActionId("edit", entry.id),
+            label: rowLabels.edit,
+          });
+          if (entry.id !== selectedId) {
+            rowActions.push({
+              id: modelProviderRowActionId("select", entry.id),
+              label: rowLabels.use,
+            });
+          }
+          rowActions.push({
+            id: modelProviderRowActionId("delete", entry.id),
+            label: rowLabels.remove,
+            tone: "danger",
+          });
+        }
+        return {
+          id: entry.id,
+          title: entry.name,
+          subtitle: entry.baseUrl,
+          meta: [
+            vendor?.name ?? null,
+            entry.modelId
+              ? locale === "zh"
+                ? `模型 ${entry.modelId}`
+                : `model ${entry.modelId}`
+              : null,
+            credentialKindLabel(entry, locale),
+          ].filter((fact): fact is string => fact !== null),
+          badge:
+            entry.id === selectedId
+              ? locale === "zh"
+                ? "当前使用"
+                : "In use"
+              : undefined,
+          actions: rowActions,
+        };
+      }),
+    ],
     actions: [
       ...(mutationAvailable
         ? [

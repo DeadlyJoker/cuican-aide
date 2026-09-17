@@ -1,33 +1,45 @@
+import { useStreamingTextPreview } from "./StreamingTextScope";
+import { useHasTaskWorkbench } from "./workbench/TaskWorkbenchContext";
+import { useMessageReplay } from "./messages/MessageReplayScope";
+import { MessageActions } from "./messages/MessageActions";
+import {
+  transcriptWindow,
+  transcriptRowTurn,
+  type ControlTranscriptRow,
+} from "../lib/control-runtime/controlTranscriptWindow";
 import {
   useEffect,
+  Fragment,
   useMemo,
   useRef,
   useState,
   type MutableRefObject,
 } from "react";
-import { ArrowDown, Code2, ListTree, Sparkles, Terminal } from "lucide-react";
+import { ArrowDown, Code2, Sparkles } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
-import type { Turn } from "@crewon/app-server-protocol/v2/Turn";
 import type { Locale } from "../lib/i18n";
-import { formatRelativeTime } from "../lib/shared/text";
 import type { WorkMode } from "../lib/workMode";
+import type { ControlTeamProgress } from "../lib/control-runtime/controlTeamProgress";
 import {
-  TranscriptMessage,
-  TranscriptFailureMessage,
+  TranscriptTeamProgress,
+  teamProgressForThread,
+} from "./TranscriptTeamProgress";
+import {
   TranscriptStreamingMessage,
+  TranscriptMessage,
   TranscriptThinkingMessage,
-  combineAgentMessages,
   type TranscriptItemLabels,
 } from "./TranscriptMessage";
 import {
-  aggregateReasoningItems,
   hasDisplayableReasoning,
-  hasProcessReasoning,
   isActionProcessItem,
 } from "./transcriptReasoning";
 
+import { TranscriptTurn, hasFinalAgentResponse } from "./TranscriptTurn";
+
 type TranscriptProps = {
+  teamProgress?: ControlTeamProgress | null;
   activeTurnId?: string | null;
   commandLabel: string;
   crewonLabel: string;
@@ -51,178 +63,6 @@ type TranscriptProps = {
   streamingText: string;
   youLabel: string;
 };
-
-function turnLabel(turn: Turn, locale: Locale): string {
-  switch (turn.status) {
-    case "completed":
-      return locale === "zh" ? "已处理" : "Processed";
-    case "failed":
-      return locale === "zh" ? "失败" : "Failed";
-    case "interrupted":
-      return locale === "zh" ? "已中断" : "Interrupted";
-    case "inProgress":
-      return locale === "zh" ? "正在处理" : "Processing";
-  }
-}
-
-function shouldShowTurnDivider(turn: Turn): boolean {
-  return turn.status !== "completed";
-}
-
-function shouldShowFailureResponse(turn: Turn): boolean {
-  return (
-    turn.status === "failed" &&
-    !turn.items.some(
-      (item) => item.type === "agentMessage" && item.text.trim().length > 0,
-    )
-  );
-}
-
-type AgentMessageItem = Extract<ThreadItem, { type: "agentMessage" }>;
-
-type FinalAgentMessageRender = {
-  insertionIndex: number;
-  item: AgentMessageItem;
-  sourceIds: Set<string>;
-};
-
-type TurnProcessRender = {
-  firstIndex: number;
-  items: ThreadItem[];
-};
-
-function isAgentMessageItem(item: ThreadItem): item is AgentMessageItem {
-  return item.type === "agentMessage" && item.text.trim().length > 0;
-}
-
-function finalAgentMessageForTurn(turn: Turn): FinalAgentMessageRender | null {
-  const agentEntries = turn.items
-    .map((item, index) => ({ item, index }))
-    .filter((entry): entry is { item: AgentMessageItem; index: number } =>
-      isAgentMessageItem(entry.item),
-    );
-
-  if (agentEntries.length === 0) {
-    return null;
-  }
-
-  const explicitFinalEntries = agentEntries.filter(
-    (entry) => entry.item.phase === "final_answer",
-  );
-  const finalEntries =
-    explicitFinalEntries.length > 0
-      ? explicitFinalEntries
-      : turn.status === "completed"
-        ? [agentEntries[agentEntries.length - 1]]
-        : [];
-
-  if (finalEntries.length === 0) {
-    return null;
-  }
-
-  const finalMessages = finalEntries.map((entry) => entry.item);
-  const sourceIds = new Set(finalMessages.map((item) => item.id));
-  return {
-    insertionIndex: finalEntries[0].index,
-    item: combineAgentMessages({
-      id: `${turn.id}-final-agent-message`,
-      messages: finalMessages,
-      phase:
-        explicitFinalEntries.length > 0
-          ? "final_answer"
-          : finalMessages[0].phase,
-    }),
-    sourceIds,
-  };
-}
-
-function isTurnProcessSourceItem(
-  item: ThreadItem,
-  finalAgentSourceIds: Set<string>,
-): boolean {
-  if (item.type === "userMessage" || item.type === "plan") {
-    return false;
-  }
-
-  if (item.type === "agentMessage") {
-    return item.text.trim().length > 0 && !finalAgentSourceIds.has(item.id);
-  }
-
-  if (item.type === "reasoning") {
-    return hasProcessReasoning(item);
-  }
-
-  return true;
-}
-
-type ProcessEntry = { index: number; item: ThreadItem };
-
-function collapseReasoningEntries(entries: ProcessEntry[]): ProcessEntry[] {
-  const collapsed: ProcessEntry[] = [];
-  let reasoningBatch: Array<Extract<ThreadItem, { type: "reasoning" }>> = [];
-  let batchStart = -1;
-
-  const flushReasoning = () => {
-    if (reasoningBatch.length === 0) {
-      return;
-    }
-
-    collapsed.push({
-      index: batchStart,
-      item: aggregateReasoningItems(
-        reasoningBatch,
-        `${reasoningBatch[0].id}-process-thought`,
-      ),
-    });
-    reasoningBatch = [];
-    batchStart = -1;
-  };
-
-  for (const entry of entries) {
-    if (entry.item.type === "reasoning") {
-      if (batchStart < 0) {
-        batchStart = entry.index;
-      }
-      reasoningBatch.push(entry.item);
-      continue;
-    }
-
-    flushReasoning();
-    collapsed.push(entry);
-  }
-
-  flushReasoning();
-  return collapsed;
-}
-
-function turnProcessRenderItems(
-  turn: Turn,
-  finalAgentSourceIds: Set<string>,
-): TurnProcessRender {
-  const processEntries: ProcessEntry[] = [];
-
-  turn.items.forEach((item, index) => {
-    if (!isTurnProcessSourceItem(item, finalAgentSourceIds)) {
-      return;
-    }
-
-    processEntries.push({ index, item });
-  });
-
-  processEntries.sort((left, right) => left.index - right.index);
-
-  // Merge consecutive reasoning breadcrumbs into one "Thought · N steps" row so
-  // the process pill stays visible without flooding the log.
-  const visibleEntries = collapseReasoningEntries(processEntries).filter(
-    (entry) =>
-      entry.item.type !== "reasoning" || hasDisplayableReasoning(entry.item),
-  );
-
-  return {
-    firstIndex: visibleEntries[0]?.index ?? -1,
-    items: visibleEntries.map((entry) => entry.item),
-  };
-}
 
 function itemActivityKey(item: ThreadItem): string {
   switch (item.type) {
@@ -286,11 +126,13 @@ export function transcriptActivityKey(
 export function shouldFollowTranscriptUpdate({
   isNearBottom,
   isThreadChange,
+  isEditingMessage = false,
 }: {
   isNearBottom: boolean;
   isThreadChange: boolean;
+  isEditingMessage?: boolean;
 }): boolean {
-  return isThreadChange || isNearBottom;
+  return !isEditingMessage && (isThreadChange || isNearBottom);
 }
 
 export function transcriptObserverStructureKey(
@@ -339,362 +181,8 @@ function scheduleTranscriptFollow(
   });
 }
 
-function turnTimeLabel(turn: Turn, locale: Locale): string | null {
-  if (turn.completedAt) {
-    return formatRelativeTime(turn.completedAt, locale);
-  }
-
-  if (turn.startedAt) {
-    return formatRelativeTime(turn.startedAt, locale);
-  }
-
-  return null;
-}
-
-function turnDurationLabel(durationMs: number | null): string | null {
-  if (!durationMs) {
-    return null;
-  }
-
-  const totalSeconds = Math.max(1, Math.round(durationMs / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const parts = [
-    hours > 0 ? `${hours}h` : null,
-    minutes > 0 ? `${minutes}m` : null,
-    seconds > 0 || (hours === 0 && minutes === 0) ? `${seconds}s` : null,
-  ];
-
-  return parts.filter(Boolean).join(" ");
-}
-
-function processActionStatus(
-  item: ThreadItem,
-): "completed" | "failed" | "inProgress" {
-  switch (item.type) {
-    case "commandExecution":
-    case "fileChange":
-      return item.status === "inProgress"
-        ? "inProgress"
-        : item.status === "failed" || item.status === "declined"
-          ? "failed"
-          : "completed";
-    case "mcpToolCall":
-    case "dynamicToolCall":
-    case "collabAgentToolCall":
-      return item.status;
-    case "imageGeneration":
-      return item.status === "completed" || item.status === "succeeded"
-        ? "completed"
-        : "inProgress";
-    default:
-      return "completed";
-  }
-}
-
-function isFileReadAction(item: ThreadItem): boolean {
-  if (item.type !== "mcpToolCall") {
-    return false;
-  }
-
-  const server = item.server.toLowerCase();
-  const tool = item.tool.toLowerCase();
-  return (
-    (server.includes("file") || server.includes("filesystem")) &&
-    tool.includes("read") &&
-    (tool.includes("file") || tool === "read")
-  );
-}
-
-function processActionGroupLabel(items: ThreadItem[], locale: Locale): string {
-  const counts = items.reduce(
-    (current, item) => ({
-      commands: current.commands + (item.type === "commandExecution" ? 1 : 0),
-      fileChanges: current.fileChanges + (item.type === "fileChange" ? 1 : 0),
-      fileReads: current.fileReads + (isFileReadAction(item) ? 1 : 0),
-      searches: current.searches + (item.type === "webSearch" ? 1 : 0),
-      other:
-        current.other +
-        (item.type !== "commandExecution" &&
-        item.type !== "fileChange" &&
-        item.type !== "webSearch" &&
-        !isFileReadAction(item)
-          ? 1
-          : 0),
-    }),
-    { commands: 0, fileChanges: 0, fileReads: 0, other: 0, searches: 0 },
-  );
-
-  if (locale === "zh") {
-    return [
-      counts.fileReads > 0
-        ? counts.fileReads === 1
-          ? "读取了文件"
-          : `读取了 ${counts.fileReads} 个文件`
-        : null,
-      counts.commands > 0
-        ? counts.commands === 1
-          ? "运行了命令"
-          : "运行了多个命令"
-        : null,
-      counts.searches > 0
-        ? counts.searches === 1
-          ? "完成了搜索"
-          : `完成了 ${counts.searches} 次搜索`
-        : null,
-      counts.fileChanges > 0
-        ? counts.fileChanges === 1
-          ? "编辑了文件"
-          : `编辑了 ${counts.fileChanges} 批文件`
-        : null,
-      counts.other > 0
-        ? counts.other === 1
-          ? "调用了工具"
-          : `调用了 ${counts.other} 个工具`
-        : null,
-    ]
-      .filter(Boolean)
-      .join("、");
-  }
-
-  return [
-    counts.fileReads > 0
-      ? counts.fileReads === 1
-        ? "Read a file"
-        : `Read ${counts.fileReads} files`
-      : null,
-    counts.commands > 0
-      ? counts.commands === 1
-        ? "Ran a command"
-        : "Ran multiple commands"
-      : null,
-    counts.searches > 0
-      ? counts.searches === 1
-        ? "Searched the web"
-        : `Ran ${counts.searches} searches`
-      : null,
-    counts.fileChanges > 0
-      ? counts.fileChanges === 1
-        ? "Edited files"
-        : `Edited ${counts.fileChanges} file batches`
-      : null,
-    counts.other > 0
-      ? counts.other === 1
-        ? "Called a tool"
-        : `Called ${counts.other} tools`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
-type ProcessTimelineEntry =
-  | { item: ThreadItem; type: "item" }
-  | { id: string; items: ThreadItem[]; type: "actionGroup" };
-
-function processTimelineEntries(items: ThreadItem[]): ProcessTimelineEntry[] {
-  const entries: ProcessTimelineEntry[] = [];
-  let actionItems: ThreadItem[] = [];
-
-  const flushActions = () => {
-    if (actionItems.length === 0) {
-      return;
-    }
-
-    if (actionItems.length === 1) {
-      entries.push({ item: actionItems[0], type: "item" });
-    } else {
-      entries.push({
-        id: `${actionItems[0].id}-action-group`,
-        items: actionItems,
-        type: "actionGroup",
-      });
-    }
-    actionItems = [];
-  };
-
-  for (const item of items) {
-    if (isActionProcessItem(item)) {
-      actionItems.push(item);
-      continue;
-    }
-
-    flushActions();
-    entries.push({ item, type: "item" });
-  }
-
-  flushActions();
-  return entries;
-}
-
-function TranscriptProcessActionGroup({
-  itemLabels,
-  items,
-  locale,
-}: {
-  itemLabels: TranscriptItemLabels;
-  items: ThreadItem[];
-  locale: Locale;
-}) {
-  const status = items.reduce<"completed" | "failed" | "inProgress">(
-    (current, item) => {
-      const itemStatus = processActionStatus(item);
-      if (current === "inProgress" || itemStatus === "inProgress") {
-        return "inProgress";
-      }
-      if (current === "failed" || itemStatus === "failed") {
-        return "failed";
-      }
-      return "completed";
-    },
-    "completed",
-  );
-  const commandOnly = items.every((item) => item.type === "commandExecution");
-
-  return (
-    <details
-      className="process-action-group"
-      data-status={status}
-      {...(status === "inProgress" ? { open: true } : {})}
-    >
-      <summary>
-        <span className="process-action-group-icon" aria-hidden="true">
-          {commandOnly ? <Terminal size={16} /> : <ListTree size={16} />}
-        </span>
-        <span>{processActionGroupLabel(items, locale)}</span>
-      </summary>
-      <div className="process-action-group-items">
-        {items.map((item) => (
-          <TranscriptMessage
-            item={item}
-            itemLabels={itemLabels}
-            key={item.id}
-            locale={locale}
-            variant="process"
-          />
-        ))}
-      </div>
-    </details>
-  );
-}
-
-type TurnProcessPanelState = "collapsed" | "collapsing" | "expanded";
-
-const TURN_PROCESS_COLLAPSE_MS = 260;
-
-function TranscriptProcessGroup({
-  detailLabel,
-  itemLabels,
-  items,
-  label,
-  locale,
-  status,
-  turnId,
-}: {
-  detailLabel: string | null;
-  itemLabels: TranscriptItemLabels;
-  items: ThreadItem[];
-  label: string;
-  locale: Locale;
-  status: Turn["status"];
-  turnId: string;
-}) {
-  const [panelState, setPanelState] = useState<TurnProcessPanelState>(() =>
-    status === "inProgress" ? "expanded" : "collapsed",
-  );
-  const collapseTimerRef = useRef<number | null>(null);
-  const processId = `turn-process-${turnId}`;
-  const isExpanded = panelState === "expanded";
-  const isRendered = panelState !== "collapsed";
-  const timelineEntries = processTimelineEntries(items);
-
-  const clearCollapseTimer = () => {
-    if (collapseTimerRef.current === null) {
-      return;
-    }
-
-    window.clearTimeout(collapseTimerRef.current);
-    collapseTimerRef.current = null;
-  };
-
-  const collapseWithAnimation = () => {
-    clearCollapseTimer();
-    setPanelState((current) =>
-      current === "collapsed" ? "collapsed" : "collapsing",
-    );
-    collapseTimerRef.current = window.setTimeout(() => {
-      collapseTimerRef.current = null;
-      setPanelState("collapsed");
-    }, TURN_PROCESS_COLLAPSE_MS);
-  };
-
-  useEffect(
-    () => () => {
-      clearCollapseTimer();
-    },
-    [],
-  );
-
-  const handleToggle = () => {
-    if (isRendered) {
-      collapseWithAnimation();
-      return;
-    }
-
-    clearCollapseTimer();
-    setPanelState("expanded");
-  };
-
-  return (
-    <section
-      className="turn-process-details"
-      data-state={panelState}
-      data-status={status}
-    >
-      <button
-        type="button"
-        className="turn-process-summary"
-        aria-controls={processId}
-        aria-expanded={isExpanded}
-        onClick={handleToggle}
-      >
-        <span className="turn-process-summary-main">
-          <span className="turn-process-title">{label}</span>
-          {detailLabel ? <em>{detailLabel}</em> : null}
-        </span>
-      </button>
-      <div
-        className="turn-process-items-shell"
-        hidden={!isRendered}
-        id={processId}
-      >
-        <div className="turn-process-items">
-          {timelineEntries.map((entry) =>
-            entry.type === "actionGroup" ? (
-              <TranscriptProcessActionGroup
-                itemLabels={itemLabels}
-                items={entry.items}
-                key={entry.id}
-                locale={locale}
-              />
-            ) : (
-              <TranscriptMessage
-                item={entry.item}
-                itemLabels={itemLabels}
-                key={entry.item.id}
-                locale={locale}
-                variant="process"
-              />
-            ),
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 export function Transcript({
+  teamProgress,
   activeTurnId,
   commandLabel,
   crewonLabel,
@@ -718,15 +206,43 @@ export function Transcript({
   streamingText,
   youLabel,
 }: TranscriptProps) {
+  const streamingPreview = useStreamingTextPreview(thread?.id ?? null);
+  const hasWorkbench = useHasTaskWorkbench();
+  const pendingTeam = teamProgressForThread(thread, teamProgress);
   const followAnchorRef = useRef<HTMLDivElement>(null);
   const followFrameRef = useRef<number | null>(null);
   const previousThreadIdRef = useRef<string | null>(null);
   const shouldFollowRef = useRef(true);
+  const isEditingMessage = Boolean(useMessageReplay()?.selection);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
-  const items = useMemo(
-    () => thread?.turns.flatMap((turn) => turn.items) ?? [],
+  const historyWindow = transcriptWindow(thread);
+  const browsingHistory = historyWindow?.newerCursor != null;
+  const pageKey = historyWindow
+    ? `${thread?.id}:${historyWindow.firstSequence}:${historyWindow.lastSequence}`
+    : thread?.id;
+  const previousPage = useRef(pageKey);
+  const rows = useMemo<ControlTranscriptRow[]>(() => {
+    const turns = thread?.turns ?? [];
+    const rows = [...(historyWindow?.rows ?? [])];
+    const included = new Set(
+      rows.flatMap((row) => (row.kind === "run" ? [row.runId] : [])),
+    );
+    for (const turn of turns)
+      if (!included.has(turn.id))
+        rows.push({
+          kind: "run",
+          runId: turn.id,
+          itemIds: turn.items.map((item) => item.id),
+          firstFragment: true,
+          continuation: false,
+        });
+    return rows;
+  }, [thread, historyWindow]);
+  const turnsById = useMemo(
+    () => new Map(thread?.turns.map((turn) => [turn.id, turn]) ?? []),
     [thread],
   );
+  const hasItems = rows.length > 0;
   const lastTurn = thread?.turns[thread.turns.length - 1] ?? null;
   const hasVisibleProcessActivity = Boolean(
     lastTurn?.items.some((item) => {
@@ -741,14 +257,20 @@ export function Transcript({
       return hasDisplayableReasoning(item);
     }),
   );
+  const latestResponseTurnId = thread?.turns.findLast(
+    (turn) => turn.status !== "inProgress" && hasFinalAgentResponse(turn),
+  )?.id;
   const shouldShowThinking =
+    !pendingTeam &&
     Boolean(thread) &&
     !streamingText &&
     lastTurn?.status === "inProgress" &&
     !hasVisibleProcessActivity;
   const shouldShowLoading =
+    !pendingTeam &&
     Boolean(thread) &&
-    items.length === 0 &&
+    thread?.status?.type === "notLoaded" &&
+    !hasItems &&
     !streamingText &&
     !shouldShowThinking;
   const itemLabels = useMemo<TranscriptItemLabels>(
@@ -777,6 +299,15 @@ export function Transcript({
     thread,
     streamingText,
   );
+  useEffect(() => {
+    if (previousPage.current === pageKey) return;
+    previousPage.current = pageKey;
+    if (!browsingHistory || !followAnchorRef.current) return;
+    cancelTranscriptFollowFrame(followFrameRef);
+    shouldFollowRef.current = false;
+    const scroller = transcriptScroller(followAnchorRef.current);
+    if (scroller) scroller.scrollTop = 0;
+  }, [pageKey, browsingHistory]);
   const streamingFollowKey =
     typeof ResizeObserver === "undefined"
       ? streamingText.length
@@ -809,22 +340,30 @@ export function Transcript({
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
       isNearBottom = distanceFromBottom < 180;
     }
-    const shouldFollow = shouldFollowTranscriptUpdate({
-      isNearBottom,
-      isThreadChange,
-    });
+    const shouldFollow =
+      !browsingHistory &&
+      shouldFollowTranscriptUpdate({
+        isNearBottom,
+        isThreadChange,
+        isEditingMessage,
+      });
     shouldFollowRef.current = shouldFollow;
     if (!shouldFollow) {
+      cancelTranscriptFollowFrame(followFrameRef);
       return;
     }
 
     scheduleTranscriptFollow(anchor, followFrameRef);
   }, [
     activityKey,
+    isEditingMessage,
     lastTurn?.status,
     shouldShowThinking,
     streamingFollowKey,
+    pendingTeam,
     thread?.id,
+    browsingHistory,
+    pageKey,
   ]);
 
   useEffect(() => {
@@ -841,7 +380,13 @@ export function Transcript({
     const commitFollowState = () => {
       const distanceFromBottom =
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-      shouldFollowRef.current = distanceFromBottom < 180;
+      shouldFollowRef.current =
+        !browsingHistory &&
+        shouldFollowTranscriptUpdate({
+          isNearBottom: distanceFromBottom < 180,
+          isThreadChange: false,
+          isEditingMessage,
+        });
       setIsScrolledUp(distanceFromBottom >= 180);
     };
     let scrollFrame: number | null = null;
@@ -882,7 +427,14 @@ export function Transcript({
       observer.disconnect();
       scroller.removeEventListener("scroll", updateFollowState);
     };
-  }, [observerStructureKey, thread?.id]);
+  }, [
+    isEditingMessage,
+    observerStructureKey,
+    thread?.id,
+    browsingHistory,
+    pageKey,
+    rows.length,
+  ]);
 
   if (!thread) {
     return (
@@ -924,7 +476,10 @@ export function Transcript({
         className="message-list"
         role="log"
         aria-busy={
-          shouldShowLoading || Boolean(streamingText) || shouldShowThinking
+          shouldShowLoading ||
+          Boolean(streamingText) ||
+          shouldShowThinking ||
+          Boolean(pendingTeam && pendingTeam.phase !== "failed")
         }
         aria-live="polite"
         aria-relevant="additions text"
@@ -938,112 +493,98 @@ export function Transcript({
             <span className="message-loading-spinner" aria-hidden="true" />
           </div>
         ) : null}
-        {thread.turns.map((turn, turnIndex) => {
-          const durationLabel = turnDurationLabel(turn.durationMs);
-          const dividerDetailLabel =
-            durationLabel ?? turnTimeLabel(turn, locale);
-          const dividerLabel = turnLabel(turn, locale);
-          const finalAgentMessage = finalAgentMessageForTurn(turn);
-          const hidesDurableFinalWhileStreaming =
-            Boolean(streamingText) &&
-            (activeTurnId
-              ? turn.id === activeTurnId
-              : turn.id === lastTurn?.id && turn.status === "inProgress");
-          const finalAgentSourceIds =
-            finalAgentMessage?.sourceIds ?? new Set<string>();
-          const processRender = turnProcessRenderItems(
-            turn,
-            finalAgentSourceIds,
-          );
-          const processItems = processRender.items;
-          const firstProcessIndex = processRender.firstIndex;
-          const processGroup =
-            processItems.length > 0 ? (
-              <TranscriptProcessGroup
-                detailLabel={dividerDetailLabel}
-                itemLabels={itemLabels}
-                items={processItems}
-                key={`${turn.id}-process`}
-                label={dividerLabel}
-                locale={locale}
-                status={turn.status}
-                turnId={turn.id}
-              />
-            ) : null;
-          return (
-            <section
-              className="turn-group"
-              data-status={turn.status}
-              aria-label={`${dividerLabel} ${turnIndex + 1}`}
-              key={turn.id}
-            >
-              {processItems.length === 0 &&
-              shouldShowTurnDivider(turn) &&
-              !(shouldShowThinking && turn.id === lastTurn?.id) ? (
-                <div className="turn-divider" data-status={turn.status}>
-                  <span>{dividerLabel}</span>
-                  {dividerDetailLabel ? <em>{dividerDetailLabel}</em> : null}
-                </div>
-              ) : null}
-              {turn.items.map((item, itemIndex) => {
-                // Empty / markup-only reasoning must not leak outside the
-                // process group as a fake "Thinking" message.
-                if (item.type === "reasoning" && !hasProcessReasoning(item)) {
-                  return null;
-                }
-
-                if (isTurnProcessSourceItem(item, finalAgentSourceIds)) {
-                  if (itemIndex !== firstProcessIndex) {
-                    return null;
-                  }
-
-                  return processGroup;
-                }
-
-                if (item.type === "agentMessage") {
-                  if (
-                    hidesDurableFinalWhileStreaming ||
-                    !finalAgentMessage ||
-                    !finalAgentMessage.sourceIds.has(item.id) ||
-                    itemIndex !== finalAgentMessage.insertionIndex
-                  ) {
-                    return null;
-                  }
-
-                  return (
-                    <TranscriptMessage
-                      item={finalAgentMessage.item}
-                      itemLabels={itemLabels}
-                      key={finalAgentMessage.item.id}
-                      locale={locale}
-                    />
-                  );
-                }
-
-                return (
-                  <TranscriptMessage
-                    item={item}
-                    itemLabels={itemLabels}
-                    key={item.id}
-                    locale={locale}
-                  />
-                );
-              })}
-              {shouldShowFailureResponse(turn) ? (
-                <TranscriptFailureMessage
-                  crewonLabel={crewonLabel}
-                  error={turn.error}
+        {rows.map((row, turnIndex) => {
+          if (row.kind === "unassociated") {
+            const item = row.item;
+            const text =
+              item.type === "userMessage"
+                ? item.content
+                    .filter((part) => part.type === "text")
+                    .map((part) => part.text)
+                    .join("\n\n")
+                : item.type === "agentMessage" || item.type === "plan"
+                  ? item.text
+                  : "";
+            return (
+              <section key={`legacy:${item.id}`}>
+                <TranscriptMessage
+                  item={item}
+                  durableMessageId={item.id}
+                  itemLabels={itemLabels}
                   locale={locale}
+                  actions={
+                    <MessageActions
+                      text={text}
+                      locale={locale}
+                      user={item.type === "userMessage"}
+                      userMessageId={
+                        item.type === "userMessage" ? item.id : undefined
+                      }
+                    />
+                  }
                 />
-              ) : null}
-            </section>
+              </section>
+            );
+          }
+          const sourceTurn = turnsById.get(row.runId);
+          if (!sourceTurn) return null;
+          const turn = historyWindow
+            ? transcriptRowTurn(sourceTurn, row)
+            : sourceTurn;
+          if (
+            pendingTeam?.messageId &&
+            turn.items.some(
+              (item) =>
+                item.type === "userMessage" &&
+                item.id === pendingTeam.messageId,
+            )
+          )
+            return null;
+          return (
+            <Fragment key={`${turn.id}:${row.itemIds[0] ?? "active"}`}>
+              <TranscriptTurn
+                turn={turn}
+                turnIndex={turnIndex}
+                locale={locale}
+                itemLabels={itemLabels}
+                crewonLabel={crewonLabel}
+                hasWorkbench={hasWorkbench}
+                shouldShowThinking={
+                  shouldShowThinking && turn.id === lastTurn?.id
+                }
+                hidesDurableFinalWhileStreaming={
+                  Boolean(streamingText) &&
+                  (activeTurnId
+                    ? turn.id === activeTurnId
+                    : turn.id === lastTurn?.id && turn.status === "inProgress")
+                }
+                isLatestResponse={turn.id === latestResponseTurnId}
+              />
+            </Fragment>
           );
         })}
+        {pendingTeam ? (
+          <TranscriptTeamProgress
+            progress={pendingTeam}
+            locale={locale}
+            itemLabels={itemLabels}
+          />
+        ) : null}
+        {!streamingText &&
+        streamingPreview.unavailable &&
+        (activeTurnId || lastTurn?.status === "inProgress") ? (
+          <p className="transcript-streaming-notice" role="status">
+            {locale === "zh"
+              ? "实时预览暂未保留，任务仍在运行。已保存内容可在会话历史中查看。"
+              : "Live preview is not retained. The task is still running; saved content is available in conversation history."}
+          </p>
+        ) : null}
         {streamingText ? (
           <TranscriptStreamingMessage
             crewonLabel={crewonLabel}
             locale={locale}
             streamingText={streamingText}
+            partial={streamingPreview.partial}
           />
         ) : null}
         {shouldShowThinking ? (

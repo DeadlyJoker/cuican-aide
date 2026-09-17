@@ -1,11 +1,48 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  parseProviderCheckpoint,
+  type ProviderCheckpoint,
+} from "@crewon/contracts";
 
 import {
   ExecutionLifecycleError,
   finishRunAttempt,
   startRunAttempt,
+  type RunAttemptProviderCheckpoint,
 } from "./execution-lifecycle.ts";
+
+test("durable attempt checkpoints remain losslessly assignable to the protocol in both directions", () => {
+  const fromProtocol = parseProviderCheckpoint({
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "direct-responses",
+    adapterVersion: "1",
+    modelId: "test-model",
+    opaquePayload: {
+      responseId: "response-1",
+      cursor: [1, null, true, { nested: "原样" }],
+    },
+  });
+  const durable: RunAttemptProviderCheckpoint = fromProtocol;
+  const restored: ProviderCheckpoint = durable;
+  const started = startRunAttempt(null, null, startInput("attempt-1", 1));
+  const completed = finishRunAttempt(
+    started.step,
+    { ...started.attempt, providerCheckpoint: durable },
+    {
+      status: "completed",
+      finishedAt: "2026-08-08T00:00:02Z",
+      checkpointDigest: `sha256:${"a".repeat(64)}`,
+    },
+  );
+  assert.deepEqual(
+    parseProviderCheckpoint(
+      JSON.parse(JSON.stringify(completed.attempt.providerCheckpoint)),
+    ),
+    fromProtocol,
+  );
+  assert.equal(restored, fromProtocol);
+});
 
 test("creates a current model Attempt then completes its Step", () => {
   const started = startRunAttempt(null, null, startInput("attempt-1", 1));

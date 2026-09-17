@@ -4,6 +4,7 @@ import {
   readThreadExecutionTarget,
   readThreadScene,
   shouldResetExecutionTarget,
+  executionTargetCatalogStatus,
   validStoredScene,
   writeThreadExecutionTarget,
   writeThreadScene,
@@ -143,5 +144,44 @@ describe("command workspace execution target state", () => {
         },
       ]
     `);
+  });
+
+  it("waits for the expert catalog on reload, even when the Agent catalog is ready", () => {
+    for (const expertTeamsStatus of [
+      "loading",
+      "unavailable",
+      "ready",
+    ] as const) {
+      const catalogStatus = executionTargetCatalogStatus({
+        executionTarget: "experts:review-team",
+        catalogStatus: "ready",
+        expertTeamsStatus,
+      });
+      expect(
+        shouldResetExecutionTarget({
+          catalogStatus,
+          optionAvailable: false,
+          selectedProviderAgentMatches: true,
+        }),
+      ).toBe(expertTeamsStatus === "ready");
+    }
+    expect(
+      shouldResetExecutionTarget({
+        catalogStatus: executionTargetCatalogStatus({
+          executionTarget: "experts:review-team",
+          catalogStatus: "ready",
+          expertTeamsStatus: "ready",
+        }),
+        optionAvailable: true,
+        selectedProviderAgentMatches: true,
+      }),
+    ).toBe(false);
+    expect(
+      executionTargetCatalogStatus({
+        executionTarget: "crewon",
+        catalogStatus: "ready",
+        expertTeamsStatus: "loading",
+      }),
+    ).toBe("ready");
   });
 });

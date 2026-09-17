@@ -1,3 +1,6 @@
+import { validateAssistantSampleContinuationBody } from "./assistant-sample-continuation.ts";
+import { validateOfficeThreadCreation } from "./office-thread-binding.ts";
+import { ApplicationError, validateThreadListSelection } from "@crewon/application";
 import {
   MESSAGE_ROLES,
   MAX_AUTOMATION_INSTRUCTION_BYTES,
@@ -749,90 +752,8 @@ export function validateAssistantSampleContinuationInput(
   if (!Number.isSafeInteger(input.sampleIndex) || input.sampleIndex < 1) {
     throw new RunStoreError("assistant_sample_index_invalid");
   }
-  const history = input.history.items[0];
-  const lastHistory = input.history.items.at(-1);
-  const completed = input.commit.events.at(-1);
-  const completedSegmentId =
-    completed?.type === "segment.provider_continuation"
-      ? completed.data.segmentId
-      : null;
-  const toolEvents = input.commit.events.filter(
-    (event): event is Extract<RunLifecycleEvent, { type: "tool.requested" }> =>
-      event.type === "tool.requested",
-  );
-  const assistantItems = input.history.items.filter(
-    (item): item is Extract<ModelHistoryItem, { type: "message" }> =>
-      item.type === "message",
-  );
-  const toolItems = input.history.items.filter(
-    (item): item is Extract<ModelHistoryItem, { type: "tool_call" }> =>
-      item.type === "tool_call",
-  );
-  if (
-    input.history.items.length === 0 ||
-    input.history.items.some(
-      (item, index) =>
-        (item.type !== "message" && item.type !== "tool_call") ||
-        item.tenantId !== input.commit.tenantId ||
-        item.threadId !== input.modelState.threadId ||
-        item.runId !== runId ||
-        item.segmentId !== completedSegmentId ||
-        item.sequence !== input.history.expectedLastSequence + index + 1,
-    ) ||
-    history?.type !== "message" ||
-    history.role !== "assistant" ||
-    history.source !== "assistant_completion" ||
-    assistantItems.some(
-      (item) =>
-        item.role !== "assistant" || item.source !== "assistant_completion",
-    ) ||
-    toolItems.length !== toolEvents.length ||
-    toolItems.some((item, index) => {
-      const event = toolEvents[index];
-      return (
-        event === undefined ||
-        item.segmentId !== event.data.segmentId ||
-        item.callId !== event.data.callId ||
-        item.kind !== event.data.kind ||
-        item.name !== event.data.name ||
-        item.input !== event.data.input
-      );
-    }) ||
-    input.history.items.some(
-      (item, index) =>
-        item.type === "message" &&
-        input.history.items
-          .slice(0, index)
-          .some((prior) => prior.type === "tool_call"),
-    ) ||
-    history.runId !== runId ||
-    completed?.type !== "segment.provider_continuation" ||
-    completed.data.sampleIndex !== input.sampleIndex ||
-    completed.data.throughHistorySequence !== lastHistory?.sequence ||
-    completed.data.segmentId !== history.segmentId ||
-    input.attempt.finishedAt !== completed.occurredAt ||
-    input.commit.workItems.length !== 0 ||
-    input.modelState.tenantId !== input.commit.tenantId ||
-    input.modelState.threadId !== history.threadId ||
-    input.modelState.throughHistorySequence !== lastHistory?.sequence
-  ) {
-    throw new RunStoreError("assistant_sample_continuation_mismatch");
-  }
+  validateAssistantSampleContinuationBody(input, runId);
   validateThreadModelState(input.modelState);
-  if (
-    input.continuation !== null &&
-    (input.continuation.tenantId !== input.commit.tenantId ||
-      input.continuation.threadId !== history.threadId ||
-      input.continuation.agentVersionId !== input.modelState.agentVersionId ||
-      input.continuation.adapterName !== input.modelState.adapterName ||
-      input.continuation.adapterVersion !== input.modelState.adapterVersion ||
-      input.continuation.modelId !== input.modelState.modelId ||
-      input.continuation.throughHistorySequence !== lastHistory?.sequence ||
-      input.continuation.contextRevision !== input.modelState.contextRevision ||
-      input.continuation.updatedAt !== input.attempt.finishedAt)
-  ) {
-    throw new RunStoreError("assistant_sample_continuation_mismatch");
-  }
   validateRunAttemptMutation(input.commit.tenantId, runId, input.lease, {
     ...input.attempt,
     status: "completed",
@@ -1112,6 +1033,7 @@ function validateRunAttemptMutation(
 }
 
 export function validateThreadCommitInput(input: CommitThreadInput): string {
+  validateOfficeThreadCreation(input);
   requireNonEmpty(input.tenantId, "tenant_id_invalid");
   requireBoundedString(
     input.idempotency.scope,
@@ -2976,6 +2898,12 @@ export function validateThreadScopedLocator(
 }
 
 export function validateThreadListQuery(query: ThreadListQuery): void {
+  try {
+    validateThreadListSelection(query);
+  } catch (error) {
+    if (error instanceof ApplicationError) throw new RunStoreError(error.code);
+    throw error;
+  }
   requireNonEmpty(query.tenantId, "tenant_id_invalid");
   requireNonEmpty(query.spaceId, "space_id_invalid");
   validateLimit(query.limit);

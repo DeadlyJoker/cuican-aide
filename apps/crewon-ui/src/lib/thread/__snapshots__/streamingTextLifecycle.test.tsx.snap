@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`partial streaming preview presentation > shows a clipped Markdown suffix as plain text with an explicit notice 1`] = `
+"<article class="message" data-kind="agentMessage" data-has-icon="false" aria-atomic="false" aria-label="CrewON"><div class="message-body"><div class="message-header"><span class="message-role">CrewON</span><span class="message-type">流式</span></div><p class="transcript-streaming-notice" role="status">仅显示最近的实时内容。已保存内容可在会话历史中查看。</p><pre class="whitespace-pre-wrap break-words [font-family:inherit]">unclosed **Markdown**
+\`\`\`
+&lt;html&gt;😀</pre></div></article>"
+`;
+
+exports[`partial streaming preview presentation > shows reclaimed previews in Command and clears the notice after completion 1`] = `"<p class="transcript-streaming-notice" role="status">Live preview is not retained. The task is still running; saved content is available in conversation history.</p>"`;

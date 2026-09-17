@@ -1,15 +1,8 @@
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { safeStorage } from "electron";
+import { writeDesktopConfigAtomically } from "./desktopConfigFile.ts";
 
 type CredentialKind = "environment" | "keychain" | "none";
 type StoredBinding = {
@@ -101,21 +94,23 @@ export class ProviderCredentialStore {
     if (binding === undefined || !this.#available(binding)) {
       throw new Error("provider_credential_missing");
     }
-    this.#state.activeProviderId = providerId;
-    this.#write();
+    this.#write({ ...this.#state, activeProviderId: providerId });
     await this.#onChange();
     return this.catalog();
   }
 
   async delete(value: unknown) {
     const providerId = parseProviderId(value);
-    this.#state.bindings = this.#state.bindings.filter(
-      (candidate) => candidate.providerId !== providerId,
-    );
-    if (this.#state.activeProviderId === providerId) {
-      this.#state.activeProviderId = null;
-    }
-    this.#write();
+    this.#write({
+      ...this.#state,
+      bindings: this.#state.bindings.filter(
+        (candidate) => candidate.providerId !== providerId,
+      ),
+      activeProviderId:
+        this.#state.activeProviderId === providerId
+          ? null
+          : this.#state.activeProviderId,
+    });
     await this.#onChange();
     return this.catalog();
   }
@@ -162,14 +157,18 @@ export class ProviderCredentialStore {
       environmentVariable,
       encryptedSecret,
     };
-    this.#state.bindings = [
+    const bindings = [
       ...this.#state.bindings.filter(
         (candidate) => candidate.providerId !== providerId,
       ),
       binding,
     ].sort((left, right) => left.providerId.localeCompare(right.providerId));
-    if (value.activate === true) this.#state.activeProviderId = providerId;
-    this.#write();
+    this.#write({
+      ...this.#state,
+      bindings,
+      activeProviderId:
+        value.activate === true ? providerId : this.#state.activeProviderId,
+    });
     await this.#onChange();
     return this.catalog();
   }
@@ -238,14 +237,9 @@ export class ProviderCredentialStore {
     };
   }
 
-  #write(): void {
-    const temporary = `${this.#path}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(this.#state)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    });
-    chmodSync(temporary, 0o600);
-    renameSync(temporary, this.#path);
+  #write(state: StoredCatalog): void {
+    writeDesktopConfigAtomically(this.#path, `${JSON.stringify(state)}\n`);
+    this.#state = state;
   }
 }
 
