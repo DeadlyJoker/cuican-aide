@@ -1,3 +1,4 @@
+import { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import { SqliteModelPricingStore } from "./sqlite-model-pricing-store.ts";
 import {
   encodeSqliteModelHistoryItem,
@@ -652,6 +653,16 @@ export class SqliteRunStore implements DomainStore {
   readonly #officeAuthority: SqliteOfficeStore;
   readonly #officeThreads: SqliteOfficeThreadStore;
   #closed = false;
+
+  /** Plugin migrations and admission are opt-in; ordinary task creation stays unchanged. */
+  extensionStore(): SqliteExtensionStore {
+    this.#assertOpen();
+    return new SqliteExtensionStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      commitRunWithinTransaction: (input) =>
+        this.#commitRun(input, null, null, { withinTransaction: true }),
+    });
+  }
 
   workflowVersionStore(
     digester: WorkflowContentDigester,

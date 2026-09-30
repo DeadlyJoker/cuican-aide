@@ -36,3 +36,5 @@ export * from "./workflow-version.ts";
 export * from "./workflow-version-codec.ts";
 export * from "./provider-continuation-budget.ts";
 export * from "./model-spending.ts";
+export * from "./extension-configuration.ts";
+export * from "./extension-run-binding.ts";

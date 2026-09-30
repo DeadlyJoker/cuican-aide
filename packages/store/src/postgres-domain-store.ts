@@ -1,3 +1,4 @@
+import { PostgresExtensionStore } from "./postgres-extension-store.ts";
 import {
   RunStoreError,
   type ActivateAgentVersionReleaseResult,
@@ -169,6 +170,15 @@ export class PostgresDomainStore
       this.pool,
       this.schemaSql(),
     );
+  }
+
+  extensionStore(): PostgresExtensionStore {
+    this.assertOpen();
+    return new PostgresExtensionStore(this.pool, this.schema, {
+      assertOpen: () => this.assertOpen(),
+      commitRunWithinTransaction: (client, input) =>
+        this.commitRunWithin(client, input),
+    });
   }
 
   workflowVersionStore(
