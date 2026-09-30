@@ -91,3 +91,4 @@ export type { RunExecutionProgressStore, RunExecutionProgressScope, RunExecution
 export { RunExecutionProgress } from "./run-execution-progress.ts";
 export { loadRunExecutionProgress, type RunProgressLoadControl, type RunProgressLoadResult } from "./run-execution-progress-loader.ts";
 export * from "./model-spending-store-port.ts";
+export * from "./external-operation-store-port.ts";

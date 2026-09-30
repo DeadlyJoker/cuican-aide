@@ -26,3 +26,5 @@ export * from "./filesystem-storage-admission.ts";
 export * from "./workflow-version-store.ts";
 export * from "./workflow-execution-store.ts";
 export { SQLITE_SCHEMA_VERSION } from "./sqlite-schema.ts";
+export * from "./sqlite-external-operation-store.ts";
+export * from "./postgres-external-operation-store.ts";
