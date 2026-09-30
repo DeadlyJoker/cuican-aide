@@ -127,6 +127,20 @@ export type ModelProviderSettingsAuthorizationResource = Readonly<{
   spaceId: string;
 }>;
 
+export type ExtensionAuthorizationAction =
+  | "extension:read"
+  | "extension:configure"
+  | "extension:activate"
+  | "extension:run"
+  | "extension:query";
+
+export type ExtensionAuthorizationResource = Readonly<{
+  kind: "extension";
+  tenantId: string;
+  spaceId: string;
+  pluginId: string;
+}>;
+
 export type AuthorizationAction =
   | RunAuthorizationAction
   | ThreadAuthorizationAction
@@ -136,6 +150,7 @@ export type AuthorizationAction =
   | OfficeAuthorizationAction
   | ArtifactAuthorizationAction
   | KnowledgeAuthorizationAction
+  | ExtensionAuthorizationAction
   | ModelProviderSettingsAuthorizationAction;
 
 export type AuthorizationResource =
@@ -147,6 +162,7 @@ export type AuthorizationResource =
   | OfficeAuthorizationResource
   | ArtifactAuthorizationResource
   | KnowledgeAuthorizationResource
+  | ExtensionAuthorizationResource
   | ModelProviderSettingsAuthorizationResource;
 
 export type AuthorizationDecision =

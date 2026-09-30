@@ -893,6 +893,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/extensions/{pluginId}/configuration": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getExtensionConfiguration"];
+    put: operations["saveExtensionConfiguration"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/extensions/{pluginId}/activation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getExtensionActivation"];
+    put: operations["setExtensionActivation"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2181,6 +2213,92 @@ export interface components {
     BindOfficeThreadRequest: {
       threadId: string;
       expectedRevision: number;
+    };
+    ExtensionCredentialReference: {
+      slotId: string;
+      credentialBindingId: string;
+    };
+    SaveExtensionConfigurationRequest: {
+      pluginVersion: string;
+      expectedRevision: number;
+      /** @description Non-secret JSON validated against the exact plugin configuration schema. Total canonical size <=16KiB, depth <=24, nodes <=8192, and nested objects <=256 properties. Secret values belong in credential bindings, not parameters. */
+      parameters: {
+        [key: string]: unknown;
+      };
+      /** @description Scoped credential references only; secret values are never accepted. */
+      credentialBindings: components["schemas"]["ExtensionCredentialReference"][];
+    };
+    /** @description enabled requires an explicit deployed crewonKernel AgentVersion; disabled/revoked require a null agentVersionId. No default Agent is changed. */
+    SetExtensionActivationRequest: {
+      configurationRevision: number;
+      expectedRevision: number;
+      /** @enum {string} */
+      state: "enabled" | "disabled" | "revoked";
+      agentVersionId: string | null;
+    };
+    ExtensionExecutionTarget: {
+      /** @constant */
+      executionAuthority: "crewonKernel";
+      agentVersionId: string;
+      agentVersionContentDigest: string;
+      materializationDigest: string;
+      authorityId: string;
+      runtimeGeneration: string;
+      policySnapshotId: string;
+      workspaceBindingId: string | null;
+    };
+    ExtensionConfiguration: {
+      /** @constant */
+      schemaVersion: "crewon.extension-configuration.v0";
+      tenantId: string;
+      spaceId: string;
+      pluginId: string;
+      revision: number;
+      pluginVersion: string;
+      manifestDigest: string;
+      implementationDigest: string;
+      /** @description Non-secret JSON validated against the exact plugin configuration schema. Total canonical size <=16KiB, depth <=24, nodes <=8192, and nested objects <=256 properties. Secret values belong in credential bindings, not parameters. */
+      parameters: {
+        [key: string]: unknown;
+      };
+      /** @description Scoped credential references only; secret values are never accepted. */
+      credentialBindings: components["schemas"]["ExtensionCredentialReference"][];
+      createdByActorId: string;
+      /** Format: date-time */
+      createdAt: string;
+      contentDigest: string;
+    };
+    ExtensionActivation: {
+      /** @constant */
+      schemaVersion: "crewon.extension-activation.v0";
+      tenantId: string;
+      spaceId: string;
+      pluginId: string;
+      revision: number;
+      configurationRevision: number;
+      configurationDigest: string;
+      /** @enum {string} */
+      state: "enabled" | "disabled" | "revoked";
+      target: components["schemas"]["ExtensionExecutionTarget"] | null;
+      updatedByActorId: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    GetExtensionConfigurationResponse: {
+      configuration: components["schemas"]["ExtensionConfiguration"] | null;
+    };
+    ExtensionConfigurationMutationResponse: {
+      /** @enum {string} */
+      disposition: "created" | "replayed";
+      configuration: components["schemas"]["ExtensionConfiguration"];
+    };
+    GetExtensionActivationResponse: {
+      activation: components["schemas"]["ExtensionActivation"] | null;
+    };
+    ExtensionActivationMutationResponse: {
+      /** @enum {string} */
+      disposition: "updated" | "replayed";
+      activation: components["schemas"]["ExtensionActivation"];
     };
   };
   responses: {
@@ -4411,6 +4529,137 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["OfficeThreadMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getExtensionConfiguration: {
+    parameters: {
+      query?: {
+        /** @description Omit for the latest saved revision. Saving does not activate it. */
+        revision?: number;
+      };
+      header?: never;
+      path: {
+        pluginId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Extension configuration state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetExtensionConfigurationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  saveExtensionConfiguration: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        pluginId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SaveExtensionConfigurationRequest"];
+      };
+    };
+    responses: {
+      /** @description Extension configuration state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExtensionConfigurationMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getExtensionActivation: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pluginId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Extension configuration state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetExtensionActivationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  setExtensionActivation: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        pluginId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetExtensionActivationRequest"];
+      };
+    };
+    responses: {
+      /** @description Extension configuration state */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExtensionActivationMutationResponse"];
         };
       };
       400: components["responses"]["Error"];

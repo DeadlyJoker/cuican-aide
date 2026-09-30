@@ -233,3 +233,50 @@ export function parseExtensionTaskReceipt(
     throw new Error("extension_task_receipt_invalid");
   return { run: { ...value.run, disposition: "replayed" }, binding };
 }
+
+export function parseExtensionConfigurationReceipt(
+  input: unknown,
+  scope: ExtensionScope,
+  receipt: ExtensionMutationReceipt,
+) {
+  const configuration = parseExtensionConfiguration(
+    input,
+    extensionStoreDigester,
+  );
+  assertReceiptIdentity(
+    configuration,
+    configuration.createdByActorId,
+    scope,
+    receipt,
+  );
+  return configuration;
+}
+
+export function parseExtensionActivationReceipt(
+  input: unknown,
+  scope: ExtensionScope,
+  receipt: ExtensionMutationReceipt,
+) {
+  const activation = parseExtensionActivation(input);
+  assertReceiptIdentity(
+    activation,
+    activation.updatedByActorId,
+    scope,
+    receipt,
+  );
+  return activation;
+}
+
+function assertReceiptIdentity(
+  value: ExtensionScope,
+  actorId: string,
+  scope: ExtensionScope,
+  receipt: ExtensionMutationReceipt,
+) {
+  if (
+    actorId !== receipt.actorId ||
+    extensionCanonicalJson(extensionScopeValues(value)) !==
+      extensionCanonicalJson(extensionScopeValues(scope))
+  )
+    throw new Error("extension_mutation_receipt_invalid");
+}

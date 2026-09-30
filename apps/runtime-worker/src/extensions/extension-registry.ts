@@ -107,6 +107,9 @@ export function createExtensionRegistry(
   );
   return Object.freeze({
     list: () => registrations,
+    resolve: (
+      identity: Readonly<{ pluginId: string; pluginVersion: string }>,
+    ) => byVersion.get(key(identity.pluginId, identity.pluginVersion)) ?? null,
     failures: () => diagnostics,
     require: (
       identity: Readonly<{

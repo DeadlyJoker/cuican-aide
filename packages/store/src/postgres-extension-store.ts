@@ -28,6 +28,8 @@ import {
   extensionStoreDigester,
   extensionTaskCommit,
   parseExtensionTaskReceipt,
+  parseExtensionConfigurationReceipt,
+  parseExtensionActivationReceipt,
   validateActivationSave,
   validateConfigurationSave,
   validateExtensionReceipt,
@@ -158,6 +160,34 @@ export class PostgresExtensionStore implements ExtensionStore {
   async loadLatestExtensionConfiguration(input: ExtensionScope) {
     this.#host.assertOpen();
     return this.#latest(this.#pool, input);
+  }
+  async loadExtensionConfigurationReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ) {
+    this.#host.assertOpen();
+    const value = await this.#receipt(
+      this.#pool,
+      input,
+      "configuration",
+      input.receipt,
+    );
+    return value === null
+      ? null
+      : parseExtensionConfigurationReceipt(value, input, input.receipt);
+  }
+  async loadExtensionActivationReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ) {
+    this.#host.assertOpen();
+    const value = await this.#receipt(
+      this.#pool,
+      input,
+      "activation",
+      input.receipt,
+    );
+    return value === null
+      ? null
+      : parseExtensionActivationReceipt(value, input, input.receipt);
   }
   async loadExtensionActivation(input: ExtensionScope) {
     this.#host.assertOpen();

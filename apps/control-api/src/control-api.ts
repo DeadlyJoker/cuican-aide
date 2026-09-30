@@ -2,6 +2,8 @@ import { wakeOutbox, type OutboxWakeupPort } from "./outbox-wakeup.ts";
 export type { OutboxWakeupPort } from "./outbox-wakeup.ts";
 import { registerModelPricingRoutes } from "./model-pricing-route.ts";
 import { registerModelSpendingRoutes } from "./model-spending-route.ts";
+import { registerExtensionConfigurationRoutes } from "./extension-configuration-route.ts";
+import type { ExtensionConfigurationApplicationService } from "@crewon/application";
 import type { ModelSpendingApplicationService } from "@crewon/application";
 import type { ModelPricingApplicationService } from "@crewon/application";
 import type { OfficeThreadApplicationService } from "@crewon/application";
@@ -219,6 +221,7 @@ import type {
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
+  extensions?: ExtensionConfigurationApplicationService | null;
   officeThreads?: OfficeThreadApplicationService | null;
   threads: ThreadApplicationService;
   taskChanges: ThreadTaskChangeQueryService;
@@ -338,6 +341,12 @@ export function buildControlApi(
 
   registerModelPricingRoutes(app, dependencies);
   registerModelSpendingRoutes(app, dependencies);
+  if (dependencies.extensions != null) {
+    registerExtensionConfigurationRoutes(app, {
+      identity: dependencies.identity,
+      extensions: dependencies.extensions,
+    });
+  }
 
   app.get("/api/v1/model-provider-settings", async (request) => {
     const actor = await dependencies.identity.resolveActor(

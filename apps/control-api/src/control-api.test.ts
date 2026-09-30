@@ -112,6 +112,19 @@ const SESSION_TOKEN = "session-token-32-bytes-minimum-0001";
 const CSRF_TOKEN = "csrf-token-32-bytes-minimum-value-1";
 const ORIGIN = "http://127.0.0.1:5175";
 
+test("keeps plugin configuration routes absent without explicit extension composition", async (context) => {
+  const { app } = await testRuntime(context);
+  for (const kind of ["configuration", "activation"]) {
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/extensions/crewon.comfyui-krea2/${kind}`,
+      headers: readHeaders(),
+    });
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().error.code, "route_not_found");
+  }
+});
+
 test("returns Git details from diff routes and the global summary", async (context) => {
   const expected = {
     cwd: "/workspace" as const,

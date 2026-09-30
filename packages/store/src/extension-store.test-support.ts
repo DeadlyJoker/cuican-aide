@@ -231,7 +231,7 @@ export async function extensionFixture(
     sqlDb !== null
       ? new SqliteExternalOperationStore(sqlDb)
       : new PostgresExternalOperationStore(sqlPool!, schema);
-  const seed = async () => {
+  const seedDeployment = async () => {
     await first.parent.registerAgentVersion({
       schemaVersion: "crewon.agent-version-asset.v0",
       tenantId: scope.tenantId,
@@ -251,6 +251,9 @@ export async function extensionFixture(
       activation: releaseActivation(bundle, "release-1", null),
       expectedActiveReleaseId: null,
     });
+  };
+  const seed = async () => {
+    await seedDeployment();
     await first.store.saveExtensionConfiguration({
       configuration: configuration(),
       expectedRevision: 0,
@@ -288,6 +291,7 @@ export async function extensionFixture(
     second,
     open,
     seed,
+    seedDeployment,
     prepare,
     operations,
     count,

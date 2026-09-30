@@ -76,6 +76,20 @@ test("retains historical versions and requires the exact adapter implementation 
   const registered = registry.list()[0]!;
   assert.equal(registry.list().length, 2);
   assert.equal(
+    registry.resolve({
+      pluginId: registered.manifest.pluginId,
+      pluginVersion: registered.manifest.version,
+    }),
+    registered,
+  );
+  assert.equal(
+    registry.resolve({
+      pluginId: registered.manifest.pluginId,
+      pluginVersion: "9.0.0",
+    }),
+    null,
+  );
+  assert.equal(
     registry.require({
       pluginId: registered.manifest.pluginId,
       version: registered.manifest.version,

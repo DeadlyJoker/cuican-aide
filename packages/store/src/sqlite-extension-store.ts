@@ -28,6 +28,8 @@ import {
   extensionStoreDigester,
   extensionTaskCommit,
   parseExtensionTaskReceipt,
+  parseExtensionConfigurationReceipt,
+  parseExtensionActivationReceipt,
   validateActivationSave,
   validateConfigurationSave,
   validateExtensionReceipt,
@@ -131,6 +133,24 @@ export class SqliteExtensionStore implements ExtensionStore {
   async loadLatestExtensionConfiguration(input: ExtensionScope) {
     this.#host.assertOpen();
     return this.#latest(input);
+  }
+  async loadExtensionConfigurationReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ) {
+    this.#host.assertOpen();
+    const value = this.#receipt(input, "configuration", input.receipt);
+    return value === null
+      ? null
+      : parseExtensionConfigurationReceipt(value, input, input.receipt);
+  }
+  async loadExtensionActivationReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ) {
+    this.#host.assertOpen();
+    const value = this.#receipt(input, "activation", input.receipt);
+    return value === null
+      ? null
+      : parseExtensionActivationReceipt(value, input, input.receipt);
   }
   async loadExtensionActivation(input: ExtensionScope) {
     this.#host.assertOpen();

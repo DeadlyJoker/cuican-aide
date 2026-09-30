@@ -61,11 +61,17 @@ export interface ExtensionStore {
   loadLatestExtensionConfiguration(
     input: ExtensionScope,
   ): Promise<ExtensionConfiguration | null>;
+  loadExtensionConfigurationReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ): Promise<ExtensionConfiguration | null>;
   saveExtensionActivation(
     input: SaveExtensionActivationInput,
   ): Promise<SaveExtensionActivationResult>;
   loadExtensionActivation(
     input: ExtensionScope,
+  ): Promise<ExtensionActivation | null>;
+  loadExtensionActivationReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
   ): Promise<ExtensionActivation | null>;
   commitExtensionRun(
     input: CommitExtensionRunInput,

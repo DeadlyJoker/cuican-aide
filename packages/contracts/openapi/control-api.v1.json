@@ -3298,6 +3298,251 @@
           }
         }
       }
+    },
+    "/api/v1/extensions/{pluginId}/configuration": {
+      "get": {
+        "operationId": "getExtensionConfiguration",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "description": "Omit for the latest saved revision. Saving does not activate it."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Extension configuration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetExtensionConfigurationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "saveExtensionConfiguration",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveExtensionConfigurationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Extension configuration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionConfigurationMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/extensions/{pluginId}/activation": {
+      "get": {
+        "operationId": "getExtensionActivation",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Extension configuration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetExtensionActivationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "setExtensionActivation",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetExtensionActivationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Extension configuration state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionActivationMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8157,6 +8402,397 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 9007199254740991
+          }
+        }
+      },
+      "ExtensionCredentialReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slotId", "credentialBindingId"],
+        "properties": {
+          "slotId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 24,
+            "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+          },
+          "credentialBindingId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "SaveExtensionConfigurationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pluginVersion",
+          "expectedRevision",
+          "parameters",
+          "credentialBindings"
+        ],
+        "properties": {
+          "pluginVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "parameters": {
+            "type": "object",
+            "maxProperties": 256,
+            "additionalProperties": true,
+            "description": "Non-secret JSON validated against the exact plugin configuration schema. Total canonical size <=16KiB, depth <=24, nodes <=8192, and nested objects <=256 properties. Secret values belong in credential bindings, not parameters."
+          },
+          "credentialBindings": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/ExtensionCredentialReference"
+            },
+            "description": "Scoped credential references only; secret values are never accepted."
+          }
+        }
+      },
+      "SetExtensionActivationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "configurationRevision",
+          "expectedRevision",
+          "state",
+          "agentVersionId"
+        ],
+        "properties": {
+          "configurationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "state": {
+            "type": "string",
+            "enum": ["enabled", "disabled", "revoked"]
+          },
+          "agentVersionId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "enabled requires an explicit deployed crewonKernel AgentVersion; disabled/revoked require a null agentVersionId. No default Agent is changed."
+      },
+      "ExtensionExecutionTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "executionAuthority",
+          "agentVersionId",
+          "agentVersionContentDigest",
+          "materializationDigest",
+          "authorityId",
+          "runtimeGeneration",
+          "policySnapshotId",
+          "workspaceBindingId"
+        ],
+        "properties": {
+          "executionAuthority": {
+            "type": "string",
+            "const": "crewonKernel"
+          },
+          "agentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "agentVersionContentDigest": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 71,
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "materializationDigest": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 71,
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "authorityId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "runtimeGeneration": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "policySnapshotId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "workspaceBindingId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ExtensionConfiguration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "tenantId",
+          "spaceId",
+          "pluginId",
+          "revision",
+          "pluginVersion",
+          "manifestDigest",
+          "implementationDigest",
+          "parameters",
+          "credentialBindings",
+          "createdByActorId",
+          "createdAt",
+          "contentDigest"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.extension-configuration.v0"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "spaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "pluginVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "manifestDigest": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 71,
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "implementationDigest": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 71,
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "parameters": {
+            "type": "object",
+            "maxProperties": 256,
+            "additionalProperties": true,
+            "description": "Non-secret JSON validated against the exact plugin configuration schema. Total canonical size <=16KiB, depth <=24, nodes <=8192, and nested objects <=256 properties. Secret values belong in credential bindings, not parameters."
+          },
+          "credentialBindings": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "$ref": "#/components/schemas/ExtensionCredentialReference"
+            },
+            "description": "Scoped credential references only; secret values are never accepted."
+          },
+          "createdByActorId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "contentDigest": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 71,
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "ExtensionActivation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "tenantId",
+          "spaceId",
+          "pluginId",
+          "revision",
+          "configurationRevision",
+          "configurationDigest",
+          "state",
+          "target",
+          "updatedByActorId",
+          "updatedAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.extension-activation.v0"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "spaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "configurationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "configurationDigest": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 71,
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["enabled", "disabled", "revoked"]
+          },
+          "target": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExtensionExecutionTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedByActorId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GetExtensionConfigurationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["configuration"],
+        "properties": {
+          "configuration": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExtensionConfiguration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ExtensionConfigurationMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "configuration"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["created", "replayed"]
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/ExtensionConfiguration"
+          }
+        }
+      },
+      "GetExtensionActivationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["activation"],
+        "properties": {
+          "activation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExtensionActivation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ExtensionActivationMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "activation"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["updated", "replayed"]
+          },
+          "activation": {
+            "$ref": "#/components/schemas/ExtensionActivation"
           }
         }
       }
