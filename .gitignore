@@ -8,6 +8,7 @@ node_modules
 !pnpm-lock.yaml
 
 # build
+/output/extensions/
 dist/
 build/
 out/

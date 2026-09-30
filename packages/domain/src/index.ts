@@ -2,6 +2,7 @@ export * from "./model-token-pricing.ts";
 export * from "./model-call-report.ts";
 export * from "./model-call-observation.ts";
 export * from "./execution-lifecycle.ts";
+export * from "./extension-manifest.ts";
 export * from "./artifact.ts";
 export * from "./automation.ts";
 export * from "./knowledge.ts";
