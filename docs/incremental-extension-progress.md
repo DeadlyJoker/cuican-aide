@@ -56,15 +56,15 @@
 
 ## 阶段状态与下一步
 
-| 阶段                 | 当前证据                                                                               |
-| -------------------- | -------------------------------------------------------------------------------------- |
-| E0 接入验证          | ComfyUI 真实 API 链路已通过；CrewON 的实际模型路由与插件执行准入仍需验证               |
-| E1 契约与注册        | 声明、校验、静态注册及单元测试已实现；生产组合与 Control 可用状态投影未接线            |
-| E2 配置与绑定        | 已实现外部任务回执及 SQLite/PostgreSQL 存储；配置、激活与 Run 原子绑定未接线           |
-| E3 Agent / Tool 闭环 | ToolRuntime、持久化恢复与 CrewON Worker 集成测试已通过；实际模型与生产配置装配尚未接通 |
-| E4 UI / E5 第二业务  | 尚未实施；遵循用户指示，产品形态细化放在调用链路完成之后                               |
+| 阶段                 | 当前证据                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| E0 接入验证          | 真实 ComfyUI API 与独立发布的 crewonKernel 模型路径已通过；产品准入接线见 E2         |
+| E1 契约与注册        | 声明、校验、静态注册及单元测试已实现；生产组合与 Control 可用状态投影未接线          |
+| E2 配置与绑定        | 已实现外部任务回执及 SQLite/PostgreSQL 存储；配置、激活与 Run 原子绑定未接线         |
+| E3 Agent / Tool 闭环 | 实际模型经 CrewON Worker 提交、进程重启恢复并返回图片已验证；生产插件配置装配仍待 E2 |
+| E4 UI / E5 第二业务  | 尚未实施；遵循用户指示，产品形态细化放在调用链路完成之后                             |
 
-继续顺序：将真实 ComfyUI 适配器接入最小插件注册和 crewonKernel 工具执行路径；按原方案增加配置、Run 绑定及外部任务的持久化关联，验证真实 Agent 到图片的全链路与中断恢复。这个过程保留现有聊天和团队路径。
+继续顺序：在已验证的真实 Agent 生图链路上，增加配置与启停、Run 原子绑定、按 AgentVersion 的插件装配及正式任务准入。这个过程保留现有聊天和团队路径。
 
 ## 2026-09-30：持久化 Tool 执行与 Worker 恢复
 
@@ -97,6 +97,55 @@
 当前 Comfy 工具实例按 Run 隔离，而生产 AgentVersion runtime 由多个 Run 共享。应先增加宿主从持久化 Run 绑定解析插件版本/配置的适配层，再将其纳入 AgentVersion materialization 摘要和组合工厂；不能直接把一个 Run 的工具实例挂给所有 Run。
 
 剩余工作包括配置快照、激活权限、Run 创建时的原子关联、注册声明与可执行适配器一致性、实际模型路由调用，以及跨模型流恢复的验证。产品形态细化仍放在真实流程验收之后。
+
+## 2026-09-30：真实模型经 CrewON Worker 生图与跨进程恢复
+
+实际执行了“用户描述 → 真实模型工具调用 → CrewON Worker → ComfyUI → 图片链接返回”。配置模型为 `gpt-5.5`，复用已有开发环境的 Responses 路由与凭据配置；没有复制或输出密钥，也没有修改原开发数据库和默认 Agent。
+
+### 执行证据
+
+- 在 `output/extensions/comfyui/real-agent/control.sqlite` 中通过现有发布流程发布并激活独立 AgentVersion，然后通过现有 Thread / Run 用例创建任务。
+- 第一个 Node 进程中，真实模型自行请求 `crewon_comfyui_krea2__submit`。ComfyUI 受理并保存外部回执后，通过 Worker 的测试钩子在宿主工具回执提交前中断本次执行。
+- 第二个 Node 进程用 `--resume` 打开同一数据库、同一 Run 和同一 AgentVersion，恢复既有提交回执。真实模型继续调用 `crewon_comfyui_krea2__observe`，取得成功结果，并以 Markdown 图片链接结束任务。
+- HTTP 调用审计累计只有 **1 个 POST /prompt**。最终 Run 为 completed，外部操作为 succeeded；没有重新生成。
+- 图片 GET 返回 200，PNG 签名、768×1368 尺寸和 SHA-256 已验证，目视内容为窗边木桌上的白色陶瓷茶壶与绿叶，符合输入描述。
+- 以第一个进程结束时的事件游标 6 续读，取得后续 121 条事件，最后序号 127，包含恢复后的工具结果和模型流式输出。
+
+| 项目                    | 值                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------- |
+| Run                     | `5e7d22c9-4629-4984-a37a-5c6b36a4e2a4`                                              |
+| AgentVersion            | `comfy-agent-5e7d22c9-4629-4984-a37a-5c6b36a4e2a4`                                  |
+| AgentVersion 内容摘要   | `sha256:b39e429cac880bc260ae0ef723ed084afc21ea094aa3faedde0cbb96ca617588`           |
+| 外部任务                | `0e46520c-fe54-1065-e1a9-cdab63f63bd1`                                              |
+| 图片 bytes              | `1267632`                                                                           |
+| 图片 SHA-256            | `0878b563bf13885745d89ad1e46841ecda8bb321db2131771940cc23a5a149fe`                  |
+| 首次/恢复证据           | `output/extensions/comfyui/real-agent/first-evidence.json`、`resumed-evidence.json` |
+| 请求审计/文件与事件核验 | 同目录 `comfy-http.jsonl`、`verification.json`                                      |
+| 图片                    | 同目录 `image-1.png`                                                                |
+
+### 复现真实 Agent 流程
+
+新增 [真实 Agent 联调脚本](../scripts/comfyui-agent-flow-smoke.mjs)，使用 Node.js 24，调用现有发布、线程、Run、Worker 和 DirectResponsesTransport。它不是第二套 Agent 引擎，也不是正式的插件配置/任务准入 API。
+
+```sh
+node --experimental-strip-types scripts/comfyui-agent-flow-smoke.mjs \
+  --output-dir output/extensions/comfyui/new-agent-run \
+  --base-url 'https://YOUR-COMFYUI-SERVICE/' \
+  --model-endpoint 'https://YOUR-MODEL-PROVIDER/v1/responses' \
+  --model-id 'YOUR-MODEL' \
+  --api-key-environment CREWON_MODEL_API_KEY \
+  --env-file '/absolute/path/to/your/local.env' \
+  --pause-after-submit \
+  --prompt '请生成一张写实照片：清晨窗边木桌上的白色陶瓷茶壶和绿叶。'
+
+node --experimental-strip-types scripts/comfyui-agent-flow-smoke.mjs \
+  --output-dir output/extensions/comfyui/new-agent-run \
+  --env-file '/absolute/path/to/your/local.env' --resume
+```
+
+默认 request profile 为现有开发服务所用的 `responsesLite`；标准 Responses 服务可显式传 `--request-profile standard`。首次运行目录中已有快照或数据库时拒绝再次创建；resume 拒绝传入新提示词或替换模型/服务参数，并验证保存快照和适配器源码摘要。对应的重复启动、参数替换和实现漂移防护已实测拒绝，HTTP 审计没有新增请求。完成后的第三次 resume 返回已保存结果；127 条事件、消息及外部回执均未改变，未产生新的生成提交，证据为同目录 `replay-evidence.json`。
+
+**完成范围：真实调用流程与跨进程恢复已经验证。** 当前仍在隔离的诊断环境：固定一个 Run 的宿主绑定写在诊断快照中，尚未替代 E2 要求的工作空间配置、启停/撤销、Run 原子绑定和生产组合工厂，也尚未从产品界面发起。完整目标保持进行中。
 
 ### 复现诊断
 
