@@ -22,6 +22,8 @@ import type {
   ExtensionConfigurationMutationResponse,
   ExtensionRuntimeResponse,
   ExtensionTaskMutationResponse,
+  GetExtensionActivationResponse,
+  GetExtensionConfigurationResponse,
   GetExtensionTaskResponse,
   StartTurnResponse,
   ThreadMutationResponse,
@@ -43,6 +45,7 @@ import {
 import {
   eventually,
   instrumentUpgradeFixtureNetwork,
+  upgradeAuthoritySnapshot,
   upgradeDefaultText,
   upgradeDigester,
   upgradeJson,
@@ -61,6 +64,7 @@ const observed = vi.hoisted(() => ({
     child: ChildProcess;
     historical: boolean;
     peers: boolean;
+    pluginInputs: boolean;
   }[],
   credentialReads: 0,
 }));
@@ -94,6 +98,10 @@ vi.mock("node:child_process", async (importOriginal) => {
           options?.env?.CREWON_EXTENSION_EXECUTION_MODE === "historical",
         peers:
           options?.env?.CREWON_EXTENSION_HISTORICAL_HOSTS_JSON !== undefined,
+        pluginInputs:
+          options?.env?.CREWON_EXTENSION_RUNTIME_BINDINGS_PATH !== undefined ||
+          options?.env?.CREWON_EXTENSION_AGENT_VERSION_ASSETS_PATH !==
+            undefined,
       });
       return child;
     },
@@ -248,12 +256,20 @@ it("actual Native automatically restores an archived historical build across a g
       );
     };
     const oldConfiguration = await save(session, 0, "before-config");
-    writeUpgradePlugin(
+    const oldOperatorInputs = writeUpgradePlugin(
       dataRoot,
       oldAgent,
       oldConfiguration,
       providers.endpoint,
     );
+    const oldDesktopConfigurationBytes = readFileSync(
+      oldOperatorInputs.desktopConfigurationPath,
+    );
+    const operatorFiles = [
+      oldOperatorInputs.snapshotPath,
+      oldOperatorInputs.runtimeBindingsPath,
+      oldOperatorInputs.agentVersionAssetsPath,
+    ].map((path) => ({ path, bytes: readFileSync(path) }));
     await first.restart();
     expect(first.session()).toEqual(session);
     const activate = async (
@@ -326,9 +342,8 @@ it("actual Native automatically restores an archived historical build across a g
     expect(oldView.body.task.operations).toHaveLength(1);
     expect(oldView.body.task.operations[0]!.status).toBe("submitted");
     const operationId = oldView.body.task.operations[0]!.operationId;
-    expect(upgradeRunBinding(dataRoot, oldTask.body.runId).target).toEqual(
-      oldTarget,
-    );
+    const originalBinding = upgradeRunBinding(dataRoot, oldTask.body.runId);
+    expect(originalBinding.target).toEqual(oldTarget);
     expect(Object.keys(oldTarget)).toHaveLength(8);
     const firstInventory = await listExtensionRecoveryCapsules({ dataRoot });
     expect(firstInventory.unavailable).toEqual([]);
@@ -340,6 +355,18 @@ it("actual Native automatically restores an archived historical build across a g
       path,
       bytes: readFileSync(path),
     }));
+    const authorityInput = {
+      configurationRevision: oldConfiguration.revision,
+      agentVersionId: oldAgent,
+      runId: oldTask.body.runId,
+    };
+    const originalAuthority = upgradeAuthoritySnapshot(
+      dataRoot,
+      authorityInput,
+    );
+    expect(JSON.parse(originalAuthority.activationJson).target).toEqual(
+      oldTarget,
+    );
     await first.stop();
     // The first installed resource tree and its source/dependency workspace are genuinely gone.
     rmSync(before, { recursive: true, force: true });
@@ -347,7 +374,11 @@ it("actual Native automatically restores an archived historical build across a g
     expect(
       providers.comfyRequests.filter((request) => request === "POST /prompt"),
     ).toHaveLength(1);
-    writeUpgradeMetadataConfig(dataRoot);
+    // Keep the operator's A configuration and inputs intact. B must identify and
+    // bridge the completed historical inputs without asking the operator to reset.
+    expect(readFileSync(oldOperatorInputs.desktopConfigurationPath)).toEqual(
+      oldDesktopConfigurationBytes,
+    );
     current = supervisor(after);
     const currentRecordStart = observed.children.length;
     await current.start();
@@ -377,6 +408,137 @@ it("actual Native automatically restores an archived historical build across a g
     );
     expect(credentialRequests).toContainEqual(
       oldCapsule.manifest.providerBinding,
+    );
+    const metadataWorker = observed.children.findLast(
+      (record) =>
+        !record.historical &&
+        record.entry === join(currentBuild.directory, "runtime-worker.mjs") &&
+        live(record.child),
+    );
+    expect(metadataWorker).toBeDefined();
+    expect(metadataWorker!.pluginInputs).toBe(false);
+    expect(readFileSync(oldOperatorInputs.desktopConfigurationPath)).toEqual(
+      oldDesktopConfigurationBytes,
+    );
+    for (const file of operatorFiles)
+      expect(readFileSync(file.path)).toEqual(file.bytes);
+    for (const file of immutable)
+      expect(readFileSync(file.path)).toEqual(file.bytes);
+    expect(upgradeAuthoritySnapshot(dataRoot, authorityInput)).toEqual(
+      originalAuthority,
+    );
+    expect(upgradeRunBinding(dataRoot, oldTask.body.runId)).toEqual(
+      originalBinding,
+    );
+    const preservedTask = await readTask(nextSession, oldTask.body.runId);
+    expect(preservedTask.status).toBe(200);
+    expect(preservedTask.body).toEqual(oldView.body);
+    const preservedConfiguration =
+      await upgradeJson<GetExtensionConfigurationResponse>(
+        nextSession,
+        `${api}/configuration?revision=${oldConfiguration.revision}`,
+      );
+    expect(preservedConfiguration.status).toBe(200);
+    expect(preservedConfiguration.body.configuration).toEqual(oldConfiguration);
+    const preservedActivation =
+      await upgradeJson<GetExtensionActivationResponse>(
+        nextSession,
+        `${api}/activation`,
+      );
+    expect(preservedActivation.status).toBe(200);
+    expect(preservedActivation.body.activation).toEqual(
+      JSON.parse(originalAuthority.activationJson),
+    );
+    const metadataInventory = await listExtensionRecoveryCapsules({ dataRoot });
+    expect(metadataInventory.unavailable).toEqual([]);
+    expect(metadataInventory.capsules.map(({ manifest }) => manifest)).toEqual([
+      oldCapsule.manifest,
+    ]);
+    const defaultThread = await upgradeJson<ThreadMutationResponse>(
+      nextSession,
+      "/api/v1/threads",
+      "POST",
+      {
+        title:
+          "Current metadata default preserves the old operator configuration",
+      },
+      "default-thread",
+    );
+    const turn = await upgradeJson<StartTurnResponse>(
+      nextSession,
+      `/api/v1/threads/${defaultThread.body.thread.threadId}/turns`,
+      "POST",
+      {
+        expectedRevision: defaultThread.body.thread.revision,
+        content: "Use the current default Agent.",
+        agentVersionId: null,
+        executionIntent: "none",
+      },
+      "default-turn",
+    );
+    expect(turn.status, JSON.stringify(turn.body)).toBe(201);
+    expect(await upgradeStream(nextSession, turn.body.run.runId)).toContain(
+      upgradeDefaultText,
+    );
+    expect(providers.modelRequests).toHaveLength(3);
+    expect(
+      providers.comfyRequests.filter((request) => request === "POST /prompt"),
+    ).toHaveLength(1);
+    const oldRuntime = await upgradeJson<ExtensionRuntimeResponse>(
+      nextSession,
+      `${api}/runtime?agentVersionId=${oldAgent}&configurationRevision=${oldConfiguration.revision}`,
+    );
+    expect(oldRuntime.status).toBe(200);
+    expect(oldRuntime.body.readiness.outcome).toBe("unavailable");
+    expect(
+      (
+        await upgradeJson<ExtensionCatalogResponse>(
+          nextSession,
+          "/api/v1/extensions",
+        )
+      ).body,
+    ).toEqual(catalog.body);
+    const queryIntent = {
+      kind: "query",
+      sourceRunId: oldTask.body.runId,
+      operationId,
+    };
+    const query = await task(nextSession, queryIntent, "historical-query");
+    expect(query.status, JSON.stringify(query.body)).toBe(200);
+    const queryFrames = await upgradeStream(nextSession, query.body.runId);
+    expect(queryFrames).toContain("event: run.completed");
+    expect(queryFrames).toContain(upgradeQueryText);
+    const queryBinding = upgradeRunBinding(dataRoot, query.body.runId);
+    expect(queryBinding.target).toEqual(oldTarget);
+    expect(queryBinding.configurationRevision).toBe(oldConfiguration.revision);
+    const observedOld = await readTask(nextSession, oldTask.body.runId);
+    expect(observedOld.body.task.operations[0]!.status).toBe("succeeded");
+    expect(observedOld.body.task.operations[0]!.images[0]!.filename).toBe(
+      "native-fixture.png",
+    );
+    expect(
+      providers.comfyRequests.filter((request) => request === "POST /prompt"),
+    ).toHaveLength(1);
+    expect(
+      providers.comfyRequests.filter((request) =>
+        request.startsWith("GET /history/"),
+      ),
+    ).toHaveLength(1);
+    expect(upgradeAuthoritySnapshot(dataRoot, authorityInput)).toEqual(
+      originalAuthority,
+    );
+    const metadataModelCount = providers.modelRequests.length;
+    const metadataResumed = await upgradeStream(
+      nextSession,
+      query.body.runId,
+      "1",
+    );
+    expect(metadataResumed).toContain(upgradeQueryText);
+    expect(metadataResumed).not.toContain("event: run.created\n");
+    expect(providers.modelRequests).toHaveLength(metadataModelCount);
+    expect(providers.comfyRequests).toHaveLength(2);
+    expect(readFileSync(oldOperatorInputs.desktopConfigurationPath)).toEqual(
+      oldDesktopConfigurationBytes,
     );
     const currentConfiguration = await save(
       nextSession,
@@ -432,6 +594,9 @@ it("actual Native automatically restores an archived historical build across a g
         record.entry === join(currentBuild.directory, "runtime-worker.mjs") &&
         live(record.child),
     )!.child;
+    expect(
+      observed.children.find((record) => record.child === worker)!.pluginInputs,
+    ).toBe(true);
     const currentPid = worker.pid;
     expect(currentPid).toBeDefined();
     const currentTarget = await activate(
@@ -442,46 +607,6 @@ it("actual Native automatically restores an archived historical build across a g
       "current-activate",
     );
     expect(currentTarget).not.toEqual(oldTarget);
-    const oldRuntime = await upgradeJson<ExtensionRuntimeResponse>(
-      nextSession,
-      `${api}/runtime?agentVersionId=${oldAgent}&configurationRevision=${oldConfiguration.revision}`,
-    );
-    expect(oldRuntime.status).toBe(200);
-    expect(oldRuntime.body.readiness.outcome).toBe("unavailable");
-    expect(
-      (
-        await upgradeJson<ExtensionCatalogResponse>(
-          nextSession,
-          "/api/v1/extensions",
-        )
-      ).body,
-    ).toEqual(catalog.body);
-    const queryIntent = {
-      kind: "query",
-      sourceRunId: oldTask.body.runId,
-      operationId,
-    };
-    const query = await task(nextSession, queryIntent, "historical-query");
-    expect(query.status, JSON.stringify(query.body)).toBe(200);
-    const queryFrames = await upgradeStream(nextSession, query.body.runId);
-    expect(queryFrames).toContain("event: run.completed");
-    expect(queryFrames).toContain(upgradeQueryText);
-    const queryBinding = upgradeRunBinding(dataRoot, query.body.runId);
-    expect(queryBinding.target).toEqual(oldTarget);
-    expect(queryBinding.configurationRevision).toBe(oldConfiguration.revision);
-    const observedOld = await readTask(nextSession, oldTask.body.runId);
-    expect(observedOld.body.task.operations[0]!.status).toBe("succeeded");
-    expect(observedOld.body.task.operations[0]!.images[0]!.filename).toBe(
-      "native-fixture.png",
-    );
-    expect(
-      providers.comfyRequests.filter((request) => request === "POST /prompt"),
-    ).toHaveLength(1);
-    expect(
-      providers.comfyRequests.filter((request) =>
-        request.startsWith("GET /history/"),
-      ),
-    ).toHaveLength(1);
     const controlBeforeExit = observed.children.findLast(
       (record) =>
         record.entry === join(currentBuild.directory, "control-api.mjs") &&
@@ -518,6 +643,13 @@ it("actual Native automatically restores an archived historical build across a g
     const resumed = await upgradeStream(nextSession, query.body.runId, "1");
     expect(resumed).toContain(upgradeQueryText);
     expect(resumed).not.toContain("event: run.created\n");
+    const resumedDefault = await upgradeStream(
+      nextSession,
+      turn.body.run.runId,
+      "1",
+    );
+    expect(resumedDefault).toContain(upgradeDefaultText);
+    expect(resumedDefault).not.toContain("event: run.created\n");
     expect(providers.modelRequests).toHaveLength(modelCount);
     expect(
       providers.comfyRequests.filter((request) => request === "POST /prompt"),
@@ -543,29 +675,6 @@ it("actual Native automatically restores an archived historical build across a g
     expect(upgradeRunBinding(dataRoot, newTask.body.runId).target).toEqual(
       currentTarget,
     );
-    const defaultThread = await upgradeJson<ThreadMutationResponse>(
-      nextSession,
-      "/api/v1/threads",
-      "POST",
-      { title: "Current default survives historical exit" },
-      "default-thread",
-    );
-    const turn = await upgradeJson<StartTurnResponse>(
-      nextSession,
-      `/api/v1/threads/${defaultThread.body.thread.threadId}/turns`,
-      "POST",
-      {
-        expectedRevision: defaultThread.body.thread.revision,
-        content: "Use the current default Agent.",
-        agentVersionId: null,
-        executionIntent: "none",
-      },
-      "default-turn",
-    );
-    expect(turn.status, JSON.stringify(turn.body)).toBe(201);
-    expect(await upgradeStream(nextSession, turn.body.run.runId)).toContain(
-      upgradeDefaultText,
-    );
     const finalInventory = await listExtensionRecoveryCapsules({ dataRoot });
     expect(finalInventory.unavailable).toEqual([]);
     expect(finalInventory.capsules).toHaveLength(2);
@@ -583,6 +692,22 @@ it("actual Native automatically restores an archived historical build across a g
     ).toEqual([currentTarget]);
     for (const file of immutable)
       expect(readFileSync(file.path)).toEqual(file.bytes);
+    for (const file of operatorFiles)
+      expect(readFileSync(file.path)).toEqual(file.bytes);
+    const finalAuthority = upgradeAuthoritySnapshot(dataRoot, authorityInput);
+    expect(finalAuthority.configurationJson).toBe(
+      originalAuthority.configurationJson,
+    );
+    expect(finalAuthority.deploymentJson).toBe(
+      originalAuthority.deploymentJson,
+    );
+    expect(finalAuthority.bindingJson).toBe(originalAuthority.bindingJson);
+    expect(upgradeRunBinding(dataRoot, oldTask.body.runId)).toEqual(
+      originalBinding,
+    );
+    expect(JSON.parse(finalAuthority.activationJson).target).toEqual(
+      currentTarget,
+    );
     for (const capsule of finalInventory.capsules as readonly ResolvedExtensionRecoveryCapsule[])
       for (const { path } of capsule.files)
         expect(readFileSync(path, "utf8")).not.toContain(secret);
@@ -602,7 +727,7 @@ it("actual Native automatically restores an archived historical build across a g
       ),
     ).toHaveLength(1);
     console.info(
-      "Native upgrade evidence: 2 genuine seven-bundle builds; model POST=7, Comfy POST=2, history GET=1; query and SSE reconnect add no generation POST; retained old resources deleted; Control-only replacement preserves current Worker PID",
+      "Native upgrade evidence: 2 genuine seven-bundle builds; preserved old operator configuration automatically yields current metadata/default plus archived old query; model POST=7, Comfy POST=2, history GET=1; query and SSE reconnect add no generation POST; old capsule/config/deployment/source binding remain unchanged; retained old resources deleted; Control-only replacement preserves current Worker PID",
     );
   } catch (error) {
     console.error(

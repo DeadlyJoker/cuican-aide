@@ -79,6 +79,13 @@ const boundaries: readonly Boundary[] = [
         "@crewon/contracts",
         "@crewon/domain",
       ],
+      "extension-recovery-inputs.ts": [
+        "node:crypto",
+        "node:fs",
+        "node:path",
+        "@crewon/contracts",
+        "@crewon/domain",
+      ],
       "extension-recovery-startup.ts": [
         "node:fs",
         "node:fs/promises",
@@ -425,6 +432,26 @@ test("AgentVersion Node subpaths cannot become compiler dependencies or acquire 
     manifest.exports["./extension-recovery"],
     "./src/extension-recovery.ts",
   );
+  assert.equal(
+    manifest.exports["./extension-recovery-inputs"],
+    "./src/extension-recovery-inputs.ts",
+  );
+  assert.equal(
+    manifest.exports["./runtime-bindings"],
+    "./src/runtime-binding-schema.ts",
+  );
+  for (const specifier of [
+    "node:crypto",
+    "node:fs",
+    "node:fs/promises",
+    "node:path",
+    "@crewon/contracts",
+    "@crewon/domain",
+  ])
+    assert.equal(
+      boundaryAllowsImport(boundary, "runtime-binding-schema.ts", specifier),
+      false,
+    );
   for (const file of sourceFiles(sourceDirectory)) {
     if (isTestSource(file)) continue;
     const relativeFile = path.relative(sourceDirectory, file);

@@ -234,6 +234,59 @@ export async function resolveRetainedExtensionBuild(
   return projection(directory, snapshot);
 }
 
+/** Inspects only the exact installed seven-entry collection; never retains or executes it. */
+export async function inspectInstalledExtensionRuntimeBuild(
+  input: Readonly<{ directory: string }>,
+): Promise<
+  Readonly<{ implementationDigest: string; buildIdentityDigest: string }>
+> {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input)) ||
+    Reflect.ownKeys(input).length !== 1
+  )
+    fail("extension_installed_build_input_invalid");
+  const value = Object.getOwnPropertyDescriptor(input, "directory");
+  if (!value?.enumerable || !("value" in value))
+    fail("extension_installed_build_input_invalid");
+  const directory = value.value as string;
+  assertPath(directory);
+  const first = await readBuild(directory, undefined, "installed");
+  const expected = [
+    "control-api.mjs",
+    "device-gateway.mjs",
+    "local-workspace-checks-mcp.mjs",
+    "provider-model-catalog.mjs",
+    "provider-settings-coordinator.mjs",
+    "runtime-release.mjs",
+    "runtime-worker.mjs",
+  ];
+  if (
+    first.identity.schemaVersion !== "crewon.extension-build-identity.v1" ||
+    first.identity.historicalWorkItemScope !==
+      "crewon.extension-work-item-scope.v1" ||
+    first.identity.bundles.map(({ file }) => file).join() !== expected.join()
+  )
+    fail("extension_installed_build_identity_invalid");
+  // Re-read the complete pins after collection inspection, including ancestor checks.
+  const checked = await readBuild(
+    directory,
+    first.identity.implementationDigest,
+    "installed",
+  );
+  if (
+    checked.artifactDigest !== first.artifactDigest ||
+    !checked.identityBytes.equals(first.identityBytes)
+  )
+    fail("extension_build_archive_source_changed");
+  await assertDirectory(directory);
+  return Object.freeze({
+    implementationDigest: first.identity.implementationDigest,
+    buildIdentityDigest: first.artifactDigest,
+  });
+}
+
 async function verifyExisting(
   directory: string,
   source: BuildSnapshot,
@@ -273,8 +326,8 @@ function assertSameBuild(expected: BuildSnapshot, actual: BuildSnapshot): void {
 
 async function readBuild(
   directory: string,
-  expected: string,
-  mode: "source" | "retained",
+  expected: string | undefined,
+  mode: "source" | "retained" | "installed",
 ): Promise<BuildSnapshot> {
   await assertDirectory(directory);
   let identityBytes: Buffer;
@@ -282,6 +335,7 @@ async function readBuild(
     identityBytes = await readFileBounded(
       join(directory, IDENTITY_FILE),
       MAX_IDENTITY_BYTES,
+      mode === "installed",
     );
   } catch (error) {
     if (hasCode(error, "ENOENT")) fail("extension_retained_build_incomplete");
@@ -293,7 +347,8 @@ async function readBuild(
     const address = BUILD_DIRECTORY.exec(parse(directory).base);
     if (
       address !== null &&
-      (address[1] !== hex(expected) || address[2] !== hex(artifactDigest))
+      (address[1] !== hex(identity.implementationDigest) ||
+        address[2] !== hex(artifactDigest))
     )
       fail("extension_retained_build_mismatch");
   }
@@ -321,6 +376,7 @@ async function readBuild(
     const bytes = await readFileBounded(
       join(directory, file),
       MAX_BUNDLE_BYTES,
+      mode === "installed",
     );
     totalBytes += bytes.length;
     if (totalBytes > MAX_BUILD_BYTES)
@@ -331,7 +387,11 @@ async function readBuild(
   // Detect replacement or rewritten metadata while the collection was read.
   if (
     hash(
-      await readFileBounded(join(directory, IDENTITY_FILE), MAX_IDENTITY_BYTES),
+      await readFileBounded(
+        join(directory, IDENTITY_FILE),
+        MAX_IDENTITY_BYTES,
+        mode === "installed",
+      ),
     ) !== hash(identityBytes)
   )
     fail("extension_build_archive_source_changed");
@@ -340,7 +400,7 @@ async function readBuild(
 
 function parseIdentity(
   bytes: Buffer,
-  expected: string,
+  expected: string | undefined,
 ): ExtensionBuildIdentity {
   let value: unknown;
   try {
@@ -370,7 +430,7 @@ function parseIdentity(
     value.bundles.length > MAX_BUNDLES
   )
     fail("extension_build_archive_identity_invalid");
-  if (value.implementationDigest !== expected)
+  if (expected !== undefined && value.implementationDigest !== expected)
     fail("extension_build_archive_implementation_mismatch");
   const names = new Set<string>();
   const bundles = value.bundles
@@ -498,9 +558,17 @@ function assertPath(path: string): void {
   )
     fail("extension_build_archive_path_invalid");
 }
-async function readFileBounded(path: string, maximum: number): Promise<Buffer> {
+async function readFileBounded(
+  path: string,
+  maximum: number,
+  rejectHardLinks = false,
+): Promise<Buffer> {
   const before = await lstat(path);
-  if (!before.isFile() || before.isSymbolicLink())
+  if (
+    !before.isFile() ||
+    before.isSymbolicLink() ||
+    (rejectHardLinks && before.nlink !== 1)
+  )
     fail("extension_build_archive_path_invalid");
   if (before.size > maximum) fail("extension_build_archive_limit_exceeded");
   const descriptor = await open(
@@ -511,6 +579,7 @@ async function readFileBounded(path: string, maximum: number): Promise<Buffer> {
     const opened = await descriptor.stat();
     if (
       !opened.isFile() ||
+      (rejectHardLinks && opened.nlink !== 1) ||
       opened.dev !== before.dev ||
       opened.ino !== before.ino ||
       opened.size !== before.size
@@ -537,6 +606,7 @@ async function readFileBounded(path: string, maximum: number): Promise<Buffer> {
       after.ctimeMs !== opened.ctimeMs ||
       !named.isFile() ||
       named.isSymbolicLink() ||
+      (rejectHardLinks && (after.nlink !== 1 || named.nlink !== 1)) ||
       named.dev !== opened.dev ||
       named.ino !== opened.ino
     )

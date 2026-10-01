@@ -1,13 +1,10 @@
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 import {
-  closeSync,
-  constants,
-  fstatSync,
-  lstatSync,
-  openSync,
-  readSync,
-} from "node:fs";
-import { isAbsolute, join, parse, resolve, sep } from "node:path";
+  extensionRecoveryOriginalInputIdentity,
+  extensionRecoverySourcePath as sourcePath,
+  readExtensionRecoverySourceFile as readSource,
+} from "@crewon/agent-version/extension-recovery-inputs";
 import {
   extensionRecoveryDirectory,
   putExtensionRecoveryFile,
@@ -120,16 +117,11 @@ export function inspectExtensionRecoveryInputs(input: {
     snapshots: Object.freeze(snapshots),
   });
   assertSourcesUnchanged(snapshot);
-  const originalInputIdentityDigest = hash(
-    Buffer.from(
-      extensionCanonicalJson({
-        schemaVersion: "crewon.extension-recovery-source.v0",
-        bindings: hash(bindings.bytes),
-        assets: hash(assets.bytes),
-        snapshots: snapshots.map((file) => hash(file.bytes)),
-      }),
-    ),
-  );
+  const originalInputIdentityDigest = extensionRecoveryOriginalInputIdentity({
+    bindings: bindings.bytes,
+    assets: assets.bytes,
+    snapshots: snapshots.map((file) => file.bytes),
+  });
   const token = Object.freeze({
     eligibility: eligibility(snapshot, model),
     originalInputIdentityDigest,
@@ -388,65 +380,6 @@ function assertSourcesUnchanged(source: InspectionSnapshot) {
 }
 function sourceFile(path: string, maximum: number): SourceFile {
   return Object.freeze({ path, maximum, bytes: readSource(path, maximum) });
-}
-function sourcePath(input: string): string {
-  if (
-    typeof input !== "string" ||
-    !isAbsolute(input) ||
-    input !== input.trim() ||
-    Buffer.byteLength(input) > 4096 ||
-    /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(input)
-  )
-    throw new Error("extension_recovery_source_path_invalid");
-  return input;
-}
-function readSource(path: string, maximum: number): Buffer {
-  const absolute = resolve(path);
-  let current = parse(absolute).root;
-  for (const segment of absolute
-    .slice(current.length)
-    .split(sep)
-    .filter(Boolean)
-    .slice(0, -1)) {
-    current = join(current, segment);
-    const metadata = lstatSync(current);
-    if (!metadata.isDirectory() || metadata.isSymbolicLink())
-      throw new Error("extension_recovery_source_path_invalid");
-  }
-  const descriptor = openSync(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-  );
-  try {
-    const before = fstatSync(descriptor);
-    if (!before.isFile() || before.size < 2 || before.size > maximum)
-      throw new Error("extension_recovery_source_size_invalid");
-    const bytes = Buffer.alloc(before.size + 1);
-    let used = 0;
-    while (used < bytes.length) {
-      const count = readSync(
-        descriptor,
-        bytes,
-        used,
-        bytes.length - used,
-        null,
-      );
-      if (count === 0) break;
-      used += count;
-    }
-    const after = fstatSync(descriptor);
-    if (
-      used !== before.size ||
-      before.size !== after.size ||
-      before.mtimeMs !== after.mtimeMs ||
-      before.ctimeMs !== after.ctimeMs
-    )
-      changed();
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, used));
-    return bytes.subarray(0, used);
-  } finally {
-    closeSync(descriptor);
-  }
 }
 function safeModelEndpoint(input: string): string | null {
   try {

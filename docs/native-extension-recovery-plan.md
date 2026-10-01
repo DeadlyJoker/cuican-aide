@@ -36,7 +36,7 @@ API key、session / CSRF / private / probe token、artifact key、数据库连�
 
 已发布输入与本次恢复资格分开处理：当前 default/catalog 或 workspace 变化后，能完整匹配的已保存插件文件仍使用原固定路径，首次有效的 bootstrap、基础 bindings 和 release 不覆盖。当前 Provider ID 或凭据要求变化只影响恢复候选；改变完整模型 endpoint 或缺少旧绑定所需的当前秘密时，当前宿主不装配旧插件，默认 Agent 和目录宿主继续启动。历史记录仍保留原 Provider 绑定，后续必须通过当前 Store 精确查询，不能将新服务的密钥发往旧服务。
 
-旧版已经在原操作者路径发布的目标不会自动搬迁。操作者将当前配置显式改为保存的文件后，可以在删除原文件的情况下继续当前执行。该选择改变原 bindings 字节，可能只返回不支持新的恢复记录，已有完整记录保持不变。升级后仍需显式为当前构建准备匹配的新配置；本阶段自动选择已有完整历史记录，不自动迁移当前配置、重新编译旧 Agent 或把旧记录当成新构建发布输入。
+旧版已经在原操作者路径发布的目标不会自动搬迁。操作者将当前配置显式改为保存的文件后，可以在删除原文件的情况下继续当前执行。该选择改变原 bindings 字节，可能只返回不支持新的恢复记录，已有完整记录保持不变。升级时可以保留已核验的旧配置启动当前默认能力及历史查询；当前构建的新生成仍需显式准备匹配的新配置，不重新编译旧 Agent 或把旧记录当成新构建发布输入。
 
 当前可复用 `loadExtensionReleaseInput` / `mergeExtensionReleaseInput`、`agentVersionDeploymentCandidates` / `runtimeExtensionTarget`、`compileRuntimeAgentVersionRelease` / `verifyRuntimeAgentVersionRelease` 及 `retainExtensionBuild` / `resolveRetainedExtensionBuild`。恢复核验不要求该旧 release 仍是当前默认指针，但要求其原 bundle、资产与部署完整匹配。
 
@@ -54,13 +54,13 @@ Supervisor 的当前健康状态与全部进程所有权已经分开：`session(
 
 新 Control 已启动但无法就绪时，受控恢复一次不带历史 peer 的原配置；同一失败 peer 集合不反复重启，集合变化后才允许再试。终止失败或恢复仍不就绪均保留实际进程归属和诊断，不声称当前已恢复。
 
-## 下一切片：当前旧配置的升级衔接
+## 当前旧配置的升级衔接
 
-尚未实现。当前 release 先按新包登记校验插件输入，旧 snapshot 的实现身份会在历史管理启动前被拒绝。后续应在 Native release 前增加独立准备模块，仅在当前两个插件路径被严格证明属于一个完整旧 capsule 时，删除本次 release / Worker 环境中的这两个路径，使当前构建先提供目录和默认能力，再由现有历史管理恢复旧查询。持久配置、旧资产、部署、activation 和 capsule 不改写；新构建的生成仍需显式准备新配置。
+打包版 Native 在 release 前使用独立准备模块，解决旧 snapshot 的实现身份在历史管理启动前被新包拒绝的问题。仅在当前两个插件路径被严格证明属于唯一一个完整旧 capsule 时，移除本次 release / Worker 环境中的这两个路径，使当前构建先提供目录和默认能力，再由现有历史管理恢复旧查询。持久配置、旧资产、部署、activation 和 capsule 不改写；当前默认 release 仍沿原路径发布，新构建的插件生成仍需显式准备新配置。
 
-该判断必须同时核验实际安装七包身份与旧归档确实不同、完整桌面 owner、全部固定文件及原发布集合、当前精确 Provider 凭据，并在使用前再次校验与取消检查。当前路径若指向保存文件，必须与固定路径及 pins 完全一致；仍指向操作者文件时，必须核对完整原输入身份、所有原 snapshot 字节及内存路径投影后的完整 bindings，不能只靠 Agent ID 或 revision 匹配。缺失、多匹配、篡改、partial、不同 owner 或凭据不可用均保留原严格行为。文件已删除且只剩无法反查的原路径时，不猜测候选。
+该判断核验实际安装七包的精确 v1 / scope.v1 身份、不同的旧构建、完整桌面 owner 和 release publisher、固定 SQLite 作用域、全部固定文件及原发布集合、当前精确 Provider 凭据。最后重新验证文件、数据库及当前凭据，整个准备阶段受 20 秒期限及启动取消约束。当前路径若指向保存文件，必须与固定路径及 pins 完全一致；仍指向操作者文件时，必须核对生产 Worker 原有的完整字节身份、所有原 snapshot 字节及路径投影后的完整 bindings。绑定解析及原身份配方由 Worker 和 Native 共用纯解析端口及专用 Node 端口。缺失、多匹配、篡改、partial、不同 owner 或凭据不可用均保留原严格发布行为。文件已删除且只剩无法反查的原路径时，不猜测候选。source、关闭及目录配置不执行这项准备。
 
-验收需在两份实际构建中保留原桌面配置字节，移除当前测试里的手动目录配置步骤，证明新默认任务先就绪、旧查询仍使用原完整目标且没有新增生成 POST；再显式接入新构建生成。正常默认/profile 本身的内容或部署冲突仍由现有 release 拒绝，不能捕获任意发布失败后清空插件。
+两份实际构建的验收保留原桌面配置字节，在新版本启动前不再手动改成目录配置：新默认任务先就绪，旧查询仍使用原完整目标且没有新增生成 POST，再显式接入新构建生成。正常 default/profile 本身的内容或部署冲突仍由现有 release 拒绝；准备失败不触发 release 重试，也不捕获任意发布失败后清空插件。具体检查结果见[实施进度](./incremental-extension-progress.md)。
 
 ## 验收证据
 

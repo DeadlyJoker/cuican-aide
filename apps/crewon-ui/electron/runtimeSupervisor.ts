@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Writable } from "node:stream";
 
 import type {
@@ -39,6 +39,7 @@ import {
   loadDesktopExtensionRecovery,
 } from "./desktopExtensionRecovery.ts";
 import { DesktopExtensionHistoryCoordinator } from "./desktopExtensionHistoryCoordinator.ts";
+import { prepareDesktopExtensionCurrentUpgradeInputs } from "./desktopExtensionCurrentUpgradeInputs.ts";
 import type { DesktopCurrentRuntimeChildren } from "./desktopControlRuntime.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
@@ -202,11 +203,31 @@ export class RuntimeSupervisor {
           ? undefined
           : { dataRoot: this.#dataDirectory },
       });
+      let currentEnvironments = initialExtensions;
+      if (this.#resolveExtensionCredential) {
+        const upgrade = await prepareDesktopExtensionCurrentUpgradeInputs({
+          dataRoot: this.#dataDirectory,
+          configuration,
+          environments: initialExtensions,
+          currentBuildDirectory: dirname(this.#paths.release),
+          source: this.#paths.source,
+          resolveProvider: this.#resolveExtensionCredential,
+          signal: startup.signal,
+        });
+        startup.signal.throwIfAborted();
+        currentEnvironments = upgrade.environments;
+        if (upgrade.reasonCode !== null)
+          this.#logs.write(
+            "stderr",
+            "Extension upgrade",
+            `${upgrade.reasonCode}\n`,
+          );
+      }
       const recovery = desktopExtensionRecoveryAttempt({
         dataRoot: this.#dataDirectory,
         provider,
         source: this.#paths.source,
-        environments: initialExtensions,
+        environments: currentEnvironments,
       });
       let extensions = recovery.environments;
       startup.signal.throwIfAborted();

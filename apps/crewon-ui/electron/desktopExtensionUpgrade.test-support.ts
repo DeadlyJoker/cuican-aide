@@ -354,6 +354,65 @@ export function upgradeRunBinding(
   }
 }
 
+/** Read exact scoped authority rows; a new default release legitimately changes other DB state. */
+export function upgradeAuthoritySnapshot(
+  dataRoot: string,
+  input: {
+    configurationRevision: number;
+    agentVersionId: string;
+    runId: string;
+  },
+) {
+  const db = new DatabaseSync(join(dataRoot, "control.sqlite"), {
+    readOnly: true,
+  });
+  try {
+    const configuration = db
+      .prepare(
+        "SELECT configuration_json FROM extension_configurations WHERE tenant_id=? AND space_id=? AND plugin_id=? AND revision=?",
+      )
+      .get(
+        DESKTOP_RUNTIME_OWNER.tenantId,
+        DESKTOP_RUNTIME_OWNER.spaceId,
+        "crewon.comfyui-krea2",
+        input.configurationRevision,
+      );
+    const activation = db
+      .prepare(
+        "SELECT activation_json FROM extension_activations WHERE tenant_id=? AND space_id=? AND plugin_id=?",
+      )
+      .get(
+        DESKTOP_RUNTIME_OWNER.tenantId,
+        DESKTOP_RUNTIME_OWNER.spaceId,
+        "crewon.comfyui-krea2",
+      );
+    const deployment = db
+      .prepare(
+        "SELECT deployment_json FROM agent_version_deployments WHERE tenant_id=? AND agent_version_id=?",
+      )
+      .get(DESKTOP_RUNTIME_OWNER.tenantId, input.agentVersionId);
+    const binding = db
+      .prepare(
+        "SELECT binding_json FROM extension_run_bindings WHERE tenant_id=? AND space_id=? AND plugin_id=? AND run_id=?",
+      )
+      .get(
+        DESKTOP_RUNTIME_OWNER.tenantId,
+        DESKTOP_RUNTIME_OWNER.spaceId,
+        "crewon.comfyui-krea2",
+        input.runId,
+      );
+    assert.ok(configuration && activation && deployment && binding);
+    return Object.freeze({
+      configurationJson: String(configuration.configuration_json),
+      activationJson: String(activation.activation_json),
+      deploymentJson: String(deployment.deployment_json),
+      bindingJson: String(binding.binding_json),
+    });
+  } finally {
+    db.close();
+  }
+}
+
 export function writeUpgradePlugin(
   dataRoot: string,
   id: string,
@@ -441,7 +500,17 @@ export function writeUpgradePlugin(
       agentVersionAssetsPath,
     }),
   );
-  return { version, defaultId };
+  return {
+    version,
+    defaultId,
+    snapshotPath,
+    runtimeBindingsPath,
+    agentVersionAssetsPath,
+    desktopConfigurationPath: join(
+      dataRoot,
+      DESKTOP_EXTENSION_CONFIGURATION_FILE,
+    ),
+  };
 }
 export function writeUpgradeMetadataConfig(dataRoot: string) {
   writeFileSync(

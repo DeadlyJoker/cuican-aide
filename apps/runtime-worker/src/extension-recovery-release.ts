@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { constants, closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
 import type { RetainedExtensionBuild } from "@crewon/agent-version/extension-build";
+import { deriveExtensionRecoveryCapsuleId } from "@crewon/agent-version/extension-recovery-inputs";
 import {
   parseExtensionRecoveryManifest,
   parseExtensionRecoveryProviderBinding,
@@ -291,15 +291,12 @@ export async function prepareExtensionRecoveryRelease(input: {
       );
       return token;
     }
-    const capsuleId = hash(
-      extensionCanonicalJson({
-        schemaVersion: "crewon.extension-recovery-selection.v0",
-        implementationDigest: retainedBuild.implementationDigest,
-        buildIdentityDigest: retainedBuild.buildIdentityDigest,
-        owner: request.owner,
-        originalInputIdentityDigest: inspection.originalInputIdentityDigest,
-      }),
-    );
+    const capsuleId = deriveExtensionRecoveryCapsuleId({
+      implementationDigest: retainedBuild.implementationDigest,
+      buildIdentityDigest: retainedBuild.buildIdentityDigest,
+      owner: request.owner,
+      originalInputIdentityDigest: inspection.originalInputIdentityDigest,
+    });
     const selection = Object.freeze({ dataRoot: request.dataRoot, capsuleId });
     let prepared: Awaited<ReturnType<typeof prepareExtensionRecoveryInputs>>;
     try {
@@ -654,9 +651,7 @@ function path(input: string | undefined): string | null {
     invalid();
   return input;
 }
-function hash(value: string): string {
-  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
-}
+
 function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
 }
