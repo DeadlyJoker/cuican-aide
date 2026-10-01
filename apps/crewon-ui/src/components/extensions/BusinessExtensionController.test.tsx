@@ -49,13 +49,21 @@ function harness(
   options: { thread?: Thread | null; open?: boolean } = {},
 ) {
   setup();
-  const runtime = { adoptExtensionTask: vi.fn(async () => {}) };
+  const runtime = {
+    adoptExtensionTask: vi.fn(
+      async (
+        _receipt: Readonly<{ threadId: string; runId: string }>,
+        _options?: Readonly<{ signal?: AbortSignal }>,
+      ) => {},
+    ),
+  };
   const onCommitted = vi.fn();
+  let currentApi = api;
   let currentThread = options.thread === undefined ? thread() : options.thread;
   let open = options.open ?? true;
   function Harness() {
     panel = useBusinessExtension({
-      client: api,
+      client: currentApi,
       runtime,
       entry,
       locale: "en",
@@ -75,9 +83,16 @@ function harness(
     api,
     runtime,
     onCommitted,
-    async render(patch: { thread?: Thread | null; open?: boolean } = {}) {
+    async render(
+      patch: {
+        thread?: Thread | null;
+        open?: boolean;
+        client?: typeof api;
+      } = {},
+    ) {
       if ("thread" in patch) currentThread = patch.thread ?? null;
       if ("open" in patch) open = patch.open ?? false;
+      if ("client" in patch) currentApi = patch.client!;
       await act(async () => {
         root!.render(<Harness />);
         await settle();
@@ -90,6 +105,21 @@ async function change(callback: () => void) {
     callback();
     await settle();
   });
+}
+async function generateThroughForm() {
+  await change(() => {
+    const textarea = container.querySelector("textarea")!;
+    Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )!.set!.call(textarea, "A ceramic teapot");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await change(() =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent?.trim() === "Generate image")!
+      .click(),
+  );
 }
 function error(status: number, code: string) {
   return new ControlApiClientError({
@@ -352,6 +382,100 @@ describe("business extension entry and real client orchestration", () => {
     await change(() => panel.onGenerate());
     expect(view.api.createThread).toHaveBeenCalledTimes(1);
     expect(view.onCommitted).toHaveBeenCalledWith("thread-1");
+  });
+  it("preserves a verified new Thread handoff while Runtime adoption is still pending", async () => {
+    const view = harness(client(), { thread: null }),
+      gate = deferred<void>();
+    view.runtime.adoptExtensionTask.mockReturnValueOnce(gate.promise);
+    await view.render();
+    await generateThroughForm();
+    const signal = view.runtime.adoptExtensionTask.mock.calls[0]![1]!.signal!;
+    await view.render({ thread: thread("thread-1") });
+    expect(signal.aborted).toBe(false);
+    expect(panel.busy).toBe("generating");
+    expect(view.onCommitted).not.toHaveBeenCalled();
+    await change(() => gate.resolve(undefined));
+    expect(view.onCommitted).toHaveBeenCalledExactlyOnceWith("thread-1");
+    expect(panel.pendingTask).toBeNull();
+    expect(view.api.createExtensionTask).toHaveBeenCalledTimes(1);
+  });
+  it("does not exempt a receipt Thread transition before its task read is verified", async () => {
+    const api = client(),
+      gate = deferred<Awaited<ReturnType<typeof api.getExtensionTask>>>();
+    api.getExtensionTask.mockReturnValueOnce(gate.promise);
+    const view = harness(api, { thread: null });
+    await view.render();
+    await generateThroughForm();
+    const signal = api.createExtensionTask.mock.calls[0]![3]!.signal!;
+    await view.render({ thread: thread("thread-1") });
+    expect(signal.aborted).toBe(true);
+    await change(() => gate.resolve({ task: task() }));
+    expect(view.runtime.adoptExtensionTask).not.toHaveBeenCalled();
+    expect(view.onCommitted).not.toHaveBeenCalled();
+  });
+  it.each(["other Thread", "client", "close", "unmount"] as const)(
+    "cancels a verified handoff after %s",
+    async (transition) => {
+      const view = harness(client(), { thread: null }),
+        gate = deferred<void>();
+      view.runtime.adoptExtensionTask.mockReturnValueOnce(gate.promise);
+      await view.render();
+      await generateThroughForm();
+      const signal = view.runtime.adoptExtensionTask.mock.calls[0]![1]!.signal!;
+      await view.render({ thread: thread("thread-1") });
+      expect(signal.aborted).toBe(false);
+      if (transition === "other Thread")
+        await view.render({ thread: thread("thread-2") });
+      else if (transition === "client") await view.render({ client: client() });
+      else if (transition === "close") await view.render({ open: false });
+      else {
+        await act(async () => root!.unmount());
+        root = null;
+      }
+      expect(signal.aborted).toBe(true);
+      await change(() => gate.resolve(undefined));
+      expect(view.onCommitted).not.toHaveBeenCalled();
+    },
+  );
+  it("retains the accepted receipt after an early Thread handoff and failed adoption", async () => {
+    const view = harness(client(), { thread: null }),
+      gate = deferred<void>();
+    view.runtime.adoptExtensionTask.mockReturnValueOnce(gate.promise);
+    await view.render();
+    await generateThroughForm();
+    await view.render({ thread: thread("thread-1") });
+    await change(() => gate.reject(new TypeError("transcript unavailable")));
+    expect(panel.pendingTask).toBe("resumeAccepted");
+    await change(() =>
+      [...container.querySelectorAll("button")]
+        .find(
+          (button) => button.textContent?.trim() === "Resume submitted task",
+        )!
+        .click(),
+    );
+    expect(view.api.createThread).toHaveBeenCalledTimes(1);
+    expect(view.api.createExtensionTask).toHaveBeenCalledTimes(1);
+    expect(view.runtime.adoptExtensionTask).toHaveBeenCalledTimes(2);
+    expect(view.onCommitted).toHaveBeenCalledExactlyOnceWith("thread-1");
+  });
+  it("rejects a receipt and task that agree on a Thread different from the submitted request", async () => {
+    const api = client();
+    api.createExtensionTask.mockImplementationOnce(async (_plugin, body) => ({
+      disposition: "committed",
+      threadId: "thread-2",
+      threadRevision: body.expectedThreadRevision + 1,
+      runId: "image-run",
+      messageId: "message-1",
+      configurationRevision: 1,
+    }));
+    api.getExtensionTask.mockResolvedValue({
+      task: task({ threadId: "thread-2" }),
+    });
+    const view = harness(api, { thread: null });
+    await view.render();
+    await generateThroughForm();
+    expect(view.runtime.adoptExtensionTask).not.toHaveBeenCalled();
+    expect(view.onCommitted).not.toHaveBeenCalled();
   });
   it("surfaces an active-Run conflict without switching to a new Thread", async () => {
     const api = client();

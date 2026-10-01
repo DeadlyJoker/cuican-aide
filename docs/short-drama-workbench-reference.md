@@ -2,6 +2,8 @@
 
 日期：2026-10-01。依据用户提供的 [shuohao-skills](https://github.com/eternityspring/shuohao-skills)，研究版本 `ef4ac0c313c7eeb1f918db5f0f0eb319745900bc`。本文记录参考结论和后续实施约束；不是已经实现的产品功能，也不提前冻结工作台页面设计。当前仍按[增量扩展方案](./incremental-extension-subsystem-plan.md)先完成 ComfyUI 的正式调用链。
 
+2026-10-02：生图调用、升级恢复及同一次 UI 到实际 Worker 的闭环已取得执行证据，下一步的[工作台产品方案](./short-drama-workbench-product-plan.md)已具体划分 S0 项目/概念图、页面操作、修订与原任务关联及验收顺序。该方案仍未实现项目存储或页面，也不代替生产身份及第二企业 API 的原计划。
+
 ## 参考中值得采用的部分
 
 仓库把创作拆成大纲、角色、美术、剧本、分镜，各阶段有独立的结构化成果和检查工具。对 CrewON 的启发是：让 Agent 按阶段完成可继续编辑的成果，业务状态保存于项目，而不是只留在聊天文字中。[仓库说明](https://github.com/eternityspring/shuohao-skills/blob/ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/README.md)

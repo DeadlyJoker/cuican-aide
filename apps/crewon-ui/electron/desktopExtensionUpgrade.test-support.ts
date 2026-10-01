@@ -38,7 +38,18 @@ const submit = "crewon_comfyui_krea2__submit",
   observe = "crewon_comfyui_krea2__observe";
 
 /** Local external API fixtures, not production Comfy/DNS or model compatibility evidence. */
-export async function upgradeProviderFixtures() {
+export async function upgradeProviderFixtures(
+  options: {
+    modelResponseDelayMs?: number;
+    currentTurnOutputsOnly?: boolean;
+  } = {},
+) {
+  assert.ok(
+    options.modelResponseDelayMs === undefined ||
+      (Number.isSafeInteger(options.modelResponseDelayMs) &&
+        options.modelResponseDelayMs >= 0 &&
+        options.modelResponseDelayMs <= 2_000),
+  );
   const modelRequests: Record<string, unknown>[] = [];
   const authorizations: (string | undefined)[] = [];
   const comfyRequests: string[] = [];
@@ -58,8 +69,13 @@ export async function upgradeProviderFixtures() {
       call_id?: string;
       output?: string;
     }[];
+    const latestUserIndex = items.findLastIndex((item) => item.role === "user");
     const last = items
-      .filter((item) => item.type === "function_call_output")
+      .filter(
+        (item, index) =>
+          item.type === "function_call_output" &&
+          (!options.currentTurnOutputsOnly || index > latestUserIndex),
+      )
       .at(-1);
     const query = items
       .filter((item) => item.role === "user")
@@ -147,6 +163,7 @@ export async function upgradeProviderFixtures() {
         },
       },
     });
+    if (options.modelResponseDelayMs) await delay(options.modelResponseDelayMs);
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.end(
       events

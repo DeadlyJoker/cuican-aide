@@ -8,6 +8,8 @@
 
 用户补充的 shuohao-skills 与 Reelbench 参考已整理为[短剧工作台参考结论](./short-drama-workbench-reference.md)。后续按项目、阶段成果与资产修订组织短剧插件；当前实施顺序仍为先跑通正式 API / Agent 流程，再细化产品形态。
 
+调用、升级恢复及同一次生产 UI 到实际 Worker 的闭环已经取得执行证据，后续[工作台产品方案](./short-drama-workbench-product-plan.md)明确了 S0 项目/概念图、修订与原 Run/operation 的关系、页面动作及逐阶段门槛。项目服务和页面尚未实现；该方向不替代下表 E5 的实际企业 API 复用验收。
+
 当前发布、standalone 及原生桌面单用户入口的配置、启动顺序、历史构建保留、打包版自动历史宿主、已核验旧配置的升级衔接与精确历史查询接线见[进程启动说明](./extension-process-startup.md)；生产多用户、通用配置迁移及完整短剧产品界面仍未交付。
 
 ## 1. 首期边界

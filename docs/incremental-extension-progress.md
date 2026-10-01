@@ -4,6 +4,26 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：同一次界面到真实宿主的闭环与短剧产品方案
+
+新增 Happy DOM 集成沿生产 `BusinessExtensionController` / `ControlApiClient` / `ControlThreadRuntime` / `Transcript` 的同一次操作调用实际 Node 24 release、Worker、Control 与 SQLite。独立源码副本离线安装并 stage 七包，先从界面保存配置，确认未部署的 Agent 不能启用，再由明确的 Native 发布步骤读取该修订准备插件，返回界面启用、生图并查询。发布是操作者准备步骤，不能把保存服务地址当成已部署。
+
+重复执行发现并修复新会话接纳的时序问题：Runtime 在 adoption 完成前发布 Thread，原界面 scope cleanup 会取消自身动作，造成任务成功但未打开会话。现在只保留同一 client、插件、epoch、pending/receipt 与 signal 下，正在接纳的已核验新 Thread 迁移；另一个 Thread、换身份或关闭仍取消，受理回执还必须归属原请求的 Thread。它不授予新的执行权限。
+
+### 本轮证据
+
+- 同一条界面流程核对配置 revision/digest 和八字段目标、准入后打开原会话、正常 Transcript 的真实 Agent 输出、同会话第二个查询 Run，以及核验后的 `/view` 结果引用。模型 POST 4 次、ComfyUI POST 1 次、history GET 1 次；供应商为本地 HTTP / HTTPS 夹具，本轮没有再次调用在线模型或真实 ComfyUI。
+- 传输故障只截断实际 Control SSE 的第一个完整带 ID 帧，没有合成事件。生产 Runtime 自动用确切 `Last-Event-ID` 重连，输出不重复。刷新、关闭重开及新 Runtime 从空 turns 恢复服务端历史和结果，均不增加模型或供应商请求。证据保存在 `output/extensions/business-extension-real-ui-evidence.json`，包括实际配置/目标、断点游标及自有进程和临时目录清理状态。
+- 新会话接纳、配置/表单及 Runtime 专项 3 文件 55/55，通过八项新增确定性回归；随后上述实际界面单项 1/1 通过。原 Native 独立双构建升级单项 1/1 再次通过，模型/Comfy 计数仍为 7/2/1，具名测试夹具选项的默认行为未改变。日志为 `output/business-extension-adoption-scope-regression.log`、`business-extension-real-ui-owned-processes-final.log` 和 `business-extension-real-ui-native-default.log`。
+- 启动与重启登记六个实际 release/Worker/Control 子进程，全部收到 close 事件后才删除临时目录；最终证据为 registered/closed 6、live 0、目录不存在，原生 spawn 观察已恢复。隔离副本仅为本地供应商网络测试增加专用接线；本轮产品逻辑只修改 Renderer，七个运行入口的正式实现指纹仍为 `sha256:71b252ebdecbb2ac425a2fe1761e61d5c7833816d8f523a49215d0bc4050af8e`，不能把副本中的测试摘要当作正式构建摘要。
+- UI 最终全量以单 Worker 执行，排除已分别通过的上述两项实际构建：436 文件、3,032 项，3,025 通过、7 失败。七项名称与断言均与界面阶段已核验的变更前基线一致，无新增失败；快照的三项 obsolete 也来自该基线，未更新或删除原断言。一次额外历史宿主耗时失败在独立 35/35 和本次全量均通过，未放宽期限。日志为 `output/extensions/checks/workbench-ui-full-final.log`，基线对照为 `workbench-ui-baseline-comparison-final.json`。UI lint（含 Electron）、build、入口边界与仓库格式通过；未改动后端产品代码，没有重复全量 packages / Worker / Control。
+
+在 [shuohao-skills / Reelbench 参考结论](./short-drama-workbench-reference.md)之上完成[短剧工作台产品方案](./short-drama-workbench-product-plan.md)。明确 S0 项目/需求修订/概念图，后续剧本、资产、分镜和视频的 API 门槛；将创作修订、Run 和外部 operation 分开，复用现有准入、事务、审批和 SSE。新项目服务及页面仍是后续实施设计，不反向扩大原 E0–E5 范围。
+
+Krea2 的供应商链接没有声明 TTL 或永久有效承诺；终态查询返回已存结果，不刷新失效 URL。受理不明时按保存标识查询也不保证能找回被服务忽略的客户端 ID，无法核验时保留未知状态，不自动再次提交收费请求。
+
+**剩余：** 原计划中的生产权威当前身份协议及第二个实际企业 API 信息仍待提供；当前显式 standalone 装配不能替代生产多用户身份核验。任意 workspace/MCP/cloud 的完整历史冻结、S0 项目代码及视频/配音/成片均属于后续扩展，不是原首期的新增必交付项。目标保持进行中。
+
 ## 2026-10-02：保留旧插件配置的打包版升级
 
 在实际 Native release 之前增加独立输入准备。只对显式开启、固定桌面 owner / release publisher、固定 standalone SQLite 的打包版检查当前七个安装包，并严格匹配唯一完整旧 capsule。操作者路径要求完整原字节身份、所有配置快照及投影后的完整 bindings 一致；保存路径要求固定路径和 pins 一致。共享纯绑定解析器与专用 Node 身份端口复用 Worker 原配方，保持已有 capsule ID 和绑定解析行为。

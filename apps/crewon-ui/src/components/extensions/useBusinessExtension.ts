@@ -57,6 +57,15 @@ type PendingTask = {
   request: CreateExtensionTaskRequest | null;
   receipt: ExtensionTaskMutationResponse | null;
 };
+type AcceptedThreadAdoption = {
+  client: BusinessExtensionClient;
+  sourceScope: string;
+  targetScope: string;
+  pending: PendingTask;
+  receipt: ExtensionTaskMutationResponse;
+  epoch: number;
+  signal: AbortSignal;
+};
 
 export function useBusinessExtension(input: {
   client: BusinessExtensionClient;
@@ -93,6 +102,21 @@ export function useBusinessExtension(input: {
   const configurationRef = useRef(configuration);
   configurationRef.current = configuration;
   const scope = `${input.entry.pluginId}:${input.entry.pluginVersion}:${input.thread?.id ?? "new"}`;
+  const currentIdentity = useRef({
+    client: input.client,
+    scope,
+    open: input.open,
+  });
+  currentIdentity.current = { client: input.client, scope, open: input.open };
+  const adopting = useRef<AcceptedThreadAdoption | null>(null);
+  const adoptionIsCurrent = (adoption: AcceptedThreadAdoption) =>
+    !adoption.signal.aborted &&
+    adoption.epoch === epoch.current &&
+    pending.current === adoption.pending &&
+    adoption.pending.receipt === adoption.receipt &&
+    currentIdentity.current.open &&
+    currentIdentity.current.client === adoption.client &&
+    currentIdentity.current.scope === adoption.targetScope;
   const key = (name: string) => `extension.${name}:${crypto.randomUUID()}`;
   const runIds =
     input.thread?.turns
@@ -105,22 +129,53 @@ export function useBusinessExtension(input: {
       .map((turn) => `${turn.id}:${turn.status}`)
       .join(":") ?? "";
 
+  useEffect(
+    () => () => {
+      epoch.current += 1;
+      adopting.current = null;
+      for (const request of requests.current) request.abort();
+      requests.current.clear();
+    },
+    [],
+  );
+
   useEffect(() => {
-    epoch.current += 1;
-    setConfiguration(null);
-    setActivation(null);
-    setBaseUrl("");
-    setPrompt("");
-    setSelected(null);
-    setReady(false);
-    setTasks([]);
-    setError(null);
-    setBusy(null);
-    setPhase("loading");
-    setPendingTask(null);
-    pending.current = null;
-    mutating.current = false;
+    const adoption = adopting.current;
+    // Runtime may publish the verified new Thread before adoption finishes.
+    // Preserve only that owned transition; other scope changes still cancel.
+    if (
+      !(
+        adoption &&
+        adoption.client === input.client &&
+        adoption.targetScope === scope &&
+        adoptionIsCurrent(adoption)
+      )
+    ) {
+      epoch.current += 1;
+      setConfiguration(null);
+      setActivation(null);
+      setBaseUrl("");
+      setPrompt("");
+      setSelected(null);
+      setReady(false);
+      setTasks([]);
+      setError(null);
+      setBusy(null);
+      setPhase("loading");
+      setPendingTask(null);
+      pending.current = null;
+      adopting.current = null;
+      mutating.current = false;
+    }
     return () => {
+      const adoption = adopting.current;
+      if (
+        adoption &&
+        adoption.client === input.client &&
+        adoption.sourceScope === scope &&
+        adoptionIsCurrent(adoption)
+      )
+        return;
       epoch.current += 1;
       for (const request of requests.current) request.abort();
       requests.current.clear();
@@ -405,7 +460,10 @@ export function useBusinessExtension(input: {
             )
           ).task;
           assertCurrent();
-          if (task.threadId !== receipt.threadId)
+          if (
+            task.threadId !== receipt.threadId ||
+            receipt.threadId !== retry.request.threadId
+          )
             throw new Error("extension_task_thread_mismatch");
           setTasks((prior) =>
             [task, ...prior.filter((item) => item.runId !== task.runId)].slice(
@@ -413,12 +471,29 @@ export function useBusinessExtension(input: {
               8,
             ),
           );
-          await input.runtime.adoptExtensionTask(receipt, { signal });
-          assertCurrent();
-          pending.current = null;
-          setPendingTask(null);
-          setPrompt("");
-          input.onCommitted(receipt.threadId);
+          const adoption: AcceptedThreadAdoption | null =
+            input.thread === null
+              ? {
+                  client: input.client,
+                  sourceScope: scope,
+                  targetScope: `${input.entry.pluginId}:${input.entry.pluginVersion}:${receipt.threadId}`,
+                  pending: retry,
+                  receipt,
+                  epoch: taskEpoch,
+                  signal,
+                }
+              : null;
+          adopting.current = adoption;
+          try {
+            await input.runtime.adoptExtensionTask(receipt, { signal });
+            assertCurrent();
+            pending.current = null;
+            setPendingTask(null);
+            setPrompt("");
+            input.onCommitted(receipt.threadId);
+          } finally {
+            if (adopting.current === adoption) adopting.current = null;
+          }
         } catch (failure) {
           if (!signal.aborted && epoch.current === taskEpoch) {
             if (retry.receipt !== null) setPendingTask("resumeAccepted");
