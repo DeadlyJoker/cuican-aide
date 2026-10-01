@@ -76,6 +76,19 @@ export class TurnApplicationService {
     actor: ActorContext,
     command: StartTurnCommand,
   ): Promise<CommitTurnStartResult> {
+    const input = await this.prepareTurn(actor, command);
+    try {
+      return await this.#store.commitTurnStart(input);
+    } catch (error) {
+      throw mapApplicationError(error);
+    }
+  }
+
+  /** Builds one authorized Message/Run transaction for hosts that add atomic domain bindings. */
+  async prepareTurn(
+    actor: ActorContext,
+    command: StartTurnCommand,
+  ): Promise<CommitTurnStartInput> {
     validateActor(actor);
     validateRequestCommand(command);
     validateRoute(command);
@@ -188,11 +201,7 @@ export class TurnApplicationService {
         workItems: [this.#workItem(actor.tenantId, runEvent, occurredAt)],
       },
     };
-    try {
-      return await this.#store.commitTurnStart(input);
-    } catch (error) {
-      throw mapApplicationError(error);
-    }
+    return input;
   }
 
   async replayTurn(

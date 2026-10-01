@@ -22,6 +22,56 @@ export type ExtensionConfigurationMutationResponse =
   components["schemas"]["ExtensionConfigurationMutationResponse"];
 export type ExtensionActivationMutationResponse =
   components["schemas"]["ExtensionActivationMutationResponse"];
+export type CreateExtensionTaskRequest = Omit<
+  components["schemas"]["CreateExtensionTaskRequest"],
+  "intent"
+> &
+  Readonly<{
+    intent:
+      | (Omit<components["schemas"]["ExtensionGenerateTaskIntent"], "input"> &
+          Readonly<{ input: JsonObject }>)
+      | components["schemas"]["ExtensionQueryTaskIntent"];
+  }>;
+export type ExtensionTaskMutationResponse =
+  components["schemas"]["ExtensionTaskMutationResponse"];
+
+export function parseCreateExtensionTaskRequest(
+  input: unknown,
+): CreateExtensionTaskRequest {
+  const value = record(input, ["threadId", "expectedThreadRevision", "intent"]);
+  // Read a data descriptor rather than invoking a caller-owned discriminant getter.
+  if (value.intent === null || typeof value.intent !== "object")
+    fail("extension_task_intent_invalid");
+  const kind = Object.getOwnPropertyDescriptor(value.intent, "kind");
+  if (kind === undefined || !Object.hasOwn(kind, "value"))
+    fail("extension_task_intent_invalid");
+  let parsed: CreateExtensionTaskRequest["intent"];
+  if (kind.value === "generate") {
+    const intent = record(value.intent, ["kind", "input"]);
+    parsed = { kind: "generate", input: parameters(intent.input) };
+  } else if (kind.value === "query") {
+    const intent = record(value.intent, ["kind", "sourceRunId", "operationId"]);
+    const operationId = text(intent.operationId, 36);
+    if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/u.test(operationId))
+      fail("extension_operation_id_invalid");
+    parsed = {
+      kind: "query",
+      sourceRunId: text(intent.sourceRunId, 128),
+      operationId,
+    };
+  } else fail("extension_task_intent_invalid");
+  if (
+    typeof value.expectedThreadRevision !== "number" ||
+    !Number.isSafeInteger(value.expectedThreadRevision) ||
+    value.expectedThreadRevision < 1
+  )
+    fail("extension_thread_revision_invalid");
+  return {
+    threadId: text(value.threadId, 128),
+    expectedThreadRevision: value.expectedThreadRevision,
+    intent: parsed,
+  };
+}
 
 export function parseExtensionPluginId(input: unknown): string {
   const value = text(input, 48);

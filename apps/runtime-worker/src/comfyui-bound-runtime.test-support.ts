@@ -29,7 +29,8 @@ import type { PinnedHttpRequest } from "./pinned-node-http.ts";
 
 export { target };
 export const actor: ActorContext = {
-  ...scope,
+  tenantId: scope.tenantId,
+  spaceId: scope.spaceId,
   actorId: "actor-1",
   principalId: "principal-1",
 };
@@ -201,5 +202,6 @@ export async function boundComfyFixture(t: TestContext) {
     requests,
     controls,
     permissions,
+    authorization,
   };
 }

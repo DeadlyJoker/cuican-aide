@@ -3,7 +3,7 @@ import { extensionCanonicalJson, parseExtensionManifest } from "@crewon/domain";
 import {
   ExtensionConfigurationApplicationService,
   type AuthorizationPort,
-  type ExtensionAuthorizationAction,
+  type AuthorizationAction,
   type ExtensionHostPort,
   type ExtensionReadiness,
   type ExtensionStore,
@@ -55,7 +55,7 @@ export async function configurationServiceFixture(
     extensionManifestFixture(scope.pluginId),
   );
   const state: {
-    denied: ExtensionAuthorizationAction | null;
+    denied: AuthorizationAction | null;
     authorizationError: Error | null;
     catalogAvailable: boolean;
     catalogDigest: string;
@@ -81,48 +81,52 @@ export async function configurationServiceFixture(
     validated: [],
     evaluated: [],
   };
+  const dependencies: Omit<
+    ConstructorParameters<typeof ExtensionConfigurationApplicationService>[0],
+    "store"
+  > = {
+    clock: { now: () => timestamp },
+    digester: extensionStoreDigester,
+    authorization: {
+      async authorize(request) {
+        state.permissions.push(structuredClone(request));
+        await state.authorizationGate;
+        if (state.authorizationError !== null) throw state.authorizationError;
+        return request.action === state.denied
+          ? { outcome: "deny", reasonCode: "test_denied" }
+          : { outcome: "allow" };
+      },
+    },
+    catalog: {
+      list: () => [],
+      resolve: (identity) =>
+        state.catalogAvailable &&
+        identity.pluginId === scope.pluginId &&
+        identity.pluginVersion === manifest.version
+          ? {
+              manifest,
+              manifestDigest: state.catalogDigest,
+              implementationDigest: state.implementationDigest,
+            }
+          : null,
+    },
+    host: {
+      async validateConfiguration(input) {
+        state.validated.push(input);
+        if (state.validationError !== null) throw state.validationError;
+      },
+      async evaluate(input) {
+        state.evaluated.push(input);
+        return state.readiness;
+      },
+    },
+  };
   const createService = (store: ExtensionStore) =>
-    new ExtensionConfigurationApplicationService({
-      store,
-      clock: { now: () => timestamp },
-      digester: extensionStoreDigester,
-      authorization: {
-        async authorize(request) {
-          state.permissions.push(structuredClone(request));
-          await state.authorizationGate;
-          if (state.authorizationError !== null) throw state.authorizationError;
-          return request.action === state.denied
-            ? { outcome: "deny", reasonCode: "test_denied" }
-            : { outcome: "allow" };
-        },
-      },
-      catalog: {
-        list: () => [],
-        resolve: (identity) =>
-          state.catalogAvailable &&
-          identity.pluginId === scope.pluginId &&
-          identity.pluginVersion === manifest.version
-            ? {
-                manifest,
-                manifestDigest: state.catalogDigest,
-                implementationDigest: state.implementationDigest,
-              }
-            : null,
-      },
-      host: {
-        async validateConfiguration(input) {
-          state.validated.push(input);
-          if (state.validationError !== null) throw state.validationError;
-        },
-        async evaluate(input) {
-          state.evaluated.push(input);
-          return state.readiness;
-        },
-      },
-    });
+    new ExtensionConfigurationApplicationService({ store, ...dependencies });
   return {
     ...f,
     state,
+    dependencies,
     service: createService(f.first.store),
     secondService: createService(f.second.store),
   };

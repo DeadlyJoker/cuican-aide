@@ -132,11 +132,37 @@ export async function extensionUseCase<T>(
         "extension_configuration_revision_conflict",
         "extension_activation_revision_conflict",
         "extension_execution_target_not_deployed",
+        "extension_generation_disabled",
+        "revision_conflict",
+        "thread_active_run_conflict",
+        "thread_not_active",
+        "goal_revision_conflict",
+        "model_provider_settings_switch_pending",
       ].includes(code)
     )
       throw new ApplicationError("conflict", code, { cause: error });
-    if (code === "extension_configuration_not_found")
+    if (
+      code === "extension_configuration_not_found" ||
+      code === "thread_not_found" ||
+      code === "extension_query_source_not_found"
+    )
       throw new ApplicationError("notFound", code, { cause: error });
+    if (code === "extension_access_revoked")
+      throw new ApplicationError("authorization", code, { cause: error });
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "code" in error &&
+      typeof error.code === "string" &&
+      [
+        "revision_conflict",
+        "thread_active_run_conflict",
+        "thread_not_active",
+        "goal_revision_conflict",
+        "model_provider_settings_switch_pending",
+      ].includes(error.code)
+    )
+      throw new ApplicationError("conflict", error.code, { cause: error });
     throw new ApplicationError("internal", "extension_service_unavailable", {
       cause: error,
     });

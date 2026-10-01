@@ -5,6 +5,10 @@ import type {
   ExtensionScope,
 } from "@crewon/domain";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
+import type {
+  CommitTurnStartInput,
+  CommitTurnStartResult,
+} from "./turn-start-store-port.ts";
 
 export type ExtensionMutationReceipt = Readonly<{
   actorId: string;
@@ -45,6 +49,18 @@ export type CommitExtensionRunResult = Readonly<{
   run: CommitRunResult;
   binding: ExtensionRunBinding;
 }>;
+export type CommitExtensionTurnInput = Readonly<{
+  turn: CommitTurnStartInput;
+  binding: ExtensionRunBinding;
+  expectedActivationRevision: number;
+  receipt: ExtensionMutationReceipt;
+}>;
+/** Adds the admitted user message and history to the existing immutable task receipt. */
+export type CommitExtensionTurnResult = CommitExtensionRunResult &
+  Readonly<{
+    schemaVersion: "crewon.extension-turn-admission.v0";
+    turn: CommitTurnStartResult;
+  }>;
 
 /**
  * Persistence for authorized host use cases. The caller must verify actor permission,
@@ -76,6 +92,12 @@ export interface ExtensionStore {
   commitExtensionRun(
     input: CommitExtensionRunInput,
   ): Promise<CommitExtensionRunResult>;
+  commitExtensionTurn(
+    input: CommitExtensionTurnInput,
+  ): Promise<CommitExtensionTurnResult>;
+  loadExtensionTurnReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ): Promise<CommitExtensionTurnResult | null>;
   loadExtensionRunReceipt(
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
   ): Promise<CommitExtensionRunResult | null>;

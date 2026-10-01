@@ -17,10 +17,14 @@ import {
 import type {
   CommitExtensionRunInput,
   CommitExtensionRunResult,
+  CommitExtensionTurnInput,
+  CommitExtensionTurnResult,
+  CommitTurnStartResult,
   ExtensionMutationReceipt,
   SaveExtensionActivationInput,
   SaveExtensionConfigurationInput,
 } from "@crewon/application";
+import { validateTurnStartInput } from "./store-invariants.ts";
 
 export const extensionStoreDigester = {
   sha256: (value: string) =>
@@ -208,6 +212,133 @@ export function extensionTaskCommit(input: CommitExtensionRunInput) {
       key: input.receipt.idempotencyKey,
       requestFingerprint: input.receipt.requestDigest,
     },
+  };
+}
+
+export function extensionTurnRunInput(
+  input: CommitExtensionTurnInput,
+): CommitExtensionRunInput {
+  return {
+    binding: input.binding,
+    expectedActivationRevision: input.expectedActivationRevision,
+    receipt: input.receipt,
+    commit: {
+      ...input.turn.run,
+      tenantId: input.turn.tenantId,
+      idempotency: input.turn.idempotency,
+    },
+  };
+}
+
+export function validateExtensionTurnCommit(input: CommitExtensionTurnInput) {
+  const binding = validateExtensionRunCommit(extensionTurnRunInput(input));
+  validateTurnStartInput(input.turn);
+  const content = input.turn.thread.messages[0]!.content;
+  if (
+    Buffer.byteLength(content) > 16 * 1024 ||
+    extensionStoreDigester.sha256(content) !== binding.inputDigest ||
+    input.turn.thread.messages[0]!.contentDigest !== binding.inputDigest ||
+    input.turn.goal.kind !== "keep" ||
+    input.turn.run.events[0]!.type !== "run.created" ||
+    input.turn.run.events[0]!.data.goalBinding != null ||
+    input.turn.run.events[0]!.data.collaborationMode !== "default"
+  )
+    throw new Error("extension_turn_input_mismatch");
+  return binding;
+}
+
+export function extensionTurnCommit(input: CommitExtensionTurnInput) {
+  return {
+    ...input.turn,
+    idempotency: extensionTaskCommit(extensionTurnRunInput(input)).idempotency,
+  };
+}
+
+export function extensionTurnResult(
+  turn: CommitTurnStartResult,
+  binding: ExtensionRunBinding,
+): CommitExtensionTurnResult {
+  return {
+    schemaVersion: "crewon.extension-turn-admission.v0",
+    binding,
+    turn,
+    run: {
+      disposition: turn.disposition,
+      state: turn.runState,
+      events: turn.runEvents,
+      outbox: turn.outbox,
+      workItems: turn.workItems,
+    },
+  };
+}
+
+export function parseExtensionTurnReceipt(
+  input: unknown,
+  scope: ExtensionScope,
+  receipt: ExtensionMutationReceipt,
+): CommitExtensionTurnResult {
+  const value = input as CommitExtensionTurnResult;
+  const { run, binding } = parseExtensionTaskReceipt(input, scope, receipt);
+  if (
+    value.schemaVersion !== "crewon.extension-turn-admission.v0" ||
+    value.turn === undefined
+  )
+    throw new Error("extension_turn_receipt_invalid");
+  const turn = value.turn;
+  const created = turn.runEvents?.[0];
+  if (
+    created?.type !== "run.created" ||
+    turn.disposition !== "committed" ||
+    turn.threadState.tenantId !== binding.tenantId ||
+    turn.threadState.spaceId !== binding.spaceId ||
+    turn.threadState.threadId !== binding.threadId ||
+    extensionCanonicalJson(turn.runState) !==
+      extensionCanonicalJson(run.state) ||
+    extensionCanonicalJson(turn.runEvents) !==
+      extensionCanonicalJson(run.events) ||
+    extensionCanonicalJson(turn.outbox) !==
+      extensionCanonicalJson(run.outbox) ||
+    extensionCanonicalJson(turn.workItems) !==
+      extensionCanonicalJson(run.workItems)
+  )
+    throw new Error("extension_turn_receipt_invalid");
+  validateExtensionTurnCommit({
+    binding,
+    receipt,
+    expectedActivationRevision: 1,
+    turn: {
+      tenantId: binding.tenantId,
+      idempotency: {
+        scope: "stored",
+        key: receipt.idempotencyKey,
+        requestFingerprint: receipt.requestDigest,
+      },
+      goal: {
+        kind: "keep",
+        expectedRevision: turn.goalState?.revision ?? null,
+      },
+      thread: {
+        expectedRevision: turn.threadState.revision - 1,
+        events: turn.threadEvents,
+        messages: turn.messages,
+        history: {
+          expectedLastSequence: (turn.historyItems[0]?.sequence ?? 0) - 1,
+          items: turn.historyItems,
+        },
+      },
+      run: {
+        expectedRevision: 0,
+        events: turn.runEvents,
+        outbox: turn.outbox,
+        workItems: turn.workItems,
+      },
+    },
+  });
+  return {
+    schemaVersion: value.schemaVersion,
+    run,
+    binding,
+    turn: { ...turn, disposition: "replayed" },
   };
 }
 

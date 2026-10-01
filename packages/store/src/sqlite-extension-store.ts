@@ -7,9 +7,13 @@ import {
   parseExtensionRunBinding,
   type ExtensionScope,
   type ExtensionExecutionTarget,
+  type ExtensionRunBinding,
 } from "@crewon/domain";
 import type {
   CommitExtensionRunInput,
+  CommitExtensionTurnInput,
+  CommitTurnStartInput,
+  CommitTurnStartResult,
   CommitRunInput,
   CommitRunResult,
   ExtensionMutationReceipt,
@@ -34,12 +38,19 @@ import {
   validateConfigurationSave,
   validateExtensionReceipt,
   validateExtensionRunCommit,
+  validateExtensionTurnCommit,
+  extensionTurnCommit,
+  extensionTurnResult,
+  parseExtensionTurnReceipt,
 } from "./extension-store-records.ts";
 import { migrateSqliteExternalOperations } from "./sqlite-external-operation-store.ts";
 
 type SqliteExtensionStoreHost = Readonly<{
   assertOpen(): void;
   commitRunWithinTransaction(input: CommitRunInput): CommitRunResult;
+  commitTurnWithinTransaction(
+    input: CommitTurnStartInput,
+  ): CommitTurnStartResult;
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
@@ -212,31 +223,7 @@ export class SqliteExtensionStore implements ExtensionStore {
       const replay = this.#receipt(binding, "task", input.receipt);
       if (replay !== null)
         return parseExtensionTaskReceipt(replay, binding, input.receipt);
-      assertExtensionAdmission(
-        binding,
-        this.#activation(binding),
-        input.expectedActivationRevision,
-        this.#configuration(binding, binding.configurationRevision),
-      );
-      this.#assertDeployment(binding.tenantId, binding.target);
-      if (binding.source !== null) {
-        const source = this.#binding({
-          tenantId: binding.tenantId,
-          spaceId: binding.spaceId,
-          runId: binding.source.runId,
-        });
-        const operation = this.#db
-          .prepare(
-            `SELECT 1 FROM extension_external_operations WHERE tenant_id = ? AND run_id = ? AND binding_digest = ? AND operation_id = ?`,
-          )
-          .get(
-            binding.tenantId,
-            binding.source.runId,
-            binding.source.bindingDigest,
-            binding.source.operationId,
-          );
-        assertExtensionQuerySource(binding, source, operation !== undefined);
-      }
+      this.#admit(binding, input.expectedActivationRevision);
       const run = this.#host.commitRunWithinTransaction(
         extensionTaskCommit(input),
       );
@@ -254,6 +241,73 @@ export class SqliteExtensionStore implements ExtensionStore {
       this.#saveReceipt(binding, "task", input.receipt, result);
       return result;
     });
+  }
+
+  async loadExtensionTurnReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ) {
+    this.#host.assertOpen();
+    const value = this.#receipt(input, "task", input.receipt);
+    return value === null
+      ? null
+      : parseExtensionTurnReceipt(value, input, input.receipt);
+  }
+
+  async commitExtensionTurn(input: CommitExtensionTurnInput) {
+    const binding = validateExtensionTurnCommit(input);
+    return this.#transaction(() => {
+      const replay = this.#receipt(binding, "task", input.receipt);
+      if (replay !== null)
+        return parseExtensionTurnReceipt(replay, binding, input.receipt);
+      this.#admit(binding, input.expectedActivationRevision);
+      const turn = this.#host.commitTurnWithinTransaction(
+        extensionTurnCommit(input),
+      );
+      if (
+        turn.disposition !== "committed" ||
+        turn.runState.runId !== binding.runId
+      )
+        throw new Error("extension_unbound_turn_receipt");
+      this.#db
+        .prepare(`INSERT INTO extension_run_bindings VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(
+          ...extensionScopeValues(binding),
+          binding.runId,
+          binding.configurationRevision,
+          JSON.stringify(binding),
+        );
+      const result = extensionTurnResult(turn, binding);
+      this.#saveReceipt(binding, "task", input.receipt, result);
+      return result;
+    });
+  }
+
+  #admit(binding: ExtensionRunBinding, expectedActivationRevision: number) {
+    assertExtensionAdmission(
+      binding,
+      this.#activation(binding),
+      expectedActivationRevision,
+      this.#configuration(binding, binding.configurationRevision),
+    );
+    this.#assertDeployment(binding.tenantId, binding.target);
+    if (binding.source !== null) {
+      const source = this.#binding({
+        tenantId: binding.tenantId,
+        spaceId: binding.spaceId,
+        runId: binding.source.runId,
+      });
+      const operation = this.#db
+        .prepare(
+          `SELECT 1 FROM extension_external_operations WHERE tenant_id = ? AND run_id = ? AND binding_digest = ? AND operation_id = ?`,
+        )
+        .get(
+          binding.tenantId,
+          binding.source.runId,
+          binding.source.bindingDigest,
+          binding.source.operationId,
+        );
+      assertExtensionQuerySource(binding, source, operation !== undefined);
+    }
   }
 
   #configuration(scope: ExtensionScope, revision: number) {

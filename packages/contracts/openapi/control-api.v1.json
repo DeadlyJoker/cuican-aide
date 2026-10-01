@@ -3543,6 +3543,78 @@
           }
         }
       }
+    },
+    "/api/v1/extensions/{pluginId}/tasks": {
+      "post": {
+        "operationId": "createExtensionTask",
+        "description": "Opt-in plugin task admission. Atomically appends the user message and commits the Run and immutable plugin binding. Query intent requires current read permission on the original Run and uses its exact configuration. Observe execution through existing Run/event endpoints.",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExtensionTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or idempotently replayed task",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionTaskMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8793,6 +8865,115 @@
           },
           "activation": {
             "$ref": "#/components/schemas/ExtensionActivation"
+          }
+        }
+      },
+      "ExtensionGenerateTaskIntent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "input"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "generate"
+          },
+          "input": {
+            "type": "object",
+            "maxProperties": 256,
+            "additionalProperties": true,
+            "description": "Plugin task JSON validated against the pinned manifest. Total canonical input <=16KiB; depth <=24; nodes <=8192. Runtime and scope fields are supplied by the host."
+          }
+        }
+      },
+      "ExtensionQueryTaskIntent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "sourceRunId", "operationId"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "query"
+          },
+          "sourceRunId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$",
+            "minLength": 36,
+            "maxLength": 36
+          }
+        }
+      },
+      "CreateExtensionTaskRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["threadId", "expectedThreadRevision", "intent"],
+        "properties": {
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expectedThreadRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "intent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ExtensionGenerateTaskIntent"
+              },
+              {
+                "$ref": "#/components/schemas/ExtensionQueryTaskIntent"
+              }
+            ]
+          }
+        }
+      },
+      "ExtensionTaskMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "threadId",
+          "threadRevision",
+          "runId",
+          "messageId",
+          "configurationRevision"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "threadRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "messageId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "configurationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
           }
         }
       }

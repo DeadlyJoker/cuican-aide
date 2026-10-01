@@ -9,6 +9,7 @@ import {
   parseExtensionEmptyQuery,
   parseSaveExtensionConfigurationRequest,
   parseSetExtensionActivationRequest,
+  parseCreateExtensionTaskRequest,
 } from "./extension-control-contract.ts";
 
 const save = {
@@ -70,6 +71,60 @@ test("extension requests accept only non-secret configuration and an explicit ac
       }),
     /slot_duplicate/u,
   );
+});
+test("extension task bodies distinguish generation from original-operation query and bound detached input", () => {
+  const generate = {
+    threadId: "thread-1",
+    expectedThreadRevision: 1,
+    intent: { kind: "generate", input: { prompt: "hello" } },
+  };
+  const parsed = parseCreateExtensionTaskRequest(generate);
+  assert.equal(
+    parseCreateExtensionTaskRequest({
+      ...generate,
+      expectedThreadRevision: 2_147_483_648,
+    }).expectedThreadRevision,
+    2_147_483_648,
+  );
+  generate.intent.input.prompt = "changed";
+  assert.deepEqual(parsed.intent, {
+    kind: "generate",
+    input: { prompt: "hello" },
+  });
+  const query = {
+    ...generate,
+    intent: {
+      kind: "query",
+      sourceRunId: "run-1",
+      operationId: "00000000-0000-0000-0000-000000000001",
+    },
+  };
+  assert.deepEqual(parseCreateExtensionTaskRequest(query), query);
+  for (const input of [
+    { ...generate, tenantId: "other" },
+    { ...generate, expectedThreadRevision: -1 },
+    { ...generate, expectedThreadRevision: 0 },
+    { ...generate, intent: { ...generate.intent, configurationRevision: 1 } },
+    {
+      ...generate,
+      intent: { kind: "generate", input: { value: "x".repeat(16_384) } },
+    },
+    { ...query, intent: { ...query.intent, operationId: "any-id" } },
+    { ...query, intent: { ...query.intent, input: {} } },
+    {
+      ...generate,
+      intent: {
+        get kind() {
+          return assert.fail("getter invoked");
+        },
+        input: {},
+      },
+    },
+  ])
+    assert.throws(
+      () => parseCreateExtensionTaskRequest(input),
+      ContractValidationError,
+    );
 });
 test("extension parameters are bounded detached JSON without executable accessors", () => {
   const input = { ...save, parameters: { nested: [1, true, null, "ok"] } };
@@ -170,4 +225,22 @@ test("OpenAPI describes opt-in extension routes with required mutation headers a
     assert.equal(schema.properties.tenantId, undefined);
     assert.equal(schema.properties.implementationDigest, undefined);
   }
+  const task = api.paths["/api/v1/extensions/{pluginId}/tasks"];
+  assert.deepEqual(Object.keys(task), ["post"]);
+  assert.ok(
+    task.post.parameters.some(
+      (item: { name?: string; required?: boolean }) =>
+        item.name === "Idempotency-Key" && item.required === true,
+    ),
+  );
+  assert.ok(
+    task.post.parameters.some(
+      (item: { $ref?: string }) =>
+        item.$ref === "#/components/parameters/CsrfToken",
+    ),
+  );
+  assert.equal(
+    api.components.schemas.CreateExtensionTaskRequest.additionalProperties,
+    false,
+  );
 });

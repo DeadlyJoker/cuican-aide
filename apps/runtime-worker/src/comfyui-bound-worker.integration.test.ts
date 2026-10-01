@@ -7,10 +7,10 @@ import {
 } from "@crewon/agent-kernel";
 import {
   RunExecutionService,
-  ThreadApplicationService,
+  ExtensionTaskApplicationService,
 } from "@crewon/application";
 import { extensionStoreDigester } from "../../../packages/store/src/extension-store-records.ts";
-import { runInput } from "../../../packages/store/src/extension-store.test-support.ts";
+import { seedThread } from "../../../packages/store/src/thread-store-conformance.test-support.ts";
 import {
   actor,
   boundComfyFixture,
@@ -28,28 +28,37 @@ test("bound Worker resumes accepted image work after disable and streams the per
   const prompt = "生成一张茶壶照片";
   const clock = { now: () => new Date().toISOString() };
   const ids = { nextId: () => randomUUID() };
-  // Fixture admission: validates Worker behavior, not the pending production task/configuration HTTP path.
-  const input = runInput("run-1", {
-    configurationRevision: f.config.revision,
-    configurationDigest: f.config.contentDigest,
-    inputDigest: extensionStoreDigester.sha256(prompt),
-  });
-  await f.prepare(input);
-  await new ThreadApplicationService({
+  // Real application admission; deployment readiness and providers remain explicit fixtures.
+  const threadId = "image-thread";
+  await seedThread(f.first.parent, { ...actor, threadId });
+  const tasks = new ExtensionTaskApplicationService({
     store: f.first.parent,
-    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    extensions: f.first.store,
+    operations: f.operations,
+    authorization: f.authorization,
     clock,
     ids,
     digester: extensionStoreDigester,
-  }).appendMessage(actor, {
-    kind: "thread.message.append",
-    threadId: input.binding.threadId,
-    expectedRevision: 1,
-    idempotencyKey: "message-1",
-    role: "user",
-    content: prompt,
+    catalog: {
+      list: () => [f.registration],
+      resolve: (identity) =>
+        identity.pluginId === f.config.pluginId &&
+        identity.pluginVersion === f.config.pluginVersion
+          ? f.registration
+          : null,
+    },
+    host: {
+      validateConfiguration: async () => {},
+      evaluate: async () => ({ outcome: "ready", target }),
+    },
   });
-  const { binding } = await f.first.store.commitExtensionRun(input);
+  const { binding } = await tasks.createTask(actor, {
+    pluginId: f.config.pluginId,
+    threadId,
+    expectedThreadRevision: 1,
+    idempotencyKey: "image-task",
+    intent: { kind: "generate", input: { prompt } },
+  });
   const transport: ModelTransportPort = {
     adapterName: "comfy-bound-worker-fixture",
     adapterVersion: "1",

@@ -7,9 +7,13 @@ import {
   parseExtensionRunBinding,
   type ExtensionScope,
   type ExtensionExecutionTarget,
+  type ExtensionRunBinding,
 } from "@crewon/domain";
 import type {
   CommitExtensionRunInput,
+  CommitExtensionTurnInput,
+  CommitTurnStartInput,
+  CommitTurnStartResult,
   CommitRunInput,
   CommitRunResult,
   ExtensionMutationReceipt,
@@ -34,6 +38,10 @@ import {
   validateConfigurationSave,
   validateExtensionReceipt,
   validateExtensionRunCommit,
+  validateExtensionTurnCommit,
+  extensionTurnCommit,
+  extensionTurnResult,
+  parseExtensionTurnReceipt,
 } from "./extension-store-records.ts";
 
 type PostgresExtensionStoreHost = Readonly<{
@@ -42,6 +50,10 @@ type PostgresExtensionStoreHost = Readonly<{
     client: PoolClient,
     input: CommitRunInput,
   ): Promise<CommitRunResult>;
+  commitTurnWithinTransaction(
+    client: PoolClient,
+    input: CommitTurnStartInput,
+  ): Promise<CommitTurnStartResult>;
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
@@ -273,34 +285,7 @@ export class PostgresExtensionStore implements ExtensionStore {
       );
       if (replay !== null)
         return parseExtensionTaskReceipt(replay, binding, input.receipt);
-      assertExtensionAdmission(
-        binding,
-        await this.#activation(client, binding),
-        input.expectedActivationRevision,
-        await this.#configuration(
-          client,
-          binding,
-          binding.configurationRevision,
-        ),
-      );
-      await this.#assertDeployment(client, binding.tenantId, binding.target);
-      if (binding.source !== null) {
-        const source = await this.#binding(client, {
-          tenantId: binding.tenantId,
-          spaceId: binding.spaceId,
-          runId: binding.source.runId,
-        });
-        const operation = await client.query(
-          `SELECT 1 FROM ${this.#schema}.extension_external_operations WHERE tenant_id = $1 AND run_id = $2 AND binding_digest = $3 AND operation_id = $4`,
-          [
-            binding.tenantId,
-            binding.source.runId,
-            binding.source.bindingDigest,
-            binding.source.operationId,
-          ],
-        );
-        assertExtensionQuerySource(binding, source, operation.rows.length > 0);
-      }
+      await this.#admit(client, binding, input.expectedActivationRevision);
       const run = await this.#host.commitRunWithinTransaction(
         client,
         extensionTaskCommit(input),
@@ -320,6 +305,95 @@ export class PostgresExtensionStore implements ExtensionStore {
       await this.#saveReceipt(client, binding, "task", input.receipt, result);
       return result;
     });
+  }
+
+  async loadExtensionTurnReceipt(
+    input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+  ) {
+    this.#host.assertOpen();
+    const value = await this.#receipt(this.#pool, input, "task", input.receipt);
+    return value === null
+      ? null
+      : parseExtensionTurnReceipt(value, input, input.receipt);
+  }
+
+  async commitExtensionTurn(input: CommitExtensionTurnInput) {
+    // Retain one snapshot while the PostgreSQL transaction awaits independent Store operations.
+    const frozenInput = structuredClone(input);
+    const binding = validateExtensionTurnCommit(frozenInput);
+    return this.#transaction(binding, async (client) => {
+      const replay = await this.#receipt(
+        client,
+        binding,
+        "task",
+        frozenInput.receipt,
+      );
+      if (replay !== null)
+        return parseExtensionTurnReceipt(replay, binding, frozenInput.receipt);
+      await this.#admit(
+        client,
+        binding,
+        frozenInput.expectedActivationRevision,
+      );
+      const turn = await this.#host.commitTurnWithinTransaction(
+        client,
+        extensionTurnCommit(frozenInput),
+      );
+      if (
+        turn.disposition !== "committed" ||
+        turn.runState.runId !== binding.runId
+      )
+        throw new Error("extension_unbound_turn_receipt");
+      await client.query(
+        `INSERT INTO ${this.#schema}.extension_run_bindings VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          ...extensionScopeValues(binding),
+          binding.runId,
+          binding.configurationRevision,
+          binding,
+        ],
+      );
+      const result = extensionTurnResult(turn, binding);
+      await this.#saveReceipt(
+        client,
+        binding,
+        "task",
+        frozenInput.receipt,
+        result,
+      );
+      return result;
+    });
+  }
+
+  async #admit(
+    client: PoolClient,
+    binding: ExtensionRunBinding,
+    expectedActivationRevision: number,
+  ) {
+    assertExtensionAdmission(
+      binding,
+      await this.#activation(client, binding),
+      expectedActivationRevision,
+      await this.#configuration(client, binding, binding.configurationRevision),
+    );
+    await this.#assertDeployment(client, binding.tenantId, binding.target);
+    if (binding.source !== null) {
+      const source = await this.#binding(client, {
+        tenantId: binding.tenantId,
+        spaceId: binding.spaceId,
+        runId: binding.source.runId,
+      });
+      const operation = await client.query(
+        `SELECT 1 FROM ${this.#schema}.extension_external_operations WHERE tenant_id = $1 AND run_id = $2 AND binding_digest = $3 AND operation_id = $4`,
+        [
+          binding.tenantId,
+          binding.source.runId,
+          binding.source.bindingDigest,
+          binding.source.operationId,
+        ],
+      );
+      assertExtensionQuerySource(binding, source, operation.rows.length > 0);
+    }
   }
 
   async #configuration(

@@ -178,6 +178,7 @@ export class PostgresDomainStore
       assertOpen: () => this.assertOpen(),
       commitRunWithinTransaction: (client, input) =>
         this.commitRunWithin(client, input),
+      commitTurnWithinTransaction: (client, input) => this.commitTurnStartWithin(client, input),
     });
   }
 

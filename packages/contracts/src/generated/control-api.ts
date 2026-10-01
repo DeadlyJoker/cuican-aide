@@ -925,6 +925,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/extensions/{pluginId}/tasks": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Opt-in plugin task admission. Atomically appends the user message and commits the Run and immutable plugin binding. Query intent requires current read permission on the original Run and uses its exact configuration. Observe execution through existing Run/event endpoints. */
+    post: operations["createExtensionTask"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2299,6 +2316,36 @@ export interface components {
       /** @enum {string} */
       disposition: "updated" | "replayed";
       activation: components["schemas"]["ExtensionActivation"];
+    };
+    ExtensionGenerateTaskIntent: {
+      /** @constant */
+      kind: "generate";
+      /** @description Plugin task JSON validated against the pinned manifest. Total canonical input <=16KiB; depth <=24; nodes <=8192. Runtime and scope fields are supplied by the host. */
+      input: {
+        [key: string]: unknown;
+      };
+    };
+    ExtensionQueryTaskIntent: {
+      /** @constant */
+      kind: "query";
+      sourceRunId: string;
+      operationId: string;
+    };
+    CreateExtensionTaskRequest: {
+      threadId: string;
+      expectedThreadRevision: number;
+      intent:
+        | components["schemas"]["ExtensionGenerateTaskIntent"]
+        | components["schemas"]["ExtensionQueryTaskIntent"];
+    };
+    ExtensionTaskMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      threadId: string;
+      threadRevision: number;
+      runId: string;
+      messageId: string;
+      configurationRevision: number;
     };
   };
   responses: {
@@ -4660,6 +4707,42 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ExtensionActivationMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createExtensionTask: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": string;
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        pluginId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateExtensionTaskRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or idempotently replayed task */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExtensionTaskMutationResponse"];
         };
       };
       400: components["responses"]["Error"];

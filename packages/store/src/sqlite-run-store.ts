@@ -661,6 +661,8 @@ export class SqliteRunStore implements DomainStore {
       assertOpen: () => this.#assertOpen(),
       commitRunWithinTransaction: (input) =>
         this.#commitRun(input, null, null, { withinTransaction: true }),
+      commitTurnWithinTransaction: (input) =>
+        this.#commitTurnStart(input, { withinTransaction: true }),
     });
   }
 
@@ -2412,10 +2414,17 @@ export class SqliteRunStore implements DomainStore {
   async commitTurnStart(
     input: CommitTurnStartInput,
   ): Promise<CommitTurnStartResult> {
+    return this.#commitTurnStart(input, { withinTransaction: false });
+  }
+
+  #commitTurnStart(
+    input: CommitTurnStartInput,
+    options: Readonly<{ withinTransaction: boolean }>,
+  ): CommitTurnStartResult {
     this.#assertOpen();
     const { runId, threadId } = validateTurnStartInput(input);
     try {
-      this.#database.exec("BEGIN IMMEDIATE");
+      if (!options.withinTransaction) this.#database.exec("BEGIN IMMEDIATE");
       const prior = this.#loadReceipt(
         input.idempotency.scope,
         input.idempotency.key,
@@ -2434,7 +2443,7 @@ export class SqliteRunStore implements DomainStore {
           ),
         );
         validateStoredTurnStartReceiptResult(result, prior, threadId);
-        this.#database.exec("COMMIT");
+        if (!options.withinTransaction) this.#database.exec("COMMIT");
         return clone({ ...result, disposition: "replayed" });
       }
 
@@ -2576,10 +2585,10 @@ export class SqliteRunStore implements DomainStore {
           input.idempotency.requestFingerprint,
           stableJson(result),
         );
-      this.#database.exec("COMMIT");
+      if (!options.withinTransaction) this.#database.exec("COMMIT");
       return clone(result);
     } catch (error) {
-      rollback(this.#database);
+      if (!options.withinTransaction) rollback(this.#database);
       throw normalizeSqliteError(error);
     }
   }

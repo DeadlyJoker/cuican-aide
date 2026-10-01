@@ -901,237 +901,246 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     input: CommitTurnStartInput,
   ): Promise<CommitTurnStartResult> {
     this.assertOpen();
-    const { runId, threadId } = validateTurnStartInput(input);
+    validateTurnStartInput(input);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await advisoryLock(
-        client,
-        `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
-      );
-      const prior = await this.#loadTurnStartReceipt(client, {
-        tenantId: input.tenantId,
-        threadId,
-        idempotency: input.idempotency,
-      });
-      if (prior !== null) {
-        await client.query("COMMIT");
-        return { ...prior, disposition: "replayed" };
-      }
-      await assertPostgresProviderSettingsAdmissionOpen(
-        client,
-        this.schemaSql(),
-        input.tenantId,
-      );
-      await advisoryLock(client, `run:${input.tenantId}:${runId}`);
-      await advisoryLock(client, `thread:${input.tenantId}:${threadId}`);
-
-      const currentThread = await this.loadThreadWithin(
-        client,
-        { tenantId: input.tenantId, threadId },
-        true,
-      );
-      if (currentThread === null) {
-        throw new RunStoreError("thread_not_found");
-      }
-      if (currentThread.revision !== input.thread.expectedRevision) {
-        throw new RunStoreError("revision_conflict");
-      }
-      if (currentThread.status !== "active") {
-        throw new RunStoreError("thread_not_active");
-      }
-      const activeRun = await client.query(
-        `SELECT 1
-         FROM ${this.schemaSql()}.run_snapshots AS snapshots
-         JOIN ${this.schemaSql()}.run_thread_bindings AS bindings
-           ON bindings.tenant_id = snapshots.tenant_id
-          AND bindings.run_id = snapshots.run_id
-         WHERE snapshots.tenant_id = $1
-           AND bindings.thread_id = $2
-           AND snapshots.state_json->>'status'
-               NOT IN ('completed', 'failed', 'canceled')
-         LIMIT 1`,
-        [input.tenantId, threadId],
-      );
-      if (activeRun.rowCount !== 0) {
-        throw new RunStoreError("thread_active_run_conflict");
-      }
-      if (
-        (await this.loadRunWithin(
-          client,
-          { tenantId: input.tenantId, runId },
-          true,
-        )) !== null
-      ) {
-        throw new RunStoreError("revision_conflict");
-      }
-      const nextGoal = applyTurnStartGoalMutation(
-        await this.loadThreadGoalWithin(
-          client,
-          { tenantId: input.tenantId, threadId },
-          true,
-        ),
-        input.goal,
-        { tenantId: input.tenantId, threadId },
-      );
-      validateTurnStartGoalBinding(nextGoal, input);
-
-      const threadEventIds = await this.#existingIds(
-        client,
-        "thread_events",
-        "event_id",
-        input.thread.events.map((event) => event.eventId),
-      );
-      const messageIds = await this.#existingIds(
-        client,
-        "messages",
-        "message_id",
-        input.thread.messages.map((message) => message.messageId),
-      );
-      validateThreadEvents(input.thread.events, threadId, (id) =>
-        threadEventIds.has(id),
-      );
-      validateMessages(
-        input.thread.messages,
-        input.thread.events,
-        threadId,
-        input.tenantId,
-        (id) => messageIds.has(id),
-      );
-      await this.validateModelHistoryWithin(
-        client,
-        { tenantId: input.tenantId, threadId },
-        input.thread.history,
-      );
-      let nextThread: ThreadState | null = currentThread;
-      for (const event of input.thread.events) {
-        nextThread = reduceThreadLifecycleEvent(nextThread, event);
-      }
-      if (nextThread === null) {
-        throw new RunStoreError("thread_events_empty");
-      }
-
-      const runEventIds = await this.#existingIds(
-        client,
-        "run_events",
-        "event_id",
-        input.run.events.map((event) => event.eventId),
-      );
-      const outboxIds = await this.#existingIds(
-        client,
-        "outbox",
-        "message_id",
-        input.run.outbox.map((message) => message.messageId),
-      );
-      const workItemIds = await this.#existingIds(
-        client,
-        "work_items",
-        "work_item_id",
-        input.run.workItems.map((item) => item.workItemId),
-      );
-      validateEvents(input.run.events, runId, (id) => runEventIds.has(id));
-      let nextRun: RunState | null = null;
-      for (const event of input.run.events) {
-        nextRun = reduceRunLifecycleEvent(nextRun, event);
-      }
-      if (
-        nextRun === null ||
-        nextRun.tenantId !== input.tenantId ||
-        nextRun.threadId !== threadId ||
-        nextRun.spaceId !== nextThread.spaceId
-      ) {
-        throw new RunStoreError("turn_start_authority_mismatch");
-      }
-      validateOutbox(input.run.outbox, runId, input.tenantId, (id) =>
-        outboxIds.has(id),
-      );
-      validateWorkItems(
-        input.run.workItems,
-        runId,
-        input.tenantId,
-        input.run.events.at(-1)?.sequence ?? 0,
-        (id) => workItemIds.has(id),
-      );
-
-      await writePostgresThreadSnapshot(
-        client,
-        this.schemaSql(),
-        currentThread,
-        nextThread,
-        input.thread.expectedRevision,
-      );
-      await writePostgresThreadEvents(
-        client,
-        this.schemaSql(),
-        input.thread.events,
-        input.tenantId,
-      );
-      await writePostgresMessages(
-        client,
-        this.schemaSql(),
-        input.thread.messages,
-      );
-      await writePostgresModelHistory(
-        client,
-        this.schemaSql(),
-        input.thread.history.items,
-      );
-      await this.writeTurnStartGoalWithin(client, input.goal, nextGoal, {
-        tenantId: input.tenantId,
-        threadId,
-      });
-      await writePostgresRunSnapshot(
-        client,
-        this.schemaSql(),
-        null,
-        nextRun,
-        input.run.expectedRevision,
-      );
-      await writePostgresRunEvents(
-        client,
-        this.schemaSql(),
-        input.run.events,
-        input.tenantId,
-      );
-      await writePostgresOutbox(client, this.schemaSql(), input.run.outbox);
-      await writePostgresWorkItems(
-        client,
-        this.schemaSql(),
-        input.run.workItems,
-      );
-      const result: CommitTurnStartResult = {
-        disposition: "committed",
-        threadState: nextThread,
-        runState: nextRun,
-        goalState: nextGoal,
-        threadEvents: input.thread.events,
-        messages: input.thread.messages,
-        historyItems: input.thread.history.items,
-        runEvents: input.run.events,
-        outbox: input.run.outbox,
-        workItems: input.run.workItems,
-      };
-      await client.query(
-        `INSERT INTO ${this.schemaSql()}.idempotency_receipts
-           (tenant_id, scope, idempotency_key, run_id, fingerprint, result_json)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [
-          input.tenantId,
-          input.idempotency.scope,
-          input.idempotency.key,
-          runId,
-          input.idempotency.requestFingerprint,
-          stableJson(result),
-        ],
-      );
+      const result = await this.commitTurnStartWithin(client, input);
       await client.query("COMMIT");
-      return structuredClone(result);
+      return result;
     } catch (error) {
       await rollbackPostgres(client);
       throw normalizePostgresError(error);
     } finally {
       client.release();
     }
+  }
+
+  protected async commitTurnStartWithin(
+    client: PoolClient,
+    input: CommitTurnStartInput,
+  ): Promise<CommitTurnStartResult> {
+    this.assertOpen();
+    const { runId, threadId } = validateTurnStartInput(input);
+    await advisoryLock(
+      client,
+      `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
+    );
+    const prior = await this.#loadTurnStartReceipt(client, {
+      tenantId: input.tenantId,
+      threadId,
+      idempotency: input.idempotency,
+    });
+    if (prior !== null) {
+      return { ...prior, disposition: "replayed" };
+    }
+    await assertPostgresProviderSettingsAdmissionOpen(
+      client,
+      this.schemaSql(),
+      input.tenantId,
+    );
+    await advisoryLock(client, `run:${input.tenantId}:${runId}`);
+    await advisoryLock(client, `thread:${input.tenantId}:${threadId}`);
+
+    const currentThread = await this.loadThreadWithin(
+      client,
+      { tenantId: input.tenantId, threadId },
+      true,
+    );
+    if (currentThread === null) {
+      throw new RunStoreError("thread_not_found");
+    }
+    if (currentThread.revision !== input.thread.expectedRevision) {
+      throw new RunStoreError("revision_conflict");
+    }
+    if (currentThread.status !== "active") {
+      throw new RunStoreError("thread_not_active");
+    }
+    const activeRun = await client.query(
+      `SELECT 1
+       FROM ${this.schemaSql()}.run_snapshots AS snapshots
+       JOIN ${this.schemaSql()}.run_thread_bindings AS bindings
+         ON bindings.tenant_id = snapshots.tenant_id
+        AND bindings.run_id = snapshots.run_id
+       WHERE snapshots.tenant_id = $1
+         AND bindings.thread_id = $2
+         AND snapshots.state_json->>'status'
+             NOT IN ('completed', 'failed', 'canceled')
+       LIMIT 1`,
+      [input.tenantId, threadId],
+    );
+    if (activeRun.rowCount !== 0) {
+      throw new RunStoreError("thread_active_run_conflict");
+    }
+    if (
+      (await this.loadRunWithin(
+        client,
+        { tenantId: input.tenantId, runId },
+        true,
+      )) !== null
+    ) {
+      throw new RunStoreError("revision_conflict");
+    }
+    const nextGoal = applyTurnStartGoalMutation(
+      await this.loadThreadGoalWithin(
+        client,
+        { tenantId: input.tenantId, threadId },
+        true,
+      ),
+      input.goal,
+      { tenantId: input.tenantId, threadId },
+    );
+    validateTurnStartGoalBinding(nextGoal, input);
+
+    const threadEventIds = await this.#existingIds(
+      client,
+      "thread_events",
+      "event_id",
+      input.thread.events.map((event) => event.eventId),
+    );
+    const messageIds = await this.#existingIds(
+      client,
+      "messages",
+      "message_id",
+      input.thread.messages.map((message) => message.messageId),
+    );
+    validateThreadEvents(input.thread.events, threadId, (id) =>
+      threadEventIds.has(id),
+    );
+    validateMessages(
+      input.thread.messages,
+      input.thread.events,
+      threadId,
+      input.tenantId,
+      (id) => messageIds.has(id),
+    );
+    await this.validateModelHistoryWithin(
+      client,
+      { tenantId: input.tenantId, threadId },
+      input.thread.history,
+    );
+    let nextThread: ThreadState | null = currentThread;
+    for (const event of input.thread.events) {
+      nextThread = reduceThreadLifecycleEvent(nextThread, event);
+    }
+    if (nextThread === null) {
+      throw new RunStoreError("thread_events_empty");
+    }
+
+    const runEventIds = await this.#existingIds(
+      client,
+      "run_events",
+      "event_id",
+      input.run.events.map((event) => event.eventId),
+    );
+    const outboxIds = await this.#existingIds(
+      client,
+      "outbox",
+      "message_id",
+      input.run.outbox.map((message) => message.messageId),
+    );
+    const workItemIds = await this.#existingIds(
+      client,
+      "work_items",
+      "work_item_id",
+      input.run.workItems.map((item) => item.workItemId),
+    );
+    validateEvents(input.run.events, runId, (id) => runEventIds.has(id));
+    let nextRun: RunState | null = null;
+    for (const event of input.run.events) {
+      nextRun = reduceRunLifecycleEvent(nextRun, event);
+    }
+    if (
+      nextRun === null ||
+      nextRun.tenantId !== input.tenantId ||
+      nextRun.threadId !== threadId ||
+      nextRun.spaceId !== nextThread.spaceId
+    ) {
+      throw new RunStoreError("turn_start_authority_mismatch");
+    }
+    validateOutbox(input.run.outbox, runId, input.tenantId, (id) =>
+      outboxIds.has(id),
+    );
+    validateWorkItems(
+      input.run.workItems,
+      runId,
+      input.tenantId,
+      input.run.events.at(-1)?.sequence ?? 0,
+      (id) => workItemIds.has(id),
+    );
+
+    await writePostgresThreadSnapshot(
+      client,
+      this.schemaSql(),
+      currentThread,
+      nextThread,
+      input.thread.expectedRevision,
+    );
+    await writePostgresThreadEvents(
+      client,
+      this.schemaSql(),
+      input.thread.events,
+      input.tenantId,
+    );
+    await writePostgresMessages(
+      client,
+      this.schemaSql(),
+      input.thread.messages,
+    );
+    await writePostgresModelHistory(
+      client,
+      this.schemaSql(),
+      input.thread.history.items,
+    );
+    await this.writeTurnStartGoalWithin(client, input.goal, nextGoal, {
+      tenantId: input.tenantId,
+      threadId,
+    });
+    await writePostgresRunSnapshot(
+      client,
+      this.schemaSql(),
+      null,
+      nextRun,
+      input.run.expectedRevision,
+    );
+    await writePostgresRunEvents(
+      client,
+      this.schemaSql(),
+      input.run.events,
+      input.tenantId,
+    );
+    await writePostgresOutbox(client, this.schemaSql(), input.run.outbox);
+    await writePostgresWorkItems(
+      client,
+      this.schemaSql(),
+      input.run.workItems,
+    );
+    const result: CommitTurnStartResult = {
+      disposition: "committed",
+      threadState: nextThread,
+      runState: nextRun,
+      goalState: nextGoal,
+      threadEvents: input.thread.events,
+      messages: input.thread.messages,
+      historyItems: input.thread.history.items,
+      runEvents: input.run.events,
+      outbox: input.run.outbox,
+      workItems: input.run.workItems,
+    };
+    await client.query(
+      `INSERT INTO ${this.schemaSql()}.idempotency_receipts
+         (tenant_id, scope, idempotency_key, run_id, fingerprint, result_json)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [
+        input.tenantId,
+        input.idempotency.scope,
+        input.idempotency.key,
+        runId,
+        input.idempotency.requestFingerprint,
+        stableJson(result),
+      ],
+    );
+    return structuredClone(result);
   }
 
   async commitRun(input: CommitRunInput): Promise<CommitRunResult> {
