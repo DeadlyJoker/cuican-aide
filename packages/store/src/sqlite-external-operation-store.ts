@@ -28,11 +28,19 @@ export function migrateSqliteExternalOperations(database: DatabaseSync) {
 
 export class SqliteExternalOperationStore implements ExternalOperationStore {
   readonly #database: DatabaseSync;
-  constructor(database: DatabaseSync) {
+  readonly #host: Readonly<{ assertOpen(): void }> | undefined;
+  constructor(database: DatabaseSync, host?: Readonly<{ assertOpen(): void }>) {
     this.#database = database;
+    this.#host = host;
+  }
+
+  async migrate(): Promise<void> {
+    this.#host?.assertOpen();
+    migrateSqliteExternalOperations(this.#database);
   }
 
   async reserveExternalOperation(input: ReserveExternalOperation) {
+    this.#host?.assertOpen();
     const operation = initialExternalOperation(input);
     return this.#transaction(() => {
       const inserted = this.#database
@@ -71,11 +79,13 @@ export class SqliteExternalOperationStore implements ExternalOperationStore {
   }
 
   async loadExternalOperation(input: ExternalOperationLocator) {
+    this.#host?.assertOpen();
     validateExternalOperationLocator(input);
     return this.#load(input);
   }
 
   async advanceExternalOperation(input: AdvanceExternalOperation) {
+    this.#host?.assertOpen();
     validateExternalOperationAdvance(input);
     return this.#transaction(() => {
       const current = this.#load(input);

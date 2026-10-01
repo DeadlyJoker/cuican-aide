@@ -1,4 +1,5 @@
 import { SqliteExtensionStore } from "./sqlite-extension-store.ts";
+import { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import { SqliteModelPricingStore } from "./sqlite-model-pricing-store.ts";
 import {
   encodeSqliteModelHistoryItem,
@@ -663,6 +664,14 @@ export class SqliteRunStore implements DomainStore {
         this.#commitRun(input, null, null, { withinTransaction: true }),
       commitTurnWithinTransaction: (input) =>
         this.#commitTurnStart(input, { withinTransaction: true }),
+    });
+  }
+
+  /** Shares the parent connection and lifetime; plugin migrations remain explicit. */
+  externalOperationStore(): SqliteExternalOperationStore {
+    this.#assertOpen();
+    return new SqliteExternalOperationStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
     });
   }
 

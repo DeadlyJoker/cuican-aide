@@ -9,6 +9,7 @@ export * from "./rate-limits.ts";
 export * from "./run-contract.ts";
 export * from "./office-control-contract.ts";
 export * from "./extension-control-contract.ts";
+export * from "./extension-host-api.ts";
 export * from "./runtime-worker-workspace-api.ts";
 export * from "./workspace-list-control-contract.ts";
 export * from "./workspace-native-readonly.ts";

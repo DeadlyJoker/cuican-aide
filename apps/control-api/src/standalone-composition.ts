@@ -22,11 +22,16 @@ import {
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
   WorkflowVersionApplicationService,
+  ExtensionConfigurationApplicationService,
+  ExtensionTaskApplicationService,
   type ActorContext,
   type ArtifactStorePort,
   type AutomationStore,
   type DomainStore,
   type ModelProviderSettingsStore,
+  type ExtensionCatalogPort,
+  type ExtensionStore,
+  type ExternalOperationStore,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
@@ -54,6 +59,21 @@ import {
 import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
 import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
+import { LoopbackExtensionHostClient } from "./extension-worker-client.ts";
+
+type ExtensionWorkerConfig = Readonly<{
+  origin: string;
+  token: string;
+  deadlineMs?: number;
+}>;
+type PreparedControlExtensions = {
+  client: LoopbackExtensionHostClient;
+  catalog: ExtensionCatalogPort;
+  extensions: ExtensionStore;
+  operations: ExternalOperationStore;
+  failureCleanup?: Promise<void>;
+  earlyFailureCleanup?: () => Promise<void>;
+};
 
 type ControlApiCompositionConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -89,6 +109,7 @@ export type PostgresControlApiConfig = ControlApiCompositionConfig &
     schema?: string;
     maxPoolSize?: number;
     statementTimeoutMs?: number;
+    extensionWorker?: ExtensionWorkerConfig;
   }>;
 
 export type StandaloneControlApiRuntime = Readonly<{
@@ -117,15 +138,38 @@ export function createStandaloneControlApi(
   }
 }
 
+/** Explicit async opt-in; the existing synchronous creator keeps plugins unavailable. */
+export async function createStandaloneControlApiWithExtensions(
+  config: StandaloneControlApiConfig &
+    Readonly<{ extensionWorker: ExtensionWorkerConfig }>,
+): Promise<StandaloneControlApiRuntime> {
+  const pinned = pinExtensionCompositionConfig(config);
+  const store = new SqliteRunStore(pinned.databasePath);
+  return composeExtensionControlApi(
+    store,
+    {
+      ...pinned,
+      localStoragePaths: [pinned.databasePath, ...(pinned.localStoragePaths ?? [])],
+    },
+    pinned.extensionWorker,
+  );
+}
+
 export async function createPostgresControlApi(
   config: PostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
+  const pinned =
+    config.extensionWorker === undefined
+      ? config
+      : pinExtensionCompositionConfig(config);
   const store = await PostgresDomainStore.open({
-    connectionString: config.connectionString,
-    schema: config.schema,
-    maxPoolSize: config.maxPoolSize,
-    statementTimeoutMs: config.statementTimeoutMs,
+    connectionString: pinned.connectionString,
+    schema: pinned.schema,
+    maxPoolSize: pinned.maxPoolSize,
+    statementTimeoutMs: pinned.statementTimeoutMs,
   });
+  if (pinned.extensionWorker !== undefined)
+    return composeExtensionControlApi(store, pinned, pinned.extensionWorker);
   try {
     return composeControlApi(store, config);
   } catch (error) {
@@ -134,15 +178,94 @@ export async function createPostgresControlApi(
   }
 }
 
+function pinExtensionCompositionConfig<
+  T extends ControlApiCompositionConfig & {
+    extensionWorker?: ExtensionWorkerConfig;
+  },
+>(config: T): T {
+  return {
+    ...config,
+    actor: structuredClone(config.actor),
+    allowedOrigins: [...config.allowedOrigins],
+    localStoragePaths:
+      config.localStoragePaths === undefined
+        ? undefined
+        : [...config.localStoragePaths],
+    extensionWorker:
+      config.extensionWorker === undefined
+        ? undefined
+        : { ...config.extensionWorker },
+  };
+}
+
+async function composeExtensionControlApi(
+  store: SqliteRunStore | PostgresDomainStore,
+  config: ControlApiCompositionConfig,
+  worker: ExtensionWorkerConfig,
+): Promise<StandaloneControlApiRuntime> {
+  let client: LoopbackExtensionHostClient | null = null;
+  let prepared: PreparedControlExtensions | undefined;
+  try {
+    client = new LoopbackExtensionHostClient(worker);
+    const catalog = await client.loadCatalog(config.actor);
+    const extensions = store.extensionStore();
+    await extensions.migrate();
+    const operations = store.externalOperationStore();
+    await operations.migrate();
+    prepared = { client, catalog, extensions, operations };
+    return composeControlApi(store, config, prepared);
+  } catch (error) {
+    await closeOwners(
+      [
+        () =>
+          prepared?.failureCleanup ??
+          prepared?.earlyFailureCleanup?.() ??
+          config.artifactStore.close(),
+        () => client?.close(),
+        () => store.close(),
+      ],
+      [error],
+    );
+    throw error;
+  }
+}
+
+/** Complete cleanup in order even if an owner rejects; startup failures remain visible. */
+async function closeOwners(
+  owners: readonly (() => void | Promise<void>)[],
+  initialErrors: readonly unknown[] = [],
+): Promise<void> {
+  const errors = [...initialErrors];
+  for (const close of owners) {
+    try {
+      await close();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  if (errors.length === 1) throw errors[0];
+  if (errors.length > 1)
+    throw new AggregateError(errors, "extension_control_cleanup_failed");
+}
+
 function composeControlApi(
   store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
+  preparedExtensions?: PreparedControlExtensions,
 ): StandaloneControlApiRuntime {
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
     paths: config.localStoragePaths ?? [],
   });
   const eventHub = new RunEventHub();
+  if (preparedExtensions !== undefined) {
+    preparedExtensions.earlyFailureCleanup = () =>
+      closeOwners([
+        () => storageCapacity.close(),
+        () => eventHub.close(),
+        () => config.artifactStore.close(),
+      ]);
+  }
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
     { store, eventHub },
@@ -155,6 +278,7 @@ function composeControlApi(
   );
   let workspaceWorker: LoopbackRuntimeWorkspaceWorkerClient | null = null;
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
+  let automationScheduler: AutomationScheduler | undefined;
   try {
     artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
     const authorization = new StandaloneAuthorization(config.actor);
@@ -197,6 +321,31 @@ function composeControlApi(
       ids,
       digester,
     });
+    const extensions =
+      preparedExtensions === undefined
+        ? undefined
+        : new ExtensionConfigurationApplicationService({
+            store: preparedExtensions.extensions,
+            catalog: preparedExtensions.catalog,
+            host: preparedExtensions.client,
+            authorization,
+            clock,
+            digester,
+          });
+    const extensionTasks =
+      preparedExtensions === undefined
+        ? undefined
+        : new ExtensionTaskApplicationService({
+            store,
+            extensions: preparedExtensions.extensions,
+            operations: preparedExtensions.operations,
+            catalog: preparedExtensions.catalog,
+            host: preparedExtensions.client,
+            authorization,
+            clock,
+            ids,
+            digester,
+          });
     const compactions = new ThreadCompactionApplicationService({
       store,
       authorization,
@@ -241,7 +390,7 @@ function composeControlApi(
       digester,
       routeResolver,
     });
-    const automationScheduler = new AutomationScheduler(
+    automationScheduler = new AutomationScheduler(
       {
         storageAdmission: storageCapacity.admission,
         automations,
@@ -314,6 +463,8 @@ function composeControlApi(
       taskChanges,
       goals,
       turns,
+      extensions,
+      extensionTasks,
       compactions,
       rollbacks,
       approvals,
@@ -358,9 +509,23 @@ function composeControlApi(
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
+      if (preparedExtensions !== undefined) {
+        await closeOwners([
+          () => storageCapacity.close(),
+          () => artifactMaintenance!.close(),
+          () => automationScheduler!.close(),
+          () => outboxDispatcher.close(),
+          () => eventHub.close(),
+          () => workspaceWorker?.close(),
+          () => preparedExtensions.client.close(),
+          () => config.artifactStore.close(),
+          () => store.close(),
+        ]);
+        return;
+      }
       storageCapacity.close();
       await artifactMaintenance!.close();
-      await automationScheduler.close();
+      await automationScheduler!.close();
       await outboxDispatcher.close();
       eventHub.close();
       await workspaceWorker?.close();
@@ -378,6 +543,18 @@ function composeControlApi(
       workspaceQueries,
     };
   } catch (error) {
+    if (preparedExtensions !== undefined) {
+      preparedExtensions.failureCleanup = closeOwners([
+        () => storageCapacity.close(),
+        () => artifactMaintenance?.close(),
+        () => automationScheduler?.close(),
+        () => outboxDispatcher.close(),
+        () => eventHub.close(),
+        () => workspaceWorker?.close(),
+        () => config.artifactStore.close(),
+      ]);
+      throw error;
+    }
     storageCapacity.close();
     void artifactMaintenance?.close();
     void outboxDispatcher.close();

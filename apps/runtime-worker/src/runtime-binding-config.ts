@@ -1,6 +1,16 @@
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 
+import {
+  bounded,
+  isPlainObject,
+  parseRuntimeBindingConfig,
+  type RuntimeBindingConfig,
+} from "./runtime-binding-schema.ts";
+
+export { parseRuntimeBindingConfig } from "./runtime-binding-schema.ts";
+export type { RuntimeBindingConfig } from "./runtime-binding-schema.ts";
+
 import type { CompiledAgentVersion } from "@crewon/agent-version";
 import type { AgentVersionDeploymentCandidate } from "@crewon/application";
 import {
@@ -37,46 +47,26 @@ import {
   createWithoutExternalAllocation,
   type RuntimeCreationOptions,
 } from "./runtime-creation-cleanup.ts";
+import {
+  loadRuntimeExtensionSnapshot,
+  runtimeExtensionTarget,
+  createRuntimeExtension,
+  type RuntimeExtensionSnapshot,
+  type RuntimeExtensionDependencies,
+} from "./extensions/extension-runtime-config.ts";
+import { registerRuntimeExtensionMaterializations } from "./extensions/extension-runtime-proof.ts";
 
-const MAX_BINDINGS = 1_000;
 const MAX_CONFIG_BYTES = 1024 * 1024;
 
-type RuntimeBindingConfig = Readonly<{
-  schemaVersion: "crewon.agent-version-runtime-bindings.v0";
-  bindings: readonly Readonly<{
-    tenantId: string;
-    agentVersionId: string;
-    contentDigest: string;
-    authorityId: string;
-    workspaceBindingId: string | null;
-    provider: Readonly<
-      | {
-          kind: "directResponses";
-          endpoint: string;
-          apiKeyEnvironment: string | null;
-          storeResponses: boolean;
-          requestProfile: "standard" | "responsesLite";
-          idleTimeoutMs: number;
-          sequencePolicy: "required" | "whenPresent";
-        }
-      | {
-          kind: "cloudAgent";
-          invocationUrl: string;
-          modelId: string;
-          agentId: number;
-          apiKeyEnvironment: string | null;
-          storeResponses: boolean;
-          requestProfile: "standard" | "responsesLite";
-          idleTimeoutMs: number;
-          sequencePolicy: "required" | "whenPresent";
-        }
-    >;
-    mcpStdioConfigPath: string | null;
-    deviceToolConfigPath: string | null;
-    remoteMcpConfigPath: string | null;
-    toolRuntimeMode?: "independent" | "shared";
-  }>[];
-}>;
+export function loadRuntimeBindingConfig(path: string): RuntimeBindingConfig {
+  return parseRuntimeBindingConfig(
+    readBoundedJson(
+      path,
+      MAX_CONFIG_BYTES,
+      "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
+    ),
+  );
+}
 
 /** Reads a bounded open runtime manifest and creates independent HTTP/MCP bindings. */
 export function loadAgentVersionRuntimeFactory(
@@ -84,18 +74,32 @@ export function loadAgentVersionRuntimeFactory(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   remoteMcpDependencies?: RemoteMcpCompositionDependencies,
   nativeProviderApiKey?: string | null,
+  extensionDependencies?: RuntimeExtensionDependencies,
 ): ConfiguredAgentVersionRuntimeFactory {
-  const input = readBoundedJson(
-    path,
-    MAX_CONFIG_BYTES,
-    "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
-  );
+  return createAgentVersionRuntimeFactory({
+    config: loadRuntimeBindingConfig(path),
+    environment,
+    remoteMcpDependencies,
+    nativeProviderApiKey,
+    extensionDependencies,
+  });
+}
+
+/** Materializes from one copied manifest, so validation and construction cannot read different files. */
+export function createAgentVersionRuntimeFactory(input: {
+  config: RuntimeBindingConfig;
+  environment: Readonly<Record<string, string | undefined>>;
+  remoteMcpDependencies?: RemoteMcpCompositionDependencies;
+  nativeProviderApiKey?: string | null;
+  extensionDependencies?: RuntimeExtensionDependencies;
+}): ConfiguredAgentVersionRuntimeFactory {
   return new ConfiguredAgentVersionRuntimeFactory(
     runtimeBindings(
-      parseRuntimeBindingConfig(input),
-      environment,
-      remoteMcpDependencies,
-      nativeProviderApiKey,
+      parseRuntimeBindingConfig(input.config),
+      input.environment,
+      input.remoteMcpDependencies,
+      input.nativeProviderApiKey,
+      input.extensionDependencies,
     ),
   );
 }
@@ -137,12 +141,13 @@ export function loadRemoteMcpManifestBindings(
 export function loadAgentVersionDeployments(
   path: string,
 ): readonly AgentVersionDeploymentCandidate[] {
-  const input = readBoundedJson(
-    path,
-    MAX_CONFIG_BYTES,
-    "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
-  );
-  return parseRuntimeBindingConfig(input).bindings.map((binding) => ({
+  return agentVersionDeploymentCandidates(loadRuntimeBindingConfig(path));
+}
+
+export function agentVersionDeploymentCandidates(
+  config: RuntimeBindingConfig,
+): readonly AgentVersionDeploymentCandidate[] {
+  return parseRuntimeBindingConfig(config).bindings.map((binding) => ({
     schemaVersion: "crewon.agent-version-deployment.v0",
     tenantId: binding.tenantId,
     agentVersionId: binding.agentVersionId,
@@ -153,220 +158,19 @@ export function loadAgentVersionDeployments(
   }));
 }
 
-export function parseRuntimeBindingConfig(
-  input: unknown,
-): RuntimeBindingConfig {
-  if (
-    !hasExactKeys(input, ["bindings", "schemaVersion"]) ||
-    input.schemaVersion !== "crewon.agent-version-runtime-bindings.v0" ||
-    !Array.isArray(input.bindings) ||
-    input.bindings.length > MAX_BINDINGS
-  ) {
-    throw new Error("agent_version_runtime_bindings_invalid");
-  }
-  return {
-    schemaVersion: input.schemaVersion,
-    bindings: input.bindings.map(parseBinding),
-  };
-}
-
-function parseBinding(
-  value: unknown,
-): RuntimeBindingConfig["bindings"][number] {
-  const bindingKeys = [
-    "agentVersionId",
-    "authorityId",
-    "contentDigest",
-    "deviceToolConfigPath",
-    "mcpStdioConfigPath",
-    "provider",
-    "remoteMcpConfigPath",
-    "tenantId",
-    "workspaceBindingId",
-  ];
-  if (
-    !hasExactKeys(value, bindingKeys) &&
-    !hasExactKeys(value, [...bindingKeys, "toolRuntimeMode"])
-  ) {
-    throw new Error("agent_version_runtime_binding_invalid");
-  }
-  const provider = parseProvider(value.provider);
-  const toolRuntimeMode = value.toolRuntimeMode;
-  if (
-    toolRuntimeMode !== undefined &&
-    toolRuntimeMode !== "independent" &&
-    toolRuntimeMode !== "shared"
-  ) {
-    throw new Error("agent_version_runtime_binding_invalid");
-  }
-  if (
-    toolRuntimeMode === "shared" &&
-    (value.mcpStdioConfigPath !== null ||
-      value.deviceToolConfigPath !== null ||
-      value.remoteMcpConfigPath !== null)
-  ) {
-    throw new Error("agent_version_runtime_binding_invalid");
-  }
-  if (
-    provider.kind === "cloudAgent" &&
-    (value.workspaceBindingId !== null ||
-      value.mcpStdioConfigPath !== null ||
-      value.deviceToolConfigPath !== null ||
-      value.remoteMcpConfigPath !== null ||
-      toolRuntimeMode === "shared")
-  ) {
-    throw new Error("agent_version_runtime_provider_authority_invalid");
-  }
-  return {
-    tenantId: bounded(value.tenantId, 256),
-    agentVersionId: bounded(value.agentVersionId, 512),
-    contentDigest: digest(value.contentDigest),
-    authorityId: bounded(value.authorityId, 512),
-    workspaceBindingId:
-      value.workspaceBindingId === null
-        ? null
-        : bounded(value.workspaceBindingId, 512),
-    provider,
-    mcpStdioConfigPath:
-      value.mcpStdioConfigPath === null
-        ? null
-        : bounded(value.mcpStdioConfigPath, 4096),
-    deviceToolConfigPath:
-      value.deviceToolConfigPath === null
-        ? null
-        : bounded(value.deviceToolConfigPath, 4096),
-    remoteMcpConfigPath:
-      value.remoteMcpConfigPath === null
-        ? null
-        : bounded(value.remoteMcpConfigPath, 4096),
-    ...(toolRuntimeMode === undefined ? {} : { toolRuntimeMode }),
-  };
-}
-
-function parseProvider(
-  value: unknown,
-): RuntimeBindingConfig["bindings"][number]["provider"] {
-  if (!isPlainObject(value) || typeof value.kind !== "string") {
-    throw new Error("agent_version_runtime_provider_invalid");
-  }
-  if (value.kind === "directResponses") {
-    return parseDirectResponsesProvider(value);
-  }
-  if (value.kind === "cloudAgent") {
-    return parseCloudAgentProvider(value);
-  }
-  throw new Error("agent_version_runtime_provider_invalid");
-}
-
-function parseDirectResponsesProvider(
-  value: Record<string, unknown>,
-): Extract<
-  RuntimeBindingConfig["bindings"][number]["provider"],
-  { kind: "directResponses" }
-> {
-  if (
-    !hasExactKeys(value, [
-      "apiKeyEnvironment",
-      "endpoint",
-      "idleTimeoutMs",
-      "kind",
-      "requestProfile",
-      "sequencePolicy",
-      "storeResponses",
-    ]) ||
-    typeof value.storeResponses !== "boolean" ||
-    (value.requestProfile !== "standard" &&
-      value.requestProfile !== "responsesLite") ||
-    (value.sequencePolicy !== "required" &&
-      value.sequencePolicy !== "whenPresent") ||
-    !Number.isSafeInteger(value.idleTimeoutMs) ||
-    Number(value.idleTimeoutMs) < 1 ||
-    Number(value.idleTimeoutMs) > 300_000
-  ) {
-    throw new Error("agent_version_runtime_provider_invalid");
-  }
-  const apiKeyEnvironment =
-    value.apiKeyEnvironment === null
-      ? null
-      : bounded(value.apiKeyEnvironment, 128);
-  if (
-    apiKeyEnvironment !== null &&
-    !/^[A-Z][A-Z0-9_]*$/u.test(apiKeyEnvironment)
-  ) {
-    throw new Error("agent_version_runtime_provider_key_invalid");
-  }
-  return {
-    kind: "directResponses",
-    endpoint: bounded(value.endpoint, 2048),
-    apiKeyEnvironment,
-    storeResponses: value.storeResponses,
-    requestProfile: value.requestProfile,
-    idleTimeoutMs: Number(value.idleTimeoutMs),
-    sequencePolicy: value.sequencePolicy,
-  };
-}
-
-function parseCloudAgentProvider(
-  value: Record<string, unknown>,
-): Extract<
-  RuntimeBindingConfig["bindings"][number]["provider"],
-  { kind: "cloudAgent" }
-> {
-  if (
-    !hasExactKeys(value, [
-      "agentId",
-      "apiKeyEnvironment",
-      "idleTimeoutMs",
-      "invocationUrl",
-      "kind",
-      "modelId",
-      "requestProfile",
-      "sequencePolicy",
-      "storeResponses",
-    ]) ||
-    typeof value.storeResponses !== "boolean" ||
-    (value.requestProfile !== "standard" &&
-      value.requestProfile !== "responsesLite") ||
-    (value.sequencePolicy !== "required" &&
-      value.sequencePolicy !== "whenPresent") ||
-    !Number.isSafeInteger(value.idleTimeoutMs) ||
-    Number(value.idleTimeoutMs) < 1 ||
-    Number(value.idleTimeoutMs) > 300_000 ||
-    !Number.isSafeInteger(value.agentId) ||
-    Number(value.agentId) < 1
-  ) {
-    throw new Error("agent_version_runtime_provider_invalid");
-  }
-  const apiKeyEnvironment =
-    value.apiKeyEnvironment === null
-      ? null
-      : bounded(value.apiKeyEnvironment, 128);
-  if (
-    apiKeyEnvironment !== null &&
-    !/^[A-Z][A-Z0-9_]*$/u.test(apiKeyEnvironment)
-  ) {
-    throw new Error("agent_version_runtime_provider_key_invalid");
-  }
-  return {
-    kind: "cloudAgent",
-    invocationUrl: bounded(value.invocationUrl, 2048),
-    modelId: bounded(value.modelId, 256),
-    agentId: Number(value.agentId),
-    apiKeyEnvironment,
-    storeResponses: value.storeResponses,
-    requestProfile: value.requestProfile,
-    idleTimeoutMs: Number(value.idleTimeoutMs),
-    sequencePolicy: value.sequencePolicy,
-  };
-}
-
 function runtimeBindings(
   config: RuntimeBindingConfig,
   environment: Readonly<Record<string, string | undefined>>,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
   nativeProviderApiKey: string | null | undefined,
+  extensionDependencies: RuntimeExtensionDependencies | undefined,
 ): readonly AgentVersionRuntimeBinding[] {
   return config.bindings.map((binding) => {
+    if (
+      binding.extensionConfigPath !== undefined &&
+      extensionDependencies === undefined
+    )
+      throw new Error("extension_runtime_not_composed");
     const executionAuthority =
       binding.provider.kind === "cloudAgent"
         ? ("providerAgent" as const)
@@ -415,6 +219,7 @@ function runtimeBindings(
                 environment,
                 remoteMcpDependencies,
                 options,
+                extensionDependencies,
               ),
     };
   });
@@ -440,12 +245,22 @@ function sha256(value: string): string {
 
 function materializationDigest(
   binding: RuntimeBindingConfig["bindings"][number],
-  snapshots?: Readonly<{ remoteMcpConfig: RemoteMcpRuntimeConfig | null }>,
+  snapshots?: Readonly<{
+    remoteMcpConfig: RemoteMcpRuntimeConfig | null;
+    extension?: RuntimeExtensionSnapshot;
+  }>,
 ): string {
   return sha256(
     stableJson({
       schemaVersion: "crewon.agent-version-materialization.v0",
       binding,
+      ...(binding.extensionConfigPath === undefined
+        ? {}
+        : {
+            extension:
+              snapshots?.extension ??
+              loadRuntimeExtensionSnapshot(binding.extensionConfigPath),
+          }),
       mcpStdioConfig:
         binding.mcpStdioConfigPath === null
           ? null
@@ -495,6 +310,7 @@ async function createBoundToolRuntime(
   environment: Readonly<Record<string, string | undefined>>,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
   options: RuntimeCreationOptions,
+  extensionDependencies: RuntimeExtensionDependencies | undefined,
 ): Promise<ToolRuntimePort> {
   const creation = new RuntimeCreationCleanup(options.failedCreationCleanup);
   try {
@@ -502,8 +318,12 @@ async function createBoundToolRuntime(
       binding.remoteMcpConfigPath === null
         ? null
         : loadRemoteMcpRuntimeConfig(binding.remoteMcpConfigPath);
+    const extension =
+      binding.extensionConfigPath === undefined
+        ? undefined
+        : loadRuntimeExtensionSnapshot(binding.extensionConfigPath);
     if (
-      materializationDigest(binding, { remoteMcpConfig }) !==
+      materializationDigest(binding, { remoteMcpConfig, extension }) !==
       expectedMaterializationDigest
     ) {
       throw new Error("agent_version_runtime_materialization_drift");
@@ -515,6 +335,28 @@ async function createBoundToolRuntime(
       throw new Error("remote_mcp_runtime_not_composed");
     }
     const runtimes: ToolRuntimePort[] = [];
+    const extensionTarget =
+      extension === undefined
+        ? undefined
+        : runtimeExtensionTarget({
+            snapshot: extension,
+            version,
+            binding,
+            materializationDigest: expectedMaterializationDigest,
+          });
+    if (extension !== undefined) {
+      if (extensionDependencies === undefined)
+        throw new Error("extension_runtime_not_composed");
+      runtimes.push(
+        creation.own(
+          createRuntimeExtension({
+            snapshot: extension,
+            target: extensionTarget!,
+            dependencies: extensionDependencies,
+          }),
+        ),
+      );
+    }
     const pimSandbox = createConfiguredPimSandboxToolRuntime(environment);
     if (pimSandbox !== undefined) {
       runtimes.push(creation.own(pimSandbox));
@@ -557,6 +399,15 @@ async function createBoundToolRuntime(
         : runtimes.length === 1
           ? runtimes[0]!
           : new CompositeToolRuntime(runtimes);
+    if (extension !== undefined)
+      registerRuntimeExtensionMaterializations(runtime, [
+        {
+          configuration: extension.configuration,
+          registration: extension.registration,
+          target: extensionTarget!,
+          approvalRequirement: extension.approvalRequirement,
+        },
+      ]);
     creation.transfer();
     return runtime;
   } catch (error) {
@@ -685,46 +536,4 @@ function requiredEnvironment(
     throw new Error("agent_version_runtime_provider_key_missing");
   }
   return value;
-}
-
-function bounded(value: unknown, maxLength: number): string {
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0 ||
-    value.length > maxLength
-  ) {
-    throw new Error("agent_version_runtime_binding_invalid");
-  }
-  return value;
-}
-
-function digest(value: unknown): string {
-  const parsed = bounded(value, 71);
-  if (!/^sha256:[a-f0-9]{64}$/u.test(parsed)) {
-    throw new Error("agent_version_runtime_binding_invalid");
-  }
-  return parsed;
-}
-
-function hasExactKeys(
-  value: unknown,
-  keys: readonly string[],
-): value is Record<string, unknown> {
-  if (!isPlainObject(value)) {
-    return false;
-  }
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  return (
-    actual.length === expected.length &&
-    actual.every((key, index) => key === expected[index])
-  );
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }

@@ -21,6 +21,7 @@ import type { AgentVersionRuntimeFactoryPort } from "./durable-agent-version-run
 import { scopeToolRuntimeToAgentVersion } from "./agent-version-tool-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
+import { readRuntimeExtensionMaterializations } from "./extensions/extension-runtime-proof.ts";
 
 export type AgentVersionRuntimeBinding = Readonly<{
   tenantId: string;
@@ -166,6 +167,28 @@ export class ConfiguredAgentVersionRuntimeFactory
         toolRuntime,
         input.version.tools,
       );
+      const extensions = readRuntimeExtensionMaterializations(toolRuntime);
+      if (
+        extensions !== null &&
+        extensions.some(
+          (proof) =>
+            binding.executionAuthority !== "crewonKernel" ||
+            proof.configuration.tenantId !== input.tenantId ||
+            proof.target.agentVersionId !== input.version.agentVersionId ||
+            proof.target.agentVersionContentDigest !==
+              input.version.contentDigest ||
+            proof.target.materializationDigest !==
+              binding.materializationDigest ||
+            proof.target.authorityId !== binding.authorityId ||
+            proof.target.workspaceBindingId !== binding.workspaceBindingId ||
+            proof.target.runtimeGeneration !==
+              input.version.runtimeGeneration ||
+            proof.target.policySnapshotId !== input.version.policySnapshotId,
+        )
+      )
+        throw new AgentVersionRuntimeError(
+          "extension_runtime_materialization_mismatch",
+        );
       // GovernedContextBundle has no disposal contract; its construction cannot
       // prove cleanup on failure merely by returning a value.
       if (binding.createGovernedContext !== undefined)
@@ -195,6 +218,7 @@ export class ConfiguredAgentVersionRuntimeFactory
         }),
         toolRuntime: scopedToolRuntime,
         contextCompactor: new KernelContextCompactor(kernel),
+        ...(extensions === null ? {} : { extensions }),
         ...(governedContext === undefined ? {} : { governedContext }),
         ...(sharedProjection
           ? {}

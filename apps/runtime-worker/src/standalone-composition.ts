@@ -19,8 +19,6 @@ import {
   RunExecutionService,
   type AgentVersionDeploymentCandidate,
   type ArtifactStorePort,
-  type DomainStore,
-  type ModelProviderSettingsStore,
   type RunRoute,
 } from "@crewon/application";
 import {
@@ -82,6 +80,16 @@ import {
   type NativeWorkspaceReadCatalog,
   type RuntimeWorkspaceReadFileConfig,
 } from "./runtime-workspace-read-composition.ts";
+import {
+  composeRuntimeExtensions,
+  extensionCompositionDeployments,
+  type RuntimeExtensionCompositionConfig,
+} from "./extensions/extension-runtime-composition.ts";
+import { RuntimeExtensionHostService } from "./extensions/extension-host-service.ts";
+import {
+  startRuntimeExtensionHostServer,
+  type RuntimeExtensionHostServer,
+} from "./extensions/extension-host-server.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -110,6 +118,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   expectedAgentVersionDigest?: string | null;
   agentVersionRuntimeFactory?: AgentVersionRuntimeFactoryPort;
   agentVersionDeployments?: readonly AgentVersionDeploymentCandidate[];
+  additionalAgentVersions?: readonly CompiledAgentVersion[];
+  extensionRuntime?: RuntimeExtensionCompositionConfig;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -161,6 +171,7 @@ export type StandaloneRuntimeWorker = Readonly<{
   agentVersionRegistry: InMemoryAgentVersionRuntimeRegistry;
   providerProbeOrigin: string | null;
   workspacePrivateOrigin: string | null;
+  extensionHostOrigin: string | null;
   close(): Promise<void>;
 }>;
 
@@ -169,7 +180,8 @@ export async function createStandaloneRuntimeWorker(
 ): Promise<StandaloneRuntimeWorker> {
   const inputs = ownCompositionInputs(config);
   try {
-    const releasePlan = compileRuntimeAgentVersionRelease(config);
+    const prepared = prepareComposition(config);
+    const releasePlan = compileRuntimeAgentVersionRelease(prepared);
     const store = new SqliteRunStore(config.databasePath);
     inputs.lifetime.own(store, { phase: "storage" });
     const workspaceReadStore =
@@ -182,7 +194,7 @@ export async function createStandaloneRuntimeWorker(
       store,
       workspaceReadStore,
       {
-        ...config,
+        ...prepared,
         localStoragePaths: [
           config.databasePath,
           ...(config.localStoragePaths ?? []),
@@ -202,7 +214,8 @@ export async function createPostgresRuntimeWorker(
 ): Promise<StandaloneRuntimeWorker> {
   const inputs = ownCompositionInputs(config);
   try {
-    const releasePlan = compileRuntimeAgentVersionRelease(config);
+    const prepared = prepareComposition(config);
+    const releasePlan = compileRuntimeAgentVersionRelease(prepared);
     const store = await PostgresDomainStore.open({
       connectionString: config.connectionString,
       schema: config.schema,
@@ -221,7 +234,7 @@ export async function createPostgresRuntimeWorker(
     return await composeRuntimeWorker(
       store,
       workspaceReadStore,
-      config,
+      prepared,
       releasePlan,
       inputs,
     );
@@ -229,6 +242,25 @@ export async function createPostgresRuntimeWorker(
     await inputs.lifetime.close().catch(() => {});
     throw error;
   }
+}
+
+function prepareComposition(
+  config: RuntimeWorkerCompositionConfig,
+): RuntimeWorkerCompositionConfig {
+  if (config.extensionRuntime === undefined) return config;
+  if (
+    config.agentVersionRuntimeFactory !== undefined ||
+    config.agentVersionDeployments !== undefined
+  )
+    throw new Error("extension_runtime_factory_configuration_conflict");
+  return {
+    ...config,
+    agentVersionDeployments: extensionCompositionDeployments({
+      config: config.extensionRuntime,
+      tenantId: config.runtimeTenantId,
+      defaultAgentVersionId: config.route.agentVersionId,
+    }),
+  };
 }
 
 function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
@@ -253,7 +285,7 @@ function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
 }
 
 async function composeRuntimeWorker(
-  store: DomainStore & ModelProviderSettingsStore,
+  store: SqliteRunStore | PostgresDomainStore,
   workspaceReadStore:
     | SqliteWorkspaceReadFileStore
     | PostgresWorkspaceReadFileStore
@@ -267,8 +299,18 @@ async function composeRuntimeWorker(
   const digester = new NodeSha256ContentDigester();
   const clock = new SystemApplicationClock();
   const artifactStore = config.artifactStore;
+  const agentVersionRuntimeFactory =
+    config.extensionRuntime === undefined
+      ? config.agentVersionRuntimeFactory
+      : await composeRuntimeExtensions({
+          config: config.extensionRuntime,
+          store,
+          tenantId: config.runtimeTenantId,
+          defaultAgentVersionId: config.route.agentVersionId,
+          expectedDeployments: config.agentVersionDeployments!,
+        });
   if (
-    (config.agentVersionRuntimeFactory === undefined) !==
+    (agentVersionRuntimeFactory === undefined) !==
     (config.agentVersionDeployments === undefined)
   ) {
     throw new Error("runtime_deployment_configuration_incomplete");
@@ -374,8 +416,8 @@ async function composeRuntimeWorker(
         : { resource: toolRuntime, release: lease.release };
     },
     factory:
-      config.agentVersionRuntimeFactory?.bindSharedToolRuntime?.(toolRuntime) ??
-      config.agentVersionRuntimeFactory ??
+      agentVersionRuntimeFactory?.bindSharedToolRuntime?.(toolRuntime) ??
+      agentVersionRuntimeFactory ??
       sharedAgentVersionRuntimeFactory(config, toolRuntime),
   });
   lifetime.own(runtimeResolver, { phase: "stop" });
@@ -428,6 +470,19 @@ async function composeRuntimeWorker(
   lifetime.own(worker, { phase: "stop" });
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
   let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
+  let extensionHostServer: RuntimeExtensionHostServer | null = null;
+  if (config.extensionRuntime?.privateHost !== undefined) {
+    extensionHostServer = await startRuntimeExtensionHostServer({
+      ...config.extensionRuntime.privateHost,
+      service: new RuntimeExtensionHostService({
+        resolveActor: config.extensionRuntime.resolveActor,
+        authorization: config.extensionRuntime.authorization,
+        runtimeResolver,
+        deployments: store,
+      }),
+    });
+    lifetime.own(extensionHostServer, { phase: "stop" });
+  }
   if (config.providerProbe !== undefined) {
     providerProbeServer = await startRuntimeProviderProbeServer({
       port: config.providerProbe.port,
@@ -485,6 +540,7 @@ async function composeRuntimeWorker(
     agentVersionRegistry,
     providerProbeOrigin: providerProbeServer?.origin ?? null,
     workspacePrivateOrigin: workspacePrivateServer?.origin ?? null,
+    extensionHostOrigin: extensionHostServer?.origin ?? null,
     close: () => lifetime.close(),
   };
 }

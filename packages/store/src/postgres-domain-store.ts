@@ -1,4 +1,5 @@
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
+import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
   RunStoreError,
   type ActivateAgentVersionReleaseResult,
@@ -179,6 +180,14 @@ export class PostgresDomainStore
       commitRunWithinTransaction: (client, input) =>
         this.commitRunWithin(client, input),
       commitTurnWithinTransaction: (client, input) => this.commitTurnStartWithin(client, input),
+    });
+  }
+
+  /** Shares the parent pool and lifetime; plugin migrations remain explicit. */
+  externalOperationStore(): PostgresExternalOperationStore {
+    this.assertOpen();
+    return new PostgresExternalOperationStore(this.pool, this.schema, {
+      assertOpen: () => this.assertOpen(),
     });
   }
 

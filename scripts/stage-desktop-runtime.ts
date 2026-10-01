@@ -1,7 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  createExtensionBuildIdentity,
+  EXTENSION_BUILD_IDENTITY_FILE,
+  getComfyImplementationDigest,
+} from "../packages/agent-version/src/extension-build.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const outputRoot = join(
@@ -72,7 +77,10 @@ function executable(name: string): string {
   return process.platform === "win32" ? `${name}.cmd` : name;
 }
 
-function bundle(spec: RuntimeBundle): void {
+export function bundleRuntime(
+  spec: RuntimeBundle,
+  implementationDigest: string,
+): void {
   execFileSync(
     executable("pnpm"),
     [
@@ -87,6 +95,7 @@ function bundle(spec: RuntimeBundle): void {
       "--tree-shaking=true",
       "--legal-comments=none",
       '--banner:js=import { createRequire as __crewonCreateRequire } from "node:module"; const require = __crewonCreateRequire(import.meta.url);',
+      `--define:__CREWON_COMFY_IMPLEMENTATION_DIGEST__=${JSON.stringify(implementationDigest)}`,
       `--outfile=${spec.output}`,
     ],
     { cwd: repositoryRoot, stdio: "inherit" },
@@ -97,13 +106,28 @@ export function main(): void {
   assertNode24(process.version);
   mkdirSync(outputRoot, { recursive: true });
   const specs = runtimeBundleSpecs();
-  for (const spec of specs) bundle(spec);
+  const implementationDigest = getComfyImplementationDigest();
+  for (const spec of specs) bundleRuntime(spec, implementationDigest);
   for (const spec of specs) {
     execFileSync(process.execPath, ["--check", spec.output], {
       cwd: repositoryRoot,
       stdio: "inherit",
     });
   }
+  if (getComfyImplementationDigest() !== implementationDigest) {
+    throw new Error("extension_source_changed_during_build");
+  }
+  writeFileSync(
+    join(outputRoot, EXTENSION_BUILD_IDENTITY_FILE),
+    JSON.stringify(
+      createExtensionBuildIdentity(
+        implementationDigest,
+        specs.map(({ output }) => output),
+      ),
+      null,
+      2,
+    ),
+  );
   process.stdout.write(`TypeScript desktop runtime staged in ${outputRoot}\n`);
 }
 

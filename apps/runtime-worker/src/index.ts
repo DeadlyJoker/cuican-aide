@@ -28,3 +28,5 @@ export * from "./runtime-workspace-read-application-adapter.ts";
 export * from "./runtime-workspace-read-tool-runtime.ts";
 export * from "./runtime-workspace-read-gateway-client.ts";
 export * from "./runtime-workspace-private-server.ts";
+export * from "./extensions/comfyui-agent-version.ts";
+export * from "./extensions/extension-runtime-composition.ts";

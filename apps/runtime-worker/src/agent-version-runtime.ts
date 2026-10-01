@@ -22,6 +22,7 @@ import {
   type AgentRuntimeReservation,
 } from "./agent-runtime-capacity.ts";
 import { closeAdmittedAgentRuntime } from "./admitted-agent-runtime-creation.ts";
+import type { RuntimeExtensionMaterialization } from "./extensions/extension-runtime-proof.ts";
 
 import type {
   PriorModelCompactionResolverPort,
@@ -39,6 +40,8 @@ export type AgentVersionRuntime = Readonly<{
   toolRuntime: ToolRuntimePort;
   contextCompactor: ContextCompactorPort;
   governedContext?: GovernedContextBundle;
+  /** Verified snapshots attached only after successful construction of the actual tool owner. */
+  extensions?: readonly RuntimeExtensionMaterialization[];
   /** Opt-in proof for exclusive, reconstructible owners; never inferred from a catalog. */
   canRetire?(): boolean;
   close?(): Promise<void>;
