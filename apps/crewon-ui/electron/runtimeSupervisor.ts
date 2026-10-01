@@ -13,7 +13,11 @@ import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import type { Writable } from "node:stream";
 
-import type { ActiveProvider } from "./providerCredentials.ts";
+import type {
+  ActiveProvider,
+  ProviderRuntimeCredentialInput,
+  ProviderRuntimeCredentialResolution,
+} from "./providerCredentials.ts";
 import {
   RuntimeLogForwarder,
   forwardRuntimeChildLogs,
@@ -34,6 +38,8 @@ import {
   desktopExtensionRecoveryAttempt,
   loadDesktopExtensionRecovery,
 } from "./desktopExtensionRecovery.ts";
+import { DesktopExtensionHistoryCoordinator } from "./desktopExtensionHistoryCoordinator.ts";
+import type { DesktopCurrentRuntimeChildren } from "./desktopControlRuntime.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -97,11 +103,19 @@ export class RuntimeSupervisor {
     | (() => DesktopExtensionRuntimeConfiguration)
     | undefined;
   readonly #extensionDeadlineMs: number | undefined;
+  readonly #resolveExtensionCredential:
+    | ((
+        input: ProviderRuntimeCredentialInput,
+      ) => ProviderRuntimeCredentialResolution)
+    | undefined;
   #startupAbort: AbortController | null = null;
   #stopping: Promise<void> | null = null;
   #controlPort = 0;
   #probePort = 0;
   #children: ChildProcess[] = [];
+  #currentChildren: DesktopCurrentRuntimeChildren | null = null;
+  #runtimeAbort: AbortController | null = null;
+  #history: DesktopExtensionHistoryCoordinator | null = null;
   #restart: Promise<void> = Promise.resolve();
   #ready = false;
   #stopWatchingChildren: (() => void) | null = null;
@@ -121,6 +135,9 @@ export class RuntimeSupervisor {
     extensionRuntime?: Readonly<{
       configuration: () => DesktopExtensionRuntimeConfiguration;
       deadlineMs?: number;
+      resolveProviderCredential?: (
+        input: ProviderRuntimeCredentialInput,
+      ) => ProviderRuntimeCredentialResolution;
     }>;
     logOutputs?: { stdout: Writable; stderr: Writable };
   }) {
@@ -133,6 +150,8 @@ export class RuntimeSupervisor {
     this.#workspaceRoot = options.workspaceRoot;
     this.#extensionRuntime = options.extensionRuntime?.configuration;
     this.#extensionDeadlineMs = options.extensionRuntime?.deadlineMs;
+    this.#resolveExtensionCredential =
+      options.extensionRuntime?.resolveProviderCredential;
     this.#logs = options.logOutputs
       ? new RuntimeLogForwarder(options.logOutputs)
       : processRuntimeLogs();
@@ -155,6 +174,7 @@ export class RuntimeSupervisor {
     }
     const startup = new AbortController();
     this.#startupAbort = startup;
+    this.#runtimeAbort = startup;
     try {
       this.#controlPort ||= await freePort();
       this.#probePort ||= await freePort();
@@ -220,12 +240,14 @@ export class RuntimeSupervisor {
             ),
           trackChild: (child) => this.#children.push(child),
         });
+      this.#currentChildren = { control, worker };
       await waitForReady(
         `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
-        this.#children,
+        [control, worker],
         startup.signal,
       );
       startup.signal.throwIfAborted();
+      let currentCapsuleId: string | null = null;
       if (prepared?.candidate && extensions.enabled && extensionOrigin) {
         const completed = await completeDesktopExtensionRecovery({
           dataRoot: this.#dataDirectory,
@@ -241,6 +263,7 @@ export class RuntimeSupervisor {
             "Extension recovery",
             `${completed.reasonCode}\n`,
           );
+        else currentCapsuleId = prepared.candidate.capsuleId;
       } else if (prepared?.reasonCode) {
         this.#logs.write(
           "stderr",
@@ -250,35 +273,118 @@ export class RuntimeSupervisor {
       }
       startup.signal.throwIfAborted();
       this.#ready = true;
-      this.#stopWatchingChildren = watchRuntimeChildren(
-        [
-          { child: control, name: "Control API" },
-          { child: worker, name: "Runtime Worker" },
-        ],
-        ({ code, name, signal }) => {
-          this.#ready = false;
-          this.#stopWatchingChildren?.();
-          this.#stopWatchingChildren = null;
-          this.#logs.write(
-            "stderr",
-            name,
-            `exited unexpectedly (${signal ?? code ?? "unknown"}); restarting runtime\n`,
-          );
-          void this.restart().catch((error) => {
-            this.#logs.write(
-              "stderr",
-              "Runtime restart",
-              `${error instanceof Error ? error.message : String(error)}\n`,
-            );
-          });
-        },
-      );
+      this.#watchCurrentChildren();
+      if (
+        extensions.enabled &&
+        !this.#paths.source &&
+        this.#resolveExtensionCredential &&
+        extensionOrigin
+      ) {
+        this.#startHistoricalHosts({
+          currentCapsuleId,
+          controlEnvironment: extensions.control(extensionOrigin),
+          startup,
+        });
+      }
     } catch (error) {
       if (this.#startupAbort === startup) await this.stop();
       throw error;
     } finally {
       if (this.#startupAbort === startup) this.#startupAbort = null;
     }
+  }
+
+  #watchCurrentChildren(
+    options: Readonly<{ scope: "pair" | "worker" }> = { scope: "pair" },
+  ): void {
+    const children = this.#currentChildren;
+    if (children === null) return;
+    this.#stopWatchingChildren?.();
+    this.#stopWatchingChildren = watchRuntimeChildren(
+      [
+        ...(options.scope === "pair"
+          ? [{ child: children.control, name: "Control API" }]
+          : []),
+        { child: children.worker, name: "Runtime Worker" },
+      ],
+      ({ code, name, signal }) => {
+        this.#ready = false;
+        this.#stopWatchingChildren?.();
+        this.#stopWatchingChildren = null;
+        this.#logs.write(
+          "stderr",
+          name,
+          `exited unexpectedly (${signal ?? code ?? "unknown"}); restarting runtime\n`,
+        );
+        void this.restart().catch((error) => {
+          this.#logs.write(
+            "stderr",
+            "Runtime restart",
+            `${error instanceof Error ? error.message : String(error)}\n`,
+          );
+        });
+      },
+    );
+  }
+
+  #startHistoricalHosts(input: {
+    currentCapsuleId: string | null;
+    controlEnvironment: NodeJS.ProcessEnv;
+    startup: AbortController;
+  }): void {
+    const history = new DesktopExtensionHistoryCoordinator({
+      dataRoot: this.#dataDirectory,
+      currentCapsuleId: input.currentCapsuleId,
+      controlEnvironment: input.controlEnvironment,
+      signal: input.startup.signal,
+      deadlineMs: this.#extensionDeadlineMs,
+      resolveProvider: this.#resolveExtensionCredential!,
+      spawnHistoricalWorker: (entry, environment) =>
+        this.#spawn("Historical Runtime Worker", entry, environment, true),
+      spawnControl: (environment) =>
+        this.#spawn("Control API", this.#paths.control, environment),
+      terminate: terminateRuntimeChild,
+      trackChild: (child) => this.#children.push(child),
+      releaseChild: (child) => {
+        this.#children = this.#children.filter((owned) => owned !== child);
+      },
+      isCurrent: () => this.#runtimeAbort === input.startup,
+      currentChildren: () => this.#currentChildren,
+      beginControlReplacement: () => {
+        this.#ready = false;
+        this.#watchCurrentChildren({ scope: "worker" });
+      },
+      registerControlReplacement: (children) => {
+        this.#currentChildren = children;
+        this.#watchCurrentChildren();
+      },
+      restoreUnchangedControl: () => {
+        const children = this.#currentChildren;
+        if (
+          children &&
+          [children.control, children.worker].every(
+            (child) => child.exitCode === null && child.signalCode === null,
+          )
+        )
+          this.#ready = true;
+        this.#watchCurrentChildren();
+      },
+      finishControlReplacement: (children) => {
+        this.#currentChildren = children;
+        this.#ready = true;
+        this.#watchCurrentChildren();
+      },
+      waitForControlReady: (children, signal) =>
+        waitForReady(
+          `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
+          children,
+          signal,
+        ),
+      diagnostic: (reasonCode) =>
+        this.#logs.write("stderr", "Extension history", `${reasonCode}\n`),
+    });
+    this.#history = history;
+    history.start();
   }
 
   async restart(): Promise<void> {
@@ -323,16 +429,33 @@ export class RuntimeSupervisor {
     this.#ready = false;
     this.#startupAbort?.abort();
     this.#startupAbort = null;
+    this.#runtimeAbort?.abort();
+    this.#runtimeAbort = null;
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
-    const children = [...this.#children];
-    const stopping = this.#stopChildren(children);
+    const stopping = this.#stopOwnedRuntime();
     this.#stopping = stopping;
     try {
       await stopping;
     } finally {
       if (this.#stopping === stopping) this.#stopping = null;
     }
+  }
+
+  async #stopOwnedRuntime(): Promise<void> {
+    const history = this.#history;
+    const results = await Promise.allSettled([history?.stop()]);
+    await this.#stopChildren([...this.#children]);
+    if (this.#children.length === 0) {
+      this.#currentChildren = null;
+      this.#history = null;
+      return;
+    }
+    const failures = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, "runtime_children_shutdown_failed");
   }
 
   async #stopChildren(children: readonly ChildProcess[]): Promise<void> {
@@ -350,10 +473,11 @@ export class RuntimeSupervisor {
   }
 
   session(): ControlRuntimeSession {
+    const current = this.#currentChildren;
     if (
       !this.#ready ||
-      this.#children.length !== 2 ||
-      this.#children.some(
+      current === null ||
+      [current.control, current.worker].some(
         (child) => child.exitCode !== null || child.signalCode !== null,
       )
     ) {

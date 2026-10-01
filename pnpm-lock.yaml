@@ -103,6 +103,9 @@ importers:
       '@crewon/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@crewon/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0

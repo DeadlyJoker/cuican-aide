@@ -497,12 +497,14 @@ export async function finishExtensionRecoveryRelease(input: {
         ["base-bindings.json", baseBytes],
         [
           "bootstrap.json",
-          Buffer.from(`${extensionCanonicalJson(bootstrap)}\n`),
+          // This parsed DTO has its own 128 KiB boundary. The plugin protocol's
+          // 64 KiB canonicalizer is not the recovery file format.
+          Buffer.from(`${JSON.stringify(bootstrap)}\n`),
         ],
         [
           "release.json",
           Buffer.from(
-            `${extensionCanonicalJson({ schemaVersion: "crewon.extension-recovery-release.v0", tenantId: request.owner.tenantId, plan })}\n`,
+            `${JSON.stringify({ schemaVersion: "crewon.extension-recovery-release.v0", tenantId: request.owner.tenantId, plan })}\n`,
           ),
         ],
       ] as const)

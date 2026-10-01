@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -121,6 +122,10 @@ function fixture(mode: "valid" | "wrong-owner" | "no-ready" | "disabled") {
               },
         ),
       deadlineMs: 1000,
+      resolveProviderCredential: () => ({
+        availability: "unavailable",
+        reason: "provider_not_configured",
+      }),
     },
   });
   const records = () =>
@@ -130,6 +135,7 @@ function fixture(mode: "valid" | "wrong-owner" | "no-ready" | "disabled") {
       .map((line) => JSON.parse(line));
   return {
     supervisor,
+    directory,
     records,
     logs,
     async close() {
@@ -216,6 +222,39 @@ it("rejects a substituted owner before Control starts and stops the partial Work
       process.kill(f.records().find((r) => r.event === "worker").pid, 0),
     ).toThrow();
     expect(() => f.supervisor.session()).toThrow("control_runtime_unavailable");
+  } finally {
+    await f.close();
+  }
+});
+
+it("keeps current readiness and child ownership when the historical inventory is invalid", async () => {
+  const f = fixture("valid");
+  mkdirSync(join(f.directory, "extension-recoveries", "unexpected"), {
+    recursive: true,
+  });
+  try {
+    await f.supervisor.start();
+    const session = f.supervisor.session();
+    const current = f
+      .records()
+      .filter((entry) => entry.event === "worker" || entry.event === "control");
+    await vi.waitFor(() =>
+      expect(f.logs.join("")).toContain(
+        "desktop_extension_historical_plans_unavailable",
+      ),
+    );
+    expect(f.supervisor.session()).toEqual(session);
+    expect(
+      f
+        .records()
+        .filter(
+          (entry) => entry.event === "worker" || entry.event === "control",
+        ),
+    ).toEqual(current);
+    for (const entry of current) process.kill(entry.pid, 0);
+    await f.supervisor.stop();
+    for (const entry of current)
+      expect(() => process.kill(entry.pid, 0)).toThrow();
   } finally {
     await f.close();
   }

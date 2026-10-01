@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { RuntimeBootstrapInputs } from "@crewon/contracts";
+import {
+  replayRuntimeBootstrapInputs as sharedReplayRuntimeBootstrapInputs,
+  RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES as SHARED_CLEAR_NAMES,
+} from "@crewon/contracts/runtime";
 
 import {
   compileRuntimeAgentVersion,
@@ -46,6 +50,27 @@ function capture(
   if (result.outcome !== "eligible") throw new Error("fixture_ineligible");
   return result.inputs;
 }
+
+test("Worker compatibility exports preserve the shared projection and its stricter effective replay gate", () => {
+  const inputs = capture();
+  assert.equal(RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES, SHARED_CLEAR_NAMES);
+  assert.deepEqual(
+    replayRuntimeBootstrapInputs(inputs),
+    sharedReplayRuntimeBootstrapInputs(inputs),
+  );
+  const unreplayable = {
+    ...inputs,
+    modelCatalog: ["model-old", "gpt-image-1"],
+  };
+  assert.equal(
+    sharedReplayRuntimeBootstrapInputs(unreplayable).CREWON_MODEL_CATALOG_JSON,
+    '["model-old","gpt-image-1"]',
+  );
+  assert.throws(
+    () => replayRuntimeBootstrapInputs(unreplayable),
+    /runtime_bootstrap_inputs_unreplayable/u,
+  );
+});
 
 function applyReplay(
   inputs: RuntimeBootstrapInputs,

@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   closeSync,
   constants,
@@ -12,8 +12,15 @@ import {
   EXTENSION_HOST_PRIVATE_PATH,
   EXTENSION_HOST_WIRE_LIMITS,
   parseExtensionHostActor,
+  parseExtensionHostRegistrationIdentity,
   parseExtensionHostResponse,
+  type ExtensionHostRegistrationIdentity,
 } from "@crewon/contracts";
+import {
+  extensionCanonicalJson,
+  parseExtensionManifest,
+  type ExtensionManifest,
+} from "@crewon/domain";
 
 export const DESKTOP_EXTENSION_CONFIGURATION_FILE =
   "desktop-extension-runtime.json";
@@ -351,15 +358,33 @@ export function waitForDesktopExtensionHost(
 }
 
 /** Proves the discovered port is the native-owned Worker, including the complete owner. */
+export type DesktopExtensionHostCatalogRegistration = Readonly<{
+  manifest: ExtensionManifest;
+  manifestDigest: string;
+  implementationDigest: string;
+}>;
+
 export async function challengeDesktopExtensionHost(input: {
   origin: string;
   token: string;
   signal: AbortSignal;
   deadlineMs?: number;
-}): Promise<void> {
+  /** Historical composition also pins the exact loaded catalog identities. */
+  expectedRegistrations?: readonly ExtensionHostRegistrationIdentity[];
+}): Promise<readonly DesktopExtensionHostCatalogRegistration[]> {
   if (!/^[a-f0-9]{64}$/u.test(input.token))
     throw new Error("desktop_extension_host_token_invalid");
   const origin = parseDesktopExtensionHostOrigin(input.origin);
+  const expected = input.expectedRegistrations?.map((registration) =>
+    parseExtensionHostRegistrationIdentity(registration),
+  );
+  if (
+    expected !== undefined &&
+    (expected.length < 1 ||
+      expected.length > EXTENSION_HOST_WIRE_LIMITS.registrations ||
+      Object.keys(expected).length !== expected.length)
+  )
+    throw new Error("desktop_extension_host_catalog_mismatch");
   const signal = AbortSignal.any([
     input.signal,
     AbortSignal.timeout(deadline(input.deadlineMs)),
@@ -412,7 +437,43 @@ export async function challengeDesktopExtensionHost(input: {
       )
     )
       throw new Error("desktop_extension_host_owner_mismatch");
+    const catalog = Object.freeze(
+      value.registrations.map((registration) => {
+        const manifest = parseExtensionManifest(registration.manifest);
+        if (
+          registration.manifestDigest !==
+          `sha256:${createHash("sha256")
+            .update(extensionCanonicalJson(manifest))
+            .digest("hex")}`
+        )
+          throw new Error("desktop_extension_host_catalog_mismatch");
+        return Object.freeze({
+          manifest,
+          manifestDigest: registration.manifestDigest,
+          implementationDigest: registration.implementationDigest,
+        });
+      }),
+    );
+    if (expected !== undefined) {
+      const identities = catalog.map((registration) =>
+        extensionCanonicalJson({
+          pluginId: registration.manifest.pluginId,
+          pluginVersion: registration.manifest.version,
+          manifestDigest: registration.manifestDigest,
+          implementationDigest: registration.implementationDigest,
+        }),
+      );
+      if (
+        new Set(identities).size !== identities.length ||
+        expected.some(
+          (registration) =>
+            !identities.includes(extensionCanonicalJson(registration)),
+        )
+      )
+        throw new Error("desktop_extension_host_catalog_mismatch");
+    }
     signal.throwIfAborted();
+    return catalog;
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();

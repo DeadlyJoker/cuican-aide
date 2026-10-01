@@ -280,6 +280,59 @@ async function fixture(t: TestContext, authenticated = false) {
 }
 
 test(
+  "actual installed Release preserves valid bootstrap and full publication metadata above the plugin JSON limit",
+  { timeout: 60000 },
+  async (t) => {
+    const f = await fixture(t);
+    const profiles = Array.from({ length: 4 }, (_, index) => ({
+      agentVersionId: `long-profile-${index}`,
+      instructions: `${index}-${"p".repeat(8098)}`,
+    }));
+    assert.ok(Buffer.byteLength(JSON.stringify(profiles)) < 32 * 1024);
+    const activation = f.run({
+      CREWON_AGENT_INSTRUCTIONS: "b".repeat(32 * 1024),
+      CREWON_DEV_AGENT_PROFILES_JSON: JSON.stringify(profiles),
+    });
+    const report = await f.report();
+    assert.equal(report.outcome, "prepared");
+    if (report.outcome !== "prepared") throw new Error("expected_candidate");
+    assert.equal(report.manifest.releaseId, activation.releaseId);
+    const directory = join(
+      f.dataRoot,
+      "extension-recoveries",
+      report.manifest.capsuleId.slice(7),
+    );
+    const bootstrap = readFileSync(join(directory, "bootstrap.json"));
+    const release = readFileSync(join(directory, "release.json"));
+    assert.ok(
+      bootstrap.byteLength > 65_536 && bootstrap.byteLength < 128 * 1024,
+    );
+    assert.ok(release.byteLength > 65_536 && release.byteLength < 256 * 1024);
+    const parsed = JSON.parse(bootstrap.toString("utf8"));
+    assert.equal(parsed.agent.instructions.length, 32 * 1024);
+    assert.deepEqual(parsed.profiles, profiles);
+    assert.equal(JSON.parse(release.toString("utf8")).plan.versions.length, 6);
+    for (const bytes of [bootstrap, release])
+      assert.equal(
+        bytes.toString("utf8").includes("must-never-persist-api-key"),
+        false,
+      );
+    const second = f.run({
+      CREWON_AGENT_INSTRUCTIONS: "b".repeat(32 * 1024),
+      CREWON_DEV_AGENT_PROFILES_JSON: JSON.stringify(profiles),
+      CREWON_EXTENSION_RECOVERY_ATTEMPT_ID: "b".repeat(64),
+    });
+    assert.equal(second.releaseId, activation.releaseId);
+    assert.equal((await f.report("b".repeat(64))).outcome, "prepared");
+    assert.deepEqual(
+      readFileSync(join(directory, "bootstrap.json")),
+      bootstrap,
+    );
+    assert.deepEqual(readFileSync(join(directory, "release.json")), release);
+  },
+);
+
+test(
   "actual installed Release freezes plugin paths, verifies publication, and emits only a pending candidate",
   { timeout: 60000 },
   async (t) => {

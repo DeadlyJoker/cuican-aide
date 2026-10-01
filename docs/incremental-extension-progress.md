@@ -4,6 +4,30 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：打包版自动历史宿主与跨构建查询
+
+当前 Control / Worker 正常就绪后，原生桌面开始后台选择完整恢复记录。固定目录最多 64 条记录，严格验证 complete marker、所有文件与原 scope.v1 七包归档，排除本次当前记录，按固定 ID 选择最多四个可恢复宿主，每宿主最多 32 个完整目标。残缺、篡改、缺失发布资产或当前精确凭据不可用均不补记录、不删除归档，也不改为当前新目标。
+
+历史 Worker 使用保存的非秘密有效 bootstrap、固定绑定路径及原代码；启动环境由白名单构造，不继承 ambient 模型或秘密配置。当前 Provider Store 每次联合核对原 providerId、完整 endpoint 及凭据要求，再解析当前可用秘密。完整原 release 的 bundle、所有 base/profile/model variant/plugin 资产和部署由独立只读 SQLite 端口读取并逐项验证，不迁移、不重新发布、不切换默认 Agent。实际旧宿主返回的 manifest 与配置共同重算 materialization，完整 owner、登记和八字段 readiness 全部通过后才向 Control 提供 peer。
+
+Supervisor 分开维护当前健康与所有子进程。历史启动失败仅报告不可用；历史 peer 加入或退出通过受控替换 Control 更新，当前 Worker 保持运行，原 SSE 按游标恢复。停止会尝试所有自有进程，终止失败保留句柄，避免重复启动；历史进程退出不反复拉起，下一次整体启动重新选择。源代码模式及插件关闭保持原路径。
+
+历史 peer 更新后的新 Control 如果活着但无法就绪，会尝试一次恢复不带历史 peer 的原 Control 配置，保留当前 Worker。相同失败 peer 集合不重复拆除已恢复的 Control，集合变化后才允许再试。终止失败不启动重复进程；恢复后的 Control 仍不就绪时，保留监督与句柄并明确报告不可用，不假装恢复成功。
+
+恢复 metadata 的序列化使用已严格解析的 DTO 与实际发布 plan，分别受 128KiB / 256KiB 文件边界限制，修复合法大配置误用插件 64KiB canonical JSON 上限的问题。插件身份、materialization 与 complete marker 的 canonical 协议不变；已有完整记录继续复用原字节，partial 字节冲突明确报告不支持，不覆盖第一次保存内容。
+
+### 本轮证据
+
+- 两份独立源码分别离线 pnpm 安装并 stage 七个实际包，第二份只增加真实 Control 输出以产生新的源码与 bundle 身份。真实 Native Supervisor 发布旧/新版本，自动启动保存的旧 Worker；删除旧源码和旧安装资源后，旧查询仍使用原八字段目标和原配置 revision，当前公共目录只有新构建。历史进程退出后当前 Worker PID 保持不变；已有查询 SSE 两次游标重连取得相同输出，新的旧查询被拒绝而已有结果仍可读取，当前新生成与默认 Agent 继续可用。模型 POST 7 次、ComfyUI 生成 POST 2 次、history GET 1 次；旧查询和重连均未增加生成 POST。两份 capsule 原字节保持不变。
+- 上述集成只在独立测试副本中设置测试 HTTPS DNS / CA，仍保留 TLS、实际 HTTP、数据库、Agent 和工具链。供应商使用本地确定性夹具，不修改生产出站策略，没有再次调用在线模型或真实 ComfyUI；不能把它作为真实视频、配音或供应商网络策略验收。
+- inventory / 严格启动输入 / 实际材料核验、当前/历史生命周期、只读 SQLite 与实际发布 CLI 均有边界回归。18 个 packages 全量测试及类型检查通过，包含 Contracts 135、AgentVersion 124、Application 195、Store 857 通过 / 191 环境跳过；Worker 最终全量 957 通过 / 198 环境跳过，Control 287 通过 / 9 环境跳过，0 失败。只读数据库专项 7/7、实际七包 release 专项 11/11，stage 专项 5/5；跳过的 PostgreSQL 项不计为实际验收。
+- 最终 Electron 全量按单 Worker 执行 28 个文件、298/298，另行执行上述独立双构建 Native 1/1，均无失败或跳过；原独立双构建归档测试 1/1 通过。当前/历史进程专项覆盖真实 ENOENT、四宿主、超时、立即退出、停止失败、取消、peer 更新、Control 活着但未就绪后的单次恢复及失败集合去重。先前默认并发运行时遇到测试夹具修订及既有短期限超时，最终稳定代码以该单 Worker 全量结果为准，未放宽既有期限或删断言。
+- Worker / Control 类型检查、UI lint（含 Electron）、Electron host 构建、边界及仓库格式检查通过。实际 Electron 的 Node 24.18.1 能加载 `node:sqlite`，独立只读端口仅在 Native 使用，Renderer 禁止导入 Store 的边界仍保留。正式七包通过语法与整套摘要核验，最终源码指纹为 `sha256:10703afb7aa03bd5a1972230a69d1d243ad93f462085f40c3603ea67a36c5d78`。所有自有夹具目录、测试服务与子进程已清理。
+
+详细证据保存在 `output/extensions/checks/native-history-*.log`、`native-historical-manager-*.log` 与 `desktop-historical-inputs-*.log`。本轮没有修改 Renderer 或重跑 UI 全量，其已有七项基线失败仍见前面的界面阶段。
+
+**剩余：** 自动历史恢复以当前安装宿主先正常启动为前提；升级后需显式为新构建准备匹配配置，当前旧配置的自动迁移尚未实现。workspace/MCP/cloud 的完整冻结、生产权威身份协议与第二个实际企业 API 仍按原计划推进。短剧继续依据 [shuohao-skills / Reelbench 参考结论](./short-drama-workbench-reference.md)组织项目、阶段成果及资产修订；Krea2 只证明文生图，参考图、视频、配音和成片未接入，目标保持进行中。
+
 ## 2026-10-02：原生恢复输入与当前凭据查询
 
 打包版桌面已接入非秘密恢复输入的实际生产路径。首次发布前，在 `extension-recoveries/<capsuleId>` 准备固定 snapshot 路径与插件 bindings，assets 保持原字节；仍调用现有授权发布入口。成功后核对真实 SQLite 发布记录，保存有效 bootstrap 参数、完整基础 bindings 与真实 release。当前 Worker 启动并通过完整 owner、插件登记、配置摘要和八字段目标挑战后，最后提交 `manifest.json`。候选交接使用固定文件与每次独立尝试身份；候选和残缺目录都不代表恢复已完成。
@@ -226,12 +250,12 @@ Control 新增可选 `POST /api/v1/extensions/:pluginId/tasks`，严格区分生
 | -------------------- | ----------------------------------------------------------------------------------- |
 | E0 接入验证          | 真实 ComfyUI API 与独立发布的 crewonKernel 模型路径已通过；产品准入接线见 E2        |
 | E1 契约与注册        | 声明、静态登记、真实 readiness 和 standalone 正式进程入口已实现；生产可信身份待接线 |
-| E2 配置与绑定        | 双库原子准入、发布及原生 standalone 启动已验证；生产身份及自动旧宿主编排仍待接通    |
-| E3 Agent / Tool 闭环 | 实际模型生图/恢复、历史领取和构建保留已验证；人工旧包消费与真实任务恢复分别验收     |
+| E2 配置与绑定        | 双库原子准入、发布、原生 standalone 与打包版自动历史宿主已验证；生产身份仍待接通    |
+| E3 Agent / Tool 闭环 | 实际模型生图/恢复已验证；独立双构建证明自动原包查询、当前 Worker 隔离及 SSE 恢复    |
 | E4 最小 Web 界面     | 已接通 BFF、客户端、配置/启用/任务/结果及原会话恢复；仅显式 standalone 装配         |
 | E5 第二业务          | 尚未接入实际企业 API；遵循用户指示，短剧详细产品形态仍在调用链路之后细化            |
 
-继续顺序：取得生产身份服务的权威协议，接通后台当前身份与旧宿主编排/查询，再验证第二个实际业务 API 的复用；在已验证的最小生图链路上细化短剧项目及资产工作台。这个过程保留现有聊天和团队路径。
+继续顺序：补齐当前旧配置的升级衔接，取得生产身份服务权威协议后接通后台当前身份，再验证第二个实际业务 API 的复用；在已验证的最小生图链路上细化短剧项目及资产工作台。这个过程保留现有聊天和团队路径。
 
 ## 2026-09-30：配置修订与 Run 原子绑定存储
 

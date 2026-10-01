@@ -31,6 +31,7 @@ import {
   DESKTOP_RUNTIME_OWNER,
   parseDesktopExtensionHostOrigin,
   type DesktopExtensionRuntimeEnvironments,
+  type DesktopExtensionHostCatalogRegistration,
 } from "./desktopExtensionRuntime.ts";
 import type { ActiveProvider } from "./providerCredentials.ts";
 
@@ -211,15 +212,21 @@ export async function loadDesktopExtensionRecovery(input: {
   };
 }
 
-/** Complete is published only after the actual owned Worker attests every exact target. */
-export async function completeDesktopExtensionRecovery(request: {
+export type DesktopExtensionRecoveryHostVerification = Readonly<{
   dataRoot: string;
   manifest: ExtensionRecoveryManifest;
   origin: string;
   token: string;
   signal: AbortSignal;
   deadlineMs: number;
-}): Promise<
+  /** Historical verification uses only the manifest returned by that owned old host. */
+  catalog?: readonly DesktopExtensionHostCatalogRegistration[];
+}>;
+
+/** Complete is published only after the actual owned Worker attests every exact target. */
+export async function completeDesktopExtensionRecovery(
+  request: DesktopExtensionRecoveryHostVerification,
+): Promise<
   Readonly<
     | { outcome: "ready" }
     | {
@@ -230,129 +237,11 @@ export async function completeDesktopExtensionRecovery(request: {
 > {
   const input = Object.freeze({ ...request });
   try {
-    if (
-      !/^[a-f0-9]{64}$/u.test(input.token) ||
-      !Number.isSafeInteger(input.deadlineMs) ||
-      input.deadlineMs < 1000 ||
-      input.deadlineMs > 30_000
-    )
-      unavailable();
-    const origin = parseDesktopExtensionHostOrigin(input.origin);
-    const signal = AbortSignal.any([
-      input.signal,
-      AbortSignal.timeout(input.deadlineMs),
-    ]);
-    signal.throwIfAborted();
-    const manifest = parseExtensionRecoveryManifest(input.manifest);
-    if (!same(manifest.owner, DESKTOP_RUNTIME_OWNER)) unavailable();
-    const build = await resolveRetainedExtensionBuild({
-      dataRoot: input.dataRoot,
-      implementationDigest: manifest.implementationDigest,
-      expectedBuildIdentityDigest: manifest.buildIdentityDigest,
-    });
-    if (build.historicalWorkItemScope !== EXTENSION_HISTORICAL_WORK_ITEM_SCOPE)
-      unavailable();
-    const selection = {
-      dataRoot: input.dataRoot,
-      capsuleId: manifest.capsuleId,
-    };
-    const directory = await extensionRecoveryDirectory({
-      selection,
-      create: false,
-    });
-    const value = (await pinnedJson(
-      selection,
+    const manifest = await verifyDesktopExtensionRecoveryHost(input);
+    await commitExtensionRecoveryCapsule({
+      selection: { dataRoot: input.dataRoot, capsuleId: manifest.capsuleId },
       manifest,
-      "plugin-bindings.json",
-    )) as {
-      bindings?: { agentVersionId?: unknown; extensionConfigPath?: unknown }[];
-    };
-    const bindings = value.bindings;
-    if (
-      !Array.isArray(bindings) ||
-      bindings.length !== manifest.targets.length ||
-      new Set(bindings.map((binding) => binding.agentVersionId)).size !==
-        bindings.length
-    )
-      unavailable();
-    const requests: ExtensionHostRequest[] = [];
-    for (const [index, binding] of bindings.entries()) {
-      signal.throwIfAborted();
-      const file = `snapshot-${String(index).padStart(2, "0")}.json` as const;
-      if (binding.extensionConfigPath !== join(directory, file)) unavailable();
-      const snapshot = (await pinnedJson(selection, manifest, file)) as {
-        configuration?: unknown;
-      };
-      const configuration = parseExtensionConfiguration(
-        snapshot.configuration,
-        {
-          sha256: (value) =>
-            `sha256:${createHash("sha256").update(value).digest("hex")}`,
-        },
-      );
-      const registration = {
-        pluginId: configuration.pluginId,
-        pluginVersion: configuration.pluginVersion,
-        manifestDigest: configuration.manifestDigest,
-        implementationDigest: configuration.implementationDigest,
-      };
-      if (
-        configuration.tenantId !== manifest.owner.tenantId ||
-        configuration.spaceId !== manifest.owner.spaceId ||
-        !manifest.registrations.some((candidate) =>
-          same(candidate, registration),
-        )
-      )
-        unavailable();
-      requests.push(
-        parseExtensionHostRequest({
-          protocol: "crewon.extension-host-request.v0",
-          operation: "readiness",
-          actor: manifest.owner,
-          registration,
-          configuration,
-          agentVersionId: binding.agentVersionId,
-        }),
-      );
-    }
-    for (let index = 0; index < requests.length; index += 4) {
-      const results = await Promise.allSettled(
-        requests.slice(index, index + 4).map(async (request) => {
-          const response = await privateReadiness(
-            origin,
-            input.token,
-            request,
-            signal,
-          );
-          if (
-            request.operation !== "readiness" ||
-            response.operation !== "readiness" ||
-            !same(response.actor, manifest.owner) ||
-            !same(response.registration, request.registration) ||
-            response.configurationDigest !==
-              (request.configuration as { contentDigest: string })
-                .contentDigest ||
-            response.agentVersionId !== request.agentVersionId ||
-            response.result.outcome !== "ready"
-          )
-            unavailable();
-          const expected = manifest.targets.find(
-            (target) => target.agentVersionId === request.agentVersionId,
-          );
-          if (
-            !expected ||
-            !same(
-              parseExtensionExecutionTarget(response.result.target),
-              expected,
-            )
-          )
-            unavailable();
-        }),
-      );
-      if (results.some((result) => result.status === "rejected")) unavailable();
-    }
-    signal.throwIfAborted();
-    await commitExtensionRecoveryCapsule({ selection, manifest });
+    });
     return { outcome: "ready" };
   } catch {
     input.signal.throwIfAborted();
@@ -361,6 +250,172 @@ export async function completeDesktopExtensionRecovery(request: {
       reasonCode: "desktop_extension_recovery_unavailable",
     };
   }
+}
+
+/** Reusable attestation for an owned current or retained Worker; never publishes a capsule. */
+export async function verifyDesktopExtensionRecoveryHost(
+  request: DesktopExtensionRecoveryHostVerification,
+): Promise<ExtensionRecoveryManifest> {
+  const input = Object.freeze({ ...request });
+  if (
+    !/^[a-f0-9]{64}$/u.test(input.token) ||
+    !Number.isSafeInteger(input.deadlineMs) ||
+    input.deadlineMs < 1000 ||
+    input.deadlineMs > 30_000
+  )
+    unavailable();
+  const origin = parseDesktopExtensionHostOrigin(input.origin);
+  const signal = AbortSignal.any([
+    input.signal,
+    AbortSignal.timeout(input.deadlineMs),
+  ]);
+  signal.throwIfAborted();
+  const manifest = parseExtensionRecoveryManifest(input.manifest);
+  if (!same(manifest.owner, DESKTOP_RUNTIME_OWNER)) unavailable();
+  const build = await resolveRetainedExtensionBuild({
+    dataRoot: input.dataRoot,
+    implementationDigest: manifest.implementationDigest,
+    expectedBuildIdentityDigest: manifest.buildIdentityDigest,
+  });
+  if (build.historicalWorkItemScope !== EXTENSION_HISTORICAL_WORK_ITEM_SCOPE)
+    unavailable();
+  const selection = {
+    dataRoot: input.dataRoot,
+    capsuleId: manifest.capsuleId,
+  };
+  const directory = await extensionRecoveryDirectory({
+    selection,
+    create: false,
+  });
+  const value = (await pinnedJson(
+    selection,
+    manifest,
+    "plugin-bindings.json",
+  )) as {
+    bindings?: { agentVersionId?: unknown; extensionConfigPath?: unknown }[];
+  };
+  const bindings = value.bindings;
+  if (
+    !Array.isArray(bindings) ||
+    bindings.length !== manifest.targets.length ||
+    new Set(bindings.map((binding) => binding.agentVersionId)).size !==
+      bindings.length
+  )
+    unavailable();
+  const requests: ExtensionHostRequest[] = [];
+  for (const [index, binding] of bindings.entries()) {
+    signal.throwIfAborted();
+    const file = `snapshot-${String(index).padStart(2, "0")}.json` as const;
+    if (binding.extensionConfigPath !== join(directory, file)) unavailable();
+    const snapshot = (await pinnedJson(selection, manifest, file)) as {
+      schemaVersion?: unknown;
+      configuration?: unknown;
+      approvalRequirement?: unknown;
+    };
+    const configuration = parseExtensionConfiguration(snapshot.configuration, {
+      sha256: (value) =>
+        `sha256:${createHash("sha256").update(value).digest("hex")}`,
+    });
+    const registration = {
+      pluginId: configuration.pluginId,
+      pluginVersion: configuration.pluginVersion,
+      manifestDigest: configuration.manifestDigest,
+      implementationDigest: configuration.implementationDigest,
+    };
+    if (
+      configuration.tenantId !== manifest.owner.tenantId ||
+      configuration.spaceId !== manifest.owner.spaceId ||
+      !manifest.registrations.some((candidate) => same(candidate, registration))
+    )
+      unavailable();
+    if (input.catalog !== undefined) {
+      const observed = input.catalog.find((candidate) =>
+        same(
+          {
+            pluginId: candidate.manifest.pluginId,
+            pluginVersion: candidate.manifest.version,
+            manifestDigest: candidate.manifestDigest,
+            implementationDigest: candidate.implementationDigest,
+          },
+          registration,
+        ),
+      );
+      const expected = manifest.targets.find(
+        (target) => target.agentVersionId === binding.agentVersionId,
+      );
+      if (
+        !observed ||
+        !expected ||
+        snapshot.schemaVersion !== "crewon.extension-runtime-config.v0" ||
+        (snapshot.approvalRequirement !== "none" &&
+          snapshot.approvalRequirement !== "perAction")
+      )
+        unavailable();
+      const materialization = `sha256:${createHash("sha256")
+        .update(
+          extensionCanonicalJson({
+            schemaVersion: "crewon.agent-version-materialization.v0",
+            binding,
+            extension: {
+              schemaVersion: "crewon.extension-runtime-config.v0",
+              configuration,
+              approvalRequirement: snapshot.approvalRequirement,
+              registration: observed,
+            },
+            mcpStdioConfig: null,
+            deviceToolConfig: null,
+            remoteMcpConfig: null,
+          }),
+        )
+        .digest("hex")}`;
+      if (materialization !== expected.materializationDigest) unavailable();
+    }
+    requests.push(
+      parseExtensionHostRequest({
+        protocol: "crewon.extension-host-request.v0",
+        operation: "readiness",
+        actor: manifest.owner,
+        registration,
+        configuration,
+        agentVersionId: binding.agentVersionId,
+      }),
+    );
+  }
+  for (let index = 0; index < requests.length; index += 4) {
+    const results = await Promise.allSettled(
+      requests.slice(index, index + 4).map(async (request) => {
+        const response = await privateReadiness(
+          origin,
+          input.token,
+          request,
+          signal,
+        );
+        if (
+          request.operation !== "readiness" ||
+          response.operation !== "readiness" ||
+          !same(response.actor, manifest.owner) ||
+          !same(response.registration, request.registration) ||
+          response.configurationDigest !==
+            (request.configuration as { contentDigest: string })
+              .contentDigest ||
+          response.agentVersionId !== request.agentVersionId ||
+          response.result.outcome !== "ready"
+        )
+          unavailable();
+        const expected = manifest.targets.find(
+          (target) => target.agentVersionId === request.agentVersionId,
+        );
+        if (
+          !expected ||
+          !same(parseExtensionExecutionTarget(response.result.target), expected)
+        )
+          unavailable();
+      }),
+    );
+    if (results.some((result) => result.status === "rejected")) unavailable();
+  }
+  signal.throwIfAborted();
+  return manifest;
 }
 
 async function pinnedJson(

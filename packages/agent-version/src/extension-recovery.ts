@@ -63,6 +63,82 @@ export type ResolvedExtensionRecoveryCapsule = Readonly<{
   manifest: ExtensionRecoveryManifest;
   files: readonly Readonly<ExtensionRecoveryFilePin & { path: string }>[];
 }>;
+export type ExtensionRecoveryCapsuleInventory = Readonly<{
+  capsules: readonly ResolvedExtensionRecoveryCapsule[];
+  unavailable: readonly Readonly<{
+    capsuleId: string;
+    reasonCode: "extension_recovery_capsule_unavailable";
+  }>[];
+}>;
+
+/** Fixed native JSON capsules only. Discovery grants no executable-path or runtime authority. */
+export async function listExtensionRecoveryCapsules(
+  input: Readonly<{ dataRoot: string }>,
+): Promise<ExtensionRecoveryCapsuleInventory> {
+  const value = record(input, ["dataRoot"]);
+  const dataRoot = dataRootValue(value.dataRoot);
+  await assertDirectory(dataRoot);
+  const root = join(dataRoot, ROOT);
+  try {
+    await assertDirectory(root);
+  } catch (error) {
+    if (
+      !hasCode(error, "ENOENT") ||
+      !(error instanceof Error) ||
+      !("path" in error) ||
+      error.path !== root
+    )
+      throw error;
+    return Object.freeze({
+      capsules: Object.freeze([]),
+      unavailable: Object.freeze([]),
+    });
+  }
+  const names = await inventory(root, MAX_CAPSULES + 1);
+  const directories = names
+    .filter((name) => name !== ".allocation-lock")
+    .sort();
+  if (
+    directories.length > MAX_CAPSULES ||
+    directories.some((name) => !/^[a-f0-9]{64}$/u.test(name))
+  )
+    fail("extension_recovery_inventory_invalid");
+  if (names.includes(".allocation-lock")) {
+    try {
+      const lock = await lstat(join(root, ".allocation-lock"));
+      if (!lock.isFile() || lock.isSymbolicLink())
+        fail("extension_recovery_inventory_invalid");
+    } catch (error) {
+      // An allocator can remove its fixed lock after enumeration.
+      if (!hasCode(error, "ENOENT")) throw error;
+    }
+  }
+  await assertDirectory(root);
+  const capsules: ResolvedExtensionRecoveryCapsule[] = [];
+  const unavailable: ExtensionRecoveryCapsuleInventory["unavailable"][number][] =
+    [];
+  for (const name of directories) {
+    const capsuleId = `sha256:${name}`;
+    try {
+      capsules.push(
+        await resolveExtensionRecoveryCapsule({ dataRoot, capsuleId }),
+      );
+    } catch {
+      // Partial, corrupt, symlinked or concurrently changing entries remain untouched.
+      unavailable.push(
+        Object.freeze({
+          capsuleId,
+          reasonCode: "extension_recovery_capsule_unavailable",
+        }),
+      );
+    }
+  }
+  await assertDirectory(root);
+  return Object.freeze({
+    capsules: Object.freeze(capsules),
+    unavailable: Object.freeze(unavailable),
+  });
+}
 
 /** Native-owned file identity only. It grants neither publication nor execution authority. */
 export async function extensionRecoveryDirectory(
@@ -509,7 +585,12 @@ async function inventory(path: string, limit: number): Promise<string[]> {
 }
 function pinSelection(input: unknown): ExtensionRecoverySelection {
   const value = record(input, ["dataRoot", "capsuleId"]);
-  const dataRoot = value.dataRoot;
+  return Object.freeze({
+    dataRoot: dataRootValue(value.dataRoot),
+    capsuleId: digestValue(value.capsuleId),
+  });
+}
+function dataRootValue(dataRoot: unknown): string {
   if (
     typeof dataRoot !== "string" ||
     !isAbsolute(dataRoot) ||
@@ -518,7 +599,7 @@ function pinSelection(input: unknown): ExtensionRecoverySelection {
     Buffer.byteLength(dataRoot) > 4096
   )
     fail("extension_recovery_selection_invalid");
-  return Object.freeze({ dataRoot, capsuleId: digestValue(value.capsuleId) });
+  return dataRoot;
 }
 function inputFile(input: unknown): ExtensionRecoveryInputFile {
   if (

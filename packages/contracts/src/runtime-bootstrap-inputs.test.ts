@@ -6,6 +6,10 @@ import {
   RUNTIME_BOOTSTRAP_INPUTS_SCHEMA,
   type RuntimeBootstrapInputs,
 } from "./runtime-bootstrap-inputs.ts";
+import {
+  replayRuntimeBootstrapInputs,
+  RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES,
+} from "./runtime.ts";
 
 function fixture(): RuntimeBootstrapInputs {
   return {
@@ -51,6 +55,76 @@ function fixture(): RuntimeBootstrapInputs {
     },
   };
 }
+
+test("shared replay projects only parsed nonsecret DTO values and preserves absent optional settings", () => {
+  const input = fixture();
+  const replay = replayRuntimeBootstrapInputs(input);
+  assert.equal(replay.CREWON_RESPONSES_ENDPOINT, input.model.endpoint);
+  assert.equal(replay.CREWON_MODEL_ID, input.model.modelId);
+  assert.equal(replay.CREWON_MODEL_CREDENTIAL_REQUIRED, "1");
+  assert.equal(replay.CREWON_RESPONSES_WEBSOCKET_ENABLED, "false");
+  assert.equal(replay.CREWON_NATIVE_WORKSPACE_READ_ENABLED, "0");
+  for (const name of [
+    "CREWON_RESPONSES_MAX_OUTPUT_TOKENS",
+    "CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS",
+    "CREWON_MODEL_CATALOG_JSON",
+    "CREWON_MODEL_API_KEY",
+    "CREWON_CONTROL_SESSION_TOKEN",
+    "CREWON_TENANT_ID",
+    "CREWON_MCP_STDIO_CONFIG_PATH",
+  ])
+    assert.equal(Object.hasOwn(replay, name), false, name);
+  assert.deepEqual(
+    JSON.parse(replay.CREWON_DEV_AGENT_PROFILES_JSON!),
+    input.profiles,
+  );
+  assert.ok(Object.isFrozen(replay));
+  assert.equal(Reflect.set(replay, "CREWON_MODEL_ID", "changed"), false);
+  (input.model as { modelId: string }).modelId = "changed";
+  assert.equal(replay.CREWON_MODEL_ID, "model-1");
+  assert.ok(Object.isFrozen(RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES));
+  for (const name of Object.keys(replay))
+    assert.ok(
+      (RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES as readonly string[]).includes(
+        name,
+      ),
+    );
+});
+
+test("shared replay preserves literal endpoints, websocket limits, catalogs and credential requirements", () => {
+  const input = fixture();
+  const replay = replayRuntimeBootstrapInputs({
+    ...input,
+    model: {
+      ...input.model,
+      endpoint: "https://API.OPENAI.COM:443/v1/responses",
+      credentialRequired: false,
+      maxOutputTokens: 128,
+      websocket: { connectTimeoutMs: 8765, maxRetries: 0 },
+    },
+    agent: { ...input.agent, instructions: null },
+    modelCatalog: ["model-1", "model-2"],
+  });
+  assert.equal(
+    replay.CREWON_RESPONSES_ENDPOINT,
+    "https://API.OPENAI.COM:443/v1/responses",
+  );
+  assert.equal(replay.CREWON_MODEL_CREDENTIAL_REQUIRED, "0");
+  assert.equal(replay.CREWON_RESPONSES_MAX_OUTPUT_TOKENS, "128");
+  assert.equal(replay.CREWON_RESPONSES_WEBSOCKET_ENABLED, "true");
+  assert.equal(replay.CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS, "8765");
+  assert.equal(replay.CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES, "0");
+  assert.equal(replay.CREWON_MODEL_CATALOG_JSON, '["model-1","model-2"]');
+  assert.equal(Object.hasOwn(replay, "CREWON_AGENT_INSTRUCTIONS"), false);
+  assert.throws(
+    () =>
+      replayRuntimeBootstrapInputs({
+        ...input,
+        apiKey: "forbidden",
+      } as RuntimeBootstrapInputs),
+    /runtime_bootstrap_inputs_invalid/u,
+  );
+});
 
 test("copies and freezes the complete credential-free bootstrap input", () => {
   const input = fixture();

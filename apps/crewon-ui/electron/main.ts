@@ -122,6 +122,8 @@ async function launch(): Promise<void> {
     extensionRuntime: {
       configuration: () =>
         loadDesktopExtensionRuntimeConfiguration(runtimeDataDirectory),
+      resolveProviderCredential: (binding) =>
+        providers.resolveForRuntime(binding),
     },
     paths,
     repositoryRoot,

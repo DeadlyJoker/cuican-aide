@@ -179,6 +179,7 @@ const boundaries: readonly Boundary[] = [
     allowedFileImports: {
       "assistant-sample-continuation.ts": ["node:util"],
       "filesystem-storage-admission.ts": ["node:fs/promises", "node:path"],
+      "extension-recovery-reader.ts": ["node:fs", "node:path"],
       "in-memory-thread-message-window.ts": ["node:buffer"],
       "model-accounting-reader.ts": ["node:timers/promises"],
       "sqlite-canonical-tool-output-codec.ts": ["node:zlib"],
