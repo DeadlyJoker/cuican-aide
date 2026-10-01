@@ -288,6 +288,7 @@ export function hasKnownActiveAgentPlatformRun(input: {
 export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 
 type CommandWorkspaceProps = {
+  businessExtensionEntry?: ReactNode;
   backgroundRunActive?: boolean;
   threadCatalogNavigation?: ThreadCatalogNavigation;
   threadCatalogSearch?: string;
@@ -799,6 +800,7 @@ export function shouldCloseComposerPalette({
 }
 
 export function CommandWorkspace({
+  businessExtensionEntry = null,
   teamProgress = null,
   activeTurnId = null,
   assistantActiveTurnId = null,
@@ -3982,6 +3984,7 @@ export function CommandWorkspace({
             onOpenTask={openLinkedThread}
           />
           <AgentsView
+            businessExtensionEntry={businessExtensionEntry}
             active={activeView === "agents"}
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}

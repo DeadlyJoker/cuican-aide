@@ -942,6 +942,57 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/extensions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Opt-in reviewed plugin metadata only. No instructions, tool definitions, digests, executable code, credentials or execution authority. No query parameters or body. Response <=2MiB. */
+    get: operations["listExtensions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/extensions/{pluginId}/runtime": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read readiness for one explicit deployed AgentVersion and saved configuration revision. Does not publish, activate, select a model, or change the default Agent. Response <=128KiB. No request body. */
+    get: operations["getExtensionRuntime"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/extensions/{pluginId}/tasks/{runId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read the authenticated durable plugin Run projection and bounded external operation result references. No query parameters or body. Response <=128KiB. */
+    get: operations["getExtensionTask"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2346,6 +2397,88 @@ export interface components {
       runId: string;
       messageId: string;
       configurationRevision: number;
+    };
+    ExtensionCatalogEntry: {
+      pluginId: string;
+      pluginVersion: string;
+      title: string;
+      description: string;
+      /** @description Detached non-executable JSON schema metadata; canonical size <=24KiB, depth <=24, nodes <=8192. */
+      inputSchema: {
+        [key: string]: unknown;
+      };
+      /** @description Detached non-secret configuration schema metadata; canonical size <=24KiB, depth <=24, nodes <=8192. */
+      configurationSchema: {
+        [key: string]: unknown;
+      };
+      credentialSlots: {
+        id: string;
+        title: string;
+      }[];
+      resultViews: ("text" | "externalOperation" | "externalResult")[];
+    };
+    ExtensionCatalogResponse: {
+      extensions: components["schemas"]["ExtensionCatalogEntry"][];
+    };
+    ExtensionReadiness:
+      | {
+          /** @constant */
+          outcome: "ready";
+          target: components["schemas"]["ExtensionExecutionTarget"];
+        }
+      | {
+          /** @constant */
+          outcome: "unavailable";
+          /** @enum {string} */
+          reasonCode:
+            | "extension_runtime_unavailable"
+            | "extension_implementation_unavailable"
+            | "extension_credential_unavailable"
+            | "extension_execution_authority_unsupported";
+        };
+    ExtensionRuntimeResponse: {
+      pluginId: string;
+      agentVersionId: string;
+      configurationRevision: number;
+      readiness: components["schemas"]["ExtensionReadiness"];
+    };
+    ExtensionTaskImage: {
+      /**
+       * Format: uri
+       * @description HTTPS result reference without credentials or fragment; no media bytes.
+       */
+      url: string;
+      filename: string;
+    };
+    ExtensionTaskOperation: {
+      operationId: string;
+      sourceRunId: string;
+      /** @enum {string} */
+      status:
+        | "submitting"
+        | "submitted"
+        | "queued"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "unknownOutcome";
+      /** Format: date-time */
+      observedAt: string;
+      images: components["schemas"]["ExtensionTaskImage"][];
+    };
+    ExtensionTaskView: {
+      runId: string;
+      threadId: string;
+      pluginId: string;
+      pluginVersion: string;
+      configurationRevision: number;
+      runStatus: components["schemas"]["RunStatus"];
+      sourceRunId: string | null;
+      operations: components["schemas"]["ExtensionTaskOperation"][];
+      truncated: boolean;
+    };
+    GetExtensionTaskResponse: {
+      task: components["schemas"]["ExtensionTaskView"];
     };
   };
   responses: {
@@ -4743,6 +4876,92 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ExtensionTaskMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listExtensions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized bounded extension metadata */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExtensionCatalogResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getExtensionRuntime: {
+    parameters: {
+      query: {
+        agentVersionId: string;
+        configurationRevision: number;
+      };
+      header?: never;
+      path: {
+        pluginId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized bounded extension metadata */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExtensionRuntimeResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getExtensionTask: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pluginId: string;
+        runId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized bounded extension metadata */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetExtensionTaskResponse"];
         };
       };
       400: components["responses"]["Error"];

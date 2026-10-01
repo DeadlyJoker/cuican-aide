@@ -695,6 +695,7 @@ export function ProjectsView({
 }
 
 export function AgentsView({
+  businessExtensionEntry = null,
   active,
   catalogFilter,
   catalogSearch,
@@ -709,6 +710,7 @@ export function AgentsView({
   onConfigureAgentPlatformCredential,
   onSaveCapability,
 }: {
+  businessExtensionEntry?: ReactNode;
   active: boolean;
   catalogFilter: string;
   catalogSearch: string;
@@ -965,6 +967,7 @@ export function AgentsView({
             onChange={onCatalogFilterChange}
           />
           <div className="catalog-header-actions">
+            {businessExtensionEntry}
             <CatalogSearch
               label="搜索能力"
               placeholder="搜索智能体、技能或服务"

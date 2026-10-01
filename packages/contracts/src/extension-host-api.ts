@@ -242,9 +242,7 @@ export function parseExtensionHostRegistrationIdentity(
   });
 }
 
-function readiness(
-  input: ExtensionHostJsonValue,
-): ExtensionHostReadinessResult {
+function readiness(input: unknown): ExtensionHostReadinessResult {
   const value = record(input);
   if (value.outcome === "ready") {
     keys(value, ["outcome", "target"]);
@@ -368,7 +366,7 @@ function wellFormed(value: string): boolean {
   }
   return true;
 }
-function record(input: ExtensionHostJsonValue): ExtensionHostJsonObject {
+function record(input: unknown): ExtensionHostJsonObject {
   if (input === null || typeof input !== "object" || Array.isArray(input))
     fail();
   return input as ExtensionHostJsonObject;
@@ -382,7 +380,7 @@ function keys(value: ExtensionHostJsonObject, expected: readonly string[]) {
   )
     fail();
 }
-function text(value: ExtensionHostJsonValue, maximumBytes: number): string {
+function text(value: unknown, maximumBytes: number): string {
   if (
     typeof value !== "string" ||
     !value ||
@@ -393,10 +391,10 @@ function text(value: ExtensionHostJsonValue, maximumBytes: number): string {
     fail();
   return value;
 }
-function identifier(value: ExtensionHostJsonValue): string {
+function identifier(value: unknown): string {
   return text(value, 128);
 }
-function digest(value: ExtensionHostJsonValue): string {
+function digest(value: unknown): string {
   const result = text(value, 71);
   if (!/^sha256:[a-f0-9]{64}$/u.test(result)) fail();
   return result;

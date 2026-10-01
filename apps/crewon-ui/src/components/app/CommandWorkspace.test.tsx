@@ -353,6 +353,15 @@ describe("CommandWorkspace", () => {
     return renderToStaticMarkup(commandWorkspaceElement());
   }
 
+  it("renders the host-owned business entry in the existing capability header", () => {
+    const markup = renderToStaticMarkup(commandWorkspaceElement({
+      businessExtensionEntry: <button type="button">Host business plugin entry</button>,
+    }));
+    expect(markup.split("Host business plugin entry")).toHaveLength(2);
+    expect(markup).toContain('class="catalog-header-actions"');
+    expect(renderCommandWorkspace()).not.toContain("Host business plugin entry");
+  });
+
   function controlWorkspaceNav(): CommandWorkspaceControlNav {
     return {
       name: "cuican-aide",

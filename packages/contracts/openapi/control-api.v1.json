@@ -3615,6 +3615,171 @@
           }
         }
       }
+    },
+    "/api/v1/extensions": {
+      "get": {
+        "operationId": "listExtensions",
+        "description": "Opt-in reviewed plugin metadata only. No instructions, tool definitions, digests, executable code, credentials or execution authority. No query parameters or body. Response <=2MiB.",
+        "responses": {
+          "200": {
+            "description": "Authorized bounded extension metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/extensions/{pluginId}/runtime": {
+      "get": {
+        "operationId": "getExtensionRuntime",
+        "description": "Read readiness for one explicit deployed AgentVersion and saved configuration revision. Does not publish, activate, select a model, or change the default Agent. Response <=128KiB. No request body.",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          },
+          {
+            "name": "agentVersionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "configurationRevision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized bounded extension metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtensionRuntimeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/extensions/{pluginId}/tasks/{runId}": {
+      "get": {
+        "operationId": "getExtensionTask",
+        "description": "Read the authenticated durable plugin Run projection and bounded external operation result references. No query parameters or body. Response <=128KiB.",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 48,
+              "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized bounded extension metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetExtensionTaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8974,6 +9139,321 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 2147483647
+          }
+        }
+      },
+      "ExtensionCatalogEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pluginId",
+          "pluginVersion",
+          "title",
+          "description",
+          "inputSchema",
+          "configurationSchema",
+          "credentialSlots",
+          "resultViews"
+        ],
+        "properties": {
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+          },
+          "pluginVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Detached non-executable JSON schema metadata; canonical size <=24KiB, depth <=24, nodes <=8192."
+          },
+          "configurationSchema": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Detached non-secret configuration schema metadata; canonical size <=24KiB, depth <=24, nodes <=8192."
+          },
+          "credentialSlots": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "title"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 24,
+                  "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                }
+              }
+            }
+          },
+          "resultViews": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "enum": ["text", "externalOperation", "externalResult"]
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "ExtensionCatalogResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["extensions"],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/ExtensionCatalogEntry"
+            }
+          }
+        }
+      },
+      "ExtensionReadiness": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["outcome", "target"],
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "ready"
+              },
+              "target": {
+                "$ref": "#/components/schemas/ExtensionExecutionTarget"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["outcome", "reasonCode"],
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "reasonCode": {
+                "type": "string",
+                "enum": [
+                  "extension_runtime_unavailable",
+                  "extension_implementation_unavailable",
+                  "extension_credential_unavailable",
+                  "extension_execution_authority_unsupported"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ExtensionRuntimeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pluginId",
+          "agentVersionId",
+          "configurationRevision",
+          "readiness"
+        ],
+        "properties": {
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+          },
+          "agentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "configurationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/ExtensionReadiness"
+          }
+        }
+      },
+      "ExtensionTaskImage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "filename"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "HTTPS result reference without credentials or fragment; no media bytes."
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      },
+      "ExtensionTaskOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "sourceRunId",
+          "status",
+          "observedAt",
+          "images"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36,
+            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "sourceRunId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "submitting",
+              "submitted",
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "unknownOutcome"
+            ]
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "images": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ExtensionTaskImage"
+            }
+          }
+        }
+      },
+      "ExtensionTaskView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "threadId",
+          "pluginId",
+          "pluginVersion",
+          "configurationRevision",
+          "runStatus",
+          "sourceRunId",
+          "operations",
+          "truncated"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+          },
+          "pluginVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "configurationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "runStatus": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "sourceRunId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ExtensionTaskOperation"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GetExtensionTaskResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task"],
+        "properties": {
+          "task": {
+            "$ref": "#/components/schemas/ExtensionTaskView"
           }
         }
       }

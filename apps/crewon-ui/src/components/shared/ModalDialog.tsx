@@ -23,6 +23,7 @@ export function ModalDialog({
   kicker,
   onClose,
   onOpenAutoFocus,
+  onCloseAutoFocus,
   size = "default",
   title,
 }: {
@@ -35,6 +36,7 @@ export function ModalDialog({
   kicker?: string;
   onClose: () => void;
   onOpenAutoFocus?: (event: Event) => void;
+  onCloseAutoFocus?: (event: Event) => void;
   size?: "default" | "wide";
   title: string;
 }) {
@@ -60,6 +62,7 @@ export function ModalDialog({
           }
         }}
         onOpenAutoFocus={onOpenAutoFocus}
+        onCloseAutoFocus={onCloseAutoFocus}
         onPointerDownOutside={(event) => {
           if (busy) {
             event.preventDefault();

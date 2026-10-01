@@ -4,6 +4,11 @@ import type {
   WebIdentitySession,
   WebIdentitySessionPort,
 } from "./identity-session-adapter.ts";
+import {
+  boundedExtensionProxyResponse,
+  extensionProxyPolicy,
+  EXTENSION_PROXY_DEADLINE_MS,
+} from "./extension-proxy-policy.ts";
 
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 const MAX_HEADER_BYTES = 16 * 1024;
@@ -108,6 +113,15 @@ export function createWebBff(config: {
         }
       }
 
+      const extensionPolicy = extensionProxyPolicy({
+        pathname: requestUrl.pathname,
+        search: requestUrl.search,
+        method: request.method,
+      });
+      if (extensionPolicy?.outcome === "deny") {
+        return errorResponse(extensionPolicy.status, extensionPolicy.code);
+      }
+
       const requestBody = await boundedRequestBody(request);
       if (requestBody instanceof Response) {
         return requestBody;
@@ -125,16 +139,34 @@ export function createWebBff(config: {
         controlTarget,
       );
       let upstream: Response;
+      const upstreamSignal =
+        extensionPolicy === null
+          ? request.signal
+          : AbortSignal.any([
+              request.signal,
+              AbortSignal.timeout(EXTENSION_PROXY_DEADLINE_MS),
+            ]);
       try {
         upstream = await fetchImpl(upstreamUrl, {
           method: request.method,
           headers,
           redirect: "manual",
-          signal: request.signal,
+          signal: upstreamSignal,
           ...(requestBody === null ? {} : { body: requestBody }),
         });
       } catch {
         return errorResponse(502, "control_api_unavailable");
+      }
+      if (extensionPolicy !== null) {
+        try {
+          upstream = await boundedExtensionProxyResponse({
+            upstream,
+            signal: upstreamSignal,
+            maximumBytes: extensionPolicy.responseMaxBytes,
+          });
+        } catch {
+          return errorResponse(502, "control_api_response_invalid");
+        }
       }
       return proxyResponse(upstream);
     },

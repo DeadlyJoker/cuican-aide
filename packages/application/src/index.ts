@@ -86,10 +86,20 @@ export * from "./workflow-human-gate-service.ts";
 
 export * from "./compaction-checkpoint-store-port.ts";
 
-export type { RunExecutionProgressStore, RunExecutionProgressScope, RunExecutionProgressCheckpoint, ReadRunExecutionProgressInput, SaveRunExecutionProgressInput } from "./run-execution-progress-store-port.ts";
+export type {
+  RunExecutionProgressStore,
+  RunExecutionProgressScope,
+  RunExecutionProgressCheckpoint,
+  ReadRunExecutionProgressInput,
+  SaveRunExecutionProgressInput,
+} from "./run-execution-progress-store-port.ts";
 
 export { RunExecutionProgress } from "./run-execution-progress.ts";
-export { loadRunExecutionProgress, type RunProgressLoadControl, type RunProgressLoadResult } from "./run-execution-progress-loader.ts";
+export {
+  loadRunExecutionProgress,
+  type RunProgressLoadControl,
+  type RunProgressLoadResult,
+} from "./run-execution-progress-loader.ts";
 export * from "./model-spending-store-port.ts";
 export * from "./external-operation-store-port.ts";
 export * from "./extension-store-port.ts";
@@ -97,3 +107,4 @@ export * from "./extension-host-port.ts";
 export * from "./extension-configuration-application-service.ts";
 export * from "./extension-execution-authorization.ts";
 export * from "./extension-task-application-service.ts";
+export * from "./extension-read-application-service.ts";

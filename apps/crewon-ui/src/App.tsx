@@ -1,3 +1,4 @@
+import { BusinessExtensionController } from "./components/extensions/BusinessExtensionController";
 import { StreamingTextScope } from "./components/StreamingTextScope";
 import { useControlThreadCatalog } from "./lib/control-runtime/useControlThreadCatalog";
 import { useThreadSelectionRead } from "./lib/thread/useThreadSelectionRead";
@@ -1326,6 +1327,19 @@ export function App({
             automationRuntime={controlAutomationRuntime}
             automationControlConfigured={controlClient !== null}
             automationControlConnected={controlRuntimeConnected}
+            businessExtensionEntry={
+              workspaceUiAuthority === "control" &&
+              controlClient &&
+              controlThreadRuntime ? (
+                <BusinessExtensionController
+                  client={controlClient}
+                  runtime={controlThreadRuntime}
+                  thread={commandShellRuntime.selectedThread}
+                  locale={locale}
+                  onOpenThread={openCommandShellThread}
+                />
+              ) : null
+            }
             workspaceAuthority={workspaceUiAuthority}
             controlWorkspaceNav={
               controlClient === null

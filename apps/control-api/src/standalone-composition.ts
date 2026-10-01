@@ -24,6 +24,7 @@ import {
   WorkflowVersionApplicationService,
   ExtensionConfigurationApplicationService,
   ExtensionTaskApplicationService,
+  ExtensionReadApplicationService,
   type ActorContext,
   type ArtifactStorePort,
   type AutomationStore,
@@ -32,6 +33,7 @@ import {
   type ExtensionCatalogPort,
   type ExtensionStore,
   type ExternalOperationStore,
+  type ExternalOperationQueryStore,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
@@ -70,7 +72,7 @@ type PreparedControlExtensions = {
   client: LoopbackExtensionHostClient;
   catalog: ExtensionCatalogPort;
   extensions: ExtensionStore;
-  operations: ExternalOperationStore;
+  operations: ExternalOperationStore & ExternalOperationQueryStore;
   failureCleanup?: Promise<void>;
   earlyFailureCleanup?: () => Promise<void>;
 };
@@ -130,7 +132,10 @@ export function createStandaloneControlApi(
   try {
     return composeControlApi(store, {
       ...config,
-      localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
+      localStoragePaths: [
+        config.databasePath,
+        ...(config.localStoragePaths ?? []),
+      ],
     });
   } catch (error) {
     void store.close();
@@ -149,7 +154,10 @@ export async function createStandaloneControlApiWithExtensions(
     store,
     {
       ...pinned,
-      localStoragePaths: [pinned.databasePath, ...(pinned.localStoragePaths ?? [])],
+      localStoragePaths: [
+        pinned.databasePath,
+        ...(pinned.localStoragePaths ?? []),
+      ],
     },
     pinned.extensionWorker,
   );
@@ -280,7 +288,11 @@ function composeControlApi(
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   let automationScheduler: AutomationScheduler | undefined;
   try {
-    artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
+    artifactMaintenance = new ArtifactRetentionMaintenance(
+      config.artifactStore.retention,
+      store,
+      config.artifactRetention,
+    );
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -344,6 +356,19 @@ function composeControlApi(
             authorization,
             clock,
             ids,
+            digester,
+          });
+    const extensionReads =
+      preparedExtensions === undefined
+        ? undefined
+        : new ExtensionReadApplicationService({
+            runs: store,
+            agentVersions: store,
+            extensions: preparedExtensions.extensions,
+            operations: preparedExtensions.operations,
+            catalog: preparedExtensions.catalog,
+            host: preparedExtensions.client,
+            authorization,
             digester,
           });
     const compactions = new ThreadCompactionApplicationService({
@@ -465,6 +490,7 @@ function composeControlApi(
       turns,
       extensions,
       extensionTasks,
+      extensionReads,
       compactions,
       rollbacks,
       approvals,
@@ -481,7 +507,10 @@ function composeControlApi(
         store,
         authorization,
       }),
-      modelSpending: new ModelSpendingApplicationService({ store, authorization }),
+      modelSpending: new ModelSpendingApplicationService({
+        store,
+        authorization,
+      }),
       providerProbes,
       providerRuntimeAvailability:
         config.providerProbeWorkers === undefined ? "unavailable" : "available",

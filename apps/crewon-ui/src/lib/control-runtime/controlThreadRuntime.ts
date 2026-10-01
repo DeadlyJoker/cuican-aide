@@ -1549,6 +1549,29 @@ export class ControlThreadRuntime {
     this.#callbacks.onThread(await this.readThread(automation.threadId));
   }
 
+  /** Admit a host-created plugin task through the existing transcript and SSE recovery path. */
+  async adoptExtensionTask(
+    receipt: Readonly<{ threadId: string; runId: string }>,
+    options: Readonly<{ signal?: AbortSignal }> = {},
+  ): Promise<void> {
+    if (this.#closed) throw new Error("control_thread_runtime_closed");
+    options.signal?.throwIfAborted();
+    const { run } = await this.#client.getRun(receipt.runId, options);
+    options.signal?.throwIfAborted();
+    if (this.#closed) throw new Error("control_thread_runtime_closed");
+    if (
+      run.runId !== receipt.runId ||
+      run.threadId !== receipt.threadId ||
+      run.purpose !== "turn"
+    )
+      throw new Error("control_extension_task_adoption_invalid");
+    const thread = await this.readThread(receipt.threadId, options);
+    options.signal?.throwIfAborted();
+    if (this.#closed || thread.id !== receipt.threadId)
+      throw new Error("control_extension_task_adoption_invalid");
+    this.#callbacks.onThread(thread);
+  }
+
   async steerTurn(
     threadId: string,
     text: string,

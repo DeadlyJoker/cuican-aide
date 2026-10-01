@@ -4,6 +4,8 @@ import type {
   ExternalOperation,
   ExternalOperationLocator,
   ExternalOperationStore,
+  ExternalOperationQuery,
+  ExternalOperationQueryStore,
   ReserveExternalOperation,
 } from "@crewon/application";
 import {
@@ -11,11 +13,15 @@ import {
   initialExternalOperation,
   nextExternalOperation,
   parseExternalOperation,
+  parseExternalOperationQueryRecord,
+  validateExternalOperationQuery,
   validateExternalOperationAdvance,
   validateExternalOperationLocator,
 } from "./external-operation-record.ts";
 
-export class PostgresExternalOperationStore implements ExternalOperationStore {
+export class PostgresExternalOperationStore
+  implements ExternalOperationStore, ExternalOperationQueryStore
+{
   readonly #pool: Pool;
   readonly #table: string;
   readonly #host: Readonly<{ assertOpen(): void }> | undefined;
@@ -87,6 +93,32 @@ export class PostgresExternalOperationStore implements ExternalOperationStore {
     return result.rows[0] === undefined
       ? null
       : parseExternalOperation(result.rows[0].record_json);
+  }
+
+  async listExternalOperations(input: ExternalOperationQuery) {
+    this.#host?.assertOpen();
+    const query = validateExternalOperationQuery(input);
+    const result = await this.#pool.query<{
+      operation_id: string;
+      record_json: ExternalOperation;
+    }>(
+      `SELECT operation_id, record_json FROM ${this.#table}
+      WHERE tenant_id = $1 AND run_id = $2 AND binding_digest = $3
+      ORDER BY operation_id LIMIT $4`,
+      [query.tenantId, query.runId, query.bindingDigest, query.limit + 1],
+    );
+    this.#host?.assertOpen();
+    const operations = result.rows.map((row) =>
+      parseExternalOperationQueryRecord({
+        record: row.record_json,
+        query,
+        operationId: row.operation_id,
+      }),
+    );
+    return Object.freeze({
+      operations: Object.freeze(operations.slice(0, query.limit)),
+      truncated: operations.length > query.limit,
+    });
   }
 
   async advanceExternalOperation(input: AdvanceExternalOperation) {

@@ -4,6 +4,8 @@ import type {
   ExternalOperation,
   ExternalOperationLocator,
   ExternalOperationStore,
+  ExternalOperationQuery,
+  ExternalOperationQueryStore,
   ReserveExternalOperation,
 } from "@crewon/application";
 import {
@@ -11,6 +13,8 @@ import {
   initialExternalOperation,
   nextExternalOperation,
   parseExternalOperation,
+  parseExternalOperationQueryRecord,
+  validateExternalOperationQuery,
   validateExternalOperationAdvance,
   validateExternalOperationLocator,
 } from "./external-operation-record.ts";
@@ -26,7 +30,9 @@ export function migrateSqliteExternalOperations(database: DatabaseSync) {
   ) STRICT;`);
 }
 
-export class SqliteExternalOperationStore implements ExternalOperationStore {
+export class SqliteExternalOperationStore
+  implements ExternalOperationStore, ExternalOperationQueryStore
+{
   readonly #database: DatabaseSync;
   readonly #host: Readonly<{ assertOpen(): void }> | undefined;
   constructor(database: DatabaseSync, host?: Readonly<{ assertOpen(): void }>) {
@@ -82,6 +88,34 @@ export class SqliteExternalOperationStore implements ExternalOperationStore {
     this.#host?.assertOpen();
     validateExternalOperationLocator(input);
     return this.#load(input);
+  }
+
+  async listExternalOperations(input: ExternalOperationQuery) {
+    this.#host?.assertOpen();
+    const query = validateExternalOperationQuery(input);
+    const rows = this.#database
+      .prepare(
+        `SELECT operation_id, record_json FROM extension_external_operations
+      WHERE tenant_id = ? AND run_id = ? AND binding_digest = ?
+      ORDER BY operation_id LIMIT ?`,
+      )
+      .all(
+        query.tenantId,
+        query.runId,
+        query.bindingDigest,
+        query.limit + 1,
+      ) as { operation_id: string; record_json: string }[];
+    const operations = rows.map((row) =>
+      parseExternalOperationQueryRecord({
+        record: JSON.parse(row.record_json),
+        query,
+        operationId: row.operation_id,
+      }),
+    );
+    return Object.freeze({
+      operations: Object.freeze(operations.slice(0, query.limit)),
+      truncated: operations.length > query.limit,
+    });
   }
 
   async advanceExternalOperation(input: AdvanceExternalOperation) {

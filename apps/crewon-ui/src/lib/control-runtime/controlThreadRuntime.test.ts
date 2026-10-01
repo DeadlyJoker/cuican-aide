@@ -1939,6 +1939,59 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it("adopts a host-created plugin Run through the existing transcript and resumable Run stream", async () => {
+    const client = fakeClient({ messages: [], runs: [runView()] });
+    const stream = deferred<Readonly<{ runId: string; afterSequence?: number }>>();
+    const runtimeCallbacks = callbacks();
+    const runtime = new ControlThreadRuntime({
+      client,
+      eventStream: async function* (_client, input) {
+        stream.resolve({ runId: input.runId, afterSequence: input.afterSequence });
+        await waitForAbort(input.signal);
+      },
+      threadEventStream: idleThreadEventStream,
+    }, runtimeCallbacks);
+    try {
+      await runtime.adoptExtensionTask({ threadId: "thread-1", runId: "run-1" });
+      await expect(stream.promise).resolves.toEqual(expect.objectContaining({ runId: "run-1" }));
+      expect(client.getRun).toHaveBeenCalledWith("run-1", {});
+      expect(runtimeCallbacks.onThread).toHaveBeenCalledWith(expect.objectContaining({ id: "thread-1" }));
+      expect(client.startTurn).not.toHaveBeenCalled();
+    } finally { runtime.close(); }
+  });
+
+  it.each([
+    { runId: "other-run" },
+    { threadId: "other-thread" },
+    { purpose: "manualCompaction" as const },
+  ])("rejects a plugin task receipt with mismatched Run identity or purpose: %j", async (patch) => {
+    const client = fakeClient({ messages: [], runs: [] });
+    vi.mocked(client.getRun).mockResolvedValue({ run: runView(patch) });
+    const runtimeCallbacks = callbacks();
+    const runtime = new ControlThreadRuntime({ client, eventStream: idleRunEventStream, threadEventStream: idleThreadEventStream }, runtimeCallbacks);
+    try {
+      await expect(runtime.adoptExtensionTask({ threadId: "thread-1", runId: "run-1" })).rejects.toThrow("control_extension_task_adoption_invalid");
+      expect(client.getThread).not.toHaveBeenCalled();
+      expect(runtimeCallbacks.onThread).not.toHaveBeenCalled();
+    } finally { runtime.close(); }
+  });
+
+  it("rejects late plugin task adoption after cancellation or runtime closure", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    const late = deferred<{ run: RunView }>();
+    vi.mocked(client.getRun).mockReturnValueOnce(late.promise);
+    const runtimeCallbacks = callbacks();
+    const runtime = new ControlThreadRuntime({ client, eventStream: idleRunEventStream, threadEventStream: idleThreadEventStream }, runtimeCallbacks);
+    const controller = new AbortController();
+    const adoption = runtime.adoptExtensionTask({ threadId: "thread-1", runId: "run-1" }, { signal: controller.signal });
+    const rejected = expect(adoption).rejects.toThrow();
+    controller.abort(); late.resolve({ run: runView() });
+    await rejected;
+    expect(client.getThread).not.toHaveBeenCalled(); expect(runtimeCallbacks.onThread).not.toHaveBeenCalled();
+    runtime.close();
+    await expect(runtime.adoptExtensionTask({ threadId: "thread-1", runId: "run-1" })).rejects.toThrow("control_thread_runtime_closed");
+  });
+
   it("fails closed on a rollback receipt that rewrites Thread state", async () => {
     const client = fakeClient({ messages: [], runs: [] });
     vi.mocked(client.rollbackThread).mockResolvedValueOnce({

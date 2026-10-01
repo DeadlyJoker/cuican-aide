@@ -49,6 +49,19 @@ export type ReserveExternalOperation = ExternalOperationScope &
 
 export type ExternalOperationLocator = ExternalOperationScope &
   Pick<ExternalOperation, "operationId">;
+export type ExternalOperationQuery = ExternalOperationScope &
+  Readonly<{ limit: number }>;
+
+/** Read-only host projection; execution stores do not have to expose enumeration. */
+export interface ExternalOperationQueryStore {
+  listExternalOperations(input: ExternalOperationQuery): Promise<
+    Readonly<{
+      operations: readonly ExternalOperation[];
+      truncated: boolean;
+    }>
+  >;
+}
+
 export type AdvanceExternalOperation = ExternalOperationLocator &
   ExternalOperationState &
   Readonly<{

@@ -94,6 +94,24 @@ import {
   RunPlanViewValidationError,
 } from "./run-plan-view.ts";
 import { WorkspaceControlClient } from "./workspace-control-client.ts";
+import {
+  ExtensionControlClient,
+  type ExtensionConfigurationQuery,
+} from "./extension-control-client.ts";
+import type {
+  CreateExtensionTaskRequest,
+  ExtensionActivationMutationResponse,
+  ExtensionConfigurationMutationResponse,
+  ExtensionTaskMutationResponse,
+  ExtensionCatalogResponse,
+  ExtensionRuntimeQuery,
+  ExtensionRuntimeResponse,
+  GetExtensionTaskResponse,
+  GetExtensionActivationResponse,
+  GetExtensionConfigurationResponse,
+  SaveExtensionConfigurationRequest,
+  SetExtensionActivationRequest,
+} from "@crewon/contracts";
 import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
 
 export type ControlApiClientConfig = Readonly<{
@@ -215,6 +233,83 @@ export class ControlApiClient {
       ...options,
       expectedStatuses: [200],
     });
+  }
+
+  getExtensionConfiguration(
+    pluginId: string,
+    query: ExtensionConfigurationQuery = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetExtensionConfigurationResponse> {
+    return this.#extensionClient().getConfiguration(pluginId, query, options);
+  }
+
+  listExtensions(options: ControlApiRequestOptions = {}): Promise<ExtensionCatalogResponse> {
+    return this.#extensionClient().list(options);
+  }
+
+  getExtensionRuntime(
+    pluginId: string,
+    query: ExtensionRuntimeQuery,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ExtensionRuntimeResponse> {
+    return this.#extensionClient().getRuntime(pluginId, query, options);
+  }
+
+  getExtensionTask(
+    pluginId: string,
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetExtensionTaskResponse> {
+    return this.#extensionClient().getTask(pluginId, runId, options);
+  }
+
+  saveExtensionConfiguration(
+    pluginId: string,
+    body: SaveExtensionConfigurationRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ExtensionConfigurationMutationResponse> {
+    return this.#extensionClient().saveConfiguration(
+      pluginId,
+      body,
+      idempotencyKey,
+      options,
+    );
+  }
+
+  getExtensionActivation(
+    pluginId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetExtensionActivationResponse> {
+    return this.#extensionClient().getActivation(pluginId, options);
+  }
+
+  setExtensionActivation(
+    pluginId: string,
+    body: SetExtensionActivationRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ExtensionActivationMutationResponse> {
+    return this.#extensionClient().setActivation(
+      pluginId,
+      body,
+      idempotencyKey,
+      options,
+    );
+  }
+
+  createExtensionTask(
+    pluginId: string,
+    body: CreateExtensionTaskRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ExtensionTaskMutationResponse> {
+    return this.#extensionClient().createTask(
+      pluginId,
+      body,
+      idempotencyKey,
+      options,
+    );
   }
 
   probeModelProvider(
@@ -1442,6 +1537,14 @@ export class ControlApiClient {
         this.#json(method, path, body, options),
       eventHeaders: () => this.#authenticatedHeaders("text/event-stream"),
       fetch: (url, init) => this.#fetch(url, init),
+      protocolError: (code) => new ControlApiProtocolError(code),
+    });
+  }
+
+  #extensionClient(): ExtensionControlClient {
+    return new ExtensionControlClient({
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
       protocolError: (code) => new ControlApiProtocolError(code),
     });
   }

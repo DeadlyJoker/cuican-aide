@@ -2,8 +2,68 @@ import type {
   AdvanceExternalOperation,
   ExternalOperation,
   ExternalOperationLocator,
+  ExternalOperationQuery,
   ReserveExternalOperation,
 } from "@crewon/application";
+
+export function validateExternalOperationQuery(
+  input: ExternalOperationQuery,
+): ExternalOperationQuery {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    (Object.getPrototypeOf(input) !== Object.prototype &&
+      Object.getPrototypeOf(input) !== null) ||
+    Object.getOwnPropertySymbols(input).length !== 0 ||
+    Object.getOwnPropertyNames(input).sort().join("\0") !==
+      "bindingDigest\0limit\0runId\0tenantId"
+  )
+    throw new Error("external_operation_query_invalid");
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (
+    Object.values(descriptors).some((entry) => !Object.hasOwn(entry, "value"))
+  )
+    throw new Error("external_operation_query_invalid");
+  const tenantId = descriptors.tenantId!.value;
+  const runId = descriptors.runId!.value;
+  const bindingDigest = descriptors.bindingDigest!.value;
+  const limit = descriptors.limit!.value;
+  text(tenantId);
+  text(runId);
+  for (const value of [tenantId, runId]) {
+    for (const point of value) {
+      const code = point.codePointAt(0)!;
+      if (code >= 0xd800 && code <= 0xdfff)
+        throw new Error("external_operation_query_invalid");
+    }
+  }
+  digest(bindingDigest);
+  if (
+    typeof limit !== "number" ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 16
+  )
+    throw new Error("external_operation_query_invalid");
+  return Object.freeze({ tenantId, runId, bindingDigest, limit });
+}
+
+export function parseExternalOperationQueryRecord(input: {
+  record: unknown;
+  query: ExternalOperationQuery;
+  operationId: string;
+}): ExternalOperation {
+  const operation = parseExternalOperation(input.record);
+  if (
+    operation.tenantId !== input.query.tenantId ||
+    operation.runId !== input.query.runId ||
+    operation.bindingDigest !== input.query.bindingDigest ||
+    operation.operationId !== input.operationId
+  )
+    throw new Error("external_operation_query_scope_mismatch");
+  return operation;
+}
 
 export function validateExternalOperationLocator(
   input: ExternalOperationLocator,
@@ -155,7 +215,7 @@ export function nextExternalOperation(
   };
 }
 
-function text(value: string) {
+function text(value: unknown): asserts value is string {
   if (
     typeof value !== "string" ||
     !value.trim() ||
@@ -165,7 +225,7 @@ function text(value: string) {
   )
     throw new Error("external_operation_identity_invalid");
 }
-function digest(value: string) {
+function digest(value: unknown): asserts value is string {
   if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
     throw new Error("external_operation_digest_invalid");
 }
