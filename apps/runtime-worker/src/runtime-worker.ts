@@ -1,6 +1,7 @@
 import { RuntimePreflight } from "./runtime-preflight.ts";
 import { AgentRuntimeCapacityError } from "./agent-runtime-capacity.ts";
 import { RuntimeStoreAccess } from "./runtime-store-access.ts";
+import { RuntimeWorkItemClaims } from "./runtime-work-item-claims.ts";
 import { CONTINUE_RUN, runWithExecutionBudget, executionBudget, type RuntimeExecutionBudget, type RuntimeWorkerStepOutcome } from "./runtime-execution-budget.ts";
 import type { RuntimeWorkerOutcome } from "./runtime-worker-outcome.ts";
 import {
@@ -57,6 +58,7 @@ import {
   type ThreadContinuationCheckpoint,
   type ToolOutputArtifactPort,
   type WorkItemClaim,
+  type WorkItemExecutionScope,
   type GoalToolExecutionResult,
 } from "@crewon/application";
 import type {
@@ -165,6 +167,7 @@ export type { ToolRuntimePort } from "@crewon/tool-broker";
 export type RuntimeWorkerConfig = Readonly<{
   ownerId: string;
   nextLeaseId: () => string;
+  workItemExecutionScope?: WorkItemExecutionScope;
   leaseDurationMs?: number;
   retryAfterMs?: number;
   approvalRecheckMs?: number;
@@ -240,6 +243,7 @@ export class RuntimeWorker {
   readonly #governedContextItems: readonly ContextHistoryItem[];
   readonly #governedContextBytes: number;
   readonly #ownerId: string;
+  readonly #workItemClaims: RuntimeWorkItemClaims;
   readonly #nextLeaseId: () => string;
   readonly #leaseDurationMs: number;
   readonly #retryAfterMs: number;
@@ -323,6 +327,10 @@ export class RuntimeWorker {
       },
     });
     this.#store = this.#storeAccess.store(dependencies.store);
+    this.#workItemClaims = new RuntimeWorkItemClaims({
+      store: this.#store,
+      executionScope: config.workItemExecutionScope,
+    });
     this.#workflowScheduler = dependencies.experimentalWorkflowScheduler;
     this.#execution = dependencies.execution.withStoreAccess((store) =>
       this.#storeAccess.store(store),
@@ -612,7 +620,7 @@ export class RuntimeWorker {
   }): Promise<RuntimeWorkerOutcome> {
     await this.#toolResultMaintenance.poll();
     if (this.#closed) return { kind: "idle" };
-    const claim = await this.#store.claimNextWorkItem({
+    const claim = await this.#workItemClaims.claim({
       ownerId: this.#ownerId,
       leaseId: requireBoundedString(
         this.#nextLeaseId(),

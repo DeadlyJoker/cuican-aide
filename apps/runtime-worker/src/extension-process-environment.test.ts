@@ -78,6 +78,7 @@ test("production rejects every ambient extension authority before allocating res
     { CREWON_EXTENSION_HOST_DEADLINE_MS: "1000" },
     { CREWON_EXTENSION_RUNTIME_BINDINGS_PATH: "/bindings" },
     { CREWON_EXTENSION_AGENT_VERSION_ASSETS_PATH: "/assets" },
+    { CREWON_EXTENSION_EXECUTION_MODE: "current" },
   ])
     assert.throws(
       () => resolveRuntimeExtensionEnvironment(input, "production"),
@@ -139,10 +140,35 @@ test("enabled host requires four explicit owner fields and strict private peer v
   assert.equal(parsed.host.deadlineMs, 30000);
   assert.equal(parsed.runtimeBindingsPath, "/bindings");
   assert.equal(parsed.agentVersionAssetsPath, "/assets");
+  assert.equal(parsed.executionMode, "current");
   assert.equal(Object.isFrozen(parsed), true);
   assert.equal(Object.isFrozen(parsed.host), true);
   assert.equal(inspect(parsed).includes(token), false);
   assert.equal(inspect(parsed.host).includes(token), false);
+});
+
+test("historical Worker mode requires opt-in and a complete published runtime", () => {
+  const published = {
+    ...environment,
+    CREWON_EXTENSION_EXECUTION_MODE: "historical",
+    CREWON_EXTENSION_RUNTIME_BINDINGS_PATH: "/bindings",
+    CREWON_EXTENSION_AGENT_VERSION_ASSETS_PATH: "/assets",
+  };
+  assert.equal(
+    resolveRuntimeExtensionEnvironment(published, "standalone")?.executionMode,
+    "historical",
+  );
+  for (const input of [
+    { CREWON_EXTENSION_EXECUTION_MODE: "current" },
+    { ...published, CREWON_EXTENSIONS_ENABLED: "0" },
+    { ...environment, CREWON_EXTENSION_EXECUTION_MODE: "historical" },
+    { ...published, CREWON_EXTENSION_AGENT_VERSION_ASSETS_PATH: undefined },
+    { ...published, CREWON_EXTENSION_EXECUTION_MODE: " historical" },
+    { ...published, CREWON_EXTENSION_EXECUTION_MODE: "other" },
+  ])
+    assert.throws(() =>
+      resolveRuntimeExtensionEnvironment(input, "standalone"),
+    );
 });
 
 test("standalone authority verifies current full identity and resource scope on every action", async () => {

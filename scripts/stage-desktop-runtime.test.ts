@@ -13,6 +13,7 @@ import {
 } from "./stage-desktop-runtime.ts";
 import {
   createExtensionBuildIdentity,
+  createScopedExtensionBuildIdentity,
   EXTENSION_BUILD_IDENTITY_FILE,
   getComfyImplementationDigest,
 } from "../packages/agent-version/src/extension-build.ts";
@@ -108,6 +109,39 @@ test("independent desktop bundles share the source identity and verify their own
       },
     );
   }
+  const scopedIdentity = createScopedExtensionBuildIdentity({
+    implementationDigest: identity,
+    bundlePaths: outputs,
+  });
+  assert.equal(
+    scopedIdentity.schemaVersion,
+    "crewon.extension-build-identity.v1",
+  );
+  writeFileSync(
+    join(directory, EXTENSION_BUILD_IDENTITY_FILE),
+    JSON.stringify(scopedIdentity),
+  );
+  assert.equal(
+    JSON.parse(
+      execFileSync(process.execPath, [outputs[1]!], { encoding: "utf8" }),
+    ).digest,
+    identity,
+  );
+  writeFileSync(
+    join(directory, EXTENSION_BUILD_IDENTITY_FILE),
+    JSON.stringify({
+      ...scopedIdentity,
+      historicalWorkItemScope: "unknown-scope",
+    }),
+  );
+  assert.throws(
+    () => execFileSync(process.execPath, [outputs[1]!], { stdio: "pipe" }),
+    /extension_build_identity_invalid/u,
+  );
+  writeFileSync(
+    join(directory, EXTENSION_BUILD_IDENTITY_FILE),
+    JSON.stringify(scopedIdentity),
+  );
   appendFileSync(outputs[1]!, "\n// artifact drift\n");
   assert.throws(
     () => execFileSync(process.execPath, [outputs[1]!], { stdio: "pipe" }),

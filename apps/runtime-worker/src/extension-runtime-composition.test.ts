@@ -1,23 +1,40 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import { Pool } from "pg";
 import {
   compileAgentVersion,
   type CompiledAgentVersion,
 } from "@crewon/agent-version";
-import { createExtensionConfiguration } from "@crewon/domain";
+import {
+  ExtensionConfigurationApplicationService,
+  ExtensionTaskApplicationService,
+  TurnApplicationService,
+  type ExtensionHostPort,
+} from "@crewon/application";
+import {
+  createExtensionConfiguration,
+  createExtensionRunBinding,
+  parseExtensionExecutionTarget,
+} from "@crewon/domain";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import { parseExtensionHostResponse } from "@crewon/contracts";
 import { processAgentRuntimeCapacity } from "./agent-runtime-capacity.ts";
 import { compileRuntimeAgentVersion } from "./standalone-composition.ts";
 import type { RuntimeBindingConfig } from "./runtime-binding-config.ts";
 import { compositionFixture } from "./runtime-composition.test-support.ts";
+import { seedThread } from "../../../packages/store/src/thread-store-conformance.test-support.ts";
 import { compileComfyAgentVersion } from "./extensions/comfyui-agent-version.ts";
 import { bundledComfyRegistration } from "./extensions/comfyui-bundled-registration.ts";
 import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-process-environment.ts";
+import {
+  COMFY_OBSERVE_TOOL,
+  COMFY_SUBMIT_TOOL,
+} from "./extensions/comfyui-tool-catalog.ts";
 import {
   composeRuntimeExtensions,
   extensionCompositionDeployments,
@@ -172,6 +189,419 @@ function fixture(t: TestContext, backend: "sqlite" | "postgres") {
       }),
   };
 }
+
+test(
+  "actual historical composition resumes an accepted bound Run, leaves unbound and other-implementation Runs untouched, then current mode executes ordinary work",
+  { timeout: 15_000 },
+  async (t) => {
+    const f = fixture(t, "sqlite");
+    const modelServer = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      const last = body.input
+        .filter(
+          (item: { type: string }) => item.type === "function_call_output",
+        )
+        .at(-1);
+      const output =
+        last === undefined
+          ? [
+              {
+                type: "function_call",
+                id: "fc-submit",
+                call_id: "submit",
+                name: COMFY_SUBMIT_TOOL,
+                arguments: JSON.stringify({ prompt: "A ceramic teapot" }),
+              },
+            ]
+          : last.call_id === "submit"
+            ? [
+                {
+                  type: "function_call",
+                  id: "fc-observe",
+                  call_id: "observe",
+                  name: COMFY_OBSERVE_TOOL,
+                  arguments: JSON.stringify({
+                    operationId: JSON.parse(last.output).operationId,
+                  }),
+                },
+              ]
+            : [];
+      const id = randomUUID();
+      const events: Record<string, unknown>[] = [
+        { type: "response.created", response: { id, status: "in_progress" } },
+      ];
+      for (const item of output)
+        events.push({ type: "response.output_item.done", item });
+      const finalText =
+        output.length === 0
+          ? `图片已生成：${JSON.parse(last.output).images[0].url}`
+          : null;
+      if (finalText !== null)
+        events.push({
+          type: "response.output_text.delta",
+          delta: finalText,
+        });
+      events.push({
+        type: "response.completed",
+        response: {
+          id,
+          status: "completed",
+          output:
+            finalText === null
+              ? output
+              : [
+                  {
+                    type: "message",
+                    role: "assistant",
+                    content: [{ type: "output_text", text: finalText }],
+                  },
+                ],
+        },
+      });
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end(
+        events
+          .map(
+            (event, sequence_number) =>
+              `data: ${JSON.stringify({ ...event, sequence_number })}\n\n`,
+          )
+          .join(""),
+      );
+    });
+    await new Promise<void>((resolve) =>
+      modelServer.listen(0, "127.0.0.1", resolve),
+    );
+    t.after(async () => {
+      await new Promise<void>((resolve) => {
+        modelServer.close(() => resolve());
+        modelServer.closeAllConnections();
+      });
+    });
+    const address = modelServer.address();
+    assert.ok(address !== null && typeof address !== "string");
+    assert.equal(f.binding.provider.kind, "directResponses");
+    if (f.binding.provider.kind !== "directResponses")
+      throw new Error("unexpected provider");
+    f.writeBindings([
+      {
+        ...f.binding,
+        provider: {
+          ...f.binding.provider,
+          endpoint: `http://127.0.0.1:${address.port}/v1/responses`,
+        },
+      },
+    ]);
+    const actor = {
+      tenantId: f.config.runtimeTenantId,
+      spaceId: f.configuration.spaceId,
+      actorId: "actor-1",
+      principalId: "principal-1",
+    };
+    const token = "historical-composition-private-token-at-least-32-bytes";
+    const requests: string[] = [];
+    const extensionRuntime = {
+      ...f.extensionRuntime,
+      privateHost: { port: 0, token },
+      dns: {
+        resolveAll: async () => [{ address: "8.8.8.8", family: 4 as const }],
+      },
+      transport: {
+        request: async (input: {
+          method: string;
+          body?: Uint8Array;
+          target: { endpoint: URL };
+        }) => {
+          const path = input.target.endpoint.pathname;
+          requests.push(`${input.method} ${path}`);
+          const id =
+            input.method === "POST"
+              ? JSON.parse(Buffer.from(input.body!).toString()).prompt_id
+              : path.split("/").at(-1)!;
+          const result =
+            input.method === "POST"
+              ? { prompt_id: id }
+              : {
+                  [id]: {
+                    status: { completed: true, status_str: "success" },
+                    outputs: {
+                      "29": {
+                        images: [
+                          {
+                            filename: `${id}.png`,
+                            subfolder: "",
+                            type: "output",
+                          },
+                        ],
+                      },
+                    },
+                  },
+                };
+          return {
+            status: 200,
+            headers: { "content-type": "application/json" },
+            body: Buffer.from(JSON.stringify(result)),
+          };
+        },
+      },
+    };
+    await f.activate({
+      additionalAgentVersions: [f.version],
+      agentVersionDeployments: extensionCompositionDeployments({
+        ...f.boundary,
+        config: extensionRuntime,
+      }),
+    });
+    const store = await f.openStore();
+    t.after(() => store.close());
+    const extensions = store.extensionStore();
+    await extensions.migrate();
+    await extensions.saveExtensionConfiguration({
+      configuration: f.configuration,
+      expectedRevision: 0,
+      receipt: {
+        actorId: actor.actorId,
+        idempotencyKey: "configuration",
+        requestDigest: digester.sha256("configuration"),
+      },
+    });
+    const ordinaryTransport = {
+      ...f.config.transport,
+      async *stream() {
+        yield { type: "output.delta" as const, delta: "ordinary completed" };
+        yield { type: "completed" as const, checkpoint: null };
+      },
+    };
+    const openWorker = (mode: "current" | "historical", crash: boolean) =>
+      f.create({
+        transport: ordinaryTransport,
+        extensionRuntime,
+        extensionExecutionMode: mode,
+        additionalAgentVersions: [f.version],
+        retryAfterMs: 0,
+        afterToolProviderResolved: async () => {
+          if (crash) throw new Error("lost_after_acceptance");
+        },
+      });
+    const current = await openWorker("current", true);
+    t.after(() => current.close());
+    // Readiness is returned by the actual authenticated host and compiled runtime proof.
+    const post = async (
+      operation: "validateConfiguration" | "readiness",
+      input: Parameters<ExtensionHostPort["evaluate"]>[0],
+    ) => {
+      const response = await fetch(
+        `${current.extensionHostOrigin}/private/v0/extensions`,
+        {
+          method: "POST",
+          headers: {
+            "authorization": `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            protocol: "crewon.extension-host-request.v0",
+            actor: input.actor,
+            operation,
+            registration: {
+              pluginId: input.registration.manifest.pluginId,
+              pluginVersion: input.registration.manifest.version,
+              manifestDigest: input.registration.manifestDigest,
+              implementationDigest: input.registration.implementationDigest,
+            },
+            configuration: input.configuration,
+            ...(operation === "readiness"
+              ? { agentVersionId: input.agentVersionId }
+              : {}),
+          }),
+        },
+      );
+      assert.equal(response.status, 200);
+      return parseExtensionHostResponse(await response.json());
+    };
+    const host: ExtensionHostPort = {
+      validateConfiguration: async (input) => {
+        await post("validateConfiguration", {
+          ...input,
+          agentVersionId: f.version.agentVersionId,
+        });
+      },
+      evaluate: async (input) => {
+        const response = await post("readiness", input);
+        assert.equal(response.operation, "readiness");
+        if (response.operation !== "readiness")
+          throw new Error("wrong operation");
+        return response.result.outcome === "ready"
+          ? {
+              outcome: "ready",
+              target: parseExtensionExecutionTarget(response.result.target),
+            }
+          : response.result;
+      },
+    };
+    const catalog = {
+      list: () => [f.registration],
+      resolve: () => f.registration,
+    };
+    const clock = { now: () => new Date().toISOString() };
+    const authorization = f.extensionRuntime.authorization;
+    const services = {
+      store: extensions,
+      host,
+      catalog,
+      clock,
+      digester,
+      authorization,
+    };
+    const configurationService = new ExtensionConfigurationApplicationService(
+      services,
+    );
+    const enabled = await configurationService.setActivation(actor, {
+      pluginId: f.configuration.pluginId,
+      configurationRevision: 1,
+      expectedRevision: 0,
+      idempotencyKey: "activation",
+      state: "enabled",
+      agentVersionId: f.version.agentVersionId,
+    });
+    assert.ok(enabled.activation.target);
+    const ids = { nextId: () => randomUUID() };
+    const tasks = new ExtensionTaskApplicationService({
+      ...services,
+      store,
+      extensions,
+      operations: store.externalOperationStore(),
+      ids,
+    });
+    await seedThread(store, { ...actor, threadId: "image-thread" });
+    const { binding } = await tasks.createTask(actor, {
+      pluginId: f.configuration.pluginId,
+      threadId: "image-thread",
+      expectedThreadRevision: 1,
+      idempotencyKey: "generate",
+      intent: { kind: "generate", input: { prompt: "生成一张茶壶照片" } },
+    });
+    assert.deepEqual(await current.worker.wake(), {
+      kind: "retried",
+      runId: binding.runId,
+      code: "lost_after_acceptance",
+    });
+    const cursor = (await store.listRunEvents(binding, 0, 100)).at(
+      -1,
+    )!.sequence;
+    await configurationService.setActivation(actor, {
+      pluginId: f.configuration.pluginId,
+      configurationRevision: 1,
+      expectedRevision: 1,
+      idempotencyKey: "disable",
+      state: "disabled",
+      agentVersionId: null,
+    });
+    await current.close();
+
+    const turns = new TurnApplicationService({
+      store,
+      clock,
+      ids,
+      digester,
+      authorization,
+    });
+    const ordinary = async (threadId: string) => {
+      await seedThread(store, { ...actor, threadId });
+      return turns.startTurn(actor, {
+        kind: "turn.start",
+        idempotencyKey: threadId,
+        threadId,
+        expectedThreadRevision: 1,
+        content: "ordinary request",
+        requestedAgentVersionId: f.config.route.agentVersionId,
+        executionIntent: "none",
+        route: f.config.route,
+      });
+    };
+    const plain = await ordinary("ordinary-thread");
+    const other = await ordinary("uninstalled-implementation-thread");
+    // This unavailable historical record is persisted test data, never a claimed ready implementation.
+    const otherConfiguration = createExtensionConfiguration(
+      {
+        ...f.configuration,
+        revision: 2,
+        implementationDigest: `sha256:${"f".repeat(64)}`,
+      },
+      digester,
+    );
+    await extensions.saveExtensionConfiguration({
+      configuration: otherConfiguration,
+      expectedRevision: 1,
+      receipt: {
+        actorId: actor.actorId,
+        idempotencyKey: "other-config",
+        requestDigest: digester.sha256("other-config"),
+      },
+    });
+    const otherBinding = createExtensionRunBinding(
+      {
+        ...binding,
+        runId: other.runState.runId,
+        threadId: other.threadState.threadId,
+        configurationRevision: 2,
+        configurationDigest: otherConfiguration.contentDigest,
+      },
+      digester,
+    );
+    const sql = new DatabaseSync(join(f.root, "control.sqlite"));
+    t.after(() => sql.close());
+    sql
+      .prepare("INSERT INTO extension_run_bindings VALUES (?, ?, ?, ?, ?, ?)")
+      .run(
+        otherBinding.tenantId,
+        otherBinding.spaceId,
+        otherBinding.pluginId,
+        otherBinding.runId,
+        2,
+        JSON.stringify(otherBinding),
+      );
+    const before = (runId: string) =>
+      sql.prepare("SELECT * FROM work_items WHERE run_id=?").get(runId);
+    const plainBefore = before(plain.runState.runId);
+    const otherBefore = before(other.runState.runId);
+    const historical = await openWorker("historical", false);
+    t.after(() => historical.close());
+    assert.deepEqual(await historical.worker.wake(), {
+      kind: "completed",
+      runId: binding.runId,
+    });
+    assert.deepEqual(await historical.worker.wake(), { kind: "idle" });
+    assert.deepEqual(before(plain.runState.runId), plainBefore);
+    assert.deepEqual(before(other.runState.runId), otherBefore);
+    assert.equal(
+      (await store.loadRun(otherBinding))?.status,
+      other.runState.status,
+    );
+    assert.equal(
+      requests.filter((request) => request === "POST /prompt").length,
+      1,
+    );
+    const events = await store.listRunEvents(binding, cursor, 100);
+    assert.ok(events.every((event) => event.sequence > cursor));
+    assert.match(
+      events
+        .filter((event) => event.type === "model.output.delta")
+        .map((event) => event.data.delta)
+        .join(""),
+      /图片已生成：https:\/\/comfy.example\/view/u,
+    );
+    await historical.close();
+    const resumedCurrent = await openWorker("current", false);
+    t.after(() => resumedCurrent.close());
+    assert.deepEqual(await resumedCurrent.worker.wake(), {
+      kind: "completed",
+      runId: plain.runState.runId,
+    });
+    assert.deepEqual(await resumedCurrent.worker.wake(), { kind: "idle" });
+    assert.deepEqual(before(other.runState.runId), otherBefore);
+  },
+);
 
 for (const backend of ["sqlite", "postgres"] as const) {
   const options = {

@@ -17,6 +17,7 @@ export * from "./automation-application-service.ts";
 export * from "./automation-store-port.ts";
 export * from "./authorization-port.ts";
 export * from "./durable-queue-port.ts";
+export { copyWorkItemExecutionScope } from "./work-item-execution-scope.ts";
 export * from "./outbox-retention-port.ts";
 export * from "./storage-admission-port.ts";
 export * from "./domain-store-port.ts";

@@ -298,7 +298,10 @@ try {
     nativeWorkspaceReadCatalog,
     ...(extensionEnvironment === undefined
       ? {}
-      : { extensionHost: extensionEnvironment.host }),
+      : {
+          extensionHost: extensionEnvironment.host,
+          extensionExecutionMode: extensionEnvironment.executionMode,
+        }),
     ...(extensionRelease === null
       ? {}
       : {

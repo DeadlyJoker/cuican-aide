@@ -5,6 +5,7 @@ export function workItemCandidatesSql(input: {
   limit: string;
   dialect: "sqlite" | "postgres";
   lock: "none" | "skipLocked";
+  executionPredicate?: string;
 }): string {
   const suffix = input.dialect === "sqlite" ? "_ms" : "";
   const available = `available_at${suffix}`,
@@ -14,7 +15,7 @@ export function workItemCandidatesSql(input: {
     SELECT * FROM (
       SELECT work_item_id,work_item_order,${available} AS ready_at
       FROM ${input.table}
-      WHERE status = 'pending' AND ${available} <= ${input.now}
+      WHERE status = 'pending' AND ${available} <= ${input.now}${input.executionPredicate ?? ""}
       ORDER BY ${available},${expires},work_item_order
       LIMIT ${input.limit}${locking}
     ) AS pending_candidates
@@ -22,7 +23,7 @@ export function workItemCandidatesSql(input: {
     SELECT * FROM (
       SELECT work_item_id,work_item_order,${expires} AS ready_at
       FROM ${input.table}
-      WHERE status = 'leased' AND ${expires} <= ${input.now}
+      WHERE status = 'leased' AND ${expires} <= ${input.now}${input.executionPredicate ?? ""}
       ORDER BY ${expires},work_item_order
       LIMIT ${input.limit}${locking}
     ) AS expired_candidates

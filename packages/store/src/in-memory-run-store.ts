@@ -1,3 +1,4 @@
+import { copyQueueClaim } from "./queue-execution-scope.ts";
 import { InMemoryModelPricingStore } from "./in-memory-model-pricing-store.ts";
 import { InMemoryModelSpendingStore } from "./in-memory-model-spending-store.ts";
 import { InMemoryRunExecutionProgressStore } from "./in-memory-run-execution-progress-store.ts";
@@ -4053,6 +4054,7 @@ export class InMemoryRunStore implements DomainStore {
   }
 
   async claimNextOutbox(input: QueueClaimInput): Promise<OutboxClaim | null> {
+    input = copyQueueClaim(input, "outbox");
     validateQueueClaim(input);
     const claimed = claimNext(this.#outbox, input, readLeaseClock(this.#clock));
     return claimed === null
@@ -4081,6 +4083,9 @@ export class InMemoryRunStore implements DomainStore {
   async claimNextWorkItem(
     input: QueueClaimInput,
   ): Promise<WorkItemClaim | null> {
+    input = copyQueueClaim(input, "workItem");
+    if (input.executionScope !== undefined)
+      throw new RunStoreError("queue_execution_scope_unsupported");
     validateQueueClaim(input);
     const claimed = claimNext(
       this.#workItems,

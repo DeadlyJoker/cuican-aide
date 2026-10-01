@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test, { type TestContext } from "node:test";
 
 import {
@@ -12,15 +12,22 @@ import {
   createAgentVersionAsset,
 } from "@crewon/agent-version";
 import type { ModelTransportPort } from "@crewon/agent-kernel";
-import { SqliteRunStore } from "@crewon/store";
+import type { QueueClaimInput } from "@crewon/application";
+import { createExtensionConfiguration } from "@crewon/domain";
+import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 
 import {
   compileRuntimeAgentVersion,
+  createPostgresRuntimeWorker,
   createStandaloneRuntimeWorker,
   type RuntimeWorkerCompositionConfig,
 } from "./standalone-composition.ts";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
 import { DesktopProviderProbeEgressPolicy } from "./provider-probe-egress.ts";
+import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-process-environment.ts";
+import { compileComfyAgentVersion } from "./extensions/comfyui-agent-version.ts";
+import { bundledComfyRegistration } from "./extensions/comfyui-bundled-registration.ts";
+import { extensionCompositionDeployments } from "./extensions/extension-runtime-composition.ts";
 
 test("compiles the production Worker prefix into one immutable AgentVersion", () => {
   const version = compileRuntimeAgentVersion(runtimeConfig());
@@ -116,6 +123,207 @@ test("requires an externally activated bootstrap release before execution", asyn
       deployedAt: "<time>",
     },
   );
+});
+
+test("metadata-only extension host migrates its scheduling records before the first claim", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  const extensions = resolveRuntimeExtensionEnvironment(
+    {
+      CREWON_EXTENSIONS_ENABLED: "1",
+      CREWON_EXTENSION_HOST_PORT: "0",
+      CREWON_EXTENSION_HOST_TOKEN: "metadata-host-private-token-32-bytes",
+      CREWON_PRINCIPAL_ID: "principal",
+      CREWON_ACTOR_ID: "actor",
+      CREWON_TENANT_ID: config.runtimeTenantId,
+      CREWON_SPACE_ID: "space",
+    },
+    "standalone",
+  );
+  assert.ok(extensions);
+  const runtime = await createStandaloneRuntimeWorker({
+    ...config,
+    databasePath,
+    scanIntervalMs: null,
+    extensionHost: extensions.host,
+  });
+  try {
+    assert.match(runtime.extensionHostOrigin!, /^http:\/\/127\.0\.0\.1:\d+$/u);
+    assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("historical Worker mode requires explicit composed extensions before opening storage", async (context) => {
+  for (const mode of ["current", "historical", "invalid"] as const) {
+    const databasePath = temporaryDatabasePath(context);
+    const config = runtimeConfig();
+    let closed = 0;
+    await assert.rejects(
+      createStandaloneRuntimeWorker({
+        ...config,
+        transport: {
+          ...config.transport,
+          close: async () => {
+            closed += 1;
+          },
+        },
+        databasePath,
+        extensionExecutionMode: mode as "historical",
+      }),
+      /extension_execution_mode_(?:without_host|invalid)|extension_historical_runtime_required/u,
+    );
+    assert.equal(existsSync(databasePath), false);
+    assert.equal(closed, 1);
+  }
+});
+
+test("Postgres composition keeps a disabled plugin snapshot while its mocked open is pending", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const initial = runtimeConfig();
+  await activateRelease(databasePath, initial);
+  const { store, resume } = pausePostgresOpenWithSqlite(context, databasePath);
+  const requests = observeClaims(context, store);
+  context.mock.method(store, "extensionStore", () =>
+    assert.fail("disabled composition must not access plugin tables"),
+  );
+  const config = {
+    ...initial,
+    route: { ...initial.route },
+    connectionString: "mocked-postgres-open",
+    scanIntervalMs: null,
+  };
+  const pending = createPostgresRuntimeWorker(config);
+  Object.assign(config, {
+    runtimeTenantId: "foreign-tenant",
+    extensionHost: metadataHost(initial.runtimeTenantId).host,
+    extensionExecutionMode: "historical",
+  });
+  config.route.agentVersionId = "changed-default-agent";
+  resume();
+  const runtime = await pending;
+  context.after(() => runtime.close());
+  assert.equal(runtime.extensionHostOrigin, null);
+  assert.equal(
+    runtime.agentVersion.agentVersionId,
+    initial.route.agentVersionId,
+  );
+  assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
+  assert.equal(requests.length, 1);
+  assert.equal(Object.hasOwn(requests[0]!, "executionScope"), false);
+});
+
+test("Postgres composition snapshots metadata host values before its mocked open yields", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const initial = runtimeConfig();
+  await activateRelease(databasePath, initial);
+  const { store, resume } = pausePostgresOpenWithSqlite(context, databasePath);
+  const requests = observeClaims(context, store);
+  const { host, actor } = metadataHost(initial.runtimeTenantId);
+  const extensionHost = { ...host };
+  const config = {
+    ...initial,
+    connectionString: "mocked-postgres-open",
+    scanIntervalMs: null,
+    extensionHost,
+  };
+  const pending = createPostgresRuntimeWorker(config);
+  Object.assign(extensionHost, {
+    port: -1,
+    token: "changed-token",
+    deadlineMs: 0,
+    authorization: { authorize: async () => ({ outcome: "deny" }) },
+    resolveActor: async () => null,
+  });
+  resume();
+  const runtime = await pending;
+  context.after(() => runtime.close());
+  const response = await extensionCatalog(
+    runtime.extensionHostOrigin!,
+    host.token,
+    actor,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(
+    (
+      await extensionCatalog(
+        runtime.extensionHostOrigin!,
+        extensionHost.token,
+        actor,
+      )
+    ).status,
+    401,
+  );
+  assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
+  assert.equal(requests[0]?.executionScope?.tenantId, initial.runtimeTenantId);
+  assert.equal(requests[0]?.executionScope?.unboundRuns, "include");
+});
+
+test("Postgres composition snapshots historical runtime paths, environment and private host before mocked open", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const initial = {
+    ...runtimeConfig(),
+    transport: { ...fakeTransport(), adapterName: "direct-responses" },
+  };
+  const plugin = historicalPluginFixture(databasePath, initial);
+  await activateRelease(databasePath, {
+    ...initial,
+    additionalAgentVersions: [plugin.version],
+    agentVersionDeployments: extensionCompositionDeployments({
+      config: plugin.extensionRuntime,
+      tenantId: initial.runtimeTenantId,
+      defaultAgentVersionId: initial.route.agentVersionId,
+    }),
+  });
+  const { store, resume } = pausePostgresOpenWithSqlite(context, databasePath);
+  const requests = observeClaims(context, store);
+  const config = {
+    ...initial,
+    connectionString: "mocked-postgres-open",
+    scanIntervalMs: null,
+    extensionRuntime: plugin.extensionRuntime,
+    additionalAgentVersions: [plugin.version],
+    extensionExecutionMode: "historical" as const,
+  };
+  const pending = createPostgresRuntimeWorker(config);
+  plugin.extensionRuntime.runtimeBindingsPath = join(
+    dirname(databasePath),
+    "missing-bindings.json",
+  );
+  plugin.extensionRuntime.additionalRuntimeBindingsPaths.push(
+    "missing-extra-bindings.json",
+  );
+  delete plugin.extensionRuntime.environment.TEST_PLUGIN_PROVIDER_KEY;
+  Object.assign(plugin.extensionRuntime.privateHost, {
+    port: -1,
+    token: "changed",
+    deadlineMs: 0,
+  });
+  Object.assign(plugin.extensionRuntime, {
+    authorization: { authorize: async () => ({ outcome: "deny" }) },
+    resolveActor: async () => null,
+  });
+  resume();
+  const runtime = await pending;
+  context.after(() => runtime.close());
+  assert.equal(
+    (
+      await extensionCatalog(
+        runtime.extensionHostOrigin!,
+        plugin.token,
+        plugin.actor,
+      )
+    ).status,
+    200,
+  );
+  assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
+  assert.deepEqual(requests[0]?.executionScope, {
+    tenantId: initial.runtimeTenantId,
+    extensionImplementationDigest: plugin.registration.implementationDigest,
+    unboundRuns: "exclude",
+  });
 });
 
 test("refuses bootstrap materialization drift for an existing Deployment", async (context) => {
@@ -316,6 +524,165 @@ test("closes Worker resources when the private probe port is occupied", async (c
   const reopened = new SqliteRunStore(databasePath);
   await reopened.close();
 });
+
+function pausePostgresOpenWithSqlite(
+  context: TestContext,
+  databasePath: string,
+) {
+  // Exercise the Pg composition await boundary, with a real SQLite store behind it.
+  const store = new SqliteRunStore(databasePath);
+  context.after(() => store.close());
+  let resume!: () => void;
+  const paused = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  context.mock.method(PostgresDomainStore, "open", async () => {
+    await paused;
+    return store;
+  });
+  return { store, resume };
+}
+
+function observeClaims(context: TestContext, store: SqliteRunStore) {
+  const requests: QueueClaimInput[] = [];
+  const claim = store.claimNextWorkItem.bind(store);
+  context.mock.method(store, "claimNextWorkItem", (input: QueueClaimInput) => {
+    requests.push(input);
+    return claim(input);
+  });
+  return requests;
+}
+
+function metadataHost(tenantId: string) {
+  const parsed = resolveRuntimeExtensionEnvironment(
+    {
+      CREWON_EXTENSIONS_ENABLED: "1",
+      CREWON_EXTENSION_HOST_PORT: "0",
+      CREWON_EXTENSION_HOST_TOKEN:
+        "composition-snapshot-private-token-32-bytes",
+      CREWON_PRINCIPAL_ID: "principal",
+      CREWON_ACTOR_ID: "actor",
+      CREWON_TENANT_ID: tenantId,
+      CREWON_SPACE_ID: "space",
+    },
+    "standalone",
+  );
+  assert.ok(parsed);
+  return parsed;
+}
+
+function extensionCatalog(
+  origin: string,
+  token: string,
+  actor: ReturnType<typeof metadataHost>["actor"],
+) {
+  return fetch(`${origin}/private/v0/extensions`, {
+    method: "POST",
+    headers: {
+      "authorization": `Bearer ${token}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      protocol: "crewon.extension-host-request.v0",
+      operation: "catalog",
+      actor,
+    }),
+  });
+}
+
+function historicalPluginFixture(
+  databasePath: string,
+  base: RuntimeWorkerCompositionConfig,
+) {
+  const digester = {
+    sha256: (value: string) =>
+      `sha256:${createHash("sha256").update(value).digest("hex")}`,
+  };
+  const version = compileComfyAgentVersion({
+    base: {
+      executionAuthority: "crewonKernel",
+      version: compileRuntimeAgentVersion(base),
+    },
+    agentVersionId: "historical-plugin-version",
+    runtimeGeneration: base.route.runtimeGeneration,
+    policySnapshotId: "historical-plugin-policy",
+    digester,
+  });
+  const registration = bundledComfyRegistration();
+  const { host, actor } = metadataHost(base.runtimeTenantId);
+  const configuration = createExtensionConfiguration(
+    {
+      schemaVersion: "crewon.extension-configuration.v0",
+      tenantId: base.runtimeTenantId,
+      spaceId: actor.spaceId,
+      pluginId: registration.manifest.pluginId,
+      pluginVersion: registration.manifest.version,
+      revision: 1,
+      manifestDigest: registration.manifestDigest,
+      implementationDigest: registration.implementationDigest,
+      parameters: { baseUrl: "https://comfy.example/" },
+      credentialBindings: [],
+      createdByActorId: actor.actorId,
+      createdAt: "2026-10-01T00:00:00.000Z",
+    },
+    digester,
+  );
+  const root = dirname(databasePath);
+  const extensionConfigPath = join(root, "historical-plugin.json");
+  writeFileSync(
+    extensionConfigPath,
+    JSON.stringify({
+      schemaVersion: "crewon.extension-runtime-config.v0",
+      configuration,
+      approvalRequirement: "none",
+    }),
+  );
+  const runtimeBindingsPath = join(root, "historical-bindings.json");
+  writeFileSync(
+    runtimeBindingsPath,
+    JSON.stringify({
+      schemaVersion: "crewon.agent-version-runtime-bindings.v0",
+      bindings: [
+        {
+          tenantId: base.runtimeTenantId,
+          agentVersionId: version.agentVersionId,
+          contentDigest: version.contentDigest,
+          authorityId: "historical-plugin-authority",
+          workspaceBindingId: null,
+          provider: {
+            kind: "directResponses",
+            endpoint: "https://provider.example/v1/responses",
+            apiKeyEnvironment: "TEST_PLUGIN_PROVIDER_KEY",
+            storeResponses: false,
+            requestProfile: "standard",
+            idleTimeoutMs: 60_000,
+            sequencePolicy: "required",
+          },
+          mcpStdioConfigPath: null,
+          deviceToolConfigPath: null,
+          remoteMcpConfigPath: null,
+          extensionConfigPath,
+        },
+      ],
+    }),
+  );
+  return {
+    version,
+    registration,
+    actor,
+    token: host.token,
+    extensionRuntime: {
+      runtimeBindingsPath,
+      additionalRuntimeBindingsPaths: [] as string[],
+      environment: {
+        TEST_PLUGIN_PROVIDER_KEY: "operator-fixture-key",
+      } as Record<string, string | undefined>,
+      privateHost: { port: host.port, token: host.token, deadlineMs: 10_000 },
+      authorization: host.authorization,
+      resolveActor: host.resolveActor,
+    },
+  };
+}
 
 function runtimeConfig(): RuntimeWorkerCompositionConfig {
   return {

@@ -9,6 +9,10 @@ import {
 } from "./sqlite-canonical-tool-output-codec.ts";
 import { SqliteModelSpendingStore } from "./sqlite-model-spending-store.ts";
 import { workItemCandidatesSql } from "./work-item-ready-order.ts";
+import {
+  copyQueueClaim,
+  workItemExecutionScopeSql,
+} from "./queue-execution-scope.ts";
 import { SqliteRunExecutionProgressStore } from "./sqlite-run-execution-progress-store.ts";
 import { validateRunExecutionProgressRun } from "./run-execution-progress-support.ts";
 import {
@@ -4697,6 +4701,7 @@ export class SqliteRunStore implements DomainStore {
 
   async claimNextOutbox(input: QueueClaimInput): Promise<OutboxClaim | null> {
     this.#assertOpen();
+    input = copyQueueClaim(input, "outbox");
     validateQueueClaim(input);
     return this.#claimOutbox(input, readLeaseClock(this.#clock));
   }
@@ -4737,6 +4742,7 @@ export class SqliteRunStore implements DomainStore {
     input: QueueClaimInput,
   ): Promise<WorkItemClaim | null> {
     this.#assertOpen();
+    input = copyQueueClaim(input, "workItem");
     validateQueueClaim(input);
     return this.#claimWorkItem(input, readLeaseClock(this.#clock));
   }
@@ -4904,6 +4910,14 @@ export class SqliteRunStore implements DomainStore {
   }
 
   #claimWorkItem(input: QueueClaimInput, now: number): WorkItemClaim | null {
+    const executionPredicate = workItemExecutionScopeSql({
+      claim: input,
+      queueTable: "work_items",
+      extensionTablePrefix: "",
+      tenantParameter: "?2",
+      digestParameter: "?3",
+      dialect: "sqlite",
+    });
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       const row = this.#database
@@ -4918,10 +4932,18 @@ export class SqliteRunStore implements DomainStore {
              lease_epoch
            FROM work_items
            WHERE work_item_id = (
-             SELECT work_item_id FROM (${workItemCandidatesSql({ table: "work_items", now: "?1", limit: "1", dialect: "sqlite", lock: "none" })})
+             SELECT work_item_id FROM (${workItemCandidatesSql({ table: "work_items", now: "?1", limit: "1", dialect: "sqlite", lock: "none", executionPredicate })})
            )`,
         )
-        .get(now) as (WorkItemRow & { lease_epoch: number }) | undefined;
+        .get(
+          now,
+          ...(input.executionScope === undefined
+            ? []
+            : [
+                input.executionScope.tenantId,
+                input.executionScope.extensionImplementationDigest,
+              ]),
+        ) as (WorkItemRow & { lease_epoch: number }) | undefined;
       if (row === undefined) {
         this.#database.exec("COMMIT");
         return null;

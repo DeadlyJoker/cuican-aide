@@ -3,6 +3,12 @@ import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export {
+  retainExtensionBuild,
+  resolveRetainedExtensionBuild,
+  type RetainedExtensionBuild,
+} from "./extension-build-archive.ts";
+
 declare const __CREWON_COMFY_IMPLEMENTATION_DIGEST__: string | undefined;
 
 export const EXTENSION_BUILD_IDENTITY_FILE = "extension-build-identity.json";
@@ -26,11 +32,20 @@ const LOADED_BUNDLE_DIGEST =
     ? null
     : digest(readBoundedFile(MODULE_PATH, MAX_BUNDLE_BYTES));
 
+export const EXTENSION_HISTORICAL_WORK_ITEM_SCOPE =
+  "crewon.extension-work-item-scope.v0";
+
 export type ExtensionBuildIdentity = Readonly<{
-  schemaVersion: "crewon.extension-build-identity.v0";
   implementationDigest: string;
   bundles: readonly Readonly<{ file: string; digest: string }>[];
-}>;
+}> &
+  (
+    | Readonly<{ schemaVersion: "crewon.extension-build-identity.v0" }>
+    | Readonly<{
+        schemaVersion: "crewon.extension-build-identity.v1";
+        historicalWorkItemScope: typeof EXTENSION_HISTORICAL_WORK_ITEM_SCOPE;
+      }>
+  );
 
 /**
  * This Node-only entrypoint is shared by Control, Worker and release compilation.
@@ -152,6 +167,22 @@ export function createExtensionBuildIdentity(
   };
 }
 
+/** Build producer only: this marker asserts the staged Worker supports scoped historical claims. */
+export function createScopedExtensionBuildIdentity(input: {
+  implementationDigest: string;
+  bundlePaths: readonly string[];
+}): ExtensionBuildIdentity {
+  const identity = createExtensionBuildIdentity(
+    input.implementationDigest,
+    input.bundlePaths,
+  );
+  return {
+    ...identity,
+    schemaVersion: "crewon.extension-build-identity.v1",
+    historicalWorkItemScope: EXTENSION_HISTORICAL_WORK_ITEM_SCOPE,
+  };
+}
+
 function verifyBundleIdentity(modulePath: string, expected: string): void {
   const identity: unknown = JSON.parse(
     readBoundedFile(
@@ -159,11 +190,20 @@ function verifyBundleIdentity(modulePath: string, expected: string): void {
       MAX_IDENTITY_BYTES,
     ).toString("utf8"),
   );
+  const scoped =
+    isRecord(identity) &&
+    identity.schemaVersion === "crewon.extension-build-identity.v1";
   if (
     !isRecord(identity) ||
     Object.keys(identity).sort().join() !==
-      "bundles,implementationDigest,schemaVersion" ||
-    identity.schemaVersion !== "crewon.extension-build-identity.v0" ||
+      (scoped
+        ? "bundles,historicalWorkItemScope,implementationDigest,schemaVersion"
+        : "bundles,implementationDigest,schemaVersion") ||
+    (!scoped &&
+      identity.schemaVersion !== "crewon.extension-build-identity.v0") ||
+    (scoped &&
+      identity.historicalWorkItemScope !==
+        EXTENSION_HISTORICAL_WORK_ITEM_SCOPE) ||
     identity.implementationDigest !== expected ||
     !Array.isArray(identity.bundles) ||
     identity.bundles.length > 64

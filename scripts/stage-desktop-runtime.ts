@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  createExtensionBuildIdentity,
+  createScopedExtensionBuildIdentity,
   EXTENSION_BUILD_IDENTITY_FILE,
   getComfyImplementationDigest,
 } from "../packages/agent-version/src/extension-build.ts";
@@ -120,10 +120,10 @@ export function main(): void {
   writeFileSync(
     join(outputRoot, EXTENSION_BUILD_IDENTITY_FILE),
     JSON.stringify(
-      createExtensionBuildIdentity(
+      createScopedExtensionBuildIdentity({
         implementationDigest,
-        specs.map(({ output }) => output),
-      ),
+        bundlePaths: specs.map(({ output }) => output),
+      }),
       null,
       2,
     ),

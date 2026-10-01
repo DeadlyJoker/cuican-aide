@@ -20,6 +20,15 @@ import {
   type RuntimeLogSink,
 } from "./runtimeLogForwarder.ts";
 import { processRuntimeLogs } from "./processRuntimeLogs.ts";
+import {
+  clearDesktopExtensionEnvironment,
+  DESKTOP_RUNTIME_OWNER,
+  desktopExtensionRuntimeEnvironments,
+  parseDesktopExtensionRuntimeConfiguration,
+  startDesktopRuntimeChildren,
+  settleDesktopRuntimeChildren,
+  type DesktopExtensionRuntimeConfiguration,
+} from "./desktopExtensionRuntime.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -79,6 +88,12 @@ export class RuntimeSupervisor {
   ) => Promise<readonly string[] | null>;
   readonly #agentPlatformApiKeyForOrigin: (origin: string) => string | null;
   readonly #workspaceRoot: () => string | null;
+  readonly #extensionRuntime:
+    | (() => DesktopExtensionRuntimeConfiguration)
+    | undefined;
+  readonly #extensionDeadlineMs: number | undefined;
+  #startupAbort: AbortController | null = null;
+  #stopping: Promise<void> | null = null;
   #controlPort = 0;
   #probePort = 0;
   #children: ChildProcess[] = [];
@@ -98,6 +113,10 @@ export class RuntimeSupervisor {
     ) => Promise<readonly string[] | null>;
     agentPlatformApiKeyForOrigin: (origin: string) => string | null;
     workspaceRoot: () => string | null;
+    extensionRuntime?: Readonly<{
+      configuration: () => DesktopExtensionRuntimeConfiguration;
+      deadlineMs?: number;
+    }>;
     logOutputs?: { stdout: Writable; stderr: Writable };
   }) {
     this.#dataDirectory = options.dataDirectory;
@@ -107,60 +126,85 @@ export class RuntimeSupervisor {
     this.#providerModelCatalog = options.providerModelCatalog;
     this.#agentPlatformApiKeyForOrigin = options.agentPlatformApiKeyForOrigin;
     this.#workspaceRoot = options.workspaceRoot;
+    this.#extensionRuntime = options.extensionRuntime?.configuration;
+    this.#extensionDeadlineMs = options.extensionRuntime?.deadlineMs;
     this.#logs = options.logOutputs
       ? new RuntimeLogForwarder(options.logOutputs)
       : processRuntimeLogs();
   }
 
   async start(): Promise<void> {
-    if (this.#children.length > 0) return;
+    if (this.#stopping !== null) await this.#stopping;
+    if (this.#children.length > 0 || this.#startupAbort !== null) return;
+    const configuration =
+      this.#extensionRuntime?.() ??
+      parseDesktopExtensionRuntimeConfiguration({
+        schemaVersion: "crewon.desktop-extension-runtime.v0",
+        enabled: false,
+      });
     this.#logs.resume();
     const provider = this.#provider();
     if (provider === null) {
       this.#ready = false;
       return;
     }
-    this.#controlPort ||= await freePort();
-    this.#probePort ||= await freePort();
-    ensureStorage(this.#dataDirectory);
-    const modelCatalog = await this.#resolveModelCatalog(provider);
-    const agentPlatformApiKey =
-      this.#cloudAgentProfiles.length === 0
-        ? null
-        : this.#agentPlatformApiKeyForOrigin(
-            cloudAgentProfilesOrigin(this.#cloudAgentProfiles),
-          );
-    const environment = this.#environment(
-      provider,
-      modelCatalog,
-      agentPlatformApiKey === null ? [] : this.#cloudAgentProfiles,
-    );
-    const { sharedEnvironment, workerEnvironment } =
-      agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
-    await this.#runOnce(
-      "Runtime release",
-      this.#paths.release,
-      sharedEnvironment,
-    );
-    this.#children = [
-      this.#spawn("Control API", this.#paths.control, sharedEnvironment),
-      this.#spawn(
-        "Runtime Worker",
-        this.#paths.worker,
-        workerEnvironment,
-        true,
-      ),
-    ];
+    const startup = new AbortController();
+    this.#startupAbort = startup;
     try {
+      this.#controlPort ||= await freePort();
+      this.#probePort ||= await freePort();
+      ensureStorage(this.#dataDirectory);
+      const modelCatalog = await this.#resolveModelCatalog(provider);
+      const agentPlatformApiKey =
+        this.#cloudAgentProfiles.length === 0
+          ? null
+          : this.#agentPlatformApiKeyForOrigin(
+              cloudAgentProfilesOrigin(this.#cloudAgentProfiles),
+            );
+      const environment = this.#environment(
+        provider,
+        modelCatalog,
+        agentPlatformApiKey === null ? [] : this.#cloudAgentProfiles,
+      );
+      const { sharedEnvironment, workerEnvironment } =
+        agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
+      const extensions = desktopExtensionRuntimeEnvironments({
+        configuration,
+        sharedEnvironment,
+        workerEnvironment,
+        deadlineMs: this.#extensionDeadlineMs,
+        retainedBuild: this.#paths.source
+          ? undefined
+          : { dataRoot: this.#dataDirectory },
+      });
+      startup.signal.throwIfAborted();
+      await this.#runOnce(
+        "Runtime release",
+        this.#paths.release,
+        extensions.release,
+        startup.signal,
+      );
+      startup.signal.throwIfAborted();
+      const { control, worker } = await startDesktopRuntimeChildren({
+        environments: extensions,
+        signal: startup.signal,
+        spawnControl: (environment) =>
+          this.#spawn("Control API", this.#paths.control, environment),
+        spawnWorker: (environment) =>
+          this.#spawn("Runtime Worker", this.#paths.worker, environment, true),
+        trackChild: (child) => this.#children.push(child),
+      });
       await waitForReady(
         `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
         this.#children,
+        startup.signal,
       );
+      startup.signal.throwIfAborted();
       this.#ready = true;
       this.#stopWatchingChildren = watchRuntimeChildren(
         [
-          { child: this.#children[0]!, name: "Control API" },
-          { child: this.#children[1]!, name: "Runtime Worker" },
+          { child: control, name: "Control API" },
+          { child: worker, name: "Runtime Worker" },
         ],
         ({ code, name, signal }) => {
           this.#ready = false;
@@ -181,8 +225,10 @@ export class RuntimeSupervisor {
         },
       );
     } catch (error) {
-      await this.stop();
+      if (this.#startupAbort === startup) await this.stop();
       throw error;
+    } finally {
+      if (this.#startupAbort === startup) this.#startupAbort = null;
     }
   }
 
@@ -224,12 +270,31 @@ export class RuntimeSupervisor {
   }
 
   async stop(): Promise<void> {
+    if (this.#stopping !== null) return this.#stopping;
     this.#ready = false;
+    this.#startupAbort?.abort();
+    this.#startupAbort = null;
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
-    const children = this.#children.splice(0);
+    const children = [...this.#children];
+    const stopping = this.#stopChildren(children);
+    this.#stopping = stopping;
     try {
-      await Promise.all(children.map((child) => terminateRuntimeChild(child)));
+      await stopping;
+    } finally {
+      if (this.#stopping === stopping) this.#stopping = null;
+    }
+  }
+
+  async #stopChildren(children: readonly ChildProcess[]): Promise<void> {
+    try {
+      const { terminal, failures } = await settleDesktopRuntimeChildren(
+        children,
+        terminateRuntimeChild,
+      );
+      this.#children = this.#children.filter((child) => !terminal.has(child));
+      if (failures.length > 0)
+        throw new AggregateError(failures, "runtime_children_shutdown_failed");
     } finally {
       this.#logs.suspend();
     }
@@ -338,10 +403,10 @@ export class RuntimeSupervisor {
       })),
     ];
     const environment: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...clearDesktopExtensionEnvironment(process.env),
       ELECTRON_RUN_AS_NODE: "1",
       NODE_ENV: "production",
-      CREWON_ACTOR_ID: "standalone-actor",
+      CREWON_ACTOR_ID: DESKTOP_RUNTIME_OWNER.actorId,
       CREWON_AGENT_VERSION_ID: agentVersionId,
       CREWON_ARTIFACT_DB_PATH: join(
         this.#dataDirectory,
@@ -373,7 +438,7 @@ export class RuntimeSupervisor {
       ),
       CREWON_NATIVE_WORKSPACE_READ_ENABLED: "0",
       CREWON_POLICY_SNAPSHOT_ID: "standalone-policy-v0",
-      CREWON_PRINCIPAL_ID: "standalone-principal",
+      CREWON_PRINCIPAL_ID: DESKTOP_RUNTIME_OWNER.principalId,
       CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT: "CREWON_MODEL_API_KEY",
       CREWON_PROVIDER_PROBE_ENDPOINT: provider.endpoint,
       CREWON_PROVIDER_PROBE_PORT: String(this.#probePort),
@@ -382,12 +447,12 @@ export class RuntimeSupervisor {
       CREWON_PROVIDER_PROBE_TOKEN: this.#probeToken,
       CREWON_PROVIDER_PROBE_WORKER_ORIGIN: `http://127.0.0.1:${this.#probePort}`,
       CREWON_PROVIDER_PROBE_WORKER_TOKEN: this.#probeToken,
-      CREWON_RELEASE_ACTOR_ID: "standalone-actor",
-      CREWON_RELEASE_PRINCIPAL_ID: "standalone-principal",
+      CREWON_RELEASE_ACTOR_ID: DESKTOP_RUNTIME_OWNER.actorId,
+      CREWON_RELEASE_PRINCIPAL_ID: DESKTOP_RUNTIME_OWNER.principalId,
       CREWON_RESPONSES_ENDPOINT: responsesEndpoint(provider.endpoint),
       CREWON_RUNTIME_GENERATION: `desktop-${fingerprint.slice(0, 32)}`,
-      CREWON_SPACE_ID: "standalone-space",
-      CREWON_TENANT_ID: "standalone-tenant",
+      CREWON_SPACE_ID: DESKTOP_RUNTIME_OWNER.spaceId,
+      CREWON_TENANT_ID: DESKTOP_RUNTIME_OWNER.tenantId,
     };
     bindDesktopWorkspaceEnvironment(environment, { mcpConfig, workspace });
     for (const name of [
@@ -486,16 +551,28 @@ export class RuntimeSupervisor {
     name: string,
     entry: string,
     environment: NodeJS.ProcessEnv,
+    signal: AbortSignal,
   ): Promise<void> {
     const child = this.#spawn(name, entry, environment);
-    const exit = await waitForExitBefore(child, RUNTIME_ONCE_DEADLINE_MS);
-    if (exit === null) {
-      await terminateRuntimeChild(child);
-      throw new Error(`${name} timed out`);
+    this.#children.push(child);
+    try {
+      const exit = await waitForExitBefore(child, RUNTIME_ONCE_DEADLINE_MS);
+      signal.throwIfAborted();
+      if (exit === null) {
+        await terminateRuntimeChild(child);
+        throw new Error(`${name} timed out`);
+      }
+      const { code, signal: exitSignal } = exit;
+      if (code !== 0)
+        throw new Error(`${name} failed (${exitSignal ?? code ?? "unknown"})`);
+    } finally {
+      const index = this.#children.indexOf(child);
+      if (
+        index !== -1 &&
+        (child.exitCode !== null || child.signalCode !== null)
+      )
+        this.#children.splice(index, 1);
     }
-    const { code, signal } = exit;
-    if (code !== 0)
-      throw new Error(`${name} failed (${signal ?? code ?? "unknown"})`);
   }
 }
 
@@ -869,9 +946,11 @@ function freePort(): Promise<number> {
 async function waitForReady(
   url: string,
   children: readonly ChildProcess[],
+  signal: AbortSignal,
 ): Promise<void> {
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
+    signal.throwIfAborted();
     if (
       children.some(
         (child) => child.exitCode !== null || child.signalCode !== null,
@@ -880,8 +959,17 @@ async function waitForReady(
       throw new Error("control_runtime_child_exited");
     }
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
-      if (response.ok) return;
+      const response = await fetch(url, {
+        signal: AbortSignal.any([signal, AbortSignal.timeout(1_000)]),
+      });
+      await response.body?.cancel();
+      if (
+        response.ok &&
+        children.every(
+          (child) => child.exitCode === null && child.signalCode === null,
+        )
+      )
+        return;
     } catch {
       // The listening socket is expected to be absent while migrations finish.
     }
@@ -899,16 +987,29 @@ export function watchRuntimeChildren(
   }) => void,
 ): () => void {
   let watching = true;
-  for (const { child, name } of children) {
-    child.once("exit", (code, signal) => {
-      if (!watching) return;
-      watching = false;
-      onUnexpectedExit({ code, name, signal });
-    });
-  }
-  return () => {
+  const cleanups: (() => void)[] = [];
+  const cleanup = () => {
     watching = false;
+    for (const remove of cleanups) remove();
   };
+  for (const { child, name } of children) {
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (!watching) return;
+      cleanup();
+      onUnexpectedExit({ code, name, signal });
+    };
+    const onError = () => onExit(child.exitCode, child.signalCode);
+    child.once("exit", onExit);
+    child.once("error", onError);
+    cleanups.push(() => {
+      child.off("exit", onExit);
+      child.off("error", onError);
+    });
+    if (child.exitCode != null || child.signalCode != null) {
+      queueMicrotask(() => onExit(child.exitCode, child.signalCode));
+    }
+  }
+  return cleanup;
 }
 
 function waitForExitBefore(

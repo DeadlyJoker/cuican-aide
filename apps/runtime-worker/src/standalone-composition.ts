@@ -91,6 +91,11 @@ import {
   type RuntimeExtensionHostServer,
 } from "./extensions/extension-host-server.ts";
 import type { RuntimeExtensionHostConfig } from "./extensions/extension-process-environment.ts";
+import {
+  extensionWorkItemExecutionScope,
+  parseExtensionExecutionMode,
+  type ExtensionExecutionMode,
+} from "./extensions/extension-work-item-scope.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -122,6 +127,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   additionalAgentVersions?: readonly CompiledAgentVersion[];
   extensionRuntime?: RuntimeExtensionCompositionConfig;
   extensionHost?: RuntimeExtensionHostConfig;
+  extensionExecutionMode?: ExtensionExecutionMode;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -247,27 +253,73 @@ export async function createPostgresRuntimeWorker(
 }
 
 function prepareComposition(
-  config: RuntimeWorkerCompositionConfig,
+  input: RuntimeWorkerCompositionConfig,
 ): RuntimeWorkerCompositionConfig {
+  // Capture scheduling and plugin materialization inputs before storage can yield.
+  const config = Object.freeze({
+    ...input,
+    route: Object.freeze({ ...input.route }),
+    ...(input.extensionHost === undefined
+      ? {}
+      : { extensionHost: Object.freeze({ ...input.extensionHost }) }),
+    ...(input.extensionRuntime === undefined
+      ? {}
+      : {
+          extensionRuntime: Object.freeze({
+            ...input.extensionRuntime,
+            environment: Object.freeze({
+              ...(input.extensionRuntime.environment ?? process.env),
+            }),
+            ...(input.extensionRuntime.additionalRuntimeBindingsPaths ===
+            undefined
+              ? {}
+              : {
+                  additionalRuntimeBindingsPaths: Object.freeze([
+                    ...input.extensionRuntime.additionalRuntimeBindingsPaths,
+                  ]),
+                }),
+            ...(input.extensionRuntime.privateHost === undefined
+              ? {}
+              : {
+                  privateHost: Object.freeze({
+                    ...input.extensionRuntime.privateHost,
+                  }),
+                }),
+          }),
+        }),
+  });
+  const mode = parseExtensionExecutionMode(config.extensionExecutionMode);
+  if (
+    config.extensionExecutionMode !== undefined &&
+    config.extensionRuntime === undefined &&
+    config.extensionHost === undefined
+  )
+    throw new Error("extension_execution_mode_without_host");
+  if (mode === "historical" && config.extensionRuntime === undefined)
+    throw new Error("extension_historical_runtime_required");
   if (
     config.extensionHost !== undefined &&
     config.extensionRuntime?.privateHost !== undefined
   )
     throw new Error("extension_host_configuration_conflict");
-  if (config.extensionRuntime === undefined) return config;
+  if (config.extensionRuntime === undefined)
+    return config.extensionHost === undefined
+      ? config
+      : Object.freeze({ ...config, extensionExecutionMode: mode });
   if (
     config.agentVersionRuntimeFactory !== undefined ||
     config.agentVersionDeployments !== undefined
   )
     throw new Error("extension_runtime_factory_configuration_conflict");
-  return {
+  return Object.freeze({
     ...config,
+    extensionExecutionMode: mode,
     agentVersionDeployments: extensionCompositionDeployments({
       config: config.extensionRuntime,
       tenantId: config.runtimeTenantId,
       defaultAgentVersionId: config.route.agentVersionId,
     }),
-  };
+  });
 }
 
 function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
@@ -306,6 +358,18 @@ async function composeRuntimeWorker(
   const digester = new NodeSha256ContentDigester();
   const clock = new SystemApplicationClock();
   const artifactStore = config.artifactStore;
+  const workItemExecutionScope =
+    config.extensionRuntime === undefined && config.extensionHost === undefined
+      ? undefined
+      : extensionWorkItemExecutionScope({
+          tenantId: config.runtimeTenantId,
+          mode: parseExtensionExecutionMode(config.extensionExecutionMode),
+        });
+  if (
+    workItemExecutionScope !== undefined &&
+    config.extensionRuntime === undefined
+  )
+    await store.extensionStore().migrate();
   const agentVersionRuntimeFactory =
     config.extensionRuntime === undefined
       ? config.agentVersionRuntimeFactory
@@ -458,6 +522,7 @@ async function composeRuntimeWorker(
     {
       ownerId: config.ownerId ?? `runtime-worker:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
+      workItemExecutionScope,
       leaseDurationMs: config.leaseDurationMs,
       retryAfterMs: config.retryAfterMs,
       approvalRecheckMs: config.approvalRecheckMs,

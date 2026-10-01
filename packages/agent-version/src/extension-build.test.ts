@@ -155,6 +155,13 @@ test("a loaded source process cannot claim edited disk code as its own implement
       "utf8",
     ),
   );
+  write(
+    "packages/agent-version/src/extension-build-archive.ts",
+    readFileSync(
+      fileURLToPath(new URL("./extension-build-archive.ts", import.meta.url)),
+      "utf8",
+    ),
+  );
   const source = join(root, "apps/runtime-worker/src/extensions/comfy.ts");
   const result = execFileSync(
     process.execPath,

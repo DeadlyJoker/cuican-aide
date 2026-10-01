@@ -32,6 +32,7 @@ import { loadLocalEnvironment } from "./localEnvironment.ts";
 import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
 import { RuntimeSupervisor, runtimePaths } from "./runtimeSupervisor.ts";
+import { loadDesktopExtensionRuntimeConfiguration } from "./desktopExtensionRuntime.ts";
 import {
   closeProcessRuntimeLogs,
   processRuntimeLogs,
@@ -118,6 +119,10 @@ async function launch(): Promise<void> {
     agentPlatformApiKeyForOrigin: (origin) =>
       agentPlatformCredentials.secretForOrigin(origin),
     dataDirectory: runtimeDataDirectory,
+    extensionRuntime: {
+      configuration: () =>
+        loadDesktopExtensionRuntimeConfiguration(runtimeDataDirectory),
+    },
     paths,
     repositoryRoot,
     provider: () => providers.active(),

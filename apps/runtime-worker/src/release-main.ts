@@ -38,6 +38,7 @@ import {
   loadExtensionReleaseInput,
   mergeExtensionReleaseInput,
 } from "./extensions/extension-release-input.ts";
+import { retainInstalledExtensionBuild } from "./extensions/retain-installed-extension-build.ts";
 
 const actor = loadRuntimeReleaseActor();
 const bindingsPath =
@@ -56,6 +57,10 @@ const extensionRelease = loadExtensionReleaseInput({
   environment: process.env,
   tenantId: actor.tenantId,
   defaultAgentVersionId: route.agentVersionId,
+});
+await retainInstalledExtensionBuild({
+  environment: process.env,
+  entrypointUrl: import.meta.url,
 });
 const transport = createModelTransport(
   environmentOr("CREWON_MODEL_ADAPTER", "responses"),

@@ -70,10 +70,19 @@ export type WorkItemClaim = Readonly<{
   lease: QueueLease;
 }>;
 
+/** Scheduling selector only; current Run, binding and execution authorization remain mandatory. */
+export type WorkItemExecutionScope = Readonly<{
+  tenantId: string;
+  extensionImplementationDigest: string;
+  unboundRuns: "include" | "exclude";
+}>;
+
 export type QueueClaimInput = Readonly<{
   ownerId: string;
   leaseId: string;
   leaseDurationMs: number;
+  /** Only claimNextWorkItem supports this selector. Hosts must migrate extension storage first. */
+  executionScope?: WorkItemExecutionScope;
 }>;
 
 export type OutboxLeaseInput = Readonly<{

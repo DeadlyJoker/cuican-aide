@@ -1,4 +1,8 @@
 import { workItemCandidatesSql } from "./work-item-ready-order.ts";
+import {
+  copyQueueClaim,
+  workItemExecutionScopeSql,
+} from "./queue-execution-scope.ts";
 import { prunePostgresDeliveredOutbox } from "./postgres-outbox-retention.ts";
 import type { OutboxRetentionStore } from "@crewon/application";
 import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
@@ -137,6 +141,7 @@ export class PostgresQueueStore implements DurableQueueStore {
   }
 
   async claimNextOutbox(input: QueueClaimInput): Promise<OutboxClaim | null> {
+    input = copyQueueClaim(input, "outbox");
     const row = await this.#claimNext("outbox", input);
     return row === null
       ? null
@@ -182,6 +187,7 @@ export class PostgresQueueStore implements DurableQueueStore {
   async claimNextWorkItem(
     input: QueueClaimInput,
   ): Promise<WorkItemClaim | null> {
+    input = copyQueueClaim(input, "workItem");
     const row = await this.#claimNext("work_items", input);
     return row === null
       ? null
@@ -292,6 +298,14 @@ export class PostgresQueueStore implements DurableQueueStore {
                    limit: "1",
                    dialect: "postgres",
                    lock: "skipLocked",
+                   executionPredicate: workItemExecutionScopeSql({
+                     claim: input,
+                     queueTable: this.#tableSql(kind),
+                     extensionTablePrefix: `${this.#schemaSql()}.`,
+                     tenantParameter: "$4",
+                     digestParameter: "$5",
+                     dialect: "postgres",
+                   }),
                  })
                : `SELECT ${id}
              FROM ${this.#tableSql(kind)}
@@ -312,7 +326,17 @@ export class PostgresQueueStore implements DurableQueueStore {
            ${kind === "outbox" ? "queue.topic" : "queue.kind"},
            queue.${itemColumn(kind)} AS item_json, queue.created_at,
            queue.lease_epoch, queue.lease_expires_at`,
-        [input.ownerId, input.leaseId, input.leaseDurationMs],
+        [
+          input.ownerId,
+          input.leaseId,
+          input.leaseDurationMs,
+          ...(input.executionScope === undefined
+            ? []
+            : [
+                input.executionScope.tenantId,
+                input.executionScope.extensionImplementationDigest,
+              ]),
+        ],
       );
       return result.rows[0] ?? null;
     } catch (error) {

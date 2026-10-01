@@ -7,8 +7,13 @@ import type {
 import { parseExtensionHostActor } from "@crewon/contracts";
 import type { RuntimeWorkerSecurityMode } from "../runtime-provider-probe-environment.ts";
 import type { RuntimeExtensionActorResolver } from "./extension-runtime-composition.ts";
+import {
+  parseExtensionExecutionMode,
+  type ExtensionExecutionMode,
+} from "./extension-work-item-scope.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
+const EXECUTION_MODE = "CREWON_EXTENSION_EXECUTION_MODE";
 const HOST_NAMES = [
   "CREWON_EXTENSION_HOST_PORT",
   "CREWON_EXTENSION_HOST_TOKEN",
@@ -39,6 +44,7 @@ export type RuntimeExtensionProcessEnvironment = Readonly<{
   host: RuntimeExtensionHostConfig;
   runtimeBindingsPath: string | null;
   agentVersionAssetsPath: string | null;
+  executionMode: ExtensionExecutionMode;
 }>;
 
 /** A single explicitly identified local owner; never an ambient production tenant authority. */
@@ -54,11 +60,19 @@ export function resolveRuntimeExtensionEnvironment(
   const pathsDeclared = PATH_NAMES.some(
     (name) => environment[name] !== undefined,
   );
+  const modeDeclared = environment[EXECUTION_MODE] !== undefined;
   if (securityMode === "production") {
-    if (flag === "1" || hostDeclared || pathsDeclared)
+    if (flag === "1" || hostDeclared || pathsDeclared || modeDeclared)
       throw new Error("CREWON_EXTENSION_CONFIGURATION_forbidden");
     return undefined;
   }
+  if (modeDeclared && flag !== "1")
+    throw new Error("extension_execution_mode_without_host");
+  const executionMode = parseExtensionExecutionMode(
+    environment[EXECUTION_MODE],
+  );
+  if (executionMode === "historical" && !pathsDeclared)
+    throw new Error("extension_historical_runtime_required");
   if (pathsDeclared)
     for (const name of PATH_NAMES) path(required(environment, name));
   const enabled = flag === "1";
@@ -121,6 +135,7 @@ export function resolveRuntimeExtensionEnvironment(
     Object.freeze({
       actor,
       host,
+      executionMode,
       runtimeBindingsPath: pathsDeclared
         ? path(required(environment, PATH_NAMES[0]))
         : null,
