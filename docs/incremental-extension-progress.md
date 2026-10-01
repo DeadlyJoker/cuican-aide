@@ -4,6 +4,24 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：精确历史查询与准备目标隔离
+
+Control 新增独立 query host 端口。已有原任务通过当前权限与完整持久化身份校验后，才能从受信 private peers 恢复其插件四项身份，并要求实际 readiness 与原任务完整 target 一致。同实现的多个已准备 Agent 可以作为候选，当前新 Agent 的 ready 不能替代旧目标。配置、激活、新生成、当前运行时读取和公有目录始终接当前宿主；历史 catalog 不进入公有目录。已有结果投影继续从持久化 operation 读取，宿主离线不会把读取变为一次外部生成。
+
+为避免正确准入的旧查询被新宿主抢走，Worker 的队列 scope 增加最多 32 个完整准备目标。ID 清单来自同一次严格绑定读取，八字段目标由编译资产及发布部署取得；实际工厂和数据库发布验证通过后才启动。SQLite / PostgreSQL 在 pending 和 expired 两分支的 LIMIT 前匹配目标，显式空集合不领取插件任务，普通任务仍由 current 模式处理；历史模式不领取普通任务。旧三字段调度接口保留原行为，执行权仍由实际 runtime acquire、不可变 Run 绑定及当前权限决定。
+
+七个生产入口现在共用完整生产源码闭包的指纹，包括 Control、Worker、Device Gateway、递归私有依赖、本地 MCP 入口和三个执行模块。Control 单独变更也产生新实现身份，解决同一源码构建摘要对应不同七包归档集合的问题。实际复现还发现隐式 tsconfig 的 class-field 或 paths 设置能在不改变指纹时改变包字节和行为，现有 stage 因此固定显式编译设置并取消隐式配置发现；固定设置与原七包在同一源码身份下逐字节一致。stage 的历史范围标记升级为 scope.v1；旧 schema v0 与 scope.v0 归档仍按原字节校验、保留和选择，但人工启动入口在执行前拒绝不能证明准备目标隔离的旧包。没有重写旧 sidecar 或自动降级。配置步骤和兼容限制见[进程启动说明](./extension-process-startup.md)。
+
+### 验证范围
+
+- 历史查询实际集成与既有组合/正式进程集成共 4/4 通过。真实 SQLite、已发布 AgentVersion、实际 Worker 工厂、鉴权 private HTTP 和 Control HTTP/SSE 证明同一实现的两个不同准备目标：current 先 wake 返回 idle，旧查询仍 pending、lease epoch 为 0；historical 随后完成。SSE 从游标 1 两次重连取得相同输出，当前新生成与默认 Agent 保持可用。该单项使用本地模型和 Comfy 夹具，模型 8 次、生成 POST 2 次、history GET 2 次；旧查询没有增加生成 POST，没有调用真实供应商。
+- 队列范围、租约栅栏及公平顺序在真实 SQLite / 临时 PostgreSQL 专项 31/31 通过，无跳过。覆盖同实现不同 Agent/同 Agent 不同 materialization、空集合、全部 target 字段、参数绑定、JSON null、expired、并发及异步快照。临时 PostgreSQL 仅开放 Unix socket，结束后已停止并清理。日志为 `output/extensions/checks/prepared-target-scope-postgres.log`。
+- query source / 授权事务专项 57/57，使用真实 SQLite 和明确的应用 host 夹具；不将该夹具当作实际 runtime readiness。私有路由与历史环境配置、既有 client/env 专项 31/31，覆盖多候选、摘要/owner 回显、离线拒替代、严格配置、重读、关闭取消及多 peer 清理失败。全量回归发现的清理错误传播问题已修复；原清理顺序与失败断言保留，只把测试辅助数据从严格 peer 配置中拆开。日志为 `application-query-host.log`、`control-host-router-focused.log` 和 `query-routing-cleanup-focused.log`。
+- 两份完全独立的源码副本分别离线 pnpm 安装并核对工作区导入，B 只修改真实 Control 启动输出；两次现有 stage 生成不同指纹与 Control 包，两套完整七包可保留在同一个数据 root。删除两份源码及安装包后，仍能按两个精确摘要选中各自归档。没有手工指定虚假实现摘要或把副本工作区导入指向当前源码。它证明两套真实构建可并存，不单独证明跨构建的任务恢复或原生自动升级流程。
+- 最终全量 Worker 895 通过 / 198 环境跳过，Control 287 通过 / 9 环境跳过，Application 195/195，均为 0 失败。AgentVersion 72/72、恢复启动器 5/5、stage 5/5（含隐式配置真实行为对照）、实际七包保留与资源替换后的消费验证 7/7、独立双构建 1/1。最终构建指纹为 `sha256:e3fc308c2b11d78c09717b8289dfa0c40947e197095fd56fe8cae4e5faffbb0a`；18 个 packages、Worker/Control 类型检查、UI lint、边界和仓库格式检查通过。日志为 `query-routing-*.log` 与 `fixed-tsconfig-final-*.log`；隐式配置复现与七包同身份字节对照另保存在 `implicit-tsconfig-proof.log`、`fixed-tsconfig-real-bundles-comparison.log`。本轮没有修改 UI 或重跑其全量，既有 7 项 UI 基线失败仍见前一界面阶段。所有自有测试服务、子进程和临时源码目录已清理。
+
+**剩余：** 原生桌面仍仅监督当前宿主，自动保存非秘密恢复输入、当前同 endpoint 凭据解析、自动旧宿主生命周期与完整跨构建产品验收继续按顺序实施。生产权威身份协议及第二个实际企业 API 仍待已提出的信息；完整目标保持进行中。短剧产品形态继续按[参考结论](./short-drama-workbench-reference.md)后置，已验证的 Krea2 入口不声称支持参考图、视频或配音。
+
 ## 2026-10-02：原生启动、构建保留与历史任务领取
 
 原生桌面的现有 `RuntimeSupervisor` 增加专用配置，默认关闭；明确开启时沿用桌面 standalone 的完整四字段身份。每次启动重读严格配置、清除环境中的插件及 bootstrap 覆盖、轮换私有 token。先运行原发布入口，再启动 Worker，并以有界鉴权目录挑战核对实际 origin 和完整 owner，最后启动 Control。取消、快速退出、就绪失败和终止失败均保留正确的子进程所有权，不能启动重复进程。配置形状与操作步骤见[进程启动说明](./extension-process-startup.md)。

@@ -12,7 +12,10 @@ import {
   type FileHandle,
 } from "node:fs/promises";
 import { isAbsolute, join, parse, resolve, sep } from "node:path";
-import type { ExtensionBuildIdentity } from "./extension-build.ts";
+import type {
+  ExtensionBuildIdentity,
+  ExtensionHistoricalWorkItemScope,
+} from "./extension-build.ts";
 
 const IDENTITY_FILE = "extension-build-identity.json";
 const ARCHIVE_DIRECTORY = "extension-builds";
@@ -34,8 +37,8 @@ const LOCK_WAIT_MS = 5_000;
 export type RetainedExtensionBuild = Readonly<{
   implementationDigest: string;
   buildIdentityDigest: string;
-  /** v0 artifacts remain retainable but do not attest historical task isolation. */
-  historicalWorkItemScope: "crewon.extension-work-item-scope.v0" | null;
+  /** Older scope markers remain immutable; only v1 attests prepared-target isolation. */
+  historicalWorkItemScope: ExtensionHistoricalWorkItemScope | null;
   directory: string;
   identityPath: string;
   bundles: readonly Readonly<{ file: string; path: string; digest: string }>[];
@@ -358,7 +361,7 @@ function parseIdentity(
         "historicalWorkItemScope",
       ]) &&
         value.schemaVersion === "crewon.extension-build-identity.v1" &&
-        value.historicalWorkItemScope === "crewon.extension-work-item-scope.v0")
+        supportedHistoricalScope(value.historicalWorkItemScope))
     ) ||
     typeof value.implementationDigest !== "string" ||
     !DIGEST.test(value.implementationDigest) ||
@@ -389,16 +392,29 @@ function parseIdentity(
     implementationDigest: value.implementationDigest,
     bundles: Object.freeze(bundles),
   };
-  return value.schemaVersion === "crewon.extension-build-identity.v1"
-    ? Object.freeze({
-        schemaVersion: "crewon.extension-build-identity.v1",
-        ...common,
-        historicalWorkItemScope: "crewon.extension-work-item-scope.v0",
-      })
-    : Object.freeze({
-        schemaVersion: "crewon.extension-build-identity.v0",
-        ...common,
-      });
+  if (value.schemaVersion === "crewon.extension-build-identity.v1") {
+    const scope = value.historicalWorkItemScope;
+    if (!supportedHistoricalScope(scope))
+      fail("extension_build_archive_identity_invalid");
+    return Object.freeze({
+      schemaVersion: "crewon.extension-build-identity.v1",
+      ...common,
+      historicalWorkItemScope: scope,
+    });
+  }
+  return Object.freeze({
+    schemaVersion: "crewon.extension-build-identity.v0",
+    ...common,
+  });
+}
+
+function supportedHistoricalScope(
+  value: unknown,
+): value is ExtensionHistoricalWorkItemScope {
+  return (
+    value === "crewon.extension-work-item-scope.v0" ||
+    value === "crewon.extension-work-item-scope.v1"
+  );
 }
 
 async function archiveRoot(dataRoot: string, create: boolean): Promise<string> {

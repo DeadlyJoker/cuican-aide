@@ -33,7 +33,11 @@ const LOADED_BUNDLE_DIGEST =
     : digest(readBoundedFile(MODULE_PATH, MAX_BUNDLE_BYTES));
 
 export const EXTENSION_HISTORICAL_WORK_ITEM_SCOPE =
-  "crewon.extension-work-item-scope.v0";
+  "crewon.extension-work-item-scope.v1";
+
+export type ExtensionHistoricalWorkItemScope =
+  | "crewon.extension-work-item-scope.v0"
+  | typeof EXTENSION_HISTORICAL_WORK_ITEM_SCOPE;
 
 export type ExtensionBuildIdentity = Readonly<{
   implementationDigest: string;
@@ -43,15 +47,15 @@ export type ExtensionBuildIdentity = Readonly<{
     | Readonly<{ schemaVersion: "crewon.extension-build-identity.v0" }>
     | Readonly<{
         schemaVersion: "crewon.extension-build-identity.v1";
-        historicalWorkItemScope: typeof EXTENSION_HISTORICAL_WORK_ITEM_SCOPE;
+        historicalWorkItemScope: ExtensionHistoricalWorkItemScope;
       }>
   );
 
 /**
  * This Node-only entrypoint is shared by Control, Worker and release compilation.
- * Source runs read actual production bytes each time. Staged bundles use the common
- * source fingerprint injected by the existing build and verify their own artifact.
- * The broad dependency closure deliberately fails closed after unrelated host edits.
+ * Source runs read the production closure of all seven staged runtime entries.
+ * Staged bundles use that common source fingerprint and verify their own artifact.
+ * The broad dependency closure deliberately fails closed after host edits.
  */
 export function getComfyImplementationDigest(): string {
   if (BUNDLED_DIGEST !== null) {
@@ -134,10 +138,21 @@ export function readComfySourceFingerprint(repositoryRoot: string): string {
       }
     }
   };
-  visit(join(root, "apps", "runtime-worker"), "@crewon/runtime-worker");
+  // Provider catalog/coordinator and release entries live in these same apps.
+  for (const app of ["runtime-worker", "control-api", "device-gateway"])
+    visit(join(root, "apps", app), `@crewon/${app}`);
   add(join(root, "pnpm-lock.yaml"));
   add(join(root, ".node-version"), 256);
   add(join(root, "scripts", "stage-desktop-runtime.ts"));
+  // The seventh entry and its reviewed local modules are bundled by the existing
+  // stage script. Keep their executable inputs explicit; UI/tests stay excluded.
+  for (const script of [
+    "local-workspace-checks-mcp.mjs",
+    "local-workspace-command-guard.mts",
+    "local-workspace-commands.mts",
+    "local-workspace-reads.mts",
+  ])
+    add(join(root, "scripts", script));
   const files = [...sources.entries()]
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([file, bytes]) => ({ file, digest: digest(bytes) }));
@@ -167,7 +182,7 @@ export function createExtensionBuildIdentity(
   };
 }
 
-/** Build producer only: this marker asserts the staged Worker supports scoped historical claims. */
+/** Build producer only: the current marker attests prepared-target historical claims. */
 export function createScopedExtensionBuildIdentity(input: {
   implementationDigest: string;
   bundlePaths: readonly string[];
@@ -203,7 +218,9 @@ function verifyBundleIdentity(modulePath: string, expected: string): void {
       identity.schemaVersion !== "crewon.extension-build-identity.v0") ||
     (scoped &&
       identity.historicalWorkItemScope !==
-        EXTENSION_HISTORICAL_WORK_ITEM_SCOPE) ||
+        EXTENSION_HISTORICAL_WORK_ITEM_SCOPE &&
+      identity.historicalWorkItemScope !==
+        "crewon.extension-work-item-scope.v0") ||
     identity.implementationDigest !== expected ||
     !Array.isArray(identity.bundles) ||
     identity.bundles.length > 64

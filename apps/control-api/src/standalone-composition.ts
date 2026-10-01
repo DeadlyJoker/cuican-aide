@@ -61,15 +61,15 @@ import {
 import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
 import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
-import { LoopbackExtensionHostClient } from "./extension-worker-client.ts";
+import {
+  ExtensionHostRouter,
+  parseExtensionWorkerRouterConfig,
+  type ExtensionWorkerRouterConfig,
+} from "./extension-host-router.ts";
 
-type ExtensionWorkerConfig = Readonly<{
-  origin: string;
-  token: string;
-  deadlineMs?: number;
-}>;
+type ExtensionWorkerConfig = ExtensionWorkerRouterConfig;
 type PreparedControlExtensions = {
-  client: LoopbackExtensionHostClient;
+  client: ExtensionHostRouter;
   catalog: ExtensionCatalogPort;
   extensions: ExtensionStore;
   operations: ExternalOperationStore & ExternalOperationQueryStore;
@@ -202,7 +202,7 @@ function pinExtensionCompositionConfig<
     extensionWorker:
       config.extensionWorker === undefined
         ? undefined
-        : { ...config.extensionWorker },
+        : parseExtensionWorkerRouterConfig(config.extensionWorker),
   };
 }
 
@@ -211,10 +211,10 @@ async function composeExtensionControlApi(
   config: ControlApiCompositionConfig,
   worker: ExtensionWorkerConfig,
 ): Promise<StandaloneControlApiRuntime> {
-  let client: LoopbackExtensionHostClient | null = null;
+  let client: ExtensionHostRouter | null = null;
   let prepared: PreparedControlExtensions | undefined;
   try {
-    client = new LoopbackExtensionHostClient(worker);
+    client = new ExtensionHostRouter(worker);
     const catalog = await client.loadCatalog(config.actor);
     const extensions = store.extensionStore();
     await extensions.migrate();
@@ -353,6 +353,7 @@ function composeControlApi(
             operations: preparedExtensions.operations,
             catalog: preparedExtensions.catalog,
             host: preparedExtensions.client,
+            queryHost: preparedExtensions.client.queryHost,
             authorization,
             clock,
             ids,

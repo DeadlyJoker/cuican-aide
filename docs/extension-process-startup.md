@@ -14,6 +14,7 @@
 | Worker / Control  | `CREWON_EXTENSION_HOST_TOKEN`                | 同一 private peer token；至少 32 字节，不能包含空白或控制字符     |
 | Worker / Control  | `CREWON_EXTENSION_HOST_DEADLINE_MS`          | 可选，1000–30000 毫秒                                             |
 | Control           | `CREWON_EXTENSION_HOST_ORIGIN`               | Worker 的确切 `http://127.0.0.1:<port>` 地址                      |
+| Control           | `CREWON_EXTENSION_HISTORICAL_HOSTS_JSON`     | 可选、最多 4 个受信历史 private peer；仅用于已有原任务的查询      |
 | 发布 CLI / Worker | `CREWON_EXTENSION_RUNTIME_BINDINGS_PATH`     | 独立插件绑定文件，必须与下一项一起配置                            |
 | 发布 CLI / Worker | `CREWON_EXTENSION_AGENT_VERSION_ASSETS_PATH` | 独立插件 AgentVersion 资产文件                                    |
 | Worker            | `CREWON_EXTENSION_EXECUTION_MODE`            | 可选 `current` / `historical`；后者必须启用宿主并提供成对插件文件 |
@@ -105,6 +106,20 @@ CREWON_EXTENSIONS_ENABLED=1 \
 
 入口重新校验整套归档，只启动该归档中的 `runtime-worker.mjs`，固定使用 `historical`，不执行 release、不覆盖默认 Agent、不接收任意 Worker 路径。它在前台监督子进程并转发取消。Worker 仍需验证旧配置、版本、部署、当前授权及所需模型凭据；保留代码不能补齐丢失的配置或已撤销权限。
 
-本轮 stage 输出 `crewon.extension-build-identity.v1`，其中 `historicalWorkItemScope` 必须为 `crewon.extension-work-item-scope.v0`，声明对应 Worker 支持历史任务范围。v0 包继续支持完整性验证和保留，但人工恢复入口拒绝启动：旧 Worker 可能忽略新增环境字段并领取普通任务。该能力标记也属于明确选择的整套文件身份摘要，不接受缺失、未知标记或自动降级。
+本轮 stage 继续输出 `crewon.extension-build-identity.v1`，但新的 `historicalWorkItemScope` 为 `crewon.extension-work-item-scope.v1`，证明 Worker 支持完整准备目标的队列隔离。旧 schema v0 包和带 scope.v0 的 schema v1 包继续支持完整性验证、保留和精确选择；人工恢复入口现在在执行前拒绝这些旧能力包。前者可能忽略历史字段领取普通任务，后者只按实现过滤，可能领取同实现下自己未准备的旧 Agent 任务。不能只重写旧 sidecar 标记来升级能力；原文件保持不变，执行需要确实支持新隔离行为的构建。这是明确的兼容限制，不能自动降级。
 
-当前尚无自动旧宿主编排及跨构建目录/就绪状态路由。新 Control 的当前宿主不能代替旧实现完成新查询准入；需要旧实现的查询仍须接到匹配宿主。源代码变更也不会自动产生可保留的运行包。因此，构建保留、明确历史领取和人工启动已交付，不能据此声称桌面自动升级恢复的整个产品流程已完成。
+当前 Worker 的插件队列范围同时限定租户、实现和最多 32 个已准备执行目标；目标从实际插件绑定、编译资产及发布部署取得，不能由模型或任务输入决定。SQLite / PostgreSQL 在选择 pending 或 expired 任务以及 LIMIT 前匹配完整八字段，保留旧三字段调度接口的原行为。当前模式仍可领取普通任务；历史模式只领取自己已准备的插件目标；只提供目录的元数据宿主没有插件领取目标。该筛选不授予执行权，领取后仍重新加载绑定、校验发布及实际 runtime acquire。
+
+原生桌面仍未自动启动旧宿主；操作者需要先保留并明确启动匹配的历史 Worker。源代码变更也不会自动产生可保留的运行包。因此，构建保留、明确历史领取和人工查询接线已交付，不能据此声称桌面自动升级恢复的整个产品流程已完成。
+
+## 历史查询接线
+
+显式 standalone Control 可通过 `CREWON_EXTENSION_HISTORICAL_HOSTS_JSON` 接入已经运行的历史宿主。值是最多 16 KiB 的 JSON 数组，各项只有 `origin`、`token` 及可选 `deadlineMs`，沿用当前 peer 的格式限制。最多 4 个历史 peer，地址不能重复或与当前 peer 重复；未知字段、缺项、非 loopback 地址和损坏数组均拒绝。该值属于可信启动配置，不能由公共请求、模型或 Run 输入提供。production 即使设置禁用标记也拒绝该环境配置；standalone 禁用时仍校验完整配置但不创建客户端或发请求。
+
+启动时只协商当前宿主，历史宿主不必在线。公共目录、保存配置、启用、新生成及当前就绪读取始终使用当前宿主。历史 catalog 不合并到公共目录，也不允许用历史配置创建新生成。
+
+已有操作的 query 先检查源 Run、绑定和 operation 的完整作用域与身份，再解析持久化的插件 ID、版本、manifest 和 implementation 四项摘要。匹配宿主必须通过鉴权 catalog 和实际 readiness，且完整执行目标与原任务一致，包括 Agent 内容、materialization、authority、generation、policy 和 workspace。相同实现的多个已准备 Agent 可同时作为候选；返回不同目标的 ready 不被接受。离线、认证失败及损坏响应不能使当前新目标替代原目标。query 准入在宿主协商后、事务提交前再次检查当前查询与源 Run 权限，并继续由原存储事务核对 activation 和不可变绑定。
+
+每阶段并发检查有界 peer 集合，整个阶段共用不超过 30 秒的期限；关闭会取消 catalog/readiness 并等待所有在途请求结束。历史就绪、权限和凭据不缓存。只读任务投影仍读取已持久化结果，不需要宿主在线；该投影不主动查询供应商。
+
+现有 stage 的实现指纹覆盖 Worker、Control、Device Gateway 的生产源和递归私有依赖，以及本地 MCP 入口和三个执行模块，统一注入七个生产包。打包器使用 stage 内明确固定的 TypeScript 配置，取消未计入指纹的隐式 tsconfig、extends 和 paths 输入；该固定配置本身属于 stage 源码指纹。Control 或 MCP 的变化同样产生新实现身份，避免同一个实现摘要对应不同归档文件集合；测试、夹具和 UI renderer 不参与该指纹。升级后仍需保留旧包、原不可变配置和运行绑定，归档代码本身不能恢复这些输入或授予执行权限。

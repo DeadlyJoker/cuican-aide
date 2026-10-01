@@ -82,7 +82,7 @@ import {
 } from "./runtime-workspace-read-composition.ts";
 import {
   composeRuntimeExtensions,
-  extensionCompositionDeployments,
+  prepareExtensionCompositionDeployments,
   type RuntimeExtensionCompositionConfig,
 } from "./extensions/extension-runtime-composition.ts";
 import { RuntimeExtensionHostService } from "./extensions/extension-host-service.ts";
@@ -93,6 +93,7 @@ import {
 import type { RuntimeExtensionHostConfig } from "./extensions/extension-process-environment.ts";
 import {
   extensionWorkItemExecutionScope,
+  preparedExtensionExecutionTargets,
   parseExtensionExecutionMode,
   type ExtensionExecutionMode,
 } from "./extensions/extension-work-item-scope.ts";
@@ -252,9 +253,14 @@ export async function createPostgresRuntimeWorker(
   }
 }
 
+type PreparedRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
+  Readonly<{
+    preparedExtensionAgentVersionIds?: readonly string[];
+  }>;
+
 function prepareComposition(
   input: RuntimeWorkerCompositionConfig,
-): RuntimeWorkerCompositionConfig {
+): PreparedRuntimeWorkerConfig {
   // Capture scheduling and plugin materialization inputs before storage can yield.
   const config = Object.freeze({
     ...input,
@@ -311,14 +317,17 @@ function prepareComposition(
     config.agentVersionDeployments !== undefined
   )
     throw new Error("extension_runtime_factory_configuration_conflict");
+  const preparedExtensions = prepareExtensionCompositionDeployments({
+    config: config.extensionRuntime,
+    tenantId: config.runtimeTenantId,
+    defaultAgentVersionId: config.route.agentVersionId,
+  });
   return Object.freeze({
     ...config,
     extensionExecutionMode: mode,
-    agentVersionDeployments: extensionCompositionDeployments({
-      config: config.extensionRuntime,
-      tenantId: config.runtimeTenantId,
-      defaultAgentVersionId: config.route.agentVersionId,
-    }),
+    agentVersionDeployments: preparedExtensions.deployments,
+    preparedExtensionAgentVersionIds:
+      preparedExtensions.extensionAgentVersionIds,
   });
 }
 
@@ -349,7 +358,7 @@ async function composeRuntimeWorker(
     | SqliteWorkspaceReadFileStore
     | PostgresWorkspaceReadFileStore
     | undefined,
-  config: RuntimeWorkerCompositionConfig,
+  config: PreparedRuntimeWorkerConfig,
   releasePlan: RuntimeAgentVersionReleasePlan,
   inputs: ReturnType<typeof ownCompositionInputs>,
 ): Promise<StandaloneRuntimeWorker> {
@@ -364,6 +373,14 @@ async function composeRuntimeWorker(
       : extensionWorkItemExecutionScope({
           tenantId: config.runtimeTenantId,
           mode: parseExtensionExecutionMode(config.extensionExecutionMode),
+          targets:
+            config.extensionRuntime === undefined
+              ? []
+              : preparedExtensionExecutionTargets({
+                  tenantId: config.runtimeTenantId,
+                  agentVersionIds: config.preparedExtensionAgentVersionIds!,
+                  releasePlan,
+                }),
         });
   if (
     workItemExecutionScope !== undefined &&

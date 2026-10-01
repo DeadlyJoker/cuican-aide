@@ -304,6 +304,7 @@ export class PostgresQueueStore implements DurableQueueStore {
                      extensionTablePrefix: `${this.#schemaSql()}.`,
                      tenantParameter: "$4",
                      digestParameter: "$5",
+                     targetsParameter: "$6",
                      dialect: "postgres",
                    }),
                  })
@@ -335,6 +336,9 @@ export class PostgresQueueStore implements DurableQueueStore {
             : [
                 input.executionScope.tenantId,
                 input.executionScope.extensionImplementationDigest,
+                ...(input.executionScope.extensionTargets === undefined
+                  ? []
+                  : [JSON.stringify(input.executionScope.extensionTargets)]),
               ]),
         ],
       );

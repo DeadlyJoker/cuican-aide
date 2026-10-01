@@ -171,6 +171,10 @@ async function workerFixture(
     requests,
     origin: `http://127.0.0.1:${address.port}`,
     token: workerToken,
+    peer: Object.freeze({
+      origin: `http://127.0.0.1:${address.port}`,
+      token: workerToken,
+    }),
   };
 }
 
@@ -224,7 +228,7 @@ test("explicit async composition negotiates the authenticated catalog and migrat
   const worker = await workerFixture(context);
   const runtime = await createStandaloneControlApiWithExtensions({
     ...cfg,
-    extensionWorker: worker,
+    extensionWorker: worker.peer,
   });
   context.after(() => runtime.app.close());
   assert.deepEqual(
@@ -286,7 +290,7 @@ test("plugin routes use the existing session, CSRF and actor scope boundary", as
   const worker = await workerFixture(context);
   const runtime = await createStandaloneControlApiWithExtensions({
     ...config(context),
-    extensionWorker: worker,
+    extensionWorker: worker.peer,
   });
   context.after(() => runtime.app.close());
   assert.equal(
@@ -350,7 +354,7 @@ test("async startup freezes the configured actor before catalog negotiation awai
   const cfg = config(context);
   const creation = createStandaloneControlApiWithExtensions({
     ...cfg,
-    extensionWorker: worker,
+    extensionWorker: worker.peer,
   });
   await started;
   Object.assign(cfg.actor, { actorId: "foreign", tenantId: "foreign" });
@@ -393,7 +397,7 @@ test("catalog authentication or actor echo failure rejects startup before plugin
     await assert.rejects(
       createStandaloneControlApiWithExtensions({
         ...cfg,
-        extensionWorker: worker,
+        extensionWorker: worker.peer,
       }),
       failure === "authentication"
         ? /extension_host_authentication_failed/u
@@ -447,7 +451,7 @@ test("migration rejection is preserved and startup awaits client close before cl
   );
   const creation = createStandaloneControlApiWithExtensions({
     ...cfg,
-    extensionWorker: worker,
+    extensionWorker: worker.peer,
   });
   const rejected = assert.rejects(
     creation,
@@ -496,7 +500,7 @@ test("composition failure closes the negotiated peer and store even when artifac
     createStandaloneControlApiWithExtensions({
       ...cfg,
       allowedOrigins: [],
-      extensionWorker: worker,
+      extensionWorker: worker.peer,
     }),
     (error) => {
       assert.ok(error instanceof AggregateError);
@@ -514,7 +518,7 @@ test("normal close awaits the peer before its SQLite owner and still closes the 
   const worker = await workerFixture(context);
   const runtime = await createStandaloneControlApiWithExtensions({
     ...cfg,
-    extensionWorker: worker,
+    extensionWorker: worker.peer,
   });
   const order: string[] = [];
   const clientClose = LoopbackExtensionHostClient.prototype.close;
@@ -595,7 +599,7 @@ test(
       ...extensionConfig,
       connectionString,
       schema: schemas[1],
-      extensionWorker: worker,
+      extensionWorker: worker.peer,
     });
     apps.push(enabled.app);
     const saved = await enabled.app.inject({

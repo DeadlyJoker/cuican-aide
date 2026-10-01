@@ -4916,6 +4916,7 @@ export class SqliteRunStore implements DomainStore {
       extensionTablePrefix: "",
       tenantParameter: "?2",
       digestParameter: "?3",
+      targetsParameter: "?4",
       dialect: "sqlite",
     });
     try {
@@ -4942,6 +4943,9 @@ export class SqliteRunStore implements DomainStore {
             : [
                 input.executionScope.tenantId,
                 input.executionScope.extensionImplementationDigest,
+                ...(input.executionScope.extensionTargets === undefined
+                  ? []
+                  : [JSON.stringify(input.executionScope.extensionTargets)]),
               ]),
         ) as (WorkItemRow & { lease_epoch: number }) | undefined;
       if (row === undefined) {

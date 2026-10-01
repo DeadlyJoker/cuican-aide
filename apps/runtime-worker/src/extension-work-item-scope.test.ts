@@ -12,11 +12,16 @@ test("current and historical Worker affinity always uses this verified loaded im
   // Persisted plugin configs use the manifest+adapter identity, not its build input alone.
   assert.notEqual(digest, getComfyImplementationDigest());
   for (const mode of ["current", "historical"] as const) {
-    const scope = extensionWorkItemExecutionScope({ tenantId: "tenant", mode });
+    const scope = extensionWorkItemExecutionScope({
+      tenantId: "tenant",
+      mode,
+      targets: [],
+    });
     assert.deepEqual(scope, {
       tenantId: "tenant",
       extensionImplementationDigest: digest,
       unboundRuns: mode === "current" ? "include" : "exclude",
+      extensionTargets: [],
     });
     assert.ok(Object.isFrozen(scope));
   }

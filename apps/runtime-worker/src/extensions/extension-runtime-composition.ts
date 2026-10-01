@@ -40,10 +40,32 @@ export function extensionCompositionDeployments(input: {
   tenantId: string;
   defaultAgentVersionId: string;
 }): readonly AgentVersionDeploymentCandidate[] {
+  return prepareExtensionCompositionDeployments(input).deployments;
+}
+
+/** One immutable read also captures the plugin versions supported by this host. */
+export function prepareExtensionCompositionDeployments(input: {
+  config: RuntimeExtensionCompositionConfig;
+  tenantId: string;
+  defaultAgentVersionId: string;
+}): Readonly<{
+  deployments: readonly AgentVersionDeploymentCandidate[];
+  extensionAgentVersionIds: readonly string[];
+}> {
   const config = checkedBindings(input);
-  return agentVersionDeploymentCandidates(config).filter(
-    (deployment) => deployment.agentVersionId !== input.defaultAgentVersionId,
-  );
+  return Object.freeze({
+    deployments: Object.freeze(
+      agentVersionDeploymentCandidates(config).filter(
+        (deployment) =>
+          deployment.agentVersionId !== input.defaultAgentVersionId,
+      ),
+    ),
+    extensionAgentVersionIds: Object.freeze(
+      config.bindings
+        .filter((binding) => binding.extensionConfigPath !== undefined)
+        .map((binding) => binding.agentVersionId),
+    ),
+  });
 }
 
 function checkedBindings(input: {

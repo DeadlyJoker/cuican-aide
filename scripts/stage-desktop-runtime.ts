@@ -94,6 +94,16 @@ export function bundleRuntime(
       "--packages=bundle",
       "--tree-shaking=true",
       "--legal-comments=none",
+      // Runtime semantics belong to this fingerprinted build input, not
+      // implicitly discovered app/package tsconfigs or their extends/paths.
+      `--tsconfig-raw=${JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          useDefineForClassFields: true,
+          verbatimModuleSyntax: false,
+          experimentalDecorators: false,
+        },
+      })}`,
       '--banner:js=import { createRequire as __crewonCreateRequire } from "node:module"; const require = __crewonCreateRequire(import.meta.url);',
       `--define:__CREWON_COMFY_IMPLEMENTATION_DIGEST__=${JSON.stringify(implementationDigest)}`,
       `--outfile=${spec.output}`,

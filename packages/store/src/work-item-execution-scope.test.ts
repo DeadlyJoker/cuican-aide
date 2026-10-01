@@ -10,7 +10,9 @@ import {
   configuration,
   receipt,
   runInput,
+  target,
 } from "./extension-store.test-support.ts";
+import type { ExtensionExecutionTarget } from "@crewon/domain";
 import { InMemoryRunStore } from "./in-memory-run-store.ts";
 import { seedThread } from "./thread-store-conformance.test-support.ts";
 import { createRunningCommitFixture } from "./run-store-conformance.test-support.ts";
@@ -57,6 +59,7 @@ async function fixture(t: TestContext, backend: "sqlite" | "postgres") {
     id: string,
     kind: "current" | "historic" | "plain" | "other" | "otherPlain",
     readiness = 0,
+    preparedTarget: ExtensionExecutionTarget = target,
   ) => {
     const config =
       kind === "historic"
@@ -68,6 +71,7 @@ async function fixture(t: TestContext, backend: "sqlite" | "postgres") {
       tenantId: config.tenantId,
       configurationRevision: config.revision,
       configurationDigest: config.contentDigest,
+      target: preparedTarget,
     });
     await f.prepare(input);
     await f.first.parent.commitRun(input.commit);
@@ -100,6 +104,246 @@ for (const backend of ["sqlite", "postgres"] as const) {
   const options = {
     skip: backend === "postgres" && !process.env.CREWON_TEST_POSTGRES_URL,
   };
+  const targetScope = (
+    targets: readonly ExtensionExecutionTarget[],
+    unboundRuns: "include" | "exclude" = "exclude",
+  ): WorkItemExecutionScope => ({
+    ...executionScope(current, unboundRuns),
+    extensionTargets: targets,
+  });
+  test(
+    `${backend}: same implementation workers claim only their exact prepared Agent and materialization before LIMIT`,
+    options,
+    async (t) => {
+      const f = await fixture(t, backend);
+      const anotherAgent = { ...target, agentVersionId: "agent-2" };
+      const anotherMaterialization = {
+        ...target,
+        materializationDigest: `sha256:${"3".repeat(64)}`,
+      };
+      await f.seed("first-agent", "current", 0, target);
+      await f.seed(
+        "same-agent-other-materialization",
+        "current",
+        1,
+        anotherMaterialization,
+      );
+      await f.seed("second-agent", "current", 2, anotherAgent);
+      const second = await f.second.parent.claimNextWorkItem(
+        claim("second-agent", targetScope([anotherAgent])),
+      );
+      assert.equal(second?.workItem.runId, "second-agent");
+      assert.equal(
+        await f.second.parent.claimNextWorkItem(
+          claim("second-empty", targetScope([anotherAgent])),
+        ),
+        null,
+      );
+      const different = await f.first.parent.claimNextWorkItem(
+        claim(
+          "different-materialization",
+          targetScope([anotherMaterialization]),
+        ),
+      );
+      assert.equal(
+        different?.workItem.runId,
+        "same-agent-other-materialization",
+      );
+      assert.equal(
+        await f.first.parent.claimNextWorkItem(
+          claim("materialization-empty", targetScope([anotherMaterialization])),
+        ),
+        null,
+      );
+      const first = await f.second.parent.claimNextWorkItem(
+        claim("first-agent", targetScope([target])),
+      );
+      assert.equal(first?.workItem.runId, "first-agent");
+      assert.ok(
+        [first, second, different].every((item) => item?.lease.epoch === 1),
+      );
+    },
+  );
+  test(
+    `${backend}: empty target set excludes bound work but keeps current ordinary tasks and tenant/implementation filters`,
+    options,
+    async (t) => {
+      const f = await fixture(t, backend);
+      await f.seed("bound", "current");
+      await f.seed("historical-implementation", "historic");
+      await f.seed("other-tenant", "otherPlain");
+      await f.seed("ordinary", "plain");
+      assert.equal(
+        await f.first.parent.claimNextWorkItem(
+          claim("empty-history", targetScope([])),
+        ),
+        null,
+      );
+      assert.equal(
+        (
+          await f.first.parent.claimNextWorkItem(
+            claim("empty-current", targetScope([], "include")),
+          )
+        )?.workItem.runId,
+        "ordinary",
+      );
+      assert.equal(
+        await f.first.parent.claimNextWorkItem(
+          claim("empty-current-again", targetScope([], "include")),
+        ),
+        null,
+      );
+      assert.equal(
+        (
+          await f.first.parent.claimNextWorkItem(
+            claim("exact", targetScope([target])),
+          )
+        )?.workItem.runId,
+        "bound",
+      );
+      assert.equal(
+        await f.first.parent.claimNextWorkItem(
+          claim("exact-again", targetScope([target], "include")),
+        ),
+        null,
+      );
+    },
+  );
+  test(
+    `${backend}: expired work remains owned by its original prepared target and cannot be stolen by a new materialization`,
+    options,
+    async (t) => {
+      const f = await fixture(t, backend);
+      const next = {
+        ...target,
+        materializationDigest: `sha256:${"4".repeat(64)}`,
+      };
+      await f.seed("old-expired-target", "current", 0, target);
+      const original = await f.first.parent.claimNextWorkItem(
+        claim("old-owner", targetScope([target])),
+      );
+      assert.ok(original);
+      await f.expire("old-expired-target", 0);
+      await f.seed("new-pending-target", "current", 1, next);
+      assert.equal(
+        (
+          await f.second.parent.claimNextWorkItem(
+            claim("new-owner", targetScope([next])),
+          )
+        )?.workItem.runId,
+        "new-pending-target",
+      );
+      assert.equal(
+        await f.second.parent.claimNextWorkItem(
+          claim("new-empty", targetScope([next])),
+        ),
+        null,
+      );
+      const restored = await f.first.parent.claimNextWorkItem(
+        claim("restored-old", targetScope([target])),
+      );
+      assert.equal(restored?.workItem.runId, "old-expired-target");
+      assert.equal(restored?.lease.epoch, 2);
+    },
+  );
+  test(
+    `${backend}: target match covers all fields, SQL-bound strings and JSON-null workspace identically`,
+    options,
+    async (t) => {
+      const f = await fixture(t, backend);
+      const prepared = {
+        ...target,
+        authorityId: "authority-'quoted",
+        workspaceBindingId: "workspace-'quoted",
+      };
+      await f.seed("prepared", "current", 0, prepared);
+      for (const mismatch of [
+        { agentVersionContentDigest: `sha256:${"5".repeat(64)}` },
+        { authorityId: "other-authority" },
+        { runtimeGeneration: "other-runtime" },
+        { policySnapshotId: "other-policy" },
+        { workspaceBindingId: null },
+      ])
+        assert.equal(
+          await f.first.parent.claimNextWorkItem(
+            claim("mismatched", targetScope([{ ...prepared, ...mismatch }])),
+          ),
+          null,
+        );
+      assert.equal(
+        (
+          await f.first.parent.claimNextWorkItem(
+            claim("quoted", targetScope([prepared])),
+          )
+        )?.workItem.runId,
+        "prepared",
+      );
+      const badNull = await f.seed("missing-workspace", "current");
+      const corruptTarget = { ...badNull.binding.target } as Record<
+        string,
+        unknown
+      >;
+      delete corruptTarget.workspaceBindingId;
+      await f.sql(
+        `UPDATE ${f.prefix}extension_run_bindings SET binding_json=${quoted(JSON.stringify({ ...badNull.binding, target: corruptTarget }))} WHERE run_id='missing-workspace'`,
+      );
+      const extra = await f.seed("extra-field", "current");
+      await f.sql(
+        `UPDATE ${f.prefix}extension_run_bindings SET binding_json=${quoted(JSON.stringify({ ...extra.binding, target: { ...extra.binding.target, extra: true } }))} WHERE run_id='extra-field'`,
+      );
+      await f.seed("null-workspace", "current");
+      assert.equal(
+        (
+          await f.first.parent.claimNextWorkItem(
+            claim("null-exact", targetScope([target])),
+          )
+        )?.workItem.runId,
+        "null-workspace",
+      );
+      assert.equal(
+        await f.first.parent.claimNextWorkItem(
+          claim("corrupt-excluded", targetScope([target])),
+        ),
+        null,
+      );
+    },
+  );
+  test(
+    `${backend}: prepared target inputs are copied before storage await and malformed sets never consume a lease`,
+    options,
+    async (t) => {
+      const f = await fixture(t, backend);
+      await f.seed("prepared", "current");
+      for (const extensionTargets of [
+        undefined,
+        null,
+        [target, target],
+        new Array(1),
+        [{ ...target, workspaceBindingId: undefined }],
+      ])
+        await assert.rejects(
+          f.first.parent.claimNextWorkItem({
+            ...claim("bad"),
+            executionScope: { ...executionScope(), extensionTargets },
+          } as QueueClaimInput),
+          code("queue_execution_scope_invalid"),
+        );
+      const mutableTarget = { ...target };
+      const input = {
+        ...claim("actual"),
+        executionScope: {
+          ...executionScope(),
+          extensionTargets: [mutableTarget],
+        },
+      };
+      const pending = f.first.parent.claimNextWorkItem(input);
+      mutableTarget.materializationDigest = `sha256:${"6".repeat(64)}`;
+      input.executionScope.extensionTargets.length = 0;
+      const claimed = await pending;
+      assert.equal(claimed?.workItem.runId, "prepared");
+      assert.equal(claimed?.lease.epoch, 1);
+    },
+  );
   test(
     `${backend}: historical and current workers isolate implementations and tenant before LIMIT`,
     options,

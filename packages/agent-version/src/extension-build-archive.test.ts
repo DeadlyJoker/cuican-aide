@@ -137,42 +137,45 @@ test("retention copies only verified static artifacts and resolves without the c
   assert.deepEqual(readdirSync(f.archive), [basename(retained.directory)]);
 });
 
-test("scoped v1 retention preserves the producer capability and pins it in the build identity", async (context) => {
-  const f = fixture(context);
-  const scoped = {
-    ...f.identity,
-    schemaVersion: "crewon.extension-build-identity.v1",
-    historicalWorkItemScope: "crewon.extension-work-item-scope.v0",
-  };
-  writeFileSync(join(f.source, IDENTITY), JSON.stringify(scoped));
-  const retained = await f.retain();
-  assert.equal(
-    retained.historicalWorkItemScope,
+test("scoped retention preserves both old and current capabilities without upgrading their claims", async (context) => {
+  for (const scope of [
     "crewon.extension-work-item-scope.v0",
-  );
-  assert.equal(retained.buildIdentityDigest, hash(JSON.stringify(scoped)));
-  assert.notEqual(
-    retained.buildIdentityDigest,
-    hash(JSON.stringify(f.identity)),
-  );
-  assert.deepEqual(await f.resolve(retained.buildIdentityDigest), retained);
-  writeFileSync(
-    join(f.source, IDENTITY),
-    JSON.stringify(
-      {
-        historicalWorkItemScope: scoped.historicalWorkItemScope,
-        bundles: [...scoped.bundles].reverse(),
-        implementationDigest: scoped.implementationDigest,
-        schemaVersion: scoped.schemaVersion,
-      },
-      null,
-      2,
-    ),
-  );
-  assert.deepEqual(await f.retain(), retained);
-  chmodSync(retained.identityPath, 0o600);
-  writeFileSync(retained.identityPath, JSON.stringify(f.identity));
-  await assert.rejects(f.resolve(), /extension_retained_build_mismatch/u);
+    "crewon.extension-work-item-scope.v1",
+  ])
+    await context.test(scope, async (subcontext) => {
+      const f = fixture(subcontext);
+      const scoped = {
+        ...f.identity,
+        schemaVersion: "crewon.extension-build-identity.v1",
+        historicalWorkItemScope: scope,
+      };
+      writeFileSync(join(f.source, IDENTITY), JSON.stringify(scoped));
+      const retained = await f.retain();
+      assert.equal(retained.historicalWorkItemScope, scope);
+      assert.equal(retained.buildIdentityDigest, hash(JSON.stringify(scoped)));
+      assert.notEqual(
+        retained.buildIdentityDigest,
+        hash(JSON.stringify(f.identity)),
+      );
+      assert.deepEqual(await f.resolve(retained.buildIdentityDigest), retained);
+      writeFileSync(
+        join(f.source, IDENTITY),
+        JSON.stringify(
+          {
+            historicalWorkItemScope: scoped.historicalWorkItemScope,
+            bundles: [...scoped.bundles].reverse(),
+            implementationDigest: scoped.implementationDigest,
+            schemaVersion: scoped.schemaVersion,
+          },
+          null,
+          2,
+        ),
+      );
+      assert.deepEqual(await f.retain(), retained);
+      chmodSync(retained.identityPath, 0o600);
+      writeFileSync(retained.identityPath, JSON.stringify(f.identity));
+      await assert.rejects(f.resolve(), /extension_retained_build_mismatch/u);
+    });
 });
 
 test("equivalent metadata is idempotent and never overwrites retained bytes", async (context) => {
@@ -290,7 +293,7 @@ test("malformed, unknown, unsafe and incomplete sidecars fail before publication
       (identity) => ({
         ...identity,
         schemaVersion: "crewon.extension-build-identity.v1",
-        historicalWorkItemScope: "crewon.extension-work-item-scope.v1",
+        historicalWorkItemScope: "crewon.extension-work-item-scope.v2",
       }),
     ],
     [

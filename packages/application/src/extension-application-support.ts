@@ -18,6 +18,7 @@ import type {
   ExtensionCatalogPort,
   ExtensionRegistration,
 } from "./extension-host-port.ts";
+import type { ExtensionQueryRegistrationIdentity } from "./extension-query-host-port.ts";
 
 /** Copy before any await so callers cannot change an authorized command in flight. */
 export function extensionCommand(
@@ -113,6 +114,41 @@ export function requireExtensionRegistration(
     throw new ApplicationError("internal", "extension_catalog_invalid", {
       cause: error,
     });
+  }
+}
+
+/** Historical metadata is accepted only for the exact durable source identity. */
+export function requirePinnedExtensionRegistration(
+  input: unknown,
+  digester: ContentDigester,
+  identity: ExtensionQueryRegistrationIdentity,
+): ExtensionRegistration {
+  try {
+    const value = extensionCommand(input, [
+      "manifest",
+      "manifestDigest",
+      "implementationDigest",
+    ]);
+    const manifest = parseExtensionManifest(value.manifest);
+    const manifestDigest = extensionDigest(value.manifestDigest);
+    const implementationDigest = extensionDigest(value.implementationDigest);
+    if (
+      manifest.pluginId !== identity.pluginId ||
+      manifest.version !== identity.pluginVersion ||
+      manifestDigest !== identity.manifestDigest ||
+      implementationDigest !== identity.implementationDigest ||
+      digester.sha256(extensionCanonicalJson(manifest)) !== manifestDigest
+    )
+      throw new Error("extension_query_registration_mismatch");
+    return Object.freeze({ manifest, manifestDigest, implementationDigest });
+  } catch (error) {
+    throw new ApplicationError(
+      "internal",
+      "extension_query_registration_invalid",
+      {
+        cause: error,
+      },
+    );
   }
 }
 

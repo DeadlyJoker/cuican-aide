@@ -2,6 +2,7 @@ import type { JsonValue } from "@crewon/contracts";
 import type { OutboxRetentionStore } from "./outbox-retention-port.ts";
 import type {
   AutomationInvocationBinding,
+  ExtensionExecutionTarget,
   FrozenWorkflowVersionBinding,
 } from "@crewon/domain";
 
@@ -75,6 +76,8 @@ export type WorkItemExecutionScope = Readonly<{
   tenantId: string;
   extensionImplementationDigest: string;
   unboundRuns: "include" | "exclude";
+  /** Optional exact prepared deployment set; an empty set excludes every bound Run. */
+  extensionTargets?: readonly ExtensionExecutionTarget[];
 }>;
 
 export type QueueClaimInput = Readonly<{

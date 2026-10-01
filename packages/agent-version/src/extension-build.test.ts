@@ -15,9 +15,28 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   assertComfyImplementationDigest,
+  createScopedExtensionBuildIdentity,
+  EXTENSION_HISTORICAL_WORK_ITEM_SCOPE,
   getComfyImplementationDigest,
   readComfySourceFingerprint,
 } from "./extension-build.ts";
+
+test("the current scoped producer declares prepared-target historical task isolation", () => {
+  const identity = createScopedExtensionBuildIdentity({
+    implementationDigest: getComfyImplementationDigest(),
+    bundlePaths: [],
+  });
+  assert.equal(
+    EXTENSION_HISTORICAL_WORK_ITEM_SCOPE,
+    "crewon.extension-work-item-scope.v1",
+  );
+  assert.equal(identity.schemaVersion, "crewon.extension-build-identity.v1");
+  assert.ok("historicalWorkItemScope" in identity);
+  assert.equal(
+    identity.historicalWorkItemScope,
+    EXTENSION_HISTORICAL_WORK_ITEM_SCOPE,
+  );
+});
 
 function fixture(context: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "crewon-extension-source-"));
@@ -39,6 +58,22 @@ function fixture(context: TestContext) {
     "export const adapter = 'v1';\n",
   );
   write(
+    "apps/control-api/package.json",
+    JSON.stringify({
+      name: "@crewon/control-api",
+      dependencies: { "@crewon/artifacts": "workspace:*" },
+    }),
+  );
+  write("apps/control-api/src/main.ts", "export const control = 'v1';\n");
+  write(
+    "apps/device-gateway/package.json",
+    JSON.stringify({
+      name: "@crewon/device-gateway",
+      dependencies: { "@crewon/contracts": "workspace:*" },
+    }),
+  );
+  write("apps/device-gateway/src/main.ts", "export const device = 'v1';\n");
+  write(
     "packages/contracts/package.json",
     JSON.stringify({
       name: "@crewon/contracts",
@@ -51,12 +86,35 @@ function fixture(context: TestContext) {
     JSON.stringify({ name: "@crewon/domain" }),
   );
   write("packages/domain/src/index.ts", "export const domain = 'v1';\n");
+  write(
+    "packages/artifacts/package.json",
+    JSON.stringify({
+      name: "@crewon/artifacts",
+      dependencies: { "@crewon/process-lifecycle": "workspace:*" },
+    }),
+  );
+  write("packages/artifacts/src/index.ts", "export const artifact = 'v1';\n");
+  write(
+    "packages/process-lifecycle/package.json",
+    JSON.stringify({ name: "@crewon/process-lifecycle" }),
+  );
+  write(
+    "packages/process-lifecycle/src/index.ts",
+    "export const process = 'v1';\n",
+  );
   write("pnpm-lock.yaml", "lockfileVersion: '9.0'\n");
   write(".node-version", "24.18.1\n");
   write(
     "scripts/stage-desktop-runtime.ts",
     "export const target = 'node24';\n",
   );
+  for (const script of [
+    "local-workspace-checks-mcp.mjs",
+    "local-workspace-command-guard.mts",
+    "local-workspace-commands.mts",
+    "local-workspace-reads.mts",
+  ])
+    write(`scripts/${script}`, "export const input = 'v1';\n");
   return { root, write };
 }
 
@@ -87,6 +145,21 @@ test("test edits leave identity stable while pin, build and dependency lock edit
     "packages/contracts/src/fixtures/sample.ts",
     "export const fixture = 2;\n",
   );
+  write("apps/control-api/src/control.test.ts", "throw new Error('test');\n");
+  write(
+    "apps/device-gateway/src/device.test-support.ts",
+    "export const fixture = 3;\n",
+  );
+  write(
+    "apps/control-api/src/fixtures/sample.ts",
+    "export const fixture = 4;\n",
+  );
+  write(
+    "scripts/local-workspace-commands.test.mts",
+    "throw new Error('test');\n",
+  );
+  write("apps/crewon-ui/src/App.tsx", "export const UI = 'changed';\n");
+  write("apps/crewon-ui/src/renderer.ts", "export const state = 'changed';\n");
   assert.equal(readComfySourceFingerprint(root), original);
   write("pnpm-lock.yaml", "lockfileVersion: '9.0'\nsnapshots: {}\n");
   const lockChanged = readComfySourceFingerprint(root);
@@ -99,6 +172,49 @@ test("test edits leave identity stable while pin, build and dependency lock edit
     "export const target = 'changed';\n",
   );
   assert.notEqual(readComfySourceFingerprint(root), nodeChanged);
+});
+
+test("all staged runtime apps and the MCP executable closure affect the shared source identity", async (context) => {
+  for (const path of [
+    "apps/control-api/src/main.ts",
+    "apps/control-api/src/provider-settings-native-coordinator.ts",
+    "apps/control-api/package.json",
+    "apps/device-gateway/src/main.ts",
+    "apps/device-gateway/package.json",
+    "apps/runtime-worker/src/provider-model-catalog-main.ts",
+    "apps/runtime-worker/src/release-main.ts",
+    "packages/artifacts/src/index.ts",
+    "packages/process-lifecycle/src/index.ts",
+    "scripts/local-workspace-checks-mcp.mjs",
+    "scripts/local-workspace-command-guard.mts",
+    "scripts/local-workspace-commands.mts",
+    "scripts/local-workspace-reads.mts",
+  ]) {
+    await context.test(path, (subcontext) => {
+      const { root, write } = fixture(subcontext);
+      const original = readComfySourceFingerprint(root);
+      if (path.endsWith("package.json")) {
+        const value = JSON.parse(readFileSync(join(root, path), "utf8"));
+        write(path, JSON.stringify({ ...value, version: "0.0.1" }));
+      } else write(path, "export const behavior = 'changed';\n");
+      assert.notEqual(readComfySourceFingerprint(root), original);
+    });
+  }
+});
+
+test("missing or symlinked MCP executable inputs fail before a shared build identity is issued", (context) => {
+  const { root } = fixture(context);
+  const input = join(root, "scripts/local-workspace-reads.mts");
+  rmSync(input);
+  assert.throws(
+    () => readComfySourceFingerprint(root),
+    /extension_build_identity_unavailable/u,
+  );
+  symlinkSync(join(root, "packages/domain/src/index.ts"), input);
+  assert.throws(
+    () => readComfySourceFingerprint(root),
+    /extension_source_identity_invalid/u,
+  );
 });
 
 test("source identity rejects missing, oversized, symlinked or escaped production inputs", (context) => {

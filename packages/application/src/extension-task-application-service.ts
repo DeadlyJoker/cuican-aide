@@ -2,6 +2,7 @@ import {
   createExtensionRunBinding,
   extensionCanonicalJson,
   extensionOpaqueId,
+  parseExtensionActivation,
   parseExtensionConfiguration,
   parseExtensionExecutionTarget,
   parseExtensionRunBinding,
@@ -21,6 +22,7 @@ import type {
   ExtensionHostPort,
 } from "./extension-host-port.ts";
 import type { ExtensionStore } from "./extension-store-port.ts";
+import type { ExtensionQueryHostPort } from "./extension-query-host-port.ts";
 import type { ExternalOperationStore } from "./external-operation-store-port.ts";
 import type { RunStore } from "./run-store-port.ts";
 import { TurnApplicationService } from "./turn-application-service.ts";
@@ -31,6 +33,7 @@ import {
   extensionScopeFor,
   extensionUseCase,
   requireExtensionRegistration,
+  requirePinnedExtensionRegistration,
 } from "./extension-application-support.ts";
 
 export type ExtensionTaskIntent =
@@ -53,6 +56,7 @@ type Dependencies = Readonly<{
   operations: ExternalOperationStore;
   catalog: ExtensionCatalogPort;
   host: ExtensionHostPort;
+  queryHost?: ExtensionQueryHostPort;
   authorization: AuthorizationPort;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
@@ -95,6 +99,8 @@ export class ExtensionTaskApplicationService {
       const expectedThreadRevision = value.expectedThreadRevision;
       const idempotencyKey = extensionOpaqueId(value.idempotencyKey);
       const intent = parseIntent(value.intent);
+      const queryHost =
+        intent.kind === "query" ? this.#dependencies.queryHost : undefined;
       const command = {
         pluginId: scope.pluginId,
         threadId,
@@ -139,9 +145,21 @@ export class ExtensionTaskApplicationService {
           receipt,
         });
       if (previous !== null) return previous;
-      const activation =
+      const activationValue =
         await this.#dependencies.extensions.loadExtensionActivation(scope);
-      if (activation === null || activation.state === "revoked")
+      if (activationValue === null)
+        throw new ApplicationError("authorization", "extension_access_revoked");
+      const activation = parseExtensionActivation(activationValue);
+      if (
+        activation.tenantId !== scope.tenantId ||
+        activation.spaceId !== scope.spaceId ||
+        activation.pluginId !== scope.pluginId
+      )
+        throw new ApplicationError(
+          "internal",
+          "extension_activation_scope_mismatch",
+        );
+      if (activation.state === "revoked")
         throw new ApplicationError("authorization", "extension_access_revoked");
       if (
         source === null &&
@@ -167,18 +185,47 @@ export class ExtensionTaskApplicationService {
         this.#dependencies.digester,
       );
       if (
+        frozen.tenantId !== scope.tenantId ||
+        frozen.spaceId !== scope.spaceId ||
+        frozen.pluginId !== scope.pluginId ||
+        frozen.revision !==
+          (source?.configurationRevision ?? activation.configurationRevision) ||
         frozen.contentDigest !==
-        (source?.configurationDigest ?? activation.configurationDigest)
+          (source?.configurationDigest ?? activation.configurationDigest)
       )
         throw new ApplicationError(
           "conflict",
           "extension_configuration_mismatch",
         );
-      const registration = requireExtensionRegistration(
-        this.#dependencies.catalog,
-        this.#dependencies.digester,
-        frozen,
-      );
+      const identity = Object.freeze({
+        pluginId: frozen.pluginId,
+        pluginVersion: frozen.pluginVersion,
+        manifestDigest: frozen.manifestDigest,
+        implementationDigest: frozen.implementationDigest,
+      });
+      const resolved =
+        queryHost === undefined
+          ? undefined
+          : await queryHost.resolveRegistration(
+              Object.freeze({ actor, identity }),
+            );
+      if (resolved === null)
+        throw new ApplicationError(
+          "conflict",
+          "extension_implementation_unavailable",
+        );
+      const registration =
+        queryHost === undefined
+          ? requireExtensionRegistration(
+              this.#dependencies.catalog,
+              this.#dependencies.digester,
+              frozen,
+            )
+          : requirePinnedExtensionRegistration(
+              resolved,
+              this.#dependencies.digester,
+              identity,
+            );
       if (
         registration.manifestDigest !== frozen.manifestDigest ||
         registration.implementationDigest !== frozen.implementationDigest
@@ -191,12 +238,20 @@ export class ExtensionTaskApplicationService {
         intent.kind === "generate"
           ? validateExtensionTaskInput(registration.manifest, intent.input)
           : { kind: "query", operationId: intent.operationId };
-      const readiness = await this.#dependencies.host.evaluate({
+      if (queryHost !== undefined && source !== null)
+        await this.#authorizeQuerySource(actor, scope.pluginId, source);
+      const readinessInput = Object.freeze({
         actor,
         registration,
         configuration: frozen,
         agentVersionId: target.agentVersionId,
       });
+      const readiness =
+        queryHost === undefined
+          ? await this.#dependencies.host.evaluate(readinessInput)
+          : await queryHost.evaluate(
+              Object.freeze({ ...readinessInput, expectedTarget: target }),
+            );
       if (readiness.outcome !== "ready")
         throw new ApplicationError(
           "conflict",
@@ -269,6 +324,8 @@ export class ExtensionTaskApplicationService {
         },
         this.#dependencies.digester,
       );
+      if (queryHost !== undefined && source !== null)
+        await this.#authorizeQuerySource(actor, scope.pluginId, source);
       return this.#dependencies.extensions.commitExtensionTurn({
         turn,
         binding,
@@ -309,6 +366,32 @@ export class ExtensionTaskApplicationService {
         throw new ApplicationError("authorization", "authorization_denied");
   }
 
+  async #authorizeQuerySource(
+    actor: ActorContext,
+    pluginId: string,
+    source: ExtensionRunBinding,
+  ) {
+    await authorizeExtension(
+      this.#dependencies.authorization,
+      actor,
+      "extension:query",
+      extensionScopeFor(actor, pluginId),
+    );
+    const decision = await this.#dependencies.authorization.authorize({
+      actor,
+      action: "run:read",
+      resource: {
+        kind: "run",
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId: source.threadId,
+        runId: source.runId,
+      },
+    });
+    if (decision.outcome !== "allow")
+      throw new ApplicationError("authorization", "authorization_denied");
+  }
+
   async #source(
     actor: ActorContext,
     pluginId: string,
@@ -324,6 +407,24 @@ export class ExtensionTaskApplicationService {
         "notFound",
         "extension_query_source_not_found",
       );
+    const owner = Object.freeze({
+      tenantId: run.tenantId,
+      spaceId: run.spaceId,
+      runId: run.runId,
+      threadId: run.threadId,
+      actorId: run.createdByActorId,
+      agentVersionId: run.agentVersionId,
+      authorityId: run.authorityId,
+      runtimeGeneration: run.runtimeGeneration,
+      policySnapshotId: run.policySnapshotId,
+      workspaceBindingId: run.workspaceBindingId,
+    });
+    if (
+      owner.tenantId !== actor.tenantId ||
+      owner.spaceId !== actor.spaceId ||
+      owner.runId !== intent.sourceRunId
+    )
+      throw new ApplicationError("internal", "extension_query_source_invalid");
     const permission = await this.#dependencies.authorization.authorize({
       actor,
       action: "run:read",
@@ -331,15 +432,16 @@ export class ExtensionTaskApplicationService {
         kind: "run",
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
-        threadId: run.threadId,
-        runId: run.runId,
+        threadId: owner.threadId,
+        runId: owner.runId,
       },
     });
     if (permission.outcome !== "allow")
       throw new ApplicationError("authorization", "authorization_denied");
     const value = await this.#dependencies.extensions.loadExtensionRunBinding({
-      ...actor,
-      runId: run.runId,
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      runId: owner.runId,
     });
     if (value === null)
       throw new ApplicationError(
@@ -350,12 +452,30 @@ export class ExtensionTaskApplicationService {
     if (
       source.pluginId !== pluginId ||
       source.source !== null ||
-      source.threadId !== run.threadId
+      source.threadId !== owner.threadId
     )
       throw new ApplicationError(
         "notFound",
         "extension_query_source_not_found",
       );
+    if (
+      source.tenantId !== actor.tenantId ||
+      source.spaceId !== actor.spaceId ||
+      source.runId !== owner.runId ||
+      source.actorId !== owner.actorId ||
+      [
+        "agentVersionId",
+        "authorityId",
+        "runtimeGeneration",
+        "policySnapshotId",
+        "workspaceBindingId",
+      ].some(
+        (key) =>
+          source.target[key as keyof typeof source.target] !==
+          owner[key as keyof typeof owner],
+      )
+    )
+      throw new ApplicationError("internal", "extension_query_source_invalid");
     const operation = await this.#dependencies.operations.loadExternalOperation(
       {
         tenantId: actor.tenantId,
@@ -368,6 +488,16 @@ export class ExtensionTaskApplicationService {
       throw new ApplicationError(
         "notFound",
         "extension_query_source_not_found",
+      );
+    if (
+      operation.tenantId !== actor.tenantId ||
+      operation.runId !== source.runId ||
+      operation.bindingDigest !== source.bindingDigest ||
+      operation.operationId !== intent.operationId
+    )
+      throw new ApplicationError(
+        "internal",
+        "external_operation_identity_conflict",
       );
     return source;
   }

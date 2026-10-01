@@ -76,6 +76,8 @@ export async function retainedExtensionWorkerLaunchPlan(input: {
     implementationDigest: selection.implementationDigest,
     expectedBuildIdentityDigest: selection.buildIdentityDigest,
   });
+  // An older complete archive can still be inspected, but its Worker cannot
+  // prove prepared-target queue isolation and must never be executed here.
   if (build.historicalWorkItemScope !== EXTENSION_HISTORICAL_WORK_ITEM_SCOPE)
     throw new Error("retained_extension_worker_scope_unsupported");
   const worker = build.bundles.find(

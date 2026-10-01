@@ -259,6 +259,7 @@ test("Postgres composition snapshots metadata host values before its mocked open
   assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
   assert.equal(requests[0]?.executionScope?.tenantId, initial.runtimeTenantId);
   assert.equal(requests[0]?.executionScope?.unboundRuns, "include");
+  assert.deepEqual(requests[0]?.executionScope?.extensionTargets, []);
 });
 
 test("Postgres composition snapshots historical runtime paths, environment and private host before mocked open", async (context) => {
@@ -319,10 +320,27 @@ test("Postgres composition snapshots historical runtime paths, environment and p
     200,
   );
   assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
+  const deployment = await store.loadAgentVersionDeployment({
+    tenantId: initial.runtimeTenantId,
+    agentVersionId: plugin.version.agentVersionId,
+  });
+  assert.ok(deployment);
   assert.deepEqual(requests[0]?.executionScope, {
     tenantId: initial.runtimeTenantId,
     extensionImplementationDigest: plugin.registration.implementationDigest,
     unboundRuns: "exclude",
+    extensionTargets: [
+      {
+        executionAuthority: "crewonKernel",
+        agentVersionId: plugin.version.agentVersionId,
+        agentVersionContentDigest: plugin.version.contentDigest,
+        materializationDigest: deployment.materializationDigest,
+        authorityId: "historical-plugin-authority",
+        runtimeGeneration: plugin.version.runtimeGeneration,
+        policySnapshotId: plugin.version.policySnapshotId,
+        workspaceBindingId: null,
+      },
+    ],
   });
 });
 

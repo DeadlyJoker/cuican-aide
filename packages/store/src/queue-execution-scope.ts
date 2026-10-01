@@ -42,6 +42,7 @@ export function workItemExecutionScopeSql(input: {
   extensionTablePrefix: string;
   tenantParameter: string;
   digestParameter: string;
+  targetsParameter: string;
   dialect: "sqlite" | "postgres";
 }): string {
   const scope = input.claim.executionScope;
@@ -53,12 +54,42 @@ export function workItemExecutionScopeSql(input: {
     input.dialect === "sqlite"
       ? "json_extract(c.configuration_json, '$.implementationDigest')"
       : "c.configuration_json->>'implementationDigest'";
+  const targets =
+    scope.extensionTargets === undefined
+      ? ""
+      : input.dialect === "postgres"
+        ? ` AND EXISTS (SELECT 1 FROM jsonb_array_elements(${input.targetsParameter}::jsonb) prepared
+            WHERE b.binding_json->'target' = prepared.value)`
+        : sqliteTargetsPredicate(input.targetsParameter);
   return ` AND tenant_id = ${input.tenantParameter} AND (
     EXISTS (SELECT 1 FROM ${bindings} b JOIN ${configurations} c
       ON c.tenant_id=b.tenant_id AND c.space_id=b.space_id AND c.plugin_id=b.plugin_id AND c.revision=b.configuration_revision
-      WHERE ${identity} AND ${digest} = ${input.digestParameter})
+      WHERE ${identity} AND ${digest} = ${input.digestParameter}${targets})
     ${scope.unboundRuns === "include" ? `OR NOT EXISTS (SELECT 1 FROM ${bindings} b WHERE ${identity})` : ""}
   )`;
+}
+
+/** Object order is irrelevant; missing/extra fields and SQL-null vs JSON-null stay distinct. */
+function sqliteTargetsPredicate(parameter: string): string {
+  const fields = [
+    "executionAuthority",
+    "agentVersionId",
+    "agentVersionContentDigest",
+    "materializationDigest",
+    "authorityId",
+    "runtimeGeneration",
+    "policySnapshotId",
+  ];
+  const matches = fields.map(
+    (field) =>
+      `json_type(b.binding_json, '$.target.${field}') = 'text' AND json_extract(b.binding_json, '$.target.${field}') = json_extract(prepared.value, '$.${field}')`,
+  );
+  return ` AND EXISTS (SELECT 1 FROM json_each(${parameter}) prepared
+    WHERE json_type(b.binding_json, '$.target') = 'object'
+      AND (SELECT COUNT(*) FROM json_each(b.binding_json, '$.target')) = 8
+      AND ${matches.join(" AND ")}
+      AND json_type(b.binding_json, '$.target.workspaceBindingId') = json_type(prepared.value, '$.workspaceBindingId')
+      AND json_extract(b.binding_json, '$.target.workspaceBindingId') IS json_extract(prepared.value, '$.workspaceBindingId'))`;
 }
 
 function dataRecord(

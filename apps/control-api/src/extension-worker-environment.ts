@@ -1,22 +1,22 @@
 import { inspect } from "node:util";
 import type { ActorContext } from "@crewon/application";
 import { parseExtensionHostActor } from "@crewon/contracts";
-import { parseLoopbackExtensionHostConfig } from "./extension-worker-client.ts";
+import {
+  parseExtensionWorkerRouterConfig,
+  type ExtensionWorkerRouterConfig,
+} from "./extension-host-router.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 export type ControlExtensionWorkerEnvironment = Readonly<{
   actor: ActorContext;
-  extensionWorker: Readonly<{
-    origin: string;
-    token: string;
-    deadlineMs?: number;
-  }>;
+  extensionWorker: ExtensionWorkerRouterConfig;
 }>;
 const ENABLED = "CREWON_EXTENSIONS_ENABLED";
 const ORIGIN = "CREWON_EXTENSION_HOST_ORIGIN";
 const TOKEN = "CREWON_EXTENSION_HOST_TOKEN";
 const DEADLINE = "CREWON_EXTENSION_HOST_DEADLINE_MS";
-const PEER_NAMES = [ORIGIN, TOKEN, DEADLINE] as const;
+const HISTORICAL = "CREWON_EXTENSION_HISTORICAL_HOSTS_JSON";
+const PEER_NAMES = [ORIGIN, TOKEN, DEADLINE, HISTORICAL] as const;
 
 /** Only explicit standalone ownership can opt in to the authenticated local Worker host. */
 export function resolveControlExtensionWorkerEnvironment(
@@ -43,18 +43,15 @@ export function resolveControlExtensionWorkerEnvironment(
     const rawDeadline = environment[DEADLINE];
     const deadlineMs =
       rawDeadline === undefined ? undefined : parseDeadline(rawDeadline);
-    const checked = parseLoopbackExtensionHostConfig({
+    const rawHistorical = environment[HISTORICAL];
+    const historicalPeers =
+      rawHistorical === undefined ? undefined : parseHistorical(rawHistorical);
+    extensionWorker = parseExtensionWorkerRouterConfig({
       origin,
       token,
       ...(deadlineMs === undefined ? {} : { deadlineMs }),
+      ...(historicalPeers === undefined ? {} : { historicalPeers }),
     });
-    extensionWorker = redact(
-      Object.freeze({
-        origin: checked.origin,
-        token: checked.token,
-        ...(deadlineMs === undefined ? {} : { deadlineMs: checked.deadlineMs }),
-      }),
-    );
   }
   if (enabled !== "1") return undefined;
   if (extensionWorker === undefined)
@@ -85,6 +82,17 @@ function parseDeadline(value: string): number {
   const parsed = Number(value);
   if (parsed < 1000 || parsed > 30000) throw new Error(`${DEADLINE}_invalid`);
   return parsed;
+}
+function parseHistorical(value: string): unknown {
+  if (Buffer.byteLength(value, "utf8") > 16 * 1024)
+    throw new Error(`${HISTORICAL}_invalid`);
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) throw new Error();
+    return parsed;
+  } catch {
+    throw new Error(`${HISTORICAL}_invalid`);
+  }
 }
 function redact<T extends object>(input: T): T {
   // Clone before attaching the inspection hook; callers may already freeze their bounded config.

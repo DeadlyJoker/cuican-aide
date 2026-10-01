@@ -559,7 +559,7 @@ test(
     });
     assert.equal(
       retained.historicalWorkItemScope,
-      "crewon.extension-work-item-scope.v0",
+      "crewon.extension-work-item-scope.v1",
     );
     assert.deepEqual(
       retained.bundles.map(({ file }) => file),

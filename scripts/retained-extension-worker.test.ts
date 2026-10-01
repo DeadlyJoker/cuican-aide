@@ -164,49 +164,60 @@ test("recovery launches only the verified retained Worker and forces historical 
   );
 });
 
-test("legacy v0 builds remain retainable but cannot be started in historical mode", async (context) => {
-  const directory = realpathSync(
-    mkdtempSync(join(tmpdir(), "crewon-legacy-retained-launcher-")),
-  );
-  context.after(() => rmSync(directory, { recursive: true, force: true }));
-  const source = join(directory, "runtime-worker.mjs");
-  const audit = join(directory, "must-not-execute.json");
-  writeFileSync(
-    source,
-    `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(audit)},'executed');`,
-  );
-  writeFileSync(
-    join(directory, EXTENSION_BUILD_IDENTITY_FILE),
-    JSON.stringify(
-      createExtensionBuildIdentity(implementationDigest, [source]),
-    ),
-  );
-  const legacy = await retainExtensionBuild({
-    dataRoot: directory,
-    currentBuildDirectory: directory,
-    expectedImplementationDigest: implementationDigest,
-  });
-  assert.equal(legacy.historicalWorkItemScope, null);
-  const cli = fileURLToPath(
-    new URL("./retained-extension-worker.ts", import.meta.url),
-  );
-  assert.throws(
-    () =>
-      execFileSync(
-        process.execPath,
-        [
-          "--experimental-strip-types",
-          cli,
-          "--data-root",
-          directory,
-          "--implementation-digest",
-          implementationDigest,
-          "--build-identity-digest",
-          legacy.buildIdentityDigest,
-        ],
-        { env: { ...process.env, ...environment }, stdio: "pipe" },
-      ),
-    /scope_unsupported/u,
-  );
-  assert.throws(() => readFileSync(audit), /ENOENT/u);
+test("legacy schema and implementation-only scope builds remain retainable but cannot execute", async (context) => {
+  for (const legacyScope of [null, "crewon.extension-work-item-scope.v0"])
+    await context.test(legacyScope ?? "legacy schema", async (subcontext) => {
+      const directory = realpathSync(
+        mkdtempSync(join(tmpdir(), "crewon-legacy-retained-launcher-")),
+      );
+      subcontext.after(() =>
+        rmSync(directory, { recursive: true, force: true }),
+      );
+      const source = join(directory, "runtime-worker.mjs");
+      const audit = join(directory, "must-not-execute.json");
+      writeFileSync(
+        source,
+        `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(audit)},'executed');`,
+      );
+      writeFileSync(
+        join(directory, EXTENSION_BUILD_IDENTITY_FILE),
+        JSON.stringify(
+          legacyScope === null
+            ? createExtensionBuildIdentity(implementationDigest, [source])
+            : {
+                ...createExtensionBuildIdentity(implementationDigest, [source]),
+                schemaVersion: "crewon.extension-build-identity.v1",
+                historicalWorkItemScope: legacyScope,
+              },
+        ),
+      );
+      const legacy = await retainExtensionBuild({
+        dataRoot: directory,
+        currentBuildDirectory: directory,
+        expectedImplementationDigest: implementationDigest,
+      });
+      assert.equal(legacy.historicalWorkItemScope, legacyScope);
+      const cli = fileURLToPath(
+        new URL("./retained-extension-worker.ts", import.meta.url),
+      );
+      assert.throws(
+        () =>
+          execFileSync(
+            process.execPath,
+            [
+              "--experimental-strip-types",
+              cli,
+              "--data-root",
+              directory,
+              "--implementation-digest",
+              implementationDigest,
+              "--build-identity-digest",
+              legacy.buildIdentityDigest,
+            ],
+            { env: { ...process.env, ...environment }, stdio: "pipe" },
+          ),
+        /scope_unsupported/u,
+      );
+      assert.throws(() => readFileSync(audit), /ENOENT/u);
+    });
 });

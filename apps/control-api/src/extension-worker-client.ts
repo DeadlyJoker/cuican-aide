@@ -46,7 +46,10 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
   }
 
   /** Startup negotiation returns an immutable synchronous catalog; every admission rechecks Worker readiness. */
-  async loadCatalog(actorInput: ActorContext): Promise<ExtensionCatalogPort> {
+  async loadCatalog(
+    actorInput: ActorContext,
+    options: Readonly<{ signal?: AbortSignal }> = {},
+  ): Promise<ExtensionCatalogPort> {
     const actor = parseExtensionHostActor(actorInput);
     const response = await this.#post(
       parseExtensionHostRequest({
@@ -54,6 +57,7 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
         operation: "catalog",
         actor,
       }),
+      options.signal,
     );
     if (response.operation !== "catalog") throw responseInvalid();
     const registrations = Object.freeze(
@@ -100,6 +104,7 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
 
   async evaluate(
     input: Parameters<ExtensionHostPort["evaluate"]>[0],
+    options: Readonly<{ signal?: AbortSignal }> = {},
   ): Promise<ExtensionReadiness> {
     const checked = configurationRequest(input);
     const request = parseExtensionHostRequest({
@@ -109,7 +114,7 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
       agentVersionId: input.agentVersionId,
     });
     if (request.operation !== "readiness") throw requestInvalid();
-    const response = await this.#post(request);
+    const response = await this.#post(request, options.signal);
     if (
       response.operation !== "readiness" ||
       response.agentVersionId !== request.agentVersionId
@@ -140,12 +145,19 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
     await Promise.allSettled([...this.#pending]);
   }
 
-  #post(request: ExtensionHostRequest): Promise<ExtensionHostResponse> {
+  #post(
+    request: ExtensionHostRequest,
+    signal?: AbortSignal,
+  ): Promise<ExtensionHostResponse> {
     if (this.#closed)
       return Promise.reject(
         new ExtensionHostWorkerError("extension_host_closed"),
       );
+    if (signal?.aborted) return Promise.reject(signal.reason);
     const controller = new AbortController();
+    const aborted = () => controller.abort(signal?.reason);
+    if (signal?.aborted) aborted();
+    else signal?.addEventListener("abort", aborted, { once: true });
     this.#controllers.add(controller);
     const timer = setTimeout(
       () =>
@@ -199,6 +211,7 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
           });
         throw responseInvalid(error);
       } finally {
+        signal?.removeEventListener("abort", aborted);
         clearTimeout(timer);
         this.#controllers.delete(controller);
       }
