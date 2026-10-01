@@ -95,3 +95,4 @@ export * from "./external-operation-store-port.ts";
 export * from "./extension-store-port.ts";
 export * from "./extension-host-port.ts";
 export * from "./extension-configuration-application-service.ts";
+export * from "./extension-execution-authorization.ts";

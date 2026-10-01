@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import { canonicalActionIntent } from "@crewon/contracts";
-import type { ToolExecutionCommand } from "@crewon/tool-broker";
-import {
-  COMFY_SUBMIT_TOOL,
-  ComfyToolRuntime,
-} from "./extensions/comfyui-tool-runtime.ts";
+import type {
+  ToolExecutionCommand,
+  ToolRuntimePort,
+} from "@crewon/tool-broker";
+import { COMFY_SUBMIT_TOOL } from "./extensions/comfyui-tool-runtime.ts";
 
 export function comfyCommand(
-  runtime: ComfyToolRuntime,
+  runtime: Pick<ToolRuntimePort, "executionPolicy">,
   options: {
     name?: string;
     args?: unknown;

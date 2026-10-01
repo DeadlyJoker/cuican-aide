@@ -16,6 +16,9 @@ export class ProductionComfyHttp implements ComfyJsonHttpPort {
   readonly #bindingId: string;
   readonly #egress: NetworkEgressResolver;
   readonly #transport: PinnedHttpPort;
+  readonly #beforeDispatch:
+    | ((input: Parameters<ComfyJsonHttpPort["request"]>[0]) => Promise<void>)
+    | undefined;
 
   constructor(config: {
     baseUrl: string;
@@ -23,6 +26,10 @@ export class ProductionComfyHttp implements ComfyJsonHttpPort {
     bindingId: string;
     dns?: NetworkDnsResolver;
     transport?: PinnedHttpPort;
+    /** Fresh host authorization, after DNS resolution and immediately before network dispatch. */
+    beforeDispatch?: (
+      input: Parameters<ComfyJsonHttpPort["request"]>[0],
+    ) => Promise<void>;
   }) {
     this.#baseUrl = comfyServiceUrl(config.baseUrl);
     if (
@@ -43,6 +50,7 @@ export class ProductionComfyHttp implements ComfyJsonHttpPort {
       policy: new ProductionNetworkEgressPolicy(),
     });
     this.#transport = config.transport ?? new PinnedNodeHttpTransport();
+    this.#beforeDispatch = config.beforeDispatch;
   }
 
   async request(
@@ -79,6 +87,8 @@ export class ProductionComfyHttp implements ComfyJsonHttpPort {
       },
       signal,
     );
+    await this.#beforeDispatch?.({ ...input, signal });
+    signal.throwIfAborted();
     const response = await this.#transport.request(
       {
         method: input.method,

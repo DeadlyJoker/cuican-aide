@@ -418,6 +418,7 @@ function sha256(value) {
 }
 async function implementationIdentity() {
   const files = [
+    "comfyui-tool-catalog.ts",
     "comfyui-api.ts",
     "comfyui-http.ts",
     "comfyui-krea2-workflow.ts",

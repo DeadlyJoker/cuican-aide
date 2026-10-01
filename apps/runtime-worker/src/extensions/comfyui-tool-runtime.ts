@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type {
   ExternalOperation,
   ExternalOperationScope,
+  ExternalOperationLocator,
   ExternalOperationStore,
   ReserveExternalOperation,
 } from "@crewon/application";
@@ -23,40 +24,16 @@ import {
 import { comfyServiceUrl } from "./comfyui-http.ts";
 import { krea2Workflow } from "./comfyui-krea2-workflow.ts";
 
-export const COMFY_SUBMIT_TOOL = "crewon_comfyui_krea2__submit";
-export const COMFY_OBSERVE_TOOL = "crewon_comfyui_krea2__observe";
-const definitions: readonly ToolDefinition[] = Object.freeze<ToolDefinition[]>([
-  {
-    schemaVersion: "crewon.tool-definition.v0",
-    kind: "function",
-    name: COMFY_SUBMIT_TOOL,
-    description:
-      "Generate one image from a text prompt. Submit once, save operationId, then use observe. A submitted status is not a finished image. Never resubmit an uncertain request.",
-    execution: "serial",
-    inputSchema: {
-      type: "object",
-      properties: {
-        prompt: { type: "string", minLength: 1, maxLength: 2_000 },
-      },
-      required: ["prompt"],
-      additionalProperties: false,
-    },
-  },
-  {
-    schemaVersion: "crewon.tool-definition.v0",
-    kind: "function",
-    name: COMFY_OBSERVE_TOOL,
-    description:
-      "Read a previously submitted image operation in this Run. Returns its actual status and image URLs only when generation succeeded. Never invent an operationId or treat unknownOutcome as failure to submit.",
-    execution: "serial",
-    inputSchema: {
-      type: "object",
-      properties: { operationId: { type: "string", format: "uuid" } },
-      required: ["operationId"],
-      additionalProperties: false,
-    },
-  },
-]);
+import {
+  COMFY_SUBMIT_TOOL,
+  COMFY_OBSERVE_TOOL,
+  comfyToolDefinitions,
+  comfyToolExecutionPolicy,
+} from "./comfyui-tool-catalog.ts";
+export {
+  COMFY_SUBMIT_TOOL,
+  COMFY_OBSERVE_TOOL,
+} from "./comfyui-tool-catalog.ts";
 
 /** Run-scoped adapter. The host owns the immutable binding, authority, store and service URL. */
 export class ComfyToolRuntime implements ToolRuntimePort {
@@ -67,6 +44,7 @@ export class ComfyToolRuntime implements ToolRuntimePort {
   readonly #api: ComfyApi;
   readonly #approval: ToolExecutionPolicy["approvalRequirement"];
   readonly #now: () => Date;
+  readonly #querySource: ExternalOperationLocator | null;
 
   constructor(config: {
     scope: ExternalOperationScope;
@@ -76,6 +54,8 @@ export class ComfyToolRuntime implements ToolRuntimePort {
     http: ComfyJsonHttpPort;
     approvalRequirement: ToolExecutionPolicy["approvalRequirement"];
     now?: () => Date;
+    /** Host-authorized original operation for a separate query Run; never model supplied. */
+    querySource?: ExternalOperationLocator;
   }) {
     this.#scope = Object.freeze({ ...config.scope });
     this.#bindingId = config.bindingId;
@@ -84,37 +64,32 @@ export class ComfyToolRuntime implements ToolRuntimePort {
     this.#api = new ComfyApi(config.http);
     this.#approval = config.approvalRequirement;
     this.#now = config.now ?? (() => new Date());
-    for (const definition of definitions)
+    this.#querySource =
+      config.querySource === undefined
+        ? null
+        : Object.freeze({ ...config.querySource });
+    if (
+      this.#querySource !== null &&
+      (this.#querySource.tenantId !== this.#scope.tenantId ||
+        this.#querySource.runId === this.#scope.runId)
+    )
+      throw new Error("comfy_query_source_invalid");
+    for (const definition of comfyToolDefinitions())
       validateToolExecutionPolicy(
         this.executionPolicy(definition.kind, definition.name)!,
       );
   }
 
   definitions(): readonly ToolDefinition[] {
-    return structuredClone(definitions);
+    return comfyToolDefinitions();
   }
 
   executionPolicy(kind: string, name: string): ToolExecutionPolicy | null {
-    if (
-      kind !== "function" ||
-      (name !== COMFY_SUBMIT_TOOL && name !== COMFY_OBSERVE_TOOL)
-    )
-      return null;
-    const submit = name === COMFY_SUBMIT_TOOL;
-    return {
-      effect: submit ? "mutation" : "readOnly",
-      recovery: submit ? "reconcilable" : "replaySafe",
-      resourceBindingId: this.#bindingId,
-      credentialBindingId: null,
-      executionTarget: { kind: "control", bindingId: this.#bindingId },
-      capability: submit ? "extension.image.generate" : "extension.image.read",
-      approvalRequirement: submit ? this.#approval : "none",
-      limits: {
-        timeoutMs: 30_000,
-        maxOutputBytes: 16_384,
-        maxArtifactBytes: 16_384,
-      },
-    };
+    return comfyToolExecutionPolicy(
+      { bindingId: this.#bindingId, approvalRequirement: this.#approval },
+      kind,
+      name,
+    );
   }
 
   async execute(
@@ -182,6 +157,8 @@ export class ComfyToolRuntime implements ToolRuntimePort {
     validateToolExecutionCommand(command);
     if (command.runId !== this.#scope.runId)
       throw new Error("comfy_run_binding_mismatch");
+    if (this.#querySource !== null && command.name === COMFY_SUBMIT_TOOL)
+      throw new Error("comfy_query_submission_forbidden");
     const policy = this.executionPolicy(command.kind, command.name);
     if (policy === null) throw new Error("comfy_tool_not_bound");
     validateToolExecutionPolicyMatchesIntent(policy, command.actionIntent);
@@ -207,15 +184,7 @@ export class ComfyToolRuntime implements ToolRuntimePort {
   }
 
   #reservation(command: ToolExecutionCommand, prompt: string) {
-    const raw = sha256(
-      JSON.stringify([
-        this.#scope.tenantId,
-        this.#scope.runId,
-        this.#scope.bindingDigest,
-        command.idempotencyKey,
-      ]),
-    ).slice(7, 39);
-    const operationId = `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
+    const operationId = comfyOperationId(this.#scope, command.idempotencyKey);
     return {
       ...this.#scope,
       operationId,
@@ -293,8 +262,13 @@ export class ComfyToolRuntime implements ToolRuntimePort {
     operationId: string,
     signal: AbortSignal,
   ) {
+    if (
+      this.#querySource !== null &&
+      operationId !== this.#querySource.operationId
+    )
+      return completed(command, null, { error: "operation_not_found" }, true);
     const operation = await this.#store.loadExternalOperation({
-      ...this.#scope,
+      ...(this.#querySource ?? this.#scope),
       operationId,
     });
     if (operation === null)
@@ -342,6 +316,22 @@ export class ComfyToolRuntime implements ToolRuntimePort {
     });
     return updated.operation;
   }
+}
+
+/** Stable correlation identity only; possession is never authorization or provider deduplication. */
+export function comfyOperationId(
+  scope: ExternalOperationScope,
+  idempotencyKey: string,
+): string {
+  const raw = sha256(
+    JSON.stringify([
+      scope.tenantId,
+      scope.runId,
+      scope.bindingDigest,
+      idempotencyKey,
+    ]),
+  ).slice(7, 39);
+  return `${raw.slice(0, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}-${raw.slice(16, 20)}-${raw.slice(20)}`;
 }
 
 function boundedSignal(command: ToolExecutionCommand, signal: AbortSignal) {
