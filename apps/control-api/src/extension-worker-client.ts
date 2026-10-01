@@ -38,23 +38,10 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
     input: { origin: string; token: string; deadlineMs?: number },
     dependencies: { fetch?: typeof globalThis.fetch } = {},
   ) {
-    this.#url = loopbackUrl(input.origin);
-    const tokenBytes = Buffer.byteLength(input.token);
-    if (
-      tokenBytes < 32 ||
-      tokenBytes > 8192 ||
-      /[\u0000-\u0020\u007f]/u.test(input.token)
-    )
-      throw new ExtensionHostWorkerError("extension_host_token_invalid");
-    this.#token = input.token;
-    const deadlineMs = input.deadlineMs ?? 10_000;
-    if (
-      !Number.isSafeInteger(deadlineMs) ||
-      deadlineMs < 1_000 ||
-      deadlineMs > 30_000
-    )
-      throw new ExtensionHostWorkerError("extension_host_deadline_invalid");
-    this.#deadlineMs = deadlineMs;
+    const checked = parseLoopbackExtensionHostConfig(input);
+    this.#url = loopbackUrl(checked.origin);
+    this.#token = checked.token;
+    this.#deadlineMs = checked.deadlineMs;
     this.#fetch = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
@@ -223,6 +210,34 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
     );
     return task;
   }
+}
+
+/** Pure peer validation; disabling the plugin never needs to construct a client or open a connection. */
+export function parseLoopbackExtensionHostConfig(input: {
+  origin: string;
+  token: string;
+  deadlineMs?: number;
+}): Readonly<{ origin: string; token: string; deadlineMs: number }> {
+  loopbackUrl(input.origin);
+  const tokenBytes = Buffer.byteLength(input.token);
+  if (
+    tokenBytes < 32 ||
+    tokenBytes > 8192 ||
+    /[\u0000-\u0020\u007f]/u.test(input.token)
+  )
+    throw new ExtensionHostWorkerError("extension_host_token_invalid");
+  const deadlineMs = input.deadlineMs ?? 10_000;
+  if (
+    !Number.isSafeInteger(deadlineMs) ||
+    deadlineMs < 1_000 ||
+    deadlineMs > 30_000
+  )
+    throw new ExtensionHostWorkerError("extension_host_deadline_invalid");
+  return Object.freeze({
+    origin: input.origin,
+    token: input.token,
+    deadlineMs,
+  });
 }
 
 export class ExtensionHostWorkerError extends Error {

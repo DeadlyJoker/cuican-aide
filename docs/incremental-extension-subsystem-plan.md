@@ -8,6 +8,8 @@
 
 用户补充的 shuohao-skills 与 Reelbench 参考已整理为[短剧工作台参考结论](./short-drama-workbench-reference.md)。后续按项目、阶段成果与资产修订组织短剧插件；当前实施顺序仍为先跑通正式 API / Agent 流程，再细化产品形态。
 
+当前发布及 standalone 进程入口的配置、启动顺序和明确限制见[进程启动说明](./extension-process-startup.md)；这不代表原生桌面、生产多用户或完整产品界面已经交付。
+
 ## 1. 首期边界
 
 **采用现有架构上的增量开发，不迁移团队，不重建 Agent 引擎。** 扩展子系统是一组分布在现有应用和包中的模块，不单独部署一个新的核心服务。

@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
 import {
   createControlDevEnvironment,
   defaultControlDataDirectory,
   developmentAgentVersionId,
+  developmentExtensionsEnabled,
   developmentRuntimeWorkerCount,
   developmentRuntimeWorkerEnvironment,
   responsesEndpoint,
+  stopDevelopmentChildren,
+  waitDevelopmentChildExit,
+  waitForDevelopmentExtensionHost,
 } from "./crewon-control-web-dev.mjs";
 
 test("uses the existing desktop development data directory on macOS", () => {
@@ -15,6 +22,268 @@ test("uses the existing desktop development data directory on macOS", () => {
     defaultControlDataDirectory("darwin", "/Users/test"),
     "/Users/test/Library/Application Support/ai.crewon.desktop.dev/control-runtime-v0",
   );
+});
+
+test("plugin opt-in requires a single Worker while the disabled topology stays unchanged", () => {
+  assert.equal(developmentExtensionsEnabled({}, 8), false);
+  assert.equal(
+    developmentExtensionsEnabled({ CREWON_EXTENSIONS_ENABLED: "0" }, 2),
+    false,
+  );
+  assert.equal(
+    developmentExtensionsEnabled({ CREWON_EXTENSIONS_ENABLED: "1" }, 1),
+    true,
+  );
+  assert.throws(
+    () => developmentExtensionsEnabled({ CREWON_EXTENSIONS_ENABLED: "1" }, 2),
+    /development_extensions_require_single_worker/u,
+  );
+  for (const flag of ["", "true", "yes", " 1 "]) {
+    assert.throws(
+      () =>
+        developmentExtensionsEnabled({ CREWON_EXTENSIONS_ENABLED: flag }, 1),
+      /CREWON_EXTENSIONS_ENABLED_invalid/u,
+    );
+  }
+});
+
+function fakeWorker() {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.exitCode = null;
+  child.signalCode = null;
+  return child;
+}
+
+test("waits for an actual split ready line and discovers a port-zero listener", async () => {
+  const child = fakeWorker();
+  const environment = {
+    CREWON_EXTENSION_HOST_PORT: "0",
+    CREWON_EXTENSION_HOST_ORIGIN: "http://127.0.0.1:3212",
+  };
+  const ready = waitForDevelopmentExtensionHost({ child, environment });
+  child.stdout.write(
+    "CrewON Runtime Worker started\nCrewON Extension Host ori",
+  );
+  child.stdout.write("gin http://127.0.0.1:49221\r\n");
+  assert.equal(await ready, "http://127.0.0.1:49221");
+  assert.equal(
+    environment.CREWON_EXTENSION_HOST_ORIGIN,
+    "http://127.0.0.1:3212",
+  );
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(child.listenerCount("error"), 0);
+  assert.equal(child.stdout.listenerCount("data"), 0);
+  assert.equal(child.stdout.listenerCount("end"), 0);
+});
+
+test("matches a configured fixed port and rejects substituted origins", async () => {
+  const environment = {
+    CREWON_EXTENSION_HOST_PORT: "3212",
+    CREWON_EXTENSION_HOST_ORIGIN: "http://127.0.0.1:3212",
+  };
+  const child = fakeWorker();
+  const ready = waitForDevelopmentExtensionHost({ child, environment });
+  child.stdout.write("CrewON Extension Host origin http://127.0.0.1:3212\n");
+  assert.equal(await ready, environment.CREWON_EXTENSION_HOST_ORIGIN);
+  assert.throws(
+    () =>
+      waitForDevelopmentExtensionHost({
+        child: fakeWorker(),
+        environment: {
+          ...environment,
+          CREWON_EXTENSION_HOST_ORIGIN: "http://127.0.0.1:3213",
+        },
+      }),
+    /development_extension_host_identity_invalid/u,
+  );
+  const substituted = fakeWorker();
+  const rejection = assert.rejects(
+    waitForDevelopmentExtensionHost({ child: substituted, environment }),
+    /development_extension_host_identity_invalid/u,
+  );
+  substituted.stdout.write(
+    "CrewON Extension Host origin http://127.0.0.1:3213\n",
+  );
+  await rejection;
+});
+
+test("rejects malformed listener identity without normalizing loopback aliases", async () => {
+  for (const origin of [
+    "http://localhost:3212",
+    "http://127.1:3212",
+    "http://2130706433:3212",
+    "http://127.0.0.1:3212/",
+    "http://127.0.0.1:3212/path",
+    "https://127.0.0.1:3212",
+    "http://owner@127.0.0.1:3212",
+    "http://127.0.0.1:0",
+    "http://127.0.0.1:3212?token=secret",
+  ]) {
+    const child = fakeWorker();
+    const rejection = assert.rejects(
+      waitForDevelopmentExtensionHost({
+        child,
+        environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+      }),
+      /development_extension_host_identity_invalid/u,
+    );
+    child.stdout.write(`CrewON Extension Host origin ${origin}\n`);
+    await rejection;
+    assert.equal(child.listenerCount("exit"), 0);
+  }
+});
+
+test("ready wait fails on exit, startup error, stdout end, deadline, cancellation and excess output", async () => {
+  for (const [event, expected] of [
+    ["exit", /exited_before_ready/u],
+    ["error", /start_failed/u],
+    ["end", /stdout_closed_before_ready/u],
+  ]) {
+    const child = fakeWorker();
+    const rejection = assert.rejects(
+      waitForDevelopmentExtensionHost({
+        child,
+        environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+      }),
+      expected,
+    );
+    if (event === "end") child.stdout.end();
+    else child.emit(event, new Error("private-peer-secret"));
+    await rejection;
+    assert.equal(child.listenerCount("exit"), 0);
+  }
+  const timed = fakeWorker();
+  await assert.rejects(
+    waitForDevelopmentExtensionHost({
+      child: timed,
+      environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+      deadlineMs: 10,
+    }),
+    /ready_timeout/u,
+  );
+  assert.equal(timed.stdout.listenerCount("data"), 0);
+  const cancelled = fakeWorker();
+  const controller = new AbortController();
+  const cancellation = assert.rejects(
+    waitForDevelopmentExtensionHost({
+      child: cancelled,
+      environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+      signal: controller.signal,
+    }),
+    /startup_cancelled/u,
+  );
+  controller.abort();
+  await cancellation;
+  const noisy = fakeWorker();
+  const overflow = assert.rejects(
+    waitForDevelopmentExtensionHost({
+      child: noisy,
+      environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+    }),
+    /stdout_limit/u,
+  );
+  noisy.stdout.write(Buffer.alloc(128 * 1024 + 1, "a"));
+  await overflow;
+});
+
+test("failed listener startup closes the already spawned clean Node child", async (t) => {
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      "process.stdout.write('CrewON Extension Host origin http://localhost:3212\\n'); setInterval(() => {}, 1000);",
+    ],
+    {
+      env: {},
+      stdio: ["ignore", "pipe", "ignore"],
+    },
+  );
+  const managed = [{ child, name: "extension startup fixture" }];
+  t.after(() => stopDevelopmentChildren(managed));
+  await assert.rejects(
+    waitForDevelopmentExtensionHost({
+      child,
+      environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+      deadlineMs: 2000,
+    }),
+    /development_extension_host_identity_invalid/u,
+  );
+  await stopDevelopmentChildren(managed);
+  assert.ok(child.exitCode !== null || child.signalCode !== null);
+  await stopDevelopmentChildren(managed);
+});
+
+test("supervision observes already completed children and failed spawns", async () => {
+  const exited = fakeWorker();
+  exited.pid = 123;
+  exited.exitCode = 2;
+  assert.deepEqual(
+    await waitDevelopmentChildExit({ child: exited, name: "fast Worker" }),
+    { code: 2, name: "fast Worker", signal: null },
+  );
+  const signalled = fakeWorker();
+  signalled.pid = 124;
+  signalled.signalCode = "SIGTERM";
+  assert.deepEqual(
+    await waitDevelopmentChildExit({
+      child: signalled,
+      name: "stopped Worker",
+    }),
+    { code: null, name: "stopped Worker", signal: "SIGTERM" },
+  );
+  assert.deepEqual(
+    await waitDevelopmentChildExit({
+      child: fakeWorker(),
+      name: "failed Worker",
+    }),
+    { code: 1, name: "failed Worker", signal: null },
+  );
+  assert.equal(exited.listenerCount("exit"), 0);
+});
+
+test("supervision waits for future exit and removes completion listeners", async () => {
+  const child = fakeWorker();
+  child.pid = 125;
+  const completion = waitDevelopmentChildExit({ child, name: "live Worker" });
+  child.emit("exit", 0, null);
+  assert.deepEqual(await completion, {
+    code: 0,
+    name: "live Worker",
+    signal: null,
+  });
+  assert.equal(child.listenerCount("exit"), 0);
+  assert.equal(child.listenerCount("error"), 0);
+});
+
+test("supervision catches a real child that exits immediately after reporting ready", async (t) => {
+  const child = spawn(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      "process.stdout.write('CrewON Extension Host origin http://127.0.0.1:49221\\n');",
+    ],
+    { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+  );
+  const managed = { child, name: "fast ready Worker" };
+  t.after(() => stopDevelopmentChildren([managed]));
+  assert.equal(
+    await waitForDevelopmentExtensionHost({
+      child,
+      environment: { CREWON_EXTENSION_HOST_PORT: "0" },
+      deadlineMs: 2000,
+    }),
+    "http://127.0.0.1:49221",
+  );
+  // Force supervisor registration to happen after the real exit event.
+  await waitDevelopmentChildExit(managed);
+  assert.deepEqual(await waitDevelopmentChildExit(managed), {
+    code: 0,
+    name: managed.name,
+    signal: null,
+  });
 });
 
 test("builds a provider Responses endpoint without discarding the base path", () => {

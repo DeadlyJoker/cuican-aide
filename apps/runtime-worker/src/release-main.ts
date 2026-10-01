@@ -15,7 +15,10 @@ import {
   modelVariantAgentVersionId,
   runtimeModelCatalog,
 } from "./runtime-model-catalog.ts";
-import { loadAgentVersionDeployments } from "./runtime-binding-config.ts";
+import {
+  agentVersionDeploymentCandidates,
+  loadAgentVersionDeployments,
+} from "./runtime-binding-config.ts";
 import {
   createConfiguredToolRuntime,
   createModelTransport,
@@ -31,29 +34,35 @@ import {
   loadRuntimeReleaseActor,
   RuntimeReleaseAuthorization,
 } from "./release-authority.ts";
+import {
+  loadExtensionReleaseInput,
+  mergeExtensionReleaseInput,
+} from "./extensions/extension-release-input.ts";
 
 const actor = loadRuntimeReleaseActor();
 const bindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
+const route = {
+  authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
+  runtimeGeneration: environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
+  agentVersionId: environmentOr("CREWON_AGENT_VERSION_ID", "default-agent-v1"),
+  policySnapshotId: environmentOr(
+    "CREWON_POLICY_SNAPSHOT_ID",
+    "standalone-policy-v0",
+  ),
+  workspaceBindingId: process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
+};
+const extensionRelease = loadExtensionReleaseInput({
+  environment: process.env,
+  tenantId: actor.tenantId,
+  defaultAgentVersionId: route.agentVersionId,
+});
 const transport = createModelTransport(
   environmentOr("CREWON_MODEL_ADAPTER", "responses"),
 );
 const toolRuntime = await createConfiguredToolRuntime();
 
 try {
-  const route = {
-    authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
-    runtimeGeneration: environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-    agentVersionId: environmentOr(
-      "CREWON_AGENT_VERSION_ID",
-      "default-agent-v1",
-    ),
-    policySnapshotId: environmentOr(
-      "CREWON_POLICY_SNAPSHOT_ID",
-      "standalone-policy-v0",
-    ),
-    workspaceBindingId: process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
-  };
   const common = {
     actor,
     authorization: new RuntimeReleaseAuthorization(actor),
@@ -136,6 +145,9 @@ try {
   ];
   const ownsBindingsManifest =
     process.env.CREWON_MODEL_CATALOG_JSON !== undefined;
+  let generatedBindings:
+    | ReturnType<typeof developmentAgentRuntimeBindings>
+    | undefined;
   if (profiles.length > 0 || ownsBindingsManifest) {
     if (bindingsPath === undefined) {
       throw new Error("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_required");
@@ -150,58 +162,82 @@ try {
     );
     const requestProfile = compatibility?.requestProfile ?? "standard";
     const sequencePolicy = compatibility?.sequencePolicy ?? "required";
-    writeFileSync(
-      bindingsPath,
-      JSON.stringify(
-        developmentAgentRuntimeBindings({
-          versions: [bootstrapVersion, ...additionalAgentVersions],
-          profiles: [
-            undefined,
-            ...profiles,
-            ...modelAgentVersions.map(() => undefined),
-          ],
-          tenantId: actor.tenantId,
-          authorityId: route.authorityId,
-          workspaceBindingId: route.workspaceBindingId,
-          endpoint,
-          requestProfile,
-          sequencePolicy,
-          idleTimeoutMs: parsePositiveInteger(
-            process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
-            "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
-          ),
-          mcpStdioConfigPath: ownsBindingsManifest
-            ? null
-            : process.env.CREWON_MCP_STDIO_CONFIG_PATH?.trim() || null,
-          ...(ownsBindingsManifest
-            ? {
-                directApiKeyEnvironment:
-                  process.env.CREWON_MODEL_CREDENTIAL_REQUIRED === "0"
-                    ? null
-                    : "CREWON_MODEL_API_KEY",
-              }
-            : {}),
-          ...(ownsBindingsManifest ? { toolRuntimeMode: "shared" } : {}),
-        }),
+    generatedBindings = developmentAgentRuntimeBindings({
+      versions: [bootstrapVersion, ...additionalAgentVersions],
+      profiles: [
+        undefined,
+        ...profiles,
+        ...modelAgentVersions.map(() => undefined),
+      ],
+      tenantId: actor.tenantId,
+      authorityId: route.authorityId,
+      workspaceBindingId: route.workspaceBindingId,
+      endpoint,
+      requestProfile,
+      sequencePolicy,
+      idleTimeoutMs: parsePositiveInteger(
+        process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
+        "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
       ),
-      { encoding: "utf8", mode: 0o600 },
-    );
+      mcpStdioConfigPath: ownsBindingsManifest
+        ? null
+        : process.env.CREWON_MCP_STDIO_CONFIG_PATH?.trim() || null,
+      ...(ownsBindingsManifest
+        ? {
+            directApiKeyEnvironment:
+              process.env.CREWON_MODEL_CREDENTIAL_REQUIRED === "0"
+                ? null
+                : "CREWON_MODEL_API_KEY",
+          }
+        : {}),
+      ...(ownsBindingsManifest ? { toolRuntimeMode: "shared" } : {}),
+    });
   }
-  const configuredDeployments = bindingsPath
-    ? loadAgentVersionDeployments(bindingsPath).filter(
-        (deployment) =>
-          deployment.tenantId === actor.tenantId &&
-          deployment.agentVersionId !== route.agentVersionId,
-      )
-    : undefined;
+  const loadedDeployments =
+    generatedBindings === undefined
+      ? bindingsPath
+        ? loadAgentVersionDeployments(bindingsPath)
+        : undefined
+      : agentVersionDeploymentCandidates(generatedBindings);
+  if (
+    extensionRelease !== null &&
+    loadedDeployments?.some(
+      (deployment) => deployment.tenantId !== actor.tenantId,
+    )
+  )
+    throw new Error("runtime_deployment_tenant_mismatch");
+  const configuredDeployments = loadedDeployments?.filter(
+    (deployment) =>
+      deployment.tenantId === actor.tenantId &&
+      deployment.agentVersionId !== route.agentVersionId,
+  );
+  const checkedRelease =
+    extensionRelease === null
+      ? undefined
+      : mergeExtensionReleaseInput({
+          extension: extensionRelease,
+          existingVersions: additionalAgentVersions,
+          existingDeployments: configuredDeployments ?? [],
+          tenantId: actor.tenantId,
+          defaultAgentVersionId: route.agentVersionId,
+        });
+  const releaseVersions =
+    checkedRelease?.additionalAgentVersions ?? additionalAgentVersions;
+  const releaseDeployments =
+    checkedRelease?.agentVersionDeployments ?? configuredDeployments;
+  if (generatedBindings !== undefined)
+    writeFileSync(bindingsPath!, JSON.stringify(generatedBindings), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
   const release = {
     ...common,
-    ...(additionalAgentVersions.length === 0
+    ...(releaseVersions.length === 0
       ? {}
-      : { additionalAgentVersions }),
-    ...(configuredDeployments === undefined
+      : { additionalAgentVersions: releaseVersions }),
+    ...(releaseDeployments === undefined
       ? {}
-      : { agentVersionDeployments: configuredDeployments }),
+      : { agentVersionDeployments: releaseDeployments }),
   };
   const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
   const activated = connectionString

@@ -38,6 +38,9 @@ import {
   createRuntimeNativeRemoteMcpOwner,
   type RuntimeNativeRemoteMcpOwner,
 } from "./runtime-native-remote-mcp.ts";
+import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-process-environment.ts";
+import { loadExtensionReleaseInput } from "./extensions/extension-release-input.ts";
+import type { RuntimeExtensionCompositionConfig } from "./extensions/extension-runtime-composition.ts";
 
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
@@ -51,6 +54,13 @@ const initialized = await (async () => {
     const securityMode = parseRuntimeWorkerSecurityMode(
       process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
     );
+    const extensionEnvironment = resolveRuntimeExtensionEnvironment(
+      process.env,
+      securityMode,
+    );
+    if (extensionEnvironment !== undefined && nativeBootstrap !== null) {
+      throw new Error("extension_native_bootstrap_unsupported");
+    }
     const ambientProviderProbe = resolveRuntimeProviderProbeEnvironment(
       process.env,
       securityMode,
@@ -94,6 +104,39 @@ const initialized = await (async () => {
         null,
     };
     if (
+      extensionEnvironment !== undefined &&
+      extensionEnvironment.actor.tenantId !== runtimeTenantId
+    ) {
+      throw new Error("runtime_deployment_tenant_mismatch");
+    }
+    const extensionRelease =
+      extensionEnvironment?.runtimeBindingsPath === undefined ||
+      extensionEnvironment.runtimeBindingsPath === null
+        ? null
+        : loadExtensionReleaseInput({
+            environment: process.env,
+            tenantId: runtimeTenantId,
+            defaultAgentVersionId: route.agentVersionId,
+          });
+    const extensionRuntime: RuntimeExtensionCompositionConfig | undefined =
+      extensionRelease === null ||
+      extensionEnvironment === undefined ||
+      extensionEnvironment.runtimeBindingsPath === null
+        ? undefined
+        : {
+            runtimeBindingsPath: extensionEnvironment.runtimeBindingsPath,
+            ...(agentVersionRuntimeBindingsPath
+              ? {
+                  additionalRuntimeBindingsPaths: [
+                    agentVersionRuntimeBindingsPath,
+                  ],
+                }
+              : {}),
+            authorization: extensionEnvironment.host.authorization,
+            resolveActor: extensionEnvironment.host.resolveActor,
+            environment: process.env,
+          };
+    if (
       nativeBootstrap?.credentialBindings !== null &&
       nativeBootstrap?.credentialBindings !== undefined
     ) {
@@ -117,14 +160,15 @@ const initialized = await (async () => {
         ),
       });
     }
-    const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
-      ? loadAgentVersionRuntimeFactory(
-          agentVersionRuntimeBindingsPath,
-          process.env,
-          remoteMcpOwner?.dependencies,
-          nativeBootstrap?.apiKey,
-        )
-      : undefined;
+    const agentVersionRuntimeFactory =
+      agentVersionRuntimeBindingsPath && extensionRelease === null
+        ? loadAgentVersionRuntimeFactory(
+            agentVersionRuntimeBindingsPath,
+            process.env,
+            remoteMcpOwner?.dependencies,
+            nativeBootstrap?.apiKey,
+          )
+        : undefined;
     transport = createModelTransport(
       environmentOr("CREWON_MODEL_ADAPTER", "responses"),
       {
@@ -136,6 +180,9 @@ const initialized = await (async () => {
     artifactAuthority = createConfiguredArtifactAuthority();
     return {
       agentVersionRuntimeFactory,
+      extensionEnvironment,
+      extensionRelease,
+      extensionRuntime,
       ambientProviderProbe,
       artifactAuthority,
       nativeWorkspaceReadCatalog,
@@ -163,6 +210,9 @@ const {
   agentVersionRuntimeFactory,
   ambientProviderProbe,
   artifactAuthority,
+  extensionEnvironment,
+  extensionRelease,
+  extensionRuntime,
   nativeWorkspaceReadCatalog,
   remoteMcpOwner,
   route,
@@ -246,6 +296,15 @@ try {
     expectedAgentVersionDigest:
       process.env.CREWON_AGENT_VERSION_CONTENT_DIGEST?.trim() || null,
     nativeWorkspaceReadCatalog,
+    ...(extensionEnvironment === undefined
+      ? {}
+      : { extensionHost: extensionEnvironment.host }),
+    ...(extensionRelease === null
+      ? {}
+      : {
+          additionalAgentVersions: extensionRelease.versions,
+          extensionRuntime,
+        }),
     ...(agentVersionRuntimeFactory === undefined
       ? {}
       : {
@@ -387,6 +446,11 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   });
   runtime.worker.start();
   process.stdout.write("CrewON Runtime Worker started\n");
+  if (runtime.extensionHostOrigin !== null) {
+    process.stdout.write(
+      `CrewON Extension Host origin ${runtime.extensionHostOrigin}\n`,
+    );
+  }
   for (const line of runtimeNativeReadinessLines({
     providerRuntimeBindingId:
       nativeBootstrap?.provider?.runtimeBindingId ?? null,

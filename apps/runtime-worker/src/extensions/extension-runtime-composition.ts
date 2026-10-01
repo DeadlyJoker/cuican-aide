@@ -10,6 +10,7 @@ import {
   agentVersionDeploymentCandidates,
   createAgentVersionRuntimeFactory,
   loadRuntimeBindingConfig,
+  parseRuntimeBindingConfig,
   type RuntimeBindingConfig,
 } from "../runtime-binding-config.ts";
 import type { NetworkDnsResolver } from "../network-egress.ts";
@@ -23,6 +24,7 @@ export type RuntimeExtensionActorResolver = (
 /** Explicit host opt-in. Identity resolution must come from a trusted current host. */
 export type RuntimeExtensionCompositionConfig = Readonly<{
   runtimeBindingsPath: string;
+  additionalRuntimeBindingsPaths?: readonly string[];
   authorization: AuthorizationPort;
   resolveActor: RuntimeExtensionActorResolver;
   environment?: Readonly<Record<string, string | undefined>>;
@@ -49,8 +51,22 @@ function checkedBindings(input: {
   tenantId: string;
   defaultAgentVersionId: string;
 }): RuntimeBindingConfig {
-  const config = loadRuntimeBindingConfig(input.config.runtimeBindingsPath);
+  const paths = [
+    input.config.runtimeBindingsPath,
+    ...(input.config.additionalRuntimeBindingsPaths ?? []),
+  ];
+  if (paths.length > 4 || new Set(paths).size !== paths.length)
+    throw new Error("extension_runtime_bindings_invalid");
+  const config = parseRuntimeBindingConfig({
+    schemaVersion: "crewon.agent-version-runtime-bindings.v0",
+    bindings: paths.flatMap((path) => loadRuntimeBindingConfig(path).bindings),
+  });
   const bindings = config.bindings;
+  if (
+    new Set(bindings.map((binding) => binding.agentVersionId)).size !==
+    bindings.length
+  )
+    throw new Error("extension_runtime_bindings_invalid");
   const extensions = bindings.filter(
     (binding) => binding.extensionConfigPath !== undefined,
   );

@@ -27,6 +27,8 @@ const fingerprintRoots = [
   join(repositoryRoot, "packages", "tool-broker", "src"),
 ];
 const MAX_DEVELOPMENT_RUNTIME_WORKERS = 8;
+const EXTENSION_HOST_READY_PREFIX = "CrewON Extension Host origin ";
+const MAX_EXTENSION_STARTUP_STDOUT_BYTES = 128 * 1024;
 const PROVIDER_PROBE_ENVIRONMENT_NAMES = [
   "CREWON_PROVIDER_PROBE_PORT",
   "CREWON_PROVIDER_PROBE_TOKEN",
@@ -50,6 +52,185 @@ export function developmentRuntimeWorkerCount(value) {
     throw new Error("CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT_invalid");
   }
   return parsed;
+}
+
+export function developmentExtensionsEnabled(environment, runtimeWorkerCount) {
+  if (
+    !Number.isSafeInteger(runtimeWorkerCount) ||
+    runtimeWorkerCount < 1 ||
+    runtimeWorkerCount > MAX_DEVELOPMENT_RUNTIME_WORKERS
+  ) {
+    throw new Error("CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT_invalid");
+  }
+  const flag = environment.CREWON_EXTENSIONS_ENABLED;
+  if (flag !== undefined && flag !== "0" && flag !== "1") {
+    throw new Error("CREWON_EXTENSIONS_ENABLED_invalid");
+  }
+  const enabled = flag === "1";
+  if (enabled && runtimeWorkerCount !== 1) {
+    throw new Error("development_extensions_require_single_worker");
+  }
+  return enabled;
+}
+
+/** The child's actual listener identity must be known before Control loads its catalog. */
+export function waitForDevelopmentExtensionHost({
+  child,
+  environment,
+  deadlineMs = 30_000,
+  signal,
+}) {
+  if (
+    !Number.isSafeInteger(deadlineMs) ||
+    deadlineMs < 1 ||
+    deadlineMs > 30_000
+  ) {
+    throw new Error("development_extension_startup_deadline_invalid");
+  }
+  const portValue = environment.CREWON_EXTENSION_HOST_PORT;
+  if (!/^(0|[1-9][0-9]*)$/u.test(portValue ?? "")) {
+    throw new Error("development_extension_host_identity_invalid");
+  }
+  const port = Number(portValue);
+  if (!Number.isSafeInteger(port) || port > 65_535) {
+    throw new Error("development_extension_host_identity_invalid");
+  }
+  const expectedOrigin = port === 0 ? undefined : `http://127.0.0.1:${port}`;
+  if (expectedOrigin !== undefined) {
+    extensionHostOrigin(expectedOrigin);
+    const configuredOrigin = environment.CREWON_EXTENSION_HOST_ORIGIN;
+    if (configuredOrigin !== undefined && configuredOrigin !== expectedOrigin) {
+      throw new Error("development_extension_host_identity_invalid");
+    }
+  }
+  if (child.stdout === null || child.stdout === undefined) {
+    throw new Error("development_extension_worker_stdout_required");
+  }
+  return new Promise((resolveReady, rejectReady) => {
+    let pending = "";
+    let bytes = 0;
+    let settled = false;
+    const cleanup = () => {
+      clearTimeout(timer);
+      child.stdout.off("data", onData);
+      child.stdout.off("end", onEnd);
+      child.stdout.off("error", onError);
+      child.off("exit", onExit);
+      child.off("error", onError);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const finish = (error, origin) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error !== null) rejectReady(error);
+      else resolveReady(origin);
+    };
+    const onError = () =>
+      finish(new Error("development_extension_worker_start_failed"));
+    const onExit = () =>
+      finish(new Error("development_extension_worker_exited_before_ready"));
+    const onEnd = () =>
+      finish(
+        new Error("development_extension_worker_stdout_closed_before_ready"),
+      );
+    const onAbort = () =>
+      finish(new Error("development_extension_startup_cancelled"));
+    const onData = (chunk) => {
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > MAX_EXTENSION_STARTUP_STDOUT_BYTES) {
+        finish(new Error("development_extension_worker_stdout_limit"));
+        return;
+      }
+      pending += chunk.toString("utf8");
+      for (;;) {
+        const newline = pending.indexOf("\n");
+        if (newline === -1) break;
+        const line = pending.slice(0, newline).replace(/\r$/u, "");
+        pending = pending.slice(newline + 1);
+        if (!line.startsWith("CrewON Extension Host origin")) continue;
+        try {
+          if (!line.startsWith(EXTENSION_HOST_READY_PREFIX)) throw new Error();
+          const origin = extensionHostOrigin(
+            line.slice(EXTENSION_HOST_READY_PREFIX.length),
+          );
+          if (expectedOrigin !== undefined && origin !== expectedOrigin)
+            throw new Error();
+          finish(null, origin);
+        } catch {
+          finish(new Error("development_extension_host_identity_invalid"));
+        }
+        return;
+      }
+    };
+    const timer = setTimeout(
+      () => finish(new Error("development_extension_worker_ready_timeout")),
+      deadlineMs,
+    );
+    child.stdout.on("data", onData);
+    child.stdout.once("end", onEnd);
+    child.stdout.once("error", onError);
+    child.once("exit", onExit);
+    child.once("error", onError);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    else if (child.exitCode !== null || child.signalCode !== null) onExit();
+  });
+}
+
+function extensionHostOrigin(value) {
+  try {
+    const url = new URL(value);
+    if (
+      url.protocol !== "http:" ||
+      url.hostname !== "127.0.0.1" ||
+      !url.port ||
+      Number(url.port) < 1 ||
+      Number(url.port) > 65_535 ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash ||
+      url.origin !== value
+    )
+      throw new Error();
+    return value;
+  } catch {
+    throw new Error("development_extension_host_identity_invalid");
+  }
+}
+
+/** Unwind partial startup before returning a failure to the launcher. */
+export async function stopDevelopmentChildren(children) {
+  await Promise.allSettled(
+    children.map(
+      ({ child }) =>
+        new Promise((resolveStopped) => {
+          if (
+            child.pid === undefined ||
+            child.exitCode !== null ||
+            child.signalCode !== null
+          ) {
+            resolveStopped();
+            return;
+          }
+          let timer;
+          const stopped = () => {
+            clearTimeout(timer);
+            child.off("exit", stopped);
+            child.off("close", stopped);
+            child.off("error", stopped);
+            resolveStopped();
+          };
+          child.once("exit", stopped);
+          child.once("close", stopped);
+          child.once("error", stopped);
+          timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
+          child.kill("SIGTERM");
+        }),
+    ),
+  );
 }
 
 export function developmentRuntimeWorkerEnvironment(
@@ -298,6 +479,31 @@ function spawnManaged(name, command, args, options) {
   return { child, name };
 }
 
+/** Includes an exit that happened between readiness and supervisor registration. */
+export function waitDevelopmentChildExit({ child, name }) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve({
+      code: child.exitCode,
+      name,
+      signal: child.signalCode,
+    });
+  }
+  if (child.pid === undefined) {
+    return Promise.resolve({ code: 1, name, signal: null });
+  }
+  return new Promise((resolveExit) => {
+    const finish = (code, signal) => {
+      child.off("exit", exited);
+      child.off("error", failed);
+      resolveExit({ code, name, signal });
+    };
+    const exited = (code, signal) => finish(code, signal);
+    const failed = () => finish(1, null);
+    child.once("exit", exited);
+    child.once("error", failed);
+  });
+}
+
 async function supervise(children) {
   let shuttingDown = false;
   const shutdown = () => {
@@ -311,29 +517,9 @@ async function supervise(children) {
   };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
-  const exit = await Promise.race(
-    children.map(
-      ({ child, name }) =>
-        new Promise((resolveExit) => {
-          child.once("exit", (code, signal) =>
-            resolveExit({ code, name, signal }),
-          );
-        }),
-    ),
-  );
+  const exit = await Promise.race(children.map(waitDevelopmentChildExit));
   shutdown();
-  await Promise.allSettled(
-    children.map(
-      ({ child }) =>
-        new Promise((resolveExit) => {
-          if (child.exitCode !== null || child.signalCode !== null) {
-            resolveExit();
-            return;
-          }
-          child.once("exit", resolveExit);
-        }),
-    ),
-  );
+  await Promise.allSettled(children.map(waitDevelopmentChildExit));
   if (!shuttingDown || (exit.code !== 0 && exit.signal === null)) {
     throw new Error(
       `${exit.name} exited unexpectedly (${exit.signal ?? exit.code ?? "unknown"})`,
@@ -343,6 +529,13 @@ async function supervise(children) {
 
 export async function main() {
   loadLocalEnvironment();
+  const runtimeWorkerCount = developmentRuntimeWorkerCount(
+    process.env.CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT,
+  );
+  const extensionsEnabled = developmentExtensionsEnabled(
+    process.env,
+    runtimeWorkerCount,
+  );
   const providerBaseUrl =
     process.env.CREWON_RESPONSES_BASE_URL?.trim() ||
     process.env.CREWON_DESKTOP_DEV_PROVIDER_ENDPOINT?.trim() ||
@@ -377,9 +570,6 @@ export async function main() {
   const controlPort = Number(process.env.CREWON_CONTROL_PORT ?? "3210");
   const probePort = Number(process.env.CREWON_PROVIDER_PROBE_PORT ?? "3211");
   const uiPort = Number(process.env.CREWON_UI_PORT ?? "5175");
-  const runtimeWorkerCount = developmentRuntimeWorkerCount(
-    process.env.CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT,
-  );
   for (const [name, port] of [
     ["CREWON_CONTROL_PORT", controlPort],
     ["CREWON_PROVIDER_PROBE_PORT", probePort],
@@ -416,52 +606,83 @@ export async function main() {
   runRelease(environment);
 
   const children = [];
-  children.push(
-    spawnManaged(
-      "Control API",
-      process.execPath,
-      ["--experimental-strip-types", join(controlSource, "main.ts")],
-      { cwd: repositoryRoot, env: environment, stdio: "inherit" },
-    ),
-  );
-  const runtimeMainUrl = pathToFileURL(join(runtimeSource, "main.ts")).href;
-  for (
-    let workerIndex = 0;
-    workerIndex < runtimeWorkerCount;
-    workerIndex += 1
-  ) {
+  const startControl = () =>
     children.push(
       spawnManaged(
-        `Runtime Worker ${workerIndex + 1}/${runtimeWorkerCount}`,
+        "Control API",
         process.execPath,
-        [
-          "--experimental-strip-types",
-          "--input-type=module",
-          "--eval",
-          `await import(${JSON.stringify(runtimeMainUrl)}); process.stdin.resume();`,
-        ],
-        {
-          cwd: repositoryRoot,
-          env: developmentRuntimeWorkerEnvironment(environment, workerIndex),
-          stdio: ["pipe", "inherit", "inherit"],
-        },
+        ["--experimental-strip-types", join(controlSource, "main.ts")],
+        { cwd: repositoryRoot, env: environment, stdio: "inherit" },
       ),
     );
-  }
-  if (!process.argv.includes("--runtime-only")) {
-    children.push(
-      spawnManaged(
-        "CrewON UI",
-        process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-        ["exec", "vite", "--host", "127.0.0.1", "--port", String(uiPort)],
-        { cwd: uiRoot, env: environment, stdio: "inherit" },
-      ),
+  const runtimeMainUrl = pathToFileURL(join(runtimeSource, "main.ts")).href;
+  const startWorker = (workerIndex, options) => {
+    const managed = spawnManaged(
+      `Runtime Worker ${workerIndex + 1}/${runtimeWorkerCount}`,
+      process.execPath,
+      [
+        "--experimental-strip-types",
+        "--input-type=module",
+        "--eval",
+        `await import(${JSON.stringify(runtimeMainUrl)}); process.stdin.resume();`,
+      ],
+      {
+        cwd: repositoryRoot,
+        env: developmentRuntimeWorkerEnvironment(environment, workerIndex),
+        stdio: ["pipe", options.stdout, "inherit"],
+      },
     );
+    children.push(managed);
+    return managed;
+  };
+  try {
+    if (extensionsEnabled) {
+      const startup = new AbortController();
+      const cancelStartup = () => startup.abort();
+      process.once("SIGINT", cancelStartup);
+      process.once("SIGTERM", cancelStartup);
+      try {
+        const worker = startWorker(0, { stdout: "pipe" });
+        worker.child.stdout.pipe(process.stdout, { end: false });
+        environment.CREWON_EXTENSION_HOST_ORIGIN =
+          await waitForDevelopmentExtensionHost({
+            child: worker.child,
+            environment,
+            signal: startup.signal,
+          });
+        startControl();
+      } finally {
+        process.off("SIGINT", cancelStartup);
+        process.off("SIGTERM", cancelStartup);
+      }
+    } else {
+      startControl();
+      for (
+        let workerIndex = 0;
+        workerIndex < runtimeWorkerCount;
+        workerIndex += 1
+      ) {
+        startWorker(workerIndex, { stdout: "inherit" });
+      }
+    }
+    if (!process.argv.includes("--runtime-only")) {
+      children.push(
+        spawnManaged(
+          "CrewON UI",
+          process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+          ["exec", "vite", "--host", "127.0.0.1", "--port", String(uiPort)],
+          { cwd: uiRoot, env: environment, stdio: "inherit" },
+        ),
+      );
+    }
+    process.stdout.write(
+      `CrewON TypeScript stack readying on http://127.0.0.1:${uiPort} (${agentVersionId})\n`,
+    );
+    await supervise(children);
+  } catch (error) {
+    await stopDevelopmentChildren(children);
+    throw error;
   }
-  process.stdout.write(
-    `CrewON TypeScript stack readying on http://127.0.0.1:${uiPort} (${agentVersionId})\n`,
-  );
-  await supervise(children);
 }
 
 if (

@@ -10,12 +10,14 @@ import {
 } from "@crewon/agent-version";
 import { createExtensionConfiguration } from "@crewon/domain";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import { parseExtensionHostResponse } from "@crewon/contracts";
 import { processAgentRuntimeCapacity } from "./agent-runtime-capacity.ts";
 import { compileRuntimeAgentVersion } from "./standalone-composition.ts";
 import type { RuntimeBindingConfig } from "./runtime-binding-config.ts";
 import { compositionFixture } from "./runtime-composition.test-support.ts";
 import { compileComfyAgentVersion } from "./extensions/comfyui-agent-version.ts";
 import { bundledComfyRegistration } from "./extensions/comfyui-bundled-registration.ts";
+import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-process-environment.ts";
 import {
   composeRuntimeExtensions,
   extensionCompositionDeployments,
@@ -154,6 +156,8 @@ function fixture(t: TestContext, backend: "sqlite" | "postgres") {
     ...f,
     version,
     binding,
+    configuration,
+    registration,
     additionalBinding,
     extensionRuntime,
     boundary,
@@ -174,6 +178,169 @@ for (const backend of ["sqlite", "postgres"] as const) {
     skip: backend === "postgres" && !process.env.CREWON_TEST_POSTGRES_URL,
     timeout: 15_000,
   };
+  test(
+    `${backend}: metadata host serves catalog before plugin publication without changing the default Agent`,
+    options,
+    async (t) => {
+      const f = fixture(t, backend);
+      const token = "composition-metadata-host-token-at-least-32-bytes";
+      const parsed = resolveRuntimeExtensionEnvironment(
+        {
+          CREWON_EXTENSIONS_ENABLED: "1",
+          CREWON_EXTENSION_HOST_PORT: "0",
+          CREWON_EXTENSION_HOST_TOKEN: token,
+          CREWON_PRINCIPAL_ID: "principal-1",
+          CREWON_ACTOR_ID: "actor-1",
+          CREWON_TENANT_ID: f.config.runtimeTenantId,
+          CREWON_SPACE_ID: "space-1",
+        },
+        "standalone",
+      );
+      assert.ok(parsed);
+      await f.activate();
+      f.observeStoreClose();
+      const runtime = await f.create({ extensionHost: parsed.host });
+      t.after(() => runtime.close());
+      assert.deepEqual(
+        runtime.agentVersion,
+        compileRuntimeAgentVersion(f.config),
+      );
+      assert.ok(runtime.extensionHostOrigin);
+      const post = async (body: unknown) => {
+        const response = await fetch(
+          `${runtime.extensionHostOrigin}/private/v0/extensions`,
+          {
+            method: "POST",
+            headers: {
+              "authorization": `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              protocol: "crewon.extension-host-request.v0",
+              actor: parsed.actor,
+              ...(body as object),
+            }),
+          },
+        );
+        assert.equal(response.status, 200);
+        return parseExtensionHostResponse(await response.json());
+      };
+      const catalog = await post({ operation: "catalog" });
+      assert.equal(catalog.operation, "catalog");
+      if (catalog.operation === "catalog")
+        assert.equal(
+          catalog.registrations[0]!.manifestDigest,
+          f.registration.manifestDigest,
+        );
+      const readiness = await post({
+        operation: "readiness",
+        registration: {
+          pluginId: f.registration.manifest.pluginId,
+          pluginVersion: f.registration.manifest.version,
+          manifestDigest: f.registration.manifestDigest,
+          implementationDigest: f.registration.implementationDigest,
+        },
+        configuration: f.configuration,
+        agentVersionId: f.version.agentVersionId,
+      });
+      assert.equal(readiness.operation, "readiness");
+      if (readiness.operation === "readiness")
+        assert.deepEqual(readiness.result, {
+          outcome: "unavailable",
+          reasonCode: "extension_runtime_unavailable",
+        });
+      await runtime.close();
+      assert.deepEqual(f.counts, { tools: 1, models: 1, stores: 1 });
+    },
+  );
+  test(
+    `${backend}: separate base bindings combine with the plugin without altering bootstrap`,
+    options,
+    async (t) => {
+      const f = fixture(t, backend);
+      const bootstrap = compileRuntimeAgentVersion(f.config);
+      const basePath = join(f.root, "ordinary-runtime-bindings.json");
+      writeFileSync(
+        basePath,
+        JSON.stringify({
+          schemaVersion: "crewon.agent-version-runtime-bindings.v0",
+          bindings: [f.ordinaryBinding(bootstrap)],
+        }),
+      );
+      const config = {
+        ...f.extensionRuntime,
+        additionalRuntimeBindingsPaths: [basePath],
+      };
+      const deployments = extensionCompositionDeployments({
+        ...f.boundary,
+        config,
+      });
+      await f.activate({
+        additionalAgentVersions: [f.version],
+        agentVersionDeployments: deployments,
+      });
+      const runtime = await f.create({
+        extensionRuntime: config,
+        additionalAgentVersions: [f.version],
+      });
+      t.after(() => runtime.close());
+      assert.deepEqual(runtime.agentVersion, bootstrap);
+      assert.deepEqual(
+        deployments.map((item) => item.agentVersionId),
+        [f.version.agentVersionId],
+      );
+      assert.throws(
+        () =>
+          extensionCompositionDeployments({
+            ...f.boundary,
+            config: {
+              ...config,
+              additionalRuntimeBindingsPaths: [
+                f.extensionRuntime.runtimeBindingsPath,
+              ],
+            },
+          }),
+        /extension_runtime_bindings_invalid/u,
+      );
+      writeFileSync(
+        basePath,
+        JSON.stringify({
+          schemaVersion: "crewon.agent-version-runtime-bindings.v0",
+          bindings: [f.binding],
+        }),
+      );
+      assert.throws(() =>
+        extensionCompositionDeployments({ ...f.boundary, config }),
+      );
+    },
+  );
+  test(
+    `${backend}: two private host owners are rejected before opening storage`,
+    options,
+    async (t) => {
+      const f = fixture(t, backend);
+      f.observeStoreClose();
+      await assert.rejects(
+        f.create({
+          extensionHost: {
+            port: 0,
+            token: "composition-owner-token-at-least-32-bytes",
+            authorization: f.extensionRuntime.authorization,
+            resolveActor: f.extensionRuntime.resolveActor,
+          },
+          extensionRuntime: {
+            ...f.extensionRuntime,
+            privateHost: {
+              port: 0,
+              token: "composition-owner-token-at-least-32-bytes",
+            },
+          },
+        }),
+        /extension_host_configuration_conflict/u,
+      );
+      assert.deepEqual(f.counts, { tools: 1, models: 1, stores: 0 });
+    },
+  );
   for (const scenario of [
     "default override",
     "foreign tenant",

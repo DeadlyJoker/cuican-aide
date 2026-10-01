@@ -90,6 +90,7 @@ import {
   startRuntimeExtensionHostServer,
   type RuntimeExtensionHostServer,
 } from "./extensions/extension-host-server.ts";
+import type { RuntimeExtensionHostConfig } from "./extensions/extension-process-environment.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -120,6 +121,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   agentVersionDeployments?: readonly AgentVersionDeploymentCandidate[];
   additionalAgentVersions?: readonly CompiledAgentVersion[];
   extensionRuntime?: RuntimeExtensionCompositionConfig;
+  extensionHost?: RuntimeExtensionHostConfig;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -247,6 +249,11 @@ export async function createPostgresRuntimeWorker(
 function prepareComposition(
   config: RuntimeWorkerCompositionConfig,
 ): RuntimeWorkerCompositionConfig {
+  if (
+    config.extensionHost !== undefined &&
+    config.extensionRuntime?.privateHost !== undefined
+  )
+    throw new Error("extension_host_configuration_conflict");
   if (config.extensionRuntime === undefined) return config;
   if (
     config.agentVersionRuntimeFactory !== undefined ||
@@ -471,12 +478,21 @@ async function composeRuntimeWorker(
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
   let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
   let extensionHostServer: RuntimeExtensionHostServer | null = null;
-  if (config.extensionRuntime?.privateHost !== undefined) {
+  const extensionHost =
+    config.extensionHost ??
+    (config.extensionRuntime?.privateHost === undefined
+      ? undefined
+      : {
+          ...config.extensionRuntime.privateHost,
+          resolveActor: config.extensionRuntime.resolveActor,
+          authorization: config.extensionRuntime.authorization,
+        });
+  if (extensionHost !== undefined) {
     extensionHostServer = await startRuntimeExtensionHostServer({
-      ...config.extensionRuntime.privateHost,
+      ...extensionHost,
       service: new RuntimeExtensionHostService({
-        resolveActor: config.extensionRuntime.resolveActor,
-        authorization: config.extensionRuntime.authorization,
+        resolveActor: extensionHost.resolveActor,
+        authorization: extensionHost.authorization,
         runtimeResolver,
         deployments: store,
       }),

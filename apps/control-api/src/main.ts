@@ -20,7 +20,9 @@ import {
 import {
   createPostgresControlApi,
   createStandaloneControlApi,
+  createStandaloneControlApiWithExtensions,
 } from "./standalone-composition.ts";
+import { resolveControlExtensionWorkerEnvironment } from "./extension-worker-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 import {
   candidateReadinessLine,
@@ -33,11 +35,14 @@ import { PimThreadSandbox } from "./pim-sandbox-client.ts";
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
 );
-const activationGate = resolvePausedAdmission(process.env, securityMode);
-const standaloneTenantId = environmentOr(
-  "CREWON_TENANT_ID",
-  "standalone-tenant",
+const extensionEnvironment = resolveControlExtensionWorkerEnvironment(
+  process.env,
+  securityMode,
 );
+const activationGate = resolvePausedAdmission(process.env, securityMode);
+const standaloneTenantId =
+  extensionEnvironment?.actor.tenantId ??
+  environmentOr("CREWON_TENANT_ID", "standalone-tenant");
 const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
   process.env,
   securityMode,
@@ -59,7 +64,9 @@ if (securityMode === "production" && connectionString === undefined) {
 const artifactEncryptionKeyId = requiredEnvironment(
   "CREWON_ARTIFACT_ENCRYPTION_KEY_ID",
 );
-const artifactRetention = configuredArtifactRetention(process.env.CREWON_ARTIFACT_RETENTION);
+const artifactRetention = configuredArtifactRetention(
+  process.env.CREWON_ARTIFACT_RETENTION,
+);
 const artifactStore = new FilesystemArtifactStore({
   rootDirectory: requiredEnvironment("CREWON_ARTIFACT_ROOT"),
   databasePath: requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
@@ -81,13 +88,17 @@ const sharedConfig = {
     process.env.CREWON_OUTBOX_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_OUTBOX_SCAN_INTERVAL_MS_invalid",
   ),
-  outboxRetention: process.env.CREWON_OUTBOX_RETENTION_MS === "off" ? null : {
-    ...DEFAULT_OUTBOX_RETENTION,
-    retentionMs: parsePositiveInteger(
-      process.env.CREWON_OUTBOX_RETENTION_MS ?? String(DEFAULT_OUTBOX_RETENTION.retentionMs),
-      "CREWON_OUTBOX_RETENTION_MS_invalid",
-    ),
-  },
+  outboxRetention:
+    process.env.CREWON_OUTBOX_RETENTION_MS === "off"
+      ? null
+      : {
+          ...DEFAULT_OUTBOX_RETENTION,
+          retentionMs: parsePositiveInteger(
+            process.env.CREWON_OUTBOX_RETENTION_MS ??
+              String(DEFAULT_OUTBOX_RETENTION.retentionMs),
+            "CREWON_OUTBOX_RETENTION_MS_invalid",
+          ),
+        },
   automationScanIntervalMs: parsePositiveInteger(
     process.env.CREWON_AUTOMATION_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_AUTOMATION_SCAN_INTERVAL_MS_invalid",
@@ -146,7 +157,7 @@ try {
         : {}),
     });
   } else {
-    const actor = {
+    const actor = extensionEnvironment?.actor ?? {
       principalId: environmentOr("CREWON_PRINCIPAL_ID", "standalone-principal"),
       actorId: environmentOr("CREWON_ACTOR_ID", "standalone-actor"),
       tenantId: standaloneTenantId,
@@ -168,18 +179,31 @@ try {
       ...(workspaceWorker === undefined ? {} : { workspaceWorker }),
       ...(activationGate === null ? {} : { activationGate }),
     };
-    runtime = connectionString
-      ? await createPostgresControlApi({
-          ...standaloneConfig,
-          connectionString,
-          ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-            ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
-            : {}),
-        })
-      : createStandaloneControlApi({
-          ...standaloneConfig,
-          databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
-        });
+    if (connectionString !== undefined && connectionString.length > 0) {
+      runtime = await createPostgresControlApi({
+        ...standaloneConfig,
+        connectionString,
+        ...(extensionEnvironment === undefined
+          ? {}
+          : { extensionWorker: extensionEnvironment.extensionWorker }),
+        ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
+          ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
+          : {}),
+      });
+    } else {
+      const databasePath = requiredEnvironment("CREWON_CONTROL_DB_PATH");
+      runtime =
+        extensionEnvironment === undefined
+          ? createStandaloneControlApi({
+              ...standaloneConfig,
+              databasePath,
+            })
+          : await createStandaloneControlApiWithExtensions({
+              ...standaloneConfig,
+              databasePath,
+              extensionWorker: extensionEnvironment.extensionWorker,
+            });
+    }
   }
 } catch (error) {
   await artifactStore.close();
