@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Writable } from "node:stream";
@@ -11,8 +17,8 @@ import {
 import { RuntimeSupervisor } from "./runtimeSupervisor.ts";
 
 function fixture(mode: "valid" | "wrong-owner" | "no-ready" | "disabled") {
-  const directory = mkdtempSync(
-    join(tmpdir(), "crewon-native-extension-supervisor-"),
+  const directory = realpathSync(
+    mkdtempSync(join(tmpdir(), "crewon-native-extension-supervisor-")),
   );
   const audit = join(directory, "audit.jsonl");
   const shared = `
@@ -26,7 +32,20 @@ function fixture(mode: "valid" | "wrong-owner" | "no-ready" | "disabled") {
   const release = join(directory, "release.mjs"),
     worker = join(directory, "worker.mjs"),
     control = join(directory, "control.mjs");
-  writeFileSync(release, shared + `record('release');`);
+  writeFileSync(
+    release,
+    shared +
+      `
+    import {writeFileSync} from 'node:fs';
+    import {join} from 'node:path';
+    record('release');
+    if(env.CREWON_EXTENSION_RECOVERY_ATTEMPT_ID)writeFileSync(join(${JSON.stringify(directory)},'extension-recovery-startup.json'),JSON.stringify({
+      schemaVersion:'crewon.extension-recovery-startup.v0',
+      attemptId:env.CREWON_EXTENSION_RECOVERY_ATTEMPT_ID,
+      outcome:'unsupported',reasonCode:'extension_recovery_plugin_inputs_unavailable',preparedInputCapsuleId:null
+    }));
+  `,
+  );
   writeFileSync(
     worker,
     shared +
@@ -144,6 +163,9 @@ it("starts real Node Worker before Control, authenticates the owner and rotates 
     expect(original[0].extensions).toEqual({
       CREWON_EXTENSIONS_ENABLED: "1",
       CREWON_EXTENSION_BUILD_ARCHIVE_DATA_ROOT: expect.any(String),
+      CREWON_EXTENSION_RECOVERY_ATTEMPT_ID:
+        expect.stringMatching(/^[a-f0-9]{64}$/),
+      CREWON_EXTENSION_RECOVERY_PROVIDER_JSON: expect.any(String),
     });
     expect(
       original[1].extensions.CREWON_EXTENSION_BUILD_ARCHIVE_DATA_ROOT,

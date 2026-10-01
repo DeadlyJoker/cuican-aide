@@ -88,6 +88,9 @@ importers:
 
   apps/crewon-ui:
     dependencies:
+      '@crewon/agent-version':
+        specifier: workspace:*
+        version: link:../../packages/agent-version
       '@crewon/capability-packs':
         specifier: workspace:*
         version: link:../../packages/capability-packs
@@ -373,6 +376,12 @@ importers:
       '@crewon/application':
         specifier: workspace:*
         version: link:../application
+      '@crewon/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@crewon/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@crewon/tool-broker':
         specifier: workspace:*
         version: link:../tool-broker

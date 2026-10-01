@@ -4,6 +4,26 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：原生恢复输入与当前凭据查询
+
+打包版桌面已接入非秘密恢复输入的实际生产路径。首次发布前，在 `extension-recoveries/<capsuleId>` 准备固定 snapshot 路径与插件 bindings，assets 保持原字节；仍调用现有授权发布入口。成功后核对真实 SQLite 发布记录，保存有效 bootstrap 参数、完整基础 bindings 与真实 release。当前 Worker 启动并通过完整 owner、插件登记、配置摘要和八字段目标挑战后，最后提交 `manifest.json`。候选交接使用固定文件与每次独立尝试身份；候选和残缺目录都不代表恢复已完成。
+
+存储只接受有界普通 JSON 文件、固定名称和无符号链接的路径，独占写入、文件同步、同字节复用；完整记录不覆盖或追加。文件准备与提交共用锁，避免完成标记发布后仍追加文件。并发修改、未知字段、缺失/篡改文件、容量与异步输入变化均有实际文件系统测试。已有原路径发布的目标不搬迁；已经保存的发布目标则必须核对全套文件与原完整部署后复用，不能因本次 default/catalog 或 workspace 不支持新恢复记录而改回原操作者路径。
+
+恢复资格与当前启动分开。相同模型地址的 Provider ID 或凭据要求变化可以使恢复候选不可用，原发布的固定路径仍保留；完整模型地址改变或旧固定 slot 缺少当前凭据时，当前宿主不装配旧插件，当前默认 Agent 和目录宿主继续运行。原记录及数据库目标不变，不把新服务密钥发送到旧服务。未启用与源代码运行维持原路径；首次仅恢复层不支持的合法操作者符号链接或可选存储容量不足，也不阻断原发布。
+
+Provider Store 新增独立的当前凭据查询：每次严格重读当前目录，联合核对 providerId、完整基础地址和派生 Responses 地址；同地址轮换取最新可用秘密，删除、地址变化或不可用明确拒绝。明确匿名与凭据缺失分别处理，不回落到 active Provider 或草稿凭据。秘密不进入恢复记录、JSON 序列化或检查输出。此模块尚未由自动历史宿主消费。
+
+### 本轮证据
+
+- 真实 Native source / packaged 两种路径均通过。packaged 使用现有 stage 构建七个实际生产包并运行实际 release、Worker、Control；验证发布、真正就绪后标记、插件/默认任务、SSE 游标续读、current catalog/Provider ID/workspace 变化后的旧文件保护。换到第二个真实 loopback 模型夹具后，旧插件不可用但默认任务完成，新密钥只到新服务，原服务请求数量不变。显式改选保存的文件并删除操作者输入后当前执行仍可用；删除安装资源后归档仍可核验。模型为本地文本夹具，没有新增真实模型或 ComfyUI 生图请求，也未证明自动跨构建旧宿主恢复。
+- 实际七包 release CLI / SQLite 专项 10/10，包含未完成候选、已有完整记录、partial metadata 冲突、篡改拒绝、容量降级、workspace/Provider 漂移、固定 slot 缺凭据及合法符号链接。input/request/既有 release-input 专项 52/52；bootstrap/transport/release 23/23、Contracts 严格启动输入 6/6。
+- 恢复存储实际文件系统专项 29/29、固定启动交接 13/13，包含真实并发写入/提交屏障、完成后不可追加、原子替换与重开、UTF-8、硬链接/符号链接和旧尝试拒绝。Native helper 33/33 使用真实本地 private HTTP 与文件系统、窄模拟归档 lookup，只证明协议与边界；实际构建身份由上一项真实 Native 集成证明。Provider 新旧专项 54/54。
+- Worker 全量 955 通过 / 198 环境跳过，Control 287 通过 / 9 环境跳过，0 失败；Electron 全量 24 个文件、205/205，包含上述真实进程流程。全部 packages 类型检查、Worker/Control 类型检查、UI lint、Electron host 构建、正式七包 stage 与仓库格式检查通过。正式源码指纹为 `sha256:48d0f375bdec60da1f4762803bbc144d62a6af970957000cb4f74bb905d3e597`。本轮未修改 renderer 或重跑 UI 全量，其已有七项基线失败仍见前文界面阶段。详细检查记录为 `output/extensions/checks/recovery-*.log`、`extension-recovery-*.log` 和 `native-recovery-helper-*.log`。
+- 包依赖边界清单补齐了精确 Node 子入口及已存在的进程关闭端口，仍禁止 AgentVersion 编译器/index 引入 Node、恢复专用依赖或这些 Node 模块。隔离源码基线 `9a25d341a` 的 12 项边界测试为 7 通过/5 失败，本轮新依赖登记前为 6 通过/6 失败；修正后新增负向覆盖，14/14 通过，test-contracts 全量 20/20。普通 package 回归均为 0 失败，其中 AgentVersion 114/114、Application 195/195、Store 850 通过/191 环境跳过；未把跳过的 PostgreSQL 项计为实际验证。基线、修正和回归证据为 `recovery-package-boundary-*`、`recovery-test-contracts-full.log` 及 `recovery-product-packages-final.log`，隔离目录已清理。
+
+**剩余：** 自动选择恢复记录、清洗环境并注入当前精确凭据、原生旧 Worker 生命周期与历史 peer 更新、完整跨构建产品验收仍按[实施顺序](./native-extension-recovery-plan.md)推进。源代码模式不自动保存构建或恢复输入，任意 workspace/MCP/cloud 场景不声称支持自动恢复；生产权威身份协议及第二个实际企业 API 仍待原先提出的信息。短剧继续按 [shuohao-skills / Reelbench 参考结论](./short-drama-workbench-reference.md)组织阶段、资产修订和 Agent 外部 API 编排；目标保持进行中。
+
 ## 2026-10-02：精确历史查询与准备目标隔离
 
 Control 新增独立 query host 端口。已有原任务通过当前权限与完整持久化身份校验后，才能从受信 private peers 恢复其插件四项身份，并要求实际 readiness 与原任务完整 target 一致。同实现的多个已准备 Agent 可以作为候选，当前新 Agent 的 ready 不能替代旧目标。配置、激活、新生成、当前运行时读取和公有目录始终接当前宿主；历史 catalog 不进入公有目录。已有结果投影继续从持久化 operation 读取，宿主离线不会把读取变为一次外部生成。

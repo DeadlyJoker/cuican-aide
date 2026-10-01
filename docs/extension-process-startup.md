@@ -88,6 +88,10 @@ owner 固定为原桌面 standalone 的完整四字段：`standalone-principal`�
 
 ## 构建保留与人工恢复
 
+打包版桌面还会为首个符合条件的文生图插件保存不可变恢复输入。首次发布前将 snapshot 放到最终的原生数据路径，并按原字节保存 assets；绑定引用在首次发布前确定。发布成功且实际 Worker 的 owner、插件登记、配置摘要及完整目标全部一致后，最后写 `manifest.json`。记录包含非秘密有效启动值、完整基础 bindings 和真实 release，秘密仍只存在当前凭据来源中。严格文件边界、适用条件及未完成的自动选择/生命周期见[恢复实施顺序](./native-extension-recovery-plan.md)。
+
+不支持自动恢复不会自动改变当前能力。已保存的插件在 default/catalog 和 workspace 变化后继续使用原发布路径；完整模型 endpoint 改变或原固定凭据 slot 不可用时，旧插件在当前宿主不可用，当前默认 Agent 与目录宿主继续启动。关闭插件与源代码模式仍使用原路径。损坏的完整记录、身份或持久化部署冲突不会以新目标替代原目标。
+
 打包版桌面显式启用插件时，仅 release 收到原生数据目录 `CREWON_EXTENSION_BUILD_ARCHIVE_DATA_ROOT`。已加载的 `runtime-release.mjs` 先验证自身构建身份，再在发布和打开业务数据库前保留完整运行包。源代码开发模式、默认关闭、Worker 和 Control 不接收这个参数。
 
 `dataRoot/extension-builds/<构建摘要hex>-<整套文件身份摘要hex>` 保留 sidecar 声明的全部 `.mjs`；不复制插件配置、模型绑定、凭据或其他文件。先写入私有临时文件，再以不覆盖已有文件的方式发布，最后以 sidecar 作为完整标记。每次选择都核对两层摘要及所有包字节；残缺目录、篡改、同实现不同文件集、遗留发布锁和超过 64 个保留构建均明确拒绝，不自动删除历史构建。构建完整性不能授予发布者或任务执行权限。

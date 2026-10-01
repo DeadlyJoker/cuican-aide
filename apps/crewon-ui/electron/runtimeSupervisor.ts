@@ -29,6 +29,11 @@ import {
   settleDesktopRuntimeChildren,
   type DesktopExtensionRuntimeConfiguration,
 } from "./desktopExtensionRuntime.ts";
+import {
+  completeDesktopExtensionRecovery,
+  desktopExtensionRecoveryAttempt,
+  loadDesktopExtensionRecovery,
+} from "./desktopExtensionRecovery.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -168,7 +173,7 @@ export class RuntimeSupervisor {
       );
       const { sharedEnvironment, workerEnvironment } =
         agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
-      const extensions = desktopExtensionRuntimeEnvironments({
+      const initialExtensions = desktopExtensionRuntimeEnvironments({
         configuration,
         sharedEnvironment,
         workerEnvironment,
@@ -177,6 +182,13 @@ export class RuntimeSupervisor {
           ? undefined
           : { dataRoot: this.#dataDirectory },
       });
+      const recovery = desktopExtensionRecoveryAttempt({
+        dataRoot: this.#dataDirectory,
+        provider,
+        source: this.#paths.source,
+        environments: initialExtensions,
+      });
+      let extensions = recovery.environments;
       startup.signal.throwIfAborted();
       await this.#runOnce(
         "Runtime release",
@@ -185,20 +197,57 @@ export class RuntimeSupervisor {
         startup.signal,
       );
       startup.signal.throwIfAborted();
-      const { control, worker } = await startDesktopRuntimeChildren({
-        environments: extensions,
-        signal: startup.signal,
-        spawnControl: (environment) =>
-          this.#spawn("Control API", this.#paths.control, environment),
-        spawnWorker: (environment) =>
-          this.#spawn("Runtime Worker", this.#paths.worker, environment, true),
-        trackChild: (child) => this.#children.push(child),
-      });
+      const prepared =
+        recovery.attempt === null
+          ? null
+          : await loadDesktopExtensionRecovery({
+              attempt: recovery.attempt,
+              environments: extensions,
+            });
+      if (prepared !== null) extensions = prepared.environments;
+      const { control, worker, extensionOrigin } =
+        await startDesktopRuntimeChildren({
+          environments: extensions,
+          signal: startup.signal,
+          spawnControl: (environment) =>
+            this.#spawn("Control API", this.#paths.control, environment),
+          spawnWorker: (environment) =>
+            this.#spawn(
+              "Runtime Worker",
+              this.#paths.worker,
+              environment,
+              true,
+            ),
+          trackChild: (child) => this.#children.push(child),
+        });
       await waitForReady(
         `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
         this.#children,
         startup.signal,
       );
+      startup.signal.throwIfAborted();
+      if (prepared?.candidate && extensions.enabled && extensionOrigin) {
+        const completed = await completeDesktopExtensionRecovery({
+          dataRoot: this.#dataDirectory,
+          manifest: prepared.candidate,
+          origin: extensionOrigin,
+          token: extensions.token,
+          signal: startup.signal,
+          deadlineMs: extensions.deadlineMs,
+        });
+        if (completed.outcome === "unavailable")
+          this.#logs.write(
+            "stderr",
+            "Extension recovery",
+            `${completed.reasonCode}\n`,
+          );
+      } else if (prepared?.reasonCode) {
+        this.#logs.write(
+          "stderr",
+          "Extension recovery",
+          `${prepared.reasonCode}\n`,
+        );
+      }
       startup.signal.throwIfAborted();
       this.#ready = true;
       this.#stopWatchingChildren = watchRuntimeChildren(

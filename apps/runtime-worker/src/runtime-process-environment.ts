@@ -7,7 +7,6 @@ import {
 import {
   DirectResponsesTransport,
   ResilientResponsesTransport,
-  type DirectResponsesTransportConfig,
 } from "@crewon/agent-responses";
 import {
   createStdioMcpRuntimeGroup,
@@ -23,113 +22,69 @@ import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { createConfiguredLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 
-export function requiredEnvironment(name: string): string {
-  const value = process.env[name];
-  if (value === undefined || value.trim().length === 0) {
-    throw new Error(`${name}_required`);
-  }
-  return value;
-}
+import {
+  parseNonNegativeInteger,
+  requiredEnvironment,
+  type RuntimeEnvironment,
+} from "./runtime-environment-values.ts";
+import { resolveResponsesRuntimeConfiguration } from "./responses-runtime-configuration.ts";
 
-export function environmentOr(name: string, fallback: string): string {
-  return process.env[name]?.trim() || fallback;
-}
+export {
+  environmentOr,
+  requiredEnvironment,
+  parseNonNegativeInteger,
+  parsePositiveInteger,
+} from "./runtime-environment-values.ts";
+export { responsesCompatibilityProfile } from "./responses-runtime-configuration.ts";
 
 export function createModelTransport(
   adapter: string,
   native: { apiKey?: string | null; providerId?: string | null } = {},
+  environment: RuntimeEnvironment = process.env,
 ): ModelTransportPort {
   if (adapter === "responses") {
-    const endpoint = environmentOr(
-      "CREWON_RESPONSES_ENDPOINT",
-      "https://api.openai.com/v1/responses",
-    );
-    const compatibility = responsesCompatibilityProfile(
+    const resolved = resolveResponsesRuntimeConfiguration(
+      environment,
       native.providerId,
-      endpoint,
     );
-    const config: DirectResponsesTransportConfig = {
-      endpoint,
+    const config = {
+      ...resolved.config,
       apiKey:
-        native.apiKey ?? (process.env.CREWON_MODEL_API_KEY?.trim() || null),
-      model: requiredEnvironment("CREWON_MODEL_ID"),
-      ...(process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS === undefined
-        ? {}
-        : {
-            maxOutputTokens: parsePositiveInteger(
-              process.env.CREWON_RESPONSES_MAX_OUTPUT_TOKENS,
-              "CREWON_RESPONSES_MAX_OUTPUT_TOKENS_invalid",
-            ),
-          }),
-      storeResponses: parseBoolean(
-        compatibility === null
-          ? (process.env.CREWON_RESPONSES_STORE ?? "false")
-          : "false",
-        "CREWON_RESPONSES_STORE_invalid",
-      ),
-      requestProfile:
-        compatibility?.requestProfile ??
-        parseResponsesRequestProfile(
-          process.env.CREWON_RESPONSES_REQUEST_PROFILE ?? "standard",
-        ),
-      idleTimeoutMs: parsePositiveInteger(
-        process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
-        "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
-      ),
-      sequencePolicy:
-        compatibility?.sequencePolicy ??
-        parseSequencePolicy(
-          process.env.CREWON_RESPONSES_SEQUENCE_POLICY ?? "required",
-        ),
-      identityPolicy:
-        compatibility === null ? "strict" : "terminalAuthoritative",
-      ...(compatibility === null ? {} : { outputDeltaFlushBytes: 1024 }),
+        native.apiKey ?? (environment.CREWON_MODEL_API_KEY?.trim() || null),
     };
-    if (
-      compatibility === null &&
-      parseBoolean(
-        process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED ?? "false",
-        "CREWON_RESPONSES_WEBSOCKET_ENABLED_invalid",
-      )
-    ) {
-      return new ResilientResponsesTransport({
-        ...config,
-        connectTimeoutMs: parsePositiveInteger(
-          process.env.CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS ?? "10000",
-          "CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS_invalid",
-        ),
-        websocketMaxRetries: parseNonNegativeInteger(
-          process.env.CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES ?? "2",
-          "CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES_invalid",
-        ),
-      });
-    }
-    return new DirectResponsesTransport(config);
+    return resolved.websocket === null
+      ? new DirectResponsesTransport(config)
+      : new ResilientResponsesTransport({
+          ...config,
+          connectTimeoutMs: resolved.websocket.connectTimeoutMs,
+          websocketMaxRetries: resolved.websocket.maxRetries,
+        });
   }
   if (adapter === "deterministic-fake") {
     const inputTokens = parseNonNegativeInteger(
-      process.env.CREWON_FAKE_INPUT_TOKENS ?? "1",
+      environment.CREWON_FAKE_INPUT_TOKENS ?? "1",
       "CREWON_FAKE_INPUT_TOKENS_invalid",
     );
     const cachedInputTokens = parseNonNegativeInteger(
-      process.env.CREWON_FAKE_CACHED_INPUT_TOKENS ?? "0",
+      environment.CREWON_FAKE_CACHED_INPUT_TOKENS ?? "0",
       "CREWON_FAKE_CACHED_INPUT_TOKENS_invalid",
     );
     if (cachedInputTokens > inputTokens) {
       throw new Error("CREWON_FAKE_CACHED_INPUT_TOKENS_invalid");
     }
     const outputTokens = parseNonNegativeInteger(
-      process.env.CREWON_FAKE_OUTPUT_TOKENS ?? "1",
+      environment.CREWON_FAKE_OUTPUT_TOKENS ?? "1",
       "CREWON_FAKE_OUTPUT_TOKENS_invalid",
     );
     return new DeterministicFakeModelTransport({
       expectedLastUserMessage: requiredEnvironment(
         "CREWON_FAKE_EXPECTED_USER_MESSAGE",
+        environment,
       ),
       events: [
         {
           type: "output.delta",
-          delta: requiredEnvironment("CREWON_FAKE_RESPONSE"),
+          delta: requiredEnvironment("CREWON_FAKE_RESPONSE", environment),
         },
         {
           type: "usage",
@@ -143,34 +98,6 @@ export function createModelTransport(
     });
   }
   throw new Error("CREWON_MODEL_ADAPTER_unsupported");
-}
-
-/** Third-party gateways use the portable Responses subset and may omit event sequence numbers. */
-export function responsesCompatibilityProfile(
-  providerId: string | null | undefined,
-  endpoint?: string,
-): Readonly<{
-  requestProfile: "responsesLite";
-  sequencePolicy: "whenPresent";
-}> | null {
-  if (endpoint !== undefined) {
-    try {
-      const url = new URL(endpoint);
-      return url.protocol === "https:" &&
-        url.hostname === "api.openai.com" &&
-        url.pathname.replace(/\/+$/u, "") === "/v1/responses"
-        ? null
-        : { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
-    } catch {
-      return { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
-    }
-  }
-  return providerId === undefined ||
-    providerId === null ||
-    providerId === "openai" ||
-    providerId === "openai-api"
-    ? null
-    : { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
 }
 
 export async function createConfiguredToolRuntime(
@@ -236,48 +163,6 @@ async function createConfiguredMcpRuntime(
     await runtime.close().catch(() => {});
     throw error;
   }
-}
-
-function parseBoolean(value: string, code: string): boolean {
-  if (value === "true") {
-    return true;
-  }
-  if (value === "false") {
-    return false;
-  }
-  throw new Error(code);
-}
-
-function parseSequencePolicy(value: string): "required" | "whenPresent" {
-  if (value === "required" || value === "whenPresent") {
-    return value;
-  }
-  throw new Error("CREWON_RESPONSES_SEQUENCE_POLICY_invalid");
-}
-
-function parseResponsesRequestProfile(
-  value: string,
-): "standard" | "responsesLite" {
-  if (value === "standard" || value === "responsesLite") {
-    return value;
-  }
-  throw new Error("CREWON_RESPONSES_REQUEST_PROFILE_invalid");
-}
-
-export function parsePositiveInteger(value: string, code: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    throw new Error(code);
-  }
-  return parsed;
-}
-
-export function parseNonNegativeInteger(value: string, code: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error(code);
-  }
-  return parsed;
 }
 
 /** Parses the explicit server-owned switch shared by Release and Worker. */

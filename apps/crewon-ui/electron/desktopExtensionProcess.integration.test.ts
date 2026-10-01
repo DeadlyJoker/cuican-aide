@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +26,18 @@ import type {
   ThreadMutationResponse,
 } from "@crewon/contracts";
 import { parseExtensionConfiguration } from "@crewon/domain";
+import {
+  createScopedExtensionBuildIdentity,
+  EXTENSION_BUILD_IDENTITY_FILE,
+  getComfyImplementationDigest,
+  resolveRetainedExtensionBuild,
+} from "@crewon/agent-version/extension-build";
+import {
+  EXTENSION_RECOVERY_STARTUP_FILE,
+  parseExtensionRecoveryStartupReport,
+  resolveExtensionRecoveryCapsule,
+  type ResolvedExtensionRecoveryCapsule,
+} from "@crewon/agent-version/extension-recovery";
 import {
   createAgentVersionAsset,
   parseAgentVersionAsset,
@@ -44,6 +64,7 @@ const digester = {
 
 async function modelFixture() {
   const requests: Record<string, unknown>[] = [];
+  const authorizations: (string | undefined)[] = [];
   const server = createServer(async (request, response) => {
     if (request.url !== "/v1/responses") {
       response.writeHead(404).end();
@@ -64,6 +85,7 @@ async function modelFixture() {
       unknown
     >;
     requests.push(input);
+    authorizations.push(request.headers.authorization);
     const text = (input.tools as { name?: string }[] | undefined)?.some(
       (t) => t.name === "crewon_comfyui_krea2__submit",
     )
@@ -124,6 +146,7 @@ async function modelFixture() {
   return {
     endpoint: `http://127.0.0.1:${address.port}/v1`,
     requests,
+    authorizations,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -175,7 +198,7 @@ async function stream(
 }
 
 /** Actual Node 24 release/Worker/Control entrypoints, with a local text-only model fixture. */
-it("runs the native metadata → configuration → prepared supplement → restart → task/SSE/default path", async () => {
+async function runNativeFlow(mode: "source" | "packaged") {
   expect(process.version).toMatch(/^v24\./u);
   vi.stubEnv("CREWON_MODEL_CREDENTIAL_REQUIRED", "0");
   vi.stubEnv("CREWON_RESPONSES_STREAM_MAX_RETRIES", "0");
@@ -184,8 +207,8 @@ it("runs the native metadata → configuration → prepared supplement → resta
   vi.stubEnv("CREWON_OUTBOX_SCAN_INTERVAL_MS", "25");
   vi.stubEnv("CREWON_OUTBOX_RETENTION_MS", "off");
   vi.stubEnv("CREWON_ARTIFACT_RETENTION", "off");
-  const directory = mkdtempSync(
-    join(tmpdir(), "crewon-native-extension-process-"),
+  const directory = realpathSync(
+    mkdtempSync(join(tmpdir(), "crewon-native-extension-process-")),
   );
   const configPath = join(directory, DESKTOP_EXTENSION_CONFIGURATION_FILE);
   writeFileSync(
@@ -199,6 +222,16 @@ it("runs the native metadata → configuration → prepared supplement → resta
   );
   const model = await modelFixture();
   const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
+  const resourcesPath = join(directory, "installed");
+  let modelCatalog = ["native-fixture-model"];
+  const originalProvider = {
+    providerId: "native-fixture",
+    endpoint: model.endpoint,
+    modelId: "native-fixture-model",
+    apiKey: "native-fixture-local-key-for-probe-0001",
+  };
+  let selectedProvider = originalProvider;
+  let workspaceRoot: string | null = null;
   const logs: string[] = [];
   const output = () =>
     new Writable({
@@ -213,25 +246,43 @@ it("runs the native metadata → configuration → prepared supplement → resta
     dataDirectory: directory,
     repositoryRoot,
     paths: runtimePaths({
-      packaged: false,
+      packaged: mode === "packaged",
       repositoryRoot,
-      resourcesPath: repositoryRoot,
+      resourcesPath,
     }),
-    provider: () => ({
-      providerId: "native-fixture",
-      endpoint: model.endpoint,
-      modelId: "native-fixture-model",
-      apiKey: "native-fixture-local-key-for-probe-0001",
-    }),
-    providerModelCatalog: async () => ["native-fixture-model"],
+    provider: () => selectedProvider,
+    providerModelCatalog: async () => modelCatalog,
     agentPlatformApiKeyForOrigin: () => null,
-    workspaceRoot: () => null,
+    workspaceRoot: () => workspaceRoot,
     logOutputs: { stdout, stderr },
     extensionRuntime: {
       configuration: () => loadDesktopExtensionRuntimeConfiguration(directory),
     },
   });
   try {
+    if (mode === "packaged") {
+      const destination = join(resourcesPath, "runtime");
+      mkdirSync(destination, { recursive: true });
+      const digest = getComfyImplementationDigest();
+      const stage = await import(
+        new URL("../../../scripts/stage-desktop-runtime.ts", import.meta.url)
+          .href
+      );
+      const specs = stage.runtimeBundleSpecs(
+        repositoryRoot,
+        destination,
+      ) as readonly { entry: string; output: string }[];
+      for (const spec of specs) stage.bundleRuntime(spec, digest);
+      writeFileSync(
+        join(destination, EXTENSION_BUILD_IDENTITY_FILE),
+        JSON.stringify(
+          createScopedExtensionBuildIdentity({
+            implementationDigest: digest,
+            bundlePaths: specs.map((spec) => spec.output),
+          }),
+        ),
+      );
+    }
     await supervisor.start();
     const session = supervisor.session();
     const catalog = await json<ExtensionCatalogResponse>(
@@ -368,6 +419,35 @@ it("runs the native metadata → configuration → prepared supplement → resta
     );
     await supervisor.restart();
     expect(supervisor.session()).toEqual(session);
+    let capsule: ResolvedExtensionRecoveryCapsule | null = null;
+    let capsuleBytes: { path: string; bytes: Buffer }[] = [];
+    if (mode === "packaged") {
+      const report = parseExtensionRecoveryStartupReport(
+        JSON.parse(
+          readFileSync(
+            join(directory, EXTENSION_RECOVERY_STARTUP_FILE),
+            "utf8",
+          ),
+        ),
+      );
+      expect(report.outcome, logs.join("").slice(-16000)).toBe("prepared");
+      if (report.outcome !== "prepared")
+        throw new Error("native_recovery_candidate_missing");
+      capsule = await resolveExtensionRecoveryCapsule({
+        dataRoot: directory,
+        capsuleId: report.manifest.capsuleId,
+      });
+      expect(capsule.manifest.targets).toHaveLength(1);
+      expect(capsule.manifest.targets[0]!.agentVersionId).toBe(pluginAgent);
+      capsuleBytes = [
+        ...capsule.files,
+        { path: join(capsule.directory, "manifest.json") },
+      ].map(({ path }) => ({ path, bytes: readFileSync(path) }));
+      for (const file of capsuleBytes)
+        expect(file.bytes.toString("utf8")).not.toContain(
+          "native-fixture-local-key-for-probe-0001",
+        );
+    }
     for (const input of immutable)
       expect(readFileSync(input.path)).toEqual(input.bytes);
     const ready = await json<ExtensionRuntimeResponse>(
@@ -489,6 +569,167 @@ it("runs the native metadata → configuration → prepared supplement → resta
     } finally {
       finalDatabase.close();
     }
+    if (capsule !== null) {
+      // Current default/catalog upgrades must preserve the first valid plugin capsule.
+      modelCatalog = ["native-fixture-model", "native-other-model"];
+      await supervisor.start();
+      const reused = parseExtensionRecoveryStartupReport(
+        JSON.parse(
+          readFileSync(
+            join(directory, EXTENSION_RECOVERY_STARTUP_FILE),
+            "utf8",
+          ),
+        ),
+      );
+      expect(reused.outcome, logs.join("").slice(-16000)).toBe("prepared");
+      if (reused.outcome !== "prepared")
+        throw new Error("native_recovery_reuse_missing");
+      expect(reused.manifest).toEqual(capsule.manifest);
+      for (const file of capsuleBytes)
+        expect(readFileSync(file.path)).toEqual(file.bytes);
+      expect(model.requests).toHaveLength(2);
+      const currentReady = await json<ExtensionRuntimeResponse>(
+        session,
+        `${api}/runtime?agentVersionId=${pluginAgent}&configurationRevision=${configuration.revision}`,
+      );
+      expect(currentReady.status, JSON.stringify(currentReady.body)).toBe(200);
+      expect(currentReady.body.readiness.outcome).toBe("ready");
+      expect(
+        currentReady.body.readiness.outcome === "ready" &&
+          currentReady.body.readiness.target,
+      ).toEqual(capsule.manifest.targets[0]);
+      selectedProvider = {
+        ...originalProvider,
+        providerId: "native-fixture-renamed",
+      };
+      await supervisor.restart();
+      expect(supervisor.session()).toEqual(session);
+      const renamed = parseExtensionRecoveryStartupReport(
+        JSON.parse(
+          readFileSync(
+            join(directory, EXTENSION_RECOVERY_STARTUP_FILE),
+            "utf8",
+          ),
+        ),
+      );
+      expect(renamed.outcome, logs.join("").slice(-16000)).toBe("unsupported");
+      const renamedReady = await json<ExtensionRuntimeResponse>(
+        session,
+        `${api}/runtime?agentVersionId=${pluginAgent}&configurationRevision=${configuration.revision}`,
+      );
+      expect(renamedReady.status).toBe(200);
+      expect(renamedReady.body.readiness.outcome).toBe("ready");
+      workspaceRoot = join(directory, "workspace");
+      mkdirSync(workspaceRoot);
+      await supervisor.restart();
+      expect(supervisor.session()).toEqual(session);
+      const workspaceReady = await json<ExtensionRuntimeResponse>(
+        session,
+        `${api}/runtime?agentVersionId=${pluginAgent}&configurationRevision=${configuration.revision}`,
+      );
+      expect(workspaceReady.status).toBe(200);
+      expect(workspaceReady.body.readiness.outcome).toBe("ready");
+      for (const file of capsuleBytes)
+        expect(readFileSync(file.path)).toEqual(file.bytes);
+      workspaceRoot = null;
+      const alternate = await modelFixture();
+      try {
+        selectedProvider = {
+          ...originalProvider,
+          providerId: "native-alternate",
+          endpoint: alternate.endpoint,
+          apiKey: "native-new-provider-key-for-probe-0002",
+        };
+        vi.stubEnv("CREWON_MODEL_CREDENTIAL_REQUIRED", "1");
+        await supervisor.restart();
+        const isolated = parseExtensionRecoveryStartupReport(
+          JSON.parse(
+            readFileSync(
+              join(directory, EXTENSION_RECOVERY_STARTUP_FILE),
+              "utf8",
+            ),
+          ),
+        );
+        expect(isolated.outcome, logs.join("").slice(-16000)).toBe(
+          "pluginUnavailable",
+        );
+        const unavailableReady = await json<ExtensionRuntimeResponse>(
+          session,
+          `${api}/runtime?agentVersionId=${pluginAgent}&configurationRevision=${configuration.revision}`,
+        );
+        expect(unavailableReady.status).toBe(200);
+        expect(unavailableReady.body.readiness.outcome).toBe("unavailable");
+        const changedThread = await json<ThreadMutationResponse>(
+          session,
+          "/api/v1/threads",
+          "POST",
+          { title: "Changed provider default" },
+          "native-changed-provider-thread",
+        );
+        expect(changedThread.status).toBe(201);
+        const changedTurn = await json<StartTurnResponse>(
+          session,
+          `/api/v1/threads/${changedThread.body.thread.threadId}/turns`,
+          "POST",
+          {
+            expectedRevision: changedThread.body.thread.revision,
+            content: "Use current provider.",
+            agentVersionId: null,
+            executionIntent: "none",
+          },
+          "native-changed-provider-turn",
+        );
+        expect(changedTurn.status, JSON.stringify(changedTurn.body)).toBe(201);
+        expect(await stream(session, changedTurn.body.run.runId)).toContain(
+          defaultText,
+        );
+        expect(alternate.requests).toHaveLength(1);
+        expect(alternate.authorizations).toEqual([
+          "Bearer native-new-provider-key-for-probe-0002",
+        ]);
+        expect(model.requests).toHaveLength(2);
+        for (const file of capsuleBytes)
+          expect(readFileSync(file.path)).toEqual(file.bytes);
+      } finally {
+        await supervisor.stop();
+        await alternate.close();
+        selectedProvider = originalProvider;
+        vi.stubEnv("CREWON_MODEL_CREDENTIAL_REQUIRED", "0");
+      }
+      await supervisor.stop();
+      // Explicitly selecting the saved pair keeps current execution usable without operator source files.
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          schemaVersion: "crewon.desktop-extension-runtime.v0",
+          enabled: true,
+          runtimeBindingsPath: join(capsule.directory, "plugin-bindings.json"),
+          agentVersionAssetsPath: join(capsule.directory, "plugin-assets.json"),
+        }),
+      );
+      for (const input of immutable) unlinkSync(input.path);
+      await supervisor.start();
+      const savedReady = await json<ExtensionRuntimeResponse>(
+        session,
+        `${api}/runtime?agentVersionId=${pluginAgent}&configurationRevision=${configuration.revision}`,
+      );
+      expect(savedReady.status, JSON.stringify(savedReady.body)).toBe(200);
+      expect(savedReady.body.readiness.outcome).toBe("ready");
+      for (const file of capsuleBytes)
+        expect(readFileSync(file.path)).toEqual(file.bytes);
+      await supervisor.stop();
+      // Archive verification remains possible after the installed source bundles are removed.
+      rmSync(resourcesPath, { recursive: true });
+      const archived = await resolveRetainedExtensionBuild({
+        dataRoot: directory,
+        implementationDigest: capsule.manifest.implementationDigest,
+        expectedBuildIdentityDigest: capsule.manifest.buildIdentityDigest,
+      });
+      expect(archived.bundles).toHaveLength(7);
+      for (const bundle of archived.bundles)
+        expect(readFileSync(bundle.path).length).toBeGreaterThan(0);
+      expect(model.requests).toHaveLength(2);
+    }
   } catch (error) {
     throw new Error(
       `${error instanceof Error ? error.message : String(error)}\n${logs.join("").slice(-16000)}`,
@@ -502,4 +743,10 @@ it("runs the native metadata → configuration → prepared supplement → resta
     rmSync(directory, { recursive: true, force: true });
     vi.unstubAllEnvs();
   }
-}, 120000);
+}
+
+it.each(["source", "packaged"] as const)(
+  "runs the native %s metadata → configuration → prepared supplement → restart → task/SSE/default path",
+  runNativeFlow,
+  120000,
+);

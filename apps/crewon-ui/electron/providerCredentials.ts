@@ -1,5 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
+import { inspect } from "node:util";
 
 import { safeStorage } from "electron";
 import { writeDesktopConfigAtomically } from "./desktopConfigFile.ts";
@@ -25,6 +35,28 @@ export type ActiveProvider = Readonly<{
   modelId: string;
   apiKey: string | null;
 }>;
+
+export type ProviderRuntimeCredentialInput = Readonly<{
+  providerId: string;
+  endpoint: string;
+  responsesEndpoint: string;
+  credentialRequired: boolean;
+}>;
+
+export type ProviderRuntimeCredentialUnavailableReason =
+  | "provider_not_configured"
+  | "provider_endpoint_mismatch"
+  | "provider_credentials_unavailable"
+  | "provider_catalog_invalid";
+
+export type ProviderRuntimeCredentialResolution =
+  | Readonly<{ availability: "available"; apiKey: string | null }>
+  | Readonly<{
+      availability: "unavailable";
+      reason: ProviderRuntimeCredentialUnavailableReason;
+    }>;
+
+const MAX_PROVIDER_CATALOG_BYTES = 512 * 1024;
 
 export class ProviderCredentialStore {
   readonly #path: string;
@@ -84,6 +116,62 @@ export class ProviderCredentialStore {
       (candidate) => candidate.providerId === providerId,
     );
     return binding === undefined ? null : this.#secret(binding);
+  }
+
+  /** Reads current persisted authority; draft overrides and active selection do not apply. */
+  resolveForRuntime(
+    input: ProviderRuntimeCredentialInput,
+  ): ProviderRuntimeCredentialResolution {
+    const request = copyRuntimeCredentialInput(input);
+    let descriptor: number;
+    try {
+      descriptor = openSync(
+        this.#path,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+    } catch (error) {
+      return unavailable(
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+          ? "provider_not_configured"
+          : "provider_catalog_invalid",
+      );
+    }
+    let state: StoredCatalog;
+    try {
+      const metadata = fstatSync(descriptor);
+      if (!metadata.isFile() || metadata.size > MAX_PROVIDER_CATALOG_BYTES)
+        throw new Error();
+      const bytes = readFileSync(descriptor);
+      if (bytes.byteLength > MAX_PROVIDER_CATALOG_BYTES) throw new Error();
+      state = copyRuntimeProviderCatalog(
+        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+      );
+    } catch {
+      return unavailable("provider_catalog_invalid");
+    } finally {
+      closeSync(descriptor);
+    }
+    const binding = state.bindings.find(
+      (candidate) => candidate.providerId === request.providerId,
+    );
+    if (binding === undefined) return unavailable("provider_not_configured");
+    if (
+      normalizedEndpoint(binding.endpoint) !== request.endpoint ||
+      derivedResponsesEndpoint(binding.endpoint) !== request.responsesEndpoint
+    )
+      return unavailable("provider_endpoint_mismatch");
+    if (binding.credentialKind === "none")
+      return request.credentialRequired
+        ? unavailable("provider_credentials_unavailable")
+        : available(null);
+    try {
+      const apiKey = this.#secret(binding);
+      if (apiKey === null)
+        return unavailable("provider_credentials_unavailable");
+      return available(parseText(apiKey, 32 * 1024));
+    } catch {
+      return unavailable("provider_credentials_unavailable");
+    }
   }
 
   async activate(value: unknown) {
@@ -241,6 +329,154 @@ export class ProviderCredentialStore {
     writeDesktopConfigAtomically(this.#path, `${JSON.stringify(state)}\n`);
     this.#state = state;
   }
+}
+
+function copyRuntimeCredentialInput(
+  input: unknown,
+): ProviderRuntimeCredentialInput {
+  try {
+    const value = copyDataObject(input, [
+      "providerId",
+      "endpoint",
+      "responsesEndpoint",
+      "credentialRequired",
+    ]);
+    if (typeof value.credentialRequired !== "boolean") throw new Error();
+    const endpoint = normalizedEndpoint(value.endpoint);
+    const responsesEndpoint = normalizedEndpoint(value.responsesEndpoint);
+    if (derivedResponsesEndpoint(endpoint) !== responsesEndpoint)
+      throw new Error();
+    return Object.freeze({
+      providerId: parseProviderId(value.providerId),
+      endpoint,
+      responsesEndpoint,
+      credentialRequired: value.credentialRequired,
+    });
+  } catch {
+    throw new Error("provider_runtime_credential_request_invalid");
+  }
+}
+
+function copyRuntimeProviderCatalog(input: unknown): StoredCatalog {
+  const value = copyDataObject(input, [
+    "schemaVersion",
+    "activeProviderId",
+    "bindings",
+  ]);
+  if (
+    value.schemaVersion !== "crewon.provider-credentials.v1" ||
+    !Array.isArray(value.bindings) ||
+    value.bindings.length > 4096
+  )
+    throw new Error();
+  const activeProviderId =
+    value.activeProviderId === null
+      ? null
+      : parseProviderId(value.activeProviderId);
+  const ids = new Set<string>();
+  const bindings = value.bindings.map((input): StoredBinding => {
+    const binding = copyDataObject(input, [
+      "providerId",
+      "endpoint",
+      "modelId",
+      "credentialKind",
+      "environmentVariable",
+      "encryptedSecret",
+    ]);
+    const providerId = parseProviderId(binding.providerId);
+    if (ids.has(providerId)) throw new Error();
+    ids.add(providerId);
+    const credentialKind = parseCredentialKind(binding.credentialKind);
+    const environmentVariable =
+      binding.environmentVariable === null
+        ? null
+        : parseEnvironmentVariable(binding.environmentVariable);
+    const encryptedSecret =
+      binding.encryptedSecret === null
+        ? null
+        : parseText(binding.encryptedSecret, 128 * 1024);
+    if (
+      (credentialKind === "environment" && environmentVariable === null) ||
+      (credentialKind !== "environment" && environmentVariable !== null) ||
+      (credentialKind !== "keychain" && encryptedSecret !== null) ||
+      (encryptedSecret !== null &&
+        (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
+          encryptedSecret,
+        ) ||
+          Buffer.from(encryptedSecret, "base64").toString("base64") !==
+            encryptedSecret))
+    )
+      throw new Error();
+    return {
+      providerId,
+      endpoint: normalizedEndpoint(binding.endpoint),
+      modelId: parseText(binding.modelId, 256),
+      credentialKind,
+      environmentVariable,
+      encryptedSecret,
+    };
+  });
+  if (activeProviderId !== null && !ids.has(activeProviderId))
+    throw new Error();
+  return {
+    schemaVersion: "crewon.provider-credentials.v1",
+    activeProviderId,
+    bindings,
+  };
+}
+
+function copyDataObject(
+  input: unknown,
+  keys: readonly string[],
+): Record<string, unknown> {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input)) ||
+    Object.getOwnPropertySymbols(input).length !== 0
+  )
+    throw new Error();
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  if (
+    Object.keys(descriptors).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(descriptors, key)) ||
+    Object.values(descriptors).some(
+      (descriptor) => !("value" in descriptor) || !descriptor.enumerable,
+    )
+  )
+    throw new Error();
+  return Object.fromEntries(keys.map((key) => [key, descriptors[key]!.value]));
+}
+
+function normalizedEndpoint(input: unknown): string {
+  const raw = parseEndpoint(input);
+  if (/[\\?#]/u.test(raw)) throw new Error();
+  return parseText(new URL(raw).toString(), 2_048);
+}
+
+function derivedResponsesEndpoint(input: string): string {
+  const url = new URL(normalizedEndpoint(input));
+  url.pathname = `${url.pathname.replace(/\/+$/u, "")}/responses`;
+  return url.toString();
+}
+
+function available(apiKey: string | null): ProviderRuntimeCredentialResolution {
+  const resolution = { availability: "available" as const, apiKey };
+  const redacted = () => ({
+    availability: "available" as const,
+    apiKey: apiKey === null ? null : "[REDACTED]",
+  });
+  Object.defineProperties(resolution, {
+    [inspect.custom]: { value: redacted },
+    toJSON: { value: redacted },
+  });
+  return Object.freeze(resolution);
+}
+
+function unavailable(
+  reason: ProviderRuntimeCredentialUnavailableReason,
+): ProviderRuntimeCredentialResolution {
+  return Object.freeze({ availability: "unavailable" as const, reason });
 }
 
 function parseProviderId(value: unknown): string {

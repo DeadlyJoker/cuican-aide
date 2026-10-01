@@ -1,10 +1,10 @@
 # 原生插件历史恢复：下一阶段实施顺序
 
-日期：2026-10-02。本文是代码审计后的后续任务，尚未实现恢复快照或自动历史宿主。当前已交付范围见[进程启动说明](./extension-process-startup.md)及[实施进度](./incremental-extension-progress.md)。继续采用现有 Node / TypeScript 发布与执行路径；短剧产品形态仍按[参考结论](./short-drama-workbench-reference.md)后置。
+日期：2026-10-02。不可变恢复输入、实际发布核验、当前 Worker 就绪后提交记录，以及当前 Provider 凭据查询模块已落地；自动历史宿主尚未接入。当前已交付范围见[进程启动说明](./extension-process-startup.md)及[实施进度](./incremental-extension-progress.md)。继续采用现有 Node / TypeScript 发布与执行路径；短剧产品形态仍按[参考结论](./short-drama-workbench-reference.md)后置。
 
 ## 先准备不可变恢复输入
 
-当前 Native release 生成的 `agent-version-runtime-bindings.json` 会在下次启动时覆盖；代码归档只保留七个运行包与 sidecar。这不足以还原旧发布。下一切片先保存可核验的非秘密恢复输入，再增加自动进程管理。
+Native release 生成的当前 `agent-version-runtime-bindings.json` 仍会在下次启动时覆盖；七包代码归档不包含配置。现已额外在原生数据目录的 `extension-recoveries/<capsuleId>` 保存可核验的非秘密恢复输入，再增加自动进程管理。
 
 两层身份必须分别处理：AgentVersion 的 `contentDigest` 覆盖版本、模型、指导、执行规则、资源和工具定义；部署的 `materializationDigest` 还覆盖完整 binding 和引用配置，包括配置路径、模型 endpoint 及凭据环境变量名称。顶层 bindings / assets 文档可以按原字节复制，已发布 binding 内的路径不能在升级后重定位。
 
@@ -26,11 +26,17 @@ API key、session / CSRF / private / probe token、artifact key、数据库连�
 
 ### 落地顺序
 
+步骤 1–4 已接入打包版桌面的实际 release / Worker / Control 路径。`manifest.json` 是最后发布的完整记录标记；固定启动交接文件只传当前尝试的候选或明确不可用结果，不能代替完整记录。源代码模式不自动归档或准备记录。第 5 步中的 Provider Store 查询已实现，自动旧 Worker 仍待接线。
+
 1. 增加独立快照模块，采用有界严格 schema、普通文件、无符号链接、独占创建及不可覆盖发布；首次 release 前确定最终路径。
 2. 冻结插件文件、有效 bootstrap 参数及工具来源，仍调用现有授权发布入口。对已有部署不改写绑定。
 3. release 成功后封存完整基础 bindings 和真实发布结果；核对 bundle、assets、deployments 与代码归档，准备待提交记录。
 4. Worker 的实际 owner / registration / 完整目标挑战通过后，以最后发布的 complete marker 提交可恢复记录。失败不伪造完成状态，不删除已发布输入；恢复时重新核对全部字节和数据库记录。
 5. 再接当前凭据解析和自动历史 Worker。恢复只执行已保存构建的 Worker，不再次 release，也不切换默认 Agent。
+
+已发布输入与本次恢复资格分开处理：当前 default/catalog 或 workspace 变化后，能完整匹配的已保存插件文件仍使用原固定路径，首次有效的 bootstrap、基础 bindings 和 release 不覆盖。当前 Provider ID 或凭据要求变化只影响恢复候选；改变完整模型 endpoint 或缺少旧绑定所需的当前秘密时，当前宿主不装配旧插件，默认 Agent 和目录宿主继续启动。历史记录仍保留原 Provider 绑定，后续必须通过当前 Store 精确查询，不能将新服务的密钥发往旧服务。
+
+旧版已经在原操作者路径发布的目标不会自动搬迁。操作者将当前配置显式改为保存的文件后，可以在删除原文件的情况下继续当前执行；这不等于已实现自动选择旧记录。该选择改变原 bindings 字节，可能只返回不支持新的恢复记录，已有完整记录保持不变。自动记录选择与升级后的旧 Worker 生命周期留在下一步骤中处理。
 
 当前可复用 `loadExtensionReleaseInput` / `mergeExtensionReleaseInput`、`agentVersionDeploymentCandidates` / `runtimeExtensionTarget`、`compileRuntimeAgentVersionRelease` / `verifyRuntimeAgentVersionRelease` 及 `retainExtensionBuild` / `resolveRetainedExtensionBuild`。恢复核验不要求该旧 release 仍是当前默认指针，但要求其原 bundle、资产与部署完整匹配。
 

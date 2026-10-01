@@ -26,6 +26,7 @@ import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 import { runtimeReleaseToolDefinitions } from "./runtime-workspace-read-tool-catalog.ts";
+import { RUNTIME_BOOTSTRAP_DEFAULTS } from "./runtime-bootstrap-defaults.ts";
 
 export type RuntimeAgentVersionReleaseConfig = Readonly<{
   runtimeTenantId: string;
@@ -238,15 +239,20 @@ export function compileRuntimeAgentVersion(
         ...(config.transport.maxOutputTokens === undefined
           ? {}
           : { maxOutputTokens: config.transport.maxOutputTokens }),
-        contextWindowTokens: config.modelContextWindowTokens ?? 273_000,
+        contextWindowTokens:
+          config.modelContextWindowTokens ??
+          RUNTIME_BOOTSTRAP_DEFAULTS.contextWindowTokens,
         autoCompactAtTokens:
           config.autoCompactAtTokens === undefined
-            ? 200_000
+            ? RUNTIME_BOOTSTRAP_DEFAULTS.autoCompactAtTokens
             : config.autoCompactAtTokens,
       },
       execution: {
-        streamMaxRetries: config.streamMaxRetries ?? 5,
-        maxToolRounds: config.maxToolRounds ?? 32,
+        streamMaxRetries:
+          config.streamMaxRetries ??
+          RUNTIME_BOOTSTRAP_DEFAULTS.streamMaxRetries,
+        maxToolRounds:
+          config.maxToolRounds ?? RUNTIME_BOOTSTRAP_DEFAULTS.maxToolRounds,
       },
       resources: {
         workspaceRequired: config.route.workspaceBindingId !== null,

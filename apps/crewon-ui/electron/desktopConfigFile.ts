@@ -11,6 +11,7 @@ import { basename, join } from "node:path";
 
 // Match the existing readers. A successful write must remain readable on restart.
 const CONFIG_LIMITS = new Map([
+  ["extension-recovery-startup.json", 256 * 1024],
   ["provider-credentials.json", 512 * 1024],
   ["agent-platform-credentials.json", 256 * 1024],
   ["desktop-workspace.json", 16 * 1024],
@@ -75,7 +76,7 @@ export function discardInterruptedDesktopConfigWrites(options: {
   }
   let removed = 0;
   let retained = 0;
-  // Four exact paths; no directory enumeration, history reads, or age heuristic.
+  // Fixed paths; no directory enumeration, history reads, or age heuristic.
   for (const [name, limit] of CONFIG_LIMITS) {
     const temporary = join(options.dataDirectory, `${name}${PENDING_SUFFIX}`);
     try {

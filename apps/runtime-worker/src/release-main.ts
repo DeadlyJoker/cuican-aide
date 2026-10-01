@@ -24,8 +24,6 @@ import {
   createModelTransport,
   environmentOr,
   parseNativeWorkspaceReadCatalog,
-  parseNonNegativeInteger,
-  parsePositiveInteger,
   requiredEnvironment,
   responsesCompatibilityProfile,
 } from "./runtime-process-environment.ts";
@@ -39,33 +37,54 @@ import {
   mergeExtensionReleaseInput,
 } from "./extensions/extension-release-input.ts";
 import { retainInstalledExtensionBuild } from "./extensions/retain-installed-extension-build.ts";
+import {
+  resolveRuntimeBootstrapAgent,
+  resolveRuntimeBootstrapRoute,
+} from "./runtime-bootstrap-defaults.ts";
+import {
+  parseExtensionRecoveryReleaseRequest,
+  prepareExtensionRecoveryRelease,
+  finishExtensionRecoveryRelease,
+} from "./extension-recovery-release.ts";
+import { resolveResponsesRuntimeConfiguration } from "./responses-runtime-configuration.ts";
 
+const environment = Object.freeze({ ...process.env });
+const recoveryRequest = parseExtensionRecoveryReleaseRequest(environment);
 const actor = loadRuntimeReleaseActor();
 const bindingsPath =
-  process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
-const route = {
-  authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
-  runtimeGeneration: environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-  agentVersionId: environmentOr("CREWON_AGENT_VERSION_ID", "default-agent-v1"),
-  policySnapshotId: environmentOr(
-    "CREWON_POLICY_SNAPSHOT_ID",
-    "standalone-policy-v0",
-  ),
-  workspaceBindingId: process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
-};
-const extensionRelease = loadExtensionReleaseInput({
-  environment: process.env,
+  environment.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
+const route = resolveRuntimeBootstrapRoute(environment);
+const bootstrapAgent = resolveRuntimeBootstrapAgent(environment);
+const originalExtensionRelease = loadExtensionReleaseInput({
+  environment,
   tenantId: actor.tenantId,
   defaultAgentVersionId: route.agentVersionId,
 });
-await retainInstalledExtensionBuild({
-  environment: process.env,
-  entrypointUrl: import.meta.url,
+const retainedBuild =
+  recoveryRequest !== null &&
+  !new URL(import.meta.url).pathname.endsWith("/runtime-release.mjs")
+    ? undefined
+    : await retainInstalledExtensionBuild({
+        environment,
+        entrypointUrl: import.meta.url,
+      });
+const recoveryPreparation = await prepareExtensionRecoveryRelease({
+  request: recoveryRequest,
+  extension: originalExtensionRelease,
+  retainedBuild,
+  releaseActor: actor,
+  defaultAgentVersionId: route.agentVersionId,
 });
+const extensionRelease =
+  recoveryPreparation !== null
+    ? recoveryPreparation.extension
+    : originalExtensionRelease;
 const transport = createModelTransport(
-  environmentOr("CREWON_MODEL_ADAPTER", "responses"),
+  environmentOr("CREWON_MODEL_ADAPTER", "responses", environment),
+  {},
+  environment,
 );
-const toolRuntime = await createConfiguredToolRuntime();
+const toolRuntime = await createConfiguredToolRuntime(environment);
 
 try {
   const common = {
@@ -73,39 +92,31 @@ try {
     authorization: new RuntimeReleaseAuthorization(actor),
     clock: new SystemApplicationClock(),
     activationId:
-      process.env.CREWON_AGENT_VERSION_ACTIVATION_ID?.trim() || uuidv7(),
+      environment.CREWON_AGENT_VERSION_ACTIVATION_ID?.trim() || uuidv7(),
     runtimeTenantId: actor.tenantId,
     route,
     transport,
-    agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
+    agentInstructions: bootstrapAgent.instructions,
     toolRuntime,
     nativeWorkspaceReadCatalog: parseNativeWorkspaceReadCatalog(
-      process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+      environment.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
     ),
-    streamMaxRetries: parseNonNegativeInteger(
-      process.env.CREWON_RESPONSES_STREAM_MAX_RETRIES ?? "5",
-      "CREWON_RESPONSES_STREAM_MAX_RETRIES_invalid",
-    ),
-    autoCompactAtTokens: parsePositiveInteger(
-      process.env.CREWON_AUTO_COMPACT_AT_TOKENS ?? "200000",
-      "CREWON_AUTO_COMPACT_AT_TOKENS_invalid",
-    ),
-    modelContextWindowTokens: parsePositiveInteger(
-      process.env.CREWON_MODEL_CONTEXT_WINDOW_TOKENS ?? "273000",
-      "CREWON_MODEL_CONTEXT_WINDOW_TOKENS_invalid",
-    ),
+    streamMaxRetries: bootstrapAgent.streamMaxRetries,
+    maxToolRounds: bootstrapAgent.maxToolRounds,
+    autoCompactAtTokens: bootstrapAgent.autoCompactAtTokens,
+    modelContextWindowTokens: bootstrapAgent.contextWindowTokens,
     expectedAgentVersionDigest:
-      process.env.CREWON_AGENT_VERSION_CONTENT_DIGEST?.trim() || null,
+      environment.CREWON_AGENT_VERSION_CONTENT_DIGEST?.trim() || null,
   };
   const profiles = parseDevelopmentAgentProfiles(
-    process.env.CREWON_DEV_AGENT_PROFILES_JSON,
+    environment.CREWON_DEV_AGENT_PROFILES_JSON,
   );
   const bootstrapVersion = compileRuntimeAgentVersion(common);
   const profileAgentVersions = profiles.map((profile) =>
     compileDevelopmentAgentProfileVersion(common, profile),
   );
   const modelIds = runtimeModelCatalog(
-    process.env.CREWON_MODEL_CATALOG_JSON,
+    environment.CREWON_MODEL_CATALOG_JSON,
     transport.modelId,
   );
   const modelVariantSources = [
@@ -149,7 +160,7 @@ try {
     ...modelAgentVersions,
   ];
   const ownsBindingsManifest =
-    process.env.CREWON_MODEL_CATALOG_JSON !== undefined;
+    environment.CREWON_MODEL_CATALOG_JSON !== undefined;
   let generatedBindings:
     | ReturnType<typeof developmentAgentRuntimeBindings>
     | undefined;
@@ -160,9 +171,10 @@ try {
     const endpoint = environmentOr(
       "CREWON_RESPONSES_ENDPOINT",
       "https://api.openai.com/v1/responses",
+      environment,
     );
     const compatibility = responsesCompatibilityProfile(
-      process.env.CREWON_PROVIDER_ID,
+      environment.CREWON_PROVIDER_ID,
       endpoint,
     );
     const requestProfile = compatibility?.requestProfile ?? "standard";
@@ -180,17 +192,15 @@ try {
       endpoint,
       requestProfile,
       sequencePolicy,
-      idleTimeoutMs: parsePositiveInteger(
-        process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
-        "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
-      ),
+      idleTimeoutMs:
+        resolveResponsesRuntimeConfiguration(environment).config.idleTimeoutMs,
       mcpStdioConfigPath: ownsBindingsManifest
         ? null
-        : process.env.CREWON_MCP_STDIO_CONFIG_PATH?.trim() || null,
+        : environment.CREWON_MCP_STDIO_CONFIG_PATH?.trim() || null,
       ...(ownsBindingsManifest
         ? {
             directApiKeyEnvironment:
-              process.env.CREWON_MODEL_CREDENTIAL_REQUIRED === "0"
+              environment.CREWON_MODEL_CREDENTIAL_REQUIRED === "0"
                 ? null
                 : "CREWON_MODEL_API_KEY",
           }
@@ -244,19 +254,26 @@ try {
       ? {}
       : { agentVersionDeployments: releaseDeployments }),
   };
-  const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
+  const connectionString = environment.CREWON_CONTROL_DATABASE_URL?.trim();
   const activated = connectionString
     ? await activatePostgresRuntimeAgentVersionRelease({
         ...release,
         connectionString,
-        ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-          ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
+        ...(environment.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
+          ? { schema: environment.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
           : {}),
       })
     : await activateStandaloneRuntimeAgentVersionRelease({
         ...release,
-        databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
+        databasePath: requiredEnvironment(
+          "CREWON_CONTROL_DB_PATH",
+          environment,
+        ),
       });
+  await finishExtensionRecoveryRelease({
+    preparation: recoveryPreparation,
+    plan: activated.plan,
+  });
   process.stdout.write(
     `${JSON.stringify({
       disposition: activated.activation.disposition,

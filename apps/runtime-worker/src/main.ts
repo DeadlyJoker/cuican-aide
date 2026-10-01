@@ -41,9 +41,15 @@ import {
 import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-process-environment.ts";
 import { loadExtensionReleaseInput } from "./extensions/extension-release-input.ts";
 import type { RuntimeExtensionCompositionConfig } from "./extensions/extension-runtime-composition.ts";
+import {
+  resolveRuntimeBootstrapAgent,
+  resolveRuntimeBootstrapRoute,
+} from "./runtime-bootstrap-defaults.ts";
 
+const environment = Object.freeze({ ...process.env });
+const bootstrapAgent = resolveRuntimeBootstrapAgent(environment);
 const agentVersionRuntimeBindingsPath =
-  process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
+  environment.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const nativeBootstrap = takeRuntimeNativeBootstrap();
 const initialized = await (async () => {
   let remoteMcpOwner: RuntimeNativeRemoteMcpOwner | undefined;
@@ -52,17 +58,17 @@ const initialized = await (async () => {
   let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
   try {
     const securityMode = parseRuntimeWorkerSecurityMode(
-      process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+      environment.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
     );
     const extensionEnvironment = resolveRuntimeExtensionEnvironment(
-      process.env,
+      environment,
       securityMode,
     );
     if (extensionEnvironment !== undefined && nativeBootstrap !== null) {
       throw new Error("extension_native_bootstrap_unsupported");
     }
     const ambientProviderProbe = resolveRuntimeProviderProbeEnvironment(
-      process.env,
+      environment,
       securityMode,
       new DesktopProviderProbeEgressPolicy(),
     );
@@ -74,7 +80,7 @@ const initialized = await (async () => {
       throw new Error("runtime_provider_probe_bootstrap_conflict");
     }
     const nativeWorkspaceReadCatalog = parseNativeWorkspaceReadCatalog(
-      process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+      environment.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
     );
     if (
       (nativeWorkspaceReadCatalog === "enabled") !==
@@ -86,21 +92,18 @@ const initialized = await (async () => {
     const runtimeTenantId =
       nativeBootstrap?.workspace?.authority.tenantId ??
       environmentOr("CREWON_TENANT_ID", "standalone-tenant");
+    const standaloneRoute = resolveRuntimeBootstrapRoute(environment);
     const route = {
-      authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
+      ...standaloneRoute,
       runtimeGeneration:
         nativeBootstrap?.workspace?.authority.runtimeBindingId ??
-        environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-      agentVersionId: environmentOr(
-        "CREWON_AGENT_VERSION_ID",
-        "default-agent-v1",
-      ),
+        standaloneRoute.runtimeGeneration,
       policySnapshotId:
         nativeBootstrap?.workspace?.authority.policySnapshotId ??
-        environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
+        standaloneRoute.policySnapshotId,
       workspaceBindingId:
         nativeBootstrap?.workspace?.authority.workspaceBindingId ??
-        process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
+        environment.CREWON_WORKSPACE_BINDING_ID?.trim() ??
         null,
     };
     if (
@@ -114,7 +117,7 @@ const initialized = await (async () => {
       extensionEnvironment.runtimeBindingsPath === null
         ? null
         : loadExtensionReleaseInput({
-            environment: process.env,
+            environment,
             tenantId: runtimeTenantId,
             defaultAgentVersionId: route.agentVersionId,
           });
@@ -134,7 +137,7 @@ const initialized = await (async () => {
               : {}),
             authorization: extensionEnvironment.host.authorization,
             resolveActor: extensionEnvironment.host.resolveActor,
-            environment: process.env,
+            environment,
           };
     if (
       nativeBootstrap?.credentialBindings !== null &&
@@ -164,19 +167,20 @@ const initialized = await (async () => {
       agentVersionRuntimeBindingsPath && extensionRelease === null
         ? loadAgentVersionRuntimeFactory(
             agentVersionRuntimeBindingsPath,
-            process.env,
+            environment,
             remoteMcpOwner?.dependencies,
             nativeBootstrap?.apiKey,
           )
         : undefined;
     transport = createModelTransport(
-      environmentOr("CREWON_MODEL_ADAPTER", "responses"),
+      environmentOr("CREWON_MODEL_ADAPTER", "responses", environment),
       {
         apiKey: nativeBootstrap?.apiKey,
         providerId: nativeBootstrap?.provider?.providerId,
       },
+      environment,
     );
-    toolRuntime = await createConfiguredToolRuntime();
+    toolRuntime = await createConfiguredToolRuntime(environment);
     artifactAuthority = createConfiguredArtifactAuthority();
     return {
       agentVersionRuntimeFactory,
@@ -245,7 +249,7 @@ try {
     runtimeTenantId,
     route,
     transport,
-    agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
+    agentInstructions: bootstrapAgent.instructions,
     toolRuntime,
     ...(artifactAuthority === undefined
       ? {}
@@ -253,48 +257,40 @@ try {
           artifactStore: artifactAuthority.store,
           artifactEncryptionKeyId: artifactAuthority.keyId,
         }),
-    ownerId: process.env.CREWON_WORKER_OWNER_ID?.trim() || undefined,
-    streamMaxRetries: parseNonNegativeInteger(
-      process.env.CREWON_RESPONSES_STREAM_MAX_RETRIES ?? "5",
-      "CREWON_RESPONSES_STREAM_MAX_RETRIES_invalid",
-    ),
+    ownerId: environment.CREWON_WORKER_OWNER_ID?.trim() || undefined,
+    streamMaxRetries: bootstrapAgent.streamMaxRetries,
+    maxToolRounds: bootstrapAgent.maxToolRounds,
     leaseDurationMs: parsePositiveInteger(
-      process.env.CREWON_WORKER_LEASE_DURATION_MS ?? "30000",
+      environment.CREWON_WORKER_LEASE_DURATION_MS ?? "30000",
       "CREWON_WORKER_LEASE_DURATION_MS_invalid",
     ),
     retryAfterMs: parseNonNegativeInteger(
-      process.env.CREWON_WORKER_RETRY_AFTER_MS ?? "1000",
+      environment.CREWON_WORKER_RETRY_AFTER_MS ?? "1000",
       "CREWON_WORKER_RETRY_AFTER_MS_invalid",
     ),
     approvalRecheckMs: parsePositiveInteger(
-      process.env.CREWON_TOOL_APPROVAL_RECHECK_MS ?? "1000",
+      environment.CREWON_TOOL_APPROVAL_RECHECK_MS ?? "1000",
       "CREWON_TOOL_APPROVAL_RECHECK_MS_invalid",
     ),
     approvalTtlMs: parsePositiveInteger(
-      process.env.CREWON_TOOL_APPROVAL_TTL_MS ?? "86400000",
+      environment.CREWON_TOOL_APPROVAL_TTL_MS ?? "86400000",
       "CREWON_TOOL_APPROVAL_TTL_MS_invalid",
     ),
     scanIntervalMs:
-      process.env.CREWON_WORKER_ONCE === "1"
+      environment.CREWON_WORKER_ONCE === "1"
         ? null
         : parsePositiveInteger(
-            process.env.CREWON_WORKER_SCAN_INTERVAL_MS ?? "1000",
+            environment.CREWON_WORKER_SCAN_INTERVAL_MS ?? "1000",
             "CREWON_WORKER_SCAN_INTERVAL_MS_invalid",
           ),
     cancellationPollIntervalMs: parsePositiveInteger(
-      process.env.CREWON_WORKER_CANCELLATION_POLL_INTERVAL_MS ?? "250",
+      environment.CREWON_WORKER_CANCELLATION_POLL_INTERVAL_MS ?? "250",
       "CREWON_WORKER_CANCELLATION_POLL_INTERVAL_MS_invalid",
     ),
-    autoCompactAtTokens: parsePositiveInteger(
-      process.env.CREWON_AUTO_COMPACT_AT_TOKENS ?? "200000",
-      "CREWON_AUTO_COMPACT_AT_TOKENS_invalid",
-    ),
-    modelContextWindowTokens: parsePositiveInteger(
-      process.env.CREWON_MODEL_CONTEXT_WINDOW_TOKENS ?? "273000",
-      "CREWON_MODEL_CONTEXT_WINDOW_TOKENS_invalid",
-    ),
+    autoCompactAtTokens: bootstrapAgent.autoCompactAtTokens,
+    modelContextWindowTokens: bootstrapAgent.contextWindowTokens,
     expectedAgentVersionDigest:
-      process.env.CREWON_AGENT_VERSION_CONTENT_DIGEST?.trim() || null,
+      environment.CREWON_AGENT_VERSION_CONTENT_DIGEST?.trim() || null,
     nativeWorkspaceReadCatalog,
     ...(extensionEnvironment === undefined
       ? {}
@@ -348,7 +344,7 @@ try {
           workspaceReadFile: nativeWorkspaceResources.readFile,
         }),
   };
-  const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
+  const connectionString = environment.CREWON_CONTROL_DATABASE_URL?.trim();
   // Resolve the remaining configuration before transferring resources. The
   // composition owns every supplied closer from invocation, even on failure.
   const databasePath = connectionString
@@ -359,8 +355,8 @@ try {
     ? await createPostgresRuntimeWorker({
         ...config,
         connectionString,
-        ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-          ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
+        ...(environment.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
+          ? { schema: environment.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
           : {}),
       })
     : await createStandaloneRuntimeWorker({
@@ -430,7 +426,7 @@ try {
   throw error;
 }
 
-if (process.env.CREWON_WORKER_ONCE === "1") {
+if (environment.CREWON_WORKER_ONCE === "1") {
   try {
     const outcome = await runtime.worker.wake();
     process.stdout.write(`${JSON.stringify(outcome)}\n`);

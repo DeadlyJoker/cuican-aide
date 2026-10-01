@@ -62,7 +62,35 @@ const boundaries: readonly Boundary[] = [
   {
     packageName: "agent-version",
     allowedBareImports: ["@crewon/application", "@crewon/tool-broker"],
-    allowedRuntimeDependencies: ["@crewon/application", "@crewon/tool-broker"],
+    // Build retention and recovery are explicit Node subpaths, not compiler dependencies.
+    allowedFileImports: {
+      "extension-build.ts": ["node:crypto", "node:fs", "node:path", "node:url"],
+      "extension-build-archive.ts": [
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+      ],
+      "extension-recovery.ts": [
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "@crewon/contracts",
+        "@crewon/domain",
+      ],
+      "extension-recovery-startup.ts": [
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+      ],
+    },
+    allowedRuntimeDependencies: [
+      "@crewon/application",
+      "@crewon/contracts",
+      "@crewon/domain",
+      "@crewon/tool-broker",
+    ],
   },
   {
     packageName: "app-server-protocol",
@@ -126,6 +154,12 @@ const boundaries: readonly Boundary[] = [
     allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/domain"],
   },
   {
+    // The coordinator takes an explicit host port and has no Node or outward imports.
+    packageName: "process-lifecycle",
+    allowedBareImports: [],
+    allowedRuntimeDependencies: [],
+  },
+  {
     packageName: "store",
     allowedBareImports: [
       "node:crypto",
@@ -167,7 +201,10 @@ const boundaries: readonly Boundary[] = [
 const controlApiBoundary = {
   // Native activation types and sandbox path normalization stay in adapters.
   allowedFileImports: {
-    "main.ts": ["node:net"],
+    "main.ts": ["node:net", "@crewon/process-lifecycle"],
+    // Diagnostic projections redact private peer tokens rather than logging their config.
+    "extension-host-router.ts": ["node:util"],
+    "extension-worker-environment.ts": ["node:util"],
     "paused-admission.ts": ["node:stream"],
     "pim-sandbox-client.ts": ["node:path"],
   },
@@ -189,6 +226,7 @@ const controlApiBoundary = {
     "@crewon/artifacts",
     "@crewon/contracts",
     "@crewon/domain",
+    "@crewon/process-lifecycle",
     "@crewon/store",
     "fastify",
     "uuid",
@@ -196,6 +234,9 @@ const controlApiBoundary = {
 } as const;
 
 const runtimeWorkerBoundary = {
+  allowedFileImports: {
+    "runtime-process-shutdown.ts": ["@crewon/process-lifecycle"],
+  },
   allowedBareImports: [
     "node:",
     "@crewon/agent-kernel",
@@ -223,6 +264,7 @@ const runtimeWorkerBoundary = {
     "@crewon/domain",
     "@crewon/device-dispatch",
     "@crewon/mcp-runtime",
+    "@crewon/process-lifecycle",
     "@crewon/store",
     "@crewon/tool-broker",
     "uuid",
@@ -230,8 +272,16 @@ const runtimeWorkerBoundary = {
 } as const;
 
 const deviceGatewayBoundary = {
+  allowedFileImports: {
+    "main.ts": ["@crewon/process-lifecycle"],
+  },
   allowedBareImports: ["node:", "@crewon/contracts", "pg", "ws"],
-  allowedRuntimeDependencies: ["@crewon/contracts", "pg", "ws"],
+  allowedRuntimeDependencies: [
+    "@crewon/contracts",
+    "@crewon/process-lifecycle",
+    "pg",
+    "ws",
+  ],
 } as const;
 
 test("every architecture package has an explicit dependency boundary", () => {
@@ -321,7 +371,12 @@ test("core values and application ports cannot acquire runtime or outward depend
 });
 
 test("adapter import exceptions do not authorize neighboring files, nested files or subpaths", () => {
-  for (const boundary of [...boundaries, controlApiBoundary]) {
+  for (const boundary of [
+    ...boundaries,
+    controlApiBoundary,
+    runtimeWorkerBoundary,
+    deviceGatewayBoundary,
+  ]) {
     for (const [file, imports] of Object.entries(
       boundary.allowedFileImports ?? {},
     )) {
@@ -342,6 +397,102 @@ test("adapter import exceptions do not authorize neighboring files, nested files
       }
     }
   }
+});
+
+test("AgentVersion Node subpaths cannot become compiler dependencies or acquire unrelated Node capabilities", () => {
+  const boundary = boundaries.find(
+    (value) => value.packageName === "agent-version",
+  )!;
+  const adapters = Object.keys(boundary.allowedFileImports!);
+  const sourceDirectory = path.join(
+    repositoryRoot,
+    "packages",
+    "agent-version",
+    "src",
+  );
+  const manifest = JSON.parse(
+    readFileSync(path.join(sourceDirectory, "../package.json"), "utf8"),
+  ) as {
+    exports: Record<string, string>;
+  };
+  assert.equal(manifest.exports["."], "./src/index.ts");
+  assert.equal(
+    manifest.exports["./extension-build"],
+    "./src/extension-build.ts",
+  );
+  assert.equal(
+    manifest.exports["./extension-recovery"],
+    "./src/extension-recovery.ts",
+  );
+  for (const file of sourceFiles(sourceDirectory)) {
+    if (isTestSource(file)) continue;
+    const relativeFile = path.relative(sourceDirectory, file);
+    for (const specifier of [
+      "node:child_process",
+      "node:net",
+      "node:worker_threads",
+    ])
+      assert.equal(
+        boundaryAllowsImport(boundary, relativeFile, specifier),
+        false,
+      );
+    if (adapters.includes(relativeFile)) continue;
+    for (const specifier of [
+      "node:crypto",
+      "node:fs",
+      "node:fs/promises",
+      "node:path",
+      "node:url",
+      "@crewon/contracts",
+      "@crewon/domain",
+    ])
+      assert.equal(
+        boundaryAllowsImport(boundary, relativeFile, specifier),
+        false,
+      );
+    for (const specifier of importSpecifiers(readFileSync(file, "utf8"))) {
+      if (!specifier.startsWith(".")) continue;
+      const importedFile = path.relative(
+        sourceDirectory,
+        path.resolve(path.dirname(file), specifier),
+      );
+      assert.equal(
+        adapters.includes(importedFile),
+        false,
+        `${relativeFile} -> ${specifier}`,
+      );
+    }
+  }
+});
+
+test("process shutdown ports are limited to the owning CLI adapters", () => {
+  const lifecycle = boundaries.find(
+    (value) => value.packageName === "process-lifecycle",
+  )!;
+  assert.deepEqual(lifecycle.allowedRuntimeDependencies, []);
+  for (const specifier of [
+    "node:process",
+    "node:fs",
+    "@crewon/application",
+    "@crewon/store",
+  ])
+    assert.equal(
+      boundaryAllowsImport(lifecycle, "process-shutdown.ts", specifier),
+      false,
+    );
+  for (const boundary of [
+    controlApiBoundary,
+    runtimeWorkerBoundary,
+    deviceGatewayBoundary,
+  ])
+    assert.equal(
+      boundaryAllowsImport(
+        boundary,
+        "new-service.ts",
+        "@crewon/process-lifecycle",
+      ),
+      false,
+    );
 });
 
 test("boundary inspection includes type imports, dynamic imports and re-exports", () => {

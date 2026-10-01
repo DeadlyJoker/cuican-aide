@@ -222,7 +222,13 @@ export async function startDesktopRuntimeChildren(input: {
   spawnControl: (environment: NodeJS.ProcessEnv) => ChildProcess;
   spawnWorker: (environment: NodeJS.ProcessEnv) => ChildProcess;
   trackChild: (child: ChildProcess) => void;
-}): Promise<Readonly<{ control: ChildProcess; worker: ChildProcess }>> {
+}): Promise<
+  Readonly<{
+    control: ChildProcess;
+    worker: ChildProcess;
+    extensionOrigin?: string;
+  }>
+> {
   const extensions = input.environments;
   const spawn = (child: ChildProcess) => {
     input.trackChild(child);
@@ -248,7 +254,7 @@ export async function startDesktopRuntimeChildren(input: {
   if (worker.exitCode !== null || worker.signalCode !== null)
     throw new Error("desktop_extension_host_child_exited");
   const control = spawn(input.spawnControl(extensions.control(origin)));
-  return { control, worker };
+  return { control, worker, extensionOrigin: origin };
 }
 
 /** Attempt every shutdown; retain ownership of a child that has not reached exit. */

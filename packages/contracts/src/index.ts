@@ -33,3 +33,4 @@ export * from "./workspace-list-control-contract.ts";
 export * from "./workspace-changes.ts";
 
 export * from "./thread-active-run-contract.ts";
+export * from "./runtime-bootstrap-inputs.ts";

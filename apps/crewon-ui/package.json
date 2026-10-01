@@ -21,6 +21,7 @@
     "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs"
   },
   "dependencies": {
+    "@crewon/agent-version": "workspace:*",
     "@crewon/capability-packs": "workspace:*",
     "@crewon/contracts": "workspace:*",
     "@crewon/control-client": "workspace:*",
