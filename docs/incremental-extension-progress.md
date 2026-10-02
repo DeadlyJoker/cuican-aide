@@ -4,6 +4,18 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：删除预览响应式覆盖，严格沿用历史样式
+
+用户再次要求“样式完全一致”，最终审查发现预览仍单独覆盖了 ≤860px 左栏网格。删除该 CSS 及其导入，响应式布局也直接沿用改造前版本，不再保留预览例外。替换该覆盖规则的旧快照检查，新增两种预览入口与生产入口的六张样式及加载顺序一致、预览组合不导入独立宿主 CSS 的回归；原页面及模块 DOM 快照未更新。
+
+相对 `776484c57`，共用 CSS、Frame、Route、右工作台、主题与平台文件仍无差异。短剧 CSS 的 107 个规则均限定在 `.drama-workbench`。实际浏览器检查 1280px 桌面左右栏占位与动态主内容；766px 恢复原单列及隐藏左栏规则，无横向溢出。临时视口重置，用户 5719 原页面保留。预览继续使用已有本地外观；没有伪造真实账号、远端偏好或连接状态。比较视觉时须使用相同主题、外观和视口。相关 16 文件 136/136、UI lint（含 Electron）、build、边界及仓库格式检查通过，日志为 `output/plugin-ui-style-consistency-*.log`；最终截图为 `output/extensions/short-drama-preview/style-consistency-both-sidebars-latest.jpg` 和 `style-original-narrow-latest.jpg`。
+
+## 2026-10-03：生产插件身份与权限适配端口
+
+新增安装授权、独立 UI 权限 epoch 与当前 profile 适配器，以及有界 HTTPS 权威端口。复用已验证 actor；安装保持原精确 allow/deny 协议，UI 的 allow 必须携带真实权限 epoch，profile 必须由权威服务返回并与 actor 的租户/空间一致。没有固定 profile、从 principal 推导配置、默认角色或伪造 epoch。未知字段、getter、跨作用域、缺失权威、超时、超大响应及无效 UTF-8 均拒绝；旧生产适配器仅扩安装请求类型 union。
+
+新增 20 条行为测试，与原安全测试合计 31/31，Control API 类型及定向格式通过；独立只读复核未发现具体缺陷。日志为 `output/extensions/checks/plugin-security-adapters-{narrow-final,typecheck-final,format-final}.log`。当前尚未装配 main/production composition，也未实际访问权威服务；这是生产接线所需的边界基础，不能称完整生产插件宿主已交付，目标保持进行中。
+
 ## 2026-10-03：独立 UI 安装产物加载与原宿主样式核验
 
 增加严格 `crewon.plugin-ui-lease.v1` 和有界 JSON 契约，内部 UI 用例从当前 actor/profile 读取真实安装账本，以独立 UI 权限、修订及权限 epoch 核验目录、挂载、资源和动作。引用不单独授予权限；异步前后重新核验，观察到失效的引用不随回滚恢复。实际文件适配器要求宿主批准公开子集，逐次验证完整安装目录和资源字节，不把混合包的 Node 入口默认暴露给浏览器。Node-only/未支持贡献可以从目录跳过，身份、授权、文件和未知异常仍保持拒绝。

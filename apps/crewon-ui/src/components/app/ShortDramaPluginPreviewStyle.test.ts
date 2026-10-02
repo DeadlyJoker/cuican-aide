@@ -2,15 +2,33 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 
-it("preserves the original desktop sidebar grid without a navigation overlay", () => {
-  const styles = readFileSync(
-    new URL("./ShortDramaPluginPreview.css", import.meta.url),
+function styleImports(source: string): string[] {
+  return Array.from(
+    source.matchAll(/import\s+["']([^"']+\.css)["']/g),
+    (match) => match[1].slice(match[1].lastIndexOf("/styles/")),
+  );
+}
+
+it("loads the original host styles in the production entry's order", () => {
+  const original = readFileSync(
+    new URL("../../main.tsx", import.meta.url),
     "utf8",
   );
-  expect(styles).not.toMatch(
-    /position:\s*(?:absolute|fixed)|background:|z-index:|padding:/,
+  const originalStyles = styleImports(original);
+  expect(originalStyles).toHaveLength(6);
+  for (const entry of [
+    "../../../../../artifacts/short-drama-workbench-preview/preview.tsx",
+    "../../../../../artifacts/installable-plugin-ui-preview/preview.tsx",
+  ]) {
+    const source = readFileSync(new URL(entry, import.meta.url), "utf8");
+    expect(styleImports(source)).toEqual(originalStyles);
+  }
+});
+
+it("adds no preview-specific CSS overrides to the existing shell", () => {
+  const source = readFileSync(
+    new URL("./ShortDramaPluginPreview.tsx", import.meta.url),
+    "utf8",
   );
-  expect(styles).toContain("232px minmax(0, 1fr)");
-  expect(styles).toContain("0 minmax(0, 1fr)");
-  expect(styles).toMatchSnapshot();
+  expect(styleImports(source)).toEqual([]);
 });

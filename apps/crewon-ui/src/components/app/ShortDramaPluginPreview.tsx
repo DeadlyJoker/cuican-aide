@@ -8,7 +8,6 @@ import { Toaster } from "../ui/sonner";
 import { emptyTerminalOutputStream } from "../../lib/terminal/terminalOutputStream";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
 import { detectPlatform, detectRuntimeSurface } from "../../lib/platform";
-import "./ShortDramaPluginPreview.css";
 
 // The preview host supplies its own reader. The business module gets no session or execution client.
 async function readPreviewPlatformSnapshot() {
