@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
+import { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
 
 /** Keeps plugin construction separate from the core Run orchestration module. */
 export function createSqliteExtensionStore(
@@ -31,4 +32,13 @@ export function createSqlitePluginCreditStore(input: {
 }): SqlitePluginCreditStore {
   input.assertOpen();
   return new SqlitePluginCreditStore(input);
+}
+
+/** Shares the host's lifetime; project persistence is migrated explicitly. */
+export function createSqliteCreativeProjectStore(input: {
+  database: DatabaseSync;
+  assertOpen(): void;
+}): SqliteCreativeProjectStore {
+  input.assertOpen();
+  return new SqliteCreativeProjectStore(input);
 }

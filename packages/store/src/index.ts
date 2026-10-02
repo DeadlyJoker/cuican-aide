@@ -32,3 +32,5 @@ export * from "./sqlite-extension-store.ts";
 export * from "./postgres-extension-store.ts";
 export * from "./sqlite-plugin-credit-store.ts";
 export * from "./postgres-plugin-credit-store.ts";
+export * from "./sqlite-creative-project-store.ts";
+export * from "./postgres-creative-project-store.ts";

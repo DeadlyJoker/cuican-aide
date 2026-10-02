@@ -1,5 +1,6 @@
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
 import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
+import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
   RunStoreError,
@@ -178,6 +179,16 @@ export class PostgresDomainStore
   pluginCreditStore(): PostgresPluginCreditStore {
     this.assertOpen();
     return new PostgresPluginCreditStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Shares the host pool and lifetime; project migration remains explicit. */
+  creativeProjectStore(): PostgresCreativeProjectStore {
+    this.assertOpen();
+    return new PostgresCreativeProjectStore({
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),

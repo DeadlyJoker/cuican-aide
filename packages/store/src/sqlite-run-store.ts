@@ -1,10 +1,12 @@
 import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
+import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
 import {
   createSqliteExtensionStore,
   createSqliteExternalOperationStore,
   createSqlitePluginCreditStore,
+  createSqliteCreativeProjectStore,
 } from "./sqlite-extension-composition.ts";
 import { SqliteModelPricingStore } from "./sqlite-model-pricing-store.ts";
 import {
@@ -688,6 +690,14 @@ export class SqliteRunStore implements DomainStore {
   /** Shares the parent connection and lifetime; credit migration and funding remain explicit. */
   pluginCreditStore(): SqlitePluginCreditStore {
     return createSqlitePluginCreditStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Shares the parent connection and lifetime; project migration remains explicit. */
+  creativeProjectStore(): SqliteCreativeProjectStore {
+    return createSqliteCreativeProjectStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
     });
