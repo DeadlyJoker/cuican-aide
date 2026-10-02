@@ -37,6 +37,17 @@ export * from "./workflow-version-codec.ts";
 export * from "./provider-continuation-budget.ts";
 export * from "./model-spending.ts";
 export * from "./plugin-credit.ts";
+export * from "./plugin-installation.ts";
+export {
+  PluginInstallationError,
+  pluginInstallationOpaqueId,
+  pluginInstallationNamespaceId,
+  pluginInstallationVersion,
+  pluginInstallationDigest,
+  pluginInstallationTimestamp,
+  pluginInstallationRevision,
+  pluginInstallationNextRevision,
+} from "./plugin-installation-validation.ts";
 export * from "./extension-credit-admission.ts";
 export * from "./extension-configuration.ts";
 export * from "./extension-run-binding.ts";

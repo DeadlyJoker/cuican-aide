@@ -12,6 +12,18 @@
 
 相关宿主、组合、样式、架构及窗口外框回归 56/56，UI lint（含 Electron）、build 和源码格式检查通过，日志为 `output/short-drama-desktop-frame-*.log`。实际浏览器核验桌面原窗口按钮和左右栏开关，1280px 左栏展开时主内容 1048px、折叠时 1280px；766px 预览为 534px/766px，无覆盖或横向溢出。左右栏同时展开的矩形边界相邻，短剧模块仍仅占主内容区。截图为 `output/extensions/short-drama-preview/original-host-restored.jpg` 与 `original-host-both-sidebars.jpg`。此修复取代之前的预览遮罩调整；没有重跑已确认的 UI 全量基线失败，也没有修改正式业务 API。
 
+## 2026-10-02：持久安装组合与实际本地宿主接通
+
+新增安装领域、必需授权与可信 profile 端口、内部 Application 服务，以及共享原 SQLite/PG 生命周期的独立安装账本。记录不可变包、当前选定版本和完整 actor/scope/kind/key 回执，CAS 提交选择；精确版本/摘要和发布者命名空间不能重绑定。首装保持停用，安装新版本保留旧选择，启用/停用/切换/逻辑卸载提交新修订。回执重放返回原结果，不重安装、不重新激活，也不删除原项目、创作修订或个人积分账本。四张独立表和 schema v1 不改变原业务协议或迁移版本。
+
+NodeHost 新增暂存 prepare/同步 commit/abort，setup 成功后仍待提交才发布；旧服务与在途借用保留，候选失败只撤销自身资源。同步发布前后核对当前实例和依赖，依赖提供者仍有活动消费者时拒绝直接升级，清理失败保留诊断。私有 `LocalPluginInstallationHost` 接通真实受控 source 目录、不可变字节安装和本地 NodeHost，要求安装/启用授权、数据与运行兼容检查、提交核验。它不是分布式领导者，也不替代原 Run 事务内的选择与积分准入。数据库确认提交后发布失败返回持久选择与 `plugin_projection_pending`，不伪装未提交；原回执重放不会重发布旧实例。启动投影恢复与生产当前权限核验尚待接入。
+
+三项实际 Application/SQLite/文件/ESM 集成通过：安装不执行模块，删除开发源码后启用、升级、回滚与逻辑卸载，旧借用继续使用锁定版本；卸载保留通过实际服务创建的项目和独立积分流水，重新打开数据库保留选择。真实 SQLite receipt INSERT 故障、ESM setup 失败和兼容拒绝保持旧选择；提交后授权拒绝保留新选择、报告 pending 并阻止新借用，原回执不激活；显式新选择可重新协调。同步撤销授权回调中的重入发布被检测，独立新实例不被错误清理。该夹具调用当前 SQLite 选择作同步核验，不能称为生产跨进程 Run 准入证明。
+
+最终 Domain 195/195、Application 247/247、Host 47/47、test-contracts 24/24；带唯一自有 PostgreSQL 的 Store 全量 1,358 项，1,357 通过、0 失败、1 项原无数据库提示测试按条件跳过。安装双库及真实提交关闭专项 24/24，均无跳过。第一次 Store 全量有 10 项 PostgreSQL `out of shared memory`；仅提高自有临时数据库的锁容量后，同一代码全量重跑全部行为通过，没有改测试断言或生产数据库。检查日志为 `output/extensions/checks/plugin-installation-*-unified*.log`，Store 以 `plugin-installation-store-tests-unified-final.log` 为准，数据库前后参数见 `owned-pg-resource-*.log`。
+
+20 个 packages 类型检查、入口边界、源码及仓库格式通过。验证完成后已停止唯一自有临时 PostgreSQL，原 PID 已退出、55543 没有监听，日志和数据库证据保留。依赖锁只增 Host 的 Application/Domain workspace 依赖和实际集成测试用 Store devDependency；SDK 的公开分发与 ABI 不改。仅 `plugin-installation-local-host.ts` 被批准桥接 App/Domain，通用加载器与 SDK 边界继续禁止 Store、内部子路径和 UI 依赖。正式安装 HTTP/页面、生产授权治理、动态 UI/动作桥、原 Tool/Run 安全退休与持久恢复、Krea2/短剧独立包迁移和 E5 第二个真实企业服务仍待完成，目标保持进行中。
+
 ## 2026-10-02：可分发 SDK、真实本地安装和 Node 加载基础
 
 新增公开 `@crewon/plugin-sdk` 0.1.0，本地 `.tgz` 分发只公开 `/contracts`、`/node`、`/ui`。使用现有 esbuild 与 TypeScript 产出三个 JS 入口、共享校验模块和九个自含声明，携带原 LICENSE/NOTICE；没有私有运行时依赖、React 或宿主源码。包描述仍来自原 Contracts 权威源，声明闭包随 SDK 输出，不手抄第二套协议。Node 专用声明无需 DOM；UI 定义包含独立 mount/update/dispose 和窄动作 ABI，实际 UI 挂载尚未实现。

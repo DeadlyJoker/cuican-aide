@@ -11,10 +11,13 @@
     "typecheck": "pnpm --filter @crewon/plugin-sdk build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@crewon/application": "workspace:*",
     "@crewon/contracts": "workspace:*",
+    "@crewon/domain": "workspace:*",
     "@crewon/plugin-sdk": "workspace:*"
   },
   "devDependencies": {
+    "@crewon/store": "workspace:*",
     "@types/node": "^24.10.1",
     "esbuild": "0.27.7",
     "typescript": "^5.9.3"

@@ -12,6 +12,10 @@ export {
 export { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
 export { installLocalPluginPackage } from "./local-plugin-package-installer.ts";
 export {
+  LocalPluginInstallationHost,
+  type LocalPluginInstallationHostDependencies,
+} from "./plugin-installation-local-host.ts";
+export {
   PluginNodeHost,
   PluginNodeHostError,
   type PluginHostService,
@@ -19,4 +23,8 @@ export {
   type PluginNodeActivation,
   type PluginNodeLease,
   type PluginNodeBorrow,
+  type PluginNodeDependencyIdentity,
+  type PluginNodeCommitCandidate,
+  type PluginNodePreparedActivation,
+  type PluginNodePreparedCommit,
 } from "./plugin-node-host.ts";

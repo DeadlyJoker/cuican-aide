@@ -12,6 +12,17 @@ import {
   assertDirectoryPins,
   pinDirectory,
 } from "./local-plugin-package-files.ts";
+import type {
+  PluginNodeCommitCandidate,
+  PluginNodePreparedActivation,
+  PluginNodePreparedCommit,
+} from "./plugin-node-preparation.ts";
+export type {
+  PluginNodeDependencyIdentity,
+  PluginNodeCommitCandidate,
+  PluginNodePreparedActivation,
+  PluginNodePreparedCommit,
+} from "./plugin-node-preparation.ts";
 
 export class PluginNodeHostError extends Error {
   readonly code: string;
@@ -55,6 +66,15 @@ export type PluginNodeBorrow = Readonly<{
 }>;
 type Service = PluginHostService & Readonly<{ owner: Instance | null }>;
 type ActivationToken = { invalidated: boolean };
+type Preparation = {
+  token: ActivationToken;
+  instance: Instance;
+  previous: Instance | undefined;
+  ownsInstance: boolean;
+  candidate: PluginNodeCommitCandidate;
+  status: "prepared" | "committing" | "committed" | "aborted";
+  cleanup: Promise<void> | null;
+};
 type Instance = {
   identity: PluginIdentity;
   descriptor: PluginPackageDescriptor;
@@ -63,6 +83,7 @@ type Instance = {
   cleanup: Array<() => void | Promise<void>>;
   phase:
     | "starting"
+    | "prepared"
     | "accepting"
     | "retained"
     | "disposing"
@@ -71,6 +92,7 @@ type Instance = {
   borrowers: number;
   setupOpen: boolean;
   failure: unknown;
+  cleanupTask: Promise<void> | null;
 };
 
 /**
@@ -83,6 +105,7 @@ export class PluginNodeHost {
   readonly #instances = new Set<Instance>();
   readonly #cleanupTasks = new Set<Promise<void>>();
   readonly #pending = new Map<string, Set<ActivationToken>>();
+  readonly #prepared = new Set<Preparation>();
   #pendingCount = 0;
   #queue: Promise<unknown> = Promise.resolve();
   #closed = false;
@@ -99,7 +122,19 @@ export class PluginNodeHost {
     }
   }
 
-  activate(input: PluginNodeActivation): Promise<PluginIdentity> {
+  async activate(input: PluginNodeActivation): Promise<PluginIdentity> {
+    const prepared = await this.prepare(input);
+    try {
+      // Compatibility entrypoint: authorization was approved during prepare.
+      return prepared.commit({ authorizeCommit: () => "allow" });
+    } catch (error) {
+      await prepared.abort();
+      throw error;
+    }
+  }
+
+  /** Starts a candidate without changing current selection or service discovery. */
+  prepare(input: PluginNodeActivation): Promise<PluginNodePreparedActivation> {
     input = Object.freeze({ ...input });
     if (
       typeof input.expectedPluginId !== "string" ||
@@ -119,11 +154,10 @@ export class PluginNodeHost {
     this.#pending.set(input.expectedPluginId, pending);
     this.#pendingCount += 1;
     const work = this.#queue
-      .then(() => this.#activate(input, token))
-      .finally(() => {
-        pending.delete(token);
-        this.#pendingCount -= 1;
-        if (!pending.size) this.#pending.delete(input.expectedPluginId);
+      .then(() => this.#prepare(input, token))
+      .catch((error: unknown) => {
+        this.#releaseToken(input.expectedPluginId, token);
+        throw error;
       });
     this.#queue = work.catch(() => undefined);
     return work;
@@ -133,6 +167,9 @@ export class PluginNodeHost {
   deactivate(pluginId: string): void {
     for (const token of this.#pending.get(pluginId) ?? [])
       token.invalidated = true;
+    for (const preparation of [...this.#prepared])
+      if (preparation.instance.identity.pluginId === pluginId)
+        this.#cancelPrepared(preparation);
     const instance = this.#current.get(pluginId);
     if (instance) this.#withdraw(instance);
   }
@@ -231,6 +268,10 @@ export class PluginNodeHost {
 
   async close(): Promise<void> {
     this.#closed = true;
+    for (const pending of this.#pending.values())
+      for (const token of pending) token.invalidated = true;
+    for (const preparation of [...this.#prepared])
+      this.#cancelPrepared(preparation);
     for (const instance of [...this.#current.values()])
       this.#withdraw(instance);
     await this.drain();
@@ -238,10 +279,10 @@ export class PluginNodeHost {
       fail("plugin_host_has_live_leases");
   }
 
-  async #activate(
+  async #prepare(
     input: PluginNodeActivation,
     token: ActivationToken,
-  ): Promise<PluginIdentity> {
+  ): Promise<PluginNodePreparedActivation> {
     this.#checkActivation(token);
     if (this.#instances.size >= 256) fail("plugin_host_instance_limit");
     if (!/^sha256:[a-f0-9]{64}$/u.test(input.expectedPackageDigest))
@@ -282,7 +323,7 @@ export class PluginNodeHost {
     if (!descriptor.entrypoints.node) fail("plugin_node_entry_missing");
     const existing = this.#current.get(descriptor.pluginId);
     if (existing?.identity.packageDigest === verified.packageDigest)
-      return existing.identity;
+      return this.#preparedHandle(existing, existing, token, false);
     const dependencies = new Map<string, Service>();
     for (const requirement of descriptor.requires) {
       const service = this.#services.get(requirement.service);
@@ -292,6 +333,7 @@ export class PluginNodeHost {
     }
     this.#checkConflicts(descriptor);
     this.#checkUpgradeDependencies(descriptor.pluginId, dependencies);
+    this.#checkUpgradeConsumers(existing);
     const identity = Object.freeze({
       pluginId: descriptor.pluginId,
       version: descriptor.version,
@@ -307,6 +349,7 @@ export class PluginNodeHost {
       borrowers: 0,
       setupOpen: true,
       failure: null,
+      cleanupTask: null,
     };
     for (const service of dependencies.values())
       if (service.owner) service.owner.borrowers += 1;
@@ -346,16 +389,14 @@ export class PluginNodeHost {
       this.#checkDependencies(instance);
       this.#checkConflicts(descriptor);
       this.#checkUpgradeDependencies(descriptor.pluginId, dependencies);
+      this.#checkUpgradeConsumers(existing);
       for (const provision of descriptor.provides)
         if (!instance.provisions.has(provision.service))
           fail("plugin_service_provision_missing");
-      const previous = this.#current.get(descriptor.pluginId);
-      if (previous) this.#withdraw(previous);
-      instance.phase = "accepting";
-      this.#current.set(descriptor.pluginId, instance);
-      for (const service of instance.provisions.values())
-        this.#services.set(service.service, service);
-      return identity;
+      if (this.#current.get(descriptor.pluginId) !== existing)
+        fail("plugin_current_changed_during_preparation");
+      instance.phase = "prepared";
+      return this.#preparedHandle(instance, existing, token, true);
     } catch (error) {
       instance.setupOpen = false;
       instance.phase = "retained";
@@ -363,6 +404,146 @@ export class PluginNodeHost {
       await this.drainCleanup();
       throw error;
     }
+  }
+
+  #preparedHandle(
+    instance: Instance,
+    previous: Instance | undefined,
+    token: ActivationToken,
+    ownsInstance: boolean,
+  ): PluginNodePreparedActivation {
+    const dependencyIdentities = Object.freeze(
+      [...instance.dependencies.values()].map((service) =>
+        Object.freeze({
+          service: service.service,
+          apiVersion: service.apiVersion,
+          provider: service.owner?.identity ?? null,
+        }),
+      ),
+    );
+    const preparation: Preparation = {
+      token,
+      instance,
+      previous,
+      ownsInstance,
+      candidate: Object.freeze({
+        descriptor: instance.descriptor,
+        packageDigest: instance.identity.packageDigest,
+        identity: instance.identity,
+        previousIdentity: previous?.identity ?? null,
+        dependencyIdentities,
+      }),
+      status: "prepared",
+      cleanup: null,
+    };
+    this.#prepared.add(preparation);
+    // Publication uses only these host-held references, never caller-supplied fields.
+    return Object.freeze({
+      identity: instance.identity,
+      dependencyIdentities,
+      commit: (input: PluginNodePreparedCommit) =>
+        this.#commitPrepared(preparation, input),
+      abort: () => this.#abortPrepared(preparation),
+    });
+  }
+
+  #commitPrepared(
+    preparation: Preparation,
+    input: PluginNodePreparedCommit,
+  ): PluginIdentity {
+    try {
+      // Detach host authority before validating any captured mutable state.
+      const authorizeCommit = input?.authorizeCommit;
+      if (preparation.status !== "prepared")
+        fail("plugin_preparation_not_available");
+      this.#checkPrepared(preparation);
+      preparation.status = "committing";
+      if (
+        typeof authorizeCommit !== "function" ||
+        authorizeCommit(preparation.candidate) !== "allow"
+      )
+        fail("plugin_commit_denied");
+      // The callback may revoke, close, publish another candidate, or withdraw a service.
+      this.#checkPrepared(preparation);
+      const { instance, previous, ownsInstance } = preparation;
+      if (ownsInstance) {
+        if (previous) this.#withdraw(previous);
+        instance.phase = "accepting";
+        this.#current.set(instance.identity.pluginId, instance);
+        for (const service of instance.provisions.values())
+          this.#services.set(service.service, service);
+      }
+      preparation.status = "committed";
+      this.#prepared.delete(preparation);
+      this.#releaseToken(instance.identity.pluginId, preparation.token);
+      return instance.identity;
+    } catch (error) {
+      this.#cancelPrepared(preparation);
+      throw error;
+    }
+  }
+
+  #checkPrepared(preparation: Preparation): void {
+    this.#checkActivation(preparation.token);
+    if (
+      !this.#prepared.has(preparation) ||
+      (preparation.status !== "prepared" && preparation.status !== "committing")
+    )
+      fail("plugin_preparation_not_available");
+    const { instance, previous, ownsInstance } = preparation;
+    if (this.#current.get(instance.identity.pluginId) !== previous)
+      fail("plugin_current_changed_during_preparation");
+    if (instance.phase !== (ownsInstance ? "prepared" : "accepting"))
+      fail("plugin_preparation_not_available");
+    this.#checkDependencies(instance);
+    if (ownsInstance) {
+      for (const provision of instance.descriptor.provides)
+        if (!instance.provisions.has(provision.service))
+          fail("plugin_service_provision_missing");
+      this.#checkConflicts(instance.descriptor);
+      this.#checkUpgradeDependencies(
+        instance.identity.pluginId,
+        instance.dependencies,
+      );
+      this.#checkUpgradeConsumers(previous);
+    }
+  }
+
+  #cancelPrepared(preparation: Preparation): void {
+    if (preparation.status === "committed" || preparation.status === "aborted")
+      return;
+    preparation.status = "aborted";
+    preparation.token.invalidated = true;
+    this.#prepared.delete(preparation);
+    this.#releaseToken(
+      preparation.instance.identity.pluginId,
+      preparation.token,
+    );
+    if (preparation.ownsInstance) {
+      preparation.instance.phase = "retained";
+      this.#retire(preparation.instance);
+    }
+  }
+
+  #abortPrepared(preparation: Preparation): Promise<void> {
+    if (preparation.status === "committed") return Promise.resolve();
+    this.#cancelPrepared(preparation);
+    preparation.cleanup ??= (async () => {
+      if (preparation.ownsInstance) await preparation.instance.cleanupTask;
+      if (
+        preparation.ownsInstance &&
+        preparation.instance.phase === "cleanupFailed"
+      )
+        throw preparation.instance.failure;
+    })();
+    return preparation.cleanup;
+  }
+
+  #releaseToken(pluginId: string, token: ActivationToken): void {
+    const pending = this.#pending.get(pluginId);
+    if (!pending?.delete(token)) return;
+    this.#pendingCount -= 1;
+    if (!pending.size) this.#pending.delete(pluginId);
   }
 
   #context(instance: Instance): PluginNodeContext {
@@ -412,7 +593,8 @@ export class PluginNodeHost {
             dispose: () => {
               if (disposed) return;
               disposed = true;
-              if (instance.setupOpen) instance.provisions.delete(service);
+              if (instance.setupOpen || instance.phase === "prepared")
+                instance.provisions.delete(service);
               if (this.#services.get(service) === record) {
                 this.#services.delete(service);
                 for (const consumer of [...this.#current.values()])
@@ -463,9 +645,24 @@ export class PluginNodeHost {
       fail("plugin_dependency_upgrade_cycle");
   }
   #checkDependencies(instance: Instance): void {
-    for (const [name, service] of instance.dependencies)
-      if (this.#services.get(name) !== service)
+    for (const requirement of instance.descriptor.requires) {
+      const current = this.#services.get(requirement.service);
+      const available =
+        current?.apiVersion === requirement.apiVersion ? current : undefined;
+      if (instance.dependencies.get(requirement.service) !== available)
         fail("plugin_dependency_changed_during_activation");
+    }
+  }
+  #checkUpgradeConsumers(previous: Instance | undefined): void {
+    if (
+      previous &&
+      [...this.#current.values()].some((consumer) =>
+        [...consumer.dependencies.values()].some(
+          ({ owner }) => owner === previous,
+        ),
+      )
+    )
+      fail("plugin_dependency_upgrade_unsupported");
   }
   #withdraw(instance: Instance): void {
     if (instance.phase !== "accepting") return;
@@ -489,6 +686,7 @@ export class PluginNodeHost {
     instance.phase = "disposing";
     // User cleanup runs after the synchronous selection/service transaction completes.
     const task = Promise.resolve().then(() => this.#cleanup(instance));
+    instance.cleanupTask = task;
     this.#cleanupTasks.add(task);
     void task.finally(() => this.#cleanupTasks.delete(task));
   }

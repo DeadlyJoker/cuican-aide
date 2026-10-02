@@ -159,6 +159,7 @@ import {
 import type { WorkflowContentDigester } from "@crewon/domain";
 import { PostgresWorkflowVersionStore } from "./workflow-version-store.ts";
 import { PostgresOfficeStore } from "./postgres-office-store.ts";
+import { PostgresPluginInstallationStore } from "./postgres-plugin-installation-store.ts";
 
 /** Complete PostgreSQL domain authority for Control API and Runtime Workers. */
 export class PostgresDomainStore
@@ -189,6 +190,16 @@ export class PostgresDomainStore
   creativeProjectStore(): PostgresCreativeProjectStore {
     this.assertOpen();
     return new PostgresCreativeProjectStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Shares the host pool and lifetime; installation migration remains explicit. */
+  pluginInstallationStore(): PostgresPluginInstallationStore {
+    this.assertOpen();
+    return new PostgresPluginInstallationStore({
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),

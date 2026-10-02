@@ -188,7 +188,18 @@ const boundaries: readonly Boundary[] = [
       "@crewon/plugin-sdk/node",
       "@crewon/plugin-sdk/contracts",
     ],
-    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/plugin-sdk"],
+    allowedFileImports: {
+      "plugin-installation-local-host.ts": [
+        "@crewon/application",
+        "@crewon/domain",
+      ],
+    },
+    allowedRuntimeDependencies: [
+      "@crewon/application",
+      "@crewon/contracts",
+      "@crewon/domain",
+      "@crewon/plugin-sdk",
+    ],
   },
   {
     packageName: "store",
@@ -484,6 +495,37 @@ test("plugin host only imports the exact approved SDK and plugin contract entryp
       boundaryAllowsImport(host, "loader.ts", specifier),
       false,
       `plugin-host -> ${specifier}`,
+    );
+});
+
+test("only the local installation adapter bridges Application and Domain ports", () => {
+  const host = boundaries.find((value) => value.packageName === "plugin-host")!;
+  for (const specifier of ["@crewon/application", "@crewon/domain"]) {
+    assert.equal(
+      boundaryAllowsImport(
+        host,
+        "plugin-installation-local-host.ts",
+        specifier,
+      ),
+      true,
+    );
+    assert.equal(
+      boundaryAllowsImport(host, "plugin-node-host.ts", specifier),
+      false,
+    );
+  }
+  for (const specifier of [
+    "@crewon/store",
+    "@crewon/application/internal",
+    "@crewon/domain/internal",
+  ])
+    assert.equal(
+      boundaryAllowsImport(
+        host,
+        "plugin-installation-local-host.ts",
+        specifier,
+      ),
+      false,
     );
 });
 

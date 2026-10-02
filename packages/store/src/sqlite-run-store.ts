@@ -2,6 +2,7 @@ import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
+import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
 import {
   createSqliteExtensionStore,
   createSqliteExternalOperationStore,
@@ -698,6 +699,15 @@ export class SqliteRunStore implements DomainStore {
   /** Shares the parent connection and lifetime; project migration remains explicit. */
   creativeProjectStore(): SqliteCreativeProjectStore {
     return createSqliteCreativeProjectStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Shares the host connection and lifetime; installation migration remains explicit. */
+  pluginInstallationStore(): SqlitePluginInstallationStore {
+    this.#assertOpen();
+    return new SqlitePluginInstallationStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
     });

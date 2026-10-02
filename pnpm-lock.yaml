@@ -545,13 +545,22 @@ importers:
 
   packages/plugin-host:
     dependencies:
+      '@crewon/application':
+        specifier: workspace:*
+        version: link:../application
       '@crewon/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@crewon/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@crewon/plugin-sdk':
         specifier: workspace:*
         version: link:../plugin-sdk
     devDependencies:
+      '@crewon/store':
+        specifier: workspace:*
+        version: link:../store
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3
