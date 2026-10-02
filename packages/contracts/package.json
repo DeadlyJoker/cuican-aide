@@ -6,7 +6,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./runtime": "./src/runtime.ts"
+    "./runtime": "./src/runtime.ts",
+    "./plugins": "./src/plugins.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

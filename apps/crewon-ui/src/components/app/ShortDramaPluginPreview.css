@@ -30,7 +30,7 @@
     z-index: 45;
     display: block;
     border: 0;
-    background: color-mix(in srgb, var(--n-950) 18%, transparent);
+    background: rgb(0 0 0 / 18%);
   }
 
   .short-drama-plugin-preview[data-preview-navigation-open="true"]
