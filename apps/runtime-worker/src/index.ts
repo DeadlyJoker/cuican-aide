@@ -30,7 +30,20 @@ export * from "./runtime-workspace-read-gateway-client.ts";
 export * from "./runtime-workspace-private-server.ts";
 export * from "./extensions/comfyui-agent-version.ts";
 export * from "./extensions/extension-runtime-composition.ts";
-export type { InstalledPluginExecutionConfig } from "./plugins/installed-plugin-runtime-composition.ts";
+export {
+  captureInstalledPluginExecutionConfig,
+  captureInstalledPluginHistoricalQueryConfig,
+  composeInstalledPluginRuntimeResolver,
+  composeInstalledPluginQueryHost,
+  type InstalledPluginExecutionConfig,
+  type InstalledPluginHistoricalQueryConfig,
+} from "./plugins/installed-plugin-runtime-composition.ts";
+export {
+  InstalledPluginQueryHost,
+  type InstalledPluginQueryHostDependencies,
+} from "./plugins/installed-plugin-query-host.ts";
+export type { InstalledPluginExecutionIoConfig } from "./plugins/installed-plugin-execution-io-config.ts";
+export type { PluginExecutionNetworkApproval } from "./plugins/plugin-execution-io-network.ts";
 export * from "./plugins/installed-plugin-business-registration.ts";
 export * from "./plugins/installed-plugin-agent-version.ts";
 export * from "./plugins/installed-plugin-agent-runtime-factory.ts";

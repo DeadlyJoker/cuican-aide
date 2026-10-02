@@ -366,13 +366,13 @@ test("replaySafe recovery uses the actual fresh broker to repeat a permitted rea
         (operation) =>
           operation.method === "reconcile" &&
           operation.recovery === "replaySafe" &&
-          operation.purpose === "submit",
+          operation.purpose === "observe",
       ),
   );
   assert.equal(await f.count("plugin_credit_reservations"), 1);
 });
 
-test("disabling a plugin denies replaySafe reconciliation before a fresh broker can execute the read again", async (t) => {
+test("disabling a plugin still permits authorized replaySafe read recovery without a new mutation", async (t) => {
   const f = await installedWorkerFixture(t, {
     replaySafe: true,
     reservation: "absent",
@@ -395,8 +395,8 @@ test("disabling a plugin denies replaySafe reconciliation before a fresh broker 
   await f.disable();
   const before = f.state.operations.length;
   await f.makeDue();
-  assert.notEqual((await f.worker().wake()).kind, "completed");
-  assert.equal(f.state.installedCalls, 1);
+  assert.equal((await f.worker().wake()).kind, "completed");
+  assert.equal(f.state.installedCalls, 2);
   assert.equal(f.state.baseCalls, 0);
   assert.ok(
     f.state.operations
@@ -405,9 +405,52 @@ test("disabling a plugin denies replaySafe reconciliation before a fresh broker 
         (operation) =>
           operation.method === "reconcile" &&
           operation.recovery === "replaySafe" &&
-          operation.purpose === "submit",
+          operation.purpose === "observe",
       ),
   );
+  assert.equal(
+    (await f.events()).filter((event) => event.type === "tool.completed")
+      .length,
+    1,
+  );
+  assert.equal(await f.count("plugin_credit_reservations"), 1);
+});
+
+test("revoking observe permission denies replaySafe read recovery before the fresh broker executes", async (t) => {
+  const f = await installedWorkerFixture(t, {
+    replaySafe: true,
+    reservation: "absent",
+  });
+  const crashed = f.worker({
+    config: {
+      afterToolProviderResolved: async () => {
+        throw new Error("fixture_before_read_commit");
+      },
+    },
+  });
+  assert.equal((await crashed.wake()).kind, "retried");
+  assert.equal(f.state.installedCalls, 1);
+  await crashed.close();
+  f.forgetInstalledResults();
+  await f.disable();
+  const authorize = f.dependencies.authorization.authorize.bind(
+    f.dependencies.authorization,
+  );
+  t.mock.method(
+    f.dependencies.authorization,
+    "authorize",
+    (request: Parameters<typeof authorize>[0]) =>
+      request.action === "extension:query"
+        ? Promise.resolve({
+            outcome: "deny" as const,
+            reasonCode: "fixture_observe_revoked",
+          })
+        : authorize(request),
+  );
+  await f.makeDue();
+  assert.notEqual((await f.worker().wake()).kind, "completed");
+  assert.equal(f.state.installedCalls, 1);
+  assert.equal(f.state.baseCalls, 0);
   assert.equal(
     (await f.events()).filter((event) => event.type === "tool.completed")
       .length,

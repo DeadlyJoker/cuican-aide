@@ -31,6 +31,10 @@ import {
   invalid,
   snapshotContext,
 } from "./plugin-tool-runtime-adapter-data.ts";
+import {
+  assertWorkerToolDispatch,
+  withCheckedWorkerToolDispatch,
+} from "./worker-tool-dispatch-authority.ts";
 
 type Method = "execute" | "reconcile" | "cancel";
 export type PluginToolRuntimeAdapterInput = Readonly<{
@@ -46,6 +50,15 @@ export type PluginToolRuntimeAdapterInput = Readonly<{
       signal: AbortSignal;
     }>,
   ): Promise<void>;
+  /** Host I/O bridge; requires a real Worker dispatch grant, never a copied lease DTO. */
+  dispatchAuthority?(
+    input: Readonly<{
+      method: Method;
+      command: ToolExecutionCommand;
+      signal: AbortSignal;
+    }>,
+    delegate: () => Promise<ToolExecutionResolution>,
+  ): Promise<ToolExecutionResolution>;
 }>;
 
 const required = [
@@ -101,6 +114,7 @@ export function adaptPluginToolRuntime(
     definitions,
     policyContext: checkedPolicyContext(input.policyContext),
     authorize: input.authorize.bind(input),
+    dispatchAuthority: input.dispatchAuthority?.bind(input),
   });
   return owner.port();
 }
@@ -116,6 +130,7 @@ class AdapterOwner {
   readonly #definitions: readonly ToolDefinition[];
   readonly #allowed: ReadonlySet<string>;
   readonly #authorize: PluginToolRuntimeAdapterInput["authorize"];
+  readonly #dispatchAuthority: PluginToolRuntimeAdapterInput["dispatchAuthority"];
   readonly #policyContext: ToolExecutionPolicyContext | undefined;
   readonly #active = new Set<Promise<unknown>>();
   readonly #reservations = new Set<Reservation>();
@@ -129,6 +144,7 @@ class AdapterOwner {
       definitions: readonly ToolDefinition[];
       policyContext: ToolExecutionPolicyContext | undefined;
       authorize: PluginToolRuntimeAdapterInput["authorize"];
+      dispatchAuthority: PluginToolRuntimeAdapterInput["dispatchAuthority"];
     }>,
   ) {
     this.#methods = input.methods;
@@ -140,6 +156,7 @@ class AdapterOwner {
       ),
     );
     this.#authorize = input.authorize;
+    this.#dispatchAuthority = input.dispatchAuthority;
     this.#policyContext = input.policyContext;
   }
 
@@ -358,7 +375,13 @@ class AdapterOwner {
         this.#assertPolicy(command);
         this.#open();
         // No late abort/close fence here: a completion receipt remains stronger evidence.
-        const result = await this.#methods[method](command, signal);
+        const result = await this.#dispatch(
+          input,
+          command,
+          method,
+          signal,
+          () => this.#methods[method](command, signal),
+        );
         return checkedResolution(result, command);
       });
     } catch (error) {
@@ -428,9 +451,17 @@ class AdapterOwner {
               signal.throwIfAborted();
               this.#assertPolicy(command);
               this.#open();
-              reservation.phase = "started";
-              this.#reservations.delete(reservation);
-              const result = await captured.execute();
+              const result = await this.#dispatch(
+                input,
+                command,
+                "execute",
+                signal,
+                () => {
+                  reservation.phase = "started";
+                  this.#reservations.delete(reservation);
+                  return captured.execute();
+                },
+              );
               return checkedResolution(result, command);
             } catch (error) {
               // A started reservation belongs to the provider's physical operation/result, even
@@ -447,6 +478,27 @@ class AdapterOwner {
       },
       release: reservation.release,
     });
+  }
+
+  #dispatch(
+    originalCommand: ToolExecutionCommand,
+    command: ToolExecutionCommand,
+    method: Method,
+    signal: AbortSignal,
+    delegate: () => Promise<ToolExecutionResolution>,
+  ): Promise<ToolExecutionResolution> {
+    if (this.#dispatchAuthority === undefined) return delegate();
+    const invocation = Object.freeze({ command, method, signal });
+    return withCheckedWorkerToolDispatch(
+      { originalCommand, command, method, signal },
+      () =>
+        this.#dispatchAuthority!(invocation, () => {
+          this.#open();
+          this.#assertPolicy(command);
+          assertWorkerToolDispatch(invocation);
+          return delegate();
+        }),
+    );
   }
 
   #track(

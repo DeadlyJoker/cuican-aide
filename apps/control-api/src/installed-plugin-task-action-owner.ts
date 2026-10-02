@@ -442,7 +442,9 @@ export class InstalledPluginTaskActionOwner {
         clock: this.#dependencies.clock,
         ids: this.#dependencies.ids,
       });
-      const host = new PluginNodeHost({ services: [bridge.hostService()] });
+      const host = new PluginNodeHost({
+        services: [bridge.hostService(), bridge.hostServiceV2()],
+      });
       created = {
         request,
         host,

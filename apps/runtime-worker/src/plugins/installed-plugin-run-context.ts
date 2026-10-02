@@ -7,7 +7,9 @@ import type {
   ExtensionStore,
   PluginInstallationStore,
   RunStore,
+  ExternalOperationStore,
 } from "@crewon/application";
+import { loadPluginQuerySource } from "@crewon/application";
 import {
   assertExtensionCreditAdmission,
   assertPluginTaskAdmission,
@@ -27,6 +29,11 @@ import {
   type ExtensionExecutionTarget,
   type PluginTaskAdmission,
   type RunState,
+  parsePluginQueryTaskAdmission,
+  effectivePluginQueryTaskAdmission,
+  assertPluginQueryTaskAdmission,
+  type PluginQueryTaskAdmission,
+  type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 
@@ -39,6 +46,7 @@ export type InstalledPluginRunContextDependencies = Readonly<{
   runs: Pick<RunStore, "loadRunInSpace">;
   installations: PluginInstallationStore;
   authorization: AuthorizationPort;
+  operations?: Pick<ExternalOperationStore, "loadExternalOperation">;
   resolveActor(
     owner: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
     signal: AbortSignal,
@@ -49,6 +57,7 @@ type SavedContext = Readonly<{
   binding: ExtensionRunBinding;
   context: PluginToolRuntimeContext;
   toolPermissionMode: RunState["toolPermissionMode"] | null;
+  query: PluginQueryTaskAdmission | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -82,7 +91,10 @@ export class InstalledPluginRunContext {
       typeof dependencies.installations.loadPackage !== "function" ||
       typeof dependencies.installations.loadSelection !== "function" ||
       typeof dependencies.authorization.authorize !== "function" ||
-      typeof dependencies.resolveActor !== "function"
+      typeof dependencies.resolveActor !== "function" ||
+      (dependencies.extensions.loadPluginQueryTaskAdmission !== undefined &&
+        dependencies.extensions.pluginQueryAdmissionVersion !==
+          "crewon.plugin-query-task-admission.v1")
     )
       fail("installed_plugin_context_port_unavailable");
     this.#dependencies = Object.freeze({ ...dependencies });
@@ -162,8 +174,20 @@ export class InstalledPluginRunContext {
     const rawAdmission = await extensions.loadPluginTaskAdmission!(locator);
     signal.throwIfAborted();
     // Only an authoritative absent v1 record follows the unchanged v0 route.
-    if (rawAdmission === null) return null;
-    const admission = parsePluginTaskAdmission(rawAdmission);
+    const rawQuery =
+      extensions.loadPluginQueryTaskAdmission === undefined
+        ? null
+        : await extensions.loadPluginQueryTaskAdmission(locator);
+    signal.throwIfAborted();
+    if (rawAdmission === null && rawQuery === null) return null;
+    if (rawAdmission !== null && rawQuery !== null)
+      fail("installed_plugin_admission_conflict");
+    const query =
+      rawQuery === null ? null : parsePluginQueryTaskAdmission(rawQuery);
+    const admission =
+      query === null
+        ? parsePluginTaskAdmission(rawAdmission)
+        : effectivePluginQueryTaskAdmission(query);
     if (
       admission.tenantId !== locator.tenantId ||
       admission.spaceId !== locator.spaceId ||
@@ -174,14 +198,43 @@ export class InstalledPluginRunContext {
     signal.throwIfAborted();
     if (rawBinding === null) fail("installed_plugin_binding_missing");
     const binding = parseExtensionRunBinding(rawBinding, digester);
-    if (binding.source !== null)
+    if (binding.source !== null && query === null)
       fail("installed_plugin_query_source_unsupported");
     const receipt = Object.freeze({
       actorId: admission.actorId,
       idempotencyKey: admission.idempotencyKey,
       requestDigest: admission.requestDigest,
     });
-    assertPluginTaskAdmission({ admission, binding, receipt }, digester);
+    if (query === null)
+      assertPluginTaskAdmission({ admission, binding, receipt }, digester);
+    else {
+      if (this.#dependencies.operations === undefined)
+        fail("installed_plugin_query_operations_unavailable");
+      const actor = await this.#actor(admission, signal);
+      const source = await loadPluginQuerySource({
+        actor,
+        pluginId: query.pluginId,
+        profileId: query.profileId,
+        publisherId: query.publisherId,
+        sourceRunId: query.source.runId,
+        operationId: query.operationId,
+        extensions,
+        runs: this.#dependencies.runs,
+        operations: this.#dependencies.operations,
+        authorization: this.#dependencies.authorization,
+        digester,
+      });
+      signal.throwIfAborted();
+      assertPluginQueryTaskAdmission(
+        { admission: query, binding, sourceBinding: source.binding, receipt },
+        digester,
+      );
+      if (
+        extensionCanonicalJson(query.source) !==
+        extensionCanonicalJson(source.admission)
+      )
+        fail("installed_plugin_query_source_changed");
+    }
     if (
       extensionCanonicalJson(binding.target) !==
       extensionCanonicalJson(expectedTarget)
@@ -193,7 +246,13 @@ export class InstalledPluginRunContext {
     });
     signal.throwIfAborted();
     if (rawReceipt === null) fail("installed_plugin_task_receipt_missing");
-    const original = validateReceipt(rawReceipt, binding, admission, receipt);
+    const original = validateReceipt(
+      rawReceipt,
+      binding,
+      admission,
+      receipt,
+      query,
+    );
     const run = await this.#dependencies.runs.loadRunInSpace(locator);
     signal.throwIfAborted();
     if (run === null) fail("installed_plugin_run_missing");
@@ -253,7 +312,7 @@ export class InstalledPluginRunContext {
         threadId: binding.threadId,
         bindingDigest: binding.bindingDigest,
         inputDigest: binding.inputDigest,
-        source: null,
+        source: binding.source,
       }),
       configuration: Object.freeze({
         revision: configuration.revision,
@@ -268,6 +327,7 @@ export class InstalledPluginRunContext {
       binding,
       context,
       toolPermissionMode: run.toolPermissionMode ?? null,
+      query,
     });
   }
 
@@ -277,8 +337,13 @@ export class InstalledPluginRunContext {
     signal: AbortSignal,
   ) {
     const { admission, binding } = saved;
+    if (saved.query !== null) purpose = "observe";
     const initial = await this.#activation(binding, purpose, signal);
-    const selection = await this.#selection(admission, purpose, signal);
+    const selection = await this.#selection(
+      saved.query ?? admission,
+      purpose,
+      signal,
+    );
     const actor = await this.#actor(admission, signal);
     for (const request of [
       {
@@ -321,7 +386,11 @@ export class InstalledPluginRunContext {
     const latest = await this.#activation(binding, purpose, signal);
     if (extensionCanonicalJson(initial) !== extensionCanonicalJson(latest))
       fail("installed_plugin_activation_changed");
-    const latestSelection = await this.#selection(admission, purpose, signal);
+    const latestSelection = await this.#selection(
+      saved.query ?? admission,
+      purpose,
+      signal,
+    );
     if (
       extensionCanonicalJson(selection) !==
       extensionCanonicalJson(latestSelection)
@@ -333,7 +402,7 @@ export class InstalledPluginRunContext {
   }
 
   async #selection(
-    admission: PluginTaskAdmission,
+    admission: PluginTaskAdmissionPin,
     purpose: InstalledPluginRunPurpose,
     signal: AbortSignal,
   ) {
@@ -442,6 +511,7 @@ function validateReceipt(
   binding: ExtensionRunBinding,
   admission: PluginTaskAdmission,
   receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
+  query: PluginQueryTaskAdmission | null = null,
 ): RunState {
   // The same bounded, accessor-free Domain JSON capture used by v0 config/binding parsing.
   const saved = JSON.parse(
@@ -472,11 +542,18 @@ function validateReceipt(
       extensionCanonicalJson(saved.turn.runEvents)
   )
     fail("installed_plugin_task_receipt_mismatch");
-  const credit = assertExtensionCreditAdmission(
-    { admission: saved.creditAdmission!, binding, receipt },
-    digester,
-  );
-  if (credit.reservation.scope.principalId !== admission.principalId)
+  const credit =
+    query === null
+      ? assertExtensionCreditAdmission(
+          { admission: saved.creditAdmission!, binding, receipt },
+          digester,
+        )
+      : undefined;
+  if (
+    (query !== null && saved.creditAdmission !== undefined) ||
+    (credit !== undefined &&
+      credit.reservation.scope.principalId !== admission.principalId)
+  )
     fail("installed_plugin_task_receipt_owner_mismatch");
   const messages = saved.turn.messages;
   if (

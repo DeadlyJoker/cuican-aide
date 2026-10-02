@@ -1,4 +1,5 @@
 import { ApplicationError } from "./application-error.ts";
+import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { CreateExtensionTaskCommand } from "./extension-task-application-service.ts";
 import type {
@@ -20,11 +21,20 @@ import {
 import {
   assertCommittedRun,
   committedTaskCommand,
+  committedQueryTaskCommand,
   committedTaskContext,
   committedTaskProjection,
   committedTaskResult,
 } from "./plugin-ui-committed-task-support.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
+import {
+  parsePluginQueryTaskAdmission,
+  parseExtensionRunBinding,
+} from "@crewon/domain";
+import {
+  assertSavedPluginQueryTask,
+  pluginQueryTaskReceipt,
+} from "./plugin-query-task-support.ts";
 
 export type PluginUiCommittedTaskAuthorityDependencies = Readonly<{
   extensions: ExtensionStore;
@@ -150,6 +160,120 @@ export class PluginUiCommittedTaskAuthority
     return (
       input !== null && typeof input === "object" && this.#outcomes.has(input)
     );
+  }
+
+  async issueQuery(
+    input: Readonly<{
+      context: PluginUiActionContext;
+      command: CreateExtensionTaskCommand;
+      result: CommitExtensionTurnResult;
+    }>,
+  ): Promise<PluginUiCommittedTaskOutcome> {
+    try {
+      const value = uiRecord(input, ["context", "command", "result"]),
+        invocation = value.context as PluginUiActionContext;
+      const { context, pin, fingerprint } = committedTaskContext(invocation);
+      const command = committedQueryTaskCommand(
+        value.command as CreateExtensionTaskCommand,
+        pin,
+      );
+      // Capture the claimed transaction before any storage await.
+      const claim = parsePluginUiJsonValue(
+        value.result,
+      ) as unknown as CommitExtensionTurnResult;
+      const raw =
+        await this.#dependencies.extensions.loadPluginQueryTaskAdmission?.({
+          tenantId: pin.tenantId,
+          spaceId: pin.spaceId,
+          runId: claim.binding.runId,
+        });
+      if (raw == null) throw new Error("plugin_query_admission_missing");
+      const query = parsePluginQueryTaskAdmission(raw);
+      const sourceRaw =
+        await this.#dependencies.extensions.loadExtensionRunBinding({
+          tenantId: pin.tenantId,
+          spaceId: pin.spaceId,
+          runId: query.source.runId,
+        });
+      if (sourceRaw === null) throw new Error("plugin_query_source_missing");
+      const source = {
+        admission: query.source,
+        binding: parseExtensionRunBinding(
+          sourceRaw,
+          this.#dependencies.digester,
+        ),
+        operationId: query.operationId,
+      };
+      const receipt = pluginQueryTaskReceipt(
+        context.actor,
+        command,
+        pin,
+        source,
+        this.#dependencies.digester,
+      );
+      const claimed = committedTaskResult(
+        claim,
+        command,
+        pin,
+        receipt,
+        this.#dependencies.digester,
+        query,
+      );
+      const savedRaw =
+        await this.#dependencies.extensions.loadExtensionTurnReceipt({
+          tenantId: pin.tenantId,
+          spaceId: pin.spaceId,
+          pluginId: pin.pluginId,
+          receipt,
+        });
+      if (savedRaw === null)
+        throw new Error("plugin_ui_committed_receipt_missing");
+      const saved = committedTaskResult(
+        savedRaw,
+        command,
+        pin,
+        receipt,
+        this.#dependencies.digester,
+        query,
+      );
+      if (saved.fingerprint !== claimed.fingerprint)
+        throw new Error("plugin_ui_committed_receipt_mismatch");
+      await assertSavedPluginQueryTask({
+        store: this.#dependencies.extensions,
+        pin,
+        source,
+        binding: saved.binding,
+        receipt,
+        digester: this.#dependencies.digester,
+      });
+      const run = await this.#dependencies.runs.loadRunInSpace({
+        tenantId: pin.tenantId,
+        spaceId: pin.spaceId,
+        runId: saved.binding.runId,
+      });
+      if (run === null) throw new Error("plugin_ui_committed_run_missing");
+      assertCommittedRun(run, saved.binding);
+      if (committedTaskContext(invocation).fingerprint !== fingerprint)
+        throw new Error("plugin_ui_committed_context_changed");
+      const outcome = Object.freeze(
+        Object.create(outcomePrototype),
+      ) as PluginUiCommittedTaskOutcome;
+      this.#outcomes.set(
+        outcome,
+        Object.freeze({
+          context: invocation,
+          contextFingerprint: fingerprint,
+          output: committedTaskProjection(claimed.result),
+        }),
+      );
+      return outcome;
+    } catch (error) {
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_committed_task_invalid",
+        { cause: error },
+      );
+    }
   }
 
   verify(

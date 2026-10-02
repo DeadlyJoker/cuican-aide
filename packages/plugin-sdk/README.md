@@ -112,7 +112,23 @@ const receipt = await tasks.createTask({
 
 `invocationRef` 由当前宿主在授权业务动作时签发，具有范围和有效期；插件不能自行生成授权引用，也不能传入 actor、principal、profile、付款方或价格。线程与业务输入仍须通过宿主检查。回执只有 `disposition`、`threadId`、`threadRevision`、`runId`、`messageId`、`configurationRevision` 六个字段，后续输出使用宿主原有 Run 事件与恢复路径。
 
-动作服务以插件自己的 `pluginId` 和 API 版本 `"1"` 提供，类型为 `PluginActionsService`：`actions` 列出 `{ contributionId, action, kind: "read" | "generateTask" }`，`invoke` 接收 `{ invocationRef, contributionId, action, input }` 并返回 JSON。声明不会授予动作权限，客户端不能指定 Node 服务；宿主负责当前贡献、选择、包版本和每次调用授权。该 ABI 不增加 manifest 字段，也不把插件在 `setup` 时固定绑定到某个用户。
+动作服务以插件自己的 `pluginId` 和 API 版本 `"1"` 提供，类型为 `PluginActionsService`：`actions` 列出 `{ contributionId, action, kind: "read" | "generateTask" | "queryTask" }`，`invoke` 接收 `{ invocationRef, contributionId, action, input }` 并返回 JSON。声明不会授予动作权限，客户端不能指定 Node 服务；宿主负责当前贡献、选择、包版本和每次调用授权。该 ABI 不增加 manifest 字段，也不把插件在 `setup` 时固定绑定到某个用户。
+
+`CREWON_TASKS_V2_API_VERSION = "2"` 和 `PluginTaskServiceV2` 在保留 `createTask` 的同时增加 `queryTask`。需要查询的包须声明 `crewon.tasks` API `2`，读取该确切版本；宿主可以同时提供 API `1` 和 `2`，原客户端继续使用 `1`。此支持限于可信宿主服务的版本共存，插件提供服务之间的原冲突规则保持不变。
+
+```ts
+const tasks = ctx.services.get<PluginTaskServiceV2>("crewon.tasks", "2");
+const receipt = await tasks.queryTask({
+  invocationRef,
+  threadId,
+  expectedThreadRevision,
+  idempotencyKey,
+  sourceRunId,
+  operationId,
+});
+```
+
+查询只传原 Run 和 operation 引用。宿主从持久原生成记录核验原包、配置、完整执行目标、已预留的个人报价和 operation 所属，再检查当前用户的来源读取及目标线程权限。查询保存独立 provenance，使用原包观察原结果，不新增生成报价或积分预留。当前 UI 可以来自新版本，但不能让历史执行换包；复制引用、旧用户权限或安装状态本身都不构成查询许可。没有真实查询 host 时明确拒绝。
 
 业务动作桥要求动作服务为普通数据对象 `{ actions, invoke }`，并捕获 `invoke` 后调用；动作声明中的 getter、隐藏字段和未知字段会被拒绝。这是该动作 ABI 的边界，通用 Node 服务的 `provide` 接口仍允许其他服务对象。
 
@@ -170,6 +186,14 @@ export default definePlugin({
 `canRetire` 是同步本地证明，仅在没有借用者时调用；缺少该方法表示未知，空扫描不证明可以退休。`close` 返回 Promise，适配器须在其完成前等待自身物理执行结束并妥善保留恢复证据。宿主不得在升级时提前清理旧 Run 所借用的实例。
 
 执行方法的取消参数是 SDK 自持的 `PluginAbortSignal`：包含 `aborted`、`reason`、`throwIfAborted` 和 abort 监听的窄视图，不需要 DOM 声明。宿主应原样传入真实原生 AbortSignal；不能用仿造信号替代。拥有 Node 或 DOM 类型、需要调用 `fetch` 的插件可在自己的网络边界将这个原生对象断言为 `AbortSignal`，该断言不会生成或补齐实现。宿主仍负责 lease 失效、当前权限和网络策略。
+
+工厂的可选第二参数为 `PluginExecutionServices`，原单参数工厂保持兼容。`approvalRequirement` 来自实际 Run 的宿主审批模式；可选 `externalOperations` 和 `jsonHttp` 提供原外部 operation 账本与受控 JSON 请求。需要它们的插件必须检查实际端口，缺少时拒绝执行。这些端口不把数据库连接、调用者、付款人、凭据或任意网络 origin 交给插件。
+
+端口的 `command` 必须是当前 `execute/reconcile/cancel` 收到的实际命令对象。宿主在已持久派发并确认的 Worker claim 内开放调用范围；复制 DTO、只持有 Run 元数据、保存命令到调用结束后都不能取得 IO 权限。`reserve` 使用原 Run 的确定性 operation ID，持久创建成功才返回当前调用范围的一次性 `dispatchRef`；`existing` 不返回新凭证。`POST` 的方法、相对路径和 JSON 内容必须与预留摘要完全一致，凭证先消耗后等待，不因失败、重开或查不到结果再次发出。ComfyUI 等供应商的关联 ID 不等于其服务端去重保证。
+
+`jsonHttp.request` 仅接受 `GET` 或 `POST`、已批准的相对路径和有界 JSON。服务 origin 来自已锁定配置；宿主检查当前 Run、包许可、DNS 和固定网络策略，在真正发送前再次检查。历史查询只能读取已准入来源的 operation，不能提交新操作。真正收到的供应商响应允许在迟到取消或撤权后写入同一 operation 的本地证据；新外部 IO 仍须重新通过当前授权。关闭等待实际 HTTP、Store CAS 和委托调用结束。
+
+这些能力仍是可信进程内插件的协作协议，不隔离恶意 Node 代码。使用宿主 IO 端口的插件应禁止自己的直接网络请求，以便外部操作实际经过统一授权和恢复路径。
 
 分发测试实际将 SDK 打包、在仓外离线安装，以 `lib: ["ES2022"]` / `types: []` 编译执行插件，调用其注册工厂，并验证原生取消、恢复查询和保留结果确认。这是 ABI 证据，尚不表示 Worker 已按安装包执行，或供应商副作用与生产恢复已接通。
 

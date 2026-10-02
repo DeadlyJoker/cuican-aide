@@ -75,6 +75,7 @@ export async function ownedActionFixture(
     maximumPackages?: number;
     setupFailure?: boolean;
     cleanupFailure?: boolean;
+    queryTasks?: boolean;
   } = {},
 ) {
   const storage = await configurationServiceFixture(
@@ -130,6 +131,8 @@ export async function ownedActionFixture(
     disposalEntered: null as (() => void) | null,
     quoteGate: null as Promise<void> | null,
     quoteEntered: null as (() => void) | null,
+    queryGate: null as Promise<void> | null,
+    queryEntered: null as (() => void) | null,
     onPackage: null as (() => Promise<void>) | null,
     afterCommit: null as
       | ((result: CommitExtensionTurnResult) => Promise<void>)
@@ -148,15 +151,16 @@ const state=globalThis[${JSON.stringify(key)}];
 export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(scope.pluginId)},async setup(context){
   state.setups++;
   context.onDispose(async()=>{state.disposals++;state.disposalEntered?.();await state.disposalGate;if(state.cleanupFailure)throw new Error('actual-fixture-dispose-failed');});
-  const tasks=context.services.getOptional('crewon.tasks','1');
+  const tasks=context.services.getOptional('crewon.tasks',${JSON.stringify(options.queryTasks ? "2" : "1")});
   state.execution=context.services.getOptional('crewon.execution','1');
   state.setupEntered?.();await state.setupGate;
   if(state.setupFailure)throw new Error('actual-fixture-setup-failed');
   context.services.provide(${JSON.stringify(scope.pluginId)},'1',{
-    actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'},{contributionId:'workbench',action:'image.read',kind:'read'}],
+    actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'},{contributionId:'workbench',action:'image.read',kind:'read'}${options.queryTasks ? ",{contributionId:'workbench',action:'image.query',kind:'queryTask'}" : ""}],
     async invoke({invocationRef,action,input}){
       state.calls++;
       if(action==='image.read'){state.readEntered?.();await state.readGate;return {value:'installed-read'};}
+      ${options.queryTasks ? "if(action==='image.query')return tasks.queryTask({invocationRef,...input});" : ""}
       return tasks.createTask({invocationRef,...input});
     }
   });
@@ -193,7 +197,11 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(sco
         },
         businessManifestPath: null,
         requires: [
-          { service: "crewon.tasks", apiVersion: "1", optional: true },
+          {
+            service: "crewon.tasks",
+            apiVersion: options.queryTasks ? "2" : "1",
+            optional: true,
+          },
           { service: "crewon.execution", apiVersion: "1", optional: true },
         ],
         provides: [{ service: scope.pluginId, apiVersion: "1" }],
@@ -256,11 +264,48 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(sco
         };
       },
     },
+    ...(options.queryTasks
+      ? {
+          pluginQueryHost: {
+            async resolveRegistration() {
+              return storage.dependencies.catalog.resolve({
+                pluginId: scope.pluginId,
+                pluginVersion: "0.1.0",
+              });
+            },
+            async evaluate({
+              source,
+              expectedTarget,
+            }: Parameters<
+              import("@crewon/application").PluginQueryHostPort["evaluate"]
+            >[0]) {
+              if (
+                JSON.stringify(expectedTarget) !==
+                JSON.stringify(source.binding.target)
+              )
+                throw new Error("fixture_query_target_mismatch");
+              state.queryEntered?.();
+              await state.queryGate;
+              return {
+                outcome: "ready" as const,
+                target: source.binding.target,
+              };
+            },
+          },
+        }
+      : {}),
   });
   // This instrumentation awaits the original actual transaction; it never supplies a synthetic receipt.
   const createTask = tasks.createTaskFromPlugin.bind(tasks);
   tasks.createTaskFromPlugin = async (...args) => {
     const result = await createTask(...args);
+    state.accepted.push(result);
+    await state.afterCommit?.(result);
+    return result;
+  };
+  const createQuery = tasks.createQueryTaskFromPlugin.bind(tasks);
+  tasks.createQueryTaskFromPlugin = async (...args) => {
+    const result = await createQuery(...args);
     state.accepted.push(result);
     await state.afterCommit?.(result);
     return result;
@@ -379,6 +424,7 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(sco
     );
   return {
     ...storage,
+    extensionState: storage.state,
     owner,
     state,
     dependencies,

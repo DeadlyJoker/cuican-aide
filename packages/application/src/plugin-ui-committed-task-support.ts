@@ -10,6 +10,7 @@ import {
   type PluginTaskAdmissionPin,
   type ExtensionCreditAdmission,
   type RunState,
+  type PluginQueryTaskAdmission,
 } from "@crewon/domain";
 import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { CreateExtensionTaskCommand } from "./extension-task-application-service.ts";
@@ -123,6 +124,44 @@ export function committedTaskCommand(
   });
 }
 
+export function committedQueryTaskCommand(
+  input: CreateExtensionTaskCommand,
+  pin: PluginTaskAdmissionPin,
+): CreateExtensionTaskCommand {
+  const value = uiRecord(input, [
+      "pluginId",
+      "threadId",
+      "expectedThreadRevision",
+      "idempotencyKey",
+      "intent",
+    ]),
+    intent = uiRecord(value.intent, ["kind", "sourceRunId", "operationId"]);
+  const operationId = extensionOpaqueId(intent.operationId);
+  if (
+    value.pluginId !== pin.pluginId ||
+    intent.kind !== "query" ||
+    typeof value.expectedThreadRevision !== "number" ||
+    !Number.isSafeInteger(value.expectedThreadRevision) ||
+    value.expectedThreadRevision < 1 ||
+    value.expectedThreadRevision >= Number.MAX_SAFE_INTEGER ||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(
+      operationId,
+    )
+  )
+    throw new Error("plugin_ui_committed_command_invalid");
+  return Object.freeze({
+    pluginId: pin.pluginId,
+    threadId: extensionOpaqueId(value.threadId),
+    expectedThreadRevision: value.expectedThreadRevision,
+    idempotencyKey: extensionOpaqueId(value.idempotencyKey),
+    intent: Object.freeze({
+      kind: "query",
+      sourceRunId: extensionOpaqueId(intent.sourceRunId),
+      operationId,
+    }),
+  });
+}
+
 /** Bounded detached snapshot of the original transaction result, not a later task/history read. */
 export function committedTaskResult(
   input: CommitExtensionTurnResult,
@@ -130,15 +169,15 @@ export function committedTaskResult(
   pin: PluginTaskAdmissionPin,
   receipt: ExtensionMutationReceipt,
   digester: ContentDigester,
+  query?: PluginQueryTaskAdmission,
 ) {
   const copied = parsePluginUiJsonValue(input);
-  const value = uiRecord(copied, [
-    "schemaVersion",
-    "turn",
-    "run",
-    "binding",
-    "creditAdmission",
-  ]);
+  const value = uiRecord(
+    copied,
+    query === undefined
+      ? ["schemaVersion", "turn", "run", "binding", "creditAdmission"]
+      : ["schemaVersion", "turn", "run", "binding"],
+  );
   const turn = uiRecord(value.turn, [
     "disposition",
     "threadState",
@@ -165,22 +204,32 @@ export function committedTaskResult(
   )
     throw new Error("plugin_ui_committed_receipt_invalid");
   const binding = parseExtensionRunBinding(value.binding, digester);
-  const credit = assertExtensionCreditAdmission(
-    {
-      admission: value.creditAdmission as ExtensionCreditAdmission,
-      binding,
-      receipt,
-    },
-    digester,
-  );
+  const credit =
+    query === undefined
+      ? assertExtensionCreditAdmission(
+          {
+            admission: value.creditAdmission as ExtensionCreditAdmission,
+            binding,
+            receipt,
+          },
+          digester,
+        )
+      : undefined;
   if (
-    binding.source !== null ||
+    (query === undefined
+      ? binding.source !== null
+      : binding.source === null ||
+        command.intent.kind !== "query" ||
+        binding.source.runId !== command.intent.sourceRunId ||
+        binding.source.operationId !== command.intent.operationId ||
+        query.extensionBindingDigest !== binding.bindingDigest) ||
     binding.pluginId !== command.pluginId ||
     binding.threadId !== command.threadId ||
     binding.tenantId !== pin.tenantId ||
     binding.spaceId !== pin.spaceId ||
     binding.actorId !== pin.actorId ||
-    credit.reservation.scope.principalId !== pin.principalId
+    (credit !== undefined &&
+      credit.reservation.scope.principalId !== pin.principalId)
   )
     throw new Error("plugin_ui_committed_receipt_identity_invalid");
   const result = copied as unknown as CommitExtensionTurnResult;
@@ -224,7 +273,9 @@ export function committedTaskResult(
     "proposedPlan",
   ]);
   const content = extensionCanonicalJson(
-    command.intent.kind === "generate" ? command.intent.input : null,
+    command.intent.kind === "generate"
+      ? command.intent.input
+      : { kind: "query", operationId: command.intent.operationId },
   );
   const event = result.turn.threadEvents[0]!;
   const history = result.turn.historyItems[0]!;

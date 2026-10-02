@@ -2,6 +2,15 @@ import { isAbsolute } from "node:path";
 import type { AuthorizationPort, ExtensionStore } from "@crewon/application";
 import type { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import {
+  parsePluginProfileScope,
+  type PluginProfileScope,
+} from "@crewon/domain";
+import {
+  InstalledPluginQueryHost,
+  type InstalledPluginQueryHostDependencies,
+} from "./installed-plugin-query-host.ts";
+import type { StoreBackedAgentVersionRuntimeResolver } from "../store-backed-agent-version-runtime-resolver.ts";
+import {
   InstalledPluginRunContext,
   type InstalledPluginRunContextDependencies,
 } from "./installed-plugin-run-context.ts";
@@ -9,6 +18,10 @@ import {
   InstalledPluginRuntimeResolver,
   type InstalledPluginRuntimeResolverDependencies,
 } from "./installed-plugin-runtime-resolver.ts";
+import {
+  captureInstalledPluginExecutionIoConfig,
+  type InstalledPluginExecutionIoConfig,
+} from "./installed-plugin-execution-io-config.ts";
 
 /** Host deployment authority, never supplied by a plugin or inferred from an installation receipt. */
 export type InstalledPluginExecutionConfig = Readonly<{
@@ -17,6 +30,13 @@ export type InstalledPluginExecutionConfig = Readonly<{
   resolveActor: InstalledPluginRunContextDependencies["resolveActor"];
   authorizePackage: InstalledPluginRuntimeResolverDependencies["authorizePackage"];
   maximumRuntimes?: number;
+  executionIo?: InstalledPluginExecutionIoConfig;
+  /** Historical observation is an explicit profile-scoped deployment, never today's catalog. */
+  historicalQuery?: InstalledPluginHistoricalQueryConfig;
+}>;
+export type InstalledPluginHistoricalQueryConfig = Readonly<{
+  scope: PluginProfileScope;
+  resolveProfile: InstalledPluginQueryHostDependencies["resolveProfile"];
 }>;
 
 /** Capture function identities and deployment values before opening asynchronous storage. */
@@ -42,9 +62,69 @@ export function captureInstalledPluginExecutionConfig(
     }),
     resolveActor: config.resolveActor.bind(config),
     authorizePackage: config.authorizePackage.bind(config),
+    ...(config.executionIo === undefined
+      ? {}
+      : {
+          executionIo: captureInstalledPluginExecutionIoConfig(
+            config.executionIo,
+          ),
+        }),
+    ...(config.historicalQuery === undefined
+      ? {}
+      : {
+          historicalQuery: captureInstalledPluginHistoricalQueryConfig(
+            config.historicalQuery,
+          ),
+        }),
     ...(config.maximumRuntimes === undefined
       ? {}
       : { maximumRuntimes: config.maximumRuntimes }),
+  });
+}
+
+export function captureInstalledPluginHistoricalQueryConfig(
+  config: InstalledPluginHistoricalQueryConfig,
+): InstalledPluginHistoricalQueryConfig {
+  if (
+    config === null ||
+    typeof config !== "object" ||
+    typeof config.resolveProfile !== "function"
+  )
+    throw new Error("installed_plugin_query_configuration_invalid");
+  return Object.freeze({
+    scope: parsePluginProfileScope(config.scope),
+    resolveProfile: config.resolveProfile.bind(config),
+  });
+}
+
+/** Uses the actual parent Store and prepared Agent runtime owner; no standalone DB or catalog substitute. */
+export function composeInstalledPluginQueryHost(
+  input: Readonly<{
+    store: SqliteRunStore | PostgresDomainStore;
+    extensions: ExtensionStore;
+    config: InstalledPluginExecutionConfig;
+    runtimeResolver: StoreBackedAgentVersionRuntimeResolver;
+    tenantId: string;
+  }>,
+): InstalledPluginQueryHost | null {
+  const config = captureInstalledPluginExecutionConfig(input.config),
+    query = config.historicalQuery;
+  if (query === undefined) return null;
+  if (query.scope.tenantId !== input.tenantId)
+    throw new Error("installed_plugin_query_tenant_mismatch");
+  return new InstalledPluginQueryHost({
+    scope: query.scope,
+    installRoot: config.installRoot,
+    extensions: input.extensions,
+    runs: input.store,
+    operations: input.store.externalOperationStore(),
+    installations: input.store.pluginInstallationStore(),
+    authorization: config.authorization,
+    runtimeResolver: input.runtimeResolver,
+    deployments: input.store,
+    resolveActor: config.resolveActor,
+    resolveProfile: query.resolveProfile,
+    authorizePackage: config.authorizePackage,
   });
 }
 
@@ -66,6 +146,7 @@ export function composeInstalledPluginRuntimeResolver(input: {
     runs: store,
     installations,
     authorization: config.authorization,
+    operations: store.externalOperationStore(),
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({
@@ -74,10 +155,25 @@ export function composeInstalledPluginRuntimeResolver(input: {
       pluginAdmissionVersion: extensions.pluginAdmissionVersion,
       loadPluginTaskAdmission:
         extensions.loadPluginTaskAdmission.bind(extensions),
+      ...(extensions.loadPluginQueryTaskAdmission === undefined
+        ? {}
+        : {
+            pluginQueryAdmissionVersion: extensions.pluginQueryAdmissionVersion,
+            loadPluginQueryTaskAdmission:
+              extensions.loadPluginQueryTaskAdmission.bind(extensions),
+          }),
     },
     installations,
     installRoot: config.installRoot,
     authorizePackage: config.authorizePackage,
+    ...(config.executionIo === undefined
+      ? {}
+      : {
+          executionIo: {
+            ...captureInstalledPluginExecutionIoConfig(config.executionIo),
+            operations: store.externalOperationStore(),
+          },
+        }),
     ...(config.maximumRuntimes === undefined
       ? {}
       : { maximumRuntimes: config.maximumRuntimes }),

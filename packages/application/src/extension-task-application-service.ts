@@ -1,3 +1,4 @@
+import { parseExtensionTaskIntent as parseIntent } from "./extension-task-intent.ts";
 import {
   createExtensionRunBinding,
   extensionCanonicalJson,
@@ -27,6 +28,8 @@ import type {
 } from "./extension-host-port.ts";
 import type { ExtensionStore } from "./extension-store-port.ts";
 import type { ExtensionQueryHostPort } from "./extension-query-host-port.ts";
+import type { PluginQueryHostPort } from "./plugin-query-source.ts";
+import { PluginQueryTaskApplicationService } from "./plugin-query-task-application-service.ts";
 import type { ExternalOperationStore } from "./external-operation-store-port.ts";
 import type { RunStore } from "./run-store-port.ts";
 import type { ExtensionCreditQuotePort } from "./extension-credit-quote-port.ts";
@@ -67,19 +70,21 @@ type TaskStore = ConstructorParameters<
   typeof TurnApplicationService
 >[0]["store"] &
   Pick<RunStore, "loadRunInSpace">;
-type Dependencies = Readonly<{
+export type ExtensionTaskApplicationDependencies = Readonly<{
   store: TaskStore;
   extensions: ExtensionStore;
   operations: ExternalOperationStore;
   catalog: ExtensionCatalogPort;
   host: ExtensionHostPort;
   queryHost?: ExtensionQueryHostPort;
+  pluginQueryHost?: PluginQueryHostPort;
   authorization: AuthorizationPort;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
   creditQuotes?: ExtensionCreditQuotePort;
 }>;
+type Dependencies = ExtensionTaskApplicationDependencies;
 
 /** Creates an opt-in user Turn through the existing execution authority and one storage transaction. */
 export class ExtensionTaskApplicationService {
@@ -115,6 +120,20 @@ export class ExtensionTaskApplicationService {
       input,
       checkedPluginTaskPin(hostDerivedPin),
       capturePluginTaskCommitAuthority(commitAuthority),
+    );
+  }
+
+  async createQueryTaskFromPlugin(
+    actor: ActorContext,
+    input: CreateExtensionTaskCommand,
+    pin: PluginTaskAdmissionPin,
+    authority?: PluginTaskCommitAuthorityPort,
+  ) {
+    return new PluginQueryTaskApplicationService(this.#dependencies).create(
+      actor,
+      input,
+      pin,
+      authority,
     );
   }
 
@@ -760,40 +779,4 @@ export class ExtensionTaskApplicationService {
       );
     return source;
   }
-}
-
-function parseIntent(input: unknown): ExtensionTaskIntent {
-  const value = input as Record<string, unknown>;
-  if (value?.kind === "generate") {
-    const parsed = extensionCommand(input, ["kind", "input"]);
-    if (
-      new TextEncoder().encode(extensionCanonicalJson(parsed.input)).length >
-      16 * 1024
-    )
-      throw new ApplicationError("validation", "extension_task_input_invalid");
-    return { kind: "generate", input: parsed.input as WorkflowSchemaValue };
-  }
-  if (value?.kind === "query") {
-    const parsed = extensionCommand(input, [
-      "kind",
-      "sourceRunId",
-      "operationId",
-    ]);
-    const operationId = extensionOpaqueId(parsed.operationId);
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(
-        operationId,
-      )
-    )
-      throw new ApplicationError(
-        "validation",
-        "extension_task_operation_invalid",
-      );
-    return {
-      kind: "query",
-      sourceRunId: extensionOpaqueId(parsed.sourceRunId),
-      operationId,
-    };
-  }
-  throw new ApplicationError("validation", "extension_task_intent_invalid");
 }

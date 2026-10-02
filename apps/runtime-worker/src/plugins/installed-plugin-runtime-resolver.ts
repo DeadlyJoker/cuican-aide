@@ -6,6 +6,8 @@ import {
   extensionToolName,
   parsePluginProfileScope,
   parsePluginTaskAdmission,
+  parsePluginQueryTaskAdmission,
+  effectivePluginQueryTaskAdmission,
   type PluginProfileScope,
   type PluginTaskAdmission,
 } from "@crewon/domain";
@@ -17,7 +19,10 @@ import {
   type PluginExecutionPackageBorrow,
   type PluginNodeCommitCandidate,
 } from "@crewon/plugin-host";
-import type { PluginToolRuntime } from "@crewon/plugin-sdk/node";
+import type {
+  PluginToolRuntime,
+  PluginExecutionServices,
+} from "@crewon/plugin-sdk/node";
 import type { ToolDefinition, ToolRuntimePort } from "@crewon/tool-broker";
 import type { RuntimeResourceLease } from "../runtime-resource-lease.ts";
 import type { RuntimeExtensionMaterialization } from "../extensions/extension-runtime-proof.ts";
@@ -43,10 +48,26 @@ import {
   fail,
   readPackage,
 } from "./installed-plugin-runtime-resolver-package.ts";
+import { PluginExecutionIoOwner } from "./plugin-execution-io.ts";
+import { captureNetworkApproval } from "./plugin-execution-io-network.ts";
+import {
+  captureInstalledPluginExecutionIoConfig,
+  installedPluginHasExternalOperation,
+  type InstalledPluginExecutionIoDependencies,
+} from "./installed-plugin-execution-io-config.ts";
 
 export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   contexts: InstalledPluginRunContext;
-  admissions: Required<PluginTaskAdmissionProbe>;
+  admissions: Required<
+    Pick<
+      PluginTaskAdmissionProbe,
+      "pluginAdmissionVersion" | "loadPluginTaskAdmission"
+    >
+  > &
+    Pick<
+      PluginTaskAdmissionProbe,
+      "pluginQueryAdmissionVersion" | "loadPluginQueryTaskAdmission"
+    >;
   installations: PluginInstallationStore;
   installRoot: string;
   authorizePackage(
@@ -58,6 +79,7 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
     signal: AbortSignal,
   ): Promise<"allow" | "deny">;
   maximumRuntimes?: number;
+  executionIo?: InstalledPluginExecutionIoDependencies;
 }>;
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
 type Prepared = Readonly<{
@@ -81,6 +103,7 @@ type Resident = {
   adapter: ToolRuntimePort | null;
   prepared: Prepared;
   runtimeClosed: boolean;
+  io: PluginExecutionIoOwner | null;
 };
 type Entry = {
   key: string;
@@ -112,6 +135,9 @@ export class InstalledPluginRuntimeResolver
       dependencies.admissions.pluginAdmissionVersion !==
         "crewon.plugin-task-admission.v1" ||
       typeof dependencies.admissions.loadPluginTaskAdmission !== "function" ||
+      (dependencies.admissions.loadPluginQueryTaskAdmission !== undefined &&
+        dependencies.admissions.pluginQueryAdmissionVersion !==
+          "crewon.plugin-query-task-admission.v1") ||
       typeof dependencies.installations.loadPackage !== "function" ||
       typeof dependencies.authorizePackage !== "function" ||
       typeof dependencies.installRoot !== "string" ||
@@ -122,7 +148,26 @@ export class InstalledPluginRuntimeResolver
     if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32)
       fail("installed_plugin_runtime_capacity_invalid");
     this.#maximum = maximum;
-    this.#dependencies = Object.freeze({ ...dependencies });
+    const io = dependencies.executionIo;
+    this.#dependencies = Object.freeze({
+      ...dependencies,
+      ...(io === undefined
+        ? {}
+        : {
+            executionIo: Object.freeze({
+              ...captureInstalledPluginExecutionIoConfig(io),
+              operations: Object.freeze({
+                loadExternalOperation: io.operations.loadExternalOperation.bind(
+                  io.operations,
+                ),
+                reserveExternalOperation:
+                  io.operations.reserveExternalOperation.bind(io.operations),
+                advanceExternalOperation:
+                  io.operations.advanceExternalOperation.bind(io.operations),
+              }),
+            }),
+          }),
+    });
   }
 
   acquire(
@@ -148,8 +193,24 @@ export class InstalledPluginRuntimeResolver
       runId: input.run.runId,
     });
     input.signal.throwIfAborted();
-    if (raw === null) return null;
-    const admission = parsePluginTaskAdmission(raw);
+    const rawQuery =
+      this.#dependencies.admissions.loadPluginQueryTaskAdmission === undefined
+        ? null
+        : await this.#dependencies.admissions.loadPluginQueryTaskAdmission({
+            tenantId: input.run.tenantId,
+            spaceId: input.run.spaceId,
+            runId: input.run.runId,
+          });
+    input.signal.throwIfAborted();
+    if (raw === null && rawQuery === null) return null;
+    if (raw !== null && rawQuery !== null)
+      fail("installed_plugin_admission_conflict");
+    const admission =
+      rawQuery === null
+        ? parsePluginTaskAdmission(raw)
+        : effectivePluginQueryTaskAdmission(
+            parsePluginQueryTaskAdmission(rawQuery),
+          );
     for (const [field, value] of [
       ["tenantId", input.run.tenantId],
       ["spaceId", input.run.spaceId],
@@ -437,6 +498,7 @@ export class InstalledPluginRuntimeResolver
         adapter: null,
         prepared,
         runtimeClosed: false,
+        io: null,
       };
       // Adoption precedes every next await, including a factory that outlives abort or shutdown.
       entry.resident = resident;
@@ -445,7 +507,10 @@ export class InstalledPluginRuntimeResolver
       this.#assertOpen(input.signal);
       resident.borrow = pkg.acquire({
         purpose:
-          input.purpose === "submit" ? "newOperation" : "historicalOperation",
+          input.purpose === "submit" &&
+          prepared.snapshot.context.run.source === null
+            ? "newOperation"
+            : "historicalOperation",
         authorizeBorrow: (identity) =>
           identity.pluginId === prepared.admission.pluginId &&
           identity.version === prepared.admission.version &&
@@ -455,9 +520,50 @@ export class InstalledPluginRuntimeResolver
             ? "allow"
             : "deny",
       });
-      const raw = await resident.borrow.factory.create(
-        snapshotContext(prepared.snapshot.context),
-      );
+      const context = snapshotContext(prepared.snapshot.context);
+      let services: PluginExecutionServices = Object.freeze({
+        approvalRequirement: prepared.proof.approvalRequirement,
+      });
+      const io = this.#dependencies.executionIo;
+      if (io !== undefined) {
+        const network = await io.resolveNetwork(context, input.signal);
+        this.#assertOpen(input.signal);
+        await this.#authorize(resident, input.purpose, input.signal);
+        if (network !== null) {
+          resident.io = new PluginExecutionIoOwner({
+            ...io,
+            context,
+            approvalRequirement: prepared.proof.approvalRequirement,
+            network,
+            authorize: async (operation) => {
+              await this.#authorize(
+                resident,
+                operation.purpose,
+                operation.signal,
+              );
+              const current = await io.resolveNetwork(
+                context,
+                operation.signal,
+              );
+              operation.signal.throwIfAborted();
+              if (
+                current === null ||
+                extensionCanonicalJson(captureNetworkApproval(current)) !==
+                  extensionCanonicalJson(resident.io!.networkApproval)
+              )
+                fail("installed_plugin_runtime_network_denied");
+              await this.#authorize(
+                resident,
+                operation.purpose,
+                operation.signal,
+              );
+            },
+          });
+          services = resident.io.services;
+        }
+      }
+      this.#assertOpen(input.signal);
+      const raw = await resident.borrow.factory.create(context, services);
       resident.hasRuntime = true;
       resident.cleanup = cleanupMethods(raw);
       resident.adapter = adaptPluginToolRuntime({
@@ -479,15 +585,36 @@ export class InstalledPluginRuntimeResolver
             intent.effect !== declared.effect ||
             intent.recovery !== declared.recovery ||
             intent.capability !== declared.capability ||
-            intent.approvalRequirement !== prepared.proof.approvalRequirement
+            intent.approvalRequirement !==
+              (declared.effect === "mutation"
+                ? prepared.proof.approvalRequirement
+                : "none") ||
+            (context.run.source !== null && declared.effect !== "readOnly")
           )
             fail("installed_plugin_runtime_policy_mismatch");
-          await this.#authorize(
-            resident,
-            installedPluginToolOperationPurpose(operation),
-            operation.signal,
-          );
+          let purpose = installedPluginToolOperationPurpose(operation);
+          if (
+            purpose === "submit" &&
+            operation.method === "execute" &&
+            resident.io !== null &&
+            io !== undefined &&
+            context.run.source === null &&
+            (await installedPluginHasExternalOperation({
+              context,
+              command: operation.command,
+              operations: io.operations,
+              signal: operation.signal,
+            }))
+          )
+            purpose = "observe";
+          await this.#authorize(resident, purpose, operation.signal);
         },
+        ...(resident.io === null
+          ? {}
+          : {
+              dispatchAuthority: (operation, delegate) =>
+                resident.io!.withInvocation(operation, delegate),
+            }),
       });
       if (
         resident.adapter.close === undefined &&
@@ -541,6 +668,7 @@ export class InstalledPluginRuntimeResolver
     purpose: "submit" | "observe",
     signal: AbortSignal,
   ): Promise<void> {
+    if (prepared.snapshot.context.run.source !== null) purpose = "observe";
     await this.#dependencies.contexts.assertCurrent(
       prepared.snapshot,
       purpose,
@@ -571,7 +699,11 @@ export class InstalledPluginRuntimeResolver
     if (entry.closing || entry.resident === null || entry.users !== 0) return;
     if (mode === "idle") {
       try {
-        if (entry.resident.adapter?.canRetire?.() !== true) return;
+        if (
+          entry.resident.adapter?.canRetire?.() !== true ||
+          (entry.resident.io !== null && !entry.resident.io.canRetire())
+        )
+          return;
       } catch {
         return;
       }
@@ -599,12 +731,30 @@ export class InstalledPluginRuntimeResolver
       const resident = entry.resident;
       if (resident === null) return;
       const cleanup = resident.adapter ?? resident.cleanup;
-      if (!resident.runtimeClosed && resident.hasRuntime) {
-        if (mode === "idle" && cleanup.canRetire?.() !== true)
+      if (!resident.runtimeClosed) {
+        if (
+          mode === "idle" &&
+          (cleanup.canRetire?.() !== true ||
+            (resident.io !== null && !resident.io.canRetire()))
+        )
           fail("installed_plugin_runtime_retirement_unproven");
-        if (cleanup.close !== undefined) await cleanup.close();
-        else if (cleanup.canRetire?.() !== true)
-          fail("installed_plugin_runtime_cleanup_unavailable");
+        const ioClose = resident.io?.close();
+        const runtimeClose = resident.hasRuntime
+          ? (async () => {
+              if (cleanup.close !== undefined) await cleanup.close();
+              else if (cleanup.canRetire?.() !== true)
+                fail("installed_plugin_runtime_cleanup_unavailable");
+            })()
+          : undefined;
+        const closed = await Promise.allSettled([ioClose, runtimeClose]);
+        const failures = closed
+          .filter((result) => result.status === "rejected")
+          .map((result) => result.reason);
+        if (failures.length)
+          throw new AggregateError(
+            failures,
+            "installed_plugin_runtime_cleanup_failed",
+          );
         resident.runtimeClosed = true;
       }
       resident.borrow?.release();

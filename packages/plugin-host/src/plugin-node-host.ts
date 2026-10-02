@@ -105,6 +105,7 @@ type Instance = {
  */
 export class PluginNodeHost {
   readonly #services = new Map<string, Service>();
+  readonly #hostServiceVersions = new Map<string, Service>();
   readonly #current = new Map<string, Instance>();
   readonly #instances = new Set<Instance>();
   readonly #cleanupTasks = new Set<Promise<void>>();
@@ -121,15 +122,16 @@ export class PluginNodeHost {
       const bindForPlugin = service.bindForPlugin;
       if (bindForPlugin !== undefined && typeof bindForPlugin !== "function")
         fail("plugin_host_service_binding_invalid");
-      if (this.#services.has(service.service)) fail("plugin_service_conflict");
-      this.#services.set(
-        service.service,
-        Object.freeze({
-          ...service,
-          bindForPlugin: bindForPlugin?.bind(service),
-          owner: null,
-        }),
-      );
+      const key = JSON.stringify([service.service, service.apiVersion]);
+      if (this.#hostServiceVersions.has(key)) fail("plugin_service_conflict");
+      const record = Object.freeze({
+        ...service,
+        bindForPlugin: bindForPlugin?.bind(service),
+        owner: null,
+      });
+      this.#hostServiceVersions.set(key, record);
+      if (!this.#services.has(service.service))
+        this.#services.set(service.service, record);
     }
   }
 
@@ -273,7 +275,12 @@ export class PluginNodeHost {
   /** Actual currently published services, without exposing their values or granting admission. */
   serviceIdentities(): readonly import("./plugin-node-preparation.ts").PluginNodeDependencyIdentity[] {
     return Object.freeze(
-      [...this.#services.values()].map(({ service, apiVersion, owner }) =>
+      [
+        ...new Set([
+          ...this.#services.values(),
+          ...this.#hostServiceVersions.values(),
+        ]),
+      ].map(({ service, apiVersion, owner }) =>
         Object.freeze({
           service,
           apiVersion,
@@ -357,7 +364,10 @@ export class PluginNodeHost {
       return this.#preparedHandle(existing, existing, token, false);
     const dependencies = new Map<string, Service>();
     for (const requirement of descriptor.requires) {
-      const service = this.#services.get(requirement.service);
+      const service = this.#serviceVersion(
+        requirement.service,
+        requirement.apiVersion,
+      );
       if (!service || service.apiVersion !== requirement.apiVersion) {
         if (!requirement.optional) fail("plugin_dependency_unavailable");
       } else dependencies.set(requirement.service, service);
@@ -677,12 +687,21 @@ export class PluginNodeHost {
   }
   #checkDependencies(instance: Instance): void {
     for (const requirement of instance.descriptor.requires) {
-      const current = this.#services.get(requirement.service);
+      const current = this.#serviceVersion(
+        requirement.service,
+        requirement.apiVersion,
+      );
       const available =
         current?.apiVersion === requirement.apiVersion ? current : undefined;
       if (instance.dependencies.get(requirement.service) !== available)
         fail("plugin_dependency_changed_during_activation");
     }
+  }
+  #serviceVersion(service: string, apiVersion: string): Service | undefined {
+    return (
+      this.#hostServiceVersions.get(JSON.stringify([service, apiVersion])) ??
+      this.#services.get(service)
+    );
   }
   #checkUpgradeConsumers(previous: Instance | undefined): void {
     if (

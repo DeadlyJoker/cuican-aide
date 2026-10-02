@@ -34,6 +34,7 @@ import {
   type ExtensionStore,
   type ExternalOperationStore,
   type ExternalOperationQueryStore,
+  type PluginQueryHostPort,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
@@ -100,6 +101,8 @@ type ControlApiCompositionConfig = Readonly<{
     token: string;
     deadlineMs?: number;
   }>;
+  /** Borrowed authority port, supplied explicitly by its installed historical runtime owner. */
+  pluginQueryHost?: PluginQueryHostPort;
 }>;
 
 export type StandaloneControlApiConfig = ControlApiCompositionConfig &
@@ -128,6 +131,8 @@ export type StandaloneControlApiRuntime = Readonly<{
 export function createStandaloneControlApi(
   config: StandaloneControlApiConfig,
 ): StandaloneControlApiRuntime {
+  if (config.pluginQueryHost !== undefined)
+    throw new Error("installed_plugin_query_requires_extensions");
   const store = new SqliteRunStore(config.databasePath);
   try {
     return composeControlApi(store, {
@@ -166,6 +171,11 @@ export async function createStandaloneControlApiWithExtensions(
 export async function createPostgresControlApi(
   config: PostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
+  if (
+    config.pluginQueryHost !== undefined &&
+    config.extensionWorker === undefined
+  )
+    throw new Error("installed_plugin_query_requires_extensions");
   const pinned =
     config.extensionWorker === undefined
       ? config
@@ -203,7 +213,25 @@ function pinExtensionCompositionConfig<
       config.extensionWorker === undefined
         ? undefined
         : parseExtensionWorkerRouterConfig(config.extensionWorker),
+    ...(config.pluginQueryHost === undefined
+      ? {}
+      : { pluginQueryHost: capturePluginQueryHost(config.pluginQueryHost) }),
   };
+}
+function capturePluginQueryHost(
+  port: PluginQueryHostPort,
+): PluginQueryHostPort {
+  if (
+    port === null ||
+    typeof port !== "object" ||
+    typeof port.resolveRegistration !== "function" ||
+    typeof port.evaluate !== "function"
+  )
+    throw new Error("installed_plugin_query_configuration_invalid");
+  return Object.freeze({
+    resolveRegistration: port.resolveRegistration.bind(port),
+    evaluate: port.evaluate.bind(port),
+  });
 }
 
 async function composeExtensionControlApi(
@@ -354,6 +382,9 @@ function composeControlApi(
             catalog: preparedExtensions.catalog,
             host: preparedExtensions.client,
             queryHost: preparedExtensions.client.queryHost,
+            ...(config.pluginQueryHost === undefined
+              ? {}
+              : { pluginQueryHost: config.pluginQueryHost }),
             authorization,
             clock,
             ids,

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "crewon.workflow-provenance.v1",
+  "workflow": "T01-Krea2文生图超强写实质感 (2).json",
+  "uploadedWorkflowSha256": "620352ec36072146e9ae7595277f9bcd7cd4698121a8786b4ba2a52263c8231a",
+  "reviewedWorkflowSourceSha256": "cdc2b10d67b3ecd9df1572251d8fea9845fbb5989bf95f6efc3e47150d61faec",
+  "reviewedMegapixels": 1,
+  "uploadedMegapixels": 4,
+  "outputNodeId": "29",
+  "variableInputs": ["51.inputs.text", "29.inputs.filename_prefix"],
+  "unconnectedNodes": ["87"],
+  "existingFirstImageSha256": "6a508e9a7344c05f80ded26cda9987155f3de82fade55ad45f924d1d9131bd6d"
+}

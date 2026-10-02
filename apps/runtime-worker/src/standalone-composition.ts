@@ -40,8 +40,10 @@ import type { InstalledPluginRunRuntimeResolverPort } from "./plugins/installed-
 import {
   captureInstalledPluginExecutionConfig,
   composeInstalledPluginRuntimeResolver,
+  composeInstalledPluginQueryHost,
   type InstalledPluginExecutionConfig,
 } from "./plugins/installed-plugin-runtime-composition.ts";
+import type { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import { type AgentVersionRuntime } from "./agent-version-runtime.ts";
@@ -192,6 +194,7 @@ export type StandaloneRuntimeWorker = Readonly<{
   providerProbeOrigin: string | null;
   workspacePrivateOrigin: string | null;
   extensionHostOrigin: string | null;
+  pluginQueryHost: InstalledPluginQueryHost | null;
   close(): Promise<void>;
 }>;
 
@@ -319,6 +322,12 @@ function prepareComposition(
   });
   const mode = parseExtensionExecutionMode(config.extensionExecutionMode);
   if (
+    config.installedPluginExecution?.historicalQuery !== undefined &&
+    config.installedPluginExecution.historicalQuery.scope.tenantId !==
+      config.runtimeTenantId
+  )
+    throw new Error("installed_plugin_query_tenant_mismatch");
+  if (
     config.extensionExecutionMode !== undefined &&
     config.extensionRuntime === undefined &&
     config.extensionHost === undefined
@@ -418,6 +427,12 @@ async function composeRuntimeWorker(
     config.installedPluginExecution !== undefined
       ? await preparePluginTaskAdmissionProbe(store)
       : store.pluginTaskAdmissionProbe();
+  if (
+    config.installedPluginExecution !== undefined &&
+    (config.installedPluginExecution.executionIo !== undefined ||
+      config.installedPluginExecution.historicalQuery !== undefined)
+  )
+    await store.externalOperationStore().migrate();
   const installedPluginRuntimeResolver =
     config.installedPluginExecution === undefined
       ? config.installedPluginRuntimeResolver
@@ -549,7 +564,43 @@ async function composeRuntimeWorker(
       agentVersionRuntimeFactory ??
       sharedAgentVersionRuntimeFactory(config, toolRuntime),
   });
-  lifetime.own(runtimeResolver, { phase: "stop" });
+  const runtimeResolverOwner = lifetime.own(runtimeResolver, { phase: "stop" });
+  const pluginQueryHost =
+    config.installedPluginExecution?.historicalQuery === undefined
+      ? null
+      : composeInstalledPluginQueryHost({
+          store,
+          extensions: store.extensionStore(),
+          config: config.installedPluginExecution,
+          runtimeResolver,
+          tenantId: config.runtimeTenantId,
+        });
+  if (pluginQueryHost !== null) {
+    const queryOwner = lifetime.own(pluginQueryHost, { phase: "stop" });
+    // A pending historical readiness borrower must finish before its resolver is fenced.
+    lifetime.own(
+      {
+        async close() {
+          const errors: unknown[] = [];
+          for (const owner of [queryOwner, runtimeResolverOwner]) {
+            try {
+              await owner.close();
+            } catch (error) {
+              errors.push(error);
+            }
+          }
+          if (errors.length)
+            throw new AggregateError(
+              errors,
+              "installed_plugin_query_cleanup_failed",
+            );
+        },
+      },
+      { phase: "stop" },
+    );
+    queryOwner.delegate();
+    runtimeResolverOwner.delegate();
+  }
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
     paths: config.localStoragePaths ?? [],
@@ -682,6 +733,7 @@ async function composeRuntimeWorker(
     providerProbeOrigin: providerProbeServer?.origin ?? null,
     workspacePrivateOrigin: workspacePrivateServer?.origin ?? null,
     extensionHostOrigin: extensionHostServer?.origin ?? null,
+    pluginQueryHost,
     close: () => lifetime.close(),
   };
 }

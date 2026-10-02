@@ -2,6 +2,8 @@ import { isDeepStrictEqual } from "node:util";
 import type { ExtensionStore } from "@crewon/application";
 import {
   parsePluginTaskAdmission,
+  parsePluginQueryTaskAdmission,
+  effectivePluginQueryTaskAdmission,
   type PluginTaskAdmission,
   type RunState,
 } from "@crewon/domain";
@@ -23,7 +25,10 @@ import {
 
 export type PluginTaskAdmissionProbe = Pick<
   ExtensionStore,
-  "pluginAdmissionVersion" | "loadPluginTaskAdmission"
+  | "pluginAdmissionVersion"
+  | "loadPluginTaskAdmission"
+  | "pluginQueryAdmissionVersion"
+  | "loadPluginQueryTaskAdmission"
 >;
 export type InstalledPluginRunRuntimeResolverPort = Readonly<{
   /**
@@ -63,9 +68,12 @@ export function installedPluginToolOperationPurpose(
 ): "submit" | "observe" {
   switch (input.method) {
     case "execute":
-      return "submit";
+      return input.command.actionIntent.effect === "readOnly"
+        ? "observe"
+        : "submit";
     case "reconcile":
-      return input.command.actionIntent.recovery === "reconcilable"
+      return input.command.actionIntent.effect === "readOnly" ||
+        input.command.actionIntent.recovery === "reconcilable"
         ? "observe"
         : "submit";
     case "cancel":
@@ -84,7 +92,10 @@ export async function readInstalledPluginTaskAdmission(input: {
   const admissions = input.admissions;
   if (
     admissions.pluginAdmissionVersion !== "crewon.plugin-task-admission.v1" ||
-    typeof admissions.loadPluginTaskAdmission !== "function"
+    typeof admissions.loadPluginTaskAdmission !== "function" ||
+    (admissions.loadPluginQueryTaskAdmission !== undefined &&
+      admissions.pluginQueryAdmissionVersion !==
+        "crewon.plugin-query-task-admission.v1")
   )
     fail("installed_plugin_admission_port_unavailable");
   const raw = await input.preflight.run({
@@ -106,10 +117,39 @@ export async function readInstalledPluginTaskAdmission(input: {
         }),
       ),
   });
-  if (raw === null) return null;
+  const queryRaw =
+    admissions.loadPluginQueryTaskAdmission === undefined
+      ? null
+      : await input.preflight.run({
+          identity: {
+            tenantId: input.run.tenantId,
+            kind: "runtime",
+            resourceId: JSON.stringify([
+              "installed-query-admission",
+              input.run.spaceId,
+              input.run.runId,
+            ]),
+          },
+          operation: () =>
+            input.scope.run(() =>
+              admissions.loadPluginQueryTaskAdmission!({
+                tenantId: input.run.tenantId,
+                spaceId: input.run.spaceId,
+                runId: input.run.runId,
+              }),
+            ),
+        });
+  if (raw === null && queryRaw === null) return null;
+  if (raw !== null && queryRaw !== null)
+    fail("installed_plugin_admission_conflict");
   let admission: PluginTaskAdmission;
   try {
-    admission = parsePluginTaskAdmission(raw);
+    admission =
+      queryRaw === null
+        ? parsePluginTaskAdmission(raw)
+        : effectivePluginQueryTaskAdmission(
+            parsePluginQueryTaskAdmission(queryRaw),
+          );
   } catch (cause) {
     throw new InstalledPluginRuntimeError(
       "installed_plugin_admission_invalid",

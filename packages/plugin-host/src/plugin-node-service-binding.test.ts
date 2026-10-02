@@ -414,3 +414,58 @@ test("a trusted binder's registered cleanup still runs when its bound service fa
   assert.equal(cleaned[0]!.packageDigest, pkg.expectedPackageDigest);
   assert.deepEqual(host.snapshot(), []);
 });
+
+test("trusted host versions coexist with exact dependency binding and cannot be shadowed by plugin provisions", async (t) => {
+  const ports = ["1", "2"].map((apiVersion) => ({
+    service: "crewon.tasks",
+    apiVersion,
+    value: { read: () => apiVersion },
+  }));
+  const host = new PluginNodeHost({ services: ports });
+  t.after(() => host.close());
+  assert.deepEqual(
+    host
+      .serviceIdentities()
+      .map(({ service, apiVersion }) => ({ service, apiVersion })),
+    ports.map(({ service, apiVersion }) => ({ service, apiVersion })),
+  );
+  assert.throws(
+    () => new PluginNodeHost({ services: [ports[0]!, ports[0]!] }),
+    { code: "plugin_service_conflict" },
+  );
+  for (const apiVersion of ["1", "2"]) {
+    const pkg = await preparedPackage(t, {
+      pluginId: `example.version-${apiVersion}`,
+      requires: [{ service: "crewon.tasks", apiVersion, optional: false }],
+      provides: [{ service: `example.version-${apiVersion}`, apiVersion: "1" }],
+      setup: `const dependency=ctx.services.get('crewon.tasks',${JSON.stringify(apiVersion)});ctx.services.provide(ctx.identity.pluginId,'1',{read:()=>dependency.read()});`,
+    });
+    await host.activate(pkg);
+    const lease = host.acquire(
+      preparedBorrow(pkg.expectedPluginId, pkg.expectedPackageDigest),
+    );
+    try {
+      assert.equal(
+        lease.getService<{ read(): string }>(pkg.expectedPluginId, "1").read(),
+        apiVersion,
+      );
+    } finally {
+      lease.release();
+    }
+  }
+  const missing = await preparedPackage(t, {
+    pluginId: "example.version-missing",
+    requires: [{ service: "crewon.tasks", apiVersion: "3", optional: false }],
+  });
+  await assert.rejects(host.activate(missing), {
+    code: "plugin_dependency_unavailable",
+  });
+  const shadow = await preparedPackage(t, {
+    pluginId: "example.shadow",
+    provides: [{ service: "crewon.tasks", apiVersion: "3" }],
+    setup: "ctx.services.provide('crewon.tasks','3',{});",
+  });
+  await assert.rejects(host.activate(shadow), {
+    code: "plugin_service_conflict",
+  });
+});

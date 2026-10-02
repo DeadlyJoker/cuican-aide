@@ -28,6 +28,10 @@ export * from "./workflow-execution-store.ts";
 export { SQLITE_SCHEMA_VERSION } from "./sqlite-schema.ts";
 export * from "./sqlite-external-operation-store.ts";
 export * from "./postgres-external-operation-store.ts";
+export {
+  parseExternalOperation,
+  validateExternalOperationAdvance,
+} from "./external-operation-record.ts";
 export * from "./sqlite-extension-store.ts";
 export * from "./postgres-extension-store.ts";
 export * from "./sqlite-plugin-credit-store.ts";

@@ -68,7 +68,10 @@ export class PluginExecutionRegistry {
     this.#available(binding);
     const factory = binding!.factory!;
     return Object.freeze({
-      create: (context: Parameters<PluginToolRuntimeFactory["create"]>[0]) => {
+      create: (
+        context: Parameters<PluginToolRuntimeFactory["create"]>[0],
+        services?: Parameters<PluginToolRuntimeFactory["create"]>[1],
+      ) => {
         const current = pluginNodeLeaseIdentity(lease);
         this.#available(binding);
         if (current !== binding!.identity)
@@ -83,7 +86,7 @@ export class PluginExecutionRegistry {
         )
           fail("plugin_execution_identity_mismatch");
         // Creation that has already started belongs to the caller's NodeLease and ToolRuntime owner.
-        return factory.create(context);
+        return factory.create(context, services);
       },
     });
   }

@@ -29,9 +29,9 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 新内部 `createTaskFromPlugin` 路径通过原 Turn/Run 提交，显式 `migratePluginAdmissions()` 后，在同一事务保存独立包身份、profile、选择修订、调用者、权限 epoch、原 v0 binding 关联及真实个人报价。新生成缺少报价或存储准入能力时拒绝；已接受的重复请求返回原任务和原报价。v0 的摘要、回执和 HTTP 请求格式不变。SDK `crewon.tasks` API `1` 和 `PluginTaskActionBridge` 通过真实实例绑定的调用引用进入该路径，报价后通过必需的宿主 callback 复核当前插件准入；只有私有 `PluginUiCommittedTaskAuthority` 验证的原受理结果跳过提交后的当前选择 gate。SDK 任务桥的生产组合须同时注入 actions 与 committedTasks，SDK 本身不暴露句柄签发或核验能力。
 
-该桥当前仅支持生成，包 ID 与原 extension ID 必须相同；尚无跨插件委托。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
+该桥支持原 API 1 生成和 API 2 的生成/历史查询，包 ID 与原 extension ID 必须相同；尚无跨插件委托。查询只传 `sourceRunId` 和 `operationId`，从持久原任务核验原包、配置、目标和原个人报价，保存独立查询准入，不新增生成报价或积分预留。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
-Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。生产安装管理、Krea2/短剧独立包和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
+Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证。生产安装管理、短剧独立包、Krea2 在线验收和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
 
 ## 2026-10-03：Worker 已安装执行组合 API
 
@@ -55,7 +55,21 @@ Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已
 
 已确认 resolver 32/32、实际 SQLite/PostgreSQL composition 26/26、router 11/11、Host 全量 135/135、Worker 双库全量 1,323/1,323，均零失败、零跳过。真实安装执行专项通过 composition helper 构造 resolver 并接原 Worker，使用真实数据库、不可变文件和 Node ESM；模型、外部供应商、身份、包许可与报价为具名夹具。它没有验收完整生产 main、真实积分结算或在线生图 API。
 
-生产部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。当前查询任务的 `source != null` 明确拒绝，历史依赖闭包、Krea2/短剧独立包、Electron 资产代理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+生产部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。已安装历史查询需要下述独立 provenance 和显式 query host；缺少真实端口时拒绝，不降级到当前包或旧目录。历史依赖闭包、短剧独立包、安装管理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+
+## 2026-10-03：宿主 IO 与历史查询组合
+
+`installedPluginExecution.executionIo` 是可选的可信部署配置。它提供 `resolveNetwork(context, signal)`，由宿主针对原 Run 配置返回 `{ baseUrlParameter, paths }` 或 `null`。路径规则为固定 `{ method, path }`，或只读 `{ method: "GET", operationPathPrefix }`；前缀只能拼接当前持久 operation 的供应商 ID 或关联 ID。origin 从已锁定参数取出，不能由插件传入。生产默认使用原 DNS 策略和固定 TLS HTTP transport；`dns`、`transport`、`now` 是程序化宿主端口，没有对应的 Renderer 配置。
+
+Krea2 的部署须明确装配此配置，批准 `POST /prompt`、`GET /queue` 和 `GET /history/<当前operation标识>`。执行工厂的第二参数从实际父 Store 创建 `externalOperations` 与 `jsonHttp`，缺少端口时 Krea2 工厂拒绝执行。当前 readiness 核验真实工厂及完整物化，没有通用的 required-runtime-services 声明；它本身不证明 IO 已装配或在线服务可达。生产动作准入前仍需完成这项能力就绪治理，不能据安装成功自动开放收费生成。
+
+每次端口调用必须使用当前 Worker 实际派发的命令对象与未结束的 claim。预留新 operation 后签发当前调用范围的一次性 POST 凭证；原已存在记录和冷恢复不再签发。请求内容受摘要约束，发送前重新核验 Run、包许可和 DNS。真正收到的响应可以保存为原 operation 的本地证据；这不授权撤权后的新外部请求。关闭等待委托调用、HTTP 和 Store CAS 结束。
+
+`installedPluginExecution.historicalQuery` 接收实际 `scope` 与 `resolveProfile(actor, signal)`。Worker 在打开异步 Store 前捕获配置，拒绝 scope 与 runtime tenant 不一致；显式迁移实际 operation Store 后，用父 Store 和实际 `StoreBackedAgentVersionRuntimeResolver` 创建 `pluginQueryHost`，由 Worker 生命周期关闭。未配置时返回 `null`，原无插件启动不访问这些 Store。公共包入口也提供 `composeInstalledPluginQueryHost` 和对应配置类型，供其他真实组合调用。
+
+Control 的扩展组合可借用 `pluginQueryHost` 端口并把它交给实际 `ExtensionTaskApplicationService`。调用者须先关闭 Control，再关闭拥有该端口的 Worker；未配置扩展 Worker 时不能静默接收查询端口。这是同进程程序化装配，没有新增跨进程 query HTTP 协议，也没有生产 main 自动启用。原 `queryHost` 保留原 v0 路径，不能代替已安装包的原 provenance。
+
+Control 动作 owner 同时注册 `crewon.tasks@1` 和 `crewon.tasks@2`。当前 UI 可以来自新包，历史来源仍用原生成包、配置和完整目标。查询继续检查当前 actor/profile、来源读取、目标线程及 `extension:query`，不重新报价、预留或 POST。查询不能作为新的生成来源再次嵌套。
 
 ## 2026-10-03：通用已安装业务物化 API
 

@@ -7,10 +7,11 @@ import { fileURLToPath } from "node:url";
 const repository = fileURLToPath(new URL("../", import.meta.url));
 
 /** Build the public example outside the host; consumers receive only the prebuilt artifacts. */
-export async function buildInstalledBusinessPluginExamples(ownedRoot) {
-  const development = join(ownedRoot, "development");
+export async function buildInstalledBusinessPluginExamples(
+  ownedRoot,
+  { includeKrea = false } = {},
+) {
   const sdkOutput = join(ownedRoot, "sdk");
-  await mkdir(development, { mode: 0o700 });
   await mkdir(sdkOutput, { mode: 0o700 });
   execFileSync("pnpm", ["pack", "--pack-destination", sdkOutput], {
     cwd: join(repository, "packages/plugin-sdk"),
@@ -21,50 +22,61 @@ export async function buildInstalledBusinessPluginExamples(ownedRoot) {
     name.endsWith(".tgz"),
   );
   assert.equal(tarballs.length, 1);
-  await cp(
-    join(repository, "examples/plugins/professional-report"),
-    development,
-    { recursive: true },
-  );
-  const packagePath = join(development, "package.json");
-  const manifest = JSON.parse(await readFile(packagePath, "utf8"));
-  manifest.dependencies["@crewon/plugin-sdk"] =
-    "file:" + join(sdkOutput, tarballs[0]);
-  await writeFile(packagePath, JSON.stringify(manifest));
-  execFileSync(
-    "pnpm",
-    [
-      "install",
-      "--ignore-scripts",
-      "--registry=https://registry.npmjs.org",
-      "--config.minimumReleaseAge=0",
-    ],
-    {
-      cwd: development,
-      stdio: "inherit",
-      timeout: 60000,
-    },
-  );
-  const packages = [];
-  for (const version of ["1.0.0", "2.0.0"]) {
-    execFileSync("pnpm", ["build"], {
-      cwd: development,
-      stdio: "inherit",
-      timeout: 60000,
-      env: { ...process.env, CREWON_EXAMPLE_PLUGIN_VERSION: version },
-    });
-    const directory = join(ownedRoot, "packages", version);
-    await cp(join(development, "dist", version), directory, {
+  async function buildExample(name, outputRoot) {
+    const development = join(ownedRoot, "development", name);
+    await mkdir(development, { recursive: true, mode: 0o700 });
+    await cp(join(repository, "examples/plugins", name), development, {
       recursive: true,
     });
-    packages.push({ version, directory });
+    const packagePath = join(development, "package.json");
+    const manifest = JSON.parse(await readFile(packagePath, "utf8"));
+    manifest.dependencies["@crewon/plugin-sdk"] =
+      "file:" + join(sdkOutput, tarballs[0]);
+    await writeFile(packagePath, JSON.stringify(manifest));
+    execFileSync(
+      "pnpm",
+      [
+        "install",
+        "--ignore-scripts",
+        "--registry=https://registry.npmjs.org",
+        "--config.minimumReleaseAge=0",
+      ],
+      {
+        cwd: development,
+        stdio: "inherit",
+        timeout: 60000,
+      },
+    );
+    const packages = [];
+    for (const version of ["1.0.0", "2.0.0"]) {
+      execFileSync("pnpm", ["build"], {
+        cwd: development,
+        stdio: "inherit",
+        timeout: 60000,
+        env: { ...process.env, CREWON_EXAMPLE_PLUGIN_VERSION: version },
+      });
+      const directory = join(ownedRoot, outputRoot, version);
+      await cp(join(development, "dist", version), directory, {
+        recursive: true,
+      });
+      packages.push(directory);
+    }
+    await rm(development, { recursive: true });
+    return packages;
   }
-  // Deleting the actual development project proves later imports cannot borrow its dependencies.
-  await rm(development, { recursive: true });
+  const packages = await buildExample("professional-report", "packages");
+  const krea = includeKrea
+    ? await buildExample("comfyui-krea2", "krea-packages")
+    : null;
+  // Deleting the actual development projects proves consumers cannot borrow their dependencies.
+  await rm(join(ownedRoot, "development"), { recursive: true });
   await rm(sdkOutput, { recursive: true });
   return Object.freeze({
-    v1Directory: packages[0].directory,
-    v2Directory: packages[1].directory,
+    v1Directory: packages[0],
+    v2Directory: packages[1],
+    ...(krea === null
+      ? {}
+      : { kreaV1Directory: krea[0], kreaV2Directory: krea[1] }),
     developmentRemoved: true,
   });
 }

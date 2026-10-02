@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
+  PluginExecutionServices,
   PluginToolRuntimeContext,
   PluginToolRuntimeFactory,
 } from "@crewon/plugin-sdk/node";
@@ -13,6 +14,44 @@ import {
   factorySetup,
   runtimeSource,
 } from "./plugin-execution-registry.test-support.ts";
+
+test("installed factory receives the optional host execution services unchanged", async (t) => {
+  const registry = new PluginExecutionRegistry();
+  const host = new PluginNodeHost({ services: [registry.hostService()] });
+  t.after(() => host.close());
+  const pkg = await executionPackage(t, {
+    setup: `const execution=ctx.services.get('crewon.execution','1');
+execution.register({create(input,services){record('mode:'+services.approvalRequirement);record('http:'+typeof services.jsonHttp?.request);const runtime=${runtimeSource};runtime.services=services;return runtime;}});`,
+  });
+  await host.activate(pkg);
+  const lease = host.acquire(
+    preparedBorrow(pkg.expectedPluginId, pkg.expectedPackageDigest),
+  );
+  const services: PluginExecutionServices = Object.freeze({
+    approvalRequirement: "perAction",
+    jsonHttp: Object.freeze({ request: async () => ({ fixture: true }) }),
+  });
+  try {
+    const factory = registry.acquire(lease);
+    const runtime = await factory.create(
+      executionContext(lease.identity),
+      services,
+    );
+    assert.equal(
+      (runtime as unknown as { services: PluginExecutionServices }).services,
+      services,
+    );
+    assert.deepEqual(await pkg.records(), [
+      "load",
+      "setup",
+      "mode:perAction",
+      "http:function",
+    ]);
+    await runtime.close?.();
+  } finally {
+    lease.release();
+  }
+});
 
 test("an actual installed ESM factory registers during setup and automatic host cleanup removes it", async (t) => {
   const registry = new PluginExecutionRegistry();

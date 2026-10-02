@@ -5,6 +5,7 @@ import type {
   ExtensionScope,
   ExtensionCreditAdmission,
   PluginTaskAdmission,
+  PluginQueryTaskAdmission,
 } from "@crewon/domain";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
 import type {
@@ -62,6 +63,7 @@ export type CommitExtensionTurnInput = Readonly<{
   creditAdmission?: ExtensionCreditAdmission;
   /** Internal server-derived v1 pin; persisted separately without changing the v0 binding or receipt shape. */
   pluginAdmission?: PluginTaskAdmission;
+  pluginQueryAdmission?: PluginQueryTaskAdmission;
 }>;
 /** Adds the admitted user message and history to the existing immutable task receipt. */
 export type CommitExtensionTurnResult = CommitExtensionRunResult &
@@ -79,6 +81,10 @@ export interface ExtensionStore {
   /** Older adapters cannot silently accept a paid task without reserving its credits. */
   readonly creditAdmissionVersion?: "crewon.extension-credit-admission.v0";
   readonly pluginAdmissionVersion?: "crewon.plugin-task-admission.v1";
+  readonly pluginQueryAdmissionVersion?: "crewon.plugin-query-task-admission.v1";
+  loadPluginQueryTaskAdmission?(
+    input: ExtensionRunLocator,
+  ): Promise<PluginQueryTaskAdmission | null>;
   loadPluginTaskAdmission?(
     input: ExtensionRunLocator,
   ): Promise<PluginTaskAdmission | null>;

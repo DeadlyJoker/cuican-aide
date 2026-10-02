@@ -20,6 +20,7 @@ import {
 import type {
   PluginActionDeclaration,
   PluginTaskRequest,
+  PluginQueryTaskRequest,
 } from "@crewon/plugin-sdk/node";
 
 export function bridgeFailure(code: string): never {
@@ -148,7 +149,9 @@ export function bridgeAction(
       !/^[a-z][a-z0-9._-]{0,127}$/u.test(fields.contributionId) ||
       typeof fields.action !== "string" ||
       !/^[a-z][a-z0-9._-]{0,127}$/u.test(fields.action) ||
-      (fields.kind !== "read" && fields.kind !== "generateTask") ||
+      (fields.kind !== "read" &&
+        fields.kind !== "generateTask" &&
+        fields.kind !== "queryTask") ||
       !context.lease.descriptor.contributions.some(
         (item) => item.id === fields.contributionId,
       )
@@ -202,6 +205,40 @@ export function bridgeTaskRequest(input: unknown): PluginTaskRequest {
     idempotencyKey,
     expectedThreadRevision: fields.expectedThreadRevision,
     input: parsePluginUiJsonValue(fields.input),
+  });
+}
+
+export function bridgeQueryTaskRequest(input: unknown): PluginQueryTaskRequest {
+  const fields = bridgeFields(input, [
+    "invocationRef",
+    "threadId",
+    "expectedThreadRevision",
+    "idempotencyKey",
+    "sourceRunId",
+    "operationId",
+  ]);
+  const common = bridgeTaskRequest({
+    invocationRef: fields.invocationRef,
+    threadId: fields.threadId,
+    expectedThreadRevision: fields.expectedThreadRevision,
+    idempotencyKey: fields.idempotencyKey,
+    input: null,
+  });
+  const sourceRunId = extensionOpaqueId(fields.sourceRunId),
+    operationId = extensionOpaqueId(fields.operationId);
+  if (
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(
+      operationId,
+    )
+  )
+    bridgeFailure("plugin_query_operation_invalid");
+  return Object.freeze({
+    invocationRef: common.invocationRef,
+    threadId: common.threadId,
+    expectedThreadRevision: common.expectedThreadRevision,
+    idempotencyKey: common.idempotencyKey,
+    sourceRunId,
+    operationId,
   });
 }
 

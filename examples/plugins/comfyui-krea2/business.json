@@ -1,0 +1,159 @@
+{
+  "schemaVersion": "crewon.extension-manifest.v0",
+  "hostApi": "crewon.extensions.v0",
+  "pluginId": "crewon.comfyui-krea2",
+  "version": "1.0.0",
+  "title": "Krea2 生图",
+  "description": "通过已配置的 ComfyUI 服务生成单张写实图片，并查询真实生成结果。",
+  "task": {
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "maxLength": 2000,
+          "enum": null
+        }
+      },
+      "required": ["prompt"],
+      "additionalProperties": false
+    },
+    "instructions": "根据用户描述准备生图提示词，调用 submit 一次并保存 operationId。已提交不表示图片已生成；调用 observe 查询真实结果。不要重发不确定的生成请求，不要编造图片链接。查询任务只能查询宿主明确关联的 operationId，不能重新提交生成。"
+  },
+  "configurationSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "maxLength": 2048,
+        "enum": null
+      }
+    },
+    "required": ["baseUrl"],
+    "additionalProperties": false
+  },
+  "credentialSlots": [],
+  "tools": [
+    {
+      "operationId": "submit",
+      "adapterId": "crewon.comfyui-api",
+      "description": "Generate one image from a text prompt. Submit once, save operationId, then use observe. A submitted status is not a finished image. Never resubmit an uncertain request.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "maxLength": 2000,
+            "enum": null
+          }
+        },
+        "required": ["prompt"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "enum": null
+          },
+          "submission": {
+            "type": "string",
+            "maxLength": 16,
+            "enum": ["accepted"]
+          },
+          "next": {
+            "type": "string",
+            "maxLength": 64,
+            "enum": ["crewon_comfyui_krea2__observe"]
+          }
+        },
+        "required": ["operationId", "submission", "next"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "extension.image.generate"
+    },
+    {
+      "operationId": "observe",
+      "adapterId": "crewon.comfyui-api",
+      "description": "Read a previously submitted image operation in this Run, or the original operation explicitly attached by the host to a query Run. Returns its actual status and image URLs only when generation succeeded. Never invent an operationId or treat unknownOutcome as failure to submit.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "enum": null
+          }
+        },
+        "required": ["operationId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "maxLength": 36,
+            "enum": null
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 32,
+            "enum": [
+              "submitting",
+              "submitted",
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "unknownOutcome"
+            ]
+          },
+          "images": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "properties": {
+                "filename": {
+                  "type": "string",
+                  "maxLength": 255,
+                  "enum": null
+                },
+                "subfolder": {
+                  "type": "string",
+                  "maxLength": 512,
+                  "enum": null
+                },
+                "type": {
+                  "type": "string",
+                  "maxLength": 16,
+                  "enum": ["output"]
+                },
+                "url": {
+                  "type": "string",
+                  "maxLength": 2048,
+                  "enum": null
+                }
+              },
+              "required": ["filename", "subfolder", "type", "url"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["operationId", "status"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "extension.image.read"
+    }
+  ],
+  "resultViews": ["externalOperation", "externalResult"]
+}

@@ -4,6 +4,7 @@ import type {
   PluginJsonValue,
 } from "./sdk-types.js";
 import type { PluginToolRuntime } from "./tool-runtime-types.js";
+import type { PluginExecutionServices } from "./execution-io-types.js";
 
 export const CREWON_EXECUTION_SERVICE = "crewon.execution";
 export const CREWON_EXECUTION_API_VERSION = "1";
@@ -48,6 +49,7 @@ export type PluginToolRuntimeContext = Readonly<{
 export interface PluginToolRuntimeFactory {
   create(
     context: PluginToolRuntimeContext,
+    services?: PluginExecutionServices,
   ): PluginToolRuntime | Promise<PluginToolRuntime>;
 }
 

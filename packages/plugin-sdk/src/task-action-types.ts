@@ -2,6 +2,7 @@ import type { PluginJsonValue } from "./sdk-types.js";
 
 export const CREWON_TASKS_SERVICE = "crewon.tasks";
 export const CREWON_TASKS_API_VERSION = "1";
+export const CREWON_TASKS_V2_API_VERSION = "2";
 
 /** Host-issued, bounded invocation authority; callers never supply an actor, payer or profile. */
 export type PluginTaskRequest = Readonly<{
@@ -26,11 +27,24 @@ export interface PluginTaskService {
   createTask(input: PluginTaskRequest): Promise<PluginTaskReceipt>;
 }
 
+/** Only source references cross the SDK boundary; package and runtime identity come from durable host records. */
+export type PluginQueryTaskRequest = Readonly<{
+  invocationRef: string;
+  threadId: string;
+  expectedThreadRevision: number;
+  idempotencyKey: string;
+  sourceRunId: string;
+  operationId: string;
+}>;
+export interface PluginTaskServiceV2 extends PluginTaskService {
+  queryTask(input: PluginQueryTaskRequest): Promise<PluginTaskReceipt>;
+}
+
 /** Declarations are metadata; the host independently authorizes each current invocation. */
 export type PluginActionDeclaration = Readonly<{
   contributionId: string;
   action: string;
-  kind: "read" | "generateTask";
+  kind: "read" | "generateTask" | "queryTask";
 }>;
 
 export type PluginActionInvocation = Readonly<{

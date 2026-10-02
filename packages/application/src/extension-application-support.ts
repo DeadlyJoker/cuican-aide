@@ -177,6 +177,9 @@ export async function extensionUseCase<T>(
         "plugin_credit_insufficient_balance",
         "plugin_credit_account_not_found",
         "extension_credit_orphaned_reservation",
+        "plugin_query_admission_conflict",
+        "plugin_query_source_invalid",
+        "plugin_query_credit_or_generation_conflict",
       ].includes(code)
     )
       throw new ApplicationError("conflict", code, { cause: error });

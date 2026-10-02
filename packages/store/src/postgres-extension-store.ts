@@ -55,6 +55,14 @@ import {
 } from "./extension-credit-admission-records.ts";
 import { migratePostgresPluginCredits } from "./plugin-credit-schema.ts";
 import { migratePostgresPluginTaskAdmissionsWithPool } from "./plugin-task-admission-schema.ts";
+import { migratePostgresPluginQueryTasks } from "./plugin-query-task-schema.ts";
+import {
+  checkedPluginQueryTurn,
+  admitPostgresPluginQuery,
+  loadPostgresPluginQuery,
+  savePostgresPluginQuery,
+  assertPluginQueryReplay,
+} from "./plugin-query-task-store-support.ts";
 import {
   admitPostgresPluginTask,
   assertPluginTaskAdmissionReplay,
@@ -87,6 +95,8 @@ type PostgresExtensionStoreHost = Readonly<{
 
 export class PostgresExtensionStore implements ExtensionStore {
   readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
+  readonly pluginQueryAdmissionVersion =
+    "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   readonly #pool: Pool;
@@ -167,6 +177,22 @@ export class PostgresExtensionStore implements ExtensionStore {
       schema: this.#schemaName,
       assertOpen: () => this.#host.assertOpen(),
     });
+    await migratePostgresPluginQueryTasks({
+      pool: this.#pool,
+      schema: this.#schemaName,
+      assertOpen: () => this.#host.assertOpen(),
+    });
+  }
+
+  async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    const value = await loadPostgresPluginQuery(
+      this.#pool,
+      this.#schemaName,
+      input,
+    );
+    this.#host.assertOpen();
+    return value;
   }
 
   async loadPluginTaskAdmission(input: ExtensionRunLocator) {
@@ -423,6 +449,7 @@ export class PostgresExtensionStore implements ExtensionStore {
   }
 
   async commitExtensionTurn(input: CommitExtensionTurnInput) {
+    const pluginQuery = checkedPluginQueryTurn(input);
     // Retain one snapshot while the PostgreSQL transaction awaits independent Store operations.
     // Validate v1 exact fields/accessors before clone can flatten or invoke them.
     const pluginAdmission = checkedPluginTaskAdmission(input);
@@ -465,6 +492,17 @@ export class PostgresExtensionStore implements ExtensionStore {
               receipt: frozenInput.receipt,
               creditAdmission: result.creditAdmission,
             });
+          if (pluginQuery !== undefined)
+            assertPluginQueryReplay(
+              pluginQuery,
+              await loadPostgresPluginQuery(
+                client,
+                this.#schemaName,
+                result.binding,
+              ),
+              result.binding,
+              frozenInput.receipt,
+            );
           return result;
         }
         const creditAdmission = checkedExtensionCreditAdmission({
@@ -478,6 +516,13 @@ export class PostgresExtensionStore implements ExtensionStore {
             client,
             this.#schemaName,
             pluginAdmission,
+          );
+        if (pluginQuery !== undefined)
+          await admitPostgresPluginQuery(
+            client,
+            this.#schemaName,
+            pluginQuery,
+            binding,
           );
         await this.#admit(
           client,
@@ -548,6 +593,8 @@ export class PostgresExtensionStore implements ExtensionStore {
             this.#schemaName,
             pluginAdmission,
           );
+        if (pluginQuery !== undefined)
+          await savePostgresPluginQuery(client, this.#schemaName, pluginQuery);
         const result = extensionTurnResult(turn, binding, creditAdmission);
         await this.#saveReceipt(
           client,

@@ -4,6 +4,28 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：独立 Krea2 包、宿主 IO 与历史查询
+
+`examples/plugins/comfyui-krea2` 只依赖公开 SDK 和 Node 标准库，提供 Node 动作、执行工厂及独立 UI。已在仓外实际安装 SDK tarball、严格编译并构建 1.0.0/2.0.0；1.0.0 包内测试 12/12。固定单张 1MP 工作流沿用原已验证配置；上传文件的 4MP 差异有明确来源记录，没有隐含增加成本。原内置 ComfyUI v0 实现和摘要保留。
+
+两版本预构建交付目录为 `output/extensions/installable-plugins/krea2-20261003/<version>`，实际 Host 重新核验各 7 文件、51,538 字节，完整摘要记录于同目录父级 `verification.json`。删除原仓外开发目录及依赖后，交付 1.0.0 bundle 再次通过 12/12。此目录是待安装产物，不冒称已在用户生产 profile 启用。
+
+执行工厂的可选宿主 IO 端口从实际 Worker 派发 claim、原 Run 和实际 Store 取得权限。只有持久新建 operation 才发一次性 POST 凭证；方法、路径及请求内容必须与预留摘要一致，重开和已存在记录只观察。HTTP 使用既有 DNS、固定地址、TLS 及请求限额，真正发送前重新检查当前权限。实际受理响应允许在迟到撤权或取消后保存原本地证据；新 IO 仍拒绝。关闭等待真实委托、HTTP 和 Store CAS。
+
+SDK `crewon.tasks@2` 增加引用式历史查询，API 1 保留。独立 `crewon.plugin-query-task-admission.v1` 保存当前查询调用者和原生成包/配置/完整目标/operation；查询沿用原包，不新增报价或个人积分预留。当前 UI pin 与原执行来源分别核验。当前用户必须仍具有来源读取、目标线程及查询权限；停用后的原任务观察不能变成新 POST。
+
+已确认实际双库 Krea Worker 6/6、原业务 Worker 8/8；历史查询、实际安装 Host 与 Store 专项 35/35，真实 Control 动作 owner 双库 6/6，v0/v1 与 Worker 兼容 123/123。IO owner 13/13 是真实 SQLite 账本加私有派发单元夹具；网络与实际固定 TLS 29/29。它们不能替代 UI→查询全链或生产线上生成验收。日志前缀为 `krea2-worker-integration-*`、`installed-query-*`、`krea2-plugin-io-*`。
+
+原用户栏、设置及工作区相关 18 文件/154 项通过，UI build 通过；本阶段未改宿主页面样式。5719 仍是离线预览，设置入口在左下角用户菜单，依赖后端的设置未连接。
+
+程序化查询/IO 启动组合已接通真实父 Store。Worker 双库启动/关闭 12/12，Control 借用端口 4/4，实际 runtime lease 关闭顺序另 2/2；QueryHost 先等待查询结束，再关闭 resolver 和 Store。新增同包实际 UI→HTTP→tasks@2→付费生成/历史查询→冷 Worker/IO 的双库 6/6，含真实新版 B UI 查询原包 A、查询 COMMIT 后回执丢失重放及停用后的 GET 观察；新 UI、旧 Krea 与旧业务的组合专项 20/20。每个场景仅一次 POST、一次原结果 GET，一次报价和个人预留，实际结果投影含图片信息；供应商/model/身份/价格仍为明确夹具。UI 目前展示任务回执与来源，未把测试结果投影冒称完整生图产品界面。
+
+还修复历史包干净加载失败被永久缓存的问题：清理成功后恢复当前许可可在同一 Host 重试；真实清理失败仍保留原 owner 和隔离槽。真实安装 ESM/SQLite 生命周期 2/2，日志 `installed-query-host-lifecycle-20261003.log`。
+
+标准 Worker 测试现在先串行打包 SDK，在仓外构建专业报告与 Krea 的 1.0.0/2.0.0，删除实际开发目录及 SDK 依赖后才启动消费者。最终 Worker 双库全量 **1,484/1,484**，SDK 分发 **8/8**、Domain **202/202**、Application **328/328**、Host **185/185**。Control **374 通过、1 跳过**：跳过依赖 Linux 进程检查的用例；Store **1,440 通过、1 跳过**：已配置 PostgreSQL 时跳过“未配置 URL”的占位用例，真实 PostgreSQL 行为均运行。没有失败。日志为 `krea2-{worker,control}-full-dualstore-20261003.log` 与 `krea2-{sdk,domain,application,store,plugin-host}-full-20261003.log`。相关类型、生产许可证、入口边界和格式检查通过。
+
+生产 main 的身份、包许可及动作桥、真实价格/失败退款与积分结算、短剧独立包、安装管理和第二个真实企业 API 尚未完成。当前 readiness 核验实际工厂与物化，仍缺通用必需 IO 服务声明及就绪门槛；生产 Krea 必须装配 `executionIo`，缺失会执行拒绝，不能据安装成功自动开放收费。当前 ComfyUI 服务地址不可用的在线验收也仍待处理；没有把供应商夹具当成真实生成结果。
+
 ## 2026-10-03：Electron 已安装插件资产通道
 
 桌面 `file://` 页面现在可通过可选的 `pluginUiAssets` v1 桥加载已安装的受信模块；缺少能力的旧桥继续拒绝桌面加载，Web 同源路径保持。主进程捕获实际 Control 会话、进程 owner 与会话 generation，核对完整原挂载 lease 后，只发布随机引用下的批准文件。新资产接口不接受或返回账号、token 或任意代理 URL；旧 bootstrap 的凭据行为不变。

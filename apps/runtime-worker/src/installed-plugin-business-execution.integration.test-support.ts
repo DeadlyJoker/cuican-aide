@@ -59,7 +59,9 @@ import {
 import { compileInstalledPluginAgentVersion } from "./plugins/installed-plugin-agent-version.ts";
 import { loadInstalledPluginBusinessRegistration } from "./plugins/installed-plugin-business-registration.ts";
 import { InstalledPluginExtensionHost } from "./plugins/installed-plugin-extension-host.ts";
+import { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
 import { extensionToolDefinitions } from "./extensions/extension-tool-catalog.ts";
+import type { InstalledPluginExecutionIoConfig } from "./plugins/installed-plugin-execution-io-config.ts";
 export { digester };
 
 export const actor: ActorContext = {
@@ -81,7 +83,8 @@ type Store = SqliteRunStore | PostgresDomainStore;
 type CountTable =
   | "run_snapshots"
   | "plugin_credit_reservations"
-  | "plugin_task_admissions";
+  | "plugin_task_admissions"
+  | "plugin_query_task_admissions";
 
 /** Named external provider fixture survives a Worker owner restart; no real supplier API is called. */
 type ProviderControls = {
@@ -125,6 +128,12 @@ export async function businessExecutionFixture(
     packageDirectory?: string;
     upgradePackageDirectory?: string;
     configurationParameters?: Readonly<Record<string, WorkflowSchemaValue>>;
+    createTransport?(): ModelTransportPort;
+    taskInput?: WorkflowSchemaValue;
+    taskAction?: Readonly<{ contributionId: string; action: string }>;
+    executionIo?: InstalledPluginExecutionIoConfig;
+    approvalRequirement?: "none" | "perAction";
+    installedQueryHost?: boolean;
   }> = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "crewon-business-execution-"));
@@ -159,11 +168,13 @@ export async function businessExecutionFixture(
   globals[globalKey] = controls;
   let composition: StandaloneRuntimeWorker | null = null;
   let host: InstalledPluginExtensionHost | null = null;
+  let queryHost: InstalledPluginQueryHost | null = null;
   let resolver: StoreBackedAgentVersionRuntimeResolver | null = null;
   let registry: InMemoryAgentVersionRuntimeRegistry | null = null;
   t.after(async () => {
     try {
       await composition?.close();
+      await queryHost?.close();
       await host?.close();
       resolver?.close();
       await registry?.close();
@@ -242,7 +253,7 @@ export async function businessExecutionFixture(
   ) {
     const current = await installations.loadSelection({
       scope,
-      pluginId: businessManifest.pluginId,
+      pluginId: registration.identity.pluginId,
     });
     assert.ok(current);
     const result = await installations.commitSelection({
@@ -286,7 +297,7 @@ export async function businessExecutionFixture(
     policySnapshotId: "host-base-policy",
     workspaceBindingId: null,
   };
-  const transport = (): ModelTransportPort => ({
+  const defaultTransport = (): ModelTransportPort => ({
     adapterName: "fixture-business-model",
     adapterVersion: "1",
     modelId: "fixture-model",
@@ -321,6 +332,7 @@ export async function businessExecutionFixture(
       yield { type: "completed", checkpoint: null };
     },
   });
+  const transport = options.createTransport?.bind(options) ?? defaultTransport;
   const baseConfig = {
     runtimeTenantId: actor.tenantId,
     route,
@@ -366,7 +378,7 @@ export async function businessExecutionFixture(
     scope,
     registration,
     configuration,
-    approvalRequirement: "none",
+    approvalRequirement: options.approvalRequirement ?? "none",
     base: {
       executionAuthority: "crewonKernel",
       version: basePlan.bootstrapVersion,
@@ -392,6 +404,9 @@ export async function businessExecutionFixture(
       installRoot: pkg.input.installRoot,
       authorization,
       resolveActor: async () => actor,
+      ...(options.executionIo === undefined
+        ? {}
+        : { executionIo: options.executionIo }),
       authorizePackage: async ({
         candidate,
         scope: requestedScope,
@@ -482,12 +497,28 @@ export async function businessExecutionFixture(
     ids,
     digester,
   });
+  if (options.installedQueryHost === true)
+    queryHost = new InstalledPluginQueryHost({
+      scope,
+      installRoot: pkg.input.installRoot,
+      extensions,
+      runs: store,
+      operations,
+      installations,
+      authorization,
+      runtimeResolver: resolver,
+      deployments: store,
+      resolveActor: async () => actor,
+      resolveProfile: async () => scope,
+      authorizePackage: async () => "allow",
+    });
   const tasks = new ExtensionTaskApplicationService({
     store,
     extensions,
     operations,
     catalog,
     host,
+    ...(queryHost === null ? {} : { pluginQueryHost: queryHost }),
     authorization,
     clock,
     ids,
@@ -532,8 +563,9 @@ export async function businessExecutionFixture(
       ...scope,
       ...registration.identity,
       selectionRevision: selection.revision,
-      contributionId: "example.professional.workbench",
-      action: "report.generate",
+      contributionId:
+        options.taskAction?.contributionId ?? "example.professional.workbench",
+      action: options.taskAction?.action ?? "report.generate",
       authorityEpoch: "fixture-current-policy",
     });
     const command: CreateExtensionTaskCommand = {
@@ -543,7 +575,9 @@ export async function businessExecutionFixture(
       idempotencyKey: `professional-task-${key}`,
       intent: {
         kind: "generate",
-        input: { subject: "Fixture company annual report" },
+        input: options.taskInput ?? {
+          subject: "Fixture company annual report",
+        },
       },
     };
     return {
@@ -682,15 +716,20 @@ export async function businessExecutionFixture(
     return next;
   }
   return {
+    databasePath,
+    connectionString,
+    schema,
     store,
     extensions,
     installations: installations as PluginInstallationStore,
     credits,
+    operations,
     creditScope,
     entry,
     factory,
     resolver,
     host,
+    queryHost,
     tasks,
     plan,
     controls,

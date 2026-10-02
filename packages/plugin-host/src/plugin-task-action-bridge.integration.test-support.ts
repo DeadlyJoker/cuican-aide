@@ -86,7 +86,10 @@ export function deferred() {
 }
 
 /** Real SQLite, installed/bundled ESM and application services; current policies are explicit fixtures. */
-export async function taskActionFixture(t: TestContext) {
+export async function taskActionFixture(
+  t: TestContext,
+  options: Readonly<{ queryTasks?: boolean }> = {},
+) {
   const f = await configurationServiceFixture(t, "sqlite");
   await f.seedDeployment();
   await f.service.saveConfiguration(actor, saveCommand);
@@ -130,6 +133,8 @@ export async function taskActionFixture(t: TestContext) {
     readEntered: null as (() => void) | null,
     useSecondConnection: false,
     accepted: [] as CommitExtensionTurnResult[],
+    queryGate: null as Promise<void> | null,
+    queryEntered: null as (() => void) | null,
   };
   const tasksFor = (storage: typeof f.first) =>
     new ExtensionTaskApplicationService({
@@ -146,6 +151,32 @@ export async function taskActionFixture(t: TestContext) {
           return { ...state.quote };
         },
       },
+      ...(options.queryTasks
+        ? {
+            pluginQueryHost: {
+              async resolveRegistration() {
+                return f.dependencies.catalog.resolve({
+                  pluginId: scope.pluginId,
+                  pluginVersion: "0.1.0",
+                });
+              },
+              async evaluate({
+                source,
+                expectedTarget,
+              }: Parameters<
+                import("@crewon/application").PluginQueryHostPort["evaluate"]
+              >[0]) {
+                assert.deepEqual(expectedTarget, source.binding.target);
+                state.queryEntered?.();
+                await state.queryGate;
+                return {
+                  outcome: "ready" as const,
+                  target: source.binding.target,
+                };
+              },
+            },
+          }
+        : {}),
     });
   const firstTasks = tasksFor(f.first);
   const secondTasks = tasksFor(f.second);
@@ -171,6 +202,14 @@ export async function taskActionFixture(t: TestContext) {
         await state.afterCommit?.(result);
         return result;
       },
+      async createQueryTaskFromPlugin(...args) {
+        const result = await (
+          state.useSecondConnection ? secondTasks : firstTasks
+        ).createQueryTaskFromPlugin(...args);
+        state.accepted.push(result);
+        await state.afterCommit?.(result);
+        return result;
+      },
     },
     committedTasks: authority,
     profiles,
@@ -188,6 +227,7 @@ export async function taskActionFixture(t: TestContext) {
   const nodeHost = new PluginNodeHost({
     services: [
       bridge.hostService(),
+      ...(options.queryTasks ? [bridge.hostServiceV2()] : []),
       {
         service: "fixture.lifecycle",
         apiVersion: "1",
@@ -213,14 +253,15 @@ export async function taskActionFixture(t: TestContext) {
   await writeFile(
     join(source, "entry.ts"),
     `
-import { definePlugin, CREWON_TASKS_SERVICE, CREWON_TASKS_API_VERSION, type PluginTaskService, type PluginActionsService } from '@crewon/plugin-sdk/node';
+import { definePlugin, CREWON_TASKS_SERVICE, CREWON_TASKS_API_VERSION, CREWON_TASKS_V2_API_VERSION, type PluginTaskServiceV2, type PluginActionsService } from '@crewon/plugin-sdk/node';
 export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(scope.pluginId)},setup(context){
-  const tasks = context.services.get<PluginTaskService>(CREWON_TASKS_SERVICE,CREWON_TASKS_API_VERSION);
+  const tasks = context.services.get<PluginTaskServiceV2>(CREWON_TASKS_SERVICE,${options.queryTasks ? "CREWON_TASKS_V2_API_VERSION" : "CREWON_TASKS_API_VERSION"});
   const lifecycle = context.services.get<{read():Promise<{value:string}>}>('fixture.lifecycle','1');
   const actions:PluginActionsService = {
-    actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'},{contributionId:'workbench',action:'image.read',kind:'read'}],
+    actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'},{contributionId:'workbench',action:'image.read',kind:'read'}${options.queryTasks ? ",{contributionId:'workbench',action:'image.query',kind:'queryTask'}" : ""}],
     async invoke({invocationRef,action,input}){
       if(action==='image.read') return lifecycle.read();
+      ${options.queryTasks ? "if(action==='image.query'){const request=input as {threadId:string;expectedThreadRevision:number;idempotencyKey:string;sourceRunId:string;operationId:string};return tasks.queryTask({invocationRef,...request});}" : ""}
       const request=input as {threadId:string;expectedThreadRevision:number;idempotencyKey:string;input:Record<string,string>};
       return tasks.createTask({invocationRef,threadId:request.threadId,expectedThreadRevision:request.expectedThreadRevision,idempotencyKey:request.idempotencyKey,input:request.input});
     }
@@ -271,7 +312,11 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
       },
       businessManifestPath: null,
       requires: [
-        { service: "crewon.tasks", apiVersion: "1", optional: false },
+        {
+          service: "crewon.tasks",
+          apiVersion: options.queryTasks ? "2" : "1",
+          optional: false,
+        },
         { service: "fixture.lifecycle", apiVersion: "1", optional: false },
       ],
       provides: [{ service: scope.pluginId, apiVersion: "1" }],

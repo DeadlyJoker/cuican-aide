@@ -134,7 +134,11 @@ export async function businessUiFixture(t: TestContext, f: BusinessFixture) {
   });
   const execution = new PluginExecutionRegistry({ maximumFactories: 1 });
   const nodeHost = new PluginNodeHost({
-    services: [bridge.hostService(), execution.hostService()],
+    services: [
+      bridge.hostService(),
+      bridge.hostServiceV2(),
+      execution.hostService(),
+    ],
   });
   const closeNode = async () => {
     bridge.close();
@@ -408,9 +412,21 @@ export async function businessUiFixture(t: TestContext, f: BusinessFixture) {
       });
       return lease;
     },
-    async click() {
+    async update(data: PluginUiJsonValue) {
+      assert.ok(
+        handle,
+        "mount the actual installed UI before updating its projection",
+      );
+      await handle.update({
+        schemaVersion: "crewon.plugin-ui-props.v1",
+        contributionId: contribution.id,
+        theme: { mode: "light", tokens: {} },
+        data,
+      });
+    },
+    async click(selector = "button") {
       invoked = null;
-      const button = root.querySelector("button");
+      const button = root.querySelector(selector);
       assert.ok(button, "the installed UI must render its own action button");
       const output = root.querySelector("output");
       assert.ok(output, "the installed UI must render its own task receipt");
@@ -429,7 +445,8 @@ export async function businessUiFixture(t: TestContext, f: BusinessFixture) {
         );
       });
       try {
-        button.click();
+        assert.equal(button.tagName, "BUTTON");
+        (button as InstanceType<typeof window.HTMLButtonElement>).click();
         await rendered;
         assert.ok(
           invoked,

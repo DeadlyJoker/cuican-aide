@@ -23,11 +23,14 @@ import {
 import {
   CREWON_TASKS_API_VERSION,
   CREWON_TASKS_SERVICE,
+  CREWON_TASKS_V2_API_VERSION,
   type PluginActionsService,
   type PluginIdentity,
   type PluginTaskReceipt,
   type PluginTaskRequest,
   type PluginTaskService,
+  type PluginTaskServiceV2,
+  type PluginQueryTaskRequest,
 } from "@crewon/plugin-sdk/node";
 import { PluginNodeHost, type PluginHostService } from "./plugin-node-host.ts";
 import {
@@ -38,10 +41,12 @@ import {
   bridgeSameSelection,
   bridgeTaskOutput,
   bridgeTaskRequest,
+  bridgeQueryTaskRequest,
 } from "./plugin-task-action-bridge-support.ts";
 
 type Dependencies = Readonly<{
-  tasks: Pick<ExtensionTaskApplicationService, "createTaskFromPlugin">;
+  tasks: Pick<ExtensionTaskApplicationService, "createTaskFromPlugin"> &
+    Partial<Pick<ExtensionTaskApplicationService, "createQueryTaskFromPlugin">>;
   committedTasks: PluginUiCommittedTaskAuthority;
   profiles: PluginInstallationHostProfilePort;
   authorization: PluginUiAuthorizationPort;
@@ -56,7 +61,7 @@ type Invocation = {
   context: PluginUiActionContext;
   pin: PluginTaskAdmissionPin;
   instance: PluginIdentity | null;
-  kind: "read" | "generateTask";
+  kind: "read" | "generateTask" | "queryTask";
   open: boolean;
   expiresAt: number;
   request: string | null;
@@ -85,6 +90,24 @@ export class PluginTaskActionBridge {
         Object.freeze({
           createTask: (input: PluginTaskRequest) =>
             this.#createTask(identity, input),
+        }),
+    });
+  }
+
+  hostServiceV2(): PluginHostService {
+    return Object.freeze({
+      service: CREWON_TASKS_SERVICE,
+      apiVersion: CREWON_TASKS_V2_API_VERSION,
+      value: Object.freeze({
+        createTask: () => bridgeFailure("plugin_task_port_unbound"),
+        queryTask: () => bridgeFailure("plugin_task_port_unbound"),
+      }),
+      bindForPlugin: (identity: PluginIdentity): PluginTaskServiceV2 =>
+        Object.freeze({
+          createTask: (input: PluginTaskRequest) =>
+            this.#createTask(identity, input),
+          queryTask: (input: PluginQueryTaskRequest) =>
+            this.#queryTask(identity, input),
         }),
     });
   }
@@ -163,11 +186,26 @@ export class PluginTaskActionBridge {
     raw: unknown,
   ): Promise<PluginTaskReceipt> {
     const input = bridgeTaskRequest(raw);
+    return this.#task(identity, input, false);
+  }
+  async #queryTask(
+    identity: PluginIdentity,
+    raw: unknown,
+  ): Promise<PluginTaskReceipt> {
+    return this.#task(identity, bridgeQueryTaskRequest(raw), true);
+  }
+  async #task(
+    identity: PluginIdentity,
+    input:
+      | ReturnType<typeof bridgeTaskRequest>
+      | ReturnType<typeof bridgeQueryTaskRequest>,
+    query: boolean,
+  ): Promise<PluginTaskReceipt> {
     const invocation = this.#invocations.get(input.invocationRef);
     if (
       !invocation ||
       invocation.instance !== identity ||
-      invocation.kind !== "generateTask"
+      invocation.kind !== (query ? "queryTask" : "generateTask")
     )
       bridgeFailure("plugin_invocation_owner_mismatch");
     const command = Object.freeze({
@@ -175,10 +213,19 @@ export class PluginTaskActionBridge {
       threadId: input.threadId,
       expectedThreadRevision: input.expectedThreadRevision,
       idempotencyKey: input.idempotencyKey,
-      intent: Object.freeze({
-        kind: "generate" as const,
-        input: input.input as WorkflowSchemaValue,
-      }),
+      intent: query
+        ? Object.freeze({
+            kind: "query" as const,
+            sourceRunId: (input as ReturnType<typeof bridgeQueryTaskRequest>)
+              .sourceRunId,
+            operationId: (input as ReturnType<typeof bridgeQueryTaskRequest>)
+              .operationId,
+          })
+        : Object.freeze({
+            kind: "generate" as const,
+            input: (input as ReturnType<typeof bridgeTaskRequest>)
+              .input as WorkflowSchemaValue,
+          }),
     });
     const request = extensionCanonicalJson(command);
     if (invocation.pending !== null) {
@@ -190,7 +237,13 @@ export class PluginTaskActionBridge {
     invocation.request = request;
     invocation.pending = (async () => {
       await this.#assertCurrent(invocation);
-      const result = await this.#dependencies.tasks.createTaskFromPlugin(
+      const create = query
+        ? this.#dependencies.tasks.createQueryTaskFromPlugin
+        : this.#dependencies.tasks.createTaskFromPlugin;
+      if (typeof create !== "function")
+        bridgeFailure("plugin_query_task_port_unavailable");
+      const result = await create.call(
+        this.#dependencies.tasks,
         invocation.context.actor,
         command,
         invocation.pin,
@@ -210,11 +263,17 @@ export class PluginTaskActionBridge {
       // Capture the bounded SDK projection before receipt verification yields to storage.
       const output = bridgeTaskOutput(result) as PluginTaskReceipt;
       // An acknowledged commit stays acknowledged after close/revocation; no new admission occurs here.
-      invocation.committed = await this.#dependencies.committedTasks.issue({
-        context: invocation.context,
-        command,
-        result,
-      });
+      invocation.committed = await (query
+        ? this.#dependencies.committedTasks.issueQuery({
+            context: invocation.context,
+            command,
+            result,
+          })
+        : this.#dependencies.committedTasks.issue({
+            context: invocation.context,
+            command,
+            result,
+          }));
       return output;
     })();
     // The action may forget to await this promise; keep its failure observed until dispatch finishes.

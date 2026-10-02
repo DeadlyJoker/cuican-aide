@@ -49,6 +49,14 @@ import {
 import { migrateSqliteExternalOperations } from "./sqlite-external-operation-store.ts";
 import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
 import { migrateSqlitePluginTaskAdmissions } from "./plugin-task-admission-schema.ts";
+import { migrateSqlitePluginQueryTasks } from "./plugin-query-task-schema.ts";
+import {
+  checkedPluginQueryTurn,
+  admitSqlitePluginQuery,
+  loadSqlitePluginQuery,
+  saveSqlitePluginQuery,
+  assertPluginQueryReplay,
+} from "./plugin-query-task-store-support.ts";
 import {
   admitSqlitePluginTask,
   assertPluginTaskAdmissionReplay,
@@ -82,6 +90,8 @@ type SqliteExtensionStoreHost = Readonly<{
 
 export class SqliteExtensionStore implements ExtensionStore {
   readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
+  readonly pluginQueryAdmissionVersion =
+    "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   readonly #db: DatabaseSync;
@@ -133,7 +143,15 @@ export class SqliteExtensionStore implements ExtensionStore {
 
   /** Explicit installed-package provenance opt-in; v0 migration and historical bindings stay unchanged. */
   async migratePluginAdmissions(): Promise<void> {
-    this.#transaction(() => migrateSqlitePluginTaskAdmissions(this.#db));
+    this.#transaction(() => {
+      migrateSqlitePluginTaskAdmissions(this.#db);
+      migrateSqlitePluginQueryTasks(this.#db);
+    });
+  }
+
+  async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    return loadSqlitePluginQuery(this.#db, input);
   }
 
   async loadPluginTaskAdmission(input: ExtensionRunLocator) {
@@ -329,6 +347,9 @@ export class SqliteExtensionStore implements ExtensionStore {
   }
 
   async commitExtensionTurn(input: CommitExtensionTurnInput) {
+    const pluginQuery = checkedPluginQueryTurn(input);
+    if (pluginQuery !== undefined)
+      input = structuredClone({ ...input, pluginQueryAdmission: pluginQuery });
     const pluginAdmission = checkedPluginTaskAdmission(input);
     if (pluginAdmission !== undefined)
       input = capturePluginTaskTurnInput(input, pluginAdmission);
@@ -356,10 +377,19 @@ export class SqliteExtensionStore implements ExtensionStore {
             receipt: input.receipt,
             creditAdmission: saved.creditAdmission,
           });
+        if (pluginQuery !== undefined)
+          assertPluginQueryReplay(
+            pluginQuery,
+            loadSqlitePluginQuery(this.#db, saved.binding),
+            saved.binding,
+            input.receipt,
+          );
         return saved;
       }
       if (pluginAdmission !== undefined)
         admitSqlitePluginTask(this.#db, pluginAdmission);
+      if (pluginQuery !== undefined)
+        admitSqlitePluginQuery(this.#db, pluginQuery, binding);
       this.#admit(binding, input.expectedActivationRevision);
       if (creditAdmission !== undefined) {
         try {
@@ -403,6 +433,8 @@ export class SqliteExtensionStore implements ExtensionStore {
         this.#saveCreditAdmission(creditAdmission);
       if (pluginAdmission !== undefined)
         saveSqlitePluginTask(this.#db, pluginAdmission);
+      if (pluginQuery !== undefined)
+        saveSqlitePluginQuery(this.#db, pluginQuery);
       const result = extensionTurnResult(turn, binding, creditAdmission);
       this.#saveReceipt(binding, "task", input.receipt, result);
       return result;

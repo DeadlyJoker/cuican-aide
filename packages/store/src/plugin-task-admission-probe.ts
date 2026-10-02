@@ -5,12 +5,22 @@ import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
 import { assertPluginTaskAdmissionSchemaVersion } from "./plugin-task-admission-schema.ts";
 import { validateRunScopedLocator } from "./store-invariants.ts";
 
+import {
+  createSqlitePluginQueryTaskAdmissionProbe,
+  createPostgresPluginQueryTaskAdmissionProbe,
+} from "./plugin-query-task-admission-probe.ts";
+type QueryReader = Required<
+  Pick<
+    ExtensionStore,
+    "pluginQueryAdmissionVersion" | "loadPluginQueryTaskAdmission"
+  >
+>;
 type AdmissionReader = Required<
   Pick<ExtensionStore, "pluginAdmissionVersion" | "loadPluginTaskAdmission">
 >;
 type Lifetime = Readonly<{
   assertOpen(): void;
-  extensionStore(): AdmissionReader;
+  extensionStore(): AdmissionReader & Partial<QueryReader>;
 }>;
 const names = [
   "plugin_task_admission_schema_version",
@@ -20,8 +30,9 @@ const names = [
 /** Construction performs no SQL or extension-store access; schema absence is checked anew for every Run. */
 export function createSqlitePluginTaskAdmissionProbe(
   input: Lifetime & Readonly<{ database: DatabaseSync }>,
-): AdmissionReader {
+): AdmissionReader & QueryReader {
   return Object.freeze({
+    ...createSqlitePluginQueryTaskAdmissionProbe(input),
     pluginAdmissionVersion: "crewon.plugin-task-admission.v1" as const,
     async loadPluginTaskAdmission(request: ExtensionRunLocator) {
       input.assertOpen();
@@ -72,9 +83,10 @@ export function createSqlitePluginTaskAdmissionProbe(
 /** Queries only the configured namespace's catalog until both current v1 tables are known to exist. */
 export function createPostgresPluginTaskAdmissionProbe(
   input: Lifetime & Readonly<{ pool: Pool; schema: string }>,
-): AdmissionReader {
+): AdmissionReader & QueryReader {
   const prefix = `${pluginInstallationSchemaName(input.schema)}.`;
   return Object.freeze({
+    ...createPostgresPluginQueryTaskAdmissionProbe(input),
     pluginAdmissionVersion: "crewon.plugin-task-admission.v1" as const,
     async loadPluginTaskAdmission(request: ExtensionRunLocator) {
       input.assertOpen();

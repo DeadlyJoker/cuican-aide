@@ -2,14 +2,23 @@ import { RuntimePreflight } from "./runtime-preflight.ts";
 import { AgentRuntimeCapacityError } from "./agent-runtime-capacity.ts";
 import { RuntimeStoreAccess } from "./runtime-store-access.ts";
 import { RuntimeWorkItemClaims } from "./runtime-work-item-claims.ts";
-import { CONTINUE_RUN, runWithExecutionBudget, executionBudget, type RuntimeExecutionBudget, type RuntimeWorkerStepOutcome } from "./runtime-execution-budget.ts";
+import {
+  CONTINUE_RUN,
+  runWithExecutionBudget,
+  executionBudget,
+  type RuntimeExecutionBudget,
+  type RuntimeWorkerStepOutcome,
+} from "./runtime-execution-budget.ts";
 import type { RuntimeWorkerOutcome } from "./runtime-worker-outcome.ts";
 import {
   loadEmptyContinuation,
   selectEmptyContinuation,
 } from "./runtime-empty-continuation.ts";
 import { loadRuntimeRunProgress } from "./runtime-run-progress.ts";
-import { MAX_EMPTY_PROVIDER_CONTINUATIONS, MAX_ASSISTANT_PROVIDER_CONTINUATIONS } from "@crewon/domain";
+import {
+  MAX_EMPTY_PROVIDER_CONTINUATIONS,
+  MAX_ASSISTANT_PROVIDER_CONTINUATIONS,
+} from "@crewon/domain";
 import { durableCompactionCheckpoint } from "./durable-compaction-checkpoint.ts";
 import { recordWorkerAgentEvent } from "./record-worker-agent-event.ts";
 import { RuntimeWorkerQueries } from "./runtime-worker-queries.ts";
@@ -27,6 +36,7 @@ import {
   withToolExecutionCapacity,
   preflightToolExecutionCapacity,
 } from "./tool-execution-capacity.ts";
+import { withWorkerToolDispatch } from "./plugins/worker-tool-dispatch-authority.ts";
 import { settleCanceledToolResults } from "./canceled-tool-results.ts";
 import { resolveToolBatch } from "./resolve-tool-batch.ts";
 import { createHash } from "node:crypto";
@@ -690,16 +700,30 @@ export class RuntimeWorker {
         error instanceof ToolExecutionPendingError
       ) {
         try {
-          const run = error instanceof RunStoreBusyError ? null : await this.#execution.loadRun(claim);
-          if (run !== null && run.cancelRequested && run.status !== "reconciling") {
+          const run =
+            error instanceof RunStoreBusyError
+              ? null
+              : await this.#execution.loadRun(claim);
+          if (
+            run !== null &&
+            run.cancelRequested &&
+            run.status !== "reconciling"
+          ) {
             return await this.#cancel(claim);
           }
           await this.#store.retryWorkItem({
             ...leaseInput(claim),
-            retryAfterMs: error instanceof RunStoreBusyError ? Math.max(this.#retryAfterMs, error.retryAfterMs) : error.retryAfterMs,
+            retryAfterMs:
+              error instanceof RunStoreBusyError
+                ? Math.max(this.#retryAfterMs, error.retryAfterMs)
+                : error.retryAfterMs,
             reasonCode: error.code,
           });
-          return { kind: "retried", runId: claim.workItem.runId, code: error.code };
+          return {
+            kind: "retried",
+            runId: claim.workItem.runId,
+            code: error.code,
+          };
         } catch (retryError) {
           if (isLeaseLoss(retryError))
             return { kind: "leaseLost", runId: claim.workItem.runId };
@@ -908,20 +932,34 @@ export class RuntimeWorker {
     });
   }
 
-  async #executeClaimStep(claim: WorkItemClaim): Promise<RuntimeWorkerStepOutcome> {
+  async #executeClaimStep(
+    claim: WorkItemClaim,
+  ): Promise<RuntimeWorkerStepOutcome> {
     let run = await this.#execution.loadRun(claim);
     if (run.purpose === "workflow") {
       // A root belongs to the workflow scheduler even when canceled/terminal:
       // children may still own unknown effects. Never use ordinary Agent settlement.
       try {
-        await this.#store.retryWorkItem({ ...leaseInput(claim), retryAfterMs: this.#retryAfterMs, reasonCode: "workflow_scheduler_unavailable" });
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs: this.#retryAfterMs,
+          reasonCode: "workflow_scheduler_unavailable",
+        });
       } catch (error) {
         if (isLeaseLoss(error)) return { kind: "leaseLost", runId: run.runId };
         // A failed or unacknowledged queue write must not enter ordinary
         // failure/cancellation settlement. The queue lease remains the recovery fence.
-        return { kind: "retried", runId: run.runId, code: "workflow_scheduler_requeue_failed" };
+        return {
+          kind: "retried",
+          runId: run.runId,
+          code: "workflow_scheduler_requeue_failed",
+        };
       }
-      return { kind: "retried", runId: run.runId, code: "workflow_scheduler_unavailable" };
+      return {
+        kind: "retried",
+        runId: run.runId,
+        code: "workflow_scheduler_unavailable",
+      };
     }
     if (isTerminal(run)) {
       await this.#completeWorkItem(claim);
@@ -1079,10 +1117,15 @@ export class RuntimeWorker {
 
     const resources = this.#runtimeResourceScope!;
     const decision = await this.#preflight.run({
-      identity: { tenantId: run.tenantId, kind: "policy", resourceId: run.runId },
-      operation: () => resources.run(() =>
-        runtime.policy.evaluate({ run, workItem: claim.workItem }),
-      ),
+      identity: {
+        tenantId: run.tenantId,
+        kind: "policy",
+        resourceId: run.runId,
+      },
+      operation: () =>
+        resources.run(() =>
+          runtime.policy.evaluate({ run, workItem: claim.workItem }),
+        ),
     });
     if (decision.outcome !== "allow") {
       const attempt =
@@ -1135,8 +1178,16 @@ export class RuntimeWorker {
     if (loadedProgress.kind === "deferred") {
       const current = await this.#execution.loadRun(claim);
       if (current.cancelRequested) return this.#cancel(claim);
-      await this.#store.retryWorkItem({ ...leaseInput(claim), retryAfterMs: 0, reasonCode: "run_execution_progress_loading" });
-      return { kind: "retried", runId: run.runId, code: "run_execution_progress_loading" };
+      await this.#store.retryWorkItem({
+        ...leaseInput(claim),
+        retryAfterMs: 0,
+        reasonCode: "run_execution_progress_loading",
+      });
+      return {
+        kind: "retried",
+        runId: run.runId,
+        code: "run_execution_progress_loading",
+      };
     }
     const pendingTools = loadedProgress.progress;
     if (pendingTools.events.length > 0) {
@@ -1182,11 +1233,19 @@ export class RuntimeWorker {
     }
     const completedToolRounds = pendingTools.completedToolRounds;
     const completedAssistantSamples = pendingTools.providerContinuationSamples;
-    if (pendingTools.emptyProviderContinuationSamples > MAX_EMPTY_PROVIDER_CONTINUATIONS) {
+    if (
+      pendingTools.emptyProviderContinuationSamples >
+      MAX_EMPTY_PROVIDER_CONTINUATIONS
+    ) {
       throw new PermanentWorkerError("model_empty_continuation_limit_exceeded");
     }
-    if (pendingTools.assistantContinuationSamples > MAX_ASSISTANT_PROVIDER_CONTINUATIONS) {
-      throw new PermanentWorkerError("model_provider_continuation_limit_exceeded");
+    if (
+      pendingTools.assistantContinuationSamples >
+      MAX_ASSISTANT_PROVIDER_CONTINUATIONS
+    ) {
+      throw new PermanentWorkerError(
+        "model_provider_continuation_limit_exceeded",
+      );
     }
     if (completedToolRounds >= runtime.maxToolRounds) {
       throw new PermanentWorkerError("model_tool_round_limit_exceeded");
@@ -1211,14 +1270,15 @@ export class RuntimeWorker {
         throw new PermanentWorkerError("thread_model_state_missing");
       }
       const priorResolver = this.#modelSwitchCompactionResolver;
-      const priorRuntime = priorResolver === undefined
-        ? null
-        : await acquirePriorCompactorResource({
-            prior: priorModelState,
-            resolver: priorResolver,
-            scope: this.#runtimeResourceScope!,
-            preflight: this.#preflight,
-          });
+      const priorRuntime =
+        priorResolver === undefined
+          ? null
+          : await acquirePriorCompactorResource({
+              prior: priorModelState,
+              resolver: priorResolver,
+              scope: this.#runtimeResourceScope!,
+              preflight: this.#preflight,
+            });
       if (priorRuntime === null || priorRuntime === undefined) {
         throw new PermanentWorkerError("model_switch_compactor_unavailable");
       }
@@ -1291,7 +1351,9 @@ export class RuntimeWorker {
             run,
             event: pendingTools.emptyContinuation,
             identity: modelIdentity,
-            onInvalid: (code) => { throw new PermanentWorkerError(code); },
+            onInvalid: (code) => {
+              throw new PermanentWorkerError(code);
+            },
           });
     const continuation =
       pendingTools.emptyContinuation === null
@@ -1902,7 +1964,11 @@ export class RuntimeWorker {
         },
         controller.signal,
         {
-          checkpoint: durableCompactionCheckpoint(this.#store.compactionCheckpoints, claim, attempt),
+          checkpoint: durableCompactionCheckpoint(
+            this.#store.compactionCheckpoints,
+            claim,
+            attempt,
+          ),
           usageSink: durableModelUsageSink(this.#store, claim, attempt),
           callSink: durableModelCallSink(this.#store, claim, attempt),
         },
@@ -2033,10 +2099,17 @@ export class RuntimeWorker {
           approval,
           this.#queries.confirmedClaim(renewedClaim),
         );
-        this.#queries.confirmedClaim(claim);
-        resolution = run.cancelRequested
-          ? await runtime.toolRuntime.cancel(command, controller.signal)
-          : await runtime.toolRuntime.reconcile(command, controller.signal);
+        const method = run.cancelRequested ? "cancel" : "reconcile";
+        resolution = await withWorkerToolDispatch(
+          {
+            command,
+            receipt,
+            method,
+            signal: controller.signal,
+            assertCurrent: () => this.#queries.confirmedClaim(claim),
+          },
+          () => runtime.toolRuntime[method](command, controller.signal),
+        );
       }
       this.#queries.confirmedClaim(claim);
       if (resolution.status === "unknownOutcome") {
@@ -2250,23 +2323,35 @@ export class RuntimeWorker {
       claim,
       run,
       ...this.#runProgressControl(claim, "execute"),
-      onInvalid: code => { throw new PermanentWorkerError(code); },
+      onInvalid: (code) => {
+        throw new PermanentWorkerError(code);
+      },
     });
   }
 
-  #runProgressControl(claim: WorkItemClaim, purpose: "execute" | "cancel"): import("@crewon/application").RunProgressLoadControl {
+  #runProgressControl(
+    claim: WorkItemClaim,
+    purpose: "execute" | "cancel",
+  ): import("@crewon/application").RunProgressLoadControl {
     let lastLeaseCheck = -Infinity;
     return {
-      query: (key, operation) => this.#queries.executionProgress(claim, key, operation),
+      query: (key, operation) =>
+        this.#queries.executionProgress(claim, key, operation),
       onProgress: async () => {
         await yieldToEventLoop();
-        if (this.#closed) throw new RuntimeAuthorityError("runtime_worker_closing");
+        if (this.#closed)
+          throw new RuntimeAuthorityError("runtime_worker_closing");
         const now = performance.now();
-        if (now - lastLeaseCheck < Math.min(1000, this.#leaseDurationMs / 3)) return;
+        if (now - lastLeaseCheck < Math.min(1000, this.#leaseDurationMs / 3))
+          return;
         await this.#renew(claim);
-        const current = await this.#queries.readCancellation(claim, () => this.#execution.loadRun(claim));
-        if (purpose === "execute" && current.cancelRequested) throw new PermanentWorkerError("worker_cancel_requested");
-        if (purpose === "cancel" && !current.cancelRequested) throw new PermanentWorkerError("cancel_not_requested");
+        const current = await this.#queries.readCancellation(claim, () =>
+          this.#execution.loadRun(claim),
+        );
+        if (purpose === "execute" && current.cancelRequested)
+          throw new PermanentWorkerError("worker_cancel_requested");
+        if (purpose === "cancel" && !current.cancelRequested)
+          throw new PermanentWorkerError("cancel_not_requested");
         lastLeaseCheck = performance.now();
       },
     };
@@ -2436,20 +2521,24 @@ export class RuntimeWorker {
         continue;
       }
       const shouldExecute = receipt.status === "prepared";
-      const capacityInput = () => ({
-        tenantId: claim.workItem.tenantId,
-        runtime: runtime.toolRuntime,
-        command: toolExecutionCommand(
-          receipt,
-          call.input,
-          toolApproval,
-          this.#queries.confirmedClaim(claim),
-        ),
-        signal,
-        operation: shouldExecute
-          ? ("execute" as const)
-          : ("reconcile" as const),
-      });
+      let capturedCapacity:
+        | Parameters<typeof withToolExecutionCapacity>[0]
+        | undefined;
+      const capacityInput = () =>
+        (capturedCapacity ??= {
+          tenantId: claim.workItem.tenantId,
+          runtime: runtime.toolRuntime,
+          command: toolExecutionCommand(
+            receipt,
+            call.input,
+            toolApproval,
+            this.#queries.confirmedClaim(claim),
+          ),
+          signal,
+          operation: shouldExecute
+            ? ("execute" as const)
+            : ("reconcile" as const),
+        });
       const preparedCall: (typeof preparedCalls)[number] = {
         event,
         receipt,
@@ -2469,8 +2558,17 @@ export class RuntimeWorker {
               preparedCall.receipt = receipt;
               await this.#afterToolDispatched?.(receipt);
             }
-            this.#queries.confirmedClaim(claim);
-            const resolution = await execute();
+            const { command, operation } = capacityInput();
+            const resolution = await withWorkerToolDispatch(
+              {
+                command,
+                receipt,
+                method: operation,
+                signal,
+                assertCurrent: () => this.#queries.confirmedClaim(claim),
+              },
+              execute,
+            );
             await this.#afterToolProviderResolved?.(resolution);
             return resolution;
           }),
@@ -2933,19 +3031,42 @@ export class RuntimeWorker {
           : null);
       let cancellation: import("@crewon/application").RunCancellationResult;
       try {
-        cancellation = await this.#execution.confirmCanceled(claim, attempt, "user_requested", this.#runProgressControl(claim, "cancel"));
+        cancellation = await this.#execution.confirmCanceled(
+          claim,
+          attempt,
+          "user_requested",
+          this.#runProgressControl(claim, "cancel"),
+        );
       } catch (error) {
         if (isLeaseLoss(error)) throw error;
-        const current = await this.#queries.readCancellation(claim, () => this.#execution.loadRun(claim));
-        if (current.status === "canceled") return { kind: "canceled", runId: run.runId };
+        const current = await this.#queries.readCancellation(claim, () =>
+          this.#execution.loadRun(claim),
+        );
+        if (current.status === "canceled")
+          return { kind: "canceled", runId: run.runId };
         const code = failureCode(error);
         // A failed preparation gets a new wake budget; do not re-enter cancellation in this wake's outer catch.
-        await this.#store.retryWorkItem({ ...leaseInput(claim), retryAfterMs: error instanceof RunStoreBusyError ? Math.max(this.#retryAfterMs, error.retryAfterMs) : this.#retryAfterMs, reasonCode: code });
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs:
+            error instanceof RunStoreBusyError
+              ? Math.max(this.#retryAfterMs, error.retryAfterMs)
+              : this.#retryAfterMs,
+          reasonCode: code,
+        });
         return { kind: "retried", runId: run.runId, code };
       }
       if (cancellation.kind === "deferred") {
-        await this.#store.retryWorkItem({ ...leaseInput(claim), retryAfterMs: 0, reasonCode: "run_cancellation_progress_loading" });
-        return { kind: "retried", runId: run.runId, code: "run_cancellation_progress_loading" };
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs: 0,
+          reasonCode: "run_cancellation_progress_loading",
+        });
+        return {
+          kind: "retried",
+          runId: run.runId,
+          code: "run_cancellation_progress_loading",
+        };
       }
     } else {
       await this.#completeWorkItem(claim);
