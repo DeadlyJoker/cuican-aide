@@ -11,6 +11,10 @@ import type { PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import type { CommandWorkspaceHostModule } from "../../components/app/CommandWorkspaceHostModule";
 import { createControlPluginUiHost } from "../plugins/controlPluginUiHost";
 import {
+  createDesktopPluginUiHost,
+  installedDesktopPluginUiAssets,
+} from "../plugins/desktopPluginUiHost";
+import {
   readControlPluginUiCatalog,
   type ControlPluginUiCatalog,
 } from "../plugins/controlPluginUiCatalog";
@@ -54,22 +58,27 @@ export function useInstalledPluginModules({
     ]);
   }, []);
   const scope = useMemo(() => {
+    if (!client || client === suspendedClient) return null;
+    const assets =
+      location.protocol === "file:" ? installedDesktopPluginUiAssets() : null;
+    if (assets) return { client, sessionKey, assets };
     if (
-      !client ||
-      client === suspendedClient ||
       (location.protocol !== "http:" && location.protocol !== "https:") ||
       client.requestOrigin !== location.origin
     )
       return null;
-    return { client, sessionKey };
+    return { client, sessionKey, assets: null };
   }, [client, suspendedClient, sessionKey]);
   const current = useRef(scope);
   current.current = scope;
   const host = useMemo(
     () =>
       scope
-        ? createControlPluginUiHost({
+        ? (scope.assets
+            ? createDesktopPluginUiHost
+            : createControlPluginUiHost)({
             client: scope.client,
+            assets: scope.assets!,
             assertCurrent: () => {
               if (current.current !== scope)
                 throw new PluginUiLoaderError("plugin_ui_session_changed");
@@ -79,6 +88,12 @@ export function useInstalledPluginModules({
         : null,
     [scope, onDiagnostic],
   );
+  useLayoutEffect(() => {
+    if (!scope?.assets) return;
+    return () => {
+      void scope.assets.invalidate().catch(onDiagnostic);
+    };
+  }, [scope, onDiagnostic]);
   const [snapshot, setSnapshot] = useState<Readonly<{
     scope: NonNullable<typeof scope>;
     catalog: ControlPluginUiCatalog;

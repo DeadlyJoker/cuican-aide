@@ -4,6 +4,20 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：Electron 已安装插件资产通道
+
+桌面 `file://` 页面现在可通过可选的 `pluginUiAssets` v1 桥加载已安装的受信模块；缺少能力的旧桥继续拒绝桌面加载，Web 同源路径保持。主进程捕获实际 Control 会话、进程 owner 与会话 generation，核对完整原挂载 lease 后，只发布随机引用下的批准文件。新资产接口不接受或返回账号、token 或任意代理 URL；旧 bootstrap 的凭据行为不变。
+
+真实 Electron Session 在读取前核验所属窗口和当前 mainFrame，拒绝其他窗口、内嵌 View、子 frame 与旧会话。每次读取重新检查权限及完整 lease，核对长度、SHA256 和 MIME；整个读取与后置权限检查共同占用有限字节预算。退出和会话替换先同步撤回入口，再等待实际读取、取消与远端挂载清理。实际旧 Control 子进程终止后，仅可退休已结束且没有未知本地 reader 的 owner；清理失败继续占用容量。
+
+原生专项及相关回归 **8 文件、71/71** 通过，零跳过。Electron **43.4.1** 实际安装夹具加载入口与相对 chunk，四类非法请求和外来 IPC 均拒绝，清理后资源计数全零；真实 RuntimeSupervisor/Node HTTP 子进程覆盖慢清理、Control 崩溃自动重启及终止后的清理重试。证据为 `output/extensions/checks/desktop-plugin-ui-tests-20261003.log`、`desktop-plugin-ui-native-proof-20261003.json`。临时安装、数据库和子进程均清理。
+
+原工作区、预览设置入口、设置路由与原设置快照专项 **23 文件、180/180**；UI lint、UI build、Electron host build、架构边界和格式检查通过。全量 UI 实际为 **3,156 通过、8 失败**，不能声称全量通过；独立只读核对确认八项失败的完整名称、首行错误及断言位置均与实际 `git archive` 历史版本 `2d753e8f5` 相同，基线证据为 `short-drama-host-ui-head-baseline-six-suites.{json,log}`，当前精确日志为 `desktop-plugin-ui-command-workspace-20261003.log`。正确的窄跑日志为 `desktop-plugin-ui-original-shell-settings-20261003.log`。
+
+本轮没有修改宿主 CSS、主题或原组件 DOM。用户栏的设置入口已在最新预览实际点击打开，各设置分类存在；当前预览没有后端连接，常规页显示设置暂不可用。`trustedModule` 仍是与 Renderer 同权的受信代码，已导入的 ESM 不能卸载；该通道不是安全沙箱，也不等于生产安装产品验收。生产安装管理、main 身份/业务动作桥、实际报价与结算、Krea2/短剧独立包及在线 API 继续待完成，完整目标保持进行中。
+
+原 ComfyUI 服务地址当前只读探测的 `/system_stats` 和 `/queue` 均返回 404；没有提交新生图。证据为 `output/extensions/checks/krea2-service-availability-20261003.json`。后续在线验收等待服务恢复或新的可用地址，独立积分的实际价格及失败结算规则仍待用户确定。
+
 ## 2026-10-03：已安装插件的终态回执维护
 
 原 Worker 的全局回执维护现在轮流借用原工具 owner 与已安装插件 owner。安装侧只扫描有界缓存中真正已准入、已发布的 SDK 实例，不读取新 Run、不加载包，也不请求外部执行权限。维护借用纳入原 users 计数；本地 ACK 继续由原 Store 核验完整持久回执，不能由插件自报成功。没有安装维护端口时保留原路径。

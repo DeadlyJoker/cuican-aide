@@ -383,6 +383,47 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect(wire.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("uses the additive native capability only for file renderers and withdraws it on account changes", async () => {
+    vi.stubGlobal(
+      "location",
+      new URL("file:///Applications/CrewON/index.html"),
+    );
+    const assets = {
+      version: 1 as const,
+      adopt: vi.fn(),
+      release: vi.fn(),
+      invalidate: vi.fn(async () => {}),
+    };
+    Object.defineProperty(window, "crewonDesktop", {
+      configurable: true,
+      value: { version: 1, pluginUiAssets: assets },
+    });
+    try {
+      const fetch = vi.fn(async () =>
+        controlUiResponse({ plugins: [item("example.native")], next: null }),
+      );
+      const client = new ControlApiClient({
+        baseUrl: "http://127.0.0.1:32100",
+        fetch,
+      });
+      await render(client);
+      expect(state.hostModules).toHaveLength(1);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(assets.adopt).not.toHaveBeenCalled();
+      act(() =>
+        window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT)),
+      );
+      await settle();
+      expect(state.hostModules).toEqual([]);
+      expect(assets.invalidate).toHaveBeenCalledTimes(1);
+      await refresh();
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      await render(null);
+      Reflect.deleteProperty(window, "crewonDesktop");
+    }
+  });
+
   it("cancels obsolete StrictMode directory work and stops scheduled polling after unmount", async () => {
     const responses: ReturnType<typeof deferred<Response>>[] = [];
     const wire = controlUiClient(() => {

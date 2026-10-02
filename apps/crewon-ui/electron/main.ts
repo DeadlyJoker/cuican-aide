@@ -7,6 +7,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  protocol,
   safeStorage,
   type IpcMainInvokeEvent,
 } from "electron";
@@ -24,6 +25,11 @@ import {
 import { DesktopHttpTransport } from "./desktopHttp.ts";
 import { bindDesktopHttpLifetime } from "./desktopHttpLifetime.ts";
 import { desktopHttpReply } from "./desktopHttpReply.ts";
+import { DesktopPluginUiAssetBroker } from "./desktopPluginUiAssets.ts";
+import {
+  bindDesktopPluginUiProtocol,
+  bindDesktopPluginUiIpc,
+} from "./desktopPluginUiProtocol.ts";
 import {
   LocalWorkspaceAuthority,
   LocalWorkspaceSandbox,
@@ -53,6 +59,17 @@ if (remoteDebuggingPort && /^\d{4,5}$/u.test(remoteDebuggingPort)) {
 }
 
 const ownsInstance = app.requestSingleInstanceLock();
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "crewon-plugin",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 desktopLog(`starting (singleInstance=${ownsInstance})`);
 if (!ownsInstance) {
   app.quit();
@@ -161,12 +178,25 @@ async function launch(): Promise<void> {
   const window = createWindow();
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
+  const pluginUiAssets = new DesktopPluginUiAssetBroker({
+    controlOwner: () => runtime.currentControlOwner(),
+    session: () => ({
+      ...runtime.session(),
+      generation: runtime.sessionGeneration,
+    }),
+    onDiagnostic: desktopLog,
+  });
+  bindDesktopPluginUiProtocol(window, pluginUiAssets, desktopLog);
+  const removeSessionListener = runtime.onSessionInvalidated(() => {
+    return pluginUiAssets.invalidate();
+  });
   registerIpc({
     agentPlatformCredentials,
     authority,
     browserViews,
     paths,
     providers,
+    pluginUiAssets,
     runtime,
     sandbox,
     window,
@@ -180,7 +210,19 @@ async function launch(): Promise<void> {
       void loadRenderer(createWindow());
   });
   app.on("window-all-closed", () => app.quit());
-  app.on("before-quit", () => void runtime?.stop());
+  let quitting = false;
+  app.on("before-quit", (event) => {
+    if (quitting) return;
+    event.preventDefault();
+    quitting = true;
+    removeSessionListener();
+    void pluginUiAssets
+      .close()
+      .catch(() => desktopLog("desktop_plugin_ui_cleanup_failed"))
+      .then(() => runtime?.stop())
+      .catch(() => desktopLog("runtime_shutdown_failed"))
+      .finally(() => app.quit());
+  });
   app.on("will-quit", closeProcessRuntimeLogs);
   app.on("second-instance", () => {
     if (window.isMinimized()) window.restore();
@@ -245,6 +287,7 @@ function registerIpc(options: {
   browserViews: BrowserViewManager;
   paths: ReturnType<typeof runtimePaths>;
   providers: ProviderCredentialStore;
+  pluginUiAssets: DesktopPluginUiAssetBroker;
   runtime: RuntimeSupervisor;
   sandbox: LocalWorkspaceSandbox;
   window: BrowserWindow;
@@ -255,6 +298,7 @@ function registerIpc(options: {
     browserViews,
     paths,
     providers,
+    pluginUiAssets,
     runtime,
     sandbox,
     window,
@@ -271,6 +315,7 @@ function registerIpc(options: {
   };
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
+  bindDesktopPluginUiIpc(window, pluginUiAssets, ipcMain);
   handle("crewon:agent-platform-credentials:catalog", () =>
     agentPlatformCredentials.catalog(),
   );

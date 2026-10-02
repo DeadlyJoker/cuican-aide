@@ -37,7 +37,7 @@ type Dependencies = Readonly<{
   releaseChild: (child: ChildProcess) => void;
   isCurrent: () => boolean;
   currentChildren: () => DesktopCurrentRuntimeChildren | null;
-  beginControlReplacement: () => void;
+  beginControlReplacement: () => void | Promise<void>;
   registerControlReplacement: (children: DesktopCurrentRuntimeChildren) => void;
   restoreUnchangedControl: () => void;
   finishControlReplacement: (children: DesktopCurrentRuntimeChildren) => void;
@@ -156,7 +156,7 @@ export class DesktopExtensionHistoryCoordinator {
         if (identity === this.#peerIdentity) return;
         const current = dependencies.currentChildren();
         if (current === null) return;
-        dependencies.beginControlReplacement();
+        await dependencies.beginControlReplacement();
         let registered: DesktopCurrentRuntimeChildren | null = null;
         try {
           const replacement = await replaceDesktopControlRuntime({
@@ -213,7 +213,7 @@ export class DesktopExtensionHistoryCoordinator {
       peers: [],
     });
     let registered = failed;
-    dependencies.beginControlReplacement();
+    await dependencies.beginControlReplacement();
     try {
       const replacement = await replaceDesktopControlRuntime({
         current: failed,

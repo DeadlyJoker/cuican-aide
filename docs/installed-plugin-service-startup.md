@@ -31,7 +31,7 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 该桥当前仅支持生成，包 ID 与原 extension ID 必须相同；尚无跨插件委托。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
-Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产代理、生产安装管理、Krea2/短剧独立包和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
+Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。生产安装管理、Krea2/短剧独立包和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
 
 ## 2026-10-03：Worker 已安装执行组合 API
 
@@ -94,3 +94,13 @@ Control 内部 `InstalledPluginTaskActionOwner` 接收真实任务服务、原�
 维护租用保持原 Node owner 和缓存容量。等待中的 Store 读取、物理工具调用、未确认回执和清理失败都不能按空扫描推断资源已释放。闲置退休仍须实际 `canRetire() === true`，随后完成工具与 Node 清理；显式关闭等待当前维护租用。停用与授权撤销阻断外部操作，但不阻止仅凭原持久证据的本地确认。
 
 SQLite/PostgreSQL 专项已验证终态 COMMIT→ACK 中断、撤权后的无外部调用确认和容量释放；正式 Worker 全量 1,417/1,417。该端口不补造生产身份、报价或结算，也不改变旧 Run/Tool 协议。
+
+## 2026-10-03：桌面已安装 UI 资产
+
+Electron 主进程注册私有 `crewon-plugin://ui` 通道，原页面 CSP 仅增加这一固定来源。Renderer 的可选 `pluginUiAssets` v1 桥接收原 Control lease 与预期 Control origin；主进程从实际 RuntimeSupervisor 会话取得凭据和 generation，不能由 Renderer 指定 token、actor 或代理地址。旧 public bootstrap 的凭据行为没有改变。
+
+真实 Session 请求 gate 只允许所属主窗口的当前 mainFrame。主进程核验原完整挂载、当前会话与权限，逐文件检查批准路径、长度、SHA256 和 MIME。入口与相对 chunk 使用同一个有界引用；外来窗口、View、子 frame、旧 generation 和声明外的文件都拒绝。文件读取及后置权限检查共同保留字节预算，清理另有独立并发上限。
+
+会话失效同步关闭入口，实际 Control 停止或替换前等待读取、取消和挂载清理。仅在捕获的实际旧子进程已终止、操作全部结束且没有未知本地 reader 时，远端 mount 可按进程终态退休；取消失败仍保留隔离并报告清理失败。旧桥缺少此能力时不回退到任意 HTTP 或 blob 导入。
+
+专项 71/71 和实际 Electron 43.4.1 安装夹具已验证该通道，证据见实施进度。`trustedModule` 与普通 Renderer 同权，导入后的 ESM 无法卸载；此处不提供 iframe 沙箱，也不代表生产安装管理、业务动作桥或收费流程已接通。

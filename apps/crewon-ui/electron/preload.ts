@@ -15,6 +15,11 @@ import {
   type DesktopHttpReadResult,
   type DesktopHttpWireResult,
 } from "../src/lib/desktop/desktopHttpProtocol.ts";
+import {
+  DESKTOP_PLUGIN_UI_VERSION,
+  type DesktopPluginUiAssets,
+  type DesktopPluginUiBinding,
+} from "../src/lib/desktop/desktopPluginUiProtocol.ts";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>;
@@ -29,6 +34,14 @@ const invokeHttp = async <T>(channel: string, value: unknown): Promise<T> => {
 
 const bridge: CrewonDesktopBridge = {
   version: DESKTOP_BRIDGE_VERSION,
+  pluginUiAssets: Object.freeze<DesktopPluginUiAssets>({
+    version: DESKTOP_PLUGIN_UI_VERSION,
+    adopt: (input) =>
+      invoke<DesktopPluginUiBinding>("crewon:plugin-ui:adopt-v1", input),
+    release: (bindingRef) =>
+      invoke<void>("crewon:plugin-ui:release-v1", bindingRef),
+    invalidate: () => invoke<void>("crewon:plugin-ui:invalidate-v1"),
+  }),
   agentPlatformCredentials: {
     catalog: () =>
       invoke<AgentPlatformCredentialCatalog>(

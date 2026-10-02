@@ -119,6 +119,11 @@ export class RuntimeSupervisor {
   #history: DesktopExtensionHistoryCoordinator | null = null;
   #restart: Promise<void> = Promise.resolve();
   #ready = false;
+  #sessionGeneration = 0;
+  readonly #sessionInvalidationListeners = new Set<
+    () => void | Promise<void>
+  >();
+  readonly #sessionCleanup = new Set<Promise<void>>();
   #stopWatchingChildren: (() => void) | null = null;
   #cloudAgentProfiles: readonly CloudAgentProfile[] = [];
   readonly #logs: RuntimeLogSink;
@@ -329,7 +334,7 @@ export class RuntimeSupervisor {
         { child: children.worker, name: "Runtime Worker" },
       ],
       ({ code, name, signal }) => {
-        this.#ready = false;
+        this.#invalidateSession();
         this.#stopWatchingChildren?.();
         this.#stopWatchingChildren = null;
         this.#logs.write(
@@ -371,8 +376,11 @@ export class RuntimeSupervisor {
       },
       isCurrent: () => this.#runtimeAbort === input.startup,
       currentChildren: () => this.#currentChildren,
-      beginControlReplacement: () => {
-        this.#ready = false;
+      beginControlReplacement: async () => {
+        this.#invalidateSession();
+        const cleanup = await this.#settleSessionCleanup();
+        if (cleanup.some((v) => v.status === "rejected"))
+          throw new Error("native_session_cleanup_failed");
         this.#watchCurrentChildren({ scope: "worker" });
       },
       registerControlReplacement: (children) => {
@@ -447,7 +455,7 @@ export class RuntimeSupervisor {
 
   async stop(): Promise<void> {
     if (this.#stopping !== null) return this.#stopping;
-    this.#ready = false;
+    this.#invalidateSession();
     this.#startupAbort?.abort();
     this.#startupAbort = null;
     this.#runtimeAbort?.abort();
@@ -465,11 +473,20 @@ export class RuntimeSupervisor {
 
   async #stopOwnedRuntime(): Promise<void> {
     const history = this.#history;
+    let nativeCleanup = await this.#settleSessionCleanup();
     const results = await Promise.allSettled([history?.stop()]);
     await this.#stopChildren([...this.#children]);
+    if (nativeCleanup.some((v) => v.status === "rejected")) {
+      // The actual managed Control may now be terminal. Reconcile its captured native owners,
+      // while an uncertain local reader must continue to reject physical cleanup.
+      this.#invalidateSession();
+      nativeCleanup = await this.#settleSessionCleanup();
+    }
     if (this.#children.length === 0) {
       this.#currentChildren = null;
       this.#history = null;
+      if (nativeCleanup.some((v) => v.status === "rejected"))
+        throw new Error("native_session_cleanup_failed");
       return;
     }
     const failures = results.flatMap((result) =>
@@ -491,6 +508,53 @@ export class RuntimeSupervisor {
     } finally {
       this.#logs.suspend();
     }
+  }
+
+  /** Native ownership identity, separate from the public bootstrap/session DTO. */
+  get sessionGeneration(): number {
+    return this.#sessionGeneration;
+  }
+
+  /** Native lifetime owner; never included in the renderer's bootstrap DTO. */
+  currentControlOwner(): ChildProcess {
+    this.session();
+    return this.#currentChildren!.control;
+  }
+
+  onSessionInvalidated(listener: () => void | Promise<void>): () => void {
+    this.#sessionInvalidationListeners.add(listener);
+    return () => this.#sessionInvalidationListeners.delete(listener);
+  }
+
+  #invalidateSession(): void {
+    this.#ready = false;
+    this.#sessionGeneration++;
+    for (const listener of this.#sessionInvalidationListeners) {
+      try {
+        const cleanup = Promise.resolve(listener());
+        this.#sessionCleanup.add(cleanup);
+        void cleanup.then(
+          () => this.#sessionCleanup.delete(cleanup),
+          () => {},
+        );
+      } catch {
+        const failed = Promise.reject(
+          new Error("native_session_cleanup_failed"),
+        );
+        this.#sessionCleanup.add(failed);
+        void failed.catch(() => {});
+      }
+    }
+  }
+
+  async #settleSessionCleanup(): Promise<PromiseSettledResult<void>[]> {
+    const results: PromiseSettledResult<void>[] = [];
+    while (this.#sessionCleanup.size) {
+      const pending = [...this.#sessionCleanup];
+      results.push(...(await Promise.allSettled(pending)));
+      for (const task of pending) this.#sessionCleanup.delete(task);
+    }
+    return results;
   }
 
   session(): ControlRuntimeSession {
