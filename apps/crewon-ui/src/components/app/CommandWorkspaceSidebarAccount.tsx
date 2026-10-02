@@ -8,17 +8,20 @@ export function SidebarAccount({
   locale = "zh",
   onSettings,
 }: {
-  account: AgentPlatformAccount;
+  account: AgentPlatformAccount | null;
   locale?: Locale;
   onSettings?: () => void;
 }) {
-  const displayName =
-    (
-      account.user.display_name ||
-      account.user.nickname ||
-      account.user.username
-    ).trim() || account.user.username;
-  const initial = displayName.charAt(0).toUpperCase() || "U";
+  const displayName = account
+    ? (
+        account.user.display_name ||
+        account.user.nickname ||
+        account.user.username
+      ).trim() || account.user.username
+    : locale === "zh"
+      ? "未登录"
+      : "Signed out";
+  const initial = account ? displayName.charAt(0).toUpperCase() || "U" : "?";
   const accountMenuRef = useRef<HTMLDetailsElement>(null);
   /*
    * Closing on blur ate the click: focus leaves `summary` on pointerdown, so the
@@ -39,16 +42,27 @@ export function SidebarAccount({
     return () =>
       document.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, []);
-  const secondaryLabel =
-    account.providerLabel !== displayName
+  const secondaryLabel = account
+    ? account.providerLabel !== displayName
       ? account.providerLabel
       : account.user.username !== displayName
         ? account.user.username
-        : account.providerLabel;
+        : account.providerLabel
+    : locale === "zh"
+      ? "页面预览"
+      : "Page preview";
 
   return (
     <footer
-      aria-label={locale === "zh" ? "当前企业账号" : "Current account"}
+      aria-label={
+        account
+          ? locale === "zh"
+            ? "当前企业账号"
+            : "Current account"
+          : locale === "zh"
+            ? "账号"
+            : "Account"
+      }
       className="sidebar-account"
       data-od-id="desktop-account-entry"
     >
@@ -76,7 +90,9 @@ export function SidebarAccount({
           <span className="sidebar-account-copy">
             <strong>{displayName}</strong>
             <small>{secondaryLabel}</small>
-          </span>          <span className="sidebar-account-chevron" aria-hidden="true">
+          </span>
+          {"          "}
+          <span className="sidebar-account-chevron" aria-hidden="true">
             <ChevronUp />
           </span>
         </summary>
@@ -94,7 +110,7 @@ export function SidebarAccount({
               <span>{locale === "zh" ? "设置" : "Settings"}</span>
             </button>
           ) : null}
-          {account.needsPassword ? (
+          {account?.needsPassword ? (
             <button
               role="menuitem"
               type="button"
@@ -109,18 +125,20 @@ export function SidebarAccount({
               </span>
             </button>
           ) : null}
-          <button
-            className="danger"
-            role="menuitem"
-            type="button"
-            onClick={(event) => {
-              event.currentTarget.closest("details")?.removeAttribute("open");
-              account.onLogout();
-            }}
-          >
-            <LogOut aria-hidden="true" />
-            <span>{locale === "zh" ? "退出登录" : "Sign out"}</span>
-          </button>
+          {account ? (
+            <button
+              className="danger"
+              role="menuitem"
+              type="button"
+              onClick={(event) => {
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                account.onLogout();
+              }}
+            >
+              <LogOut aria-hidden="true" />
+              <span>{locale === "zh" ? "退出登录" : "Sign out"}</span>
+            </button>
+          ) : null}
         </div>
       </details>
     </footer>

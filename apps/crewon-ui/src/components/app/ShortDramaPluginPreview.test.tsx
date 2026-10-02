@@ -16,6 +16,14 @@ import {
 } from "../../lib/platform";
 import { DEFAULT_APPEARANCE } from "../../lib/appearance/appearancePreferences";
 import { setAppliedAppearance } from "../../lib/appearance/appearanceRuntime";
+import {
+  LOCAL_APPEARANCE_KEY,
+  persistLocalAppearanceField,
+} from "../../lib/appearance/localAppearanceStore";
+import {
+  settingsCatalog,
+  settingsSectionLabel,
+} from "../../lib/settings/settingsCatalog";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -28,6 +36,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-08-03T12:00:00+08:00"));
   window.history.replaceState(null, "", "/");
   initializeShortDramaPreviewSurface();
+  window.localStorage.removeItem(LOCAL_APPEARANCE_KEY);
 });
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
@@ -41,6 +50,7 @@ afterEach(async () => {
       document.documentElement.removeAttribute(attribute.name);
   vi.useRealTimers();
   vi.restoreAllMocks();
+  window.localStorage.removeItem(LOCAL_APPEARANCE_KEY);
 });
 
 async function click(element: Element | null) {
@@ -141,7 +151,110 @@ describe("ShortDramaPluginPreview", () => {
       />,
     );
     expect(markup).not.toContain("data-host-module-");
+    expect(markup).not.toContain('class="sidebar-account"');
     expect(markup).toContain("让 CrewON 完成你的工作");
+  });
+
+  it("opens every existing settings page from the signed-out footer and returns to the same project without requests or writes", async () => {
+    persistLocalAppearanceField("uiFontSize", "17");
+    const savedAppearance = window.localStorage.getItem(LOCAL_APPEARANCE_KEY);
+    const storageWrite = vi.spyOn(window.localStorage, "setItem");
+    const fetch = vi.spyOn(globalThis, "fetch");
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root!.render(<ShortDramaPluginPreview referenceImage="/sample.png" />),
+    );
+    const shell = container.querySelector<HTMLElement>(
+      ".short-drama-plugin-preview",
+    )!;
+    // The unchanged shell initializes its existing local unread-event cache on mount.
+    // Observe settings interactions after that unrelated initialization.
+    storageWrite.mockClear();
+    const sidebar = shell.querySelector(".command-sidebar");
+    const footer = sidebar!.querySelector(".sidebar-account")!;
+    expect(footer.getAttribute("aria-label")).toBe("账号");
+    expect(footer.textContent).toContain("未登录");
+    expect(footer.textContent).toContain("页面预览");
+    expect(footer.textContent).not.toContain("退出登录");
+    expect(container.querySelector(".settings-command-screen")).toBeNull();
+    await click(
+      sidebar!.querySelector('[data-host-module-target="crewon.short-drama"]'),
+    );
+    const pane = shell.querySelector<HTMLElement>(
+      '[data-host-module-id="crewon.short-drama"]',
+    )!;
+    await click(pane.querySelector(".project-grid button"));
+    const projectName = pane.querySelector(".page-heading h1")!.textContent;
+    await click(shell.querySelector(".command-workbench-trigger"));
+    const workbench = shell.querySelector<HTMLElement>(".command-workbench")!;
+    expect(workbench.hidden).toBe(false);
+    const menu = footer.querySelector<HTMLDetailsElement>("details")!;
+    menu.open = true;
+    await click(footer.querySelector('[role="menuitem"]'));
+    expect(menu.open).toBe(false);
+    expect(shell.hidden).toBe(true);
+    expect(workbench.hidden).toBe(true);
+    const settings = container.querySelector<HTMLElement>(
+      ".settings-command-screen",
+    )!;
+    expect(settings).not.toBeNull();
+    expect(settings.textContent).toContain("设置暂不可用");
+    for (const group of settingsCatalog) {
+      for (const item of group.items) {
+        const button = [
+          ...settings.querySelectorAll(".settings-nav-group button"),
+        ].find(
+          (candidate) =>
+            candidate.querySelector("strong")?.textContent ===
+            settingsSectionLabel(item.id, "zh"),
+        );
+        await click(button ?? null);
+        expect(
+          settings.querySelector<HTMLElement>(".settings-page")?.dataset
+            .section,
+        ).toBe(item.id);
+      }
+    }
+    await click(
+      [...settings.querySelectorAll(".settings-nav-group button")].find(
+        (button) => button.querySelector("strong")?.textContent === "外观",
+      ) ?? null,
+    );
+    const appearance = settings.querySelector<HTMLInputElement>(
+      'input[type="number"]',
+    )!;
+    expect(appearance.value).toBe("17");
+    expect(appearance.disabled).toBe(true);
+    const search = settings.querySelector<HTMLInputElement>(
+      ".settings-search input",
+    )!;
+    search.focus();
+    const shortcut = new KeyboardEvent("keydown", {
+      key: "p",
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => document.dispatchEvent(shortcut));
+    expect(shortcut.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(search);
+    await click(settings.querySelector(".settings-back-button"));
+    expect(shell.hidden).toBe(false);
+    expect(workbench.hidden).toBe(false);
+    expect(pane.querySelector(".page-heading h1")?.textContent).toBe(
+      projectName,
+    );
+    expect(shell.querySelector(".command-sidebar")).toBe(sidebar);
+    expect(
+      shell.querySelector('[data-host-module-id="crewon.short-drama"]'),
+    ).toBe(pane);
+    expect(window.localStorage.getItem(LOCAL_APPEARANCE_KEY)).toBe(
+      savedAppearance,
+    );
+    expect(storageWrite).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("keeps the real desktop frame and appearance detection aligned without granting a native bridge", () => {

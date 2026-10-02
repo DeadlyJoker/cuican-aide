@@ -142,7 +142,10 @@ export function pluginUiAssetUrl(
   base: string,
   mountRef: string,
   path: string,
+  routeStyle: PluginUiAssetRouteStyle = "mount-root",
 ): string {
+  if (routeStyle !== "mount-root" && routeStyle !== "control-mount-assets")
+    uiFailure("plugin_ui_asset_route_invalid");
   if (
     !/^[A-Za-z0-9_-]{32,128}$/u.test(mountRef) ||
     path
@@ -155,8 +158,11 @@ export function pluginUiAssetUrl(
     path.startsWith("/")
   )
     uiFailure("plugin_ui_asset_path_invalid");
-  return `${base}/${mountRef}/${path.split("/").map(encodeURIComponent).join("/")}`;
+  const assets = routeStyle === "control-mount-assets" ? "/assets" : "";
+  return `${base}/${mountRef}${assets}/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
+
+export type PluginUiAssetRouteStyle = "mount-root" | "control-mount-assets";
 
 export function abortedPluginUiOperation(): PluginUiLoaderError {
   return new PluginUiLoaderError("plugin_ui_operation_aborted");

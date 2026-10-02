@@ -39,7 +39,8 @@ import {
 } from "./CommandWorkspaceChrome";
 import {
   CommandWorkspaceHostModulePane,
-  useCommandWorkspaceHostModule,
+  mergeCommandWorkspaceHostModules,
+  useCommandWorkspaceHostModules,
   type CommandWorkspaceHostModule,
   type CommandWorkspacePlatformSnapshotLoader,
 } from "./CommandWorkspaceHostModule";
@@ -296,6 +297,7 @@ export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 type CommandWorkspaceProps = {
   businessExtensionEntry?: ReactNode;
   hostModule?: CommandWorkspaceHostModule;
+  hostModules?: readonly CommandWorkspaceHostModule[];
   platformSnapshotLoader?: CommandWorkspacePlatformSnapshotLoader;
   backgroundRunActive?: boolean;
   threadCatalogNavigation?: ThreadCatalogNavigation;
@@ -433,6 +435,8 @@ type CommandWorkspaceProps = {
   onEnsureAssistantThread?: () => Promise<Thread | null>;
   onModeChange: (mode: WorkMode) => void;
   onOpenSettings?: () => void;
+  /** Explicit preview-host footer; defaults to the original authenticated-account behavior. */
+  showSignedOutAccount?: boolean;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onSceneChange?: (scene: CommandScene) => void;
   onRetryConnection: () => void;
@@ -810,6 +814,7 @@ export function shouldCloseComposerPalette({
 export function CommandWorkspace({
   businessExtensionEntry = null,
   hostModule,
+  hostModules,
   platformSnapshotLoader = readAgentPlatformSnapshot,
   teamProgress = null,
   activeTurnId = null,
@@ -861,6 +866,7 @@ export function CommandWorkspace({
   onEnsureAssistantThread,
   onModeChange,
   onOpenSettings,
+  showSignedOutAccount = false,
   onSaveCapability,
   onSceneChange,
   onRemoveComposerMention,
@@ -878,7 +884,7 @@ export function CommandWorkspace({
   onSetThreadGoalStatus,
   providerResource,
 }: CommandWorkspaceProps) {
-  const hostModuleView = useCommandWorkspaceHostModule(hostModule);
+  const modules = mergeCommandWorkspaceHostModules({ hostModule, hostModules });
   // The browser is an outcome-focused surface. Advanced execution controls and
   // local inspection remain available in the desktop application.
   const compactWeb = platform === "web";
@@ -932,6 +938,12 @@ export function CommandWorkspace({
       : "office",
   );
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
+  const hostModuleView = useCommandWorkspaceHostModules(modules, {
+    navigationScope: JSON.stringify([
+      selectedThreadId ?? selectedThread?.id ?? null,
+      scene,
+    ]),
+  });
   useEffect(() => {
     onSceneChange?.(scene);
   }, [onSceneChange, scene]);
@@ -2291,6 +2303,7 @@ export function CommandWorkspace({
   }
 
   function switchScene(nextScene: CommandScene) {
+    hostModuleView.close();
     setScene(nextScene);
     setSceneMode("auto");
     if (!newTaskDraft && selectedThreadId !== null) {
@@ -3247,20 +3260,16 @@ export function CommandWorkspace({
       >
         <CommandSidebar
           activeView={activeView}
-          hostModule={
-            hostModule
-              ? {
-                  id: hostModule.id,
-                  label: hostModule.label,
-                  active: hostModuleView.active,
-                  onOpen: () => {
-                    closeComposerPalette();
-                    setSidebarSearchOpen(false);
-                    hostModuleView.open();
-                  },
-                }
-              : undefined
-          }
+          hostModules={modules.map((module) => ({
+            id: module.id,
+            label: module.label,
+            active: hostModuleView.selectedId === module.id,
+            onOpen: () => {
+              closeComposerPalette();
+              setSidebarSearchOpen(false);
+              hostModuleView.open(module.id);
+            },
+          }))}
           controlWorkspace={
             workspaceAuthority === "control"
               ? (controlWorkspaceNav ?? undefined)
@@ -3307,6 +3316,7 @@ export function CommandWorkspace({
           }
           onOpenLinkedThread={openLinkedThread}
           onOpenSettings={onOpenSettings}
+          showSignedOutAccount={showSignedOutAccount}
           onQueryChange={setSidebarSearchQuery}
           onSwitchView={switchView}
           onToggleCollapse={() =>
@@ -3321,9 +3331,7 @@ export function CommandWorkspace({
           <section
             className={classNames(
               "shell-view command-home-view",
-              !hostModuleView.active &&
-                activeView === "command" &&
-                "active",
+              !hostModuleView.active && activeView === "command" && "active",
               showCommandThread && "has-command-thread",
             )}
             data-shell-view="command"
@@ -4256,10 +4264,13 @@ export function CommandWorkspace({
               onSubmit={(input) => void createWorkflowDefinition(input)}
             />
           ) : null}
-          <CommandWorkspaceHostModulePane
-            module={hostModule}
-            active={hostModuleView.active}
-          />
+          {modules.map((module) => (
+            <CommandWorkspaceHostModulePane
+              key={module.id}
+              module={module}
+              active={hostModuleView.selectedId === module.id}
+            />
+          ))}
         </section>
       </section>
     </section>

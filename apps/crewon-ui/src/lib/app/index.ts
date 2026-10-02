@@ -59,6 +59,7 @@ export { useAppPendingServerRequests } from "./useAppPendingServerRequests";
 export { useAppRunTrackingRefs } from "./useAppRunTrackingRefs";
 export { useAppServerEventHandlerSet } from "./useAppServerEventHandlerSet";
 export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
+export { useInstalledPluginModules } from "./useInstalledPluginModules";
 export { useAppSlashCommands } from "./useAppSlashCommands";
 export { useAppTerminalState } from "./useAppTerminalState";
 export { useAppThreadSelection } from "./useAppThreadSelection";

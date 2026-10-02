@@ -1,10 +1,29 @@
-import { MAX_OFFICE_THREAD_RESPONSE_BYTES, parseOfficeThreadResponse, parseOfficeThreadMutationResponse, parseBindOfficeThreadRequest, type OfficeThreadResponse, type OfficeThreadMutationResponse, type BindOfficeThreadRequest } from "@crewon/contracts";
-import { MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES, type GetThreadActiveRunResponse } from "@crewon/contracts";
-import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
-import { MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES, parseThreadTranscriptWindowResponse, type GetThreadTranscriptWindowResponse } from "@crewon/contracts";
 import {
-  MAX_THREAD_CATALOG_RESPONSE_BYTES, parseThreadCatalogQuery, parseThreadCatalogResponse,
-  threadCatalogPath, type ThreadCatalogRequest, type ThreadCatalogResponse,
+  MAX_OFFICE_THREAD_RESPONSE_BYTES,
+  parseOfficeThreadResponse,
+  parseOfficeThreadMutationResponse,
+  parseBindOfficeThreadRequest,
+  type OfficeThreadResponse,
+  type OfficeThreadMutationResponse,
+  type BindOfficeThreadRequest,
+} from "@crewon/contracts";
+import {
+  MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES,
+  type GetThreadActiveRunResponse,
+} from "@crewon/contracts";
+import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
+import {
+  MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES,
+  parseThreadTranscriptWindowResponse,
+  type GetThreadTranscriptWindowResponse,
+} from "@crewon/contracts";
+import {
+  MAX_THREAD_CATALOG_RESPONSE_BYTES,
+  parseThreadCatalogQuery,
+  parseThreadCatalogResponse,
+  threadCatalogPath,
+  type ThreadCatalogRequest,
+  type ThreadCatalogResponse,
 } from "@crewon/contracts";
 import {
   MAX_THREAD_MESSAGE_WINDOW_RESPONSE_BYTES,
@@ -213,6 +232,11 @@ export class ControlApiClient {
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
+  /** The validated HTTP request origin, without session secrets or a configurable asset URL. */
+  get requestOrigin(): string {
+    return this.#baseUrl.origin;
+  }
+
   async getExecutionIntentCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<ExecutionIntentCapabilityResponse> {
@@ -245,7 +269,9 @@ export class ControlApiClient {
     return this.#extensionClient().getConfiguration(pluginId, query, options);
   }
 
-  listExtensions(options: ControlApiRequestOptions = {}): Promise<ExtensionCatalogResponse> {
+  listExtensions(
+    options: ControlApiRequestOptions = {},
+  ): Promise<ExtensionCatalogResponse> {
     return this.#extensionClient().list(options);
   }
 
@@ -936,11 +962,30 @@ export class ControlApiClient {
     options: ControlApiRequestOptions = {},
   ): Promise<GetThreadTranscriptWindowResponse> {
     const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
-    const response = await this.#json<unknown>("GET", withQuery(
-      `/api/v1/threads/${resourceId(threadId)}/transcript-window`, query,
-    ), null, { ...options, expectedStatuses: [200], maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES });
-    try { return parseThreadTranscriptWindowResponse(response, threadId, parsedQuery); }
-    catch { throw new ControlApiProtocolError("control_client_transcript_window_invalid"); }
+    const response = await this.#json<unknown>(
+      "GET",
+      withQuery(
+        `/api/v1/threads/${resourceId(threadId)}/transcript-window`,
+        query,
+      ),
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadTranscriptWindowResponse(
+        response,
+        threadId,
+        parsedQuery,
+      );
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_transcript_window_invalid",
+      );
+    }
   }
 
   listThreadMessages(
@@ -1213,7 +1258,11 @@ export class ControlApiClient {
     });
   }
 
-  async getRunInThread(threadId: string, runId: string, options: ControlApiRequestOptions = {}): Promise<GetRunResponse> {
+  async getRunInThread(
+    threadId: string,
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetRunResponse> {
     const response = await this.getRun(runId, options);
     try {
       const run = parseRunView(response.run, threadId);

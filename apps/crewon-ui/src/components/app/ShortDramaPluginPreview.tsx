@@ -4,6 +4,7 @@ import { AppCommandShellRoute } from "./AppCommandShellRoute";
 import { emptyAgentPlatformSnapshot } from "./commandWorkspaceState";
 import { ShortDramaWorkbenchPreview } from "../short-drama/ShortDramaWorkbenchPreview";
 import { DesktopWindowFrame } from "../DesktopWindowFrame";
+import { ShortDramaPreviewSettings } from "./ShortDramaPreviewSettings";
 import { Toaster } from "../ui/sonner";
 import { emptyTerminalOutputStream } from "../../lib/terminal/terminalOutputStream";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
@@ -37,16 +38,19 @@ export function ShortDramaPluginPreview({
   const [composerValue, setComposerValue] = useState("");
   const [workbenchOpen, setWorkbenchOpen] = useState(false);
   const [scene, setScene] = useState<CommandScene>("office");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsVisited, setSettingsVisited] = useState(false);
   return (
     <DesktopWindowFrame>
-      <div className="short-drama-plugin-preview">
+      <div className="short-drama-plugin-preview" hidden={settingsOpen}>
         <AppCommandShellRoute
           capabilityDrawer={{
             busyToolId: null,
             commandValue: "",
             disabled: true,
             locale: "zh",
-            open: workbenchOpen,
+            // Suspend the drawer's document shortcuts while the existing shell stays mounted.
+            open: workbenchOpen && !settingsOpen,
             panel: null,
             scene,
             terminalCwd: null,
@@ -89,10 +93,14 @@ export function ShortDramaPluginPreview({
           platformSnapshotLoader={readPreviewPlatformSnapshot}
           workMode="office"
           workspaceAuthority="control"
+          showSignedOutAccount
           onAttachContext={previewNotice}
           onChangeComposerValue={setComposerValue}
           onModeChange={previewNotice}
-          onOpenSettings={previewNotice}
+          onOpenSettings={() => {
+            setSettingsVisited(true);
+            setSettingsOpen(true);
+          }}
           onRetryConnection={previewNotice}
           onSceneChange={setScene}
           onSend={previewNotice}
@@ -100,6 +108,11 @@ export function ShortDramaPluginPreview({
           onSendNewThread={previewNotice}
         />
       </div>
+      {settingsVisited ? (
+        <div hidden={!settingsOpen}>
+          <ShortDramaPreviewSettings onBack={() => setSettingsOpen(false)} />
+        </div>
+      ) : null}
       <Toaster closeButton gap={6} offset={52} position="top-right" />
     </DesktopWindowFrame>
   );

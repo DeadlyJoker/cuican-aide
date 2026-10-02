@@ -258,6 +258,48 @@ describe("trusted UI loader (explicit importer unit tests)", () => {
     expect(h.importModule).not.toHaveBeenCalled();
   });
 
+  it("supports the exact Control mounted-assets route without changing the default route", () => {
+    const lease = uiLease();
+    expect(
+      pluginUiAssetUrl(
+        "/api/v1/plugins/ui/mounts",
+        lease.mountRef,
+        "assets/封面.png",
+        "control-mount-assets",
+      ),
+    ).toBe(
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/assets/assets/%E5%B0%81%E9%9D%A2.png`,
+    );
+    expect(
+      pluginUiAssetUrl("/api/plugin-ui/assets", lease.mountRef, "ui/index.js"),
+    ).toBe(`/api/plugin-ui/assets/${lease.mountRef}/ui/index.js`);
+    expect(() =>
+      pluginUiAssetUrl(
+        "/api/v1/plugins/ui/mounts",
+        lease.mountRef,
+        "ui/index.js",
+        "unknown" as never,
+      ),
+    ).toThrow("plugin_ui_asset_route_invalid");
+    const h = uiHarness();
+    expect(
+      () =>
+        new TrustedPluginUiLoader({
+          ports: h.ports,
+          assetBasePath: "/api/v1/plugins/ui/mounts",
+          routeStyle: "unknown" as never,
+        }),
+    ).toThrow("plugin_ui_asset_route_invalid");
+    expect(
+      () =>
+        new TrustedPluginUiLoader({
+          ports: h.ports,
+          assetBasePath: "/api/v1/plugins/ui/mounts",
+          routeStyle: null as never,
+        }),
+    ).toThrow("plugin_ui_asset_route_invalid");
+  });
+
   it("closes a valid acquired lease even when props fail before importing", async () => {
     const h = uiHarness();
     await expect(

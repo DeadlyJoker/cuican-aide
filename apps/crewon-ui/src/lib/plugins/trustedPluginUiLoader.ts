@@ -24,6 +24,7 @@ import {
   pluginUiAssetUrl,
   uiFailure,
   uiRecord,
+  type PluginUiAssetRouteStyle,
 } from "./pluginUiValidation";
 
 export type PluginUiHostPorts = Readonly<{
@@ -92,6 +93,7 @@ type Candidate = {
 export class TrustedPluginUiLoader {
   readonly #ports: PluginUiHostPorts;
   readonly #assetBasePath: string;
+  readonly #routeStyle: PluginUiAssetRouteStyle;
   readonly #importer: PluginUiModuleImporter;
   readonly #slots = new WeakMap<HTMLElement, Slot>();
   readonly #cleanupPending = new Set<Candidate>();
@@ -102,6 +104,7 @@ export class TrustedPluginUiLoader {
     options: Readonly<{
       ports: PluginUiHostPorts;
       assetBasePath: string;
+      routeStyle?: PluginUiAssetRouteStyle;
       importer?: PluginUiModuleImporter;
     }>,
   ) {
@@ -122,6 +125,13 @@ export class TrustedPluginUiLoader {
       onDiagnostic: options.ports.onDiagnostic.bind(options.ports),
     });
     this.#assetBasePath = checkedPluginUiAssetBase(options.assetBasePath);
+    this.#routeStyle =
+      options.routeStyle === undefined ? "mount-root" : options.routeStyle;
+    if (
+      this.#routeStyle !== "mount-root" &&
+      this.#routeStyle !== "control-mount-assets"
+    )
+      uiFailure("plugin_ui_asset_route_invalid");
     this.#importer = options.importer ?? importTrustedPluginUiModule;
   }
 
@@ -170,7 +180,12 @@ export class TrustedPluginUiLoader {
         uiFailure("plugin_ui_mode_unsupported");
       if (!lease.publicAssets.includes(entry.path))
         uiFailure("plugin_ui_entry_not_public");
-      url = pluginUiAssetUrl(this.#assetBasePath, lease.mountRef, entry.path);
+      url = pluginUiAssetUrl(
+        this.#assetBasePath,
+        lease.mountRef,
+        entry.path,
+        this.#routeStyle,
+      );
       if (
         !root ||
         root.nodeType !== 1 ||

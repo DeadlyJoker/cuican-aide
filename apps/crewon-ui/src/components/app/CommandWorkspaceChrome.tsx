@@ -32,6 +32,7 @@ import {
 } from "react";
 
 import { shellNavItems } from "./commandWorkspaceData";
+import { mergeCommandWorkspaceHostModules } from "./CommandWorkspaceHostModule";
 import {
   commandSidebarThreadHasUnreadSignal,
   type CommandSidebarThreadScope,
@@ -185,6 +186,7 @@ export function CommandSidebar({
   threadCatalogNavigation,
   activeView,
   hostModule,
+  hostModules,
   controlWorkspace,
   cwd,
   isSearchOpen,
@@ -193,6 +195,7 @@ export function CommandSidebar({
   platform = "web",
   query,
   selectedLinkedThreadId,
+  showSignedOutAccount = false,
   slots,
   workspaceAuthority,
   onCreateWorkspace,
@@ -214,6 +217,12 @@ export function CommandSidebar({
     active: boolean;
     onOpen(): void;
   }>;
+  hostModules?: readonly Readonly<{
+    id: string;
+    label: string;
+    active: boolean;
+    onOpen(): void;
+  }>[];
   controlWorkspace?: CommandControlWorkspaceNav;
   cwd: string;
   isSearchOpen: boolean;
@@ -222,6 +231,8 @@ export function CommandSidebar({
   platform?: PlatformKind;
   query: string;
   selectedLinkedThreadId: string | null;
+  /** Explicit preview-host chrome; does not establish an authenticated account. */
+  showSignedOutAccount?: boolean;
   slots: CommandHomeSlots;
   workspaceAuthority: CommandWorkspaceAuthority;
   onCloseSearch: () => void;
@@ -235,6 +246,8 @@ export function CommandSidebar({
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
 }) {
+  const modules = mergeCommandWorkspaceHostModules({ hostModule, hostModules });
+  const moduleActive = modules.some((module) => module.active);
   const account = useAgentPlatformAccount();
   /*
    * This drives layout only: the drag region and the brand offset that clears
@@ -485,12 +498,10 @@ export function CommandSidebar({
         {shellNavItems.map((item) => (
           <button
             aria-current={
-              !hostModule?.active && activeView === item.key
-                ? "page"
-                : undefined
+              !moduleActive && activeView === item.key ? "page" : undefined
             }
             className={classNames(
-              !hostModule?.active && activeView === item.key && "active",
+              !moduleActive && activeView === item.key && "active",
             )}
             data-nav-key={item.key}
             data-shell-view-target={item.key}
@@ -527,28 +538,27 @@ export function CommandSidebar({
             ) : null}
           </button>
         ))}
-        {hostModule ? (
+        {modules.map((module) => (
           <button
-            aria-current={hostModule.active ? "page" : undefined}
-            className={classNames(hostModule.active && "active")}
-            data-host-module-target={hostModule.id}
+            aria-current={module.active ? "page" : undefined}
+            className={classNames(module.active && "active")}
+            data-host-module-target={module.id}
+            key={module.id}
             type="button"
-            onClick={hostModule.onOpen}
+            onClick={module.onOpen}
           >
             <span className="nav-glyph" aria-hidden="true">
               <Blocks aria-hidden="true" />
             </span>
-            <strong>{hostModule.label}</strong>
+            <strong>{module.label}</strong>
           </button>
-        ) : null}
+        ))}
         <button
           aria-current={
-            !hostModule?.active && activeView === "knowledge"
-              ? "page"
-              : undefined
+            !moduleActive && activeView === "knowledge" ? "page" : undefined
           }
           className={classNames(
-            !hostModule?.active && activeView === "knowledge" && "active",
+            !moduleActive && activeView === "knowledge" && "active",
           )}
           data-run-title-zh="知识库"
           data-run-title-en="Knowledge base"
@@ -593,7 +603,7 @@ export function CommandSidebar({
         controlWorkspace={controlWorkspace}
       />
 
-      {account ? (
+      {account || showSignedOutAccount ? (
         <SidebarAccount
           account={account}
           locale={locale}

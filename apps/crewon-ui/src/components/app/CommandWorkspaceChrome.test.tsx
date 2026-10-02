@@ -541,6 +541,21 @@ describe("CommandSidebar", () => {
 });
 
 describe("SidebarAccount", () => {
+  it("keeps the original footer style for an explicit signed-out preview without account actions", () => {
+    const markup = renderToStaticMarkup(
+      <SidebarAccount account={null} onSettings={vi.fn()} />,
+    );
+
+    expect(markup).toContain('aria-label="账号"');
+    expect(markup).toContain('class="sidebar-account"');
+    expect(markup).toContain("未登录");
+    expect(markup).toContain("页面预览");
+    expect(markup).toContain("设置");
+    expect(markup).not.toContain("当前企业账号");
+    expect(markup).not.toContain("退出登录");
+    expect(markup).not.toContain("设置登录密码");
+  });
+
   it("prefers the synchronized enterprise display name", () => {
     const markup = renderToStaticMarkup(
       <SidebarAccount

@@ -16,6 +16,7 @@ export type PluginModuleMountProps = Readonly<{
   props: PluginUiProps;
   className?: string;
   onError?(error: unknown): void;
+  onMounted?(): void;
 }>;
 
 /** A content-slot mount only. Navigation, theme initialization and the application shell remain host-owned. */
@@ -27,6 +28,7 @@ export function PluginModuleMount({
   props,
   className,
   onError,
+  onMounted,
 }: PluginModuleMountProps) {
   const root = useRef<HTMLDivElement>(null);
   const current = useRef<{ handle: PluginUiMountHandle; key: string } | null>(
@@ -36,8 +38,10 @@ export function PluginModuleMount({
   const epoch = useRef(0);
   const latestProps = useRef(props);
   const errorHandler = useRef(onError);
+  const mountedHandler = useRef(onMounted);
   latestProps.current = props;
   errorHandler.current = onError;
+  mountedHandler.current = onMounted;
 
   function report(error: unknown) {
     if (
@@ -92,6 +96,7 @@ export function PluginModuleMount({
       if (pending.current === controller) pending.current = null;
       if (latestProps.current !== initialProps)
         await handle.update(latestProps.current);
+      if (isCurrent()) mountedHandler.current?.();
     };
     void mount().catch(report);
     // A pending replacement is cancelled, while an already published previous module stays until the new one is ready.

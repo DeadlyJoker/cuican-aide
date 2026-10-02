@@ -52,6 +52,7 @@ import {
   useAppSlashCommands,
   useAppWorkspaceStatusState,
   useAppShellRuntimeState,
+  useInstalledPluginModules,
   useAppTerminalState,
   useAppThreadSelection,
   useAppServerEventHandlerSet,
@@ -150,6 +151,12 @@ export function App({
     setTheme,
     theme,
   } = useAppShellRuntimeState();
+  const installedPlugins = useInstalledPluginModules({
+    client: controlClient,
+    sessionKey: platformAccount ? String(platformAccount.user.id) : null,
+    theme,
+    locale,
+  });
   const {
     appView,
     appViewRef,
@@ -1261,6 +1268,7 @@ export function App({
       <StreamingTextScope presentation={threadState.streamingTextPresentation}>
         <TranscriptNavigationScope runtime={controlThreadRuntime}>
           <AppCommandShellRoute
+            hostModules={installedPlugins.hostModules}
             teamProgress={
               commandShellRuntime.selectedThreadId
                 ? (teamProgressByThread[commandShellRuntime.selectedThreadId] ??
