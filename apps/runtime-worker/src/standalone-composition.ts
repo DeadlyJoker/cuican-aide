@@ -35,6 +35,8 @@ import type {
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
+import { preparePluginTaskAdmissionProbe } from "./plugins/plugin-task-admission-probe.ts";
+import type { InstalledPluginRunRuntimeResolverPort } from "./plugins/installed-plugin-run-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import { type AgentVersionRuntime } from "./agent-version-runtime.ts";
@@ -129,6 +131,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   extensionRuntime?: RuntimeExtensionCompositionConfig;
   extensionHost?: RuntimeExtensionHostConfig;
   extensionExecutionMode?: ExtensionExecutionMode;
+  /** Trusted composition only; never inferred from package metadata or a fixed preview identity. */
+  installedPluginRuntimeResolver?: InstalledPluginRunRuntimeResolverPort;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -338,6 +342,8 @@ function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
     config.toolRuntime === undefined
       ? undefined
       : lifetime.own(config.toolRuntime, { phase: "resources" });
+  if (config.installedPluginRuntimeResolver !== undefined)
+    lifetime.own(config.installedPluginRuntimeResolver, { phase: "resources" });
   for (const gateway of [
     config.workspacePrivate?.gateway,
     config.workspaceReadFile?.gateway,
@@ -387,6 +393,11 @@ async function composeRuntimeWorker(
     config.extensionRuntime === undefined
   )
     await store.extensionStore().migrate();
+  const pluginTaskAdmissions =
+    workItemExecutionScope !== undefined ||
+    config.installedPluginRuntimeResolver !== undefined
+      ? await preparePluginTaskAdmissionProbe(store)
+      : store.pluginTaskAdmissionProbe();
   const agentVersionRuntimeFactory =
     config.extensionRuntime === undefined
       ? config.agentVersionRuntimeFactory
@@ -534,6 +545,8 @@ async function composeRuntimeWorker(
         config.modelSwitchCompactionResolver ??
         runtimeResolver.priorModelCompactionResolver(),
       agentVersionRuntimeResolver: runtimeResolver,
+      pluginTaskAdmissions,
+      installedPluginRuntimeResolver: config.installedPluginRuntimeResolver,
       policy,
     },
     {

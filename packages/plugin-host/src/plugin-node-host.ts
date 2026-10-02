@@ -17,6 +17,12 @@ import type {
   PluginNodePreparedActivation,
   PluginNodePreparedCommit,
 } from "./plugin-node-preparation.ts";
+import type { PluginHostService } from "./plugin-host-service.ts";
+import { registerPluginNodeLease } from "./plugin-node-lease-authority.ts";
+export type {
+  PluginHostService,
+  PluginHostServiceLifetime,
+} from "./plugin-host-service.ts";
 export type {
   PluginNodeDependencyIdentity,
   PluginNodeCommitCandidate,
@@ -33,13 +39,6 @@ export class PluginNodeHostError extends Error {
   }
 }
 
-export type PluginHostService = Readonly<{
-  service: string;
-  apiVersion: string;
-  value: object;
-  /** Trusted host factory only; receives this instance's actual frozen package identity. */
-  bindForPlugin?(identity: PluginIdentity): object;
-}>;
 export type PluginActivationCandidate = Readonly<{
   descriptor: PluginPackageDescriptor;
   packageDigest: string;
@@ -233,7 +232,7 @@ export class PluginNodeHost {
       ),
     );
     let released = false;
-    return Object.freeze({
+    const lease = Object.freeze({
       identity: instance.identity,
       getService<T extends object>(service: string, apiVersion: string): T {
         if (released) fail("plugin_lease_released");
@@ -249,6 +248,13 @@ export class PluginNodeHost {
         this.#retire(instance);
       },
     });
+    registerPluginNodeLease(
+      lease,
+      instance.identity,
+      () => released,
+      () => this.#closed,
+    );
+    return lease;
   }
 
   snapshot(): readonly Readonly<{
@@ -577,6 +583,14 @@ export class PluginNodeHost {
     const requireSetup = () => {
       if (!instance.setupOpen) fail("plugin_registration_closed");
     };
+    const lifetime = Object.freeze({
+      onDispose: (callback: () => void | Promise<void>) => {
+        requireSetup();
+        if (typeof callback !== "function") fail("plugin_cleanup_invalid");
+        if (instance.cleanup.length >= 1024) fail("plugin_cleanup_limit");
+        instance.cleanup.push(callback);
+      },
+    });
     return Object.freeze({
       identity: instance.identity,
       services: Object.freeze({
@@ -599,7 +613,7 @@ export class PluginNodeHost {
           if (cached !== undefined) return cached as T;
           if (instance.bindingFailure !== null) throw instance.bindingFailure;
           try {
-            const bound = value.bindForPlugin(instance.identity);
+            const bound = value.bindForPlugin(instance.identity, lifetime);
             if (bound instanceof Promise) {
               void bound.catch(() => undefined);
               fail("plugin_host_service_binding_invalid");
@@ -652,12 +666,7 @@ export class PluginNodeHost {
           });
         },
       }),
-      onDispose: (callback: () => void | Promise<void>) => {
-        requireSetup();
-        if (typeof callback !== "function") fail("plugin_cleanup_invalid");
-        if (instance.cleanup.length >= 1024) fail("plugin_cleanup_limit");
-        instance.cleanup.push(callback);
-      },
+      onDispose: lifetime.onDispose,
     });
   }
 

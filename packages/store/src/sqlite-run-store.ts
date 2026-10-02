@@ -1,4 +1,5 @@
 import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
+import { createSqlitePluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
@@ -667,6 +668,16 @@ export class SqliteRunStore implements DomainStore {
   readonly #officeAuthority: SqliteOfficeStore;
   readonly #officeThreads: SqliteOfficeThreadStore;
   #closed = false;
+
+  /** Read-only admission detection; construction never accesses or migrates plugin tables. */
+  pluginTaskAdmissionProbe() {
+    this.#assertOpen();
+    return createSqlitePluginTaskAdmissionProbe({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      extensionStore: () => this.extensionStore(),
+    });
+  }
 
   /** Plugin migrations and admission are opt-in; ordinary task creation stays unchanged. */
   extensionStore(): SqliteExtensionStore {

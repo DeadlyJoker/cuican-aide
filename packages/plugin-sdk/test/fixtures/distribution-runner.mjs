@@ -5,6 +5,7 @@ import { parsePluginUiDefinition } from "@crewon/plugin-sdk/ui";
 import plugin, { events } from "./dist/external-node.js";
 import ui from "./dist/external-ui.js";
 import taskPlugin from "./dist/external-task-node.js";
+import "./execution-distribution-runner.mjs";
 import {
   CREWON_TASKS_SERVICE,
   CREWON_TASKS_API_VERSION,

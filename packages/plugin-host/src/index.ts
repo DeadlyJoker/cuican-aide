@@ -19,6 +19,7 @@ export {
   PluginNodeHost,
   PluginNodeHostError,
   type PluginHostService,
+  type PluginHostServiceLifetime,
   type PluginActivationCandidate,
   type PluginNodeActivation,
   type PluginNodeLease,
@@ -37,3 +38,11 @@ export type {
   PluginInstalledSelectionRecoveryPolicy,
 } from "./plugin-installation-recovery.ts";
 export { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";
+export {
+  PluginExecutionRegistry,
+  PluginExecutionRegistryError,
+} from "./plugin-execution-registry.ts";
+export {
+  PluginExecutionPackage,
+  type PluginExecutionPackageBorrow,
+} from "./plugin-execution-package.ts";

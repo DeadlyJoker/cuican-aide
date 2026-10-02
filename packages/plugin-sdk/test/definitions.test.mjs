@@ -6,6 +6,8 @@ import {
   PluginSdkContractError,
   CREWON_TASKS_SERVICE,
   CREWON_TASKS_API_VERSION,
+  CREWON_EXECUTION_SERVICE,
+  CREWON_EXECUTION_API_VERSION,
 } from "../dist/node.js";
 import {
   defineUiPlugin,
@@ -16,6 +18,8 @@ import {
   parsePluginPackageDescriptor,
   CREWON_TASKS_SERVICE as ContractsTaskService,
   CREWON_TASKS_API_VERSION as ContractsTaskVersion,
+  CREWON_EXECUTION_SERVICE as ContractsExecutionService,
+  CREWON_EXECUTION_API_VERSION as ContractsExecutionVersion,
 } from "../dist/contracts.js";
 
 test("Node and pure contract entries export the same explicit task service protocol", () => {
@@ -23,6 +27,13 @@ test("Node and pure contract entries export the same explicit task service proto
   assert.equal(CREWON_TASKS_API_VERSION, "1");
   assert.equal(ContractsTaskService, CREWON_TASKS_SERVICE);
   assert.equal(ContractsTaskVersion, CREWON_TASKS_API_VERSION);
+});
+
+test("Node and pure contract entries expose the execution service without creating or registering a runtime", () => {
+  assert.equal(CREWON_EXECUTION_SERVICE, "crewon.execution");
+  assert.equal(CREWON_EXECUTION_API_VERSION, "1");
+  assert.equal(ContractsExecutionService, CREWON_EXECUTION_SERVICE);
+  assert.equal(ContractsExecutionVersion, CREWON_EXECUTION_API_VERSION);
 });
 
 test("compiled entry helpers freeze detached exact definitions without calling plugin code", () => {

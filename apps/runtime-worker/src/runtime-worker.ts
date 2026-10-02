@@ -122,6 +122,13 @@ import {
   acquireRuntimeResource,
   acquirePriorCompactorResource,
 } from "./runtime-resource-resolution.ts";
+import {
+  acquireInstalledPluginRunToolRuntime,
+  readInstalledPluginTaskAdmission,
+  InstalledPluginRuntimeError,
+  type InstalledPluginRunRuntimeResolverPort,
+  type PluginTaskAdmissionProbe,
+} from "./plugins/installed-plugin-run-runtime.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
 
@@ -240,6 +247,10 @@ export class RuntimeWorker {
   readonly #agentVersionRuntimeResolver:
     | AgentVersionRuntimeResolverPort
     | undefined;
+  readonly #pluginTaskAdmissions: PluginTaskAdmissionProbe | undefined;
+  readonly #installedPluginRuntimeResolver:
+    | InstalledPluginRunRuntimeResolverPort
+    | undefined;
   readonly #governedContextItems: readonly ContextHistoryItem[];
   readonly #governedContextBytes: number;
   readonly #ownerId: string;
@@ -303,6 +314,8 @@ export class RuntimeWorker {
       governedContext?: GovernedContextBundle;
       modelSwitchCompactionResolver?: PriorModelCompactionResolverPort;
       agentVersionRuntimeResolver?: AgentVersionRuntimeResolverPort;
+      pluginTaskAdmissions?: PluginTaskAdmissionProbe;
+      installedPluginRuntimeResolver?: InstalledPluginRunRuntimeResolverPort;
     },
     config: RuntimeWorkerConfig,
   ) {
@@ -348,6 +361,9 @@ export class RuntimeWorker {
       dependencies.modelSwitchCompactionResolver;
     this.#agentVersionRuntimeResolver =
       dependencies.agentVersionRuntimeResolver;
+    this.#pluginTaskAdmissions = dependencies.pluginTaskAdmissions;
+    this.#installedPluginRuntimeResolver =
+      dependencies.installedPluginRuntimeResolver;
     let visitRegistry = false;
     this.#toolResultMaintenance = new ToolResultMaintenance({
       store: dependencies.store,
@@ -730,10 +746,41 @@ export class RuntimeWorker {
   }
 
   async #resolveAgentVersionRuntime(
-    tenantId: string,
-    agentVersionId: string,
+    run: RunState,
+    purpose: "submit" | "observe",
   ): Promise<WorkerAgentRuntime | null> {
+    try {
+      return await this.#resolveRunAgentRuntime(run, purpose);
+    } catch (error) {
+      if (error instanceof InstalledPluginRuntimeError)
+        throw new PermanentWorkerError(error.code);
+      throw error;
+    }
+  }
+
+  async #resolveRunAgentRuntime(
+    run: RunState,
+    purpose: "submit" | "observe",
+  ): Promise<WorkerAgentRuntime | null> {
+    const resources = this.#runtimeResourceScope!;
+    const admission = await readInstalledPluginTaskAdmission({
+      run,
+      admissions: this.#pluginTaskAdmissions,
+      scope: resources,
+      preflight: this.#preflight,
+    });
+    if (
+      admission !== null &&
+      this.#installedPluginRuntimeResolver === undefined
+    )
+      throw new InstalledPluginRuntimeError(
+        "installed_plugin_runtime_owner_unavailable",
+      );
     if (this.#agentVersionRuntimeResolver === undefined) {
+      if (admission !== null)
+        throw new InstalledPluginRuntimeError(
+          "installed_plugin_materialization_unavailable",
+        );
       return {
         executionAuthority: "crewonKernel",
         kernel: this.#kernel,
@@ -750,18 +797,50 @@ export class RuntimeWorker {
     }
     const resolver = this.#agentVersionRuntimeResolver;
     const resolved = await acquireRuntimeResource({
-      locator: { tenantId, agentVersionId },
+      locator: { tenantId: run.tenantId, agentVersionId: run.agentVersionId },
       resolver,
-      scope: this.#runtimeResourceScope!,
+      scope: resources,
       preflight: this.#preflight,
     });
     if (resolved === null) {
       return null;
     }
-    if (resolved.version.agentVersionId !== agentVersionId) {
+    if (resolved.version.agentVersionId !== run.agentVersionId) {
       throw new PermanentWorkerError("agent_version_runtime_identity_mismatch");
     }
-    return this.#projectAgentVersionRuntime(resolved);
+    const runtime = this.#projectAgentVersionRuntime(resolved);
+    if (admission === null) return runtime;
+    const toolRuntime = await this.#preflight.run({
+      identity: {
+        tenantId: run.tenantId,
+        kind: "runtime",
+        resourceId: JSON.stringify([
+          "installed-runtime",
+          run.spaceId,
+          run.runId,
+          purpose,
+        ]),
+      },
+      operation: () =>
+        resources.run(async () => {
+          const controller = this.#executionController();
+          try {
+            return await acquireInstalledPluginRunToolRuntime({
+              run,
+              base: resolved,
+              admission,
+              resolver: this.#installedPluginRuntimeResolver,
+              purpose,
+              signal: controller.signal,
+              scope: resources,
+            });
+          } finally {
+            // This tracks the physical acquire, even if preflight has already timed out.
+            this.#executionControllers.delete(controller);
+          }
+        }),
+    });
+    return { ...runtime, toolRuntime };
   }
 
   #projectAgentVersionRuntime(
@@ -884,15 +963,20 @@ export class RuntimeWorker {
           code: "tool_approval_auto_approved",
         };
       }
-      const runtime = await this.#resolveAgentVersionRuntime(
-        run.tenantId,
-        run.agentVersionId,
-      );
+      const runtime = await this.#resolveAgentVersionRuntime(run, "observe");
       if (runtime !== null) {
         const loaded = await this.#pendingToolEvents(claim, run);
         if (loaded.kind === "deferred") {
-          await this.#store.retryWorkItem({ ...leaseInput(claim), retryAfterMs: 0, reasonCode: "run_execution_progress_loading" });
-          return { kind: "waitingApproval", runId: run.runId, approvalId: storedApproval.approvalId };
+          await this.#store.retryWorkItem({
+            ...leaseInput(claim),
+            retryAfterMs: 0,
+            reasonCode: "run_execution_progress_loading",
+          });
+          return {
+            kind: "waitingApproval",
+            runId: run.runId,
+            approvalId: storedApproval.approvalId,
+          };
         }
         const pending = loaded.progress;
         const replacement = await replaceChangedToolApproval({
@@ -940,8 +1024,10 @@ export class RuntimeWorker {
     const manualCompaction = manualCompactionRequest(claim, run);
 
     const runtime = await this.#resolveAgentVersionRuntime(
-      run.tenantId,
-      run.agentVersionId,
+      run,
+      // Running may still contain a dispatched receipt after a crash. Acquisition must allow
+      // passive recovery; the trusted ToolRuntime rechecks submit before every new effect.
+      run.status === "queued" ? "submit" : "observe",
     );
     if (runtime === null) {
       await this.#store.retryWorkItem({
@@ -2737,10 +2823,7 @@ export class RuntimeWorker {
         const runtime =
           run.status === "queued"
             ? null
-            : await this.#resolveAgentVersionRuntime(
-                run.tenantId,
-                run.agentVersionId,
-              );
+            : await this.#resolveAgentVersionRuntime(run, "observe");
         if (runtime !== null) {
           const drain = await settleCanceledToolResults({
             runtime: runtime.toolRuntime,

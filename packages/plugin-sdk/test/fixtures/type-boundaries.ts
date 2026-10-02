@@ -7,6 +7,36 @@ import type {
   PluginActionsService,
 } from "@crewon/plugin-sdk/node";
 import type { PluginTaskReceipt } from "@crewon/plugin-sdk/contracts";
+import type {
+  PluginExecutionService,
+  PluginToolRuntime,
+  PluginToolRuntimeContext,
+} from "@crewon/plugin-sdk/node";
+
+export function checkExecutionBoundary(
+  execution: PluginExecutionService,
+  runtime: PluginToolRuntime,
+  context: PluginToolRuntimeContext,
+) {
+  execution.register({ create: () => runtime });
+  // @ts-expect-error Registration requires an execution factory, not a runtime or arbitrary object.
+  execution.register(runtime);
+  execution.register({
+    // @ts-expect-error Every execution adapter must implement reconciliation and cancellation.
+    create: () => ({
+      definitions: runtime.definitions,
+      execute: runtime.execute,
+    }),
+  });
+  // @ts-expect-error Runtime creation cannot rewrite the host's original Run identity.
+  context.run.runId = "replacement";
+  // @ts-expect-error Configuration references never expose credential material.
+  context.configuration.credentialBindings[0].credentialValue;
+  // @ts-expect-error Execution metadata is not a Store or new Run API.
+  context.store.createRun();
+  // @ts-expect-error Execution service registers factories; it does not admit new tasks.
+  execution.createTask({});
+}
 
 export function checkTaskAuthorityBoundary(
   tasks: PluginTaskService,

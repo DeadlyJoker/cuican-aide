@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { PluginIdentity } from "@crewon/plugin-sdk/node";
 import { PluginNodeHost, type PluginHostService } from "./plugin-node-host.ts";
+import type { PluginHostServiceLifetime } from "./plugin-host-service.ts";
 import {
   preparedPackage,
   preparedBorrow,
@@ -344,4 +345,72 @@ test("unbound host services and plugin-provided values keep their original value
   } finally {
     lease.release();
   }
+});
+
+test("trusted service bindings receive the actual setup lifetime and host cleanup runs without plugin bookkeeping", async (t) => {
+  let lifetime!: PluginHostServiceLifetime;
+  const cleaned: PluginIdentity[] = [];
+  const host = new PluginNodeHost({
+    services: [
+      {
+        service: "crewon.tasks",
+        apiVersion: "1",
+        value: {},
+        bindForPlugin(identity, currentLifetime) {
+          lifetime = currentLifetime;
+          currentLifetime.onDispose(() => {
+            cleaned.push(identity);
+          });
+          return { read: () => identity };
+        },
+      },
+    ],
+  });
+  t.after(() => host.close());
+  const pkg = await preparedPackage(t, {
+    requires,
+    setup: "ctx.services.get('crewon.tasks','1');",
+  });
+  const identity = await host.activate(pkg);
+  assert.ok(Object.isFrozen(lifetime));
+  assert.throws(() => lifetime.onDispose(() => {}), {
+    code: "plugin_registration_closed",
+  });
+  assert.deepEqual(cleaned, []);
+  host.deactivate(pkg.expectedPluginId);
+  await host.drain();
+  assert.deepEqual(cleaned, [identity]);
+  assert.throws(() => lifetime.onDispose(() => {}), {
+    code: "plugin_registration_closed",
+  });
+});
+
+test("a trusted binder's registered cleanup still runs when its bound service fails validation", async (t) => {
+  const cleaned: PluginIdentity[] = [];
+  const host = new PluginNodeHost({
+    services: [
+      {
+        service: "crewon.tasks",
+        apiVersion: "1",
+        value: {},
+        bindForPlugin(identity, lifetime) {
+          lifetime.onDispose(() => {
+            cleaned.push(identity);
+          });
+          return null as unknown as object;
+        },
+      },
+    ],
+  });
+  t.after(() => host.close());
+  const pkg = await preparedPackage(t, {
+    requires,
+    setup: "ctx.services.get('crewon.tasks','1');",
+  });
+  await assert.rejects(host.activate(pkg), {
+    code: "plugin_host_service_binding_failed",
+  });
+  assert.equal(cleaned.length, 1);
+  assert.equal(cleaned[0]!.packageDigest, pkg.expectedPackageDigest);
+  assert.deepEqual(host.snapshot(), []);
 });

@@ -310,6 +310,9 @@ importers:
         specifier: 14.0.1
         version: 14.0.1
     devDependencies:
+      '@crewon/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3

@@ -97,6 +97,61 @@ const receipt = await tasks.createTask({
 
 目前 SDK 已提供这些调用接口与独立安装后的 ABI 验证；它们本身不签发引用、不创建 Run、不扣款，也不表示业务动作桥已经装配。
 
+## 执行工厂 ABI
+
+Node 和 contracts 入口导出 `CREWON_EXECUTION_SERVICE = "crewon.execution"`、`CREWON_EXECUTION_API_VERSION = "1"`、`PluginExecutionService`、`PluginToolRuntimeFactory`、`PluginToolRuntimeContext` 与自持的 `PluginToolRuntime` 类型。执行工厂由宿主服务注册，不改变原有 `{ actions, invoke }` 动作服务：
+
+```ts
+import {
+  definePlugin,
+  CREWON_EXECUTION_SERVICE,
+  CREWON_EXECUTION_API_VERSION,
+  type PluginExecutionService,
+  type PluginToolRuntimeFactory,
+} from "@crewon/plugin-sdk/node";
+import { createStoryTools } from "./tools.js";
+
+export default definePlugin({
+  apiVersion: "crewon.plugin-host.v1",
+  pluginId: "example.story",
+  setup(ctx) {
+    const execution = ctx.services.get<PluginExecutionService>(
+      CREWON_EXECUTION_SERVICE,
+      CREWON_EXECUTION_API_VERSION,
+    );
+    const factory: PluginToolRuntimeFactory = { create: createStoryTools };
+    const registration = execution.register(factory);
+    ctx.onDispose(() => registration.dispose());
+  },
+});
+```
+
+`createStoryTools` 是独立插件自己的实现，返回 `PluginToolRuntime` 或其 Promise。包需要在 `requires` 中声明 `{ service: "crewon.execution", apiVersion: "1", optional: false }`；宿主必须实际提供该服务，并将注册绑定到正在加载的真实包身份。撤销注册停止新准入，已有执行实例的租用、保留结果和清理由宿主管理。SDK 不实现这个注册服务或 Worker 适配器。
+
+工厂上下文由宿主核验持久 Run 后复制并冻结，包含以下元数据，不包含 Store、ActorContext、权限令牌或凭据值：
+
+| 字段            | 内容                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `identity`      | 实际安装包的 `pluginId`、`version`、`packageDigest`                                                         |
+| `scope`         | `tenantId`、`spaceId`、`profileId`                                                                          |
+| `run`           | 原 `runId`、`threadId`、`bindingDigest`、`inputDigest`，以及可空的原 operation 来源 `source`                |
+| `configuration` | 冻结的 `revision`、`contentDigest`、JSON `parameters` 和不含秘密的 `credentialBindings` 引用                |
+| `target`        | 原执行目标的 AgentVersion、内容和物化摘要、authority、runtimeGeneration、policySnapshot 与 workspaceBinding |
+
+上下文不是当前权限证明；持有它也不能创建新 Run、变更选择或读取其他用户数据。宿主适配器须核对实际包、原 v0 Run binding、配置、AgentVersion 与每次命令，并在外部副作用前执行当前授权检查。历史 Run 必须继续使用原包和原 operation 身份，不能改用当前最新选择。v0 schema 标签和原 Run 的 binding digest 均保持不变。
+
+`PluginToolRuntime` 必须提供 `definitions`、同步 `executionPolicy` 和异步 `execute` / `reconcile` / `cancel`。命令完整保留 invocation、executionId、lease、actionDigest、ActionIntent 与 approvalProof；结果保留 `completed`、`canceled`、`unknownOutcome`，以及原 ToolResult 的输出、artifactRef 和可选 workspaceChanges。SDK 自持这些结构，不要求独立插件导入 Application、Domain 或 Tool-broker。
+
+副作用必须声明 `mutation` / `reconcilable`。已派发操作在响应丢失或重开后应核对原 execution、idempotency、action 和请求摘要，使用 `reconcile` 查原 operation，不再次派发；取消或信号中止不能证明供应商副作用已经撤销。不确定结果应返回 `unknownOutcome`。供应商持久回执与去重仍由实际执行适配器负责，这些类型本身不保证 exactly-once。
+
+可选方法完整保留原宿主能力：`reserveExecution` 返回 `execute` / `release` 句柄；`acknowledgeExecutionResult` 在宿主确认持久提交后释放本地结果证据；`retainedExecutionResults`、`scanRetainedExecutionResults`、`readRetainedExecutionResult` 和 `cancelRetainedExecution` 支持有界查询与本地取消。扫描和本地查询不得重新派发工具。`resultOwner` 只能由宿主传入，不进入模型输入。确认回执返回 `false` 时，宿主继续保留尚未物理结束的执行。
+
+`canRetire` 是同步本地证明，仅在没有借用者时调用；缺少该方法表示未知，空扫描不证明可以退休。`close` 返回 Promise，适配器须在其完成前等待自身物理执行结束并妥善保留恢复证据。宿主不得在升级时提前清理旧 Run 所借用的实例。
+
+执行方法的取消参数是 SDK 自持的 `PluginAbortSignal`：包含 `aborted`、`reason`、`throwIfAborted` 和 abort 监听的窄视图，不需要 DOM 声明。宿主应原样传入真实原生 AbortSignal；不能用仿造信号替代。拥有 Node 或 DOM 类型、需要调用 `fetch` 的插件可在自己的网络边界将这个原生对象断言为 `AbortSignal`，该断言不会生成或补齐实现。宿主仍负责 lease 失效、当前权限和网络策略。
+
+分发测试实际将 SDK 打包、在仓外离线安装，以 `lib: ["ES2022"]` / `types: []` 编译执行插件，调用其注册工厂，并验证原生取消、恢复查询和保留结果确认。这是 ABI 证据，尚不表示 Worker 已按安装包执行，或供应商副作用与生产恢复已接通。
+
 ## UI 入口示例
 
 独立项目的 `src/ui.ts`：
@@ -141,4 +196,4 @@ pnpm exec esbuild src/node.ts src/ui.ts --bundle --format=esm --platform=neutral
 
 Node 插件运行在受信任的宿主进程中。公开 ABI 不是沙箱，也不提供文件系统、网络或权限隔离；安装信任、启停授权以及每次业务调用的身份检查由宿主负责。
 
-任务 ABI 之外，当前 SDK 没有公开的 ToolRuntime、工作流、配置或计费服务端口。`services.get` / `provide` 只能访问宿主实际装配、且包中声明的命名服务，不意味着这些能力已经可用。
+任务和执行工厂 ABI 之外，当前 SDK 没有工作流调度、配置管理或计费服务端口。`services.get` / `provide` 只能访问宿主实际装配、且包中声明的命名服务，不意味着这些能力已经可用。

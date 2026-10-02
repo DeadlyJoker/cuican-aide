@@ -101,7 +101,9 @@ function fixture() {
     },
   } as unknown as PluginNodeHost;
   const bound = (owner: PluginIdentity = identity) =>
-    bridge.hostService().bindForPlugin!(owner) as PluginTaskService;
+    bridge.hostService().bindForPlugin!(owner, {
+      onDispose() {},
+    }) as PluginTaskService;
   return {
     bridge,
     context,

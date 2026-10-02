@@ -1,4 +1,5 @@
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
+import { createPostgresPluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
 import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
@@ -178,6 +179,17 @@ export class PostgresDomainStore
       this.pool,
       this.schemaSql(),
     );
+  }
+
+  /** Read-only admission detection; construction never accesses or migrates plugin tables. */
+  pluginTaskAdmissionProbe() {
+    this.assertOpen();
+    return createPostgresPluginTaskAdmissionProbe({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+      extensionStore: () => this.extensionStore(),
+    });
   }
 
   /** Shares the host pool and lifetime; credit migration and funding remain explicit. */

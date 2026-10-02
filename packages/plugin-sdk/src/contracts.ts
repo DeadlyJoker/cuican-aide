@@ -21,3 +21,5 @@ export {
   type PluginActionInvocation,
   type PluginActionsService,
 } from "./task-action-types.js";
+export * from "./execution-types.js";
+export type * from "./tool-runtime-types.js";

@@ -24,6 +24,8 @@ export {
   type PluginActionInvocation,
   type PluginActionsService,
 } from "./task-action-types.js";
+export * from "./execution-types.js";
+export type * from "./tool-runtime-types.js";
 
 /** Defines a Node ABI entry; it neither invokes setup nor resolves declared services. */
 export function definePlugin(
