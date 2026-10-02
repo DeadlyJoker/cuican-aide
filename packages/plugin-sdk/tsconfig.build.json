@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationMap": false,
+    "rootDir": "..",
+    "outDir": "dist/types",
+    "rewriteRelativeImportExtensions": true
+  },
+  "files": ["src/contracts.ts", "src/node.ts", "src/ui.ts"],
+  "include": []
+}

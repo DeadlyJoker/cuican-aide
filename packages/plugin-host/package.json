@@ -1,0 +1,25 @@
+{
+  "name": "@crewon/plugin-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "pnpm --filter @crewon/plugin-sdk build && node --experimental-strip-types --test --test-concurrency=1 src/*.test.ts",
+    "typecheck": "pnpm --filter @crewon/plugin-sdk build && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@crewon/contracts": "workspace:*",
+    "@crewon/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "esbuild": "0.27.7",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

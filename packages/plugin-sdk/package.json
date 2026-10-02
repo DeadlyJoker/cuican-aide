@@ -1,0 +1,44 @@
+{
+  "name": "@crewon/plugin-sdk",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Portable CrewON plugin ABI and package metadata contracts",
+  "type": "module",
+  "sideEffects": false,
+  "license": "Apache-2.0",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./contracts": {
+      "types": "./dist/types/plugin-sdk/src/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./node": {
+      "types": "./dist/types/plugin-sdk/src/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./ui": {
+      "types": "./dist/types/plugin-sdk/src/ui.d.ts",
+      "import": "./dist/ui.js"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test --test-concurrency=1 test/*.test.mjs",
+    "prepack": "pnpm build"
+  },
+  "devDependencies": {
+    "@crewon/contracts": "workspace:*",
+    "@types/node": "^24.10.1",
+    "esbuild": "0.27.7",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

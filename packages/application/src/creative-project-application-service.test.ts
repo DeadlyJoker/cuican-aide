@@ -8,7 +8,7 @@ import {
   createFixture,
   deferred,
   withContentDigest,
-} from "./creative-project-test-support.ts";
+} from "./creative-project.test-support.ts";
 import type {
   ChangeConceptAssetResult,
   CreateCreativeProjectResult,

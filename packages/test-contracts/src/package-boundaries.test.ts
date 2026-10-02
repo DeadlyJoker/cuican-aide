@@ -12,9 +12,15 @@ const repositoryRoot = path.resolve(
 type Boundary = Readonly<{
   packageName: string;
   allowedBareImports: readonly string[];
+  allowedExactBareImports?: readonly string[];
   allowedFileImports?: Readonly<Record<string, readonly string[]>>;
   allowedRuntimeDependencies: readonly string[];
 }>;
+
+type ImportBoundary = Pick<
+  Boundary,
+  "allowedBareImports" | "allowedExactBareImports" | "allowedFileImports"
+>;
 
 const boundaries: readonly Boundary[] = [
   {
@@ -165,6 +171,24 @@ const boundaries: readonly Boundary[] = [
     packageName: "process-lifecycle",
     allowedBareImports: [],
     allowedRuntimeDependencies: [],
+  },
+  {
+    // Published bundles contain their contract source; consumers need no private workspace packages.
+    packageName: "plugin-sdk",
+    allowedBareImports: [],
+    allowedExactBareImports: ["@crewon/contracts/plugins"],
+    allowedRuntimeDependencies: [],
+  },
+  {
+    // Installation and loading stay in a private Node adapter, never in the public SDK or renderer.
+    packageName: "plugin-host",
+    allowedBareImports: ["node:"],
+    allowedExactBareImports: [
+      "@crewon/contracts/plugins",
+      "@crewon/plugin-sdk/node",
+      "@crewon/plugin-sdk/contracts",
+    ],
+    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/plugin-sdk"],
   },
   {
     packageName: "store",
@@ -405,6 +429,62 @@ test("adapter import exceptions do not authorize neighboring files, nested files
       }
     }
   }
+});
+
+test("public plugin SDK cannot acquire Node, host, application or private package subtrees", () => {
+  const sdk = boundaries.find((value) => value.packageName === "plugin-sdk")!;
+  assert.deepEqual(sdk.allowedRuntimeDependencies, []);
+  assert.equal(
+    boundaryAllowsImport(sdk, "node.ts", "@crewon/contracts/plugins"),
+    true,
+  );
+  for (const specifier of [
+    "node:crypto",
+    "node:fs",
+    "@crewon/plugin-host",
+    "@crewon/plugin-host/loader",
+    "@crewon/application",
+    "@crewon/store",
+    "@crewon/tool-broker",
+    "@crewon/contracts",
+    "@crewon/contracts/runtime",
+    "@crewon/contracts/plugins/unapproved",
+    "fastify",
+    "pg",
+  ])
+    assert.equal(
+      boundaryAllowsImport(sdk, "node.ts", specifier),
+      false,
+      `plugin-sdk -> ${specifier}`,
+    );
+});
+
+test("plugin host only imports the exact approved SDK and plugin contract entrypoints", () => {
+  const host = boundaries.find((value) => value.packageName === "plugin-host")!;
+  for (const specifier of [
+    "node:fs",
+    "@crewon/contracts/plugins",
+    "@crewon/plugin-sdk/node",
+    "@crewon/plugin-sdk/contracts",
+  ])
+    assert.equal(boundaryAllowsImport(host, "loader.ts", specifier), true);
+  for (const specifier of [
+    "@crewon/contracts",
+    "@crewon/contracts/runtime",
+    "@crewon/contracts/plugins/unapproved",
+    "@crewon/plugin-sdk",
+    "@crewon/plugin-sdk/ui",
+    "@crewon/plugin-sdk/node/unapproved",
+    "@crewon/plugin-sdk/contracts/unapproved",
+    "@crewon/plugin-sdk/types",
+    "@crewon/application",
+    "@crewon/store",
+  ])
+    assert.equal(
+      boundaryAllowsImport(host, "loader.ts", specifier),
+      false,
+      `plugin-host -> ${specifier}`,
+    );
 });
 
 test("AgentVersion Node subpaths cannot become compiler dependencies or acquire unrelated Node capabilities", () => {
@@ -670,14 +750,6 @@ test("default Direct Responses path remains removable from OpenAI SDK packages",
 });
 
 test("React renderer cannot import server, store or Node runtime modules", () => {
-  const forbiddenPrefixes = [
-    "node:",
-    "@crewon/application",
-    "@crewon/control-api",
-    "@crewon/store",
-    "fastify",
-    "uuid",
-  ];
   const violations = sourceFiles(
     path.join(repositoryRoot, "apps", "crewon-ui", "src"),
   ).flatMap((file) => {
@@ -685,15 +757,41 @@ test("React renderer cannot import server, store or Node runtime modules", () =>
       return [];
     }
     return importSpecifiers(readFileSync(file, "utf8"))
-      .filter((specifier) =>
-        forbiddenPrefixes.some((prefix) => specifier.startsWith(prefix)),
-      )
+      .filter(isForbiddenRendererImport)
       .map(
         (specifier) => `${path.relative(repositoryRoot, file)} -> ${specifier}`,
       );
   });
   assert.deepEqual(violations, []);
 });
+
+test("renderer plugin entrypoints exclude Node lifecycle and private host imports", () => {
+  for (const specifier of [
+    "@crewon/plugin-sdk/node",
+    "@crewon/plugin-sdk/node/unapproved",
+    "@crewon/plugin-host",
+    "@crewon/plugin-host/loader",
+  ])
+    assert.equal(isForbiddenRendererImport(specifier), true, specifier);
+  for (const specifier of [
+    "@crewon/plugin-sdk/ui",
+    "@crewon/plugin-sdk/contracts",
+  ])
+    assert.equal(isForbiddenRendererImport(specifier), false, specifier);
+});
+
+function isForbiddenRendererImport(specifier: string): boolean {
+  return [
+    "node:",
+    "@crewon/application",
+    "@crewon/control-api",
+    "@crewon/store",
+    "@crewon/plugin-sdk/node",
+    "@crewon/plugin-host",
+    "fastify",
+    "uuid",
+  ].some((prefix) => specifier.startsWith(prefix));
+}
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -710,7 +808,7 @@ function sourceFiles(directory: string): string[] {
 
 function importViolations(
   directory: string,
-  boundary: Pick<Boundary, "allowedBareImports" | "allowedFileImports">,
+  boundary: ImportBoundary,
 ): string[] {
   return sourceFiles(directory).flatMap((file) => {
     if (isTestSource(file)) {
@@ -733,11 +831,12 @@ function importViolations(
 }
 
 function boundaryAllowsImport(
-  boundary: Pick<Boundary, "allowedBareImports" | "allowedFileImports">,
+  boundary: ImportBoundary,
   relativeFile: string,
   specifier: string,
 ): boolean {
   return (
+    (boundary.allowedExactBareImports ?? []).includes(specifier) ||
     boundary.allowedBareImports.some((allowed) =>
       matchesAllowedImport(specifier, allowed),
     ) ||
