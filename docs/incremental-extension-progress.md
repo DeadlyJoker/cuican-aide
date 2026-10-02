@@ -4,6 +4,14 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：短剧工作台交互预览
+
+按用户“先看到页面”的要求，提交 `58dff7a69` 增加[独立页面预览](../artifacts/short-drama-workbench-preview/README.md)，沿用 CrewON 的设计约定，包含项目列表、项目概览和概念图详情。可体验新建、归档/恢复、需求修订、概念图新版本、模拟提交/查询/选用及记录弹窗。归档后阻止新的创作，仍保留历史和已提交任务查询；旧需求和概念图版本不会被覆盖。
+
+预览仅使用当前页面内存，不调用外部模型或 ComfyUI，不提供项目持久化，也没有改动现有首页、聊天和团队入口。已有 Krea2 测试图片的原字节副本明确标注为画面示意，模拟查询不生成新图片。本项完成页面展示，不能替代 E3 的真实调用证据、S0 的项目闭环或 E5 的第二业务复用。
+
+实际浏览器验证了上述交互、原生弹窗 Escape 与焦点恢复、1440×1000 / 1440×700 / 390×844 布局；桌面和窄屏无横向溢出，低高度下主要动作可用。截图保存在 `output/extensions/short-drama-preview/`。初始界面快照 1/1、相关四文件 47/47 通过，归档修正后原快照未更新仍 1/1 通过；UI lint（含 Electron 类型）、build、入口边界、仓库格式及新增文件格式通过。日志为 `output/short-drama-preview-*.log`。本轮没有重复后端或旧 UI 全量测试，既有七项 UI 基线失败的记录仍保留。
+
 ## 2026-10-02：同一次界面到真实宿主的闭环与短剧产品方案
 
 新增 Happy DOM 集成沿生产 `BusinessExtensionController` / `ControlApiClient` / `ControlThreadRuntime` / `Transcript` 的同一次操作调用实际 Node 24 release、Worker、Control 与 SQLite。独立源码副本离线安装并 stage 七包，先从界面保存配置，确认未部署的 Agent 不能启用，再由明确的 Native 发布步骤读取该修订准备插件，返回界面启用、生图并查询。发布是操作者准备步骤，不能把保存服务地址当成已部署。
@@ -18,7 +26,7 @@
 - 启动与重启登记六个实际 release/Worker/Control 子进程，全部收到 close 事件后才删除临时目录；最终证据为 registered/closed 6、live 0、目录不存在，原生 spawn 观察已恢复。隔离副本仅为本地供应商网络测试增加专用接线；本轮产品逻辑只修改 Renderer，七个运行入口的正式实现指纹仍为 `sha256:71b252ebdecbb2ac425a2fe1761e61d5c7833816d8f523a49215d0bc4050af8e`，不能把副本中的测试摘要当作正式构建摘要。
 - UI 最终全量以单 Worker 执行，排除已分别通过的上述两项实际构建：436 文件、3,032 项，3,025 通过、7 失败。七项名称与断言均与界面阶段已核验的变更前基线一致，无新增失败；快照的三项 obsolete 也来自该基线，未更新或删除原断言。一次额外历史宿主耗时失败在独立 35/35 和本次全量均通过，未放宽期限。日志为 `output/extensions/checks/workbench-ui-full-final.log`，基线对照为 `workbench-ui-baseline-comparison-final.json`。UI lint（含 Electron）、build、入口边界与仓库格式通过；未改动后端产品代码，没有重复全量 packages / Worker / Control。
 
-在 [shuohao-skills / Reelbench 参考结论](./short-drama-workbench-reference.md)之上完成[短剧工作台产品方案](./short-drama-workbench-product-plan.md)。明确 S0 项目/需求修订/概念图，后续剧本、资产、分镜和视频的 API 门槛；将创作修订、Run 和外部 operation 分开，复用现有准入、事务、审批和 SSE。新项目服务及页面仍是后续实施设计，不反向扩大原 E0–E5 范围。
+在 [shuohao-skills / Reelbench 参考结论](./short-drama-workbench-reference.md)之上完成[短剧工作台产品方案](./short-drama-workbench-product-plan.md)。明确 S0 项目/需求修订/概念图，后续剧本、资产、分镜和视频的 API 门槛；将创作修订、Run 和外部 operation 分开，复用现有准入、事务、审批和 SSE。新项目服务及真实项目界面仍是后续实施设计；上述独立预览不反向扩大原 E0–E5 范围。
 
 Krea2 的供应商链接没有声明 TTL 或永久有效承诺；终态查询返回已存结果，不刷新失效 URL。受理不明时按保存标识查询也不保证能找回被服务忽略的客户端 ID，无法核验时保留未知状态，不自动再次提交收费请求。
 
@@ -289,7 +297,7 @@ Control 新增可选 `POST /api/v1/extensions/:pluginId/tasks`，严格区分生
 | E2 配置与绑定        | 双库原子准入、发布、原生 standalone、打包版旧配置升级与自动历史宿主已验证；生产身份仍待接通 |
 | E3 Agent / Tool 闭环 | 实际模型生图/恢复已验证；独立双构建证明自动原包查询、当前 Worker 隔离及 SSE 恢复            |
 | E4 最小 Web 界面     | 已接通 BFF、客户端、配置/启用/任务/结果及原会话恢复；仅显式 standalone 装配                 |
-| E5 第二业务          | 尚未接入实际企业 API；遵循用户指示，短剧详细产品形态仍在调用链路之后细化                    |
+| E5 第二业务          | 尚未接入实际企业 API；短剧产品方案及交互预览已完成，仍不能代替第二个真实业务 API 的复用验收 |
 
 继续顺序：取得生产身份服务权威协议后接通后台当前身份，再验证第二个实际业务 API 的复用；同时在已验证的最小生图链路上细化短剧项目及资产工作台，workspace/MCP/cloud 的冻结另行补齐。这个过程保留现有聊天和团队路径。
 
