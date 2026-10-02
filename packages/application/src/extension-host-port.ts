@@ -31,6 +31,14 @@ export type ExtensionReadiness =
     }>;
 
 export interface ExtensionHostPort {
+  /**
+   * Installed business registrations require the host-issued v1 package/profile
+   * admission and a personal credit quote. Omitted only by legacy v0 hosts.
+   * This metadata decision does not establish execution readiness.
+   */
+  taskAdmissionMode?(
+    input: Readonly<{ registration: ExtensionRegistration }>,
+  ): "legacy" | "installed";
   /** Adapter-specific non-secret configuration and scoped credential-reference validation; no API call. */
   validateConfiguration(
     input: Readonly<{

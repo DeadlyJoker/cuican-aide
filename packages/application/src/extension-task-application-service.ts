@@ -85,9 +85,15 @@ type Dependencies = Readonly<{
 export class ExtensionTaskApplicationService {
   readonly #dependencies: Dependencies;
   readonly #turns: TurnApplicationService;
+  readonly #taskAdmissionMode: ExtensionHostPort["taskAdmissionMode"];
   constructor(dependencies: Dependencies) {
     this.#dependencies = dependencies;
     this.#turns = new TurnApplicationService(dependencies);
+    const taskAdmissionMode = dependencies.host.taskAdmissionMode;
+    this.#taskAdmissionMode =
+      taskAdmissionMode === undefined
+        ? undefined
+        : taskAdmissionMode.bind(dependencies.host);
   }
 
   async createTask(
@@ -319,6 +325,20 @@ export class ExtensionTaskApplicationService {
         throw new ApplicationError(
           "conflict",
           "extension_implementation_unavailable",
+        );
+      const admissionMode =
+        this.#taskAdmissionMode === undefined
+          ? "legacy"
+          : this.#taskAdmissionMode(Object.freeze({ registration }));
+      if (admissionMode !== "legacy" && admissionMode !== "installed")
+        throw new ApplicationError(
+          "internal",
+          "extension_task_admission_mode_invalid",
+        );
+      if (admissionMode === "installed" && pin === null)
+        throw new ApplicationError(
+          "conflict",
+          "installed_plugin_task_admission_required",
         );
       const taskInput =
         intent.kind === "generate"

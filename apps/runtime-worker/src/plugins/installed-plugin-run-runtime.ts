@@ -15,6 +15,7 @@ import type {
   RuntimeResourceScope,
 } from "../runtime-resource-lease.ts";
 import type { RuntimePreflight } from "../runtime-preflight.ts";
+import { readInstalledPluginAgentRuntimeScope } from "./installed-plugin-agent-runtime-factory-proof.ts";
 import {
   parseRuntimeExtensionMaterialization,
   type RuntimeExtensionMaterialization,
@@ -146,6 +147,14 @@ export function installedPluginRunMaterialization(input: {
     );
   }
   const { run, base, admission } = input;
+  const installedScope = readInstalledPluginAgentRuntimeScope(base);
+  if (
+    installedScope !== null &&
+    (installedScope.tenantId !== admission.tenantId ||
+      installedScope.spaceId !== admission.spaceId ||
+      installedScope.profileId !== admission.profileId)
+  )
+    fail("installed_plugin_materialization_profile_mismatch");
   const target = proof.target;
   if (
     base.executionAuthority !== "crewonKernel" ||

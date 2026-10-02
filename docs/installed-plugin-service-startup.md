@@ -29,7 +29,7 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 新内部 `createTaskFromPlugin` 路径通过原 Turn/Run 提交，显式 `migratePluginAdmissions()` 后，在同一事务保存独立包身份、profile、选择修订、调用者、权限 epoch、原 v0 binding 关联及真实个人报价。新生成缺少报价或存储准入能力时拒绝；已接受的重复请求返回原任务和原报价。v0 的摘要、回执和 HTTP 请求格式不变。SDK `crewon.tasks` API `1` 和 `PluginTaskActionBridge` 通过真实实例绑定的调用引用进入该路径，报价后通过必需的宿主 callback 复核当前插件准入；只有私有 `PluginUiCommittedTaskAuthority` 验证的原受理结果跳过提交后的当前选择 gate。SDK 任务桥的生产组合须同时注入 actions 与 committedTasks，SDK 本身不暴露句柄签发或核验能力。
 
-该桥当前仅支持生成，包 ID 与原 extension ID 必须相同；尚无跨插件委托。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂及 Worker 按确切安装包借用执行实例已通过显式组合 API 实现，生产 Worker main 的真实身份/包许可及通用已安装业务物化仍未接通，详见下节。当前 Node 动作到任务准入的测试没有执行外部生成 API。
+该桥当前仅支持生成，包 ID 与原 extension ID 必须相同；尚无跨插件委托。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。当前 Node 动作到任务准入的测试没有执行外部生成 API。
 
 Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产代理、生产安装管理、Krea2/短剧独立包和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
 
@@ -55,4 +55,16 @@ Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产代理、
 
 已确认 resolver 32/32、实际 SQLite/PostgreSQL composition 26/26、router 11/11、Host 全量 135/135、Worker 双库全量 1,323/1,323，均零失败、零跳过。真实安装执行专项通过 composition helper 构造 resolver 并接原 Worker，使用真实数据库、不可变文件和 Node ESM；模型、外部供应商、身份、包许可与报价为具名夹具。它没有验收完整生产 main、真实积分结算或在线生图 API。
 
-生产部署仍需装配真实身份与包许可端口、通用已安装业务包的 Agent 物化、业务动作桥及真实报价/积分结算。当前查询任务的 `source != null` 明确拒绝，历史依赖闭包、Krea2/短剧独立包、Electron 资产代理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+生产部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。当前查询任务的 `source != null` 明确拒绝，历史依赖闭包、Krea2/短剧独立包、Electron 资产代理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+
+## 2026-10-03：通用已安装业务物化 API
+
+以下 API 从 `@crewon/runtime-worker` 的包入口导出，供真实宿主组合使用；没有新增自动启用的环境变量，也不替换旧 ComfyUI v0 配置或默认 Agent。
+
+1. 用 `loadInstalledPluginBusinessRegistration` 指定实际安装根、完整包身份/摘要及当前元数据读取许可。它通过 Host 读取已核验的 `businessManifestPath`，返回由实际读取过程持有的注册对象。读取上限 128 KiB，不导入插件代码；对象复制后不能作为工厂的部署输入。
+2. 用 `compileInstalledPluginAgentVersion` 传入实际基础 AgentVersion，显式指定新的 Agent ID、runtime generation 和 policy snapshot。插件增加自己的工具和任务指令，原模型、基础工具、资源及执行参数继续由宿主决定；字段使用业务清单 schema，模型工具目录会去除 Workflow 的 null 约束哨兵。
+3. 用 `createInstalledPluginAgentVersionRuntimeFactory` 提供完整 tenant/space/profile、实际注册、配置、基础 AgentVersion 及其原部署、派生版本和宿主资源创建端口。端口返回值转移真实 transport/tool owner，工具目录必须与基础版本完全相同。工厂产生独立 v1 物化摘要；`deploymentBindings(tenantId)` 与派生版本通过原发布流程加入 additional versions/deployments，不改变默认 Agent。
+4. 用 `InstalledPluginExtensionHost` 配合实际 `StoreBackedAgentVersionRuntimeResolver`、安装 Store、部署 Store、当前身份/profile、原授权和包许可端口，交给原配置与激活用例。该 Host 是固定 profile 的资源 owner，必须由组合关闭。配置校验不启动 Node；就绪检查核验实际物化、完整工具目录和 Node 实例上的 SDK 工厂注册。`maximumPackages` 为 1–32，默认 32，包含 pending 与清理失败项。
+5. 已安装新任务必须走原 `createTaskFromPlugin`，在同一原 Turn/Run 事务锁定包、选择和个人报价。该 Host 的 `taskAdmissionMode` 要求 installed 准入；直接使用旧公开 v0 接口创建新安装式任务会在 readiness、报价和 Run 准备前拒绝。历史回执重放与旧宿主 v0 路径保持兼容。Worker 仍使用上一节的 `installedPluginExecution` owner 执行确切包。
+
+这些调用不签发账号、包信任、报价、余额或凭据。非空 credential bindings 因没有真实租用服务而拒绝；必需的外部 Node 服务因没有历史依赖闭包而拒绝。同一包同时承担 UI 动作、任务服务与 Worker 执行的生产组合尚待实现，分别通过的任务桥和执行夹具不能替代该验收。

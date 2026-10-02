@@ -31,3 +31,7 @@ export * from "./runtime-workspace-private-server.ts";
 export * from "./extensions/comfyui-agent-version.ts";
 export * from "./extensions/extension-runtime-composition.ts";
 export type { InstalledPluginExecutionConfig } from "./plugins/installed-plugin-runtime-composition.ts";
+export * from "./plugins/installed-plugin-business-registration.ts";
+export * from "./plugins/installed-plugin-agent-version.ts";
+export * from "./plugins/installed-plugin-agent-runtime-factory.ts";
+export * from "./plugins/installed-plugin-extension-host.ts";

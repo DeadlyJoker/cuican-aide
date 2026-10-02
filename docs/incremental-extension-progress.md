@@ -4,6 +4,22 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：通用已安装业务清单、Agent 物化与任务准入
+
+业务声明现在可以从实际安装包的 `businessManifestPath` 读取，不再要求 ComfyUI 的 `baseUrl` 或固定工具名。读取逐项核验完整包文件、身份、摘要、目录边界和当前元数据许可；有界 JSON 读取不导入 Node/UI，也不调用外部服务。Worker 仅接受该读取过程取得的实际注册对象；复制的注册声明不获得部署权威。新的实现摘要使用明确的 v1 配方绑定完整包摘要与实际 Node 入口，不重新解释旧内置插件的 v0 摘要。
+
+通用编译在真实基础 AgentVersion 上增加声明的工具和任务指令，保留原模型、资源、基础工具及顺序，拒绝工具名和 Agent ID 冲突。新的程序化工厂同时核验完整 profile、原基础部署、配置、派生版本和实际基础工具 owner，并将它们纳入独立物化摘要。宿主工具仍由原 owner 执行；插件工具的元数据占位实例明确拒绝执行，只有原 Run 的 SDK resolver 才能替换它。实际运行对象另保留完整 profile 的私有构造证明，跨 profile 的任务不能复用该物化。
+
+`InstalledPluginExtensionHost` 使用真实 StoreBacked resolver、部署、物化证明及安装包的实际 SDK 工厂注册判断就绪，不以清单、目录或占位工具代替可执行性。配置校验不启动插件；就绪检查借用并释放工厂注册，不创建虚构 Run 或工具实例。当前身份、profile、选择、包许可及异步 setup 后的复核仍是宿主职责。启动中、正常缓存及失败清理的资源共同占用有界容量，关闭等待真实生命周期。
+
+原任务层新增可选的内部 `taskAdmissionMode` 元数据端口。已安装业务的新任务必须进入原 `createTaskFromPlugin` 的包/profile/个人报价准入；旧公开 v0 路径在创建 Run 前拒绝无 pin 的安装式任务。旧宿主不实现该端口时保留原行为，历史 v0/v1 回执继续先重放。没有新增 HTTP 字段或改变旧持久化形状，原前端本阶段未修改。
+
+实际安装业务集成在 SQLite 和 PostgreSQL 上 **8/8** 通过：使用实际包注册、原基础发布/部署、通用工厂、StoreBacked resolver 和就绪 Host，再通过原个人报价事务进入 owned standalone Worker。原默认 Agent 同时完成普通任务；重复请求只保留一个原任务、原报价和积分预留。关闭并重开 Worker 与数据库连接后，已经升级至 v2 且停用的选择仍允许旧任务用 v1 原包观察回执，无再次执行。profile 用例只证明实际物化层拒绝，不是跨 profile 的完整启动测试；供应商回执是同进程具名 Map，不是跨操作系统进程或在线 API 验收。当前积分仍为预留，不算完成结算。
+
+本阶段 Host 全量 **165/165**、Application 全量 **328/328**、Worker 双库全量 **1,393/1,393**，均零失败、零跳过。类型、生产许可证、架构边界及相关格式检查通过。日志为 `output/extensions/checks/installed-business-{host-full,application-full,worker-full-dual-store,execution-integration}.log`。异步工厂创建另外捕获原输入；返回对象的构造证明失败时先清理真实资源，清理失败保留真实失败 owner，不把容量误报为已释放。
+
+当前是显式组合 API 的增量实现；生产 main 的身份/发布者许可、实际报价与结算、单包 UI/任务/执行组合、Krea2/短剧包迁移和在线外部 API 仍待验收。无实际凭据租用服务时，非空 credential binding 明确拒绝；尚无依赖闭包时拒绝必需的外部 Node 服务。不能将专项测试的模型、许可和报价夹具当成这些生产权威。
+
 ## 2026-10-03：已安装包执行 owner、原工具路由与失败清理隔离
 
 Standalone SQLite/PostgreSQL 组合现在可以显式配置 `installedPluginExecution`，由宿主提供安装根、当前 actor 解析、原授权端口、发布者/包许可端口及可选容量。组合在打开 Store 前验证并捕获配置值和方法身份，拒绝与注入 resolver 并用；显式迁移完成后，从本组合的实际 Run、扩展及安装 Store 构造真实 `InstalledPluginRunContext` 和 `InstalledPluginRuntimeResolver`。组合拥有该 resolver，启动失败回收，重复关闭合并为一次；关闭顺序为 Worker 停止准入、执行资源释放、最后关闭 Store。

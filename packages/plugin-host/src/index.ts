@@ -12,6 +12,11 @@ export {
 export { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
 export { installLocalPluginPackage } from "./local-plugin-package-installer.ts";
 export {
+  readInstalledPluginBusinessManifest,
+  type ReadInstalledPluginBusinessManifestInput,
+  type InstalledPluginBusinessManifest,
+} from "./installed-plugin-business-manifest.ts";
+export {
   LocalPluginInstallationHost,
   type LocalPluginInstallationHostDependencies,
 } from "./plugin-installation-local-host.ts";
