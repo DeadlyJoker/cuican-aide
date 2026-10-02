@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppCommandShellRoute } from "./AppCommandShellRoute";
 import { emptyAgentPlatformSnapshot } from "./commandWorkspaceState";
@@ -9,6 +9,7 @@ import { Toaster } from "../ui/sonner";
 import { emptyTerminalOutputStream } from "../../lib/terminal/terminalOutputStream";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
 import { detectPlatform, detectRuntimeSurface } from "../../lib/platform";
+import { getInitialLocale } from "../../lib/i18n";
 
 // The preview host supplies its own reader. The business module gets no session or execution client.
 async function readPreviewPlatformSnapshot() {
@@ -40,15 +41,19 @@ export function ShortDramaPluginPreview({
   const [scene, setScene] = useState<CommandScene>("office");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsVisited, setSettingsVisited] = useState(false);
+  const [locale, setLocale] = useState(getInitialLocale);
+  useEffect(() => {
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+  }, [locale]);
   return (
-    <DesktopWindowFrame>
+    <DesktopWindowFrame locale={locale}>
       <div className="short-drama-plugin-preview" hidden={settingsOpen}>
         <AppCommandShellRoute
           capabilityDrawer={{
             busyToolId: null,
             commandValue: "",
             disabled: true,
-            locale: "zh",
+            locale,
             // Suspend the drawer's document shortcuts while the existing shell stays mounted.
             open: workbenchOpen && !settingsOpen,
             panel: null,
@@ -74,16 +79,17 @@ export function ShortDramaPluginPreview({
           }}
           composerValue={composerValue}
           confirmDialog={{
-            locale: "zh",
+            locale,
             request: null,
             onCancel: previewNotice,
             onConfirm: previewNotice,
           }}
           connectionState="disconnected"
+          locale={locale}
           cwd=""
           hostModule={{
             id: "crewon.short-drama",
-            label: "AI 短剧",
+            label: locale === "zh" ? "AI 短剧" : "AI drama",
             content: (
               <ShortDramaWorkbenchPreview referenceImage={referenceImage} />
             ),
@@ -110,7 +116,11 @@ export function ShortDramaPluginPreview({
       </div>
       {settingsVisited ? (
         <div hidden={!settingsOpen}>
-          <ShortDramaPreviewSettings onBack={() => setSettingsOpen(false)} />
+          <ShortDramaPreviewSettings
+            locale={locale}
+            onLocaleChange={setLocale}
+            onBack={() => setSettingsOpen(false)}
+          />
         </div>
       ) : null}
       <Toaster closeButton gap={6} offset={52} position="top-right" />

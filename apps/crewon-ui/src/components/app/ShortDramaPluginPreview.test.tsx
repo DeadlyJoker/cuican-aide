@@ -19,7 +19,10 @@ import { setAppliedAppearance } from "../../lib/appearance/appearanceRuntime";
 import {
   LOCAL_APPEARANCE_KEY,
   persistLocalAppearanceField,
+  readLocalAppearance,
 } from "../../lib/appearance/localAppearanceStore";
+import { getInitialLocale, persistLocale } from "../../lib/i18n";
+import { THEME_STORAGE_KEY } from "../../lib/theme";
 import {
   settingsCatalog,
   settingsSectionLabel,
@@ -30,6 +33,7 @@ import {
 ).IS_REACT_ACT_ENVIRONMENT = true;
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
+let restoreStorageWrite: (() => void) | null = null;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -37,8 +41,14 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/");
   initializeShortDramaPreviewSurface();
   window.localStorage.removeItem(LOCAL_APPEARANCE_KEY);
+  window.localStorage.removeItem(THEME_STORAGE_KEY);
+  persistLocale("zh");
+  setAppliedAppearance(DEFAULT_APPEARANCE);
+  document.documentElement.dataset.theme = "light";
 });
 afterEach(async () => {
+  restoreStorageWrite?.();
+  restoreStorageWrite = null;
   if (root) await act(async () => root?.unmount());
   root = null;
   container?.remove();
@@ -51,6 +61,8 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   window.localStorage.removeItem(LOCAL_APPEARANCE_KEY);
+  window.localStorage.removeItem(THEME_STORAGE_KEY);
+  window.localStorage.removeItem("crewon-ui-locale");
 });
 
 async function click(element: Element | null) {
@@ -58,6 +70,88 @@ async function click(element: Element | null) {
   await act(async () =>
     element!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
   );
+}
+
+async function mountPreview() {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () =>
+    root!.render(<ShortDramaPluginPreview referenceImage="/sample.png" />),
+  );
+  return container;
+}
+
+async function openSettings() {
+  await click(container!.querySelector('.sidebar-account [role="menuitem"]'));
+  return container!.querySelector<HTMLElement>(".settings-command-screen")!;
+}
+
+async function openSection(section: string) {
+  await click(
+    [...container!.querySelectorAll(".settings-nav-group button")].find(
+      (button) => button.querySelector("strong")?.textContent === section,
+    ) ?? null,
+  );
+}
+
+function settingField(label: string) {
+  return [...container!.querySelectorAll(".settings-field-list > label")].find(
+    (field) => field.querySelector("strong")?.textContent === label,
+  )!;
+}
+
+async function editNumber(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+async function commitNumber(input: HTMLInputElement) {
+  await act(async () =>
+    input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })),
+  );
+}
+
+async function chooseLocale(label: string) {
+  const trigger = settingField("语言").querySelector('[role="combobox"]')!;
+  await act(async () =>
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }),
+    ),
+  );
+  await click(
+    [...document.querySelectorAll('[role="option"]')].find(
+      (option) => option.textContent?.trim() === label,
+    ) ?? null,
+  );
+}
+
+function rejectStorageWrites() {
+  // happy-dom binds Storage methods on a Proxy; assignment-based spy restore
+  // cannot replace those methods after binding. Restore its actual descriptor.
+  const storage = window.localStorage;
+  const original = storage.setItem;
+  Object.defineProperty(storage, "setItem", {
+    configurable: true,
+    writable: true,
+    value: () => {
+      throw new Error("denied");
+    },
+  });
+  restoreStorageWrite = () =>
+    Object.defineProperty(storage, "setItem", {
+      configurable: true,
+      writable: true,
+      value: original,
+    });
 }
 
 describe("ShortDramaPluginPreview", () => {
@@ -226,7 +320,10 @@ describe("ShortDramaPluginPreview", () => {
       'input[type="number"]',
     )!;
     expect(appearance.value).toBe("17");
-    expect(appearance.disabled).toBe(true);
+    expect(appearance.disabled).toBe(false);
+    expect(
+      settings.querySelector(".settings-page")?.getAttribute("data-mode"),
+    ).toBe("live");
     const search = settings.querySelector<HTMLInputElement>(
       ".settings-search input",
     )!;
@@ -255,6 +352,157 @@ describe("ShortDramaPluginPreview", () => {
     );
     expect(storageWrite).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("saves and applies local theme and font size while keeping the same project mounted", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    await mountPreview();
+    await click(
+      container!.querySelector(
+        '[data-host-module-target="crewon.short-drama"]',
+      ),
+    );
+    const pane = container!.querySelector<HTMLElement>(
+      '[data-host-module-id="crewon.short-drama"]',
+    )!;
+    await click(pane.querySelector(".project-grid button"));
+    const projectName = pane.querySelector(".page-heading h1")!.textContent;
+    const settings = await openSettings();
+    await openSection("外观");
+    await click(
+      [...settingField("主题").querySelectorAll('[role="radio"]')].find(
+        (button) => button.textContent === "深色",
+      ) ?? null,
+    );
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
+    expect(readLocalAppearance()?.themeMode).toBe("dark");
+    const size =
+      settingField("界面字号").querySelector<HTMLInputElement>("input")!;
+    await editNumber(size, "999");
+    expect(size.value).toBe("999");
+    expect(readLocalAppearance()?.uiFontSize).toBe(
+      DEFAULT_APPEARANCE.uiFontSize,
+    );
+    await commitNumber(size);
+    expect(size.value).toBe("18");
+    expect(readLocalAppearance()?.uiFontSize).toBe(18);
+    expect(
+      document.documentElement.style.getPropertyValue("--user-ui-font-size"),
+    ).toBe("18px");
+    await openSection("键盘快捷键");
+    expect(
+      settings.querySelector(".settings-page")?.getAttribute("data-mode"),
+    ).toBe("live");
+    expect(settings.textContent).toContain("快捷键目前不可自定义");
+    await click(
+      [...settings.querySelectorAll("button")].find(
+        (b) => b.textContent === "刷新",
+      ) ?? null,
+    );
+    expect(settings.textContent).not.toContain("设置暂不可用");
+    await openSection("外观");
+    expect(
+      settingField("界面字号").querySelector<HTMLInputElement>("input")!.value,
+    ).toBe("18");
+    await click(settings.querySelector(".settings-back-button"));
+    expect(
+      container!.querySelector('[data-host-module-id="crewon.short-drama"]'),
+    ).toBe(pane);
+    expect(pane.hidden).toBe(false);
+    expect(pane.querySelector(".page-heading h1")!.textContent).toBe(
+      projectName,
+    );
+    await openSettings();
+    expect(
+      settingField("界面字号").querySelector<HTMLInputElement>("input")!.value,
+    ).toBe("18");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("persists language and updates the existing shell without losing its project", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch");
+    await mountPreview();
+    await click(
+      container!.querySelector(
+        '[data-host-module-target="crewon.short-drama"]',
+      ),
+    );
+    const pane = container!.querySelector<HTMLElement>(
+      '[data-host-module-id="crewon.short-drama"]',
+    )!;
+    await click(pane.querySelector(".project-grid button"));
+    const projectName = pane.querySelector(".page-heading h1")!.textContent;
+    const settings = await openSettings();
+    await openSection("外观");
+    await chooseLocale("English");
+    expect(getInitialLocale()).toBe("en");
+    expect(document.documentElement.lang).toBe("en");
+    expect(
+      settings.querySelector(".settings-page")?.getAttribute("data-mode"),
+    ).toBe("live");
+    expect(settings.textContent).toContain("Appearance");
+    expect(
+      container!
+        .querySelector('[data-od-id="desktop-command-screen"]')
+        ?.getAttribute("data-locale"),
+    ).toBe("en");
+    await click(settings.querySelector(".settings-back-button"));
+    expect(
+      container!.querySelector('[data-host-module-id="crewon.short-drama"]'),
+    ).toBe(pane);
+    expect(pane.querySelector(".page-heading h1")!.textContent).toBe(
+      projectName,
+    );
+    expect(container!.querySelector(".sidebar-account")!.textContent).toContain(
+      "Signed out",
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a font draft and reports failed local persistence without applying it", async () => {
+    persistLocalAppearanceField("uiFontSize", "15");
+    setAppliedAppearance(readLocalAppearance()!);
+    await mountPreview();
+    const settings = await openSettings();
+    await openSection("外观");
+    const size =
+      settingField("界面字号").querySelector<HTMLInputElement>("input")!;
+    const saved = window.localStorage.getItem(LOCAL_APPEARANCE_KEY);
+    rejectStorageWrites();
+    await editNumber(size, "17");
+    expect(size.value).toBe("17");
+    await commitNumber(size);
+    expect(size.value).toBe("15");
+    expect(
+      document.documentElement.style.getPropertyValue("--user-ui-font-size"),
+    ).toBe("15px");
+    expect(window.localStorage.getItem(LOCAL_APPEARANCE_KEY)).toBe(saved);
+    expect(settings.querySelector('[role="status"]')!.textContent).toContain(
+      "无法保存到本机存储",
+    );
+    expect(settings.textContent).not.toContain("已保存");
+  });
+
+  it("does not switch the shell language when its storage write fails", async () => {
+    await mountPreview();
+    const settings = await openSettings();
+    await openSection("外观");
+    rejectStorageWrites();
+    await chooseLocale("English");
+    expect(getInitialLocale()).toBe("zh");
+    expect(document.documentElement.lang).toBe("zh-CN");
+    expect(
+      container!
+        .querySelector('[data-od-id="desktop-command-screen"]')
+        ?.getAttribute("data-locale"),
+    ).toBe("zh");
+    expect(
+      settingField("语言").querySelector('[role="combobox"]')!.textContent,
+    ).toBe("中文");
+    expect(settings.querySelector('[role="status"]')!.textContent).toContain(
+      "无法保存到本机存储",
+    );
   });
 
   it("keeps the real desktop frame and appearance detection aligned without granting a native bridge", () => {
