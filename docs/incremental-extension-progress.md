@@ -4,6 +4,14 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：恢复插件改造前的完整前端宿主
+
+按用户“样式完全一致”的要求，预览改为直接复用原 `DesktopWindowFrame`、`AppCommandShellRoute` 和 `CommandWorkspaceCapabilityDrawer`。撤销预览自造的导航按钮、左侧绝对定位抽屉、遮罩及模块顶端额外间距，恢复原窗口控件、品牌位置、右侧工作台开关与宽度调整。通过已有 URL 桌面样式覆盖统一 Frame、Chrome 和 appearance 的环境检测，保存的外观设置不会再把预览切回 Web；没有伪造原生 IPC 桥接。
+
+相对历史基线 `776484c57` 和 `2d753e8f5`，原宿主与左右栏组件、六张共用样式、平台检测、字体、颜色和主题文件均无插件改写。CommandWorkspace/Chrome 仅增加可选模块入口、内容槽与切换逻辑。按用户明确要求，窄宽度预览保持桌面原 232px/0px 左栏网格，主内容随之重排；该规则仅属于预览，不改正式 Web 响应式行为。新增“AI 短剧”导航行属于新增模块。预览账号上下文为空，登录账号页脚不显示，不能将这一演示数据状态称为已登录生产界面。
+
+相关宿主、组合、样式、架构及窗口外框回归 56/56，UI lint（含 Electron）、build 和源码格式检查通过，日志为 `output/short-drama-desktop-frame-*.log`。实际浏览器核验桌面原窗口按钮和左右栏开关，1280px 左栏展开时主内容 1048px、折叠时 1280px；766px 预览为 534px/766px，无覆盖或横向溢出。左右栏同时展开的矩形边界相邻，短剧模块仍仅占主内容区。截图为 `output/extensions/short-drama-preview/original-host-restored.jpg` 与 `original-host-both-sidebars.jpg`。此修复取代之前的预览遮罩调整；没有重跑已确认的 UI 全量基线失败，也没有修改正式业务 API。
+
 ## 2026-10-02：可分发 SDK、真实本地安装和 Node 加载基础
 
 新增公开 `@crewon/plugin-sdk` 0.1.0，本地 `.tgz` 分发只公开 `/contracts`、`/node`、`/ui`。使用现有 esbuild 与 TypeScript 产出三个 JS 入口、共享校验模块和九个自含声明，携带原 LICENSE/NOTICE；没有私有运行时依赖、React 或宿主源码。包描述仍来自原 Contracts 权威源，声明闭包随 SDK 输出，不手抄第二套协议。Node 专用声明无需 DOM；UI 定义包含独立 mount/update/dispose 和窄动作 ABI，实际 UI 挂载尚未实现。

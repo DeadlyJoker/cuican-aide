@@ -4,7 +4,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CommandWorkspace } from "./CommandWorkspace";
-import { ShortDramaPluginPreview } from "./ShortDramaPluginPreview";
+import {
+  initializeShortDramaPreviewSurface,
+  ShortDramaPluginPreview,
+} from "./ShortDramaPluginPreview";
+import {
+  detectOperatingSystem,
+  detectPlatform,
+  detectRuntimeSurface,
+  hasDesktopBridge,
+} from "../../lib/platform";
+import { DEFAULT_APPEARANCE } from "../../lib/appearance/appearancePreferences";
+import { setAppliedAppearance } from "../../lib/appearance/appearanceRuntime";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -16,6 +27,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-08-03T12:00:00+08:00"));
   window.history.replaceState(null, "", "/");
+  initializeShortDramaPreviewSurface();
 });
 afterEach(async () => {
   if (root) await act(async () => root?.unmount());
@@ -23,6 +35,10 @@ afterEach(async () => {
   container?.remove();
   container = null;
   document.body.classList.remove("modal-open");
+  document.documentElement.removeAttribute("style");
+  for (const attribute of [...document.documentElement.attributes])
+    if (attribute.name.startsWith("data-"))
+      document.documentElement.removeAttribute(attribute.name);
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -40,12 +56,18 @@ describe("ShortDramaPluginPreview", () => {
       <ShortDramaPluginPreview referenceImage="/sample.png" />,
     );
     expect(markup).toContain("让 CrewON 完成你的工作");
+    expect(markup).toContain('class="desktop-window-frame"');
+    expect(markup).toContain('class="desktop-window-controls-slot"');
+    expect(markup).toContain('class="desktop-window-drag-strip"');
     expect(markup).toContain('data-od-id="desktop-command-screen"');
     expect(markup).toContain('data-host-module-target="crewon.short-drama"');
     expect(markup).toContain(
       'data-host-module-id="crewon.short-drama" hidden=""',
     );
     expect(markup).toContain('data-nav-key="team"');
+    expect(markup).toContain("command-workbench-trigger");
+    expect(markup).toContain('data-capability-sidebar-open="false"');
+    expect(markup).not.toContain("short-drama-preview-navigation");
     expect(markup).not.toContain('class="drama-sidebar"');
     expect(markup).toMatchSnapshot();
   });
@@ -68,6 +90,8 @@ describe("ShortDramaPluginPreview", () => {
     )!;
     expect(homepage.hidden).toBe(false);
     expect(pane.hidden).toBe(true);
+    await click(container.querySelector('[data-window-action="close"]'));
+    expect(hasDesktopBridge()).toBe(false);
     await click(
       container.querySelector('[data-host-module-target="crewon.short-drama"]'),
     );
@@ -120,7 +144,43 @@ describe("ShortDramaPluginPreview", () => {
     expect(markup).toContain("让 CrewON 完成你的工作");
   });
 
-  it("uses the same sidebar as a narrow preview drawer and closes it when selecting original pages", async () => {
+  it("keeps the real desktop frame and appearance detection aligned without granting a native bridge", () => {
+    window.history.replaceState(
+      { preview: true },
+      "",
+      "/?theme=light&project=story#view-team",
+    );
+    initializeShortDramaPreviewSurface();
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("theme")).toBe("light");
+    expect(params.get("project")).toBe("story");
+    expect(window.location.hash).toBe("#view-team");
+    expect(window.history.state).toEqual({ preview: true });
+    expect(detectRuntimeSurface()).toBe("desktop");
+    expect(detectPlatform()).toBe("mac");
+    expect(detectOperatingSystem()).toBe("mac");
+    expect(hasDesktopBridge()).toBe(false);
+    const before = renderToStaticMarkup(
+      <ShortDramaPluginPreview referenceImage="/sample.png" />,
+    );
+    setAppliedAppearance({
+      ...DEFAULT_APPEARANCE,
+      themeMode: "light",
+      translucentSidebar: true,
+    });
+    expect(document.documentElement.dataset.surface).toBe("desktop");
+    expect(document.documentElement.dataset.os).toBe("mac");
+    expect(document.documentElement.dataset.translucentSidebar).toBe("true");
+    const after = renderToStaticMarkup(
+      <ShortDramaPluginPreview referenceImage="/sample.png" />,
+    );
+    expect(after).toBe(before);
+    expect(after).toContain('data-window-platform="mac"');
+    expect(after).toContain('data-window-controls="native"');
+    expect(after).toContain('data-desktop-drag-region=""');
+  });
+
+  it("uses the original sidebar collapse and right workbench controls across module and original views", async () => {
     const width = vi.spyOn(window, "innerWidth", "get").mockReturnValue(767);
     container = document.createElement("div");
     document.body.append(container);
@@ -128,41 +188,58 @@ describe("ShortDramaPluginPreview", () => {
     await act(async () =>
       root!.render(<ShortDramaPluginPreview referenceImage="/sample.png" />),
     );
-    const host = container.querySelector<HTMLElement>(
-      ".short-drama-plugin-preview",
-    )!;
+    const host = container.querySelector<HTMLElement>(".command-shell-route")!;
+    const commandWindow =
+      container.querySelector<HTMLElement>(".command-window")!;
     const sidebar = container.querySelector(".command-sidebar");
-    const trigger = host.querySelector('[aria-label="打开导航"]')!;
-    expect(host.dataset.previewNavigationOpen).toBe("false");
-    await click(trigger);
-    expect(host.dataset.previewNavigationOpen).toBe("true");
+    expect(host.querySelector('[aria-label="打开导航"]')).toBeNull();
+    expect(host.querySelector('[aria-label="关闭导航"]')).toBeNull();
     expect(container.querySelectorAll(".command-sidebar")).toHaveLength(1);
+    const collapse = sidebar!.querySelector("[data-sidebar-collapse]");
+    await click(collapse);
+    expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(true);
+    await click(collapse);
+    expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(false);
     await click(
       sidebar!.querySelector('[data-host-module-target="crewon.short-drama"]'),
     );
-    expect(host.dataset.previewNavigationOpen).toBe("false");
+    expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(false);
     expect(
       container.querySelector<HTMLElement>(
         '[data-host-module-id="crewon.short-drama"]',
       )?.hidden,
     ).toBe(false);
-    await click(trigger);
+    const workbench = host.querySelector<HTMLElement>(".command-workbench")!;
+    expect(workbench.hidden).toBe(true);
+    await click(host.querySelector(".command-workbench-trigger"));
+    expect(workbench.hidden).toBe(false);
+    expect(host.dataset.capabilitySidebarOpen).toBe("true");
+    expect(host.querySelector(".command-workbench-trigger")).toBeNull();
     await click(sidebar!.querySelector('[data-nav-key="team"]'));
-    expect(host.dataset.previewNavigationOpen).toBe("false");
+    expect(workbench.hidden).toBe(false);
     expect(
       container.querySelector<HTMLElement>('[data-shell-view="team"]')?.hidden,
     ).toBe(false);
-    await click(trigger);
-    await click(sidebar!.querySelector("[data-sidebar-collapse]"));
-    expect(host.dataset.previewNavigationOpen).toBe("false");
-    expect(
-      container
-        .querySelector(".command-window")
-        ?.classList.contains("sidebar-collapsed"),
-    ).toBe(false);
-    await click(trigger);
-    await click(host.querySelector('[aria-label="关闭导航"]'));
-    expect(host.dataset.previewNavigationOpen).toBe("false");
+    width.mockReturnValue(1440);
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    const resize = workbench.querySelector<HTMLElement>('[role="separator"]')!;
+    const previousWidth = Number(resize.getAttribute("aria-valuenow"));
+    await act(async () =>
+      resize.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+      ),
+    );
+    expect(Number(resize.getAttribute("aria-valuenow"))).toBe(
+      previousWidth + 24,
+    );
+    expect(workbench.style.width).toBe(`${previousWidth + 24}px`);
+    await click(host.querySelector('[aria-label="关闭工作台"]'));
+    expect(workbench.hidden).toBe(true);
+    expect(host.dataset.capabilitySidebarOpen).toBe("false");
+    expect(host.querySelector(".command-workbench-trigger")).not.toBeNull();
+    await click(sidebar!.querySelector('[data-nav-key="command"]'));
+    expect(host.querySelector(".command-workbench-trigger")).not.toBeNull();
+    expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(false);
     expect(container.querySelector(".command-sidebar")).toBe(sidebar);
     width.mockRestore();
   });
