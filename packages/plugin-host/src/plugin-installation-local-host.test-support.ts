@@ -19,8 +19,13 @@ import {
 } from "@crewon/application";
 import { parsePluginSelection } from "@crewon/domain";
 import { SqliteRunStore } from "@crewon/store";
+import type { PluginPackageDescriptor } from "@crewon/contracts/plugins";
 import { LocalPluginInstallationHost } from "./plugin-installation-local-host.ts";
-import { PluginNodeHost, type PluginNodeLease } from "./plugin-node-host.ts";
+import {
+  PluginNodeHost,
+  type PluginActivationCandidate,
+  type PluginNodeLease,
+} from "./plugin-node-host.ts";
 import { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
 
 export const actor: ActorContext = Object.freeze({
@@ -69,6 +74,9 @@ export async function localInstallationFixture(t: TestContext) {
     incompatible: false,
     denyCommit: false,
     beforeFence: null as (() => void) | null,
+    activation: null as (() => Promise<void>) | null,
+    activationCandidates: [] as PluginActivationCandidate[],
+    compatibilityDescriptors: [] as (PluginPackageDescriptor | null)[],
   };
   const local = new LocalPluginInstallationHost({
     profile: scope,
@@ -80,8 +88,13 @@ export async function localInstallationFixture(t: TestContext) {
       return sources.get(sourceId)!;
     },
     authorizeInstallation: async () => (policy.denyInstall ? "deny" : "allow"),
-    authorizeActivation: async () => (policy.denyActivation ? "deny" : "allow"),
-    validateCompatibility: async () => {
+    authorizeActivation: async ({ candidate }) => {
+      policy.activationCandidates.push(candidate);
+      await policy.activation?.();
+      return policy.denyActivation ? "deny" : "allow";
+    },
+    validateCompatibility: async ({ descriptor }) => {
+      policy.compatibilityDescriptors.push(descriptor);
       if (policy.incompatible)
         throw new ApplicationError(
           "conflict",
@@ -135,11 +148,18 @@ export async function localInstallationFixture(t: TestContext) {
   });
   async function packageSource(
     version: string,
-    options: { failSetup?: boolean } = {},
+    options: {
+      failSetup?: boolean;
+      entryKind?: "node" | "mixed" | "uiOnly";
+      requires?: PluginPackageDescriptor["requires"];
+      provides?: PluginPackageDescriptor["provides"];
+    } = {},
   ) {
     const sourceId = `source-${version}`;
     const directory = join(root, sourceId);
     const marker = join(root, `${sourceId}.imported`);
+    const uiMarker = join(root, `${sourceId}.ui-imported`);
+    const entryKind = options.entryKind ?? "node";
     await mkdir(directory, { mode: 0o700 });
     const source = `import {writeFileSync} from 'node:fs';
 writeFileSync(${JSON.stringify(marker)},'imported');
@@ -150,7 +170,26 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:'example.story',setu
  ${options.failSetup ? "throw new Error('fixture_setup_failed');" : ""}
 }};`;
     const bytes = Buffer.from(source);
-    await writeFile(join(directory, "entry.mjs"), bytes);
+    const files = [];
+    if (entryKind !== "uiOnly") {
+      await writeFile(join(directory, "entry.mjs"), bytes);
+      files.push({
+        path: "entry.mjs",
+        byteLength: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      });
+    }
+    if (entryKind !== "node") {
+      const ui = Buffer.from(
+        `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(uiMarker)},'ui imported');export default {};`,
+      );
+      await writeFile(join(directory, "ui.mjs"), ui);
+      files.push({
+        path: "ui.mjs",
+        byteLength: ui.length,
+        sha256: createHash("sha256").update(ui).digest("hex"),
+      });
+    }
     await writeFile(
       join(directory, "crewon.plugin.json"),
       JSON.stringify({
@@ -162,20 +201,36 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:'example.story',setu
         description:
           "Deterministic local lifecycle fixture; no supplier or price.",
         publisherId: "example.publisher",
-        entrypoints: { node: "entry.mjs", ui: null },
+        entrypoints: {
+          node: entryKind === "uiOnly" ? null : "entry.mjs",
+          ui:
+            entryKind === "node"
+              ? null
+              : { path: "ui.mjs", mode: "trustedModule" },
+        },
         businessManifestPath: null,
-        requires: [
-          { service: "host.recorder", apiVersion: "1", optional: false },
-        ],
-        provides: [{ service: "example.story", apiVersion: "1" }],
-        contributions: [],
-        files: [
-          {
-            path: "entry.mjs",
-            byteLength: bytes.length,
-            sha256: createHash("sha256").update(bytes).digest("hex"),
-          },
-        ],
+        requires:
+          options.requires ??
+          (entryKind === "uiOnly"
+            ? []
+            : [{ service: "host.recorder", apiVersion: "1", optional: false }]),
+        provides:
+          options.provides ??
+          (entryKind === "uiOnly"
+            ? []
+            : [{ service: "example.story", apiVersion: "1" }]),
+        contributions:
+          entryKind === "node"
+            ? []
+            : [
+                {
+                  id: "story",
+                  kind: "module",
+                  slot: "main.content",
+                  title: "Story",
+                },
+              ],
+        files,
       }),
     );
     const verified = await verifyLocalPluginPackage({ directory });
@@ -184,6 +239,7 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:'example.story',setu
       sourceId,
       directory,
       marker,
+      uiMarker,
       expectedPluginId: "example.story",
       expectedPackageDigest: verified.packageDigest,
     };

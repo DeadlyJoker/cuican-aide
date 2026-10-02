@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { ApplicationError, type ActorContext } from "@crewon/application";
 import {
   assertPluginProfileScope,
@@ -12,7 +11,7 @@ import {
   type PluginSelection,
 } from "@crewon/domain";
 import type { PluginPackageDescriptor } from "@crewon/contracts/plugins";
-import { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
+import { verifyInstalledSelectionPackage } from "./plugin-installation-package-support.ts";
 import type { PluginNodeHost } from "./plugin-node-host.ts";
 
 /** A current host-issued actor; installedByActorId is historical audit, never startup authority. */
@@ -142,20 +141,11 @@ export async function verifyRecovery(
   let descriptor: PluginPackageDescriptor | null = null;
   if (input.package) {
     const pkg = input.package;
-    const verified = await verifyLocalPluginPackage({
-      directory: join(installRoot, "packages", pkg.packageDigest.slice(7)),
+    descriptor = await verifyInstalledSelectionPackage({
+      installRoot,
+      package: pkg,
     });
     assertRecoveryCurrent(input, policy);
-    descriptor = verified.descriptor;
-    if (
-      verified.packageDigest !== pkg.packageDigest ||
-      descriptor.pluginId !== pkg.pluginId ||
-      descriptor.version !== pkg.version ||
-      descriptor.publisherId !== pkg.publisherId
-    )
-      throw new ApplicationError("internal", "plugin_installed_bytes_mismatch");
-    if (input.selection.state === "enabled" && !descriptor.entrypoints.node)
-      throw new ApplicationError("conflict", "plugin_node_entry_missing");
   }
   await policy.validateCompatibility(Object.freeze({ ...input, descriptor }));
   assertRecoveryCurrent(input, policy);

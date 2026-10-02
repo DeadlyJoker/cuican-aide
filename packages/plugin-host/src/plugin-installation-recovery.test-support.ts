@@ -88,6 +88,7 @@ export async function installedRecoveryFixture(t: TestContext) {
       version?: string;
       failSetup?: boolean;
       pauseSetup?: boolean;
+      entryKind?: "node" | "mixed" | "uiOnly";
       provides?: readonly { service: string; apiVersion: string }[];
       requires?: readonly {
         service: string;
@@ -101,11 +102,17 @@ export async function installedRecoveryFixture(t: TestContext) {
     const id = `${pluginId}-${version}-${++sequence}`;
     const directory = join(root, id);
     const marker = join(root, `${id}.imported`);
+    const uiMarker = join(root, `${id}.ui-imported`);
+    const entryKind = input.entryKind ?? "node";
     await mkdir(directory, { mode: 0o700 });
-    const provides = input.provides ?? [{ service: pluginId, apiVersion: "1" }];
-    const requires = input.requires ?? [
-      { service: "host.recorder", apiVersion: "1", optional: false },
-    ];
+    const provides =
+      input.provides ??
+      (entryKind === "uiOnly" ? [] : [{ service: pluginId, apiVersion: "1" }]);
+    const requires =
+      input.requires ??
+      (entryKind === "uiOnly"
+        ? []
+        : [{ service: "host.recorder", apiVersion: "1", optional: false }]);
     const bytes = Buffer.from(`import {writeFileSync} from 'node:fs';
 writeFileSync(${JSON.stringify(marker)},'imported');
 export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(pluginId)},async setup(ctx){
@@ -122,7 +129,22 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(plu
  ${provides.map((p) => `ctx.services.provide(${JSON.stringify(p.service)},${JSON.stringify(p.apiVersion)},{read:()=>${JSON.stringify(`${pluginId}:${version}`)}});`).join("\n")}
  ${input.failSetup ? "throw new Error('fixture_setup_failed');" : ""}
 }};`);
-    await writeFile(join(directory, "entry.mjs"), bytes);
+    const files = [];
+    if (entryKind !== "uiOnly") {
+      await writeFile(join(directory, "entry.mjs"), bytes);
+      files.push({
+        path: "entry.mjs",
+        byteLength: bytes.length,
+        sha256: digest(bytes),
+      });
+    }
+    if (entryKind !== "node") {
+      const ui = Buffer.from(
+        `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(uiMarker)},'ui imported');export default {};`,
+      );
+      await writeFile(join(directory, "ui.mjs"), ui);
+      files.push({ path: "ui.mjs", byteLength: ui.length, sha256: digest(ui) });
+    }
     await writeFile(
       join(directory, "crewon.plugin.json"),
       JSON.stringify({
@@ -133,18 +155,28 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(plu
         title: "Recovery fixture",
         description: "Test-only recovery package; no supplier policy.",
         publisherId: "example.publisher",
-        entrypoints: { node: "entry.mjs", ui: null },
+        entrypoints: {
+          node: entryKind === "uiOnly" ? null : "entry.mjs",
+          ui:
+            entryKind === "node"
+              ? null
+              : { path: "ui.mjs", mode: "trustedModule" },
+        },
         businessManifestPath: null,
         requires,
         provides,
-        contributions: [],
-        files: [
-          {
-            path: "entry.mjs",
-            byteLength: bytes.length,
-            sha256: digest(bytes),
-          },
-        ],
+        contributions:
+          entryKind === "node"
+            ? []
+            : [
+                {
+                  id: "story",
+                  kind: "module",
+                  slot: "main.content",
+                  title: "Story",
+                },
+              ],
+        files,
       }),
     );
     const installed = await installLocalPluginPackage({
@@ -153,7 +185,7 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(plu
       authorization: async () => ({ outcome: "allow" }),
     });
     await rm(directory, { recursive: true });
-    return { installed, directory, marker };
+    return { installed, directory, marker, uiMarker };
   }
 
   async function save(

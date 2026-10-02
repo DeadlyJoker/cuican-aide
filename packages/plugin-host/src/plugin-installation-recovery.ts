@@ -6,6 +6,7 @@ import { parsePluginSelection, type PluginSelection } from "@crewon/domain";
 import type { PluginIdentity } from "@crewon/plugin-sdk/node";
 import type { LocalPluginInstallationHostDependencies } from "./plugin-installation-local-host.ts";
 import type { PluginNodePreparedActivation } from "./plugin-node-host.ts";
+import { verifyInstalledSelectionPackage } from "./plugin-installation-package-support.ts";
 import {
   assertRecoveryCurrent,
   orderRecoveries,
@@ -105,12 +106,12 @@ export async function recoverInstalledSelections(
       const current = acceptingIdentity(host, record.input.selection.pluginId);
       if (current && current !== previous) published.push(current);
     }
-    // A callback may re-enter raw Node APIs; successful recovery must still describe the final desired state.
-    for (const input of items) {
+    // UI-only desired state has no accepting Node identity; callbacks cannot substitute a raw publication.
+    for (const { input, descriptor } of verified) {
       assertRecoveryCurrent(input, policy);
       const current = acceptingIdentity(host, input.selection.pluginId);
       if (
-        input.selection.state === "enabled"
+        input.selection.state === "enabled" && descriptor?.entrypoints.node
           ? current?.packageDigest !== input.selection.selectedPackageDigest
           : current !== undefined
       )
@@ -157,6 +158,7 @@ async function prepareVerifiedRecovery(
 ): Promise<PluginPreparedSelection> {
   const { input } = verified;
   const { selection, package: pkg, actor, scope } = input;
+  const uiOnly = verified.descriptor?.entrypoints.node === null;
   const previous = acceptingIdentity(host, selection.pluginId);
   const checkPrevious = () => {
     if (acceptingIdentity(host, selection.pluginId) !== previous)
@@ -168,7 +170,25 @@ async function prepareVerifiedRecovery(
   let candidate: PluginNodePreparedActivation | null = null;
   try {
     assertRecoveryCurrent(input, policy);
-    if (selection.state === "enabled") {
+    if (selection.state === "enabled" && uiOnly) {
+      const outcome = await host.dependencies.authorizeActivation({
+        actor,
+        scope,
+        candidate: Object.freeze({
+          descriptor: verified.descriptor!,
+          packageDigest: pkg!.packageDigest,
+        }),
+      });
+      assertRecoveryCurrent(input, policy);
+      if (outcome !== "allow")
+        throw new ApplicationError("authorization", "plugin_activation_denied");
+      await verifyInstalledSelectionPackage({
+        installRoot: host.dependencies.installRoot,
+        package: pkg!,
+      });
+      assertRecoveryCurrent(input, policy);
+      checkPrevious();
+    } else if (selection.state === "enabled") {
       candidate = await host.dependencies.nodeHost.prepare({
         installRoot: host.dependencies.installRoot,
         expectedPluginId: selection.pluginId,
@@ -225,7 +245,7 @@ async function prepareVerifiedRecovery(
           );
         assertRecoveryCurrent(input, policy);
         checkPrevious();
-        if (selection.state === "enabled") {
+        if (selection.state === "enabled" && !uiOnly) {
           candidate!.commit({
             authorizeCommit: (commitCandidate) => {
               assertRecoveryCurrent(input, policy);

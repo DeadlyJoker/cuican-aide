@@ -536,3 +536,166 @@ test("permission revoked inside the synchronous publication fence cannot activat
   assert.deepEqual(host.node.snapshot(), []);
   assert.deepEqual(f.dump(), before);
 });
+
+test("reopened SQLite restores and repeats an enabled UI-only selection without importing UI or creating a Node identity", async (t) => {
+  const f = await installedRecoveryFixture(t);
+  const ui = await f.packageSource({ entryKind: "uiOnly" });
+  const selection = await f.save(ui);
+  const before = f.dump();
+  await f.reopen();
+  const host = f.host();
+  const input = await f.selectionInput();
+  assert.deepEqual(
+    await host.local.recoverSelections([input], host.authority),
+    [selection],
+  );
+  assert.deepEqual(host.node.snapshot(), []);
+  assert.throws(() => host.acquire(input), {
+    code: "plugin_instance_unavailable",
+  });
+  const repeated = await host.local.prepareRecovery(input, host.authority);
+  repeated.commit({ selection });
+  assert.deepEqual(host.node.snapshot(), []);
+  assert.deepEqual(f.dump(), before);
+  assert.deepEqual(f.events, []);
+  await absent(ui.uiMarker);
+  await f.transition("example.story", "disabled");
+  const disabled = await f.selectionInput();
+  await host.local.recoverSelections([disabled], host.authority);
+  await f.transition("example.story", "uninstalled", null);
+  const removed = await f.selectionInput();
+  await host.local.recoverSelections([removed], host.authority);
+  assert.deepEqual(host.node.snapshot(), []);
+  await absent(ui.uiMarker);
+});
+
+test("recovery changes mixed to UI-only and back while old Node leases retain their original identity", async (t) => {
+  const f = await installedRecoveryFixture(t);
+  const mixed = await f.packageSource({ entryKind: "mixed" });
+  await f.save(mixed);
+  const host = f.host();
+  const mixedInput = await f.selectionInput();
+  await host.local.recoverSelections([mixedInput], host.authority);
+  const old = host.acquire(mixedInput);
+  const ui = await f.packageSource({ version: "2.0.0", entryKind: "uiOnly" });
+  await f.save(ui);
+  const uiInput = await f.selectionInput();
+  const before = f.dump();
+  await host.local.recoverSelections([uiInput], host.authority);
+  assert.deepEqual(f.dump(), before);
+  assert.equal(
+    host.node.snapshot().some(({ phase }) => phase === "accepting"),
+    false,
+  );
+  assert.equal(
+    old.getService<{ read(): string }>("example.story", "1").read(),
+    "example.story:1.0.0",
+  );
+  assert.throws(() => host.acquire(mixedInput), {
+    code: "plugin_instance_unavailable",
+  });
+  await f.transition("example.story", "enabled", mixed.installed.packageDigest);
+  const rollback = await f.selectionInput();
+  await host.local.recoverSelections([rollback], host.authority);
+  const newer = host.acquire(rollback);
+  assert.notEqual(newer.identity, old.identity);
+  assert.equal(
+    f.events.filter((event) => event.includes("setup:example.story:1.0.0"))
+      .length,
+    2,
+  );
+  await absent(mixed.uiMarker);
+  await absent(ui.uiMarker);
+  old.release();
+  await host.local.drain();
+  assert.equal(
+    f.events.filter((event) => event.includes("dispose:example.story:1.0.0"))
+      .length,
+    1,
+  );
+});
+
+test("UI-only recovery preserves activation, compatibility and fresh permission checks through asynchronous and synchronous fences", async (t) => {
+  const f = await installedRecoveryFixture(t);
+  const ui = await f.packageSource({ entryKind: "uiOnly" });
+  await f.save(ui);
+  const input = await f.selectionInput();
+  const host = f.host();
+  const before = f.dump();
+  host.policy.denyActivation = true;
+  await assert.rejects(host.local.prepareRecovery(input, host.authority), {
+    code: "plugin_activation_denied",
+  });
+  host.policy.denyActivation = false;
+  host.policy.incompatible = true;
+  await assert.rejects(host.local.prepareRecovery(input, host.authority), {
+    code: "fixture_incompatible",
+  });
+  host.policy.incompatible = false;
+  const gate = barrier();
+  host.policy.activation = gate.wait;
+  const pending = host.local.prepareRecovery(input, host.authority);
+  await gate.entered;
+  host.policy.denyCurrent = true;
+  gate.finish();
+  await assert.rejects(pending, { code: "plugin_recovery_current_denied" });
+  host.policy.activation = null;
+  host.policy.denyCurrent = false;
+  const candidate = await host.local.prepareRecovery(input, host.authority);
+  host.policy.beforeCommit = () => {
+    host.policy.denyCurrent = true;
+  };
+  assert.throws(() => candidate.commit({ selection: input.selection }), {
+    code: "plugin_recovery_current_denied",
+  });
+  await candidate.abort();
+  assert.deepEqual(f.dump(), before);
+  assert.deepEqual(host.node.snapshot(), []);
+  await absent(ui.uiMarker);
+});
+
+test("UI-only recovery rejects Node service declarations before any batch code and rechecks installed UI bytes after activation", async (t) => {
+  const f = await installedRecoveryFixture(t);
+  const node = await f.packageSource({ pluginId: "example.node" });
+  const ui = await f.packageSource({
+    provides: [{ service: "example.story", apiVersion: "1" }],
+    entryKind: "uiOnly",
+  });
+  await f.save(node);
+  await f.save(ui);
+  const host = f.host();
+  await assert.rejects(
+    host.local.recoverSelections(
+      [await f.selectionInput("example.node"), await f.selectionInput()],
+      host.authority,
+    ),
+    { code: "plugin_ui_only_services_unsupported" },
+  );
+  await absent(node.marker);
+  await absent(ui.uiMarker);
+  const valid = await f.packageSource({
+    pluginId: "example.valid",
+    entryKind: "uiOnly",
+  });
+  await f.save(valid);
+  host.policy.activation = async () => {
+    const path = join(
+      f.installRoot,
+      "packages",
+      valid.installed.packageDigest.slice(7),
+      "ui.mjs",
+    );
+    await chmod(path, 0o600);
+    await writeFile(path, "changed after authority await");
+  };
+  const before = f.dump();
+  await assert.rejects(
+    host.local.prepareRecovery(
+      await f.selectionInput("example.valid"),
+      host.authority,
+    ),
+    { code: "plugin_package_file_size_mismatch" },
+  );
+  assert.deepEqual(f.dump(), before);
+  assert.deepEqual(host.node.snapshot(), []);
+});

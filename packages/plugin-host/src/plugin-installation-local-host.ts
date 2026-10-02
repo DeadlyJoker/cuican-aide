@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import {
   ApplicationError,
   type ActorContext,
@@ -22,7 +21,7 @@ import {
 } from "@crewon/domain";
 import type { PluginPackageDescriptor } from "@crewon/contracts/plugins";
 import { installLocalPluginPackage } from "./local-plugin-package-installer.ts";
-import { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
+import { verifyInstalledSelectionPackage } from "./plugin-installation-package-support.ts";
 import {
   LocalPluginPackageError,
   type PluginPackageInstallationCandidate,
@@ -65,7 +64,9 @@ export type LocalPluginInstallationHostDependencies = Readonly<{
   ): Promise<void>;
   /**
    * Synchronous trusted fence for the confirmed durable selection, current authority epoch and
-   * every dependency's durable identity. Cannot call plugin code or rely only on Node's current map.
+   * every dependency's durable identity. A null candidate means UI-only selection or Node withdrawal;
+   * it still requires the exact durable selection and current permission, never a default grant.
+   * Cannot call plugin code or rely only on Node's current map.
    * Real Run admission still has to recheck durable selection within its existing transaction.
    */
   authorizeCommit(
@@ -207,6 +208,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
     });
     const release = await this.#lock();
     let node: PluginNodePreparedActivation | null = null;
+    let uiOnly = false;
     // Only the coordinator owns new selection changes. This is not a Run-admission lock.
     const previous = this.#dependencies.nodeHost
       .snapshot()
@@ -228,30 +230,36 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
             "internal",
             "plugin_selection_package_missing",
           );
-        const verified = await verifyLocalPluginPackage({
-          directory: join(
-            this.#dependencies.installRoot,
-            "packages",
-            pkg.packageDigest.slice(7),
-          ),
+        descriptor = await verifyInstalledSelectionPackage({
+          installRoot: this.#dependencies.installRoot,
+          package: pkg,
         });
-        descriptor = verified.descriptor;
-        if (
-          verified.packageDigest !== pkg.packageDigest ||
-          descriptor.pluginId !== pkg.pluginId ||
-          descriptor.version !== pkg.version ||
-          descriptor.publisherId !== pkg.publisherId
-        )
-          throw new ApplicationError(
-            "internal",
-            "plugin_installed_bytes_mismatch",
-          );
+        uiOnly = descriptor.entrypoints.node === null;
       }
       await this.#dependencies.validateCompatibility({
         ...preparedInput,
         descriptor,
       });
-      if (needsPackage) {
+      if (needsPackage && uiOnly) {
+        if (
+          (await this.#dependencies.authorizeActivation({
+            ...authority,
+            candidate: Object.freeze({
+              descriptor: descriptor!,
+              packageDigest: pkg!.packageDigest,
+            }),
+          })) !== "allow"
+        )
+          throw new ApplicationError(
+            "authorization",
+            "plugin_activation_denied",
+          );
+        // The authority await must not let changed installed bytes retain the previous grant.
+        await verifyInstalledSelectionPackage({
+          installRoot: this.#dependencies.installRoot,
+          package: pkg!,
+        });
+      } else if (needsPackage) {
         node = await this.#dependencies.nodeHost.prepare({
           installRoot: this.#dependencies.installRoot,
           expectedPluginId: nextSelection.pluginId,
@@ -318,7 +326,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
               "conflict",
               "plugin_selection_commit_mismatch",
             );
-          if (nextSelection.state === "enabled") {
+          if (nextSelection.state === "enabled" && !uiOnly) {
             if (!candidate)
               throw new ApplicationError(
                 "internal",
