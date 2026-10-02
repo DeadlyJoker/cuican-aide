@@ -19,6 +19,7 @@ import {
   type AuthorityTime,
 } from "./runtime-authority-query.ts";
 import { ToolResultMaintenance } from "./tool-result-maintenance.ts";
+import { toolResultMaintenanceSources } from "./tool-result-maintenance-sources.ts";
 import { durableModelCallSink } from "./durable-model-call-sink.ts";
 import { StorageAdmissionError } from "@crewon/application";
 import { RunStoreBusyError } from "@crewon/application";
@@ -367,19 +368,30 @@ export class RuntimeWorker {
     let visitRegistry = false;
     this.#toolResultMaintenance = new ToolResultMaintenance({
       store: dependencies.store,
-      nextRuntimeLease: () => {
-        const resolver = this.#agentVersionRuntimeResolver;
-        if (resolver?.nextToolResultMaintenanceLease !== undefined) {
-          return resolver.nextToolResultMaintenanceLease();
-        }
-        visitRegistry = !visitRegistry;
-        if (visitRegistry) {
-          return externalResourceLease(
-            resolver?.nextToolResultMaintenanceRuntime?.() ?? this.#toolRuntime,
-          );
-        }
-        return externalResourceLease(this.#toolRuntime);
-      },
+      nextRuntimeLease: toolResultMaintenanceSources({
+        ...(this.#installedPluginRuntimeResolver
+          ?.nextToolResultMaintenanceLease === undefined
+          ? {}
+          : {
+              installed: () =>
+                this.#installedPluginRuntimeResolver!
+                  .nextToolResultMaintenanceLease!(),
+            }),
+        base: () => {
+          const resolver = this.#agentVersionRuntimeResolver;
+          if (resolver?.nextToolResultMaintenanceLease !== undefined) {
+            return resolver.nextToolResultMaintenanceLease();
+          }
+          visitRegistry = !visitRegistry;
+          if (visitRegistry) {
+            return externalResourceLease(
+              resolver?.nextToolResultMaintenanceRuntime?.() ??
+                this.#toolRuntime,
+            );
+          }
+          return externalResourceLease(this.#toolRuntime);
+        },
+      }),
     });
     this.#governedContextItems =
       dependencies.governedContext?.modelItems() ?? [];

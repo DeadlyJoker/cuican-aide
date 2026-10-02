@@ -295,17 +295,44 @@ export class InstalledPluginRuntimeResolver
     }
     selected.users++;
     selected.published = true;
+    return this.#lease(selected, resource);
+  }
+
+  /** Never loads a Run, opens a package or authorizes provider work during idle receipt repair. */
+  nextToolResultMaintenanceLease(): RuntimeResourceLease<ToolRuntimePort> | null {
+    if (this.#closing) return null;
+    // Rotate at most the bounded resident set, including entries that remain quarantined.
+    for (let visited = 0; visited < this.#entries.size; visited++) {
+      const first = this.#entries.entries().next().value;
+      if (first === undefined) return null;
+      const [key, entry] = first;
+      this.#entries.delete(key);
+      this.#entries.set(key, entry);
+      if (entry.closing || !entry.published || entry.resident?.adapter == null)
+        continue;
+      if (entry.users === 0) this.#beginRetirement(entry, "idle");
+      if (entry.closing) continue;
+      entry.users++;
+      return this.#lease(entry, entry.resident.adapter);
+    }
+    return null;
+  }
+
+  #lease(
+    entry: Entry,
+    resource: ToolRuntimePort,
+  ): RuntimeResourceLease<ToolRuntimePort> {
     let released = false;
     return Object.freeze({
       resource,
       release: () => {
         if (released) return;
         released = true;
-        selected.users--;
-        if (selected.users === 0) {
-          selected.waitForUsers?.();
-          selected.waitForUsers = null;
-          if (!selected.closing) this.#beginRetirement(selected, "idle");
+        entry.users--;
+        if (entry.users === 0) {
+          entry.waitForUsers?.();
+          entry.waitForUsers = null;
+          if (!entry.closing) this.#beginRetirement(entry, "idle");
         }
       },
     });

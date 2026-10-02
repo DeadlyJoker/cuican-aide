@@ -83,4 +83,14 @@ Control 内部 `InstalledPluginTaskActionOwner` 接收真实任务服务、原�
 
 测试预构建阶段从官方 registry 安装模板固定的开发工具，关闭安装脚本；首次运行需要 registry 可达或有完整缓存。SDK 本身来自本地 tarball，消费者运行前已删除实际开发目录及依赖。
 
+模板的 `packageManager` 固定为 pnpm 10.33.0；复制到仓外后仍使用 Node.js 24 和相同 pnpm 版本。
+
 同包专项用实际 renderer loader 和安装 UI 字节，在 DOM 按钮提交后经过真实本机 HTTP、原付费 Turn/Run 事务及 owned Worker。供应商是明确标注的 HTTP/SQLite 夹具，模型、身份、包许可及报价仍为夹具；供应商数据库与 Worker 连接重开不等于跨操作系统进程的生产验收。积分目前仅验证原预留事务，单次价格和失败退款规则仍须产品确认后装配真实报价与结算。
+
+## 2026-10-03：终态本地回执维护
+
+实际 `InstalledPluginRuntimeResolver` 现在提供可选的 `nextToolResultMaintenanceLease` 端口。Worker 在原工具与该 owner 间有界轮转，安装侧仅返回已准入的实际 SDK 实例，不通过维护创建新任务、导入新包或申请 dispatch 权限。原 Store 正确核验已提交的工具回执后，才向该实际实例 ACK。
+
+维护租用保持原 Node owner 和缓存容量。等待中的 Store 读取、物理工具调用、未确认回执和清理失败都不能按空扫描推断资源已释放。闲置退休仍须实际 `canRetire() === true`，随后完成工具与 Node 清理；显式关闭等待当前维护租用。停用与授权撤销阻断外部操作，但不阻止仅凭原持久证据的本地确认。
+
+SQLite/PostgreSQL 专项已验证终态 COMMIT→ACK 中断、撤权后的无外部调用确认和容量释放；正式 Worker 全量 1,417/1,417。该端口不补造生产身份、报价或结算，也不改变旧 Run/Tool 协议。

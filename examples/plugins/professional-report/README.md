@@ -2,7 +2,7 @@
 
 将整个目录复制到 CrewON 仓库外开发，仅依赖公开 `@crewon/plugin-sdk`。它包含同一个包的页面、任务动作和执行工厂；不导入宿主源码，不修改首页或主题。示例不是已接通的企业 AI 服务，外部报告 API 必须由开发者实现或适配。
 
-SDK 尚未发布到 registry。在 CrewON 仓库内用 Node.js 24、pnpm 10 执行 `pnpm --filter @crewon/plugin-sdk pack --pack-destination /absolute/sdk-output`，然后在复制后的插件项目中执行：
+SDK 尚未发布到 registry。在 CrewON 仓库内用 Node.js 24、pnpm 10.33.0 执行 `pnpm --filter @crewon/plugin-sdk pack --pack-destination /absolute/sdk-output`，然后在复制后的插件项目中执行；模板的 `packageManager` 同样固定为 pnpm 10.33.0：
 
 ```sh
 pnpm add /absolute/sdk-output/crewon-plugin-sdk-0.1.0.tgz

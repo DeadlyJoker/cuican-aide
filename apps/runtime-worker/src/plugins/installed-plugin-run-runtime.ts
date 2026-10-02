@@ -39,6 +39,8 @@ export type InstalledPluginRunRuntimeResolverPort = Readonly<{
       signal: AbortSignal;
     }>,
   ): Promise<RuntimeResourceLease<ToolRuntimePort> | null>;
+  /** Local receipt maintenance borrows only already admitted, actually owned runtimes; it grants no dispatch authority. */
+  nextToolResultMaintenanceLease?(): RuntimeResourceLease<ToolRuntimePort> | null;
   /** The composition closes an owned resolver after Worker admission stops. */
   close?(): Promise<void>;
 }>;
