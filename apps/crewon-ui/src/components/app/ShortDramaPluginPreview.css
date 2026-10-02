@@ -30,7 +30,8 @@
     z-index: 45;
     display: block;
     border: 0;
-    background: rgb(0 0 0 / 18%);
+    /* Opening navigation must preserve the host's existing page colors. */
+    background: transparent;
   }
 
   .short-drama-plugin-preview[data-preview-navigation-open="true"]
