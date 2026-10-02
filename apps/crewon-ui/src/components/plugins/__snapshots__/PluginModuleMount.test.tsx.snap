@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`PluginModuleMount host composition > renders only an empty content slot inheriting the existing host theme 1`] = `"<div class="host-pane" data-plugin-content-slot="main.content"></div>"`;

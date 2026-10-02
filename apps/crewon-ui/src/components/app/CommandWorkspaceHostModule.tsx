@@ -10,7 +10,7 @@ export type CommandWorkspacePlatformSnapshotLoader =
 export type CommandWorkspaceHostModule = Readonly<{
   id: string;
   label: string;
-  content: ReactNode;
+  content: ReactNode | ((state: Readonly<{ active: boolean }>) => ReactNode);
 }>;
 
 export function useCommandWorkspaceHostModule(
@@ -43,7 +43,9 @@ export function CommandWorkspaceHostModulePane({
       data-host-module-id={module.id}
       hidden={!active}
     >
-      {module.content}
+      {typeof module.content === "function"
+        ? module.content({ active })
+        : module.content}
     </section>
   );
 }

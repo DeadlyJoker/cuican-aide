@@ -12,3 +12,9 @@ export {
   type PluginUiContribution,
   type PluginPackageFile,
 } from "./plugin-package-contract.ts";
+export {
+  PluginUiContractError,
+  parsePluginUiJsonValue,
+  type PluginUiJsonValue,
+} from "./plugin-ui-json.ts";
+export { parsePluginUiLease, type PluginUiLease } from "./plugin-ui-lease.ts";

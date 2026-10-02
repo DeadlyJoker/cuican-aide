@@ -28,3 +28,7 @@ export {
   type PluginNodePreparedActivation,
   type PluginNodePreparedCommit,
 } from "./plugin-node-host.ts";
+export {
+  LocalPluginUiPackageReader,
+  type LocalPluginUiPackageReaderDependencies,
+} from "./plugin-ui-package-reader.ts";

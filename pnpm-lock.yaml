@@ -103,6 +103,9 @@ importers:
       '@crewon/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@crewon/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       '@crewon/store':
         specifier: workspace:*
         version: link:../../packages/store

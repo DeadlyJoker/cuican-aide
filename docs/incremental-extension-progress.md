@@ -4,6 +4,22 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：独立 UI 安装产物加载与原宿主样式核验
+
+增加严格 `crewon.plugin-ui-lease.v1` 和有界 JSON 契约，内部 UI 用例从当前 actor/profile 读取真实安装账本，以独立 UI 权限、修订及权限 epoch 核验目录、挂载、资源和动作。引用不单独授予权限；异步前后重新核验，观察到失效的引用不随回滚恢复。实际文件适配器要求宿主批准公开子集，逐次验证完整安装目录和资源字节，不把混合包的 Node 入口默认暴露给浏览器。Node-only/未支持贡献可以从目录跳过，身份、授权、文件和未知异常仍保持拒绝。
+
+Renderer 通过固定同源 URL 原生导入预构建 UI，支持相对 chunk；只挂在原主内容槽，传入有界主题投影及窄动作桥。隐藏模块不加载，退出同步撤回本次动作资格；更新、替换、取消和卸载分别清理自己持有的实例，失败保留诊断。当前只支持可信 `trustedModule` 的主内容模块；可信代码拥有普通 Renderer 权限，样式根节点约束不是沙箱。原生导入没有入口 SRI 且已经开始后不能取消，未实现的 `isolatedWeb`、设置和结果贡献不降级加载。
+
+实际[仓外浏览器夹具](../artifacts/installable-plugin-ui-preview/README.md) 打包 SDK，在独立临时项目离线安装、严格编译与 bundle 两个版本，安装到真实 SQLite/目录组合后删除开发目录与 node_modules。浏览器原生获取 8 次声明的入口/chunk 字节，实际 SHA/长度与安装清单一致；v1/v2 动作分别调用实际 Node 服务，投影更新、退出/重进、升级、卸载/重挂和授权撤销通过。无会话、伪造 actor、私有 Node 资源和旧引用均拒绝，关闭后的资源为 404。最终停用修订为 4，6 个挂载引用全部关闭，撤销后没有额外成功动作。仅使用固定测试身份、测试策略及计数服务，不代表生产授权、收费调用或第二个真实企业接口。
+
+按用户再次强调的“样式完全一致”复查 `776484c57` 与模块接入前 `2d753e8f5`：原共用 CSS、窗口框架、路由、右工作台、平台与外观文件均无插件改写；导航只追加模块入口。修正新独立预览在已有 appearance 时漏写主题的初始化，复用原主题与 URL 覆盖逻辑。实际浏览器确认原首页、侧栏品牌/工具的字体颜色及模块进入前后布局相同；左栏 232px↔0px 动态重排，左右栏同时展开时主内容 568px、右工作台 480px，矩形相邻，无覆盖及横向溢出。原 5719 页面保留；5720 临时服务正常停止，全部自有临时目录清除。截图为 `output/extensions/short-drama-preview/style-consistency-home.jpg`、`style-consistency-both-sidebars.jpg` 及 `output/extensions/independent-ui/native-installed-v2.jpg`。
+
+统一检查 Application 271/271、Host 60/60、test-contracts 24/24、SDK 真实仓外分发 5/5、20 个 packages 类型及边界通过。额外只读审查发现 JSON 聚合预算原来在复制/序列化后检查，已改为遍历时准确累计 UTF-8/转义/标点预算，避免超大输入先放大内存；新增小预算回归不制造大内存。修复后契约专项 11/11、Application UI 24/24、Renderer 34/34，Contracts 全量 161/161、SDK 5/5 再次通过。原宿主工作台 128/128、相邻样式/预览/窗口 98/98，加上 loader/组件/架构 39/39，全为 0 失败；既有快照未改，UI lint、build、最终边界和仓库格式通过。有效日志为 `output/extensions/checks/plugin-ui-*-unified.log`、`plugin-ui-*-final.log`、`plugin-ui-json-budget-*.log` 及 `output/plugin-ui-shell-{command-workspace-narrow,style-preview-frame,build}.log`；误用 pnpm 参数分隔符启动的全 UI 检查已中断，不计验收。
+
+生产安装 HTTP/UI、当前身份/策略与动态可见目录组合、多插件导航、Krea2/短剧独立包迁移、原 Tool/Run/operation/个人积分事务、旧任务恢复及真实企业 API 验收仍待实施，目标保持进行中。此次没有修改正式身份/Worker/积分服务，也未重复在线生图。
+
+夹具另补齐初始化异常及提前退出的资源所有权：资源创建后逐项登记逆序清理，初始化期间 SIG 只请求退出，在当前操作结束后的检查点清理，正常 SIG/stdin 共享同一清理 Promise。启动失败、提前 SIGTERM、正常 stdin stop 和 SIGINT 的 4/4 独立进程验证通过，全部临时目录删除；各 probe 证据单独保存为 `plugin-ui-preview-cleanup-*-evidence.json`，原浏览器证据按备份原字节恢复。服务端及 Renderer 夹具通过严格类型复核，未把测试配置或身份组合并入正式应用。
+
 ## 2026-10-02：恢复插件改造前的完整前端宿主
 
 按用户“样式完全一致”的要求，预览改为直接复用原 `DesktopWindowFrame`、`AppCommandShellRoute` 和 `CommandWorkspaceCapabilityDrawer`。撤销预览自造的导航按钮、左侧绝对定位抽屉、遮罩及模块顶端额外间距，恢复原窗口控件、品牌位置、右侧工作台开关与宽度调整。通过已有 URL 桌面样式覆盖统一 Frame、Chrome 和 appearance 的环境检测，保存的外观设置不会再把预览切回 Web；没有伪造原生 IPC 桥接。

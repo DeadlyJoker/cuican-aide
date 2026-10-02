@@ -6,11 +6,11 @@ SDK 可打包为本地 `.tgz`，供独立开发项目安装，尚未发布到 np
 
 ## 三个公开入口
 
-| 入口                           | 内容                                                                                                                                      |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `@crewon/plugin-sdk/contracts` | 包描述契约、`parsePluginPackageDescriptor`，以及 `PluginJsonValue`、`PluginDisposable`、`PluginIdentity`、Node 上下文和 UI props 等纯类型 |
-| `@crewon/plugin-sdk/node`      | `definePlugin`、`parsePluginNodeDefinition`、`PluginSdkContractError` 与 Node ABI 类型                                                    |
-| `@crewon/plugin-sdk/ui`        | `defineUiPlugin`、`parsePluginUiDefinition`、`PluginSdkContractError` 与 UI ABI 类型                                                      |
+| 入口                           | 内容                                                                                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@crewon/plugin-sdk/contracts` | 包描述契约、`parsePluginPackageDescriptor`、`parsePluginUiLease`、有界 `parsePluginUiJsonValue`，以及身份、生命周期、Node 上下文和 UI props 等纯类型 |
+| `@crewon/plugin-sdk/node`      | `definePlugin`、`parsePluginNodeDefinition`、`PluginSdkContractError` 与 Node ABI 类型                                                               |
+| `@crewon/plugin-sdk/ui`        | `defineUiPlugin`、`parsePluginUiDefinition`、`PluginSdkContractError` 与 UI ABI 类型                                                                 |
 
 没有包根入口。包描述契约沿用 `@crewon/contracts/plugins` 的权威实现，构建时将其纯模块闭包打入 SDK。描述校验只检查结构，不读取产物字节、执行插件或授予权限。Node 入口的声明闭包无需 DOM 类型；UI 入口需要 TypeScript 的 `DOM` lib。
 

@@ -193,6 +193,11 @@ const boundaries: readonly Boundary[] = [
         "@crewon/application",
         "@crewon/domain",
       ],
+      "plugin-ui-package-reader.ts": ["@crewon/application", "@crewon/domain"],
+      "plugin-ui-package-reader-support.ts": [
+        "@crewon/application",
+        "@crewon/domain",
+      ],
     },
     allowedRuntimeDependencies: [
       "@crewon/application",
@@ -498,17 +503,15 @@ test("plugin host only imports the exact approved SDK and plugin contract entryp
     );
 });
 
-test("only the local installation adapter bridges Application and Domain ports", () => {
+test("only the installation and UI asset adapters bridge Application and Domain ports", () => {
   const host = boundaries.find((value) => value.packageName === "plugin-host")!;
   for (const specifier of ["@crewon/application", "@crewon/domain"]) {
-    assert.equal(
-      boundaryAllowsImport(
-        host,
-        "plugin-installation-local-host.ts",
-        specifier,
-      ),
-      true,
-    );
+    for (const file of [
+      "plugin-installation-local-host.ts",
+      "plugin-ui-package-reader.ts",
+      "plugin-ui-package-reader-support.ts",
+    ])
+      assert.equal(boundaryAllowsImport(host, file, specifier), true);
     assert.equal(
       boundaryAllowsImport(host, "plugin-node-host.ts", specifier),
       false,
@@ -519,14 +522,12 @@ test("only the local installation adapter bridges Application and Domain ports",
     "@crewon/application/internal",
     "@crewon/domain/internal",
   ])
-    assert.equal(
-      boundaryAllowsImport(
-        host,
-        "plugin-installation-local-host.ts",
-        specifier,
-      ),
-      false,
-    );
+    for (const file of [
+      "plugin-installation-local-host.ts",
+      "plugin-ui-package-reader.ts",
+      "plugin-ui-package-reader-support.ts",
+    ])
+      assert.equal(boundaryAllowsImport(host, file, specifier), false);
 });
 
 test("AgentVersion Node subpaths cannot become compiler dependencies or acquire unrelated Node capabilities", () => {
