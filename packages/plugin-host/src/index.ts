@@ -36,3 +36,4 @@ export type {
   PluginInstalledSelectionRecoveryInput,
   PluginInstalledSelectionRecoveryPolicy,
 } from "./plugin-installation-recovery.ts";
+export { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";

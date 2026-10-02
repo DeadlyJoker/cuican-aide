@@ -2,6 +2,11 @@ import assert from "node:assert/strict";
 import { chmod, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import type {
+  PluginUiActionContext,
+  PluginUiCommittedTaskOutcome,
+  PluginUiCommittedTaskPort,
+} from "@crewon/application";
 import {
   pluginRouteActor,
   pluginRouteScope,
@@ -202,3 +207,67 @@ test("close never returns a late injected action result as a successful public r
   complete();
   await held;
 });
+
+for (const committed of [true, false])
+  test(`production close ${committed ? "preserves verified accepted task output" : "fences ordinary JSON with a committed-task verifier configured"}`, async (t) => {
+    let entered!: () => void;
+    let complete!: () => void;
+    const invoked = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    // This fixture tests lifecycle composition of a trusted verifier. Real SQL receipt validation
+    // lives in Application and the installed ESM + SQLite task bridge integration suite.
+    const outcomes = new WeakMap<object, PluginUiActionContext>();
+    const receipt = Object.freeze({
+      disposition: "committed",
+      threadId: "fixture-thread",
+      threadRevision: 2,
+      runId: "fixture-original-run",
+      messageId: "fixture-message",
+      configurationRevision: 1,
+    });
+    const verifier: PluginUiCommittedTaskPort = {
+      isOutcome(input): input is PluginUiCommittedTaskOutcome {
+        return (
+          input !== null && typeof input === "object" && outcomes.has(input)
+        );
+      },
+      verify(context, outcome) {
+        assert.equal(outcomes.get(outcome), context);
+        outcomes.delete(outcome);
+        return receipt;
+      },
+    };
+    const f = await productionPluginUiFixture(t, {
+      committedTasks: verifier,
+      actions: {
+        async invoke(context) {
+          const outcome = Object.freeze(
+            Object.create(null),
+          ) as PluginUiCommittedTaskOutcome;
+          outcomes.set(outcome, context);
+          entered();
+          await held;
+          return committed ? outcome : { accepted: true };
+        },
+      },
+    });
+    const lease = await f.open();
+    const pending = f.app.inject({
+      method: "POST",
+      url: `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      headers: f.authentication.headers,
+      payload: { action: "allowed.fixture", input: {} },
+    });
+    await invoked;
+    f.runtime.close();
+    complete();
+    const response = await pending;
+    assert.equal(response.statusCode, committed ? 200 : 409, response.body);
+    if (committed) assert.deepEqual(response.json(), { output: receipt });
+    else
+      assert.equal(response.json().error.code, "plugin_ui_service_unavailable");
+  });

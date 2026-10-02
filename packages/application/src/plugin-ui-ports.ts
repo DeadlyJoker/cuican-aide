@@ -62,6 +62,27 @@ export interface PluginUiOpaqueIdPort {
   /** Unpredictable unique host-issued reference; 32..128 ASCII letters, digits, '_' or '-'. */
   nextId(): string;
 }
+export type PluginUiActionContext = PluginUiPackageContext &
+  Readonly<{
+    lease: PluginUiLease;
+    authorityEpoch: string;
+    action: string;
+    input: PluginUiJsonValue;
+  }>;
+declare const pluginUiCommittedTaskOutcomeTag: unique symbol;
+/** Host-only opaque capability. Neither its TypeScript shape nor plugin JSON proves a commit. */
+export type PluginUiCommittedTaskOutcome = Readonly<{
+  [pluginUiCommittedTaskOutcomeTag]: true;
+}>;
+export interface PluginUiCommittedTaskPort {
+  /** Only a private registry membership check may recognize an issued outcome. */
+  isOutcome(input: unknown): input is PluginUiCommittedTaskOutcome;
+  /** Synchronous, single-use projection of an already verified durable task for this exact invocation. */
+  verify(
+    context: PluginUiActionContext,
+    outcome: PluginUiCommittedTaskOutcome,
+  ): PluginUiJsonValue;
+}
 export interface PluginUiActionPort {
   /**
    * Required host allowlist and dispatch fence. Rechecks current durable selection/authority at actual
@@ -70,12 +91,6 @@ export interface PluginUiActionPort {
    * Run/Tool/credit admission remains the responsibility of its existing authorized business boundary.
    */
   invoke(
-    input: PluginUiPackageContext &
-      Readonly<{
-        lease: PluginUiLease;
-        authorityEpoch: string;
-        action: string;
-        input: PluginUiJsonValue;
-      }>,
-  ): Promise<PluginUiJsonValue>;
+    input: PluginUiActionContext,
+  ): Promise<PluginUiJsonValue | PluginUiCommittedTaskOutcome>;
 }

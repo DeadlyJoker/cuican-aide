@@ -71,6 +71,32 @@ export default definePlugin({
 
 `setup` 可返回 `void`、`PluginDisposable` 或对应的 Promise。`onDispose` 接受同步或异步清理函数。服务发现、声明核验、注册提交、失败清理以及升级时旧实例租约的保留由宿主实现，SDK 只定义调用接口。插件应登记自己获取资源后的清理操作；服务注册返回的 disposable 可用于撤销注册。
 
+## 任务与动作 ABI
+
+Node 和 contracts 入口导出 `CREWON_TASKS_SERVICE = "crewon.tasks"`、`CREWON_TASKS_API_VERSION = "1"`、`PluginTaskService`、`PluginTaskRequest`、`PluginTaskReceipt` 和 `PluginActionsService` 等纯类型。包需显式声明该任务依赖，宿主也必须实际装配对应服务：
+
+```ts
+const tasks = ctx.services.get<PluginTaskService>(
+  CREWON_TASKS_SERVICE,
+  CREWON_TASKS_API_VERSION,
+);
+const receipt = await tasks.createTask({
+  invocationRef,
+  threadId,
+  expectedThreadRevision,
+  idempotencyKey,
+  input: { prompt: "A ceramic teapot by a sunlit window." },
+});
+```
+
+`invocationRef` 由当前宿主在授权业务动作时签发，具有范围和有效期；插件不能自行生成授权引用，也不能传入 actor、principal、profile、付款方或价格。线程与业务输入仍须通过宿主检查。回执只有 `disposition`、`threadId`、`threadRevision`、`runId`、`messageId`、`configurationRevision` 六个字段，后续输出使用宿主原有 Run 事件与恢复路径。
+
+动作服务以插件自己的 `pluginId` 和 API 版本 `"1"` 提供，类型为 `PluginActionsService`：`actions` 列出 `{ contributionId, action, kind: "read" | "generateTask" }`，`invoke` 接收 `{ invocationRef, contributionId, action, input }` 并返回 JSON。声明不会授予动作权限，客户端不能指定 Node 服务；宿主负责当前贡献、选择、包版本和每次调用授权。该 ABI 不增加 manifest 字段，也不把插件在 `setup` 时固定绑定到某个用户。
+
+业务动作桥要求动作服务为普通数据对象 `{ actions, invoke }`，并捕获 `invoke` 后调用；动作声明中的 getter、隐藏字段和未知字段会被拒绝。这是该动作 ABI 的边界，通用 Node 服务的 `provide` 接口仍允许其他服务对象。
+
+目前 SDK 已提供这些调用接口与独立安装后的 ABI 验证；它们本身不签发引用、不创建 Run、不扣款，也不表示业务动作桥已经装配。
+
 ## UI 入口示例
 
 独立项目的 `src/ui.ts`：
@@ -115,4 +141,4 @@ pnpm exec esbuild src/node.ts src/ui.ts --bundle --format=esm --platform=neutral
 
 Node 插件运行在受信任的宿主进程中。公开 ABI 不是沙箱，也不提供文件系统、网络或权限隔离；安装信任、启停授权以及每次业务调用的身份检查由宿主负责。
 
-当前 SDK 没有公开的 Run、ToolRuntime、工作流、配置或计费服务端口。`services.get` / `provide` 只能访问宿主实际装配、且包中声明的命名服务，不意味着这些能力已经可用。
+任务 ABI 之外，当前 SDK 没有公开的 ToolRuntime、工作流、配置或计费服务端口。`services.get` / `provide` 只能访问宿主实际装配、且包中声明的命名服务，不意味着这些能力已经可用。

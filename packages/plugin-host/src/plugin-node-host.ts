@@ -37,6 +37,8 @@ export type PluginHostService = Readonly<{
   service: string;
   apiVersion: string;
   value: object;
+  /** Trusted host factory only; receives this instance's actual frozen package identity. */
+  bindForPlugin?(identity: PluginIdentity): object;
 }>;
 export type PluginActivationCandidate = Readonly<{
   descriptor: PluginPackageDescriptor;
@@ -79,6 +81,8 @@ type Instance = {
   identity: PluginIdentity;
   descriptor: PluginPackageDescriptor;
   dependencies: Map<string, Service>;
+  boundServices: Map<Service, object>;
+  bindingFailure: PluginNodeHostError | null;
   provisions: Map<string, Service>;
   cleanup: Array<() => void | Promise<void>>;
   phase:
@@ -114,10 +118,17 @@ export class PluginNodeHost {
     if (input.services.length > 1024) fail("plugin_host_service_limit");
     for (const service of input.services) {
       checkService(service.service, service.apiVersion, service.value);
+      const bindForPlugin = service.bindForPlugin;
+      if (bindForPlugin !== undefined && typeof bindForPlugin !== "function")
+        fail("plugin_host_service_binding_invalid");
       if (this.#services.has(service.service)) fail("plugin_service_conflict");
       this.#services.set(
         service.service,
-        Object.freeze({ ...service, owner: null }),
+        Object.freeze({
+          ...service,
+          bindForPlugin: bindForPlugin?.bind(service),
+          owner: null,
+        }),
       );
     }
   }
@@ -356,6 +367,8 @@ export class PluginNodeHost {
       identity,
       descriptor,
       dependencies,
+      boundServices: new Map(),
+      bindingFailure: null,
       provisions: new Map(),
       cleanup: [],
       phase: "starting",
@@ -398,6 +411,7 @@ export class PluginNodeHost {
         instance.cleanup.push(() => started.dispose());
       }
       instance.setupOpen = false;
+      if (instance.bindingFailure !== null) throw instance.bindingFailure;
       this.#checkActivation(token);
       this.#checkDependencies(instance);
       this.#checkConflicts(descriptor);
@@ -579,7 +593,27 @@ export class PluginNodeHost {
             instance.phase === "cleanupFailed"
           )
             fail("plugin_instance_unavailable");
-          return value.value as T;
+          if (value.owner !== null || value.bindForPlugin === undefined)
+            return value.value as T;
+          const cached = instance.boundServices.get(value);
+          if (cached !== undefined) return cached as T;
+          if (instance.bindingFailure !== null) throw instance.bindingFailure;
+          try {
+            const bound = value.bindForPlugin(instance.identity);
+            if (bound instanceof Promise) {
+              void bound.catch(() => undefined);
+              fail("plugin_host_service_binding_invalid");
+            }
+            checkService(service, apiVersion, bound);
+            instance.boundServices.set(value, bound);
+            return bound as T;
+          } catch (cause) {
+            instance.bindingFailure = new PluginNodeHostError(
+              "plugin_host_service_binding_failed",
+              { cause },
+            );
+            throw instance.bindingFailure;
+          }
         },
         provide: <T extends object>(
           service: string,
@@ -718,6 +752,7 @@ export class PluginNodeHost {
       return; // Retain dependency leases: failed cleanup is not proof resources are gone.
     }
     instance.phase = "disposed";
+    instance.boundServices.clear();
     for (const service of instance.dependencies.values())
       if (service.owner) {
         service.owner.borrowers -= 1;

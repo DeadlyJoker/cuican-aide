@@ -11,3 +11,13 @@ export type {
   PluginUiTheme,
   PluginUiProps,
 } from "./sdk-types.js";
+export {
+  CREWON_TASKS_SERVICE,
+  CREWON_TASKS_API_VERSION,
+  type PluginTaskRequest,
+  type PluginTaskReceipt,
+  type PluginTaskService,
+  type PluginActionDeclaration,
+  type PluginActionInvocation,
+  type PluginActionsService,
+} from "./task-action-types.js";

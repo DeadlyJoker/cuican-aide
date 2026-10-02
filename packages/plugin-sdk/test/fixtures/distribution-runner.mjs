@@ -4,6 +4,11 @@ import { parsePluginNodeDefinition } from "@crewon/plugin-sdk/node";
 import { parsePluginUiDefinition } from "@crewon/plugin-sdk/ui";
 import plugin, { events } from "./dist/external-node.js";
 import ui from "./dist/external-ui.js";
+import taskPlugin from "./dist/external-task-node.js";
+import {
+  CREWON_TASKS_SERVICE,
+  CREWON_TASKS_API_VERSION,
+} from "@crewon/plugin-sdk/node";
 
 const callbacks = [];
 const provided = new Map();
@@ -51,4 +56,82 @@ assert.deepEqual(events, ["setup:example.external", "dispose", "cleanup"]);
 assert.equal(parsePluginUiDefinition(ui).pluginId, "example.external");
 console.log(
   "External installed SDK: Node setup, service ABI and cleanup passed; UI ABI compiled and validated.",
+);
+
+// Contract fixture only: this port does not claim real authority, credit admission or Run execution.
+const taskCallbacks = [];
+const taskServices = new Map();
+const requests = [];
+const receipt = Object.freeze({
+  disposition: "committed",
+  threadId: "fixture-thread",
+  threadRevision: 2,
+  runId: "fixture-run",
+  messageId: "fixture-message",
+  configurationRevision: 1,
+});
+await parsePluginNodeDefinition(taskPlugin).setup(
+  Object.freeze({
+    identity: Object.freeze({
+      pluginId: "example.tasks",
+      version: "0.1.0",
+      packageDigest: `sha256:${"b".repeat(64)}`,
+    }),
+    services: Object.freeze({
+      get(service, apiVersion) {
+        assert.equal(service, CREWON_TASKS_SERVICE);
+        assert.equal(apiVersion, CREWON_TASKS_API_VERSION);
+        return {
+          createTask: async (input) => {
+            requests.push(input);
+            return receipt;
+          },
+        };
+      },
+      provide(service, apiVersion, value) {
+        assert.equal(service, "example.tasks");
+        assert.equal(apiVersion, "1");
+        taskServices.set(service, value);
+        return {
+          dispose() {
+            taskServices.delete(service);
+          },
+        };
+      },
+    }),
+    onDispose(callback) {
+      taskCallbacks.push(callback);
+    },
+  }),
+);
+const actions = taskServices.get("example.tasks");
+assert.deepEqual(actions.actions, [
+  {
+    contributionId: "workbench",
+    action: "image.generate",
+    kind: "generateTask",
+  },
+]);
+assert.deepEqual(
+  await actions.invoke({
+    invocationRef: "fixture-invocation-reference",
+    contributionId: "workbench",
+    action: "image.generate",
+    input: { prompt: "fixture" },
+  }),
+  receipt,
+);
+assert.deepEqual(requests, [
+  {
+    invocationRef: "fixture-invocation-reference",
+    threadId: "fixture-thread",
+    expectedThreadRevision: 1,
+    idempotencyKey: "fixture-task-key",
+    input: { prompt: "fixture" },
+  },
+]);
+for (const callback of taskCallbacks.reverse()) await callback();
+assert.equal(taskServices.size, 0);
+console.log(
+  "Task and action ABI compiled and invoked through the isolated installed SDK contract fixture.",
 );

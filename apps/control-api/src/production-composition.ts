@@ -94,6 +94,14 @@ export async function createProductionPostgresControlApi(
     actions === undefined
       ? undefined
       : Object.freeze({ invoke: actions.invoke.bind(actions) });
+  const committedTasks = config.pluginUi?.committedTasks;
+  const committedSnapshot =
+    committedTasks === undefined
+      ? undefined
+      : Object.freeze({
+          isOutcome: committedTasks.isOutcome.bind(committedTasks),
+          verify: committedTasks.verify.bind(committedTasks),
+        });
   const productionConfig =
     config.pluginUi === undefined
       ? config
@@ -106,6 +114,9 @@ export async function createProductionPostgresControlApi(
             ...(actionSnapshot === undefined
               ? {}
               : { actions: actionSnapshot }),
+            ...(committedSnapshot === undefined
+              ? {}
+              : { committedTasks: committedSnapshot }),
           }),
         };
   const store = await PostgresDomainStore.open({
@@ -393,6 +404,18 @@ function validateProductionConfig(
         "invoke",
         "production_plugin_ui_actions_invalid",
       );
+    if (config.pluginUi.committedTasks !== undefined) {
+      requireMethod(
+        config.pluginUi.committedTasks,
+        "isOutcome",
+        "production_plugin_ui_committed_tasks_invalid",
+      );
+      requireMethod(
+        config.pluginUi.committedTasks,
+        "verify",
+        "production_plugin_ui_committed_tasks_invalid",
+      );
+    }
   }
   if (config.providerProbeWorkers !== undefined) {
     requireMethod(

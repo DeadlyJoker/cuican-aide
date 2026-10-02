@@ -130,6 +130,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
     }
     for (const name of [
       "external-node.ts",
+      "external-task-node.ts",
       "external-ui.ts",
       "type-boundaries.ts",
       "distribution-runner.mjs",
@@ -150,7 +151,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
             outDir: "dist",
             rootDir: ".",
           },
-          files: ["external-node.ts"],
+          files: ["external-node.ts", "external-task-node.ts"],
         },
         null,
         2,
@@ -219,6 +220,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
       executed,
       /Node setup, service ABI and cleanup passed; UI ABI compiled and validated/u,
     );
+    assert.match(executed, /Task and action ABI compiled and invoked/u);
     console.log(installed.trim());
     console.log(executed.trim());
   } finally {

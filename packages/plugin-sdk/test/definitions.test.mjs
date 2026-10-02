@@ -4,13 +4,26 @@ import {
   definePlugin,
   parsePluginNodeDefinition,
   PluginSdkContractError,
+  CREWON_TASKS_SERVICE,
+  CREWON_TASKS_API_VERSION,
 } from "../dist/node.js";
 import {
   defineUiPlugin,
   parsePluginUiDefinition,
   PluginSdkContractError as UiError,
 } from "../dist/ui.js";
-import { parsePluginPackageDescriptor } from "../dist/contracts.js";
+import {
+  parsePluginPackageDescriptor,
+  CREWON_TASKS_SERVICE as ContractsTaskService,
+  CREWON_TASKS_API_VERSION as ContractsTaskVersion,
+} from "../dist/contracts.js";
+
+test("Node and pure contract entries export the same explicit task service protocol", () => {
+  assert.equal(CREWON_TASKS_SERVICE, "crewon.tasks");
+  assert.equal(CREWON_TASKS_API_VERSION, "1");
+  assert.equal(ContractsTaskService, CREWON_TASKS_SERVICE);
+  assert.equal(ContractsTaskVersion, CREWON_TASKS_API_VERSION);
+});
 
 test("compiled entry helpers freeze detached exact definitions without calling plugin code", () => {
   let calls = 0;

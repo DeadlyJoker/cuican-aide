@@ -3,7 +3,10 @@ import { createServer, request } from "node:https";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import Fastify from "fastify";
-import type { PluginUiActionPort } from "@crewon/application";
+import type {
+  PluginUiActionPort,
+  PluginUiCommittedTaskPort,
+} from "@crewon/application";
 import {
   TEST_CA_CERT,
   TEST_SERVER_CERT,
@@ -183,6 +186,7 @@ export async function productionPluginUiFixture(
   t: TestContext,
   options: {
     actions?: PluginUiActionPort;
+    committedTasks?: PluginUiCommittedTaskPort;
     publicAssets?: readonly string[];
   } = {},
 ) {
@@ -234,7 +238,13 @@ export async function productionPluginUiFixture(
     timeoutMs: 1000,
   });
   const runtime = createProductionPluginUiRuntime(
-    { configuration, ...(options.actions ? { actions: options.actions } : {}) },
+    {
+      configuration,
+      ...(options.actions ? { actions: options.actions } : {}),
+      ...(options.committedTasks
+        ? { committedTasks: options.committedTasks }
+        : {}),
+    },
     {
       ledger: source.ledger,
       clock: { now: () => new Date().toISOString() },

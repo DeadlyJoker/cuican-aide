@@ -42,6 +42,7 @@ import {
 } from "./extension-application-support.ts";
 import {
   assertSavedPluginTask,
+  capturePluginTaskCommitAuthority,
   checkedPluginTaskPin,
   commitPluginTask,
   pluginTaskActor,
@@ -49,6 +50,7 @@ import {
   pluginTaskReceipt,
   requirePluginTaskQuotes,
   requirePluginTaskStore,
+  type PluginTaskCommitAuthorityPort,
 } from "./extension-plugin-task-support.ts";
 
 export type ExtensionTaskIntent =
@@ -100,11 +102,13 @@ export class ExtensionTaskApplicationService {
     actorInput: ActorContext,
     input: CreateExtensionTaskCommand,
     hostDerivedPin: PluginTaskAdmissionPin,
+    commitAuthority?: PluginTaskCommitAuthorityPort,
   ) {
     return this.#createTask(
       actorInput,
       input,
       checkedPluginTaskPin(hostDerivedPin),
+      capturePluginTaskCommitAuthority(commitAuthority),
     );
   }
 
@@ -112,6 +116,7 @@ export class ExtensionTaskApplicationService {
     actorInput: ActorContext,
     input: CreateExtensionTaskCommand,
     pin: PluginTaskAdmissionPin | null,
+    commitAuthority: PluginTaskCommitAuthorityPort | null = null,
   ) {
     return extensionUseCase(async () => {
       const actor =
@@ -444,6 +449,8 @@ export class ExtensionTaskApplicationService {
               ),
             }),
       };
+      if (pin !== null && commitAuthority !== null)
+        await commitAuthority.assertCurrent({ actor, pin });
       const result = await (pin === null
         ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
         : commitPluginTask(this.#dependencies.extensions, commitInput));

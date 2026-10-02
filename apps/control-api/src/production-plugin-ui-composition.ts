@@ -5,6 +5,7 @@ import {
   type ApplicationClock,
   type PluginInstallationStore,
   type PluginUiActionPort,
+  type PluginUiCommittedTaskPort,
   type PluginUiPackageContext,
   type PluginUiPackagePort,
 } from "@crewon/application";
@@ -28,6 +29,8 @@ export type ProductionPluginUiConfig = Readonly<{
   configuration: ProductionPluginUiConfiguration;
   /** Must enter the existing authorized business/Run boundary; no automatic Node dispatch. */
   actions?: PluginUiActionPort;
+  /** Trusted verifier for original durable task receipts; absent for read-only deployments. */
+  committedTasks?: PluginUiCommittedTaskPort;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -52,6 +55,20 @@ export function createProductionPluginUiRuntime(
   )
     throw new Error("production_plugin_ui_actions_invalid");
   const invokeAction = input.actions?.invoke.bind(input.actions);
+  const committedTasks = input.committedTasks;
+  if (
+    committedTasks !== undefined &&
+    (typeof committedTasks.isOutcome !== "function" ||
+      typeof committedTasks.verify !== "function")
+  )
+    throw new Error("production_plugin_ui_committed_tasks_invalid");
+  const committedSnapshot =
+    committedTasks === undefined
+      ? undefined
+      : Object.freeze({
+          isOutcome: committedTasks.isOutcome.bind(committedTasks),
+          verify: committedTasks.verify.bind(committedTasks),
+        });
   const lifetime = new AbortController();
   const available = () => {
     if (lifetime.signal.aborted) unavailable();
@@ -126,6 +143,9 @@ export function createProductionPluginUiRuntime(
           return invokeAction(request);
         },
       },
+      ...(committedSnapshot === undefined
+        ? {}
+        : { committedTasks: committedSnapshot }),
     });
   const call = async <T>(
     work: (service: PluginUiApplicationService) => Promise<T>,
@@ -160,7 +180,16 @@ export function createProductionPluginUiRuntime(
       call((current) => current.validateMount(...args)),
     readAsset: (...args) => call((current) => current.readAsset(...args)),
     closeMount: (...args) => call((current) => current.closeMount(...args)),
-    invoke: (...args) => call((current) => current.invoke(...args)),
+    invoke: (...args) => {
+      if (committedSnapshot === undefined)
+        return call((current) => current.invoke(...args));
+      available();
+      const current = application;
+      if (current === null) unavailable();
+      // The application returns late success only for a verified durable receipt. JSON results
+      // still run its policy fence, whose requests are cancelled by this runtime's lifetime.
+      return current.invoke(...args);
+    },
   });
   return Object.freeze({
     service,

@@ -21,6 +21,25 @@ import type {
 } from "./extension-store-port.ts";
 import { extensionCommand } from "./extension-application-support.ts";
 
+/** Trusted host callback, never a plugin or HTTP-supplied identity/permission claim. */
+export interface PluginTaskCommitAuthorityPort {
+  assertCurrent(
+    input: Readonly<{
+      actor: ActorContext;
+      pin: PluginTaskAdmissionPin;
+    }>,
+  ): Promise<void>;
+}
+
+export function capturePluginTaskCommitAuthority(
+  input: PluginTaskCommitAuthorityPort | undefined,
+): PluginTaskCommitAuthorityPort | null {
+  if (input === undefined) return null;
+  if (typeof input.assertCurrent !== "function")
+    throw new ApplicationError("conflict", "plugin_task_authority_unavailable");
+  return Object.freeze({ assertCurrent: input.assertCurrent.bind(input) });
+}
+
 export function checkedPluginTaskPin(input: unknown): PluginTaskAdmissionPin {
   try {
     return parsePluginTaskAdmissionPin(input);

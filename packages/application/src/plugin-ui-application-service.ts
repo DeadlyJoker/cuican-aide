@@ -5,6 +5,7 @@ import {
 } from "@crewon/contracts/plugins";
 import type { PluginProfileScope } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { registerPluginUiInvocation } from "./plugin-ui-invocation-authority.ts";
 import type { ApplicationClock } from "./application-runtime-ports.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { PluginInstallationHostProfilePort } from "./plugin-installation-host-port.ts";
@@ -20,6 +21,8 @@ import type {
 } from "./plugin-ui-commands.ts";
 import type {
   PluginUiActionPort,
+  PluginUiActionContext,
+  PluginUiCommittedTaskPort,
   PluginUiAuthorizationAction,
   PluginUiAuthorizationPort,
   PluginUiAuthorizationResource,
@@ -66,6 +69,8 @@ export type PluginUiApplicationDependencies = Readonly<{
   authorization: PluginUiAuthorizationPort;
   packages: PluginUiPackagePort;
   actions: PluginUiActionPort;
+  /** Trusted host receipt authority only; never supplied by a plugin or inferred from its JSON. */
+  committedTasks?: PluginUiCommittedTaskPort;
   ids: PluginUiOpaqueIdPort;
   clock: ApplicationClock;
   /** Only lower limits are accepted; there is no unbounded lease or byte configuration. */
@@ -103,6 +108,10 @@ export class PluginUiApplicationService {
           typeof (port as unknown as Record<string, unknown>)[method] !==
             "function"
         )
+          throw new ApplicationError("internal", "plugin_ui_port_missing");
+    if (dependencies.committedTasks !== undefined)
+      for (const method of ["isOutcome", "verify"] as const)
+        if (typeof dependencies.committedTasks?.[method] !== "function")
           throw new ApplicationError("internal", "plugin_ui_port_missing");
     this.#limits = uiOutput(() => {
       const value =
@@ -250,18 +259,31 @@ export class PluginUiApplicationService {
       const command = uiInvokeCommand(input);
       const binding = this.#binding(actor, command.mountRef);
       await this.#fence(actor, binding, "invoke");
-      const raw = await this.#dependencies.actions.invoke(
-        Object.freeze({
-          ...binding.context,
-          lease: binding.lease,
-          authorityEpoch: binding.authorityEpoch,
-          action: command.action,
-          input: command.input,
-        }),
+      const context: PluginUiActionContext = Object.freeze({
+        ...binding.context,
+        lease: binding.lease,
+        authorityEpoch: binding.authorityEpoch,
+        action: command.action,
+        input: command.input,
+      });
+      const unregister = registerPluginUiInvocation(context, () =>
+        this.#fence(actor, binding, "invoke"),
       );
-      const result = uiOutput(() => parsePluginUiJsonValue(raw));
-      await this.#fence(actor, binding, "invoke");
-      return result;
+      try {
+        const raw = await this.#dependencies.actions.invoke(context);
+        const authority = this.#dependencies.committedTasks;
+        if (authority?.isOutcome(raw) === true) {
+          // The original transaction already admitted this task. Later selection/lease changes cannot
+          // turn that accepted receipt into a retry signal; ordinary JSON retains the read fence below.
+          const result = authority.verify(context, raw);
+          return uiOutput(() => parsePluginUiJsonValue(result));
+        }
+        const result = uiOutput(() => parsePluginUiJsonValue(raw));
+        await this.#fence(actor, binding, "invoke");
+        return result;
+      } finally {
+        unregister();
+      }
     });
   }
 

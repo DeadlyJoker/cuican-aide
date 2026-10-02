@@ -14,6 +14,16 @@ export type {
   PluginNodeSetupResult,
   PluginNodeDefinition,
 } from "./sdk-types.js";
+export {
+  CREWON_TASKS_SERVICE,
+  CREWON_TASKS_API_VERSION,
+  type PluginTaskRequest,
+  type PluginTaskReceipt,
+  type PluginTaskService,
+  type PluginActionDeclaration,
+  type PluginActionInvocation,
+  type PluginActionsService,
+} from "./task-action-types.js";
 
 /** Defines a Node ABI entry; it neither invokes setup nor resolves declared services. */
 export function definePlugin(

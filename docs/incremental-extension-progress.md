@@ -4,6 +4,24 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：用户栏和设置页再次核验
+
+再次检查用户反馈的入口缺失：5719 使用当前 worktree 源码，左下角账号菜单已接回原设置路由。独立 Headless Chrome 在 1440×900、1280×720、1000×600、1000×400 四种窗口中确认用户栏没有裁切，可以打开菜单、进入全部 11 个当前可见设置分类并返回原首页，无页面错误。本次没有再次修改组件或 CSS；样式目录与改造前 `776484c57` 没有差异。预览没有登录账号或设置服务，因此服务配置仍明确显示暂不可用，不能将只读预览称为正式账号设置已接通。原标签自动化因设备锁屏不可用，已请求在 Codex 打开当前预览，返回状态为 queued，不声称已刷新原标签。
+
+相关 UI 专项 17 文件 144/144，UI build 通过。命令参数误用导致另外执行了完整 UI suite，结果为 3117 通过、10 失败；失败涉及既有历史视图/文案、压力检查超时及两项构建夹具按根入口解析只有子路径导出的 SDK，本次未改测试或快照规避，不将全量结果算作绿色验收。证据位于 `output/extensions/short-drama-preview/ui-settings-recovery/`，包括 `{component-narrow-tests,component-tests,build,browser-verification}.log`、`browser-verification.json`、`account-menu.png` 和 `settings-page.png`。
+
+## 2026-10-03：SDK 调用引用与原任务动作桥
+
+公开 SDK 增加 `crewon.tasks` API `1` 的生成请求和原六字段任务回执，以及按贡献点声明的 `read` / `generateTask` 动作服务。动作服务使用包自己的 plugin ID，不把任意动作名解释成 Node 服务。NodeHost 只对宿主服务按实际实例绑定窄端口；同形身份对象、旧实例端口和另一个包都不能借用当前调用引用。默认共享服务与原生命周期保持兼容。SDK 实际仓外打包、离线安装、Node-only 声明和任务 ABI 6/6；绑定专项 6/6、原 NodeHost 加绑定回归 88/88 通过。
+
+新增 `PluginTaskActionBridge`，从已授权 UI 上下文派生完整 actor/profile/包版本/pin，签发最多 128 个、最多 30 秒的调用引用。SDK 请求不接受 actor、payer、profile、价格或摘要字段；一次调用只允许一个稳定任务命令，重复调用等待原结果，不创建第二个 Run。报价完成后、原事务提交前再次核验当前 profile、权限 epoch、同步持久选择、引用期限及实际 UI 挂载。最后一项使用私有 WeakMap 登记本次 context，实际 `closeMount` 或调用结束立即撤销准入，不能用同形对象或客户端字段伪造。业务声明不是授权，同步 profile 拥有权也不是权限证明。
+
+`PluginUiCommittedTaskAuthority` 从实际 Store 的原任务回执、完整 pin、个人报价关联和真实 Run 核验受理结果，只签发本次调用可消费一次的私有句柄。普通 JSON 和读取动作保持前后权限检查；只有该句柄可以在提交后停用、升级、撤权、租约关闭或期限变化时返回原任务 DTO。插件自报 committed、假句柄和跨调用复用均不能绕过校验。生产组合可以显式注入这个可信核验端口，关闭仍拒绝新的调用和普通晚返回；有核验端口的在途动作等待原受理结果，不把已经确认的提交重新报告为准入失败。
+
+真实 SQLite、SDK bundle、不可变文件安装、删除开发目录、Node ESM、UI Application 和原 Turn/Run/个人积分链路 9/9，零跳过。覆盖提交后真实停用、epoch/期限变化和 bridge 关闭只返回原回执，报价等待中的三类撤权及真实页面关闭零写入，普通读取后置撤权，以及第二个 SQLite 连接重试保留原 30 积分报价且不重新预留。资金、价格、身份和同步选择写者都为明确测试夹具；没有调用在线生图，也没有将它们称作生产价格或正式账号权威。Application 全量 320/320、Host 全量 108/108 通过；最后一处回执投影捕获和夹具引用白名单调整后，动作桥单元 11 项与真实 SQL 集成 9 项再次合计 20/20 通过。Control 全量基线 330 通过/11 环境相关跳过，最终生产 UI 专项 8 通过/2 项 PG 环境跳过，均零失败；本次没有运行 PG 服务。独立审查发现动作数组索引 getter 和自定义迭代器可绕过遍历上限，已改为严格自有数据索引捕获并覆盖零 getter 执行。实际关闭页面的最终门禁由上述 9 项 SQL 集成和 Application 全量单独验证。日志位于 `output/plugin-ui-committed-task/` 和 `output/extensions/checks/plugin-task-*.log`。
+
+**仍待完成：** 生产安装/Node owner 与动作桥的 main 装配、真实报价/积分权威、SDK 执行工厂、Worker 按确切独立包执行和历史冷恢复、Krea2/短剧独立包迁移、Electron 资产代理、安装管理和第二个实际企业 API。当前生成包 ID 必须与原 extension ID 相同；尚未提供跨插件委托或多执行工厂。正式 main 仍明确返回业务动作不可用，本轮未修改原 UI 或样式，完整目标继续进行中。
+
 ## 2026-10-03：生产已安装 UI 启动与原 Run 的包版本准入
 
 生产 Control 现在接受显式的已安装 UI 配置，复用真实 `ProductionControlApiIdentity`、HTTPS profile/权限权威、共享 PostgreSQL pool 的独立安装账本及受批准的不可变文件子集。未配置时原路由保持不变，不创建安装账本。原生资源及引用仍逐次核验当前作用域、权限 epoch 和选择修订；关闭取消权威请求并撤销服务引用。实际 HTTPS、完整生产 PostgreSQL 组合及旧鉴权回归共 55/55 通过。启动方式和当前边界见[已安装插件的服务启动](./installed-plugin-service-startup.md)。生产动作仍明确不可用，未假接 ComfyUI、账号、profile、价格或积分。
