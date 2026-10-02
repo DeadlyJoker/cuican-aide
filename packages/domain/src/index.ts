@@ -40,3 +40,19 @@ export * from "./plugin-credit.ts";
 export * from "./extension-credit-admission.ts";
 export * from "./extension-configuration.ts";
 export * from "./extension-run-binding.ts";
+export * from "./creative-project.ts";
+export * from "./creative-project-revisions.ts";
+export {
+  CreativeProjectError,
+  creativeProjectTitle,
+  creativeProjectPrompt,
+  creativeProjectBriefText,
+  creativeProjectOpaqueId,
+  creativeProjectRevision,
+  creativeProjectTimestamp,
+  creativeProjectDigest,
+  validateCreativeProjectScope,
+  validateCreativeProjectActor,
+  assertCreativeProjectOwner,
+  assertCreativeProjectScope,
+} from "./creative-project-validation.ts";

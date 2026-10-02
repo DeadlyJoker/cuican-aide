@@ -21,6 +21,8 @@ export type ApplicationIdKind =
   | "officeVersion"
   | "officeDelegation"
   | "artifact"
+  | "creativeProject"
+  | "conceptAsset"
   | "knowledge";
 
 export interface ApplicationIdGenerator {
