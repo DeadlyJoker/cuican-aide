@@ -8,6 +8,10 @@
 
 当前实施范围、模块划分、调用路径和验收门槛以 [增量扩展子系统实施方案](./incremental-extension-subsystem-plan.md) 为准。
 
+2026-10-02 补充：[业务插件可变范围](./plugin-variability-boundary.md) 明确业务插件只贡献已声明的能力和自己的内容页面，沿用现有导航、主题、身份、任务和积分宿主。更换整套应用外壳属于另一项应用组合决策，不能随业务插件接入一起发生；短剧预览据此收回自造侧栏和整体主题。
+
+用户随后明确需要独立开发并安装插件，后续优先按[可安装插件方案](./installable-plugin-protocol-plan.md)实现公开协议、SDK 和实际包加载。现有静态工具注册与可信 UI 组合只提供调用和界面试点，不能视为可插拔框架交付；下文随宿主发布的阶段限制不替代这个新增目标。
+
 本文补充 [现有插件分析](./plugin-extensibility.md)，将范围从任务模板扩展到完整业务能力。沿用 [现有架构](../ARCHITECTURE.md) 的 Control、Worker、Device 和 UI 分工；下文新增的契约、注册表及生命周期均为设计建议。
 
 ## 从 DeepSeek Harness 借鉴什么

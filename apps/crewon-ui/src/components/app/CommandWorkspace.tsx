@@ -37,6 +37,12 @@ import {
   type PaletteItemWithCommand,
   type CommandWorkspaceAuthority,
 } from "./CommandWorkspaceChrome";
+import {
+  CommandWorkspaceHostModulePane,
+  useCommandWorkspaceHostModule,
+  type CommandWorkspaceHostModule,
+  type CommandWorkspacePlatformSnapshotLoader,
+} from "./CommandWorkspaceHostModule";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import {
   assistantAutomationDraft,
@@ -289,6 +295,8 @@ export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 
 type CommandWorkspaceProps = {
   businessExtensionEntry?: ReactNode;
+  hostModule?: CommandWorkspaceHostModule;
+  platformSnapshotLoader?: CommandWorkspacePlatformSnapshotLoader;
   backgroundRunActive?: boolean;
   threadCatalogNavigation?: ThreadCatalogNavigation;
   threadCatalogSearch?: string;
@@ -801,6 +809,8 @@ export function shouldCloseComposerPalette({
 
 export function CommandWorkspace({
   businessExtensionEntry = null,
+  hostModule,
+  platformSnapshotLoader = readAgentPlatformSnapshot,
   teamProgress = null,
   activeTurnId = null,
   assistantActiveTurnId = null,
@@ -868,6 +878,7 @@ export function CommandWorkspace({
   onSetThreadGoalStatus,
   providerResource,
 }: CommandWorkspaceProps) {
+  const hostModuleView = useCommandWorkspaceHostModule(hostModule);
   // The browser is an outcome-focused surface. Advanced execution controls and
   // local inspection remain available in the desktop application.
   const compactWeb = platform === "web";
@@ -1098,6 +1109,7 @@ export function CommandWorkspace({
 
   useEffect(() => {
     function syncRoute() {
+      hostModuleView.close();
       setActiveView(shellViewFromHash());
     }
     window.addEventListener("hashchange", syncRoute);
@@ -1606,7 +1618,7 @@ export function CommandWorkspace({
   useEffect(() => {
     let cancelled = false;
     setPlatformState("loading");
-    readAgentPlatformSnapshot()
+    platformSnapshotLoader()
       .then((snapshot) => {
         if (cancelled) {
           return;
@@ -1624,7 +1636,7 @@ export function CommandWorkspace({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [platformSnapshotLoader]);
 
   useEffect(() => {
     setActiveLinkedThreadId(selectedThreadId);
@@ -2175,7 +2187,7 @@ export function CommandWorkspace({
   async function reloadPlatformResources() {
     setPlatformState("loading");
     try {
-      setPlatformSnapshot(await readAgentPlatformSnapshot());
+      setPlatformSnapshot(await platformSnapshotLoader());
       setPlatformState("ready");
     } catch {
       setPlatformSnapshot(emptyAgentPlatformSnapshot);
@@ -2224,6 +2236,7 @@ export function CommandWorkspace({
   }
 
   function switchView(view: CommandShellView) {
+    hostModuleView.close();
     setOpenPalette(null);
     setPaletteQuery("");
     setActiveView(view);
@@ -3234,6 +3247,20 @@ export function CommandWorkspace({
       >
         <CommandSidebar
           activeView={activeView}
+          hostModule={
+            hostModule
+              ? {
+                  id: hostModule.id,
+                  label: hostModule.label,
+                  active: hostModuleView.active,
+                  onOpen: () => {
+                    closeComposerPalette();
+                    setSidebarSearchOpen(false);
+                    hostModuleView.open();
+                  },
+                }
+              : undefined
+          }
           controlWorkspace={
             workspaceAuthority === "control"
               ? (controlWorkspaceNav ?? undefined)
@@ -3294,7 +3321,9 @@ export function CommandWorkspace({
           <section
             className={classNames(
               "shell-view command-home-view",
-              activeView === "command" && "active",
+              !hostModuleView.active &&
+                activeView === "command" &&
+                "active",
               showCommandThread && "has-command-thread",
             )}
             data-shell-view="command"
@@ -3302,7 +3331,7 @@ export function CommandWorkspace({
             data-shell-view-title-en="New task"
             data-od-id="shell-view-command"
             data-has-thread={showCommandThread ? "true" : "false"}
-            hidden={activeView !== "command"}
+            hidden={hostModuleView.active || activeView !== "command"}
           >
             {/*
              * The task bar is a sibling of the centered work column, not a child
@@ -3721,7 +3750,7 @@ export function CommandWorkspace({
                     })
                 : undefined
             }
-            active={activeView === "assist"}
+            active={!hostModuleView.active && activeView === "assist"}
             activeTurnId={assistantActiveTurnId}
             composer={
               <CommandComposer
@@ -3971,7 +4000,7 @@ export function CommandWorkspace({
             onStop={onStop}
           />
           <ProjectsView
-            active={activeView === "projects"}
+            active={!hostModuleView.active && activeView === "projects"}
             locale={locale}
             tasks={commandLinkedThreads}
             onNewTask={() => {
@@ -3985,7 +4014,7 @@ export function CommandWorkspace({
           />
           <AgentsView
             businessExtensionEntry={businessExtensionEntry}
-            active={activeView === "agents"}
+            active={!hostModuleView.active && activeView === "agents"}
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}
             platformState={platformState}
@@ -4008,14 +4037,14 @@ export function CommandWorkspace({
             onSaveCapability={onSaveCapability}
           />
           <KnowledgeCatalogView
-            active={activeView === "knowledge"}
+            active={!hostModuleView.active && activeView === "knowledge"}
             platformState={platformState}
             resourceStates={platformResourceStates}
             snapshot={platformSnapshot}
             onReload={reloadPlatformResources}
           />
           <AutomationView
-            active={activeView === "schedule"}
+            active={!hostModuleView.active && activeView === "schedule"}
             connected={automationControlConnected}
             controlConfigured={automationControlConfigured}
             createDraft={scheduleCreateDraft}
@@ -4028,7 +4057,7 @@ export function CommandWorkspace({
             onOpenThread={onSelectLinkedThread}
           />
           <TeamView
-            active={activeView === "team"}
+            active={!hostModuleView.active && activeView === "team"}
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
             teamMode={teamMode}
@@ -4227,6 +4256,10 @@ export function CommandWorkspace({
               onSubmit={(input) => void createWorkflowDefinition(input)}
             />
           ) : null}
+          <CommandWorkspaceHostModulePane
+            module={hostModule}
+            active={hostModuleView.active}
+          />
         </section>
       </section>
     </section>

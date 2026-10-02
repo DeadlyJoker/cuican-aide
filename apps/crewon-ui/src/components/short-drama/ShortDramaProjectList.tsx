@@ -33,7 +33,6 @@ export function ShortDramaProjectList({
     <>
       <div className="page-heading">
         <div>
-          <span className="eyebrow">CREATIVE WORKSPACE</span>
           <h1>短剧工作台</h1>
           <p>从一个故事开始，逐步整理需求、画面与创作成果。</p>
         </div>

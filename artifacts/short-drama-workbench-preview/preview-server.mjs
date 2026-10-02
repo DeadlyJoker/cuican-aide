@@ -7,6 +7,9 @@ const { createServer } = await import(require.resolve("vite"));
 const { default: react } = await import(
   require.resolve("@vitejs/plugin-react")
 );
+const { default: tailwindcss } = await import(
+  require.resolve("@tailwindcss/vite")
+);
 const script = `/@fs${repository}artifacts/short-drama-workbench-preview/preview.tsx`;
 const server = await createServer({
   configFile: false,
@@ -28,6 +31,7 @@ const server = await createServer({
     fs: { allow: [repository] },
   },
   plugins: [
+    tailwindcss(),
     react(),
     {
       name: "short-drama-page-preview",

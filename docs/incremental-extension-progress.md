@@ -4,6 +4,16 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-02：收回整体改版，明确独立安装目标
+
+按用户要求，短剧页面改为复用原 CommandWorkspace 首页和侧栏，仅新增 AI 短剧入口，业务内容在原主内容区显示。删除预览自造的工作空间、账号、全局导航和主题；模块使用宿主主题与控件变量，样式限定在自己的根节点。宿主新插槽只供当前可信组件组合，未接生产 App，也不是动态安装器。原宿主 SSR 快照逐字保留；新组合与模块有真实 DOM 交互和快照覆盖。窄屏预览复用同一原侧栏，触发及抽屉样式仅属于预览宿主，不塞进业务模块。
+
+对照原生产基线 `776484c57`，六张宿主样式及 main 未改；用户主工作区的设置样式修改也保留。实际样式失真来自预览漏写 `data-theme`，同时命中深色外壳和浅色色阶。预览首次渲染前恢复原 `getInitialTheme()` 与本地 appearance 解析，保持 URL 主题覆盖与已有偏好，不改全局 CSS。低高度验证另发现图片外描述错误绝对定位，已改回图片面板内正常布局。浏览器确认原首页、模块入口、深色继承、滚动、窄屏导航及无横向溢出；证据为 `output/extensions/short-drama-preview/host-module-restored-theme.jpg`。
+
+UI 最终 441 文件、3,041 项：3,033 通过、8 失败。八项均由 HEAD `2d753e8f5` 独立归档基线的相同六个 suite 实际复现，含 soak trend 的已有超时；三项 obsolete 快照也保留。新增组合最初违反 UI 依赖边界，已移到 app 组合层，规则未放宽；原宿主、组合及架构专项 88/88、模块专项 3/3 通过。最终 UI lint（含 Electron）、build、入口边界、仓库格式通过。证据为 `output/extensions/checks/short-drama-host-ui-final-*.log`、`short-drama-host-ui-head-baseline-six-suites.log` 和基线 JSON；本项未修改后端行为，未重复 Store 全量。
+
+用户随后明确“插件一定是可插拔的，做好插件协议，就可以独立开发并安装”。[可变边界](./plugin-variability-boundary.md)已区分模块业务变化与平台应用组合，并补充[可安装协议实施顺序](./installable-plugin-protocol-plan.md)。后续优先公开包协议与 SDK、实际安装/加载、独立 UI，再将 Krea2 和短剧作为包接入。须以仓外构建插件安装、停用、升级及历史恢复而无需修改宿主源码作为验收；当前试点和页面预览不能算达成。协议包描述的第一步已开始，SDK、安装器、动态加载及该端到端验收仍未交付，目标保持进行中。
+
 ## 2026-10-02：项目修订的实际双库存储基础
 
 继续 S0 的存储步骤，在原 SqliteRunStore / PostgresDomainStore 宿主增加 `creativeProjectStore()`，共享连接及关闭边界。创建适配器不自动迁移；宿主显式调用独立版本 1 的项目迁移，原核心 schema、SQLite user_version、插件配置及个人积分版本保持不变。项目、需求修订、概念图元数据、描述修订及按 tenant/space/principal/actor/命令种类隔离的回执已落实际数据库，不引入第二套运行时。

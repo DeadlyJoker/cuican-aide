@@ -1,0 +1,47 @@
+/* Preview host composition only. The production shell and business module CSS stay unchanged. */
+.short-drama-plugin-preview .short-drama-preview-navigation-trigger,
+.short-drama-plugin-preview .short-drama-preview-navigation-scrim {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .short-drama-plugin-preview [data-host-module-id] {
+    padding-top: 48px;
+  }
+
+  .short-drama-plugin-preview .short-drama-preview-navigation-trigger {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 40;
+    display: grid;
+    border-color: var(--border);
+    background: var(--surface);
+  }
+
+  .short-drama-plugin-preview[data-preview-navigation-open="true"]
+    .short-drama-preview-navigation-trigger {
+    display: none;
+  }
+
+  .short-drama-plugin-preview .short-drama-preview-navigation-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 45;
+    display: block;
+    border: 0;
+    background: color-mix(in srgb, var(--n-950) 18%, transparent);
+  }
+
+  .short-drama-plugin-preview[data-preview-navigation-open="true"]
+    .screen-shell.command-screen
+    .command-sidebar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    display: grid;
+    width: min(232px, calc(100% - 48px));
+    height: 100%;
+    box-shadow: var(--shadow-drawer-right);
+  }
+}

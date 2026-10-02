@@ -3,13 +3,8 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  ChevronDown,
   ChevronRight,
-  Clapperboard,
-  Film,
-  FolderOpen,
   Image,
-  MoreHorizontal,
   Plus,
   Settings2,
   Sparkles,
@@ -35,7 +30,7 @@ import "./ShortDramaWorkbenchPreview.css";
 
 type Page = "projects" | "overview" | "concept";
 
-/** Isolated visual preview. State is in memory; no API, credentials, or execution is used. */
+/** Embeddable business preview; the host owns navigation, identity and appearance. */
 export function ShortDramaWorkbenchPreview({
   referenceImage,
 }: {
@@ -43,7 +38,7 @@ export function ShortDramaWorkbenchPreview({
 }) {
   const [projects, setProjects] = useState(initialDramaProjects);
   const [projectId, setProjectId] = useState("window-letter");
-  const [page, setPage] = useState<Page>("overview");
+  const [page, setPage] = useState<Page>("projects");
   const [dialog, setDialog] = useState<ShortDramaPreviewDialog>(null);
   const [version, setVersion] = useState(2);
   const [briefDraft, setBriefDraft] = useState(projects[0]!.briefs.at(-1)!);
@@ -189,118 +184,39 @@ export function ShortDramaWorkbenchPreview({
   const imageLabel = "画面示意 · 已有 Krea2 测试样例";
 
   return (
-    <div className="drama-workbench">
-      <aside className="drama-sidebar">
-        <div className="brand">
-          <span className="brand-mark">C</span>
-          <strong>CrewON</strong>
-          <button
-            className="button icon"
-            aria-label="查看预览说明"
-            onClick={() =>
-              setNotice("这是独立的页面预览，不改变现有聊天与团队入口")
-            }
-          >
-            <MoreHorizontal size={18} />
-          </button>
-        </div>
-        <div className="workspace-switch">
-          <span className="workspace-mark">W</span>
-          <span>
-            个人工作空间<small>创作与灵感</small>
-          </span>
-          <ChevronDown size={14} />
-        </div>
-        <button
-          className="nav-link"
-          onClick={() => {
-            setPage("projects");
-            setShowArchived(false);
-          }}
-        >
-          <FolderOpen size={17} />
-          项目总览
-        </button>
-        <button
-          className="nav-link active"
-          onClick={() => {
-            setPage("overview");
-          }}
-        >
-          <Clapperboard size={17} />
-          短剧工作台
-          <span className="nav-dot" />
-        </button>
-        <div className="side-section">
-          <span>创作项目</span>
-          <button
-            className="button icon"
-            aria-label="新建创作项目"
-            onClick={() => setDialog("new")}
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-        <nav aria-label="创作项目" className="project-nav">
-          {projects
-            .filter((item) => !item.archived)
-            .map((item) => (
-              <button
-                key={item.id}
-                className={
-                  projectId === item.id && page !== "projects" ? "active" : ""
-                }
-                onClick={() => openProject(item)}
-              >
-                <span
-                  className={`project-dot ${item.id === "window-letter" ? "olive" : ""}`}
-                />
-                {item.name}
-              </button>
-            ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="film-note">
-            <Film size={19} />
-            <strong>从故事，到画面</strong>
-            <span>保留每一次创作的来处。</span>
-          </div>
-          <button className="nav-link" onClick={() => setDialog("settings")}>
-            <Settings2 size={16} />
-            生成服务设置
-          </button>
-          <div className="account">
-            <span className="avatar">W</span>
-            <span>
-              我的工作空间<small>个人创作</small>
-            </span>
-          </div>
-        </div>
-      </aside>
-      <main className="drama-main">
+    <section className="drama-workbench" aria-label="AI 短剧工作台">
+      <div className="drama-main">
         <header className="drama-topbar">
-          <div className="breadcrumbs">
-            <button onClick={() => setPage("projects")}>资源库</button>
+          <nav className="breadcrumbs" aria-label="AI 短剧路径">
+            <button onClick={() => setPage("projects")}>AI 短剧</button>
             <ChevronRight size={13} />
-            <button onClick={() => setPage("projects")}>短剧工作台</button>
-            {page !== "projects" && (
+            {page === "projects" ? (
+              <span>我的项目</span>
+            ) : (
               <>
-                <ChevronRight size={13} />
-                <span>{project.name}</span>
+                <button onClick={() => setPage("overview")}>
+                  {project.name}
+                </button>
+                {page === "concept" && (
+                  <>
+                    <ChevronRight size={13} />
+                    <span>概念图 v{version}</span>
+                  </>
+                )}
               </>
             )}
-          </div>
+          </nav>
           <div className="topbar-actions">
             <span className="preview-tag">
               <span />
               页面预览
             </span>
             <button
-              className="button icon"
-              aria-label="生成服务设置"
+              className="button secondary"
               onClick={() => setDialog("settings")}
             >
               <Settings2 size={17} />
+              生成服务设置
             </button>
           </div>
         </header>
@@ -324,11 +240,6 @@ export function ShortDramaWorkbenchPreview({
             <>
               <div className="page-heading">
                 <div>
-                  <span className="eyebrow">
-                    {page === "concept"
-                      ? "CONCEPT / VISUAL DEVELOPMENT"
-                      : "PROJECT / VISUAL DEVELOPMENT"}
-                  </span>
                   <h1>{page === "concept" ? "概念图" : project.name}</h1>
                   <p>
                     {page === "concept"
@@ -710,7 +621,7 @@ export function ShortDramaWorkbenchPreview({
             </>
           )}
         </div>
-      </main>
+      </div>
       {notice && (
         <div className="toast" role="status">
           <Check size={15} />
@@ -729,6 +640,6 @@ export function ShortDramaWorkbenchPreview({
         onCreate={createProject}
         onClose={() => setDialog(null)}
       />
-    </div>
+    </section>
   );
 }

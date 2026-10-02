@@ -3,6 +3,7 @@ import {
   BookOpen,
   Bot,
   CalendarDays,
+  Blocks,
   ChevronRight,
   ChevronUp,
   Cloud,
@@ -183,6 +184,7 @@ function workspaceName(path: string, emptyLabel = "工作空间"): string {
 export function CommandSidebar({
   threadCatalogNavigation,
   activeView,
+  hostModule,
   controlWorkspace,
   cwd,
   isSearchOpen,
@@ -206,6 +208,12 @@ export function CommandSidebar({
 }: {
   threadCatalogNavigation?: ThreadCatalogNavigation;
   activeView: CommandShellView;
+  hostModule?: Readonly<{
+    id: string;
+    label: string;
+    active: boolean;
+    onOpen(): void;
+  }>;
   controlWorkspace?: CommandControlWorkspaceNav;
   cwd: string;
   isSearchOpen: boolean;
@@ -476,8 +484,14 @@ export function CommandSidebar({
       <nav className="sidebar-nav" data-od-id="desktop-nav">
         {shellNavItems.map((item) => (
           <button
-            aria-current={activeView === item.key ? "page" : undefined}
-            className={classNames(activeView === item.key && "active")}
+            aria-current={
+              !hostModule?.active && activeView === item.key
+                ? "page"
+                : undefined
+            }
+            className={classNames(
+              !hostModule?.active && activeView === item.key && "active",
+            )}
             data-nav-key={item.key}
             data-shell-view-target={item.key}
             key={item.key}
@@ -513,9 +527,29 @@ export function CommandSidebar({
             ) : null}
           </button>
         ))}
+        {hostModule ? (
+          <button
+            aria-current={hostModule.active ? "page" : undefined}
+            className={classNames(hostModule.active && "active")}
+            data-host-module-target={hostModule.id}
+            type="button"
+            onClick={hostModule.onOpen}
+          >
+            <span className="nav-glyph" aria-hidden="true">
+              <Blocks aria-hidden="true" />
+            </span>
+            <strong>{hostModule.label}</strong>
+          </button>
+        ) : null}
         <button
-          aria-current={activeView === "knowledge" ? "page" : undefined}
-          className={classNames(activeView === "knowledge" && "active")}
+          aria-current={
+            !hostModule?.active && activeView === "knowledge"
+              ? "page"
+              : undefined
+          }
+          className={classNames(
+            !hostModule?.active && activeView === "knowledge" && "active",
+          )}
           data-run-title-zh="知识库"
           data-run-title-en="Knowledge base"
           type="button"
