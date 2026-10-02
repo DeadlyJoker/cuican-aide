@@ -4,7 +4,6 @@ import {
   CreditLedgerError,
   createCreditAccount,
   grantCreditAccount,
-  reserveCreditAccount,
   settleCreditReservation,
   releaseCreditReservation,
   validateCreditScope,
@@ -20,7 +19,10 @@ import {
 } from "./plugin-credit-schema.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 import {
-  assertCreditReservationReplay,
+  lockPostgresPluginCreditAccount,
+  reservePostgresPluginCreditsWithinTransaction,
+} from "./postgres-plugin-credit-reservation.ts";
+import {
   creditAmount,
   creditEntriesQuery,
   creditEntry,
@@ -106,50 +108,14 @@ export class PostgresPluginCreditStore implements PluginCreditStore {
 
   async reserve(input: CreditReservationInput): Promise<CreditReservation> {
     const checked = validateCreditReservationInput(input);
-    return this.#transaction(checked.scope, async (client) => {
-      const account = await this.#requiredAccount(client, checked.scope);
-      const replay = await this.#reservation(
+    return this.#transaction(checked.scope, (client) =>
+      reservePostgresPluginCreditsWithinTransaction({
         client,
-        checked.scope,
-        "idempotency_key",
-        checked.idempotencyKey,
-      );
-      if (replay !== null) {
-        assertCreditReservationReplay(replay, checked);
-        return replay;
-      }
-      if (
-        (await this.#reservation(
-          client,
-          checked.scope,
-          "reservation_id",
-          checked.reservationId,
-        )) !== null
-      )
-        throw new CreditLedgerError("plugin_credit_reservation_id_conflict");
-      const next = reserveCreditAccount(account, checked);
-      await this.#writeAccount(client, next.account);
-      await this.#query(
-        client,
-        `INSERT INTO ${this.#prefix}plugin_credit_reservations VALUES($1,$2,$3,$4,$5,$6)`,
-        [
-          ...creditScopeValues(checked.scope),
-          checked.reservationId,
-          checked.idempotencyKey,
-          JSON.stringify(next.reservation),
-        ],
-      );
-      await this.#appendEntry(
-        client,
-        creditEntry({
-          account: next.account,
-          kind: "reserve",
-          credits: checked.quotedCredits,
-          reservationId: checked.reservationId,
-        }),
-      );
-      return next.reservation;
-    });
+        schema: this.#schema,
+        input: checked,
+        assertOpen: this.#assertOpen,
+      }),
+    );
   }
 
   async settle(input: {
@@ -360,21 +326,19 @@ export class PostgresPluginCreditStore implements PluginCreditStore {
     try {
       this.#assertOpen();
       await this.#query(client, "BEGIN");
-      await this.#query(
-        client,
-        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-        [
-          JSON.stringify(
-            scope === null
-              ? ["plugin-credit-migration", this.#schema]
-              : [
-                  "plugin-credit-account",
-                  this.#schema,
-                  ...creditScopeValues(scope),
-                ],
-          ),
-        ],
-      );
+      if (scope === null)
+        await this.#query(
+          client,
+          "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+          [JSON.stringify(["plugin-credit-migration", this.#schema])],
+        );
+      else
+        await lockPostgresPluginCreditAccount({
+          client,
+          schema: this.#schema,
+          scope,
+          assertOpen: this.#assertOpen,
+        });
       const result = await body(client);
       // After PostgreSQL confirms COMMIT, a later host close cannot undo the write.
       // Preserve that successful result instead of converting it into a false failure.

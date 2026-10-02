@@ -103,6 +103,7 @@ export {
 } from "./run-execution-progress-loader.ts";
 export * from "./model-spending-store-port.ts";
 export * from "./plugin-credit-store-port.ts";
+export * from "./extension-credit-quote-port.ts";
 export * from "./external-operation-store-port.ts";
 export * from "./extension-store-port.ts";
 export * from "./extension-host-port.ts";

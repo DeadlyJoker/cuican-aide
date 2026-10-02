@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import {
+  CreditLedgerError,
   extensionOpaqueId,
   extensionRevision,
   parseExtensionActivation,
@@ -8,6 +9,7 @@ import {
   type ExtensionScope,
   type ExtensionExecutionTarget,
   type ExtensionRunBinding,
+  type ExtensionCreditAdmission,
 } from "@crewon/domain";
 import type {
   CommitExtensionRunInput,
@@ -43,6 +45,24 @@ import {
   extensionTurnResult,
   parseExtensionTurnReceipt,
 } from "./extension-store-records.ts";
+import {
+  assertExtensionCreditAdmissionLink,
+  assertExtensionCreditReplayPrincipal,
+  assertExtensionCreditSchemaVersion,
+  checkedExtensionCreditAdmission,
+  decodeExtensionCreditAdmission,
+  extensionCreditAdmissionSchemaSql,
+} from "./extension-credit-admission-records.ts";
+import { migratePostgresPluginCredits } from "./plugin-credit-schema.ts";
+import {
+  lockPostgresPluginCreditAccount,
+  reservePostgresPluginCreditsWithinTransaction,
+} from "./postgres-plugin-credit-reservation.ts";
+import {
+  assertCreditReservationReplay,
+  creditScopeValues,
+  decodeCreditReservation,
+} from "./plugin-credit-support.ts";
 
 type PostgresExtensionStoreHost = Readonly<{
   assertOpen(): void;
@@ -57,14 +77,18 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  readonly creditAdmissionVersion =
+    "crewon.extension-credit-admission.v0" as const;
   readonly #pool: Pool;
   readonly #schema: string;
+  readonly #schemaName: string;
   readonly #host: PostgresExtensionStoreHost;
   constructor(pool: Pool, schema: string, host: PostgresExtensionStoreHost) {
     if (!/^[a-z][a-z0-9_]{0,62}$/u.test(schema))
       throw new Error("extension_schema_invalid");
     this.#pool = pool;
     this.#schema = `"${schema}"`;
+    this.#schemaName = schema;
     this.#host = host;
   }
 
@@ -117,6 +141,41 @@ export class PostgresExtensionStore implements ExtensionStore {
           UNIQUE (tenant_id, run_id, binding_digest, idempotency_key)
         );
       `);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** Opt-in ledger and immutable Run/quote linkage; no accounts or funds are created. */
+  async migrateCredits(): Promise<void> {
+    this.#host.assertOpen();
+    const client = await this.#pool.connect();
+    try {
+      this.#host.assertOpen();
+      await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [JSON.stringify(["plugin-credit-migration", this.#schemaName])],
+      );
+      await migratePostgresPluginCredits(client, this.#schemaName);
+      await client.query(
+        extensionCreditAdmissionSchemaSql({
+          dialect: "postgres",
+          schema: this.#schemaName,
+        }),
+      );
+      const version = await client.query<{ id: unknown; version: unknown }>(
+        `SELECT id,version FROM ${this.#schema}.extension_credit_schema_version LIMIT 2`,
+      );
+      assertExtensionCreditSchemaVersion(version.rows);
+      await client.query(
+        `SELECT tenant_id,space_id,run_id,principal_id,pool_id,reservation_id,admission_json FROM ${this.#schema}.extension_credit_admissions LIMIT 0`,
+      );
+      this.#host.assertOpen();
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
@@ -269,9 +328,10 @@ export class PostgresExtensionStore implements ExtensionStore {
   ) {
     this.#host.assertOpen();
     const value = await this.#receipt(this.#pool, input, "task", input.receipt);
-    return value === null
-      ? null
-      : parseExtensionTaskReceipt(value, input, input.receipt);
+    if (value === null) return null;
+    const result = parseExtensionTaskReceipt(value, input, input.receipt);
+    await this.#assertCreditLink(this.#pool, result.creditAdmission);
+    return result;
   }
 
   async commitExtensionRun(input: CommitExtensionRunInput) {
@@ -283,8 +343,15 @@ export class PostgresExtensionStore implements ExtensionStore {
         "task",
         input.receipt,
       );
-      if (replay !== null)
-        return parseExtensionTaskReceipt(replay, binding, input.receipt);
+      if (replay !== null) {
+        const result = parseExtensionTaskReceipt(
+          replay,
+          binding,
+          input.receipt,
+        );
+        await this.#assertCreditLink(client, result.creditAdmission);
+        return result;
+      }
       await this.#admit(client, binding, input.expectedActivationRevision);
       const run = await this.#host.commitRunWithinTransaction(
         client,
@@ -312,57 +379,175 @@ export class PostgresExtensionStore implements ExtensionStore {
   ) {
     this.#host.assertOpen();
     const value = await this.#receipt(this.#pool, input, "task", input.receipt);
-    return value === null
-      ? null
-      : parseExtensionTurnReceipt(value, input, input.receipt);
+    if (value === null) return null;
+    const result = parseExtensionTurnReceipt(value, input, input.receipt);
+    await this.#assertCreditLink(this.#pool, result.creditAdmission);
+    return result;
+  }
+
+  async loadExtensionCreditAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    const admission = await this.#creditAdmission(this.#pool, input);
+    if (admission !== null) await this.#assertCreditLink(this.#pool, admission);
+    return admission;
   }
 
   async commitExtensionTurn(input: CommitExtensionTurnInput) {
     // Retain one snapshot while the PostgreSQL transaction awaits independent Store operations.
     const frozenInput = structuredClone(input);
     const binding = validateExtensionTurnCommit(frozenInput);
-    return this.#transaction(binding, async (client) => {
-      const replay = await this.#receipt(
-        client,
-        binding,
-        "task",
-        frozenInput.receipt,
-      );
-      if (replay !== null)
-        return parseExtensionTurnReceipt(replay, binding, frozenInput.receipt);
-      await this.#admit(
-        client,
-        binding,
-        frozenInput.expectedActivationRevision,
-      );
-      const turn = await this.#host.commitTurnWithinTransaction(
-        client,
-        extensionTurnCommit(frozenInput),
-      );
-      if (
-        turn.disposition !== "committed" ||
-        turn.runState.runId !== binding.runId
-      )
-        throw new Error("extension_unbound_turn_receipt");
-      await client.query(
-        `INSERT INTO ${this.#schema}.extension_run_bindings VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          ...extensionScopeValues(binding),
-          binding.runId,
-          binding.configurationRevision,
+    let creditPath = false;
+    return this.#transaction(
+      binding,
+      async (client) => {
+        const replay = await this.#receipt(
+          client,
           binding,
-        ],
-      );
-      const result = extensionTurnResult(turn, binding);
-      await this.#saveReceipt(
-        client,
-        binding,
-        "task",
-        frozenInput.receipt,
-        result,
-      );
-      return result;
+          "task",
+          frozenInput.receipt,
+        );
+        if (replay !== null) {
+          const result = parseExtensionTurnReceipt(
+            replay,
+            binding,
+            frozenInput.receipt,
+          );
+          assertExtensionCreditReplayPrincipal({
+            saved: result.creditAdmission,
+            requested: frozenInput.creditAdmission,
+          });
+          creditPath = result.creditAdmission !== undefined;
+          await this.#assertCreditLink(client, result.creditAdmission);
+          return result;
+        }
+        const creditAdmission = checkedExtensionCreditAdmission({
+          admission: frozenInput.creditAdmission,
+          binding,
+          receipt: frozenInput.receipt,
+        });
+        creditPath = creditAdmission !== undefined;
+        await this.#admit(
+          client,
+          binding,
+          frozenInput.expectedActivationRevision,
+        );
+        if (creditAdmission !== undefined) {
+          await lockPostgresPluginCreditAccount({
+            client,
+            schema: this.#schemaName,
+            scope: creditAdmission.reservation.scope,
+            assertOpen: () => this.#host.assertOpen(),
+          });
+          try {
+            await reservePostgresPluginCreditsWithinTransaction({
+              client,
+              schema: this.#schemaName,
+              input: creditAdmission.reservation,
+              assertOpen: () => this.#host.assertOpen(),
+              requireNew: true,
+            });
+          } catch (error) {
+            if (
+              error instanceof CreditLedgerError &&
+              (error.code === "plugin_credit_idempotency_conflict" ||
+                error.code === "plugin_credit_reservation_id_conflict")
+            )
+              throw new Error("extension_credit_orphaned_reservation", {
+                cause: error,
+              });
+            throw error;
+          }
+        }
+        const turn = await this.#host.commitTurnWithinTransaction(
+          client,
+          extensionTurnCommit(frozenInput),
+        );
+        if (
+          turn.disposition !== "committed" ||
+          turn.runState.runId !== binding.runId
+        )
+          throw new Error("extension_unbound_turn_receipt");
+        await client.query(
+          `INSERT INTO ${this.#schema}.extension_run_bindings VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            ...extensionScopeValues(binding),
+            binding.runId,
+            binding.configurationRevision,
+            binding,
+          ],
+        );
+        if (creditAdmission !== undefined)
+          await client.query(
+            `INSERT INTO ${this.#schema}.extension_credit_admissions VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [
+              binding.tenantId,
+              binding.spaceId,
+              binding.runId,
+              creditAdmission.reservation.scope.principalId,
+              creditAdmission.reservation.scope.poolId,
+              creditAdmission.reservation.reservationId,
+              JSON.stringify(creditAdmission),
+            ],
+          );
+        const result = extensionTurnResult(turn, binding, creditAdmission);
+        await this.#saveReceipt(
+          client,
+          binding,
+          "task",
+          frozenInput.receipt,
+          result,
+        );
+        return result;
+      },
+      {
+        beforeCommit: () => {
+          if (creditPath) this.#host.assertOpen();
+        },
+      },
+    );
+  }
+
+  async #creditAdmission(
+    client: Pool | PoolClient,
+    input: ExtensionRunLocator,
+  ) {
+    extensionOpaqueId(input.tenantId);
+    extensionOpaqueId(input.spaceId);
+    extensionOpaqueId(input.runId);
+    this.#host.assertOpen();
+    const result = await client.query(
+      `SELECT tenant_id,space_id,run_id,principal_id,pool_id,reservation_id,admission_json FROM ${this.#schema}.extension_credit_admissions WHERE tenant_id=$1 AND space_id=$2 AND run_id=$3`,
+      [input.tenantId, input.spaceId, input.runId],
+    );
+    this.#host.assertOpen();
+    return decodeExtensionCreditAdmission(result.rows[0]);
+  }
+
+  async #assertCreditLink(
+    client: Pool | PoolClient,
+    admission: ExtensionCreditAdmission | undefined,
+  ) {
+    if (admission === undefined) return;
+    assertExtensionCreditAdmissionLink({
+      admission,
+      linked: await this.#creditAdmission(client, admission),
     });
+    this.#host.assertOpen();
+    const rows = await client.query(
+      `SELECT reservation_id,idempotency_key,record_json FROM ${this.#schema}.plugin_credit_reservations WHERE tenant_id=$1 AND principal_id=$2 AND pool_id=$3 AND reservation_id=$4`,
+      [
+        ...creditScopeValues(admission.reservation.scope),
+        admission.reservation.reservationId,
+      ],
+    );
+    this.#host.assertOpen();
+    const reservation = decodeCreditReservation(
+      rows.rows[0] as Parameters<typeof decodeCreditReservation>[0],
+      admission.reservation.scope,
+    );
+    if (reservation === null)
+      throw new Error("extension_credit_admission_link_mismatch");
+    assertCreditReservationReplay(reservation, admission.reservation);
   }
 
   async #admit(
@@ -522,6 +707,7 @@ export class PostgresExtensionStore implements ExtensionStore {
   async #transaction<T>(
     scope: ExtensionScope,
     body: (client: PoolClient) => Promise<T>,
+    options: { beforeCommit?(): void } = {},
   ): Promise<T> {
     this.#host.assertOpen();
     const client = await this.#pool.connect();
@@ -535,6 +721,7 @@ export class PostgresExtensionStore implements ExtensionStore {
         ]),
       ]);
       const result = await body(client);
+      options.beforeCommit?.();
       await client.query("COMMIT");
       return result;
     } catch (error) {

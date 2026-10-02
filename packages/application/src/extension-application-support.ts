@@ -174,6 +174,9 @@ export async function extensionUseCase<T>(
         "thread_not_active",
         "goal_revision_conflict",
         "model_provider_settings_switch_pending",
+        "plugin_credit_insufficient_balance",
+        "plugin_credit_account_not_found",
+        "extension_credit_orphaned_reservation",
       ].includes(code)
     )
       throw new ApplicationError("conflict", code, { cause: error });
@@ -183,7 +186,10 @@ export async function extensionUseCase<T>(
       code === "extension_query_source_not_found"
     )
       throw new ApplicationError("notFound", code, { cause: error });
-    if (code === "extension_access_revoked")
+    if (
+      code === "extension_access_revoked" ||
+      code === "extension_credit_account_owner_mismatch"
+    )
       throw new ApplicationError("authorization", code, { cause: error });
     if (
       error !== null &&

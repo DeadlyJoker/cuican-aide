@@ -9,6 +9,9 @@ import {
   validateExtensionTaskInput,
   type ExtensionRunBinding,
   type WorkflowSchemaValue,
+  createExtensionCreditAdmission,
+  assertExtensionCreditAdmission,
+  type ExtensionCreditAdmission,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
@@ -25,6 +28,7 @@ import type { ExtensionStore } from "./extension-store-port.ts";
 import type { ExtensionQueryHostPort } from "./extension-query-host-port.ts";
 import type { ExternalOperationStore } from "./external-operation-store-port.ts";
 import type { RunStore } from "./run-store-port.ts";
+import type { ExtensionCreditQuotePort } from "./extension-credit-quote-port.ts";
 import { TurnApplicationService } from "./turn-application-service.ts";
 import {
   authorizeExtension,
@@ -61,6 +65,7 @@ type Dependencies = Readonly<{
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
+  creditQuotes?: ExtensionCreditQuotePort;
 }>;
 
 /** Creates an opt-in user Turn through the existing execution authority and one storage transaction. */
@@ -144,7 +149,15 @@ export class ExtensionTaskApplicationService {
           ...scope,
           receipt,
         });
-      if (previous !== null) return previous;
+      if (previous !== null) {
+        this.#assertCreditPrincipal(
+          actor,
+          previous.creditAdmission,
+          previous.binding,
+          receipt,
+        );
+        return previous;
+      }
       const activationValue =
         await this.#dependencies.extensions.loadExtensionActivation(scope);
       if (activationValue === null)
@@ -326,13 +339,139 @@ export class ExtensionTaskApplicationService {
       );
       if (queryHost !== undefined && source !== null)
         await this.#authorizeQuerySource(actor, scope.pluginId, source);
-      return this.#dependencies.extensions.commitExtensionTurn({
+      const creditAdmission =
+        intent.kind === "generate" &&
+        this.#dependencies.creditQuotes !== undefined
+          ? await this.#quoteGeneration(
+              actor,
+              binding,
+              receipt,
+              taskInput as WorkflowSchemaValue,
+            )
+          : undefined;
+      if (creditAdmission !== undefined) {
+        // A price-policy await cannot retain permission that was revoked in the meantime.
+        await authorizeExtension(
+          this.#dependencies.authorization,
+          actor,
+          "extension:run",
+          scope,
+        );
+        await this.#authorizeThread(actor, threadId);
+      }
+      const result = await this.#dependencies.extensions.commitExtensionTurn({
         turn,
         binding,
         receipt,
         expectedActivationRevision: activation.revision,
+        ...(creditAdmission === undefined ? {} : { creditAdmission }),
       });
+      this.#assertCreditPrincipal(
+        actor,
+        result.creditAdmission,
+        result.binding,
+        receipt,
+      );
+      if (
+        creditAdmission !== undefined &&
+        result.run.disposition === "committed" &&
+        result.creditAdmission === undefined
+      )
+        throw new ApplicationError(
+          "internal",
+          "extension_credit_admission_missing",
+        );
+      return result;
     });
+  }
+
+  async #quoteGeneration(
+    actor: ActorContext,
+    binding: ExtensionRunBinding,
+    receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
+    input: WorkflowSchemaValue,
+  ): Promise<ExtensionCreditAdmission> {
+    if (
+      this.#dependencies.extensions.creditAdmissionVersion !==
+      "crewon.extension-credit-admission.v0"
+    )
+      throw new ApplicationError(
+        "conflict",
+        "extension_credit_admission_unavailable",
+      );
+    let raw: unknown;
+    try {
+      raw = await this.#dependencies.creditQuotes!.quoteGeneration(
+        Object.freeze({
+          actor,
+          binding,
+          input: JSON.parse(
+            extensionCanonicalJson(input),
+          ) as WorkflowSchemaValue,
+          commandRequestDigest: receipt.requestDigest,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof ApplicationError) throw error;
+      throw new ApplicationError(
+        "conflict",
+        "extension_credit_quote_unavailable",
+        { cause: error },
+      );
+    }
+    try {
+      const quote = extensionCommand(raw, [
+        "poolId",
+        "priceRevision",
+        "quotedCredits",
+      ]);
+      return createExtensionCreditAdmission(
+        {
+          binding,
+          receipt,
+          principalId: actor.principalId,
+          poolId: quote.poolId as string,
+          priceRevision: quote.priceRevision as number,
+          quotedCredits: quote.quotedCredits as string,
+        },
+        this.#dependencies.digester,
+      );
+    } catch (error) {
+      throw new ApplicationError("internal", "extension_credit_quote_invalid", {
+        cause: error,
+      });
+    }
+  }
+
+  #assertCreditPrincipal(
+    actor: ActorContext,
+    admission: ExtensionCreditAdmission | undefined,
+    binding: ExtensionRunBinding,
+    receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
+  ): void {
+    if (admission === undefined) return;
+    let checked: ExtensionCreditAdmission;
+    try {
+      checked = assertExtensionCreditAdmission(
+        { admission, binding, receipt },
+        this.#dependencies.digester,
+      );
+    } catch (error) {
+      throw new ApplicationError(
+        "internal",
+        "extension_credit_admission_invalid",
+        { cause: error },
+      );
+    }
+    if (
+      checked.reservation.scope.principalId !== actor.principalId ||
+      checked.tenantId !== actor.tenantId ||
+      checked.spaceId !== actor.spaceId
+    )
+      throw new ApplicationError(
+        "authorization",
+        "extension_credit_account_owner_mismatch",
+      );
   }
 
   async #authorizeThread(actor: ActorContext, threadId: string) {

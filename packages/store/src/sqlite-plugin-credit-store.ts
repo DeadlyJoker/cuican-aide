@@ -4,7 +4,6 @@ import {
   CreditLedgerError,
   createCreditAccount,
   grantCreditAccount,
-  reserveCreditAccount,
   settleCreditReservation,
   releaseCreditReservation,
   validateCreditScope,
@@ -15,8 +14,8 @@ import {
   type CreditScope,
 } from "@crewon/domain";
 import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
+import { reserveSqlitePluginCreditsWithinTransaction } from "./sqlite-plugin-credit-reservation.ts";
 import {
-  assertCreditReservationReplay,
   creditAmount,
   creditEntriesQuery,
   creditEntry,
@@ -90,45 +89,11 @@ export class SqlitePluginCreditStore implements PluginCreditStore {
 
   async reserve(input: CreditReservationInput): Promise<CreditReservation> {
     const checked = validateCreditReservationInput(input);
-    return this.#transaction(() => {
-      const account = this.#requiredAccount(checked.scope);
-      const replay = this.#reservation(
-        checked.scope,
-        "idempotency_key",
-        checked.idempotencyKey,
-      );
-      if (replay !== null) {
-        assertCreditReservationReplay(replay, checked);
-        return replay;
-      }
-      if (
-        this.#reservation(
-          checked.scope,
-          "reservation_id",
-          checked.reservationId,
-        ) !== null
-      )
-        throw new CreditLedgerError("plugin_credit_reservation_id_conflict");
-      const next = reserveCreditAccount(account, checked);
-      this.#writeAccount(next.account);
-      this.#database
-        .prepare("INSERT INTO plugin_credit_reservations VALUES(?,?,?,?,?,?)")
-        .run(
-          ...creditScopeValues(checked.scope),
-          checked.reservationId,
-          checked.idempotencyKey,
-          JSON.stringify(next.reservation),
-        );
-      this.#appendEntry(
-        creditEntry({
-          account: next.account,
-          kind: "reserve",
-          credits: checked.quotedCredits,
-          reservationId: checked.reservationId,
-        }),
-      );
-      return next.reservation;
-    });
+    return this.#transaction(
+      () =>
+        reserveSqlitePluginCreditsWithinTransaction(this.#database, checked)
+          .reservation,
+    );
   }
 
   async settle(input: {

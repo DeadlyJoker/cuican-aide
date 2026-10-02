@@ -1,4 +1,5 @@
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
+import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
   RunStoreError,
@@ -173,13 +174,24 @@ export class PostgresDomainStore
     );
   }
 
+  /** Shares the host pool and lifetime; credit migration and funding remain explicit. */
+  pluginCreditStore(): PostgresPluginCreditStore {
+    this.assertOpen();
+    return new PostgresPluginCreditStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
   extensionStore(): PostgresExtensionStore {
     this.assertOpen();
     return new PostgresExtensionStore(this.pool, this.schema, {
       assertOpen: () => this.assertOpen(),
       commitRunWithinTransaction: (client, input) =>
         this.commitRunWithin(client, input),
-      commitTurnWithinTransaction: (client, input) => this.commitTurnStartWithin(client, input),
+      commitTurnWithinTransaction: (client, input) =>
+        this.commitTurnStartWithin(client, input),
     });
   }
 
@@ -474,11 +486,7 @@ export class PostgresDomainStore
     query: ScheduledAutomationListQuery,
   ): Promise<readonly AutomationDefinitionRecord[]> {
     this.assertOpen();
-    return listPostgresScheduledAutomations(
-      this.pool,
-      this.schemaSql(),
-      query,
-    );
+    return listPostgresScheduledAutomations(this.pool, this.schemaSql(), query);
   }
 
   async loadAutomationInvocationReceipt(

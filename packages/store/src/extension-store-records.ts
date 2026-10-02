@@ -13,6 +13,8 @@ import {
   type ExtensionExecutionTarget,
   type ExtensionRunBinding,
   type ExtensionScope,
+  type ExtensionCreditAdmission,
+  assertExtensionCreditAdmission,
 } from "@crewon/domain";
 import type {
   CommitExtensionRunInput,
@@ -257,10 +259,12 @@ export function extensionTurnCommit(input: CommitExtensionTurnInput) {
 export function extensionTurnResult(
   turn: CommitTurnStartResult,
   binding: ExtensionRunBinding,
+  creditAdmission?: ExtensionCreditAdmission,
 ): CommitExtensionTurnResult {
   return {
     schemaVersion: "crewon.extension-turn-admission.v0",
     binding,
+    ...(creditAdmission === undefined ? {} : { creditAdmission }),
     turn,
     run: {
       disposition: turn.disposition,
@@ -279,6 +283,13 @@ export function parseExtensionTurnReceipt(
 ): CommitExtensionTurnResult {
   const value = input as CommitExtensionTurnResult;
   const { run, binding } = parseExtensionTaskReceipt(input, scope, receipt);
+  const creditAdmission =
+    value.creditAdmission === undefined
+      ? undefined
+      : assertExtensionCreditAdmission(
+          { admission: value.creditAdmission, binding, receipt },
+          extensionStoreDigester,
+        );
   if (
     value.schemaVersion !== "crewon.extension-turn-admission.v0" ||
     value.turn === undefined
@@ -339,6 +350,7 @@ export function parseExtensionTurnReceipt(
     run,
     binding,
     turn: { ...turn, disposition: "replayed" },
+    ...(creditAdmission === undefined ? {} : { creditAdmission }),
   };
 }
 
@@ -362,7 +374,18 @@ export function parseExtensionTaskReceipt(
     value.run.state.spaceId !== binding.spaceId
   )
     throw new Error("extension_task_receipt_invalid");
-  return { run: { ...value.run, disposition: "replayed" }, binding };
+  const creditAdmission =
+    value.creditAdmission === undefined
+      ? undefined
+      : assertExtensionCreditAdmission(
+          { admission: value.creditAdmission, binding, receipt },
+          extensionStoreDigester,
+        );
+  return {
+    run: { ...value.run, disposition: "replayed" },
+    binding,
+    ...(creditAdmission === undefined ? {} : { creditAdmission }),
+  };
 }
 
 export function parseExtensionConfigurationReceipt(

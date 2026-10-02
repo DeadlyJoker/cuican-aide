@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  CreditLedgerError,
   extensionOpaqueId,
   extensionRevision,
   parseExtensionActivation,
@@ -8,9 +9,11 @@ import {
   type ExtensionScope,
   type ExtensionExecutionTarget,
   type ExtensionRunBinding,
+  type ExtensionCreditAdmission,
 } from "@crewon/domain";
 import type {
   CommitExtensionRunInput,
+  CommitExtensionRunResult,
   CommitExtensionTurnInput,
   CommitTurnStartInput,
   CommitTurnStartResult,
@@ -44,6 +47,21 @@ import {
   parseExtensionTurnReceipt,
 } from "./extension-store-records.ts";
 import { migrateSqliteExternalOperations } from "./sqlite-external-operation-store.ts";
+import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
+import { reserveSqlitePluginCreditsWithinTransaction } from "./sqlite-plugin-credit-reservation.ts";
+import {
+  checkedExtensionCreditAdmission,
+  assertExtensionCreditReplayPrincipal,
+  decodeExtensionCreditAdmission,
+  assertExtensionCreditAdmissionLink,
+  extensionCreditAdmissionSchemaSql,
+  assertExtensionCreditSchemaVersion,
+} from "./extension-credit-admission-records.ts";
+import {
+  assertCreditReservationReplay,
+  creditScopeValues,
+  decodeCreditReservation,
+} from "./plugin-credit-support.ts";
 
 type SqliteExtensionStoreHost = Readonly<{
   assertOpen(): void;
@@ -54,6 +72,8 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
+  readonly creditAdmissionVersion =
+    "crewon.extension-credit-admission.v0" as const;
   readonly #db: DatabaseSync;
   readonly #host: SqliteExtensionStoreHost;
   constructor(database: DatabaseSync, host: SqliteExtensionStoreHost) {
@@ -99,6 +119,35 @@ export class SqliteExtensionStore implements ExtensionStore {
     `);
       migrateSqliteExternalOperations(this.#db);
     });
+  }
+
+  /** Explicit billing opt-in. Ordinary plugin migration never creates or reads credit tables. */
+  async migrateCredits(): Promise<void> {
+    this.#transaction(() => {
+      migrateSqlitePluginCredits(this.#db);
+      this.#db.exec(extensionCreditAdmissionSchemaSql({ dialect: "sqlite" }));
+      assertExtensionCreditSchemaVersion(
+        this.#db
+          .prepare(
+            "SELECT id,version FROM extension_credit_schema_version LIMIT 2",
+          )
+          .all() as { id: unknown; version: unknown }[],
+      );
+      this.#db
+        .prepare(
+          "SELECT tenant_id,space_id,run_id,principal_id,pool_id,reservation_id,admission_json FROM extension_credit_admissions LIMIT 0",
+        )
+        .all();
+    });
+  }
+
+  async loadExtensionCreditAdmission(
+    input: ExtensionRunLocator,
+  ): Promise<ExtensionCreditAdmission | null> {
+    this.#host.assertOpen();
+    const admission = this.#creditAdmission(input);
+    if (admission !== null) this.#verifyCreditAdmission(admission);
+    return admission;
   }
 
   async saveExtensionConfiguration(input: SaveExtensionConfigurationInput) {
@@ -214,7 +263,9 @@ export class SqliteExtensionStore implements ExtensionStore {
     const value = this.#receipt(input, "task", input.receipt);
     return value === null
       ? null
-      : parseExtensionTaskReceipt(value, input, input.receipt);
+      : this.#verifyCreditReceipt(
+          parseExtensionTaskReceipt(value, input, input.receipt),
+        );
   }
 
   async commitExtensionRun(input: CommitExtensionRunInput) {
@@ -222,7 +273,9 @@ export class SqliteExtensionStore implements ExtensionStore {
     return this.#transaction(() => {
       const replay = this.#receipt(binding, "task", input.receipt);
       if (replay !== null)
-        return parseExtensionTaskReceipt(replay, binding, input.receipt);
+        return this.#verifyCreditReceipt(
+          parseExtensionTaskReceipt(replay, binding, input.receipt),
+        );
       this.#admit(binding, input.expectedActivationRevision);
       const run = this.#host.commitRunWithinTransaction(
         extensionTaskCommit(input),
@@ -250,16 +303,53 @@ export class SqliteExtensionStore implements ExtensionStore {
     const value = this.#receipt(input, "task", input.receipt);
     return value === null
       ? null
-      : parseExtensionTurnReceipt(value, input, input.receipt);
+      : this.#verifyCreditReceipt(
+          parseExtensionTurnReceipt(value, input, input.receipt),
+        );
   }
 
   async commitExtensionTurn(input: CommitExtensionTurnInput) {
     const binding = validateExtensionTurnCommit(input);
+    const creditAdmission = checkedExtensionCreditAdmission({
+      admission: input.creditAdmission,
+      binding,
+      receipt: input.receipt,
+    });
     return this.#transaction(() => {
       const replay = this.#receipt(binding, "task", input.receipt);
-      if (replay !== null)
-        return parseExtensionTurnReceipt(replay, binding, input.receipt);
+      if (replay !== null) {
+        const saved = this.#verifyCreditReceipt(
+          parseExtensionTurnReceipt(replay, binding, input.receipt),
+        );
+        assertExtensionCreditReplayPrincipal({
+          saved: saved.creditAdmission,
+          requested: creditAdmission,
+        });
+        return saved;
+      }
       this.#admit(binding, input.expectedActivationRevision);
+      if (creditAdmission !== undefined) {
+        try {
+          const reserved = reserveSqlitePluginCreditsWithinTransaction(
+            this.#db,
+            creditAdmission.reservation,
+          );
+          if (reserved.disposition !== "created")
+            throw new Error("extension_credit_orphaned_reservation");
+        } catch (error) {
+          if (
+            error instanceof CreditLedgerError &&
+            [
+              "plugin_credit_idempotency_conflict",
+              "plugin_credit_reservation_id_conflict",
+            ].includes(error.code)
+          )
+            throw new Error("extension_credit_orphaned_reservation", {
+              cause: error,
+            });
+          throw error;
+        }
+      }
       const turn = this.#host.commitTurnWithinTransaction(
         extensionTurnCommit(input),
       );
@@ -276,10 +366,70 @@ export class SqliteExtensionStore implements ExtensionStore {
           binding.configurationRevision,
           JSON.stringify(binding),
         );
-      const result = extensionTurnResult(turn, binding);
+      if (creditAdmission !== undefined)
+        this.#saveCreditAdmission(creditAdmission);
+      const result = extensionTurnResult(turn, binding, creditAdmission);
       this.#saveReceipt(binding, "task", input.receipt, result);
       return result;
     });
+  }
+
+  #creditAdmission(
+    input: ExtensionRunLocator,
+  ): ExtensionCreditAdmission | null {
+    extensionOpaqueId(input.tenantId);
+    extensionOpaqueId(input.spaceId);
+    extensionOpaqueId(input.runId);
+    const row = this.#db
+      .prepare(
+        "SELECT tenant_id,space_id,run_id,principal_id,pool_id,reservation_id,admission_json FROM extension_credit_admissions WHERE tenant_id=? AND space_id=? AND run_id=?",
+      )
+      .get(input.tenantId, input.spaceId, input.runId);
+    return decodeExtensionCreditAdmission(
+      row as Parameters<typeof decodeExtensionCreditAdmission>[0],
+    );
+  }
+
+  #saveCreditAdmission(admission: ExtensionCreditAdmission): void {
+    this.#db
+      .prepare("INSERT INTO extension_credit_admissions VALUES(?,?,?,?,?,?,?)")
+      .run(
+        admission.tenantId,
+        admission.spaceId,
+        admission.runId,
+        admission.reservation.scope.principalId,
+        admission.reservation.scope.poolId,
+        admission.reservation.reservationId,
+        JSON.stringify(admission),
+      );
+  }
+
+  #verifyCreditReceipt<T extends CommitExtensionRunResult>(result: T): T {
+    if (result.creditAdmission !== undefined)
+      this.#verifyCreditAdmission(result.creditAdmission);
+    return result;
+  }
+
+  #verifyCreditAdmission(admission: ExtensionCreditAdmission): void {
+    assertExtensionCreditAdmissionLink({
+      admission,
+      linked: this.#creditAdmission(admission),
+    });
+    const row = this.#db
+      .prepare(
+        "SELECT reservation_id,idempotency_key,record_json FROM plugin_credit_reservations WHERE tenant_id=? AND principal_id=? AND pool_id=? AND reservation_id=?",
+      )
+      .get(
+        ...creditScopeValues(admission.reservation.scope),
+        admission.reservation.reservationId,
+      );
+    const reservation = decodeCreditReservation(
+      row as Parameters<typeof decodeCreditReservation>[0],
+      admission.reservation.scope,
+    );
+    if (reservation === null)
+      throw new Error("extension_credit_admission_link_mismatch");
+    assertCreditReservationReplay(reservation, admission.reservation);
   }
 
   #admit(binding: ExtensionRunBinding, expectedActivationRevision: number) {

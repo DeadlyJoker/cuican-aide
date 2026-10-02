@@ -1,5 +1,11 @@
-import { SqliteExtensionStore } from "./sqlite-extension-store.ts";
-import { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
+import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
+import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
+import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
+import {
+  createSqliteExtensionStore,
+  createSqliteExternalOperationStore,
+  createSqlitePluginCreditStore,
+} from "./sqlite-extension-composition.ts";
 import { SqliteModelPricingStore } from "./sqlite-model-pricing-store.ts";
 import {
   encodeSqliteModelHistoryItem,
@@ -661,8 +667,8 @@ export class SqliteRunStore implements DomainStore {
 
   /** Plugin migrations and admission are opt-in; ordinary task creation stays unchanged. */
   extensionStore(): SqliteExtensionStore {
-    this.#assertOpen();
-    return new SqliteExtensionStore(this.#database, {
+    return createSqliteExtensionStore({
+      database: this.#database,
       assertOpen: () => this.#assertOpen(),
       commitRunWithinTransaction: (input) =>
         this.#commitRun(input, null, null, { withinTransaction: true }),
@@ -673,8 +679,16 @@ export class SqliteRunStore implements DomainStore {
 
   /** Shares the parent connection and lifetime; plugin migrations remain explicit. */
   externalOperationStore(): SqliteExternalOperationStore {
-    this.#assertOpen();
-    return new SqliteExternalOperationStore(this.#database, {
+    return createSqliteExternalOperationStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Shares the parent connection and lifetime; credit migration and funding remain explicit. */
+  pluginCreditStore(): SqlitePluginCreditStore {
+    return createSqlitePluginCreditStore({
+      database: this.#database,
       assertOpen: () => this.#assertOpen(),
     });
   }

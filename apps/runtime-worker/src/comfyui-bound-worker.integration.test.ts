@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import {
   CrewONAgentKernel,
   type ModelTransportPort,
@@ -8,6 +8,7 @@ import {
 import {
   RunExecutionService,
   ExtensionTaskApplicationService,
+  type ExtensionCreditQuotePort,
 } from "@crewon/application";
 import { extensionStoreDigester } from "../../../packages/store/src/extension-store-records.ts";
 import { seedThread } from "../../../packages/store/src/thread-store-conformance.test-support.ts";
@@ -23,11 +24,39 @@ import {
 import { RuntimeWorker } from "./runtime-worker.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 
-test("bound Worker resumes accepted image work after disable and streams the persisted source result", async (t) => {
+async function assertBoundWorkerResume(
+  t: TestContext,
+  pricing: "unpriced" | "quoted",
+) {
   const f = await boundComfyFixture(t);
   const prompt = "生成一张茶壶照片";
   const clock = { now: () => new Date().toISOString() };
   const ids = { nextId: () => randomUUID() };
+  const creditScope = {
+    tenantId: actor.tenantId,
+    principalId: actor.principalId,
+    poolId: "worker-credit-fixture",
+  };
+  let quoteCalls = 0;
+  const creditQuotes: ExtensionCreditQuotePort = {
+    async quoteGeneration() {
+      quoteCalls += 1;
+      // Fixture amounts only; production pricing and settlement are not configured.
+      return {
+        poolId: creditScope.poolId,
+        priceRevision: 1,
+        quotedCredits: "25",
+      };
+    },
+  };
+  if (pricing === "quoted") {
+    await f.first.store.migrateCredits();
+    await f.first.parent.pluginCreditStore().grant({
+      scope: creditScope,
+      grantId: "worker-fixture-funding",
+      credits: "100",
+    });
+  }
   // Real application admission; deployment readiness and providers remain explicit fixtures.
   const threadId = "image-thread";
   await seedThread(f.first.parent, { ...actor, threadId });
@@ -39,6 +68,7 @@ test("bound Worker resumes accepted image work after disable and streams the per
     clock,
     ids,
     digester: extensionStoreDigester,
+    ...(pricing === "quoted" ? { creditQuotes } : {}),
     catalog: {
       list: () => [f.registration],
       resolve: (identity) =>
@@ -52,7 +82,7 @@ test("bound Worker resumes accepted image work after disable and streams the per
       evaluate: async () => ({ outcome: "ready", target }),
     },
   });
-  const { binding } = await tasks.createTask(actor, {
+  const { binding, creditAdmission } = await tasks.createTask(actor, {
     pluginId: f.config.pluginId,
     threadId,
     expectedThreadRevision: 1,
@@ -169,6 +199,13 @@ test("bound Worker resumes accepted image work after disable and streams the per
       -1,
     )!.sequence;
     await f.state("disabled");
+    if (pricing === "quoted") {
+      const account = await f.first.parent
+        .pluginCreditStore()
+        .getAccount(creditScope);
+      assert.equal(account?.availableCredits, "75");
+      assert.equal(account?.reservedCredits, "25");
+    }
   } finally {
     await first.close();
     await f.first.parent.close();
@@ -212,7 +249,41 @@ test("bound Worker resumes accepted image work after disable and streams the per
       (await reopened.store.loadExtensionActivation(binding))?.state,
       "disabled",
     );
+    assert.equal(quoteCalls, pricing === "quoted" ? 1 : 0);
+    if (pricing === "quoted") {
+      const credits = reopened.parent.pluginCreditStore();
+      const account = await credits.getAccount(creditScope);
+      assert.equal(account?.availableCredits, "75");
+      assert.equal(account?.reservedCredits, "25");
+      assert.deepEqual(
+        await reopened.store.loadExtensionCreditAdmission(binding),
+        creditAdmission,
+      );
+      const reservation = await credits.getReservation({
+        scope: creditScope,
+        reservationId: binding.runId,
+      });
+      assert.equal(reservation?.state, "reserved");
+      assert.deepEqual(
+        (
+          await credits.listEntries({
+            scope: creditScope,
+            afterRevision: 0,
+            limit: 10,
+          })
+        ).map((entry) => entry.kind),
+        ["grant", "reserve"],
+      );
+    } else {
+      assert.equal(creditAdmission, undefined);
+    }
   } finally {
     await restored.close();
   }
-});
+}
+
+test("bound Worker resumes accepted image work after disable and streams the persisted source result", (t) =>
+  assertBoundWorkerResume(t, "unpriced"));
+
+test("quoted bound Worker resumes accepted image work with one personal credit hold", (t) =>
+  assertBoundWorkerResume(t, "quoted"));
