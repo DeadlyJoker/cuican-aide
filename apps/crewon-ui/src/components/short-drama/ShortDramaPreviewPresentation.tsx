@@ -1,6 +1,14 @@
 import { ArrowRight, Check } from "lucide-react";
 import type { ConceptPreview } from "./short-drama-preview-data";
 
+export function ShortDramaAccessNotice() {
+  return (
+    <p className="detail-note">
+      所有用户可用；生成消耗个人独立积分。当前为页面演示，不实际扣费。
+    </p>
+  );
+}
+
 export function Status({
   label,
   value,

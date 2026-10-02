@@ -27,6 +27,7 @@ import {
 } from "./ShortDramaPreviewDialogs";
 import {
   ArrowUpRight,
+  ShortDramaAccessNotice,
   Status,
   stateName,
 } from "./ShortDramaPreviewPresentation";
@@ -409,6 +410,7 @@ export function ShortDramaWorkbenchPreview({
                           生成新版本
                         </button>
                       </div>
+                      <ShortDramaAccessNotice />
                       {selected ? (
                         <button
                           className="concept-art"
@@ -632,6 +634,7 @@ export function ShortDramaWorkbenchPreview({
                           positive={concept.state === "succeeded"}
                         />
                       </div>
+                      <ShortDramaAccessNotice />
                       <div className="detail-actions">
                         {concept.state === "draft" ? (
                           <button

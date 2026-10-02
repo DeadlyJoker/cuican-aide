@@ -1,6 +1,10 @@
 import { Film, FolderOpen, Plus, Search } from "lucide-react";
 import type { DramaProjectPreview } from "./short-drama-preview-data";
-import { ArrowUpRight, stateName } from "./ShortDramaPreviewPresentation";
+import {
+  ArrowUpRight,
+  ShortDramaAccessNotice,
+  stateName,
+} from "./ShortDramaPreviewPresentation";
 
 /** Project-list presentation for the isolated in-memory preview. */
 export function ShortDramaProjectList({
@@ -38,6 +42,7 @@ export function ShortDramaProjectList({
           新建项目
         </button>
       </div>
+      <ShortDramaAccessNotice />
       <div className="section-row">
         <div className="filter-tabs">
           <button
