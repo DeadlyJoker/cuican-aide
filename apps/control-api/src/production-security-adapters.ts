@@ -5,11 +5,13 @@ import {
   type AutomationAuthorizationPort,
   type AuthorizationDecision,
   type AuthorizationPort,
+  type PluginInstallationAuthorizationPort,
 } from "@crewon/application";
 
 export type ControlAuthorizationRequest =
   | Parameters<AuthorizationPort["authorize"]>[0]
-  | Parameters<AutomationAuthorizationPort["authorize"]>[0];
+  | Parameters<AutomationAuthorizationPort["authorize"]>[0]
+  | Parameters<PluginInstallationAuthorizationPort["authorize"]>[0];
 
 import {
   ControlApiIdentityError,
