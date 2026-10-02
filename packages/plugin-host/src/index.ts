@@ -44,5 +44,7 @@ export {
 } from "./plugin-execution-registry.ts";
 export {
   PluginExecutionPackage,
+  pluginExecutionPackageFailureOwner,
   type PluginExecutionPackageBorrow,
+  type PluginExecutionPackageFailureOwner,
 } from "./plugin-execution-package.ts";

@@ -42,6 +42,16 @@ test("installed Run context reads the real paid task, exact original package/con
     format: "mp4",
   });
   assert.deepEqual(snapshot.context.target, target);
+  const persisted = await f.first.parent.loadRunInSpace(f.task.binding);
+  assert.ok(persisted);
+  assert.equal(
+    f.reader.verifiedToolPermissionMode(snapshot),
+    persisted.toolPermissionMode ?? null,
+  );
+  assert.throws(
+    () => f.reader.verifiedToolPermissionMode({ ...snapshot }),
+    /installed_plugin_context_snapshot_invalid/,
+  );
   assert.ok(Object.isFrozen(snapshot.context.configuration.parameters));
   assert.deepEqual(
     f.controls.requests.map((request) => request.action),
@@ -125,12 +135,97 @@ test("a newer selected package never substitutes for the old admitted package or
     }),
   );
   assert.deepEqual(await f.load("observe"), original);
+  assert.deepEqual(await f.load("submit"), original);
   await f.reader.assertCurrent(original, "observe", signal());
   assert.equal(
     (await f.first.store.loadPluginTaskAdmission(f.task.binding))
       ?.packageDigest,
     f.pin.packageDigest,
   );
+});
+
+test("persisted plugin disable and uninstall deny new dispatch while preserving authorized original-package observation", async (t) => {
+  for (const state of ["disabled", "uninstalled"] as const) {
+    await t.test(state, async (sub) => {
+      const f = await installedRunContextFixture(sub);
+      const original = await f.load();
+      assert.ok(original);
+      await f.installations.commitSelection(
+        selectionRecipe(f.enabled.selection, `context-select-${state}`, {
+          actor,
+          state,
+        }),
+      );
+      await assert.rejects(
+        f.load("submit"),
+        /installed_plugin_generation_disabled/,
+      );
+      await assert.rejects(
+        f.reader.assertCurrent(original, "submit", signal()),
+        /installed_plugin_generation_disabled/,
+      );
+      assert.deepEqual(await f.load("observe"), original);
+      await f.reader.assertCurrent(original, "observe", signal());
+      assert.equal(
+        (await f.credits.getAccount(f.creditScope))?.reservedCredits,
+        "30",
+      );
+    });
+  }
+});
+
+test("an installation selection changed during policy evaluation cannot reuse its initial grant", async (t) => {
+  const f = await installedRunContextFixture(t);
+  let changed = false;
+  f.controls.authorizeHook = async () => {
+    if (changed) return;
+    changed = true;
+    await f.installations.commitSelection(
+      selectionRecipe(f.enabled.selection, "context-disable-during-policy", {
+        actor,
+        state: "disabled",
+      }),
+    );
+  };
+  await assert.rejects(
+    f.load("submit"),
+    /installed_plugin_generation_disabled/,
+  );
+  f.controls.authorizeHook = null;
+  assert.ok(await f.load("observe"));
+});
+
+test("current installed selection cannot claim another profile, publisher or a revision older than admission", async (t) => {
+  const f = await installedRunContextFixture(t);
+  const current = await f.installations.loadSelection({
+    scope: f.profile,
+    pluginId: f.pin.pluginId,
+  });
+  assert.ok(current);
+  for (const selection of [
+    null,
+    { ...current, profileId: "foreign-profile" },
+    { ...current, publisherId: "foreign.publisher" },
+    { ...current, revision: 1 },
+    { ...current, state: "disabled" },
+    { ...current, selectedPackageDigest: `sha256:${"d".repeat(64)}` },
+  ]) {
+    const installations = new Proxy(f.installations, {
+      get(source, name) {
+        if (name === "loadSelection") return async () => selection;
+        const value = Reflect.get(source, name, source) as unknown;
+        return typeof value === "function" ? value.bind(source) : value;
+      },
+    });
+    const reader = new InstalledPluginRunContext({
+      ...f.dependencies,
+      installations,
+    });
+    await assert.rejects(
+      f.load("observe", reader),
+      /installed_plugin_selection_(missing|scope_mismatch|revision_invalid|admission_mismatch)/,
+    );
+  }
 });
 
 test("current owner identity must retain the original principal, actor and tenant/space", async (t) => {

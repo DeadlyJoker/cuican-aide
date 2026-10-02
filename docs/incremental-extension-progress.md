@@ -4,6 +4,20 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：已安装包执行 owner、原工具路由与失败清理隔离
+
+Standalone SQLite/PostgreSQL 组合现在可以显式配置 `installedPluginExecution`，由宿主提供安装根、当前 actor 解析、原授权端口、发布者/包许可端口及可选容量。组合在打开 Store 前验证并捕获配置值和方法身份，拒绝与注入 resolver 并用；显式迁移完成后，从本组合的实际 Run、扩展及安装 Store 构造真实 `InstalledPluginRunContext` 和 `InstalledPluginRuntimeResolver`。组合拥有该 resolver，启动失败回收，重复关闭合并为一次；关闭顺序为 Worker 停止准入、执行资源释放、最后关闭 Store。
+
+真实 resolver 以不可变 admission、原配置、原执行目标和工具目录核验确切安装包，通过 `PluginExecutionPackage` 加载原摘要对应的 Node ESM，从真实 Node lease 取得 SDK 工厂并创建每个 Run 的工具实例。router 仅接管业务清单声明的插件工具，保留原完整目录及其顺序、原 Kernel 和宿主工具；执行、恢复、取消及保留回执仍交给各自实际 owner。只有权威 v1 记录确实不存在才沿用原工具路径，来源读取错误、缺少 owner 或物化证明均明确拒绝，不回退到当前版本或旧内置实现。
+
+当前授权同时检查持久化安装选择、原扩展激活和真实 actor。安装选择停用阻断新的 dispatch，`reconcilable` 观察仍使用原包与回执；`replaySafe reconcile` 按 `submit` 检查。Run 的 canonical `toolPermissionMode` 从实际持久化 Run 和原受理回执核验后投影为 sandbox 上下文，调用方不能通过修改 Run 副本提升权限。包 setup 完成后的异步 `beforeCommit` gate 再次读取当前身份、选择和许可，发布者许可端口等待期间发生的撤权也会在后置检查中拒绝发布。
+
+缓存保留仍有物理调用或未确认 SDK 完成回执的实例，warm 借用授权失败不关闭这些旧资源。闲置退休需要实际 `canRetire() === true`；可选 `close` 缺失时也不能凭空推断清理完成。新增启动清理失败的真实 owner：Host 用私有 WeakMap 将冻结的关闭句柄绑定到实际抛出的错误，仿造或包装错误不能取得该所有权。resolver 将清理失败的 Host/SDK 实例留在有界隔离项中，同一原任务不重新 setup，其他任务仍受容量限制，显式关闭继续报告失败，不假称已清理或释放容量。
+
+已确认专项为 resolver **32/32**、实际 SQLite/PostgreSQL composition **26/26**、router **11/11**、Host 全量 **135/135**、Worker 双库全量 **1,323/1,323**，均零失败、零跳过；Host 和 Worker 类型、生产许可证、架构边界及相关格式检查通过。实际安装执行专项通过 composition helper 构造真实 resolver，再接真实 Worker、双库 Store、不可变安装文件和原任务/工具回执路径；模型、SDK 外部供应商实现、身份、包许可及报价仍为明确夹具。它证明执行 owner 和组合行为，不等同于完整生产 main、真实积分结算或在线生成 API 的端到端验收。历史阶段的全量数字仅代表当时版本。
+
+**仍待接通：** 生产 Worker `main` 的真实身份和包许可配置、通用已安装业务包的 Agent 物化证明、生产动作桥与真实报价/积分结算权威、历史依赖闭包、Krea2/短剧独立包及真实 API 验收。上述组合 API 已实现，但不能用预览身份、静态自授权或测试物化证明替代这些生产端口。历史阶段记录保留，完整目标继续进行中；当前启动边界见[已安装插件的服务启动](./installed-plugin-service-startup.md)。
+
 ## 2026-10-03：执行工厂协议、原 Run 执行入口与历史包加载基础
 
 公开 SDK 增加显式声明的 `crewon.execution` API `1` 执行工厂。工厂接收宿主核验后的原包、Run、配置和完整执行目标快照，不携带账号权限、Store 或凭据值；返回自含的原 ToolRuntime 协议，覆盖执行、恢复、取消、预约、保留结果与确认。Node 声明仍无需 DOM 或宿主私有包。Host 将工厂注册绑定到实际 Node 实例及其清理周期，借用必须使用未释放的真实 Node lease；同形对象不能伪造身份。已开始的工厂创建由调用方继续持有，关闭不丢弃晚到资源。

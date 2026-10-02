@@ -138,6 +138,68 @@ test("checks commit authority and every borrow instead of treating installation 
   await owner.close();
 });
 
+test("joins asynchronous post-setup authority before publishing a factory", async (t) => {
+  const installed = await executionPackage(t);
+  let release!: () => void;
+  const authority = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let checked = false;
+  let commitCalls = 0;
+  const opening = PluginExecutionPackage.open({
+    activation: installed,
+    beforeCommit: async () => {
+      assert.ok((await installed.records()).includes("setup"));
+      checked = true;
+      await authority;
+    },
+    commit: {
+      authorizeCommit: () => {
+        assert.equal(checked, true);
+        commitCalls++;
+        return "allow";
+      },
+    },
+  });
+  try {
+    while (!checked) await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(commitCalls, 0);
+    release();
+    const owner = await opening;
+    assert.equal(commitCalls, 1);
+    await owner.close();
+  } finally {
+    release();
+    await opening.then((owner) => owner.close()).catch(() => {});
+  }
+});
+
+test("post-setup authority failure disposes the unpublished Node instance", async (t) => {
+  const installed = await executionPackage(t);
+  let commitCalls = 0;
+  await assert.rejects(
+    PluginExecutionPackage.open({
+      activation: installed,
+      beforeCommit: async () => {
+        assert.ok((await installed.records()).includes("setup"));
+        throw new Error("fixture_current_authority_revoked");
+      },
+      commit: {
+        authorizeCommit: () => {
+          commitCalls++;
+          return "allow";
+        },
+      },
+    }),
+    /fixture_current_authority_revoked/,
+  );
+  assert.equal(commitCalls, 0);
+  assert.equal(
+    (await installed.records()).filter((value) => value === "dispose").length,
+    1,
+  );
+});
+
 test("does not silently borrow current foreign service dependencies", async (t) => {
   const installed = await executionPackage(t, {
     requires: [

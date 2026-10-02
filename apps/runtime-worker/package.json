@@ -25,6 +25,7 @@
     "@crewon/device-dispatch": "workspace:*",
     "@crewon/domain": "workspace:*",
     "@crewon/mcp-runtime": "workspace:*",
+    "@crewon/plugin-host": "workspace:*",
     "@crewon/process-lifecycle": "workspace:*",
     "@crewon/store": "workspace:*",
     "@crewon/tool-broker": "workspace:*",

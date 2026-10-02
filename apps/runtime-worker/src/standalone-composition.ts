@@ -37,6 +37,11 @@ import type { ToolRuntimePort } from "@crewon/tool-broker";
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
 import { preparePluginTaskAdmissionProbe } from "./plugins/plugin-task-admission-probe.ts";
 import type { InstalledPluginRunRuntimeResolverPort } from "./plugins/installed-plugin-run-runtime.ts";
+import {
+  captureInstalledPluginExecutionConfig,
+  composeInstalledPluginRuntimeResolver,
+  type InstalledPluginExecutionConfig,
+} from "./plugins/installed-plugin-runtime-composition.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import { type AgentVersionRuntime } from "./agent-version-runtime.ts";
@@ -133,6 +138,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   extensionExecutionMode?: ExtensionExecutionMode;
   /** Trusted composition only; never inferred from package metadata or a fixed preview identity. */
   installedPluginRuntimeResolver?: InstalledPluginRunRuntimeResolverPort;
+  /** Construct and own the installed execution resolver using this composition's actual stores. */
+  installedPluginExecution?: InstalledPluginExecutionConfig;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -265,10 +272,22 @@ type PreparedRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
 function prepareComposition(
   input: RuntimeWorkerCompositionConfig,
 ): PreparedRuntimeWorkerConfig {
+  if (
+    input.installedPluginExecution !== undefined &&
+    input.installedPluginRuntimeResolver !== undefined
+  )
+    throw new Error("installed_plugin_execution_configuration_conflict");
   // Capture scheduling and plugin materialization inputs before storage can yield.
   const config = Object.freeze({
     ...input,
     route: Object.freeze({ ...input.route }),
+    ...(input.installedPluginExecution === undefined
+      ? {}
+      : {
+          installedPluginExecution: captureInstalledPluginExecutionConfig(
+            input.installedPluginExecution,
+          ),
+        }),
     ...(input.extensionHost === undefined
       ? {}
       : { extensionHost: Object.freeze({ ...input.extensionHost }) }),
@@ -395,9 +414,20 @@ async function composeRuntimeWorker(
     await store.extensionStore().migrate();
   const pluginTaskAdmissions =
     workItemExecutionScope !== undefined ||
-    config.installedPluginRuntimeResolver !== undefined
+    config.installedPluginRuntimeResolver !== undefined ||
+    config.installedPluginExecution !== undefined
       ? await preparePluginTaskAdmissionProbe(store)
       : store.pluginTaskAdmissionProbe();
+  const installedPluginRuntimeResolver =
+    config.installedPluginExecution === undefined
+      ? config.installedPluginRuntimeResolver
+      : composeInstalledPluginRuntimeResolver({
+          store,
+          extensions: store.extensionStore(),
+          config: config.installedPluginExecution,
+        });
+  if (installedPluginRuntimeResolver !== undefined)
+    lifetime.own(installedPluginRuntimeResolver, { phase: "resources" });
   const agentVersionRuntimeFactory =
     config.extensionRuntime === undefined
       ? config.agentVersionRuntimeFactory
@@ -546,7 +576,7 @@ async function composeRuntimeWorker(
         runtimeResolver.priorModelCompactionResolver(),
       agentVersionRuntimeResolver: runtimeResolver,
       pluginTaskAdmissions,
-      installedPluginRuntimeResolver: config.installedPluginRuntimeResolver,
+      installedPluginRuntimeResolver,
       policy,
     },
     {

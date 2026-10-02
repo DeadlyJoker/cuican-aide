@@ -297,6 +297,9 @@ importers:
       '@crewon/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
+      '@crewon/plugin-host':
+        specifier: workspace:*
+        version: link:../../packages/plugin-host
       '@crewon/process-lifecycle':
         specifier: workspace:*
         version: link:../../packages/process-lifecycle

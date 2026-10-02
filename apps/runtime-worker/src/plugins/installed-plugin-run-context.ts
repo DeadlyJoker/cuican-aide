@@ -19,6 +19,7 @@ import {
   parseExtensionRunBinding,
   parseInstalledPluginPackage,
   parsePluginProfileScope,
+  parsePluginSelection,
   parsePluginTaskAdmission,
   pluginInstallationOpaqueId,
   reduceRunLifecycleEvent,
@@ -47,6 +48,7 @@ type SavedContext = Readonly<{
   admission: PluginTaskAdmission;
   binding: ExtensionRunBinding;
   context: PluginToolRuntimeContext;
+  toolPermissionMode: RunState["toolPermissionMode"] | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -78,6 +80,7 @@ export class InstalledPluginRunContext {
       typeof dependencies.extensions.loadExtensionTurnReceipt !== "function" ||
       typeof dependencies.runs.loadRunInSpace !== "function" ||
       typeof dependencies.installations.loadPackage !== "function" ||
+      typeof dependencies.installations.loadSelection !== "function" ||
       typeof dependencies.authorization.authorize !== "function" ||
       typeof dependencies.resolveActor !== "function"
     )
@@ -138,6 +141,15 @@ export class InstalledPluginRunContext {
     )
       fail("installed_plugin_context_changed");
     await this.#authorize(current, purpose, signal);
+  }
+
+  /** Host-only projection from the actual persisted Run; never supplied by a plugin or copied snapshot. */
+  verifiedToolPermissionMode(
+    snapshot: InstalledPluginRunSnapshot,
+  ): RunState["toolPermissionMode"] | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.toolPermissionMode;
   }
 
   async #read(
@@ -251,7 +263,12 @@ export class InstalledPluginRunContext {
       }),
       target: binding.target,
     });
-    return Object.freeze({ admission, binding, context });
+    return Object.freeze({
+      admission,
+      binding,
+      context,
+      toolPermissionMode: run.toolPermissionMode ?? null,
+    });
   }
 
   async #authorize(
@@ -261,6 +278,7 @@ export class InstalledPluginRunContext {
   ) {
     const { admission, binding } = saved;
     const initial = await this.#activation(binding, purpose, signal);
+    const selection = await this.#selection(admission, purpose, signal);
     const actor = await this.#actor(admission, signal);
     for (const request of [
       {
@@ -303,9 +321,57 @@ export class InstalledPluginRunContext {
     const latest = await this.#activation(binding, purpose, signal);
     if (extensionCanonicalJson(initial) !== extensionCanonicalJson(latest))
       fail("installed_plugin_activation_changed");
+    const latestSelection = await this.#selection(admission, purpose, signal);
+    if (
+      extensionCanonicalJson(selection) !==
+      extensionCanonicalJson(latestSelection)
+    )
+      fail("installed_plugin_selection_changed");
     const currentActor = await this.#actor(admission, signal);
     if (extensionCanonicalJson(currentActor) !== extensionCanonicalJson(actor))
       fail("installed_plugin_execution_identity_unavailable");
+  }
+
+  async #selection(
+    admission: PluginTaskAdmission,
+    purpose: InstalledPluginRunPurpose,
+    signal: AbortSignal,
+  ) {
+    signal.throwIfAborted();
+    const scope = parsePluginProfileScope({
+      tenantId: admission.tenantId,
+      spaceId: admission.spaceId,
+      profileId: admission.profileId,
+    });
+    const raw = await this.#dependencies.installations.loadSelection({
+      scope,
+      pluginId: admission.pluginId,
+    });
+    signal.throwIfAborted();
+    if (raw === null) fail("installed_plugin_selection_missing");
+    const selection = parsePluginSelection(raw);
+    for (const field of [
+      "tenantId",
+      "spaceId",
+      "profileId",
+      "pluginId",
+      "publisherId",
+    ] as const)
+      if (selection[field] !== admission[field])
+        fail("installed_plugin_selection_scope_mismatch");
+    if (selection.revision < admission.selectionRevision)
+      fail("installed_plugin_selection_revision_invalid");
+    if (
+      selection.revision === admission.selectionRevision &&
+      (selection.state !== "enabled" ||
+        selection.selectedPackageDigest !== admission.packageDigest)
+    )
+      fail("installed_plugin_selection_admission_mismatch");
+    // Selection gates new operations, while the immutable admission still selects
+    // the original package for recovery after upgrade or logical uninstall.
+    if (purpose === "submit" && selection.state !== "enabled")
+      fail("installed_plugin_generation_disabled");
+    return selection;
   }
 
   async #activation(

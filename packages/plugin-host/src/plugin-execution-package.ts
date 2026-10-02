@@ -17,6 +17,22 @@ export type PluginExecutionPackageBorrow = Readonly<{
   release(): void;
 }>;
 
+export type PluginExecutionPackageFailureOwner = Readonly<{
+  /** Failed cleanup is still owned; closing never invents physical disposal. */
+  close(): Promise<void>;
+}>;
+
+const failureOwners = new WeakMap<object, PluginExecutionPackageFailureOwner>();
+
+/** Only the actual startup error carries ownership; matching error text grants nothing. */
+export function pluginExecutionPackageFailureOwner(
+  error: unknown,
+): PluginExecutionPackageFailureOwner | null {
+  return error !== null && typeof error === "object"
+    ? (failureOwners.get(error) ?? null)
+    : null;
+}
+
 /**
  * A private Node host for one exact installed package, including cold historical loads.
  * It never changes another host's current selection or exposes its service discovery.
@@ -42,15 +58,21 @@ export class PluginExecutionPackage {
   static async open(
     input: Readonly<{
       activation: PluginNodeActivation;
+      /** Re-read asynchronous current authority after setup and before the synchronous commit gate. */
+      beforeCommit?(): Promise<void>;
       /** Current host authority, checked after verified ESM setup, before publication. */
       commit: PluginNodePreparedCommit;
     }>,
   ): Promise<PluginExecutionPackage> {
+    const beforeCommit = input.beforeCommit;
+    if (beforeCommit !== undefined && typeof beforeCommit !== "function")
+      throw new Error("plugin_execution_before_commit_invalid");
     const registry = new PluginExecutionRegistry({ maximumFactories: 1 });
     const host = new PluginNodeHost({ services: [registry.hostService()] });
     let prepared: Awaited<ReturnType<PluginNodeHost["prepare"]>> | null = null;
     try {
       prepared = await host.prepare(input.activation);
+      await beforeCommit?.();
       const identity = prepared.commit(input.commit);
       // A successfully loaded Node package must actually register its factory.
       const lease = host.acquire({
@@ -78,11 +100,22 @@ export class PluginExecutionPackage {
           failures.push(failure);
         }
       }
-      if (failures.length)
-        throw new AggregateError(
+      if (failures.length) {
+        const failed = new AggregateError(
           [error, ...failures],
           "plugin_execution_package_start_failed",
         );
+        failureOwners.set(
+          failed,
+          Object.freeze({
+            close: async () => {
+              registry.close();
+              await host.close();
+            },
+          }),
+        );
+        throw failed;
+      }
       throw error;
     }
   }
