@@ -195,6 +195,7 @@ export function CommandSidebar({
   platform = "web",
   query,
   selectedLinkedThreadId,
+  sidebarCollapsed = false,
   showSignedOutAccount = false,
   slots,
   workspaceAuthority,
@@ -231,6 +232,7 @@ export function CommandSidebar({
   platform?: PlatformKind;
   query: string;
   selectedLinkedThreadId: string | null;
+  sidebarCollapsed?: boolean;
   /** Explicit preview-host chrome; does not establish an authenticated account. */
   showSignedOutAccount?: boolean;
   slots: CommandHomeSlots;
@@ -262,6 +264,7 @@ export function CommandSidebar({
           archiveThread: "归档会话",
           cancel: "取消",
           collapseSidebar: "折叠侧栏",
+          expandSidebar: "展开侧栏",
           conversation: "对话",
           controlWorkspaceEmpty: "尚未绑定本机文件夹作为工作空间。",
           feature: "功能",
@@ -303,6 +306,7 @@ export function CommandSidebar({
           archiveThread: "Archive conversation",
           cancel: "Cancel",
           collapseSidebar: "Collapse sidebar",
+          expandSidebar: "Expand sidebar",
           conversation: "Conversation",
           controlWorkspaceEmpty: "No local folder is bound as a workspace yet.",
           feature: "Feature",
@@ -441,8 +445,10 @@ export function CommandSidebar({
          */}
         <div className="sidebar-tools" aria-label={copy.sidebarTools}>
           <button
-            aria-label={copy.collapseSidebar}
-            aria-pressed="false"
+            aria-label={
+              sidebarCollapsed ? copy.expandSidebar : copy.collapseSidebar
+            }
+            aria-pressed={sidebarCollapsed}
             className="sidebar-tool"
             data-od-id="sidebar-collapse-button"
             data-sidebar-collapse=""

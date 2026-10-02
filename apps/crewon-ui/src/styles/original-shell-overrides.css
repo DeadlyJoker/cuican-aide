@@ -6444,6 +6444,19 @@ body.modal-open {
   .command-sidebar {
     display: none;
   }
+  :root[data-surface="desktop"]
+    .desktop-command-screen
+    .command-window:not(.sidebar-collapsed) {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+  :root[data-surface="desktop"] .desktop-command-screen .command-sidebar {
+    display: grid;
+  }
+  :root[data-surface="desktop"]
+    .screen-shell.command-screen
+    .settings-command-window {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
   .hero-center {
     width: min(720px, calc(100% - 24px));
     gap: 10px;

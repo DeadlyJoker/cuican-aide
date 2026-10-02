@@ -9357,7 +9357,10 @@ button.library-item:hover .library-card-chevron {
 }
 
 @media (max-width: 760px) {
-  .screen-shell.command-screen .settings-command-window {
+  .screen-shell.command-screen .settings-command-window,
+  :root[data-surface="desktop"]
+    .screen-shell.command-screen
+    .settings-command-window {
     grid-template-columns: 180px minmax(0, 1fr);
   }
 
@@ -15460,6 +15463,14 @@ button.library-item:hover .library-card-chevron {
   }
 }
 
+@media (min-width: 761px) and (max-width: 860px) {
+  :root[data-surface="desktop"]
+    .screen-shell.command-screen
+    .settings-command-window {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 860px) {
   .screen-shell.command-screen {
     padding: 0;
@@ -15477,6 +15488,24 @@ button.library-item:hover .library-card-chevron {
 
   .screen-shell.command-screen .command-sidebar {
     display: none;
+  }
+
+  /* Desktop panels keep the original rail and its account/settings access. */
+  :root[data-surface="desktop"]
+    .desktop-command-screen
+    .command-window:not(.sidebar-collapsed) {
+    grid-template-columns: 232px minmax(0, 1fr);
+  }
+
+  :root[data-surface="desktop"] .desktop-command-screen .command-sidebar {
+    display: grid;
+  }
+
+  :root[data-surface="desktop"] .settings-command-window > .settings-sidebar {
+    position: relative;
+    inset: auto;
+    width: auto;
+    box-shadow: none;
   }
 
   .screen-shell.command-screen .command-canvas {

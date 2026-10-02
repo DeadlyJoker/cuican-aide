@@ -3283,6 +3283,7 @@ export function CommandWorkspace({
           platform={platform}
           query={sidebarSearchQuery}
           selectedLinkedThreadId={activeLinkedThreadId}
+          sidebarCollapsed={sidebarCollapsed}
           slots={slots}
           workspaceAuthority={workspaceAuthority}
           onCloseSearch={() => {

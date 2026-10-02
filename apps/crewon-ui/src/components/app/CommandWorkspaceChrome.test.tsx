@@ -45,15 +45,20 @@ const sidebarSlots: CommandHomeSlots = {
   },
 };
 
-function renderSidebar() {
+function renderSidebar({
+  sidebarCollapsed,
+  locale,
+}: { sidebarCollapsed?: boolean; locale?: "zh" | "en" } = {}) {
   return renderToStaticMarkup(
     <CommandSidebar
       activeView="command"
       cwd="/Users/me/projects/crewon"
       isSearchOpen={false}
       linkedThreads={[]}
+      locale={locale}
       query=""
       selectedLinkedThreadId={null}
+      sidebarCollapsed={sidebarCollapsed}
       slots={sidebarSlots}
       workspaceAuthority="legacy"
       onCloseSearch={vi.fn()}
@@ -86,6 +91,21 @@ function linkedThread(
 }
 
 describe("CommandSidebar", () => {
+  it.each([
+    ["zh", false, "折叠侧栏"],
+    ["zh", true, "展开侧栏"],
+    ["en", false, "Collapse sidebar"],
+    ["en", true, "Expand sidebar"],
+  ] as const)(
+    "reflects the actual collapsed state in the %s toggle (%s)",
+    (locale, sidebarCollapsed, label) => {
+      const markup = renderSidebar({ locale, sidebarCollapsed });
+      expect(markup).toContain(
+        `aria-label="${label}" aria-pressed="${sidebarCollapsed}"`,
+      );
+    },
+  );
+
   it.each(["legacy", "control"] as const)(
     "limits each %s workspace to five without limiting search",
     (authority) => {
