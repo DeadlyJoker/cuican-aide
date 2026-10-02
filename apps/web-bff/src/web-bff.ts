@@ -9,6 +9,12 @@ import {
   extensionProxyPolicy,
   EXTENSION_PROXY_DEADLINE_MS,
 } from "./extension-proxy-policy.ts";
+import {
+  boundedPluginProxyRequest,
+  boundedPluginProxyResponse,
+  pluginProxyPolicy,
+  PLUGIN_PROXY_DEADLINE_MS,
+} from "./plugin-proxy-policy.ts";
 
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 const MAX_HEADER_BYTES = 16 * 1024;
@@ -37,7 +43,11 @@ const RESPONSE_HEADER_ALLOWLIST = [
 ] as const;
 
 export type WebBff = Readonly<{
-  handle(request: Request): Promise<Response>;
+  /** Original target supplied only by the HTTP adapter, never by a request header. */
+  handle(
+    request: Request,
+    context?: Readonly<{ rawTarget: string }>,
+  ): Promise<Response>;
 }>;
 
 export function createWebBff(config: {
@@ -66,10 +76,30 @@ export function createWebBff(config: {
   const fetchImpl = config.fetch ?? globalThis.fetch;
 
   return {
-    async handle(request): Promise<Response> {
+    async handle(request, context): Promise<Response> {
       const requestUrl = new URL(request.url);
       if (requestUrl.origin !== publicOrigin) {
         return errorResponse(400, "request_origin_invalid");
+      }
+      const rawTarget = context?.rawTarget;
+      const queryOffset = rawTarget?.indexOf("?") ?? -1;
+      const pluginPolicy = pluginProxyPolicy({
+        pathname:
+          rawTarget === undefined
+            ? requestUrl.pathname
+            : queryOffset < 0
+              ? rawTarget
+              : rawTarget.slice(0, queryOffset),
+        search:
+          rawTarget === undefined
+            ? requestUrl.search
+            : queryOffset < 0
+              ? ""
+              : rawTarget.slice(queryOffset),
+        method: request.method,
+      });
+      if (pluginPolicy?.outcome === "deny") {
+        return errorResponse(pluginPolicy.status, pluginPolicy.code);
       }
       if (requestUrl.pathname === LIVE_PATH && requestUrl.search === "") {
         return request.method === "GET"
@@ -121,8 +151,32 @@ export function createWebBff(config: {
       if (extensionPolicy?.outcome === "deny") {
         return errorResponse(extensionPolicy.status, extensionPolicy.code);
       }
+      const upstreamSignal =
+        pluginPolicy !== null || extensionPolicy !== null
+          ? AbortSignal.any([
+              request.signal,
+              AbortSignal.timeout(
+                pluginPolicy !== null
+                  ? PLUGIN_PROXY_DEADLINE_MS
+                  : EXTENSION_PROXY_DEADLINE_MS,
+              ),
+            ])
+          : request.signal;
 
-      const requestBody = await boundedRequestBody(request);
+      let requestBody: ArrayBuffer | Uint8Array<ArrayBuffer> | null | Response;
+      try {
+        requestBody =
+          pluginPolicy === null
+            ? await boundedRequestBody(request)
+            : await boundedPluginProxyRequest(request, upstreamSignal);
+      } catch (error) {
+        return errorResponse(
+          error instanceof Error && error.message === "plugin_body_too_large"
+            ? 413
+            : 400,
+          "plugin_request_invalid",
+        );
+      }
       if (requestBody instanceof Response) {
         return requestBody;
       }
@@ -139,13 +193,6 @@ export function createWebBff(config: {
         controlTarget,
       );
       let upstream: Response;
-      const upstreamSignal =
-        extensionPolicy === null
-          ? request.signal
-          : AbortSignal.any([
-              request.signal,
-              AbortSignal.timeout(EXTENSION_PROXY_DEADLINE_MS),
-            ]);
       try {
         upstream = await fetchImpl(upstreamUrl, {
           method: request.method,
@@ -157,7 +204,17 @@ export function createWebBff(config: {
       } catch {
         return errorResponse(502, "control_api_unavailable");
       }
-      if (extensionPolicy !== null) {
+      if (pluginPolicy !== null) {
+        try {
+          upstream = await boundedPluginProxyResponse({
+            upstream,
+            signal: upstreamSignal,
+            policy: pluginPolicy,
+          });
+        } catch {
+          return errorResponse(502, "control_api_response_invalid");
+        }
+      } else if (extensionPolicy !== null) {
         try {
           upstream = await boundedExtensionProxyResponse({
             upstream,

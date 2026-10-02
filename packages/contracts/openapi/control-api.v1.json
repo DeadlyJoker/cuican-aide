@@ -3780,6 +3780,766 @@
           }
         }
       }
+    },
+    "/api/v1/plugins/packages": {
+      "get": {
+        "operationId": "listPluginPackages",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PluginNamespaceId"
+            }
+          },
+          {
+            "name": "afterPackageDigest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PluginPackageDigest"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginPackageListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/packages/{packageDigest}": {
+      "get": {
+        "operationId": "getPluginPackage",
+        "parameters": [
+          {
+            "name": "packageDigest",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginPackageDigest"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPluginPackageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/selections": {
+      "get": {
+        "operationId": "listPluginSelections",
+        "parameters": [
+          {
+            "name": "afterPluginId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PluginNamespaceId"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginSelectionListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/selections/{pluginId}": {
+      "get": {
+        "operationId": "getPluginSelection",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginNamespaceId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetPluginSelectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "selectPluginPackage",
+        "parameters": [
+          {
+            "name": "pluginId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginNamespaceId"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginIdempotencyKey"
+            },
+            "description": "Required host-validated idempotency key; never part of the JSON body."
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectPluginPackageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginSelectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/installations": {
+      "post": {
+        "operationId": "installPluginPackage",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginIdempotencyKey"
+            },
+            "description": "Required host-validated idempotency key; never part of the JSON body."
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallPluginPackageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInstallationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/ui/catalog": {
+      "get": {
+        "operationId": "listPluginUiCatalog",
+        "parameters": [
+          {
+            "name": "afterPluginId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PluginNamespaceId"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 16777216 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginUiCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/ui/mounts": {
+      "post": {
+        "operationId": "openPluginUiMount",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenPluginUiMountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 524288 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginUiLease"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/ui/mounts/{mountRef}": {
+      "get": {
+        "operationId": "validatePluginUiMount",
+        "parameters": [
+          {
+            "name": "mountRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginMountRef"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 524288 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginUiLease"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "closePluginUiMount",
+        "parameters": [
+          {
+            "name": "mountRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginMountRef"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClosePluginUiMountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "No query. An absent body, null or a strict empty JSON object is accepted for existing JSON transports. Cleans only this actor's reference; returns 200 {closed:true}.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "maxProperties": 0
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/ui/mounts/{mountRef}/actions": {
+      "post": {
+        "operationId": "invokePluginUiAction",
+        "parameters": [
+          {
+            "name": "mountRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginMountRef"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvokePluginUiActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvokePluginUiActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/ui/mounts/{mountRef}/assets/{assetPath}": {
+      "get": {
+        "operationId": "getPluginUiAsset",
+        "parameters": [
+          {
+            "name": "mountRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginMountRef"
+            }
+          },
+          {
+            "name": "assetPath",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginAssetPath"
+            },
+            "description": "Inventory-relative wildcard path; encode each segment independently. No query. May contain nested segments."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized original inventory bytes, at most 32 MiB. Current session, enabled selection, lease and publication policy are checked; never a public static install directory.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "const": "no-store"
+                }
+              },
+              "X-Content-Type-Options": {
+                "schema": {
+                  "const": "nosniff"
+                }
+              },
+              "Cross-Origin-Resource-Policy": {
+                "schema": {
+                  "const": "same-origin"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "text/javascript": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9454,6 +10214,985 @@
         "properties": {
           "task": {
             "$ref": "#/components/schemas/ExtensionTaskView"
+          }
+        }
+      },
+      "PluginNamespaceId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+      },
+      "PluginPackageDigest": {
+        "type": "string",
+        "minLength": 71,
+        "maxLength": 71,
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "PluginOpaqueId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "description": "Server-issued opaque reference or action name. No leading/trailing whitespace, Unicode control/format/line/paragraph separator or unpaired surrogate. It never conveys authority by itself."
+      },
+      "PluginIdempotencyKey": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[!-~]{1,128}$",
+        "description": "HTTP Idempotency-Key token: 1..128 printable ASCII characters with no whitespace. Unicode and Latin-1 non-ASCII values are rejected before constructing or sending HTTP headers. Internal ledger keys and source references retain separate value rules."
+      },
+      "PluginMountRef": {
+        "type": "string",
+        "minLength": 32,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9_-]{32,128}$"
+      },
+      "PluginAssetPath": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+(?:/[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+)*$",
+        "description": "Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification."
+      },
+      "PluginPackageView": {
+        "type": "object",
+        "required": [
+          "pluginId",
+          "version",
+          "publisherId",
+          "packageDigest",
+          "installedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pluginId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 128,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+          },
+          "publisherId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "packageDigest": {
+            "$ref": "#/components/schemas/PluginPackageDigest"
+          },
+          "installedAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        }
+      },
+      "PluginSelectionView": {
+        "type": "object",
+        "required": [
+          "pluginId",
+          "publisherId",
+          "revision",
+          "state",
+          "selectedPackageDigest",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pluginId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "publisherId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "state": {
+            "type": "string",
+            "enum": ["enabled", "disabled", "uninstalled"]
+          },
+          "selectedPackageDigest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginPackageDigest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["enabled", "disabled"]
+              },
+              "selectedPackageDigest": {
+                "$ref": "#/components/schemas/PluginPackageDigest"
+              }
+            }
+          },
+          {
+            "properties": {
+              "state": {
+                "const": "uninstalled"
+              },
+              "selectedPackageDigest": {
+                "type": "null"
+              }
+            }
+          }
+        ],
+        "description": "Desired durable selection, separate from runtime health. Uninstalled has null digest; enabled/disabled have an installed digest. Server scope and audit identity are private."
+      },
+      "PluginPackageListResponse": {
+        "type": "object",
+        "required": ["packages", "next"],
+        "additionalProperties": false,
+        "properties": {
+          "packages": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PluginPackageView"
+            }
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginPackageDigest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "PluginSelectionListResponse": {
+        "type": "object",
+        "required": ["selections", "next"],
+        "additionalProperties": false,
+        "properties": {
+          "selections": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PluginSelectionView"
+            }
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginNamespaceId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GetPluginPackageResponse": {
+        "type": "object",
+        "required": ["package"],
+        "additionalProperties": false,
+        "properties": {
+          "package": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginPackageView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GetPluginSelectionResponse": {
+        "type": "object",
+        "required": ["selection"],
+        "additionalProperties": false,
+        "properties": {
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginSelectionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "InstallPluginPackageRequest": {
+        "type": "object",
+        "required": [
+          "sourceId",
+          "expectedPluginId",
+          "expectedPackageDigest",
+          "expectedSelectionRevision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": {
+            "$ref": "#/components/schemas/PluginOpaqueId"
+          },
+          "expectedPluginId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "expectedPackageDigest": {
+            "$ref": "#/components/schemas/PluginPackageDigest"
+          },
+          "expectedSelectionRevision": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "SelectPluginPackageRequest": {
+        "type": "object",
+        "required": [
+          "state",
+          "selectedPackageDigest",
+          "expectedSelectionRevision"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": ["enabled", "disabled", "uninstalled"]
+          },
+          "selectedPackageDigest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginPackageDigest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expectedSelectionRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["enabled", "disabled"]
+              },
+              "selectedPackageDigest": {
+                "$ref": "#/components/schemas/PluginPackageDigest"
+              }
+            }
+          },
+          {
+            "properties": {
+              "state": {
+                "const": "uninstalled"
+              },
+              "selectedPackageDigest": {
+                "type": "null"
+              }
+            }
+          }
+        ]
+      },
+      "PluginInstallationResponse": {
+        "type": "object",
+        "required": ["kind", "disposition", "package", "selection"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "install"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "package": {
+            "$ref": "#/components/schemas/PluginPackageView"
+          },
+          "selection": {
+            "$ref": "#/components/schemas/PluginSelectionView"
+          }
+        }
+      },
+      "PluginSelectionMutation": {
+        "type": "object",
+        "required": ["kind", "disposition", "selection"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "select"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "selection": {
+            "$ref": "#/components/schemas/PluginSelectionView"
+          }
+        }
+      },
+      "PluginSelectionProjection": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["outcome"],
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "const": "applied"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["outcome"],
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "const": "unchanged"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["outcome", "reasonCode"],
+            "additionalProperties": false,
+            "properties": {
+              "outcome": {
+                "const": "pending"
+              },
+              "reasonCode": {
+                "const": "plugin_projection_pending"
+              }
+            }
+          }
+        ]
+      },
+      "PluginSelectionResponse": {
+        "type": "object",
+        "required": ["mutation", "projection"],
+        "additionalProperties": false,
+        "properties": {
+          "mutation": {
+            "$ref": "#/components/schemas/PluginSelectionMutation"
+          },
+          "projection": {
+            "$ref": "#/components/schemas/PluginSelectionProjection"
+          }
+        },
+        "description": "A replay preserves the original mutation snapshot and returns unchanged projection. A committed mutation returns applied or pending; pending does not imply database rollback.",
+        "oneOf": [
+          {
+            "properties": {
+              "mutation": {
+                "properties": {
+                  "disposition": {
+                    "const": "replayed"
+                  }
+                }
+              },
+              "projection": {
+                "properties": {
+                  "outcome": {
+                    "const": "unchanged"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "mutation": {
+                "properties": {
+                  "disposition": {
+                    "const": "committed"
+                  }
+                }
+              },
+              "projection": {
+                "properties": {
+                  "outcome": {
+                    "enum": ["applied", "pending"]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PluginPackageEntrypoints": {
+        "type": "object",
+        "required": ["node", "ui"],
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+(?:/[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+)*$",
+                    "description": "Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification."
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "\\.(?:mjs|js)$"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ui": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": ["mode", "path"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "mode": {
+                        "const": "trustedModule"
+                      },
+                      "path": {
+                        "allOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256,
+                            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+(?:/[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+)*$",
+                            "description": "Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification."
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "\\.(?:mjs|js)$"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["mode", "path"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "mode": {
+                        "const": "isolatedWeb"
+                      },
+                      "path": {
+                        "allOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256,
+                            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+(?:/[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+)*$",
+                            "description": "Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification."
+                          },
+                          {
+                            "type": "string",
+                            "pattern": "\\.html$"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "node": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "properties": {
+              "ui": {
+                "type": "object"
+              }
+            }
+          }
+        ]
+      },
+      "PluginServiceRequirement": {
+        "type": "object",
+        "required": ["service", "apiVersion", "optional"],
+        "additionalProperties": false,
+        "properties": {
+          "service": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "apiVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+          },
+          "optional": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PluginServiceProvision": {
+        "type": "object",
+        "required": ["service", "apiVersion"],
+        "additionalProperties": false,
+        "properties": {
+          "service": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "apiVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+          }
+        }
+      },
+      "PluginUiContribution": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["id", "kind", "slot", "title"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PluginNamespaceId"
+              },
+              "kind": {
+                "const": "module"
+              },
+              "slot": {
+                "const": "main.content"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "description": "At most 160 Unicode scalar values; no control characters."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "kind", "slot", "title"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PluginNamespaceId"
+              },
+              "kind": {
+                "const": "settings"
+              },
+              "slot": {
+                "const": "settings.section"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "description": "At most 160 Unicode scalar values; no control characters."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "kind", "slot", "title"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/PluginNamespaceId"
+              },
+              "kind": {
+                "const": "result"
+              },
+              "slot": {
+                "const": "result.view"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "description": "At most 160 Unicode scalar values; no control characters."
+              }
+            }
+          }
+        ]
+      },
+      "PluginPackageFile": {
+        "type": "object",
+        "required": ["path", "byteLength", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+(?:/[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+)*$",
+            "description": "Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification."
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "minLength": 64,
+            "maxLength": 64
+          }
+        }
+      },
+      "PluginPackageDescriptor": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "hostApi",
+          "pluginId",
+          "version",
+          "title",
+          "description",
+          "publisherId",
+          "entrypoints",
+          "businessManifestPath",
+          "requires",
+          "provides",
+          "contributions",
+          "files"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": "crewon.plugin-package.v1"
+          },
+          "hostApi": {
+            "const": "crewon.plugin-host.v1"
+          },
+          "pluginId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 128,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalar values; no control characters."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "At most 8192 UTF-8 bytes."
+          },
+          "publisherId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "entrypoints": {
+            "$ref": "#/components/schemas/PluginPackageEntrypoints"
+          },
+          "businessManifestPath": {
+            "anyOf": [
+              {
+                "allOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256,
+                    "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+(?:/[^/\\\\%:?#\\s\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]+)*$",
+                    "description": "Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification."
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "\\.json$"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requires": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/PluginServiceRequirement"
+            }
+          },
+          "provides": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/PluginServiceProvision"
+            }
+          },
+          "contributions": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/PluginUiContribution"
+            }
+          },
+          "files": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 512,
+            "items": {
+              "$ref": "#/components/schemas/PluginPackageFile"
+            }
+          }
+        },
+        "description": "Metadata shape only, at most 256 KiB encoded JSON, depth 16 and 8192 nodes. At least one entrypoint; UI entry requires declared contributions. Paths and services are unique; all referenced artifacts are declared, nonempty entrypoints. Inventory excludes crewon.plugin.json and forbids file/parent conflicts; hashes and actual trust require host verification.",
+        "x-max-encoded-bytes": 262144
+      },
+      "PluginUiJsonValue": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {}
+          },
+          {
+            "type": "object",
+            "additionalProperties": true
+          }
+        ],
+        "description": "Finite detached plain JSON, depth <=16, nodes <=8192, valid Unicode. Input <=24 KiB, output <=64 KiB encoded JSON. It does not carry actor/profile authority."
+      },
+      "OpenPluginUiMountRequest": {
+        "type": "object",
+        "required": [
+          "pluginId",
+          "contributionId",
+          "expectedSelectionRevision",
+          "expectedPackageDigest"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "pluginId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "contributionId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "expectedSelectionRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "expectedPackageDigest": {
+            "$ref": "#/components/schemas/PluginPackageDigest"
+          }
+        }
+      },
+      "InvokePluginUiActionRequest": {
+        "type": "object",
+        "required": ["action", "input"],
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/PluginOpaqueId"
+          },
+          "input": {
+            "$ref": "#/components/schemas/PluginUiJsonValue",
+            "x-max-encoded-bytes": 24576
+          }
+        },
+        "description": "Action must be in the host contribution allowlist. This JSON envelope does not authorize arbitrary Node services, Run/Tool execution or charging."
+      },
+      "PluginUiLease": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "mountRef",
+          "expiresAt",
+          "selectionRevision",
+          "packageDigest",
+          "descriptor",
+          "contributionId",
+          "publicAssets"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "const": "crewon.plugin-ui-lease.v1"
+          },
+          "mountRef": {
+            "$ref": "#/components/schemas/PluginMountRef"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          },
+          "selectionRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "packageDigest": {
+            "$ref": "#/components/schemas/PluginPackageDigest"
+          },
+          "descriptor": {
+            "$ref": "#/components/schemas/PluginPackageDescriptor"
+          },
+          "contributionId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "publicAssets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PluginAssetPath"
+            }
+          }
+        },
+        "description": "Shape-only current enabled-selection lease. UI must be trustedModule, contribution module/main.content, approved assets inventory subset includes UI entrypoint. Reference alone is not an authorization grant. The host rechecks actor/profile/selection/authority epoch for every use.",
+        "x-max-encoded-bytes": 524288
+      },
+      "PluginUiCatalogItem": {
+        "type": "object",
+        "required": [
+          "descriptor",
+          "publicAssets",
+          "selectionRevision",
+          "packageDigest"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "descriptor": {
+            "$ref": "#/components/schemas/PluginPackageDescriptor"
+          },
+          "publicAssets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PluginAssetPath"
+            }
+          },
+          "selectionRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "packageDigest": {
+            "$ref": "#/components/schemas/PluginPackageDigest"
+          }
+        }
+      },
+      "PluginUiCatalogResponse": {
+        "type": "object",
+        "required": ["plugins", "next"],
+        "additionalProperties": false,
+        "properties": {
+          "plugins": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PluginUiCatalogItem"
+            }
+          },
+          "next": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginNamespaceId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "Only enabled trustedModule main.content packages. Cursor belongs to underlying selection page, so filtered unsupported/disabled packages can yield an empty displayed page with nonnull next.",
+        "x-max-encoded-bytes": 16777216
+      },
+      "ClosePluginUiMountResponse": {
+        "type": "object",
+        "required": ["closed"],
+        "additionalProperties": false,
+        "properties": {
+          "closed": {
+            "const": true
+          }
+        }
+      },
+      "InvokePluginUiActionResponse": {
+        "type": "object",
+        "required": ["output"],
+        "additionalProperties": false,
+        "properties": {
+          "output": {
+            "$ref": "#/components/schemas/PluginUiJsonValue",
+            "x-max-encoded-bytes": 65536
           }
         }
       }

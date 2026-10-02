@@ -98,6 +98,7 @@ import {
   ExtensionControlClient,
   type ExtensionConfigurationQuery,
 } from "./extension-control-client.ts";
+import { PluginControlClient } from "./plugin-control-client.ts";
 import type {
   CreateExtensionTaskRequest,
   ExtensionActivationMutationResponse,
@@ -196,6 +197,7 @@ export class ControlApiClient {
   readonly #csrfToken: string | null;
   readonly #origin: string | null;
   readonly #fetch: typeof globalThis.fetch;
+  #pluginClient: PluginControlClient | null = null;
 
   constructor(config: ControlApiClientConfig) {
     this.#baseUrl = parseBaseUrl(config.baseUrl);
@@ -1549,6 +1551,14 @@ export class ControlApiClient {
     });
   }
 
+  get plugins(): PluginControlClient {
+    return (this.#pluginClient ??= new PluginControlClient({
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
+      protocolError: (code) => new ControlApiProtocolError(code),
+    }));
+  }
+
   async #json<T>(
     method: "GET" | "POST" | "PUT" | "DELETE",
     path: string,
@@ -1559,6 +1569,7 @@ export class ControlApiClient {
       requireIdempotency?: boolean;
       expectedStatuses: readonly number[];
       maximumResponseBytes?: number;
+      redirect?: RequestRedirect;
       accept?: string;
     },
   ): Promise<T> {
@@ -1590,6 +1601,7 @@ export class ControlApiClient {
       headers,
       credentials: "include",
       signal: options.signal,
+      ...(options.redirect === undefined ? {} : { redirect: options.redirect }),
       ...(body === null ? {} : { body: JSON.stringify(body) }),
     });
     if (!options.expectedStatuses.includes(response.status)) {

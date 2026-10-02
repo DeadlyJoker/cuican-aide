@@ -252,6 +252,19 @@ export class PluginNodeHost {
     );
   }
 
+  /** Actual currently published services, without exposing their values or granting admission. */
+  serviceIdentities(): readonly import("./plugin-node-preparation.ts").PluginNodeDependencyIdentity[] {
+    return Object.freeze(
+      [...this.#services.values()].map(({ service, apiVersion, owner }) =>
+        Object.freeze({
+          service,
+          apiVersion,
+          provider: owner?.identity ?? null,
+        }),
+      ),
+    );
+  }
+
   /** Waits for cleanup that can run now. It never invents completion for borrowed instances. */
   async drain(): Promise<void> {
     await this.#queue;

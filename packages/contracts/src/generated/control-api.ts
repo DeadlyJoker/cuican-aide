@@ -993,6 +993,167 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/plugins/packages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listPluginPackages"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/packages/{packageDigest}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getPluginPackage"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/selections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listPluginSelections"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/selections/{pluginId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getPluginSelection"];
+    put: operations["selectPluginPackage"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/installations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["installPluginPackage"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/ui/catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listPluginUiCatalog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/ui/mounts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["openPluginUiMount"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/ui/mounts/{mountRef}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["validatePluginUiMount"];
+    put?: never;
+    post?: never;
+    /** @description No query. An absent body, null or a strict empty JSON object is accepted for existing JSON transports. Cleans only this actor's reference; returns 200 {closed:true}. */
+    delete: operations["closePluginUiMount"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/ui/mounts/{mountRef}/actions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["invokePluginUiAction"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/plugins/ui/mounts/{mountRef}/assets/{assetPath}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getPluginUiAsset"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2479,6 +2640,281 @@ export interface components {
     };
     GetExtensionTaskResponse: {
       task: components["schemas"]["ExtensionTaskView"];
+    };
+    PluginNamespaceId: string;
+    PluginPackageDigest: string;
+    /** @description Server-issued opaque reference or action name. No leading/trailing whitespace, Unicode control/format/line/paragraph separator or unpaired surrogate. It never conveys authority by itself. */
+    PluginOpaqueId: string;
+    /** @description HTTP Idempotency-Key token: 1..128 printable ASCII characters with no whitespace. Unicode and Latin-1 non-ASCII values are rejected before constructing or sending HTTP headers. Internal ledger keys and source references retain separate value rules. */
+    PluginIdempotencyKey: string;
+    PluginMountRef: string;
+    /** @description Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification. */
+    PluginAssetPath: string;
+    PluginPackageView: {
+      pluginId: components["schemas"]["PluginNamespaceId"];
+      version: string;
+      publisherId: components["schemas"]["PluginNamespaceId"];
+      packageDigest: components["schemas"]["PluginPackageDigest"];
+      /** Format: date-time */
+      installedAt: string;
+    };
+    /** @description Desired durable selection, separate from runtime health. Uninstalled has null digest; enabled/disabled have an installed digest. Server scope and audit identity are private. */
+    PluginSelectionView: {
+      pluginId: components["schemas"]["PluginNamespaceId"];
+      publisherId: components["schemas"]["PluginNamespaceId"];
+      revision: number;
+      /** @enum {string} */
+      state: "enabled" | "disabled" | "uninstalled";
+      selectedPackageDigest:
+        | components["schemas"]["PluginPackageDigest"]
+        | null;
+      /** Format: date-time */
+      updatedAt: string;
+    } & (
+      | {
+          /** @enum {string} */
+          state?: "enabled" | "disabled";
+          selectedPackageDigest?: components["schemas"]["PluginPackageDigest"];
+        }
+      | {
+          /** @constant */
+          state?: "uninstalled";
+          selectedPackageDigest?: null;
+        }
+    );
+    PluginPackageListResponse: {
+      packages: components["schemas"]["PluginPackageView"][];
+      next: components["schemas"]["PluginPackageDigest"] | null;
+    };
+    PluginSelectionListResponse: {
+      selections: components["schemas"]["PluginSelectionView"][];
+      next: components["schemas"]["PluginNamespaceId"] | null;
+    };
+    GetPluginPackageResponse: {
+      package: components["schemas"]["PluginPackageView"] | null;
+    };
+    GetPluginSelectionResponse: {
+      selection: components["schemas"]["PluginSelectionView"] | null;
+    };
+    InstallPluginPackageRequest: {
+      sourceId: components["schemas"]["PluginOpaqueId"];
+      expectedPluginId: components["schemas"]["PluginNamespaceId"];
+      expectedPackageDigest: components["schemas"]["PluginPackageDigest"];
+      expectedSelectionRevision: number | null;
+    };
+    SelectPluginPackageRequest: {
+      /** @enum {string} */
+      state: "enabled" | "disabled" | "uninstalled";
+      selectedPackageDigest:
+        | components["schemas"]["PluginPackageDigest"]
+        | null;
+      expectedSelectionRevision: number;
+    } & (
+      | {
+          /** @enum {string} */
+          state?: "enabled" | "disabled";
+          selectedPackageDigest?: components["schemas"]["PluginPackageDigest"];
+        }
+      | {
+          /** @constant */
+          state?: "uninstalled";
+          selectedPackageDigest?: null;
+        }
+    );
+    PluginInstallationResponse: {
+      /** @constant */
+      kind: "install";
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      package: components["schemas"]["PluginPackageView"];
+      selection: components["schemas"]["PluginSelectionView"];
+    };
+    PluginSelectionMutation: {
+      /** @constant */
+      kind: "select";
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      selection: components["schemas"]["PluginSelectionView"];
+    };
+    PluginSelectionProjection:
+      | {
+          /** @constant */
+          outcome: "applied";
+        }
+      | {
+          /** @constant */
+          outcome: "unchanged";
+        }
+      | {
+          /** @constant */
+          outcome: "pending";
+          /** @constant */
+          reasonCode: "plugin_projection_pending";
+        };
+    /** @description A replay preserves the original mutation snapshot and returns unchanged projection. A committed mutation returns applied or pending; pending does not imply database rollback. */
+    PluginSelectionResponse: {
+      mutation: components["schemas"]["PluginSelectionMutation"];
+      projection: components["schemas"]["PluginSelectionProjection"];
+    } & (
+      | {
+          mutation?: {
+            /** @constant */
+            disposition?: "replayed";
+          };
+          projection?: {
+            /** @constant */
+            outcome?: "unchanged";
+          };
+        }
+      | {
+          mutation?: {
+            /** @constant */
+            disposition?: "committed";
+          };
+          projection?: {
+            /** @enum {unknown} */
+            outcome?: "applied" | "pending";
+          };
+        }
+    );
+    PluginPackageEntrypoints:
+      | {
+          node: string | null;
+          ui:
+            | (
+                | {
+                    /** @constant */
+                    mode: "trustedModule";
+                    path: string;
+                  }
+                | {
+                    /** @constant */
+                    mode: "isolatedWeb";
+                    path: string;
+                  }
+              )
+            | null;
+        }
+      | {
+          node?: string;
+        }
+      | {
+          ui?: Record<string, never>;
+        };
+    PluginServiceRequirement: {
+      service: components["schemas"]["PluginNamespaceId"];
+      apiVersion: string;
+      optional: boolean;
+    };
+    PluginServiceProvision: {
+      service: components["schemas"]["PluginNamespaceId"];
+      apiVersion: string;
+    };
+    PluginUiContribution:
+      | {
+          id: components["schemas"]["PluginNamespaceId"];
+          /** @constant */
+          kind: "module";
+          /** @constant */
+          slot: "main.content";
+          /** @description At most 160 Unicode scalar values; no control characters. */
+          title: string;
+        }
+      | {
+          id: components["schemas"]["PluginNamespaceId"];
+          /** @constant */
+          kind: "settings";
+          /** @constant */
+          slot: "settings.section";
+          /** @description At most 160 Unicode scalar values; no control characters. */
+          title: string;
+        }
+      | {
+          id: components["schemas"]["PluginNamespaceId"];
+          /** @constant */
+          kind: "result";
+          /** @constant */
+          slot: "result.view";
+          /** @description At most 160 Unicode scalar values; no control characters. */
+          title: string;
+        };
+    PluginPackageFile: {
+      /** @description Decoded package-relative inventory path, at most 256 UTF-8 bytes. No absolute path, empty/dot segment, encoding escape, control/format character or URL. Actual bytes and links require host verification. */
+      path: string;
+      byteLength: number;
+      sha256: string;
+    };
+    /** @description Metadata shape only, at most 256 KiB encoded JSON, depth 16 and 8192 nodes. At least one entrypoint; UI entry requires declared contributions. Paths and services are unique; all referenced artifacts are declared, nonempty entrypoints. Inventory excludes crewon.plugin.json and forbids file/parent conflicts; hashes and actual trust require host verification. */
+    PluginPackageDescriptor: {
+      /** @constant */
+      schemaVersion: "crewon.plugin-package.v1";
+      /** @constant */
+      hostApi: "crewon.plugin-host.v1";
+      pluginId: components["schemas"]["PluginNamespaceId"];
+      version: string;
+      /** @description At most 160 Unicode scalar values; no control characters. */
+      title: string;
+      /** @description At most 8192 UTF-8 bytes. */
+      description: string;
+      publisherId: components["schemas"]["PluginNamespaceId"];
+      entrypoints: components["schemas"]["PluginPackageEntrypoints"];
+      businessManifestPath: string | null;
+      requires: components["schemas"]["PluginServiceRequirement"][];
+      provides: components["schemas"]["PluginServiceProvision"][];
+      contributions: components["schemas"]["PluginUiContribution"][];
+      files: components["schemas"]["PluginPackageFile"][];
+    };
+    /** @description Finite detached plain JSON, depth <=16, nodes <=8192, valid Unicode. Input <=24 KiB, output <=64 KiB encoded JSON. It does not carry actor/profile authority. */
+    PluginUiJsonValue:
+      | null
+      | boolean
+      | number
+      | string
+      | unknown[]
+      | {
+          [key: string]: unknown;
+        };
+    OpenPluginUiMountRequest: {
+      pluginId: components["schemas"]["PluginNamespaceId"];
+      contributionId: components["schemas"]["PluginNamespaceId"];
+      expectedSelectionRevision: number;
+      expectedPackageDigest: components["schemas"]["PluginPackageDigest"];
+    };
+    /** @description Action must be in the host contribution allowlist. This JSON envelope does not authorize arbitrary Node services, Run/Tool execution or charging. */
+    InvokePluginUiActionRequest: {
+      action: components["schemas"]["PluginOpaqueId"];
+      input: components["schemas"]["PluginUiJsonValue"];
+    };
+    /** @description Shape-only current enabled-selection lease. UI must be trustedModule, contribution module/main.content, approved assets inventory subset includes UI entrypoint. Reference alone is not an authorization grant. The host rechecks actor/profile/selection/authority epoch for every use. */
+    PluginUiLease: {
+      /** @constant */
+      schemaVersion: "crewon.plugin-ui-lease.v1";
+      mountRef: components["schemas"]["PluginMountRef"];
+      /** Format: date-time */
+      expiresAt: string;
+      selectionRevision: number;
+      packageDigest: components["schemas"]["PluginPackageDigest"];
+      descriptor: components["schemas"]["PluginPackageDescriptor"];
+      contributionId: components["schemas"]["PluginNamespaceId"];
+      publicAssets: components["schemas"]["PluginAssetPath"][];
+    };
+    PluginUiCatalogItem: {
+      descriptor: components["schemas"]["PluginPackageDescriptor"];
+      publicAssets: components["schemas"]["PluginAssetPath"][];
+      selectionRevision: number;
+      packageDigest: components["schemas"]["PluginPackageDigest"];
+    };
+    /** @description Only enabled trustedModule main.content packages. Cursor belongs to underlying selection page, so filtered unsupported/disabled packages can yield an empty displayed page with nonnull next. */
+    PluginUiCatalogResponse: {
+      plugins: components["schemas"]["PluginUiCatalogItem"][];
+      next: components["schemas"]["PluginNamespaceId"] | null;
+    };
+    ClosePluginUiMountResponse: {
+      /** @constant */
+      closed: true;
+    };
+    InvokePluginUiActionResponse: {
+      output: components["schemas"]["PluginUiJsonValue"];
     };
   };
   responses: {
@@ -4970,6 +5406,414 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  listPluginPackages: {
+    parameters: {
+      query?: {
+        pluginId?: components["schemas"]["PluginNamespaceId"];
+        afterPackageDigest?: components["schemas"]["PluginPackageDigest"];
+        /** @description Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected. */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginPackageListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getPluginPackage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        packageDigest: components["schemas"]["PluginPackageDigest"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetPluginPackageResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  listPluginSelections: {
+    parameters: {
+      query?: {
+        afterPluginId?: components["schemas"]["PluginNamespaceId"];
+        /** @description Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected. */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginSelectionListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getPluginSelection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        pluginId: components["schemas"]["PluginNamespaceId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetPluginSelectionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  selectPluginPackage: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required host-validated idempotency key; never part of the JSON body. */
+        "Idempotency-Key": components["schemas"]["PluginIdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        pluginId: components["schemas"]["PluginNamespaceId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SelectPluginPackageRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginSelectionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  installPluginPackage: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required host-validated idempotency key; never part of the JSON body. */
+        "Idempotency-Key": components["schemas"]["PluginIdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InstallPluginPackageRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginInstallationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  listPluginUiCatalog: {
+    parameters: {
+      query?: {
+        afterPluginId?: components["schemas"]["PluginNamespaceId"];
+        /** @description Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected. */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized response; at most 16777216 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginUiCatalogResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  openPluginUiMount: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OpenPluginUiMountRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized response; at most 524288 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginUiLease"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  validatePluginUiMount: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mountRef: components["schemas"]["PluginMountRef"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized response; at most 524288 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginUiLease"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  closePluginUiMount: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        mountRef: components["schemas"]["PluginMountRef"];
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": null | Record<string, never>;
+      };
+    };
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ClosePluginUiMountResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  invokePluginUiAction: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        mountRef: components["schemas"]["PluginMountRef"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InvokePluginUiActionRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized response; at most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InvokePluginUiActionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getPluginUiAsset: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        mountRef: components["schemas"]["PluginMountRef"];
+        /** @description Inventory-relative wildcard path; encode each segment independently. No query. May contain nested segments. */
+        assetPath: components["schemas"]["PluginAssetPath"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized original inventory bytes, at most 32 MiB. Current session, enabled selection, lease and publication policy are checked; never a public static install directory. */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-store";
+          "X-Content-Type-Options"?: "nosniff";
+          "Cross-Origin-Resource-Policy"?: "same-origin";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/octet-stream": string;
+          "text/javascript": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
 }

@@ -33,6 +33,12 @@ import {
   type PluginNodeCommitCandidate,
   type PluginNodePreparedActivation,
 } from "./plugin-node-host.ts";
+import {
+  prepareInstalledSelectionRecovery,
+  recoverInstalledSelections,
+  type PluginInstalledSelectionRecoveryInput,
+  type PluginInstalledSelectionRecoveryPolicy,
+} from "./plugin-installation-recovery.ts";
 
 type Authority = Readonly<{ actor: ActorContext; scope: PluginProfileScope }>;
 
@@ -369,6 +375,38 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
   async drain(): Promise<void> {
     while (this.#cleanup.size) await Promise.all([...this.#cleanup]);
     await this.#dependencies.nodeHost.drain();
+  }
+
+  /** Restore the original durable revision without installing sources or creating a selection receipt. */
+  prepareRecovery(
+    input: PluginInstalledSelectionRecoveryInput,
+    policy: PluginInstalledSelectionRecoveryPolicy,
+  ): Promise<PluginPreparedSelection> {
+    return prepareInstalledSelectionRecovery(
+      this.#recoveryCoordinator(),
+      input,
+      policy,
+    );
+  }
+
+  /** Provider-first startup restore, sharing this profile's selection publication coordinator. */
+  recoverSelections(
+    input: readonly PluginInstalledSelectionRecoveryInput[],
+    policy: PluginInstalledSelectionRecoveryPolicy,
+  ): Promise<readonly PluginSelection[]> {
+    return recoverInstalledSelections(
+      this.#recoveryCoordinator(),
+      input,
+      policy,
+    );
+  }
+
+  #recoveryCoordinator() {
+    return {
+      dependencies: this.#dependencies,
+      lock: () => this.#lock(),
+      trackCleanup: (task: Promise<void>) => this.#trackCleanup(task),
+    };
   }
 
   #trackCleanup(task: Promise<void>): void {

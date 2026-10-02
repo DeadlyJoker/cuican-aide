@@ -43,7 +43,10 @@ const server = createServer(async (incoming, outgoing) => {
       publicOrigin,
       controller.signal,
     );
-    await writeFetchResponse(outgoing, await bff.handle(request));
+    await writeFetchResponse(
+      outgoing,
+      await bff.handle(request, { rawTarget: incoming.url ?? "/" }),
+    );
   } catch (error) {
     const bodyTooLarge = error instanceof RequestBodyTooLargeError;
     writeJsonError(

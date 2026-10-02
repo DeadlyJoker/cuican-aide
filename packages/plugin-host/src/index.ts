@@ -32,3 +32,7 @@ export {
   LocalPluginUiPackageReader,
   type LocalPluginUiPackageReaderDependencies,
 } from "./plugin-ui-package-reader.ts";
+export type {
+  PluginInstalledSelectionRecoveryInput,
+  PluginInstalledSelectionRecoveryPolicy,
+} from "./plugin-installation-recovery.ts";
