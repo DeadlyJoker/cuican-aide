@@ -123,8 +123,9 @@ export async function installAndVerifyWorkspace(
   root: string,
   signal: AbortSignal,
 ): Promise<string> {
+  const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
   await command(
-    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    pnpm,
     [
       "install",
       "--offline",
@@ -135,19 +136,43 @@ export async function installAndVerifyWorkspace(
     root,
     signal,
   );
+  // dist is deliberately absent from the source snapshot, and install skips
+  // lifecycle scripts. Build the public SDK from this copy's own sources.
+  await command(
+    pnpm,
+    ["--filter", "@crewon/plugin-sdk", "build"],
+    root,
+    signal,
+  );
+  return verifyWorkspacePackageLinks(root, signal);
+}
+
+export async function verifyWorkspacePackageLinks(
+  root: string,
+  signal: AbortSignal,
+): Promise<string> {
   const output = await command(
     process.execPath,
     [
+      "--experimental-import-meta-resolve",
       "--input-type=module",
       "--eval",
       `
         import assert from 'node:assert/strict';
         import { readFileSync, realpathSync } from 'node:fs';
         import { createRequire } from 'node:module';
-        import { join, relative, sep } from 'node:path';
-        import { pathToFileURL } from 'node:url';
+        import { isAbsolute, join, relative, sep } from 'node:path';
+        import { fileURLToPath, pathToFileURL } from 'node:url';
         const root = process.argv[1];
         const visited = new Set();
+        function assertCopiedEntry(packageRoot, entry, specifier) {
+          const location = relative(packageRoot, realpathSync(entry));
+          assert.ok(!isAbsolute(location) && location !== '..' && !location.startsWith('..' + sep), specifier + ' resolved outside copied package: ' + entry);
+        }
+        function assertImportEntry(directory, packageRoot, specifier) {
+          const entry = import.meta.resolve(specifier, pathToFileURL(join(directory, 'package.json')).href);
+          assertCopiedEntry(packageRoot, fileURLToPath(entry), specifier);
+        }
         function visit(directory) {
           if (visited.has(directory)) return;
           visited.add(directory);
@@ -157,8 +182,21 @@ export async function installAndVerifyWorkspace(
             for (const [name, version] of Object.entries(manifest[field] ?? {})) {
               if (!version.startsWith('workspace:')) continue;
               const packageRoot = join(root, 'packages', name.slice('@crewon/'.length));
-              const entry = realpathSync(require.resolve(name));
-              assert.ok(!relative(packageRoot, entry).startsWith('..' + sep), name + ' resolved outside copied package: ' + entry);
+              if (name === '@crewon/plugin-sdk') {
+                const sdk = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
+                assert.ok(sdk.exports && typeof sdk.exports === 'object' && !Array.isArray(sdk.exports), 'SDK must declare its public subpath exports');
+                const exports = Object.keys(sdk.exports);
+                assert.ok(exports.length > 0);
+                for (const subpath of exports) {
+                  assert.ok(subpath.startsWith('./') && !subpath.includes('*'), 'SDK entry must be an explicit public subpath: ' + subpath);
+                  assertImportEntry(directory, packageRoot, name + subpath.slice(1));
+                }
+              } else {
+                // Preserve the existing root-entry check and additionally prove
+                // the import condition used by the staged ESM bundles.
+                assertCopiedEntry(packageRoot, require.resolve(name), name);
+                assertImportEntry(directory, packageRoot, name);
+              }
               visit(packageRoot);
             }
           }
