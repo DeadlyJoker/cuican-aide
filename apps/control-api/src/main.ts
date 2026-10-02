@@ -8,6 +8,7 @@ import {
 } from "@crewon/artifacts";
 
 import { createProductionPostgresControlApi } from "./production-composition.ts";
+import { resolveProductionPluginUiEnvironment } from "./production-plugin-ui-environment.ts";
 import {
   HttpControlTokenVerifier,
   HttpPolicyDecisionPort,
@@ -34,6 +35,10 @@ import { PimThreadSandbox } from "./pim-sandbox-client.ts";
 
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+);
+const pluginUiConfiguration = resolveProductionPluginUiEnvironment(
+  process.env,
+  securityMode,
 );
 const extensionEnvironment = resolveControlExtensionWorkerEnvironment(
   process.env,
@@ -152,6 +157,9 @@ try {
       connectionString: productionConnectionString,
       identity,
       authorization,
+      ...(pluginUiConfiguration === undefined
+        ? {}
+        : { pluginUi: { configuration: pluginUiConfiguration } }),
       ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
         ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
         : {}),

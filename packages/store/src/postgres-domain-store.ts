@@ -160,6 +160,7 @@ import type { WorkflowContentDigester } from "@crewon/domain";
 import { PostgresWorkflowVersionStore } from "./workflow-version-store.ts";
 import { PostgresOfficeStore } from "./postgres-office-store.ts";
 import { PostgresPluginInstallationStore } from "./postgres-plugin-installation-store.ts";
+import type { PostgresPluginInstallationProfileOwner } from "./postgres-plugin-installation-profile-owner.ts";
 
 /** Complete PostgreSQL domain authority for Control API and Runtime Workers. */
 export class PostgresDomainStore
@@ -167,6 +168,9 @@ export class PostgresDomainStore
   implements DomainStore
 {
   readonly #officeAuthority: PostgresOfficeStore;
+  readonly #pluginProfileOwners =
+    new Set<PostgresPluginInstallationProfileOwner>();
+  #pluginOwnerClose: Promise<void> | null = null;
 
   constructor(options: PostgresThreadStoreOptions) {
     super(options);
@@ -203,7 +207,35 @@ export class PostgresDomainStore
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
+      registerOwner: (owner) => {
+        this.#pluginProfileOwners.add(owner);
+        return () => {
+          this.#pluginProfileOwners.delete(owner);
+        };
+      },
     });
+  }
+
+  override close(): Promise<void> {
+    if (this.#pluginOwnerClose) return this.#pluginOwnerClose;
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    this.#pluginOwnerClose = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    // super.close marks the parent closed synchronously. Every dedicated owner also withdraws
+    // synchronously, including acquisition still in progress; both physical lifetimes are awaited.
+    const tasks = [
+      super.close(),
+      ...[...this.#pluginProfileOwners].map((owner) => owner.close()),
+    ];
+    void Promise.allSettled(tasks).then((results) => {
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") reject(failed.reason);
+      else resolve();
+    });
+    return this.#pluginOwnerClose;
   }
 
   extensionStore(): PostgresExtensionStore {

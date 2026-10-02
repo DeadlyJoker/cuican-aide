@@ -48,6 +48,15 @@ import {
 } from "./extension-store-records.ts";
 import { migrateSqliteExternalOperations } from "./sqlite-external-operation-store.ts";
 import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
+import { migrateSqlitePluginTaskAdmissions } from "./plugin-task-admission-schema.ts";
+import {
+  admitSqlitePluginTask,
+  assertPluginTaskAdmissionReplay,
+  capturePluginTaskTurnInput,
+  checkedPluginTaskAdmission,
+  loadSqlitePluginTask,
+  saveSqlitePluginTask,
+} from "./plugin-task-admission-store-support.ts";
 import { reserveSqlitePluginCreditsWithinTransaction } from "./sqlite-plugin-credit-reservation.ts";
 import {
   checkedExtensionCreditAdmission,
@@ -72,6 +81,7 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
+  readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   readonly #db: DatabaseSync;
@@ -119,6 +129,16 @@ export class SqliteExtensionStore implements ExtensionStore {
     `);
       migrateSqliteExternalOperations(this.#db);
     });
+  }
+
+  /** Explicit installed-package provenance opt-in; v0 migration and historical bindings stay unchanged. */
+  async migratePluginAdmissions(): Promise<void> {
+    this.#transaction(() => migrateSqlitePluginTaskAdmissions(this.#db));
+  }
+
+  async loadPluginTaskAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    return loadSqlitePluginTask(this.#db, input);
   }
 
   /** Explicit billing opt-in. Ordinary plugin migration never creates or reads credit tables. */
@@ -309,6 +329,9 @@ export class SqliteExtensionStore implements ExtensionStore {
   }
 
   async commitExtensionTurn(input: CommitExtensionTurnInput) {
+    const pluginAdmission = checkedPluginTaskAdmission(input);
+    if (pluginAdmission !== undefined)
+      input = capturePluginTaskTurnInput(input, pluginAdmission);
     const binding = validateExtensionTurnCommit(input);
     const creditAdmission = checkedExtensionCreditAdmission({
       admission: input.creditAdmission,
@@ -325,8 +348,18 @@ export class SqliteExtensionStore implements ExtensionStore {
           saved: saved.creditAdmission,
           requested: creditAdmission,
         });
+        if (pluginAdmission !== undefined)
+          assertPluginTaskAdmissionReplay({
+            requested: pluginAdmission,
+            saved: loadSqlitePluginTask(this.#db, saved.binding),
+            binding: saved.binding,
+            receipt: input.receipt,
+            creditAdmission: saved.creditAdmission,
+          });
         return saved;
       }
+      if (pluginAdmission !== undefined)
+        admitSqlitePluginTask(this.#db, pluginAdmission);
       this.#admit(binding, input.expectedActivationRevision);
       if (creditAdmission !== undefined) {
         try {
@@ -368,6 +401,8 @@ export class SqliteExtensionStore implements ExtensionStore {
         );
       if (creditAdmission !== undefined)
         this.#saveCreditAdmission(creditAdmission);
+      if (pluginAdmission !== undefined)
+        saveSqlitePluginTask(this.#db, pluginAdmission);
       const result = extensionTurnResult(turn, binding, creditAdmission);
       this.#saveReceipt(binding, "task", input.receipt, result);
       return result;

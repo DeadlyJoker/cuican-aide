@@ -36,3 +36,4 @@ export * from "./sqlite-creative-project-store.ts";
 export * from "./postgres-creative-project-store.ts";
 export * from "./sqlite-plugin-installation-store.ts";
 export * from "./postgres-plugin-installation-store.ts";
+export * from "./postgres-plugin-installation-profile-owner.ts";

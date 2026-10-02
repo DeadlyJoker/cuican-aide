@@ -12,6 +12,7 @@ import {
   createExtensionCreditAdmission,
   assertExtensionCreditAdmission,
   type ExtensionCreditAdmission,
+  type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
@@ -39,6 +40,16 @@ import {
   requireExtensionRegistration,
   requirePinnedExtensionRegistration,
 } from "./extension-application-support.ts";
+import {
+  assertSavedPluginTask,
+  checkedPluginTaskPin,
+  commitPluginTask,
+  pluginTaskActor,
+  pluginTaskAdmission,
+  pluginTaskReceipt,
+  requirePluginTaskQuotes,
+  requirePluginTaskStore,
+} from "./extension-plugin-task-support.ts";
 
 export type ExtensionTaskIntent =
   | Readonly<{ kind: "generate"; input: WorkflowSchemaValue }>
@@ -81,8 +92,32 @@ export class ExtensionTaskApplicationService {
     actorInput: ActorContext,
     input: CreateExtensionTaskCommand,
   ) {
+    return this.#createTask(actorInput, input, null);
+  }
+
+  /** Internal host-issued authority only. The original v0 HTTP command does not accept this pin. */
+  async createTaskFromPlugin(
+    actorInput: ActorContext,
+    input: CreateExtensionTaskCommand,
+    hostDerivedPin: PluginTaskAdmissionPin,
+  ) {
+    return this.#createTask(
+      actorInput,
+      input,
+      checkedPluginTaskPin(hostDerivedPin),
+    );
+  }
+
+  async #createTask(
+    actorInput: ActorContext,
+    input: CreateExtensionTaskCommand,
+    pin: PluginTaskAdmissionPin | null,
+  ) {
     return extensionUseCase(async () => {
-      const actor = extensionActor(actorInput);
+      const actor =
+        pin === null
+          ? extensionActor(actorInput)
+          : pluginTaskActor(actorInput, pin);
       const value = extensionCommand(input, [
         "pluginId",
         "threadId",
@@ -104,6 +139,19 @@ export class ExtensionTaskApplicationService {
       const expectedThreadRevision = value.expectedThreadRevision;
       const idempotencyKey = extensionOpaqueId(value.idempotencyKey);
       const intent = parseIntent(value.intent);
+      if (pin !== null) {
+        if (intent.kind !== "generate")
+          throw new ApplicationError(
+            "validation",
+            "plugin_task_query_unsupported",
+          );
+        if (pin.pluginId !== scope.pluginId)
+          throw new ApplicationError(
+            "authorization",
+            "plugin_task_admission_owner_mismatch",
+          );
+        requirePluginTaskStore(this.#dependencies.extensions);
+      }
       const queryHost =
         intent.kind === "query" ? this.#dependencies.queryHost : undefined;
       const command = {
@@ -131,19 +179,22 @@ export class ExtensionTaskApplicationService {
         intent.kind === "query"
           ? await this.#source(actor, scope.pluginId, intent)
           : null;
-      const receipt = {
-        actorId: actor.actorId,
-        idempotencyKey,
-        requestDigest: this.#dependencies.digester.sha256(
-          extensionCanonicalJson({
-            schemaVersion: "crewon.extension-task-command.v0",
-            tenantId: actor.tenantId,
-            spaceId: actor.spaceId,
-            actorId: actor.actorId,
-            command,
-          }),
-        ),
-      };
+      const receipt =
+        pin === null
+          ? {
+              actorId: actor.actorId,
+              idempotencyKey,
+              requestDigest: this.#dependencies.digester.sha256(
+                extensionCanonicalJson({
+                  schemaVersion: "crewon.extension-task-command.v0",
+                  tenantId: actor.tenantId,
+                  spaceId: actor.spaceId,
+                  actorId: actor.actorId,
+                  command,
+                }),
+              ),
+            }
+          : pluginTaskReceipt(actor, command, pin, this.#dependencies.digester);
       const previous =
         await this.#dependencies.extensions.loadExtensionTurnReceipt({
           ...scope,
@@ -156,8 +207,25 @@ export class ExtensionTaskApplicationService {
           previous.binding,
           receipt,
         );
+        if (pin !== null) {
+          if (previous.creditAdmission === undefined)
+            throw new ApplicationError(
+              "internal",
+              "extension_credit_admission_missing",
+            );
+          await assertSavedPluginTask({
+            store: this.#dependencies.extensions,
+            pin,
+            binding: previous.binding,
+            threadId,
+            receipt,
+            digester: this.#dependencies.digester,
+          });
+        }
         return previous;
       }
+      if (pin !== null)
+        requirePluginTaskQuotes(this.#dependencies.creditQuotes);
       const activationValue =
         await this.#dependencies.extensions.loadExtensionActivation(scope);
       if (activationValue === null)
@@ -299,7 +367,7 @@ export class ExtensionTaskApplicationService {
         kind: "turn.start",
         threadId,
         expectedThreadRevision,
-        idempotencyKey,
+        idempotencyKey: receipt.idempotencyKey,
         content,
         executionIntentVersion: "v1",
         executionIntent: "none",
@@ -359,13 +427,26 @@ export class ExtensionTaskApplicationService {
         );
         await this.#authorizeThread(actor, threadId);
       }
-      const result = await this.#dependencies.extensions.commitExtensionTurn({
+      const commitInput = {
         turn,
         binding,
         receipt,
         expectedActivationRevision: activation.revision,
         ...(creditAdmission === undefined ? {} : { creditAdmission }),
-      });
+        ...(pin === null
+          ? {}
+          : {
+              pluginAdmission: pluginTaskAdmission(
+                pin,
+                binding,
+                receipt,
+                this.#dependencies.digester,
+              ),
+            }),
+      };
+      const result = await (pin === null
+        ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
+        : commitPluginTask(this.#dependencies.extensions, commitInput));
       this.#assertCreditPrincipal(
         actor,
         result.creditAdmission,
@@ -374,13 +455,25 @@ export class ExtensionTaskApplicationService {
       );
       if (
         creditAdmission !== undefined &&
-        result.run.disposition === "committed" &&
+        (result.run.disposition === "committed" || pin !== null) &&
         result.creditAdmission === undefined
       )
         throw new ApplicationError(
           "internal",
           "extension_credit_admission_missing",
         );
+      if (pin !== null)
+        await assertSavedPluginTask({
+          store: this.#dependencies.extensions,
+          pin,
+          binding: result.binding,
+          threadId,
+          ...(result.run.disposition === "committed"
+            ? { committedBinding: binding }
+            : {}),
+          receipt,
+          digester: this.#dependencies.digester,
+        });
       return result;
     });
   }

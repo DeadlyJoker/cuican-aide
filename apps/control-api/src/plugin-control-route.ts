@@ -37,8 +37,18 @@ import { requestContext } from "./request-context.ts";
 export type PluginControlRouteDependencies = Readonly<{
   identity: ControlApiIdentityPort;
   pluginInstallation?: PluginInstallationApplicationService | null;
-  pluginUi?: PluginUiApplicationService | null;
+  pluginUi?: PluginUiControlService | null;
 }>;
+
+export type PluginUiControlService = Pick<
+  PluginUiApplicationService,
+  | "catalog"
+  | "openMount"
+  | "validateMount"
+  | "readAsset"
+  | "closeMount"
+  | "invoke"
+>;
 
 /** Installed packages use the existing request identity; references and metadata never authorize use. */
 export function registerPluginControlRoutes(
@@ -210,7 +220,7 @@ function registerUiRoutes(
   app: FastifyInstance,
   dependencies: Readonly<{
     identity: ControlApiIdentityPort;
-    service: PluginUiApplicationService;
+    service: PluginUiControlService;
   }>,
 ): void {
   app.get<{ Querystring: unknown }>(

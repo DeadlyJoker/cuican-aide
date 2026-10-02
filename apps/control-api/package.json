@@ -15,6 +15,7 @@
     "@crewon/artifacts": "workspace:*",
     "@crewon/contracts": "workspace:*",
     "@crewon/domain": "workspace:*",
+    "@crewon/plugin-host": "workspace:*",
     "@crewon/process-lifecycle": "workspace:*",
     "@crewon/store": "workspace:*",
     "fastify": "5.11.0",
@@ -23,7 +24,6 @@
   "devDependencies": {
     "@crewon/agent-kernel": "workspace:*",
     "@crewon/control-client": "workspace:*",
-    "@crewon/plugin-host": "workspace:*",
     "@crewon/runtime-worker": "workspace:*",
     "@crewon/tool-broker": "workspace:*",
     "@types/node": "^24.10.1",

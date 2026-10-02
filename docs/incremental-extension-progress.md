@@ -4,6 +4,18 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：生产已安装 UI 启动与原 Run 的包版本准入
+
+生产 Control 现在接受显式的已安装 UI 配置，复用真实 `ProductionControlApiIdentity`、HTTPS profile/权限权威、共享 PostgreSQL pool 的独立安装账本及受批准的不可变文件子集。未配置时原路由保持不变，不创建安装账本。原生资源及引用仍逐次核验当前作用域、权限 epoch 和选择修订；关闭取消权威请求并撤销服务引用。实际 HTTPS、完整生产 PostgreSQL 组合及旧鉴权回归共 55/55 通过。启动方式和当前边界见[已安装插件的服务启动](./installed-plugin-service-startup.md)。生产动作仍明确不可用，未假接 ComfyUI、账号、profile、价格或积分。
+
+PostgreSQL 安装组合新增实际 profile owner：专用连接持有 session 锁，普通写者在回执/命名空间前取得相同 profile 锁，拥有者通过自己的连接串行提交。物理提交确认之前同步版本投影不可用；确认后从当前持久行重建，旧回执不会回退最新选择。失去连接或关闭父宿主会同步撤销准入并等待物理连接结束。真实 PG 拥有权 8/8、原安装双库兼容 24/24，均零跳过；不将这个同步投影当作权限证明或瞬时网络故障探测。
+
+新增内部 `createTaskFromPlugin` 和独立 `crewon.plugin-task-admission.v1` 记录，使用原 Turn/Run/operation/个人积分路径。完整包、profile、选择修订、调用者、贡献/动作、权限 epoch 和原 binding 关联在原 Run 提交事务中保存；PostgreSQL 选择行的共享锁持续到提交，停用更新必须等待，SQLite 使用原写事务。新生成必须取得真实个人报价和受支持的原子存储，不走无报价分支；已接受的重复请求保留原任务与原价格，不重新报价。旧 v0 摘要、幂等键、回执和 HTTP DTO 不变，迁移也保持显式 opt-in。实际双库应用到存储、并发提交、真实停用竞争、原子失败回滚、卸载保留及严格输入边界共 69/69，零跳过；独立审查发现的 PG clone 弱化 accessor/隐藏字段问题已修复并覆盖 pin getter 零执行用例。v1 还在快照后再次核验 pin 与最终 Turn，双库覆盖同 Run ID 下合法 actor 切换的 getter 回归；SQLite 仅 v1 使用快照，v0 保留原流程。
+
+全量基线 Domain 199/199、Application 289/289、Store 919 通过/240 环境相关跳过、Control 328 通过/11 环境相关跳过，均零失败；随后最终快照修复的 69 项相关双库回归全部通过。未把跳过的 PG 项算作验证，实际 PG 证据由上述专项单独提供。20 个 packages、Control、Runtime Worker 类型检查、入口边界及源码和仓库格式通过。检查日志位于 `output/extensions/checks/plugin-task-*.log`、`production-plugin-*.log`、`postgres-plugin-profile-owner-*.log`、`installed-plugin-*.log`。本轮没有改 UI 或共用样式，也没有重复在线生成；自有临时 PostgreSQL 在连接及测试 schema 清理后正常停止。
+
+**尚未完成：** 生产安装/Node 拥有者装配、SDK 调用引用及已提交动作回执语义、Worker 按独立包执行和历史查询、Krea2/短剧包迁移、真实积分权威、Electron 资产代理及第二个真实企业 API。完整目标仍进行中，不把这些基础测试称为插件产品验收。
+
 ## 2026-10-03：补回预览用户栏与原设置页
 
 用户指出 5719 预览缺少用户栏和设置页。原因是独立预览没有账号上下文，原 Chrome 按条件隐藏账号页脚，且设置回调只显示预览提示。新增明确的宿主预览选项，复用原 `SidebarAccount` 的未登录分支，不伪造用户或角色，不显示密码和退出动作；已登录原账号 DOM、交互和快照逐字保留。默认正式页面不启用该预览选项。

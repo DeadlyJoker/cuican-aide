@@ -1,0 +1,326 @@
+import type { DatabaseSync } from "node:sqlite";
+import type { Pool, PoolClient } from "pg";
+import type {
+  CommitExtensionTurnInput,
+  ExtensionMutationReceipt,
+  ExtensionRunLocator,
+} from "@crewon/application";
+import {
+  assertPluginTaskAdmission,
+  parsePluginTaskAdmission,
+  parsePluginTaskAdmissionPin,
+  parsePluginSelection,
+  parseInstalledPluginPackage,
+  pluginInstallationOpaqueId,
+  type ExtensionRunBinding,
+  type ExtensionCreditAdmission,
+  type PluginTaskAdmission,
+} from "@crewon/domain";
+import { extensionStoreDigester } from "./extension-store-records.ts";
+import { assertPluginTaskAdmissionSchemaVersion } from "./plugin-task-admission-schema.ts";
+import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
+
+type PostgresReader = Pool | PoolClient;
+type Row = Record<string, unknown>;
+
+export function capturePluginTaskTurnInput(
+  input: CommitExtensionTurnInput,
+  admission: PluginTaskAdmission,
+): CommitExtensionTurnInput {
+  const captured = structuredClone({ ...input, pluginAdmission: admission });
+  // Keep provenance tied to the actual snapshot if other fields change when read.
+  checkedPluginTaskAdmission(captured);
+  return captured;
+}
+
+export function checkedPluginTaskAdmission(
+  input: CommitExtensionTurnInput,
+): PluginTaskAdmission | undefined {
+  const field = Object.getOwnPropertyDescriptor(input, "pluginAdmission");
+  if (field === undefined) {
+    if ("pluginAdmission" in input)
+      throw new Error("plugin_task_admission_record_invalid");
+    return undefined;
+  }
+  if (!Object.hasOwn(field, "value") || !field.enumerable)
+    throw new Error("plugin_task_admission_record_invalid");
+  if (field.value === undefined) return undefined;
+  const admission = parsePluginTaskAdmission(field.value);
+  assertPluginTaskAdmission(
+    { admission, binding: input.binding, receipt: input.receipt },
+    extensionStoreDigester,
+  );
+  assertCreditPrincipal(admission, input.creditAdmission);
+  if (input.binding.source !== null)
+    throw new Error("plugin_task_query_admission_unsupported");
+  return admission;
+}
+
+export function assertPluginTaskAdmissionReplay(input: {
+  requested: PluginTaskAdmission | undefined;
+  saved: PluginTaskAdmission | null;
+  binding: ExtensionRunBinding;
+  receipt: ExtensionMutationReceipt;
+  creditAdmission: ExtensionCreditAdmission | undefined;
+}): void {
+  if (input.requested === undefined && input.saved === null) return;
+  if (input.requested === undefined || input.saved === null)
+    throw new Error("plugin_task_admission_conflict");
+  assertPluginTaskAdmission(
+    { admission: input.saved, binding: input.binding, receipt: input.receipt },
+    extensionStoreDigester,
+  );
+  assertCreditPrincipal(input.saved, input.creditAdmission);
+  const pin = (value: PluginTaskAdmission) =>
+    parsePluginTaskAdmissionPin(
+      Object.fromEntries(
+        Object.entries(value).filter(
+          ([key]) =>
+            ![
+              "schemaVersion",
+              "runId",
+              "threadId",
+              "extensionBindingDigest",
+              "requestDigest",
+              "idempotencyKey",
+            ].includes(key),
+        ),
+      ),
+    );
+  if (
+    JSON.stringify(pin(input.saved)) !== JSON.stringify(pin(input.requested)) ||
+    input.saved.threadId !== input.requested.threadId ||
+    input.saved.requestDigest !== input.requested.requestDigest ||
+    input.saved.idempotencyKey !== input.requested.idempotencyKey
+  )
+    throw new Error("plugin_task_admission_conflict");
+}
+
+function assertCreditPrincipal(
+  admission: PluginTaskAdmission,
+  credit: ExtensionCreditAdmission | undefined,
+): void {
+  if (
+    credit === undefined ||
+    credit.reservation.scope.tenantId !== admission.tenantId ||
+    credit.reservation.scope.principalId !== admission.principalId
+  )
+    throw new Error("plugin_task_credit_admission_required");
+}
+
+function assertSelection(
+  admission: PluginTaskAdmission,
+  row: Row | undefined,
+): void {
+  if (row === undefined) throw new Error("plugin_task_admission_conflict");
+  const selection = parsePluginSelection(json(row.selection_json));
+  const pkg = parseInstalledPluginPackage(json(row.package_json));
+  if (
+    selection.state !== "enabled" ||
+    selection.revision !== admission.selectionRevision ||
+    selection.selectedPackageDigest !== admission.packageDigest ||
+    [selection, pkg].some(
+      (value) =>
+        value.tenantId !== admission.tenantId ||
+        value.spaceId !== admission.spaceId ||
+        value.profileId !== admission.profileId ||
+        value.pluginId !== admission.pluginId ||
+        value.publisherId !== admission.publisherId,
+    ) ||
+    pkg.packageDigest !== admission.packageDigest ||
+    pkg.version !== admission.version
+  )
+    throw new Error("plugin_task_admission_conflict");
+}
+
+const selectionQuery = (
+  prefix: string,
+) => `SELECT s.record_json AS selection_json,p.record_json AS package_json FROM ${prefix}plugin_profile_selections s
+  JOIN ${prefix}installed_plugin_packages p ON p.tenant_id=s.tenant_id AND p.space_id=s.space_id AND p.profile_id=s.profile_id AND p.package_digest=s.selected_package_digest
+  WHERE s.tenant_id=$1 AND s.space_id=$2 AND s.profile_id=$3 AND s.plugin_id=$4`;
+const admissionQuery = (
+  prefix: string,
+) => `SELECT a.*,b.binding_json,p.record_json AS package_json FROM ${prefix}plugin_task_admissions a
+  JOIN ${prefix}extension_run_bindings b ON b.tenant_id=a.tenant_id AND b.run_id=a.run_id
+  JOIN ${prefix}installed_plugin_packages p ON p.tenant_id=a.tenant_id AND p.space_id=a.space_id AND p.profile_id=a.profile_id AND p.package_digest=a.package_digest
+  WHERE a.tenant_id=$1 AND a.space_id=$2 AND a.run_id=$3`;
+
+export function admitSqlitePluginTask(
+  database: DatabaseSync,
+  admission: PluginTaskAdmission,
+): void {
+  sqliteVersion(database);
+  const query = selectionQuery("").replaceAll(/\$[1-4]/gu, "?");
+  assertSelection(
+    admission,
+    database.prepare(query).get(...scope(admission), admission.pluginId),
+  );
+}
+
+/** Selection UPDATE takes the same row lock: keep this shared lock until the Run transaction commits. */
+export async function admitPostgresPluginTask(
+  client: PoolClient,
+  schema: string,
+  admission: PluginTaskAdmission,
+): Promise<void> {
+  await postgresVersion(client, schema);
+  const result = await client.query<Row>(
+    `${selectionQuery(prefix(schema))} FOR SHARE OF s,p`,
+    [...scope(admission), admission.pluginId],
+  );
+  assertSelection(admission, result.rows[0]);
+}
+
+export function saveSqlitePluginTask(
+  database: DatabaseSync,
+  admission: PluginTaskAdmission,
+): void {
+  database
+    .prepare("INSERT INTO plugin_task_admissions VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+    .run(...admissionValues(admission), JSON.stringify(admission));
+}
+export async function savePostgresPluginTask(
+  client: PoolClient,
+  schema: string,
+  admission: PluginTaskAdmission,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO ${prefix(schema)}plugin_task_admissions VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [...admissionValues(admission), admission],
+  );
+}
+
+export function loadSqlitePluginTask(
+  database: DatabaseSync,
+  input: ExtensionRunLocator,
+): PluginTaskAdmission | null {
+  sqliteVersion(database);
+  const values = locator(input);
+  return decode(
+    database
+      .prepare(admissionQuery("").replaceAll(/\$[1-3]/gu, "?"))
+      .get(...values),
+  );
+}
+export async function loadPostgresPluginTask(
+  client: PostgresReader,
+  schema: string,
+  input: ExtensionRunLocator,
+): Promise<PluginTaskAdmission | null> {
+  await postgresVersion(client, schema);
+  const result = await client.query<Row>(
+    admissionQuery(prefix(schema)),
+    locator(input),
+  );
+  return decode(result.rows[0]);
+}
+
+function decode(row: Row | undefined): PluginTaskAdmission | null {
+  if (row === undefined) return null;
+  const admission = parsePluginTaskAdmission(json(row.admission_json));
+  // The v0 digest validator lives in the domain, so a corrupt historical binding cannot appear valid.
+  const binding = json(row.binding_json) as ExtensionRunBinding;
+  assertPluginTaskAdmission(
+    {
+      admission,
+      binding,
+      receipt: {
+        actorId: admission.actorId,
+        idempotencyKey: admission.idempotencyKey,
+        requestDigest: admission.requestDigest,
+      },
+    },
+    extensionStoreDigester,
+  );
+  const pkg = parseInstalledPluginPackage(json(row.package_json));
+  const columns = {
+    tenantId: "tenant_id",
+    spaceId: "space_id",
+    profileId: "profile_id",
+    pluginId: "plugin_id",
+    principalId: "principal_id",
+    actorId: "actor_id",
+    runId: "run_id",
+    packageDigest: "package_digest",
+    selectionRevision: "selection_revision",
+    extensionBindingDigest: "extension_binding_digest",
+  } as const;
+  if (
+    Object.entries(columns).some(
+      ([key, column]) =>
+        String(admission[key as keyof typeof columns]) !== String(row[column]),
+    ) ||
+    pkg.tenantId !== admission.tenantId ||
+    pkg.spaceId !== admission.spaceId ||
+    pkg.profileId !== admission.profileId ||
+    pkg.pluginId !== admission.pluginId ||
+    pkg.publisherId !== admission.publisherId ||
+    pkg.version !== admission.version ||
+    pkg.packageDigest !== admission.packageDigest
+  )
+    throw new Error("plugin_task_admission_record_invalid");
+  return admission;
+}
+
+function sqliteVersion(database: DatabaseSync): void {
+  assertPluginTaskAdmissionSchemaVersion(
+    database
+      .prepare(
+        "SELECT id,version FROM plugin_task_admission_schema_version LIMIT 2",
+      )
+      .all() as { id: unknown; version: unknown }[],
+  );
+}
+async function postgresVersion(
+  client: PostgresReader,
+  schema: string,
+): Promise<void> {
+  assertPluginTaskAdmissionSchemaVersion(
+    (
+      await client.query<{ id: unknown; version: unknown }>(
+        `SELECT id,version FROM ${prefix(schema)}plugin_task_admission_schema_version LIMIT 2`,
+      )
+    ).rows,
+  );
+}
+function json(value: unknown): unknown {
+  return typeof value === "string" ? JSON.parse(value) : value;
+}
+function prefix(schema: string): string {
+  return `${pluginInstallationSchemaName(schema)}.`;
+}
+function scope(value: PluginTaskAdmission): [string, string, string] {
+  return [value.tenantId, value.spaceId, value.profileId];
+}
+function locator(value: ExtensionRunLocator): [string, string, string] {
+  return [
+    pluginInstallationOpaqueId(value.tenantId),
+    pluginInstallationOpaqueId(value.spaceId),
+    pluginInstallationOpaqueId(value.runId),
+  ];
+}
+function admissionValues(
+  value: PluginTaskAdmission,
+): [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  number,
+  string,
+] {
+  return [
+    ...scope(value),
+    value.pluginId,
+    value.principalId,
+    value.actorId,
+    value.runId,
+    value.packageDigest,
+    value.selectionRevision,
+    value.extensionBindingDigest,
+  ];
+}

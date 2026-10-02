@@ -52,6 +52,13 @@ import {
   UnavailableTenantProviderProbeWorkerRegistry,
   type TenantProviderProbeWorkerRegistry,
 } from "./provider-probe-worker-client.ts";
+import { ProductionControlApiIdentity } from "./production-security-adapters.ts";
+import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
+import {
+  createProductionPluginUiRuntime,
+  type ProductionPluginUiConfig,
+  type ProductionPluginUiRuntime,
+} from "./production-plugin-ui-composition.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -70,6 +77,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
+  pluginUi?: ProductionPluginUiConfig;
 }>;
 
 /**
@@ -80,6 +88,26 @@ export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
   validateProductionConfig(config);
+  // Capture the pure deployment settings before PostgreSQL's asynchronous open.
+  const actions = config.pluginUi?.actions;
+  const actionSnapshot =
+    actions === undefined
+      ? undefined
+      : Object.freeze({ invoke: actions.invoke.bind(actions) });
+  const productionConfig =
+    config.pluginUi === undefined
+      ? config
+      : {
+          ...config,
+          pluginUi: Object.freeze({
+            configuration: parseProductionPluginUiConfiguration(
+              config.pluginUi.configuration,
+            ),
+            ...(actionSnapshot === undefined
+              ? {}
+              : { actions: actionSnapshot }),
+          }),
+        };
   const store = await PostgresDomainStore.open({
     connectionString: config.connectionString,
     schema: config.schema,
@@ -87,7 +115,7 @@ export async function createProductionPostgresControlApi(
     statementTimeoutMs: config.statementTimeoutMs,
   });
   try {
-    return await composeProductionControlApi(store, config);
+    return await composeProductionControlApi(store, productionConfig);
   } catch (error) {
     await store.close();
     throw error;
@@ -114,10 +142,24 @@ async function composeProductionControlApi(
     },
   );
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
+  let pluginUiRuntime: ProductionPluginUiRuntime | undefined;
   try {
-    artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
+    artifactMaintenance = new ArtifactRetentionMaintenance(
+      config.artifactStore.retention,
+      store,
+      config.artifactRetention,
+    );
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
+    if (config.pluginUi !== undefined) {
+      const ledger = store.pluginInstallationStore();
+      // Plugin installation history has an explicit independent schema version.
+      await ledger.migrate();
+      pluginUiRuntime = createProductionPluginUiRuntime(config.pluginUi, {
+        ledger,
+        clock,
+      });
+    }
     const workflowVersionStore = store.workflowVersionStore(digester);
     await workflowVersionStore.migrate();
     const application = new RunApplicationService({
@@ -250,6 +292,7 @@ async function composeProductionControlApi(
       authorization: config.authorization,
     });
     const app = buildControlApi({
+      pluginUi: pluginUiRuntime?.service,
       application,
       offices,
       officeThreads,
@@ -272,7 +315,10 @@ async function composeProductionControlApi(
         store,
         authorization: config.authorization,
       }),
-      modelSpending: new ModelSpendingApplicationService({ store, authorization: config.authorization }),
+      modelSpending: new ModelSpendingApplicationService({
+        store,
+        authorization: config.authorization,
+      }),
       providerProbes,
       // Team remains fail closed until its coordinator, tenant egress policy,
       // and authenticated Worker transport are deployed together.
@@ -292,6 +338,7 @@ async function composeProductionControlApi(
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
+      pluginUiRuntime?.close();
       storageCapacity.close();
       await artifactMaintenance!.close();
       await automationScheduler.close();
@@ -311,6 +358,7 @@ async function composeProductionControlApi(
       workspaceQueries,
     };
   } catch (error) {
+    pluginUiRuntime?.close();
     storageCapacity.close();
     void artifactMaintenance?.close();
     void outboxDispatcher.close();
@@ -335,6 +383,17 @@ function validateProductionConfig(
     "production_authorization_required",
   );
   requireMethod(config.artifactStore, "close", "artifact_store_required");
+  if (config.pluginUi !== undefined) {
+    if (!(config.identity instanceof ProductionControlApiIdentity))
+      throw new Error("production_plugin_ui_identity_required");
+    parseProductionPluginUiConfiguration(config.pluginUi.configuration);
+    if (config.pluginUi.actions !== undefined)
+      requireMethod(
+        config.pluginUi.actions,
+        "invoke",
+        "production_plugin_ui_actions_invalid",
+      );
+  }
   if (config.providerProbeWorkers !== undefined) {
     requireMethod(
       config.providerProbeWorkers,

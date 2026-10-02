@@ -5,11 +5,11 @@ import { registerModelSpendingRoutes } from "./model-spending-route.ts";
 import { registerExtensionConfigurationRoutes } from "./extension-configuration-route.ts";
 import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
-import { registerPluginControlRoutes } from "./plugin-control-route.ts";
-import type {
-  PluginInstallationApplicationService,
-  PluginUiApplicationService,
-} from "@crewon/application";
+import {
+  registerPluginControlRoutes,
+  type PluginUiControlService,
+} from "./plugin-control-route.ts";
+import type { PluginInstallationApplicationService } from "@crewon/application";
 import type { ExtensionReadApplicationService } from "@crewon/application";
 import type { ExtensionConfigurationApplicationService } from "@crewon/application";
 import type { ExtensionTaskApplicationService } from "@crewon/application";
@@ -234,7 +234,7 @@ export type ControlApiDependencies = Readonly<{
   extensionTasks?: ExtensionTaskApplicationService | null;
   extensionReads?: ExtensionReadApplicationService | null;
   pluginInstallation?: PluginInstallationApplicationService | null;
-  pluginUi?: PluginUiApplicationService | null;
+  pluginUi?: PluginUiControlService | null;
   officeThreads?: OfficeThreadApplicationService | null;
   threads: ThreadApplicationService;
   taskChanges: ThreadTaskChangeQueryService;

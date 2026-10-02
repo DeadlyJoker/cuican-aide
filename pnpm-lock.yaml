@@ -48,6 +48,9 @@ importers:
       '@crewon/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@crewon/plugin-host':
+        specifier: workspace:*
+        version: link:../../packages/plugin-host
       '@crewon/process-lifecycle':
         specifier: workspace:*
         version: link:../../packages/process-lifecycle
@@ -67,9 +70,6 @@ importers:
       '@crewon/control-client':
         specifier: workspace:*
         version: link:../../packages/control-client
-      '@crewon/plugin-host':
-        specifier: workspace:*
-        version: link:../../packages/plugin-host
       '@crewon/runtime-worker':
         specifier: workspace:*
         version: link:../runtime-worker

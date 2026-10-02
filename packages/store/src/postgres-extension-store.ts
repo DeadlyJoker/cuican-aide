@@ -54,6 +54,15 @@ import {
   extensionCreditAdmissionSchemaSql,
 } from "./extension-credit-admission-records.ts";
 import { migratePostgresPluginCredits } from "./plugin-credit-schema.ts";
+import { migratePostgresPluginTaskAdmissionsWithPool } from "./plugin-task-admission-schema.ts";
+import {
+  admitPostgresPluginTask,
+  assertPluginTaskAdmissionReplay,
+  capturePluginTaskTurnInput,
+  checkedPluginTaskAdmission,
+  loadPostgresPluginTask,
+  savePostgresPluginTask,
+} from "./plugin-task-admission-store-support.ts";
 import {
   lockPostgresPluginCreditAccount,
   reservePostgresPluginCreditsWithinTransaction,
@@ -77,6 +86,7 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   readonly #pool: Pool;
@@ -148,6 +158,26 @@ export class PostgresExtensionStore implements ExtensionStore {
     } finally {
       client.release();
     }
+  }
+
+  /** Explicit installed-package provenance opt-in; v0 migration and historical bindings stay unchanged. */
+  async migratePluginAdmissions(): Promise<void> {
+    await migratePostgresPluginTaskAdmissionsWithPool({
+      pool: this.#pool,
+      schema: this.#schemaName,
+      assertOpen: () => this.#host.assertOpen(),
+    });
+  }
+
+  async loadPluginTaskAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    const admission = await loadPostgresPluginTask(
+      this.#pool,
+      this.#schemaName,
+      input,
+    );
+    this.#host.assertOpen();
+    return admission;
   }
 
   /** Opt-in ledger and immutable Run/quote linkage; no accounts or funds are created. */
@@ -394,7 +424,12 @@ export class PostgresExtensionStore implements ExtensionStore {
 
   async commitExtensionTurn(input: CommitExtensionTurnInput) {
     // Retain one snapshot while the PostgreSQL transaction awaits independent Store operations.
-    const frozenInput = structuredClone(input);
+    // Validate v1 exact fields/accessors before clone can flatten or invoke them.
+    const pluginAdmission = checkedPluginTaskAdmission(input);
+    const frozenInput =
+      pluginAdmission === undefined
+        ? structuredClone(input)
+        : capturePluginTaskTurnInput(input, pluginAdmission);
     const binding = validateExtensionTurnCommit(frozenInput);
     let creditPath = false;
     return this.#transaction(
@@ -418,6 +453,18 @@ export class PostgresExtensionStore implements ExtensionStore {
           });
           creditPath = result.creditAdmission !== undefined;
           await this.#assertCreditLink(client, result.creditAdmission);
+          if (pluginAdmission !== undefined)
+            assertPluginTaskAdmissionReplay({
+              requested: pluginAdmission,
+              saved: await loadPostgresPluginTask(
+                client,
+                this.#schemaName,
+                result.binding,
+              ),
+              binding: result.binding,
+              receipt: frozenInput.receipt,
+              creditAdmission: result.creditAdmission,
+            });
           return result;
         }
         const creditAdmission = checkedExtensionCreditAdmission({
@@ -426,6 +473,12 @@ export class PostgresExtensionStore implements ExtensionStore {
           receipt: frozenInput.receipt,
         });
         creditPath = creditAdmission !== undefined;
+        if (pluginAdmission !== undefined)
+          await admitPostgresPluginTask(
+            client,
+            this.#schemaName,
+            pluginAdmission,
+          );
         await this.#admit(
           client,
           binding,
@@ -488,6 +541,12 @@ export class PostgresExtensionStore implements ExtensionStore {
               creditAdmission.reservation.reservationId,
               JSON.stringify(creditAdmission),
             ],
+          );
+        if (pluginAdmission !== undefined)
+          await savePostgresPluginTask(
+            client,
+            this.#schemaName,
+            pluginAdmission,
           );
         const result = extensionTurnResult(turn, binding, creditAdmission);
         await this.#saveReceipt(

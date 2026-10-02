@@ -38,6 +38,7 @@ export * from "./provider-continuation-budget.ts";
 export * from "./model-spending.ts";
 export * from "./plugin-credit.ts";
 export * from "./plugin-installation.ts";
+export * from "./plugin-task-admission.ts";
 export {
   PluginInstallationError,
   pluginInstallationOpaqueId,
