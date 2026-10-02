@@ -17,6 +17,11 @@ export type PluginIdentity = Readonly<{
 }>;
 export type PluginNodeServices = Readonly<{
   get<T extends object>(service: string, apiVersion: string): T;
+  /** Feature-detect on older hosts. Only a declared optional dependency may be absent. */
+  getOptional?<T extends object>(
+    service: string,
+    apiVersion: string,
+  ): T | undefined;
   provide<T extends object>(
     service: string,
     apiVersion: string,

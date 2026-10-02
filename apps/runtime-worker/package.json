@@ -11,7 +11,7 @@
     "release": "node --experimental-strip-types src/release-main.ts",
     "release:rollback": "node --experimental-strip-types src/release-rollback-main.ts",
     "start": "node --experimental-strip-types src/main.ts",
-    "test": "pnpm license:check && node --experimental-strip-types --test src/*.test.ts",
+    "test": "pnpm license:check && node scripts/test-installed-plugin-examples.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -35,6 +35,8 @@
     "@crewon/plugin-sdk": "workspace:*",
     "@types/node": "^24.10.1",
     "@types/pg": "8.20.0",
+    "esbuild": "0.27.7",
+    "happy-dom": "20.13.1",
     "pg": "8.22.0",
     "typescript": "^5.9.3"
   },

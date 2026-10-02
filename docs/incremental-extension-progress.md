@@ -4,6 +4,24 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+## 2026-10-03：仓外 SDK 单包页面、任务与执行链
+
+公开 SDK 新增可选的 `services.getOptional`。只有包明确声明为 optional 且实际依赖不存在时才返回 `undefined`；未声明、API 不同、必需依赖误用、失效实例及绑定失败仍拒绝。原 `get` 与旧 SDK 上下文类型保持兼容。NodeHost 的服务读取拆入独立模块，沿用真实实例捕获的依赖、绑定缓存及清理周期，不跟随当前注册表重新解释旧包。
+
+新增 [仓外专业报告模板](../examples/plugins/professional-report/README.md)：复制到仓库外，只依赖实际 SDK tarball，严格 TypeScript 编译自含 Node/UI ESM、业务清单与包描述。同包可选声明任务和执行服务，Control 只提供真实任务桥，Worker 只提供真实执行注册；缺少服务时对应能力明确不可用。安装前构建实际 v1/v2 并删除开发项目及 SDK 依赖，随后只交付完整预构建目录；没有借用宿主源码或开发项目的 node_modules。
+
+单包集成与原业务回归在 SQLite/PostgreSQL 上 **12/12** 通过。实际 renderer loader 读取安装包 UI 字节，由真实 DOM 按钮经本机 HTTP、UI Application、任务桥、个人积分预留事务进入原 Run 和 owned Worker。模拟已提交后的响应丢失，页面重试原冻结输入与幂等键，只取得原 Run、原报价和一次预留。默认 Agent 同时完成普通任务。原页面正常关闭后，供应商 HTTP/SQLite 与 Worker 连接重开，再安装 v2 并停用；新挂载拒绝，旧任务仍由 v1 原包 GET 查询原结果，供应商 POST 总数为一。
+
+Control 新增内部 `InstalledPluginTaskActionOwner`，拥有真实懒加载 Node 服务与任务桥，逐次检查当前 actor/profile/UI epoch、数据库选择、包许可和完整安装字节。setup 等待后再次复核；缓存不捕获首次 actor 或选择修订。生产组合可成对转交该实际 owner 的动作与原提交回执权威，拒绝同形对象与独立端口混用。关闭立即撤掉 UI 准入，并等待实际 setup、任务及 disposer 后再关数据库；失败清理保留所有权和容量，不假称释放。
+
+公开 SDK 仓外分发专项 **8/8** 通过，同包双库专项、Worker 类型及生产许可证、架构边界通过。精确日志为 `output/extensions/checks/plugin-optional-sdk-distribution-20261003.log`、`plugin-single-package-ui-worker-dual.log`。Worker 正式测试入口现在先串行构建双版本仓外示例，再启动消费者；重建 SDK dist 的命令不能与消费者测试并行。
+
+独立审查还发现报告模板的两个实际生命周期问题：串行工具批次仍会在逐项 ACK 前完成多个调用，单份本地结果会覆盖前一执行；非 2xx 响应若保留未结束的 body，则逻辑调用结束后仍有 HTTP 流。模板改为按执行身份保留最多 32 份结果，提供原协议严格字段的有界查询及带游标的 scoped 扫描，并逐项核验完整 intent、状态和供应商回执后 ACK。错误响应先取消实际 body，每次传输最终 abort 自身控制器。实际安装包和 SDK 工厂的 HTTP 专项 **7/7** 已验证这些资源与回执行为；它不代表已接通 installed resolver 的全局终态 idle 维修。
+
+最终 Host 全量 **173/173**、Control 全量 **364 通过 / 1 项 Linux 专项在 macOS 跳过**、正式 Worker 测试入口双库全量 **1,404/1,404**，均零失败；Control 新 owner 与原生产组合专项 **36/36**。SDK/Host/Control/Worker 类型、冻结 lockfile 安装、生产许可证、架构边界及仓库和新增源码格式检查通过。首次正式入口仅在预构建阶段因外部开发工具的镜像离线元数据缺失失败，没有启动消费者；改为从官方 registry 正常安装模板的固定开发工具，关闭安装脚本后重新构建，最终全量日志为 `output/extensions/checks/plugin-single-package-{host-full,control-full,worker-full-final}-20261003.log`。SDK tarball 仍来自本地实际发布构建；开发目录在启动消费者前已删除。
+
+**边界：** 本轮未修改现有 UI 组件或 CSS。报告供应商为明确的 HTTP/SQLite 夹具，模型、身份、包许可和报价也为夹具；连接与数据库重开不等于跨操作系统进程或在线企业 API 验收。积分只验证原预留事务，实际价格、失败退款和结算尚未接通。生产 main 的当前身份/发布者许可接线、Krea2/短剧独立包迁移、Electron 资产代理和第二个真实企业 API 继续待完成，完整目标保持进行中。
+
 ## 2026-10-03：通用已安装业务清单、Agent 物化与任务准入
 
 业务声明现在可以从实际安装包的 `businessManifestPath` 读取，不再要求 ComfyUI 的 `baseUrl` 或固定工具名。读取逐项核验完整包文件、身份、摘要、目录边界和当前元数据许可；有界 JSON 读取不导入 Node/UI，也不调用外部服务。Worker 仅接受该读取过程取得的实际注册对象；复制的注册声明不获得部署权威。新的实现摘要使用明确的 v1 配方绑定完整包摘要与实际 Node 入口，不重新解释旧内置插件的 v0 摘要。

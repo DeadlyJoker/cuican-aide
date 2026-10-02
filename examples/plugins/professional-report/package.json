@@ -1,0 +1,21 @@
+{
+  "name": "crewon-professional-report-example",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && node build.mjs"
+  },
+  "dependencies": {
+    "@crewon/plugin-sdk": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "esbuild": "0.27.7",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10 <11"
+  }
+}

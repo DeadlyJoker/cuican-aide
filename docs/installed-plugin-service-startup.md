@@ -29,7 +29,7 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 新内部 `createTaskFromPlugin` 路径通过原 Turn/Run 提交，显式 `migratePluginAdmissions()` 后，在同一事务保存独立包身份、profile、选择修订、调用者、权限 epoch、原 v0 binding 关联及真实个人报价。新生成缺少报价或存储准入能力时拒绝；已接受的重复请求返回原任务和原报价。v0 的摘要、回执和 HTTP 请求格式不变。SDK `crewon.tasks` API `1` 和 `PluginTaskActionBridge` 通过真实实例绑定的调用引用进入该路径，报价后通过必需的宿主 callback 复核当前插件准入；只有私有 `PluginUiCommittedTaskAuthority` 验证的原受理结果跳过提交后的当前选择 gate。SDK 任务桥的生产组合须同时注入 actions 与 committedTasks，SDK 本身不暴露句柄签发或核验能力。
 
-该桥当前仅支持生成，包 ID 与原 extension ID 必须相同；尚无跨插件委托。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。当前 Node 动作到任务准入的测试没有执行外部生成 API。
+该桥当前仅支持生成，包 ID 与原 extension ID 必须相同；尚无跨插件委托。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
 Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产代理、生产安装管理、Krea2/短剧独立包和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
 
@@ -67,4 +67,20 @@ Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产代理、
 4. 用 `InstalledPluginExtensionHost` 配合实际 `StoreBackedAgentVersionRuntimeResolver`、安装 Store、部署 Store、当前身份/profile、原授权和包许可端口，交给原配置与激活用例。该 Host 是固定 profile 的资源 owner，必须由组合关闭。配置校验不启动 Node；就绪检查核验实际物化、完整工具目录和 Node 实例上的 SDK 工厂注册。`maximumPackages` 为 1–32，默认 32，包含 pending 与清理失败项。
 5. 已安装新任务必须走原 `createTaskFromPlugin`，在同一原 Turn/Run 事务锁定包、选择和个人报价。该 Host 的 `taskAdmissionMode` 要求 installed 准入；直接使用旧公开 v0 接口创建新安装式任务会在 readiness、报价和 Run 准备前拒绝。历史回执重放与旧宿主 v0 路径保持兼容。Worker 仍使用上一节的 `installedPluginExecution` owner 执行确切包。
 
-这些调用不签发账号、包信任、报价、余额或凭据。非空 credential bindings 因没有真实租用服务而拒绝；必需的外部 Node 服务因没有历史依赖闭包而拒绝。同一包同时承担 UI 动作、任务服务与 Worker 执行的生产组合尚待实现，分别通过的任务桥和执行夹具不能替代该验收。
+这些调用不签发账号、包信任、报价、余额或凭据。非空 credential bindings 因没有真实租用服务而拒绝；必需的外部 Node 服务因没有历史依赖闭包而拒绝。同一包的 UI 动作与 Worker 执行组合已通过下述仓外 SDK 示例和双库专项；生产 main、实际身份与计费装配仍待验收。
+
+## 2026-10-03：同包可选服务与 Control 动作 owner
+
+公开 SDK 的 `services.getOptional` 是可选的增量方法。包须在 `requires` 中明确将对应服务声明为 optional，才能读取为 `undefined`；未声明、请求不同 API、把必需依赖当成可选、绑定失败或实例已清理仍然拒绝。原 `get` 保持原语义，旧 SDK 上下文仍满足类型契约；使用新方法的包必须自行检测旧宿主并明确拒绝加载。
+
+一个包可以同时声明可选的 `crewon.tasks` 与 `crewon.execution`：Control 动作宿主只提供真实任务服务，Worker 只提供真实执行注册。包始终提供自己声明的动作服务，缺少任务服务时动作明确拒绝；缺少实际执行工厂时 Worker readiness 拒绝。不会为通过 setup 制造任务端口或空执行工厂。
+
+Control 内部 `InstalledPluginTaskActionOwner` 接收真实任务服务、原提交回执权威、安装 Store、当前 actor/profile/UI 权限、包许可及安装根。它懒加载实际 Node 包，有界缓存按 profile、包 ID 和完整摘要区分。每次动作重新核验实际调用证明、当前身份、数据库选择、完整安装字节与许可；setup 等待后再次检查，再发布实际 Node 服务。同步选择投影只来自成功的实际 Store 读取，缓存不绑定首次 actor 或选择修订。
+
+程序化 `ProductionPluginUiConfig.ownedTaskActions` 将该实际 owner 的 actions 和 committedTasks 成对转交，拒绝同形对象及与原独立端口混用。原端口和未配置的只读模式保持可用；`close()` 现在返回 Promise，立即撤回 UI，等待实际 setup、动作及 Node disposer 后再关闭数据库。启动或关闭清理失败继续报告并保留失败所有权，不能算释放容量。生产 main 没有新增自授权、默认价格或环境变量自动启用该 owner。
+
+仓外开发模板见 [专业报告插件示例](../examples/plugins/professional-report/README.md)。它只依赖实际 SDK tarball，严格 TypeScript 编译后交付自含的 Node/UI ESM、业务清单和包描述；删除开发目录及 SDK 依赖后，安装器仍能校验并运行 v1/v2。原页面不被模板覆盖。Worker 正式 `pnpm test` 先串行构建这两个仓外版本，再启动消费者测试；不要与会重建 SDK dist 的其他命令并行。直接运行同包专项时必须提供 `CREWON_TEST_BUSINESS_PLUGIN_V1_DIR`、`CREWON_TEST_BUSINESS_PLUGIN_V2_DIR`；PostgreSQL 项另需实际 `CREWON_TEST_POSTGRES_URL`，不得将缺包解释为通过。
+
+测试预构建阶段从官方 registry 安装模板固定的开发工具，关闭安装脚本；首次运行需要 registry 可达或有完整缓存。SDK 本身来自本地 tarball，消费者运行前已删除实际开发目录及依赖。
+
+同包专项用实际 renderer loader 和安装 UI 字节，在 DOM 按钮提交后经过真实本机 HTTP、原付费 Turn/Run 事务及 owned Worker。供应商是明确标注的 HTTP/SQLite 夹具，模型、身份、包许可及报价仍为夹具；供应商数据库与 Worker 连接重开不等于跨操作系统进程的生产验收。积分目前仅验证原预留事务，单次价格和失败退款规则仍须产品确认后装配真实报价与结算。

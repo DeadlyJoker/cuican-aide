@@ -132,10 +132,12 @@ test("the real tarball installs offline outside the workspace, compiles independ
       "external-node.ts",
       "external-task-node.ts",
       "external-execution-node.ts",
+      "external-optional-node.ts",
       "external-ui.ts",
       "type-boundaries.ts",
       "distribution-runner.mjs",
       "execution-distribution-runner.mjs",
+      "optional-distribution-runner.mjs",
     ])
       await cp(join(fixtures, name), join(directory, name));
     await writeFile(
@@ -157,6 +159,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
             "external-node.ts",
             "external-task-node.ts",
             "external-execution-node.ts",
+            "external-optional-node.ts",
           ],
         },
         null,
@@ -230,6 +233,10 @@ test("the real tarball installs offline outside the workspace, compiles independ
     assert.match(
       executed,
       /Execution factory ABI compiled Node-only and invoked/u,
+    );
+    assert.match(
+      executed,
+      /Optional service ABI compiled Node-only and invoked in both contexts; old host rejected explicitly/u,
     );
     console.log(installed.trim());
     console.log(executed.trim());

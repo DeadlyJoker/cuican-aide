@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -21,7 +28,9 @@ import {
   createExtensionConfiguration,
   extensionToolName,
   parsePluginTaskAdmissionPin,
+  type PluginSelection,
   type PluginTaskAdmissionPin,
+  type WorkflowSchemaValue,
 } from "@crewon/domain";
 import { installLocalPluginPackage } from "@crewon/plugin-host";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
@@ -112,6 +121,11 @@ return {dispose(){f.disposes.push(${JSON.stringify(version)})}};}};`;
 export async function businessExecutionFixture(
   t: TestContext,
   backend: "sqlite" | "postgres" = "sqlite",
+  options: Readonly<{
+    packageDirectory?: string;
+    upgradePackageDirectory?: string;
+    configurationParameters?: Readonly<Record<string, WorkflowSchemaValue>>;
+  }> = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "crewon-business-execution-"));
   const databasePath = join(directory, "control.sqlite");
@@ -160,12 +174,20 @@ export async function businessExecutionFixture(
         await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
         await admin.end();
       }
+      if (options.packageDirectory !== undefined)
+        await removeInstalledTree(join(directory, "installed"));
       await rm(directory, { recursive: true, force: true });
     }
   });
-  const pkg = await businessPackageFixture(t, {
-    node: installedNodeSource(globalKey, "1.0.0"),
-  });
+  const pkg =
+    options.packageDirectory === undefined
+      ? await businessPackageFixture(t, {
+          node: installedNodeSource(globalKey, "1.0.0"),
+        })
+      : await installedBusinessPackage({
+          directory: options.packageDirectory,
+          installRoot: join(directory, "installed"),
+        });
   const registration = await pkg.load();
   const timestamp = new Date().toISOString();
   const clock = { now: () => timestamp };
@@ -184,6 +206,7 @@ export async function businessExecutionFixture(
   await operations.migrate();
   const installations = store.pluginInstallationStore();
   await installations.migrate();
+  let selectionProjection: PluginSelection | null = null;
   await extensions.migratePluginAdmissions();
   const credits = store.pluginCreditStore();
   await credits.migrate();
@@ -195,7 +218,7 @@ export async function businessExecutionFixture(
       scope,
       pluginId: identity.pluginId,
     });
-    return installations.recordInstalledPackage({
+    const result = await installations.recordInstalledPackage({
       scope,
       actor,
       package: {
@@ -209,6 +232,8 @@ export async function businessExecutionFixture(
       expectedSelectionRevision: current?.revision ?? null,
       receipt: { idempotencyKey: key, requestDigest: digester.sha256(key) },
     });
+    selectionProjection = result.selection;
+    return result;
   }
   await recordPackage(registration.identity, "install-professional-1");
   async function select(
@@ -220,7 +245,7 @@ export async function businessExecutionFixture(
       pluginId: businessManifest.pluginId,
     });
     assert.ok(current);
-    return installations.commitSelection({
+    const result = await installations.commitSelection({
       scope,
       actor,
       expectedSelectionRevision: current.revision,
@@ -240,6 +265,8 @@ export async function businessExecutionFixture(
         ),
       },
     });
+    selectionProjection = result.selection;
+    return result;
   }
   await select("enabled");
   const creditScope = {
@@ -326,7 +353,9 @@ export async function businessExecutionFixture(
       manifestDigest: registration.manifestDigest,
       implementationDigest: registration.implementationDigest,
       revision: 1,
-      parameters: { organization: "Fixture company" },
+      parameters: options.configurationParameters ?? {
+        organization: "Fixture company",
+      },
       credentialBindings: [],
       createdByActorId: actor.actorId,
       createdAt: timestamp,
@@ -595,6 +624,21 @@ export async function businessExecutionFixture(
     });
   }
   async function upgrade() {
+    if (options.upgradePackageDirectory !== undefined) {
+      const installed = await installLocalPluginPackage({
+        directory: options.upgradePackageDirectory,
+        installRoot: pkg.input.installRoot,
+        authorization: async () => ({ outcome: "allow" }),
+      });
+      const next = await loadInstalledPluginBusinessRegistration({
+        ...pkg.input,
+        expectedVersion: installed.descriptor.version,
+        expectedPackageDigest: installed.packageDigest,
+      });
+      await recordPackage(next.identity, "install-professional-2");
+      await select("enabled", next.identity.packageDigest);
+      return next;
+    }
     const source = join(directory, "upgrade-source");
     await mkdir(source);
     const files = [
@@ -659,5 +703,45 @@ export async function businessExecutionFixture(
     count,
     actor,
     scope,
+    pkg,
+    currentSelection: () => selectionProjection,
   };
+}
+
+/** Installs a previously built external SDK package without rebuilding or substituting its descriptor. */
+async function installedBusinessPackage(
+  input: Readonly<{ directory: string; installRoot: string }>,
+) {
+  await mkdir(input.installRoot, { mode: 0o700 });
+  const installed = await installLocalPluginPackage({
+    ...input,
+    authorization: async () => ({ outcome: "allow" }),
+  });
+  const expected = {
+    installRoot: input.installRoot,
+    expectedPluginId: installed.descriptor.pluginId,
+    expectedPublisherId: installed.descriptor.publisherId,
+    expectedVersion: installed.descriptor.version,
+    expectedPackageDigest: installed.packageDigest,
+    signal: new AbortController().signal,
+    authorizeRead: async () => "allow" as const,
+  };
+  return {
+    installed,
+    input: expected,
+    load: () => loadInstalledPluginBusinessRegistration(expected),
+  };
+}
+
+async function removeInstalledTree(directory: string): Promise<void> {
+  try {
+    await chmod(directory, 0o700);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  for (const entry of await readdir(directory, { withFileTypes: true }))
+    if (entry.isDirectory())
+      await removeInstalledTree(join(directory, entry.name));
+  await rm(directory, { recursive: true, force: true });
 }

@@ -19,6 +19,7 @@ import type {
 } from "./plugin-node-preparation.ts";
 import type { PluginHostService } from "./plugin-host-service.ts";
 import { registerPluginNodeLease } from "./plugin-node-lease-authority.ts";
+import { createPluginNodeServiceAccess } from "./plugin-node-service-access.ts";
 export type {
   PluginHostService,
   PluginHostServiceLifetime,
@@ -591,44 +592,18 @@ export class PluginNodeHost {
         instance.cleanup.push(callback);
       },
     });
+    const access = createPluginNodeServiceAccess(instance, lifetime, {
+      checkService,
+      fail,
+      bindingError: (cause) =>
+        new PluginNodeHostError("plugin_host_service_binding_failed", {
+          cause,
+        }),
+    });
     return Object.freeze({
       identity: instance.identity,
       services: Object.freeze({
-        get<T extends object>(service: string, apiVersion: string): T {
-          const declaration = instance.descriptor.requires.find(
-            (item) => item.service === service,
-          );
-          if (!declaration || declaration.apiVersion !== apiVersion)
-            fail("plugin_dependency_undeclared");
-          const value = instance.dependencies.get(service);
-          if (!value) fail("plugin_dependency_unavailable");
-          if (
-            instance.phase === "disposed" ||
-            instance.phase === "cleanupFailed"
-          )
-            fail("plugin_instance_unavailable");
-          if (value.owner !== null || value.bindForPlugin === undefined)
-            return value.value as T;
-          const cached = instance.boundServices.get(value);
-          if (cached !== undefined) return cached as T;
-          if (instance.bindingFailure !== null) throw instance.bindingFailure;
-          try {
-            const bound = value.bindForPlugin(instance.identity, lifetime);
-            if (bound instanceof Promise) {
-              void bound.catch(() => undefined);
-              fail("plugin_host_service_binding_invalid");
-            }
-            checkService(service, apiVersion, bound);
-            instance.boundServices.set(value, bound);
-            return bound as T;
-          } catch (cause) {
-            instance.bindingFailure = new PluginNodeHostError(
-              "plugin_host_service_binding_failed",
-              { cause },
-            );
-            throw instance.bindingFailure;
-          }
-        },
+        ...access,
         provide: <T extends object>(
           service: string,
           apiVersion: string,

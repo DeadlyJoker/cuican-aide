@@ -24,6 +24,10 @@ import {
   parseProductionPluginUiConfiguration,
   type ProductionPluginUiConfiguration,
 } from "./production-plugin-ui-environment.ts";
+import {
+  isInstalledPluginTaskActionOwner,
+  type InstalledPluginTaskActionOwner,
+} from "./installed-plugin-task-action-owner.ts";
 
 export type ProductionPluginUiConfig = Readonly<{
   configuration: ProductionPluginUiConfiguration;
@@ -31,10 +35,12 @@ export type ProductionPluginUiConfig = Readonly<{
   actions?: PluginUiActionPort;
   /** Trusted verifier for original durable task receipts; absent for read-only deployments. */
   committedTasks?: PluginUiCommittedTaskPort;
+  /** Transfers the actual Node/task resources together with their durable-receipt authority. */
+  ownedTaskActions?: InstalledPluginTaskActionOwner;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
-  close(): void;
+  close(): Promise<void>;
 }>;
 
 /** Stateless scoped readers share installed bytes, never authority, profile selection or leases. */
@@ -49,13 +55,11 @@ export function createProductionPluginUiRuntime(
   const configuration = parseProductionPluginUiConfiguration(
     input.configuration,
   );
-  if (
-    input.actions !== undefined &&
-    typeof input.actions?.invoke !== "function"
-  )
+  const { actions, committedTasks, owner } =
+    captureProductionPluginUiActions(input);
+  if (actions !== undefined && typeof actions?.invoke !== "function")
     throw new Error("production_plugin_ui_actions_invalid");
-  const invokeAction = input.actions?.invoke.bind(input.actions);
-  const committedTasks = input.committedTasks;
+  const invokeAction = actions?.invoke.bind(actions);
   if (
     committedTasks !== undefined &&
     (typeof committedTasks.isOutcome !== "function" ||
@@ -191,12 +195,41 @@ export function createProductionPluginUiRuntime(
       return current.invoke(...args);
     },
   });
+  let closing: Promise<void> | null = null;
   return Object.freeze({
     service,
     close: () => {
       lifetime.abort();
       application = null;
+      return (closing ??= owner?.close() ?? Promise.resolve());
     },
+  });
+}
+
+/** Capture an actual owner as a pair; a structural DTO never transfers Node ownership. */
+export function captureProductionPluginUiActions(
+  input: ProductionPluginUiConfig,
+): Readonly<{
+  actions: PluginUiActionPort | undefined;
+  committedTasks: PluginUiCommittedTaskPort | undefined;
+  owner: InstalledPluginTaskActionOwner | undefined;
+}> {
+  const owner = input.ownedTaskActions;
+  if (owner !== undefined) {
+    if (!isInstalledPluginTaskActionOwner(owner))
+      throw new Error("production_plugin_ui_action_owner_invalid");
+    if (input.actions !== undefined || input.committedTasks !== undefined)
+      throw new Error("production_plugin_ui_action_owner_conflict");
+    return Object.freeze({
+      actions: owner.actions,
+      committedTasks: owner.committedTasks,
+      owner,
+    });
+  }
+  return Object.freeze({
+    actions: input.actions,
+    committedTasks: input.committedTasks,
+    owner: undefined,
   });
 }
 function unavailable(): never {

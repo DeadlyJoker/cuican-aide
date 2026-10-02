@@ -71,6 +71,27 @@ export default definePlugin({
 
 `setup` 可返回 `void`、`PluginDisposable` 或对应的 Promise。`onDispose` 接受同步或异步清理函数。服务发现、声明核验、注册提交、失败清理以及升级时旧实例租约的保留由宿主实现，SDK 只定义调用接口。插件应登记自己获取资源后的清理操作；服务注册返回的 disposable 可用于撤销注册。
 
+## 可选服务与同一包的多种宿主上下文
+
+`services.getOptional<T>(service, apiVersion)` 只允许读取清单中具有相同服务名、API 标签且 `optional: true` 的依赖。该上下文没有兼容服务时返回 `undefined`；未声明、请求标签不符、把必需依赖当作可选依赖、实例已失效或服务绑定失败仍会抛错。原 `get` 保持严格行为，即使清单把依赖标为 optional，缺失时也不会返回 `undefined`。不要捕获任意 `get` 异常来推断服务缺失。
+
+该方法在类型上可选，以保留旧宿主上下文的结构兼容。使用它的插件必须先检测宿主能力，缺少方法时明确拒绝启动：
+
+```ts
+if (typeof ctx.services.getOptional !== "function") {
+  throw new Error("plugin_optional_service_api_unavailable");
+}
+const tasks = ctx.services.getOptional<PluginTaskService>("crewon.tasks", "1");
+const execution = ctx.services.getOptional<PluginExecutionService>(
+  "crewon.execution",
+  "1",
+);
+```
+
+同一个包可以将这两个服务都声明为 optional，在任务宿主中调用实际 `tasks`，在执行宿主中向实际 `execution` 注册工厂。服务是否存在不授予当前用户权限；调用引用、任务准入和每次执行授权仍由相应宿主核验。执行宿主没有任务服务时不能创建任务，任务宿主没有执行服务时不能假注册工厂。没有实际工厂注册的包也不能通过执行就绪检查。
+
+清单中所有 `provides` 仍必须在每种上下文注册。若包声明自己的动作服务，应始终提供严格的 `{ actions, invoke }` 对象；缺少任务服务的上下文可以不列出任务动作，并在调用时明确拒绝。服务绑定及清理属于本次 `setup`，不要把某一上下文的服务保存为模块全局变量再供另一实例复用。准备期间可选服务的可用性变化仍会阻止发布。
+
 ## 任务与动作 ABI
 
 Node 和 contracts 入口导出 `CREWON_TASKS_SERVICE = "crewon.tasks"`、`CREWON_TASKS_API_VERSION = "1"`、`PluginTaskService`、`PluginTaskRequest`、`PluginTaskReceipt` 和 `PluginActionsService` 等纯类型。包需显式声明该任务依赖，宿主也必须实际装配对应服务：

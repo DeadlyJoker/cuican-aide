@@ -55,10 +55,12 @@ import {
 import { ProductionControlApiIdentity } from "./production-security-adapters.ts";
 import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
 import {
+  captureProductionPluginUiActions,
   createProductionPluginUiRuntime,
   type ProductionPluginUiConfig,
   type ProductionPluginUiRuntime,
 } from "./production-plugin-ui-composition.ts";
+import { isInstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -87,48 +89,67 @@ export type ProductionPostgresControlApiConfig = Readonly<{
 export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
-  validateProductionConfig(config);
-  // Capture the pure deployment settings before PostgreSQL's asynchronous open.
-  const actions = config.pluginUi?.actions;
-  const actionSnapshot =
-    actions === undefined
-      ? undefined
-      : Object.freeze({ invoke: actions.invoke.bind(actions) });
-  const committedTasks = config.pluginUi?.committedTasks;
-  const committedSnapshot =
-    committedTasks === undefined
-      ? undefined
-      : Object.freeze({
-          isOutcome: committedTasks.isOutcome.bind(committedTasks),
-          verify: committedTasks.verify.bind(committedTasks),
-        });
-  const productionConfig =
-    config.pluginUi === undefined
-      ? config
-      : {
-          ...config,
-          pluginUi: Object.freeze({
-            configuration: parseProductionPluginUiConfiguration(
-              config.pluginUi.configuration,
-            ),
-            ...(actionSnapshot === undefined
-              ? {}
-              : { actions: actionSnapshot }),
-            ...(committedSnapshot === undefined
-              ? {}
-              : { committedTasks: committedSnapshot }),
-          }),
-        };
-  const store = await PostgresDomainStore.open({
-    connectionString: config.connectionString,
-    schema: config.schema,
-    maxPoolSize: config.maxPoolSize,
-    statementTimeoutMs: config.statementTimeoutMs,
-  });
+  const ownedTaskActions = config.pluginUi?.ownedTaskActions;
+  let store: PostgresDomainStore | undefined;
   try {
+    validateProductionConfig(config);
+    // Capture the pure deployment settings before PostgreSQL's asynchronous open.
+    const actions = config.pluginUi?.actions;
+    const actionSnapshot =
+      actions === undefined
+        ? undefined
+        : Object.freeze({ invoke: actions.invoke.bind(actions) });
+    const committedTasks = config.pluginUi?.committedTasks;
+    const committedSnapshot =
+      committedTasks === undefined
+        ? undefined
+        : Object.freeze({
+            isOutcome: committedTasks.isOutcome.bind(committedTasks),
+            verify: committedTasks.verify.bind(committedTasks),
+          });
+    const productionConfig =
+      config.pluginUi === undefined
+        ? config
+        : {
+            ...config,
+            pluginUi: Object.freeze({
+              configuration: parseProductionPluginUiConfiguration(
+                config.pluginUi.configuration,
+              ),
+              ...(actionSnapshot === undefined
+                ? {}
+                : { actions: actionSnapshot }),
+              ...(committedSnapshot === undefined
+                ? {}
+                : { committedTasks: committedSnapshot }),
+              ...(ownedTaskActions === undefined ? {} : { ownedTaskActions }),
+            }),
+          };
+    store = await PostgresDomainStore.open({
+      connectionString: config.connectionString,
+      schema: config.schema,
+      maxPoolSize: config.maxPoolSize,
+      statementTimeoutMs: config.statementTimeoutMs,
+    });
     return await composeProductionControlApi(store, productionConfig);
   } catch (error) {
-    await store.close();
+    const failures: unknown[] = [];
+    if (isInstalledPluginTaskActionOwner(ownedTaskActions))
+      try {
+        await ownedTaskActions.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
+    try {
+      await store?.close();
+    } catch (failure) {
+      failures.push(failure);
+    }
+    if (failures.length)
+      throw new AggregateError(
+        [error, ...failures],
+        "production_plugin_ui_startup_cleanup_failed",
+      );
     throw error;
   }
 }
@@ -349,14 +370,16 @@ async function composeProductionControlApi(
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
-      pluginUiRuntime?.close();
-      storageCapacity.close();
-      await artifactMaintenance!.close();
-      await automationScheduler.close();
-      await outboxDispatcher.close();
-      eventHub.close();
-      await config.artifactStore.close();
-      await store.close();
+      await closeResources([
+        () => pluginUiRuntime?.close(),
+        () => storageCapacity.close(),
+        () => artifactMaintenance!.close(),
+        () => automationScheduler.close(),
+        () => outboxDispatcher.close(),
+        () => eventHub.close(),
+        () => config.artifactStore.close(),
+        () => store.close(),
+      ]);
     });
     return {
       app,
@@ -369,13 +392,21 @@ async function composeProductionControlApi(
       workspaceQueries,
     };
   } catch (error) {
-    pluginUiRuntime?.close();
-    storageCapacity.close();
-    void artifactMaintenance?.close();
-    void outboxDispatcher.close();
-    eventHub.close();
-    void config.artifactStore.close();
-    void store.close();
+    try {
+      await closeResources([
+        () => pluginUiRuntime?.close(),
+        () => storageCapacity.close(),
+        () => artifactMaintenance?.close(),
+        () => outboxDispatcher.close(),
+        () => eventHub.close(),
+        () => config.artifactStore.close(),
+      ]);
+    } catch (failure) {
+      throw new AggregateError(
+        [error, failure],
+        "production_control_api_startup_cleanup_failed",
+      );
+    }
     throw error;
   }
 }
@@ -398,6 +429,7 @@ function validateProductionConfig(
     if (!(config.identity instanceof ProductionControlApiIdentity))
       throw new Error("production_plugin_ui_identity_required");
     parseProductionPluginUiConfiguration(config.pluginUi.configuration);
+    captureProductionPluginUiActions(config.pluginUi);
     if (config.pluginUi.actions !== undefined)
       requireMethod(
         config.pluginUi.actions,
@@ -434,6 +466,20 @@ function validateProductionConfig(
     512,
     "artifact_encryption_key_id_invalid",
   );
+}
+
+async function closeResources(
+  tasks: readonly (() => void | Promise<void> | undefined)[],
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const task of tasks)
+    try {
+      await task();
+    } catch (failure) {
+      failures.push(failure);
+    }
+  if (failures.length)
+    throw new AggregateError(failures, "production_control_api_cleanup_failed");
 }
 
 function requireMethod(value: unknown, method: string, code: string): void {

@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "crewon.extension-manifest.v0",
+  "hostApi": "crewon.extensions.v0",
+  "pluginId": "example.professional",
+  "version": "1.0.0",
+  "title": "Professional report example",
+  "description": "An independently built example for an explicitly configured report API.",
+  "task": {
+    "instructions": "Use the professional report tools; preserve the provider's actual outcome.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string", "maxLength": 2000, "enum": null }
+      },
+      "required": ["subject"],
+      "additionalProperties": false
+    }
+  },
+  "configurationSchema": {
+    "type": "object",
+    "properties": {
+      "organization": { "type": "string", "maxLength": 160, "enum": null },
+      "providerBaseUrl": { "type": "string", "maxLength": 2048, "enum": null }
+    },
+    "required": ["organization", "providerBaseUrl"],
+    "additionalProperties": false
+  },
+  "credentialSlots": [],
+  "tools": [
+    {
+      "operationId": "generate",
+      "adapterId": "example.professional.api",
+      "description": "Generate a professional report once.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "subject": { "type": "string", "maxLength": 2000, "enum": null }
+        },
+        "required": ["subject"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "report": { "type": "string", "maxLength": 8000, "enum": null }
+        },
+        "required": ["report"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "example.report.generate"
+    }
+  ],
+  "resultViews": ["text"]
+}
