@@ -15,6 +15,11 @@ import { createProductionPostgresControlApi } from "./production-composition.ts"
 import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
 import { pluginUiProductionIdentity } from "./production-plugin-ui.test-support.ts";
 import { captureProductionPluginUiOwnerConfiguration } from "./project-query-plugin-composition.ts";
+import { parseInstalledPluginConfigurationConfig } from "./installed-plugin-configuration-environment.ts";
+import {
+  configDocument,
+  environment,
+} from "./installed-plugin-configuration.test-support.ts";
 
 const publication = {
   source: {
@@ -165,6 +170,13 @@ test("query requires approved source publication and actual original task compos
     authorization: allowed,
     artifactStore: new InMemoryArtifactStore(),
     artifactEncryptionKeyId: "fixture-key",
+    // Supply the original metadata-only reader prerequisite without authorizing paid task composition.
+    pluginConfiguration: {
+      configuration: parseInstalledPluginConfigurationConfig(
+        { ...configDocument, installRoot: configuration.installRoot },
+        environment,
+      ),
+    },
     creativeProjects: {
       authorization: allowed,
       generationReads: reader,

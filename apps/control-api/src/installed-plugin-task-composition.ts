@@ -1,11 +1,5 @@
-import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
-  ExtensionConfigurationApplicationService,
-  ExtensionReadApplicationService,
-  ExtensionTaskApplicationService,
-  PluginUiCommittedTaskAuthority,
-  ProjectGenerationReadApplicationService,
   type ApplicationClock,
   type ApplicationIdGenerator,
   type AuthorizationPort,
@@ -23,16 +17,14 @@ import type { PluginActivationCandidate } from "@crewon/plugin-host";
 import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import type { ActorContext } from "@crewon/application";
 import type { PluginProfileScope } from "@crewon/domain";
-import { InstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
-import { InstalledPluginProjectQueryOwner } from "./installed-plugin-project-query-owner.ts";
 import { assertProjectQueryPluginPublications } from "./project-query-plugin-configuration.ts";
-import { InstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
 import type { PreparedCreativeProjects } from "./creative-project-composition.ts";
 import { assertProjectGenerationPluginPublications } from "./project-generation-plugin-configuration.ts";
+import { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import {
-  bindInstalledPluginRequestOwner,
-  InstalledPluginRequestOwner,
-} from "./installed-plugin-request-owner.ts";
+  createInstalledPluginTaskRuntimeCore,
+  type InstalledPluginTaskRuntimeCore,
+} from "./installed-plugin-task-runtime-core.ts";
 import { InstalledPluginPeerClient } from "./installed-plugin-peer-client.ts";
 import {
   InstalledPluginCreditQuoteAuthority,
@@ -54,17 +46,7 @@ import {
   pluginSecurityUiRequest,
 } from "./plugin-security-validation.ts";
 
-export type InstalledPluginTaskRuntime = Readonly<{
-  owner: InstalledPluginTaskActionOwner;
-  projectGenerations?: InstalledPluginProjectGenerationOwner;
-  projectQueries?: InstalledPluginProjectQueryOwner;
-  projectGenerationReads?: ProjectGenerationReadApplicationService;
-  requests: InstalledPluginRequestOwner;
-  extensions: ExtensionConfigurationApplicationService;
-  extensionTasks: ExtensionTaskApplicationService;
-  extensionReads: ExtensionReadApplicationService;
-  close(): Promise<void>;
-}>;
+export type InstalledPluginTaskRuntime = InstalledPluginTaskRuntimeCore;
 
 /** Uses the same real parent store as ordinary Runs. This neither funds accounts nor publishes deployments. */
 export async function createInstalledPluginTaskRuntime(
@@ -106,22 +88,10 @@ export async function createInstalledPluginTaskRuntime(
     { fetch: dependencies.fetch },
   );
   let requests: InstalledPluginRequestOwner | undefined;
-  let owner: InstalledPluginTaskActionOwner | undefined;
-  let projectGenerations: InstalledPluginProjectGenerationOwner | undefined;
-  let projectQueries: InstalledPluginProjectQueryOwner | undefined;
+  let core: InstalledPluginTaskRuntimeCore | undefined;
   let metadata: InstalledPluginConfigurationMetadata | undefined;
   try {
     const ledger = dependencies.store.pluginInstallationStore();
-    await ledger.migrate();
-    const extensions = dependencies.store.extensionStore();
-    await extensions.migrate();
-    await extensions.migratePluginAdmissions();
-    await extensions.migrateCredits();
-    if (generations !== undefined) await extensions.migrateProjectGenerations();
-    if (queries !== undefined) {
-      await extensions.migrateProjectQueries();
-      await extensions.enableProjectGenerationReads();
-    }
     const current = () => {
       if (requests === undefined)
         throw new Error("installed_plugin_request_authority_unavailable");
@@ -243,175 +213,38 @@ export async function createInstalledPluginTaskRuntime(
       currentSignal: () => current().currentSignal(),
       assertCurrent: () => current().assertCurrent(),
     });
-    const reads = bindInstalledPluginRequestOwner(
-      new ExtensionReadApplicationService({
-        runs: dependencies.store,
-        agentVersions: dependencies.store,
-        extensions,
-        operations: dependencies.store.externalOperationStore(),
-        catalog: requests.catalog,
-        host: requests.host,
-        authorization: businessAuthorization,
-        digester: dependencies.digester,
-      }),
-      requests,
-      { preparation: "configuration" },
-    );
-    const projectGenerationReads =
-      queries === undefined
-        ? undefined
-        : new ProjectGenerationReadApplicationService({
-            projects: dependencies.creativeProjects!.service,
-            tasks: reads,
-            extensions,
-            digester: dependencies.digester,
-          });
-    const tasks = new ExtensionTaskApplicationService({
+    core = await createInstalledPluginTaskRuntimeCore({
       store: dependencies.store,
-      extensions,
-      operations: dependencies.store.externalOperationStore(),
-      catalog: requests.catalog,
-      host: requests.host,
-      pluginQueryHost: requests.pluginQueryHost,
-      authorization: businessAuthorization,
+      requests,
+      installRoot: configuration.installRoot,
+      maximumPackages: configuration.maximumPackages,
+      publications: ui.publications,
+      profiles,
+      businessAuthorization,
+      uiAuthorization: authorization,
+      authorizePackage,
+      creditQuotes: quotes,
       clock: dependencies.clock,
       ids: dependencies.ids,
       digester: dependencies.digester,
-      creditQuotes: quotes,
-      ...(projectGenerationReads === undefined
+      ...(dependencies.creativeProjects === undefined
         ? {}
-        : { projectGenerationReads }),
-      ...(generations === undefined && queries === undefined
+        : { creativeProjects: dependencies.creativeProjects }),
+      ...(dependencies.metadataHostUiServices === undefined
         ? {}
-        : {
-            creativeProjects: {
-              store: (generations ?? queries)!.store,
-              authorization: (generations ?? queries)!.authorization,
-            },
-          }),
+        : { metadataHostUiServices: dependencies.metadataHostUiServices }),
     });
-    const configurationService = bindInstalledPluginRequestOwner(
-      new ExtensionConfigurationApplicationService({
-        store: extensions,
-        catalog: requests.catalog,
-        host: requests.host,
-        authorization: businessAuthorization,
-        clock: dependencies.clock,
-        digester: dependencies.digester,
-      }),
-      requests,
-      { preparation: "configuration" },
-    );
-    bindInstalledPluginRequestOwner(tasks, requests);
-    const committedTasks = new PluginUiCommittedTaskAuthority({
-      extensions,
-      runs: dependencies.store,
-      digester: dependencies.digester,
-      ...(queries === undefined
-        ? {}
-        : {
-            projectQueries: {
-              publications: queries.publications,
-              projects: queries.store,
-              operations: dependencies.store.externalOperationStore(),
-            },
-          }),
-      ...(generations === undefined
-        ? {}
-        : {
-            projectGenerations: {
-              publications: generations.publications,
-              projects: generations.store,
-            },
-          }),
-    });
-    owner = new InstalledPluginTaskActionOwner({
-      installRoot: configuration.installRoot,
-      installations: ledger,
-      tasks,
-      committedTasks,
-      profiles,
-      authorization,
-      resolveActor: (identity, signal) =>
-        current().resolveActor(identity, signal),
-      authorizePackage,
-      clock: dependencies.clock,
-      ids: { nextId: () => randomBytes(32).toString("base64url") },
-      maximumPackages: configuration.maximumPackages,
-    });
-    if (generations !== undefined)
-      projectGenerations = new InstalledPluginProjectGenerationOwner(
-        {
-          installRoot: configuration.installRoot,
-          publications: generations.publications,
-          installations: ledger,
-          projects: generations.store,
-          tasks,
-          taskOwner: owner,
-          committedTasks,
-          profiles,
-          authorization,
-          resolveActor: (identity, signal) =>
-            current().resolveActor(identity, signal),
-          authorizePackage,
-          requestSignal: () => current().currentSignal(),
-          clock: dependencies.clock,
-          ids: { nextId: () => randomBytes(32).toString("base64url") },
-          digester: dependencies.digester,
-          maximumInvocations: configuration.maximumPackages,
-        },
-        dependencies.metadataHostUiServices,
-      );
-    if (queries !== undefined)
-      projectQueries = new InstalledPluginProjectQueryOwner(
-        {
-          installRoot: configuration.installRoot,
-          publications: queries.publications,
-          installations: ledger,
-          generationReads: projectGenerationReads!,
-          tasks,
-          taskOwner: owner,
-          committedTasks,
-          profiles,
-          authorization,
-          resolveActor: (identity, signal) =>
-            current().resolveActor(identity, signal),
-          authorizePackage,
-          requestSignal: () => current().currentSignal(),
-          clock: dependencies.clock,
-          ids: { nextId: () => randomBytes(32).toString("base64url") },
-          digester: dependencies.digester,
-          maximumInvocations: configuration.maximumPackages,
-        },
-        projectGenerations?.hostUiServices ??
-          dependencies.metadataHostUiServices,
-      );
-    const actualOwner = owner,
+    const actualCore = core,
       actualRequests = requests,
       actualMetadata = metadata;
-    const actualGenerations = projectGenerations;
-    const actualQueries = projectQueries;
     let closing: Promise<void> | null = null;
     return Object.freeze({
-      owner: actualOwner,
-      ...(actualGenerations === undefined
-        ? {}
-        : { projectGenerations: actualGenerations }),
-      ...(actualQueries === undefined ? {} : { projectQueries: actualQueries }),
-      ...(projectGenerationReads === undefined
-        ? {}
-        : { projectGenerationReads }),
-      requests: actualRequests,
-      extensions: configurationService,
-      extensionTasks: tasks,
-      extensionReads: reads,
+      ...actualCore,
       close: () =>
         (closing ??= closeAll([
           // Withdraw request authority synchronously before joining the actual task/Node owner.
           () => actualRequests.close(),
-          () => actualQueries?.close(),
-          () => actualGenerations?.close(),
-          () => actualOwner.close(),
+          () => actualCore.close(),
           () => actualMetadata.close(),
           () => peer.close(),
           () => http.close(),
@@ -421,9 +254,7 @@ export async function createInstalledPluginTaskRuntime(
     try {
       await closeAll([
         () => requests?.close(),
-        () => projectQueries?.close(),
-        () => projectGenerations?.close(),
-        () => owner?.close(),
+        () => core?.close(),
         () => metadata?.close(),
         () => peer.close(),
         () => http.close(),

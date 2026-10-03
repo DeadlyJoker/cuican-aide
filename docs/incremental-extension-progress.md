@@ -6,6 +6,14 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：共享安装任务核心与 SQLite 执行机制
+
+将原 Production 任务、生成和查询的实际 Application/owner 装配提取为共享核心，支持原 SQLite/PostgreSQL 并借用实际签发的 request owner；宿主显式提供 profile、授权和报价。Production 身份、严格配置、peer 与 HTTP authority 保留。核心不创建钱包、资金或身份，metadata-only 仍不能执行；关闭等待真实操作，迟到读取拒绝，真实 COMMIT 保留原 opaque 成功回执。Native Main 的执行 opt-in、生成/查询 owner 和三类恢复尚未接通，不能因共享机制完成而标记短剧可执行。协议与验证范围见[共享任务核心](./installed-plugin-task-runtime-core.md)。
+
+新真实 SQLite **10/10**、原 requests **9/9**、查询前置装配 **5/5**、原实际短剧 5.0 ESM/PG metadata **12/12**和原 Production Main/Control/BFF/Worker 进程 **1/1**通过。既有双库组合首轮 **138 项通过**，一项旧 reader 前提缺失在 HEAD 也复现，补齐真实 metadata-only reader 后保留原错误和零 SQL/身份读取断言；首轮八项 ESM 跳过及默认组合两个 PG 跳过均已在后续实际专项执行，默认组合其余 **88 项通过**。组间有重叠，不相加，原失败/跳过日志保留。Control 类型、boundary、license 和格式检查通过；统一证据为 `output/extensions/checks/installed-task-core-proof-20261004.json`。
+
+所有资金、定价、peer readiness 与供应商/模型响应仍为明确具名夹具，不是人类真实收费或 Native 在线执行。原前端、账户、设置、两侧栏、SDK、正式资产、生产映射与旧发行包摘要一致，当前用户设置页已实查仍可见；原服务保留。自有 PG 在全部测试消费者结束后正常停止并清理，旧进程 proof 恢复原字节。真实个人钱包/价格/结算、Native 付费入口及 Worker、可用供应商在线 S0、打包完整链路和 E5 继续按原目标实施；本轮没有再次调用原 ComfyUI 服务。
+
 ## 2026-10-04：Native 私有审批、Main 与选用恢复
 
 原 Native factory 增加严格独立的 approval/bootstrap v2，`projects` 仅接受有界项目数据，v1 字段、序列化和无 opt-in 行为保持。Main 在原 Standalone SQLite 分支接入项目元数据、历史读取、图片选用与选用恢复，精确绑定实际 LocalActor 和本地 scope；每类 source publication 独立批准，纯预检先于 SQL/registry。恢复复用原 SQLite journal 和实际请求 owner，不授予生成、供应商查询、钱包或定价权限。原前端、账户、设置、两侧栏、共享 CSS、SDK 与旧独立发行包未修改，具体协议见[Native 接线](./native-plugin-history-integration.md)。

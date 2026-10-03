@@ -336,6 +336,13 @@ export class InstalledPluginRequestOwner {
   }
 }
 
+/** Only this module's issued request owners carry the actual private HTTP scope. */
+export function isInstalledPluginRequestOwner(
+  input: unknown,
+): input is InstalledPluginRequestOwner {
+  return input !== null && typeof input === "object" && owners.has(input);
+}
+
 /** Only actual host-created Application instances acquire this private HTTP scope. */
 export function bindInstalledPluginRequestOwner<
   T extends
