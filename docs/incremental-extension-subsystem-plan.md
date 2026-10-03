@@ -2,7 +2,7 @@
 
 状态：已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
-2026-10-04 最新范围：独立短剧 9.0.0 已通过原完整 Web App/Main/BFF 的三类原请求冷恢复和实际选用重启重放，生成/查询仅 stage 与 hydrate；[精确证据与未完成项](./incremental-extension-progress.md)保留 S0/E5、Native、真实钱包/定价及外部 API 的验收边界。
+2026-10-04 最新范围：独立短剧 9.0.0 已通过原完整 Web App/Main/BFF 的三类原请求冷恢复和实际选用重启重放，生成/查询仅 stage 与 hydrate。Native 已增量接通独立私有审批 v2、Main、历史读取和选用恢复日志，保留 v1 与原前端；具体范围见[Native 接线](./native-plugin-history-integration.md)。[精确证据与未完成项](./incremental-extension-progress.md)保留 S0/E5、Native 付费执行及打包全链路、真实钱包/定价及外部 API 的验收边界。
 
 2026-10-02 范围补充：用户明确插件必须可插拔，可独立开发并安装。下文 E0–E5 的静态调用试点是已有阶段范围；随宿主构建与排除动态安装的约束不再代表最终交付。后续优先按[可安装插件协议与实施顺序](./installable-plugin-protocol-plan.md)补齐公开 SDK、实际包安装与 Node/UI 加载，再把短剧业务模块作为独立包接入；现有首页、团队、聊天及旧执行绑定保持兼容。
 
@@ -12,7 +12,7 @@
 
 用户补充的 shuohao-skills 与 Reelbench 参考已整理为[短剧工作台参考结论](./short-drama-workbench-reference.md)。后续按项目、阶段成果与资产修订组织短剧插件；当前实施顺序仍为先跑通正式 API / Agent 流程，再细化产品形态。
 
-调用、升级恢复及同一次生产 UI 到实际 Worker 的闭环已经取得执行证据，后续[工作台产品方案](./short-drama-workbench-product-plan.md)明确了 S0 项目/概念图、修订与原 Run/operation 的关系、页面动作及逐阶段门槛。项目 Domain、Application、实际 SQLite/PostgreSQL 存储及公共 HTTP/BFF/Client 服务已实现；安装插件的[项目动作协议与 SDK helper](./installed-plugin-creative-project-actions.md)、项目生成事务关联及只读历史也已接通。2026-10-04 已实现[生成就绪检查和原会话准备](./installed-plugin-generation-context-actions.md)、独立短剧 6.0.0 的原操作查询，以及 [7.0.0 的确切图片选用](./project-generation-selection-protocol.md)，关闭模块后保留原请求。[持久恢复协议](./plugin-ui-durable-recovery-protocol.md)现已接入正式 Production Main，实际三次进程启动验证三类原请求冷恢复、选用提交确认失败及原键重放；生成/查询仅验证装配与暂存，Standalone/Native 未接线。完整 App 在线生成、真实个人钱包与定价仍未联合验收；进程专项不替代完整 App 的同次生成链，也不替代下表 E5 的实际企业 API 复用验收。
+调用、升级恢复及同一次生产 UI 到实际 Worker 的闭环已经取得执行证据，后续[工作台产品方案](./short-drama-workbench-product-plan.md)明确了 S0 项目/概念图、修订与原 Run/operation 的关系、页面动作及逐阶段门槛。项目 Domain、Application、实际 SQLite/PostgreSQL 存储及公共 HTTP/BFF/Client 服务已实现；安装插件的[项目动作协议与 SDK helper](./installed-plugin-creative-project-actions.md)、项目生成事务关联及只读历史也已接通。2026-10-04 已实现[生成就绪检查和原会话准备](./installed-plugin-generation-context-actions.md)、独立短剧 6.0.0 的原操作查询，以及 [7.0.0 的确切图片选用](./project-generation-selection-protocol.md)，关闭模块后保留原请求。[持久恢复协议](./plugin-ui-durable-recovery-protocol.md)现已接入正式 Production Main，实际三次进程启动验证三类原请求冷恢复、选用提交确认失败及原键重放；生成/查询仅验证装配与暂存。Standalone/Native 的独立私有审批现已接通历史读取和选用恢复，不授予生成、供应商查询或资金权威。完整 App 在线生成、真实个人钱包与定价仍未联合验收；进程专项不替代完整 App 的同次生成链，也不替代下表 E5 的实际企业 API 复用验收。
 
 当前发布、standalone 及原生桌面单用户入口的配置、启动顺序、历史构建保留、打包版自动历史宿主、已核验旧配置的升级衔接与精确历史查询接线见[进程启动说明](./extension-process-startup.md)；生产多用户、通用配置迁移及完整短剧产品界面仍未交付。
 

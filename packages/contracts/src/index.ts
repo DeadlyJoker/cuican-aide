@@ -35,6 +35,7 @@ export * from "./project-generation-context-ui-action-contract.ts";
 export * from "./project-generation-host-context-contract.ts";
 export * from "./project-generation-selection-host-context-contract.ts";
 export * from "./plugin-ui-recovery-contract.ts";
+export * from "./desktop-project-history-contract.ts";
 export * from "./plugin-control-contract.ts";
 export * from "./plugin-source-control-contract.ts";
 export * from "./extension-host-api.ts";

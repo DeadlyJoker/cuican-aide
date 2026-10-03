@@ -6,6 +6,8 @@ import type { ActorContext } from "@crewon/application";
 import {
   parsePluginSourceView,
   parsePluginControlAssetPath,
+  parseDesktopProjectHistoryConfiguration,
+  type DesktopProjectHistoryConfiguration,
 } from "@crewon/contracts";
 import {
   parsePluginProfileScope,
@@ -33,8 +35,7 @@ export type DesktopPluginPublication = Readonly<{
   publicAssets: readonly string[];
 }>;
 /** Native-owned local-device authority, never a cloud account or a renderer profile selector. */
-export type DesktopPluginConfiguration = Readonly<{
-  schemaVersion: "crewon.desktop-plugin-bootstrap.v1";
+type DesktopPluginConfigurationBase = Readonly<{
   actor: ActorContext;
   scope: PluginProfileScope;
   authorityEpoch: string;
@@ -42,6 +43,14 @@ export type DesktopPluginConfiguration = Readonly<{
   sources: readonly DesktopPluginSource[];
   publications: readonly DesktopPluginPublication[];
 }>;
+export type DesktopPluginConfiguration = DesktopPluginConfigurationBase &
+  (
+    | Readonly<{ schemaVersion: "crewon.desktop-plugin-bootstrap.v1" }>
+    | Readonly<{
+        schemaVersion: "crewon.desktop-plugin-bootstrap.v2";
+        projects: DesktopProjectHistoryConfiguration;
+      }>
+  );
 const parsed = new WeakSet<object>();
 const MAX_BYTES = 256 * 1024;
 
@@ -51,6 +60,12 @@ export function parseDesktopPluginConfiguration(
   if (input !== null && typeof input === "object" && parsed.has(input))
     return input as DesktopPluginConfiguration;
   try {
+    const schema =
+      input !== null && typeof input === "object"
+        ? Object.getOwnPropertyDescriptor(input, "schemaVersion")
+        : undefined;
+    if (!schema?.enumerable || !Object.hasOwn(schema, "value")) invalid();
+    const v2 = schema.value === "crewon.desktop-plugin-bootstrap.v2";
     const value = pluginSecurityRecord(input, [
       "schemaVersion",
       "actor",
@@ -59,9 +74,10 @@ export function parseDesktopPluginConfiguration(
       "installRoot",
       "sources",
       "publications",
+      ...(v2 ? ["projects"] : []),
     ]);
     if (
-      value.schemaVersion !== "crewon.desktop-plugin-bootstrap.v1" ||
+      (!v2 && value.schemaVersion !== "crewon.desktop-plugin-bootstrap.v1") ||
       typeof value.authorityEpoch !== "string" ||
       !/^[A-Za-z0-9_-]{32,128}$/u.test(value.authorityEpoch)
     )
@@ -156,15 +172,28 @@ export function parseDesktopPluginConfiguration(
       publications.length
     )
       invalid();
-    const configuration = Object.freeze({
-      schemaVersion: "crewon.desktop-plugin-bootstrap.v1" as const,
+    const common = {
       actor,
       scope,
       authorityEpoch: value.authorityEpoch as string,
       installRoot: desktopPluginPrivatePath(value.installRoot),
       sources: Object.freeze(sources),
       publications: Object.freeze(publications),
-    });
+    };
+    const configuration = Object.freeze(
+      v2
+        ? {
+            schemaVersion: "crewon.desktop-plugin-bootstrap.v2" as const,
+            ...common,
+            projects: parseDesktopProjectHistoryConfiguration(value.projects, {
+              publications,
+            }),
+          }
+        : {
+            schemaVersion: "crewon.desktop-plugin-bootstrap.v1" as const,
+            ...common,
+          },
+    );
     if (Buffer.byteLength(JSON.stringify(configuration)) > MAX_BYTES) invalid();
     parsed.add(configuration);
     return configuration;

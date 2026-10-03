@@ -5,6 +5,7 @@ import type {
   ActorContext,
   CreativeProjectAuthorizationPort,
   InvokePluginUiActionCommand,
+  PluginUiApplicationService,
 } from "@crewon/application";
 import { installLocalPluginPackage } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
@@ -21,6 +22,7 @@ import { parseDesktopPluginConfiguration } from "./desktop-plugin-configuration.
 import { createDesktopPluginRuntime } from "./desktop-plugin-runtime.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import type { ControlApiRequestContext } from "./control-api-ports.ts";
+import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 
 export const nativeHistoryReadAction =
   "crewon.project-generation-reads.v1.getConceptGeneration";
@@ -38,6 +40,8 @@ export async function nativeProjectHistoryFixture(
   options: Readonly<{
     requiredRecovery?: boolean;
     requiredHistory?: boolean;
+    selectionRecovery?: boolean;
+    requiredExecution?: boolean;
   }> = {},
 ) {
   let runtime:
@@ -59,10 +63,24 @@ export async function nativeProjectHistoryFixture(
     pluginId: "test.native-historical-image-ui",
     uiOnly: true,
     requires: [
-      ...(options.requiredRecovery
+      ...(options.requiredRecovery || options.selectionRecovery
         ? [
             {
               service: "crewon.plugin-ui-recovery",
+              apiVersion: "1",
+              optional: !options.requiredRecovery,
+            },
+          ]
+        : []),
+      ...(options.requiredExecution
+        ? [
+            {
+              service: "crewon.project-generations",
+              apiVersion: "1",
+              optional: false,
+            },
+            {
+              service: "crewon.project-generation-queries",
               apiVersion: "1",
               optional: false,
             },
@@ -141,6 +159,13 @@ export async function nativeProjectHistoryFixture(
     packageDigest: source.packageDigest,
     contributionId: "workbench",
   }));
+  const recoveryConfiguration: PluginUiRecoveryConfiguration = {
+    version: "crewon.plugin-ui-recovery.v1",
+    publications: publications.map((publication) => ({
+      ...publication,
+      actions: [nativeHistorySelectAction],
+    })),
+  };
   const configuration = parseDesktopPluginConfiguration({
     schemaVersion: "crewon.desktop-plugin-bootstrap.v1",
     actor: history.actor,
@@ -220,7 +245,12 @@ export async function nativeProjectHistoryFixture(
           }),
     });
     runtime = await createDesktopPluginRuntime(
-      { configuration },
+      {
+        configuration,
+        ...(options.selectionRecovery
+          ? { uiRecovery: recoveryConfiguration }
+          : {}),
+      },
       {
         store: parent,
         identity,
@@ -284,6 +314,44 @@ export async function nativeProjectHistoryFixture(
       ),
     };
   }
+  async function getRecovery(
+    mountRef: string,
+    options: Readonly<{
+      request?: ControlApiRequestContext;
+      actor?: ActorContext;
+    }> = {},
+  ) {
+    assert.ok(runtime?.ui.getRecovery);
+    assert.ok(runtime.ui.recoveryAuthenticatedRequest);
+    const actor = options.actor ?? history.actor;
+    return runtime.ui.recoveryAuthenticatedRequest(
+      options.request ?? {
+        ...request(),
+        method: "GET",
+        url: `/api/v1/plugins/ui/mounts/${mountRef}/recovery`,
+      },
+      actor,
+      undefined,
+      () => runtime!.ui.getRecovery!(actor, { mountRef }),
+    );
+  }
+  async function stageRecovery(
+    command: Parameters<PluginUiApplicationService["stageRecovery"]>[1],
+    options: Readonly<{
+      request?: ControlApiRequestContext;
+      actor?: ActorContext;
+    }> = {},
+  ) {
+    assert.ok(runtime?.ui.stageRecovery);
+    assert.ok(runtime.ui.recoveryAuthenticatedRequest);
+    const actor = options.actor ?? history.actor;
+    return runtime.ui.recoveryAuthenticatedRequest(
+      options.request ?? request(),
+      actor,
+      undefined,
+      () => runtime!.ui.stageRecovery!(actor, command),
+    );
+  }
   const locator = {
     projectId: history.reference.projectId,
     assetId: history.reference.assetId,
@@ -327,6 +395,9 @@ export async function nativeProjectHistoryFixture(
     v2,
     scope,
     configuration,
+    publications,
+    recoveryConfiguration,
+    authorization,
     identity,
     open,
     close,
@@ -334,6 +405,8 @@ export async function nativeProjectHistoryFixture(
     mount,
     invoke,
     request,
+    getRecovery,
+    stageRecovery,
     locator,
     selectionInput,
     effects,

@@ -14,9 +14,11 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
+  parseDesktopProjectHistoryConfiguration,
   parseExtensionHostActor,
   parsePluginControlAssetPath,
   parsePluginSourceView,
+  type DesktopProjectHistoryConfiguration,
   type ExtensionHostActor,
 } from "@crewon/contracts";
 import {
@@ -28,8 +30,12 @@ import { DESKTOP_RUNTIME_OWNER } from "./desktopExtensionRuntime.ts";
 export const DESKTOP_PLUGIN_APPROVAL_FILE = "plugin-approvals.json";
 export const DESKTOP_PLUGIN_APPROVAL_SCHEMA =
   "crewon.desktop-plugin-approval.v1";
+export const DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2 =
+  "crewon.desktop-plugin-approval.v2";
 export const DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA =
   "crewon.desktop-plugin-bootstrap.v1";
+export const DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2 =
+  "crewon.desktop-plugin-bootstrap.v2";
 const PROFILE_FILE = "plugin-profile.json";
 const PROFILE_SCHEMA = "crewon.desktop-plugin-profile.v1";
 const MAX_BYTES = 128 * 1024;
@@ -48,8 +54,7 @@ type Publication = Readonly<{
   packageDigest: string;
   publicAssets: readonly string[];
 }>;
-export type DesktopPluginBootstrapManifest = Readonly<{
-  schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA;
+type BootstrapManifestFields = Readonly<{
   actor: ExtensionHostActor;
   scope: PluginProfileScope;
   authorityEpoch: string;
@@ -57,6 +62,25 @@ export type DesktopPluginBootstrapManifest = Readonly<{
   sources: readonly Source[];
   publications: readonly Publication[];
 }>;
+export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
+  (
+    | Readonly<{ schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA }>
+    | Readonly<{
+        schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2;
+        projects: DesktopProjectHistoryConfiguration;
+      }>
+  );
+type ApprovalSettings = Readonly<{
+  sources: readonly Source[];
+  publications: readonly Publication[];
+}> &
+  (
+    | Readonly<{ schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA }>
+    | Readonly<{
+        schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2;
+        projects: DesktopProjectHistoryConfiguration;
+      }>
+  );
 export type DesktopPluginBootstrap = Readonly<{
   bootstrapPath: string;
   environment: Readonly<{ CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: string }>;
@@ -162,15 +186,25 @@ export async function prepareDesktopPluginBootstrap(
       sessionEntropy: entropy,
     }),
   );
-  const manifest: DesktopPluginBootstrapManifest = Object.freeze({
-    schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA,
+  const manifestFields: BootstrapManifestFields = {
     actor,
     scope,
     authorityEpoch,
     installRoot,
     sources: settings.sources,
     publications: settings.publications,
-  });
+  };
+  const manifest: DesktopPluginBootstrapManifest =
+    settings.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+      ? Object.freeze({
+          schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2,
+          ...manifestFields,
+          projects: settings.projects,
+        })
+      : Object.freeze({
+          schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA,
+          ...manifestFields,
+        });
   const bytes = Buffer.from(JSON.stringify(manifest));
   if (bytes.byteLength > MAX_BYTES) invalid("size");
   const bootstrapPath = join(
@@ -226,9 +260,22 @@ export async function prepareDesktopPluginBootstrap(
   return result;
 }
 
-function parseApproval(input: unknown) {
-  const value = record(input, ["schemaVersion", "sources", "publications"]);
-  if (value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA)
+function parseApproval(input: unknown): ApprovalSettings {
+  if (input === null || typeof input !== "object") invalid("shape");
+  const schemaVersion = Object.getOwnPropertyDescriptor(
+    input,
+    "schemaVersion",
+  )?.value;
+  const value = record(
+    input,
+    schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+      ? ["schemaVersion", "sources", "publications", "projects"]
+      : ["schemaVersion", "sources", "publications"],
+  );
+  if (
+    value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA &&
+    value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+  )
     invalid("approval");
   const ids = new Set<string>(),
     directories = new Set<string>(),
@@ -318,10 +365,22 @@ function parseApproval(input: unknown) {
       publicAssets: Object.freeze(publicAssets),
     });
   });
-  return Object.freeze({
+  const settings = {
     sources: Object.freeze(sources),
     publications: Object.freeze(publications),
-  });
+  };
+  return value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+    ? Object.freeze({
+        schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2,
+        ...settings,
+        projects: parseDesktopProjectHistoryConfiguration(value.projects, {
+          publications: settings.publications,
+        }),
+      })
+    : Object.freeze({
+        schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA,
+        ...settings,
+      });
 }
 
 function privateFile(path: string, maximum: number): FileSnapshot {

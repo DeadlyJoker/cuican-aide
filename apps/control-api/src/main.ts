@@ -33,6 +33,7 @@ import {
   createStandaloneControlApiWithPlugins,
 } from "./standalone-composition.ts";
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
+import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { loadDesktopInstalledPluginActivationEnvironment } from "./desktop-installed-plugin-activation-environment.ts";
 import { resolveControlExtensionWorkerEnvironment } from "./extension-worker-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
@@ -273,15 +274,22 @@ try {
       });
     } else {
       const databasePath = requiredEnvironment("CREWON_CONTROL_DB_PATH");
+      const desktopPlugins =
+        desktopPluginBootstrapPath === undefined
+          ? undefined
+          : await loadDesktopPluginConfiguration(desktopPluginBootstrapPath, {
+              actor,
+            });
       runtime =
-        desktopPluginBootstrapPath !== undefined
+        desktopPlugins !== undefined
           ? await createStandaloneControlApiWithPlugins({
               ...standaloneConfig,
               databasePath,
-              desktopPlugins: await loadDesktopPluginConfiguration(
-                desktopPluginBootstrapPath,
-                { actor },
-              ),
+              desktopPlugins,
+              ...composeDesktopProjectStartup({
+                configuration: desktopPlugins,
+                actor,
+              }),
               ...(desktopPluginActivation === undefined
                 ? {}
                 : { desktopPluginActivation }),

@@ -41,6 +41,8 @@ import {
   createDesktopPluginRuntime,
   type DesktopPluginRuntime,
 } from "./desktop-plugin-runtime.ts";
+import { captureDesktopProjectRecoveryStartup } from "./desktop-project-startup.ts";
+import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 import {
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
@@ -220,6 +222,7 @@ export async function createStandaloneControlApiWithPlugins(
     Readonly<{
       desktopPlugins: DesktopPluginConfiguration;
       desktopPluginActivation?: DesktopInstalledPluginActivationConfig;
+      uiRecovery?: PluginUiRecoveryConfiguration;
       extensionWorker?: ExtensionWorkerConfig;
     }>,
 ): Promise<StandaloneControlApiRuntime> {
@@ -234,6 +237,13 @@ export async function createStandaloneControlApiWithPlugins(
     })
   )
     throw new Error("desktop_plugin_owner_mismatch");
+  const uiRecovery = captureDesktopProjectRecoveryStartup({
+    runtimeConfiguration: config,
+    publications: configuration.publications,
+    projects: captureStandaloneCreativeProjectCompositionConfig(
+      config.creativeProjects,
+    ),
+  });
   const pinned = pinExtensionCompositionConfig(config);
   desktopProjectUiPublications(
     pinned.creativeProjects,
@@ -253,6 +263,7 @@ export async function createStandaloneControlApiWithPlugins(
     const runtime = await createDesktopPluginRuntime(
       {
         configuration,
+        ...(uiRecovery === undefined ? {} : { uiRecovery }),
         ...(config.desktopPluginActivation === undefined
           ? {}
           : { activation: config.desktopPluginActivation }),

@@ -6,6 +6,18 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 私有审批、Main 与选用恢复
+
+原 Native factory 增加严格独立的 approval/bootstrap v2，`projects` 仅接受有界项目数据，v1 字段、序列化和无 opt-in 行为保持。Main 在原 Standalone SQLite 分支接入项目元数据、历史读取、图片选用与选用恢复，精确绑定实际 LocalActor 和本地 scope；每类 source publication 独立批准，纯预检先于 SQL/registry。恢复复用原 SQLite journal 和实际请求 owner，不授予生成、供应商查询、钱包或定价权限。原前端、账户、设置、两侧栏、共享 CSS、SDK 与旧独立发行包未修改，具体协议见[Native 接线](./native-plugin-history-integration.md)。
+
+真实原 `main.ts` 集成 **1/1、零跳过**：同一文件 SQLite 上实际启动并物理停止两轮 Main，通过原 HTTP/ControlClient 读取真实已保存历史、选用第二张图片、保存 accepted 请求、冷重启读取原回执并显式原 key/输入/旧 CAS 重放。旧 mount/session 和错误 CSRF 拒绝，当前图片与原回执分别读取；accepted 日志保留首次 committed 回执及一次派发计数，业务原键重放仍返回 replayed。选用回执与 intent 各一条，effects 和具名 wallet 基线不变，没有新 Run、积分预留或 provider transport；两轮子进程及端口均实际关闭。
+
+新私有 contract **16/16**、全 contracts **373/373**、原/新 Electron bootstrap **51/51**、Native startup/历史/选用/恢复 **38/38**、原 Native runtime/配置/安装/activation **36/36**、原 Electron runtime **44/44**通过，分组有重叠、不相加，均零失败、零跳过。Control API/Host 类型、Host 构建、boundary、license、格式与 diff 检查通过。原 HTTP 契约的路径冻结测试补齐此前已实现的 selection GET/PUT 路径，没有新增公共路由。Main 首轮夹具 Origin 被真实客户端拒绝，改用实际 loopback HTTP Origin；随后修正新测试对 accepted sticky 回执和计数的误解，产品协议和保护条件未放宽。统一证据为 `output/extensions/checks/native-project-startup-proof-20261004.json`。
+
+Main 使用真实安装源字节、SQLite 和 HTTP，但审批、历史 target 身份、资金与 provider 结果为具名夹具，不是 packaged Electron/Main/preload/App 全链路或真实付费执行。未更新用户审批、安装选择、生产项目映射或收费配置。短剧 8/9/10 仍缺 Native mandatory 生成/查询 owner，不能因选用恢复接通而标记 ready。原服务保留；真实个人钱包/价格/结算、Native 付费生成/查询与 Worker、可用供应商的在线 S0、打包完整流程及 E5 第二个真实企业 API 继续按原目标验收。
+
+原 ComfyUI 地址本轮只读重验：首页、`/queue` 和 `/system_stats` 仍返回 HTTP 404，没有生成 POST。证据为 `output/extensions/checks/comfyui-original-service-availability-20261004-native-startup.json`，不能把本轮 Main 历史/选用验证当作在线生成已跑通。
+
 ## 2026-10-04：Native 历史读取与选用的真实装配
 
 已将原历史读取与选用 action owner 提取为共享核心，Native 使用实际 SQLite、`StandaloneIdentity`、安装审批和已绑定请求 owner；Web 保留原 Production 身份。显式项目读取配置增加独立的历史授权，核对持久 Run/binding、原安装准入和 principal/actor/profile/package。元数据、读取、选用批准独立，生成、供应商查询与资金权限仍未授予。原前端和 SDK 未修改。

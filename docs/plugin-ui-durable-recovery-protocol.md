@@ -1,6 +1,6 @@
 # 已安装插件原请求持久恢复协议
 
-日期：2026-10-04。状态：协议、SQL 日志、网页/桌面 renderer 宿主及正式 Production Main 启动配置已实现。独立短剧 9.0.0 已在原完整 Web App、Main/BFF 和全新浏览器 profile 中验证三类冷恢复、实际选用提交及进程重启后的原键重放；生成/查询仅 stage 与 hydrate，未执行其业务动作。Standalone/Native 未接入此配置，完整 App 在线生成及打包版流程仍未验收，不代表 S0 已完成。当前证据见[实施进度](./incremental-extension-progress.md)。
+日期：2026-10-04。状态：协议、SQL 日志、网页/桌面 renderer 宿主及正式 Production Main 启动配置已实现。独立短剧 9.0.0 已在原完整 Web App、Main/BFF 和全新浏览器 profile 中验证三类冷恢复、实际选用提交及进程重启后的原键重放；生成/查询仅 stage 与 hydrate，未执行其业务动作。Standalone/Native 通过独立私有审批 v2 接通选用恢复，不接收 Production 配置或付费生成/查询权限。完整 App 在线生成及打包版流程仍未验收，不代表 S0 已完成。当前证据见[实施进度](./incremental-extension-progress.md)。
 
 ## 协议边界
 
@@ -58,6 +58,12 @@
 每个恢复动作必须有同一完整 source publication 的生成、查询或选用 owner 配置。读取能力必须有实际 task/configuration reader；完整生成/查询仍需要真实任务配置和批准的 UI publication。缺失这些依赖在打开业务数据库前拒绝。Main 注入与其他原 Application 服务相同的真实 `DynamicPolicyAuthorization`，不会根据部署 JSON 授权用户。
 
 可选 `CREWON_CONTROL_DATABASE_MAX_POOL_SIZE` 仅接受 Production 下的规范十进制 `1`–`64`。缺省保持原 Pool 默认值；Standalone、前导零、空白、指数或越界值拒绝。它传给原 PostgreSQL Store，不创建第二个数据库或执行循环。
+
+## Native Main 接线
+
+Native 使用固定私有 `plugin-approvals.json` 的 v2 项目配置，经原 Electron factory 校验并生成 v2 bootstrap，再由原 Main 在 Standalone SQLite 分支装配。v1 继续保持原字段和行为。审批只承载有界数据；项目元数据、历史读取、图片选用和选用恢复分别批准确切包与 contribution，不能相互借用权限。`uiRecovery` 仅允许原 `selectConceptImage` 动作，缺少同源 selection owner 时在数据库和 registry 初始化前拒绝。
+
+实际恢复 owner 借用原请求 owner 与 SQLite，不接管其生命周期。真实 session、Origin、CSRF、当前 actor/profile、source lease 和局部授权仍逐次核验；关闭等待物理调用与确认事务结束，原业务已验证的 COMMIT 保留成功。默认关闭时不获取恢复 adapter 或迁移 schema。具体私有协议、兼容测试与验收边界见[Native 接线](./native-plugin-history-integration.md)。
 
 ## 未知结果与确认
 

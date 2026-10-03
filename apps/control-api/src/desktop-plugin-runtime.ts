@@ -46,6 +46,12 @@ import {
   type DesktopProjectHistoryPluginRuntime,
 } from "./desktop-project-history-plugin-runtime.ts";
 import { combineSelectionCommittedMetadata } from "./project-generation-selection-plugin-ui-owner.ts";
+import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
+import {
+  assertDesktopPluginUiRecoveryConfiguration,
+  prepareDesktopPluginUiRecovery,
+  type DesktopPluginUiRecoveryRuntime,
+} from "./desktop-plugin-ui-recovery.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -60,6 +66,7 @@ export async function createDesktopPluginRuntime(
   input: Readonly<{
     configuration: DesktopPluginConfiguration;
     activation?: DesktopInstalledPluginActivationConfig;
+    uiRecovery?: PluginUiRecoveryConfiguration;
   }>,
   dependencies: Readonly<{
     store: SqliteRunStore;
@@ -78,6 +85,11 @@ export async function createDesktopPluginRuntime(
     throw new Error("desktop_project_generation_execution_authority_required");
   if (dependencies.creativeProjects?.pluginQueries !== undefined)
     throw new Error("desktop_project_query_execution_authority_required");
+  const recoveryConfiguration = assertDesktopPluginUiRecoveryConfiguration({
+    configuration: input.uiRecovery,
+    publications: configuration.publications,
+    selectionUi: dependencies.creativeProjects?.selectionUi,
+  });
   const registry = await createDesktopPluginSourceRegistry(configuration);
   const projectConfiguration = dependencies.creativeProjects?.pluginUi;
   const actionPublications = desktopProjectUiPublications(
@@ -94,11 +106,14 @@ export async function createDesktopPluginRuntime(
   let activation: DesktopInstalledPluginActivationOwner | null = null;
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
+  let recovery: DesktopPluginUiRecoveryRuntime | undefined;
   const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (input) =>
-      (history?.hostUiServices ?? projectUi?.hostUiServices)?.isAvailable(
-        input,
-      ) ?? false,
+      (
+        recovery?.hostUiServices ??
+        history?.hostUiServices ??
+        projectUi?.hostUiServices
+      )?.isAvailable(input) ?? false,
   });
   try {
     await ledger.migrate();
@@ -163,6 +178,22 @@ export async function createDesktopPluginRuntime(
         ? {}
         : { fallback: projectUi.hostUiServices }),
     });
+    recovery = await prepareDesktopPluginUiRecovery({
+      configuration: recoveryConfiguration,
+      publications: configuration.publications,
+      selectionUi: dependencies.creativeProjects?.selectionUi,
+      store: dependencies.store,
+      requests: configurationRuntime.requests,
+      selection: history?.selectionRuntime?.owner,
+      clock: dependencies.clock,
+      digester: dependencies.digester,
+      ...(history?.hostUiServices === undefined && projectUi === undefined
+        ? {}
+        : { fallback: history?.hostUiServices ?? projectUi!.hostUiServices }),
+      onDiagnostic: () => {
+        process.emitWarning("plugin_ui_recovery_persistence_failed");
+      },
+    });
     let closed = false;
     let closing: Promise<void> | null = null;
     const physical = new Set<Promise<unknown>>();
@@ -226,6 +257,7 @@ export async function createDesktopPluginRuntime(
       ids: { nextId: () => randomBytes(32).toString("base64url") },
       actions:
         history?.readRuntime?.owner.actions(businessActions) ?? businessActions,
+      ...(recovery === undefined ? {} : { recovery: recovery.service }),
       ...(history?.selectionRuntime === undefined && projectUi === undefined
         ? {}
         : {
@@ -260,6 +292,17 @@ export async function createDesktopPluginRuntime(
         call(() => application.validateMount(...args)),
       readAsset: (...args) => call(() => application.readAsset(...args)),
       closeMount: (...args) => call(() => application.closeMount(...args)),
+      ...(recovery === undefined
+        ? {}
+        : {
+            getRecovery: (
+              ...args: Parameters<PluginUiApplicationService["getRecovery"]>
+            ) => call(() => application.getRecovery(...args)),
+            stageRecovery: (
+              ...args: Parameters<PluginUiApplicationService["stageRecovery"]>
+            ) => call(() => application.stageRecovery(...args)),
+            recoveryAuthenticatedRequest: recovery.run,
+          }),
       invoke: (...args) => {
         if (projectUi === undefined && history?.selectionRuntime === undefined)
           return call(() => application.invoke(...args));
@@ -271,12 +314,18 @@ export async function createDesktopPluginRuntime(
         return result;
       },
       ...(history?.readRuntime === undefined &&
-      history?.selectionRuntime === undefined
+      history?.selectionRuntime === undefined &&
+      recovery === undefined
         ? {}
         : {
             invokeAuthenticatedRequest: ((request, actor, command, signal) => {
               available();
-              const invoke = () => ui.invoke(actor, command);
+              const invoke = () =>
+                recovery === undefined
+                  ? ui.invoke(actor, command)
+                  : recovery.run(request, actor, signal, () =>
+                      ui.invoke(actor, command),
+                    );
               if (
                 command.action === "crewon.project-generation-reads" ||
                 command.action.startsWith("crewon.project-generation-reads.")
@@ -333,6 +382,7 @@ export async function createDesktopPluginRuntime(
         authority.withdraw();
         return (closing = closeAll([
           () => Promise.allSettled([...physical]),
+          () => recovery?.close(),
           () => projectUi?.close(),
           () => history?.close(),
           () => ownedActivation?.close(),
@@ -345,6 +395,7 @@ export async function createDesktopPluginRuntime(
     authority.withdraw();
     try {
       await closeAll([
+        () => recovery?.close(),
         () => projectUi?.close(),
         () => history?.close(),
         () => configurationRuntime?.close(),
