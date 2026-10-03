@@ -266,6 +266,28 @@ export async function verifyInstalledPluginRelease(
     signal?: AbortSignal;
   }>,
 ): Promise<void> {
+  return verifyLoadedRelease(input, "published");
+}
+
+/** Publication preflight checks installed inputs without granting a factory permission to allocate. */
+export async function verifyInstalledPluginReleaseInputs(
+  input: Readonly<{
+    release: LoadedInstalledPluginRelease;
+    store: ParentStore;
+    signal?: AbortSignal;
+  }>,
+): Promise<void> {
+  return verifyLoadedRelease(input, "inputs");
+}
+
+async function verifyLoadedRelease(
+  input: Readonly<{
+    release: LoadedInstalledPluginRelease;
+    store: ParentStore;
+    signal?: AbortSignal;
+  }>,
+  mode: "inputs" | "published",
+): Promise<void> {
   const release = input.release,
     store = input.store;
   assertLoadedInstalledPluginRelease(release);
@@ -286,7 +308,7 @@ export async function verifyInstalledPluginRelease(
         : AbortSignal.any([suppliedSignal, lifetimeSignal]);
     for (let index = 0; index < state.entries.length; index++) {
       signal.throwIfAborted();
-      await verifyEntry(
+      await (mode === "published" ? verifyEntry : verifyEntryInputs)(
         store,
         state.entries[index]!,
         state.registrations[index]!,
@@ -295,7 +317,7 @@ export async function verifyInstalledPluginRelease(
     }
     state.lifetime.assertLive();
     signal.throwIfAborted();
-    state.store = store;
+    if (mode === "published") state.store = store;
   });
 }
 
@@ -346,6 +368,15 @@ async function verifyEntry(
     )
       fail("deployment_mismatch");
   }
+  await verifyEntryInputs(store, entry, registration, signal);
+}
+
+async function verifyEntryInputs(
+  store: ParentStore,
+  entry: InstalledPluginReleaseEntry,
+  registration: InstalledPluginBusinessRegistration,
+  signal: AbortSignal,
+): Promise<void> {
   const configuration = await store
     .extensionStore()
     .loadExtensionConfiguration({

@@ -2,7 +2,7 @@
 
 The Worker can explicitly load an installed plugin release. Without this configuration, its existing startup, default Agent, model bindings and tools follow the original path. Desktop installation management does not enable execution or billing.
 
-This is a private deployment protocol. The authority services below must be implemented and deployed by the host. The bridge does not provide a user directory, price source, wallet funding, or automatic release publication. Test authorities and test-funded Runs do not prove those production services are connected.
+This is a private deployment protocol. The authority services below must be implemented and deployed by the host. The bridge does not provide a user directory, price source or wallet funding. Release publication is a separate explicit CLI step; Worker startup does not perform it. Test authorities and test-funded Runs do not prove those production services are connected.
 
 ## Configuration
 
@@ -100,7 +100,7 @@ The loader reads the complete actual installed package without importing its Nod
 
 The actual parent Store must already contain the published original and derived Agent assets/deployments, configuration revision and installed-package ledger. After its explicit migrations, startup verifies them before registering or allocating plugin runtimes. The existing full release-bundle verification also remains required. Startup does not publish assets, activate a release, select a package, grant credits or repair missing deployment state.
 
-The existing `release-main` CLI does not yet consume this new document. Publication currently requires the existing authorized `AgentVersionReleaseApplicationService` to publish and activate the complete bundle. Automated installed-release publication is a subsequent integration step; do not treat the Worker configuration as an installation or publication command.
+The existing `release-main` CLI now accepts this configuration through an explicit installed-publication path. It requires an explicitly identified OS release operator and the exact original model bindings in the final Worker deployment set. It publishes source and derived assets through the existing Application services and activates the complete bundle once. Loading this Worker configuration alone does not install or publish a package. See [publication inputs, invocation, verification and generated-file handling](./installed-plugin-release-publication.md).
 
 Each factory creation rechecks the same Store, actual package bytes and current read approval. A different profile, materialization, compiled version, missing artifact or revoked permission fails closed. Successful runtime resources transfer to the existing runtime registry/caller; release shutdown joins pending verification/creation work without discarding a late-created resource.
 

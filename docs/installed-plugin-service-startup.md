@@ -1,5 +1,7 @@
 # 已安装插件的服务启动
 
+已安装业务的 Worker 部署与发布现采用同一个显式私有配置。原 CLI 已接入真实包读取、原模型/派生资产发布和唯一完整 bundle 激活；Worker 只验证已经发布的状态。发布操作者、当前用户执行许可、安装批准和个人积分准入分别处理，原默认 Agent 与页面样式保留。当前接线、严格输入及重放/关闭限制见 [Worker 部署](./installed-plugin-worker-deployment.md) 和[正式发布 CLI](./installed-plugin-release-publication.md)。下文较早的程序化 owner 和历史测试不代替实际当前身份、正式 Control 业务动作、报价及结算服务。
+
 Control 支持显式启用已安装插件的 UI 目录、挂载及资源读取。生产 PostgreSQL 部署复用生产请求身份和现有 Web/BFF 会话，不创建账号、profile、权限 epoch 或积分余额；正式桌面的本机 SQLite 接线见下节，使用原 Native 单机身份与受控本机审批。未配置时保留原页面和路由。
 
 Worker 的已安装业务执行另有[私有部署协议](./installed-plugin-worker-deployment.md)。它显式读取真实安装包、已经发布的 Agent/配置及当前 HTTPS 权威；安装管理、UI 发布和执行权限分别检查。该接线已有实际子进程证据，真实业务身份服务、Control 动作桥、报价与积分结算仍需部署和验收。

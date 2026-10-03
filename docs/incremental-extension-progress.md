@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：独立安装包的正式发布 CLI
+
+原 `release-main` 现在可显式消费严格的已安装插件配置和发布文档。新路径要求明确的 OS 发布操作者，包读取许可与原 Application 的发布/部署许可分别核验；未配置时沿用原 CLI/default Agent。实际包元数据在模型或数据库构造之前读取，发布前再次核验真实安装账本、原配置修订、实际字节和当前读取许可。
+
+原模型来源与派生 Agent 必须位于 main 将加载的同一完整部署集合，全文候选和版本冲突直接拒绝。通过现有 Application 发布不可变资产，随后只激活最终 bundle 一次；没有先激活原模型再切换插件的临时状态。原模型来源缺少实际 bindings 时不会凭空补造部署。发布与安装/启用、用户准入和积分分别处理。
+
+原 profile/model-catalog 分支保留。新路径的生成 manifest 纳入明确的 source bindings，先暂存本次私有文件，再于真实 COMMIT 后核对原文件及当前 active bundle。旧 A 回执在 B 激活后重放只返回真实历史结果和不可用核验，不回写 B 的绑定文件；并发改写、撤权及晚关闭不掩盖已提交的 activation。资产发布、最终 activation 及文件发布并非跨系统单事务。关闭依次等待真实发布、文件、release 和权威操作，再关闭同一父 Store。
+
+真实发布与 loader 双库专项 **30/30**，严格 CLI 输入 **11/11**，实际 CLI→Worker 子进程 **16/16**，文件/发布生命周期双库专项 **18/18**，均零失败、零跳过。子进程 setup 只准备真实安装、配置和内存编译文档；全部 Agent/部署/bundle 由唯一实际 CLI 发布。SQLite 验证两版完整 Run pin、供应商 **2 次 POST**和 default 兼容；另一个 PostgreSQL 子进程验证首次发布、重放、metadata 启动及原 default Run。身份、模型、供应商、资金额度和报价仍为具名夹具，不是在线收费验收。
+
+最终 `pnpm --filter @crewon/runtime-worker test --test-concurrency=4` **1641/1641，零失败、零跳过**，使用本轮实际临时 PostgreSQL；唯一 SDK producer 完成后才运行消费者，Krea2 的 v1/v2 明确使用同轮仓外包。Worker 类型检查、最终七入口桌面 runtime stage、仓库 boundary 和改动文件格式均通过。日志为 `installed-release-worker-full-final-20261003.log`、`installed-release-process-first-20261003.log`、`installed-plugin-release-publication-20261003.log`、`installed-release-cli-composition-20261003.log`、`installed-release-cli-input-20261003.log`，位于 `output/extensions/checks/`。全部测试 child/server/temp 已关闭；本轮 PG 清理前其他连接及测试 schema 为零，实际进程已退出、root/socket 已删除、端口可重新绑定，记录为 `installed-release-postgres-owner-20261003.json`。七入口构建不冒充 packaged.app 的插件业务验收。
+
+部署说明见[发布 CLI](./installed-plugin-release-publication.md)。Worker 启动仍不自行发布或发放积分。Control 正式业务动作与 readiness/query 桥、真实当前身份与独立积分资金/报价/结算、短剧项目持久化和在线生成、ComfyUI 当前可用性及第二个实际企业 API 仍未完成；目标保持进行中。本轮没有修改宿主页面、CSS、设置布局或既有快照。
+
 ## 2026-10-03：已安装插件的正式 Worker 执行入口
 
 新增独立的 `crewon.installed-plugin-worker.v1` 部署配置与 `crewon.installed-plugin-release.v1` 发布文档。未配置时保留原 Worker/default Agent；定义为空、未知字段、错误权限或不完整权威配置在建库前拒绝。Native 管理启动清理该执行配置，不把本机安装许可当成用户执行或积分权限。配置、HTTPS 私有协议与当前部署限制见[Worker 部署说明](./installed-plugin-worker-deployment.md)。
@@ -18,7 +32,7 @@
 
 最终 `pnpm --filter @crewon/runtime-worker test --test-concurrency=4` 使用本轮实际临时 PostgreSQL、先完成唯一 SDK producer 再启动消费者，**1584/1584，零跳过、零失败**。Worker 类型检查、原 runtime-binding 专项、Native 环境隔离 **10/10**、Native 类型、七入口桌面 runtime stage、Electron Host 构建、仓库 boundary 与全部改动源/文档格式已通过。日志为 `installed-worker-full-final-20261003.log`、`installed-worker-process-production-sealed-20261003.log`、`installed-plugin-release-loader-20261003.log`、`installed-plugin-worker-authority-lifetime-20261003.log`、`installed-worker-authority-unit-final-20261003.log`；全部位于 `output/extensions/checks/`。测试子进程、临时目录和本轮 PostgreSQL/socket 均已实际关闭清理；清理前其他连接及剩余测试 schema 为零，记录为 `installed-worker-postgres-owner-20261003.json`。本轮没有修改宿主 CSS、页面组件、设置布局或既有快照。
 
-发布仍通过既有授权 `AgentVersionReleaseApplicationService` 预先完成；`release-main` CLI 尚不消费新文档，Worker 启动不自动发布、发放积分或生成报价。Control 的正式任务动作/当前调用者与报价服务、真实独立积分资金来源/结算、短剧正式生成与持久项目、用户 ComfyUI 当前服务可用性及 E5 的第二个真实企业接口仍需继续接通。目标保持进行中。
+本节对应 `83eb61df1` 阶段，当时发布通过既有授权 `AgentVersionReleaseApplicationService` 预先完成，CLI 尚不消费新文档；该缺口现见首节。Worker 启动仍不自动发布、发放积分或生成报价。Control 的正式任务动作/当前调用者与报价服务、真实独立积分资金来源/结算、短剧正式生成与持久项目、用户 ComfyUI 当前服务可用性及 E5 的第二个真实企业接口仍需继续接通。目标保持进行中。
 
 ## 2026-10-03：桌面 SQLite 安装启动与本机管理
 

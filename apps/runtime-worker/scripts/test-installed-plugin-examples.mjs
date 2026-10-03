@@ -44,6 +44,7 @@ try {
         CREWON_TEST_BUSINESS_PLUGIN_V1_DIR: examples.v1Directory,
         CREWON_TEST_BUSINESS_PLUGIN_V2_DIR: examples.v2Directory,
         CREWON_TEST_KREA_PLUGIN_DIR: examples.kreaV1Directory,
+        CREWON_TEST_KREA_PLUGIN_V1_DIR: examples.kreaV1Directory,
         CREWON_TEST_KREA_PLUGIN_V2_DIR: examples.kreaV2Directory,
         CREWON_TEST_SHORT_DRAMA_PLUGIN_V1_DIR: examples.shortDramaV1Directory,
         CREWON_TEST_SHORT_DRAMA_PLUGIN_V2_DIR: examples.shortDramaV2Directory,

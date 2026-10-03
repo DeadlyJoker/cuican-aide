@@ -18,6 +18,7 @@ import {
 import {
   agentVersionDeploymentCandidates,
   loadAgentVersionDeployments,
+  type RuntimeBindingConfig,
 } from "./runtime-binding-config.ts";
 import {
   createConfiguredToolRuntime,
@@ -47,46 +48,64 @@ import {
   finishExtensionRecoveryRelease,
 } from "./extension-recovery-release.ts";
 import { resolveResponsesRuntimeConfiguration } from "./responses-runtime-configuration.ts";
+import { loadInstalledPluginReleaseCliInput } from "./plugins/installed-plugin-release-cli-input.ts";
+import { mergeInstalledPluginReleasePublicationInput } from "./plugins/installed-plugin-release-publication-input.ts";
+import {
+  activatePostgresInstalledPluginAgentVersionRelease,
+  activateStandaloneInstalledPluginAgentVersionRelease,
+  type InstalledPluginRuntimeReleaseActivationResult,
+} from "./installed-plugin-release-publication-composition.ts";
+import type { RuntimeAgentVersionReleaseActivationResult } from "./agent-version-release-composition.ts";
 
 const environment = Object.freeze({ ...process.env });
-const recoveryRequest = parseExtensionRecoveryReleaseRequest(environment);
 const actor = loadRuntimeReleaseActor();
 const bindingsPath =
   environment.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const route = resolveRuntimeBootstrapRoute(environment);
 const bootstrapAgent = resolveRuntimeBootstrapAgent(environment);
-const originalExtensionRelease = loadExtensionReleaseInput({
+const installedCliInput = await loadInstalledPluginReleaseCliInput({
   environment,
-  tenantId: actor.tenantId,
+  actor,
   defaultAgentVersionId: route.agentVersionId,
 });
-const retainedBuild =
-  recoveryRequest !== null &&
-  !new URL(import.meta.url).pathname.endsWith("/runtime-release.mjs")
-    ? undefined
-    : await retainInstalledExtensionBuild({
-        environment,
-        entrypointUrl: import.meta.url,
-      });
-const recoveryPreparation = await prepareExtensionRecoveryRelease({
-  request: recoveryRequest,
-  extension: originalExtensionRelease,
-  retainedBuild,
-  releaseActor: actor,
-  defaultAgentVersionId: route.agentVersionId,
-});
-const extensionRelease =
-  recoveryPreparation !== null
-    ? recoveryPreparation.extension
-    : originalExtensionRelease;
-const transport = createModelTransport(
-  environmentOr("CREWON_MODEL_ADAPTER", "responses", environment),
-  {},
-  environment,
-);
-const toolRuntime = await createConfiguredToolRuntime(environment);
+let installedInputTransferred = false;
+let transport: ReturnType<typeof createModelTransport> | undefined;
+let toolRuntime:
+  | Awaited<ReturnType<typeof createConfiguredToolRuntime>>
+  | undefined;
 
 try {
+  const recoveryRequest = parseExtensionRecoveryReleaseRequest(environment);
+  const originalExtensionRelease = loadExtensionReleaseInput({
+    environment,
+    tenantId: actor.tenantId,
+    defaultAgentVersionId: route.agentVersionId,
+  });
+  const retainedBuild =
+    recoveryRequest !== null &&
+    !new URL(import.meta.url).pathname.endsWith("/runtime-release.mjs")
+      ? undefined
+      : await retainInstalledExtensionBuild({
+          environment,
+          entrypointUrl: import.meta.url,
+        });
+  const recoveryPreparation = await prepareExtensionRecoveryRelease({
+    request: recoveryRequest,
+    extension: originalExtensionRelease,
+    retainedBuild,
+    releaseActor: actor,
+    defaultAgentVersionId: route.agentVersionId,
+  });
+  const extensionRelease =
+    recoveryPreparation !== null
+      ? recoveryPreparation.extension
+      : originalExtensionRelease;
+  transport = createModelTransport(
+    environmentOr("CREWON_MODEL_ADAPTER", "responses", environment),
+    {},
+    environment,
+  );
+  toolRuntime = await createConfiguredToolRuntime(environment);
   const common = {
     actor,
     authorization: new RuntimeReleaseAuthorization(actor),
@@ -136,7 +155,7 @@ try {
     ),
   ];
   const modelAgentVersions = modelIds.flatMap((modelId) =>
-    modelId === transport.modelId
+    modelId === common.transport.modelId
       ? []
       : modelVariantSources.flatMap((source) => {
           const agentVersionId = modelVariantAgentVersionId(
@@ -161,9 +180,7 @@ try {
   ];
   const ownsBindingsManifest =
     environment.CREWON_MODEL_CATALOG_JSON !== undefined;
-  let generatedBindings:
-    | ReturnType<typeof developmentAgentRuntimeBindings>
-    | undefined;
+  let generatedBindings: RuntimeBindingConfig | undefined;
   if (profiles.length > 0 || ownsBindingsManifest) {
     if (bindingsPath === undefined) {
       throw new Error("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_required");
@@ -215,7 +232,7 @@ try {
         : undefined
       : agentVersionDeploymentCandidates(generatedBindings);
   if (
-    extensionRelease !== null &&
+    (extensionRelease !== null || installedCliInput !== null) &&
     loadedDeployments?.some(
       (deployment) => deployment.tenantId !== actor.tenantId,
     )
@@ -236,11 +253,26 @@ try {
           tenantId: actor.tenantId,
           defaultAgentVersionId: route.agentVersionId,
         });
+  const installedCheckedRelease =
+    installedCliInput === null
+      ? undefined
+      : mergeInstalledPluginReleasePublicationInput({
+          release: installedCliInput.release,
+          existingVersions: additionalAgentVersions,
+          existingDeployments: configuredDeployments ?? [],
+          ...(generatedBindings === undefined ? {} : { generatedBindings }),
+        });
+  if (installedCheckedRelease?.generatedBindings !== undefined)
+    generatedBindings = installedCheckedRelease.generatedBindings;
   const releaseVersions =
-    checkedRelease?.additionalAgentVersions ?? additionalAgentVersions;
+    installedCheckedRelease?.additionalAgentVersions ??
+    checkedRelease?.additionalAgentVersions ??
+    additionalAgentVersions;
   const releaseDeployments =
-    checkedRelease?.agentVersionDeployments ?? configuredDeployments;
-  if (generatedBindings !== undefined)
+    installedCheckedRelease?.agentVersionDeployments ??
+    checkedRelease?.agentVersionDeployments ??
+    configuredDeployments;
+  if (installedCliInput === null && generatedBindings !== undefined)
     writeFileSync(bindingsPath!, JSON.stringify(generatedBindings), {
       encoding: "utf8",
       mode: 0o600,
@@ -255,21 +287,50 @@ try {
       : { agentVersionDeployments: releaseDeployments }),
   };
   const connectionString = environment.CREWON_CONTROL_DATABASE_URL?.trim();
-  const activated = connectionString
-    ? await activatePostgresRuntimeAgentVersionRelease({
-        ...release,
-        connectionString,
-        ...(environment.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-          ? { schema: environment.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
-          : {}),
-      })
-    : await activateStandaloneRuntimeAgentVersionRelease({
-        ...release,
-        databasePath: requiredEnvironment(
-          "CREWON_CONTROL_DB_PATH",
-          environment,
-        ),
-      });
+  const schema = environment.CREWON_CONTROL_DATABASE_SCHEMA?.trim();
+  const databasePath = connectionString
+    ? undefined
+    : requiredEnvironment("CREWON_CONTROL_DB_PATH", environment);
+  let activated:
+    | RuntimeAgentVersionReleaseActivationResult
+    | InstalledPluginRuntimeReleaseActivationResult;
+  if (installedCliInput === null) {
+    activated = connectionString
+      ? await activatePostgresRuntimeAgentVersionRelease({
+          ...release,
+          connectionString,
+          ...(schema ? { schema } : {}),
+        })
+      : await activateStandaloneRuntimeAgentVersionRelease({
+          ...release,
+          databasePath: databasePath!,
+        });
+  } else {
+    const installedRelease = {
+      ...release,
+      ownedInstalledPluginCliInput: installedCliInput,
+      ...(generatedBindings === undefined
+        ? {}
+        : {
+            generatedBindingsManifest: {
+              path: bindingsPath!,
+              config: generatedBindings,
+            },
+          }),
+    };
+    // The wrapper owns both asynchronous metadata owners even if opening or preflight fails.
+    installedInputTransferred = true;
+    activated = connectionString
+      ? await activatePostgresInstalledPluginAgentVersionRelease({
+          ...installedRelease,
+          connectionString,
+          ...(schema ? { schema } : {}),
+        })
+      : await activateStandaloneInstalledPluginAgentVersionRelease({
+          ...installedRelease,
+          databasePath: databasePath!,
+        });
+  }
   await finishExtensionRecoveryRelease({
     preparation: recoveryPreparation,
     plan: activated.plan,
@@ -289,8 +350,22 @@ try {
       materializationDigests: activated.plan.deployments.map(
         (deployment) => deployment.materializationDigest,
       ),
+      ...("verification" in activated
+        ? { verification: { outcome: activated.verification.outcome } }
+        : {}),
     })}\n`,
   );
 } finally {
-  await Promise.allSettled([toolRuntime?.close?.(), transport.close?.()]);
+  if (!installedInputTransferred && installedCliInput !== null) {
+    await Promise.allSettled([
+      Promise.resolve().then(() => installedCliInput.release.close()),
+    ]);
+    await Promise.allSettled([
+      Promise.resolve().then(() => installedCliInput.authority.close()),
+    ]);
+  }
+  await Promise.allSettled([
+    Promise.resolve().then(() => toolRuntime?.close?.()),
+    Promise.resolve().then(() => transport?.close?.()),
+  ]);
 }
