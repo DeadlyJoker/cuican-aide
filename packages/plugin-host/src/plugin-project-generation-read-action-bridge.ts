@@ -1,3 +1,4 @@
+import { preserveProjectGenerationQueryHostAvailability } from "./plugin-project-generation-query-host-availability.ts";
 import {
   capturePluginUiInvocationCommitAuthority,
   type PluginUiActionContext,
@@ -167,9 +168,12 @@ export class PluginProjectGenerationReadActionBridge {
     });
     return other === undefined
       ? port
-      : preserveProjectGenerationContextHostAvailability(
+      : preserveProjectGenerationQueryHostAvailability(
           other,
-          preserveProjectGenerationHostAvailability(other, port),
+          preserveProjectGenerationContextHostAvailability(
+            other,
+            preserveProjectGenerationHostAvailability(other, port),
+          ),
         );
   }
 

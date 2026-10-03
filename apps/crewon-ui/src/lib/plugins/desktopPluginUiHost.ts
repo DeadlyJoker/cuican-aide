@@ -5,7 +5,9 @@ import {
 import {
   parsePluginUiLease,
   PROJECT_GENERATION_UI_ACTIONS,
+  PROJECT_GENERATION_QUERY_UI_ACTIONS,
   parseProjectGenerationUiActionRequest,
+  parseProjectGenerationQueryUiActionRequest,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type { ControlApiClient } from "@crewon/control-client";
@@ -35,6 +37,7 @@ import {
   type InstalledPluginTaskReceiptEvent,
 } from "./installedPluginTaskReceipt";
 import type { InstalledPluginGenerationJournal } from "./installedPluginGenerationJournal";
+import type { InstalledPluginProjectQueryJournal } from "./installedPluginProjectQueryJournal";
 
 export function installedDesktopPluginUiAssets(): DesktopPluginUiAssets | null {
   const assets = getDesktopBridge()?.pluginUiAssets;
@@ -55,6 +58,7 @@ export function createDesktopPluginUiHost(
     onDiagnostic(error: unknown): void;
     onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
     generationJournal?: InstalledPluginGenerationJournal;
+    projectQueryJournal?: InstalledPluginProjectQueryJournal;
     importer?: PluginUiModuleImporter;
   }>,
 ): ControlPluginUiHost {
@@ -64,7 +68,8 @@ export function createDesktopPluginUiHost(
     options.assets.version !== DESKTOP_PLUGIN_UI_VERSION
   )
     uiFailure("plugin_ui_transport_unsupported");
-  const { client, assertCurrent, generationJournal } = options;
+  const { client, assertCurrent, generationJournal, projectQueryJournal } =
+    options;
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -107,6 +112,24 @@ export function createDesktopPluginUiHost(
         await validateLease(lease, signal);
       },
       async invoke(lease, input) {
+        if (input.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0]) {
+          if (!projectQueryJournal)
+            uiFailure("plugin_ui_project_query_journal_unavailable");
+          const query = parseProjectGenerationQueryUiActionRequest({
+            action: input.action,
+            input: input.input,
+          });
+          const response = await projectQueryJournal.invoke({
+            lease,
+            input: query.input,
+            signal: input.signal,
+            assertCurrent,
+            request: (signal) =>
+              client.plugins.invoke(lease.mountRef, query, { signal }),
+          });
+          assertPluginUiCurrent(assertCurrent, input.signal);
+          return response.output;
+        }
         if (input.action === PROJECT_GENERATION_UI_ACTIONS[0]) {
           if (!generationJournal)
             uiFailure("plugin_ui_generation_journal_unavailable");

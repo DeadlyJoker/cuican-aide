@@ -93,3 +93,16 @@ export {
   type PluginExecutionPackageBorrow,
   type PluginExecutionPackageFailureOwner,
 } from "./plugin-execution-package.ts";
+
+export {
+  PluginProjectGenerationQueryActionBridge,
+  type PluginProjectGenerationQueryActionBridgeDependencies,
+  type PluginProjectGenerationQueryDispatchPort,
+} from "./plugin-project-generation-query-action-bridge.ts";
+export {
+  PluginProjectGenerationQueryExecutionBridge,
+  type PluginProjectGenerationQueryExecutionAuthority,
+  type PluginProjectGenerationQueryExecutionInput,
+  type PluginProjectGenerationQueryExecutionResult,
+  type PluginProjectGenerationQueryExecutionBridgeDependencies,
+} from "./plugin-project-generation-query-execution-bridge.ts";

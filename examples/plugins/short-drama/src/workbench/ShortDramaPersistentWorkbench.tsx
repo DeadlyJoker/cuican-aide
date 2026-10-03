@@ -18,6 +18,7 @@ import {
 } from "./creative-project-controller";
 import { ConceptWorkbench } from "./ConceptWorkbench";
 import { ConceptGenerationActions } from "./ConceptGenerationActions";
+import { ConceptQueryActions } from "./ConceptQueryActions";
 
 function SaveFeedback({
   controller,
@@ -155,6 +156,9 @@ export function ShortDramaPersistentWorkbench({
                 controller={controller.concepts.submissions}
               />
             )}
+          {!details && controller.concepts.queries.getSnapshot().request && (
+            <ConceptQueryActions controller={controller.concepts.queries} />
+          )}
           {snapshot.phase === "waiting" ? (
             <p className="detail-note" role="status">
               正在等待模块就绪…

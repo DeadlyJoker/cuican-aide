@@ -57,6 +57,8 @@ export * from "./creative-project.ts";
 export * from "./creative-project-revisions.ts";
 export * from "./project-generation-link.ts";
 export * from "./project-generation-publication.ts";
+export * from "./project-query-publication.ts";
+export * from "./project-query-link.ts";
 export {
   CreativeProjectError,
   creativeProjectTitle,

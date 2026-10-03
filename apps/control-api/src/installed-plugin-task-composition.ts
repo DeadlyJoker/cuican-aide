@@ -5,6 +5,7 @@ import {
   ExtensionReadApplicationService,
   ExtensionTaskApplicationService,
   PluginUiCommittedTaskAuthority,
+  ProjectGenerationReadApplicationService,
   type ApplicationClock,
   type ApplicationIdGenerator,
   type AuthorizationPort,
@@ -23,6 +24,8 @@ import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import type { ActorContext } from "@crewon/application";
 import type { PluginProfileScope } from "@crewon/domain";
 import { InstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
+import { InstalledPluginProjectQueryOwner } from "./installed-plugin-project-query-owner.ts";
+import { assertProjectQueryPluginPublications } from "./project-query-plugin-configuration.ts";
 import { InstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
 import type { PreparedCreativeProjects } from "./creative-project-composition.ts";
 import { assertProjectGenerationPluginPublications } from "./project-generation-plugin-configuration.ts";
@@ -54,6 +57,8 @@ import {
 export type InstalledPluginTaskRuntime = Readonly<{
   owner: InstalledPluginTaskActionOwner;
   projectGenerations?: InstalledPluginProjectGenerationOwner;
+  projectQueries?: InstalledPluginProjectQueryOwner;
+  projectGenerationReads?: ProjectGenerationReadApplicationService;
   requests: InstalledPluginRequestOwner;
   extensions: ExtensionConfigurationApplicationService;
   extensionTasks: ExtensionTaskApplicationService;
@@ -83,6 +88,8 @@ export async function createInstalledPluginTaskRuntime(
   const configuration = input.configuration;
   const ui = parseProductionPluginUiConfiguration(input.uiConfiguration);
   const generations = dependencies.creativeProjects?.pluginGenerations;
+  const queries = dependencies.creativeProjects?.pluginQueries;
+  assertProjectQueryPluginPublications(queries, ui.publications);
   assertProjectGenerationPluginPublications(generations, ui.publications);
   if (
     !(dependencies.store instanceof PostgresDomainStore) ||
@@ -101,6 +108,7 @@ export async function createInstalledPluginTaskRuntime(
   let requests: InstalledPluginRequestOwner | undefined;
   let owner: InstalledPluginTaskActionOwner | undefined;
   let projectGenerations: InstalledPluginProjectGenerationOwner | undefined;
+  let projectQueries: InstalledPluginProjectQueryOwner | undefined;
   let metadata: InstalledPluginConfigurationMetadata | undefined;
   try {
     const ledger = dependencies.store.pluginInstallationStore();
@@ -110,6 +118,10 @@ export async function createInstalledPluginTaskRuntime(
     await extensions.migratePluginAdmissions();
     await extensions.migrateCredits();
     if (generations !== undefined) await extensions.migrateProjectGenerations();
+    if (queries !== undefined) {
+      await extensions.migrateProjectQueries();
+      await extensions.enableProjectGenerationReads();
+    }
     const current = () => {
       if (requests === undefined)
         throw new Error("installed_plugin_request_authority_unavailable");
@@ -231,6 +243,29 @@ export async function createInstalledPluginTaskRuntime(
       currentSignal: () => current().currentSignal(),
       assertCurrent: () => current().assertCurrent(),
     });
+    const reads = bindInstalledPluginRequestOwner(
+      new ExtensionReadApplicationService({
+        runs: dependencies.store,
+        agentVersions: dependencies.store,
+        extensions,
+        operations: dependencies.store.externalOperationStore(),
+        catalog: requests.catalog,
+        host: requests.host,
+        authorization: businessAuthorization,
+        digester: dependencies.digester,
+      }),
+      requests,
+      { preparation: "configuration" },
+    );
+    const projectGenerationReads =
+      queries === undefined
+        ? undefined
+        : new ProjectGenerationReadApplicationService({
+            projects: dependencies.creativeProjects!.service,
+            tasks: reads,
+            extensions,
+            digester: dependencies.digester,
+          });
     const tasks = new ExtensionTaskApplicationService({
       store: dependencies.store,
       extensions,
@@ -243,12 +278,15 @@ export async function createInstalledPluginTaskRuntime(
       ids: dependencies.ids,
       digester: dependencies.digester,
       creditQuotes: quotes,
-      ...(generations === undefined
+      ...(projectGenerationReads === undefined
+        ? {}
+        : { projectGenerationReads }),
+      ...(generations === undefined && queries === undefined
         ? {}
         : {
             creativeProjects: {
-              store: generations.store,
-              authorization: generations.authorization,
+              store: (generations ?? queries)!.store,
+              authorization: (generations ?? queries)!.authorization,
             },
           }),
     });
@@ -265,24 +303,19 @@ export async function createInstalledPluginTaskRuntime(
       { preparation: "configuration" },
     );
     bindInstalledPluginRequestOwner(tasks, requests);
-    const reads = bindInstalledPluginRequestOwner(
-      new ExtensionReadApplicationService({
-        runs: dependencies.store,
-        agentVersions: dependencies.store,
-        extensions,
-        operations: dependencies.store.externalOperationStore(),
-        catalog: requests.catalog,
-        host: requests.host,
-        authorization: businessAuthorization,
-        digester: dependencies.digester,
-      }),
-      requests,
-      { preparation: "configuration" },
-    );
     const committedTasks = new PluginUiCommittedTaskAuthority({
       extensions,
       runs: dependencies.store,
       digester: dependencies.digester,
+      ...(queries === undefined
+        ? {}
+        : {
+            projectQueries: {
+              publications: queries.publications,
+              projects: queries.store,
+              operations: dependencies.store.externalOperationStore(),
+            },
+          }),
       ...(generations === undefined
         ? {}
         : {
@@ -329,16 +362,45 @@ export async function createInstalledPluginTaskRuntime(
         },
         dependencies.metadataHostUiServices,
       );
+    if (queries !== undefined)
+      projectQueries = new InstalledPluginProjectQueryOwner(
+        {
+          installRoot: configuration.installRoot,
+          publications: queries.publications,
+          installations: ledger,
+          generationReads: projectGenerationReads!,
+          tasks,
+          taskOwner: owner,
+          committedTasks,
+          profiles,
+          authorization,
+          resolveActor: (identity, signal) =>
+            current().resolveActor(identity, signal),
+          authorizePackage,
+          requestSignal: () => current().currentSignal(),
+          clock: dependencies.clock,
+          ids: { nextId: () => randomBytes(32).toString("base64url") },
+          digester: dependencies.digester,
+          maximumInvocations: configuration.maximumPackages,
+        },
+        projectGenerations?.hostUiServices ??
+          dependencies.metadataHostUiServices,
+      );
     const actualOwner = owner,
       actualRequests = requests,
       actualMetadata = metadata;
     const actualGenerations = projectGenerations;
+    const actualQueries = projectQueries;
     let closing: Promise<void> | null = null;
     return Object.freeze({
       owner: actualOwner,
       ...(actualGenerations === undefined
         ? {}
         : { projectGenerations: actualGenerations }),
+      ...(actualQueries === undefined ? {} : { projectQueries: actualQueries }),
+      ...(projectGenerationReads === undefined
+        ? {}
+        : { projectGenerationReads }),
       requests: actualRequests,
       extensions: configurationService,
       extensionTasks: tasks,
@@ -347,6 +409,7 @@ export async function createInstalledPluginTaskRuntime(
         (closing ??= closeAll([
           // Withdraw request authority synchronously before joining the actual task/Node owner.
           () => actualRequests.close(),
+          () => actualQueries?.close(),
           () => actualGenerations?.close(),
           () => actualOwner.close(),
           () => actualMetadata.close(),
@@ -358,6 +421,7 @@ export async function createInstalledPluginTaskRuntime(
     try {
       await closeAll([
         () => requests?.close(),
+        () => projectQueries?.close(),
         () => projectGenerations?.close(),
         () => owner?.close(),
         () => metadata?.close(),

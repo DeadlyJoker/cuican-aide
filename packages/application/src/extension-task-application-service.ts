@@ -13,6 +13,8 @@ import {
 import type { ProjectGenerationReference } from "@crewon/domain";
 import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
 import type { CreatePublishedProjectTaskInput } from "./project-generation-execution-authority.ts";
+import type { CreatePublishedProjectQueryTaskInput } from "./project-query-execution-authority.ts";
+import type { ProjectGenerationReadApplicationService } from "./project-generation-read-application-service.ts";
 import {
   getPublishedProjectGenerationReadiness,
   type GetPublishedProjectGenerationReadinessInput,
@@ -101,6 +103,7 @@ export type ExtensionTaskApplicationDependencies = Readonly<{
   creditQuotes?: ExtensionCreditQuotePort;
   /** Explicit project generation integration; ordinary tasks never read project metadata. */
   creativeProjects?: ProjectGenerationApplicationPorts;
+  projectGenerationReads?: ProjectGenerationReadApplicationService;
 }>;
 type Dependencies = ExtensionTaskApplicationDependencies;
 
@@ -153,6 +156,14 @@ export class ExtensionTaskApplicationService {
       pin,
       authority,
     );
+  }
+
+  createPublishedProjectQueryTaskFromPlugin(
+    input: CreatePublishedProjectQueryTaskInput,
+  ) {
+    return new PluginQueryTaskApplicationService(
+      this.#dependencies,
+    ).createPublished(input);
   }
 
   /** Internal host-issued project source and authority; the original public task body stays strict. */

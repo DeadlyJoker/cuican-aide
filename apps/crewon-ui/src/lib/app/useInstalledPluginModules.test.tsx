@@ -22,6 +22,12 @@ import {
   uiLease,
 } from "../plugins/pluginUiLoader.test-support";
 
+import type { InstalledPluginProjectQueryPorts } from "../plugins/useInstalledPluginProjectQueryContext";
+import {
+  queryJournalLease,
+  queryJournalInput,
+} from "../plugins/installedPluginProjectQuery.test-support";
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 type Input = Parameters<typeof useInstalledPluginModules>[0];
 type State = ReturnType<typeof useInstalledPluginModules>;
@@ -762,6 +768,79 @@ describe("installed plugin directory App composition (real Control client)", () 
     ).toThrow();
     expect(
       wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+  });
+  it("keeps query recovery independent of generation through remount and purges it before an account replacement", async () => {
+    const lease = queryJournalLease();
+    let catalog = controlUiItem(lease);
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [catalog], next: null }),
+    );
+    const runtime = { adoptExtensionTask: vi.fn(async () => {}) };
+    const taskContext = {
+      runtime,
+      selectedThreadId: null,
+      runIds: [],
+      onOpenTask: vi.fn(),
+    };
+    await render(wire.client, { taskContext }, true);
+    const ports = () =>
+      presentation() as ReturnType<typeof presentation> & {
+        projectQueryPorts: InstalledPluginProjectQueryPorts;
+        generationPorts: InstalledPluginGenerationPorts;
+      };
+    const query = ports().projectQueryPorts.journal;
+    const generation = ports().generationPorts.journal;
+    const input = queryJournalInput();
+    await expect(
+      query.invoke({
+        lease,
+        input,
+        signal: new AbortController().signal,
+        request: async () => {
+          throw new Error("sent query outcome unknown");
+        },
+      }),
+    ).rejects.toThrow("sent query outcome unknown");
+    expect(generation.snapshot()).toEqual([]);
+    catalog = controlUiItem({
+      ...lease,
+      selectionRevision: 2,
+      packageDigest: `sha256:${"2".repeat(64)}`,
+    });
+    await refresh();
+    expect(ports().projectQueryPorts.journal).toBe(query);
+    expect(
+      query.current({
+        lease: {
+          ...lease,
+          selectionRevision: 2,
+          packageDigest: catalog.packageDigest,
+        },
+      })?.retryable,
+    ).toBe(false);
+    await act(async () =>
+      window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT)),
+    );
+    expect(state.hostModules).toEqual([]);
+    expect(query.snapshot()).toEqual([]);
+    expect(() => query.register({ lease, input })).toThrow(
+      "plugin_ui_project_query_journal_inactive",
+    );
+    const replacement = controlUiClient(() =>
+      controlUiResponse({ plugins: [controlUiItem(lease)], next: null }),
+    );
+    await render(replacement.client, {
+      taskContext,
+      sessionKey: "replacement-account",
+    });
+    expect(ports().projectQueryPorts.journal).not.toBe(query);
+    expect(ports().projectQueryPorts.journal.snapshot()).toEqual([]);
+    expect(
+      wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+    expect(
+      replacement.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
     ).toBe(true);
   });
 });

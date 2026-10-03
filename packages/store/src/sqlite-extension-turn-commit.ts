@@ -59,10 +59,21 @@ import {
   type ProjectGenerationCommitOptions,
 } from "./project-generation-store-support.ts";
 import { admitSqliteProjectGenerationPublication } from "./project-generation-publication-admission.ts";
+import { assertSqliteProjectQuerySchema } from "./project-query-schema.ts";
+import {
+  captureProjectQuery,
+  admitSqliteProjectQueryPublication,
+  prepareSqliteProjectQuery,
+  loadSqliteProjectQueryLink,
+  assertProjectQueryReceipt,
+  projectQueryInsertSql,
+  projectQueryValues,
+} from "./project-query-store-support.ts";
 
 type SqliteExtensionTurnHost = Readonly<{
   database: DatabaseSync;
   projectGenerationsEnabled: boolean;
+  projectQueriesEnabled: boolean;
   assertOpen(): void;
   transaction(
     body: () => CommitExtensionTurnResult,
@@ -94,6 +105,20 @@ export async function commitSqliteExtensionTurn(
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
   const pluginQuery = checkedPluginQueryTurn(input);
+  const projectQuery = captureProjectQuery(
+    input,
+    pluginQuery,
+    host.projectQueriesEnabled,
+    options,
+  );
+  if (projectQuery !== null)
+    input = {
+      ...input,
+      projectQuery: {
+        reference: projectQuery.reference,
+        generationLinkDigest: projectQuery.generationLinkDigest,
+      },
+    };
   if (pluginQuery !== undefined)
     input = structuredClone({ ...input, pluginQueryAdmission: pluginQuery });
   const pluginAdmission = checkedPluginTaskAdmission(input);
@@ -120,10 +145,18 @@ export async function commitSqliteExtensionTurn(
     await assertCreativeProjectCommitCurrent(prepared.authority);
     assertCreativeProjectCommitActive(prepared.authority);
   }
+  if (projectQuery !== null) {
+    await assertCreativeProjectCommitCurrent(projectQuery.authority);
+    assertCreativeProjectCommitActive(projectQuery.authority);
+  }
   return host.transaction(
     () => {
       if (host.projectGenerationsEnabled)
         assertSqliteProjectGenerationSchema(host.database);
+      if (host.projectQueriesEnabled)
+        assertSqliteProjectQuerySchema(host.database);
+      if (projectQuery !== null)
+        admitSqliteProjectQueryPublication(host.database, projectQuery);
       const replay = host.receipt(binding, "task", input.receipt);
       if (replay !== null) {
         const saved = host.verifyCreditReceipt(
@@ -160,6 +193,13 @@ export async function commitSqliteExtensionTurn(
             binding: saved.binding,
             receipt: input.receipt,
           });
+        if (host.projectQueriesEnabled)
+          assertProjectQueryReceipt(
+            projectQuery,
+            loadSqliteProjectQueryLink(host.database, saved.binding),
+            saved.binding,
+            input.receipt,
+          );
         return saved;
       }
       if (prepared?.publication !== undefined)
@@ -171,6 +211,15 @@ export async function commitSqliteExtensionTurn(
         admitSqlitePluginTask(host.database, pluginAdmission);
       if (pluginQuery !== undefined)
         admitSqlitePluginQuery(host.database, pluginQuery, binding);
+      const queryLink =
+        projectQuery === null
+          ? undefined
+          : prepareSqliteProjectQuery(
+              host.database,
+              projectQuery,
+              input,
+              pluginQuery!,
+            );
       host.admit(binding, input.expectedActivationRevision);
       let projectLink: ProjectGenerationLink | undefined;
       if (prepared !== null) {
@@ -235,12 +284,17 @@ export async function commitSqliteExtensionTurn(
         host.database
           .prepare(projectGenerationInsertSql())
           .run(...projectGenerationValues(projectLink));
+      if (queryLink !== undefined)
+        host.database
+          .prepare(projectQueryInsertSql())
+          .run(...projectQueryValues(queryLink));
       return result;
     },
     {
       beforeCommit: () => {
         if (prepared !== null) host.assertOpen();
         assertCreativeProjectCommitActive(prepared?.authority);
+        assertCreativeProjectCommitActive(projectQuery?.authority);
       },
     },
   );

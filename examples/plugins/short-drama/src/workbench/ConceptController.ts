@@ -1,5 +1,6 @@
 import type { ProjectDetails } from "./creative-project-controller";
 import { ConceptGenerationController } from "./ConceptGenerationController";
+import { ConceptQueryController } from "./ConceptQueryController";
 import { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
 import type { PublicConceptAsset } from "@crewon/plugin-sdk/contracts";
 import type {
@@ -58,6 +59,7 @@ const initial = (): ConceptSnapshot => ({
 export class ConceptController {
   readonly generations: ConceptGenerationController;
   readonly submissions: ConceptGenerationIntentController;
+  readonly queries: ConceptQueryController;
   #ports: ConceptPorts;
   #details: ProjectDetails | null = null;
   #ready = false;
@@ -89,9 +91,24 @@ export class ConceptController {
         if (!this.submissions.locked) void this.loadAssets();
       },
     });
-    this.generations.subscribe(() =>
-      this.submissions.setRecord(this.generations.getSnapshot()),
-    );
+    this.queries = new ConceptQueryController({
+      client: ports.queryClient,
+      lockChanged: () => {
+        this.#ports.lockChanged(this.locked);
+        for (const listener of this.#listeners) listener();
+      },
+      accepted: () => {
+        if (this.#ready) void this.generations.refresh();
+      },
+      restore: (request) => ports.restoreQuerySource(request),
+      restored: () => {
+        if (!this.queries.locked) void this.loadAssets();
+      },
+    });
+    this.generations.subscribe(() => {
+      this.submissions.setRecord(this.generations.getSnapshot());
+      this.queries.setRecord(this.generations.getSnapshot());
+    });
   }
   getSnapshot = (): ConceptSnapshot => this.#snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -102,7 +119,8 @@ export class ConceptController {
     return (
       this.#snapshot.saving ||
       this.#snapshot.pendingKind !== null ||
-      this.submissions.locked
+      this.submissions.locked ||
+      this.queries.locked
     );
   }
   #update(change: Partial<ConceptSnapshot>) {
@@ -153,6 +171,17 @@ export class ConceptController {
   #bindSubmission() {
     const selection = this.#snapshot.selection,
       project = this.#details?.project;
+    this.queries.bindSource(
+      selection && !this.#snapshot.editing
+        ? {
+            projectId: selection.asset.projectId,
+            assetId: selection.asset.assetId,
+            assetRevision: selection.revision.assetRevision,
+          }
+        : null,
+      this.#ready,
+      this.#ports.projectBlocked() || this.submissions.locked,
+    );
     this.submissions.bindSource(
       selection && !this.#snapshot.editing && project
         ? {
@@ -206,6 +235,7 @@ export class ConceptController {
     this.#listeners.clear();
     this.generations.dispose();
     this.submissions.dispose();
+    this.queries.dispose();
   }
   #reading(kind: "assets" | "selection" | "history" | "refresh") {
     this.#reads.get(kind)?.abort();

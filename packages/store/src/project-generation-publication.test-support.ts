@@ -17,7 +17,11 @@ import {
 export async function publicationFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: { generationMigration?: boolean; metadata?: boolean } = {},
+  options: {
+    generationMigration?: boolean;
+    metadata?: boolean;
+    maxPoolSize?: number;
+  } = {},
 ) {
   const f = await projectGenerationFixture(t, backend, options);
   const input = await f.input();

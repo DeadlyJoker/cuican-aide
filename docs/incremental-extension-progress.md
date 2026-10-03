@@ -6,6 +6,26 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：原操作查询协议与独立短剧 6.0.0
+
+新增独立 `crewon.project-generation-queries@1`，严格只接受已保存输入三字段、确切 operation、原线程 CAS 和幂等键。实际 Control owner 从项目生成关联反查原付费历史；原 Query Task、独立当前执行包、历史配置与八字段目标保持原运行链路。查询侧记录与原 Turn/Run/绑定/回执在同一事务提交；两个当前安装 pin 在同一 SQL client 上锁定，支持单连接 PostgreSQL。原生成关联、积分预留、生成槽位及普通任务协议不变，部署批准与 schema 迁移默认关闭。细节见[原操作查询 UI 协议](./project-generation-query-ui-protocol.md)。
+
+通用模块增加独立账户查询 journal 和只读查询上下文，复用原 Control transport 与 runtime 导航。UNKNOWN 保留确切原请求，未确认时不能换键；实际请求结束且 pin 匹配后才显式重试。生成与查询回执分开保存，接受查询后重新读取线程 CAS；账号变更同步撤回。查询上下文只读取已有会话，包括原生成控件准备的会话，不创建会话。原 App、用户栏、设置、两侧栏及共享 CSS 本阶段没有改动；仅新增查询控件快照，原快照字节保持不变。
+
+短剧 6.0.0 在原模块和样式中增加每个确切 operation 的“查询原任务”按钮、查询受理状态、同键恢复及原保存源恢复；SDK 仓外 tarball 消费者严格编译，实际发布 ESM 新旧功能 55/55 通过。7 个固定摘要文件及 manifest 已独立校验，原 5.0.0 安装包保留。实际 6.0.0 ESM 的 DOM 点击进一步沿注册 mount/assets HTTP、原 RequestOwner/Peer、真实 Node 查询包 B、同一 SQL 与 issuer 验证新查询，以及丢确认回复、关闭重开、同键显式重试；SQLite 和单连接 PostgreSQL 2/2 通过。原付费 A 历史由原 Task Application 和真实 Node A 安装 pin 建立，该专项未执行旧 5.0.0 UI 生图，也没有在线模型、Worker 或供应商调用。
+
+分组窄检查均零跳过，各组存在重叠，不跨组求和：Contracts 26/26、SDK 27/27、Domain 37/37、Application 145/145、双库 Store 新旧 190/190、Host 111/111、Control 新 36/36 和原回归 150/150、原 Worker 查询回归 16/16、原 UI/生成/查询/设置/侧栏 220/220、原业务模块 10/10、独立 ESM 55/55、实际 6.0.0 HTTP/Node/双库 ESM 2/2。相关类型、UI lint/build、boundary、格式和 diff 检查通过。旧 Host query fixture 的 queued Run 已按原 reducer 推进到实际 dispatch 所需的 running；没有放宽权限、积分或产品断言。原全量 UI 九项失败和此前跳过记录仍保留，此处没有声称全量 UI 已绿。
+
+统一证据为 `output/extensions/checks/project-query-ui-proof-20261004.json`；独立产物为 `output/extensions/installable-plugins/query-ui-short-drama-20261004/short-drama/6.0.0`。自有 PG 60201 在全部消费者物理结束后正常停止并删除准确临时目录，原完整 App 服务保留。身份、PDP、Peer、付费历史与钱包是明确具名夹具，不冒充用户生产资金或在线供应商。
+
+完整目标继续进行。下一步是确切 operation/resultIndex 的图片选用及持久关联；完整应用进程重启后的 UNKNOWN 持久恢复、正式 Main/full App/packaged App 在线 Krea2、真实个人身份/插件钱包/价格权威、第二个实际企业 API 和完整 S0 验收仍未完成。
+
+## 2026-10-04：实际用户栏、设置与原本地服务恢复
+
+在用户实际标签核验了原 AuthGate/App 中的账户菜单与设置入口，并打开“常规”设置读取实际后端数据。当前标签位于 5730 原完整应用；此前 5719 前端单独预览缺少配对 Control 会话，不作为完整设置后端验收。使用既有本地开发配置启动原 Control、Worker/provider probe 与 Vite 编排，没有复制或输出凭据，没有提交模型任务或改动用户偏好。原账户、菜单与设置路由保持原布局。
+
+屏幕与服务证据见 `output/extensions/checks/account-settings-live-20261004/proof.json` 及 `settings.jpg`。这确认实际登录页面与本地设置服务已恢复，不代表生产 PIM 执行身份、插件钱包和价格权威已选定。原服务继续运行。
+
 ## 2026-10-04：项目生成上下文与独立短剧 5.0.0
 
 新增独立 `crewon.project-generation-contexts@1` 就绪检查，并沿原安装 source→target owner、Task Application、issuer、profile/PDP 与真实安装 pin 核验保存来源、CAS、配置和当前执行连接。检查不创建会话、Run 或积分预留；原 generateConcept 输入、回执及普通任务协议保持兼容。已知 optional 协议允许只读模块安装，不把缺失的生成 owner 视为服务可用。细节见[生成上下文与恢复协议](./installed-plugin-generation-context-actions.md)。

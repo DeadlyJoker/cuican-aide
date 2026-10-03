@@ -1,0 +1,54 @@
+import {
+  captureProductionPluginUiActions,
+  type ProductionPluginUiConfig,
+} from "./production-plugin-ui-composition.ts";
+import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
+import { isInstalledPluginProjectQueryOwner } from "./installed-plugin-project-query-owner.ts";
+
+/** Pure capture before asynchronous database startup; original owners remain a paired capability. */
+export function captureProductionPluginUiOwnerConfiguration(
+  input: ProductionPluginUiConfig,
+): ProductionPluginUiConfig {
+  captureProductionPluginUiActions(input);
+  const actions = input.actions;
+  const committed = input.committedTasks;
+  return Object.freeze({
+    configuration: parseProductionPluginUiConfiguration(input.configuration),
+    ...(actions === undefined
+      ? {}
+      : { actions: Object.freeze({ invoke: actions.invoke.bind(actions) }) }),
+    ...(committed === undefined
+      ? {}
+      : {
+          committedTasks: Object.freeze({
+            isOutcome: committed.isOutcome.bind(committed),
+            verify: committed.verify.bind(committed),
+          }),
+        }),
+    ...(input.ownedTaskActions === undefined
+      ? {}
+      : { ownedTaskActions: input.ownedTaskActions }),
+    ...(input.ownedProjectGenerationActions === undefined
+      ? {}
+      : { ownedProjectGenerationActions: input.ownedProjectGenerationActions }),
+    ...(input.ownedProjectGenerationReadActions === undefined
+      ? {}
+      : {
+          ownedProjectGenerationReadActions:
+            input.ownedProjectGenerationReadActions,
+        }),
+    ...(input.ownedCreativeProjectActions === undefined
+      ? {}
+      : { ownedCreativeProjectActions: input.ownedCreativeProjectActions }),
+    ...(input.ownedProjectQueryActions === undefined
+      ? {}
+      : { ownedProjectQueryActions: input.ownedProjectQueryActions }),
+  });
+}
+
+/** Startup failures join only actual transferred resources; structural objects cannot acquire ownership. */
+export async function closeProductionProjectQueryOwner(
+  input: unknown,
+): Promise<void> {
+  if (isInstalledPluginProjectQueryOwner(input)) await input.close();
+}

@@ -40,7 +40,7 @@ export function pluginQueryTaskReceipt(
 }
 export async function assertSavedPluginQueryTask(
   input: Readonly<{
-    store: ExtensionStore;
+    store: Pick<ExtensionStore, "loadPluginQueryTaskAdmission">;
     pin: PluginTaskAdmissionPin;
     source: PluginQuerySource;
     binding: ExtensionRunBinding;

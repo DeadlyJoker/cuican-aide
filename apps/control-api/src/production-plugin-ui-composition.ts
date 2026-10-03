@@ -38,6 +38,10 @@ import {
   isInstalledPluginProjectGenerationOwner,
   type InstalledPluginProjectGenerationOwner,
 } from "./installed-plugin-project-generation-owner.ts";
+import {
+  isInstalledPluginProjectQueryOwner,
+  type InstalledPluginProjectQueryOwner,
+} from "./installed-plugin-project-query-owner.ts";
 
 export type ProductionPluginUiConfig = Readonly<{
   configuration: ProductionPluginUiConfiguration;
@@ -51,6 +55,7 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
   ownedProjectGenerationReadActions?: PluginProjectGenerationReadActionBridge;
+  ownedProjectQueryActions?: InstalledPluginProjectQueryOwner;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -74,6 +79,13 @@ export function createProductionPluginUiRuntime(
   const metadataOwner = input.ownedCreativeProjectActions;
   const generationOwner = input.ownedProjectGenerationActions;
   const generationReadOwner = input.ownedProjectGenerationReadActions;
+  const queryOwner = input.ownedProjectQueryActions;
+  if (
+    queryOwner !== undefined &&
+    (!isInstalledPluginProjectQueryOwner(queryOwner) ||
+      queryOwner.taskOwner !== owner)
+  )
+    throw new Error("production_plugin_ui_project_query_owner_invalid");
   if (
     generationReadOwner !== undefined &&
     !isPluginProjectGenerationReadActionBridge(generationReadOwner)
@@ -178,6 +190,17 @@ export function createProductionPluginUiRuntime(
         invoke: async (request) => {
           available();
           if (
+            request.action === "crewon.project-generation-queries" ||
+            request.action.startsWith("crewon.project-generation-queries.")
+          ) {
+            if (queryOwner === undefined)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return queryOwner.actions.invoke(request);
+          }
+          if (
             request.action === "crewon.project-generation-reads" ||
             request.action.startsWith("crewon.project-generation-reads.")
           ) {
@@ -269,6 +292,7 @@ export function createProductionPluginUiRuntime(
       application = null;
       return (closing ??= Promise.allSettled([
         generationOwner?.close(),
+        queryOwner?.close(),
         generationReadOwner?.close(),
         owner?.close(),
         metadataOwner?.close(),
@@ -307,6 +331,12 @@ export function captureProductionPluginUiActions(
   )
     throw new Error("production_plugin_ui_metadata_owner_invalid");
   const owner = input.ownedTaskActions;
+  if (
+    input.ownedProjectQueryActions !== undefined &&
+    (!isInstalledPluginProjectQueryOwner(input.ownedProjectQueryActions) ||
+      input.ownedProjectQueryActions.taskOwner !== owner)
+  )
+    throw new Error("production_plugin_ui_project_query_owner_invalid");
   if (
     input.ownedProjectGenerationActions !== undefined &&
     (!isInstalledPluginProjectGenerationOwner(

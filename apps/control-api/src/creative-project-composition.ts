@@ -22,6 +22,10 @@ import {
   type ProjectGenerationPluginConfiguration,
 } from "./project-generation-plugin-configuration.ts";
 import {
+  captureProjectQueryPluginConfiguration,
+  type ProjectQueryPluginConfiguration,
+} from "./project-query-plugin-configuration.ts";
+import {
   captureProjectGenerationReadConfiguration,
   prepareProjectGenerationReadStore,
   type ProjectGenerationReadConfiguration,
@@ -37,6 +41,7 @@ export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
+  pluginQueries?: ProjectQueryPluginConfiguration;
   generationReads?: ProjectGenerationReadConfiguration;
   generationReadUi?: ProjectGenerationReadPluginUiConfig;
 }>;
@@ -48,6 +53,11 @@ export type PreparedCreativeProjects = {
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
   readonly generationReadStore?: ProjectGenerationReadStore;
   readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
+    Readonly<{
+      store: CreativeProjectStore;
+      authorization: CreativeProjectAuthorizationPort;
+    }>;
+  readonly pluginQueries?: ProjectQueryPluginConfiguration &
     Readonly<{
       store: CreativeProjectStore;
       authorization: CreativeProjectAuthorizationPort;
@@ -75,6 +85,7 @@ export function captureCreativeProjectCompositionConfig(
         key !== "authorization" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
+        key !== "pluginQueries" &&
         key !== "generationReads" &&
         key !== "generationReadUi",
     ) ||
@@ -98,6 +109,15 @@ export function captureCreativeProjectCompositionConfig(
   const pluginGenerations = captureProjectGenerationPluginConfiguration(
     generationsField?.value,
   );
+  const queriesField = fields.pluginQueries;
+  if (
+    queriesField !== undefined &&
+    (!Object.hasOwn(queriesField, "value") || !queriesField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const pluginQueries = captureProjectQueryPluginConfiguration(
+    queriesField?.value,
+  );
   const readsField = fields.generationReads;
   if (
     readsField !== undefined &&
@@ -107,6 +127,8 @@ export function captureCreativeProjectCompositionConfig(
   const generationReads = captureProjectGenerationReadConfiguration(
     readsField?.value,
   );
+  if (pluginQueries !== undefined && generationReads === undefined)
+    throw new Error("project_query_generation_reader_required");
   const readUiField = fields.generationReadUi;
   if (
     readUiField !== undefined &&
@@ -139,6 +161,7 @@ export function captureCreativeProjectCompositionConfig(
         }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
+        ...(pluginQueries === undefined ? {} : { pluginQueries }),
         ...(generationReads === undefined ? {} : { generationReads }),
         ...(generationReadUi === undefined ? {} : { generationReadUi }),
       });
@@ -157,6 +180,8 @@ export function captureStandaloneCreativeProjectCompositionConfig(
     throw new Error(
       "standalone_project_generation_execution_authority_required",
     );
+  if (configuration?.pluginQueries !== undefined)
+    throw new Error("standalone_project_query_execution_authority_required");
   return configuration;
 }
 
@@ -175,6 +200,15 @@ export async function prepareCreativeProjects(
   const store = owner.creativeProjectStore();
   await store.migrate();
   return {
+    ...(configuration.pluginQueries === undefined
+      ? {}
+      : {
+          pluginQueries: Object.freeze({
+            ...configuration.pluginQueries,
+            store,
+            authorization: configuration.authorization,
+          }),
+        }),
     ...(configuration.generationReadUi === undefined
       ? {}
       : { generationReadUi: configuration.generationReadUi }),

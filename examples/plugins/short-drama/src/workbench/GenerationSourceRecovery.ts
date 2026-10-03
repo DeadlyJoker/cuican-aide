@@ -1,5 +1,5 @@
 import type { PluginCreativeProjectClient } from "@crewon/plugin-sdk/ui";
-import type { ProjectGenerationUiInput } from "@crewon/plugin-sdk/contracts";
+import type { ConceptGenerationLocator } from "@crewon/plugin-sdk/contracts";
 import type { ProjectDetails } from "./creative-project-controller";
 import type { ConceptSelection } from "./ConceptController.types";
 
@@ -27,7 +27,7 @@ export class GenerationSourceRecovery {
     });
     this.#apply = apply;
   }
-  async restore(request: ProjectGenerationUiInput) {
+  async restore(request: Readonly<{ reference: ConceptGenerationLocator }>) {
     if (this.#disposed) return false;
     this.abort();
     const controller = new AbortController();

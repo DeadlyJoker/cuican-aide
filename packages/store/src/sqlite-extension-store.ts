@@ -1,3 +1,8 @@
+import {
+  migrateSqliteProjectQueries,
+  assertSqliteProjectQuerySchema,
+} from "./project-query-schema.ts";
+import { loadSqliteProjectQueryLink } from "./project-query-store-support.ts";
 import { commitSqliteExtensionTurn } from "./sqlite-extension-turn-commit.ts";
 import {
   projectGenerationSourceLocator,
@@ -94,6 +99,17 @@ export class SqliteExtensionStore implements ExtensionStore {
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   #projectGenerationsEnabled = false;
+  #projectQueriesEnabled = false;
+  get projectQueryVersion() {
+    return this.#projectQueriesEnabled
+      ? ("crewon.project-query-link.v1" as const)
+      : undefined;
+  }
+  get projectQueryPublicationVersion() {
+    return this.#projectQueriesEnabled
+      ? ("crewon.project-query-publication.v1" as const)
+      : undefined;
+  }
   #projectGenerationReadsEnabled = false;
   get projectGenerationReadVersion() {
     return this.#projectGenerationReadsEnabled
@@ -204,6 +220,28 @@ export class SqliteExtensionStore implements ExtensionStore {
       .all(...projectGenerationSourceValues(locator));
     this.#host.assertOpen();
     return decodeProjectGenerationSource(rows, locator);
+  }
+
+  /** Query opt-in verifies existing generation history and never grants generation writes. */
+  async migrateProjectQueries(): Promise<void> {
+    this.#transaction(() => migrateSqliteProjectQueries(this.#db), {
+      beforeCommit: () => this.#host.assertOpen(),
+    });
+    this.#projectQueriesEnabled = true;
+  }
+  async loadProjectQueryLink(input: ExtensionRunLocator) {
+    if (!this.#projectQueriesEnabled)
+      throw new Error("project_query_unavailable");
+    this.#host.assertOpen();
+    assertSqliteProjectQuerySchema(this.#db);
+    const values = projectGenerationLocator(input);
+    const link = loadSqliteProjectQueryLink(this.#db, {
+      tenantId: values[0],
+      spaceId: values[1],
+      runId: values[2],
+    });
+    this.#host.assertOpen();
+    return link;
   }
 
   async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
@@ -415,6 +453,7 @@ export class SqliteExtensionStore implements ExtensionStore {
       {
         database: this.#db,
         projectGenerationsEnabled: this.#projectGenerationsEnabled,
+        projectQueriesEnabled: this.#projectQueriesEnabled,
         assertOpen: () => this.#host.assertOpen(),
         transaction: (body, hooks) => this.#transaction(body, hooks),
         receipt: (scope, kind, receipt) => this.#receipt(scope, kind, receipt),

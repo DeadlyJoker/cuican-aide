@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { PluginUiLease } from "@crewon/contracts/plugins";
 import type { PluginUiProps, PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
@@ -12,6 +19,12 @@ import { InstalledPluginTaskControls } from "./InstalledPluginTaskControls";
 import { useInstalledPluginGenerationContext } from "../../lib/plugins/useInstalledPluginGenerationContext";
 import type { InstalledPluginGenerationPorts } from "../../lib/plugins/useInstalledPluginGenerationContext.types";
 import { InstalledPluginGenerationControls } from "./InstalledPluginGenerationControls";
+
+import {
+  useInstalledPluginProjectQueryContext,
+  type InstalledPluginProjectQueryPorts,
+} from "../../lib/plugins/useInstalledPluginProjectQueryContext";
+import { InstalledPluginProjectQueryControls } from "./InstalledPluginProjectQueryControls";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
 type Monitor = {
@@ -29,6 +42,7 @@ export function InstalledPluginModule({
   onDiagnostic,
   taskPorts = null,
   generationPorts = null,
+  projectQueryPorts = null,
   selectedThreadId = null,
   runIds = [],
   onOpenTask,
@@ -41,6 +55,7 @@ export function InstalledPluginModule({
   onDiagnostic(error: unknown): void;
   taskPorts?: InstalledPluginTaskPorts | null;
   generationPorts?: InstalledPluginGenerationPorts | null;
+  projectQueryPorts?: InstalledPluginProjectQueryPorts | null;
   selectedThreadId?: string | null;
   runIds?: readonly string[];
   onOpenTask?(threadId: string): void;
@@ -65,6 +80,36 @@ export function InstalledPluginModule({
     active,
     selectedThreadId,
   });
+  const queryEnabled = module.plugin.descriptor.requires.some(
+    (item) =>
+      item.service === "crewon.project-generation-queries" &&
+      item.apiVersion === "1",
+  );
+  const projectQuery = useInstalledPluginProjectQueryContext({
+    ports: queryEnabled ? projectQueryPorts : null,
+    module,
+    active,
+    selectedThreadId,
+    preparedThreadId: generationEnabled
+      ? (generation.context.thread?.threadId ?? null)
+      : null,
+  });
+  useEffect(() => {
+    if (!active || !queryEnabled || !projectQueryPorts || !generationEnabled)
+      return;
+    // A query appends its own Turn. Re-read the original conversation CAS before a later generation.
+    return projectQueryPorts.journal.subscribe((intent) => {
+      if (intent.familyKey === module.key && intent.phase === "accepted")
+        generation.refresh();
+    });
+  }, [
+    active,
+    queryEnabled,
+    projectQueryPorts,
+    generationEnabled,
+    module.key,
+    generation.refresh,
+  ]);
   const tasks = useInstalledPluginTaskContext({
     ports: taskEnabled ? taskPorts : null,
     module,
@@ -173,6 +218,9 @@ export function InstalledPluginModule({
         ...(generationEnabled && generationPorts
           ? { projectGenerationContext: generation.context }
           : {}),
+        ...(queryEnabled && projectQueryPorts
+          ? { projectGenerationQueryContext: projectQuery.context }
+          : {}),
       }),
     }),
     [
@@ -185,6 +233,9 @@ export function InstalledPluginModule({
       generationEnabled,
       generationPorts,
       generation.context,
+      queryEnabled,
+      projectQueryPorts,
+      projectQuery.context,
       ready,
       context,
     ],
@@ -205,6 +256,12 @@ export function InstalledPluginModule({
     <>
       {generationEnabled && generationPorts ? (
         <InstalledPluginGenerationControls state={generation} locale={locale} />
+      ) : null}
+      {queryEnabled && projectQueryPorts && projectQuery.context.intent ? (
+        <InstalledPluginProjectQueryControls
+          state={projectQuery}
+          locale={locale}
+        />
       ) : null}
       {taskEnabled && taskPorts && onOpenTask ? (
         <InstalledPluginTaskControls

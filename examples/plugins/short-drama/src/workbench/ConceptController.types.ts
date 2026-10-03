@@ -3,6 +3,7 @@ import type {
   PluginProjectGenerationReadClient,
   PluginProjectGenerationClient,
   PluginProjectGenerationContextClient,
+  PluginProjectGenerationQueryClient,
 } from "@crewon/plugin-sdk/ui";
 import type {
   CreativeProjectUiInputMap,
@@ -11,6 +12,7 @@ import type {
   PublicCreativeProject,
   PublicProjectBrief,
   ProjectGenerationUiInput,
+  ProjectGenerationQueryUiInput,
 } from "@crewon/plugin-sdk/contracts";
 import type { ProjectDetails } from "./creative-project-controller";
 
@@ -57,6 +59,8 @@ export type ConceptPorts = Readonly<{
   generationClient: PluginProjectGenerationReadClient;
   submissionClient: PluginProjectGenerationClient;
   contextClient: PluginProjectGenerationContextClient;
+  queryClient: PluginProjectGenerationQueryClient;
+  restoreQuerySource(request: ProjectGenerationQueryUiInput): Promise<boolean>;
   restoreGenerationSource(request: ProjectGenerationUiInput): Promise<boolean>;
   projectBlocked(): boolean;
   projectCommitted(project: PublicCreativeProject): void;

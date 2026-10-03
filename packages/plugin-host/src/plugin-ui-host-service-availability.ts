@@ -11,6 +11,8 @@ import {
   CREWON_PROJECT_GENERATIONS_API_VERSION,
   CREWON_PROJECT_GENERATION_READS_SERVICE,
   CREWON_PROJECT_GENERATION_READS_API_VERSION,
+  CREWON_PROJECT_GENERATION_QUERIES_SERVICE,
+  CREWON_PROJECT_GENERATION_QUERIES_API_VERSION,
   CREWON_PROJECT_GENERATION_CONTEXTS_SERVICE,
   CREWON_PROJECT_GENERATION_CONTEXTS_API_VERSION,
   type PluginPackageDescriptor,
@@ -25,6 +27,11 @@ import {
   hasProjectGenerationContextHostAvailability,
   preserveProjectGenerationContextHostAvailability,
 } from "./plugin-project-generation-context-host-availability.ts";
+
+import {
+  hasProjectGenerationQueryHostAvailability,
+  preserveProjectGenerationQueryHostAvailability,
+} from "./plugin-project-generation-query-host-availability.ts";
 
 /** Host protocol availability never supplies a Node service or grants an invocation permission. */
 export type PluginUiHostServiceAvailabilityPort = Readonly<{
@@ -73,7 +80,10 @@ export function capturePluginUiHostServiceAvailability(
       },
     }),
   );
-  return preserveProjectGenerationContextHostAvailability(port, result);
+  return preserveProjectGenerationQueryHostAvailability(
+    port,
+    preserveProjectGenerationContextHostAvailability(port, result),
+  );
 }
 
 /** Known optional protocols can be declared without an owner; required generation protocols need actual assembly. */
@@ -105,6 +115,12 @@ export function assertUiOnlyServiceDeclarations(
                 hasProjectGenerationContextHostAvailability(
                   hostUiServices,
                 )))) ||
+          (requirement.service === CREWON_PROJECT_GENERATION_QUERIES_SERVICE &&
+            requirement.apiVersion ===
+              CREWON_PROJECT_GENERATION_QUERIES_API_VERSION &&
+            (requirement.optional ||
+              (hostUiServices !== undefined &&
+                hasProjectGenerationQueryHostAvailability(hostUiServices)))) ||
           (hostUiServices !== undefined &&
             requirement.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
             requirement.apiVersion === CREWON_CREATIVE_PROJECTS_API_VERSION)

@@ -6,6 +6,7 @@ import {
   parsePluginTaskAdmission,
   type ExtensionRunBinding,
   type PluginTaskAdmission,
+  type RunState,
   reduceRunLifecycleEvent,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
@@ -44,21 +45,54 @@ export interface PluginQueryHostPort {
     }>,
   ): Promise<ExtensionReadiness>;
 }
+type PluginQuerySourceStorageInput = Readonly<{
+  actor: ActorContext;
+  pluginId: string;
+  profileId: string;
+  publisherId: string;
+  sourceRunId: string;
+  operationId: string;
+  extensions: Pick<
+    ExtensionStore,
+    | "loadPluginTaskAdmission"
+    | "loadExtensionRunBinding"
+    | "loadExtensionTurnReceipt"
+  >;
+  runs: Pick<RunStore, "loadRunInSpace">;
+  operations: Pick<ExternalOperationStore, "loadExternalOperation">;
+  digester: ContentDigester;
+}>;
 export async function loadPluginQuerySource(
-  input: Readonly<{
-    actor: ActorContext;
-    pluginId: string;
-    profileId: string;
-    publisherId: string;
-    sourceRunId: string;
-    operationId: string;
-    extensions: ExtensionStore;
-    runs: Pick<RunStore, "loadRunInSpace">;
-    operations: Pick<ExternalOperationStore, "loadExternalOperation">;
-    authorization: AuthorizationPort;
-    digester: ContentDigester;
-  }>,
+  input: PluginQuerySourceStorageInput &
+    Readonly<{ authorization: AuthorizationPort }>,
 ): Promise<PluginQuerySource> {
+  const run = await loadSourceRun(input);
+  const allow = await input.authorization.authorize({
+    actor: input.actor,
+    action: "run:read",
+    resource: {
+      kind: "run",
+      tenantId: input.actor.tenantId,
+      spaceId: input.actor.spaceId,
+      runId: input.sourceRunId,
+      threadId: run.threadId,
+    },
+  });
+  if (allow.outcome !== "allow")
+    throw new ApplicationError("authorization", "authorization_denied");
+  return verifyPluginQuerySourceStorage(input, run);
+}
+
+/** Persistent receipt proof after COMMIT; it establishes no current authorization. */
+export async function loadPluginQuerySourceProof(
+  input: PluginQuerySourceStorageInput,
+): Promise<PluginQuerySource> {
+  return verifyPluginQuerySourceStorage(input, await loadSourceRun(input));
+}
+
+async function loadSourceRun(
+  input: PluginQuerySourceStorageInput,
+): Promise<RunState> {
   const locator = {
     tenantId: input.actor.tenantId,
     spaceId: input.actor.spaceId,
@@ -72,13 +106,18 @@ export async function loadPluginQuerySource(
     run.runId !== locator.runId
   )
     throw new ApplicationError("notFound", "plugin_query_source_not_found");
-  const allow = await input.authorization.authorize({
-    actor: input.actor,
-    action: "run:read",
-    resource: { kind: "run", ...locator, threadId: run.threadId },
-  });
-  if (allow.outcome !== "allow")
-    throw new ApplicationError("authorization", "authorization_denied");
+  return run;
+}
+
+async function verifyPluginQuerySourceStorage(
+  input: PluginQuerySourceStorageInput,
+  run: RunState,
+): Promise<PluginQuerySource> {
+  const locator = {
+    tenantId: input.actor.tenantId,
+    spaceId: input.actor.spaceId,
+    runId: input.sourceRunId,
+  };
   if (typeof input.extensions.loadPluginTaskAdmission !== "function")
     throw new ApplicationError("conflict", "plugin_query_source_unavailable");
   const rawAdmission = await input.extensions.loadPluginTaskAdmission(locator);

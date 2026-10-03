@@ -1,22 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { commitPostgresExtensionTurn } from "./postgres-extension-turn-commit.ts";
-import {
-  projectGenerationSourceLocator,
-  projectGenerationSourceValues,
-  projectGenerationSourceReadSql,
-  decodeProjectGenerationSource,
-  assertPostgresProjectGenerationReadSchema,
-} from "./project-generation-source-read.ts";
-import {
-  migratePostgresProjectGenerations,
-  assertPostgresProjectGenerationSchema,
-} from "./project-generation-schema.ts";
-import {
-  decodeProjectGeneration,
-  projectGenerationReadSql,
-  projectGenerationLocator,
-  type ProjectGenerationCommitOptions,
-} from "./project-generation-store-support.ts";
+import { PostgresProjectAssociations } from "./postgres-project-associations.ts";
+import type { ProjectGenerationCommitOptions } from "./project-generation-store-support.ts";
 import {
   extensionOpaqueId,
   extensionRevision,
@@ -95,21 +80,30 @@ export class PostgresExtensionStore implements ExtensionStore {
     "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
-  #projectGenerationsEnabled = false;
-  #projectGenerationReadsEnabled = false;
+  readonly #projects: PostgresProjectAssociations;
   get projectGenerationReadVersion() {
-    return this.#projectGenerationReadsEnabled
+    return this.#projects.readsEnabled
       ? ("crewon.project-generation-read.v1" as const)
       : undefined;
   }
   get projectGenerationVersion() {
-    return this.#projectGenerationsEnabled
+    return this.#projects.generationsEnabled
       ? ("crewon.project-generation-link.v0" as const)
       : undefined;
   }
   get projectGenerationPublicationVersion() {
-    return this.#projectGenerationsEnabled
+    return this.#projects.generationsEnabled
       ? ("crewon.project-generation-publication.v1" as const)
+      : undefined;
+  }
+  get projectQueryVersion() {
+    return this.#projects.queriesEnabled
+      ? ("crewon.project-query-link.v1" as const)
+      : undefined;
+  }
+  get projectQueryPublicationVersion() {
+    return this.#projects.queriesEnabled
+      ? ("crewon.project-query-publication.v1" as const)
       : undefined;
   }
   readonly #pool: Pool;
@@ -123,6 +117,9 @@ export class PostgresExtensionStore implements ExtensionStore {
     this.#schema = `"${schema}"`;
     this.#schemaName = schema;
     this.#host = host;
+    this.#projects = new PostgresProjectAssociations(pool, schema, () =>
+      this.#host.assertOpen(),
+    );
   }
 
   async migrate() {
@@ -197,88 +194,25 @@ export class PostgresExtensionStore implements ExtensionStore {
     });
   }
 
-  /** Explicit opt-in; ordinary extension migration does not inspect project metadata. */
   async migrateProjectGenerations(): Promise<void> {
-    this.#host.assertOpen();
-    const client = await this.#pool.connect();
-    try {
-      await client.query("BEGIN");
-      await client.query(
-        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
-        [JSON.stringify(["project-generation-migration", this.#schemaName])],
-      );
-      await migratePostgresProjectGenerations(client, this.#schemaName);
-      this.#host.assertOpen();
-      await client.query("COMMIT");
-      this.#projectGenerationsEnabled = true;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw error;
-    } finally {
-      client.release();
-    }
+    await this.#projects.migrateProjectGenerations();
   }
   async loadProjectGenerationLink(input: ExtensionRunLocator) {
-    if (!this.#projectGenerationsEnabled)
-      throw new Error("project_generation_unavailable");
-    this.#host.assertOpen();
-    const locator = projectGenerationLocator(input);
-    const client = await this.#pool.connect();
-    try {
-      await assertPostgresProjectGenerationSchema(client, this.#schemaName);
-      const rows = await client.query(
-        projectGenerationReadSql(`${this.#schema}.`, true),
-        locator,
-      );
-      this.#host.assertOpen();
-      return decodeProjectGeneration(rows.rows[0], {
-        tenantId: locator[0],
-        spaceId: locator[1],
-        runId: locator[2],
-      });
-    } finally {
-      client.release();
-    }
+    return this.#projects.loadProjectGenerationLink(input);
   }
-  /** Verify existing immutable data only; never create schema or grant generation writes. */
   async enableProjectGenerationReads(): Promise<void> {
-    this.#host.assertOpen();
-    const client = await this.#pool.connect();
-    try {
-      await assertPostgresProjectGenerationReadSchema(
-        client,
-        this.#schemaName,
-        `${this.#schema}.`,
-      );
-      this.#host.assertOpen();
-      this.#projectGenerationReadsEnabled = true;
-    } finally {
-      client.release();
-    }
+    await this.#projects.enableProjectGenerationReads();
   }
   async loadProjectGenerationLinkBySource(
     input: ProjectGenerationSourceLocator,
   ) {
-    if (!this.#projectGenerationReadsEnabled)
-      throw new Error("project_generation_read_unavailable");
-    this.#host.assertOpen();
-    const locator = projectGenerationSourceLocator(input);
-    const client = await this.#pool.connect();
-    try {
-      await assertPostgresProjectGenerationReadSchema(
-        client,
-        this.#schemaName,
-        `${this.#schema}.`,
-      );
-      const rows = await client.query(
-        projectGenerationSourceReadSql(`${this.#schema}.`, true),
-        projectGenerationSourceValues(locator),
-      );
-      this.#host.assertOpen();
-      return decodeProjectGenerationSource(rows.rows, locator);
-    } finally {
-      client.release();
-    }
+    return this.#projects.loadProjectGenerationLinkBySource(input);
+  }
+  async migrateProjectQueries(): Promise<void> {
+    await this.#projects.migrateProjectQueries();
+  }
+  async loadProjectQueryLink(input: ExtensionRunLocator) {
+    return this.#projects.loadProjectQueryLink(input);
   }
 
   async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
@@ -552,7 +486,8 @@ export class PostgresExtensionStore implements ExtensionStore {
     return commitPostgresExtensionTurn(
       {
         schema: this.#schemaName,
-        projectGenerationsEnabled: this.#projectGenerationsEnabled,
+        projectGenerationsEnabled: this.#projects.generationsEnabled,
+        projectQueriesEnabled: this.#projects.queriesEnabled,
         assertOpen: () => this.#host.assertOpen(),
         transaction: (scope, body, options) =>
           this.#transaction(scope, body, options),

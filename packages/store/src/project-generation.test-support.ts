@@ -47,9 +47,15 @@ export const activeAuthority = Object.freeze({
 export async function projectGenerationFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: { generationMigration?: boolean; metadata?: boolean } = {},
+  options: {
+    generationMigration?: boolean;
+    metadata?: boolean;
+    maxPoolSize?: number;
+  } = {},
 ) {
-  const f = await extensionFixture(t, backend);
+  const f = await extensionFixture(t, backend, {
+    maxPoolSize: options.maxPoolSize,
+  });
   await f.seed();
   const base = extensionTurnInput();
   const actor = {

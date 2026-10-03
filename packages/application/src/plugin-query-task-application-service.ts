@@ -37,6 +37,13 @@ import {
   assertSavedPluginQueryTask,
   pluginQueryTaskReceipt,
 } from "./plugin-query-task-support.ts";
+import {
+  capturePublishedProjectQueryTask,
+  commitProjectQueryTask,
+  prepareProjectQueryTask,
+  type CapturedProjectQueryTask,
+} from "./project-query-application-support.ts";
+import type { CreatePublishedProjectQueryTaskInput } from "./project-query-execution-authority.ts";
 
 export class PluginQueryTaskApplicationService {
   readonly #dependencies: ExtensionTaskApplicationDependencies;
@@ -50,6 +57,25 @@ export class PluginQueryTaskApplicationService {
     input: CreateExtensionTaskCommand,
     pinInput: PluginTaskAdmissionPin,
     authorityInput?: PluginTaskCommitAuthorityPort,
+  ) {
+    return this.#create(actorInput, input, pinInput, authorityInput);
+  }
+  async createPublished(input: CreatePublishedProjectQueryTaskInput) {
+    const captured = capturePublishedProjectQueryTask(input);
+    return this.#create(
+      captured.actor,
+      captured.command,
+      captured.executionPin,
+      undefined,
+      captured.captured,
+    );
+  }
+  async #create(
+    actorInput: ActorContext,
+    input: CreateExtensionTaskCommand,
+    pinInput: PluginTaskAdmissionPin,
+    authorityInput?: PluginTaskCommitAuthorityPort,
+    projectInput?: CapturedProjectQueryTask,
   ) {
     return extensionUseCase(async () => {
       const pin = checkedPluginTaskPin(pinInput),
@@ -107,6 +133,15 @@ export class PluginQueryTaskApplicationService {
         authorizeExtension(d.authorization, actor, "extension:query", scope);
       await authorize();
       await this.#authorizeThread(actor, command.threadId);
+      const project =
+        projectInput === undefined
+          ? null
+          : await prepareProjectQueryTask({
+              captured: projectInput,
+              dependencies: d,
+              actor,
+              command,
+            });
       const sourceInput = {
         actor,
         pluginId: pin.pluginId,
@@ -121,13 +156,16 @@ export class PluginQueryTaskApplicationService {
         digester: d.digester,
       };
       const source = await loadPluginQuerySource(sourceInput);
-      const receipt = pluginQueryTaskReceipt(
+      project?.assertSource(source);
+      const baseReceipt = pluginQueryTaskReceipt(
         actor,
         command,
         pin,
         source,
         d.digester,
       );
+      const receipt =
+        project === null ? baseReceipt : project.receipt(baseReceipt);
       const previous = await d.extensions.loadExtensionTurnReceipt({
         ...scope,
         receipt,
@@ -144,6 +182,8 @@ export class PluginQueryTaskApplicationService {
         await authorize();
         await this.#authorizeThread(actor, command.threadId);
         await authority?.assertCurrent({ actor, pin });
+        await project?.assertSaved(previous.binding, receipt);
+        await project?.assertCurrent();
         return previous;
       }
       const activationRaw = await d.extensions.loadExtensionActivation(scope);
@@ -278,13 +318,23 @@ export class PluginQueryTaskApplicationService {
       await authorize();
       await this.#authorizeThread(actor, command.threadId);
       await authority?.assertCurrent({ actor, pin });
-      const result = await d.extensions.commitExtensionTurn({
-        turn,
-        binding,
-        receipt,
-        expectedActivationRevision: activation.revision,
-        pluginQueryAdmission: admission,
-      });
+      await project?.assertCurrent();
+      const commit = () =>
+        d.extensions.commitExtensionTurn(
+          {
+            turn,
+            binding,
+            receipt,
+            expectedActivationRevision: activation.revision,
+            pluginQueryAdmission: admission,
+            ...(project === null ? {} : { projectQuery: project.sidecar }),
+          },
+          project?.commitOptions,
+        );
+      const result =
+        project === null
+          ? await commit()
+          : await commitProjectQueryTask(commit);
       if (result.creditAdmission !== undefined)
         throw new ApplicationError(
           "internal",
@@ -298,6 +348,7 @@ export class PluginQueryTaskApplicationService {
         receipt,
         digester: d.digester,
       });
+      await project?.assertSaved(result.binding, receipt);
       return result;
     });
   }

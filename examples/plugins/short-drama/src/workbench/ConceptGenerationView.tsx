@@ -3,6 +3,8 @@ import type {
   ConceptGenerationTaskView,
   ConceptGenerationOperation,
 } from "@crewon/plugin-sdk/contracts";
+import type { ConceptQueryController } from "./ConceptQueryController";
+import { ConceptQueryOperationButton } from "./ConceptQueryActions";
 import type { ConceptGenerationController } from "./ConceptGenerationController";
 
 const runLabels: Record<ConceptGenerationTaskView["runStatus"], string> = {
@@ -28,11 +30,13 @@ const operationLabels: Record<ConceptGenerationOperation["status"], string> = {
 /** Read-only results remain attached to the selected saved revision and original result indices. */
 export function ConceptGenerationView({
   controller,
+  queries,
   name,
   blocked,
   unconfirmed = false,
 }: {
   controller: ConceptGenerationController;
+  queries: ConceptQueryController;
   name: string;
   blocked: boolean;
   unconfirmed?: boolean;
@@ -93,6 +97,10 @@ export function ConceptGenerationView({
               data-operation-revision={operation.operationRevision}
             >
               <strong>执行记录：{operationLabels[operation.status]}</strong>
+              <ConceptQueryOperationButton
+                controller={queries}
+                operationId={operation.operationId}
+              />
               <p className="detail-note">
                 更新于{" "}
                 <time dateTime={operation.observedAt}>

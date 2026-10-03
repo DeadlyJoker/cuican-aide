@@ -29,6 +29,8 @@ import { createInstalledPluginTaskReceipts } from "../plugins/installedPluginTas
 import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
 import { createInstalledPluginGenerationJournal } from "../plugins/installedPluginGenerationJournal";
 
+import { createInstalledPluginProjectQueryJournal } from "../plugins/installedPluginProjectQueryJournal";
+
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
 const EMPTY_MODULES: readonly CommandWorkspaceHostModule[] = Object.freeze([]);
@@ -106,6 +108,22 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskContextEnabled, onDiagnostic],
   );
+  const mountedQueryJournal = useRef<ReturnType<
+    typeof createInstalledPluginProjectQueryJournal
+  > | null>(null);
+  const projectQueryJournal = useMemo(
+    () =>
+      scope && taskContextEnabled
+        ? createInstalledPluginProjectQueryJournal({
+            assertCurrent: () => {
+              if (current.current !== scope || mountedScope.current !== scope)
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onDiagnostic,
+          })
+        : null,
+    [scope, taskContextEnabled, onDiagnostic],
+  );
   const receipts = useMemo(
     () =>
       scope && taskContextEnabled
@@ -123,6 +141,7 @@ export function useInstalledPluginModules({
     mountedScope.current = scope;
     mountedReceipts.current = receipts;
     mountedGenerationJournal.current = generationJournal;
+    mountedQueryJournal.current = projectQueryJournal;
     return () => {
       if (
         mountedScope.current === scope &&
@@ -131,6 +150,7 @@ export function useInstalledPluginModules({
         mountedScope.current = null;
         mountedReceipts.current = null;
         mountedGenerationJournal.current = null;
+        mountedQueryJournal.current = null;
       }
       // StrictMode immediately reattaches this same owner. Real withdrawal
       // fences synchronously and erases its recovery cache after that boundary.
@@ -145,9 +165,14 @@ export function useInstalledPluginModules({
           mountedGenerationJournal.current !== generationJournal
         )
           generationJournal?.invalidate();
+        if (
+          mountedScope.current !== scope ||
+          mountedQueryJournal.current !== projectQueryJournal
+        )
+          projectQueryJournal?.invalidate();
       });
     };
-  }, [scope, receipts, generationJournal]);
+  }, [scope, receipts, generationJournal, projectQueryJournal]);
   const host = useMemo(
     () =>
       scope
@@ -167,9 +192,10 @@ export function useInstalledPluginModules({
             onDiagnostic,
             ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
             ...(generationJournal ? { generationJournal } : {}),
+            ...(projectQueryJournal ? { projectQueryJournal } : {}),
           })
         : null,
-    [scope, onDiagnostic, receipts, generationJournal],
+    [scope, onDiagnostic, receipts, generationJournal, projectQueryJournal],
   );
   useLayoutEffect(() => {
     if (!scope?.assets) return;
@@ -216,8 +242,10 @@ export function useInstalledPluginModules({
       mountedScope.current = null;
       mountedReceipts.current = null;
       mountedGenerationJournal.current = null;
+      mountedQueryJournal.current = null;
       receipts?.invalidate();
       generationJournal?.invalidate();
+      projectQueryJournal?.invalidate();
       setSuspendedClient(client);
       setSnapshot(null);
     };
@@ -227,7 +255,7 @@ export function useInstalledPluginModules({
         AGENT_PLATFORM_SESSION_CHANGED_EVENT,
         invalidate,
       );
-  }, [client, receipts, generationJournal]);
+  }, [client, receipts, generationJournal, projectQueryJournal]);
   useEffect(() => {
     if (!scope || !host) return;
     const controller = new AbortController();
@@ -332,6 +360,36 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskRuntime, generationJournal],
   );
+  const projectQueryPorts = useMemo(
+    () =>
+      scope && taskRuntime && projectQueryJournal
+        ? {
+            client: scope.client,
+            runtime: taskRuntime,
+            journal: projectQueryJournal,
+            assertSessionCurrent: () => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedQueryJournal.current !== projectQueryJournal ||
+                taskContextRef.current?.runtime !== taskRuntime
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onOpenTask: (threadId: string) => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedQueryJournal.current !== projectQueryJournal ||
+                taskContextRef.current?.runtime !== taskRuntime
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+              taskContextRef.current.onOpenTask(threadId);
+            },
+          }
+        : null,
+    [scope, taskRuntime, projectQueryJournal],
+  );
   const taskRunIdsKey = JSON.stringify(taskContext?.runIds.slice(0, 8) ?? []);
   const taskRunIds = useMemo<readonly string[]>(
     () => Object.freeze(JSON.parse(taskRunIdsKey)),
@@ -355,6 +413,7 @@ export function useInstalledPluginModules({
               onDiagnostic={onDiagnostic}
               taskPorts={taskPorts}
               generationPorts={generationPorts}
+              projectQueryPorts={projectQueryPorts}
               selectedThreadId={selectedTaskThreadId}
               runIds={taskRunIds}
               onOpenTask={(threadId) => {
@@ -374,6 +433,7 @@ export function useInstalledPluginModules({
     onDiagnostic,
     taskPorts,
     generationPorts,
+    projectQueryPorts,
     selectedTaskThreadId,
     taskRunIds,
   ]);

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "5.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "6.0.0";
 if (version.length > 64 || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(version))
   throw new Error("example_version_invalid");
 const output = join(root, "dist", version);
@@ -75,7 +75,7 @@ const descriptor = parsePluginPackageDescriptor({
   version,
   title: "AI 短剧工作台",
   description:
-    "独立短剧工作台：保存项目与概念输入，通过宿主提交已保存画面的生成任务并恢复原记录。",
+    "独立短剧工作台：保存项目与概念输入，通过宿主提交已保存画面的生成任务并恢复原记录，并查询原生图服务执行进度。",
   entrypoints: {
     node: null,
     ui: { path: "ui.mjs", mode: "trustedModule" },
@@ -89,6 +89,11 @@ const descriptor = parsePluginPackageDescriptor({
       optional: true,
     },
     { service: "crewon.project-generations", apiVersion: "1", optional: true },
+    {
+      service: "crewon.project-generation-queries",
+      apiVersion: "1",
+      optional: true,
+    },
     {
       service: "crewon.project-generation-contexts",
       apiVersion: "1",

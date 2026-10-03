@@ -64,8 +64,10 @@ export {
 export * from "./creative-project-ui-action-contract.ts";
 export * from "./project-generation-ui-action-contract.ts";
 export * from "./project-generation-read-ui-action-contract.ts";
+export * from "./project-generation-query-ui-action-contract.ts";
 export * from "./project-generation-context-ui-action-contract.ts";
 export * from "./project-generation-host-context-contract.ts";
+export * from "./project-generation-query-host-context-contract.ts";
 export type {
   ConceptGenerationLocator,
   ConceptGenerationImage,

@@ -62,10 +62,21 @@ import {
   type ProjectGenerationCommitOptions,
 } from "./project-generation-store-support.ts";
 import { admitPostgresProjectGenerationPublication } from "./project-generation-publication-admission.ts";
+import { assertPostgresProjectQuerySchema } from "./project-query-schema.ts";
+import {
+  captureProjectQuery,
+  admitPostgresProjectQueryPublication,
+  preparePostgresProjectQuery,
+  loadPostgresProjectQueryLink,
+  assertProjectQueryReceipt,
+  projectQueryInsertSql,
+  projectQueryValues,
+} from "./project-query-store-support.ts";
 
 type PostgresExtensionTurnHost = Readonly<{
   schema: string;
   projectGenerationsEnabled: boolean;
+  projectQueriesEnabled: boolean;
   assertOpen(): void;
   transaction(
     scope: ExtensionScope,
@@ -107,6 +118,20 @@ export async function commitPostgresExtensionTurn(
   options?: ProjectGenerationCommitOptions,
 ) {
   const pluginQuery = checkedPluginQueryTurn(input);
+  const projectQuery = captureProjectQuery(
+    input,
+    pluginQuery,
+    host.projectQueriesEnabled,
+    options,
+  );
+  if (projectQuery !== null)
+    input = {
+      ...input,
+      projectQuery: {
+        reference: projectQuery.reference,
+        generationLinkDigest: projectQuery.generationLinkDigest,
+      },
+    };
   // Retain one snapshot while the PostgreSQL transaction awaits independent Store operations.
   // Validate v1 exact fields/accessors before clone can flatten or invoke them.
   const pluginAdmission = checkedPluginTaskAdmission(input);
@@ -128,12 +153,23 @@ export async function commitPostgresExtensionTurn(
   if (prepared !== null)
     await assertCreativeProjectCommitCurrent(prepared.authority);
   assertCreativeProjectCommitActive(prepared?.authority);
+  if (projectQuery !== null)
+    await assertCreativeProjectCommitCurrent(projectQuery.authority);
+  assertCreativeProjectCommitActive(projectQuery?.authority);
   let creditPath = false;
   return host.transaction(
     binding,
     async (client) => {
       if (host.projectGenerationsEnabled)
         await assertPostgresProjectGenerationSchema(client, host.schema);
+      if (host.projectQueriesEnabled)
+        await assertPostgresProjectQuerySchema(client, host.schema);
+      if (projectQuery !== null)
+        await admitPostgresProjectQueryPublication(
+          client,
+          host.schema,
+          projectQuery,
+        );
       const replay = await host.receipt(
         client,
         binding,
@@ -185,6 +221,19 @@ export async function commitPostgresExtensionTurn(
         }
         if (prepared !== null)
           await assertCreativeProjectCommitCurrent(prepared.authority);
+        if (host.projectQueriesEnabled)
+          assertProjectQueryReceipt(
+            projectQuery,
+            await loadPostgresProjectQueryLink(
+              client,
+              host.schema,
+              result.binding,
+            ),
+            result.binding,
+            frozenInput.receipt,
+          );
+        if (projectQuery !== null)
+          await assertCreativeProjectCommitCurrent(projectQuery.authority);
         return result;
       }
       const creditAdmission = checkedExtensionCreditAdmission({
@@ -208,6 +257,16 @@ export async function commitPostgresExtensionTurn(
           pluginQuery,
           binding,
         );
+      const queryLink =
+        projectQuery === null
+          ? undefined
+          : await preparePostgresProjectQuery(
+              client,
+              host.schema,
+              projectQuery,
+              frozenInput,
+              pluginQuery!,
+            );
       await host.admit(client, binding, frozenInput.expectedActivationRevision);
       let projectLink: ProjectGenerationLink | undefined;
       if (prepared !== null) {
@@ -312,14 +371,22 @@ export async function commitPostgresExtensionTurn(
           projectGenerationInsertSql(`${prefix}.`, true),
           projectGenerationValues(projectLink),
         );
+      if (queryLink !== undefined)
+        await client.query(
+          projectQueryInsertSql(`${prefix}.`, true),
+          projectQueryValues(queryLink),
+        );
       if (prepared !== null)
         await assertCreativeProjectCommitCurrent(prepared.authority);
+      if (projectQuery !== null)
+        await assertCreativeProjectCommitCurrent(projectQuery.authority);
       return result;
     },
     {
       beforeCommit: () => {
         if (creditPath) host.assertOpen();
         assertCreativeProjectCommitActive(prepared?.authority);
+        assertCreativeProjectCommitActive(projectQuery?.authority);
       },
     },
   );

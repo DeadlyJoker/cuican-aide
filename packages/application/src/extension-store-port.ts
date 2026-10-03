@@ -8,12 +8,15 @@ import type {
   PluginQueryTaskAdmission,
   ProjectGenerationReference,
   ProjectGenerationLink,
+  ProjectQueryReference,
+  ProjectQueryLink,
 } from "@crewon/domain";
 import type {
   CreativeProjectCommitAuthority,
   CreativeProjectOwnerScope,
 } from "./creative-project-store-port.ts";
 import type { ProjectGenerationExecutionPublication } from "./project-generation-execution-authority.ts";
+import type { ProjectQueryExecutionPublication } from "./project-query-execution-authority.ts";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
 import type {
   CommitTurnStartInput,
@@ -80,12 +83,21 @@ export type CommitExtensionTurnInput = Readonly<{
   pluginQueryAdmission?: PluginQueryTaskAdmission;
   /** Internal confirmed project source; committed atomically with the original Turn and credits. */
   projectGeneration?: ProjectGenerationReference;
+  /** Historical source selected by the actual project owner; no metadata CAS or new generation slot. */
+  projectQuery?: Readonly<{
+    reference: ProjectQueryReference;
+    generationLinkDigest: string;
+  }>;
 }>;
 export type CommitExtensionTurnOptions = Readonly<{
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
   /** Detached source and execution installation pins; the Store locks both using its existing connection. */
   projectGenerationPublication?: ProjectGenerationExecutionPublication;
+  /** Transaction-safe identity/policy fences; must never borrow a second connection. */
+  projectQueryAuthority?: CreativeProjectCommitAuthority;
+  /** Current business UI and query execution pins, separately from original generation provenance. */
+  projectQueryPublication?: ProjectQueryExecutionPublication;
 }>;
 /** Adds the admitted user message and history to the existing immutable task receipt. */
 export type CommitExtensionTurnResult = CommitExtensionRunResult &
@@ -109,6 +121,11 @@ export interface ExtensionStore {
   readonly projectGenerationPublicationVersion?: "crewon.project-generation-publication.v1";
   /** Separate read-only opt-in; it does not grant generation writes or create any schema. */
   readonly projectGenerationReadVersion?: "crewon.project-generation-read.v1";
+  readonly projectQueryVersion?: "crewon.project-query-link.v1";
+  readonly projectQueryPublicationVersion?: "crewon.project-query-publication.v1";
+  loadProjectQueryLink?(
+    input: ExtensionRunLocator,
+  ): Promise<ProjectQueryLink | null>;
   loadProjectGenerationLinkBySource?(
     input: ProjectGenerationSourceLocator,
   ): Promise<ProjectGenerationLink | null>;

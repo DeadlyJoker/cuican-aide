@@ -123,7 +123,11 @@ export * from "./external-operation-store-port.ts";
 export * from "./extension-store-port.ts";
 export * from "./extension-host-port.ts";
 export * from "./extension-query-host-port.ts";
-export * from "./plugin-query-source.ts";
+export {
+  loadPluginQuerySource,
+  type PluginQuerySource,
+  type PluginQueryHostPort,
+} from "./plugin-query-source.ts";
 export * from "./plugin-query-task-support.ts";
 export * from "./extension-configuration-application-service.ts";
 export * from "./extension-execution-authorization.ts";
@@ -136,6 +140,14 @@ export {
   type ProjectGenerationExecutionAuthority,
 } from "./project-generation-execution-authority.ts";
 export { projectGenerationUiTaskCommand } from "./project-generation-task-receipt.ts";
+export {
+  captureProjectQueryExecutionPublication,
+  type CreatePublishedProjectQueryTaskInput,
+  type ProjectQueryExecutionPublication,
+  type ProjectQueryExecutionAuthority,
+} from "./project-query-execution-authority.ts";
+export { projectGenerationQueryUiTaskCommand } from "./project-query-task-receipt.ts";
+export type { CommittedProjectQueryConfiguration } from "./plugin-ui-committed-project-query.ts";
 export type {
   GetPublishedProjectGenerationReadinessInput,
   PublishedProjectGenerationReadinessResult,

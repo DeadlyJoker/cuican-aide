@@ -70,6 +70,11 @@ import {
 import { isInstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
 import { isInstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
 import { validateProductionConfig } from "./production-configuration-validation.ts";
+import { assertProjectQueryExecutionComposition } from "./project-query-plugin-configuration.ts";
+import {
+  captureProductionPluginUiOwnerConfiguration,
+  closeProductionProjectQueryOwner,
+} from "./project-query-plugin-composition.ts";
 import { assertProjectGenerationExecutionComposition } from "./project-generation-plugin-configuration.ts";
 import {
   parseProductionPluginInstallationConfiguration,
@@ -178,6 +183,13 @@ export async function createProductionPostgresControlApi(
       config.pluginConfiguration === undefined
     )
       throw new Error("project_generation_read_ui_reader_required");
+    assertProjectQueryExecutionComposition({
+      queries: creativeProjects?.pluginQueries,
+      publications: config.pluginUi?.configuration.publications,
+      taskConfiguration: config.pluginTasks,
+      uiConfiguration: config.pluginUi,
+      ownedActions: config.pluginUi?.ownedProjectQueryActions,
+    });
     assertProjectGenerationExecutionComposition({
       generations: creativeProjects?.pluginGenerations,
       publications: config.pluginUi?.configuration.publications,
@@ -190,20 +202,6 @@ export async function createProductionPostgresControlApi(
       ownedCreativeProjectActions !== undefined
     )
       throw new Error("creative_project_plugin_actions_conflict");
-    // Capture the pure deployment settings before PostgreSQL's asynchronous open.
-    const actions = config.pluginUi?.actions;
-    const actionSnapshot =
-      actions === undefined
-        ? undefined
-        : Object.freeze({ invoke: actions.invoke.bind(actions) });
-    const committedTasks = config.pluginUi?.committedTasks;
-    const committedSnapshot =
-      committedTasks === undefined
-        ? undefined
-        : Object.freeze({
-            isOutcome: committedTasks.isOutcome.bind(committedTasks),
-            verify: committedTasks.verify.bind(committedTasks),
-          });
     const pluginInstallation =
       config.pluginInstallation === undefined
         ? undefined
@@ -233,27 +231,9 @@ export async function createProductionPostgresControlApi(
       ...(config.pluginUi === undefined
         ? {}
         : {
-            pluginUi: Object.freeze({
-              configuration: parseProductionPluginUiConfiguration(
-                config.pluginUi.configuration,
-              ),
-              ...(actionSnapshot === undefined
-                ? {}
-                : { actions: actionSnapshot }),
-              ...(committedSnapshot === undefined
-                ? {}
-                : { committedTasks: committedSnapshot }),
-              ...(ownedTaskActions === undefined ? {} : { ownedTaskActions }),
-              ...(ownedProjectGenerationActions === undefined
-                ? {}
-                : { ownedProjectGenerationActions }),
-              ...(ownedCreativeProjectActions === undefined
-                ? {}
-                : { ownedCreativeProjectActions }),
-              ...(ownedProjectGenerationReadActions === undefined
-                ? {}
-                : { ownedProjectGenerationReadActions }),
-            }),
+            pluginUi: captureProductionPluginUiOwnerConfiguration(
+              config.pluginUi,
+            ),
           }),
     });
     const registry =
@@ -271,6 +251,13 @@ export async function createProductionPostgresControlApi(
     return await composeProductionControlApi(store, productionConfig, registry);
   } catch (error) {
     const failures: unknown[] = [];
+    try {
+      await closeProductionProjectQueryOwner(
+        config.pluginUi?.ownedProjectQueryActions,
+      );
+    } catch (failure) {
+      failures.push(failure);
+    }
     if (
       isPluginProjectGenerationReadActionBridge(
         ownedProjectGenerationReadActions,
@@ -401,6 +388,7 @@ async function composeProductionControlApi(
         );
       }
       const existingHostUiServices =
+        pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
         projectPluginRuntime?.hostUiServices;
       if (creativeProjects?.generationReadUi !== undefined) {
@@ -475,6 +463,9 @@ async function composeProductionControlApi(
             ...(pluginTaskRuntime === undefined
               ? {}
               : { ownedTaskActions: pluginTaskRuntime.owner }),
+            ...(pluginTaskRuntime?.projectQueries === undefined
+              ? {}
+              : { ownedProjectQueryActions: pluginTaskRuntime.projectQueries }),
             ...(pluginTaskRuntime?.projectGenerations === undefined
               ? {}
               : {
@@ -652,11 +643,13 @@ async function composeProductionControlApi(
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
             projectGenerations: pluginTaskRuntime?.projectGenerations,
+            projectQueries: pluginTaskRuntime?.projectQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
           });
     const extensionReads =
       pluginTaskRuntime?.extensionReads ??
       pluginConfigurationRuntime?.extensionReads;
+    projectGenerationReads ??= pluginTaskRuntime?.projectGenerationReads;
     const generationReadStore =
       projectGenerationReads !== undefined
         ? undefined

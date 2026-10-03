@@ -38,11 +38,17 @@ import {
   captureProjectGenerationPublications,
   type PluginTaskAdmissionPin,
   type ProjectGenerationPublication,
+  captureProjectQueryPublications,
+  type ProjectQueryPublication,
 } from "@crewon/domain";
 import {
   assertSavedPluginQueryTask,
   pluginQueryTaskReceipt,
 } from "./plugin-query-task-support.ts";
+import {
+  prepareCommittedProjectQueries,
+  type CommittedProjectQueryConfiguration,
+} from "./plugin-ui-committed-project-query.ts";
 
 export type PluginUiCommittedTaskAuthorityDependencies = Readonly<{
   extensions: ExtensionStore;
@@ -50,6 +56,7 @@ export type PluginUiCommittedTaskAuthorityDependencies = Readonly<{
   digester: ContentDigester;
   /** Explicit approved business-to-execution mapping; absent for all ordinary task paths. */
   projectGenerations?: CommittedProjectGenerationConfiguration;
+  projectQueries?: CommittedProjectQueryConfiguration;
 }>;
 type VerifiedOutcome = Readonly<{
   context: PluginUiActionContext;
@@ -62,6 +69,30 @@ const generationAuthorities = new WeakMap<
   object,
   readonly ProjectGenerationPublication[]
 >();
+const queryAuthorities = new WeakMap<
+  object,
+  readonly ProjectQueryPublication[]
+>();
+
+export function isPluginUiCommittedProjectQueryAuthority(
+  input: Readonly<{
+    authority: unknown;
+    publications: readonly ProjectQueryPublication[];
+  }>,
+): boolean {
+  if (input.authority === null || typeof input.authority !== "object")
+    return false;
+  const configured = queryAuthorities.get(input.authority);
+  if (configured === undefined) return false;
+  return captureProjectQueryPublications(input.publications).every(
+    (publication) =>
+      configured.some(
+        (candidate) =>
+          extensionCanonicalJson(candidate) ===
+          extensionCanonicalJson(publication),
+      ),
+  );
+}
 
 /** Construction capability only; this does not grant current execution or credit permission. */
 export function isPluginUiCommittedProjectGenerationAuthority(
@@ -96,6 +127,7 @@ export class PluginUiCommittedTaskAuthority
   readonly #projectGenerations: ReturnType<
     typeof prepareCommittedProjectGenerations
   >;
+  readonly #projectQueries: ReturnType<typeof prepareCommittedProjectQueries>;
 
   constructor(dependencies: PluginUiCommittedTaskAuthorityDependencies) {
     requirePluginTaskStore(dependencies.extensions);
@@ -120,6 +152,61 @@ export class PluginUiCommittedTaskAuthority
       throw new ApplicationError(
         "internal",
         "plugin_ui_project_generation_configuration_invalid",
+        { cause },
+      );
+    }
+    try {
+      this.#projectQueries = prepareCommittedProjectQueries(
+        dependencies.projectQueries,
+        this.#dependencies,
+      );
+      if (this.#projectQueries !== undefined)
+        queryAuthorities.set(this, this.#projectQueries.publications);
+    } catch (cause) {
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_project_query_configuration_invalid",
+        { cause },
+      );
+    }
+  }
+
+  /** A saved query sidecar acknowledges the query Run while retaining its original business context. */
+  async issueProjectGenerationQuery(
+    input: Readonly<{
+      context: PluginUiActionContext;
+      command: CreateExtensionTaskCommand;
+      executionPin: PluginTaskAdmissionPin;
+      result: CommitExtensionTurnResult;
+    }>,
+  ): Promise<PluginUiCommittedTaskOutcome> {
+    try {
+      if (this.#projectQueries === undefined)
+        throw new Error("plugin_ui_project_query_unavailable");
+      const value = uiRecord(input, [
+        "context",
+        "command",
+        "executionPin",
+        "result",
+      ]);
+      const invocation = value.context as PluginUiActionContext;
+      const verified = await this.#projectQueries.verify(input);
+      const outcome = Object.freeze(
+        Object.create(outcomePrototype),
+      ) as PluginUiCommittedTaskOutcome;
+      this.#outcomes.set(
+        outcome,
+        Object.freeze({
+          context: invocation,
+          contextFingerprint: verified.fingerprint,
+          output: parsePluginUiJsonValue(verified.output),
+        }),
+      );
+      return outcome;
+    } catch (cause) {
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_committed_project_query_invalid",
         { cause },
       );
     }

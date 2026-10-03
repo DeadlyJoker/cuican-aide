@@ -4,6 +4,7 @@ import test from "node:test";
 import type { PluginUiJsonValue } from "@crewon/application";
 import { seedThread } from "../../store/src/thread-store-conformance.test-support.ts";
 import { extensionStoreDigester } from "../../store/src/extension-store-records.ts";
+import { startExternalOperationFixtureRun } from "../../store/src/external-operation-run.test-support.ts";
 import {
   actor,
   taskActionFixture,
@@ -13,6 +14,7 @@ async function fixture(t: Parameters<typeof taskActionFixture>[0]) {
   const f = await taskActionFixture(t, { queryTasks: true });
   await f.invoke();
   const source = f.state.accepted[0]!;
+  await startExternalOperationFixtureRun(f.first.parent, source.binding);
   const operationId = randomUUID();
   await f.operations.reserveExternalOperation({
     tenantId: actor.tenantId,
