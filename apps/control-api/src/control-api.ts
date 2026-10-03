@@ -5,6 +5,7 @@ import { registerModelSpendingRoutes } from "./model-spending-route.ts";
 import { registerExtensionConfigurationRoutes } from "./extension-configuration-route.ts";
 import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
+import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
 import {
   registerPluginControlRoutes,
   type PluginUiControlService,
@@ -12,6 +13,7 @@ import {
   type PluginSourceControlService,
 } from "./plugin-control-route.ts";
 import type { ExtensionReadApplicationService } from "@crewon/application";
+import type { CreativeProjectApplicationService } from "@crewon/application";
 import type { ExtensionConfigurationApplicationService } from "@crewon/application";
 import type { ExtensionTaskApplicationService } from "@crewon/application";
 import type { ModelSpendingApplicationService } from "@crewon/application";
@@ -234,6 +236,7 @@ export type ControlApiDependencies = Readonly<{
   extensions?: ExtensionConfigurationApplicationService | null;
   extensionTasks?: ExtensionTaskApplicationService | null;
   extensionReads?: ExtensionReadApplicationService | null;
+  creativeProjects?: CreativeProjectApplicationService | null;
   pluginInstallation?: PluginInstallationControlService | null;
   pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
@@ -357,6 +360,12 @@ export function buildControlApi(
   registerModelPricingRoutes(app, dependencies);
   registerModelSpendingRoutes(app, dependencies);
   registerPluginControlRoutes(app, dependencies);
+  if (dependencies.creativeProjects != null) {
+    registerCreativeProjectRoutes(app, {
+      identity: dependencies.identity,
+      creativeProjects: dependencies.creativeProjects,
+    });
+  }
   if (dependencies.extensions != null) {
     registerExtensionConfigurationRoutes(app, {
       identity: dependencies.identity,

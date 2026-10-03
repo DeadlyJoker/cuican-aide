@@ -45,11 +45,19 @@ import {
 } from "./desktop-plugin-configuration.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
 import {
+  captureCreativeProjectCompositionConfig,
+  composeStandaloneCreativeProjects,
+  prepareCreativeProjects,
+  type CreativeProjectCompositionConfig,
+  type PreparedCreativeProjects,
+} from "./creative-project-composition.ts";
+import {
   composeStandaloneExtensionServices,
   type DesktopPluginNamespaceMembership,
 } from "./desktop-plugin-extension-composition.ts";
 
 import { buildControlApi } from "./control-api.ts";
+import { closeStandaloneCompositionOwners as closeOwners } from "./standalone-composition-cleanup.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import { RunEventHub } from "./run-event-hub.ts";
@@ -120,6 +128,7 @@ type ControlApiCompositionConfig = Readonly<{
   }>;
   /** Borrowed authority port, supplied explicitly by its installed historical runtime owner. */
   pluginQueryHost?: PluginQueryHostPort;
+  creativeProjects?: CreativeProjectCompositionConfig;
 }>;
 
 export type StandaloneControlApiConfig = ControlApiCompositionConfig &
@@ -148,6 +157,8 @@ export type StandaloneControlApiRuntime = Readonly<{
 export function createStandaloneControlApi(
   config: StandaloneControlApiConfig,
 ): StandaloneControlApiRuntime {
+  if (config.creativeProjects !== undefined)
+    throw new Error("creative_projects_require_async_composition");
   if (config.pluginQueryHost !== undefined)
     throw new Error("installed_plugin_query_requires_extensions");
   const store = new SqliteRunStore(config.databasePath);
@@ -163,6 +174,21 @@ export function createStandaloneControlApi(
     void store.close();
     throw error;
   }
+}
+
+/** Explicit SQLite project opt-in; the historical synchronous creator stays unchanged. */
+export async function createStandaloneControlApiWithCreativeProjects(
+  config: StandaloneControlApiConfig &
+    Readonly<{ creativeProjects: CreativeProjectCompositionConfig }>,
+): Promise<StandaloneControlApiRuntime> {
+  if (config.pluginQueryHost !== undefined)
+    throw new Error("installed_plugin_query_requires_extensions");
+  const pinned = pinExtensionCompositionConfig(config);
+  return composeStandaloneCreativeProjects({
+    config: pinned,
+    compose: ({ store, config: composed, projects }) =>
+      composeControlApi(store, composed, undefined, undefined, projects),
+  });
 }
 
 /** Explicit async opt-in; the existing synchronous creator keeps plugins unavailable. */
@@ -248,19 +274,28 @@ export async function createStandaloneControlApiWithPlugins(
         ...(pinned.localStoragePaths ?? []),
       ],
     };
-    return pinned.extensionWorker === undefined
-      ? composeControlApi(store, composed, undefined, prepared)
-      : await composeExtensionControlApi(
-          store,
-          composed,
-          pinned.extensionWorker,
-          prepared,
-        );
+    if (pinned.extensionWorker === undefined)
+      return composeControlApi(
+        store,
+        composed,
+        undefined,
+        prepared,
+        await prepareCreativeProjects(store, pinned.creativeProjects),
+      );
+    return await composeExtensionControlApi(
+      store,
+      composed,
+      pinned.extensionWorker,
+      prepared,
+    );
   } catch (error) {
     await closeOwners(
       [
         () => prepared?.failureCleanup ?? prepared?.runtime.close(),
-        () => config.artifactStore.close(),
+        () =>
+          prepared?.failureCleanup === undefined
+            ? config.artifactStore.close()
+            : undefined,
         () => store.close(),
       ],
       [error],
@@ -277,10 +312,7 @@ export async function createPostgresControlApi(
     config.extensionWorker === undefined
   )
     throw new Error("installed_plugin_query_requires_extensions");
-  const pinned =
-    config.extensionWorker === undefined
-      ? config
-      : pinExtensionCompositionConfig(config);
+  const pinned = pinExtensionCompositionConfig(config);
   const store = await PostgresDomainStore.open({
     connectionString: pinned.connectionString,
     schema: pinned.schema,
@@ -289,10 +321,22 @@ export async function createPostgresControlApi(
   });
   if (pinned.extensionWorker !== undefined)
     return composeExtensionControlApi(store, pinned, pinned.extensionWorker);
+  let projects: PreparedCreativeProjects | undefined;
   try {
-    return composeControlApi(store, config);
+    projects = await prepareCreativeProjects(store, pinned.creativeProjects);
+    return composeControlApi(store, pinned, undefined, undefined, projects);
   } catch (error) {
-    await store.close();
+    await closeOwners(
+      [
+        () =>
+          projects?.failureCleanup ??
+          (pinned.creativeProjects === undefined
+            ? undefined
+            : pinned.artifactStore.close()),
+        () => store.close(),
+      ],
+      [error],
+    );
     throw error;
   }
 }
@@ -302,7 +346,7 @@ function pinExtensionCompositionConfig<
     extensionWorker?: ExtensionWorkerConfig;
   },
 >(config: T): T {
-  return {
+  return Object.freeze({
     ...config,
     actor: structuredClone(config.actor),
     allowedOrigins: [...config.allowedOrigins],
@@ -317,7 +361,10 @@ function pinExtensionCompositionConfig<
     ...(config.pluginQueryHost === undefined
       ? {}
       : { pluginQueryHost: capturePluginQueryHost(config.pluginQueryHost) }),
-  };
+    creativeProjects: captureCreativeProjectCompositionConfig(
+      config.creativeProjects,
+    ),
+  });
 }
 function capturePluginQueryHost(
   port: PluginQueryHostPort,
@@ -362,40 +409,31 @@ async function composeExtensionControlApi(
     const operations = store.externalOperationStore();
     await operations.migrate();
     prepared = { client, catalog, extensions, operations };
-    return composeControlApi(store, config, prepared, preparedPlugins);
-  } catch (error) {
-    await closeOwners(
-      [
-        () =>
-          prepared?.failureCleanup ??
-          prepared?.earlyFailureCleanup?.() ??
-          config.artifactStore.close(),
-        () => preparedPlugins?.runtime.close(),
-        () => client?.close(),
-        () => store.close(),
-      ],
-      [error],
+    return composeControlApi(
+      store,
+      config,
+      prepared,
+      preparedPlugins,
+      await prepareCreativeProjects(store, config.creativeProjects),
     );
+  } catch (error) {
+    const ownedCleanup =
+      prepared?.failureCleanup ?? prepared?.earlyFailureCleanup?.();
+    const cleanup = closeOwners([
+      () => ownedCleanup ?? config.artifactStore.close(),
+      () =>
+        ownedCleanup === undefined
+          ? preparedPlugins?.runtime.close()
+          : undefined,
+      () => client?.close(),
+    ]);
+    if (preparedPlugins !== undefined) {
+      preparedPlugins.failureCleanup = cleanup;
+      throw error;
+    }
+    await closeOwners([() => cleanup, () => store.close()], [error]);
     throw error;
   }
-}
-
-/** Complete cleanup in order even if an owner rejects; startup failures remain visible. */
-async function closeOwners(
-  owners: readonly (() => void | Promise<void>)[],
-  initialErrors: readonly unknown[] = [],
-): Promise<void> {
-  const errors = [...initialErrors];
-  for (const close of owners) {
-    try {
-      await close();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length === 1) throw errors[0];
-  if (errors.length > 1)
-    throw new AggregateError(errors, "extension_control_cleanup_failed");
 }
 
 function composeControlApi(
@@ -403,6 +441,7 @@ function composeControlApi(
   config: ControlApiCompositionConfig,
   preparedExtensions?: PreparedControlExtensions,
   preparedPlugins?: PreparedControlPlugins,
+  preparedProjects?: PreparedCreativeProjects,
 ): StandaloneControlApiRuntime {
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
@@ -607,6 +646,7 @@ function composeControlApi(
       authorization,
     });
     const app = buildControlApi({
+      creativeProjects: preparedProjects?.service,
       application,
       offices,
       officeThreads,
@@ -669,7 +709,11 @@ function composeControlApi(
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
-      if (preparedExtensions !== undefined || preparedPlugins !== undefined) {
+      if (
+        preparedExtensions !== undefined ||
+        preparedPlugins !== undefined ||
+        preparedProjects !== undefined
+      ) {
         await closeOwners([
           () => preparedPlugins?.runtime.close(),
           () => storageCapacity.close(),
@@ -704,7 +748,11 @@ function composeControlApi(
       workspaceQueries,
     };
   } catch (error) {
-    if (preparedExtensions !== undefined || preparedPlugins !== undefined) {
+    if (
+      preparedExtensions !== undefined ||
+      preparedPlugins !== undefined ||
+      preparedProjects !== undefined
+    ) {
       const failureCleanup = closeOwners([
         () => preparedPlugins?.runtime.close(),
         () => storageCapacity.close(),
@@ -719,6 +767,8 @@ function composeControlApi(
         preparedExtensions.failureCleanup = failureCleanup;
       if (preparedPlugins !== undefined)
         preparedPlugins.failureCleanup = failureCleanup;
+      if (preparedProjects !== undefined)
+        preparedProjects.failureCleanup = failureCleanup;
       throw error;
     }
     storageCapacity.close();

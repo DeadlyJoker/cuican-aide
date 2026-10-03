@@ -90,6 +90,11 @@ import {
   type InstalledPluginConfigurationRuntime,
 } from "./installed-plugin-configuration-composition.ts";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
+import {
+  captureCreativeProjectCompositionConfig,
+  prepareCreativeProjects,
+  type CreativeProjectCompositionConfig,
+} from "./creative-project-composition.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -108,6 +113,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
+  creativeProjects?: CreativeProjectCompositionConfig;
   pluginUi?: ProductionPluginUiConfig;
   pluginConfiguration?: Readonly<{
     configuration: InstalledPluginConfigurationConfig;
@@ -129,6 +135,9 @@ export async function createProductionPostgresControlApi(
   let store: PostgresDomainStore | undefined;
   try {
     validateProductionConfig(config);
+    const creativeProjects = captureCreativeProjectCompositionConfig(
+      config.creativeProjects,
+    );
     // Capture the pure deployment settings before PostgreSQL's asynchronous open.
     const actions = config.pluginUi?.actions;
     const actionSnapshot =
@@ -151,8 +160,9 @@ export async function createProductionPostgresControlApi(
               config.pluginInstallation.configuration,
             ),
           });
-    const productionConfig = {
+    const productionConfig = Object.freeze({
       ...config,
+      creativeProjects,
       ...(config.pluginConfiguration === undefined
         ? {}
         : {
@@ -184,7 +194,7 @@ export async function createProductionPostgresControlApi(
               ...(ownedTaskActions === undefined ? {} : { ownedTaskActions }),
             }),
           }),
-    };
+    });
     const registry =
       pluginInstallation === undefined
         ? undefined
@@ -257,6 +267,10 @@ async function composeProductionControlApi(
     );
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
+    const creativeProjects = await prepareCreativeProjects(
+      store,
+      config.creativeProjects,
+    );
     if (
       config.pluginUi !== undefined ||
       config.pluginInstallation !== undefined
@@ -464,6 +478,7 @@ async function composeProductionControlApi(
                 ),
             });
     const app = buildControlApi({
+      creativeProjects: creativeProjects?.service,
       pluginUi: pluginUiService,
       extensions:
         pluginTaskRuntime?.extensions ?? pluginConfigurationRuntime?.extensions,
@@ -568,6 +583,11 @@ async function composeProductionControlApi(
 function validateProductionConfig(
   config: ProductionPostgresControlApiConfig,
 ): void {
+  if (
+    config.creativeProjects !== undefined &&
+    !(config.identity instanceof ProductionControlApiIdentity)
+  )
+    throw new Error("production_creative_project_identity_required");
   if (config.pluginConfiguration !== undefined) {
     assertInstalledPluginConfigurationConfig(
       config.pluginConfiguration.configuration,

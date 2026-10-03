@@ -26,6 +26,7 @@ export * from "./run-contract.ts";
 export * from "./office-control-contract.ts";
 export * from "./extension-control-contract.ts";
 export * from "./extension-read-contract.ts";
+export * from "./creative-project-control-contract.ts";
 export * from "./plugin-control-contract.ts";
 export * from "./plugin-source-control-contract.ts";
 export * from "./extension-host-api.ts";

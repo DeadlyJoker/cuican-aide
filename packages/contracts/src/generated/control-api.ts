@@ -1170,6 +1170,180 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/creative-projects": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["listCreativeProjects"];
+    put?: never;
+    /** @description Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed. */
+    post: operations["createCreativeProject"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["getCreativeProject"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/title": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed. */
+    put: operations["renameCreativeProject"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/state": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed. */
+    put: operations["setCreativeProjectState"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/briefs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["listProjectBriefs"];
+    put?: never;
+    /** @description Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed. */
+    post: operations["appendProjectBrief"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/briefs/{briefRevision}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["getProjectBrief"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/concepts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["listConceptAssets"];
+    put?: never;
+    /** @description Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed. */
+    post: operations["createConceptAsset"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/concepts/{assetId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["getConceptAsset"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/concepts/{assetId}/revisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["listConceptRevisions"];
+    put?: never;
+    /** @description Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed. */
+    post: operations["appendConceptAssetRevision"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/concepts/{assetId}/revisions/{assetRevision}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing. */
+    get: operations["getConceptRevision"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2950,6 +3124,147 @@ export interface components {
       /** @description Last returned sourceId only when a full page has additional rows; otherwise null. */
       next: components["schemas"]["PluginOpaqueId"] | null;
     };
+    /** @description S0 short-drama metadata projection. Contains no payer, authority, execution, image or selected-result claim. Stored ownership remains server-authoritative. */
+    PublicCreativeProject: {
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      projectId: string;
+      /** @enum {string} */
+      kind: "short-drama";
+      /** @description At most 160 Unicode scalar values, no surrounding whitespace. */
+      title: string;
+      revision: number;
+      /** @enum {string} */
+      state: "active" | "archived";
+      latestBriefRevision: number;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    PublicProjectBrief: {
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      projectId: string;
+      briefRevision: number;
+      /** @description At most 8192 UTF-8 bytes. Preserve confirmed whitespace and line breaks. */
+      text: string;
+      contentDigest: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    PublicConceptAsset: {
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      projectId: string;
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      assetId: string;
+      /** @description At most 160 Unicode scalar values, no surrounding whitespace. */
+      name: string;
+      revision: number;
+      latestAssetRevision: number;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    PublicConceptRevision: {
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      projectId: string;
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      assetId: string;
+      assetRevision: number;
+      briefRevision: number;
+      briefContentDigest: string;
+      /** @description At most 2000 UTF-16 units, preserve the confirmed prompt. */
+      prompt: string;
+      contentDigest: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CreateCreativeProjectRequest: {
+      /** @description At most 160 Unicode scalar values, no surrounding whitespace. */
+      title: string;
+      /** @description At most 8192 UTF-8 bytes. Preserve confirmed whitespace and line breaks. */
+      briefText: string;
+    };
+    RenameCreativeProjectRequest: {
+      /** @description At most 160 Unicode scalar values, no surrounding whitespace. */
+      title: string;
+      expectedProjectRevision: number;
+    };
+    SetCreativeProjectStateRequest: {
+      /** @enum {string} */
+      state: "active" | "archived";
+      expectedProjectRevision: number;
+    };
+    AppendProjectBriefRequest: {
+      /** @description At most 8192 UTF-8 bytes. Preserve confirmed whitespace and line breaks. */
+      text: string;
+      expectedProjectRevision: number;
+    };
+    CreateConceptAssetRequest: {
+      /** @description At most 160 Unicode scalar values, no surrounding whitespace. */
+      name: string;
+      briefRevision: number;
+      /** @description At most 2000 UTF-16 units, preserve the confirmed prompt. */
+      prompt: string;
+      expectedProjectRevision: number;
+    };
+    AppendConceptAssetRevisionRequest: {
+      briefRevision: number;
+      /** @description At most 2000 UTF-16 units, preserve the confirmed prompt. */
+      prompt: string;
+      expectedProjectRevision: number;
+      expectedAssetMetadataRevision: number;
+    };
+    GetCreativeProjectResponse: {
+      project: components["schemas"]["PublicCreativeProject"];
+    };
+    GetProjectBriefResponse: {
+      brief: components["schemas"]["PublicProjectBrief"];
+    };
+    GetConceptAssetResponse: {
+      asset: components["schemas"]["PublicConceptAsset"];
+    };
+    GetConceptRevisionResponse: {
+      assetRevision: components["schemas"]["PublicConceptRevision"];
+    };
+    CreativeProjectMetadataMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      project: components["schemas"]["PublicCreativeProject"];
+    };
+    CreativeProjectBriefMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      project: components["schemas"]["PublicCreativeProject"];
+      brief: components["schemas"]["PublicProjectBrief"];
+    };
+    CreativeProjectConceptMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      project: components["schemas"]["PublicCreativeProject"];
+      asset: components["schemas"]["PublicConceptAsset"];
+      assetRevision: components["schemas"]["PublicConceptRevision"];
+    };
+    /** @description Ordered by updatedAt DESC, projectId DESC in Unicode scalar order. Cursor binds the state filter. Response stays within 60 KiB; when byte-trimmed, continuation identifies the last returned row. */
+    CreativeProjectListResponse: {
+      projects: components["schemas"]["PublicCreativeProject"][];
+      nextCursor: string | null;
+    };
+    /** @description Ascending revisions strictly after the supplied cursor. Non-null continuation permits another read and does not claim another row exists. Pages may be shortened to the 60 KiB response budget. */
+    ProjectBriefListResponse: {
+      briefs: components["schemas"]["PublicProjectBrief"][];
+      nextAfterBriefRevision: number | null;
+    };
+    /** @description Ascending asset IDs in Unicode scalar order; continuation permits another read, not an exact hasMore claim. Response at most 60 KiB. */
+    ConceptAssetListResponse: {
+      assets: components["schemas"]["PublicConceptAsset"][];
+      nextAfterAssetId: string | null;
+    };
+    /** @description Ascending revisions; continuation permits another read, not an exact hasMore claim. Response at most 60 KiB. */
+    ConceptRevisionListResponse: {
+      revisions: components["schemas"]["PublicConceptRevision"][];
+      nextAfterAssetRevision: number | null;
+    };
   };
   responses: {
     /** @description Stable safe error envelope */
@@ -2990,6 +3305,8 @@ export interface components {
     ResourceCursor: string;
     AgentVersionCursor: string;
     Limit: number;
+    /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+    CreativeProjectIdempotencyKey: string;
   };
   requestBodies: never;
   headers: never;
@@ -5880,6 +6197,459 @@ export interface operations {
       413: components["responses"]["Error"];
       500: components["responses"]["Error"];
       503: components["responses"]["Error"];
+    };
+  };
+  listCreativeProjects: {
+    parameters: {
+      query?: {
+        state?: "active" | "archived" | "all";
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createCreativeProject: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateCreativeProjectRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectBriefMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getCreativeProject: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetCreativeProjectResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  renameCreativeProject: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RenameCreativeProjectRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectMetadataMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  setCreativeProjectState: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetCreativeProjectStateRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectMetadataMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listProjectBriefs: {
+    parameters: {
+      query?: {
+        afterBriefRevision?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectBriefListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  appendProjectBrief: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AppendProjectBriefRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectBriefMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getProjectBrief: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        briefRevision: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetProjectBriefResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listConceptAssets: {
+    parameters: {
+      query?: {
+        afterAssetId?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConceptAssetListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createConceptAsset: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateConceptAssetRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectConceptMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getConceptAsset: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetConceptAssetResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listConceptRevisions: {
+    parameters: {
+      query?: {
+        afterAssetRevision?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        projectId: string;
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConceptRevisionListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  appendConceptAssetRevision: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AppendConceptAssetRevisionRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CreativeProjectConceptMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getConceptRevision: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        assetId: string;
+        assetRevision: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetConceptRevisionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
     };
   };
 }

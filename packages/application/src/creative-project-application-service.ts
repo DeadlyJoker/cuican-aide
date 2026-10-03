@@ -75,7 +75,7 @@ export type CreativeProjectApplicationDependencies = Readonly<{
   digester: ContentDigester;
 }>;
 
-/** Internal metadata/history use cases only: no production wiring, Run, supplier, selection or billing. */
+/** Owned metadata/history use cases; no Run, supplier, result selection or billing. */
 export class CreativeProjectApplicationService {
   readonly #dependencies: CreativeProjectApplicationDependencies;
   constructor(dependencies: CreativeProjectApplicationDependencies) {

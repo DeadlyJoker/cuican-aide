@@ -15,6 +15,12 @@ import {
   pluginProxyPolicy,
   PLUGIN_PROXY_DEADLINE_MS,
 } from "./plugin-proxy-policy.ts";
+import {
+  boundedCreativeProjectProxyRequest,
+  boundedCreativeProjectProxyResponse,
+  creativeProjectProxyPolicy,
+  CREATIVE_PROJECT_PROXY_DEADLINE_MS,
+} from "./creative-project-proxy-policy.ts";
 
 const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 const MAX_HEADER_BYTES = 16 * 1024;
@@ -83,7 +89,7 @@ export function createWebBff(config: {
       }
       const rawTarget = context?.rawTarget;
       const queryOffset = rawTarget?.indexOf("?") ?? -1;
-      const pluginPolicy = pluginProxyPolicy({
+      const policyInput = {
         pathname:
           rawTarget === undefined
             ? requestUrl.pathname
@@ -97,9 +103,14 @@ export function createWebBff(config: {
               ? ""
               : rawTarget.slice(queryOffset),
         method: request.method,
-      });
+      };
+      const pluginPolicy = pluginProxyPolicy(policyInput);
       if (pluginPolicy?.outcome === "deny") {
         return errorResponse(pluginPolicy.status, pluginPolicy.code);
+      }
+      const projectPolicy = creativeProjectProxyPolicy(policyInput);
+      if (projectPolicy?.outcome === "deny") {
+        return errorResponse(projectPolicy.status, projectPolicy.code);
       }
       if (requestUrl.pathname === LIVE_PATH && requestUrl.search === "") {
         return request.method === "GET"
@@ -152,13 +163,17 @@ export function createWebBff(config: {
         return errorResponse(extensionPolicy.status, extensionPolicy.code);
       }
       const upstreamSignal =
-        pluginPolicy !== null || extensionPolicy !== null
+        pluginPolicy !== null ||
+        extensionPolicy !== null ||
+        projectPolicy !== null
           ? AbortSignal.any([
               request.signal,
               AbortSignal.timeout(
                 pluginPolicy !== null
                   ? PLUGIN_PROXY_DEADLINE_MS
-                  : EXTENSION_PROXY_DEADLINE_MS,
+                  : projectPolicy !== null
+                    ? CREATIVE_PROJECT_PROXY_DEADLINE_MS
+                    : EXTENSION_PROXY_DEADLINE_MS,
               ),
             ])
           : request.signal;
@@ -166,15 +181,21 @@ export function createWebBff(config: {
       let requestBody: ArrayBuffer | Uint8Array<ArrayBuffer> | null | Response;
       try {
         requestBody =
-          pluginPolicy === null
-            ? await boundedRequestBody(request)
-            : await boundedPluginProxyRequest(request, upstreamSignal);
+          projectPolicy !== null
+            ? await boundedCreativeProjectProxyRequest(request, upstreamSignal)
+            : pluginPolicy === null
+              ? await boundedRequestBody(request)
+              : await boundedPluginProxyRequest(request, upstreamSignal);
       } catch (error) {
         return errorResponse(
-          error instanceof Error && error.message === "plugin_body_too_large"
+          error instanceof Error &&
+            (error.message === "plugin_body_too_large" ||
+              error.message === "creative_project_body_too_large")
             ? 413
             : 400,
-          "plugin_request_invalid",
+          projectPolicy !== null
+            ? "creative_project_request_invalid"
+            : "plugin_request_invalid",
         );
       }
       if (requestBody instanceof Response) {
@@ -210,6 +231,15 @@ export function createWebBff(config: {
             upstream,
             signal: upstreamSignal,
             policy: pluginPolicy,
+          });
+        } catch {
+          return errorResponse(502, "control_api_response_invalid");
+        }
+      } else if (projectPolicy !== null) {
+        try {
+          upstream = await boundedCreativeProjectProxyResponse({
+            upstream,
+            signal: upstreamSignal,
           });
         } catch {
           return errorResponse(502, "control_api_response_invalid");

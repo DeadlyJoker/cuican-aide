@@ -337,6 +337,9 @@ importers:
 
   apps/web-bff:
     dependencies:
+      '@crewon/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@crewon/process-lifecycle':
         specifier: workspace:*
         version: link:../../packages/process-lifecycle
@@ -344,6 +347,9 @@ importers:
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3
+      fastify:
+        specifier: 5.11.0
+        version: 5.11.0
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

@@ -4605,6 +4605,898 @@
           }
         }
       }
+    },
+    "/api/v1/creative-projects": {
+      "get": {
+        "operationId": "listCreativeProjects",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "default": "active"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCreativeProject",
+        "description": "Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectBriefMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCreativeProjectRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}": {
+      "get": {
+        "operationId": "getCreativeProject",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCreativeProjectResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/title": {
+      "put": {
+        "operationId": "renameCreativeProject",
+        "description": "Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectMetadataMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameCreativeProjectRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/state": {
+      "put": {
+        "operationId": "setCreativeProjectState",
+        "description": "Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectMetadataMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCreativeProjectStateRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/briefs": {
+      "get": {
+        "operationId": "listProjectBriefs",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "afterBriefRevision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectBriefListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "appendProjectBrief",
+        "description": "Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectBriefMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendProjectBriefRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/briefs/{briefRevision}": {
+      "get": {
+        "operationId": "getProjectBrief",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "briefRevision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetProjectBriefResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/concepts": {
+      "get": {
+        "operationId": "listConceptAssets",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "afterAssetId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptAssetListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createConceptAsset",
+        "description": "Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectConceptMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConceptAssetRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/concepts/{assetId}": {
+      "get": {
+        "operationId": "getConceptAsset",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetConceptAssetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/concepts/{assetId}/revisions": {
+      "get": {
+        "operationId": "listConceptRevisions",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "afterAssetRevision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptRevisionListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "post": {
+        "operationId": "appendConceptAssetRevision",
+        "description": "Metadata/input mutation only. Requires current authorization, exact body fields, CAS revisions where applicable and an actor-scoped Idempotency-Key. Same input/key replays the original result; the same key with changed input conflicts. No generation or charge is performed.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreativeProjectConceptMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendConceptAssetRevisionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/concepts/{assetId}/revisions/{assetRevision}": {
+      "get": {
+        "operationId": "getConceptRevision",
+        "description": "Explicitly enabled project service using the current authenticated actor and a separately configured project authorization policy. No Run submission, supplier calls, selection or billing.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetRevision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetConceptRevisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4831,6 +5723,17 @@
           "minimum": 1,
           "maximum": 100,
           "default": 100
+        }
+      },
+      "CreativeProjectIdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
         }
       }
     },
@@ -11331,6 +12234,599 @@
           }
         },
         "description": "Strictly increasing sourceId code-unit order; unique sourceId, digest and pluginId/version; each pluginId has one publisher. Encoded response at most 131072 bytes."
+      },
+      "PublicCreativeProject": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "kind",
+          "title",
+          "revision",
+          "state",
+          "latestBriefRevision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "short-drama"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalar values, no surrounding whitespace."
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "latestBriefRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24
+          }
+        },
+        "description": "S0 short-drama metadata projection. Contains no payer, authority, execution, image or selected-result claim. Stored ownership remains server-authoritative."
+      },
+      "PublicProjectBrief": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "briefRevision",
+          "text",
+          "contentDigest",
+          "createdAt"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "At most 8192 UTF-8 bytes. Preserve confirmed whitespace and line breaks."
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24
+          }
+        }
+      },
+      "PublicConceptAsset": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "assetId",
+          "name",
+          "revision",
+          "latestAssetRevision",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalar values, no surrounding whitespace."
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "latestAssetRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24
+          }
+        }
+      },
+      "PublicConceptRevision": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "assetId",
+          "assetRevision",
+          "briefRevision",
+          "briefContentDigest",
+          "prompt",
+          "contentDigest",
+          "createdAt"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "assetRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "briefContentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "At most 2000 UTF-16 units, preserve the confirmed prompt."
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24
+          }
+        }
+      },
+      "CreateCreativeProjectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "briefText"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalar values, no surrounding whitespace."
+          },
+          "briefText": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "At most 8192 UTF-8 bytes. Preserve confirmed whitespace and line breaks."
+          }
+        }
+      },
+      "RenameCreativeProjectRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "expectedProjectRevision"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalar values, no surrounding whitespace."
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "SetCreativeProjectStateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "expectedProjectRevision"
+        ],
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ]
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "AppendProjectBriefRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "text",
+          "expectedProjectRevision"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "At most 8192 UTF-8 bytes. Preserve confirmed whitespace and line breaks."
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "CreateConceptAssetRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "briefRevision",
+          "prompt",
+          "expectedProjectRevision"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalar values, no surrounding whitespace."
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "At most 2000 UTF-16 units, preserve the confirmed prompt."
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "AppendConceptAssetRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "briefRevision",
+          "prompt",
+          "expectedProjectRevision",
+          "expectedAssetMetadataRevision"
+        ],
+        "properties": {
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "At most 2000 UTF-16 units, preserve the confirmed prompt."
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "expectedAssetMetadataRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "GetCreativeProjectResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "project"
+        ],
+        "properties": {
+          "project": {
+            "$ref": "#/components/schemas/PublicCreativeProject"
+          }
+        }
+      },
+      "GetProjectBriefResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "brief"
+        ],
+        "properties": {
+          "brief": {
+            "$ref": "#/components/schemas/PublicProjectBrief"
+          }
+        }
+      },
+      "GetConceptAssetResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset"
+        ],
+        "properties": {
+          "asset": {
+            "$ref": "#/components/schemas/PublicConceptAsset"
+          }
+        }
+      },
+      "GetConceptRevisionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assetRevision"
+        ],
+        "properties": {
+          "assetRevision": {
+            "$ref": "#/components/schemas/PublicConceptRevision"
+          }
+        }
+      },
+      "CreativeProjectMetadataMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "project"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/PublicCreativeProject"
+          }
+        }
+      },
+      "CreativeProjectBriefMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "project",
+          "brief"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/PublicCreativeProject"
+          },
+          "brief": {
+            "$ref": "#/components/schemas/PublicProjectBrief"
+          }
+        }
+      },
+      "CreativeProjectConceptMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "project",
+          "asset",
+          "assetRevision"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "project": {
+            "$ref": "#/components/schemas/PublicCreativeProject"
+          },
+          "asset": {
+            "$ref": "#/components/schemas/PublicConceptAsset"
+          },
+          "assetRevision": {
+            "$ref": "#/components/schemas/PublicConceptRevision"
+          }
+        }
+      },
+      "CreativeProjectListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projects",
+          "nextCursor"
+        ],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PublicCreativeProject"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 1024
+          }
+        },
+        "description": "Ordered by updatedAt DESC, projectId DESC in Unicode scalar order. Cursor binds the state filter. Response stays within 60 KiB; when byte-trimmed, continuation identifies the last returned row."
+      },
+      "ProjectBriefListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "briefs",
+          "nextAfterBriefRevision"
+        ],
+        "properties": {
+          "briefs": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PublicProjectBrief"
+            }
+          },
+          "nextAfterBriefRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "description": "Ascending revisions strictly after the supplied cursor. Non-null continuation permits another read and does not claim another row exists. Pages may be shortened to the 60 KiB response budget."
+      },
+      "ConceptAssetListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "assets",
+          "nextAfterAssetId"
+        ],
+        "properties": {
+          "assets": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PublicConceptAsset"
+            }
+          },
+          "nextAfterAssetId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "description": "Ascending asset IDs in Unicode scalar order; continuation permits another read, not an exact hasMore claim. Response at most 60 KiB."
+      },
+      "ConceptRevisionListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revisions",
+          "nextAfterAssetRevision"
+        ],
+        "properties": {
+          "revisions": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PublicConceptRevision"
+            }
+          },
+          "nextAfterAssetRevision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "description": "Ascending revisions; continuation permits another read, not an exact hasMore claim. Response at most 60 KiB."
       }
     }
   }
