@@ -1,4 +1,6 @@
 import { PostgresProjectConceptSelectionStore } from "./postgres-project-concept-selection-store.ts";
+import { PostgresPluginUiIntentJournalStore } from "./postgres-plugin-ui-intent-journal-store.ts";
+import type { PluginUiIntentPayloadVerifier } from "@crewon/application";
 import type { ProjectGenerationImageResultVerifier } from "@crewon/application";
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
 import { createPostgresPluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
@@ -211,6 +213,19 @@ export class PostgresDomainStore
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Independent recovery journal; construction neither migrates nor enables it. */
+  pluginUiIntentJournalStore(input: {
+    verifier: PluginUiIntentPayloadVerifier;
+  }): PostgresPluginUiIntentJournalStore {
+    this.assertOpen();
+    return new PostgresPluginUiIntentJournalStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+      verifier: input.verifier,
     });
   }
 

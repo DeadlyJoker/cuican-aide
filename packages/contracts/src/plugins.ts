@@ -71,6 +71,7 @@ export * from "./project-generation-context-ui-action-contract.ts";
 export * from "./project-generation-host-context-contract.ts";
 export * from "./project-generation-query-host-context-contract.ts";
 export * from "./project-generation-selection-host-context-contract.ts";
+export * from "./plugin-ui-recovery-contract.ts";
 export type {
   ConceptGenerationLocator,
   ConceptGenerationImage,

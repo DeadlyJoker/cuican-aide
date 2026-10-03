@@ -1,5 +1,7 @@
 export * from "./postgres-project-concept-selection-store.ts";
 export * from "./sqlite-project-concept-selection-store.ts";
+export * from "./sqlite-plugin-ui-intent-journal-store.ts";
+export * from "./postgres-plugin-ui-intent-journal-store.ts";
 export * from "./sqlite-model-call-report.ts";
 export * from "./model-accounting-report.ts";
 export * from "@crewon/application";

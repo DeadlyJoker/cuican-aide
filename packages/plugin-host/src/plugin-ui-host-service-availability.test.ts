@@ -6,6 +6,7 @@ import {
   assertUiOnlyServiceDeclarations,
   capturePluginUiHostServiceAvailability,
   appendProjectGenerationSelectionUiServiceAvailability,
+  appendPluginUiRecoveryServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
 import { registerProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
@@ -51,6 +52,87 @@ function candidate(input: Parameters<typeof descriptor>[0] = {}) {
 }
 const rejectsUnavailable = (work: () => unknown) =>
   assert.throws(work, { code: "plugin_dependency_unavailable" });
+
+test("recovery requires independent actual assembly and never supplies an older owner's binding", () => {
+  const recovery = {
+    service: "crewon.plugin-ui-recovery",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [recovery] });
+  assertUiOnlyServiceDeclarations(actual.descriptor);
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({ scope, candidate: actual }),
+  );
+  let recoveries = 0,
+    fallbacks = 0;
+  const raw = {
+    isAvailable() {
+      recoveries++;
+      return true;
+    },
+  };
+  const fallback = registerProjectGenerationHostAvailability({
+    isAvailable() {
+      fallbacks++;
+      return false;
+    },
+  });
+  const extended = appendPluginUiRecoveryServiceAvailability({
+    recovery: raw,
+    fallback,
+  });
+  raw.isAvailable = () => false;
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: actual,
+    hostUiServices: extended,
+  });
+  assert.equal(recoveries, 1);
+  assert.equal(fallbacks, 0);
+  const paid = candidate({
+    requires: [
+      {
+        service: "crewon.project-generations",
+        apiVersion: "1",
+        optional: false,
+      },
+    ],
+  });
+  assertUiOnlyServiceDeclarations(paid.descriptor, extended);
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: paid,
+      hostUiServices: extended,
+    }),
+  );
+  assert.equal(fallbacks, 1);
+  const forgedPaid = appendPluginUiRecoveryServiceAvailability({
+    recovery: registerProjectGenerationHostAvailability({
+      isAvailable: () => true,
+    }),
+  });
+  assert.throws(
+    () => assertUiOnlyServiceDeclarations(paid.descriptor, forgedPaid),
+    { code: "plugin_ui_only_services_unsupported" },
+  );
+  assertUiOnlyServiceDeclarations(
+    descriptor({ requires: [{ ...recovery, optional: true }] }),
+  );
+  for (const requirement of [
+    { ...recovery, apiVersion: "2" },
+    { ...recovery, service: "example.crewon.plugin-ui-recovery" },
+  ])
+    assert.throws(
+      () =>
+        assertUiOnlyServiceDeclarations(
+          descriptor({ requires: [requirement] }),
+          extended,
+        ),
+      { code: "plugin_ui_only_services_unsupported" },
+    );
+});
 
 test("known optional image selection protocol preserves metadata-only installation without granting availability", () => {
   const selection = {

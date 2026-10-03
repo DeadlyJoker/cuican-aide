@@ -111,6 +111,9 @@ export * from "./plugin-installation-application-service.ts";
 export * from "./plugin-ui-ports.ts";
 export * from "./plugin-ui-commands.ts";
 export * from "./plugin-ui-application-service.ts";
+export * from "./plugin-ui-recovery-ports.ts";
+export * from "./plugin-ui-recovery-application-service.ts";
+export { createPluginUiIntentPayloadVerifier } from "./plugin-ui-recovery-codec.ts";
 export * from "./plugin-ui-committed-task-authority.ts";
 export {
   assertPluginUiInvocationCurrent,
@@ -164,3 +167,4 @@ export * from "./project-generation-read-application-service.ts";
 export * from "./project-generation-image-result-verifier.ts";
 export * from "./project-concept-selection-store-port.ts";
 export * from "./project-concept-selection-application-service.ts";
+export * from "./plugin-ui-intent-journal-store.ts";

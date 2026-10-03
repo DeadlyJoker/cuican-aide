@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：原请求持久恢复协议、SQL 日志与宿主接线
+
+新增独立 `crewon.plugin-ui-recovery@1`，沿原 ControlClient、BFF、已安装挂载及业务动作保存生成、查询、图片选用的原请求。Host 首次 ready 前完整恢复三个通道；实际写动作先确认 stage 的 SQL ACK，再沿原业务 owner 执行。注册回复不明时不派发业务请求，冷恢复不自动提交，不换 key 或 CAS。旧插件没有声明时不增加恢复 I/O，原账户、设置、两侧栏、App 和共享样式本阶段没有修改。协议见[原请求持久恢复](./plugin-ui-durable-recovery-protocol.md)。
+
+SQLite/PostgreSQL 日志复用原 Control 数据库和显式迁移，realm 持久保存；账户隔离使用真实 realm/tenant/space/principal，原完整 admission pin 保留。每账户最多 32 条记录，未确认请求不能淘汰；当前安装 pin、授权和调用活性在事务内复验，PostgreSQL 支持单连接池。accepted 只吸收原业务已经验证的不透明确认，图片第一次明确提交前 CAS 冲突才可能标记 refused。确认写入与原业务 COMMIT 仍是两个事务：确认失败记录固定诊断并返回原成功回执，冷恢复保留 UNKNOWN，需显式重放原请求，不能宣称原子恢复。
+
+短剧控制器完整读取三通道后再恢复原保存输入，修复历史 accepted 来源覆盖另一来源 UNKNOWN 的竞态。多个不同来源 UNKNOWN 都保留并阻止重试；当前没有逐通道人工解冲突界面，不能宣称这类冲突已经可自助解决。此阶段不改既有 7.0.0 发布包；仓外新源码候选包只用于编译与发布 ESM 回归，尚未声明新恢复能力或替换实际安装。
+
+审查发现原 SQL 规范化会抹掉字符串大小写和布尔分组，已改为触发器/函数严格保留字面量、括号及内部语句边界。两库通过实际 DDL 篡改证明大小写或 OR/AND 分组变化会使 schema 被拒绝，原 prepared 请求仍保留，不返回伪空记录。PostgreSQL 引擎输出的数值约束采用同值明确类型预期，仅为反序列化格式兼容，没有放宽保护规则。
+
+分组检查通过，均零跳过，组间有重叠，不跨组求和：Contracts 新协议 **6/6**、ControlClient 全量 **177/177**、BFF 全量 **56/56**、Domain/实际双库日志 **30/30**、Application 新旧窄回归 **80/80**、Control 新旧窄回归 **43/43**、Host availability **11/11**、SDK 构建与分发 **57/57**、新 SDK 后 renderer/挂载回归 **167/167**、短剧来源与快照 **21/21**、原 CommandWorkspace/设置与样式 **153/153**。实际选用 owner、ControlClient、注册 HTTP 和同库 SQLite/单连接 PostgreSQL **14/14** 验证 stage 丢回复、关闭冷开、原 key 恢复、实际确认写失败及旧回执不覆盖新选择；该专项只覆盖真实选用业务 owner，未执行在线生成或查询 owner。SQL 专项另包含实际新 Node 进程读取三个原通道，不能代替完整 App 重启。
+
+实际 SDK tarball 在仓外离线安装，公开恢复声明/类型严格编译及短剧候选包自持构建通过，发布 ESM **67/67**。相关类型、UI build/lint、boundary、格式及 diff 检查通过。统一证据为 `output/extensions/checks/plugin-ui-recovery-proof-20261004.json`，精确源码清单为 `plugin-ui-recovery-source-whitelist-20261004.json`。自有 PostgreSQL 61072 在全部消费者物理结束后正常停止，并核验准确进程、数据与 socket 目录清理；原完整 App 服务保留，实际设置页面已打开并确认正常加载。此前全量 UI 的九项失败与跳过记录仍保留，本阶段只声称限定回归通过。
+
+当前实际装配仅支持显式 `createProductionPostgresControlApi({ uiRecovery })` 配置；正式 Main 尚未加载此配置或项目 owner，Standalone/Native 不支持付费生成/查询，不能把管理身份当作个人执行或付款权威。原 `createThread` 不在这三个日志动作内。身份/profile/PDP、原付费历史、钱包和报价使用具名夹具，不代表真实生产资金；本阶段无 Worker、模型、供应商调用或新增实际费用。下一步先接通正式启动配置与真实进程重启，再发布声明新能力的独立包并联合验收完整 App 在线保存/生成/查询/选用。真实个人插件钱包和价格权威、第二个实际企业 API、完整 S0/E5 仍未完成，完整目标保持进行中。
+
 ## 2026-10-04：独立短剧 7.0.0 图片选用与宿主恢复
 
 独立短剧包在原概念图模块中增加确切图片的“选用这张图”、当前选用和需重新确认提示。控制器只通过公开 SDK 指定已保存输入、真实 operation revision、原始图片索引、元数据/选用 CAS 和原 key；当前指针单独 GET，不把旧命令回执作为当前图片。未知请求锁住编辑、切换、归档及新生成/查询/选用；首次明确冲突可以显式刷新真实版本后重新选择，已有 UNKNOWN 不换键。无选用 Host context 时保留原页面和旧快照。

@@ -2,6 +2,7 @@ const PREFIX = "/api/v1/plugins";
 export const PLUGIN_PROXY_DEADLINE_MS = 10_000;
 export const PLUGIN_JSON_RESPONSE_MAX_BYTES = 128 * 1024;
 export const PLUGIN_LEASE_RESPONSE_MAX_BYTES = 512 * 1024;
+export const PLUGIN_RECOVERY_RESPONSE_MAX_BYTES = 60 * 1024;
 export const PLUGIN_CATALOG_RESPONSE_MAX_BYTES = 16 * 1024 * 1024;
 export const PLUGIN_ASSET_RESPONSE_MAX_BYTES = 32 * 1024 * 1024;
 const REQUEST_MAX_BYTES = 64 * 1024;
@@ -104,7 +105,10 @@ export function pluginProxyPolicy(input: {
             : PLUGIN_JSON_RESPONSE_MAX_BYTES;
       } else if (parts.length === 4 && parts[3] === "actions")
         methods = ["POST"];
-      else if (
+      else if (parts.length === 4 && parts[3] === "recovery") {
+        methods = ["GET", "POST"];
+        responseMaxBytes = PLUGIN_RECOVERY_RESPONSE_MAX_BYTES;
+      } else if (
         parts.length >= 5 &&
         parts[3] === "assets" &&
         assetPath(parts.slice(4))

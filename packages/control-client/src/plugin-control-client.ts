@@ -2,6 +2,7 @@ import {
   MAX_PLUGIN_CONTROL_RESPONSE_BYTES,
   MAX_PLUGIN_UI_CATALOG_RESPONSE_BYTES,
   MAX_PLUGIN_UI_LEASE_RESPONSE_BYTES,
+  MAX_PLUGIN_UI_RECOVERY_RESPONSE_BYTES,
   parseClosePluginUiMountResponse,
   parseGetPluginPackageResponse,
   parseGetPluginSelectionResponse,
@@ -23,6 +24,9 @@ import {
   parsePluginSourceListQuery,
   parsePluginSourceListResponse,
   parsePluginUiCatalogResponse,
+  parsePluginUiRecoveryHintsResponse,
+  parsePluginUiRecoveryRequest,
+  parseStagePluginUiRecoveryResponse,
   parseSelectPluginPackageRequest,
   parseValidatePluginUiMountResponse,
   type InstallPluginPackageRequest,
@@ -31,6 +35,7 @@ import {
   type PluginPackageListQuery,
   type PluginSelectionListQuery,
   type PluginSourceListQuery,
+  type PluginUiRecoveryRequest,
   type SelectPluginPackageRequest,
 } from "@crewon/contracts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
@@ -273,6 +278,45 @@ export class PluginControlClient {
       options,
     );
     return this.#output(() => parseInvokePluginUiActionResponse(result));
+  }
+
+  /** Read-only account recovery hints; the current mount still owns authorization. */
+  async getRecovery(
+    mountRef: string,
+    options: PluginControlRequestOptions = {},
+  ) {
+    const ref = this.#input(() => parsePluginControlMountRef(mountRef));
+    const result = await this.#json(
+      "GET",
+      `${PREFIX}/ui/mounts/${ref}/recovery`,
+      null,
+      options,
+      { maximumResponseBytes: MAX_PLUGIN_UI_RECOVERY_RESPONSE_BYTES },
+    );
+    return this.#output(() => parsePluginUiRecoveryHintsResponse(result));
+  }
+
+  /** A durable staging ACK precedes the separate original business invocation. */
+  async stageRecovery(
+    mountRef: string,
+    request: PluginUiRecoveryRequest,
+    options: PluginControlRequestOptions = {},
+  ) {
+    const ref = this.#input(() => parsePluginControlMountRef(mountRef));
+    const checked = this.#input(() => parsePluginUiRecoveryRequest(request));
+    const result = await this.#json(
+      "POST",
+      `${PREFIX}/ui/mounts/${ref}/recovery`,
+      checked,
+      options,
+      {
+        expectedStatuses: [200, 201],
+        maximumResponseBytes: MAX_PLUGIN_UI_RECOVERY_RESPONSE_BYTES,
+      },
+    );
+    return this.#output(() =>
+      parseStagePluginUiRecoveryResponse(result, checked),
+    );
   }
 
   async #json(

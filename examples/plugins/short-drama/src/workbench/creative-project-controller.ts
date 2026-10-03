@@ -10,6 +10,11 @@ import type {
   ProjectGenerationHostContext,
 } from "@crewon/plugin-sdk/ui";
 import { ConceptController } from "./ConceptController";
+import {
+  ConceptRecoveryCoordinator,
+  type ConceptRecoveryContexts,
+  type ConceptRecoveryLane,
+} from "./ConceptRecoveryCoordinator";
 import { GenerationSourceRecovery } from "./GenerationSourceRecovery";
 import type {
   CreativeProjectUiInputMap,
@@ -53,6 +58,7 @@ export type ProjectSnapshot = Readonly<{
   nextBriefRevision: number | null;
   loadingBriefs: boolean;
   conceptLocked: boolean;
+  recoveryConflict: boolean;
 }>;
 
 export function briefBytes(text: string): number {
@@ -109,6 +115,7 @@ export class CreativeProjectController {
   readonly #generationRecovery: GenerationSourceRecovery;
   readonly #queryRecovery: GenerationSourceRecovery;
   readonly #selectionRecovery: GenerationSourceRecovery;
+  readonly #recovery = new ConceptRecoveryCoordinator();
   #client: PluginCreativeProjectClient;
   #listeners = new Set<() => void>();
   #ready = false;
@@ -137,6 +144,7 @@ export class CreativeProjectController {
     nextBriefRevision: null,
     loadingBriefs: false,
     conceptLocked: false,
+    recoveryConflict: false,
   };
 
   constructor(ports: {
@@ -150,6 +158,7 @@ export class CreativeProjectController {
     const client = ports.projects;
     this.#client = client;
     this.concepts = new ConceptController({
+      recovery: this.#recovery,
       client,
       generationClient: ports.generations,
       submissionClient: ports.submissions,
@@ -157,10 +166,17 @@ export class CreativeProjectController {
       queryClient: ports.queries,
       selectionClient: ports.selections,
       restoreSelectionSource: (request) =>
-        this.#selectionRecovery.restore(request),
-      restoreQuerySource: (request) => this.#queryRecovery.restore(request),
+        this.#recovery.restore("selection", request, () =>
+          this.#selectionRecovery.restore(request),
+        ),
+      restoreQuerySource: (request) =>
+        this.#recovery.restore("query", request, () =>
+          this.#queryRecovery.restore(request),
+        ),
       restoreGenerationSource: (request) =>
-        this.#generationRecovery.restore(request),
+        this.#recovery.restore("generation", request, () =>
+          this.#generationRecovery.restore(request),
+        ),
       projectBlocked: () =>
         Boolean(this.#write || this.#intent || !this.#ready),
       lockChanged: (conceptLocked) => this.#update({ conceptLocked }),
@@ -178,26 +194,19 @@ export class CreativeProjectController {
         this.#refreshConceptProject(projectId, signal),
     });
     const applyRecovery = (
+      lane: ConceptRecoveryLane,
       details: ProjectDetails,
       selection: import("./ConceptController.types").ConceptSelection,
     ) => {
       if (!this.#ready || this.#disposed) return;
-      const imageRequest = this.concepts.images.getSnapshot().request;
       if (
-        this.concepts.images.locked &&
-        imageRequest &&
-        JSON.stringify([
-          imageRequest.reference.projectId,
-          imageRequest.reference.assetId,
-          imageRequest.reference.assetRevision,
-        ]) !==
-          JSON.stringify([
-            selection.asset.projectId,
-            selection.asset.assetId,
-            selection.revision.assetRevision,
-          ])
+        !this.#recovery.canApply(lane, {
+          projectId: selection.asset.projectId,
+          assetId: selection.asset.assetId,
+          assetRevision: selection.revision.assetRevision,
+        })
       )
-        throw new Error("selection_source_recovery_mismatch");
+        return;
       this.concepts.preserveGenerationDraft();
       this.#detail?.abort();
       this.#update({
@@ -215,23 +224,12 @@ export class CreativeProjectController {
     };
     this.#generationRecovery = new GenerationSourceRecovery(
       client,
-      (details, selection) => {
-        const query = this.concepts.queries.getSnapshot();
-        if (
-          this.concepts.queries.locked &&
-          query.request &&
-          JSON.stringify(query.request.reference) !==
-            JSON.stringify({
-              projectId: selection.asset.projectId,
-              assetId: selection.asset.assetId,
-              assetRevision: selection.revision.assetRevision,
-            })
-        )
-          return;
-        applyRecovery(details, selection);
-      },
+      (details, selection) => applyRecovery("generation", details, selection),
     );
-    this.#queryRecovery = new GenerationSourceRecovery(client, applyRecovery);
+    this.#queryRecovery = new GenerationSourceRecovery(
+      client,
+      (details, selection) => applyRecovery("query", details, selection),
+    );
     this.#selectionRecovery = new GenerationSourceRecovery(
       client,
       (details, selection) => {
@@ -251,7 +249,7 @@ export class CreativeProjectController {
             ])
         )
           throw new Error("selection_source_recovery_invalidated");
-        applyRecovery(details, selection);
+        applyRecovery("selection", details, selection);
       },
     );
   }
@@ -290,17 +288,42 @@ export class CreativeProjectController {
     }
   }
   setGenerationContext(context: ProjectGenerationHostContext | null) {
-    this.concepts.submissions.setHostContext(context);
-    this.#update({});
+    this.setRecoveryContexts({
+      ...this.#recovery.contexts,
+      generation: context,
+    });
   }
   setQueryContext(context: ProjectGenerationQueryHostContext | null) {
-    this.concepts.queries.setHostContext(context);
-    this.#update({});
+    this.setRecoveryContexts({ ...this.#recovery.contexts, query: context });
   }
   setSelectionContext(context: ProjectGenerationSelectionHostContext | null) {
-    if (!context) this.#selectionRecovery.abort();
-    this.concepts.images.setHostContext(context);
-    this.#update({});
+    this.setRecoveryContexts({
+      ...this.#recovery.contexts,
+      selection: context,
+    });
+  }
+  setRecoveryContexts(contexts: ConceptRecoveryContexts) {
+    const wasConflicting = this.#recovery.conflict;
+    const changed = this.#recovery.capture(contexts);
+    if (!contexts.selection) this.#selectionRecovery.abort();
+    const retryGate = <T extends { intent: { retryable: boolean } | null }>(
+      context: T | null,
+    ): T | null =>
+      context && this.#recovery.conflict && context.intent
+        ? { ...context, intent: { ...context.intent, retryable: false } }
+        : context;
+    this.concepts.images.setHostContext(retryGate(contexts.selection));
+    this.concepts.submissions.setHostContext(retryGate(contexts.generation));
+    this.concepts.queries.setHostContext(retryGate(contexts.query));
+    this.#update({
+      recoveryConflict: this.#recovery.conflict,
+      conceptLocked: this.concepts.locked,
+    });
+    if (changed && this.#ready && (wasConflicting || this.#recovery.conflict)) {
+      this.concepts.submissions.resume();
+      this.concepts.queries.resume();
+      this.concepts.images.resume();
+    }
   }
   #abort() {
     this.#generationRecovery.abort();

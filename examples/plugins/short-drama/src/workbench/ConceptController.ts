@@ -133,7 +133,8 @@ export class ConceptController {
       this.#snapshot.pendingKind !== null ||
       this.submissions.locked ||
       this.queries.locked ||
-      this.images.locked
+      this.images.locked ||
+      this.#ports.recovery.conflict
     );
   }
   #update(change: Partial<ConceptSnapshot>) {
@@ -193,6 +194,7 @@ export class ConceptController {
       submissions: this.submissions,
       queries: this.queries,
       images: this.images,
+      recovery: this.#ports.recovery,
     });
   }
   adoptGenerationSelection(selection: ConceptSelection) {

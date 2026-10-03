@@ -3,6 +3,7 @@ import type { ConceptSelection } from "./ConceptController.types";
 import type { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
 import type { ConceptQueryController } from "./ConceptQueryController";
 import type { ConceptImageSelectionController } from "./ConceptImageSelectionController";
+import type { ConceptRecoveryCoordinator } from "./ConceptRecoveryCoordinator";
 
 /** Keep saved-source derivation and cross-capability write locks in one bounded module. */
 export function bindConceptCapabilities(input: {
@@ -15,8 +16,10 @@ export function bindConceptCapabilities(input: {
   submissions: ConceptGenerationIntentController;
   queries: ConceptQueryController;
   images: ConceptImageSelectionController;
+  recovery: ConceptRecoveryCoordinator;
 }) {
   const { selection, project, submissions, queries, images } = input;
+  const blocked = input.blocked || input.recovery.conflict;
   const source =
     selection && !input.editing
       ? {
@@ -34,22 +37,19 @@ export function bindConceptCapabilities(input: {
         }
       : null;
   queries.bindSource(
-    source,
+    input.recovery.preservesHistory("query") ? null : source,
     input.ready,
-    input.blocked || submissions.locked || images.locked,
+    blocked || submissions.locked || images.locked,
   );
   submissions.bindSource(
-    reference,
-    project?.state === "active" && !input.blocked && !images.locked,
+    input.recovery.preservesHistory("generation") ? null : reference,
+    project?.state === "active" && !blocked && !images.locked,
     input.ready,
   );
   images.bindSource(
-    reference,
+    input.recovery.preservesHistory("selection") ? null : reference,
     project?.state === "active",
     input.ready,
-    input.blocked ||
-      input.metadataPending ||
-      submissions.locked ||
-      queries.locked,
+    blocked || input.metadataPending || submissions.locked || queries.locked,
   );
 }

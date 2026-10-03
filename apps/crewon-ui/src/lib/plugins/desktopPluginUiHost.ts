@@ -1,3 +1,4 @@
+import { createInstalledPluginUiRecovery } from "./installedPluginUiRecovery";
 import type { InstalledPluginProjectSelectionJournal } from "./installedPluginProjectSelectionJournal";
 import {
   parsePluginUiCatalogResponse,
@@ -80,6 +81,7 @@ export function createDesktopPluginUiHost(
     projectQueryJournal,
     selectionJournal,
   } = options;
+  const recovery = createInstalledPluginUiRecovery(options);
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -137,6 +139,7 @@ export function createDesktopPluginUiHost(
             const response = await selectionJournal.invoke({
               lease,
               input: selection.input,
+              stage: recovery.stage(lease, selection),
               signal: input.signal,
               assertCurrent,
               request: (signal) =>
@@ -168,6 +171,7 @@ export function createDesktopPluginUiHost(
           const response = await projectQueryJournal.invoke({
             lease,
             input: query.input,
+            stage: recovery.stage(lease, query),
             signal: input.signal,
             assertCurrent,
             request: (signal) =>
@@ -186,6 +190,7 @@ export function createDesktopPluginUiHost(
           const response = await generationJournal.invoke({
             lease,
             input: generation.input,
+            stage: recovery.stage(lease, generation),
             signal: input.signal,
             assertCurrent,
             request: (signal) =>
@@ -208,6 +213,7 @@ export function createDesktopPluginUiHost(
         return response.output;
       },
       async closeMount(lease) {
+        recovery.release(lease);
         const owned = bindings.get(lease.mountRef);
         if (owned) {
           if (owned.identity !== checkedLeaseIdentity(lease))
@@ -309,6 +315,7 @@ export function createDesktopPluginUiHost(
           binding.entryUrl,
         );
         assertPluginUiCurrent(assertCurrent, signal);
+        await recovery.hydrate(lease, signal);
         return lease;
       } catch (error) {
         try {

@@ -10,6 +10,22 @@ import type { ApplicationClock } from "./application-runtime-ports.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { PluginInstallationHostProfilePort } from "./plugin-installation-host-port.ts";
 import type { PluginInstallationStore } from "./plugin-installation-store-port.ts";
+import type { PluginUiRecoveryPort } from "./plugin-ui-recovery-ports.ts";
+import {
+  capturePluginUiRecoveryDispatch,
+  capturePluginUiRecoveryPort,
+  confirmPluginUiRecovery,
+  invokePluginUiWithRecovery,
+  pluginUiDeclaresRecovery,
+  pluginUiRecoveryMutation,
+  recoveryInvocationRequest,
+  requirePluginUiRecovery,
+} from "./plugin-ui-recovery-invocation.ts";
+import {
+  getPluginUiRecovery,
+  pluginUiRecoveryActionContext,
+  stagePluginUiRecovery,
+} from "./plugin-ui-recovery-operation.ts";
 import type {
   InvokePluginUiActionCommand,
   OpenPluginUiMountCommand,
@@ -74,6 +90,8 @@ export type PluginUiApplicationDependencies = Readonly<{
   committedTasks?: PluginUiCommittedTaskPort;
   /** Separate trusted metadata receipt owner; does not authorize task/Run admission. */
   committedMetadata?: PluginUiCommittedMetadataPort;
+  /** Explicit durable request staging; absent for existing packages and deployments. */
+  recovery?: PluginUiRecoveryPort;
   ids: PluginUiOpaqueIdPort;
   clock: ApplicationClock;
   /** Only lower limits are accepted; there is no unbounded lease or byte configuration. */
@@ -87,13 +105,22 @@ type MountBinding = Readonly<{
 
 /** Internal process-local UI admission; this is neither browser isolation nor production HTTP wiring. */
 export class PluginUiApplicationService {
+  /** Internal composition evidence only; never projected as a user capability. */
+  get recoveryAvailable(): boolean {
+    return this.#recovery !== undefined;
+  }
   readonly #dependencies: PluginUiApplicationDependencies;
   readonly #limits: PluginUiApplicationLimits;
+  readonly #recovery: PluginUiRecoveryPort | undefined;
   readonly #mounts = new Map<string, MountBinding>();
   #pending = 0;
   #referenceSequence = 0;
 
   constructor(dependencies: PluginUiApplicationDependencies) {
+    const recovery = Object.getOwnPropertyDescriptor(dependencies, "recovery");
+    if (recovery !== undefined && !Object.hasOwn(recovery, "value"))
+      throw new ApplicationError("internal", "plugin_ui_recovery_port_invalid");
+    this.#recovery = capturePluginUiRecoveryPort(recovery?.value);
     this.#dependencies = Object.freeze({ ...dependencies });
     for (const [port, methods] of [
       [dependencies.profiles, ["resolve"]],
@@ -260,12 +287,65 @@ export class PluginUiApplicationService {
     });
   }
 
+  getRecovery(actorInput: ActorContext, input: PluginUiMountQuery) {
+    return uiOperation(() => {
+      const query = uiMountQuery(input);
+      return getPluginUiRecovery(
+        this.#recoveryOperation(
+          actorInput,
+          query.mountRef,
+          "crewon.plugin-ui-recovery.v1.getRecovery",
+          null,
+        ),
+      );
+    });
+  }
+
+  stageRecovery(actorInput: ActorContext, input: InvokePluginUiActionCommand) {
+    return uiOperation(() => {
+      const command = uiInvokeCommand(input);
+      const request = recoveryInvocationRequest(command.action, command.input);
+      return stagePluginUiRecovery(
+        this.#recoveryOperation(
+          actorInput,
+          command.mountRef,
+          request.action,
+          request.input,
+        ),
+        request,
+      );
+    });
+  }
+
+  #recoveryOperation(
+    actorInput: ActorContext,
+    mountRef: string,
+    action: string,
+    input: PluginUiActionContext["input"],
+  ) {
+    const actor = uiActor(actorInput);
+    const binding = this.#binding(actor, mountRef);
+    return {
+      context: pluginUiRecoveryActionContext(binding, action, input),
+      port: this.#recovery,
+      assertCurrent: () => this.#fence(actor, binding, "invoke"),
+      assertActive: () => this.#alive(binding),
+      assertTransactionCurrent: () => this.#transactionFence(actor, binding),
+    };
+  }
+
   invoke(actorInput: ActorContext, input: InvokePluginUiActionCommand) {
     return uiOperation(async () => {
       const actor = uiActor(actorInput);
       const command = uiInvokeCommand(input);
       const binding = this.#binding(actor, command.mountRef);
       await this.#fence(actor, binding, "invoke");
+      const usesRecovery =
+        pluginUiRecoveryMutation(command.action) &&
+        pluginUiDeclaresRecovery(binding.lease);
+      const recovery = usesRecovery
+        ? requirePluginUiRecovery(binding.lease, this.#recovery)
+        : undefined;
       const context: PluginUiActionContext = Object.freeze({
         ...binding.context,
         lease: binding.lease,
@@ -278,6 +358,7 @@ export class PluginUiApplicationService {
         () => this.#fence(actor, binding, "invoke"),
         () => this.#alive(binding),
         command.action.startsWith("crewon.creative-projects.") ||
+          usesRecovery ||
           command.action ===
             "crewon.project-generation-selections.v1.selectConceptImage"
           ? Object.freeze({
@@ -286,12 +367,27 @@ export class PluginUiApplicationService {
           : undefined,
       );
       try {
-        const raw = await this.#dependencies.actions.invoke(context);
+        const dispatch =
+          recovery === undefined
+            ? undefined
+            : capturePluginUiRecoveryDispatch(
+                await recovery.beginDispatch(context),
+              );
+        const raw =
+          dispatch === undefined
+            ? await this.#dependencies.actions.invoke(context)
+            : await invokePluginUiWithRecovery(
+                this.#dependencies.actions,
+                context,
+                dispatch,
+              );
         const authority = this.#dependencies.committedTasks;
         if (authority?.isOutcome(raw) === true) {
           // The original transaction already admitted this task. Later selection/lease changes cannot
           // turn that accepted receipt into a retry signal; ordinary JSON retains the read fence below.
           const result = authority.verify(context, raw);
+          if (dispatch !== undefined)
+            return confirmPluginUiRecovery(dispatch, result);
           return uiOutput(() => parsePluginUiJsonValue(result));
         }
         const metadata = this.#dependencies.committedMetadata;
@@ -299,6 +395,8 @@ export class PluginUiApplicationService {
           // A confirmed metadata commit has its own private owner; later withdrawal cannot turn it
           // into a retry signal, and this path conveys no task or credit admission.
           const result = metadata.verify(context, raw);
+          if (dispatch !== undefined)
+            return confirmPluginUiRecovery(dispatch, result);
           return uiOutput(() => parsePluginUiJsonValue(result));
         }
         const result = uiOutput(() => parsePluginUiJsonValue(raw));

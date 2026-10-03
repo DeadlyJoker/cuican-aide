@@ -8,6 +8,7 @@ import {
   PLUGIN_CATALOG_RESPONSE_MAX_BYTES,
   PLUGIN_JSON_RESPONSE_MAX_BYTES,
   PLUGIN_LEASE_RESPONSE_MAX_BYTES,
+  PLUGIN_RECOVERY_RESPONSE_MAX_BYTES,
 } from "./plugin-proxy-policy.ts";
 
 const origin = "https://plugins.example.test";
@@ -55,6 +56,164 @@ function request(path: string, init: RequestInit = {}) {
   });
 }
 
+test("recovery permits only the exact mount GET/POST family, without caller scope queries", () => {
+  for (const method of ["GET", "POST"]) {
+    assert.deepEqual(policy(`${mount}/recovery`, method), {
+      outcome: "allow",
+      responseKind: "json",
+      responseMaxBytes: PLUGIN_RECOVERY_RESPONSE_MAX_BYTES,
+    });
+    for (const search of [
+      "?",
+      "?actorId=forged",
+      "?tenantId=forged",
+      "?phase=accepted",
+      "?limit=1",
+    ])
+      assert.deepEqual(policy(`${mount}/recovery${search}`, method), {
+        outcome: "deny",
+        status: 400,
+        code: "plugin_query_invalid",
+      });
+  }
+  for (const method of ["PUT", "DELETE", "PATCH", "HEAD"])
+    assert.deepEqual(policy(`${mount}/recovery`, method), {
+      outcome: "deny",
+      status: 405,
+      code: "method_not_allowed",
+    });
+  for (const suffix of [
+    "/",
+    "/accepted",
+    "/../actions",
+    "/%2e%2e/actions",
+    "/%00",
+  ])
+    assert.equal(policy(`${mount}/recovery${suffix}`)?.outcome, "deny");
+});
+
+test("recovery GET resolves fresh session and staging replaces credentials while preserving the original command", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  let resolutions = 0;
+  const bff = app(
+    async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return Response.json({
+        version: "crewon.plugin-ui-recovery.v1",
+        intents: [],
+      });
+    },
+    () => {
+      resolutions++;
+    },
+  );
+  const path = `${mount}/recovery`;
+  assert.equal((await bff.handle(new Request(`${origin}${path}`))).status, 401);
+  assert.equal(
+    (
+      await bff.handle(
+        request(path, {
+          headers: {
+            "authorization": "Bearer forged",
+            "x-forwarded-tenant": "forged",
+            "x-actor-id": "forged",
+          },
+        }),
+      )
+    ).status,
+    200,
+  );
+  const csrfResponse = await bff.handle(request("/control-api/session"));
+  const { csrfToken } = (await csrfResponse.json()) as { csrfToken: string };
+  const body = JSON.stringify({
+    action: "crewon.project-generation-queries.v1.queryConceptGeneration",
+    input: { idempotencyKey: "original-key" },
+  });
+  assert.equal(
+    (
+      await bff.handle(
+        request(path, {
+          method: "POST",
+          body,
+          headers: {
+            origin,
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken,
+            "authorization": "Bearer forged",
+            "x-forwarded-tenant": "forged",
+          },
+        }),
+      )
+    ).status,
+    200,
+  );
+  assert.equal(calls.length, 2);
+  assert.equal(resolutions, 4);
+  for (const { url, init } of calls) {
+    const headers = new Headers(init.headers);
+    assert.equal(url, `http://127.0.0.1:3210${path}`);
+    assert.equal(init.redirect, "manual");
+    assert.equal(
+      headers.get("authorization"),
+      `Bearer ${session.controlAccessToken}`,
+    );
+    assert.equal(
+      headers.get("x-crewon-bff-authorization"),
+      `Bearer ${serviceToken}`,
+    );
+    assert.equal(headers.get("cookie"), null);
+    assert.equal(headers.get("x-forwarded-tenant"), null);
+    assert.equal(headers.get("x-actor-id"), null);
+    assert.equal(headers.get("idempotency-key"), null);
+    assert.equal(
+      headers.get("x-csrf-token"),
+      init.method === "GET" ? null : controlCsrf,
+    );
+    assert.ok(init.signal instanceof AbortSignal);
+  }
+  assert.equal(calls[0]!.init.body, undefined);
+  assert.equal(
+    new TextDecoder().decode(calls[1]!.init.body as Uint8Array),
+    body,
+  );
+  const invalidHeaders: readonly Record<string, string>[] = [
+    { origin, "content-type": "application/json" },
+    {
+      "origin": "https://forged.test",
+      "content-type": "application/json",
+      "x-csrf-token": csrfToken,
+    },
+  ];
+  for (const headers of invalidHeaders)
+    assert.equal(
+      (await bff.handle(request(path, { method: "POST", body, headers })))
+        .status,
+      403,
+    );
+  assert.equal(calls.length, 2);
+});
+
+test("recovery successful replies use the 60 KiB bound and never follow redirects", async () => {
+  const replies = [
+    new Response(" ".repeat(PLUGIN_RECOVERY_RESPONSE_MAX_BYTES) + "{}", {
+      headers: { "content-type": "application/json" },
+    }),
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://elsewhere.test" },
+    }),
+  ];
+  let calls = 0;
+  const bff = app(async (_url, init = {}) => {
+    calls++;
+    assert.equal(init.redirect, "manual");
+    return replies.shift()!;
+  });
+  for (let i = 0; i < 2; i++)
+    assert.equal((await bff.handle(request(`${mount}/recovery`))).status, 502);
+  assert.equal(calls, 2);
+});
+
 test("declares every plugin route with exact method and finite response family", () => {
   for (const [path, method, kind, bytes] of [
     [`${base}/sources`, "GET", "json", PLUGIN_JSON_RESPONSE_MAX_BYTES],
@@ -84,6 +243,8 @@ test("declares every plugin route with exact method and finite response family",
     [mount, "GET", "json", PLUGIN_LEASE_RESPONSE_MAX_BYTES],
     [mount, "DELETE", "json", PLUGIN_JSON_RESPONSE_MAX_BYTES],
     [`${mount}/actions`, "POST", "json", PLUGIN_JSON_RESPONSE_MAX_BYTES],
+    [`${mount}/recovery`, "GET", "json", PLUGIN_RECOVERY_RESPONSE_MAX_BYTES],
+    [`${mount}/recovery`, "POST", "json", PLUGIN_RECOVERY_RESPONSE_MAX_BYTES],
     [
       `${mount}/assets/dist/chunks/helper.mjs`,
       "GET",
@@ -98,7 +259,7 @@ test("declares every plugin route with exact method and finite response family",
     });
     assert.equal(
       policy(path, method === "GET" ? "POST" : "GET")?.outcome,
-      path === mount && method === "DELETE"
+      path.endsWith("/recovery") || (path === mount && method === "DELETE")
         ? "allow"
         : path.includes("/selections/fixture") && method === "PUT"
           ? "allow"
@@ -381,6 +542,7 @@ test("install/select and UI mutation bodies keep CSRF separation and original id
     [`${base}/selections/fixture.plugin`, "PUT"],
     [`${base}/ui/mounts`, "POST"],
     [`${mount}/actions`, "POST"],
+    [`${mount}/recovery`, "POST"],
     [mount, "DELETE"],
   ]) {
     const body = method === "DELETE" ? undefined : "{}";

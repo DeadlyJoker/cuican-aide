@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
   PluginUiApplicationService,
+  isPluginUiRecoveryApplicationService,
+  type PluginUiRecoveryApplicationService,
   isPluginCreativeProjectActionOwner,
   type PluginCreativeProjectActionOwner,
   type ApplicationClock,
@@ -62,6 +64,7 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedProjectGenerationReadActions?: PluginProjectGenerationReadActionBridge;
   ownedProjectQueryActions?: InstalledPluginProjectQueryOwner;
   ownedProjectSelectionActions?: ProjectGenerationSelectionPluginUiOwner;
+  recovery?: PluginUiRecoveryApplicationService;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -87,6 +90,9 @@ export function createProductionPluginUiRuntime(
   const generationReadOwner = input.ownedProjectGenerationReadActions;
   const queryOwner = input.ownedProjectQueryActions;
   const selectionOwner = input.ownedProjectSelectionActions;
+  const recovery = input.recovery;
+  if (recovery !== undefined && !isPluginUiRecoveryApplicationService(recovery))
+    throw new Error("production_plugin_ui_recovery_owner_invalid");
   if (
     selectionOwner !== undefined &&
     !isProjectGenerationSelectionPluginUiOwner(selectionOwner)
@@ -267,6 +273,7 @@ export function createProductionPluginUiRuntime(
         ? {}
         : { committedTasks: committedSnapshot }),
       ...(committedMetadata === undefined ? {} : { committedMetadata }),
+      ...(recovery === undefined ? {} : { recovery }),
     });
   const call = async <T>(
     work: (service: PluginUiApplicationService) => Promise<T>,
@@ -311,6 +318,16 @@ export function createProductionPluginUiRuntime(
       // still run its policy fence, whose requests are cancelled by this runtime's lifetime.
       return current.invoke(...args);
     },
+    ...(recovery === undefined
+      ? {}
+      : {
+          getRecovery: (
+            ...args: Parameters<PluginUiApplicationService["getRecovery"]>
+          ) => call((current) => current.getRecovery(...args)),
+          stageRecovery: (
+            ...args: Parameters<PluginUiApplicationService["stageRecovery"]>
+          ) => call((current) => current.stageRecovery(...args)),
+        }),
   });
   let closing: Promise<void> | null = null;
   return Object.freeze({

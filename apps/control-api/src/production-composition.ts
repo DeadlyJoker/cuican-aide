@@ -1,5 +1,6 @@
 import { ModelPricingApplicationService } from "@crewon/application";
 import { ModelSpendingApplicationService } from "@crewon/application";
+import { closeResources } from "./production-control-resource-cleanup.ts";
 import { OfficeThreadApplicationService } from "@crewon/application";
 import type { StorageAdmissionPort } from "@crewon/application";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
@@ -112,7 +113,6 @@ import {
 } from "./production-creative-project-plugin-runtime.ts";
 import { type ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import { assertProjectGenerationReadPluginPublications } from "./project-generation-read-plugin-ui-composition.ts";
-import { composeProductionProjectHistoryPlugins } from "./production-project-history-plugin-composition.ts";
 import {
   assertProductionProjectSelectionComposition,
   closeProductionProjectSelectionOwner,
@@ -120,6 +120,13 @@ import {
 } from "./project-generation-selection-composition.ts";
 import type { ProductionProjectGenerationSelectionPluginRuntime } from "./production-project-generation-selection-plugin-runtime.ts";
 import type { ProjectConceptSelectionApplicationService } from "@crewon/application";
+import {
+  assertProductionPluginUiRecoveryConfiguration,
+  capturePluginUiRecoveryConfiguration,
+  composeProductionPluginUiRecoveryHistory,
+  type PluginUiRecoveryConfiguration,
+  type ProductionPluginUiRecoveryRuntime,
+} from "./plugin-ui-recovery-composition.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -139,6 +146,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
   creativeProjects?: CreativeProjectCompositionConfig;
+  uiRecovery?: PluginUiRecoveryConfiguration;
   pluginUi?: ProductionPluginUiConfig;
   pluginConfiguration?: Readonly<{
     configuration: InstalledPluginConfigurationConfig;
@@ -166,8 +174,13 @@ export async function createProductionPostgresControlApi(
   let store: PostgresDomainStore | undefined;
   try {
     validateProductionConfig(config);
+    const uiRecovery = capturePluginUiRecoveryConfiguration(config.uiRecovery);
     const creativeProjects = captureCreativeProjectCompositionConfig(
       config.creativeProjects,
+    );
+    assertProductionPluginUiRecoveryConfiguration(
+      { ...config, creativeProjects },
+      uiRecovery,
     );
     assertCreativeProjectPluginPublications(
       creativeProjects?.pluginUi,
@@ -219,6 +232,7 @@ export async function createProductionPostgresControlApi(
     const productionConfig = Object.freeze({
       ...config,
       creativeProjects,
+      uiRecovery,
       ...(config.pluginConfiguration === undefined
         ? {}
         : {
@@ -335,6 +349,7 @@ async function composeProductionControlApi(
   );
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   let pluginUiRuntime: ProductionPluginUiRuntime | undefined;
+  let pluginUiRecovery: ProductionPluginUiRecoveryRuntime | undefined;
   let pluginTaskRuntime: InstalledPluginTaskRuntime | undefined;
   let pluginConfigurationRuntime:
     | InstalledPluginConfigurationRuntime
@@ -408,7 +423,8 @@ async function composeProductionControlApi(
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
         projectPluginRuntime?.hostUiServices;
-      const history = await composeProductionProjectHistoryPlugins({
+      const history = await composeProductionPluginUiRecoveryHistory({
+        config,
         store,
         projects: creativeProjects,
         ui: config.pluginUi?.configuration,
@@ -425,6 +441,7 @@ async function composeProductionControlApi(
       projectSelections = history.selections;
       projectGenerationReadPluginRuntime = history.readRuntime;
       projectSelectionPluginRuntime = history.selectionRuntime;
+      pluginUiRecovery = history.recovery;
       const hostUiServices = history.hostUiServices;
       if (config.pluginInstallation !== undefined) {
         if (registry === undefined)
@@ -447,6 +464,9 @@ async function composeProductionControlApi(
         pluginUiRuntime = createProductionPluginUiRuntime(
           {
             ...config.pluginUi,
+            ...(pluginUiRecovery === undefined
+              ? {}
+              : { recovery: pluginUiRecovery.service }),
             ...(projectSelectionPluginRuntime === undefined
               ? {}
               : {
@@ -639,6 +659,7 @@ async function composeProductionControlApi(
             projectQueries: pluginTaskRuntime?.projectQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
             projectSelections: projectSelectionPluginRuntime,
+            recovery: pluginUiRecovery,
           });
     const extensionReads =
       pluginTaskRuntime?.extensionReads ??
@@ -728,6 +749,7 @@ async function composeProductionControlApi(
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),
+        () => pluginUiRecovery?.close(),
         () => pluginInstallationRuntime?.close(),
         () => storageCapacity.close(),
         () => artifactMaintenance!.close(),
@@ -757,6 +779,7 @@ async function composeProductionControlApi(
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),
+        () => pluginUiRecovery?.close(),
         () => pluginInstallationRuntime?.close(),
         () => storageCapacity.close(),
         () => artifactMaintenance?.close(),
@@ -772,20 +795,6 @@ async function composeProductionControlApi(
     }
     throw error;
   }
-}
-
-async function closeResources(
-  tasks: readonly (() => void | Promise<void> | undefined)[],
-): Promise<void> {
-  const failures: unknown[] = [];
-  for (const task of tasks)
-    try {
-      await task();
-    } catch (failure) {
-      failures.push(failure);
-    }
-  if (failures.length)
-    throw new AggregateError(failures, "production_control_api_cleanup_failed");
 }
 
 import { ArtifactRetentionMaintenance } from "./artifact-retention-maintenance.ts";

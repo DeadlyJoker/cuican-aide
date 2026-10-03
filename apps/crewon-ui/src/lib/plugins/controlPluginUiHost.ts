@@ -1,3 +1,4 @@
+import { createInstalledPluginUiRecovery } from "./installedPluginUiRecovery";
 import type { InstalledPluginProjectSelectionJournal } from "./installedPluginProjectSelectionJournal";
 import {
   parsePluginUiCatalogResponse,
@@ -69,6 +70,7 @@ export function createControlPluginUiHost(
     projectQueryJournal,
     selectionJournal,
   } = options;
+  const recovery = createInstalledPluginUiRecovery(options);
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -124,6 +126,7 @@ export function createControlPluginUiHost(
             const response = await selectionJournal.invoke({
               lease,
               input: selection.input,
+              stage: recovery.stage(lease, selection),
               signal: input.signal,
               assertCurrent,
               request: (signal) =>
@@ -155,6 +158,7 @@ export function createControlPluginUiHost(
           const response = await projectQueryJournal.invoke({
             lease,
             input: query.input,
+            stage: recovery.stage(lease, query),
             signal: input.signal,
             assertCurrent,
             request: (signal) =>
@@ -173,6 +177,7 @@ export function createControlPluginUiHost(
           const response = await generationJournal.invoke({
             lease,
             input: generation.input,
+            stage: recovery.stage(lease, generation),
             signal: input.signal,
             assertCurrent,
             request: (signal) =>
@@ -195,6 +200,7 @@ export function createControlPluginUiHost(
         return response.output;
       },
       async closeMount(lease) {
+        recovery.release(lease);
         // Revoke the reference through the original authenticated client even after the host changed session.
         await pluginUiControlRequest((signal) =>
           client.plugins.closeMount(lease.mountRef, { signal }),
@@ -240,6 +246,7 @@ export function createControlPluginUiHost(
         assertPluginUiCurrent(assertCurrent);
         if (pluginUiCatalogIdentity(lease) !== pluginUiCatalogIdentity(item))
           uiFailure("plugin_ui_lease_identity_mismatch");
+        await recovery.hydrate(lease, signal);
       } catch (error) {
         try {
           await loader.closeUnusedMount(lease);

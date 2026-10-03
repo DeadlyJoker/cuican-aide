@@ -1,4 +1,6 @@
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
+import { SqlitePluginUiIntentJournalStore } from "./sqlite-plugin-ui-intent-journal-store.ts";
+import type { PluginUiIntentPayloadVerifier } from "@crewon/application";
 import type { ProjectGenerationImageResultVerifier } from "@crewon/application";
 import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import { createSqlitePluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
@@ -717,6 +719,18 @@ export class SqliteRunStore implements DomainStore {
     return createSqliteCreativeProjectStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Independent recovery journal; construction neither migrates nor enables it. */
+  pluginUiIntentJournalStore(input: {
+    verifier: PluginUiIntentPayloadVerifier;
+  }): SqlitePluginUiIntentJournalStore {
+    this.#assertOpen();
+    return new SqlitePluginUiIntentJournalStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      verifier: input.verifier,
     });
   }
 

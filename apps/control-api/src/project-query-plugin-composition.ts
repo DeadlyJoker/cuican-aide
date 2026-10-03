@@ -17,6 +17,7 @@ export function captureProductionPluginUiOwnerConfiguration(
       ? {}
       : { ownedProjectSelectionActions: input.ownedProjectSelectionActions }),
     configuration: parseProductionPluginUiConfiguration(input.configuration),
+    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     ...(actions === undefined
       ? {}
       : { actions: Object.freeze({ invoke: actions.invoke.bind(actions) }) }),

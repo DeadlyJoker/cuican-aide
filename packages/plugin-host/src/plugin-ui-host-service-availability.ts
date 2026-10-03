@@ -17,6 +17,8 @@ import {
   CREWON_PROJECT_GENERATION_CONTEXTS_API_VERSION,
   CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE,
   CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION,
+  CREWON_PLUGIN_UI_RECOVERY_SERVICE,
+  CREWON_PLUGIN_UI_RECOVERY_API_VERSION,
   type PluginPackageDescriptor,
   type PluginServiceRequirement,
 } from "@crewon/contracts/plugins";
@@ -112,6 +114,31 @@ export function appendProjectGenerationSelectionUiServiceAvailability(
   return port;
 }
 
+/** Recovery is independently assembled; preserve every older owner's private availability binding. */
+export function appendPluginUiRecoveryServiceAvailability(
+  input: Readonly<{
+    recovery: PluginUiHostServiceAvailabilityPort;
+    fallback?: PluginUiHostServiceAvailabilityPort;
+  }>,
+): PluginUiHostServiceAvailabilityPort {
+  const recovery = capturePluginUiHostServiceAvailability(input.recovery)!;
+  const fallback = capturePluginUiHostServiceAvailability(input.fallback);
+  let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
+    isAvailable: (request) =>
+      request.requirement.service === CREWON_PLUGIN_UI_RECOVERY_SERVICE
+        ? request.requirement.apiVersion ===
+            CREWON_PLUGIN_UI_RECOVERY_API_VERSION &&
+          recovery.isAvailable(request)
+        : fallback?.isAvailable(request) === true,
+  });
+  if (fallback !== undefined) {
+    port = preserveProjectGenerationHostAvailability(fallback, port);
+    port = preserveProjectGenerationContextHostAvailability(fallback, port);
+    port = preserveProjectGenerationQueryHostAvailability(fallback, port);
+  }
+  return port;
+}
+
 /** Known optional protocols can be declared without an owner; required generation protocols need actual assembly. */
 export function assertUiOnlyServiceDeclarations(
   descriptor: PluginPackageDescriptor,
@@ -132,6 +159,8 @@ export function assertUiOnlyServiceDeclarations(
             CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE &&
             requirement.apiVersion ===
               CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION) ||
+          (requirement.service === CREWON_PLUGIN_UI_RECOVERY_SERVICE &&
+            requirement.apiVersion === CREWON_PLUGIN_UI_RECOVERY_API_VERSION) ||
           (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
             requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&
             (requirement.optional ||

@@ -7,6 +7,7 @@ import type { ProductionProjectGenerationSelectionPluginRuntime } from "./produc
 import { parseProjectGenerationUiActionRequest } from "@crewon/contracts/plugins";
 import { parseProjectGenerationContextUiActionRequest } from "@crewon/contracts/plugins";
 import { parseProjectGenerationQueryUiActionRequest } from "@crewon/contracts/plugins";
+import type { ProductionPluginUiRecoveryRuntime } from "./plugin-ui-recovery-composition.ts";
 import {
   isInstalledPluginProjectQueryOwner,
   type InstalledPluginProjectQueryOwner,
@@ -25,6 +26,7 @@ export function createProductionPluginUiRequestService({
   projectGenerationReads,
   projectQueries,
   projectSelections,
+  recovery,
 }: Readonly<{
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
@@ -33,6 +35,7 @@ export function createProductionPluginUiRequestService({
   projectGenerationReads?: ProductionProjectGenerationReadPluginRuntime;
   projectQueries?: InstalledPluginProjectQueryOwner;
   projectSelections?: ProductionProjectGenerationSelectionPluginRuntime;
+  recovery?: ProductionPluginUiRecoveryRuntime;
 }>): PluginUiControlService {
   if (
     projectQueries !== undefined &&
@@ -52,13 +55,22 @@ export function createProductionPluginUiRequestService({
     projectGenerations === undefined &&
     projectQueries === undefined &&
     projectGenerationReads === undefined &&
-    projectSelections === undefined
+    projectSelections === undefined &&
+    recovery === undefined
   )
     return ui;
   return Object.freeze({
     ...ui,
+    ...(recovery === undefined
+      ? {}
+      : { recoveryAuthenticatedRequest: recovery.run }),
     invokeAuthenticatedRequest: (request, actor, command, signal) => {
-      const invoke = () => ui.invoke(actor, command);
+      const invoke = () =>
+        recovery === undefined
+          ? ui.invoke(actor, command)
+          : recovery.run(request, actor, signal, () =>
+              ui.invoke(actor, command),
+            );
       if (
         command.action === "crewon.project-generation-selections" ||
         command.action.startsWith("crewon.project-generation-selections.")

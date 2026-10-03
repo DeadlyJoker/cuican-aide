@@ -17,6 +17,7 @@ import type {
   ProjectGenerationSelectionUiInput,
 } from "@crewon/plugin-sdk/contracts";
 import type { ProjectDetails } from "./creative-project-controller";
+import type { ConceptRecoveryCoordinator } from "./ConceptRecoveryCoordinator";
 
 export type ConceptDraft = Readonly<{
   name: string;
@@ -57,6 +58,7 @@ export type ConceptIntent =
       input: CreativeProjectUiInputMap["crewon.creative-projects.v1.appendConceptRevision"];
     }>;
 export type ConceptPorts = Readonly<{
+  recovery: ConceptRecoveryCoordinator;
   client: PluginCreativeProjectClient;
   generationClient: PluginProjectGenerationReadClient;
   submissionClient: PluginProjectGenerationClient;

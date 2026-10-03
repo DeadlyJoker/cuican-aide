@@ -7,6 +7,7 @@ import {
   parseProjectGenerationUiActionResponse,
   type PluginUiJsonValue,
   type PluginUiLease,
+  type PluginUiRecoveryHint,
   type ProjectGenerationUiInput,
   type ProjectGenerationUiReceipt,
 } from "@crewon/contracts/plugins";
@@ -19,6 +20,18 @@ import {
   PluginUiLoaderError,
   uiFailure,
 } from "./pluginUiValidation";
+
+import {
+  capturePluginUiRecoveryStage,
+  freshPluginUiRecoveryHistory,
+  mergePluginUiRecoveryStageHistory,
+  pluginUiRecoveryReceiptsMatch,
+  preparePluginUiRecoveryRestore,
+  restorePluginUiRecoveryHistory,
+  PluginUiRecoveryRefusedError,
+  type InstalledPluginRecoveryHistory,
+  type InstalledPluginRecoveryRestorePlan,
+} from "./installedPluginRecoveryJournalSupport";
 
 export type InstalledPluginGenerationSourcePin = Readonly<{
   pluginId: string;
@@ -37,6 +50,8 @@ export type InstalledPluginGenerationIntent = Readonly<{
   retryable: boolean;
   reasonCode: string | null;
   physicallyPending: boolean;
+  dispatchMayHaveOccurred: boolean;
+  dispatchAttemptCount: number;
 }>;
 export type InstalledPluginGenerationActionResponse = Readonly<{
   output: PluginUiJsonValue;
@@ -47,6 +62,10 @@ export type InstalledPluginGenerationJournal = Readonly<{
     listener: (intent: InstalledPluginGenerationIntent) => void,
   ): () => void;
   invalidate(): void;
+  /** Trusted GET hints only; preparing the plan does not publish or send a request. */
+  restore(
+    hints: readonly PluginUiRecoveryHint[],
+  ): InstalledPluginRecoveryRestorePlan;
   current(
     input: Readonly<{ lease: PluginUiLease; input?: ProjectGenerationUiInput }>,
   ): InstalledPluginGenerationIntent | null;
@@ -61,6 +80,8 @@ export type InstalledPluginGenerationJournal = Readonly<{
       request(
         signal: AbortSignal,
       ): Promise<InstalledPluginGenerationActionResponse>;
+      /** A durable ACK must precede the original mutation when recovery is declared. */
+      stage?(signal: AbortSignal): Promise<PluginUiRecoveryHint>;
       assertCurrent?: () => void;
     }>,
   ): Promise<InstalledPluginGenerationActionResponse>;
@@ -71,11 +92,12 @@ export type InstalledPluginGenerationJournal = Readonly<{
 type Physical = {
   controller: AbortController;
   sent: boolean;
+  businessSent: boolean;
   settled: boolean;
   work: Promise<InstalledPluginGenerationActionResponse>;
   timer?: ReturnType<typeof setTimeout>;
 };
-type Entry = {
+type Entry = InstalledPluginRecoveryHistory & {
   familyKey: string;
   sourcePin: InstalledPluginGenerationSourcePin;
   input: ProjectGenerationUiInput;
@@ -87,6 +109,8 @@ type Entry = {
 };
 const MAX_INTENTS = 32;
 const MAX_PHYSICAL = 16;
+const intentKey = (familyKey: string, key: string) =>
+  JSON.stringify([familyKey, key]);
 
 export function installedPluginGenerationFamilyKey(
   lease: PluginUiLease,
@@ -177,10 +201,19 @@ export function createInstalledPluginGenerationJournal(
         entry.phase === "uncertain",
       reasonCode: entry.reasonCode,
       physicallyPending: entry.physical !== undefined,
+      dispatchMayHaveOccurred: entry.dispatchMayHaveOccurred,
+      dispatchAttemptCount: entry.dispatchAttemptCount,
     });
-  const publish = (entry: Entry) => {
-    if (stopped || !entries.has(entry.input.idempotencyKey)) return;
+  const captureSnapshot = () => {
     snapshot = Object.freeze([...entries.values()].reverse().map(view));
+  };
+  const publish = (entry: Entry) => {
+    if (
+      stopped ||
+      !entries.has(intentKey(entry.familyKey, entry.input.idempotencyKey))
+    )
+      return;
+    captureSnapshot();
     const intent = view(entry);
     for (const listener of [...listeners]) {
       if (stopped) break;
@@ -194,8 +227,10 @@ export function createInstalledPluginGenerationJournal(
   };
   const mismatch = (entry: Entry) => {
     entry.blocked = true;
-    if (entry.phase !== "accepted") entry.phase = "uncertain";
-    entry.reasonCode = "plugin_ui_generation_intent_mismatch";
+    if (entry.phase !== "accepted" && entry.phase !== "refused")
+      entry.phase = "uncertain";
+    if (entry.phase !== "refused")
+      entry.reasonCode = "plugin_ui_generation_intent_mismatch";
     publish(entry);
     return view(entry);
   };
@@ -221,7 +256,9 @@ export function createInstalledPluginGenerationJournal(
     const input = raw === undefined ? undefined : requestFor(raw).input;
     const familyKey = installedPluginGenerationFamilyKey(lease);
     const exact =
-      input === undefined ? undefined : entries.get(input.idempotencyKey);
+      input === undefined
+        ? undefined
+        : entries.get(intentKey(familyKey, input.idempotencyKey));
     const unresolved = activeFamily(familyKey);
     const found =
       exact ??
@@ -272,7 +309,9 @@ export function createInstalledPluginGenerationJournal(
       );
       if (retired === undefined)
         uiFailure("plugin_ui_generation_journal_limit");
-      entries.delete(retired.input.idempotencyKey);
+      entries.delete(
+        intentKey(retired.familyKey, retired.input.idempotencyKey),
+      );
     }
     const entry: Entry = {
       familyKey: installedPluginGenerationFamilyKey(lease),
@@ -282,21 +321,27 @@ export function createInstalledPluginGenerationJournal(
       receipt: null,
       reasonCode: null,
       blocked: false,
+      ...freshPluginUiRecoveryHistory(),
     };
-    entries.set(input.idempotencyKey, entry);
+    entries.set(intentKey(entry.familyKey, input.idempotencyKey), entry);
     publish(entry);
     return view(entry);
   };
   const unknown = (entry: Entry) => {
-    if (stopped || entry.phase === "accepted") return;
+    if (stopped || entry.phase === "accepted" || entry.phase === "refused")
+      return;
     entry.phase = "uncertain";
+    entry.unknownSeen = true;
     if (!entry.blocked)
       entry.reasonCode = "plugin_ui_generation_result_unknown";
     publish(entry);
   };
   const refused = (entry: Entry, reasonCode: string) => {
     if (stopped || entry.phase === "accepted" || entry.blocked) return;
-    entry.phase = "refused";
+    entry.phase =
+      entry.dispatchMayHaveOccurred || entry.unknownSeen
+        ? "uncertain"
+        : "refused";
     entry.reasonCode = reasonCode;
     publish(entry);
   };
@@ -320,6 +365,45 @@ export function createInstalledPluginGenerationJournal(
       };
     },
     invalidate,
+    restore(hints) {
+      return preparePluginUiRecoveryRestore({
+        hints,
+        action: PROJECT_GENERATION_UI_ACTIONS[0],
+        entries,
+        checkCurrent,
+        captureSnapshot,
+        publish,
+        limit: MAX_INTENTS,
+        failureCode: "plugin_ui_generation_recovery_mismatch",
+        key: (entry) => intentKey(entry.familyKey, entry.input.idempotencyKey),
+        create(hint): Entry {
+          if (hint.request.action !== PROJECT_GENERATION_UI_ACTIONS[0])
+            uiFailure("plugin_ui_generation_recovery_mismatch");
+          return {
+            familyKey: JSON.stringify([
+              hint.sourcePin.pluginId,
+              hint.sourcePin.contributionId,
+            ]),
+            sourcePin: hint.sourcePin,
+            input: requestFor(hint.request.input).input,
+            phase:
+              hint.phase === "prepared" || hint.phase === "dispatched"
+                ? "uncertain"
+                : hint.phase,
+            receipt: hint.receipt as ProjectGenerationUiReceipt | null,
+            reasonCode:
+              hint.reasonCode ??
+              (hint.receipt === null
+                ? "plugin_ui_generation_result_unknown"
+                : null),
+            blocked:
+              (hint.phase === "prepared" || hint.phase === "dispatched") &&
+              !hint.retryable,
+            ...restorePluginUiRecoveryHistory(hint),
+          };
+        },
+      });
+    },
     current({ lease, input }) {
       checkCurrent();
       const found = find(lease, input);
@@ -349,11 +433,14 @@ export function createInstalledPluginGenerationJournal(
       input: raw,
       signal: caller,
       request,
+      stage,
       assertCurrent: extra,
     }) {
       const registered = register({ lease: rawLease, input: raw });
       const checked = requestFor(raw);
-      const entry = entries.get(registered.input.idempotencyKey)!;
+      const entry = entries.get(
+        intentKey(registered.familyKey, registered.input.idempotencyKey),
+      )!;
       if (
         entry.blocked ||
         !same(entry.input, checked.input) ||
@@ -374,6 +461,7 @@ export function createInstalledPluginGenerationJournal(
         job = {
           controller: new AbortController(),
           sent: false,
+          businessSent: false,
           settled: false,
           work: undefined as unknown as Promise<InstalledPluginGenerationActionResponse>,
         };
@@ -406,26 +494,94 @@ export function createInstalledPluginGenerationJournal(
               uiFailure("plugin_ui_generation_intent_mismatch");
             }
             if (
-              entries.get(entry.input.idempotencyKey) !== entry ||
+              entries.get(
+                intentKey(entry.familyKey, entry.input.idempotencyKey),
+              ) !== entry ||
               entry.blocked ||
               !same(parsePluginUiLease(rawLease), lease) ||
               !same(requestFor(raw).input, entry.input)
             )
               uiFailure("plugin_ui_generation_intent_mismatch");
-            // Only this line transfers the request to the physical transport. Any subsequent error is UNKNOWN.
+            if (stage) {
+              // A lost stage ACK preserves the original key without sending the business request.
+              actual.sent = true;
+              const hint = capturePluginUiRecoveryStage(
+                await stage(actual.controller.signal),
+                requestFor(entry.input),
+                entry.sourcePin,
+              );
+              checkCurrent(extra);
+              if (
+                entries.get(
+                  intentKey(entry.familyKey, entry.input.idempotencyKey),
+                ) !== entry
+              )
+                uiFailure("plugin_ui_generation_intent_mismatch");
+              mergePluginUiRecoveryStageHistory(entry, hint);
+              if (hint.phase === "accepted") {
+                if (
+                  entry.phase === "accepted" &&
+                  !pluginUiRecoveryReceiptsMatch(entry.receipt, hint.receipt)
+                )
+                  uiFailure("plugin_ui_recovery_receipt_mismatch");
+                entry.phase = "accepted";
+                entry.receipt ??= hint.receipt as ProjectGenerationUiReceipt;
+                entry.reasonCode = null;
+                publish(entry);
+                return { output: entry.receipt as PluginUiJsonValue };
+              }
+              if (hint.phase === "refused") {
+                if (entry.phase === "accepted")
+                  uiFailure("plugin_ui_generation_recovery_mismatch");
+                entry.phase = "refused";
+                entry.reasonCode = hint.reasonCode;
+                publish(entry);
+                throw new PluginUiRecoveryRefusedError(hint.reasonCode!);
+              }
+              if (entry.phase === "accepted")
+                return { output: entry.receipt as PluginUiJsonValue };
+              if (entry.phase === "refused")
+                throw new PluginUiRecoveryRefusedError(entry.reasonCode!);
+              if (caller.aborted || actual.controller.signal.aborted)
+                throw abortedPluginUiOperation();
+              if (Date.parse(lease.expiresAt) <= Date.now())
+                uiFailure("plugin_ui_generation_lease_expired");
+              if (
+                entry.blocked ||
+                !same(parsePluginUiLease(rawLease), lease) ||
+                !same(requestFor(raw).input, entry.input)
+              )
+                uiFailure("plugin_ui_generation_intent_mismatch");
+              if (!hint.retryable) {
+                mismatch(entry);
+                uiFailure("plugin_ui_generation_intent_mismatch");
+              }
+            }
+            // Business dispatch history excludes the preceding stage request.
             actual.sent = true;
+            actual.businessSent = true;
+            entry.dispatchMayHaveOccurred = true;
+            if (entry.dispatchAttemptCount >= Number.MAX_SAFE_INTEGER)
+              uiFailure("plugin_ui_recovery_dispatch_limit");
+            entry.dispatchAttemptCount += 1;
             const response = await request(actual.controller.signal);
             checkCurrent(extra);
             const receipt = parseProjectGenerationUiActionResponse(
               { action: PROJECT_GENERATION_UI_ACTIONS[0], input: entry.input },
               response.output,
             );
+            if (
+              entry.phase === "accepted" &&
+              !pluginUiRecoveryReceiptsMatch(entry.receipt, receipt)
+            )
+              uiFailure("plugin_ui_generation_recovery_mismatch");
             entry.phase = "accepted";
-            entry.receipt = receipt;
+            entry.receipt ??= receipt;
             entry.reasonCode = null;
             publish(entry);
-            return { output: receipt };
+            return { output: entry.receipt };
           } catch (error) {
+            if (error instanceof PluginUiRecoveryRefusedError) throw error;
             if (actual.sent) unknown(entry);
             else
               refused(

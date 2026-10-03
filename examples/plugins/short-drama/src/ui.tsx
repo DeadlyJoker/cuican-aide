@@ -142,10 +142,14 @@ export default defineUiPlugin({
       }
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
-      controller?.setSelectionContext(selectionContext(next.data));
-      controller?.setGenerationContext(generationContext(next.data));
-      controller?.setQueryContext(queryContext(next.data));
-      controller?.setReady(dataFlag(next.data, "pluginUiReady"));
+      const ready = dataFlag(next.data, "pluginUiReady");
+      if (!ready) controller?.setReady(false);
+      controller?.setRecoveryContexts({
+        selection: selectionContext(next.data),
+        generation: generationContext(next.data),
+        query: queryContext(next.data),
+      });
+      if (ready) controller?.setReady(true);
       flushSync(() =>
         reactRoot.render(
           controller ? (

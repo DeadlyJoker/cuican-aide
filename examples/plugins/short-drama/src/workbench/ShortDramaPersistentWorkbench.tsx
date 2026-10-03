@@ -151,6 +151,11 @@ export function ShortDramaPersistentWorkbench({
           </span>
         </div>
         <div className="drama-content">
+          {snapshot.recoveryConflict && (
+            <p className="detail-note" role="alert">
+              有多个来自不同输入的未确认请求。原请求已保留，当前输入不会自动切换；请先确认这些原请求。
+            </p>
+          )}
           {!details &&
             controller.concepts.submissions.getSnapshot().request && (
               <ConceptGenerationActions

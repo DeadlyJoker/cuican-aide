@@ -11,6 +11,7 @@ import {
   parseProjectGenerationSelectionUiActionRequest,
   type PluginUiJsonValue,
   type PluginUiLease,
+  type PluginUiRecoveryHint,
   type ProjectGenerationSelectionUiInput,
 } from "@crewon/contracts/plugins";
 import {
@@ -22,6 +23,18 @@ import {
   PluginUiLoaderError,
   uiFailure,
 } from "./pluginUiValidation";
+
+import {
+  capturePluginUiRecoveryStage,
+  freshPluginUiRecoveryHistory,
+  mergePluginUiRecoveryStageHistory,
+  pluginUiRecoveryReceiptsMatch,
+  preparePluginUiRecoveryRestore,
+  restorePluginUiRecoveryHistory,
+  PluginUiRecoveryRefusedError,
+  type InstalledPluginRecoveryHistory,
+  type InstalledPluginRecoveryRestorePlan,
+} from "./installedPluginRecoveryJournalSupport";
 
 export type InstalledPluginProjectSelectionSourcePin = Readonly<{
   pluginId: string;
@@ -40,6 +53,8 @@ export type InstalledPluginProjectSelectionIntent = Readonly<{
   retryable: boolean;
   reasonCode: string | null;
   physicallyPending: boolean;
+  dispatchMayHaveOccurred: boolean;
+  dispatchAttemptCount: number;
 }>;
 export type InstalledPluginProjectSelectionActionResponse = Readonly<{
   output: PluginUiJsonValue;
@@ -50,6 +65,10 @@ export type InstalledPluginProjectSelectionJournal = Readonly<{
     listener: (intent: InstalledPluginProjectSelectionIntent) => void,
   ): () => void;
   invalidate(): void;
+  /** Trusted GET hints only; preparing the plan does not publish or send a request. */
+  restore(
+    hints: readonly PluginUiRecoveryHint[],
+  ): InstalledPluginRecoveryRestorePlan;
   current(
     input: Readonly<{
       lease: PluginUiLease;
@@ -70,6 +89,8 @@ export type InstalledPluginProjectSelectionJournal = Readonly<{
       request(
         signal: AbortSignal,
       ): Promise<InstalledPluginProjectSelectionActionResponse>;
+      /** A durable ACK must precede the original mutation when recovery is declared. */
+      stage?(signal: AbortSignal): Promise<PluginUiRecoveryHint>;
       assertCurrent?: () => void;
     }>,
   ): Promise<InstalledPluginProjectSelectionActionResponse>;
@@ -81,11 +102,12 @@ type Physical = {
   controller: AbortController;
   previouslyDispatched: boolean;
   sent: boolean;
+  businessSent: boolean;
   settled: boolean;
   work: Promise<InstalledPluginProjectSelectionActionResponse>;
   timer?: ReturnType<typeof setTimeout>;
 };
-type Entry = {
+type Entry = InstalledPluginRecoveryHistory & {
   familyKey: string;
   sourcePin: InstalledPluginProjectSelectionSourcePin;
   input: ProjectGenerationSelectionUiInput;
@@ -93,7 +115,6 @@ type Entry = {
   receipt: SelectConceptImageResponse | null;
   reasonCode: string | null;
   blocked: boolean;
-  dispatched: boolean;
   physical?: Physical;
 };
 const MAX_INTENTS = 32;
@@ -109,6 +130,7 @@ const PRE_COMMIT_REVISION_CONFLICTS = new Set([
 function firstRevisionConflict(error: unknown, job: Physical): boolean {
   return (
     !job.previouslyDispatched &&
+    job.businessSent &&
     error instanceof ControlApiClientError &&
     error.status === 409 &&
     error.category === "conflict" &&
@@ -223,14 +245,19 @@ export function createInstalledPluginProjectSelectionJournal(
         entry.phase === "uncertain",
       reasonCode: entry.reasonCode,
       physicallyPending: entry.physical !== undefined,
+      dispatchMayHaveOccurred: entry.dispatchMayHaveOccurred,
+      dispatchAttemptCount: entry.dispatchAttemptCount,
     });
+  const captureSnapshot = () => {
+    snapshot = Object.freeze([...entries.values()].reverse().map(view));
+  };
   const publish = (entry: Entry) => {
     if (
       stopped ||
       !entries.has(intentKey(entry.familyKey, entry.input.idempotencyKey))
     )
       return;
-    snapshot = Object.freeze([...entries.values()].reverse().map(view));
+    captureSnapshot();
     const intent = view(entry);
     for (const listener of [...listeners]) {
       if (stopped) break;
@@ -244,8 +271,10 @@ export function createInstalledPluginProjectSelectionJournal(
   };
   const mismatch = (entry: Entry) => {
     entry.blocked = true;
-    if (entry.phase !== "accepted") entry.phase = "uncertain";
-    entry.reasonCode = "plugin_ui_project_selection_intent_mismatch";
+    if (entry.phase !== "accepted" && entry.phase !== "refused")
+      entry.phase = "uncertain";
+    if (entry.phase !== "refused")
+      entry.reasonCode = "plugin_ui_project_selection_intent_mismatch";
     publish(entry);
     return view(entry);
   };
@@ -337,22 +366,27 @@ export function createInstalledPluginProjectSelectionJournal(
       receipt: null,
       reasonCode: null,
       blocked: false,
-      dispatched: false,
+      ...freshPluginUiRecoveryHistory(),
     };
     entries.set(intentKey(entry.familyKey, input.idempotencyKey), entry);
     publish(entry);
     return view(entry);
   };
   const unknown = (entry: Entry) => {
-    if (stopped || entry.phase === "accepted") return;
+    if (stopped || entry.phase === "accepted" || entry.phase === "refused")
+      return;
     entry.phase = "uncertain";
+    entry.unknownSeen = true;
     if (!entry.blocked)
       entry.reasonCode = "plugin_ui_project_selection_result_unknown";
     publish(entry);
   };
   const refused = (entry: Entry, reasonCode: string) => {
     if (stopped || entry.phase === "accepted" || entry.blocked) return;
-    entry.phase = entry.dispatched ? "uncertain" : "refused";
+    entry.phase =
+      entry.dispatchMayHaveOccurred || entry.unknownSeen
+        ? "uncertain"
+        : "refused";
     entry.reasonCode = reasonCode;
     publish(entry);
   };
@@ -376,6 +410,47 @@ export function createInstalledPluginProjectSelectionJournal(
       };
     },
     invalidate,
+    restore(hints) {
+      return preparePluginUiRecoveryRestore({
+        hints,
+        action: PROJECT_GENERATION_SELECTION_UI_ACTIONS[1],
+        entries,
+        checkCurrent,
+        captureSnapshot,
+        publish,
+        limit: MAX_INTENTS,
+        failureCode: "plugin_ui_project_selection_recovery_mismatch",
+        key: (entry) => intentKey(entry.familyKey, entry.input.idempotencyKey),
+        create(hint): Entry {
+          if (
+            hint.request.action !== PROJECT_GENERATION_SELECTION_UI_ACTIONS[1]
+          )
+            uiFailure("plugin_ui_project_selection_recovery_mismatch");
+          return {
+            familyKey: JSON.stringify([
+              hint.sourcePin.pluginId,
+              hint.sourcePin.contributionId,
+            ]),
+            sourcePin: hint.sourcePin,
+            input: requestFor(hint.request.input).input,
+            phase:
+              hint.phase === "prepared" || hint.phase === "dispatched"
+                ? "uncertain"
+                : hint.phase,
+            receipt: hint.receipt as SelectConceptImageResponse | null,
+            reasonCode:
+              hint.reasonCode ??
+              (hint.receipt === null
+                ? "plugin_ui_project_selection_result_unknown"
+                : null),
+            blocked:
+              (hint.phase === "prepared" || hint.phase === "dispatched") &&
+              !hint.retryable,
+            ...restorePluginUiRecoveryHistory(hint),
+          };
+        },
+      });
+    },
     current({ lease, input }) {
       checkCurrent();
       const found = find(lease, input);
@@ -388,6 +463,7 @@ export function createInstalledPluginProjectSelectionJournal(
       input: raw,
       signal: caller,
       request,
+      stage,
       assertCurrent: extra,
     }) {
       const registered = register({ lease: rawLease, input: raw });
@@ -418,8 +494,10 @@ export function createInstalledPluginProjectSelectionJournal(
         }
         job = {
           controller: new AbortController(),
-          previouslyDispatched: entry.dispatched,
+          previouslyDispatched:
+            entry.dispatchMayHaveOccurred || entry.unknownSeen,
           sent: false,
+          businessSent: false,
           settled: false,
           work: undefined as unknown as Promise<InstalledPluginProjectSelectionActionResponse>,
         };
@@ -465,9 +543,70 @@ export function createInstalledPluginProjectSelectionJournal(
               !same(requestFor(raw).input, entry.input)
             )
               uiFailure("plugin_ui_project_selection_intent_mismatch");
-            // Only this line transfers the request to the physical transport. Any subsequent error is UNKNOWN.
+            if (stage) {
+              // A lost stage ACK preserves the original key without sending the business request.
+              actual.sent = true;
+              const hint = capturePluginUiRecoveryStage(
+                await stage(actual.controller.signal),
+                requestFor(entry.input),
+                entry.sourcePin,
+              );
+              checkCurrent(extra);
+              if (
+                entries.get(
+                  intentKey(entry.familyKey, entry.input.idempotencyKey),
+                ) !== entry
+              )
+                uiFailure("plugin_ui_project_selection_intent_mismatch");
+              mergePluginUiRecoveryStageHistory(entry, hint);
+              actual.previouslyDispatched ||=
+                entry.dispatchMayHaveOccurred || entry.unknownSeen;
+              if (hint.phase === "accepted") {
+                if (
+                  entry.phase === "accepted" &&
+                  !pluginUiRecoveryReceiptsMatch(entry.receipt, hint.receipt)
+                )
+                  uiFailure("plugin_ui_recovery_receipt_mismatch");
+                entry.phase = "accepted";
+                entry.receipt ??= hint.receipt as SelectConceptImageResponse;
+                entry.reasonCode = null;
+                publish(entry);
+                return { output: entry.receipt as PluginUiJsonValue };
+              }
+              if (hint.phase === "refused") {
+                if (entry.phase === "accepted")
+                  uiFailure("plugin_ui_project_selection_recovery_mismatch");
+                entry.phase = "refused";
+                entry.reasonCode = hint.reasonCode;
+                publish(entry);
+                throw new PluginUiRecoveryRefusedError(hint.reasonCode!);
+              }
+              if (entry.phase === "accepted")
+                return { output: entry.receipt as PluginUiJsonValue };
+              if (entry.phase === "refused")
+                throw new PluginUiRecoveryRefusedError(entry.reasonCode!);
+              if (caller.aborted || actual.controller.signal.aborted)
+                throw abortedPluginUiOperation();
+              if (Date.parse(lease.expiresAt) <= Date.now())
+                uiFailure("plugin_ui_project_selection_lease_expired");
+              if (
+                entry.blocked ||
+                !same(parsePluginUiLease(rawLease), lease) ||
+                !same(requestFor(raw).input, entry.input)
+              )
+                uiFailure("plugin_ui_project_selection_intent_mismatch");
+              if (!hint.retryable) {
+                mismatch(entry);
+                uiFailure("plugin_ui_project_selection_intent_mismatch");
+              }
+            }
+            // Business dispatch history excludes the preceding stage request.
             actual.sent = true;
-            entry.dispatched = true;
+            actual.businessSent = true;
+            entry.dispatchMayHaveOccurred = true;
+            if (entry.dispatchAttemptCount >= Number.MAX_SAFE_INTEGER)
+              uiFailure("plugin_ui_recovery_dispatch_limit");
+            entry.dispatchAttemptCount += 1;
             const response = await request(actual.controller.signal);
             checkCurrent(extra);
             const { idempotencyKey: _key, ...command } = entry.input;
@@ -475,12 +614,18 @@ export function createInstalledPluginProjectSelectionJournal(
               response.output,
               command,
             );
+            if (
+              entry.phase === "accepted" &&
+              !pluginUiRecoveryReceiptsMatch(entry.receipt, receipt)
+            )
+              uiFailure("plugin_ui_project_selection_recovery_mismatch");
             entry.phase = "accepted";
-            entry.receipt = receipt;
+            entry.receipt ??= receipt;
             entry.reasonCode = null;
             publish(entry);
-            return { output: receipt };
+            return { output: entry.receipt };
           } catch (error) {
+            if (error instanceof PluginUiRecoveryRefusedError) throw error;
             if (actual.sent) {
               if (
                 firstRevisionConflict(error, actual) &&

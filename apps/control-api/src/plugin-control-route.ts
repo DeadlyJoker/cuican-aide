@@ -41,6 +41,7 @@ import type {
   ControlApiRequestContext,
 } from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
+import { registerPluginUiRecoveryRoutes } from "./plugin-ui-recovery-route.ts";
 
 export type PluginControlRouteDependencies = Readonly<{
   identity: ControlApiIdentityPort;
@@ -82,6 +83,14 @@ export type PluginUiControlService = Pick<
       input: Parameters<PluginUiApplicationService["invoke"]>[1],
       signal: AbortSignal,
     ): ReturnType<PluginUiApplicationService["invoke"]>;
+    getRecovery?: PluginUiApplicationService["getRecovery"];
+    stageRecovery?: PluginUiApplicationService["stageRecovery"];
+    recoveryAuthenticatedRequest?<T>(
+      request: ControlApiRequestContext,
+      actor: ActorContext,
+      signal: AbortSignal | undefined,
+      work: () => Promise<T>,
+    ): Promise<T>;
   }>;
 
 /** Installed packages use the existing request identity; references and metadata never authorize use. */
@@ -113,6 +122,11 @@ export function registerPluginControlRoutes(
     });
   if (dependencies.pluginUi != null)
     registerUiRoutes(app, {
+      identity: dependencies.identity,
+      service: dependencies.pluginUi,
+    });
+  if (dependencies.pluginUi != null)
+    registerPluginUiRecoveryRoutes(app, {
       identity: dependencies.identity,
       service: dependencies.pluginUi,
     });
