@@ -1154,6 +1154,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/plugins/sources": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listPluginSources"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2915,6 +2931,24 @@ export interface components {
     };
     InvokePluginUiActionResponse: {
       output: components["schemas"]["PluginUiJsonValue"];
+    };
+    PluginSourceView: {
+      sourceId: components["schemas"]["PluginOpaqueId"];
+      pluginId: components["schemas"]["PluginNamespaceId"];
+      publisherId: components["schemas"]["PluginNamespaceId"];
+      /** @description Exact valid semantic package version. */
+      version: string;
+      /** @description At most 160 Unicode scalars and 640 UTF-8 bytes; validated like the package descriptor. */
+      title: string;
+      /** @description At most 8192 UTF-8 bytes; validated like the package descriptor. */
+      description: string;
+      packageDigest: components["schemas"]["PluginPackageDigest"];
+    };
+    /** @description Strictly increasing sourceId code-unit order; unique sourceId, digest and pluginId/version; each pluginId has one publisher. Encoded response at most 131072 bytes. */
+    PluginSourceListResponse: {
+      sources: components["schemas"]["PluginSourceView"][];
+      /** @description Last returned sourceId only when a full page has additional rows; otherwise null. */
+      next: components["schemas"]["PluginOpaqueId"] | null;
     };
   };
   responses: {
@@ -5804,6 +5838,38 @@ export interface operations {
         content: {
           "application/octet-stream": string;
           "text/javascript": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  listPluginSources: {
+    parameters: {
+      query?: {
+        afterSourceId?: components["schemas"]["PluginOpaqueId"];
+        /** @description Canonical decimal query value, default 50. Duplicated or unknown query fields are rejected. */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authorized approved-source metadata only; no source directory or installation permission. At most 131072 encoded bytes. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginSourceListResponse"];
         };
       };
       400: components["responses"]["Error"];

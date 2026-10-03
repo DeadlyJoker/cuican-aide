@@ -32,6 +32,10 @@ export type PluginInstallationPrepareSelectionInput = Readonly<{
   package: InstalledPluginPackage | null;
 }>;
 export type PluginPreparedSelection = Readonly<{
+  /** Optional current-authority refresh after confirmed Store COMMIT, before synchronous publication. */
+  prepareCommit?(
+    input: Readonly<{ selection: PluginSelection }>,
+  ): Promise<void>;
   /**
    * Synchronous publication only after the Store confirms this exact durable selection. The adapter
    * must fence every new admission against the latest durable profile selection, including while

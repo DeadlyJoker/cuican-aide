@@ -8,8 +8,9 @@ import { registerExtensionReadRoutes } from "./extension-read-route.ts";
 import {
   registerPluginControlRoutes,
   type PluginUiControlService,
+  type PluginInstallationControlService,
+  type PluginSourceControlService,
 } from "./plugin-control-route.ts";
-import type { PluginInstallationApplicationService } from "@crewon/application";
 import type { ExtensionReadApplicationService } from "@crewon/application";
 import type { ExtensionConfigurationApplicationService } from "@crewon/application";
 import type { ExtensionTaskApplicationService } from "@crewon/application";
@@ -233,7 +234,8 @@ export type ControlApiDependencies = Readonly<{
   extensions?: ExtensionConfigurationApplicationService | null;
   extensionTasks?: ExtensionTaskApplicationService | null;
   extensionReads?: ExtensionReadApplicationService | null;
-  pluginInstallation?: PluginInstallationApplicationService | null;
+  pluginInstallation?: PluginInstallationControlService | null;
+  pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
   officeThreads?: OfficeThreadApplicationService | null;
   threads: ThreadApplicationService;

@@ -4380,7 +4380,9 @@
             "application/json": {
               "schema": {
                 "oneOf": [
-                  { "type": "null" },
+                  {
+                    "type": "null"
+                  },
                   {
                     "type": "object",
                     "additionalProperties": false,
@@ -4510,6 +4512,69 @@
                 "schema": {
                   "type": "string",
                   "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/plugins/sources": {
+      "get": {
+        "operationId": "listPluginSources",
+        "parameters": [
+          {
+            "name": "afterSourceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PluginOpaqueId"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 50
+            },
+            "description": "Canonical decimal query value, default 50. Duplicated or unknown query fields are rejected."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized approved-source metadata only; no source directory or installation permission. At most 131072 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginSourceListResponse"
                 }
               }
             }
@@ -11195,6 +11260,77 @@
             "x-max-encoded-bytes": 65536
           }
         }
+      },
+      "PluginSourceView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sourceId",
+          "pluginId",
+          "publisherId",
+          "version",
+          "title",
+          "description",
+          "packageDigest"
+        ],
+        "properties": {
+          "sourceId": {
+            "$ref": "#/components/schemas/PluginOpaqueId"
+          },
+          "pluginId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "publisherId": {
+            "$ref": "#/components/schemas/PluginNamespaceId"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Exact valid semantic package version."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalars and 640 UTF-8 bytes; validated like the package descriptor."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "description": "At most 8192 UTF-8 bytes; validated like the package descriptor."
+          },
+          "packageDigest": {
+            "$ref": "#/components/schemas/PluginPackageDigest"
+          }
+        }
+      },
+      "PluginSourceListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sources", "next"],
+        "properties": {
+          "sources": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/PluginSourceView"
+            }
+          },
+          "next": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PluginOpaqueId"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last returned sourceId only when a full page has additional rows; otherwise null."
+          }
+        },
+        "description": "Strictly increasing sourceId code-unit order; unique sourceId, digest and pluginId/version; each pluginId has one publisher. Encoded response at most 131072 bytes."
       }
     }
   }

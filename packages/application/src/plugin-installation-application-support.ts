@@ -403,12 +403,34 @@ export function checkedPreparedSelection(
   input: unknown,
 ): PluginPreparedSelection {
   try {
-    const value = installationRecord(input, ["commit", "abort"]);
-    if (typeof value.commit !== "function" || typeof value.abort !== "function")
+    const withPreparation =
+      input !== null &&
+      typeof input === "object" &&
+      Object.hasOwn(input, "prepareCommit");
+    const value = installationRecord(
+      input,
+      withPreparation
+        ? ["commit", "abort", "prepareCommit"]
+        : ["commit", "abort"],
+    );
+    if (
+      typeof value.commit !== "function" ||
+      typeof value.abort !== "function" ||
+      (withPreparation && typeof value.prepareCommit !== "function")
+    )
       throw new Error("plugin_installation_prepared_handle_invalid");
     return Object.freeze({
-      commit: value.commit as PluginPreparedSelection["commit"],
-      abort: value.abort as PluginPreparedSelection["abort"],
+      commit: (value.commit as PluginPreparedSelection["commit"]).bind(input),
+      abort: (value.abort as PluginPreparedSelection["abort"]).bind(input),
+      ...(withPreparation
+        ? {
+            prepareCommit: (
+              value.prepareCommit as NonNullable<
+                PluginPreparedSelection["prepareCommit"]
+              >
+            ).bind(input),
+          }
+        : {}),
     });
   } catch (error) {
     throw new ApplicationError(

@@ -24,6 +24,7 @@ import type { Locale } from "../i18n";
 import type { Theme } from "../theme";
 import { InstalledPluginModule } from "../../components/plugins/InstalledPluginModule";
 import { readPluginUiTheme } from "../../components/plugins/pluginUiPresentation";
+import { INSTALLED_PLUGIN_SELECTION_CHANGED } from "../plugins/installedPluginChanges";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -98,6 +99,19 @@ export function useInstalledPluginModules({
     scope: NonNullable<typeof scope>;
     catalog: ControlPluginUiCatalog;
   }> | null>(null);
+  const catalogGeneration = useRef(0);
+  const [catalogRevision, setCatalogRevision] = useState(0);
+  useLayoutEffect(() => {
+    const refresh = () => {
+      // A hint cannot publish a module. Withdraw now and read the authenticated directory again.
+      catalogGeneration.current += 1;
+      setSnapshot(null);
+      setCatalogRevision((revision) => revision + 1);
+    };
+    window.addEventListener(INSTALLED_PLUGIN_SELECTION_CHANGED, refresh);
+    return () =>
+      window.removeEventListener(INSTALLED_PLUGIN_SELECTION_CHANGED, refresh);
+  }, []);
   const [presentation, setPresentation] = useState<PluginUiTheme>(() =>
     readPluginUiTheme(document.documentElement, theme),
   );
@@ -130,13 +144,17 @@ export function useInstalledPluginModules({
   useEffect(() => {
     if (!scope || !host) return;
     const controller = new AbortController();
+    const generation = catalogGeneration.current;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const refresh = async () => {
       try {
         const catalog = await readControlPluginUiCatalog({
           client: scope.client,
           assertCurrent: () => {
-            if (current.current !== scope)
+            if (
+              current.current !== scope ||
+              catalogGeneration.current !== generation
+            )
               throw new PluginUiLoaderError("plugin_ui_session_changed");
           },
           signal: AbortSignal.any([
@@ -144,7 +162,11 @@ export function useInstalledPluginModules({
             AbortSignal.timeout(CATALOG_SNAPSHOT_DEADLINE_MS),
           ]),
         });
-        if (!controller.signal.aborted && current.current === scope)
+        if (
+          !controller.signal.aborted &&
+          current.current === scope &&
+          catalogGeneration.current === generation
+        )
           setSnapshot((previous) =>
             previous?.scope === scope &&
             previous.catalog.fingerprint === catalog.fingerprint
@@ -152,7 +174,11 @@ export function useInstalledPluginModules({
               : { scope, catalog },
           );
       } catch (error) {
-        if (!controller.signal.aborted && current.current === scope) {
+        if (
+          !controller.signal.aborted &&
+          current.current === scope &&
+          catalogGeneration.current === generation
+        ) {
           setSnapshot(null);
           onDiagnostic(error);
         }
@@ -166,7 +192,7 @@ export function useInstalledPluginModules({
       controller.abort();
       if (timer !== null) clearTimeout(timer);
     };
-  }, [scope, host, onDiagnostic]);
+  }, [scope, host, onDiagnostic, catalogRevision]);
   const catalog = snapshot?.scope === scope ? snapshot.catalog : null;
   const hostModules = useMemo<readonly CommandWorkspaceHostModule[]>(() => {
     if (!host || !catalog) return EMPTY_MODULES;

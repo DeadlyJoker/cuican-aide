@@ -57,10 +57,13 @@ export function pluginProxyPolicy(input: {
     return denied(404, "route_not_found");
   const suffix = input.pathname.slice(PREFIX.length);
   let methods: readonly string[];
-  let query: "packages" | "selections" | "empty" = "empty";
+  let query: "packages" | "selections" | "sources" | "empty" = "empty";
   let responseKind: "json" | "asset" = "json";
   let responseMaxBytes = PLUGIN_JSON_RESPONSE_MAX_BYTES;
-  if (suffix === "/packages") {
+  if (suffix === "/sources") {
+    methods = ["GET"];
+    query = "sources";
+  } else if (suffix === "/packages") {
     methods = ["GET"];
     query = "packages";
   } else if (suffix === "/selections") {
@@ -159,7 +162,7 @@ function assetPath(parts: readonly string[]): boolean {
 }
 function validQuery(
   search: string,
-  kind: "packages" | "selections" | "empty",
+  kind: "packages" | "selections" | "sources" | "empty",
 ): boolean {
   if (search === "") return true;
   if (kind === "empty" || search.length > 2048 || !search.startsWith("?"))
@@ -168,7 +171,9 @@ function validQuery(
   const keys =
     kind === "packages"
       ? ["pluginId", "afterPackageDigest", "limit"]
-      : ["afterPluginId", "limit"];
+      : kind === "sources"
+        ? ["afterSourceId", "limit"]
+        : ["afterPluginId", "limit"];
   if (
     [...query].length === 0 ||
     search
@@ -183,9 +188,23 @@ function validQuery(
       if (!/^[1-9][0-9]?$/u.test(value) || Number(value) > 50) return false;
     } else if (key === "afterPackageDigest") {
       if (!digest(value)) return false;
+    } else if (key === "afterSourceId") {
+      if (!sourceId(value)) return false;
     } else if (!namespace(value)) return false;
   }
   return true;
+}
+function sourceId(value: string): boolean {
+  return (
+    value.length >= 1 &&
+    value.length <= 128 &&
+    value === value.trim() &&
+    !/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value) &&
+    [...value].every((point) => {
+      const code = point.codePointAt(0)!;
+      return code < 0xd800 || code > 0xdfff;
+    })
+  );
 }
 function denied(
   status: 400 | 404 | 405,

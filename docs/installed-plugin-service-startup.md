@@ -21,6 +21,28 @@ profile 服务接收服务端已验证的 `{ actor }`，返回 `{ tenantId, spac
 
 启动在共享 PostgreSQL pool 上显式迁移独立安装账本，不修改原任务、配置或积分 schema。只有部署批准且当前选择为 enabled 的包可以进入目录；每次请求重新核验身份、profile、包选择及权限。关闭服务会撤掉引用并取消尚未完成的权威请求。
 
+## 2026-10-03：安装管理的生产接线
+
+生产 PostgreSQL Control 另支持 `CREWON_PLUGIN_INSTALLATION_ENABLED=1`。未启用时不能残留其他 `CREWON_PLUGIN_INSTALLATION_*` 配置；standalone 模式拒绝这些配置。该开关独立于上面的 UI 发布开关，安装批准、UI 文件公开和任务执行分别检查。
+
+| 变量                                                         | 内容                                             |
+| ------------------------------------------------------------ | ------------------------------------------------ |
+| `CREWON_PLUGIN_INSTALLATION_INSTALL_ROOT`                    | 宿主拥有的绝对安装根                             |
+| `CREWON_PLUGIN_INSTALLATION_SOURCES_JSON`                    | 最多 32 个已批准来源，JSON 最多 128 KiB          |
+| `CREWON_PLUGIN_INSTALLATION_PROFILE_AUTHORITY_URL` / `TOKEN` | 当前 profile 的 HTTPS 权威及服务凭据             |
+| `CREWON_PLUGIN_INSTALLATION_POLICY_AUTHORITY_URL` / `TOKEN`  | 当前安装权限与稳定 epoch 的 HTTPS 权威及服务凭据 |
+| `CREWON_PLUGIN_INSTALLATION_AUTHORITY_TIMEOUT_MS`            | 可选；默认 2 秒，范围 1–30000 毫秒               |
+
+每项来源必须包含 `sourceId`、私有 `directory`、`pluginId`、`publisherId`、`version` 和实际 `packageDigest`。安装根和来源目录须由当前服务用户拥有，禁止组或其他用户访问、符号链接和目录重叠。启动核验实际包；解析来源时再次核验实际字节。公共来源目录只返回包描述中的标题、说明和确切包身份，不返回路径或凭据；全部公共元数据超过 128 KiB 时拒绝启动。
+
+正式客户端 `client.plugins.listSources()` 通过同源 BFF 访问 `GET /api/v1/plugins/sources`，与已有安装、选择和包版本端口一起使用。界面保留原用户栏、设置导航及页面样式，在“工具与扩展”中增加局部插件管理组件，按页读取批准来源、安装选择和版本。首次安装为停用；安装新版本保留当前版本，随后显式切换才升级或回滚。停用撤下模块；卸载保留包、历史任务和业务数据。响应丢失或服务器未知错误时，重试沿用同一冻结请求和幂等键；旧回执不能覆盖当前选择。
+
+生产 runtime 懒加载实际账本的 profile owner，使用真实 Node Host 和安装 Host；当前 Node Host 不注入任务、执行或计费服务，声明这些必需服务的包不能靠安装成功获得运行能力。已确认数据库提交后，新增可选 `prepareCommit` 先复核当前 actor、profile、安装权限 epoch、确切准备实例及依赖，再同步消费一次性发布凭据。旧 `commit/abort` 端口保持兼容。最终授权或发布失败时返回运行状态待确认，并撤掉旧 Node 的新准入，不回滚已提交的选择。
+
+管理读取、安装、停用、卸载和旧回执重试不自动启动 Node；只有新的显式启用才恢复真实依赖图。恢复失败须先撤掉准入并完成实际清理；依赖停用、旧来源批准撤销或包损坏后，仍可读取状态、停用及卸载，不能把故障变成无法修复的管理死锁。清理失败保留隔离状态并报告失败。恢复沿用实际选择、原包摘要和本次请求的真实 actor，不能用历史安装者身份授权。关闭先等待所有实际权威请求与本地宿主资源完成，再释放 profile owner。
+
+此处的 epoch 复核不能保证远端撤销在网络传递前被瞬时观察。运行状态也不代表生成或计费已就绪；生产 Worker main 的真实身份、包许可、业务动作、报价与结算继续单独装配。
+
 ## 执行边界
 
 生产 main 尚未装配插件业务动作桥，动作明确返回 `plugin_ui_actions_unavailable`。服务端组合 API 可以接收真实 `PluginUiActionPort`，该端口必须进入原 Run、Tool、operation 和个人积分准入，不可直接从界面调用 ComfyUI。
@@ -31,7 +53,7 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 该桥支持原 API 1 生成和 API 2 的生成/历史查询，包 ID 与原 extension ID 必须相同；尚无跨插件委托。查询只传 `sourceRunId` 和 `operationId`，从持久原任务核验原包、配置、目标和原个人报价，保存独立查询准入，不新增生成报价或积分预留。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
-Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证；短剧 UI-only 独立包已交付，并通过实包安装与通用 loader 的双库交互专项及本轮原生浏览器验证。生产安装管理、短剧正式生成与项目持久化、Krea2 在线验收和第二个真实企业 API 尚未完成。原用户栏与设置已在 5719 和已安装的 5720 预览实际点击验证，11 类设置保留；当前离线预览的外观设置可用，其余后台设置仍未连接。
+Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证；短剧 UI-only 独立包已交付，并通过实包安装与通用 loader 的双库交互专项及原生浏览器验证。生产 PostgreSQL 安装管理已有上述接线；桌面端独立安装 bootstrap、短剧正式生成与项目持久化、Krea2 在线验收和第二个真实企业 API 尚未完成。原用户栏与设置已在 5719 和已安装的 5720 预览实际点击验证，11 类设置保留；当前离线预览的外观设置可用，其余后台设置仍未连接。
 
 ## 2026-10-03：Worker 已安装执行组合 API
 

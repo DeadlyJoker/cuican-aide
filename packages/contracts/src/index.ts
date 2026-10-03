@@ -27,6 +27,7 @@ export * from "./office-control-contract.ts";
 export * from "./extension-control-contract.ts";
 export * from "./extension-read-contract.ts";
 export * from "./plugin-control-contract.ts";
+export * from "./plugin-source-control-contract.ts";
 export * from "./extension-host-api.ts";
 export * from "./office-thread-contract.ts";
 export * from "./runtime-worker-workspace-api.ts";

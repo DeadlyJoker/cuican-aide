@@ -2,6 +2,7 @@ import {
   ApplicationError,
   type PluginInstallationApplicationService,
   type PluginUiApplicationService,
+  type ActorContext,
 } from "@crewon/application";
 import {
   parseGetPluginPackageResponse,
@@ -24,10 +25,14 @@ import {
   parsePluginSelectionListResponse,
   parsePluginSelectionResponse,
   parsePluginUiCatalogResponse,
+  parsePluginSourceListQuery,
+  parsePluginSourceListResponse,
   parseSelectPluginPackageRequest,
   parseValidatePluginUiMountResponse,
   type PluginPackageView,
   type PluginSelectionView,
+  type PluginSourceListQuery,
+  type PluginSourceListResponse,
 } from "@crewon/contracts";
 import type { InstalledPluginPackage, PluginSelection } from "@crewon/domain";
 import type { FastifyInstance, FastifyReply } from "fastify";
@@ -36,8 +41,25 @@ import { requestContext } from "./request-context.ts";
 
 export type PluginControlRouteDependencies = Readonly<{
   identity: ControlApiIdentityPort;
-  pluginInstallation?: PluginInstallationApplicationService | null;
+  pluginInstallation?: PluginInstallationControlService | null;
+  pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
+}>;
+
+export type PluginInstallationControlService = Pick<
+  PluginInstallationApplicationService,
+  | "getPackage"
+  | "getSelection"
+  | "listPackages"
+  | "listSelections"
+  | "install"
+  | "select"
+>;
+export type PluginSourceControlService = Readonly<{
+  listSources(
+    actor: ActorContext,
+    query: PluginSourceListQuery,
+  ): Promise<PluginSourceListResponse>;
 }>;
 
 export type PluginUiControlService = Pick<
@@ -55,6 +77,23 @@ export function registerPluginControlRoutes(
   app: FastifyInstance,
   dependencies: PluginControlRouteDependencies,
 ): void {
+  if (dependencies.pluginSources != null) {
+    const sources = dependencies.pluginSources;
+    app.get<{ Querystring: unknown }>(
+      "/api/v1/plugins/sources",
+      async (request, reply) => {
+        pluginHeaders(reply);
+        const actor = await dependencies.identity.resolveActor(
+          requestContext(request),
+        );
+        const query = parsePluginSourceListQuery(request.query);
+        const result = await sources.listSources(actor, query);
+        return checkedResponse(() =>
+          parsePluginSourceListResponse(result, query),
+        );
+      },
+    );
+  }
   if (dependencies.pluginInstallation != null)
     registerInstallationRoutes(app, {
       identity: dependencies.identity,
@@ -71,7 +110,7 @@ function registerInstallationRoutes(
   app: FastifyInstance,
   dependencies: Readonly<{
     identity: ControlApiIdentityPort;
-    service: PluginInstallationApplicationService;
+    service: PluginInstallationControlService;
   }>,
 ): void {
   app.get<{ Querystring: unknown }>(

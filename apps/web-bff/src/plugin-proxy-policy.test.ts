@@ -57,6 +57,7 @@ function request(path: string, init: RequestInit = {}) {
 
 test("declares every plugin route with exact method and finite response family", () => {
   for (const [path, method, kind, bytes] of [
+    [`${base}/sources`, "GET", "json", PLUGIN_JSON_RESPONSE_MAX_BYTES],
     [`${base}/packages`, "GET", "json", PLUGIN_JSON_RESPONSE_MAX_BYTES],
     [
       `${base}/packages/${encodeURIComponent(digest)}`,
@@ -105,6 +106,108 @@ test("declares every plugin route with exact method and finite response family",
     );
     assert.equal(policy(path, "HEAD")?.outcome, "deny");
   }
+});
+
+test("source catalog permits only bounded own cursor queries and GET, without relaxing existing routes", () => {
+  for (const cursor of ["opaque:source", "来源/版本", "x".repeat(128)])
+    assert.equal(
+      policy(
+        `${base}/sources?afterSourceId=${encodeURIComponent(cursor)}&limit=50`,
+      )?.outcome,
+      "allow",
+    );
+  assert.equal(policy(`${base}/sources?limit=1`)?.outcome, "allow");
+  for (const query of [
+    "afterSourceId=",
+    "afterSourceId=one&afterSourceId=two",
+    `afterSourceId=${encodeURIComponent("x".repeat(129))}`,
+    "afterSourceId=%20blank",
+    "afterSourceId=%00",
+    "afterSourceId=%E2%80%8B",
+    "limit=0",
+    "limit=01",
+    "limit=51",
+    "limit=1&limit=2",
+    "profileId=forged",
+    "actorId=forged",
+    "path=%2Fprivate%2Fsource",
+    "limit=1&&",
+  ])
+    assert.deepEqual(
+      policy(`${base}/sources?${query}`),
+      { outcome: "deny", status: 400, code: "plugin_query_invalid" },
+      query,
+    );
+  for (const method of ["POST", "PUT", "DELETE", "HEAD"])
+    assert.deepEqual(policy(`${base}/sources`, method), {
+      outcome: "deny",
+      status: 405,
+      code: "method_not_allowed",
+    });
+  assert.equal(policy(`${base}/sources/private-id`)?.outcome, "deny");
+  assert.equal(
+    policy(`${base}/packages?afterSourceId=opaque`)?.outcome,
+    "deny",
+  );
+  assert.equal(
+    policy(`${base}/installations?afterSourceId=opaque`, "POST")?.outcome,
+    "deny",
+  );
+});
+
+test("source listing requires a fresh real session and forwards public JSON without renderer identity or credentials", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  let resolutions = 0;
+  const response = { sources: [], next: null };
+  const bff = app(
+    async (url, init = {}) => {
+      calls.push({ url: String(url), init });
+      return Response.json(response);
+    },
+    () => {
+      resolutions++;
+    },
+  );
+  for (let i = 0; i < 2; i++) {
+    const result = await bff.handle(
+      request(`${base}/sources?afterSourceId=approved%3Aone&limit=1`, {
+        headers: {
+          "authorization": "Bearer forged",
+          "x-actor-id": "forged",
+          "x-forwarded-tenant": "forged",
+          "x-csrf-token": "forged",
+        },
+      }),
+    );
+    assert.equal(result.status, 200);
+    assert.deepEqual(await result.json(), response);
+  }
+  assert.equal(resolutions, 2);
+  assert.equal(calls.length, 2);
+  for (const { url, init } of calls) {
+    const headers = new Headers(init.headers);
+    assert.equal(
+      url,
+      `http://127.0.0.1:3210${base}/sources?afterSourceId=approved%3Aone&limit=1`,
+    );
+    assert.equal(init.method, "GET");
+    assert.equal(init.body, undefined);
+    assert.equal(init.redirect, "manual");
+    assert.equal(
+      headers.get("authorization"),
+      `Bearer ${session.controlAccessToken}`,
+    );
+    assert.equal(headers.get("cookie"), null);
+    assert.equal(headers.get("x-actor-id"), null);
+    assert.equal(headers.get("x-forwarded-tenant"), null);
+    assert.equal(headers.get("x-csrf-token"), null);
+    assert.equal(headers.get("idempotency-key"), null);
+  }
+  const denied = await bff.handle(
+    new Request(new URL(`${base}/sources`, origin)),
+  );
+  assert.equal(denied.status, 401);
+  assert.equal(calls.length, 2);
 });
 
 test("rejects unknown families, raw and encoded traversal and undeclared path shapes", () => {

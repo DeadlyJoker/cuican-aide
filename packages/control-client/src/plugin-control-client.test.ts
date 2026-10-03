@@ -22,6 +22,15 @@ const pkg = {
   packageDigest: digest,
   installedAt: "2026-10-01T00:00:00.000Z",
 };
+const source = {
+  sourceId: "approved:source-2",
+  pluginId,
+  publisherId: pkg.publisherId,
+  version: pkg.version,
+  title: "Verified source",
+  description: "Public install metadata",
+  packageDigest: digest,
+};
 const selection = {
   pluginId,
   publisherId: pkg.publisherId,
@@ -235,6 +244,154 @@ test("eleven methods share the original authenticated transport, exact paths, CS
   for (const { init } of calls)
     if (init.body !== undefined)
       assert.equal(String(init.body).includes("actorId"), false);
+});
+
+test("source listing uses the original authenticated GET transport, canonical cursor/default and no mutation headers", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const api = client(async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return Response.json({ sources: [source], next: null });
+  }, null);
+  const controller = new AbortController();
+  assert.deepEqual(
+    await api.plugins.listSources({}, { signal: controller.signal }),
+    { sources: [source], next: null },
+  );
+  await api.plugins.listSources({
+    afterSourceId: "approved:source-1",
+    limit: 1,
+  });
+  await api.plugins.listSources({ afterSourceId: null });
+  assert.deepEqual(
+    calls.map(({ url }) => url),
+    [
+      "https://control.test/api/v1/plugins/sources?limit=50",
+      "https://control.test/api/v1/plugins/sources?afterSourceId=approved%3Asource-1&limit=1",
+      "https://control.test/api/v1/plugins/sources?limit=50",
+    ],
+  );
+  for (const { init } of calls) {
+    const headers = new Headers(init.headers);
+    assert.equal(init.method, "GET");
+    assert.equal(init.body, undefined);
+    assert.equal(init.credentials, "include");
+    assert.equal(init.redirect, "manual");
+    assert.equal(headers.get("authorization"), "Bearer actor-token");
+    assert.equal(headers.get("origin"), "https://ui.test");
+    assert.equal(headers.get("x-csrf-token"), null);
+    assert.equal(headers.get("idempotency-key"), null);
+  }
+  assert.equal(calls[0]!.init.signal, controller.signal);
+});
+
+test("source requests reject renderer authority, path fields and getters before fetch", async () => {
+  let fetches = 0,
+    reads = 0;
+  const api = client(async () => {
+    fetches++;
+    return Response.json({ sources: [], next: null });
+  });
+  for (const query of [
+    { limit: "1" },
+    { limit: 0 },
+    { limit: 51 },
+    { afterSourceId: " " },
+    { afterSourceId: ["one", "two"] },
+    { actorId: "forged" },
+    { profileId: "forged" },
+    { path: "/private/source" },
+    Object.defineProperty({}, "limit", {
+      enumerable: true,
+      get() {
+        reads++;
+        return 1;
+      },
+    }),
+  ])
+    await assert.rejects(api.plugins.listSources(query as never), {
+      code: "control_client_plugin_request_invalid",
+    });
+  assert.equal(fetches, 0);
+  assert.equal(reads, 0);
+});
+
+test("source replies reject stale cursors, aliases, private metadata and false continuations", async () => {
+  for (const response of [
+    { sources: [source], next: "another-cursor" },
+    { sources: [source, source], next: null },
+    { sources: [{ ...source, directory: "/private/source" }], next: null },
+    { sources: [source], next: null, actorId: "private" },
+    { sources: [], next: source.sourceId },
+  ])
+    await assert.rejects(
+      client(async () => Response.json(response)).plugins.listSources(),
+      invalid,
+    );
+  await assert.rejects(
+    client(async () =>
+      Response.json({ sources: [source], next: null }),
+    ).plugins.listSources({ afterSourceId: source.sourceId }),
+    invalid,
+  );
+});
+
+test("source query snapshots cannot drift while fetch is pending, and cancellation cannot return a stale page", async () => {
+  const query = { afterSourceId: "approved:source-1", limit: 1 };
+  let resolve!: (value: Response) => void;
+  const api = client(
+    async () =>
+      new Promise<Response>((done) => {
+        resolve = done;
+      }),
+  );
+  const pending = api.plugins.listSources(query);
+  query.afterSourceId = "approved:source-9";
+  query.limit = 50;
+  resolve(Response.json({ sources: [source], next: source.sourceId }));
+  assert.deepEqual(await pending, { sources: [source], next: source.sourceId });
+  const controller = new AbortController();
+  controller.abort();
+  let fetches = 0;
+  await assert.rejects(
+    client(async () => {
+      fetches++;
+      return Response.json({ sources: [], next: null });
+    }).plugins.listSources({}, { signal: controller.signal }),
+    { name: "AbortError" },
+  );
+  assert.equal(fetches, 0);
+  const delayed = new AbortController();
+  await assert.rejects(
+    client(async () => {
+      delayed.abort();
+      return Response.json({ sources: [], next: null });
+    }).plugins.listSources({}, { signal: delayed.signal }),
+    { name: "AbortError" },
+  );
+});
+
+test("source listing cancels an oversized finite JSON response using the existing 128KiB boundary", async () => {
+  let cancelled = false;
+  const api = client(
+    async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              new Uint8Array(MAX_PLUGIN_CONTROL_RESPONSE_BYTES + 1),
+            );
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+  );
+  await assert.rejects(api.plugins.listSources(), {
+    code: "control_client_workspace_response_too_large",
+  });
+  assert.equal(cancelled, true);
 });
 
 test("filtered UI catalog pages preserve authoritative next even when no UI item is visible", async () => {

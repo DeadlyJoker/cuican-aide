@@ -7,6 +7,7 @@ import type { PluginUiCatalogItem } from "@crewon/contracts";
 import type { PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import { useInstalledPluginModules } from "./useInstalledPluginModules";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
+import { notifyInstalledPluginSelectionChanged } from "../plugins/installedPluginChanges";
 import {
   controlUiClient,
   controlUiItem,
@@ -178,6 +179,59 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect((after({ active: false }) as ReactElement).key).not.toBe(
       (before({ active: false }) as ReactElement).key,
     );
+  });
+
+  it("withdraws immediately after a selection change and only republishes from a fresh authenticated directory", async () => {
+    const updated = deferred<Response>();
+    let changed = false;
+    const wire = controlUiClient(() =>
+      changed
+        ? updated.promise
+        : controlUiResponse({ plugins: [item("example.old")], next: null }),
+    );
+    await render(wire.client);
+    expect(state.hostModules).toHaveLength(1);
+    changed = true;
+    await act(async () => notifyInstalledPluginSelectionChanged());
+    expect(state.hostModules).toEqual([]);
+    expect(wire.fetch).toHaveBeenCalledTimes(2);
+    updated.resolve(
+      controlUiResponse({ plugins: [item("example.new")], next: null }),
+    );
+    await settle();
+    expect(state.hostModules).toHaveLength(1);
+    expect(container.textContent).toContain("example.new");
+    expect(container.textContent).not.toContain("example.old");
+    for (const [, init] of wire.fetch.mock.calls) {
+      expect(new Headers(init?.headers).get("authorization")).toBe(
+        "Bearer captured-user-token",
+      );
+    }
+  });
+
+  it("ignores the old in-flight snapshot after a management mutation", async () => {
+    const late = deferred<Response>();
+    let reads = 0;
+    const wire = controlUiClient(() => {
+      reads++;
+      if (reads === 2) return late.promise;
+      return controlUiResponse({
+        plugins: [item(reads === 1 ? "example.old" : "example.new")],
+        next: null,
+      });
+    });
+    await render(wire.client);
+    await refresh();
+    expect(reads).toBe(2);
+    await act(async () => notifyInstalledPluginSelectionChanged());
+    await settle();
+    expect(container.textContent).toContain("example.new");
+    late.resolve(
+      controlUiResponse({ plugins: [item("example.stale")], next: null }),
+    );
+    await settle();
+    expect(container.textContent).toContain("example.new");
+    expect(container.textContent).not.toContain("example.stale");
   });
 
   it("follows empty pages with a next cursor and removes withdrawn modules on the next snapshot", async () => {

@@ -9,6 +9,7 @@ import {
 
 import { createProductionPostgresControlApi } from "./production-composition.ts";
 import { resolveProductionPluginUiEnvironment } from "./production-plugin-ui-environment.ts";
+import { resolveProductionPluginInstallationEnvironment } from "./production-plugin-installation-environment.ts";
 import {
   HttpControlTokenVerifier,
   HttpPolicyDecisionPort,
@@ -40,6 +41,8 @@ const pluginUiConfiguration = resolveProductionPluginUiEnvironment(
   process.env,
   securityMode,
 );
+const pluginInstallationConfiguration =
+  resolveProductionPluginInstallationEnvironment(process.env, securityMode);
 const extensionEnvironment = resolveControlExtensionWorkerEnvironment(
   process.env,
   securityMode,
@@ -160,6 +163,13 @@ try {
       ...(pluginUiConfiguration === undefined
         ? {}
         : { pluginUi: { configuration: pluginUiConfiguration } }),
+      ...(pluginInstallationConfiguration === undefined
+        ? {}
+        : {
+            pluginInstallation: {
+              configuration: pluginInstallationConfiguration,
+            },
+          }),
       ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
         ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
         : {}),

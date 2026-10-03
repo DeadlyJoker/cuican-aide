@@ -20,6 +20,8 @@ import {
   parsePluginSelectionListQuery,
   parsePluginSelectionListResponse,
   parsePluginSelectionResponse,
+  parsePluginSourceListQuery,
+  parsePluginSourceListResponse,
   parsePluginUiCatalogResponse,
   parseSelectPluginPackageRequest,
   parseValidatePluginUiMountResponse,
@@ -28,6 +30,7 @@ import {
   type OpenPluginUiMountRequest,
   type PluginPackageListQuery,
   type PluginSelectionListQuery,
+  type PluginSourceListQuery,
   type SelectPluginPackageRequest,
 } from "@crewon/contracts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
@@ -40,6 +43,10 @@ export type PluginPackageQuery = Readonly<{
 }>;
 export type PluginSelectionQuery = Readonly<{
   afterPluginId?: string | null;
+  limit?: number;
+}>;
+export type PluginSourceQuery = Readonly<{
+  afterSourceId?: string | null;
   limit?: number;
 }>;
 type JsonOptions = PluginControlRequestOptions &
@@ -70,6 +77,19 @@ export class PluginControlClient {
     this.#transport = transport;
   }
 
+  async listSources(
+    query: PluginSourceQuery = {},
+    options: PluginControlRequestOptions = {},
+  ) {
+    const checked = this.#input(() => sourceQuery(query));
+    const result = await this.#json(
+      "GET",
+      `${PREFIX}/sources${search(checked)}`,
+      null,
+      options,
+    );
+    return this.#output(() => parsePluginSourceListResponse(result, checked));
+  }
   async listPackages(
     query: PluginPackageQuery = {},
     options: PluginControlRequestOptions = {},
@@ -323,6 +343,10 @@ function selectionQuery(input: PluginSelectionQuery): PluginSelectionListQuery {
   const fields = queryFields(input, ["afterPluginId", "limit"]);
   return parsePluginSelectionListQuery(rawQuery(fields));
 }
+function sourceQuery(input: PluginSourceQuery): PluginSourceListQuery {
+  const fields = queryFields(input, ["afterSourceId", "limit"]);
+  return parsePluginSourceListQuery(rawQuery(fields));
+}
 function rawQuery(
   input: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, unknown>> {
@@ -333,7 +357,10 @@ function rawQuery(
   );
 }
 function search(
-  input: PluginPackageListQuery | PluginSelectionListQuery,
+  input:
+    | PluginPackageListQuery
+    | PluginSelectionListQuery
+    | PluginSourceListQuery,
 ): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(input))

@@ -300,6 +300,10 @@ export class PluginInstallationApplicationService {
         });
       }
       try {
+        if (prepared.prepareCommit !== undefined)
+          await prepared.prepareCommit(
+            Object.freeze({ selection: mutation.selection }),
+          );
         const returned: unknown = prepared.commit(
           Object.freeze({ selection: mutation.selection }),
         );

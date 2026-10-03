@@ -1,0 +1,76 @@
+.installed-plugin-settings {
+  display: grid;
+  gap: 16px;
+  color: var(--settings-fg);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.65;
+}
+.installed-plugin-settings :is(h2, h3, h4, p) {
+  margin: 0;
+}
+.installed-plugin-settings h2 {
+  font-size: 16px;
+}
+.installed-plugin-settings h3 {
+  font-size: 14px;
+}
+.installed-plugin-settings h4 {
+  font-size: inherit;
+}
+.installed-plugin-settings p {
+  color: var(--settings-muted);
+  overflow-wrap: anywhere;
+}
+.installed-plugin-settings > header,
+.installed-plugin-settings .installed-plugin-card > header,
+.installed-plugin-settings .installed-plugin-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.installed-plugin-settings > section {
+  display: grid;
+  gap: 12px;
+}
+.installed-plugin-settings .installed-plugin-card {
+  padding: 18px;
+  border: 1px solid var(--settings-border);
+  border-radius: var(--radius-lg);
+  background: var(--settings-card);
+  min-width: 0;
+}
+.installed-plugin-settings .installed-plugin-card > header p,
+.installed-plugin-settings .installed-plugin-description {
+  margin-top: 4px;
+}
+.installed-plugin-settings .installed-plugin-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.installed-plugin-settings .installed-plugin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+.installed-plugin-settings .installed-plugin-versions {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--settings-border);
+}
+.installed-plugin-settings button {
+  height: auto;
+  min-height: 32px;
+  white-space: normal;
+  text-align: left;
+}
+.installed-plugin-settings [role="alert"] {
+  color: var(--danger);
+}
