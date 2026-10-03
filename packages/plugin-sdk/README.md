@@ -138,7 +138,13 @@ const receipt = await tasks.queryTask({
 
 UI 入口新增 `createPluginCreativeProjectClient(services)`，以原 `services.invoke` 提供项目、需求及概念输入修订的 14 个类型化方法；contracts 入口导出严格动作解析器与公开 DTO。输入最多 24KiB、响应最多 60KiB。helper 捕获实际 dispatcher 和本次 caller signal，取消后不交付迟到响应，并清理监听。
 
-这套协议不包含生成或扣款，也不使 Host 服务自动可用；正式安装插件的 dispatcher、依赖可用性和 ready 仍待接线。当前项目归属也不是任意插件的数据 namespace。仓外 tarball 测试覆盖纯 ES2022 contracts、DOM UI 编译和全部动作调用。完整动作及宿主提交边界见[协议说明](../../docs/installed-plugin-creative-project-actions.md)。
+这套协议不包含生成或扣款，也不使 Host 服务自动可用；已提供显式安装模块 dispatcher、依赖可用性和 ready 装配。当前项目归属也不是任意插件的数据 namespace。仓外 tarball 测试覆盖纯 ES2022 contracts、DOM UI 编译和全部动作调用。完整动作及宿主提交边界见[协议说明](../../docs/installed-plugin-creative-project-actions.md)。
+
+## 保存输入的项目生成 UI helper
+
+`createPluginProjectGenerationClient(services).generateConcept(input, options?)` 沿原 invoke ABI 提交保存输入的五字段引用、会话 ID、预期会话版本和幂等键；插件不能提供 prompt、目标、身份或报价。响应是原六字段任务回执，committed/replayed 均绑定原会话及预期版本加一。helper 捕获原请求和 signal，不自动重试，不探测或启用服务。
+
+新服务 `crewon.project-generations@1` 当前只有协议及回执验证，Host dispatcher 和 UI-only 服务可用性尚未装配。不能仅通过声明 requirement 就把生成能力设为可用。仓外测试覆盖 ES2022 纯契约、DOM helper 编译与实际动作调用；[宿主映射和后续边界](../../docs/project-generation-ui-protocol.md)仍需落实。
 
 ## 执行工厂 ABI
 

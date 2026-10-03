@@ -127,7 +127,11 @@ test("generation freezes the saved input and complete original execution identit
   assert.equal(input.project.revision, 3);
   assert.equal(input.asset.revision, 1);
   assert.deepEqual(parseProjectGenerationLink(link, digester), link);
-  const mutable = structuredClone(input);
+  const copied = structuredClone(input);
+  const mutable = {
+    ...copied,
+    binding: { ...copied.binding, target: { ...copied.binding.target } },
+  };
   const saved = createProjectGenerationLink(mutable, digester);
   mutable.reference.assetRevision = 7;
   mutable.binding.target.authorityId = "changed";

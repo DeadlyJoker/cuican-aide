@@ -15,9 +15,20 @@ export type {
 export type { PluginUiProps, PluginUiTheme } from "./sdk-types.js";
 export { createPluginCreativeProjectClient } from "./creative-project-ui.js";
 export type { PluginCreativeProjectClient } from "./creative-project-ui.types.js";
+export { createPluginProjectGenerationClient } from "./project-generation-ui.js";
+export type { PluginProjectGenerationClient } from "./project-generation-ui.types.js";
 export {
   CREWON_CREATIVE_PROJECTS_SERVICE,
   CREWON_CREATIVE_PROJECTS_API_VERSION,
+  CREWON_PROJECT_GENERATIONS_SERVICE,
+  CREWON_PROJECT_GENERATIONS_API_VERSION,
+} from "./contracts.js";
+export type {
+  ProjectGenerationUiAction,
+  ProjectGenerationUiReference,
+  ProjectGenerationUiInput,
+  ProjectGenerationUiReceipt,
+  ProjectGenerationUiActionRequest,
 } from "./contracts.js";
 
 /** Defines a UI ABI entry. Actual mounting and isolation belong to the host. */

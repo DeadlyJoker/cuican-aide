@@ -56,6 +56,7 @@ export * from "./extension-run-binding.ts";
 export * from "./creative-project.ts";
 export * from "./creative-project-revisions.ts";
 export * from "./project-generation-link.ts";
+export * from "./project-generation-publication.ts";
 export {
   CreativeProjectError,
   creativeProjectTitle,

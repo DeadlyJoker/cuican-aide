@@ -41,6 +41,7 @@ import {
   extensionScopeFor,
 } from "./extension-application-support.ts";
 import type { CreateExtensionTaskCommand } from "./extension-task-application-service.ts";
+import { projectGenerationTaskReceipt } from "./project-generation-task-receipt.ts";
 
 /** Trusted host composition must supply the existing project store and its current access policy. */
 export type ProjectGenerationApplicationPorts = Readonly<{
@@ -183,16 +184,7 @@ export function projectGenerationTaskAdmission(
     },
     assertActive: () => assertCreativeProjectCommitActive(captured.authority),
     receipt(base: ExtensionMutationReceipt): ExtensionMutationReceipt {
-      return Object.freeze({
-        ...base,
-        requestDigest: digester.sha256(
-          extensionCanonicalJson({
-            schemaVersion: "crewon.project-generation-command.v0",
-            taskRequestDigest: base.requestDigest,
-            reference,
-          }),
-        ),
-      });
+      return projectGenerationTaskReceipt(base, reference, digester);
     },
     async assertNewInput(taskInput: WorkflowSchemaValue): Promise<void> {
       await creativeProjectUseCase(async () => {

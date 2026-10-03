@@ -5,6 +5,13 @@ import {
   getRequest,
 } from "./dist/external-creative-project-contracts.js";
 import { project, projectId, vectors } from "./creative-project-responses.mjs";
+import { createGenerationClient } from "./dist/external-project-generation-ui.js";
+import {
+  generationInput,
+  generationRequest,
+  generationReceipt,
+  requirement as generationRequirement,
+} from "./dist/external-project-generation-contracts.js";
 
 assert.deepEqual(requirement, {
   service: "crewon.creative-projects",
@@ -47,4 +54,27 @@ for (const [method, input, response] of vectors) {
 }
 console.log(
   "Creative project metadata contracts compiled without DOM; independent UI helper invoked fourteen existing-ABI actions.",
+);
+assert.deepEqual(generationRequirement, {
+  service: "crewon.project-generations",
+  apiVersion: "1",
+  optional: true,
+});
+let generationCalls = 0;
+const generationClient = createGenerationClient({
+  async invoke(action, input) {
+    generationCalls++;
+    assert.equal(action, "crewon.project-generations.v1.generateConcept");
+    assert.deepEqual(input, generationRequest.input);
+    return generationReceipt;
+  },
+});
+assert.equal(generationCalls, 0);
+assert.deepEqual(
+  await generationClient.generateConcept(generationInput),
+  generationReceipt,
+);
+assert.equal(generationCalls, 1);
+console.log(
+  "Independent saved-source generation helper preserved the original task receipt.",
 );

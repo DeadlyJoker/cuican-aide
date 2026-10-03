@@ -105,6 +105,8 @@ test("creative project declarations and UI methods work from a real offline tarb
     for (const name of [
       "external-creative-project-contracts.ts",
       "external-creative-project-ui.ts",
+      "external-project-generation-contracts.ts",
+      "external-project-generation-ui.ts",
       "creative-project-responses.mjs",
       "creative-project-distribution-runner.mjs",
     ])
@@ -120,13 +122,22 @@ test("creative project declarations and UI methods work from a real offline tarb
       rootDir: ".",
     };
     for (const [name, lib, files] of [
-      ["pure", ["ES2022"], ["external-creative-project-contracts.ts"]],
+      [
+        "pure",
+        ["ES2022"],
+        [
+          "external-creative-project-contracts.ts",
+          "external-project-generation-contracts.ts",
+        ],
+      ],
       [
         "ui",
         ["ES2022", "DOM"],
         [
           "external-creative-project-contracts.ts",
           "external-creative-project-ui.ts",
+          "external-project-generation-contracts.ts",
+          "external-project-generation-ui.ts",
         ],
       ],
     ]) {
@@ -157,6 +168,10 @@ test("creative project declarations and UI methods work from a real offline tarb
     assert.match(
       executed,
       /independent UI helper invoked fourteen existing-ABI actions/u,
+    );
+    assert.match(
+      executed,
+      /Independent saved-source generation helper preserved the original task receipt/u,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

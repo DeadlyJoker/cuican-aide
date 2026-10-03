@@ -62,6 +62,7 @@ export {
   type NativeInstalledPluginPreparationTarget,
 } from "./native-installed-plugin-preparation-result.ts";
 export * from "./creative-project-ui-action-contract.ts";
+export * from "./project-generation-ui-action-contract.ts";
 export {
   MAX_CREATIVE_PROJECT_RESPONSE_BYTES,
   type PublicCreativeProject,

@@ -154,7 +154,7 @@ export function pluginTaskAdmission(
 }
 export async function assertSavedPluginTask(
   input: Readonly<{
-    store: ExtensionStore;
+    store: Pick<ExtensionStore, "loadPluginTaskAdmission">;
     pin: PluginTaskAdmissionPin;
     binding: ExtensionRunBinding;
     threadId: string;

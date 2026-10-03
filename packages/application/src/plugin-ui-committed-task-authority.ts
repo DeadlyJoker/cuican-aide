@@ -28,8 +28,13 @@ import {
 } from "./plugin-ui-committed-task-support.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 import {
+  prepareCommittedProjectGenerations,
+  type CommittedProjectGenerationConfiguration,
+} from "./plugin-ui-committed-project-generation.ts";
+import {
   parsePluginQueryTaskAdmission,
   parseExtensionRunBinding,
+  type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import {
   assertSavedPluginQueryTask,
@@ -40,6 +45,8 @@ export type PluginUiCommittedTaskAuthorityDependencies = Readonly<{
   extensions: ExtensionStore;
   runs: Pick<RunStore, "loadRunInSpace">;
   digester: ContentDigester;
+  /** Explicit approved business-to-execution mapping; absent for all ordinary task paths. */
+  projectGenerations?: CommittedProjectGenerationConfiguration;
 }>;
 type VerifiedOutcome = Readonly<{
   context: PluginUiActionContext;
@@ -58,6 +65,9 @@ export class PluginUiCommittedTaskAuthority
 {
   readonly #dependencies: PluginUiCommittedTaskAuthorityDependencies;
   readonly #outcomes = new WeakMap<object, VerifiedOutcome>();
+  readonly #projectGenerations: ReturnType<
+    typeof prepareCommittedProjectGenerations
+  >;
 
   constructor(dependencies: PluginUiCommittedTaskAuthorityDependencies) {
     requirePluginTaskStore(dependencies.extensions);
@@ -71,6 +81,59 @@ export class PluginUiCommittedTaskAuthority
         "plugin_ui_committed_task_port_missing",
       );
     this.#dependencies = Object.freeze({ ...dependencies });
+    try {
+      this.#projectGenerations = prepareCommittedProjectGenerations(
+        dependencies.projectGenerations,
+        this.#dependencies,
+      );
+    } catch (cause) {
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_project_generation_configuration_invalid",
+        { cause },
+      );
+    }
+  }
+
+  /** Only the saved paid project intent may acknowledge a task from a different execution package. */
+  async issueProjectGeneration(
+    input: Readonly<{
+      context: PluginUiActionContext;
+      command: CreateExtensionTaskCommand;
+      executionPin: PluginTaskAdmissionPin;
+      result: CommitExtensionTurnResult;
+    }>,
+  ): Promise<PluginUiCommittedTaskOutcome> {
+    try {
+      if (this.#projectGenerations === undefined)
+        throw new Error("plugin_ui_project_generation_unavailable");
+      const value = uiRecord(input, [
+        "context",
+        "command",
+        "executionPin",
+        "result",
+      ]);
+      const invocation = value.context as PluginUiActionContext;
+      const verified = await this.#projectGenerations.verify(input);
+      const outcome = Object.freeze(
+        Object.create(outcomePrototype),
+      ) as PluginUiCommittedTaskOutcome;
+      this.#outcomes.set(
+        outcome,
+        Object.freeze({
+          context: invocation,
+          contextFingerprint: verified.fingerprint,
+          output: parsePluginUiJsonValue(verified.output),
+        }),
+      );
+      return outcome;
+    } catch (cause) {
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_committed_project_generation_invalid",
+        { cause },
+      );
+    }
   }
 
   async issue(
