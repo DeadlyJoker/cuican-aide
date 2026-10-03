@@ -86,21 +86,32 @@ export function loadAgentVersionRuntimeFactory(
 }
 
 /** Materializes from one copied manifest, so validation and construction cannot read different files. */
-export function createAgentVersionRuntimeFactory(input: {
+export type AgentVersionRuntimeBindingsInput = {
   config: RuntimeBindingConfig;
   environment: Readonly<Record<string, string | undefined>>;
   remoteMcpDependencies?: RemoteMcpCompositionDependencies;
   nativeProviderApiKey?: string | null;
   extensionDependencies?: RuntimeExtensionDependencies;
-}): ConfiguredAgentVersionRuntimeFactory {
+};
+
+export function createAgentVersionRuntimeFactory(
+  input: AgentVersionRuntimeBindingsInput,
+): ConfiguredAgentVersionRuntimeFactory {
   return new ConfiguredAgentVersionRuntimeFactory(
-    runtimeBindings(
-      parseRuntimeBindingConfig(input.config),
-      input.environment,
-      input.remoteMcpDependencies,
-      input.nativeProviderApiKey,
-      input.extensionDependencies,
-    ),
+    createAgentVersionRuntimeBindings(input),
+  );
+}
+
+/** Reuses the same materializers for an explicit installed release without allocating resources. */
+export function createAgentVersionRuntimeBindings(
+  input: AgentVersionRuntimeBindingsInput,
+): readonly AgentVersionRuntimeBinding[] {
+  return runtimeBindings(
+    parseRuntimeBindingConfig(input.config),
+    input.environment,
+    input.remoteMcpDependencies,
+    input.nativeProviderApiKey,
+    input.extensionDependencies,
   );
 }
 

@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：已安装插件的正式 Worker 执行入口
+
+新增独立的 `crewon.installed-plugin-worker.v1` 部署配置与 `crewon.installed-plugin-release.v1` 发布文档。未配置时保留原 Worker/default Agent；定义为空、未知字段、错误权限或不完整权威配置在建库前拒绝。Native 管理启动清理该执行配置，不把本机安装许可当成用户执行或积分权限。配置、HTTPS 私有协议与当前部署限制见[Worker 部署说明](./installed-plugin-worker-deployment.md)。
+
+实际安装包读取后，复用原 Agent 编译器和 runtime-binding 物化器，核对完整包/publisher/version/digest、profile、配置、原模型部署与派生目标。实际父 Store 迁移后再次核验原及派生 Agent 的已发布资产、部署、配置修订及安装账本；原完整激活 release 的核验仍保留。新路径与旧固定扩展宿主不能混用，未知版本不回退到其他 factory。每次创建重验实际字节与当前读取权限。
+
+后台执行从当前 HTTPS 权威重新解析原 Run owner 的完整 actor，并另行检查 Application 策略、精确包/profile/purpose 许可及可选网络服务。保存的 principal、本机管理批准及包清单都不授予权限。权限响应不缓存；逻辑取消和超时仍保留实际 HTTP/创建容量，关闭同步撤回新操作，再等待物理操作和晚到实际资源转交，最后关闭数据库。
+
+实际 SQLite/PostgreSQL 发布/加载及文件专项 **18/18**、实际父 Store 生命周期 **4/4**；严格配置、网络和策略协议及 HTTP 物理关闭专项 **29/29**。正式 source 子进程 **12/12**：保留无配置默认启动、非法配置建库前拒绝、真实 Krea2 两版的 metadata-only 启动与 HTTPS 超时关闭；专业报告的实际 production-mode Worker 使用测试端真实 Application 原子受理的两版 Run，旧任务执行 v1、新任务执行 v2、default 保持原功能。原 Run 的完整 package/principal/target pin 不变，供应商仅 **2 次 POST**；策略撤销、当前主体错配及包许可撤销均无模型或供应商派发。身份、模型、供应商、资金和报价均明确为测试夹具，不是线上收费或真实企业 API 验收。
+
+最终 `pnpm --filter @crewon/runtime-worker test --test-concurrency=4` 使用本轮实际临时 PostgreSQL、先完成唯一 SDK producer 再启动消费者，**1584/1584，零跳过、零失败**。Worker 类型检查、原 runtime-binding 专项、Native 环境隔离 **10/10**、Native 类型、七入口桌面 runtime stage、Electron Host 构建、仓库 boundary 与全部改动源/文档格式已通过。日志为 `installed-worker-full-final-20261003.log`、`installed-worker-process-production-sealed-20261003.log`、`installed-plugin-release-loader-20261003.log`、`installed-plugin-worker-authority-lifetime-20261003.log`、`installed-worker-authority-unit-final-20261003.log`；全部位于 `output/extensions/checks/`。测试子进程、临时目录和本轮 PostgreSQL/socket 均已实际关闭清理；清理前其他连接及剩余测试 schema 为零，记录为 `installed-worker-postgres-owner-20261003.json`。本轮没有修改宿主 CSS、页面组件、设置布局或既有快照。
+
+发布仍通过既有授权 `AgentVersionReleaseApplicationService` 预先完成；`release-main` CLI 尚不消费新文档，Worker 启动不自动发布、发放积分或生成报价。Control 的正式任务动作/当前调用者与报价服务、真实独立积分资金来源/结算、短剧正式生成与持久项目、用户 ComfyUI 当前服务可用性及 E5 的第二个真实企业接口仍需继续接通。目标保持进行中。
+
 ## 2026-10-03：桌面 SQLite 安装启动与本机管理
 
 桌面 Native 从自身 `userData/control-runtime-v1` 读取明确的私有批准文件，派生真实本机 actor、持久 profile 与每次会话的 bootstrap。未配置批准时保留原启动路径，不扫描插件目录或创建插件 schema。批准文件与生成 bootstrap 拒绝链接、公开权限、超限字节及读取过程中的文件替换；原企业账号、PIM 身份和默认模型没有被本机管理许可替代。

@@ -46,6 +46,11 @@ import {
 } from "./plugins/installed-plugin-runtime-composition.ts";
 import type { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
 import type { InstalledPluginExecutionReadinessPort } from "./plugins/installed-plugin-execution-readiness.ts";
+import {
+  prepareInstalledPluginReleaseComposition,
+  verifyInstalledPluginReleaseComposition,
+  type LoadedInstalledPluginRelease,
+} from "./plugins/installed-plugin-release-composition.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import { type AgentVersionRuntime } from "./agent-version-runtime.ts";
@@ -144,6 +149,9 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   installedPluginRuntimeResolver?: InstalledPluginRunRuntimeResolverPort;
   /** Construct and own the installed execution resolver using this composition's actual stores. */
   installedPluginExecution?: InstalledPluginExecutionConfig;
+  installedPluginRelease?: LoadedInstalledPluginRelease;
+  /** Trusted authority lifetime only; this closer never grants execution or payment permission. */
+  installedPluginAuthorityOwner?: Readonly<{ close(): Promise<void> }>;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -279,6 +287,7 @@ type PreparedRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
 function prepareComposition(
   input: RuntimeWorkerCompositionConfig,
 ): PreparedRuntimeWorkerConfig {
+  prepareInstalledPluginReleaseComposition(input);
   if (
     input.installedPluginExecution !== undefined &&
     input.installedPluginRuntimeResolver !== undefined
@@ -369,6 +378,8 @@ function prepareComposition(
 
 function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
   const lifetime = new RuntimeCompositionLifetime();
+  if (config.installedPluginRelease !== undefined)
+    lifetime.own(config.installedPluginRelease, { phase: "resources" });
   const transport = lifetime.own(config.transport, { phase: "resources" });
   const tools =
     config.toolRuntime === undefined
@@ -376,6 +387,8 @@ function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
       : lifetime.own(config.toolRuntime, { phase: "resources" });
   if (config.installedPluginRuntimeResolver !== undefined)
     lifetime.own(config.installedPluginRuntimeResolver, { phase: "resources" });
+  if (config.installedPluginAuthorityOwner !== undefined)
+    lifetime.own(config.installedPluginAuthorityOwner, { phase: "resources" });
   for (const gateway of [
     config.workspacePrivate?.gateway,
     config.workspaceReadFile?.gateway,
@@ -437,6 +450,7 @@ async function composeRuntimeWorker(
       config.installedPluginExecution.historicalQuery !== undefined)
   )
     await store.externalOperationStore().migrate();
+  await verifyInstalledPluginReleaseComposition({ config, store });
   const executionReadiness =
     config.installedPluginExecution === undefined
       ? null

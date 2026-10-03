@@ -15,7 +15,8 @@ export function clearDesktopPluginEnvironment(
     if (
       name.startsWith("CREWON_PLUGIN_UI_") ||
       name.startsWith("CREWON_PLUGIN_INSTALLATION_") ||
-      name.startsWith("CREWON_DESKTOP_PLUGIN_")
+      name.startsWith("CREWON_DESKTOP_PLUGIN_") ||
+      name === "CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH"
     )
       delete result[name];
   }

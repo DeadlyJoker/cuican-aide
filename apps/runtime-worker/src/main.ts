@@ -42,6 +42,20 @@ import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-proce
 import { loadExtensionReleaseInput } from "./extensions/extension-release-input.ts";
 import type { RuntimeExtensionCompositionConfig } from "./extensions/extension-runtime-composition.ts";
 import {
+  INSTALLED_PLUGIN_WORKER_CONFIG_ENV,
+  loadInstalledPluginWorkerConfig,
+} from "./plugins/installed-plugin-worker-config.ts";
+import {
+  createInstalledPluginWorkerAuthority,
+  type InstalledPluginWorkerAuthority,
+} from "./plugins/installed-plugin-worker-authority.ts";
+import { readInstalledPluginReleaseDocument } from "./plugins/installed-plugin-release-document.ts";
+import {
+  loadInstalledPluginRelease,
+  composeInstalledPluginReleaseRuntimeFactory,
+  type LoadedInstalledPluginRelease,
+} from "./plugins/installed-plugin-release-loader.ts";
+import {
   resolveRuntimeBootstrapAgent,
   resolveRuntimeBootstrapRoute,
 } from "./runtime-bootstrap-defaults.ts";
@@ -56,14 +70,30 @@ const initialized = await (async () => {
   let transport: ReturnType<typeof createModelTransport> | undefined;
   let toolRuntime: Awaited<ReturnType<typeof createConfiguredToolRuntime>>;
   let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
+  let installedPluginAuthority: InstalledPluginWorkerAuthority | undefined;
+  let installedPluginRelease: LoadedInstalledPluginRelease | undefined;
   try {
     const securityMode = parseRuntimeWorkerSecurityMode(
       environment.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
     );
+    const installedPluginConfigPath =
+      environment[INSTALLED_PLUGIN_WORKER_CONFIG_ENV];
+    const installedPluginConfiguration =
+      installedPluginConfigPath === undefined
+        ? undefined
+        : loadInstalledPluginWorkerConfig(
+            installedPluginConfigPath,
+            environment,
+          );
     const extensionEnvironment = resolveRuntimeExtensionEnvironment(
       environment,
       securityMode,
     );
+    if (
+      installedPluginConfiguration !== undefined &&
+      extensionEnvironment !== undefined
+    )
+      throw new Error("installed_plugin_release_legacy_runtime_conflict");
     if (extensionEnvironment !== undefined && nativeBootstrap !== null) {
       throw new Error("extension_native_bootstrap_unsupported");
     }
@@ -163,7 +193,7 @@ const initialized = await (async () => {
         ),
       });
     }
-    const agentVersionRuntimeFactory =
+    const baseAgentVersionRuntimeFactory =
       agentVersionRuntimeBindingsPath && extensionRelease === null
         ? loadAgentVersionRuntimeFactory(
             agentVersionRuntimeBindingsPath,
@@ -172,6 +202,48 @@ const initialized = await (async () => {
             nativeBootstrap?.apiKey,
           )
         : undefined;
+    if (installedPluginConfiguration !== undefined) {
+      installedPluginAuthority = createInstalledPluginWorkerAuthority(
+        installedPluginConfiguration,
+      );
+      const document = readInstalledPluginReleaseDocument(
+        installedPluginAuthority.releaseDocumentPath,
+      );
+      if (
+        document.tenantId !== runtimeTenantId ||
+        document.defaultAgentVersionId !== route.agentVersionId
+      )
+        throw new Error("installed_plugin_release_bootstrap_mismatch");
+      installedPluginRelease = await loadInstalledPluginRelease({
+        document,
+        installRoot: installedPluginAuthority.installRoot,
+        authorizeRead: installedPluginAuthority.authorizeRead,
+        environment,
+        ...(remoteMcpOwner === undefined
+          ? {}
+          : { remoteMcpDependencies: remoteMcpOwner.dependencies }),
+        ...(nativeBootstrap?.apiKey === undefined
+          ? {}
+          : { nativeProviderApiKey: nativeBootstrap.apiKey }),
+      });
+    }
+    const agentVersionRuntimeFactory =
+      installedPluginRelease === undefined
+        ? baseAgentVersionRuntimeFactory
+        : composeInstalledPluginReleaseRuntimeFactory({
+            release: installedPluginRelease,
+            ...(baseAgentVersionRuntimeFactory === undefined
+              ? {}
+              : {
+                  base: {
+                    factory: baseAgentVersionRuntimeFactory,
+                    deployments:
+                      baseAgentVersionRuntimeFactory.deploymentBindings(
+                        runtimeTenantId,
+                      ),
+                  },
+                }),
+          });
     transport = createModelTransport(
       environmentOr("CREWON_MODEL_ADAPTER", "responses", environment),
       {
@@ -187,6 +259,8 @@ const initialized = await (async () => {
       extensionEnvironment,
       extensionRelease,
       extensionRuntime,
+      installedPluginAuthority,
+      installedPluginRelease,
       ambientProviderProbe,
       artifactAuthority,
       nativeWorkspaceReadCatalog,
@@ -200,6 +274,8 @@ const initialized = await (async () => {
   } catch (error) {
     await Promise.allSettled(
       [
+        () => installedPluginRelease?.close(),
+        () => installedPluginAuthority?.close(),
         () => artifactAuthority?.store.close(),
         () => toolRuntime?.close?.(),
         () => transport?.close?.(),
@@ -217,6 +293,8 @@ const {
   extensionEnvironment,
   extensionRelease,
   extensionRuntime,
+  installedPluginAuthority,
+  installedPluginRelease,
   nativeWorkspaceReadCatalog,
   remoteMcpOwner,
   route,
@@ -304,6 +382,15 @@ try {
           additionalAgentVersions: extensionRelease.versions,
           extensionRuntime,
         }),
+    ...(installedPluginRelease === undefined
+      ? {}
+      : {
+          installedPluginRelease,
+          installedPluginExecution:
+            installedPluginAuthority!.installedPluginExecution,
+          installedPluginAuthorityOwner: installedPluginAuthority!,
+          additionalAgentVersions: installedPluginRelease.versions,
+        }),
     ...(agentVersionRuntimeFactory === undefined
       ? {}
       : {
@@ -367,6 +454,8 @@ try {
   if (!compositionOwnsResources) {
     await Promise.allSettled(
       [
+        () => installedPluginRelease?.close(),
+        () => installedPluginAuthority?.close(),
         () => nativeWorkspaceResources?.gateway.close(),
         () => nativeWorkspaceResources?.readGateway.close(),
         () => artifactAuthority?.store.close(),
