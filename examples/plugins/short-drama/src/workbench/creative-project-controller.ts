@@ -154,10 +154,12 @@ export class CreativeProjectController {
     contexts: PluginProjectGenerationContextClient;
     queries: PluginProjectGenerationQueryClient;
     selections: PluginProjectGenerationSelectionClient;
+    physicalWritesPending?: () => boolean;
   }) {
     const client = ports.projects;
     this.#client = client;
     this.concepts = new ConceptController({
+      physicalWritesPending: ports.physicalWritesPending,
       recovery: this.#recovery,
       client,
       generationClient: ports.generations,
@@ -178,7 +180,12 @@ export class CreativeProjectController {
           this.#generationRecovery.restore(request),
         ),
       projectBlocked: () =>
-        Boolean(this.#write || this.#intent || !this.#ready),
+        Boolean(
+          this.#write ||
+            this.#intent ||
+            !this.#ready ||
+            ports.physicalWritesPending?.(),
+        ),
       lockChanged: (conceptLocked) => this.#update({ conceptLocked }),
       projectCommitted: (project) => {
         const details = this.#snapshot.details;
@@ -278,6 +285,7 @@ export class CreativeProjectController {
       this.concepts.queries.resume();
       this.concepts.images.resume();
     } else {
+      this.#recovery.invalidateSelection();
       this.#abort();
       this.#update({
         phase: "waiting",
@@ -303,27 +311,75 @@ export class CreativeProjectController {
     });
   }
   setRecoveryContexts(contexts: ConceptRecoveryContexts) {
-    const wasConflicting = this.#recovery.conflict;
+    const wasConflicting = this.#recovery.manualHandling;
     const changed = this.#recovery.capture(contexts);
-    if (!contexts.selection) this.#selectionRecovery.abort();
-    const retryGate = <T extends { intent: { retryable: boolean } | null }>(
-      context: T | null,
-    ): T | null =>
-      context && this.#recovery.conflict && context.intent
-        ? { ...context, intent: { ...context.intent, retryable: false } }
-        : context;
-    this.concepts.images.setHostContext(retryGate(contexts.selection));
-    this.concepts.submissions.setHostContext(retryGate(contexts.generation));
-    this.concepts.queries.setHostContext(retryGate(contexts.query));
+    if (changed) {
+      this.#generationRecovery.abort();
+      this.#queryRecovery.abort();
+      this.#selectionRecovery.abort();
+    } else if (!contexts.selection) this.#selectionRecovery.abort();
+    this.concepts.images.setHostContext(contexts.selection);
+    this.concepts.submissions.setHostContext(contexts.generation);
+    this.concepts.queries.setHostContext(contexts.query);
     this.#update({
-      recoveryConflict: this.#recovery.conflict,
+      recoveryConflict: this.#recovery.manualHandling,
       conceptLocked: this.concepts.locked,
     });
-    if (changed && this.#ready && (wasConflicting || this.#recovery.conflict)) {
+    if (
+      changed &&
+      this.#ready &&
+      (wasConflicting || this.#recovery.manualHandling)
+    ) {
       this.concepts.submissions.resume();
       this.concepts.queries.resume();
       this.concepts.images.resume();
     }
+  }
+  get recoveryChoices() {
+    return this.#recovery.choices;
+  }
+  refreshWriteActivity() {
+    this.#update({ conceptLocked: this.concepts.locked });
+  }
+  #recoveryController(lane: ConceptRecoveryLane) {
+    switch (lane) {
+      case "generation":
+        return this.concepts.submissions;
+      case "query":
+        return this.concepts.queries;
+      case "selection":
+        return this.concepts.images;
+    }
+  }
+  canChooseRecoveryRequest(lane: ConceptRecoveryLane): boolean {
+    const hint = this.#recovery.contexts[lane]?.intent;
+    return Boolean(
+      this.#recovery.manualHandling &&
+        this.#ready &&
+        !this.#disposed &&
+        !this.#write &&
+        !this.#intent &&
+        !this.#detail &&
+        !this.#history &&
+        !this.concepts.originalRequestBusy &&
+        hint &&
+        JSON.stringify(hint.request) ===
+          JSON.stringify(this.#recoveryController(lane).getSnapshot().request),
+    );
+  }
+  async selectRecoveryRequest(lane: ConceptRecoveryLane) {
+    if (!this.canChooseRecoveryRequest(lane) || !this.#recovery.select(lane))
+      return;
+    this.#update({ recoveryConflict: this.#recovery.manualHandling });
+    await this.#recoveryController(lane).restoreSource();
+  }
+  async retryRecoveryRequest(lane: ConceptRecoveryLane) {
+    if (
+      this.#recovery.selectedLane !== lane ||
+      !this.canChooseRecoveryRequest(lane)
+    )
+      return;
+    await this.#recoveryController(lane).retry();
   }
   #abort() {
     this.#generationRecovery.abort();

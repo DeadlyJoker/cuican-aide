@@ -6,6 +6,16 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：独立短剧 10.0.0 不同来源原请求逐条恢复
+
+已修复三类 UNKNOWN 分属不同保存输入时无法恢复的互锁。插件内新增最多三条原请求的“查看原输入”和“重试这条原请求”：查看只读，重放保留完整原请求和旧 CAS，剩余原请求不会自动切源。撤权、提示变化及迟到读取均撤回本地选择；新写与导航等到实际写调用结束才解锁。SDK 取消 UI 等待后，单次挂载内仍跟踪原 Host 写 Promise。具体范围见[逐条恢复说明](./short-drama-multi-source-recovery.md)。
+
+52 文件仓外消费者的严格编译与自持构建通过，发行 ESM **88/88**、原插件组件 **21/21**、CommandWorkspace 窄回归 **139/139**，零失败、零跳过。真实 Host verifier 核验七个声明文件，10.0.0 packageDigest 为 `sha256:51f06e43aa10b2f4d062a53f85f6a7787660878177faf224545377a609820a8c`。独立浏览器夹具使用真实发行 ESM 和原应用公开主题，验证三条原请求分别精确重放一次及确认后的正常编辑；不扩大为完整 App、Native 或在线付费链路。原 App/账户/设置/侧栏保护文件、正式构建资产、插件 CSS、SDK 和旧发行包摘要一致。用户原设置页已实查，原服务保留。
+
+此次未更新用户批准或生产项目映射，下面 9.0.0 配置与完整 Web App 证据保持其原范围。真实部署、个人钱包/定价、可用供应商、完整在线 S0、Native 和 E5 仍未完成，目标继续进行。
+
+用户提供的原 ComfyUI 地址本轮只读重验：首页、`/queue` 和 `/system_stats` 仍返回 HTTP 404，没有生成 POST。证据为 `output/extensions/checks/comfyui-original-service-availability-20261004-ui10.json`；独立浏览器夹具不能替代该在线服务验收。
+
 ## 2026-10-04：实际短剧与 Krea2 包的生产项目配置
 
 已从真实短剧 9.0.0 与 Krea2 2.0.0 交付包生成完整八项项目配置，固定 UI 来源、生成/查询目标、图片验证身份及三类原请求恢复。具体产物、身份与使用前提见[生产项目配置](./short-drama-production-deployment-review.md)。原 Host verifier、临时文件安装及公共业务 registration 前后复核通过，正式 Production 私有 loader 接受实际 `0600` 配置；同文件在 Standalone 被拒绝。临时安装根已清理，没有用户 profile/选择、Agent 发布、activation、数据库、Worker、模型、供应商或积分操作。

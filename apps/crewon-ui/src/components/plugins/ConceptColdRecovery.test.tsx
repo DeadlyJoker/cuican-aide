@@ -37,6 +37,9 @@ type Contexts = {
 type Controller = {
   setReady(ready: boolean): void;
   setRecoveryContexts(contexts: Contexts): void;
+  selectRecoveryRequest(
+    lane: "generation" | "query" | "selection",
+  ): Promise<void>;
   getSnapshot(): { recoveryConflict: boolean };
   concepts: {
     getSnapshot(): {
@@ -418,7 +421,7 @@ describe("fresh controller captures all recovery lanes before readonly source ad
     await f.click("重试原查询");
     expect(s.service.callsFor(query)[0].input).toEqual(qry);
   });
-  it("retains every different-source UNKNOWN, blocks retries and resumes readonly recovery after one is definitively accepted", async () => {
+  it("retains every different-source UNKNOWN and requires an explicit source choice after one is definitively accepted", async () => {
     const s = sources(),
       gen = s.gen(s.a),
       qry = s.qry(s.b);
@@ -454,7 +457,15 @@ describe("fresh controller captures all recovery lanes before readonly source ad
       });
       await settle();
     });
-    expect(f.controller.getSnapshot().recoveryConflict).toBe(false);
+    expect(f.controller.getSnapshot().recoveryConflict).toBe(true);
+    expect(f.controller.concepts.getSnapshot().selection).toBeNull();
+    expect(f.button("重试原查询").disabled).toBe(true);
+    expect(f.controller.concepts.queries.getSnapshot().request).toEqual(qry);
+    assertNoWrites(s.service);
+    await act(async () => {
+      await f.controller.selectRecoveryRequest("query");
+      await settle();
+    });
     expect(f.controller.concepts.getSnapshot().selection?.asset.assetId).toBe(
       s.b.asset.assetId,
     );

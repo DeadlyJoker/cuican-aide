@@ -76,20 +76,24 @@ export class ConceptImageSelectionController {
   }
   get locked() {
     return (
+      this.#write !== null ||
       this.#snapshot.intentPhase === "pending" ||
       this.#snapshot.intentPhase === "uncertain" ||
       this.#snapshot.recovery === "loading"
     );
   }
-  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
-    if (
+  get originalRequestBusy() {
+    return (
       this.#disposed ||
       !this.#ready ||
       this.#write !== null ||
+      this.#read !== null ||
       this.#snapshot.intentPhase === "pending" ||
       this.#snapshot.recovery === "loading"
-    )
-      return true;
+    );
+  }
+  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
+    if (this.originalRequestBusy) return true;
     if (this.#snapshot.intentPhase !== "uncertain") return false;
     const request = this.#snapshot.request,
       intent = this.#host?.intent;
@@ -337,6 +341,7 @@ export class ConceptImageSelectionController {
     const controller = new AbortController(),
       lifetime = this.#lifetime;
     this.#write = controller;
+    this.#ports.lockChanged();
     const current = () =>
       !this.#disposed &&
       this.#ready &&
@@ -374,8 +379,10 @@ export class ConceptImageSelectionController {
       }
     } finally {
       if (this.#write === controller) {
+        const locked = this.locked;
         this.#write = null;
         this.#update();
+        if (locked !== this.locked) this.#ports.lockChanged();
       }
     }
   }
@@ -408,7 +415,10 @@ export class ConceptImageSelectionController {
       if (current()) this.#update({ phase: "unavailable", current: null });
       return false;
     } finally {
-      if (this.#read === controller) this.#read = null;
+      if (this.#read === controller) {
+        this.#read = null;
+        this.#update();
+      }
     }
   }
   async restoreSource(): Promise<boolean> {

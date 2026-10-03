@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "9.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "10.0.0";
 if (version.length > 64 || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(version))
   throw new Error("example_version_invalid");
 const output = join(root, "dist", version);

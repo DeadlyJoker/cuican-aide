@@ -3,7 +3,10 @@ import type { ConceptSelection } from "./ConceptController.types";
 import type { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
 import type { ConceptQueryController } from "./ConceptQueryController";
 import type { ConceptImageSelectionController } from "./ConceptImageSelectionController";
-import type { ConceptRecoveryCoordinator } from "./ConceptRecoveryCoordinator";
+import type {
+  ConceptRecoveryCoordinator,
+  ConceptRecoveryLane,
+} from "./ConceptRecoveryCoordinator";
 
 /** Keep saved-source derivation and cross-capability write locks in one bounded module. */
 export function bindConceptCapabilities(input: {
@@ -19,7 +22,8 @@ export function bindConceptCapabilities(input: {
   recovery: ConceptRecoveryCoordinator;
 }) {
   const { selection, project, submissions, queries, images } = input;
-  const blocked = input.blocked || input.recovery.conflict;
+  const blocked =
+    input.blocked || input.recovery.conflict || input.recovery.manualHandling;
   const source =
     selection && !input.editing
       ? {
@@ -36,34 +40,56 @@ export function bindConceptCapabilities(input: {
           expectedAssetMetadataRevision: selection.asset.revision,
         }
       : null;
-  const retryPolicy = {
-    originalRetryBlocked: () =>
-      input.blocked ||
-      input.recovery.conflict ||
-      input.metadataPending ||
-      input.editing ||
-      !input.ready ||
-      submissions.blocksOriginalRetry(source) ||
-      queries.blocksOriginalRetry(source) ||
-      images.blocksOriginalRetry(source),
+  const controllers = {
+    generation: submissions,
+    query: queries,
+    selection: images,
   };
+  const retryPolicy = (lane: ConceptRecoveryLane) => ({
+    originalRetryBlocked: () => {
+      if (
+        input.blocked ||
+        input.metadataPending ||
+        input.editing ||
+        !input.ready ||
+        submissions.originalRequestBusy ||
+        queries.originalRequestBusy ||
+        images.originalRequestBusy
+      )
+        return true;
+      if (input.recovery.manualHandling)
+        return (
+          !input.recovery.allowsOriginalRetry(lane, source) ||
+          controllers[lane].blocksOriginalRetry(source)
+        );
+      return (
+        input.recovery.conflict ||
+        submissions.blocksOriginalRetry(source) ||
+        queries.blocksOriginalRetry(source) ||
+        images.blocksOriginalRetry(source)
+      );
+    },
+  });
+  const preserveLane = (lane: ConceptRecoveryLane) =>
+    input.recovery.preservesHistory(lane) ||
+    (input.recovery.manualHandling && input.recovery.selectedLane !== lane);
   queries.bindSource(
-    input.recovery.preservesHistory("query") ? null : source,
+    preserveLane("query") ? null : source,
     input.ready,
     blocked || submissions.locked || images.locked,
-    retryPolicy,
+    retryPolicy("query"),
   );
   submissions.bindSource(
-    input.recovery.preservesHistory("generation") ? null : reference,
+    preserveLane("generation") ? null : reference,
     project?.state === "active" && !blocked && !images.locked,
     input.ready,
-    retryPolicy,
+    retryPolicy("generation"),
   );
   images.bindSource(
-    input.recovery.preservesHistory("selection") ? null : reference,
+    preserveLane("selection") ? null : reference,
     project?.state === "active",
     input.ready,
     blocked || input.metadataPending || submissions.locked || queries.locked,
-    retryPolicy,
+    retryPolicy("selection"),
   );
 }

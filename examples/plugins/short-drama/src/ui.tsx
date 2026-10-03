@@ -21,6 +21,7 @@ import stylesheet from "./workbench/ShortDramaWorkbenchPreview.css";
 import referenceImage from "./assets/crewon-krea2-reference.png";
 import { CreativeProjectController } from "./workbench/creative-project-controller";
 import { ShortDramaPersistentWorkbench } from "./workbench/ShortDramaPersistentWorkbench";
+import { PluginWriteActivity } from "./workbench/PluginWriteActivity";
 
 const contributionId = "workbench";
 
@@ -110,15 +111,21 @@ export default defineUiPlugin({
     root.append(owner);
     const reactRoot = createRoot(content);
     const preview = dataFlag(props.data, "shortDramaPreview");
-    const controller = preview
+    let controller: CreativeProjectController | null = null;
+    const writes = new PluginWriteActivity(services, () =>
+      controller?.refreshWriteActivity(),
+    );
+    const clients = writes.services;
+    controller = preview
       ? null
       : new CreativeProjectController({
-          projects: createPluginCreativeProjectClient(services),
-          generations: createPluginProjectGenerationReadClient(services),
-          submissions: createPluginProjectGenerationClient(services),
-          contexts: createPluginProjectGenerationContextClient(services),
-          queries: createPluginProjectGenerationQueryClient(services),
-          selections: createPluginProjectGenerationSelectionClient(services),
+          projects: createPluginCreativeProjectClient(clients),
+          generations: createPluginProjectGenerationReadClient(clients),
+          submissions: createPluginProjectGenerationClient(clients),
+          contexts: createPluginProjectGenerationContextClient(clients),
+          queries: createPluginProjectGenerationQueryClient(clients),
+          selections: createPluginProjectGenerationSelectionClient(clients),
+          physicalWritesPending: () => writes.pending,
         });
     let disposed = false;
     let appliedTokens: string[] = [];
@@ -165,6 +172,7 @@ export default defineUiPlugin({
     try {
       update(props);
     } catch (error) {
+      writes.dispose();
       controller?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
@@ -178,6 +186,7 @@ export default defineUiPlugin({
       dispose() {
         if (disposed) return;
         disposed = true;
+        writes.dispose();
         controller?.dispose();
         try {
           flushSync(() => reactRoot.unmount());

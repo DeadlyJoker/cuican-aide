@@ -71,6 +71,7 @@ export type ConceptPorts = Readonly<{
   restoreQuerySource(request: ProjectGenerationQueryUiInput): Promise<boolean>;
   restoreGenerationSource(request: ProjectGenerationUiInput): Promise<boolean>;
   projectBlocked(): boolean;
+  physicalWritesPending?: () => boolean;
   projectCommitted(project: PublicCreativeProject): void;
   lockChanged(locked: boolean): void;
   refreshProject(

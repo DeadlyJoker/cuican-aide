@@ -144,12 +144,27 @@ export class ConceptController {
   };
   get locked(): boolean {
     return (
+      this.#write !== null ||
+      this.#ports.physicalWritesPending?.() ||
       this.#snapshot.saving ||
       this.#snapshot.pendingKind !== null ||
       this.submissions.locked ||
       this.queries.locked ||
       this.images.locked ||
       this.#ports.recovery.conflict
+    );
+  }
+  get originalRequestBusy(): boolean {
+    return (
+      this.#disposed ||
+      !this.#ready ||
+      this.#ports.physicalWritesPending?.() ||
+      this.#write !== null ||
+      this.#snapshot.saving ||
+      this.#snapshot.pendingKind !== null ||
+      this.submissions.originalRequestBusy ||
+      this.queries.originalRequestBusy ||
+      this.images.originalRequestBusy
     );
   }
   #update(change: Partial<ConceptSnapshot>) {
@@ -185,7 +200,6 @@ export class ConceptController {
       ++this.#epoch;
       this.#abortReads();
       this.#write?.abort();
-      this.#write = null;
       this.#intent = null;
       this.#update(initial());
     } else if (latestChanged) this.#update({ confirmedOldBrief: false });
@@ -670,6 +684,7 @@ export class ConceptController {
     const controller = new AbortController();
     const epoch = this.#epoch;
     this.#write = controller;
+    this.#ports.lockChanged(this.locked);
     const current = () =>
       this.#ready &&
       !this.#disposed &&
@@ -773,9 +788,11 @@ export class ConceptController {
       });
     } finally {
       if (this.#write === controller) {
+        const locked = this.locked;
         const alive = current();
         this.#write = null;
-        if (alive) this.#update({ saving: false });
+        this.#update(alive ? { saving: false } : {});
+        if (locked !== this.locked) this.#ports.lockChanged(this.locked);
       }
     }
   }

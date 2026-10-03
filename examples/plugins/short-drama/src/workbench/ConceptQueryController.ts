@@ -72,6 +72,7 @@ export class ConceptQueryController {
   };
   get locked() {
     return (
+      this.#write !== null ||
       this.#snapshot.intentPhase === "pending" ||
       this.#snapshot.intentPhase === "uncertain" ||
       this.#snapshot.recovery === "loading"
@@ -80,15 +81,17 @@ export class ConceptQueryController {
   get hasHostContext() {
     return this.#host !== null;
   }
-  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
-    if (
+  get originalRequestBusy() {
+    return (
       this.#disposed ||
       !this.#ready ||
       this.#write !== null ||
       this.#snapshot.intentPhase === "pending" ||
       this.#snapshot.recovery === "loading"
-    )
-      return true;
+    );
+  }
+  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
+    if (this.originalRequestBusy) return true;
     if (this.#snapshot.intentPhase !== "uncertain") return false;
     const request = this.#snapshot.request,
       intent = this.#host?.intent;
@@ -275,6 +278,7 @@ export class ConceptQueryController {
   async #submit(request: ProjectGenerationQueryUiInput) {
     const controller = new AbortController();
     this.#write = controller;
+    this.#ports.lockChanged();
     const current = () =>
       !this.#disposed &&
       this.#ready &&
@@ -308,8 +312,10 @@ export class ConceptQueryController {
         });
     } finally {
       if (this.#write === controller) {
+        const locked = this.locked;
         this.#write = null;
         this.#update();
+        if (locked !== this.locked) this.#ports.lockChanged();
       }
     }
   }

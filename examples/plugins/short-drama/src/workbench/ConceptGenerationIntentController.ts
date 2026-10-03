@@ -89,6 +89,7 @@ export class ConceptGenerationIntentController {
   };
   get locked() {
     return (
+      this.#write !== null ||
       this.#snapshot.intentPhase === "pending" ||
       this.#snapshot.intentPhase === "uncertain" ||
       this.#snapshot.recovery === "loading"
@@ -97,15 +98,17 @@ export class ConceptGenerationIntentController {
   get hasHostContext() {
     return this.#host !== null;
   }
-  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
-    if (
+  get originalRequestBusy() {
+    return (
       this.#disposed ||
       !this.#ready ||
       this.#write !== null ||
       this.#snapshot.intentPhase === "pending" ||
       this.#snapshot.recovery === "loading"
-    )
-      return true;
+    );
+  }
+  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
+    if (this.originalRequestBusy) return true;
     if (this.#snapshot.intentPhase !== "uncertain") return false;
     const request = this.#snapshot.request,
       intent = this.#host?.intent;
@@ -336,6 +339,7 @@ export class ConceptGenerationIntentController {
     this.#rebind();
     const controller = new AbortController();
     this.#write = controller;
+    this.#ports.lockChanged();
     const current = () =>
       !this.#disposed &&
       this.#ready &&
@@ -364,8 +368,12 @@ export class ConceptGenerationIntentController {
             key(this.#host.intent.request) === key(request),
         });
     } finally {
-      if (this.#write === controller) this.#write = null;
-      this.#update({});
+      if (this.#write === controller) {
+        const locked = this.locked;
+        this.#write = null;
+        this.#update({});
+        if (locked !== this.locked) this.#ports.lockChanged();
+      }
     }
   }
   async restoreSource() {
