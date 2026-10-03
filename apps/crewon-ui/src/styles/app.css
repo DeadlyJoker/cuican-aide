@@ -1324,7 +1324,7 @@ textarea:focus-visible {
 
 .command-sidebar {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, auto) minmax(0, 1fr) auto;
   gap: 14px;
   min-width: 0;
   min-height: 0;
@@ -11512,7 +11512,7 @@ button.library-item:hover .library-card-chevron {
 .screen-shell.command-screen .command-sidebar {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, auto) minmax(0, 1fr) auto;
   gap: 8px;
   min-width: 0;
   min-height: 0;
@@ -11874,7 +11874,11 @@ button.library-item:hover .library-card-chevron {
  */
 .screen-shell.command-screen .sidebar-nav {
   display: grid;
+  grid-auto-rows: minmax(28px, auto);
+  align-content: start;
   gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
   padding-top: 2px;
 }
 

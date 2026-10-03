@@ -1,0 +1,120 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`command sidebar overflow > allows only the navigation track to shrink in app.css 1`] = `
+{
+  "nav": {
+    "align-content": "start",
+    "display": "grid",
+    "gap": "2px",
+    "grid-auto-rows": "minmax(28px, auto)",
+    "min-height": "0",
+    "overflow-y": "auto",
+    "padding-top": "2px",
+  },
+  "sidebar": {
+    "background": "var(--command-sidebar-bg)",
+    "border-right": "1px solid var(--command-sidebar-border)",
+    "display": "grid",
+    "gap": "8px",
+    "grid-template-rows": "auto minmax(0, auto) minmax(0, 1fr) auto",
+    "min-height": "0",
+    "min-width": "0",
+    "padding": "14px 8px 10px",
+    "position": "relative",
+  },
+}
+`;
+
+exports[`command sidebar overflow > allows only the navigation track to shrink in original-shell-overrides.css 1`] = `
+{
+  "nav": {
+    "align-content": "start",
+    "display": "grid",
+    "gap": "2px",
+    "grid-auto-rows": "minmax(28px, auto)",
+    "min-height": "0",
+    "overflow-y": "auto",
+    "padding-top": "4px",
+  },
+  "sidebar": {
+    "background": "var(--command-sidebar-bg)",
+    "border-right": "1px solid var(--command-sidebar-border)",
+    "display": "grid",
+    "gap": "14px",
+    "grid-template-rows": "auto minmax(0, auto) minmax(0, 1fr) auto",
+    "min-width": "0",
+    "padding": "20px 12px 14px",
+    "position": "relative",
+  },
+}
+`;
+
+exports[`command sidebar overflow > preserves the original account/settings action with 0 installed modules 1`] = `
+{
+  "account": "林林晓企业微信已绑定          ",
+  "actions": [
+    "设置",
+    "退出登录",
+  ],
+  "footerClass": "sidebar-account",
+  "navigation": [
+    "新建任务",
+    "任务",
+    "助理",
+    "智能体",
+    "日程安排",
+    "团队",
+    "知识库",
+  ],
+}
+`;
+
+exports[`command sidebar overflow > preserves the original account/settings action with 1 installed modules 1`] = `
+{
+  "account": "林林晓企业微信已绑定          ",
+  "actions": [
+    "设置",
+    "退出登录",
+  ],
+  "footerClass": "sidebar-account",
+  "navigation": [
+    "新建任务",
+    "任务",
+    "助理",
+    "智能体",
+    "日程安排",
+    "团队",
+    "插件 1",
+    "知识库",
+  ],
+}
+`;
+
+exports[`command sidebar overflow > preserves the original account/settings action with 9 installed modules 1`] = `
+{
+  "account": "林林晓企业微信已绑定          ",
+  "actions": [
+    "设置",
+    "退出登录",
+  ],
+  "footerClass": "sidebar-account",
+  "navigation": [
+    "新建任务",
+    "任务",
+    "助理",
+    "智能体",
+    "日程安排",
+    "团队",
+    "插件 1",
+    "插件 2",
+    "插件 3",
+    "插件 4",
+    "插件 5",
+    "插件 6",
+    "插件 7",
+    "插件 8",
+    "插件 9",
+    "知识库",
+  ],
+}
+`;
