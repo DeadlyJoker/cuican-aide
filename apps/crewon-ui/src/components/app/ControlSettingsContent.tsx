@@ -16,10 +16,12 @@ import { readControlSettingsCatalog } from "../../lib/settings/controlSettingsCa
 import { BundledTaskPackSettings } from "../settings/BundledTaskPackSettings";
 import { InstalledPluginSettings } from "../settings/InstalledPluginSettings";
 import type { TaskPackDraftHandler } from "../../lib/plugin/prepareTaskPackDraft";
+import type { InstalledPluginConfigurationClient } from "../../lib/plugins/useInstalledPluginConfiguration";
 
 export function ControlSettingsContent({
   activeSection,
   client,
+  pluginConfigurationClient,
   locale,
   platformUser,
   onSectionChange,
@@ -28,6 +30,7 @@ export function ControlSettingsContent({
   activeSection: SettingsSection;
   client: Pick<ControlApiClient, "getActiveAgentVersionCatalog"> &
     Partial<Pick<ControlApiClient, "plugins">>;
+  pluginConfigurationClient?: InstalledPluginConfigurationClient;
   locale: Locale;
   platformUser: AgentPlatformUser | null;
   onSectionChange: (section: SettingsSection) => void;
@@ -70,7 +73,11 @@ export function ControlSettingsContent({
       }}
     >
       {activeSection === "mcp-servers" && client.plugins && (
-        <InstalledPluginSettings client={client.plugins} locale={locale} />
+        <InstalledPluginSettings
+          client={client.plugins}
+          configurationClient={pluginConfigurationClient}
+          locale={locale}
+        />
       )}
       {activeSection === "mcp-servers" && platformUser && (
         <BundledTaskPackSettings

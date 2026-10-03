@@ -1,0 +1,140 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`installed plugin configuration settings presentation > scopes original settings tokens, wrapping and narrow controls to the new panel 1`] = `
+".installed-plugin-configuration {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--settings-border);
+  color: var(--settings-fg);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.6;
+}
+
+.installed-plugin-configuration :is(p, h4) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.installed-plugin-configuration h4 {
+  color: var(--settings-fg);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 500;
+}
+
+.installed-plugin-configuration-header,
+.installed-plugin-configuration-field-header,
+.installed-plugin-configuration-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.installed-plugin-configuration-header > div {
+  min-width: 0;
+}
+
+.installed-plugin-configuration-header p,
+.installed-plugin-configuration-hint {
+  color: var(--settings-muted);
+}
+
+.installed-plugin-configuration form,
+.installed-plugin-configuration-fields,
+.installed-plugin-configuration-field {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.installed-plugin-configuration-field {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--settings-border);
+}
+
+.installed-plugin-configuration-field-header label {
+  min-width: 0;
+  color: var(--settings-fg);
+  overflow-wrap: anywhere;
+}
+
+.installed-plugin-configuration-field-header small {
+  margin-left: 8px;
+  color: var(--settings-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.installed-plugin-configuration :is(input, [data-slot="select-trigger"]) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 34px;
+  border-color: var(--settings-border);
+  background: var(--settings-card-soft);
+  color: var(--settings-fg);
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.installed-plugin-configuration [data-slot="select-trigger"] > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.installed-plugin-configuration button {
+  height: auto;
+  min-height: 32px;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.installed-plugin-configuration [data-slot="switch"] {
+  min-height: 0;
+}
+
+.installed-plugin-configuration :is(input, button):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.installed-plugin-configuration-group {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 0 12px;
+  gap: 12px;
+  border: 0;
+  border-left: 1px solid var(--settings-border);
+}
+
+.installed-plugin-configuration-array-item {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.installed-plugin-configuration-error,
+.installed-plugin-configuration-field-error {
+  color: var(--danger);
+}
+
+.installed-plugin-configuration-actions {
+  justify-content: flex-start;
+}
+
+@media (max-width: 600px) {
+  .installed-plugin-configuration-header {
+    align-items: flex-start;
+  }
+
+  .installed-plugin-configuration-group {
+    padding-left: 6px;
+  }
+}
+"
+`;

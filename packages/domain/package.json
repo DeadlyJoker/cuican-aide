@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./thread-title": "./src/thread-title.ts"
+    "./thread-title": "./src/thread-title.ts",
+    "./workflow-schema": "./src/workflow-schema-entry.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",

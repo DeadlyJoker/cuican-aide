@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：原设置页中的通用已安装插件配置
+
+原用户栏、设置导航、全局 CSS 和既有快照保持本轮开始时的版本。正式 `CommandSettingsRoute` 在已有“工具与扩展 → 已安装插件”卡片内增加“业务配置”，沿用原公共控件；没有新设置分类或插件专用宿主分支。仍选中的停用包可配置，卸载后入口撤下。旧的只接安装客户端的组件调用保持原 DOM，配置能力由正式设置组合显式传入。
+
+表单先按真实选择摘要读取包版本，再匹配已认证目录的业务 schema。对象、数组、可选字段、字符串/枚举、数字/整数和布尔值均使用递归控件；未设置的可选字段惰性创建，不重复展开隐藏子树。UI 约束与原配置参数协议的 8192 JSON 节点/16 KiB 保持一致，合法稀疏数组、大值和原型形状属性名已有行为覆盖。新增纯 Domain `./workflow-schema` 入口使 Renderer 不引入 Node 类型。凭据槽或既有引用保持只读，不收集密钥或静默清空引用。
+
+保存前后重核当前选择及包，沿用原 tenant/space 最新 revision；选择 B 时不把 A 的旧配置冒充 B 的配置。冲突保留草稿，结果未知时锁定草稿并保留同一 body/key 直接重试，成功后再次读取当前配置。账号或确切选择变化撤回晚到响应；其他插件的操作及选择未改变的安装回执不会清掉当前草稿。通知只是当前 typed 回执的本地刷新提示，不能授予权限。
+
+实际 PostgreSQL/Chromium Web 设置专项 **1/1、零跳过**：真实 verifier/installer 字节与停用安装账本、生产 Control main/BFF main、具名 HTTPS 身份/profile/策略服务，原用户栏 → 原设置 → schema 表单完成一次真实 PUT，revision 1 和 actor 归属正确；设置关闭重挂、Control 物理重启及新浏览器均读回同一份配置。实际安装 Node ESM 导入为零，九张执行/发布/外部操作表零行，个人积分表不存在。六张最终截图使用正式构建的初始及设置 lazy CSS，另验证 **1280×640、860×640** 的表单和保存按钮可滚动到达、无横向溢出。日志为 `installed-plugin-configuration-ui-browser-layout-final-20261003.log`，最终证明与截图位于同名前缀目录。它覆盖原 Web 设置组件链，不冒充正式 Main/full App、packaged.app、真实企业登录或生成/收费验收。
+
+最终原命令页/设置/插件组件专项 **22 文件、179/179**；Hook/schema/原安装与模块/架构专项 **6 文件、76/76**；Domain 全量 **203/203**。UI lint/build、全部 packages 与 Control 类型、七入口 runtime stage、仓库 boundary 及格式通过。全部消费者终态后才运行唯一 producer，packages 类型按 workspace-concurrency=1 串行执行。全 UI 按技能要求实际运行，**3338 通过、8 失败、2 跳过，共 3348 项**，另有 3 个 obsolete 快照；八项的名称、错误和断言位置与 `e898923cd` 的实际全量完全一致，没有新增失败。它们仍是 TranscriptWindow 四项、线程目录/工作区/Office 各一项和 soak 超时，不能称全量通过。另一个包依赖登记专项仍有三项既有失败，涉及本轮未改的 Host/Store/Control/Worker，未放宽清单。检查日志前缀为 `installed-plugin-configuration-`，位于 `output/extensions/checks/`。
+
+所有专项消费者与自有 Control/BFF/Chromium/HTTPS 子进程已物理结束，测试 schema 和临时目录已清理。Root 的临时 PostgreSQL 在其他连接及测试 schema 均为零后停机，PID 已消失，自有 root/socket 已删除，端口可重新绑定；记录为 `installed-plugin-configuration-ui-postgres-owner-20261003.json` 与 `installed-plugin-configuration-postgres-cleanup-final-20261003.log`。用户现有 5719/5720 页面服务继续保留。
+
+这完成已有真实安装上的原设置表单和持久配置路径。发布与启用仍显式执行；从空库安装到自动发布、完整 App 的真实任务上下文/生成和历史查询、凭据管理、真实积分资金/价格/结算、短剧持久项目与第二个实际企业 API 均未完成。ComfyUI 当前地址的首页、`/queue` 和 `/system_stats` 实测为 404，恢复地址问题仍待用户确认。目标继续进行。
+
 ## 2026-10-03：独立安装包的首次配置入口
 
 已消除发布前首配依赖 Worker 的循环。生产 Control 可显式启用独立配置 owner，从真实安装账本的当前选择核验完整包和业务 JSON，提供原配置 schema，并通过原 HTTP 路由保存第一份配置；停用但仍选中的包也可配置。共享 Host 读取器不导入包的 Node/UI ESM、不分配工厂，不创建 Run、发布目标、报价或积分。完整任务 owner 复用这条元数据路径；启用及运行仍需要实际发布和 Worker 的原就绪核验。

@@ -92,6 +92,7 @@ export function CommandSettingsRoute({
               key={activeSection}
               activeSection={activeSection}
               client={controlClient}
+              pluginConfigurationClient={controlClient}
               locale={locale}
               platformUser={platformUser}
               onSectionChange={onSectionChange}

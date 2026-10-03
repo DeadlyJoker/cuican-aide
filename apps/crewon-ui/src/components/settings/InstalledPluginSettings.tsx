@@ -10,17 +10,24 @@ import {
   type PluginInstallationSettingsClient,
 } from "../../lib/plugins/usePluginInstallationSettings";
 import { Button } from "../ui/button";
+import type { InstalledPluginConfigurationClient } from "../../lib/plugins/useInstalledPluginConfiguration";
+import { InstalledPluginConfigurationPanel } from "./InstalledPluginConfigurationPanel";
 import "./InstalledPluginSettings.css";
 
 export function InstalledPluginSettings({
   client,
+  configurationClient,
   locale,
 }: {
   client: PluginInstallationSettingsClient;
+  configurationClient?: InstalledPluginConfigurationClient;
   locale: Locale;
 }) {
   const state = usePluginInstallationSettings(client, locale);
   const [versionPlugin, setVersionPlugin] = useState<string | null>(null);
+  const [configurationPlugin, setConfigurationPlugin] = useState<string | null>(
+    null,
+  );
   const zh = locale === "zh";
   const disabled = state.busy || state.loading || state.retryable;
   return (
@@ -137,6 +144,24 @@ export function InstalledPluginSettings({
                   </span>
                 </header>
                 <div className="installed-plugin-actions">
+                  {configurationClient && selection.state !== "uninstalled" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={disabled}
+                      aria-expanded={configurationPlugin === selection.pluginId}
+                      aria-controls={`plugin-configuration-${selection.pluginId}`}
+                      onClick={() =>
+                        setConfigurationPlugin(
+                          configurationPlugin === selection.pluginId
+                            ? null
+                            : selection.pluginId,
+                        )
+                      }
+                    >
+                      {zh ? "业务配置" : "Business configuration"}
+                    </Button>
+                  )}
                   {selection.state !== "uninstalled" && (
                     <>
                       <Button
@@ -193,6 +218,25 @@ export function InstalledPluginSettings({
                     {zh ? "管理版本" : "Manage versions"}
                   </Button>
                 </div>
+                {configurationClient &&
+                  selection.state !== "uninstalled" &&
+                  configurationPlugin === selection.pluginId && (
+                    <div id={`plugin-configuration-${selection.pluginId}`}>
+                      <InstalledPluginConfigurationPanel
+                        key={JSON.stringify([
+                          selection.pluginId,
+                          selection.publisherId,
+                          selection.selectedPackageDigest,
+                          selection.revision,
+                          selection.state,
+                        ])}
+                        client={configurationClient}
+                        selection={selection}
+                        locale={locale}
+                        disabled={disabled}
+                      />
+                    </div>
+                  )}
                 {versionPlugin === selection.pluginId && (
                   <PluginVersions
                     key={`${selection.pluginId}:${selection.revision}`}

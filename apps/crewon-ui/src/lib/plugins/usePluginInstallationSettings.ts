@@ -182,8 +182,16 @@ export function usePluginInstallationSettings(
       intent.current = command;
       setRetryable(false);
       if (command.kind === "install") {
-        await client.installPackage(command.request, command.key, { signal });
+        const result = await client.installPackage(
+          command.request,
+          command.key,
+          { signal },
+        );
         if (!available()) return;
+        notifyInstalledPluginSelectionChanged({
+          pluginId: command.request.expectedPluginId,
+          selection: result.selection,
+        });
         setFeedback(
           zh
             ? "版本已安装。请在已安装插件中选择是否启用。"
@@ -198,7 +206,10 @@ export function usePluginInstallationSettings(
         );
         if (!available()) return;
         // This hint withdraws old UI immediately; the next directory still comes from the server.
-        notifyInstalledPluginSelectionChanged();
+        notifyInstalledPluginSelectionChanged({
+          pluginId: command.pluginId,
+          selection: result.mutation.selection,
+        });
         setFeedback(
           result.projection.outcome === "pending"
             ? zh

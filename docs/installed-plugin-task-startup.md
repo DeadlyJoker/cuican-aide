@@ -12,7 +12,7 @@ Control and Worker must use the same installation ledger, configuration and Run 
 
 Before starting Worker, use the original configuration HTTP routes to save the exact installed package's first configuration, then use the [installed release CLI](./installed-plugin-release-publication.md) to publish the original model assets, derived Agents and final complete release bundle. The [Worker deployment configuration](./installed-plugin-worker-deployment.md) pins that actual package, profile, configuration revision and full execution target. Worker startup verifies this state; it does not install, publish, activate, grant credits or invent a configuration.
 
-The configuration stage below can run before any Worker or release exists. It requires a real installed package and installation ledger prepared by the operator; it does not install from a browser or complete the end-user product configuration UI. Publication and activation remain explicit steps.
+The configuration stage below can run before any Worker or release exists. It requires a real installed package and installation ledger. The original settings route now exposes the selected package's schema form; publication and activation remain explicit steps. The process evidence starts with an operator-prepared installation ledger and does not prove a fresh-database end-user installation followed by automatic publication.
 
 ## Control configuration before publication
 
@@ -53,6 +53,16 @@ Use the original authenticated HTTP routes through BFF:
 4. Close metadata-only Control and remove `CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH` before switching to the full task configuration below. After CLI publication, explicitly enable the selected installation, start the verified Worker/peer and task Control, then use the original activation route with the published Agent and saved configuration revision.
 
 Configuration GET and accepted configuration/activation receipt replay do not prepare metadata or read a package. They still require the original permission and current request identity/profile. New saves prepare the exact version, validate its schema and actual package, and recheck configure permission after preparation and host validation before writing. Disabled/revoked activation does not prepare metadata. Enabled activation lazily uses the actual Worker peer; without that runtime it returns `extension_runtime_unavailable` and writes no activation. Saving a configuration is never evidence that generation is ready.
+
+### Original settings form
+
+Open the existing account menu, then **Settings → Tools and extensions → Installed plugin → Business configuration**. Both enabled and disabled selections can be configured; uninstalled selections have no configuration entry. Installation management must also be configured to supply the original authenticated source/package/selection directory. The configuration metadata opt-in alone does not supply that installation directory.
+
+The form obtains the actual selected package version from its digest and matches the authenticated business catalog entry. It uses the existing bounded object/string/enum/number/integer/boolean/array schema, with lazy optional fields and the original 8192-node/16-KiB parameter limits. It does not accept credentials. A package declaring credential slots, or an existing configuration with credential references, remains read-only in this form; references are not silently removed.
+
+Saving uses the original configuration PUT and current space-scoped revision, including when a selected version B follows a configuration saved for A. A conflict preserves the draft. An unknown outcome locks the draft and retains the exact request body and idempotency key for retry; that retry does not depend on another catalog read. After a receipt, the form rereads current configuration and selection before displaying success. Session/package changes withdraw old responses; changes to another plugin and installation receipts with an unchanged selection preserve the current draft. This local refresh hint never supplies authorization.
+
+The real Chromium Web settings acceptance uses production Control/BFF, verified immutable package bytes and PostgreSQL, with named identity/profile/policy authorities. It covers one persisted PUT, settings remount, physical Control/browser restart and reread. It does not prove the formal Main/full App, packaged desktop application, real enterprise sign-in, generation, pricing, funding or settlement. Native local installation management does not acquire configuration/execution authority from this form.
 
 ## Worker private peer
 
