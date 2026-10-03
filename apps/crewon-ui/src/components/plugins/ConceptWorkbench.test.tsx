@@ -4,7 +4,9 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createPluginCreativeProjectClient,
+  createPluginProjectGenerationReadClient,
   type PluginCreativeProjectClient,
+  type PluginProjectGenerationReadClient,
 } from "@crewon/plugin-sdk/ui";
 import {
   deferred,
@@ -15,9 +17,10 @@ import { flush } from "../../lib/plugins/pluginUiLoader.test-support";
 // The installed module is an independent TS project, checked against the public SDK separately.
 type Controller = { setReady(ready: boolean): void; dispose(): void };
 const { CreativeProjectController } = await vi.importActual<{
-  CreativeProjectController: new (
-    client: PluginCreativeProjectClient,
-  ) => Controller;
+  CreativeProjectController: new (ports: {
+    projects: PluginCreativeProjectClient;
+    generations: PluginProjectGenerationReadClient;
+  }) => Controller;
 }>(
   new URL(
     "../../../../../examples/plugins/short-drama/src/workbench/creative-project-controller.ts",
@@ -50,9 +53,10 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 async function fixture(service: ReturnType<typeof metadataService>) {
-  const controller = new CreativeProjectController(
-    createPluginCreativeProjectClient(service.services),
-  );
+  const controller = new CreativeProjectController({
+    projects: createPluginCreativeProjectClient(service.services),
+    generations: createPluginProjectGenerationReadClient(service.services),
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);

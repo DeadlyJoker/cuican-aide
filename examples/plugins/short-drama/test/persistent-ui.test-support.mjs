@@ -43,6 +43,11 @@ export function metadataService({ pageSize = 20 } = {}) {
   const records = new Map();
   const receipts = new Map();
   const calls = [];
+  const generations = new Map();
+  let generationGate = null;
+  let generationRefused = false;
+  const generationKey = (locator) =>
+    JSON.stringify([locator.projectId, locator.assetId, locator.assetRevision]);
   let ticks = 0;
   let serial = 0;
   let assetSerial = 0;
@@ -184,7 +189,36 @@ export function metadataService({ pageSize = 20 } = {}) {
   const services = {
     async invoke(action, input, options) {
       calls.push({ action, input: copy(input), signal: options?.signal });
-      assert.ok(action.startsWith("crewon.creative-projects.v1."));
+      assert.ok(
+        action.startsWith("crewon.creative-projects.v1.") ||
+          action === "crewon.project-generation-reads.v1.getConceptGeneration",
+      );
+      if (
+        action === "crewon.project-generation-reads.v1.getConceptGeneration"
+      ) {
+        assert.deepEqual(Object.keys(input).sort(), [
+          "assetId",
+          "assetRevision",
+          "projectId",
+        ]);
+        if (generationRefused || refuse)
+          throw new Error("plugin_ui_action_not_permitted");
+        const record = projectRecord(input.projectId);
+        const concept = conceptRecord(record, input.assetId);
+        assert.ok(
+          concept.revisions.some(
+            (revision) => revision.assetRevision === input.assetRevision,
+          ),
+        );
+        if (generationGate) {
+          const gate = generationGate;
+          generationGate = null;
+          return gate.promise;
+        }
+        return copy({
+          generation: generations.get(generationKey(input)) ?? null,
+        });
+      }
       if (refuse) throw new Error("plugin_ui_action_not_permitted");
       const method = action.split(".").at(-1);
       if (conceptReadGates.has(method)) {
@@ -377,6 +411,15 @@ export function metadataService({ pageSize = 20 } = {}) {
     services,
     calls,
     records,
+    setGeneration(locator, generation) {
+      generations.set(generationKey(locator), copy(generation));
+    },
+    gateGenerationRead(gate) {
+      generationGate = gate;
+    },
+    refuseGeneration(value) {
+      generationRefused = value;
+    },
     create,
     createConcept,
     externalConceptRevision,

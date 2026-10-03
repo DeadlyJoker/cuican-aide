@@ -144,7 +144,13 @@ UI 入口新增 `createPluginCreativeProjectClient(services)`，以原 `services
 
 `createPluginProjectGenerationClient(services).generateConcept(input, options?)` 沿原 invoke ABI 提交保存输入的五字段引用、会话 ID、预期会话版本和幂等键；插件不能提供 prompt、目标、身份或报价。响应是原六字段任务回执，committed/replayed 均绑定原会话及预期版本加一。helper 捕获原请求和 signal，不自动重试，不探测或启用服务。
 
-新服务 `crewon.project-generations@1` 当前只有协议及回执验证，Host dispatcher 和 UI-only 服务可用性尚未装配。不能仅通过声明 requirement 就把生成能力设为可用。仓外测试覆盖 ES2022 纯契约、DOM helper 编译与实际动作调用；[宿主映射和后续边界](../../docs/project-generation-ui-protocol.md)仍需落实。
+新服务 `crewon.project-generations@1` 已有明确部署映射的 Host / Control 调度及 UI-only 服务可用性装配。声明 requirement 不授予生成权限，生产仍须实际任务 owner、原回执 issuer、个人报价及明确批准的 source → target 映射。仓外测试覆盖 ES2022 纯契约、DOM helper 编译与实际动作调用；[宿主映射和后续边界](../../docs/project-generation-ui-protocol.md)说明已实现的调度及待接入的页面流程。
+
+## 保存生成的只读 UI helper
+
+`createPluginProjectGenerationReadClient(services).getConceptGeneration(locator, options?)` 通过独立服务 `crewon.project-generation-reads@1` 读取保存输入的原任务。locator 只有 `projectId`、`assetId`、`assetRevision`，不能传 Run、执行插件、身份或报价。响应沿用 `GetConceptGenerationResponse`；`generation: null` 只表示该保存版本没有关联，权限拒绝或服务不可用仍返回错误。
+
+helper 不探测或启用服务、不自动重试，捕获实际 dispatcher、原请求及 caller signal，取消后丢弃迟到结果并清理监听。协议保持 60KiB 整体响应上限，保留原 `operationRevision` 和图片 `resultIndex`。只读声明不授予生成、供应商查询或图片选用权限；Host 须显式批准该业务包的摘要和贡献。独立短剧 4.0.0 将其声明为 optional，缺少读取能力仍可使用原项目保存流程。完整边界见[保存生成只读协议](../../docs/project-generation-read-ui-protocol.md)。
 
 ## 执行工厂 ABI
 

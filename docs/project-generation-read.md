@@ -1,6 +1,6 @@
 # 保存的项目生成：只读恢复
 
-状态：Control、Application、SQLite/PostgreSQL 和公共客户端已实现。SDK、插件页面读取、主动查询供应商及图片选用尚未接入。
+状态：Control、Application、SQLite/PostgreSQL、公共客户端以及显式装配的 SDK / Host 插件读取已实现。独立短剧 4.0.0 可读取保存版本的原生成记录；主动查询供应商及图片选用尚未接入。插件协议及装配边界见[只读 UI 协议](./project-generation-read-ui-protocol.md)。
 
 ## 公共入口
 
@@ -28,4 +28,4 @@
 
 真实 SQLite 和隔离 PostgreSQL 18.6 覆盖冷恢复、原回执损坏、缺失关联行、历史归档及单连接池实际 Application 读取；Control 实际 HTTP 覆盖原身份、任务权限、严格定位及 operation 原始索引。测试夹具不代表人类生产身份、钱包、真实供应商生成或正式 App 闭环。
 
-测试及清理证据见 `output/extensions/checks/project-generation-read-proof-20261003.json`。后续顺序仍是 SDK/Host 读取、插件页面生成与恢复、原 operation 显式查询、确切结果选用。
+测试及清理证据见 `output/extensions/checks/project-generation-read-proof-20261003.json`。后续顺序仍是插件页面生成与原线程准备、原 operation 显式查询、确切结果选用。

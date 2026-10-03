@@ -8,6 +8,8 @@ import type {
   PublicProjectBrief,
   PublicConceptAsset,
   PublicConceptRevision,
+  PublicConceptGeneration,
+  ConceptGenerationLocator,
 } from "@crewon/plugin-sdk/contracts";
 
 export function persistentProps(
@@ -62,6 +64,12 @@ export function metadataService(options?: { pageSize?: number }): {
     prompt: string,
   ): ConceptDetails;
   refuse(value: boolean): void;
+  setGeneration(
+    locator: ConceptGenerationLocator,
+    generation: PublicConceptGeneration | null,
+  ): void;
+  gateGenerationRead(gate: { promise: Promise<unknown> }): void;
+  refuseGeneration(value: boolean): void;
   loseNextWrite(): void;
   gateList(gate: { promise: Promise<unknown> }): void;
   gateConceptRead(

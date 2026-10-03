@@ -362,6 +362,77 @@ export function bindInstalledPluginRequestOwner<
   return service;
 }
 
+/** Capture only the actual reader's configuration scope; no task owner or execution preparation is transferred. */
+export function captureInstalledPluginReadRequestScope(
+  service: ExtensionReadApplicationService,
+): InstalledPluginReadRequestScope {
+  const binding = serviceOwners.get(service);
+  if (
+    !(service instanceof ExtensionReadApplicationService) ||
+    binding?.preparation !== "configuration"
+  )
+    denied();
+  const { owner } = binding;
+  const run = owner.run.bind(owner);
+  return Object.freeze({
+    run: <T>(
+      input: Parameters<InstalledPluginReadRequestScope["run"]>[0],
+      work: () => Promise<T>,
+    ) => {
+      if (input === null || typeof input !== "object" || Array.isArray(input))
+        denied();
+      const keys = Reflect.ownKeys(input);
+      if (
+        keys.some(
+          (key) =>
+            typeof key !== "string" ||
+            !["request", "actor", "signal", "preparation"].includes(key),
+        )
+      )
+        denied();
+      const fields = pluginSecurityRecord(input, keys as string[]);
+      if (
+        !Object.hasOwn(fields, "request") ||
+        !Object.hasOwn(fields, "actor") ||
+        (fields.preparation !== undefined &&
+          fields.preparation !== "configuration")
+      )
+        denied();
+      return run(
+        {
+          request: fields.request as ControlApiRequestContext,
+          actor: fields.actor as ActorContext,
+          ...(fields.signal === undefined
+            ? {}
+            : { signal: fields.signal as AbortSignal }),
+          preparation: "configuration",
+        },
+        work,
+      );
+    },
+    assertCurrent: owner.assertCurrent.bind(owner),
+    currentActor: owner.currentActor.bind(owner),
+    currentScope: owner.currentScope.bind(owner),
+  });
+}
+
+export type InstalledPluginReadRequestScope = Readonly<
+  Pick<
+    InstalledPluginRequestOwner,
+    "assertCurrent" | "currentActor" | "currentScope"
+  > & {
+    run<T>(
+      input: Readonly<{
+        request: ControlApiRequestContext;
+        actor: ActorContext;
+        signal?: AbortSignal;
+        preparation?: "configuration";
+      }>,
+      work: () => Promise<T>,
+    ): Promise<T>;
+  }
+>;
+
 /** Unbound legacy instances take precisely their original path, without peer/profile/token reads. */
 export async function withInstalledPluginHttpRequest<T>(
   service: object,

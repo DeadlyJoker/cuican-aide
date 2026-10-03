@@ -1,5 +1,6 @@
 import {
   createPluginCreativeProjectClient,
+  createPluginProjectGenerationReadClient,
   defineUiPlugin,
   type PluginUiProps,
 } from "@crewon/plugin-sdk/ui";
@@ -54,9 +55,10 @@ export default defineUiPlugin({
     const preview = dataFlag(props.data, "shortDramaPreview");
     const controller = preview
       ? null
-      : new CreativeProjectController(
-          createPluginCreativeProjectClient(services),
-        );
+      : new CreativeProjectController({
+          projects: createPluginCreativeProjectClient(services),
+          generations: createPluginProjectGenerationReadClient(services),
+        });
     let disposed = false;
     let appliedTokens: string[] = [];
     function update(next: PluginUiProps) {

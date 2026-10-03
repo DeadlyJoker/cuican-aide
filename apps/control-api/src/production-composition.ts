@@ -27,9 +27,11 @@ import {
   type AutomationStore,
   type AuthorizationPort,
   type DomainStore,
+  type ProjectGenerationReadApplicationService,
   type ModelProviderSettingsStore,
 } from "@crewon/application";
 import { PostgresDomainStore } from "@crewon/store";
+import { isPluginProjectGenerationReadActionBridge } from "@crewon/plugin-host";
 
 import { buildControlApi } from "./control-api.ts";
 import {
@@ -103,6 +105,11 @@ import {
   createProductionCreativeProjectPluginRuntime,
   type ProductionCreativeProjectPluginRuntime,
 } from "./production-creative-project-plugin-runtime.ts";
+import {
+  createProductionProjectGenerationReadPluginRuntime,
+  type ProductionProjectGenerationReadPluginRuntime,
+} from "./production-project-generation-read-plugin-runtime.ts";
+import { assertProjectGenerationReadPluginPublications } from "./project-generation-read-plugin-ui-composition.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -144,6 +151,8 @@ export async function createProductionPostgresControlApi(
     config.pluginUi?.ownedProjectGenerationActions;
   const ownedCreativeProjectActions =
     config.pluginUi?.ownedCreativeProjectActions;
+  const ownedProjectGenerationReadActions =
+    config.pluginUi?.ownedProjectGenerationReadActions;
   let store: PostgresDomainStore | undefined;
   try {
     validateProductionConfig(config);
@@ -154,6 +163,21 @@ export async function createProductionPostgresControlApi(
       creativeProjects?.pluginUi,
       config.pluginUi?.configuration.publications,
     );
+    assertProjectGenerationReadPluginPublications(
+      creativeProjects?.generationReadUi,
+      config.pluginUi?.configuration.publications,
+    );
+    if (
+      creativeProjects?.generationReadUi !== undefined &&
+      ownedProjectGenerationReadActions !== undefined
+    )
+      throw new Error("project_generation_read_plugin_actions_conflict");
+    if (
+      creativeProjects?.generationReadUi !== undefined &&
+      config.pluginTasks === undefined &&
+      config.pluginConfiguration === undefined
+    )
+      throw new Error("project_generation_read_ui_reader_required");
     assertProjectGenerationExecutionComposition({
       generations: creativeProjects?.pluginGenerations,
       publications: config.pluginUi?.configuration.publications,
@@ -226,6 +250,9 @@ export async function createProductionPostgresControlApi(
               ...(ownedCreativeProjectActions === undefined
                 ? {}
                 : { ownedCreativeProjectActions }),
+              ...(ownedProjectGenerationReadActions === undefined
+                ? {}
+                : { ownedProjectGenerationReadActions }),
             }),
           }),
     });
@@ -244,6 +271,16 @@ export async function createProductionPostgresControlApi(
     return await composeProductionControlApi(store, productionConfig, registry);
   } catch (error) {
     const failures: unknown[] = [];
+    if (
+      isPluginProjectGenerationReadActionBridge(
+        ownedProjectGenerationReadActions,
+      )
+    )
+      try {
+        await ownedProjectGenerationReadActions.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
     if (isInstalledPluginProjectGenerationOwner(ownedProjectGenerationActions))
       try {
         await ownedProjectGenerationActions.close();
@@ -306,6 +343,12 @@ async function composeProductionControlApi(
     | ProductionPluginInstallationRuntime
     | undefined;
   let projectPluginRuntime: ProductionCreativeProjectPluginRuntime | undefined;
+  let projectGenerationReadPluginRuntime:
+    | ProductionProjectGenerationReadPluginRuntime
+    | undefined;
+  let projectGenerationReads:
+    | ProjectGenerationReadApplicationService
+    | undefined;
   try {
     artifactMaintenance = new ArtifactRetentionMaintenance(
       config.artifactStore.retention,
@@ -357,9 +400,57 @@ async function composeProductionControlApi(
           },
         );
       }
-      const hostUiServices =
+      const existingHostUiServices =
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
         projectPluginRuntime?.hostUiServices;
+      if (creativeProjects?.generationReadUi !== undefined) {
+        if (config.pluginUi === undefined)
+          throw new Error("project_generation_read_ui_configuration_required");
+        // Only this opt-in moves metadata-only reader assembly ahead of installation recovery.
+        if (
+          pluginTaskRuntime === undefined &&
+          config.pluginConfiguration !== undefined
+        )
+          pluginConfigurationRuntime =
+            await createInstalledPluginConfigurationRuntime(
+              config.pluginConfiguration.configuration,
+              {
+                store,
+                identity: config.identity as ProductionControlApiIdentity,
+                authorization: config.authorization,
+                clock,
+                digester,
+              },
+            );
+        const taskReads =
+          pluginTaskRuntime?.extensionReads ??
+          pluginConfigurationRuntime?.extensionReads;
+        const extensions =
+          creativeProjects.generationReadStore ??
+          (await prepareProjectGenerationReadStore(store));
+        projectGenerationReads = composeProjectGenerationReadService({
+          projects: creativeProjects,
+          extensions,
+          tasks: taskReads,
+          digester,
+        });
+        if (projectGenerationReads === undefined || taskReads === undefined)
+          throw new Error("project_generation_read_ui_reader_required");
+        projectGenerationReadPluginRuntime =
+          createProductionProjectGenerationReadPluginRuntime({
+            configuration: creativeProjects.generationReadUi,
+            reads: projectGenerationReads,
+            taskReads,
+            ui: config.pluginUi.configuration,
+            identity: config.identity as ProductionControlApiIdentity,
+            ...(existingHostUiServices === undefined
+              ? {}
+              : { hostUiServices: existingHostUiServices }),
+          });
+      }
+      const hostUiServices =
+        projectGenerationReadPluginRuntime?.hostUiServices ??
+        existingHostUiServices;
       if (config.pluginInstallation !== undefined) {
         if (registry === undefined)
           throw new Error("production_plugin_source_registry_required");
@@ -393,6 +484,12 @@ async function composeProductionControlApi(
             ...(projectPluginRuntime === undefined
               ? {}
               : { ownedCreativeProjectActions: projectPluginRuntime.owner }),
+            ...(projectGenerationReadPluginRuntime === undefined
+              ? {}
+              : {
+                  ownedProjectGenerationReadActions:
+                    projectGenerationReadPluginRuntime.owner,
+                }),
           },
           {
             ledger,
@@ -400,7 +497,10 @@ async function composeProductionControlApi(
           },
         );
     }
-    if (config.pluginConfiguration !== undefined) {
+    if (
+      config.pluginConfiguration !== undefined &&
+      pluginConfigurationRuntime === undefined
+    ) {
       pluginConfigurationRuntime =
         await createInstalledPluginConfigurationRuntime(
           config.pluginConfiguration.configuration,
@@ -552,16 +652,19 @@ async function composeProductionControlApi(
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
             projectGenerations: pluginTaskRuntime?.projectGenerations,
+            projectGenerationReads: projectGenerationReadPluginRuntime,
           });
     const extensionReads =
       pluginTaskRuntime?.extensionReads ??
       pluginConfigurationRuntime?.extensionReads;
     const generationReadStore =
-      creativeProjects?.generationReadStore ??
-      (creativeProjects?.pluginGenerations === undefined
+      projectGenerationReads !== undefined
         ? undefined
-        : await prepareProjectGenerationReadStore(store));
-    const projectGenerationReads = composeProjectGenerationReadService({
+        : (creativeProjects?.generationReadStore ??
+          (creativeProjects?.pluginGenerations === undefined
+            ? undefined
+            : await prepareProjectGenerationReadStore(store)));
+    projectGenerationReads ??= composeProjectGenerationReadService({
       projects: creativeProjects,
       extensions: generationReadStore,
       tasks: extensionReads,
@@ -624,6 +727,7 @@ async function composeProductionControlApi(
     app.addHook("onClose", async () => {
       await closeResources([
         () => projectPluginRuntime?.close(),
+        () => projectGenerationReadPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),
@@ -651,6 +755,7 @@ async function composeProductionControlApi(
     try {
       await closeResources([
         () => projectPluginRuntime?.close(),
+        () => projectGenerationReadPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),

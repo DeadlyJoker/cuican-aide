@@ -12,6 +12,13 @@ import {
   generationReceipt,
   requirement as generationRequirement,
 } from "./dist/external-project-generation-contracts.js";
+import { createReadClient } from "./dist/external-project-generation-read-ui.js";
+import {
+  locator,
+  request as readRequest,
+  response as readResponse,
+  requirement as readRequirement,
+} from "./dist/external-project-generation-read-contracts.js";
 
 assert.deepEqual(requirement, {
   service: "crewon.creative-projects",
@@ -77,4 +84,27 @@ assert.deepEqual(
 assert.equal(generationCalls, 1);
 console.log(
   "Independent saved-source generation helper preserved the original task receipt.",
+);
+assert.deepEqual(readRequirement, {
+  service: "crewon.project-generation-reads",
+  apiVersion: "1",
+  optional: true,
+});
+let readCalls = 0;
+const readClient = createReadClient({
+  async invoke(action, input) {
+    readCalls++;
+    assert.equal(
+      action,
+      "crewon.project-generation-reads.v1.getConceptGeneration",
+    );
+    assert.deepEqual(input, readRequest.input);
+    return readResponse;
+  },
+});
+assert.equal(readCalls, 0);
+assert.deepEqual(await readClient.getConceptGeneration(locator), readResponse);
+assert.equal(readCalls, 1);
+console.log(
+  "Independent saved-source read helper recovered the original task.",
 );

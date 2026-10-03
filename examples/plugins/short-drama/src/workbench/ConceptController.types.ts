@@ -1,4 +1,7 @@
-import type { PluginCreativeProjectClient } from "@crewon/plugin-sdk/ui";
+import type {
+  PluginCreativeProjectClient,
+  PluginProjectGenerationReadClient,
+} from "@crewon/plugin-sdk/ui";
 import type {
   CreativeProjectUiInputMap,
   PublicConceptAsset,
@@ -48,6 +51,7 @@ export type ConceptIntent =
     }>;
 export type ConceptPorts = Readonly<{
   client: PluginCreativeProjectClient;
+  generationClient: PluginProjectGenerationReadClient;
   projectBlocked(): boolean;
   projectCommitted(project: PublicCreativeProject): void;
   lockChanged(locked: boolean): void;

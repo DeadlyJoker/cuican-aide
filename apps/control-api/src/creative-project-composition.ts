@@ -27,6 +27,10 @@ import {
   type ProjectGenerationReadConfiguration,
   type ProjectGenerationReadStore,
 } from "./project-generation-read-composition.ts";
+import {
+  captureProjectGenerationReadPluginUiConfig,
+  type ProjectGenerationReadPluginUiConfig,
+} from "./project-generation-read-plugin-ui-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
@@ -34,12 +38,14 @@ export type CreativeProjectCompositionConfig = Readonly<{
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   generationReads?: ProjectGenerationReadConfiguration;
+  generationReadUi?: ProjectGenerationReadPluginUiConfig;
 }>;
 
 export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
   readonly generationReads?: ProjectGenerationReadConfiguration;
+  readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
   readonly generationReadStore?: ProjectGenerationReadStore;
   readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
     Readonly<{
@@ -69,7 +75,8 @@ export function captureCreativeProjectCompositionConfig(
         key !== "authorization" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
-        key !== "generationReads",
+        key !== "generationReads" &&
+        key !== "generationReadUi",
     ) ||
     !Object.hasOwn(fields, "authorization") ||
     !Object.hasOwn(fields.authorization!, "value")
@@ -100,6 +107,17 @@ export function captureCreativeProjectCompositionConfig(
   const generationReads = captureProjectGenerationReadConfiguration(
     readsField?.value,
   );
+  const readUiField = fields.generationReadUi;
+  if (
+    readUiField !== undefined &&
+    (!Object.hasOwn(readUiField, "value") || !readUiField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const generationReadUi = captureProjectGenerationReadPluginUiConfig(
+    readUiField?.value,
+  );
+  if (generationReadUi !== undefined && generationReads === undefined)
+    throw new Error("project_generation_read_ui_reader_required");
   const port = fields.authorization!.value as
     | CreativeProjectAuthorizationPort
     | null
@@ -122,6 +140,7 @@ export function captureCreativeProjectCompositionConfig(
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(generationReads === undefined ? {} : { generationReads }),
+        ...(generationReadUi === undefined ? {} : { generationReadUi }),
       });
     }
     target = Object.getPrototypeOf(target);
@@ -156,6 +175,9 @@ export async function prepareCreativeProjects(
   const store = owner.creativeProjectStore();
   await store.migrate();
   return {
+    ...(configuration.generationReadUi === undefined
+      ? {}
+      : { generationReadUi: configuration.generationReadUi }),
     ...(configuration.generationReads === undefined
       ? {}
       : { generationReads: configuration.generationReads }),

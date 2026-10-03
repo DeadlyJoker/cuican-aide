@@ -9,6 +9,8 @@ import {
   CREWON_CREATIVE_PROJECTS_API_VERSION,
   CREWON_PROJECT_GENERATIONS_SERVICE,
   CREWON_PROJECT_GENERATIONS_API_VERSION,
+  CREWON_PROJECT_GENERATION_READS_SERVICE,
+  CREWON_PROJECT_GENERATION_READS_API_VERSION,
   type PluginPackageDescriptor,
   type PluginServiceRequirement,
 } from "@crewon/contracts/plugins";
@@ -79,13 +81,18 @@ export function assertUiOnlyServiceDeclarations(
     descriptor.provides.length !== 0 ||
     descriptor.requires.some(
       (requirement) =>
-        hostUiServices === undefined ||
         !(
-          (requirement.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
-            requirement.apiVersion === CREWON_CREATIVE_PROJECTS_API_VERSION) ||
-          (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
-            requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&
-            hasProjectGenerationHostAvailability(hostUiServices))
+          (requirement.service === CREWON_PROJECT_GENERATION_READS_SERVICE &&
+            requirement.apiVersion ===
+              CREWON_PROJECT_GENERATION_READS_API_VERSION) ||
+          (hostUiServices !== undefined &&
+            ((requirement.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
+              requirement.apiVersion ===
+                CREWON_CREATIVE_PROJECTS_API_VERSION) ||
+              (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
+                requirement.apiVersion ===
+                  CREWON_PROJECT_GENERATIONS_API_VERSION &&
+                hasProjectGenerationHostAvailability(hostUiServices))))
         ),
     )
   )

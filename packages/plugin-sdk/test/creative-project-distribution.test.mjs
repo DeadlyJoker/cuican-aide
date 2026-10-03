@@ -107,6 +107,8 @@ test("creative project declarations and UI methods work from a real offline tarb
       "external-creative-project-ui.ts",
       "external-project-generation-contracts.ts",
       "external-project-generation-ui.ts",
+      "external-project-generation-read-contracts.ts",
+      "external-project-generation-read-ui.ts",
       "creative-project-responses.mjs",
       "creative-project-distribution-runner.mjs",
     ])
@@ -128,6 +130,7 @@ test("creative project declarations and UI methods work from a real offline tarb
         [
           "external-creative-project-contracts.ts",
           "external-project-generation-contracts.ts",
+          "external-project-generation-read-contracts.ts",
         ],
       ],
       [
@@ -138,6 +141,8 @@ test("creative project declarations and UI methods work from a real offline tarb
           "external-creative-project-ui.ts",
           "external-project-generation-contracts.ts",
           "external-project-generation-ui.ts",
+          "external-project-generation-read-contracts.ts",
+          "external-project-generation-read-ui.ts",
         ],
       ],
     ]) {
@@ -172,6 +177,10 @@ test("creative project declarations and UI methods work from a real offline tarb
     assert.match(
       executed,
       /Independent saved-source generation helper preserved the original task receipt/u,
+    );
+    assert.match(
+      executed,
+      /Independent saved-source read helper recovered the original task/u,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

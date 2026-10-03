@@ -11,7 +11,11 @@ import {
   type PluginUiPackageContext,
   type PluginUiPackagePort,
 } from "@crewon/application";
-import { LocalPluginUiPackageReader } from "@crewon/plugin-host";
+import {
+  LocalPluginUiPackageReader,
+  isPluginProjectGenerationReadActionBridge,
+  type PluginProjectGenerationReadActionBridge,
+} from "@crewon/plugin-host";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 import {
   AuthorityPluginHostProfile,
@@ -46,6 +50,7 @@ export type ProductionPluginUiConfig = Readonly<{
   /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
+  ownedProjectGenerationReadActions?: PluginProjectGenerationReadActionBridge;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -68,6 +73,12 @@ export function createProductionPluginUiRuntime(
     captureProductionPluginUiActions(input);
   const metadataOwner = input.ownedCreativeProjectActions;
   const generationOwner = input.ownedProjectGenerationActions;
+  const generationReadOwner = input.ownedProjectGenerationReadActions;
+  if (
+    generationReadOwner !== undefined &&
+    !isPluginProjectGenerationReadActionBridge(generationReadOwner)
+  )
+    throw new Error("production_plugin_ui_generation_read_owner_invalid");
   if (
     generationOwner !== undefined &&
     (!isInstalledPluginProjectGenerationOwner(generationOwner) ||
@@ -82,6 +93,11 @@ export function createProductionPluginUiRuntime(
   if (actions !== undefined && typeof actions?.invoke !== "function")
     throw new Error("production_plugin_ui_actions_invalid");
   const invokeAction = actions?.invoke.bind(actions);
+  const readActions = generationReadOwner?.actions({
+    invoke: async () => {
+      throw new ApplicationError("conflict", "plugin_ui_actions_unavailable");
+    },
+  });
   if (
     committedTasks !== undefined &&
     (typeof committedTasks.isOutcome !== "function" ||
@@ -161,6 +177,17 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (
+            request.action === "crewon.project-generation-reads" ||
+            request.action.startsWith("crewon.project-generation-reads.")
+          ) {
+            if (generationReadOwner === undefined)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return readActions!.invoke(request);
+          }
           if (metadataOwner?.supportsAction(request.action))
             return metadataOwner.actions.invoke(request);
           if (request.action.startsWith("crewon.project-generations.")) {
@@ -238,6 +265,7 @@ export function createProductionPluginUiRuntime(
       application = null;
       return (closing ??= Promise.allSettled([
         generationOwner?.close(),
+        generationReadOwner?.close(),
         owner?.close(),
         metadataOwner?.close(),
       ]).then((results) => {
@@ -262,6 +290,13 @@ export function captureProductionPluginUiActions(
   committedTasks: PluginUiCommittedTaskPort | undefined;
   owner: InstalledPluginTaskActionOwner | undefined;
 }> {
+  if (
+    input.ownedProjectGenerationReadActions !== undefined &&
+    !isPluginProjectGenerationReadActionBridge(
+      input.ownedProjectGenerationReadActions,
+    )
+  )
+    throw new Error("production_plugin_ui_generation_read_owner_invalid");
   if (
     input.ownedCreativeProjectActions !== undefined &&
     !isPluginCreativeProjectActionOwner(input.ownedCreativeProjectActions)

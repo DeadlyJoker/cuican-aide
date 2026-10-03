@@ -63,6 +63,15 @@ export {
 } from "./native-installed-plugin-preparation-result.ts";
 export * from "./creative-project-ui-action-contract.ts";
 export * from "./project-generation-ui-action-contract.ts";
+export * from "./project-generation-read-ui-action-contract.ts";
+export type {
+  ConceptGenerationLocator,
+  ConceptGenerationImage,
+  ConceptGenerationOperation,
+  ConceptGenerationTaskView,
+  PublicConceptGeneration,
+  GetConceptGenerationResponse,
+} from "./project-generation-read-contract.ts";
 export {
   MAX_CREATIVE_PROJECT_RESPONSE_BYTES,
   type PublicCreativeProject,

@@ -2,6 +2,7 @@ import { ApplicationError } from "@crewon/application";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import type { ProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
+import type { ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import { parseProjectGenerationUiActionRequest } from "@crewon/contracts/plugins";
 import {
   isInstalledPluginProjectGenerationOwner,
@@ -14,11 +15,13 @@ export function createProductionPluginUiRequestService({
   taskRequests,
   projects,
   projectGenerations,
+  projectGenerationReads,
 }: Readonly<{
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
   projects?: ProductionCreativeProjectPluginRuntime;
   projectGenerations?: InstalledPluginProjectGenerationOwner;
+  projectGenerationReads?: ProductionProjectGenerationReadPluginRuntime;
 }>): PluginUiControlService {
   if (
     projectGenerations !== undefined &&
@@ -29,13 +32,31 @@ export function createProductionPluginUiRequestService({
   if (
     taskRequests === undefined &&
     projects === undefined &&
-    projectGenerations === undefined
+    projectGenerations === undefined &&
+    projectGenerationReads === undefined
   )
     return ui;
   return Object.freeze({
     ...ui,
     invokeAuthenticatedRequest: (request, actor, command, signal) => {
       const invoke = () => ui.invoke(actor, command);
+      if (
+        command.action === "crewon.project-generation-reads" ||
+        command.action.startsWith("crewon.project-generation-reads.")
+      ) {
+        if (projectGenerationReads === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        return projectGenerationReads.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
       if (command.action.startsWith("crewon.project-generations.")) {
         if (projectGenerations === undefined || taskRequests === undefined)
           throw new ApplicationError(

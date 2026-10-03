@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-03：独立插件读取保存生成，短剧 4.0.0 冷挂载恢复
+
+完成独立只读 `crewon.project-generation-reads@1` 的 Contracts、SDK、Host 与 Production Control 装配。唯一动作只接受保存项目、资产和输入修订，由原不可变关联查找原 Run；沿原 UI invoke 返回有界 JSON，不增加 Node 服务、任务回执类型或供应商循环。原 14 个元数据动作和唯一 generateConcept 保持兼容。协议细节见[保存生成只读 UI 协议](./project-generation-read-ui-protocol.md)。
+
+只读 UI 使用独立部署批准 `creativeProjects.generationReadUi.publications`，固定真实业务包、摘要和贡献；元数据或付费生成批准不授予它。默认关闭，optional 声明只保留模块，不使读取自动可用。Production 在实际身份/profile 的 configuration-only scope 内读取，捕获的原 reader scope 在类型与运行时均拒绝 execution preparation；读取前后复验当前身份、来源、原任务和 UI invocation。撤回或关闭拒绝迟到 JSON，清理等待物理操作结束，不改变旧 Run 或积分。
+
+短剧 4.0.0 在已有模块内增加已保存版本的生成记录，使用原样式显示原 Run、operation 状态和原始图片索引。编辑、换版本、换项目和关闭会撤回旧请求；不可用与没有关联分别显示。新包在仓外离线安装实际 SDK tarball、编译并自持 UI ESM；旧 3.0.0 产物和既有服务保留。实际 4.0.0 原字节经验证安装后，由 DOM 操作通过原 Host HTTP 读取真实 SQLite 的测试历史；两个不同的真实 mountRef 冷挂载恢复同一 Run、operationRevision 和 resultIndex，原 Run/积分账户不变，Node 与供应商 transport 调用为零。
+
+本阶段分组检查通过，组间不求和：Contracts 全量 **311/311**；SDK 全量与公开 tarball 仓外分发 **36/36**；Host 新读取及原桥回归 **39/39**；Control 新实际双库及 Production factory/restart/default-off **16/16**，包含这些新检查的原 UI/task/metadata/request-owner/HTTP 回归共 **63/63**；独立 4.0.0 ESM DOM **26/26**；实际安装 4.0.0 → Host HTTP → SQLite 冷挂载 **1/1**；原账号/设置及两个业务模块窄测 **31/31**，均零跳过。原 UI 构建、lint、相关类型、boundary 和格式检查通过。模块快照仅更新 ConceptWorkbench 两个业务状态；共享 CSS、shell、账号/设置源码及这些快照本阶段无改动。
+
+实际双库专项使用隔离本机 PostgreSQL 18.6 和真实 SQLite；身份、profile/PDP、定价及既有付费历史是具名夹具，不是人类生产身份或供应商调用。Production factory 首次失败来自新 fixture 未传隔离 schema，随后安装恢复 fixture 缺少 authority epoch；修正自有 fixture 后重跑通过，未改 schema 检查或产品授权。独立模块专项不能替代真实安装专项，两类证据分别保留。
+
+用户栏和设置继续使用 `bb93f1b79` 恢复的 5719 原应用入口，预览仅在 `/plugin-preview.html`。当前浏览器标签读取/刷新仍超时，无新的真实登录屏幕验收。空响应的 Control `/session` 503 来自 Vite 缺少配对开发会话配置；PIM 登录不会解除该分支。原全应用开发编排会产生固定 standalone 身份，不能拿它冒充本人执行身份；真实既有 Native 或 Identity/BFF/Control 配置尚未提供，没有复制凭据或创建新身份。此前全量 UI 九项失败仍保留，未声称全量 UI 或真实设置后端已通过。
+
+产物与日志位于 `output/extensions/installable-plugins/generation-read-short-drama-20261003/` 和 `output/extensions/checks/`，统一证据为 `project-generation-read-ui-proof-20261003.json`。本轮自有 PG 55814 已正常停止并删除准确临时目录，用户 UI 服务保留。下一步仍是生成控件、真实能力与原线程准备、原 operation 显式查询、确切结果选用和原会话导航。真实个人身份、插件钱包及价格权威仍等待原选择；正式 Main/full App 在线 Krea2、第二个实际企业 API 和完整 S0 尚未完成，完整目标继续进行。
+
 ## 2026-10-03：恢复当前地址的原应用入口，并接通保存生成的只读服务
 
 用户继续报告用户栏和设置缺失。对照改造前 `776484c57` 后确认原入口组件仍在，但用户当前 5719 根路径仍加载独立短剧预览，绕过原 AuthGate 和 App。现已纠正这一个开发入口：5719 `/` 使用正常 Vite 配置和原 `index.html → main.tsx → AgentPlatformAuthGate → App`，原 PIM 代理正常；独立无账号设计预览仅在明确的 `/plugin-preview.html` 加载。原页面组件、CSS 和快照未改，5720 和 5730 服务保留。修复提交为 `bb93f1b79`。

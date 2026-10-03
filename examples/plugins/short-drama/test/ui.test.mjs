@@ -12,7 +12,7 @@ import {
   settle,
 } from "./ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "3.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "4.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -31,6 +31,11 @@ test("ships a UI-only, self-contained package and the original locally scoped st
   assert.equal(descriptor.businessManifestPath, null);
   assert.deepEqual(descriptor.requires, [
     { service: "crewon.creative-projects", apiVersion: "1", optional: false },
+    {
+      service: "crewon.project-generation-reads",
+      apiVersion: "1",
+      optional: true,
+    },
   ]);
   assert.deepEqual(descriptor.provides, []);
   assert.deepEqual(descriptor.contributions, [

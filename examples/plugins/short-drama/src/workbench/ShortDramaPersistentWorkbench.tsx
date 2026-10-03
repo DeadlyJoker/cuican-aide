@@ -75,7 +75,7 @@ function SaveFeedback({
   );
 }
 
-/** The original module layout with real project/brief records; generation is a later capability. */
+/** The original module layout with saved sources and read-only original task records. */
 export function ShortDramaPersistentWorkbench({
   controller,
 }: {

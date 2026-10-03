@@ -9,7 +9,7 @@ import {
   persistentProps,
 } from "./persistent-ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "3.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "4.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -99,8 +99,11 @@ test("creates a concept against the saved brief, preserves both raw drafts and b
     assert.match(f.container.textContent, /概念输入 v1 已保存/u);
     assert.equal(f.container.querySelector("img"), null);
     assert.equal(
-      service.calls.every((call) =>
-        call.action.startsWith("crewon.creative-projects.v1."),
+      service.calls.every(
+        (call) =>
+          call.action.startsWith("crewon.creative-projects.v1.") ||
+          call.action ===
+            "crewon.project-generation-reads.v1.getConceptGeneration",
       ),
       true,
     );

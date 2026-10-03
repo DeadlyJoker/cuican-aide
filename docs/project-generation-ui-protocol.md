@@ -16,7 +16,7 @@ Control 构造核对 generation owner、实际 task owner、任务服务和原 i
 
 本阶段真实 Control owner 专项 **24/24**、原 owner 回归 **21/21**、Production UI HTTP 专项 **10/10**，均零跳过。后者使用真实 SQLite、单连接 PostgreSQL、原安装包/Node、原 issuer、Fastify 路由与 CA/主机名验证的 TLS 1.3 profile/PDP 测试服务，证明生成、幂等重放、提交前撤权及提交后 runtime 关闭。身份与积分是明确夹具，不是生产人类账号或钱包。其他 Application/Store、Host、issuer 和 composition 的分组日志见[实施进度](./incremental-extension-progress.md)，不同检查组不相加。
 
-尚未接入独立短剧页面的生成按钮、真实能力状态与原线程准备；按项目/输入查找原生成、operation 查询、确切结果选用和冷恢复导航仍待实现。本阶段也不代表完整生产 runtime factory、正式 Main/full App/packaged Krea2 在线生图、人类身份钱包或价格结算验收。
+尚未接入独立短剧页面的生成按钮、真实能力状态与原线程准备。按保存输入查找原生成已通过独立的[只读 UI 协议](./project-generation-read-ui-protocol.md)接入；operation 查询、确切结果选用和冷恢复导航仍待实现。本阶段也不代表完整生产 runtime factory、正式 Main/full App/packaged Krea2 在线生图、人类身份钱包或价格结算验收。
 
 以下既有章节保留协议前置阶段的记录，其中“尚未装配”等状态以本节的当前实现为准。
 
@@ -50,4 +50,4 @@ Host 组装任务时，从业务包身份和原 UI 幂等键派生有界命名�
 
 真实 Host dispatcher 需捕获两端实际安装与当前权威，沿[项目内部事务](./project-generation-link.md)提交。事务内借原连接验证并锁定两端 selection；不能把会重新获取共享连接的完整 UI current 检查塞入单连接 PostgreSQL 事务。该路径还需实际双库、撤权及关闭验证，目前尚未实现。
 
-工作台随后需要真实能力状态、原线程准备、按保存输入恢复原受理记录，以及通过项目关联核验的原会话导航。旧 task hook 按业务 module.pluginId 查任务，不能放宽它来接受不同执行插件。原 operation 查询、确切图片选用和生产钱包仍是后续工作。
+工作台随后需要真实能力状态、原线程准备，以及通过项目关联核验的原会话导航。按保存输入恢复原受理记录使用独立只读协议；旧 task hook 按业务 module.pluginId 查任务，不能放宽它来接受不同执行插件。原 operation 查询、确切图片选用和生产钱包仍是后续工作。

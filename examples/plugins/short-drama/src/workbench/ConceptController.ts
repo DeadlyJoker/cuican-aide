@@ -1,4 +1,5 @@
 import type { ProjectDetails } from "./creative-project-controller";
+import { ConceptGenerationController } from "./ConceptGenerationController";
 import type { PublicConceptAsset } from "@crewon/plugin-sdk/contracts";
 import type {
   ConceptDraft,
@@ -53,6 +54,7 @@ const initial = (): ConceptSnapshot => ({
 
 /** Owns confirmed concept inputs only; asset identity and input revision remain distinct. */
 export class ConceptController {
+  readonly generations: ConceptGenerationController;
   #ports: ConceptPorts;
   #details: ProjectDetails | null = null;
   #ready = false;
@@ -69,6 +71,7 @@ export class ConceptController {
   #drafts = new Map<string, ConceptDraft>();
   constructor(ports: ConceptPorts) {
     this.#ports = ports;
+    this.generations = new ConceptGenerationController(ports.generationClient);
   }
   getSnapshot = (): ConceptSnapshot => this.#snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -82,6 +85,17 @@ export class ConceptController {
     if (this.#disposed) return;
     const locked = this.locked;
     this.#snapshot = { ...this.#snapshot, ...change };
+    const selection = this.#snapshot.selection;
+    this.generations.bind(
+      selection && !this.#snapshot.editing
+        ? {
+            projectId: selection.asset.projectId,
+            assetId: selection.asset.assetId,
+            assetRevision: selection.revision.assetRevision,
+          }
+        : null,
+      this.#ready,
+    );
     if (locked !== this.locked) this.#ports.lockChanged(this.locked);
     for (const listener of this.#listeners) listener();
   }
@@ -122,6 +136,7 @@ export class ConceptController {
     this.#abortReads();
     this.#write?.abort();
     this.#listeners.clear();
+    this.generations.dispose();
   }
   #reading(kind: "assets" | "selection" | "history" | "refresh") {
     this.#reads.get(kind)?.abort();

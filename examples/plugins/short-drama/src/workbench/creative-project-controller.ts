@@ -1,4 +1,7 @@
-import type { PluginCreativeProjectClient } from "@crewon/plugin-sdk/ui";
+import type {
+  PluginCreativeProjectClient,
+  PluginProjectGenerationReadClient,
+} from "@crewon/plugin-sdk/ui";
 import { ConceptController } from "./ConceptController";
 import type {
   CreativeProjectUiInputMap,
@@ -125,10 +128,15 @@ export class CreativeProjectController {
     conceptLocked: false,
   };
 
-  constructor(client: PluginCreativeProjectClient) {
+  constructor(ports: {
+    projects: PluginCreativeProjectClient;
+    generations: PluginProjectGenerationReadClient;
+  }) {
+    const client = ports.projects;
     this.#client = client;
     this.concepts = new ConceptController({
       client,
+      generationClient: ports.generations,
       projectBlocked: () =>
         Boolean(this.#write || this.#intent || !this.#ready),
       lockChanged: (conceptLocked) => this.#update({ conceptLocked }),

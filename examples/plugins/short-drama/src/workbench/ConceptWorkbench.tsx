@@ -2,9 +2,10 @@ import { useSyncExternalStore } from "react";
 import { Image, Plus } from "lucide-react";
 import type { ConceptController } from "./ConceptController";
 import { ConceptEditor } from "./ConceptEditor";
+import { ConceptGenerationView } from "./ConceptGenerationView";
 import type { ProjectDetails } from "./creative-project-controller";
 
-/** Shows persisted inputs and immutable history; no generation or selected-result records. */
+/** Shows saved inputs, immutable history and the original task records for the selected revision. */
 export function ConceptWorkbench({
   controller,
   details,
@@ -98,6 +99,13 @@ export function ConceptWorkbench({
           )}
         </>
       )}
+      {snapshot.selection && !snapshot.editing && (
+        <ConceptGenerationView
+          controller={controller.generations}
+          name={snapshot.selection.asset.name}
+          blocked={locked}
+        />
+      )}
       {snapshot.error && (
         <p className="detail-note" role="alert">
           {snapshot.error}
@@ -183,7 +191,7 @@ export function ConceptWorkbench({
         </button>
       )}
       <p className="detail-note">
-        这里只保存概念描述和来源需求，尚无生成图片。
+        生成记录属于已保存的版本，草稿不会改变历史任务。
       </p>
     </section>
   );
