@@ -3,6 +3,7 @@ import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import type { ProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
 import type { ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
+import type { ProductionProjectGenerationSelectionPluginRuntime } from "./production-project-generation-selection-plugin-runtime.ts";
 import { parseProjectGenerationUiActionRequest } from "@crewon/contracts/plugins";
 import { parseProjectGenerationContextUiActionRequest } from "@crewon/contracts/plugins";
 import { parseProjectGenerationQueryUiActionRequest } from "@crewon/contracts/plugins";
@@ -23,6 +24,7 @@ export function createProductionPluginUiRequestService({
   projectGenerations,
   projectGenerationReads,
   projectQueries,
+  projectSelections,
 }: Readonly<{
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
@@ -30,6 +32,7 @@ export function createProductionPluginUiRequestService({
   projectGenerations?: InstalledPluginProjectGenerationOwner;
   projectGenerationReads?: ProductionProjectGenerationReadPluginRuntime;
   projectQueries?: InstalledPluginProjectQueryOwner;
+  projectSelections?: ProductionProjectGenerationSelectionPluginRuntime;
 }>): PluginUiControlService {
   if (
     projectQueries !== undefined &&
@@ -48,13 +51,31 @@ export function createProductionPluginUiRequestService({
     projects === undefined &&
     projectGenerations === undefined &&
     projectQueries === undefined &&
-    projectGenerationReads === undefined
+    projectGenerationReads === undefined &&
+    projectSelections === undefined
   )
     return ui;
   return Object.freeze({
     ...ui,
     invokeAuthenticatedRequest: (request, actor, command, signal) => {
       const invoke = () => ui.invoke(actor, command);
+      if (
+        command.action === "crewon.project-generation-selections" ||
+        command.action.startsWith("crewon.project-generation-selections.")
+      ) {
+        if (projectSelections === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        return projectSelections.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
       if (
         command.action === "crewon.project-generation-queries" ||
         command.action.startsWith("crewon.project-generation-queries.")

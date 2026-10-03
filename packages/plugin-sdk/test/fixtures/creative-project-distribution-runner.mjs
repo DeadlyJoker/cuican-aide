@@ -25,6 +25,50 @@ import {
   response as readResponse,
   requirement as readRequirement,
 } from "./dist/external-project-generation-read-contracts.js";
+import { createSelectionClient } from "./dist/external-project-generation-selection-ui.js";
+import {
+  selectionInput,
+  selectionReceipt,
+  selectionRequest,
+  requirement as selectionRequirement,
+} from "./dist/external-project-generation-selection-contracts.js";
+
+assert.deepEqual(selectionRequirement, {
+  service: "crewon.project-generation-selections",
+  apiVersion: "1",
+  optional: true,
+});
+let selectionCalls = 0;
+const selections = createSelectionClient({
+  async invoke(action, input) {
+    selectionCalls++;
+    if (
+      action === "crewon.project-generation-selections.v1.getConceptSelection"
+    ) {
+      assert.deepEqual(input, { projectId: "project", assetId: "asset" });
+      return { selectionRevision: 0, current: null };
+    }
+    assert.equal(action, selectionRequest.action);
+    assert.deepEqual(input, selectionInput);
+    return selectionReceipt;
+  },
+});
+assert.equal(selectionCalls, 0);
+assert.deepEqual(
+  await selections.getConceptSelection({
+    projectId: "project",
+    assetId: "asset",
+  }),
+  { selectionRevision: 0, current: null },
+);
+assert.deepEqual(
+  await selections.selectConceptImage(selectionInput),
+  selectionReceipt,
+);
+assert.equal(selectionCalls, 2);
+console.log(
+  "Independent image selection and current-pointer read work from the installed portable SDK.",
+);
 
 assert.deepEqual(requirement, {
   service: "crewon.creative-projects",

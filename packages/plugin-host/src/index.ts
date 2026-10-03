@@ -79,6 +79,7 @@ export {
 } from "./plugin-project-generation-execution-bridge.ts";
 export {
   capturePluginUiHostServiceAvailability,
+  appendProjectGenerationSelectionUiServiceAvailability,
   assertUiOnlyServiceDeclarations,
   assertPluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,

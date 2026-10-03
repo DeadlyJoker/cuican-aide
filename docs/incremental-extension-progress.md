@@ -6,6 +6,18 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：确切图片选用服务与双库事务
+
+新增独立 `crewon.project-generation-selections@1`、GET/PUT 公共服务和严格 SDK，用户只指定已保存输入、确切 operation/revision/resultIndex、元数据 CAS、独立选用 CAS 和原请求键。服务端核验原付费生成、配置、准入、任务回执及原始结果，再原子保存不可变 OperationResultLink、独立当前选用指针和不可变选用命令回执。旧 key 重放返回原回执，不覆盖较新的选择；修改创作输入后保留旧选用并标记需重新确认，项目重命名不使图片过期。细节见[图片选用协议](./project-generation-selection-protocol.md)。
+
+HTTP 认证命令与已安装插件 UI 明确分支；实际 UI owner 在同一 SQL client 锁定真实安装 pin，读取历史只需原配置与 Run 读取范围，不要求新的执行 Peer、会话或积分预留。独立 schema 与部署批准默认关闭，未知或部分 schema 拒绝使用。选用不访问供应商，不创建 Turn/Run，不修改原元数据版本或原生成槽位。ComfyUI 的 URL 与输出目录检查保留在纯供应商适配器；通用层与公共客户端的显示文件名规则保持一致，避免存储提交成功后回执被拒绝。
+
+分组检查零跳过，组间重叠，不跨组求和：新 Contracts 19/19；完整 SDK 54/54，含真实 tarball 仓外安装、严格编译和安装后 ESM 消费；Client/BFF 新旧窄组合 39/39；Domain/Store/实际 Application 双 SQL 新旧窄组合 241/241；Application 全部 514/514；Control/Host 新组合 45/45、原 Control 窄回归 105/105。实际 SQLite 和 PostgreSQL 单连接池验证包含二图切换、旧回执与新指针、历史输入、原付费证明破损、部分 schema、事务回滚、真实锁等待及 COMMIT 后撤权仍保留确认结果。相关类型、生成协议、boundary、格式和 diff 检查通过。一次 Host 类型脚本误触 SDK 重建造成并行 Control 类型检查缺声明，待构建物理结束后以直接 tsc 重跑 Control/Host，两项均通过；最终 SDK 由 Root 串行重新构建和打包。
+
+统一证据为 `output/extensions/checks/project-selection-foundation-proof-20261004.json`，SDK 为 `output/extensions/checks/project-selection-sdk-pack-20261004/crewon-plugin-sdk-0.1.0.tgz`。自有 PostgreSQL 62261 在全部测试消费者物理结束后停止，并核验进程退出后删除准确临时目录。原完整 App 服务继续运行，主界面、账号、设置、侧栏与共享样式本阶段未修改。
+
+此阶段尚未发布新的短剧包，也未接入页面“设为选用”控件或其丢回复恢复。实际权限、个人钱包、历史收费和 ProductionIdentity/profile/PDP 的测试使用具名夹具，不代表用户生产身份或资金。下一步是独立短剧控件与账户恢复接线；完整 App 在线生成、查询、选用及进程重启 UNKNOWN 恢复、真实个人插件钱包和价格权威、第二个企业 API、完整 S0 与 E5 门槛仍未完成。
+
 ## 2026-10-04：原操作查询协议与独立短剧 6.0.0
 
 新增独立 `crewon.project-generation-queries@1`，严格只接受已保存输入三字段、确切 operation、原线程 CAS 和幂等键。实际 Control owner 从项目生成关联反查原付费历史；原 Query Task、独立当前执行包、历史配置与八字段目标保持原运行链路。查询侧记录与原 Turn/Run/绑定/回执在同一事务提交；两个当前安装 pin 在同一 SQL client 上锁定，支持单连接 PostgreSQL。原生成关联、积分预留、生成槽位及普通任务协议不变，部署批准与 schema 迁移默认关闭。细节见[原操作查询 UI 协议](./project-generation-query-ui-protocol.md)。

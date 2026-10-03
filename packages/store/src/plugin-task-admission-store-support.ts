@@ -112,7 +112,7 @@ function assertCreditPrincipal(
     throw new Error("plugin_task_credit_admission_required");
 }
 
-const admissionQuery = (
+export const admissionQuery = (
   prefix: string,
 ) => `SELECT a.*,b.binding_json,p.record_json AS package_json FROM ${prefix}plugin_task_admissions a
   JOIN ${prefix}extension_run_bindings b ON b.tenant_id=a.tenant_id AND b.run_id=a.run_id
@@ -186,7 +186,7 @@ export function loadSqlitePluginTask(
 ): PluginTaskAdmission | null {
   sqliteVersion(database);
   const values = locator(input);
-  return decode(
+  return decodePluginTaskAdmissionRecord(
     database
       .prepare(admissionQuery("").replaceAll(/\$[1-3]/gu, "?"))
       .get(...values),
@@ -202,10 +202,12 @@ export async function loadPostgresPluginTask(
     admissionQuery(prefix(schema)),
     locator(input),
   );
-  return decode(result.rows[0]);
+  return decodePluginTaskAdmissionRecord(result.rows[0]);
 }
 
-function decode(row: Row | undefined): PluginTaskAdmission | null {
+export function decodePluginTaskAdmissionRecord(
+  row: Row | undefined,
+): PluginTaskAdmission | null {
   if (row === undefined) return null;
   const admission = parsePluginTaskAdmission(json(row.admission_json));
   // The v0 digest validator lives in the domain, so a corrupt historical binding cannot appear valid.

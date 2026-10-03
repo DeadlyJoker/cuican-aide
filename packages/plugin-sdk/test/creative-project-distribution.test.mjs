@@ -111,6 +111,8 @@ test("creative project declarations and UI methods work from a real offline tarb
       "external-project-generation-read-ui.ts",
       "external-project-generation-context-contracts.ts",
       "external-project-generation-context-ui.ts",
+      "external-project-generation-selection-contracts.ts",
+      "external-project-generation-selection-ui.ts",
       "creative-project-responses.mjs",
       "creative-project-distribution-runner.mjs",
     ])
@@ -134,6 +136,7 @@ test("creative project declarations and UI methods work from a real offline tarb
           "external-project-generation-contracts.ts",
           "external-project-generation-read-contracts.ts",
           "external-project-generation-context-contracts.ts",
+          "external-project-generation-selection-contracts.ts",
         ],
       ],
       [
@@ -148,6 +151,8 @@ test("creative project declarations and UI methods work from a real offline tarb
           "external-project-generation-read-ui.ts",
           "external-project-generation-context-contracts.ts",
           "external-project-generation-context-ui.ts",
+          "external-project-generation-selection-contracts.ts",
+          "external-project-generation-selection-ui.ts",
         ],
       ],
     ]) {

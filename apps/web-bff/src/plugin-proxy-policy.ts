@@ -275,9 +275,18 @@ export async function boundedPluginProxyResponse(input: {
 export async function boundedPluginProxyRequest(
   request: Request,
   signal: AbortSignal,
+  options: Readonly<{ maximumBytes: number }> = {
+    maximumBytes: REQUEST_MAX_BYTES,
+  },
 ): Promise<Uint8Array<ArrayBuffer> | null> {
   if (request.method === "GET") return null;
   if (request.method === "DELETE" && request.body === null) return null;
+  if (
+    !Number.isSafeInteger(options.maximumBytes) ||
+    options.maximumBytes < 1 ||
+    options.maximumBytes > REQUEST_MAX_BYTES
+  )
+    throw new Error("plugin_request_invalid");
   if (
     !/^application\/json(?:\s*;\s*charset=utf-8)?$/iu.test(
       request.headers.get("content-type") ?? "",
@@ -287,7 +296,7 @@ export async function boundedPluginProxyRequest(
   return readFiniteBody(
     request.body,
     request.headers.get("content-length"),
-    REQUEST_MAX_BYTES,
+    options.maximumBytes,
     signal,
   );
 }

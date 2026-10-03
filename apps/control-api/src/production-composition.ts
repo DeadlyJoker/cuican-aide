@@ -110,11 +110,16 @@ import {
   createProductionCreativeProjectPluginRuntime,
   type ProductionCreativeProjectPluginRuntime,
 } from "./production-creative-project-plugin-runtime.ts";
-import {
-  createProductionProjectGenerationReadPluginRuntime,
-  type ProductionProjectGenerationReadPluginRuntime,
-} from "./production-project-generation-read-plugin-runtime.ts";
+import { type ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import { assertProjectGenerationReadPluginPublications } from "./project-generation-read-plugin-ui-composition.ts";
+import { composeProductionProjectHistoryPlugins } from "./production-project-history-plugin-composition.ts";
+import {
+  assertProductionProjectSelectionComposition,
+  closeProductionProjectSelectionOwner,
+  composeOwnedProjectGenerationSelectionService,
+} from "./project-generation-selection-composition.ts";
+import type { ProductionProjectGenerationSelectionPluginRuntime } from "./production-project-generation-selection-plugin-runtime.ts";
+import type { ProjectConceptSelectionApplicationService } from "@crewon/application";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -183,6 +188,7 @@ export async function createProductionPostgresControlApi(
       config.pluginConfiguration === undefined
     )
       throw new Error("project_generation_read_ui_reader_required");
+    assertProductionProjectSelectionComposition(config, creativeProjects);
     assertProjectQueryExecutionComposition({
       queries: creativeProjects?.pluginQueries,
       publications: config.pluginUi?.configuration.publications,
@@ -251,6 +257,13 @@ export async function createProductionPostgresControlApi(
     return await composeProductionControlApi(store, productionConfig, registry);
   } catch (error) {
     const failures: unknown[] = [];
+    try {
+      await closeProductionProjectSelectionOwner(
+        config.pluginUi?.ownedProjectSelectionActions,
+      );
+    } catch (failure) {
+      failures.push(failure);
+    }
     try {
       await closeProductionProjectQueryOwner(
         config.pluginUi?.ownedProjectQueryActions,
@@ -333,6 +346,10 @@ async function composeProductionControlApi(
   let projectGenerationReadPluginRuntime:
     | ProductionProjectGenerationReadPluginRuntime
     | undefined;
+  let projectSelectionPluginRuntime:
+    | ProductionProjectGenerationSelectionPluginRuntime
+    | undefined;
+  let projectSelections: ProjectConceptSelectionApplicationService | undefined;
   let projectGenerationReads:
     | ProjectGenerationReadApplicationService
     | undefined;
@@ -391,54 +408,24 @@ async function composeProductionControlApi(
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
         projectPluginRuntime?.hostUiServices;
-      if (creativeProjects?.generationReadUi !== undefined) {
-        if (config.pluginUi === undefined)
-          throw new Error("project_generation_read_ui_configuration_required");
-        // Only this opt-in moves metadata-only reader assembly ahead of installation recovery.
-        if (
-          pluginTaskRuntime === undefined &&
-          config.pluginConfiguration !== undefined
-        )
-          pluginConfigurationRuntime =
-            await createInstalledPluginConfigurationRuntime(
-              config.pluginConfiguration.configuration,
-              {
-                store,
-                identity: config.identity as ProductionControlApiIdentity,
-                authorization: config.authorization,
-                clock,
-                digester,
-              },
-            );
-        const taskReads =
-          pluginTaskRuntime?.extensionReads ??
-          pluginConfigurationRuntime?.extensionReads;
-        const extensions =
-          creativeProjects.generationReadStore ??
-          (await prepareProjectGenerationReadStore(store));
-        projectGenerationReads = composeProjectGenerationReadService({
-          projects: creativeProjects,
-          extensions,
-          tasks: taskReads,
-          digester,
-        });
-        if (projectGenerationReads === undefined || taskReads === undefined)
-          throw new Error("project_generation_read_ui_reader_required");
-        projectGenerationReadPluginRuntime =
-          createProductionProjectGenerationReadPluginRuntime({
-            configuration: creativeProjects.generationReadUi,
-            reads: projectGenerationReads,
-            taskReads,
-            ui: config.pluginUi.configuration,
-            identity: config.identity as ProductionControlApiIdentity,
-            ...(existingHostUiServices === undefined
-              ? {}
-              : { hostUiServices: existingHostUiServices }),
-          });
-      }
-      const hostUiServices =
-        projectGenerationReadPluginRuntime?.hostUiServices ??
-        existingHostUiServices;
+      const history = await composeProductionProjectHistoryPlugins({
+        store,
+        projects: creativeProjects,
+        ui: config.pluginUi?.configuration,
+        taskRuntime: pluginTaskRuntime,
+        configuration: config.pluginConfiguration?.configuration,
+        identity: config.identity as ProductionControlApiIdentity,
+        authorization: config.authorization,
+        clock,
+        digester,
+        hostUiServices: existingHostUiServices,
+      });
+      pluginConfigurationRuntime = history.configurationRuntime;
+      projectGenerationReads = history.reads;
+      projectSelections = history.selections;
+      projectGenerationReadPluginRuntime = history.readRuntime;
+      projectSelectionPluginRuntime = history.selectionRuntime;
+      const hostUiServices = history.hostUiServices;
       if (config.pluginInstallation !== undefined) {
         if (registry === undefined)
           throw new Error("production_plugin_source_registry_required");
@@ -460,6 +447,12 @@ async function composeProductionControlApi(
         pluginUiRuntime = createProductionPluginUiRuntime(
           {
             ...config.pluginUi,
+            ...(projectSelectionPluginRuntime === undefined
+              ? {}
+              : {
+                  ownedProjectSelectionActions:
+                    projectSelectionPluginRuntime.owner,
+                }),
             ...(pluginTaskRuntime === undefined
               ? {}
               : { ownedTaskActions: pluginTaskRuntime.owner }),
@@ -645,6 +638,7 @@ async function composeProductionControlApi(
             projectGenerations: pluginTaskRuntime?.projectGenerations,
             projectQueries: pluginTaskRuntime?.projectQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
+            projectSelections: projectSelectionPluginRuntime,
           });
     const extensionReads =
       pluginTaskRuntime?.extensionReads ??
@@ -663,7 +657,16 @@ async function composeProductionControlApi(
       tasks: extensionReads,
       digester,
     });
+    projectSelections ??= composeOwnedProjectGenerationSelectionService({
+      projects: creativeProjects,
+      generationReads: projectGenerationReads,
+      owner: store,
+      authorization: config.authorization,
+      clock,
+      digester,
+    });
     const app = buildControlApi({
+      projectConceptSelections: projectSelections,
       creativeProjects: creativeProjects?.service,
       projectGenerationReads,
       pluginUi: pluginUiService,
@@ -720,6 +723,7 @@ async function composeProductionControlApi(
     app.addHook("onClose", async () => {
       await closeResources([
         () => projectPluginRuntime?.close(),
+        () => projectSelectionPluginRuntime?.close(),
         () => projectGenerationReadPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
@@ -748,6 +752,7 @@ async function composeProductionControlApi(
     try {
       await closeResources([
         () => projectPluginRuntime?.close(),
+        () => projectSelectionPluginRuntime?.close(),
         () => projectGenerationReadPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),

@@ -1361,6 +1361,24 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/creative-projects/{projectId}/concepts/{assetId}/selection": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Independent opt-in selection read. Current owner/project and original execution read authorization. Empty query only. Reads durable pointer and original verified result without provider IO, Run creation or credits. */
+    get: operations["getConceptSelection"];
+    /** @description Independent opt-in selection write. Same transaction rechecks paid generation provenance, exact succeeded operation revision, raw result index, current active project/asset metadata CAS and selection CAS. No supplier calls, new Run, credits or metadata revision changes. Same key replays the original committed receipt without replacing a newer pointer. */
+    put: operations["selectConceptImage"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3334,6 +3352,72 @@ export interface components {
     };
     GetConceptGenerationResponse: {
       generation: components["schemas"]["PublicConceptGeneration"] | null;
+    };
+    ConceptSelectionLocator: {
+      projectId: string;
+      assetId: string;
+    };
+    ConceptSelectionSource: {
+      projectId: string;
+      assetId: string;
+      assetRevision: number;
+    };
+    ConceptSelectionWriteReference: {
+      projectId: string;
+      assetId: string;
+      assetRevision: number;
+      expectedProjectRevision: number;
+      expectedAssetMetadataRevision: number;
+    };
+    /** @description At most 24 KiB. Exact original result index and independent selection CAS. The path must agree with reference. Caller cannot supply URL, Run, configuration, account, price or provider reference. Historical input may be selected using current active project and metadata CAS. */
+    SelectConceptImageRequest: {
+      reference: components["schemas"]["ConceptSelectionWriteReference"];
+      operationId: string;
+      expectedOperationRevision: number;
+      resultIndex: number;
+      expectedSelectionRevision: number;
+    };
+    PublicConceptImageSelection: {
+      reference: components["schemas"]["ConceptSelectionSource"];
+      operationId: string;
+      operationRevision: number;
+      resultIndex: number;
+      filename: string;
+      /**
+       * Format: uri
+       * @description Server verified HTTPS reference without credentials or fragment; no media bytes.
+       */
+      url: string;
+      /** Format: date-time */
+      selectedAt: string;
+    };
+    CurrentConceptImageSelection: {
+      reference: components["schemas"]["ConceptSelectionSource"];
+      operationId: string;
+      operationRevision: number;
+      resultIndex: number;
+      filename: string;
+      /**
+       * Format: uri
+       * @description Server verified HTTPS reference without credentials or fragment; no media bytes.
+       */
+      url: string;
+      /** Format: date-time */
+      selectedAt: string;
+      /** @description Only changed creative input dependencies make a saved selection require confirmation. Rename does not. */
+      requiresConfirmation: boolean;
+    };
+    /** @description At most 24 KiB. Revision zero iff actual current pointer is null. Missing capability/schema is an error, not an empty pointer. */
+    GetConceptSelectionResponse: {
+      selectionRevision: number;
+      current: components["schemas"]["CurrentConceptImageSelection"] | null;
+    };
+    /** @description At most 24 KiB. Immutable command receipt; selectionRevision equals expectedSelectionRevision + 1. Replay does not overwrite or represent a newer current pointer. Read current pointer separately. */
+    SelectConceptImageResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      selectionRevision: number;
+      selection: components["schemas"]["PublicConceptImageSelection"];
     };
   };
   responses: {
@@ -6748,6 +6832,71 @@ export interface operations {
       401: components["responses"]["Error"];
       403: components["responses"]["Error"];
       404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getConceptSelection: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded selection projection (maximum 24 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetConceptSelectionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  selectConceptImage: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["CreativeProjectIdempotencyKey"];
+      };
+      path: {
+        projectId: string;
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SelectConceptImageRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded selection projection (maximum 24 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SelectConceptImageResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };
   };

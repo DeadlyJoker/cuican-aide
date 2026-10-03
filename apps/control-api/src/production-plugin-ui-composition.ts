@@ -42,6 +42,11 @@ import {
   isInstalledPluginProjectQueryOwner,
   type InstalledPluginProjectQueryOwner,
 } from "./installed-plugin-project-query-owner.ts";
+import {
+  isProjectGenerationSelectionPluginUiOwner,
+  combineSelectionCommittedMetadata,
+  type ProjectGenerationSelectionPluginUiOwner,
+} from "./project-generation-selection-plugin-ui-owner.ts";
 
 export type ProductionPluginUiConfig = Readonly<{
   configuration: ProductionPluginUiConfiguration;
@@ -56,6 +61,7 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
   ownedProjectGenerationReadActions?: PluginProjectGenerationReadActionBridge;
   ownedProjectQueryActions?: InstalledPluginProjectQueryOwner;
+  ownedProjectSelectionActions?: ProjectGenerationSelectionPluginUiOwner;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -80,6 +86,19 @@ export function createProductionPluginUiRuntime(
   const generationOwner = input.ownedProjectGenerationActions;
   const generationReadOwner = input.ownedProjectGenerationReadActions;
   const queryOwner = input.ownedProjectQueryActions;
+  const selectionOwner = input.ownedProjectSelectionActions;
+  if (
+    selectionOwner !== undefined &&
+    !isProjectGenerationSelectionPluginUiOwner(selectionOwner)
+  )
+    throw new Error("production_plugin_ui_selection_owner_invalid");
+  const committedMetadata =
+    selectionOwner === undefined
+      ? metadataOwner?.committedMetadata
+      : combineSelectionCommittedMetadata(
+          selectionOwner.committedMetadata,
+          metadataOwner?.committedMetadata,
+        );
   if (
     queryOwner !== undefined &&
     (!isInstalledPluginProjectQueryOwner(queryOwner) ||
@@ -190,6 +209,17 @@ export function createProductionPluginUiRuntime(
         invoke: async (request) => {
           available();
           if (
+            request.action === "crewon.project-generation-selections" ||
+            request.action.startsWith("crewon.project-generation-selections.")
+          ) {
+            if (selectionOwner === undefined)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return selectionOwner.actions.invoke(request);
+          }
+          if (
             request.action === "crewon.project-generation-queries" ||
             request.action.startsWith("crewon.project-generation-queries.")
           ) {
@@ -236,9 +266,7 @@ export function createProductionPluginUiRuntime(
       ...(committedSnapshot === undefined
         ? {}
         : { committedTasks: committedSnapshot }),
-      ...(metadataOwner === undefined
-        ? {}
-        : { committedMetadata: metadataOwner.committedMetadata }),
+      ...(committedMetadata === undefined ? {} : { committedMetadata }),
     });
   const call = async <T>(
     work: (service: PluginUiApplicationService) => Promise<T>,
@@ -274,7 +302,7 @@ export function createProductionPluginUiRuntime(
     readAsset: (...args) => call((current) => current.readAsset(...args)),
     closeMount: (...args) => call((current) => current.closeMount(...args)),
     invoke: (...args) => {
-      if (committedSnapshot === undefined && metadataOwner === undefined)
+      if (committedSnapshot === undefined && committedMetadata === undefined)
         return call((current) => current.invoke(...args));
       available();
       const current = application;
@@ -296,6 +324,7 @@ export function createProductionPluginUiRuntime(
         generationReadOwner?.close(),
         owner?.close(),
         metadataOwner?.close(),
+        selectionOwner?.close(),
       ]).then((results) => {
         const failures = results.flatMap((result) =>
           result.status === "rejected" ? [result.reason] : [],
@@ -318,6 +347,13 @@ export function captureProductionPluginUiActions(
   committedTasks: PluginUiCommittedTaskPort | undefined;
   owner: InstalledPluginTaskActionOwner | undefined;
 }> {
+  if (
+    input.ownedProjectSelectionActions !== undefined &&
+    !isProjectGenerationSelectionPluginUiOwner(
+      input.ownedProjectSelectionActions,
+    )
+  )
+    throw new Error("production_plugin_ui_selection_owner_invalid");
   if (
     input.ownedProjectGenerationReadActions !== undefined &&
     !isPluginProjectGenerationReadActionBridge(

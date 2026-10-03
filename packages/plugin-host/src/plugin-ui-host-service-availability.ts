@@ -15,6 +15,8 @@ import {
   CREWON_PROJECT_GENERATION_QUERIES_API_VERSION,
   CREWON_PROJECT_GENERATION_CONTEXTS_SERVICE,
   CREWON_PROJECT_GENERATION_CONTEXTS_API_VERSION,
+  CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE,
+  CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION,
   type PluginPackageDescriptor,
   type PluginServiceRequirement,
 } from "@crewon/contracts/plugins";
@@ -86,6 +88,30 @@ export function capturePluginUiHostServiceAvailability(
   );
 }
 
+/** Extend only this metadata service; every older capability retains its captured original dispatcher. */
+export function appendProjectGenerationSelectionUiServiceAvailability(
+  input: Readonly<{
+    selection: PluginUiHostServiceAvailabilityPort;
+    fallback?: PluginUiHostServiceAvailabilityPort;
+  }>,
+): PluginUiHostServiceAvailabilityPort {
+  const selection = capturePluginUiHostServiceAvailability(input.selection)!;
+  const fallback = capturePluginUiHostServiceAvailability(input.fallback);
+  let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
+    isAvailable: (request) =>
+      request.requirement.service ===
+      CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE
+        ? selection.isAvailable(request)
+        : fallback?.isAvailable(request) === true,
+  });
+  if (fallback !== undefined) {
+    port = preserveProjectGenerationHostAvailability(fallback, port);
+    port = preserveProjectGenerationContextHostAvailability(fallback, port);
+    port = preserveProjectGenerationQueryHostAvailability(fallback, port);
+  }
+  return port;
+}
+
 /** Known optional protocols can be declared without an owner; required generation protocols need actual assembly. */
 export function assertUiOnlyServiceDeclarations(
   descriptor: PluginPackageDescriptor,
@@ -102,6 +128,10 @@ export function assertUiOnlyServiceDeclarations(
           (requirement.service === CREWON_PROJECT_GENERATION_READS_SERVICE &&
             requirement.apiVersion ===
               CREWON_PROJECT_GENERATION_READS_API_VERSION) ||
+          (requirement.service ===
+            CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE &&
+            requirement.apiVersion ===
+              CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION) ||
           (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
             requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&
             (requirement.optional ||

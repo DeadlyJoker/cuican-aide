@@ -35,6 +35,7 @@ import {
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import { composeProjectGenerationReadService } from "./project-generation-read-composition.ts";
+import { composeOwnedProjectGenerationSelectionService } from "./project-generation-selection-composition.ts";
 import type { FastifyInstance } from "fastify";
 import {
   createDesktopPluginRuntime,
@@ -651,12 +652,21 @@ function composeControlApi(
       store,
       authorization,
     });
+    const projectGenerationReads = composeProjectGenerationReadService({
+      projects: preparedProjects,
+      extensions: preparedProjects?.generationReadStore,
+      tasks: extensionReads,
+      digester,
+    });
     const app = buildControlApi({
       creativeProjects: preparedProjects?.service,
-      projectGenerationReads: composeProjectGenerationReadService({
+      projectGenerationReads,
+      projectConceptSelections: composeOwnedProjectGenerationSelectionService({
         projects: preparedProjects,
-        extensions: preparedProjects?.generationReadStore,
-        tasks: extensionReads,
+        generationReads: projectGenerationReads,
+        owner: store,
+        authorization,
+        clock,
         digester,
       }),
       application,

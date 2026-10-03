@@ -28,6 +28,8 @@ export * from "./extension-control-contract.ts";
 export * from "./extension-read-contract.ts";
 export * from "./creative-project-control-contract.ts";
 export * from "./project-generation-read-contract.ts";
+export * from "./project-generation-selection-contract.ts";
+export * from "./project-generation-selection-ui-action-contract.ts";
 export * from "./project-generation-read-ui-action-contract.ts";
 export * from "./project-generation-context-ui-action-contract.ts";
 export * from "./project-generation-host-context-contract.ts";

@@ -7,6 +7,8 @@ import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
 import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
 import { registerProjectGenerationReadRoutes } from "./project-generation-read-route.ts";
+import { registerProjectGenerationSelectionRoutes } from "./project-generation-selection-route.ts";
+import type { ProjectConceptSelectionApplicationService } from "@crewon/application";
 import type { ProjectGenerationReadApplicationService } from "@crewon/application";
 import {
   registerPluginControlRoutes,
@@ -240,6 +242,7 @@ export type ControlApiDependencies = Readonly<{
   extensionReads?: ExtensionReadApplicationService | null;
   creativeProjects?: CreativeProjectApplicationService | null;
   projectGenerationReads?: ProjectGenerationReadApplicationService | null;
+  projectConceptSelections?: ProjectConceptSelectionApplicationService | null;
   pluginInstallation?: PluginInstallationControlService | null;
   pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
@@ -375,6 +378,15 @@ export function buildControlApi(
     registerProjectGenerationReadRoutes(app, {
       identity: dependencies.identity,
       projectGenerationReads: dependencies.projectGenerationReads,
+      extensionReads: dependencies.extensionReads,
+    });
+  }
+  if (dependencies.projectConceptSelections != null) {
+    if (dependencies.extensionReads == null)
+      throw new Error("project_generation_selection_reader_required");
+    registerProjectGenerationSelectionRoutes(app, {
+      identity: dependencies.identity,
+      selections: dependencies.projectConceptSelections,
       extensionReads: dependencies.extensionReads,
     });
   }

@@ -5,8 +5,10 @@ import {
   assertPluginUiHostServiceAvailability,
   assertUiOnlyServiceDeclarations,
   capturePluginUiHostServiceAvailability,
+  appendProjectGenerationSelectionUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
+import { registerProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
 import { scope } from "./plugin-installation-local-host.test-support.ts";
 
 const requirement = Object.freeze({
@@ -49,6 +51,86 @@ function candidate(input: Parameters<typeof descriptor>[0] = {}) {
 }
 const rejectsUnavailable = (work: () => unknown) =>
   assert.throws(work, { code: "plugin_dependency_unavailable" });
+
+test("known optional image selection protocol preserves metadata-only installation without granting availability", () => {
+  const selection = {
+    service: "crewon.project-generation-selections",
+    apiVersion: "1",
+    optional: true,
+  };
+  const optional = candidate({ requires: [selection] });
+  assertUiOnlyServiceDeclarations(optional.descriptor);
+  assertPluginUiHostServiceAvailability({ scope, candidate: optional });
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: candidate({ requires: [{ ...selection, optional: false }] }),
+    }),
+  );
+  let calls = 0;
+  const unavailable = capturePluginUiHostServiceAvailability({
+    isAvailable() {
+      calls++;
+      return false;
+    },
+  });
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: optional,
+    hostUiServices: unavailable,
+  });
+  assert.equal(calls, 0);
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: candidate({ requires: [{ ...selection, optional: false }] }),
+      hostUiServices: unavailable,
+    }),
+  );
+  for (const requirement of [
+    { ...selection, apiVersion: "2" },
+    { ...selection, service: "example.crewon.project-generation-selections" },
+  ])
+    assert.throws(
+      () =>
+        assertUiOnlyServiceDeclarations(
+          descriptor({ requires: [requirement] }),
+        ),
+      { code: "plugin_ui_only_services_unsupported" },
+    );
+});
+test("selection extension cannot override or manufacture an older paid availability marker", () => {
+  const paid = {
+    service: "crewon.project-generations",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [paid] });
+  const fallback = registerProjectGenerationHostAvailability(
+    Object.freeze({ isAvailable: () => false }),
+  );
+  const extended = appendProjectGenerationSelectionUiServiceAvailability({
+    selection: { isAvailable: () => true },
+    fallback,
+  });
+  assertUiOnlyServiceDeclarations(actual.descriptor, extended);
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: extended,
+    }),
+  );
+  const falseBrand = appendProjectGenerationSelectionUiServiceAvailability({
+    selection: registerProjectGenerationHostAvailability({
+      isAvailable: () => true,
+    }),
+  });
+  assert.throws(
+    () => assertUiOnlyServiceDeclarations(actual.descriptor, falseBrand),
+    { code: "plugin_ui_only_services_unsupported" },
+  );
+});
 
 test("legacy UI-only packages stay valid; absent Host port preserves requires rejection", () => {
   assertUiOnlyServiceDeclarations(descriptor());

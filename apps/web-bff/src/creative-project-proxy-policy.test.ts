@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatCreativeProjectCursor } from "@crewon/contracts";
+import {
+  formatCreativeProjectCursor,
+  MAX_PROJECT_GENERATION_SELECTION_BYTES,
+} from "@crewon/contracts";
 import {
   boundedCreativeProjectProxyRequest,
   boundedCreativeProjectProxyResponse,
@@ -27,6 +30,23 @@ const otherSession: WebIdentitySession = {
   sessionId: "project-browser-session-b-at-least-32",
   controlAccessToken: "project-control-identity-b-at-least-32",
 };
+
+const selectionPath = `${base}/${encodeURIComponent("项目/%")}/concepts/${encodeURIComponent("概念\\图")}/selection`;
+function selectionRequest() {
+  return {
+    reference: {
+      projectId: "项目/%",
+      assetId: "概念\\图",
+      assetRevision: 2,
+      expectedProjectRevision: 7,
+      expectedAssetMetadataRevision: 3,
+    },
+    operationId: "00000000-0000-4000-8000-000000000123",
+    expectedOperationRevision: 4,
+    resultIndex: 2,
+    expectedSelectionRevision: 0,
+  };
+}
 
 function policy(path: string, method = "GET") {
   const position = path.indexOf("?");
@@ -575,4 +595,173 @@ test("project deadline and browser cancellation stop pending JSON while Run SSE 
   );
   assert.equal(events.headers.get("content-type"), "text/event-stream");
   assert.equal(await events.text(), "id: 1\ndata: {}\n\n");
+});
+
+test("independent selection route admits GET/PUT only, with empty query and 24 KiB replies", () => {
+  for (const method of ["GET", "PUT"])
+    assert.deepEqual(policy(selectionPath, method), {
+      outcome: "allow",
+      responseMaxBytes: MAX_PROJECT_GENERATION_SELECTION_BYTES,
+    });
+  for (const method of ["POST", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+    assert.deepEqual(policy(selectionPath, method), {
+      outcome: "deny",
+      status: 405,
+      code: "method_not_allowed",
+    });
+  for (const query of [
+    "?",
+    "?owner=forged",
+    "?operationId=forged",
+    "?resultIndex=0",
+  ])
+    for (const method of ["GET", "PUT"])
+      assert.equal(policy(selectionPath + query, method)?.outcome, "deny");
+  for (const suffix of ["/", "/query", "/private"])
+    assert.equal(policy(selectionPath + suffix)?.outcome, "deny");
+  assert.equal(
+    policy(`${base}/p/concepts/a/revisions/1/selection`)?.outcome,
+    "deny",
+  );
+});
+
+test("selection forwarding preserves server session, original CSRF/key, and exact choice bytes", async () => {
+  const observed: {
+    headers: Headers;
+    body: unknown;
+    method: string | undefined;
+  }[] = [];
+  const app = bff(async (url, init) => {
+    assert.equal(String(url), `${target}${selectionPath}`);
+    observed.push({
+      headers: new Headers(init?.headers),
+      body: init?.body
+        ? JSON.parse(new TextDecoder().decode(init.body as Uint8Array))
+        : null,
+      method: init?.method,
+    });
+    return Response.json(
+      init?.method === "GET"
+        ? { selectionRevision: 0, current: null }
+        : { disposition: "committed", selectionRevision: 1, selection: {} },
+    );
+  });
+  const csrf = await csrfToken(app);
+  const read = await app.handle(
+    request(selectionPath, {
+      headers: {
+        cookie,
+        "authorization": "Bearer forged",
+        "x-crewon-principal-id": "forged",
+      },
+    }),
+  );
+  assert.equal(read.status, 200);
+  const write = await app.handle(
+    request(selectionPath, {
+      method: "PUT",
+      headers: {
+        ...writeHeaders(csrf, "choose-once"),
+        "x-crewon-principal-id": "forged",
+      },
+      body: JSON.stringify(selectionRequest()),
+    }),
+  );
+  assert.equal(write.status, 200);
+  assert.equal(observed.length, 2);
+  assert.deepEqual(observed[1]!.body, selectionRequest());
+  for (const item of observed) {
+    assert.equal(
+      item.headers.get("authorization"),
+      `Bearer ${session.controlAccessToken}`,
+    );
+    assert.equal(item.headers.get("x-crewon-principal-id"), null);
+  }
+  assert.equal(observed[0]!.headers.get("idempotency-key"), null);
+  assert.equal(observed[1]!.headers.get("idempotency-key"), "choose-once");
+  assert.equal(observed[1]!.headers.get("x-csrf-token"), controlCsrf);
+});
+
+test("selection body and path mismatch or injected authority is refused before upstream", async () => {
+  let calls = 0;
+  const app = bff(async () => {
+    calls++;
+    return Response.json({});
+  });
+  const csrf = await csrfToken(app);
+  for (const body of [
+    {
+      ...selectionRequest(),
+      reference: { ...selectionRequest().reference, projectId: "other" },
+    },
+    {
+      ...selectionRequest(),
+      reference: { ...selectionRequest().reference, assetId: "other" },
+    },
+    { ...selectionRequest(), url: "https://forged.test" },
+    {
+      ...selectionRequest(),
+      source: { kind: "authenticated-project-command" },
+    },
+    { ...selectionRequest(), resultIndex: 16 },
+    { ...selectionRequest(), idempotencyKey: "body-key" },
+  ])
+    assert.equal(
+      (
+        await app.handle(
+          request(selectionPath, {
+            method: "PUT",
+            headers: writeHeaders(csrf),
+            body: JSON.stringify(body),
+          }),
+        )
+      ).status,
+      400,
+    );
+  assert.equal(
+    (
+      await app.handle(
+        request(selectionPath, {
+          method: "PUT",
+          headers: writeHeaders("forged-csrf"),
+          body: JSON.stringify(selectionRequest()),
+        }),
+      )
+    ).status,
+    403,
+  );
+  assert.equal(calls, 0);
+});
+
+test("selection request and response streams obey 24 KiB without changing metadata bounds", async () => {
+  let calls = 0;
+  const app = bff(async () => {
+    calls++;
+    return Response.json({
+      padding: "a".repeat(MAX_PROJECT_GENERATION_SELECTION_BYTES),
+    });
+  });
+  const csrf = await csrfToken(app);
+  const huge = await app.handle(
+    request(selectionPath, {
+      method: "PUT",
+      headers: writeHeaders(csrf),
+      body: JSON.stringify({
+        ...selectionRequest(),
+        padding: "a".repeat(MAX_PROJECT_GENERATION_SELECTION_BYTES),
+      }),
+    }),
+  );
+  assert.equal(huge.status, 413);
+  assert.equal(calls, 0);
+  assert.equal(
+    (await app.handle(request(selectionPath, { headers: { cookie } }))).status,
+    502,
+  );
+  assert.equal(calls, 1);
+  assert.equal(policy(`${base}/p`)?.outcome, "allow");
+  assert.equal(
+    (await app.handle(request(`${base}/p`, { headers: { cookie } }))).status,
+    200,
+  );
 });

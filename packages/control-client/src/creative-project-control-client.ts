@@ -1,5 +1,6 @@
 import {
   MAX_CREATIVE_PROJECT_RESPONSE_BYTES,
+  MAX_PROJECT_GENERATION_SELECTION_BYTES,
   parseAppendConceptAssetRevisionRequest,
   parseAppendProjectBriefRequest,
   parseConceptAssetListQuery,
@@ -18,6 +19,10 @@ import {
   parseGetConceptRevisionResponse,
   parseConceptGenerationLocator,
   parseGetConceptGenerationResponse,
+  parseConceptSelectionLocator,
+  parseGetConceptSelectionResponse,
+  parseSelectConceptImageRequest,
+  parseSelectConceptImageResponse,
   parseGetCreativeProjectResponse,
   parseGetProjectBriefResponse,
   parseProjectBriefListQuery,
@@ -26,6 +31,8 @@ import {
   parseSetCreativeProjectStateRequest,
   type AppendConceptAssetRevisionRequest,
   type ConceptGenerationLocator,
+  type ConceptSelectionLocator,
+  type SelectConceptImageRequest,
   type AppendProjectBriefRequest,
   type CreateConceptAssetRequest,
   type CreateCreativeProjectRequest,
@@ -231,6 +238,45 @@ export class CreativeProjectControlClient {
     return this.#output(() =>
       parseGetConceptGenerationResponse(result, locator),
     );
+  }
+  async getConceptSelection(
+    input: ConceptSelectionLocator,
+    options: CreativeProjectControlRequestOptions = {},
+  ) {
+    const locator = this.#input(() => parseConceptSelectionLocator(input));
+    const result = await this.#json(
+      "GET",
+      `${conceptPath(locator.projectId, locator.assetId)}/selection`,
+      null,
+      options,
+      { maximumResponseBytes: MAX_PROJECT_GENERATION_SELECTION_BYTES },
+    );
+    return this.#output(() =>
+      parseGetConceptSelectionResponse(result, locator),
+    );
+  }
+  async selectConceptImage(
+    input: SelectConceptImageRequest,
+    idempotencyKey: string,
+    options: CreativeProjectControlRequestOptions = {},
+  ) {
+    const request = this.#input(() => parseSelectConceptImageRequest(input));
+    const key = this.#input(() =>
+      parseCreativeProjectIdempotencyKey(idempotencyKey),
+    );
+    const result = await this.#json(
+      "PUT",
+      `${conceptPath(request.reference.projectId, request.reference.assetId)}/selection`,
+      request,
+      options,
+      {
+        requireCsrf: true,
+        requireIdempotency: true,
+        idempotencyKey: key,
+        maximumResponseBytes: MAX_PROJECT_GENERATION_SELECTION_BYTES,
+      },
+    );
+    return this.#output(() => parseSelectConceptImageResponse(result, request));
   }
   async listBriefs(
     projectId: string,

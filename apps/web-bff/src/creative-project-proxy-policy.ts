@@ -1,5 +1,6 @@
 import {
   MAX_CREATIVE_PROJECT_RESPONSE_BYTES,
+  MAX_PROJECT_GENERATION_SELECTION_BYTES,
   parseConceptAssetListQuery,
   parseConceptRevisionListQuery,
   parseCreativeProjectEmptyQuery,
@@ -8,6 +9,7 @@ import {
   parseCreativeProjectListQuery,
   parseCreativeProjectRevision,
   parseProjectBriefListQuery,
+  parseSelectConceptImageRequest,
 } from "@crewon/contracts";
 import { boundedExtensionProxyResponse } from "./extension-proxy-policy.ts";
 import { boundedPluginProxyRequest } from "./plugin-proxy-policy.ts";
@@ -79,6 +81,7 @@ export function creativeProjectProxyPolicy(input: {
   const suffix = input.pathname.slice(PREFIX.length);
   const parts = suffix === "" ? [] : suffix.slice(1).split("/");
   let methods: readonly string[];
+  let responseMaxBytes = CREATIVE_PROJECT_PROXY_RESPONSE_MAX_BYTES;
   let query: QueryKind = "empty";
   if (parts.length === 0) {
     methods = ["GET", "POST"];
@@ -101,7 +104,10 @@ export function creativeProjectProxyPolicy(input: {
     query = "concepts";
   } else if (parts[1] === "concepts" && opaqueSegment(parts[2] ?? "")) {
     if (parts.length === 3) methods = ["GET"];
-    else if (parts.length === 4 && parts[3] === "revisions") {
+    else if (parts.length === 4 && parts[3] === "selection") {
+      methods = ["GET", "PUT"];
+      responseMaxBytes = MAX_PROJECT_GENERATION_SELECTION_BYTES;
+    } else if (parts.length === 4 && parts[3] === "revisions") {
       methods = ["GET", "POST"];
       query = "revisions";
     } else if (
@@ -118,7 +124,7 @@ export function creativeProjectProxyPolicy(input: {
     return denied(400, "creative_project_query_invalid");
   return Object.freeze({
     outcome: "allow",
-    responseMaxBytes: CREATIVE_PROJECT_PROXY_RESPONSE_MAX_BYTES,
+    responseMaxBytes,
   });
 }
 
@@ -204,13 +210,37 @@ export async function boundedCreativeProjectProxyRequest(
   if (request.method === "GET") return null;
   try {
     parseCreativeProjectIdempotencyKey(request.headers.get("idempotency-key"));
-    const bytes = await boundedPluginProxyRequest(request, signal);
+    const url = new URL(request.url);
+    const policy = creativeProjectProxyPolicy({
+      pathname: url.pathname,
+      search: url.search,
+      method: request.method,
+    });
+    const selection =
+      policy?.outcome === "allow" &&
+      policy.responseMaxBytes === MAX_PROJECT_GENERATION_SELECTION_BYTES;
+    const bytes = await boundedPluginProxyRequest(
+      request,
+      signal,
+      selection
+        ? { maximumBytes: MAX_PROJECT_GENERATION_SELECTION_BYTES }
+        : undefined,
+    );
     if (bytes === null) throw new Error("creative_project_request_invalid");
     const value: unknown = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     );
     if (value === null || typeof value !== "object" || Array.isArray(value))
       throw new Error("creative_project_request_invalid");
+    if (selection) {
+      const checked = parseSelectConceptImageRequest(value);
+      const parts = url.pathname.slice(PREFIX.length + 1).split("/");
+      if (
+        checked.reference.projectId !== decodeURIComponent(parts[0]!) ||
+        checked.reference.assetId !== decodeURIComponent(parts[2]!)
+      )
+        throw new Error("creative_project_request_invalid");
+    }
     signal.throwIfAborted();
     return bytes;
   } catch (error) {
@@ -227,8 +257,17 @@ export async function boundedCreativeProjectProxyRequest(
 export async function boundedCreativeProjectProxyResponse(input: {
   upstream: Response;
   signal: AbortSignal;
+  maximumBytes?: number;
 }): Promise<Response> {
   const { upstream, signal } = input;
+  const maximumBytes =
+    input.maximumBytes ?? CREATIVE_PROJECT_PROXY_RESPONSE_MAX_BYTES;
+  if (
+    !Number.isSafeInteger(maximumBytes) ||
+    maximumBytes < 1 ||
+    maximumBytes > CREATIVE_PROJECT_PROXY_RESPONSE_MAX_BYTES
+  )
+    throw new Error("creative_project_response_invalid");
   if (
     upstream.body === null ||
     upstream.status < 200 ||
@@ -245,7 +284,7 @@ export async function boundedCreativeProjectProxyResponse(input: {
     const finite = await boundedExtensionProxyResponse({
       upstream,
       signal,
-      maximumBytes: CREATIVE_PROJECT_PROXY_RESPONSE_MAX_BYTES,
+      maximumBytes,
     });
     signal.throwIfAborted();
     const bytes = await finite.arrayBuffer();

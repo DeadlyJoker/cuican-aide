@@ -5560,6 +5560,133 @@
           }
         }
       }
+    },
+    "/api/v1/creative-projects/{projectId}/concepts/{assetId}/selection": {
+      "get": {
+        "operationId": "getConceptSelection",
+        "description": "Independent opt-in selection read. Current owner/project and original execution read authorization. Empty query only. Reads durable pointer and original verified result without provider IO, Run creation or credits.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded selection projection (maximum 24 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetConceptSelectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      },
+      "put": {
+        "operationId": "selectConceptImage",
+        "description": "Independent opt-in selection write. Same transaction rechecks paid generation provenance, exact succeeded operation revision, raw result index, current active project/asset metadata CAS and selection CAS. No supplier calls, new Run, credits or metadata revision changes. Same key replays the original committed receipt without replacing a newer pointer.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CreativeProjectIdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectConceptImageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded selection projection (maximum 24 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SelectConceptImageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -13020,6 +13147,263 @@
             ]
           }
         }
+      },
+      "ConceptSelectionLocator": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["projectId", "assetId"],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "ConceptSelectionSource": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["projectId", "assetId", "assetRevision"],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "ConceptSelectionWriteReference": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "assetId",
+          "assetRevision",
+          "expectedProjectRevision",
+          "expectedAssetMetadataRevision"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "assetRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "expectedAssetMetadataRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "SelectConceptImageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "operationId",
+          "expectedOperationRevision",
+          "resultIndex",
+          "expectedSelectionRevision"
+        ],
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/ConceptSelectionWriteReference"
+          },
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "expectedOperationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "resultIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "expectedSelectionRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740990
+          }
+        },
+        "description": "At most 24 KiB. Exact original result index and independent selection CAS. The path must agree with reference. Caller cannot supply URL, Run, configuration, account, price or provider reference. Historical input may be selected using current active project and metadata CAS."
+      },
+      "PublicConceptImageSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "operationId",
+          "operationRevision",
+          "resultIndex",
+          "filename",
+          "url",
+          "selectedAt"
+        ],
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/ConceptSelectionSource"
+          },
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "operationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "resultIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "Server verified HTTPS reference without credentials or fragment; no media bytes."
+          },
+          "selectedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CurrentConceptImageSelection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "operationId",
+          "operationRevision",
+          "resultIndex",
+          "filename",
+          "url",
+          "selectedAt",
+          "requiresConfirmation"
+        ],
+        "properties": {
+          "reference": {
+            "$ref": "#/components/schemas/ConceptSelectionSource"
+          },
+          "operationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "operationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "resultIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "Server verified HTTPS reference without credentials or fragment; no media bytes."
+          },
+          "selectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "requiresConfirmation": {
+            "type": "boolean",
+            "description": "Only changed creative input dependencies make a saved selection require confirmation. Rename does not."
+          }
+        }
+      },
+      "GetConceptSelectionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["selectionRevision", "current"],
+        "properties": {
+          "selectionRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentConceptImageSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "At most 24 KiB. Revision zero iff actual current pointer is null. Missing capability/schema is an error, not an empty pointer."
+      },
+      "SelectConceptImageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "selectionRevision", "selection"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "selectionRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "selection": {
+            "$ref": "#/components/schemas/PublicConceptImageSelection"
+          }
+        },
+        "description": "At most 24 KiB. Immutable command receipt; selectionRevision equals expectedSelectionRevision + 1. Replay does not overwrite or represent a newer current pointer. Read current pointer separately."
       }
     }
   }

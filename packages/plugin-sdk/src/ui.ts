@@ -21,6 +21,8 @@ export { createPluginProjectGenerationReadClient } from "./project-generation-re
 export type { PluginProjectGenerationReadClient } from "./project-generation-read-ui.types.js";
 export { createPluginProjectGenerationQueryClient } from "./project-generation-query-ui.js";
 export type { PluginProjectGenerationQueryClient } from "./project-generation-query-ui.types.js";
+export { createPluginProjectGenerationSelectionClient } from "./project-generation-selection-ui.js";
+export type { PluginProjectGenerationSelectionClient } from "./project-generation-selection-ui.types.js";
 export { createPluginProjectGenerationContextClient } from "./project-generation-context-ui.js";
 export type { PluginProjectGenerationContextClient } from "./project-generation-context-ui.types.js";
 export {
@@ -38,6 +40,8 @@ export {
   CREWON_PROJECT_GENERATION_READS_API_VERSION,
   CREWON_PROJECT_GENERATION_QUERIES_SERVICE,
   CREWON_PROJECT_GENERATION_QUERIES_API_VERSION,
+  CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE,
+  CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION,
   CREWON_PROJECT_GENERATION_CONTEXTS_SERVICE,
   CREWON_PROJECT_GENERATION_CONTEXTS_API_VERSION,
 } from "./contracts.js";
@@ -55,6 +59,15 @@ export type {
   ProjectGenerationQueryUiInput,
   ProjectGenerationQueryUiReceipt,
   ProjectGenerationQueryUiActionRequest,
+  ProjectGenerationSelectionUiAction,
+  ProjectGenerationSelectionUiInput,
+  ProjectGenerationSelectionUiActionRequest,
+  ProjectGenerationSelectionUiResponse,
+  ConceptSelectionLocator,
+  PublicConceptImageSelection,
+  GetConceptSelectionResponse,
+  SelectConceptImageRequest,
+  SelectConceptImageResponse,
   ConceptGenerationLocator,
   ConceptGenerationImage,
   ConceptGenerationOperation,

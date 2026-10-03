@@ -1,3 +1,5 @@
+import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
+import type { ProjectGenerationImageResultVerifier } from "@crewon/application";
 import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import { createSqlitePluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
@@ -715,6 +717,18 @@ export class SqliteRunStore implements DomainStore {
     return createSqliteCreativeProjectStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Independent result selection adapter; construction neither migrates nor enables it. */
+  projectConceptSelectionStore(input: {
+    verifier: ProjectGenerationImageResultVerifier;
+  }): SqliteProjectConceptSelectionStore {
+    this.#assertOpen();
+    return new SqliteProjectConceptSelectionStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      verifier: input.verifier,
     });
   }
 

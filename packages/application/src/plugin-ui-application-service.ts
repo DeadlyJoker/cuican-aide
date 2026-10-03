@@ -277,7 +277,9 @@ export class PluginUiApplicationService {
         context,
         () => this.#fence(actor, binding, "invoke"),
         () => this.#alive(binding),
-        command.action.startsWith("crewon.creative-projects.")
+        command.action.startsWith("crewon.creative-projects.") ||
+          command.action ===
+            "crewon.project-generation-selections.v1.selectConceptImage"
           ? Object.freeze({
               assertCurrent: () => this.#transactionFence(actor, binding),
             })

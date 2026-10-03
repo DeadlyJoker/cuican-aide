@@ -433,6 +433,26 @@ export type InstalledPluginReadRequestScope = Readonly<
   }
 >;
 
+/** Optional original HTTP reader fence; legacy unbound readers retain their original local identity path. */
+export function captureInstalledPluginHttpReadCommitAuthority(
+  service: ExtensionReadApplicationService,
+):
+  | Readonly<{ assertCurrent(): Promise<void>; assertActive(): void }>
+  | undefined {
+  if (!(service instanceof ExtensionReadApplicationService)) denied();
+  const binding = serviceOwners.get(service);
+  if (binding === undefined) return undefined;
+  if (binding.preparation !== "configuration") denied();
+  const current = binding.owner.assertCurrent.bind(binding.owner);
+  const signal = binding.owner.currentSignal.bind(binding.owner);
+  return Object.freeze({
+    assertCurrent: current,
+    assertActive: () => {
+      signal().throwIfAborted();
+    },
+  });
+}
+
 /** Unbound legacy instances take precisely their original path, without peer/profile/token reads. */
 export async function withInstalledPluginHttpRequest<T>(
   service: object,

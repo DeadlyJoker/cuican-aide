@@ -35,6 +35,13 @@ import {
   captureProjectGenerationReadPluginUiConfig,
   type ProjectGenerationReadPluginUiConfig,
 } from "./project-generation-read-plugin-ui-composition.ts";
+import {
+  captureProjectGenerationSelectionConfiguration,
+  prepareProjectGenerationSelectionStore,
+  type ProjectGenerationSelectionConfiguration,
+  type ProjectGenerationSelectionStore,
+  type ProjectGenerationSelectionStoreOwner,
+} from "./project-generation-selection-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
@@ -44,6 +51,8 @@ export type CreativeProjectCompositionConfig = Readonly<{
   pluginQueries?: ProjectQueryPluginConfiguration;
   generationReads?: ProjectGenerationReadConfiguration;
   generationReadUi?: ProjectGenerationReadPluginUiConfig;
+  resultSelections?: ProjectGenerationSelectionConfiguration;
+  selectionUi?: CreativeProjectPluginUiConfig;
 }>;
 
 export type PreparedCreativeProjects = {
@@ -52,6 +61,15 @@ export type PreparedCreativeProjects = {
   readonly generationReads?: ProjectGenerationReadConfiguration;
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
   readonly generationReadStore?: ProjectGenerationReadStore;
+  readonly selectionUi?: CreativeProjectPluginUiConfig;
+  readonly resultSelections?: ProjectGenerationSelectionConfiguration &
+    Readonly<{
+      store: ProjectGenerationSelectionStore;
+      projects: Readonly<{
+        store: CreativeProjectStore;
+        authorization: CreativeProjectAuthorizationPort;
+      }>;
+    }>;
   readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
     Readonly<{
       store: CreativeProjectStore;
@@ -69,6 +87,7 @@ export type PreparedCreativeProjects = {
 type CreativeProjectStoreOwner = Readonly<{
   creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
   extensionStore?(): ProjectGenerationReadStore;
+  projectConceptSelectionStore?: ProjectGenerationSelectionStoreOwner["projectConceptSelectionStore"];
 }>;
 
 /** Capture the borrowed method before asynchronous startup without changing the caller. */
@@ -87,7 +106,9 @@ export function captureCreativeProjectCompositionConfig(
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
         key !== "generationReads" &&
-        key !== "generationReadUi",
+        key !== "generationReadUi" &&
+        key !== "resultSelections" &&
+        key !== "selectionUi",
     ) ||
     !Object.hasOwn(fields, "authorization") ||
     !Object.hasOwn(fields.authorization!, "value")
@@ -140,6 +161,24 @@ export function captureCreativeProjectCompositionConfig(
   );
   if (generationReadUi !== undefined && generationReads === undefined)
     throw new Error("project_generation_read_ui_reader_required");
+  for (const key of ["resultSelections", "selectionUi"] as const) {
+    const field = fields[key];
+    if (
+      field !== undefined &&
+      (!Object.hasOwn(field, "value") || !field.enumerable)
+    )
+      throw new Error("creative_project_configuration_invalid");
+  }
+  const resultSelections = captureProjectGenerationSelectionConfiguration(
+    fields.resultSelections?.value,
+  );
+  const selectionUi = captureCreativeProjectPluginUiConfig(
+    fields.selectionUi?.value,
+  );
+  if (resultSelections !== undefined && generationReads === undefined)
+    throw new Error("project_generation_selection_reader_required");
+  if (selectionUi !== undefined && resultSelections === undefined)
+    throw new Error("project_generation_selection_ui_store_required");
   const port = fields.authorization!.value as
     | CreativeProjectAuthorizationPort
     | null
@@ -164,6 +203,8 @@ export function captureCreativeProjectCompositionConfig(
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
         ...(generationReads === undefined ? {} : { generationReads }),
         ...(generationReadUi === undefined ? {} : { generationReadUi }),
+        ...(resultSelections === undefined ? {} : { resultSelections }),
+        ...(selectionUi === undefined ? {} : { selectionUi }),
       });
     }
     target = Object.getPrototypeOf(target);
@@ -199,7 +240,38 @@ export async function prepareCreativeProjects(
       : undefined;
   const store = owner.creativeProjectStore();
   await store.migrate();
+  const selectionStore =
+    configuration.resultSelections === undefined
+      ? undefined
+      : await prepareProjectGenerationSelectionStore(
+          {
+            projectConceptSelectionStore: (input) => {
+              if (owner.projectConceptSelectionStore === undefined)
+                throw new Error(
+                  "project_generation_selection_composition_required",
+                );
+              return owner.projectConceptSelectionStore(input);
+            },
+          },
+          configuration.resultSelections,
+        );
   return {
+    ...(configuration.selectionUi === undefined
+      ? {}
+      : { selectionUi: configuration.selectionUi }),
+    ...(configuration.resultSelections === undefined ||
+    selectionStore === undefined
+      ? {}
+      : {
+          resultSelections: Object.freeze({
+            ...configuration.resultSelections,
+            store: selectionStore,
+            projects: Object.freeze({
+              store,
+              authorization: configuration.authorization,
+            }),
+          }),
+        }),
     ...(configuration.pluginQueries === undefined
       ? {}
       : {

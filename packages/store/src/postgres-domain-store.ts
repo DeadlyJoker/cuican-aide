@@ -1,3 +1,5 @@
+import { PostgresProjectConceptSelectionStore } from "./postgres-project-concept-selection-store.ts";
+import type { ProjectGenerationImageResultVerifier } from "@crewon/application";
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
 import { createPostgresPluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
@@ -209,6 +211,19 @@ export class PostgresDomainStore
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Independent result selection adapter; construction neither migrates nor enables it. */
+  projectConceptSelectionStore(input: {
+    verifier: ProjectGenerationImageResultVerifier;
+  }): PostgresProjectConceptSelectionStore {
+    this.assertOpen();
+    return new PostgresProjectConceptSelectionStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+      verifier: input.verifier,
     });
   }
 

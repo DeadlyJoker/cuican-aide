@@ -13,6 +13,9 @@ export function captureProductionPluginUiOwnerConfiguration(
   const actions = input.actions;
   const committed = input.committedTasks;
   return Object.freeze({
+    ...(input.ownedProjectSelectionActions === undefined
+      ? {}
+      : { ownedProjectSelectionActions: input.ownedProjectSelectionActions }),
     configuration: parseProductionPluginUiConfiguration(input.configuration),
     ...(actions === undefined
       ? {}
