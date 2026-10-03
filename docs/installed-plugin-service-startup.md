@@ -6,6 +6,8 @@ Control 支持显式启用已安装插件的 UI 目录、挂载及资源读取�
 
 Worker 的已安装业务执行另有[私有部署协议](./installed-plugin-worker-deployment.md)。它显式读取真实安装包、已经发布的 Agent/配置及当前 HTTPS 权威；安装管理、UI 发布和执行权限分别检查。正式 Control 动作桥已接线，实际子进程证据使用具名服务夹具；真实业务身份、价格、资金及积分结算仍需部署和验收。
 
+短剧 9.0.0 与 Krea2 2.0.0 的[具体生产项目配置](./short-drama-production-deployment-review.md)已从实际交付包生成，并通过原私有 loader 校验。该产物固定项目动作映射、结果验证身份和原请求恢复；尚未应用到用户服务，不替代真实安装选择、Agent 发布、身份/包/网络许可、可用供应商及个人积分配置。
+
 ## 部署配置
 
 生产启动使用已有 `CREWON_CONTROL_SECURITY_MODE=production`、数据库及身份配置，再提供以下变量：

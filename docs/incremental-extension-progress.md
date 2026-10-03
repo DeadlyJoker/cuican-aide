@@ -6,6 +6,14 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：实际短剧与 Krea2 包的生产项目配置
+
+已从真实短剧 9.0.0 与 Krea2 2.0.0 交付包生成完整八项项目配置，固定 UI 来源、生成/查询目标、图片验证身份及三类原请求恢复。具体产物、身份与使用前提见[生产项目配置](./short-drama-production-deployment-review.md)。原 Host verifier、临时文件安装及公共业务 registration 前后复核通过，正式 Production 私有 loader 接受实际 `0600` 配置；同文件在 Standalone 被拒绝。临时安装根已清理，没有用户 profile/选择、Agent 发布、activation、数据库、Worker、模型、供应商或积分操作。
+
+配置 SHA-256 为 `d4ee9463833a982a521e98639c94c4608a07c28d52dab0dd00ee726f15ccc83b`，证明为 `output/extensions/deployment-prep/short-drama9-krea2-20261004/verification.json`。14 个保护源文件、15 份正式 UI 资产、冻结 SDK 与旧短剧 8.0.0 包复核一致。动作名称是现有 Krea 适配器的明确部署选择，正式 owner 的运行时 action 检查继续保留；静态包和配置校验不证明执行就绪。
+
+本轮用户原 ComfyUI 的首页、队列和系统状态再次实际返回 HTTP 404，只进行 GET；证据为 `output/extensions/checks/comfyui-original-service-availability-20261004-deployment-review.json`。真实身份/部署、个人积分资金/价格/结算、可用供应商服务、完整在线 S0、Native/打包版和 E5 仍未联合验收，完整目标继续进行。
+
 ## 2026-10-04：独立短剧 9.0.0 与原完整 Web App 重启恢复
 
 9.0.0 修复同一保存来源的三类 UNKNOWN 原请求互锁：宿主允许重试时，用户可以显式重放确切原请求；实际在途请求、来源冲突、元数据写入和未就绪仍阻止重试，新写操作继续锁定。原 key、输入及全部旧 CAS 保留。新包在仓外使用冻结 SDK 离线严格编译、自持构建，发布 ESM **78/78** 通过；原 UI 四文件窄回归 **21/21** 通过。实际 Host verifier 核验七个声明文件，产物为 `output/extensions/installable-plugins/recovery-ui9-short-drama-20261004/short-drama/9.0.0`，packageDigest 为 `sha256:981c3bcdb7fc9c47186118a482bb1d8ec3dd1d4f95d3a09139f7a104dfba2334`。旧 8.0.0 产物保持独立；原 App 的 14 个受保护源文件、15 份正式资产及 SDK 摘要均保持一致。
