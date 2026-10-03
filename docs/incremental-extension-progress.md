@@ -4,6 +4,26 @@
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
+历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
+
+## 2026-10-03：执行服务准入与独立短剧页面包
+
+公开 SDK 执行工厂增加可选 `requiredServices`，支持严格的 `externalOperations`/`jsonHttp` 声明。Host 从真实已安装工厂捕获不可变声明，并在业务 `create` 前核验实际端口；旧未声明工厂保持兼容。Krea2 独立包声明两项服务，不再依赖业务创建后才发现宿主缺少 IO。
+
+实际 `InstalledPluginExtensionHost` 与历史 `InstalledPluginQueryHost` 在返回就绪前调用可信部署的预检。`executionIo.resolveReadinessNetwork` 接收真实包、profile、配置、完整目标和 submit/observe 用途，不创造 Run、命令、operation 或调用 HTTP。缺 owner、配置、预检、持久操作端口、批准路径或公共 HTTPS DNS 时拒绝；等待后再次核验当前权限、部署和真实 Node 工厂。历史查询还修复了等待后未重新核验原 AgentVersion 读取权限的问题。最终调用者授权等待期间撤回真实 Node 工厂的竞态也已修复：所有异步 gate 完成后才做最后工厂核验，再同步返回；现代声明与旧包两项真实 ESM 回归先在旧源码复现错误 ready，修复后通过。
+
+Worker 程序化组合借出 `pluginExecutionReadiness`，从父 Store 和已捕获的 IO 配置构造真实 owner，并将同一端口交给历史查询 Host。外部配置/任务 Host 可借入该端口，必须先关闭自己再关闭 Worker。超时和逻辑取消不释放尚未物理结束的 callback/DNS 槽，Worker 关闭等待它们结束后才关闭 Store。
+
+新 `examples/plugins/short-drama` 只依赖公开 SDK/UI、React/ReactDOM 和原 lucide 版本。原业务 CSS、图标、6 份其他业务文件及 PNG 保持原样，页面作为 UI-only 的 `crewon.short-drama/workbench` 安装；没有 Node、任务或计费服务。主题投影补齐原控件、间距、圆角、阴影与代码字体变量，共 39 个受支持名称，不改变宿主全局样式。卸载关闭 dialog、通知定时器和自身 DOM，重开明确重置内存演示数据。
+
+官方 producer 已用唯一 SDK tarball 在仓外严格构建专业报告、Krea2 和短剧各两版本，实际删除开发目录及依赖后再运行消费者。短剧真实 SQLite/PostgreSQL 安装、资产读取、通用 loader、交互、主题、卸载/重开及升级/停用专项 **8/8**；包内实际 ESM 行为 **7/7**。Krea、原业务和 query composition 双库专项 **30/30**，包含服务撤回或私有 DNS 时在报价/个人预留之前拒绝。SDK 分发 **8/8**、Host 全量 **202/202**、正式 Worker 双库全量 **1,521/1,521，零跳过**；Control 全量 **374 通过、1 项 Linux 进程用例在 macOS 跳过，共 375 项**，均零失败。readiness、关闭与原 Agent 权限专项也已通过。全量日志为 `readiness-short-drama-worker-final-full-20261003.log`、`required-services-control-full-20261003.log`，短剧专项为 `short-drama-installed-ui-integration.log`；其余日志前缀 `required-services-*`、`plugin-io-readiness-*`。原 5719 用户栏已实际点击进入原 11 类设置，外观页可用。最终相关 UI **22 文件、231/231**、UI lint（含 Electron 类型）与 UI build 均通过，日志为 `installed-short-drama-final-ui-{tests,lint,build}-20261003.log`；这一窄跑不改写历史全量 UI 的失败记录。
+
+[已安装短剧预览](../artifacts/installed-short-drama-preview/README.md) 在 5720 使用真实 SQLite 安装、原 Control 身份/CSRF 路由及正式 UI loader，通过浏览器原生动态 import 加载实际 `ui.mjs` 和 PNG。首次浏览器暴露 Vite 开发模式注入精确 `?import` 与正式资产空查询契约冲突；正式 UI Vite 代理和夹具共用有界路径归一化，仅移除合法已安装 JS 资产的精确空标记，51 项边界测试通过，额外及非空查询仍由正式路由拒绝，没有弱化生产协议。
+
+实际浏览器已验证项目、概念图与生成记录展示、新建内存项目、原用户菜单及设置、退出重开重置、原生 dialog 随退出清理。设置和离开模块时服务端 active mounts 均为 0，重开为 1；原左栏展开占 232px、右工作台占 480px，1280px 窗口主内容宽度依次为 1280、1048、568px，没有遮挡。HTTP proof 核验 JS/PNG 摘要、Origin/CSRF/私有资产和关闭边界；浏览器后实际账本 Run、thread、message 均为 0，未创建积分表。证据为 `installed-short-drama-preview-http-20261003.json`、`installed-short-drama-browser-{leave,settings,final}-proof-20261003.json` 及 `output/extensions/short-drama-preview/ui-settings-recovery/` 截图。这里使用具名本机预览身份，不能当作生产登录或在线生成验收。
+
+新预构建目录 `output/extensions/installable-plugins/readiness-short-drama-20261003/{krea2,short-drama}/<version>` 已通过实际包 verifier 重新核验四个完整复制目录，摘要见父级 `verification.json`。Krea2 每版本 7 文件、51,614 字节；短剧每版本 8 文件、1,949,650 字节。这是待安装交付物，不能冒称在用户生产 profile 已启用。短剧 UI-only 独立包已完成实包安装验收，当前仍为页面演示，没有真实保存项目、生成视频、扣费或跨插件委托。生产 main 的身份/包许可/动作桥、真实价格与失败退款/积分结算、安装管理页面、在线 Krea2 和第二个真实企业 API 仍未完成，目标保持进行中。
+
 ## 2026-10-03：独立 Krea2 包、宿主 IO 与历史查询
 
 `examples/plugins/comfyui-krea2` 只依赖公开 SDK 和 Node 标准库，提供 Node 动作、执行工厂及独立 UI。已在仓外实际安装 SDK tarball、严格编译并构建 1.0.0/2.0.0；1.0.0 包内测试 12/12。固定单张 1MP 工作流沿用原已验证配置；上传文件的 4MP 差异有明确来源记录，没有隐含增加成本。原内置 ComfyUI v0 实现和摘要保留。
@@ -24,7 +44,7 @@ SDK `crewon.tasks@2` 增加引用式历史查询，API 1 保留。独立 `crewon
 
 标准 Worker 测试现在先串行打包 SDK，在仓外构建专业报告与 Krea 的 1.0.0/2.0.0，删除实际开发目录及 SDK 依赖后才启动消费者。最终 Worker 双库全量 **1,484/1,484**，SDK 分发 **8/8**、Domain **202/202**、Application **328/328**、Host **185/185**。Control **374 通过、1 跳过**：跳过依赖 Linux 进程检查的用例；Store **1,440 通过、1 跳过**：已配置 PostgreSQL 时跳过“未配置 URL”的占位用例，真实 PostgreSQL 行为均运行。没有失败。日志为 `krea2-{worker,control}-full-dualstore-20261003.log` 与 `krea2-{sdk,domain,application,store,plugin-host}-full-20261003.log`。相关类型、生产许可证、入口边界和格式检查通过。
 
-生产 main 的身份、包许可及动作桥、真实价格/失败退款与积分结算、短剧独立包、安装管理和第二个真实企业 API 尚未完成。当前 readiness 核验实际工厂与物化，仍缺通用必需 IO 服务声明及就绪门槛；生产 Krea 必须装配 `executionIo`，缺失会执行拒绝，不能据安装成功自动开放收费。当前 ComfyUI 服务地址不可用的在线验收也仍待处理；没有把供应商夹具当成真实生成结果。
+本节记录当时的验收；通用必需 IO 声明、就绪门槛和短剧独立演示包已在上节补齐。生产 main 的身份、包许可及动作桥、真实价格/失败退款与积分结算、安装管理和第二个真实企业 API 尚未完成。生产 Krea 必须装配真实 `executionIo` 与预检，不能据安装成功自动开放收费。当前 ComfyUI 服务地址不可用的在线验收也仍待处理；没有把供应商夹具当成真实生成结果。
 
 ## 2026-10-03：Electron 已安装插件资产通道
 
@@ -36,7 +56,7 @@ SDK `crewon.tasks@2` 增加引用式历史查询，API 1 保留。独立 `crewon
 
 原工作区、预览设置入口、设置路由与原设置快照专项 **23 文件、180/180**；UI lint、UI build、Electron host build、架构边界和格式检查通过。全量 UI 实际为 **3,156 通过、8 失败**，不能声称全量通过；独立只读核对确认八项失败的完整名称、首行错误及断言位置均与实际 `git archive` 历史版本 `2d753e8f5` 相同，基线证据为 `short-drama-host-ui-head-baseline-six-suites.{json,log}`，当前精确日志为 `desktop-plugin-ui-command-workspace-20261003.log`。正确的窄跑日志为 `desktop-plugin-ui-original-shell-settings-20261003.log`。
 
-本轮没有修改宿主 CSS、主题或原组件 DOM。用户栏的设置入口已在最新预览实际点击打开，各设置分类存在；当前预览没有后端连接，常规页显示设置暂不可用。`trustedModule` 仍是与 Renderer 同权的受信代码，已导入的 ESM 不能卸载；该通道不是安全沙箱，也不等于生产安装产品验收。生产安装管理、main 身份/业务动作桥、实际报价与结算、Krea2/短剧独立包及在线 API 继续待完成，完整目标保持进行中。
+本轮没有修改宿主 CSS、主题或原组件 DOM。用户栏的设置入口已在本节当时的预览实际点击打开，各设置分类存在；当前预览没有后端连接，常规页显示设置暂不可用。本轮新短剧包的浏览器核验见首节待办；最新用户栏/设置反馈已在 5719 新标签实际进入原设置页，证据见首节。`trustedModule` 仍是与 Renderer 同权的受信代码，已导入的 ESM 不能卸载；该通道不是安全沙箱，也不等于生产安装产品验收。独立 Krea2 包及短剧 UI-only 包已在后续阶段交付；生产安装管理、main 身份/业务动作桥、实际报价与结算、短剧正式生成和项目持久化、在线 API 继续待完成，完整目标保持进行中。
 
 原 ComfyUI 服务地址当前只读探测的 `/system_stats` 和 `/queue` 均返回 404；没有提交新生图。证据为 `output/extensions/checks/krea2-service-availability-20261003.json`。后续在线验收等待服务恢复或新的可用地址，独立积分的实际价格及失败结算规则仍待用户确定。
 

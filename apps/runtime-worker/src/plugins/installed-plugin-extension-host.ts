@@ -24,6 +24,7 @@ import {
   type PluginActivationCandidate,
   type PluginExecutionPackageFailureOwner,
 } from "@crewon/plugin-host";
+import type { InstalledPluginExecutionReadinessPort } from "./installed-plugin-execution-readiness-types.ts";
 import type { AgentVersionRuntime } from "../agent-version-runtime.ts";
 import { StoreBackedAgentVersionRuntimeResolver } from "../store-backed-agent-version-runtime-resolver.ts";
 import { extensionToolDefinitions } from "../extensions/extension-tool-catalog.ts";
@@ -62,6 +63,8 @@ export type InstalledPluginExtensionHostDependencies = Readonly<{
   deployments: Pick<AgentVersionDeploymentStore, "loadAgentVersionDeployment">;
   /** Includes pending setup and failed physical cleanup, never more than 32. */
   maximumPackages?: number;
+  /** Actual deployment-owned IO preflight. Legacy factories without declared services remain compatible. */
+  executionReadiness?: InstalledPluginExecutionReadinessPort;
 }>;
 
 type Request = Readonly<{
@@ -143,6 +146,13 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
       resolveProfile: method(input, "resolveProfile"),
       authorizePackage: method(input, "authorizePackage"),
       runtimeResolver: input.runtimeResolver,
+      ...(input.executionReadiness === undefined
+        ? {}
+        : {
+            executionReadiness: Object.freeze({
+              assertReady: method(input.executionReadiness, "assertReady"),
+            }),
+          }),
       deployments: Object.freeze({
         loadAgentVersionDeployment: method(
           input.deployments,
@@ -316,9 +326,77 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
                   ? "allow"
                   : "deny",
             });
-            // The final actual registry borrow follows every asynchronous gate.
-            // No fake Run or business factory.create() is needed for readiness.
-            borrow.release();
+            try {
+              const requiredServices = borrow.factory.requiredServices ?? [];
+              if (requiredServices.length > 0) {
+                const gate = this.#dependencies.executionReadiness;
+                if (gate === undefined)
+                  fail("installed_plugin_execution_services_unavailable");
+                await gate.assertReady(
+                  {
+                    metadata: {
+                      identity: request.registration.identity,
+                      scope: this.#scope,
+                      configuration: request.configuration,
+                      target: result.target,
+                      purpose: "submit",
+                    },
+                    requiredServices,
+                  },
+                  signal,
+                );
+                await this.#authorizeCandidate(
+                  request,
+                  packageCandidate!,
+                  signal,
+                );
+                await revalidateInstalledPluginBusinessRegistration(
+                  request.registration,
+                  signal,
+                );
+                const currentDeployment =
+                  await this.#dependencies.deployments.loadAgentVersionDeployment(
+                    {
+                      tenantId: this.#scope.tenantId,
+                      agentVersionId: request.agentVersionId!,
+                    },
+                  );
+                if (currentDeployment === null)
+                  fail("installed_plugin_extension_host_runtime_missing");
+                await this.#authorize(request, signal);
+                result = this.#runtimeReadiness(
+                  request,
+                  lease!.resource,
+                  currentDeployment,
+                );
+              }
+            } finally {
+              borrow.release();
+            }
+          } catch {
+            result = unavailable("extension_runtime_unavailable");
+          }
+        }
+        await this.#authorize(request, signal);
+        if (result.outcome === "ready") {
+          try {
+            if (packageOwner === null)
+              fail("installed_plugin_extension_host_owner_missing");
+            // Every asynchronous gate precedes this actual factory check and synchronous return.
+            const finalBorrow = packageOwner.acquire({
+              purpose: "newOperation",
+              authorizeBorrow: (identity) =>
+                !this.#closed &&
+                !signal.aborted &&
+                same(identity, {
+                  pluginId: request.registration.identity.pluginId,
+                  version: request.registration.identity.version,
+                  packageDigest: request.registration.identity.packageDigest,
+                })
+                  ? "allow"
+                  : "deny",
+            });
+            finalBorrow.release();
           } catch {
             result = unavailable("extension_runtime_unavailable");
           }

@@ -3,6 +3,7 @@ import {
   CREWON_EXECUTION_SERVICE,
   type PluginDisposable,
   type PluginExecutionService,
+  type PluginExecutionServiceRequirement,
   type PluginIdentity,
   type PluginToolRuntimeFactory,
 } from "@crewon/plugin-sdk/node";
@@ -68,6 +69,9 @@ export class PluginExecutionRegistry {
     this.#available(binding);
     const factory = binding!.factory!;
     return Object.freeze({
+      ...(factory.requiredServices === undefined
+        ? {}
+        : { requiredServices: factory.requiredServices }),
       create: (
         context: Parameters<PluginToolRuntimeFactory["create"]>[0],
         services?: Parameters<PluginToolRuntimeFactory["create"]>[1],
@@ -85,6 +89,7 @@ export class PluginExecutionRegistry {
           !matchesIdentity(supplied.value, current)
         )
           fail("plugin_execution_identity_mismatch");
+        assertRequiredServices(factory.requiredServices, services);
         // Creation that has already started belongs to the caller's NodeLease and ToolRuntime owner.
         return factory.create(context, services);
       },
@@ -157,8 +162,8 @@ function captureFactory(
   const keys = Reflect.ownKeys(input);
   if (
     (prototype !== Object.prototype && prototype !== null) ||
-    keys.length !== 1 ||
-    keys[0] !== "create"
+    !keys.includes("create") ||
+    keys.some((key) => key !== "create" && key !== "requiredServices")
   )
     fail("plugin_execution_factory_invalid");
   const create = Object.getOwnPropertyDescriptor(input, "create");
@@ -168,7 +173,87 @@ function captureFactory(
     typeof create.value !== "function"
   )
     fail("plugin_execution_factory_invalid");
-  return Object.freeze({ create: create.value.bind(input) });
+  const requirement = Object.getOwnPropertyDescriptor(
+    input,
+    "requiredServices",
+  );
+  if (
+    requirement !== undefined &&
+    (!requirement.enumerable || !("value" in requirement))
+  )
+    fail("plugin_execution_factory_invalid");
+  const requiredServices =
+    requirement === undefined
+      ? undefined
+      : captureRequirements(requirement.value);
+  return Object.freeze({
+    create: create.value.bind(input),
+    ...(requiredServices === undefined ? {} : { requiredServices }),
+  });
+}
+
+function captureRequirements(
+  input: unknown,
+): readonly PluginExecutionServiceRequirement[] {
+  if (!Array.isArray(input) || Object.getPrototypeOf(input) !== Array.prototype)
+    fail("plugin_execution_factory_invalid");
+  const length = Object.getOwnPropertyDescriptor(input, "length"),
+    keys = Reflect.ownKeys(input);
+  if (
+    !length ||
+    !("value" in length) ||
+    !Number.isSafeInteger(length.value) ||
+    length.value < 0 ||
+    length.value > 2 ||
+    keys.length !== length.value + 1
+  )
+    fail("plugin_execution_factory_invalid");
+  const required: PluginExecutionServiceRequirement[] = [];
+  for (let index = 0; index < length.value; index++) {
+    const field = Object.getOwnPropertyDescriptor(input, String(index));
+    if (
+      !field?.enumerable ||
+      !("value" in field) ||
+      (field.value !== "externalOperations" && field.value !== "jsonHttp") ||
+      required.includes(field.value)
+    )
+      fail("plugin_execution_factory_invalid");
+    required.push(field.value);
+  }
+  return Object.freeze(required);
+}
+
+function assertRequiredServices(
+  required: readonly PluginExecutionServiceRequirement[] | undefined,
+  services: Parameters<PluginToolRuntimeFactory["create"]>[1],
+): void {
+  for (const requirement of required ?? []) {
+    const port = dataProperty(services, requirement),
+      methods =
+        requirement === "externalOperations"
+          ? ["reserve", "load", "advance"]
+          : ["request"];
+    if (
+      methods.some((method) => typeof dataProperty(port, method) !== "function")
+    )
+      fail("plugin_execution_required_services_unavailable");
+  }
+}
+
+/** Permit ordinary class ports as well as frozen records without evaluating accessors. */
+function dataProperty(input: unknown, name: string): unknown {
+  if (
+    input === null ||
+    (typeof input !== "object" && typeof input !== "function")
+  )
+    return undefined;
+  let current: object | null = input;
+  for (let depth = 0; current !== null && depth < 32; depth++) {
+    const field = Object.getOwnPropertyDescriptor(current, name);
+    if (field !== undefined) return "value" in field ? field.value : undefined;
+    current = Object.getPrototypeOf(current);
+  }
+  return undefined;
 }
 
 function fail(code: string): never {

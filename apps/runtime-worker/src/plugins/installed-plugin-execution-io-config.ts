@@ -5,6 +5,7 @@ import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import type { ToolExecutionCommand } from "@crewon/tool-broker";
 import type { NetworkDnsResolver } from "../network-egress.ts";
 import type { PinnedHttpPort } from "../pinned-node-http.ts";
+import type { InstalledPluginExecutionReadinessMetadata } from "./installed-plugin-execution-readiness-types.ts";
 import {
   ioFailure,
   ioJson,
@@ -15,6 +16,11 @@ import {
 export type InstalledPluginExecutionIoConfig = Readonly<{
   resolveNetwork(
     context: PluginToolRuntimeContext,
+    signal: AbortSignal,
+  ): Promise<PluginExecutionNetworkApproval | null>;
+  /** Preflight for actual installed metadata before any Run exists; it grants no dispatch. */
+  resolveReadinessNetwork?(
+    input: InstalledPluginExecutionReadinessMetadata,
     signal: AbortSignal,
   ): Promise<PluginExecutionNetworkApproval | null>;
   dns?: NetworkDnsResolver;
@@ -30,6 +36,8 @@ export function captureInstalledPluginExecutionIoConfig(
 ): InstalledPluginExecutionIoConfig {
   if (
     typeof input?.resolveNetwork !== "function" ||
+    (input.resolveReadinessNetwork !== undefined &&
+      typeof input.resolveReadinessNetwork !== "function") ||
     (input.dns !== undefined && typeof input.dns.resolveAll !== "function") ||
     (input.transport !== undefined &&
       typeof input.transport.request !== "function") ||
@@ -38,6 +46,9 @@ export function captureInstalledPluginExecutionIoConfig(
     ioFailure("configuration_invalid");
   return Object.freeze({
     resolveNetwork: input.resolveNetwork.bind(input),
+    ...(input.resolveReadinessNetwork === undefined
+      ? {}
+      : { resolveReadinessNetwork: input.resolveReadinessNetwork.bind(input) }),
     ...(input.dns === undefined
       ? {}
       : {

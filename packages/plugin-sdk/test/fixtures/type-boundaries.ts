@@ -1,16 +1,23 @@
 import { definePlugin } from "@crewon/plugin-sdk/node";
 import { defineUiPlugin } from "@crewon/plugin-sdk/ui";
 import type { PluginUiProps, PluginUiServices } from "@crewon/plugin-sdk/ui";
+// @ts-expect-error Execution requirements are exposed only by Node and contracts entrypoints.
+import type { PluginExecutionServiceRequirement as UiRequirement } from "@crewon/plugin-sdk/ui";
 import type {
   PluginTaskService,
   PluginTaskRequest,
   PluginActionsService,
 } from "@crewon/plugin-sdk/node";
-import type { PluginTaskReceipt } from "@crewon/plugin-sdk/contracts";
+import type {
+  PluginTaskReceipt,
+  PluginExecutionServiceRequirement as ContractsRequirement,
+} from "@crewon/plugin-sdk/contracts";
 import type {
   PluginExecutionService,
   PluginToolRuntime,
   PluginToolRuntimeContext,
+  PluginToolRuntimeFactory,
+  PluginExecutionServiceRequirement,
 } from "@crewon/plugin-sdk/node";
 
 export function checkExecutionBoundary(
@@ -19,6 +26,22 @@ export function checkExecutionBoundary(
   context: PluginToolRuntimeContext,
 ) {
   execution.register({ create: () => runtime });
+  const required: readonly PluginExecutionServiceRequirement[] = [
+    "externalOperations",
+    "jsonHttp",
+  ];
+  const fromContracts: readonly ContractsRequirement[] = required;
+  const declared: PluginToolRuntimeFactory = {
+    requiredServices: fromContracts,
+    create: () => runtime,
+  };
+  execution.register(declared);
+  // @ts-expect-error Requirements are a bounded known-service union, not arbitrary host service names.
+  execution.register({ requiredServices: ["network"], create: () => runtime });
+  // @ts-expect-error Requirement metadata cannot be overwritten through the portable factory ABI.
+  declared.requiredServices = [];
+  // @ts-expect-error Requirement metadata exposes no mutable array methods.
+  declared.requiredServices!.push("jsonHttp");
   // @ts-expect-error Registration requires an execution factory, not a runtime or arbitrary object.
   execution.register(runtime);
   execution.register({

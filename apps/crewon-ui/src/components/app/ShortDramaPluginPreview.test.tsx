@@ -155,6 +155,45 @@ function rejectStorageWrites() {
 }
 
 describe("ShortDramaPluginPreview", () => {
+  it("uses an installed module override and withdraws it while original settings are open", async () => {
+    const states: boolean[] = [];
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root!.render(
+        <ShortDramaPluginPreview
+          referenceImage="/sample.png"
+          moduleOverride={{
+            id: "independent.drama",
+            label: "AI 短剧",
+            content: ({ active }) => {
+              states.push(active);
+              return active ? (
+                <p data-installed-preview>真实安装模块槽</p>
+              ) : null;
+            },
+          }}
+        />,
+      ),
+    );
+    expect(container.querySelector(".drama-workbench")).toBeNull();
+    expect(states.at(-1)).toBe(false);
+    await click(
+      container.querySelector('[data-host-module-target="independent.drama"]'),
+    );
+    expect(states.at(-1)).toBe(true);
+    expect(container.querySelector("[data-installed-preview]")).not.toBeNull();
+    await openSettings();
+    expect(states.at(-1)).toBe(false);
+    expect(container.querySelector("[data-installed-preview]")).toBeNull();
+    await click(container.querySelector(".settings-back-button"));
+    expect(states.at(-1)).toBe(true);
+    await click(container.querySelector('[data-nav-key="command"]'));
+    expect(states.at(-1)).toBe(false);
+    expect(container.querySelector("[data-installed-preview]")).toBeNull();
+  });
+
   it("keeps the existing homepage and navigation with a hidden module slot", () => {
     const markup = renderToStaticMarkup(
       <ShortDramaPluginPreview referenceImage="/sample.png" />,

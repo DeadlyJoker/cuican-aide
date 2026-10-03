@@ -22,6 +22,10 @@ import {
   captureInstalledPluginExecutionIoConfig,
   type InstalledPluginExecutionIoConfig,
 } from "./installed-plugin-execution-io-config.ts";
+import {
+  InstalledPluginExecutionReadinessOwner,
+  type InstalledPluginExecutionReadinessPort,
+} from "./installed-plugin-execution-readiness.ts";
 
 /** Host deployment authority, never supplied by a plugin or inferred from an installation receipt. */
 export type InstalledPluginExecutionConfig = Readonly<{
@@ -105,6 +109,7 @@ export function composeInstalledPluginQueryHost(
     config: InstalledPluginExecutionConfig;
     runtimeResolver: StoreBackedAgentVersionRuntimeResolver;
     tenantId: string;
+    executionReadiness?: InstalledPluginExecutionReadinessPort;
   }>,
 ): InstalledPluginQueryHost | null {
   const config = captureInstalledPluginExecutionConfig(input.config),
@@ -125,6 +130,24 @@ export function composeInstalledPluginQueryHost(
     resolveActor: config.resolveActor,
     resolveProfile: query.resolveProfile,
     authorizePackage: config.authorizePackage,
+    ...(input.executionReadiness === undefined
+      ? {}
+      : { executionReadiness: input.executionReadiness }),
+  });
+}
+
+/** Own this preflight with the parent Store; callers receive no synthetic Run or dispatch grant. */
+export function composeInstalledPluginExecutionReadiness(
+  input: Readonly<{
+    store: SqliteRunStore | PostgresDomainStore;
+    config: InstalledPluginExecutionConfig;
+  }>,
+): InstalledPluginExecutionReadinessOwner | null {
+  const config = captureInstalledPluginExecutionConfig(input.config);
+  if (config.executionIo === undefined) return null;
+  return new InstalledPluginExecutionReadinessOwner({
+    configuration: config.executionIo,
+    operations: input.store.externalOperationStore(),
   });
 }
 

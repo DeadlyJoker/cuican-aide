@@ -62,6 +62,7 @@ import { InstalledPluginExtensionHost } from "./plugins/installed-plugin-extensi
 import { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
 import { extensionToolDefinitions } from "./extensions/extension-tool-catalog.ts";
 import type { InstalledPluginExecutionIoConfig } from "./plugins/installed-plugin-execution-io-config.ts";
+import { composeInstalledPluginExecutionReadiness } from "./plugins/installed-plugin-runtime-composition.ts";
 export { digester };
 
 export const actor: ActorContext = {
@@ -169,13 +170,17 @@ export async function businessExecutionFixture(
   let composition: StandaloneRuntimeWorker | null = null;
   let host: InstalledPluginExtensionHost | null = null;
   let queryHost: InstalledPluginQueryHost | null = null;
+  let executionReadiness: ReturnType<
+    typeof composeInstalledPluginExecutionReadiness
+  > = null;
   let resolver: StoreBackedAgentVersionRuntimeResolver | null = null;
   let registry: InMemoryAgentVersionRuntimeRegistry | null = null;
   t.after(async () => {
     try {
-      await composition?.close();
       await queryHost?.close();
       await host?.close();
+      await executionReadiness?.close();
+      await composition?.close();
       resolver?.close();
       await registry?.close();
       await store.close();
@@ -441,6 +446,10 @@ export async function businessExecutionFixture(
     registry,
     factory,
   });
+  executionReadiness = composeInstalledPluginExecutionReadiness({
+    store,
+    config: workerBase.installedPluginExecution,
+  });
   host = new InstalledPluginExtensionHost({
     scope,
     registrations: [registration],
@@ -452,6 +461,7 @@ export async function businessExecutionFixture(
     authorizePackage: async () => "allow",
     runtimeResolver: resolver,
     deployments: store,
+    ...(executionReadiness === null ? {} : { executionReadiness }),
   });
   const catalog = {
     list: () => [registration],
@@ -511,6 +521,7 @@ export async function businessExecutionFixture(
       resolveActor: async () => actor,
       resolveProfile: async () => scope,
       authorizePackage: async () => "allow",
+      ...(executionReadiness === null ? {} : { executionReadiness }),
     });
   const tasks = new ExtensionTaskApplicationService({
     store,

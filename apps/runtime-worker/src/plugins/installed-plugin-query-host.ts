@@ -34,6 +34,7 @@ import {
   type PluginActivationCandidate,
   type PluginExecutionPackageFailureOwner,
 } from "@crewon/plugin-host";
+import type { InstalledPluginExecutionReadinessPort } from "./installed-plugin-execution-readiness-types.ts";
 import { StoreBackedAgentVersionRuntimeResolver } from "../store-backed-agent-version-runtime-resolver.ts";
 import { extensionToolDefinitions } from "../extensions/extension-tool-catalog.ts";
 import { parseRuntimeExtensionMaterialization } from "../extensions/extension-runtime-proof.ts";
@@ -48,6 +49,7 @@ const digester = {
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
 export type InstalledPluginQueryHostDependencies = Readonly<{
+  executionReadiness?: InstalledPluginExecutionReadinessPort;
   scope: PluginProfileScope;
   installRoot: string;
   extensions: ExtensionStore;
@@ -108,6 +110,15 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
       resolveActor: input.resolveActor.bind(input),
       resolveProfile: input.resolveProfile.bind(input),
       authorizePackage: input.authorizePackage.bind(input),
+      ...(input.executionReadiness === undefined
+        ? {}
+        : {
+            executionReadiness: Object.freeze({
+              assertReady: input.executionReadiness.assertReady.bind(
+                input.executionReadiness,
+              ),
+            }),
+          }),
       runs: Object.freeze({
         loadRunInSpace: input.runs.loadRunInSpace.bind(input.runs),
       }),
@@ -238,6 +249,19 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
     }
     if (!same(before, await this.#facts(input.source)))
       throw new Error("installed_plugin_query_authority_changed");
+    const versionDecision = await d.authorization.authorize({
+      actor: input.actor,
+      action: "agentVersion:read",
+      resource: {
+        kind: "agentVersion",
+        tenantId: this.#scope.tenantId,
+        spaceId: this.#scope.spaceId,
+        agentVersionId: input.source.binding.target.agentVersionId,
+      },
+    });
+    s.throwIfAborted();
+    if (versionDecision.outcome !== "allow")
+      throw new Error("installed_plugin_query_forbidden");
   }
   async #facts(source: PluginQuerySource) {
     const raw = await this.#d.extensions.loadExtensionActivation(
@@ -456,7 +480,61 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
               ? "allow"
               : "deny",
         });
-        borrow.release();
+        try {
+          try {
+            const requiredServices = borrow.factory.requiredServices ?? [];
+            if (requiredServices.length > 0) {
+              if (d.executionReadiness === undefined)
+                throw new Error(
+                  "installed_plugin_execution_services_unavailable",
+                );
+              await d.executionReadiness.assertReady(
+                {
+                  metadata: {
+                    identity: installed.identity,
+                    scope: this.#scope,
+                    configuration,
+                    target,
+                    purpose: "observe",
+                  },
+                  requiredServices,
+                },
+                s,
+              );
+            }
+          } catch {
+            s.throwIfAborted();
+            await this.#assert(input);
+            return unavailable();
+          }
+          await this.#assert(input);
+          const latestRegistration = await this.#registration(input);
+          if (
+            !same(project(latestRegistration), registration) ||
+            !same(
+              await d.deployments.loadAgentVersionDeployment(locator),
+              deployment,
+            ) ||
+            !same(readInstalledPluginAgentRuntimeScope(runtime), this.#scope) ||
+            !same(runtime.toolRuntime.definitions(), runtime.version.tools)
+          )
+            return unavailable();
+          await this.#assert(input);
+        } finally {
+          borrow.release();
+        }
+        const finalBorrow = pkg.acquire({
+          purpose: "historicalOperation",
+          authorizeBorrow: (identity) =>
+            !this.#closed &&
+            !s.aborted &&
+            identity.pluginId === installed.identity.pluginId &&
+            identity.version === installed.identity.version &&
+            identity.packageDigest === installed.identity.packageDigest
+              ? "allow"
+              : "deny",
+        });
+        finalBorrow.release();
         return Object.freeze({ outcome: "ready", target });
       } finally {
         lease.release();

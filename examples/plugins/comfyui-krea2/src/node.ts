@@ -27,7 +27,10 @@ export default definePlugin({
       CREWON_EXECUTION_API_VERSION,
     );
     if (execution) {
-      const registration = execution.register({ create: createKreaRuntime });
+      const registration = execution.register({
+        requiredServices: ["externalOperations", "jsonHttp"],
+        create: createKreaRuntime,
+      });
       context.onDispose(() => registration.dispose());
     }
     const actions: PluginActionsService = {

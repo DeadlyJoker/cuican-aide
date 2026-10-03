@@ -7,6 +7,7 @@ import type {
   PinnedHttpResponse,
 } from "./pinned-node-http.ts";
 import type { InstalledPluginExecutionIoConfig } from "./plugins/installed-plugin-execution-io-config.ts";
+import type { InstalledPluginExecutionReadinessMetadata } from "./plugins/installed-plugin-execution-readiness.ts";
 import {
   businessExecutionFixture,
   actor,
@@ -54,6 +55,8 @@ export async function kreaExecutionFixture(
   const contexts: PluginToolRuntimeContext[] = [];
   const submissions: Submission[] = [];
   const models: { tools: string[]; input: unknown }[] = [];
+  const preflights: InstalledPluginExecutionReadinessMetadata[] = [];
+  const readiness = { allowed: true, address: "8.8.8.8" };
   let dnsRequests = 0;
   const model = (): ModelTransportPort => ({
     adapterName: "fixture-installed-krea-model",
@@ -140,6 +143,7 @@ export async function kreaExecutionFixture(
         baseUrl: kreaService,
       });
       contexts.push(context);
+      if (!readiness.allowed) return null;
       return {
         baseUrlParameter: "baseUrl",
         paths: [
@@ -149,11 +153,32 @@ export async function kreaExecutionFixture(
         ],
       };
     },
+    resolveReadinessNetwork: async (metadata, signal) => {
+      signal.throwIfAborted();
+      assert.equal(metadata.identity.pluginId, "crewon.comfyui-krea2");
+      assert.deepEqual(metadata.scope, scope);
+      assert.deepEqual(metadata.configuration.parameters, {
+        baseUrl: kreaService,
+      });
+      assert.equal(Object.hasOwn(metadata, "run"), false);
+      assert.equal(Object.hasOwn(metadata, "command"), false);
+      preflights.push(metadata);
+      return readiness.allowed
+        ? {
+            baseUrlParameter: "baseUrl",
+            paths: [
+              { method: "POST", path: "/prompt" },
+              { method: "GET", operationPathPrefix: "/history/" },
+              { method: "GET", path: "/queue" },
+            ],
+          }
+        : null;
+    },
     dns: {
       resolveAll: async (hostname) => {
         assert.equal(hostname, "krea-fixture.example");
         dnsRequests++;
-        return [{ address: "8.8.8.8", family: 4 }];
+        return [{ address: readiness.address, family: 4 }];
       },
     },
     transport: {
@@ -226,6 +251,8 @@ export async function kreaExecutionFixture(
     submissions,
     contexts,
     models,
+    preflights,
+    readiness,
     dnsRequests: () => dnsRequests,
   };
 }

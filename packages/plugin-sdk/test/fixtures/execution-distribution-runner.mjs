@@ -12,6 +12,7 @@ import plugin, {
   contexts,
   signals,
   events,
+  requiredServiceNames,
 } from "./dist/external-execution-node.js";
 
 const identity = Object.freeze({
@@ -51,6 +52,8 @@ await parsePluginNodeDefinition(plugin).setup(
 assert.equal(ContractsService, "crewon.execution");
 assert.equal(ContractsVersion, "1");
 assert.ok(factory);
+assert.deepEqual(requiredServiceNames, ["externalOperations", "jsonHttp"]);
+assert.deepEqual(factory.requiredServices, []);
 const digest = `sha256:${"d".repeat(64)}`;
 const context = Object.freeze({
   identity,

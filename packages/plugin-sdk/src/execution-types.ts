@@ -9,6 +9,11 @@ import type { PluginExecutionServices } from "./execution-io-types.js";
 export const CREWON_EXECUTION_SERVICE = "crewon.execution";
 export const CREWON_EXECUTION_API_VERSION = "1";
 
+/** Required host IO shape only; declaring a service grants no execution authority. */
+export type PluginExecutionServiceRequirement =
+  | "externalOperations"
+  | "jsonHttp";
+
 /** Host-derived immutable Run/configuration metadata; none of these values grants authority. */
 export type PluginToolRuntimeContext = Readonly<{
   identity: PluginIdentity;
@@ -47,6 +52,7 @@ export type PluginToolRuntimeContext = Readonly<{
 }>;
 
 export interface PluginToolRuntimeFactory {
+  readonly requiredServices?: readonly PluginExecutionServiceRequirement[];
   create(
     context: PluginToolRuntimeContext,
     services?: PluginExecutionServices,

@@ -9,7 +9,7 @@ const repository = fileURLToPath(new URL("../", import.meta.url));
 /** Build the public example outside the host; consumers receive only the prebuilt artifacts. */
 export async function buildInstalledBusinessPluginExamples(
   ownedRoot,
-  { includeKrea = false } = {},
+  { includeKrea = false, includeShortDrama = false } = {},
 ) {
   const sdkOutput = join(ownedRoot, "sdk");
   await mkdir(sdkOutput, { mode: 0o700 });
@@ -68,6 +68,9 @@ export async function buildInstalledBusinessPluginExamples(
   const krea = includeKrea
     ? await buildExample("comfyui-krea2", "krea-packages")
     : null;
+  const shortDrama = includeShortDrama
+    ? await buildExample("short-drama", "short-drama-packages")
+    : null;
   // Deleting the actual development projects proves consumers cannot borrow their dependencies.
   await rm(join(ownedRoot, "development"), { recursive: true });
   await rm(sdkOutput, { recursive: true });
@@ -77,6 +80,12 @@ export async function buildInstalledBusinessPluginExamples(
     ...(krea === null
       ? {}
       : { kreaV1Directory: krea[0], kreaV2Directory: krea[1] }),
+    ...(shortDrama === null
+      ? {}
+      : {
+          shortDramaV1Directory: shortDrama[0],
+          shortDramaV2Directory: shortDrama[1],
+        }),
     developmentRemoved: true,
   });
 }

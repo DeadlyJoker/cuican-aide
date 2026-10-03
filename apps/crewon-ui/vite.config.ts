@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { normalizePluginUiViteImportPath } from "./src/lib/plugins/pluginUiViteImportPath";
 // @ts-expect-error Vite runs this file in Node while the browser tsconfig excludes Node globals.
 import { writeFile } from "node:fs/promises";
 
@@ -288,6 +289,7 @@ export default defineConfig(({ mode }) => {
         "/api/v1": {
           target: controlTarget,
           changeOrigin: false,
+          rewrite: normalizePluginUiViteImportPath,
           configure(proxy) {
             (proxy as unknown as HttpProxy).on("proxyReq", (proxyReq) => {
               if (controlSessionToken) {

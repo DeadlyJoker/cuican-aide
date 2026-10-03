@@ -5,6 +5,7 @@ import { emptyAgentPlatformSnapshot } from "./commandWorkspaceState";
 import { ShortDramaWorkbenchPreview } from "../short-drama/ShortDramaWorkbenchPreview";
 import { DesktopWindowFrame } from "../DesktopWindowFrame";
 import { ShortDramaPreviewSettings } from "./ShortDramaPreviewSettings";
+import type { CommandWorkspaceHostModule } from "./CommandWorkspaceHostModule";
 import { Toaster } from "../ui/sonner";
 import { emptyTerminalOutputStream } from "../../lib/terminal/terminalOutputStream";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
@@ -33,8 +34,11 @@ export function initializeShortDramaPreviewSurface(): void {
 /** Preview-only composition of the existing CrewON shell and one trusted business module. */
 export function ShortDramaPluginPreview({
   referenceImage,
+  moduleOverride,
 }: {
   referenceImage: string;
+  /** Trusted preview composition may supply a real installed contribution. Default demo stays unchanged. */
+  moduleOverride?: CommandWorkspaceHostModule;
 }) {
   const [composerValue, setComposerValue] = useState("");
   const [workbenchOpen, setWorkbenchOpen] = useState(false);
@@ -87,13 +91,29 @@ export function ShortDramaPluginPreview({
           connectionState="disconnected"
           locale={locale}
           cwd=""
-          hostModule={{
-            id: "crewon.short-drama",
-            label: locale === "zh" ? "AI 短剧" : "AI drama",
-            content: (
-              <ShortDramaWorkbenchPreview referenceImage={referenceImage} />
-            ),
-          }}
+          hostModule={
+            moduleOverride
+              ? {
+                  ...moduleOverride,
+                  content: ({ active }) => {
+                    const visible = active && !settingsOpen;
+                    return typeof moduleOverride.content === "function"
+                      ? moduleOverride.content({ active: visible })
+                      : visible
+                        ? moduleOverride.content
+                        : null;
+                  },
+                }
+              : {
+                  id: "crewon.short-drama",
+                  label: locale === "zh" ? "AI 短剧" : "AI drama",
+                  content: (
+                    <ShortDramaWorkbenchPreview
+                      referenceImage={referenceImage}
+                    />
+                  ),
+                }
+          }
           isSending={false}
           platform={detectPlatform()}
           platformSnapshotLoader={readPreviewPlatformSnapshot}

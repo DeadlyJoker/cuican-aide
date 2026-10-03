@@ -3,6 +3,7 @@ import {
   CREWON_EXECUTION_SERVICE,
   CREWON_EXECUTION_API_VERSION,
   type PluginExecutionService,
+  type PluginExecutionServiceRequirement,
   type PluginToolRuntime,
   type PluginToolRuntimeFactory,
   type PluginToolRuntimeContext,
@@ -10,6 +11,13 @@ import {
   type PluginToolExecutionResolution,
   type PluginAbortSignal,
 } from "@crewon/plugin-sdk/node";
+import type { PluginExecutionServiceRequirement as ContractsRequirement } from "@crewon/plugin-sdk/contracts";
+
+export const requiredServiceNames: readonly PluginExecutionServiceRequirement[] =
+  ["externalOperations", "jsonHttp"];
+const contractsRequirements: readonly ContractsRequirement[] =
+  requiredServiceNames;
+void contractsRequirements;
 
 export const contexts: PluginToolRuntimeContext[] = [];
 export const signals: PluginAbortSignal[] = [];
@@ -17,6 +25,7 @@ export const events: string[] = [];
 
 /** Contract fixture only: no provider, Store, authority or Run is created here. */
 const factory: PluginToolRuntimeFactory = {
+  requiredServices: [],
   async create(context) {
     contexts.push(context);
     let active = 0;

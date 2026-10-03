@@ -31,7 +31,7 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 该桥支持原 API 1 生成和 API 2 的生成/历史查询，包 ID 与原 extension ID 必须相同；尚无跨插件委托。查询只传 `sourceRunId` 和 `operationId`，从持久原任务核验原包、配置、目标和原个人报价，保存独立查询准入，不新增生成报价或积分预留。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
-Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证。生产安装管理、短剧独立包、Krea2 在线验收和第二个真实企业 API 尚未交付。安装账本与 UI 读取的通过不能替代这些验收。
+Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证；短剧 UI-only 独立包已交付，并通过实包安装与通用 loader 的双库交互专项及本轮原生浏览器验证。生产安装管理、短剧正式生成与项目持久化、Krea2 在线验收和第二个真实企业 API 尚未完成。原用户栏与设置已在 5719 和已安装的 5720 预览实际点击验证，11 类设置保留；当前离线预览的外观设置可用，其余后台设置仍未连接。
 
 ## 2026-10-03：Worker 已安装执行组合 API
 
@@ -53,15 +53,29 @@ Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已
 
 实例仍有物理调用或未确认完成回执时保持缓存，warm 借用授权失败不会关闭它。闲置退休须有实际 `canRetire() === true`，可选 `close` 缺失也不能推断资源已消失。Host 启动清理失败通过私有 WeakMap 保留真实错误对应的失败 owner，仿造或包装错误无效；resolver 将该 owner 留在有界隔离项中，不重复 setup、不释放容量，显式关闭继续报告失败。正常清理成功的启动失败仍释放容量。
 
-已确认 resolver 32/32、实际 SQLite/PostgreSQL composition 26/26、router 11/11、Host 全量 135/135、Worker 双库全量 1,323/1,323，均零失败、零跳过。真实安装执行专项通过 composition helper 构造 resolver 并接原 Worker，使用真实数据库、不可变文件和 Node ESM；模型、外部供应商、身份、包许可与报价为具名夹具。它没有验收完整生产 main、真实积分结算或在线生图 API。
+此前 resolver 32/32、实际 SQLite/PostgreSQL composition 26/26、router 11/11 专项已确认通过；本轮 Host 全量 202/202、正式 Worker 双库全量 1,521/1,521，均零失败、零跳过。Control 共 375 项：374 通过、1 项 Linux 进程用例在 macOS 跳过、零失败。全量日志为 `required-services-host-full-20261003.log`、`readiness-short-drama-worker-final-full-20261003.log`、`required-services-control-full-20261003.log`。真实安装执行专项通过 composition helper 构造 resolver 并接原 Worker，使用真实数据库、不可变文件和 Node ESM；模型、外部供应商、身份、包许可与报价为具名夹具。它没有验收完整生产 main、真实积分结算或在线生图 API。
 
-生产部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。已安装历史查询需要下述独立 provenance 和显式 query host；缺少真实端口时拒绝，不降级到当前包或旧目录。历史依赖闭包、短剧独立包、安装管理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+生产部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。已安装历史查询需要下述独立 provenance 和显式 query host；缺少真实端口时拒绝，不降级到当前包或旧目录。历史依赖闭包、短剧正式生成与项目持久化、安装管理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+
+## 2026-10-03：独立短剧 UI-only 包
+
+[短剧示例](../examples/plugins/short-drama/README.md) 的 `crewon.short-drama/workbench` 是预构建的可信主内容模块，没有 Node 入口、业务清单、任务或计费服务。演示项目、需求修订、概念图和查询按钮只改变当前页面内存，退出重开会重置；这不代表正式生成或项目持久化已经接通。
+
+已复制的交付目录为 `output/extensions/installable-plugins/readiness-short-drama-20261003/short-drama/{1.0.0,2.0.0}`；实际 Host verifier 核验每版本 8 文件、1,949,650 字节，完整摘要与同阶段 Krea2 包记录在父级 `verification.json`。这些目录是待安装产物，没有自动启用用户 profile。
+
+真实 SQLite/PostgreSQL 安装、PNG 字节读取、实际 TrustedPluginUiLoader 挂载和核心交互专项 8/8、零跳过，覆盖主题更新、宿主账号/root 不变、dialog 与定时器清理、重挂重置、升级与停用后的租约拒绝，以及零 invoke/fetch/Run/积分写入。日志为 `short-drama-installed-ui-integration.log`；包内 ESM 行为 7/7。该专项 DOM 使用 HappyDOM，Node importer 在实际资产校验后导入已安装 fileURL 以保留相对 PNG。
+
+另有[本机浏览器预览](../artifacts/installed-short-drama-preview/README.md)，从实际安装的 SQLite 选择经正式 UI HTTP 路由、原生动态 import 读取包内 JS/PNG。实际浏览器已核验项目、概念图和记录界面、内存项目创建、原账号/设置入口、dialog 退出清理、重开重置及两侧栏动态占宽；设置/离开时原 mount 为 0，重开为 1，未创建 Run、消息或积分表。正式 Vite 开发代理共用严格的 `?import` 路径归一化，51 项边界测试通过；其他查询和生产空查询契约保持拒绝。相关 UI 231/231、UI lint 与 build 通过。精确 HTTP、服务端计数及截图见[实施进度](./incremental-extension-progress.md)。具名预览身份及页面演示不能替代生产 main、真实生成、项目持久化或桌面完整产品验收。
 
 ## 2026-10-03：宿主 IO 与历史查询组合
 
 `installedPluginExecution.executionIo` 是可选的可信部署配置。它提供 `resolveNetwork(context, signal)`，由宿主针对原 Run 配置返回 `{ baseUrlParameter, paths }` 或 `null`。路径规则为固定 `{ method, path }`，或只读 `{ method: "GET", operationPathPrefix }`；前缀只能拼接当前持久 operation 的供应商 ID 或关联 ID。origin 从已锁定参数取出，不能由插件传入。生产默认使用原 DNS 策略和固定 TLS HTTP transport；`dns`、`transport`、`now` 是程序化宿主端口，没有对应的 Renderer 配置。
 
-Krea2 的部署须明确装配此配置，批准 `POST /prompt`、`GET /queue` 和 `GET /history/<当前operation标识>`。执行工厂的第二参数从实际父 Store 创建 `externalOperations` 与 `jsonHttp`，缺少端口时 Krea2 工厂拒绝执行。当前 readiness 核验真实工厂及完整物化，没有通用的 required-runtime-services 声明；它本身不证明 IO 已装配或在线服务可达。生产动作准入前仍需完成这项能力就绪治理，不能据安装成功自动开放收费生成。
+Krea2 的部署须明确装配此配置，批准 `POST /prompt`、`GET /queue` 和 `GET /history/<当前operation标识>`。执行工厂以 `requiredServices: ["externalOperations", "jsonHttp"]` 声明所需端口；第二参数从实际父 Store 创建这些端口，缺失时在业务 `create` 前拒绝。
+
+声明执行服务的包还要求 `executionIo.resolveReadinessNetwork(metadata, signal)`。metadata 为实际 `{ identity, scope, configuration, target, purpose }`，用途是 `submit` 或 `observe`，没有 Run 或命令。宿主预检核对实际 operation Store、原配置 HTTPS 根、批准路径和公共 DNS，不发送 HTTP，也不证明供应商在线或价格可用。两个已安装 Host 在返回 ready 前等待此预检并再次核验当前授权、部署和 Node 工厂；缺少真实 owner/配置/方法或返回 `null` 时拒绝。旧未声明工厂保留原兼容路径。
+
+程序化 Worker 返回借用的 `pluginExecutionReadiness` 端口，并自动注入其历史查询 Host；配置与新任务 Host 须通过 `executionReadiness` 显式借入。先关闭借用的 Control/配置 Host，再关闭 Worker。需要自行组合时，公共 `composeInstalledPluginExecutionReadiness({ store, config })` 返回需由宿主拥有并关闭的 owner；Store 必须是实际父 Store并显式迁移操作账本。owner 关闭等待预检 callback 与 DNS 真正结束，不关闭借入 Store。仍需真实报价与个人积分准入，安装成功本身不开放收费生成。
 
 每次端口调用必须使用当前 Worker 实际派发的命令对象与未结束的 claim。预留新 operation 后签发当前调用范围的一次性 POST 凭证；原已存在记录和冷恢复不再签发。请求内容受摘要约束，发送前重新核验 Run、包许可和 DNS。真正收到的响应可以保存为原 operation 的本地证据；这不授权撤权后的新外部请求。关闭等待委托调用、HTTP 和 Store CAS 结束。
 

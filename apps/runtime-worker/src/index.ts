@@ -35,6 +35,7 @@ export {
   captureInstalledPluginHistoricalQueryConfig,
   composeInstalledPluginRuntimeResolver,
   composeInstalledPluginQueryHost,
+  composeInstalledPluginExecutionReadiness,
   type InstalledPluginExecutionConfig,
   type InstalledPluginHistoricalQueryConfig,
 } from "./plugins/installed-plugin-runtime-composition.ts";
@@ -43,6 +44,11 @@ export {
   type InstalledPluginQueryHostDependencies,
 } from "./plugins/installed-plugin-query-host.ts";
 export type { InstalledPluginExecutionIoConfig } from "./plugins/installed-plugin-execution-io-config.ts";
+export type {
+  InstalledPluginExecutionReadinessInput,
+  InstalledPluginExecutionReadinessMetadata,
+  InstalledPluginExecutionReadinessPort,
+} from "./plugins/installed-plugin-execution-readiness.ts";
 export type { PluginExecutionNetworkApproval } from "./plugins/plugin-execution-io-network.ts";
 export * from "./plugins/installed-plugin-business-registration.ts";
 export * from "./plugins/installed-plugin-agent-version.ts";

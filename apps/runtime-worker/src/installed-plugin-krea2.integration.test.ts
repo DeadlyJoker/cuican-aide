@@ -15,6 +15,50 @@ for (const backend of ["sqlite", "postgres"] as const) {
     skip: backend === "postgres" && !process.env.CREWON_TEST_POSTGRES_URL,
   };
   test(
+    `${backend}: installed Krea2 IO readiness refuses generation before quoting or reserving personal credits`,
+    options,
+    async (t) => {
+      const f = await kreaExecutionFixture(t, backend);
+      const request = await f.prepareTask("krea-services-unavailable");
+      assert.ok(
+        f.preflights.length > 0,
+        "activation checks the actual declared services",
+      );
+      const priorChecks = f.preflights.length;
+      for (const denied of ["deployment", "private-dns"] as const) {
+        f.readiness.allowed = denied !== "deployment";
+        f.readiness.address =
+          denied === "private-dns" ? "127.0.0.1" : "8.8.8.8";
+        await assert.rejects(request.create());
+        assert.equal(f.controls.quotes, 0);
+        assert.equal(await f.count("run_snapshots"), 0);
+        assert.equal(await f.count("plugin_credit_reservations"), 0);
+        assert.equal(f.requests.length, 0);
+        assert.equal(f.contexts.length, 0);
+        assert.equal(f.models.length, 0);
+      }
+      assert.equal(f.preflights.length, priorChecks + 2);
+      assert.equal(f.preflights.at(-1)!.purpose, "submit");
+      assert.deepEqual(
+        f.preflights.at(-1)!.identity,
+        f.entry.registration.identity,
+      );
+      f.readiness.allowed = true;
+      f.readiness.address = "8.8.8.8";
+      const accepted = await request.create();
+      assert.equal(f.controls.quotes, 1);
+      assert.equal(await f.count("plugin_credit_reservations"), 1);
+      assert.equal(
+        accepted.creditAdmission?.reservation.scope.principalId,
+        actor.principalId,
+      );
+      // Admission still performs no business execution or provider request.
+      assert.equal(f.requests.length, 0);
+      assert.equal(f.contexts.length, 0);
+      assert.equal(f.models.length, 0);
+    },
+  );
+  test(
     `${backend}: installed SDK Krea2 package executes a paid Run through actual Worker IO and preserves the default Agent`,
     options,
     async (t) => {

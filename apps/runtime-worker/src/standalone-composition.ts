@@ -41,9 +41,11 @@ import {
   captureInstalledPluginExecutionConfig,
   composeInstalledPluginRuntimeResolver,
   composeInstalledPluginQueryHost,
+  composeInstalledPluginExecutionReadiness,
   type InstalledPluginExecutionConfig,
 } from "./plugins/installed-plugin-runtime-composition.ts";
 import type { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
+import type { InstalledPluginExecutionReadinessPort } from "./plugins/installed-plugin-execution-readiness.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import { type AgentVersionRuntime } from "./agent-version-runtime.ts";
@@ -195,6 +197,8 @@ export type StandaloneRuntimeWorker = Readonly<{
   workspacePrivateOrigin: string | null;
   extensionHostOrigin: string | null;
   pluginQueryHost: InstalledPluginQueryHost | null;
+  /** Borrowed by the admission Host; close that Host before closing this Worker. */
+  pluginExecutionReadiness: InstalledPluginExecutionReadinessPort | null;
   close(): Promise<void>;
 }>;
 
@@ -433,6 +437,15 @@ async function composeRuntimeWorker(
       config.installedPluginExecution.historicalQuery !== undefined)
   )
     await store.externalOperationStore().migrate();
+  const executionReadiness =
+    config.installedPluginExecution === undefined
+      ? null
+      : composeInstalledPluginExecutionReadiness({
+          store,
+          config: config.installedPluginExecution,
+        });
+  if (executionReadiness !== null)
+    lifetime.own(executionReadiness, { phase: "resources" });
   const installedPluginRuntimeResolver =
     config.installedPluginExecution === undefined
       ? config.installedPluginRuntimeResolver
@@ -574,6 +587,7 @@ async function composeRuntimeWorker(
           config: config.installedPluginExecution,
           runtimeResolver,
           tenantId: config.runtimeTenantId,
+          ...(executionReadiness === null ? {} : { executionReadiness }),
         });
   if (pluginQueryHost !== null) {
     const queryOwner = lifetime.own(pluginQueryHost, { phase: "stop" });
@@ -734,6 +748,13 @@ async function composeRuntimeWorker(
     workspacePrivateOrigin: workspacePrivateServer?.origin ?? null,
     extensionHostOrigin: extensionHostServer?.origin ?? null,
     pluginQueryHost,
+    pluginExecutionReadiness:
+      executionReadiness === null
+        ? null
+        : Object.freeze({
+            assertReady:
+              executionReadiness.assertReady.bind(executionReadiness),
+          }),
     close: () => lifetime.close(),
   };
 }

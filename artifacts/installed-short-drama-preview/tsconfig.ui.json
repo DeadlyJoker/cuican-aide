@@ -1,0 +1,14 @@
+{
+  "extends": "../../apps/crewon-ui/tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "baseUrl": "../..",
+    "paths": {
+      "@/*": ["apps/crewon-ui/src/*"],
+      "@crewon/control-client": ["packages/control-client/src/index.ts"],
+      "node:fs": ["apps/crewon-ui/src/type-roots/node/index.d.ts"],
+      "node:fs/promises": ["apps/crewon-ui/src/type-roots/node/index.d.ts"]
+    }
+  },
+  "include": ["*.tsx", "../../apps/crewon-ui/src/vite-env.d.ts"]
+}

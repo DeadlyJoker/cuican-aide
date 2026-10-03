@@ -96,6 +96,10 @@ function factory(tasks) {
     },
   });
   assert.equal(typeof factory?.create, "function");
+  assert.deepEqual(factory.requiredServices, [
+    "externalOperations",
+    "jsonHttp",
+  ]);
   return { factory, actions };
 }
 /** Explicit unit IO ports; these do not simulate host permissions, paid admission or production network governance. */

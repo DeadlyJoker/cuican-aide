@@ -49,6 +49,7 @@ export async function hostFixture(
   t: TestContext,
   options: {
     registerFactory?: boolean;
+    requiredServices?: readonly ("externalOperations" | "jsonHttp")[];
     disposeFails?: boolean;
     maximumPackages?: number;
     secondVersion?: boolean;
@@ -74,7 +75,7 @@ export async function hostFixture(
 const record=v=>appendFileSync(${JSON.stringify(path)},v+'\\n');record('import');
 export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(pluginId)},
 async setup(ctx){record('setup');await globalThis[${JSON.stringify(key)}].onSetup?.();
-${options.registerFactory === false ? "" : `const registration=ctx.services.get('crewon.execution','1').register({create(){record('create');throw new Error('readiness must not create a business runtime')}});globalThis[${JSON.stringify(key)}].revokeFactory=()=>registration.dispose();`}
+${options.registerFactory === false ? "" : `const registration=ctx.services.get('crewon.execution','1').register({${options.requiredServices === undefined ? "" : "requiredServices:" + JSON.stringify(options.requiredServices) + ","}create(){record('create');throw new Error('readiness must not create a business runtime')}});globalThis[${JSON.stringify(key)}].revokeFactory=()=>registration.dispose();`}
 return {async dispose(){record('dispose');await globalThis[${JSON.stringify(key)}].onDispose?.();
 ${options.disposeFails ? "throw new Error('readiness fixture disposal failed');" : ""}}};}};`;
   const f = await factoryFixture(t, { node });

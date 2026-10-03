@@ -187,7 +187,11 @@ export default definePlugin({
 
 执行方法的取消参数是 SDK 自持的 `PluginAbortSignal`：包含 `aborted`、`reason`、`throwIfAborted` 和 abort 监听的窄视图，不需要 DOM 声明。宿主应原样传入真实原生 AbortSignal；不能用仿造信号替代。拥有 Node 或 DOM 类型、需要调用 `fetch` 的插件可在自己的网络边界将这个原生对象断言为 `AbortSignal`，该断言不会生成或补齐实现。宿主仍负责 lease 失效、当前权限和网络策略。
 
-工厂的可选第二参数为 `PluginExecutionServices`，原单参数工厂保持兼容。`approvalRequirement` 来自实际 Run 的宿主审批模式；可选 `externalOperations` 和 `jsonHttp` 提供原外部 operation 账本与受控 JSON 请求。需要它们的插件必须检查实际端口，缺少时拒绝执行。这些端口不把数据库连接、调用者、付款人、凭据或任意网络 origin 交给插件。
+工厂的可选第二参数为 `PluginExecutionServices`，原单参数工厂保持兼容。`approvalRequirement` 来自实际 Run 的宿主审批模式；可选 `externalOperations` 和 `jsonHttp` 提供原外部 operation 账本与受控 JSON 请求。这些端口不把数据库连接、调用者、付款人、凭据或任意网络 origin 交给插件。
+
+需要 IO 的工厂应声明只读 `requiredServices`，例如 `{ requiredServices: ["externalOperations", "jsonHttp"], create: createStoryTools }`。Node 和 contracts 入口导出的 `PluginExecutionServiceRequirement` 仅允许这两个值；数组可以为空，不能重复。宿主注册时复制并冻结声明，实际租用工厂可读取该声明，并在执行插件的 `create` 前检查所需端口：`externalOperations` 必须具有 `reserve`、`load`、`advance`，`jsonHttp` 必须具有 `request`。缺失时以 `plugin_execution_required_services_unavailable` 拒绝，插件业务工厂不会执行。省略声明的旧工厂保持原行为。
+
+声明与方法形状不授予 Run、网络或付款权限，也不证明部署就绪。宿主仍须核验真实配置、服务所有权和当前操作授权；插件自身也应检查运行时实际收到的服务。SDK 只提供类型，实际注册检查由宿主实现。
 
 端口的 `command` 必须是当前 `execute/reconcile/cancel` 收到的实际命令对象。宿主在已持久派发并确认的 Worker claim 内开放调用范围；复制 DTO、只持有 Run 元数据、保存命令到调用结束后都不能取得 IO 权限。`reserve` 使用原 Run 的确定性 operation ID，持久创建成功才返回当前调用范围的一次性 `dispatchRef`；`existing` 不返回新凭证。`POST` 的方法、相对路径和 JSON 内容必须与预留摘要完全一致，凭证先消耗后等待，不因失败、重开或查不到结果再次发出。ComfyUI 等供应商的关联 ID 不等于其服务端去重保证。
 
@@ -226,6 +230,8 @@ export default defineUiPlugin({
 ```
 
 完整 mount 签名为 `mount(root: HTMLElement, props, services)`，允许返回 Promise。返回实例必须包含 `update(nextProps)` 和 `dispose()`，两者可异步。props 包含 `schemaVersion: "crewon.plugin-ui-props.v1"`、`contributionId`、`theme: { mode, tokens }` 和 JSON `data`。
+
+CrewON 的主题投影读取已经绘制的原界面变量，不修改宿主样式。除原色彩、基础字体、控件高度及 `--radius-md`/`--radius-lg` 外，当前公共投影还包含 `--accent-ink`/`--accent-strong`、`--control-fg`/`--control-fg-muted`、`--control-ring`/`--control-ring-strong`、`--control-surface`/`--control-surface-active`/`--control-surface-hover`、`--panel-subtle`、`--radius-sm`/`--radius-xl`、`--shadow-modal`、`--space-1` 到 `--space-6` 和 `--user-code-font`。只提供实际存在的非空值；总计最多 39 个受支持名称，低于协议的 64 项上限。插件将它们应用到自己拥有的根节点，更新时清除已撤回的变量，卸载时释放局部节点；不能修改 `document` 的主题或复制全局工作区 CSS。
 
 UI 服务只有 `services.invoke(action, input, { signal? })`，返回 JSON 值；动作必须由宿主映射并授权。接口没有客户端 actor、principal 或全局身份参数。实际挂载、主题传递、动作路由和 UI 隔离由宿主负责，SDK 中的类型和定义校验不代表页面已接通。
 
