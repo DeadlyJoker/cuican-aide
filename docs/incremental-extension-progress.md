@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：完整 Web App 的安装模块执行与冷恢复
+
+正式 UI 构建的原 `index.html → main.tsx → AgentPlatformAuthGate → App` 已实际验收。原登录表单取得具名普通用户账号，原左下用户栏打开原设置导航，在“工具与扩展”读回真实安装包和配置；原 CSS 和设置 lazy CSS 实际加载。没有替换正式入口、注入 Control 客户端、Native 桥或改写宿主页面。完整专项及重复运行命令见[验收说明](./installed-plugin-full-app-acceptance.md)。
+
+打开真实独立报告模块时 Thread/Run/预留/模型/供应商调用均为零；显式“创建任务”后只有一个 Thread。包内页面的一次动作经实际 BFF、production Control、Worker 和 PostgreSQL 创建一个原 Run，完整包身份、principal/actor/profile、配置修订 2 和个人预留持久化。实际报价 **30 测试积分**，预留 **一次**，供应商 **一次 POST**、模型 **两次 Responses**；报告包的原 ToolExecutionReceipt 为一条，SDK external operation 为零。
+
+“打开任务”进入原任务页，实际 Run/Thread SSE 返回 200，原转录显示报告。Control、Worker 物理重启、新浏览器目录重新登录后，原侧栏恢复同一任务，模块读回已完成状态；Thread/Run/准入/绑定/预留/转录没有增加或被重写，供应商仍只有一次 POST。该证据证明实际流可打开、持久结果与冷恢复，不单独证明实时 delta 逐帧驱动 DOM，也不替代原运行时的重连/游标组件覆盖。
+
+新增 `pnpm --filter @crewon/control-api test:installed-plugin-full-app` 先完成正式 UI 构建和唯一共享 SDK producer，在仓外构建两版报告包，实际删除开发源码/依赖/SDK 后才启动消费者，结果 **1/1、零跳过**。最终日志为 `installed-plugin-full-app-official-producer-consumer-sealed-20261003.log`；证明和十五张截图位于 `output/extensions/checks/installed-plugin-full-app-browser-sealed-20261003/`。首次三次失败分别为测试定位父/子 DOM 层级、空闲 SSE 的响应头等待及只读分页超过实际 16 项上限；均只修专项观测，原产品断言和旧快照没有放宽，失败日志保留。
+
+UI lint、Control 类型、license 和仓库 boundary 通过。按项目技能运行原 UI 全量，**3389 通过、8 失败、2 跳过，共 3399 项**，另有三个旧 obsolete snapshot；不能称全量通过。完整失败名称、错误及首帧与前阶段相同，证据为 `installed-plugin-full-app-ui-baseline-comparison-sealed-20261003.json`。本轮新增的是独立验收入口和夹具，未修改原用户菜单、设置导航、页面组件、全局样式或旧快照。
+
+实际七个正式产品子进程均以 0 退出，浏览器及子进程物理清理，独占 schema、连接、端口和临时目录检查通过；producer 临时产物在消费者结束后删除。Root 临时 PostgreSQL 的其他连接和剩余测试 schema 均为零，随后停机、确认 PID 消失、删除自有 root/socket 并重绑端口成功，记录为 `installed-plugin-full-app-owned-cleanup-sealed-20261003.log`。用户 5719/5720 预览继续保留，用户栏与原设置页已实际再次打开。
+
+安装、选择、真实 HTTP 首配、唯一 CLI 发布和 activation 是明确的操作者前提，不是从空库安装到自动发布的产品闭环。身份、策略、资金/报价、模型和报告供应商均为具名测试服务，预留没有执行真实结算；专业报告夹具不替代 E5 第二个实际企业 API。正式 Native/Main/file/packaged 执行、完整 App 的 Krea2 原操作查询与在线生成、真实资金/价格/结算和短剧持久项目仍未完成。下一落地点是正式 Native 的 SQLite 业务首配，保留执行与付款的独立准入，目标继续进行。
+
 ## 2026-10-03：已安装模块的任务上下文与连续查询
 
 原 `App` 通过通用宿主为声明 `crewon.tasks@1/@2` 的独立页面提供实际会话修订、至多八项公开任务和用户明确选择的生成操作。没有当前会话时，打开模块不创建 Thread/Run；点击通用“创建任务”后才使用原认证客户端创建目标并读取真实修订。新目标暂不切换 App 选择，业务草稿继续保留；点击“打开任务”才进入原会话。没有 Krea 名称专用的宿主分支，SDK、公开 HTTP 与持久形状没有改动，详见[任务上下文协议](./installed-plugin-ui-task-context.md)。

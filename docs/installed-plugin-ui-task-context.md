@@ -29,3 +29,5 @@ Krea2 包使用以上投影，确认受理后等待实际会话版本更新，�
 该页面接线不提供默认资金、价格或生产身份；新生成仍需要原安装、配置、发布、启用和真实报价准入。组件及具名 HTTP 测试不等于完整正式 App 的生成验收，双库安装式 UI/Worker 集成也不等于用户当前 ComfyUI 在线可用。完整 App/Main/packaged App、正式收费查询进程和在线服务验证仍需分别完成。
 
 实际包的组件接线专项使用 Node.js 24 执行 `pnpm --filter @crewon/ui test:installed-plugin-task-context`。该入口复用已有唯一 SDK producer，在仓外构建独立包、删除开发源码与依赖后才启动消费者，消费者物理退出后清理自有目录。普通 UI 测试不构建包；未提供 `CREWON_TEST_KREA_PLUGIN_DIR` 时这两项不运行，显式配置空目录或坏包仍失败。专项必须实际运行两项、零跳过，不能将普通测试中的缺夹具跳过当作安装式验证通过。
+
+完整正式 Web 入口的专业报告动作与冷恢复另见[完整 App 验收](./installed-plugin-full-app-acceptance.md)，使用实际 BFF/Control/Worker/PostgreSQL 和具名服务。它不替代 Krea2 的在线生成、原操作查询、正式 Native 或实际个人结算验收。

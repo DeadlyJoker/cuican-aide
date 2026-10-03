@@ -7,6 +7,7 @@
     "license:check": "node scripts/check-production-licenses.mjs",
     "start": "node --experimental-strip-types src/main.ts",
     "test": "pnpm license:check && node --experimental-strip-types --test src/*.test.ts",
+    "test:installed-plugin-full-app": "node scripts/test-installed-plugin-full-app.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
