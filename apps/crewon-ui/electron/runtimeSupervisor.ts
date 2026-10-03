@@ -59,6 +59,11 @@ import {
 } from "./desktopInstalledPluginRuntime.ts";
 import type { DesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 import { startDesktopInstalledPluginRuntimeChildren } from "./desktopInstalledPluginRuntimeChildren.ts";
+import {
+  prepareAutomaticDesktopInstalledPluginRuntime,
+  type AutomaticDesktopInstalledPluginRuntime,
+} from "./desktopAutomaticInstalledPluginRuntime.ts";
+import { DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -140,6 +145,8 @@ export class RuntimeSupervisor {
   #managementControl: ChildProcess | null = null;
   #pluginBootstrap: DesktopPluginBootstrapOwner | null = null;
   #installedRuntimeOwner: DesktopInstalledPluginRuntime | null = null;
+  #automaticInstalledRuntimeOwner: AutomaticDesktopInstalledPluginRuntime | null =
+    null;
   #installedStartupJoin: Promise<
     Readonly<{ control: ChildProcess; worker: ChildProcess }>
   > | null = null;
@@ -205,6 +212,8 @@ export class RuntimeSupervisor {
       throw new Error("desktop_plugin_bootstrap_cleanup_required");
     if (this.#installedRuntimeOwner !== null)
       throw new Error("desktop_installed_plugin_runtime_cleanup_required");
+    if (this.#automaticInstalledRuntimeOwner !== null)
+      throw new Error("desktop_installed_plugin_preparation_cleanup_required");
     const configuration =
       this.#extensionRuntime?.() ??
       parseDesktopExtensionRuntimeConfiguration({
@@ -296,8 +305,7 @@ export class RuntimeSupervisor {
           throw new Error("desktop_installed_plugin_legacy_runtime_conflict");
         if (bootstrap === null)
           throw new Error("desktop_installed_plugin_bootstrap_required");
-        const installed = prepareDesktopInstalledPluginRuntime({
-          configuration: installedConfiguration,
+        const installedInputs = {
           dataDirectory: this.#dataDirectory,
           bootstrap,
           provider,
@@ -313,7 +321,34 @@ export class RuntimeSupervisor {
           },
           deadlineMs: this.#installedDeadlineMs,
           signal: startup.signal,
-        });
+        };
+        let installed: DesktopInstalledPluginRuntime;
+        if (
+          installedConfiguration.schemaVersion ===
+          DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+        ) {
+          const automatic = prepareAutomaticDesktopInstalledPluginRuntime({
+            ...installedInputs,
+            configuration: installedConfiguration,
+          });
+          this.#automaticInstalledRuntimeOwner = automatic;
+          automatic.assertCurrent();
+          await this.#runOnce(
+            "Installed plugin preparation",
+            this.#paths.release,
+            automatic.preparationEnvironment,
+            startup.signal,
+          );
+          assertProviderCurrent();
+          automatic.assertCurrent();
+          startup.signal.throwIfAborted();
+          installed = automatic.complete();
+        } else {
+          installed = prepareDesktopInstalledPluginRuntime({
+            ...installedInputs,
+            configuration: installedConfiguration,
+          });
+        }
         this.#installedRuntimeOwner = installed;
         installed.assertCurrent();
         await this.#runOnce(
@@ -627,6 +662,7 @@ export class RuntimeSupervisor {
     this.#runtimeAbort = null;
     this.#pluginBootstrap?.withdraw();
     this.#installedRuntimeOwner?.withdraw();
+    this.#automaticInstalledRuntimeOwner?.withdraw();
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
     const stopping = this.#stopOwnedRuntime();
@@ -642,6 +678,7 @@ export class RuntimeSupervisor {
     const history = this.#history;
     const bootstrap = this.#pluginBootstrap;
     const installed = this.#installedRuntimeOwner;
+    const automatic = this.#automaticInstalledRuntimeOwner;
     const installedStartup = this.#installedStartupJoin;
     let nativeCleanup = await this.#settleSessionCleanup();
     const results = await Promise.allSettled([history?.stop()]);
@@ -672,6 +709,9 @@ export class RuntimeSupervisor {
       await installed?.close();
       if (this.#installedRuntimeOwner === installed)
         this.#installedRuntimeOwner = null;
+      await automatic?.close();
+      if (this.#automaticInstalledRuntimeOwner === automatic)
+        this.#automaticInstalledRuntimeOwner = null;
       await bootstrap?.close();
       if (this.#pluginBootstrap === bootstrap) this.#pluginBootstrap = null;
       if (nativeCleanup.some((v) => v.status === "rejected"))

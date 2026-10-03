@@ -1,6 +1,6 @@
 # Native 安装包发布与 Worker 加载
 
-此阶段接通 Electron Main 已明确开启的安装包发布与 Worker 加载。原用户栏、设置导航、页面组件和样式保持不变。没有固定开启文件时继续原默认或旧扩展路径；无模型时仍只提供本机安装和配置管理。
+Electron Main 已明确开启的安装包可以从已保存配置和当前模型自动准备发布输入，再沿用原发布与 Worker 加载。原用户栏、设置导航、页面组件和样式保持不变。没有固定开启文件时继续原默认或旧扩展路径；无模型时仍只提供本机安装和配置管理。
 
 ## 启动输入
 
@@ -32,7 +32,56 @@ Main 只从实际运行数据目录读取 `desktop-installed-plugin-runtime.json
 
 `workerConfigurationPath` 使用已有的 `crewon.installed-plugin-worker.v1` 私有协议，详见[服务启动](./installed-plugin-service-startup.md)。它包含真实安装目录、完整发布文档、HTTPS actor/policy/profile/package authority、可选的明确 network authority 和凭据环境变量引用。专用凭据变量可以使用 `NATIVE_INSTALLED_AUTHORITY_TOKEN`；不能引用默认 Control、模型或系统运行必需的变量。Main 将这些凭据仅交给 release/Worker 子进程。
 
-发布文档仍为既有 `crewon.installed-plugin-release.v1`。它必须使用同一 Native profile、实际批准的包身份、安装副本和已持久化的业务配置；模型来源必须是独立 `directResponses` binding，匹配当前真实模型与凭据引用。默认 Agent 的 shared 工具绑定不作为插件来源。此阶段需要操作者预先构造完整文档，尚未自动从设置保存的配置和模型编译发布输入。
+发布文档仍为既有 `crewon.installed-plugin-release.v1`。它必须使用同一 Native profile、实际批准的包身份、安装副本和已持久化的业务配置；模型来源必须是独立 `directResponses` binding，匹配当前真实模型与凭据引用。默认 Agent 的 shared 工具绑定不作为插件来源。v1 仍要求操作者预先构造完整文档，兼容原开启配置。
+
+## 自动准备配置 v2
+
+同一固定文件支持 `crewon.desktop-installed-plugin-runtime.v2`。`enabled: false` 仍只有版本和停用字段；开启时用实际插件列表和权限服务替代操作者的文档路径：
+
+```json
+{
+  "schemaVersion": "crewon.desktop-installed-plugin-runtime.v2",
+  "enabled": true,
+  "providerBinding": {
+    "providerId": "actual-provider-id",
+    "endpoint": "https://actual-model-provider.example/v1",
+    "responsesEndpoint": "https://actual-model-provider.example/v1/responses",
+    "modelId": "actual-model-id",
+    "credentialRequired": true
+  },
+  "plugins": [
+    { "pluginId": "example.professional", "approvalRequirement": "none" }
+  ],
+  "workerAuthorities": {
+    "actorAuthority": {
+      "url": "https://actual-authority.example/actor",
+      "serviceTokenEnvironmentVariable": "NATIVE_INSTALLED_AUTHORITY_TOKEN"
+    },
+    "policyAuthority": {
+      "url": "https://actual-authority.example/policy",
+      "serviceTokenEnvironmentVariable": "NATIVE_INSTALLED_AUTHORITY_TOKEN"
+    },
+    "profileAuthority": {
+      "url": "https://actual-authority.example/profile",
+      "serviceTokenEnvironmentVariable": "NATIVE_INSTALLED_AUTHORITY_TOKEN"
+    },
+    "packageAuthority": {
+      "url": "https://actual-authority.example/package",
+      "serviceTokenEnvironmentVariable": "NATIVE_INSTALLED_AUTHORITY_TOKEN"
+    },
+    "networkAuthority": null,
+    "timeoutMs": 5000
+  }
+}
+```
+
+示例地址和凭据名必须替换为真实部署输入。列表限 1–32 个不同插件，每项 `approvalRequirement` 为 `none` 或 `perAction`。Main 捕获实际固定文件、批准包集合、持久 Native profile 和模型绑定；只在自有 `0700` 随机目录创建 `0600` 的 `preparation.json` 与 `worker.json`。Renderer 不能提交临时路径或自行签发这些输入。
+
+原 `runtime-release` 首次以 `CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH` 模式运行：在分配默认工具前验证私有文件和环境，读取同一个 `control.sqlite` 的真实安装选择和最新业务配置，重新请求真实 actor/profile、包读取和策略许可，核验安装字节与业务 schema，然后生成同目录的 `release.json`。这一步不发布任何 Agent、不写 runtime bindings、不改变选择、不导入业务 Node。完整文档保持原 1 MiB 上限；较长合法模型定义和 32 项组合不会被通用扩展 JSON 的 64 KiB 序列化限制误拒绝。
+
+Main 等待准备 CLI 的实际 `close`，重核全部所有者，再以原发布模式运行同一个 CLI。默认、独立模型 source 和插件 derived 资产在这一次发布中建立；不要求此前已启动或发布普通默认 Agent。source 使用当前模型的真实 binding、instructions/model/execution，独立清空默认工具和工作区依赖；配置修订、随机目录及凭据值不改变相同模型的 source 身份，配置或批准要求变化会改变 derived 目标。
+
+保存配置继续只是保存。下一次明确启动或重启才读取最新 revision；没有隐式热重启或业务执行。显式列出的插件已卸载、配置不匹配或权限被撤回时，当前私有开启模式拒绝启动。后续产品接线仍需处理单插件失效与卸载，保持宿主原有能力可用；v2 固定文件也仍是明确操作者开启输入，尚不是用户安装后的完整自动执行闭环。
 
 ## 原运行链路
 
@@ -42,9 +91,9 @@ Main 随后启动既有 Worker，从实际输出读取新私有 peer 的 loopbac
 
 当前 Control 不获得 installed peer 凭据、任务准入或付款身份。Native 管理许可不能替代执行许可。本次启动不隐式启用业务包、不创建收费 Run、不注入余额或报价，也不发送生成请求。安装管理中的显式模块启用继续沿用原依赖规则；声明可选执行服务的模块可以启用，但这不证明业务可执行。与旧扩展同时开启同一个 Worker 时明确拒绝。
 
-交付来源离线后继续使用已安装副本。取消、失败、停止和重启会先撤回新工作，再等待实际 release/Worker/Control 的 `close`，包括输出管道关闭；不能只凭 `exitCode` 删除仍被子进程消费的 bootstrap。退出未知时保留所有者，拒绝开启下一次运行。操作者配置和发布文件不作为临时文件删除。
+交付来源离线后继续使用已安装副本。取消、失败、停止和重启会先撤回新工作，再等待实际 preparation/release/Worker/Control 的 `close`，包括输出管道关闭；不能只凭 `exitCode` 删除仍被子进程消费的 bootstrap。实际 private peer 的 HTTP/body 挑战也必须结束，才能清理临时准备目录和 bootstrap。退出未知时保留所有者，拒绝开启下一次运行。固定操作者配置和 v1 操作者发布文件不作为临时文件删除。
 
-## 本阶段验收
+## v1 加载阶段验收
 
 在 Node.js 24 下提供真实独立包目录，运行：
 
@@ -63,6 +112,28 @@ CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR=/absolute/independent/professional-packag
 
 固定配置/运行 owner/私有挑战检查 **85/85**，原默认/旧扩展/bootstrap/物理关闭回归 **69/69**，原 Native 配置行为 **18/18**，正式 Main/preload/file App 原用户栏、设置、安装和配置冷恢复专项 **2/2**，均零失败、零跳过。UI lint/build、Main 构建、七个 runtime bundle、boundary 和生产许可证检查通过。早期两次全量 UI 仍有旧失败，范围及完整日志见[实施进度](./incremental-extension-progress.md)；不能称全量 UI 通过。
 
+## v2 自动准备验收
+
+提供上述实际独立专业包，运行：
+
+```bash
+CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR=/absolute/independent/professional-package \
+  pnpm --filter @crewon/ui exec vitest run \
+  electron/desktopInstalledPluginRuntime.automatic.process.integration.test.ts \
+  electron/desktopInstalledPluginRuntime.automatic.lifetime.integration.test.ts \
+  electron/desktopInstalledPluginRuntime.automatic.preparation-lifetime.integration.test.ts \
+  electron/desktopInstalledPluginRuntime.process.integration.test.ts \
+  electron/desktopInstalledPluginRuntime.lifetime.integration.test.ts
+```
+
+冻结后的实际进程验收 **6/6、零跳过**，日志为 `native-installed-automatic-process-final-20261003.log`。通过原 Native HTTP 安装和保存配置，确认 Agent 表零行后直接启动 v2；两次真实 CLI 完成准备和首次完整发布，原 Control ready。来源离线时使用已安装副本恢复同一 bundle；配置 revision 2 在下次启动生成新 derived 并保留旧资产与部署，未声称已能执行历史查询。实际包权限撤回则无新发布、无 Worker/Control。v1 原加载和普通默认路径一并回归。
+
+新增关停验收用自有 HTTPS proxy 转发并核验原 actor 响应，只延迟原字节。准备 CLI 仍等待时，实际 PID 存活、临时目录只有两份输入、bindings 不存在且发表表为零；停止返回时 CLI 已物理退出，随后文件清理，同一固定配置可以实际重新启动。另一项保留原 private peer Response 的验收证明 Worker 退出后仍必须等待挑战结束。
+
+Worker 新准备及实际 CLI 前置拒绝 **16/16**，桌面配置/owner **79/79**，原默认/旧扩展/bootstrap/关闭及 peer 检查 **94/94**。原 Worker 文档/loader/bindings/CLI/publication 回归 **43 通过、5 个 PostgreSQL 跳过**；本轮未提供 PostgreSQL，不将跳过计为完成。具名测试权限服务和实际 SQLite 证明自动准备与发布，业务 Node、模型请求、供应商、Run 和资金记录均为零；不是生产权限、真实用户执行或付款验收。
+
+正式 Main/preload/file App 原用户栏、设置导航、安装和业务配置冷恢复专项 **2/2、零跳过**，日志和截图位于 `native-installed-automatic-original-app-20261003` 前缀。本轮未修改 Renderer、全局 CSS 或旧快照；此专项没有开启 installed execution。UI lint/build、Worker/Control 类型、Main 构建、七入口 runtime stage、生产 license、boundary 和格式检查通过。合计 240 通过、5 个 PostgreSQL 跳过，范围及夹具实际清理记录见 `native-installed-automatic-proof-20261003.json`。
+
 ## 后续交付
 
-下一阶段仍需从原设置的实际配置与模型自动准备发布输入，再完成 Native 候选激活、真实 Node/IO readiness、独立用户执行身份、个人积分准入与结算。正式 packaged App 执行、ComfyUI 在线生成、短剧持久项目和第二个真实企业 API 也在原目标范围内。
+下一阶段完成 Native 候选激活、真实 Node/IO readiness、单插件故障与卸载隔离、独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。

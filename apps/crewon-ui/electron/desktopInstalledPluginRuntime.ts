@@ -32,17 +32,15 @@ import {
   desktopInstalledPluginInvalid as invalid,
   desktopInstalledPluginRecord as record,
   desktopInstalledPluginText as text,
+  DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+  DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES,
+  desktopInstalledPluginAuthorityEndpoints,
+  parseDesktopInstalledPluginWorkerAuthorities,
   type EnabledDesktopInstalledPluginRuntimeConfiguration,
 } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 
 const EXECUTION_PATH = "CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH";
-const authorityNames = [
-  "actorAuthority",
-  "policyAuthority",
-  "profileAuthority",
-  "packageAuthority",
-  "networkAuthority",
-] as const;
+const authorityNames = DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES;
 const digester = {
   sha256: (value: string) =>
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
@@ -65,20 +63,78 @@ export type DesktopInstalledPluginRuntime = Readonly<{
   /** Called after all consuming children have physically stopped. Operator files are retained. */
   close(): Promise<void>;
 }>;
+export type DesktopInstalledPluginRuntimeInput = Readonly<{
+  configuration: EnabledDesktopInstalledPluginRuntimeConfiguration;
+  dataDirectory: string;
+  bootstrap: DesktopPluginBootstrap;
+  provider: ActiveProvider;
+  sharedEnvironment: NodeJS.ProcessEnv;
+  workerEnvironment: NodeJS.ProcessEnv;
+  deadlineMs?: number;
+  signal: AbortSignal;
+}>;
 
 /** Synchronous ownership capture before Main starts or awaits any consuming child. */
 export function prepareDesktopInstalledPluginRuntime(
-  input: Readonly<{
-    configuration: EnabledDesktopInstalledPluginRuntimeConfiguration;
-    dataDirectory: string;
-    bootstrap: DesktopPluginBootstrap;
-    provider: ActiveProvider;
-    sharedEnvironment: NodeJS.ProcessEnv;
-    workerEnvironment: NodeJS.ProcessEnv;
-    deadlineMs?: number;
-    signal: AbortSignal;
-  }>,
+  input: DesktopInstalledPluginRuntimeInput,
 ): DesktopInstalledPluginRuntime {
+  const {
+    signal,
+    dataDirectory,
+    configuration,
+    bootstrap,
+    manifest,
+    scope,
+    shared,
+    worker,
+    provider,
+  } = captureDesktopInstalledPluginRuntimeInputs(input);
+  if (configuration.schemaVersion !== DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA)
+    invalid("configuration_mode");
+  const workerFile = captureDesktopInstalledPluginRuntimeDocument(
+    configuration.workerConfigurationPath,
+    128 * 1024,
+  );
+  const workerConfig = parseWorkerConfiguration(workerFile.value, manifest);
+  const authorityTokens = captureDesktopInstalledPluginAuthorityTokens(
+    workerConfig,
+    shared,
+    worker,
+  );
+  const releaseFile = captureDesktopInstalledPluginRuntimeDocument(
+    workerConfig.releaseDocumentPath,
+    1024 * 1024,
+  );
+  const snapshots: Snapshot[] = [workerFile, releaseFile];
+  const expectedCatalogEntries = captureRelease(
+    releaseFile.value,
+    manifest,
+    shared,
+    configuration,
+    authorityTokens,
+    snapshots,
+  );
+  return createCapturedRuntime({
+    input,
+    signal,
+    dataDirectory,
+    configuration,
+    bootstrap,
+    manifest,
+    scope,
+    shared,
+    worker,
+    provider,
+    authorityTokens,
+    snapshots,
+    expectedCatalogEntries,
+  });
+}
+
+/** Internal Native input capture shared by v1 publication and v2 preparation; no file issuance. */
+export function captureDesktopInstalledPluginRuntimeInputs(
+  input: DesktopInstalledPluginRuntimeInput,
+) {
   if (!(input.signal instanceof AbortSignal)) invalid("signal");
   const signal = input.signal;
   signal.throwIfAborted();
@@ -102,26 +158,45 @@ export function prepareDesktopInstalledPluginRuntime(
   const provider = copyProvider(input.provider);
   assertNativeEnvironment(shared, dataDirectory, provider, configuration);
   assertNativeEnvironment(worker, dataDirectory, provider, configuration);
-  const workerFile = captureDesktopInstalledPluginRuntimeDocument(
-    configuration.workerConfigurationPath,
-    128 * 1024,
-  );
-  const workerConfig = parseWorkerConfiguration(workerFile.value, manifest);
-  const authorityTokens = captureAuthorityTokens(workerConfig, shared, worker);
-  const releaseFile = captureDesktopInstalledPluginRuntimeDocument(
-    workerConfig.releaseDocumentPath,
-    1024 * 1024,
-  );
-  const snapshots: Snapshot[] = [workerFile, releaseFile];
-  const expectedCatalogEntries = captureRelease(
-    releaseFile.value,
-    manifest,
-    shared,
+  return {
+    signal,
+    dataDirectory,
     configuration,
+    bootstrap,
+    manifest,
+    scope,
+    shared,
+    worker,
+    provider,
+  };
+}
+
+function createCapturedRuntime(
+  input: ReturnType<typeof captureDesktopInstalledPluginRuntimeInputs> &
+    Readonly<{
+      input: DesktopInstalledPluginRuntimeInput;
+      authorityTokens: Record<string, string>;
+      snapshots: readonly Snapshot[];
+      expectedCatalogEntries: readonly DesktopInstalledPluginExpectedCatalogEntry[];
+    }>,
+): DesktopInstalledPluginRuntime {
+  const {
+    signal,
+    dataDirectory,
+    configuration,
+    bootstrap,
+    manifest,
+    scope,
+    shared,
+    worker,
+    provider,
     authorityTokens,
     snapshots,
-  );
-  const deadlineMs = input.deadlineMs ?? 20_000;
+    expectedCatalogEntries,
+  } = input;
+  if (configuration.schemaVersion !== DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA)
+    invalid("configuration_mode");
+  const deadlineMs = input.input.deadlineMs ?? 20_000;
   if (
     !Number.isSafeInteger(deadlineMs) ||
     deadlineMs < 1_000 ||
@@ -130,19 +205,19 @@ export function prepareDesktopInstalledPluginRuntime(
     invalid("deadline");
   let token = randomBytes(32).toString("hex");
   let releaseEnvironment: NodeJS.ProcessEnv | null = {
-    ...withoutInstalledEnvironment(shared),
+    ...withoutDesktopInstalledPluginEnvironment(shared),
     ...authorityTokens,
     [EXECUTION_PATH]: configuration.workerConfigurationPath,
   };
   let workerEnvironment: NodeJS.ProcessEnv | null = {
-    ...withoutInstalledEnvironment(worker),
+    ...withoutDesktopInstalledPluginEnvironment(worker),
     ...authorityTokens,
     [EXECUTION_PATH]: configuration.workerConfigurationPath,
     CREWON_INSTALLED_PLUGIN_PEER_PORT: "0",
     CREWON_INSTALLED_PLUGIN_PEER_TOKEN: token,
     CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: String(deadlineMs),
   };
-  const controlEnvironment = withoutInstalledEnvironment(shared);
+  const controlEnvironment = withoutDesktopInstalledPluginEnvironment(shared);
   for (const name of Object.keys(authorityTokens))
     delete controlEnvironment[name];
   let control: NodeJS.ProcessEnv | null = controlEnvironment;
@@ -156,7 +231,7 @@ export function prepareDesktopInstalledPluginRuntime(
     );
     const current = assertDesktopPluginBootstrapIssued(bootstrap);
     if (current !== manifest) invalid("bootstrap_changed");
-    if (!isDeepStrictEqual(copyProvider(input.provider), provider))
+    if (!isDeepStrictEqual(copyProvider(input.input.provider), provider))
       invalid("provider_changed");
     for (const snapshot of snapshots) snapshot.assertCurrent();
     signal.throwIfAborted();
@@ -253,35 +328,13 @@ function parseWorkerConfiguration(
     )
   )
     invalid("scope");
-  const authorities = authorityNames.flatMap((name) => {
-    if (name === "networkAuthority" && value[name] === null) return [];
-    const endpoint = record(value[name]);
-    desktopInstalledPluginExactKeys(endpoint, [
-      "url",
-      "serviceTokenEnvironmentVariable",
-    ]);
-    const raw = text(endpoint.url, 2048);
-    if (/[\s?#]/u.test(raw)) invalid("authority_endpoint");
-    const url = new URL(raw);
-    if (
-      url.protocol !== "https:" ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      invalid("authority_endpoint");
-    const environmentVariable = text(
-      endpoint.serviceTokenEnvironmentVariable,
-      128,
-    );
-    if (
-      !/^[A-Z][A-Z0-9_]{0,127}$/u.test(environmentVariable) ||
-      reservedEnvironment(environmentVariable)
-    )
-      invalid("authority_reference");
-    return [{ url: url.href, environmentVariable }];
-  });
+  const authorities = desktopInstalledPluginAuthorityEndpoints(
+    parseDesktopInstalledPluginWorkerAuthorities(
+      Object.fromEntries(
+        [...authorityNames, "timeoutMs"].map((name) => [name, value[name]]),
+      ),
+    ),
+  );
   return Object.freeze({
     installRoot: manifest.installRoot,
     releaseDocumentPath: desktopInstalledPluginAbsolutePath(
@@ -290,8 +343,8 @@ function parseWorkerConfiguration(
     authorities: Object.freeze(authorities),
   });
 }
-function captureAuthorityTokens(
-  config: WorkerConfiguration,
+export function captureDesktopInstalledPluginAuthorityTokens(
+  config: Pick<WorkerConfiguration, "authorities">,
   shared: NodeJS.ProcessEnv,
   worker: NodeJS.ProcessEnv,
 ): Record<string, string> {
@@ -585,39 +638,11 @@ function copyEnvironment(input: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     invalid("environment");
   return value as NodeJS.ProcessEnv;
 }
-function withoutInstalledEnvironment(
+export function withoutDesktopInstalledPluginEnvironment(
   input: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   const result = { ...input };
   for (const name of Object.keys(result))
     if (name.startsWith("CREWON_INSTALLED_PLUGIN_")) delete result[name];
   return result;
-}
-function reservedEnvironment(name: string): boolean {
-  return (
-    (name.startsWith("CREWON_") &&
-      !name.startsWith("CREWON_INSTALLED_PLUGIN_AUTHORITY_")) ||
-    /^(?:NODE_|ELECTRON_|DYLD_|LD_|XDG_|LC_|PNPM_|NPM_|VITE_)/u.test(name) ||
-    [
-      "PATH",
-      "HOME",
-      "SHELL",
-      "USER",
-      "LOGNAME",
-      "TMPDIR",
-      "TMP",
-      "TEMP",
-      "LANG",
-      "TZ",
-      "PWD",
-      "OLDPWD",
-      "SSL_CERT_FILE",
-      "SSL_CERT_DIR",
-      "HTTPS_PROXY",
-      "HTTP_PROXY",
-      "ALL_PROXY",
-      "NO_PROXY",
-      "CODEX_HOME",
-    ].includes(name)
-  );
 }

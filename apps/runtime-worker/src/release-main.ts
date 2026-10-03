@@ -56,6 +56,11 @@ import {
   type InstalledPluginRuntimeReleaseActivationResult,
 } from "./installed-plugin-release-publication-composition.ts";
 import type { RuntimeAgentVersionReleaseActivationResult } from "./agent-version-release-composition.ts";
+import { prepareNativeInstalledPluginRelease } from "./plugins/installed-plugin-native-preparation.ts";
+import {
+  assertNativeInstalledPluginPreparation,
+  loadNativeInstalledPluginPreparation,
+} from "./plugins/installed-plugin-native-preparation-config.ts";
 
 const environment = Object.freeze({ ...process.env });
 const actor = loadRuntimeReleaseActor();
@@ -63,11 +68,25 @@ const bindingsPath =
   environment.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const route = resolveRuntimeBootstrapRoute(environment);
 const bootstrapAgent = resolveRuntimeBootstrapAgent(environment);
-const installedCliInput = await loadInstalledPluginReleaseCliInput({
-  environment,
-  actor,
-  defaultAgentVersionId: route.agentVersionId,
-});
+const nativePreparationPath =
+  environment.CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH;
+// Validate private Native inputs before allocating model or tool transports.
+const nativePreparationInput =
+  nativePreparationPath === undefined
+    ? null
+    : loadNativeInstalledPluginPreparation({
+        inputPath: nativePreparationPath,
+        environment,
+        actor,
+      });
+const installedCliInput =
+  nativePreparationPath === undefined
+    ? await loadInstalledPluginReleaseCliInput({
+        environment,
+        actor,
+        defaultAgentVersionId: route.agentVersionId,
+      })
+    : null;
 let installedInputTransferred = false;
 let transport: ReturnType<typeof createModelTransport> | undefined;
 let toolRuntime:
@@ -225,136 +244,154 @@ try {
       ...(ownsBindingsManifest ? { toolRuntimeMode: "shared" } : {}),
     });
   }
-  const loadedDeployments =
-    generatedBindings === undefined
-      ? bindingsPath
-        ? loadAgentVersionDeployments(bindingsPath)
-        : undefined
-      : agentVersionDeploymentCandidates(generatedBindings);
-  if (
-    (extensionRelease !== null || installedCliInput !== null) &&
-    loadedDeployments?.some(
-      (deployment) => deployment.tenantId !== actor.tenantId,
-    )
-  )
-    throw new Error("runtime_deployment_tenant_mismatch");
-  const configuredDeployments = loadedDeployments?.filter(
-    (deployment) =>
-      deployment.tenantId === actor.tenantId &&
-      deployment.agentVersionId !== route.agentVersionId,
-  );
-  const checkedRelease =
-    extensionRelease === null
-      ? undefined
-      : mergeExtensionReleaseInput({
-          extension: extensionRelease,
-          existingVersions: additionalAgentVersions,
-          existingDeployments: configuredDeployments ?? [],
-          tenantId: actor.tenantId,
-          defaultAgentVersionId: route.agentVersionId,
-        });
-  const installedCheckedRelease =
-    installedCliInput === null
-      ? undefined
-      : mergeInstalledPluginReleasePublicationInput({
-          release: installedCliInput.release,
-          existingVersions: additionalAgentVersions,
-          existingDeployments: configuredDeployments ?? [],
-          ...(generatedBindings === undefined ? {} : { generatedBindings }),
-        });
-  if (installedCheckedRelease?.generatedBindings !== undefined)
-    generatedBindings = installedCheckedRelease.generatedBindings;
-  const releaseVersions =
-    installedCheckedRelease?.additionalAgentVersions ??
-    checkedRelease?.additionalAgentVersions ??
-    additionalAgentVersions;
-  const releaseDeployments =
-    installedCheckedRelease?.agentVersionDeployments ??
-    checkedRelease?.agentVersionDeployments ??
-    configuredDeployments;
-  if (installedCliInput === null && generatedBindings !== undefined)
-    writeFileSync(bindingsPath!, JSON.stringify(generatedBindings), {
-      encoding: "utf8",
-      mode: 0o600,
+  if (nativePreparationPath !== undefined) {
+    assertNativeInstalledPluginPreparation(nativePreparationInput!);
+    const prepared = await prepareNativeInstalledPluginRelease({
+      inputPath: nativePreparationPath,
+      environment,
+      actor,
+      bootstrapVersion,
+      defaultAgentVersionId: route.agentVersionId,
     });
-  const release = {
-    ...common,
-    ...(releaseVersions.length === 0
-      ? {}
-      : { additionalAgentVersions: releaseVersions }),
-    ...(releaseDeployments === undefined
-      ? {}
-      : { agentVersionDeployments: releaseDeployments }),
-  };
-  const connectionString = environment.CREWON_CONTROL_DATABASE_URL?.trim();
-  const schema = environment.CREWON_CONTROL_DATABASE_SCHEMA?.trim();
-  const databasePath = connectionString
-    ? undefined
-    : requiredEnvironment("CREWON_CONTROL_DB_PATH", environment);
-  let activated:
-    | RuntimeAgentVersionReleaseActivationResult
-    | InstalledPluginRuntimeReleaseActivationResult;
-  if (installedCliInput === null) {
-    activated = connectionString
-      ? await activatePostgresRuntimeAgentVersionRelease({
-          ...release,
-          connectionString,
-          ...(schema ? { schema } : {}),
-        })
-      : await activateStandaloneRuntimeAgentVersionRelease({
-          ...release,
-          databasePath: databasePath!,
-        });
+    process.stdout.write(
+      `${JSON.stringify({
+        disposition: "prepared",
+        tenantId: actor.tenantId,
+        pluginCount: prepared.document.entries.length,
+      })}\n`,
+    );
   } else {
-    const installedRelease = {
-      ...release,
-      ownedInstalledPluginCliInput: installedCliInput,
-      ...(generatedBindings === undefined
+    const loadedDeployments =
+      generatedBindings === undefined
+        ? bindingsPath
+          ? loadAgentVersionDeployments(bindingsPath)
+          : undefined
+        : agentVersionDeploymentCandidates(generatedBindings);
+    if (
+      (extensionRelease !== null || installedCliInput !== null) &&
+      loadedDeployments?.some(
+        (deployment) => deployment.tenantId !== actor.tenantId,
+      )
+    )
+      throw new Error("runtime_deployment_tenant_mismatch");
+    const configuredDeployments = loadedDeployments?.filter(
+      (deployment) =>
+        deployment.tenantId === actor.tenantId &&
+        deployment.agentVersionId !== route.agentVersionId,
+    );
+    const checkedRelease =
+      extensionRelease === null
+        ? undefined
+        : mergeExtensionReleaseInput({
+            extension: extensionRelease,
+            existingVersions: additionalAgentVersions,
+            existingDeployments: configuredDeployments ?? [],
+            tenantId: actor.tenantId,
+            defaultAgentVersionId: route.agentVersionId,
+          });
+    const installedCheckedRelease =
+      installedCliInput === null
+        ? undefined
+        : mergeInstalledPluginReleasePublicationInput({
+            release: installedCliInput.release,
+            existingVersions: additionalAgentVersions,
+            existingDeployments: configuredDeployments ?? [],
+            ...(generatedBindings === undefined ? {} : { generatedBindings }),
+          });
+    if (installedCheckedRelease?.generatedBindings !== undefined)
+      generatedBindings = installedCheckedRelease.generatedBindings;
+    const releaseVersions =
+      installedCheckedRelease?.additionalAgentVersions ??
+      checkedRelease?.additionalAgentVersions ??
+      additionalAgentVersions;
+    const releaseDeployments =
+      installedCheckedRelease?.agentVersionDeployments ??
+      checkedRelease?.agentVersionDeployments ??
+      configuredDeployments;
+    if (installedCliInput === null && generatedBindings !== undefined)
+      writeFileSync(bindingsPath!, JSON.stringify(generatedBindings), {
+        encoding: "utf8",
+        mode: 0o600,
+      });
+    const release = {
+      ...common,
+      ...(releaseVersions.length === 0
         ? {}
-        : {
-            generatedBindingsManifest: {
-              path: bindingsPath!,
-              config: generatedBindings,
-            },
-          }),
+        : { additionalAgentVersions: releaseVersions }),
+      ...(releaseDeployments === undefined
+        ? {}
+        : { agentVersionDeployments: releaseDeployments }),
     };
-    // The wrapper owns both asynchronous metadata owners even if opening or preflight fails.
-    installedInputTransferred = true;
-    activated = connectionString
-      ? await activatePostgresInstalledPluginAgentVersionRelease({
-          ...installedRelease,
-          connectionString,
-          ...(schema ? { schema } : {}),
-        })
-      : await activateStandaloneInstalledPluginAgentVersionRelease({
-          ...installedRelease,
-          databasePath: databasePath!,
-        });
+    const connectionString = environment.CREWON_CONTROL_DATABASE_URL?.trim();
+    const schema = environment.CREWON_CONTROL_DATABASE_SCHEMA?.trim();
+    const databasePath = connectionString
+      ? undefined
+      : requiredEnvironment("CREWON_CONTROL_DB_PATH", environment);
+    let activated:
+      | RuntimeAgentVersionReleaseActivationResult
+      | InstalledPluginRuntimeReleaseActivationResult;
+    if (installedCliInput === null) {
+      activated = connectionString
+        ? await activatePostgresRuntimeAgentVersionRelease({
+            ...release,
+            connectionString,
+            ...(schema ? { schema } : {}),
+          })
+        : await activateStandaloneRuntimeAgentVersionRelease({
+            ...release,
+            databasePath: databasePath!,
+          });
+    } else {
+      const installedRelease = {
+        ...release,
+        ownedInstalledPluginCliInput: installedCliInput,
+        ...(generatedBindings === undefined
+          ? {}
+          : {
+              generatedBindingsManifest: {
+                path: bindingsPath!,
+                config: generatedBindings,
+              },
+            }),
+      };
+      // The wrapper owns both asynchronous metadata owners even if opening or preflight fails.
+      installedInputTransferred = true;
+      activated = connectionString
+        ? await activatePostgresInstalledPluginAgentVersionRelease({
+            ...installedRelease,
+            connectionString,
+            ...(schema ? { schema } : {}),
+          })
+        : await activateStandaloneInstalledPluginAgentVersionRelease({
+            ...installedRelease,
+            databasePath: databasePath!,
+          });
+    }
+    await finishExtensionRecoveryRelease({
+      preparation: recoveryPreparation,
+      plan: activated.plan,
+    });
+    process.stdout.write(
+      `${JSON.stringify({
+        disposition: activated.activation.disposition,
+        tenantId: actor.tenantId,
+        releaseId: activated.plan.bundle.releaseId,
+        activationId: release.activationId,
+        agentVersionIds: activated.plan.deployments.map(
+          (deployment) => deployment.agentVersionId,
+        ),
+        contentDigests: activated.plan.deployments.map(
+          (deployment) => deployment.contentDigest,
+        ),
+        materializationDigests: activated.plan.deployments.map(
+          (deployment) => deployment.materializationDigest,
+        ),
+        ...("verification" in activated
+          ? { verification: { outcome: activated.verification.outcome } }
+          : {}),
+      })}\n`,
+    );
   }
-  await finishExtensionRecoveryRelease({
-    preparation: recoveryPreparation,
-    plan: activated.plan,
-  });
-  process.stdout.write(
-    `${JSON.stringify({
-      disposition: activated.activation.disposition,
-      tenantId: actor.tenantId,
-      releaseId: activated.plan.bundle.releaseId,
-      activationId: release.activationId,
-      agentVersionIds: activated.plan.deployments.map(
-        (deployment) => deployment.agentVersionId,
-      ),
-      contentDigests: activated.plan.deployments.map(
-        (deployment) => deployment.contentDigest,
-      ),
-      materializationDigests: activated.plan.deployments.map(
-        (deployment) => deployment.materializationDigest,
-      ),
-      ...("verification" in activated
-        ? { verification: { outcome: activated.verification.outcome } }
-        : {}),
-    })}\n`,
-  );
 } finally {
   if (!installedInputTransferred && installedCliInput !== null) {
     await Promise.allSettled([

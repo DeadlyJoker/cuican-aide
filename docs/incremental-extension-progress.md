@@ -6,6 +6,24 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：Native 从保存配置和当前模型自动准备发布
+
+同一固定私有开启文件增加 v2，列表中的安装包不再要求操作者逐项构造 source/derived 文档。Main 捕获实际模型、批准集合与持久 Native profile，建立自有私有输入目录，第一次运行原 `runtime-release` 只读取实际 SQLite selection/latest configuration、重新核验真实 HTTPS actor/profile/package/read-policy 及安装字节，生成原 v1 发布文档。输入错误和旧扩展冲突在默认工具构造前拒绝；原 issued 文件 pin 在正式准备前再次核对。Main 等待准备 CLI 物理关闭后，第二次原 CLI 才发布完整 default/source/derived bundle，无需前置普通默认发布。协议、边界与复现命令见[桌面加载说明](./installed-plugin-native-runtime.md)。
+
+配置修订复用同一真实独立模型 source；derived 身份纳入实际 scope、包、完整配置和批准要求。凭据值、随机目录与临时文档路径不进入身份。较长合法 bootstrap 和 32 个实际安装条目保持既有 1 MiB 文档上限；新增有界 canonical recipe 保持旧小输入摘要顺序，避免误用通用扩展 JSON 的 64 KiB 上限。默认 Agent 的工具、工作区和模型目录继续由原发布路径编译，插件 source 不复用 shared 工具。
+
+冻结后的真实 source Supervisor/CLI/Worker/Control/SQLite 验收 **6/6、零跳过**，日志 `native-installed-automatic-process-final-20261003.log`。原 Native HTTP 安装停用包和首配之后，实际 Agent 表为零即可自动准备和首次发布；交付来源离线仍从安装字节重建同一文档与 bundle。真实 PUT 保存 revision 2 不隐式重启，下次启动建立新 derived，旧资产、部署与原默认定义保留。撤回包读取权限则无新发布且不启动 Worker/Control。该组也回归原 v1 加载和普通默认进程。
+
+一项新验收以真实 HTTPS proxy 转发、核验并暂缓原 actor 响应，没有构造 allow。第一个 preparation CLI 等待时实际 PID 存活，临时目录只有两输入、bindings 未写且发表表零行；stop 返回时该 CLI 已物理退出，随后自有输入与 bootstrap 清理，同一固定配置实际重新启动可 ready。另一项暂停原 private peer Response，证明实际 Worker 退出后仍等待 HTTP/body 挑战，才能撤掉三份准备文件及 bootstrap；并发 restart 等待原所有者退休。全程业务 Node、模型/供应商请求、Run 和资金记录为零。
+
+本轮 Worker 新准备/实际 CLI 前置拒绝 **16/16**，桌面配置/owner **79/79**，原默认/旧扩展/bootstrap/物理关闭和 peer 检查 **94/94**。原 Worker 文档/loader/bindings/CLI/publication 回归 **43 通过、5 个 PostgreSQL 跳过**；没有 PostgreSQL 服务，不把这五项当作完成。正式 Main/preload/file App 原用户栏/设置/安装/配置冷恢复 **2/2、零跳过**，证明与截图位于 `output/extensions/checks/native-installed-automatic-original-app-20261003/`。UI lint/build、Worker/Control 类型、Main 构建、七入口 runtime stage、生产 license、boundary 和格式检查通过。本轮所有 Renderer、全局 CSS 和旧快照逐字节保持开始版本，用户预览的原设置入口也已实际再次打开。
+
+原失败日志保留：首次 Worker 夹具以默认 text/plain 发送 JSON，被真实 authority parser 拒绝，随后只修夹具 Content-Type；类型检查也发现夹具环境的过窄推断，已显式使用环境 Record，未放宽产品协议。此前 UI 全量的八个既有失败及三个旧快照问题仍如下面历史章节记录；本轮没有重跑或声称全量 UI 通过，没有启动共享 SDK producer。
+
+本轮相关检查合计 **240 通过、5 个 PostgreSQL 跳过**，范围和实际计数见 `native-installed-automatic-proof-20261003.json`。所有消费者结束后，具名夹具的临时目录与实际进程均为零；原独立专业包再次验证相同摘要，用户 5719/5720 预览继续监听，未清理或重启用户服务。
+
+v2 仍是明确私有开启输入，具名权限服务仍是测试服务；安装及保存配置不隐式授予执行或付款。显式列表中已卸载或失效的插件当前拒绝这一开启模式，后续需完成单插件故障/卸载隔离，保持宿主原能力可用。Native 实际 Node/IO 候选准备与激活、独立真实用户执行身份、个人资金/价格/结算、正式 Main/full App/packaged Krea2 在线生成及历史查询、短剧持久项目与第二个实际企业 API 仍未完成。下一落地点是候选准备和宿主隔离，完整目标继续进行。
+
 ## 2026-10-03：Native 明确开启的安装包发布与 Worker 加载
 
 Electron Main 增加固定私有 `desktop-installed-plugin-runtime.json` 开启输入，捕获当前实际模型、Native profile、批准 tuple、安装副本和完整操作者发布文档，沿用原 `runtime-release`、Worker 和 Control。新逻辑独立于旧扩展开启路径；未开启时保持原默认路径，无模型时仍提供原安装和配置管理。原用户栏、设置导航、页面组件、全局 CSS 和旧快照本轮未修改。输入、边界和复现命令见[桌面加载说明](./installed-plugin-native-runtime.md)。
