@@ -112,7 +112,11 @@ export * from "./plugin-ui-ports.ts";
 export * from "./plugin-ui-commands.ts";
 export * from "./plugin-ui-application-service.ts";
 export * from "./plugin-ui-committed-task-authority.ts";
-export { assertPluginUiInvocationCurrent } from "./plugin-ui-invocation-authority.ts";
+export {
+  assertPluginUiInvocationCurrent,
+  capturePluginUiInvocationCommitAuthority,
+  type PluginUiInvocationCommitAuthority,
+} from "./plugin-ui-invocation-authority.ts";
 export type { PluginTaskCommitAuthorityPort } from "./extension-plugin-task-support.ts";
 export * from "./extension-credit-quote-port.ts";
 export * from "./external-operation-store-port.ts";
@@ -127,5 +131,6 @@ export * from "./extension-task-application-service.ts";
 export * from "./extension-read-application-service.ts";
 export * from "./creative-project-commands.ts";
 export * from "./creative-project-store-port.ts";
+export * from "./creative-project-commit-authority.ts";
 export * from "./creative-project-authorization-port.ts";
 export * from "./creative-project-application-service.ts";

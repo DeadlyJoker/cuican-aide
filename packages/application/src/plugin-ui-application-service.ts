@@ -266,8 +266,10 @@ export class PluginUiApplicationService {
         action: command.action,
         input: command.input,
       });
-      const unregister = registerPluginUiInvocation(context, () =>
-        this.#fence(actor, binding, "invoke"),
+      const unregister = registerPluginUiInvocation(
+        context,
+        () => this.#fence(actor, binding, "invoke"),
+        () => this.#alive(binding),
       );
       try {
         const raw = await this.#dependencies.actions.invoke(context);

@@ -43,8 +43,12 @@ OpenAPI 为这些操作新增独立 schema 与项目幂等参数，原 HTTP 契�
 
 BFF 只代理明确项目路径和方法，在 URL 规范化前检查原目标，防止编码或点路径落回通用代理。请求最多 64KiB，正常和错误响应都最多 60KiB，期限 10 秒；继续使用原 session、身份头剥离及 CSRF 机制。它不改原 SSE 或插件任务代理。
 
+## 每次调用的提交检查
+
+可信 Host 可给 Application 的六个写用例传入独立可选提交 authority，Store 在实际 COMMIT 前核对本次调用。关闭、过期或已经观察到的撤权使未派发的提交整笔回滚；已确认 COMMIT 保留成功和原回执。此选项不进入 HTTP、schema 或持久输入，缺省公共调用保持原行为，不承诺远端权限和数据库的全局原子性。具体时序与 SDK 动作见[安装插件项目协议](./installed-plugin-creative-project-actions.md)。
+
 ## 验证边界与下一步
 
 严格契约、客户端取消/期限、实际 SQLite 与 PostgreSQL HTTP、可选装配及真实 BFF→Control→SQLite 验证覆盖保存、不可变历史、账号隔离、撤权、并发 CAS、丢回复重放、归档、分页字节裁剪、回执失败回滚及同库重启恢复。PostgreSQL 验证使用隔离的本机 18.6 实例；具名测试身份不代替生产账号和钱包。
 
-下一步将同一公共服务接入安装插件的明确 Host action，再连接模块内的项目界面；生成关联仍需加入原 Run/个人积分冻结事务，结果选用只能引用已核验的原 operation。保留原用户栏、设置、侧栏、普通聊天和团队页面，完整 S0 门槛见[产品方案](./short-drama-workbench-product-plan.md#实施与验收顺序)。
+安装插件动作协议、SDK helper 和可信调用提交检查已实现；下一步将同一公共服务接入明确 Host dispatcher、实际依赖可用性和 ready，再连接模块内的项目界面。生成关联仍需加入原 Run/个人积分冻结事务，结果选用只能引用已核验的原 operation。保留原用户栏、设置、侧栏、普通聊天和团队页面，完整 S0 门槛见[产品方案](./short-drama-workbench-product-plan.md#实施与验收顺序)。

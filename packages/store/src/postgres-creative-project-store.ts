@@ -1,8 +1,13 @@
 import type { Pool, PoolClient } from "pg";
-import type {
-  CreativeProjectStore,
-  CreativeProjectMutationResult,
-  CreativeProjectOwnerScope,
+import {
+  assertCreativeProjectCommitActive,
+  assertCreativeProjectCommitCurrent,
+  captureCreativeProjectCommitAuthority,
+  type CreativeProjectCommitAuthority,
+  type CreativeProjectCommitOptions,
+  type CreativeProjectStore,
+  type CreativeProjectMutationResult,
+  type CreativeProjectOwnerScope,
 } from "@crewon/application";
 import type {
   CreativeProject,
@@ -219,41 +224,65 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     return this.#receipt(this.#pool, creativeMutationIdentity(input));
   }
 
-  async commitProjectCreation(input: ReadInput<"commitProjectCreation">) {
+  async commitProjectCreation(
+    input: ReadInput<"commitProjectCreation">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    const authority = captureCreativeProjectCommitAuthority(options);
     const result = await this.#commit(
       prepareCreativeMutation("create-project", input),
+      authority,
     );
     if (result.kind !== "create-project")
       throw new Error("creative_project_receipt_invalid");
     return result;
   }
 
-  async commitProjectMetadata(input: ReadInput<"commitProjectMetadata">) {
+  async commitProjectMetadata(
+    input: ReadInput<"commitProjectMetadata">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    const authority = captureCreativeProjectCommitAuthority(options);
     const detached = creativeStoreRecord(input);
     const kind = creativeMutationKind(detached.kind);
     if (kind !== "rename-project" && kind !== "set-project-state")
       creativeStoreFailure("creative_project_mutation_kind_invalid");
-    const result = await this.#commit(prepareCreativeMutation(kind, detached));
+    const result = await this.#commit(
+      prepareCreativeMutation(kind, detached),
+      authority,
+    );
     if (result.kind !== "rename-project" && result.kind !== "set-project-state")
       throw new Error("creative_project_receipt_invalid");
     return result;
   }
 
-  async commitProjectBrief(input: ReadInput<"commitProjectBrief">) {
+  async commitProjectBrief(
+    input: ReadInput<"commitProjectBrief">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    const authority = captureCreativeProjectCommitAuthority(options);
     const result = await this.#commit(
       prepareCreativeMutation("append-brief", input),
+      authority,
     );
     if (result.kind !== "append-brief")
       throw new Error("creative_project_receipt_invalid");
     return result;
   }
 
-  async commitConceptRevision(input: ReadInput<"commitConceptRevision">) {
+  async commitConceptRevision(
+    input: ReadInput<"commitConceptRevision">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    const authority = captureCreativeProjectCommitAuthority(options);
     const detached = creativeStoreRecord(input);
     const kind = creativeMutationKind(detached.kind);
     if (kind !== "create-concept" && kind !== "append-concept")
       creativeStoreFailure("creative_project_mutation_kind_invalid");
-    const result = await this.#commit(prepareCreativeMutation(kind, detached));
+    const result = await this.#commit(
+      prepareCreativeMutation(kind, detached),
+      authority,
+    );
     if (result.kind !== "create-concept" && result.kind !== "append-concept")
       throw new Error("creative_project_receipt_invalid");
     return result;
@@ -261,6 +290,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
 
   async #commit(
     prepared: PreparedCreativeMutation,
+    authority: CreativeProjectCommitAuthority | undefined,
   ): Promise<CreativeProjectMutationResult> {
     const identity = creativeMutationIdentity({
       actor: prepared.actor,
@@ -341,7 +371,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
         ],
       );
       return result;
-    });
+    }, authority);
   }
 
   async #project(
@@ -549,12 +579,24 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     return result;
   }
 
-  async #transaction<T>(body: (client: PoolClient) => Promise<T>): Promise<T> {
+  async #transaction<T>(
+    body: (client: PoolClient) => Promise<T>,
+    authority?: CreativeProjectCommitAuthority,
+  ): Promise<T> {
     this.#assertOpen();
+    if (authority !== undefined) {
+      await assertCreativeProjectCommitCurrent(authority);
+      assertCreativeProjectCommitActive(authority);
+      this.#assertOpen();
+    }
     const client = await this.#pool.connect();
     try {
       await this.#query(client, "BEGIN");
       const result = await body(client);
+      // Revalidate after all SQL awaits, including lock waits and the final receipt INSERT.
+      if (authority !== undefined)
+        await assertCreativeProjectCommitCurrent(authority);
+      assertCreativeProjectCommitActive(authority);
       // A confirmed COMMIT remains successful even if the host closes while awaiting it.
       this.#assertOpen();
       await client.query("COMMIT");

@@ -59,6 +59,17 @@ type MutationIdentity = Readonly<{
   receipt: CreativeProjectMutationReceipt;
 }>;
 
+/** Borrowed host authority for this exact invocation, never part of a persisted recipe. */
+export type CreativeProjectCommitAuthority = Readonly<{
+  assertCurrent(): Promise<void>;
+  /** Synchronous local withdrawal check; returning a Promise does not establish commit authority. */
+  assertActive(): void;
+}>;
+
+export type CreativeProjectCommitOptions = Readonly<{
+  authority?: CreativeProjectCommitAuthority;
+}>;
+
 /**
  * Trusted internal persistence recipes, not a public owner or write-authority API.
  * Implementations must check the stored principal and tenant/space, compare revisions,
@@ -66,6 +77,8 @@ type MutationIdentity = Readonly<{
  * A concept's supplied brief must be re-read from immutable storage in that transaction.
  * No recipe here starts a Run or calls a supplier. Future generation links must join
  * the original Turn/Run/credit transaction, rather than be attached after dispatch.
+ * Optional per-call authority also gates replay publication and must be rechecked
+ * before COMMIT dispatch. Confirmed commits are not rejected by later withdrawal.
  */
 export interface CreativeProjectStore {
   loadProject(input: {
@@ -129,6 +142,7 @@ export interface CreativeProjectStore {
         project: CreativeProject;
         initialBrief: ProjectBriefRevision;
       }>,
+    options?: CreativeProjectCommitOptions,
   ): Promise<CreateCreativeProjectResult>;
   commitProjectMetadata(
     input: MutationIdentity &
@@ -137,6 +151,7 @@ export interface CreativeProjectStore {
         expectedProjectRevision: number;
         project: CreativeProject;
       }>,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ChangeCreativeProjectMetadataResult>;
   commitProjectBrief(
     input: MutationIdentity &
@@ -145,6 +160,7 @@ export interface CreativeProjectStore {
         project: CreativeProject;
         brief: ProjectBriefRevision;
       }>,
+    options?: CreativeProjectCommitOptions,
   ): Promise<AppendProjectBriefResult>;
   commitConceptRevision(
     input: MutationIdentity &
@@ -161,5 +177,6 @@ export interface CreativeProjectStore {
             expectedAssetMetadataRevision: number;
           }>
       ),
+    options?: CreativeProjectCommitOptions,
   ): Promise<ChangeConceptAssetResult>;
 }

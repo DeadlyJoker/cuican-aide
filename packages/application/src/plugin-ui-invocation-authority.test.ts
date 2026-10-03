@@ -4,6 +4,7 @@ import * as application from "./index.ts";
 import { ApplicationError } from "./application-error.ts";
 import {
   assertPluginUiInvocationCurrent,
+  capturePluginUiInvocationCommitAuthority,
   registerPluginUiInvocation,
 } from "./plugin-ui-invocation-authority.ts";
 import { committedUiFixture } from "./plugin-ui-committed-task.test-support.ts";
@@ -18,12 +19,16 @@ function unavailable(error: unknown) {
   );
 }
 
-test("the package exposes only invocation assertion and rejects any unregistered or copied context", async () => {
+test("the package exposes trusted invocation checks, keeps registration private, and rejects copied context", async () => {
   assert.equal(
     application.assertPluginUiInvocationCurrent,
     assertPluginUiInvocationCurrent,
   );
   assert.equal("registerPluginUiInvocation" in application, false);
+  assert.equal(
+    application.capturePluginUiInvocationCommitAuthority,
+    capturePluginUiInvocationCommitAuthority,
+  );
   const f = committedUiFixture();
   const context = f.detachedContext();
   let reads = 0;

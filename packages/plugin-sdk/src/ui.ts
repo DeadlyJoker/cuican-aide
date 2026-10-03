@@ -13,6 +13,12 @@ export type {
   PluginUiInvocationOptions,
 } from "./ui-types.js";
 export type { PluginUiProps, PluginUiTheme } from "./sdk-types.js";
+export { createPluginCreativeProjectClient } from "./creative-project-ui.js";
+export type { PluginCreativeProjectClient } from "./creative-project-ui.types.js";
+export {
+  CREWON_CREATIVE_PROJECTS_SERVICE,
+  CREWON_CREATIVE_PROJECTS_API_VERSION,
+} from "./contracts.js";
 
 /** Defines a UI ABI entry. Actual mounting and isolation belong to the host. */
 export function defineUiPlugin(

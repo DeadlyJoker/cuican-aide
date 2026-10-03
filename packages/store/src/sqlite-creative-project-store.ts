@@ -1,8 +1,13 @@
 import type { DatabaseSync } from "node:sqlite";
-import type {
-  CreativeProjectMutationResult,
-  CreativeProjectOwnerScope,
-  CreativeProjectStore,
+import {
+  assertCreativeProjectCommitActive,
+  assertCreativeProjectCommitCurrent,
+  captureCreativeProjectCommitAuthority,
+  type CreativeProjectCommitAuthority,
+  type CreativeProjectCommitOptions,
+  type CreativeProjectMutationResult,
+  type CreativeProjectOwnerScope,
+  type CreativeProjectStore,
 } from "@crewon/application";
 import type {
   ConceptAsset,
@@ -217,43 +222,73 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
 
   async commitProjectCreation(
     input: Input<"commitProjectCreation">,
+    options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitProjectCreation">> {
-    return this.#commit(
+    const authority = captureCreativeProjectCommitAuthority(options);
+    const result = await this.#commit(
       prepareCreativeMutation("create-project", input),
-    ) as Result<"commitProjectCreation">;
+      authority,
+    );
+    if (result.kind !== "create-project")
+      throw new Error("creative_project_receipt_invalid");
+    return result;
   }
 
   async commitProjectMetadata(
     input: Input<"commitProjectMetadata">,
+    options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitProjectMetadata">> {
+    const authority = captureCreativeProjectCommitAuthority(options);
     const kind = creativeMutationKind(creativeStoreRecord(input).kind);
     if (kind !== "rename-project" && kind !== "set-project-state")
       creativeStoreFailure("creative_project_mutation_kind_invalid");
-    return this.#commit(
+    const result = await this.#commit(
       prepareCreativeMutation(kind, input),
-    ) as Result<"commitProjectMetadata">;
+      authority,
+    );
+    if (result.kind !== "rename-project" && result.kind !== "set-project-state")
+      throw new Error("creative_project_receipt_invalid");
+    return result;
   }
 
   async commitProjectBrief(
     input: Input<"commitProjectBrief">,
+    options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitProjectBrief">> {
-    return this.#commit(
+    const authority = captureCreativeProjectCommitAuthority(options);
+    const result = await this.#commit(
       prepareCreativeMutation("append-brief", input),
-    ) as Result<"commitProjectBrief">;
+      authority,
+    );
+    if (result.kind !== "append-brief")
+      throw new Error("creative_project_receipt_invalid");
+    return result;
   }
 
   async commitConceptRevision(
     input: Input<"commitConceptRevision">,
+    options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitConceptRevision">> {
+    const authority = captureCreativeProjectCommitAuthority(options);
     const kind = creativeMutationKind(creativeStoreRecord(input).kind);
     if (kind !== "create-concept" && kind !== "append-concept")
       creativeStoreFailure("creative_project_mutation_kind_invalid");
-    return this.#commit(
+    const result = await this.#commit(
       prepareCreativeMutation(kind, input),
-    ) as Result<"commitConceptRevision">;
+      authority,
+    );
+    if (result.kind !== "create-concept" && result.kind !== "append-concept")
+      throw new Error("creative_project_receipt_invalid");
+    return result;
   }
 
-  #commit(prepared: PreparedCreativeMutation): CreativeProjectMutationResult {
+  async #commit(
+    prepared: PreparedCreativeMutation,
+    authority: CreativeProjectCommitAuthority | undefined,
+  ): Promise<CreativeProjectMutationResult> {
+    // SQLite's transaction stays synchronous; external authority work happens before BEGIN.
+    if (authority !== undefined)
+      await assertCreativeProjectCommitCurrent(authority);
     return this.#transaction(() => {
       const identity = creativeMutationIdentity({
         actor: prepared.actor,
@@ -285,27 +320,33 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
         brief,
         asset,
       });
+      this.#assertCommitActive(authority);
       if (prepared.kind === "create-project")
         this.#insertProject(result.project);
       else
         this.#updateProject(result.project, prepared.expectedProjectRevision);
-      if (result.kind === "create-project" || result.kind === "append-brief")
+      if (result.kind === "create-project" || result.kind === "append-brief") {
+        this.#assertCommitActive(authority);
         this.#insertBrief(result.brief);
+      }
       if (
         result.kind === "create-concept" ||
         result.kind === "append-concept"
       ) {
+        this.#assertCommitActive(authority);
         if (prepared.kind === "create-concept") this.#insertAsset(result.asset);
         else if (prepared.kind === "append-concept")
           this.#updateAsset(
             result.asset,
             prepared.expectedAssetMetadataRevision,
           );
+        this.#assertCommitActive(authority);
         this.#insertRevision(result.assetRevision);
       }
+      this.#assertCommitActive(authority);
       this.#saveReceipt(identity, result);
       return result;
-    });
+    }, authority);
   }
 
   #project(owner: CreativeProjectOwnerScope, projectId: string) {
@@ -479,11 +520,25 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       );
   }
 
-  #transaction<T>(body: () => T): T {
+  #assertCommitActive(
+    authority: CreativeProjectCommitAuthority | undefined,
+  ): void {
+    if (authority !== undefined) {
+      assertCreativeProjectCommitActive(authority);
+      this.#assertOpen();
+    }
+  }
+
+  #transaction<T>(
+    body: () => T,
+    authority?: CreativeProjectCommitAuthority,
+  ): T {
+    this.#assertCommitActive(authority);
     this.#assertOpen();
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const result = body();
+      this.#assertCommitActive(authority);
       this.#assertOpen();
       this.#database.exec("COMMIT");
       return result;

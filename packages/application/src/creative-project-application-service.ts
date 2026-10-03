@@ -41,8 +41,14 @@ import type {
   CreativeProjectMutationKind,
   CreativeProjectMutationReceipt,
   CreativeProjectMutationResult,
+  CreativeProjectCommitOptions,
+  CreativeProjectCommitAuthority,
   CreativeProjectStore,
 } from "./creative-project-store-port.ts";
+import {
+  captureCreativeProjectCommitAuthority,
+  assertCreativeProjectCommitCurrent,
+} from "./creative-project-commit-authority.ts";
 import {
   assertCreativeCommittedRecords,
   checkedCreativeAsset,
@@ -85,61 +91,73 @@ export class CreativeProjectApplicationService {
   createProject(
     actor: ActorContext,
     command: CreateCreativeProjectCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<CreateCreativeProjectResult> {
     return this.#mutate(
       actor,
       "create-project",
       command,
+      options,
     ) as Promise<CreateCreativeProjectResult>;
   }
   renameProject(
     actor: ActorContext,
     command: RenameCreativeProjectCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ChangeCreativeProjectMetadataResult> {
     return this.#mutate(
       actor,
       "rename-project",
       command,
+      options,
     ) as Promise<ChangeCreativeProjectMetadataResult>;
   }
   setProjectState(
     actor: ActorContext,
     command: SetCreativeProjectStateCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ChangeCreativeProjectMetadataResult> {
     return this.#mutate(
       actor,
       "set-project-state",
       command,
+      options,
     ) as Promise<ChangeCreativeProjectMetadataResult>;
   }
   appendBrief(
     actor: ActorContext,
     command: AppendProjectBriefCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<AppendProjectBriefResult> {
     return this.#mutate(
       actor,
       "append-brief",
       command,
+      options,
     ) as Promise<AppendProjectBriefResult>;
   }
   createConcept(
     actor: ActorContext,
     command: CreateConceptAssetCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ChangeConceptAssetResult> {
     return this.#mutate(
       actor,
       "create-concept",
       command,
+      options,
     ) as Promise<ChangeConceptAssetResult>;
   }
   appendConceptRevision(
     actor: ActorContext,
     command: AppendConceptAssetRevisionCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ChangeConceptAssetResult> {
     return this.#mutate(
       actor,
       "append-concept",
       command,
+      options,
     ) as Promise<ChangeConceptAssetResult>;
   }
 
@@ -403,8 +421,12 @@ export class CreativeProjectApplicationService {
     actorInput: ActorContext,
     kind: CreativeProjectMutationKind,
     input: CreativeProjectMutationCommand,
+    options?: CreativeProjectCommitOptions,
   ): Promise<CreativeProjectMutationResult> {
     return creativeProjectUseCase(async () => {
+      const authority = captureCreativeProjectCommitAuthority(options);
+      const commitOptions =
+        authority === undefined ? undefined : Object.freeze({ authority });
       const actor = creativeActor(actorInput);
       const command = creativeMutationCommand(kind, input);
       const projectId = "projectId" in command ? command.projectId : null;
@@ -419,11 +441,15 @@ export class CreativeProjectApplicationService {
         this.#dependencies.digester,
       );
       await this.#authorize(actor, action, projectId);
+      if (authority !== undefined)
+        await assertCreativeProjectCommitCurrent(authority);
       const previous = await this.#dependencies.store.loadMutationReceipt({
         actor,
         kind,
         receipt,
       });
+      if (authority !== undefined)
+        await assertCreativeProjectCommitCurrent(authority);
       if (previous !== null) {
         const result = checkedCreativeMutationResult(
           previous,
@@ -433,6 +459,8 @@ export class CreativeProjectApplicationService {
           this.#dependencies.digester,
         );
         await this.#authorize(actor, action, projectId);
+        if (authority !== undefined)
+          await assertCreativeProjectCommitCurrent(authority);
         return Object.freeze({ ...result, disposition: "replayed" as const });
       }
       const prepared = await this.#prepareMutation(
@@ -440,8 +468,11 @@ export class CreativeProjectApplicationService {
         kind,
         command,
         receipt,
+        commitOptions,
       );
       await this.#authorize(actor, action, projectId);
+      if (authority !== undefined)
+        await assertCreativeProjectCommitCurrent(authority);
       const raw = await prepared.commit();
       const result = checkedCreativeMutationResult(
         raw,
@@ -460,6 +491,7 @@ export class CreativeProjectApplicationService {
     kind: CreativeProjectMutationKind,
     command: CreativeProjectMutationCommand,
     receipt: CreativeProjectMutationReceipt,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ReturnType<typeof prepareCreativeMutation>> {
     const identity = { actor, receipt };
     if (kind === "create-project") {
@@ -488,18 +520,25 @@ export class CreativeProjectApplicationService {
         this.#dependencies.digester,
       );
       return prepareCreativeMutation(created, () =>
-        this.#dependencies.store.commitProjectCreation({
-          ...identity,
-          project: created.project,
-          initialBrief: created.brief,
-        }),
+        this.#dependencies.store.commitProjectCreation(
+          {
+            ...identity,
+            project: created.project,
+            initialBrief: created.brief,
+          },
+          options,
+        ),
       );
     }
     const checked = command as Exclude<
       CreativeProjectMutationCommand,
       CreateCreativeProjectCommand
     >;
-    const project = await this.#project(actor, checked.projectId);
+    const project = await this.#project(
+      actor,
+      checked.projectId,
+      options?.authority,
+    );
     const at = creativeProjectTimestamp(this.#dependencies.clock.now());
     const common = {
       project,
@@ -513,12 +552,15 @@ export class CreativeProjectApplicationService {
         title: (command as RenameCreativeProjectCommand).title,
       });
       return prepareCreativeMutation({ project: renamed }, () =>
-        this.#dependencies.store.commitProjectMetadata({
-          ...identity,
-          kind,
-          expectedProjectRevision: checked.expectedProjectRevision,
-          project: renamed,
-        }),
+        this.#dependencies.store.commitProjectMetadata(
+          {
+            ...identity,
+            kind,
+            expectedProjectRevision: checked.expectedProjectRevision,
+            project: renamed,
+          },
+          options,
+        ),
       );
     }
     if (kind === "set-project-state") {
@@ -527,12 +569,15 @@ export class CreativeProjectApplicationService {
         state: (command as SetCreativeProjectStateCommand).state,
       });
       return prepareCreativeMutation({ project: changed }, () =>
-        this.#dependencies.store.commitProjectMetadata({
-          ...identity,
-          kind,
-          expectedProjectRevision: checked.expectedProjectRevision,
-          project: changed,
-        }),
+        this.#dependencies.store.commitProjectMetadata(
+          {
+            ...identity,
+            kind,
+            expectedProjectRevision: checked.expectedProjectRevision,
+            project: changed,
+          },
+          options,
+        ),
       );
     }
     if (kind === "append-brief") {
@@ -541,11 +586,14 @@ export class CreativeProjectApplicationService {
         this.#dependencies.digester,
       );
       return prepareCreativeMutation(changed, () =>
-        this.#dependencies.store.commitProjectBrief({
-          ...identity,
-          expectedProjectRevision: checked.expectedProjectRevision,
-          ...changed,
-        }),
+        this.#dependencies.store.commitProjectBrief(
+          {
+            ...identity,
+            expectedProjectRevision: checked.expectedProjectRevision,
+            ...changed,
+          },
+          options,
+        ),
       );
     }
     const conceptCommand = command as
@@ -555,6 +603,7 @@ export class CreativeProjectApplicationService {
       actor,
       project,
       conceptCommand.briefRevision,
+      options?.authority,
     );
     if (kind === "create-concept") {
       const input = command as CreateConceptAssetCommand;
@@ -571,16 +620,24 @@ export class CreativeProjectApplicationService {
         this.#dependencies.digester,
       );
       return prepareCreativeMutation(changed, () =>
-        this.#dependencies.store.commitConceptRevision({
-          ...identity,
-          kind,
-          expectedProjectRevision: checked.expectedProjectRevision,
-          ...changed,
-        }),
+        this.#dependencies.store.commitConceptRevision(
+          {
+            ...identity,
+            kind,
+            expectedProjectRevision: checked.expectedProjectRevision,
+            ...changed,
+          },
+          options,
+        ),
       );
     }
     const input = command as AppendConceptAssetRevisionCommand;
-    const asset = await this.#asset(actor, project, input.assetId);
+    const asset = await this.#asset(
+      actor,
+      project,
+      input.assetId,
+      options?.authority,
+    );
     const changed = appendConceptAssetRevision(
       {
         ...common,
@@ -592,13 +649,16 @@ export class CreativeProjectApplicationService {
       this.#dependencies.digester,
     );
     return prepareCreativeMutation(changed, () =>
-      this.#dependencies.store.commitConceptRevision({
-        ...identity,
-        kind: "append-concept",
-        expectedProjectRevision: checked.expectedProjectRevision,
-        expectedAssetMetadataRevision: input.expectedAssetMetadataRevision,
-        ...changed,
-      }),
+      this.#dependencies.store.commitConceptRevision(
+        {
+          ...identity,
+          kind: "append-concept",
+          expectedProjectRevision: checked.expectedProjectRevision,
+          expectedAssetMetadataRevision: input.expectedAssetMetadataRevision,
+          ...changed,
+        },
+        options,
+      ),
     );
   }
 
@@ -629,11 +689,14 @@ export class CreativeProjectApplicationService {
   async #project(
     actor: ActorContext,
     projectId: string,
+    authority?: CreativeProjectCommitAuthority,
   ): Promise<CreativeProject> {
     const raw = await this.#dependencies.store.loadProject({
       owner: creativeOwner(actor),
       projectId,
     });
+    if (authority !== undefined)
+      await assertCreativeProjectCommitCurrent(authority);
     if (raw === null)
       throw new ApplicationError("notFound", "creative_project_not_found");
     return checkedCreativeProject(raw, creativeOwner(actor), projectId);
@@ -642,12 +705,15 @@ export class CreativeProjectApplicationService {
     actor: ActorContext,
     project: CreativeProject,
     briefRevision: number,
+    authority?: CreativeProjectCommitAuthority,
   ): Promise<ProjectBriefRevision> {
     const raw = await this.#dependencies.store.loadBrief({
       owner: creativeOwner(actor),
       projectId: project.projectId,
       briefRevision,
     });
+    if (authority !== undefined)
+      await assertCreativeProjectCommitCurrent(authority);
     if (raw === null)
       throw new ApplicationError(
         "notFound",
@@ -664,12 +730,15 @@ export class CreativeProjectApplicationService {
     actor: ActorContext,
     project: CreativeProject,
     assetId: string,
+    authority?: CreativeProjectCommitAuthority,
   ): Promise<ConceptAsset> {
     const raw = await this.#dependencies.store.loadConceptAsset({
       owner: creativeOwner(actor),
       projectId: project.projectId,
       assetId,
     });
+    if (authority !== undefined)
+      await assertCreativeProjectCommitCurrent(authority);
     if (raw === null)
       throw new ApplicationError(
         "notFound",

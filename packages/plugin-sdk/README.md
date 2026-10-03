@@ -134,6 +134,12 @@ const receipt = await tasks.queryTask({
 
 目前 SDK 已提供这些调用接口与独立安装后的 ABI 验证；它们本身不签发引用、不创建 Run、不扣款，也不表示业务动作桥已经装配。
 
+## 创作项目元数据 UI helper
+
+UI 入口新增 `createPluginCreativeProjectClient(services)`，以原 `services.invoke` 提供项目、需求及概念输入修订的 14 个类型化方法；contracts 入口导出严格动作解析器与公开 DTO。输入最多 24KiB、响应最多 60KiB。helper 捕获实际 dispatcher 和本次 caller signal，取消后不交付迟到响应，并清理监听。
+
+这套协议不包含生成或扣款，也不使 Host 服务自动可用；正式安装插件的 dispatcher、依赖可用性和 ready 仍待接线。当前项目归属也不是任意插件的数据 namespace。仓外 tarball 测试覆盖纯 ES2022 contracts、DOM UI 编译和全部动作调用。完整动作及宿主提交边界见[协议说明](../../docs/installed-plugin-creative-project-actions.md)。
+
 ## 执行工厂 ABI
 
 Node 和 contracts 入口导出 `CREWON_EXECUTION_SERVICE = "crewon.execution"`、`CREWON_EXECUTION_API_VERSION = "1"`、`PluginExecutionService`、`PluginToolRuntimeFactory`、`PluginToolRuntimeContext` 与自持的 `PluginToolRuntime` 类型。执行工厂由宿主服务注册，不改变原有 `{ actions, invoke }` 动作服务：

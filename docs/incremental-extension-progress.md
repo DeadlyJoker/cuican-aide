@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-03：项目动作协议、独立 SDK 与提交前资格
+
+在上一阶段公共项目服务基础上，新增 14 个严格 metadata 动作及 `createPluginCreativeProjectClient(services)`，沿用原 UI invocation，不新增 Node action kind、HTTP shape 或数据库 schema。协议复用公开 DTO，输入最多 24KiB、响应最多 60KiB，不能传入账号、付款或凭据。SDK 实际 tarball 在仓外离线安装，纯 ES2022 contracts 与 DOM UI 独立编译，三个公开入口和 29 个自持声明通过验证；helper 固定实际 dispatcher/caller signal，取消后不交付迟到响应。细节见[插件项目动作协议](./installed-plugin-creative-project-actions.md)。
+
+实际本次 invocation 可由可信 Host 捕获不可序列化的提交资格，六个 Application 写用例及四种 Store 提交显式传入可选 options；缺省公共路径保留原行为。Application 在授权、回执和业务读取后复验；SQLite 保持同步事务，PostgreSQL 在全部 SQL 后重验并紧邻 COMMIT 做同步检查。关闭、过期或已观察到的撤权拒绝尚未派发的提交，业务记录和回执整笔回滚；已确认 COMMIT 保留原成功回执。观察到动作 policy deny 只撤回这次 registration，恢复 allow 也不能恢复旧 guard；原 mount、asset 和 invoke 权限继续独立判断。该边界不保证远端策略与数据库全局原子性。
+
+新增专项 **49/49**，合并 Contracts 全量 **288/288**、SDK 全量 **20/20**、原 Application 回归 **74/74**、新增 invocation/双库/API 资格 **26/26**、原双库项目 Store **26/26**、公共路由与原装配 **30/30**、原用户栏/设置/预览 **34/34**，不重叠合计 **498 通过、零跳过**。PostgreSQL 使用实际隔离的本机 18.6 集群，包含锁等待撤权、回执后的撤权回滚与已确认提交恢复；供应商、账号、充值、定价和结算未调用。测试以真实 SQLite 与实际 PluginUiApplicationService 验证，但不是正式包安装或生产用户的页面保存验收。
+
+Contracts/SDK/Application/Store/Control 类型、生产与开发许可证、UI lint（含 Main 类型）、原 UI build、boundary 及仓库格式检查通过。SDK producer 独占构建和 pack，其他消费检查等待完成后执行。首次 SDK 分发失败来自新负向 fixture 的注释位置，修正位置并保留全部断言；一次原权限分离测试发现 blanket deny 撤回 mount 改变既有行为，已缩小为本次 invocation 撤回，原测试和快照均未改。日志与集群清理证据见 `output/extensions/checks/creative-project-invoke-proof-20261003.json`。
+
+用户当前 5719 服务实际输出未登录账号页脚和原设置回调，入口是展开侧栏后的左下账号菜单。该独立预览未挂正式 AuthGate，因此没有真实用户名和在线设置数据；desktop/mac 参数不移除入口。定向 DOM/快照测试与原构建通过，Renderer、CSS、预览与旧 UI 快照本轮未改，5719/5720 原进程保留。当前电脑锁屏且浏览器绑定超时，未取得新的屏幕证据，也未声称当前标签已刷新或设置已在屏幕打开。
+
+本轮完成协议与提交检查前置，尚未实现正式 Host dispatcher、UI-only 依赖可用性投影、激活 ready 或 committed-metadata 交付；原普通 JSON 后置 fence 仍可能拒绝已提交记录的页面响应，原幂等键恢复已验证。下一步按此顺序接 Host 和真实模块保存，再加入原 Run/个人冻结同事务的项目生成关联与已核验选用。真实用户执行身份及积分后端归属仍等待用户选择，正式 Main/full App/packaged Krea2 在线生成与历史查询、第二个实际企业 API 仍待完成。完整目标继续进行。
+
 ## 2026-10-03：短剧项目公共元数据与输入修订服务
 
 项目、需求与概念图输入接通严格的公共 HTTP、ControlClient 和同源 BFF；14 个操作提供创建、重命名、归档/恢复、分页读取与不可变修订。公开投影省略 owner、tenant、space 和审计 actor，请求不接受这些字段。全部写入保留幂等回执及原事务，修改或追加使用明确预期版本；同键改输入、跨账号/空间、撤权和并发冲突均拒绝。服务没有生成、任意 URL 关联、选用或积分命令，读取历史不访问供应商。协议与接线边界见[项目公共服务](./creative-project-public-service.md)。
