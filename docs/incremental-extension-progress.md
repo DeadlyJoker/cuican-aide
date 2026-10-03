@@ -6,6 +6,24 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：独立安装包的首次配置入口
+
+已消除发布前首配依赖 Worker 的循环。生产 Control 可显式启用独立配置 owner，从真实安装账本的当前选择核验完整包和业务 JSON，提供原配置 schema，并通过原 HTTP 路由保存第一份配置；停用但仍选中的包也可配置。共享 Host 读取器不导入包的 Node/UI ESM、不分配工厂，不创建 Run、发布目标、报价或积分。完整任务 owner 复用这条元数据路径；启用及运行仍需要实际发布和 Worker 的原就绪核验。
+
+首次保存先检查原 configure 权限与持久回执，只在没有回执时准备确切包版本；准备和验证后的权限再次核验。配置 GET、已受理配置/激活的回执重放不读取元数据，仍检查原权限和当前请求身份/profile。保存的配置及 activation 仍沿用原 v0 tenant/space 作用域。目录按当前选中包限制核验数量，卸载历史不占这一额度；历史扫描最多 32 页、每页 50 个命名空间，游标必须严格推进。关闭同步撤回能力，并等待实际元数据/网络工作完成后再关闭原 Store。
+
+实际 PostgreSQL Control/BFF 子进程首配专项 **1/1、零跳过**：前置仅使用真实 verifier/installer 的不可变字节与安装账本，停用的两版包分别通过原 HTTP 保存 revision 1/2；换版并拒绝包读取后，原受理配置回执仍重放且没有新增包请求。此时没有 Worker、peer、release 或报价/资金服务，实际安装 ESM 导入为零，发布/activation/Run/operation 九表零行、个人积分表不存在，未发布启用返回 409。
+
+随后由唯一真实 CLI 发布原 HTTP 配置，正式 Worker/Control/BFF 经原插件动作 HTTP 接口提交两版 Run；个人测试积分各预留 30、供应商共 2 次 POST、模型 5 次请求，幂等重放不追加预留，普通默认 Run 不含插件绑定。资金、报价、身份、模型和报告供应商均为具名夹具；两次预留仍未结算。所有测试子进程退出 0，独占 schema 与连接已清理。日志为 `installed-plugin-first-configuration-process-first-20261003.log`，证明为 `installed-plugin-tasks-process-proof-20261003.json`（v2）。
+
+最终 Worker 全量 **1652/1652、零跳过**；Control 全量 **478 通过、1 项 Linux 进程用例在 macOS 跳过，共 479 项、零失败**，包含修改后的首次 HTTP 配置进程链。Application 全量 **343/343**、共享 Host 全量 **205/205**。新旧 Control 窄专项 **37/37**覆盖实际包、持久首配、当前身份/版本、物理关闭、卸载历史及明确容量；共享 Host 迁移专项 **14/14**及原读取/编译/物化回归 **54/54**也通过。
+
+Native 环境隔离 **10/10**、原命令页/设置/预览 **17 文件、153/153**、UI lint/build、全部 packages/Control/Worker 类型、七入口桌面 runtime stage、仓库 boundary 与格式检查通过。SDK 构建在消费者启动前完成；Worker 及所有 Control/Host 检查都已实际结束后才再次构建 SDK。本轮没有修改页面组件、CSS、设置导航或旧快照；Native 仅额外清理生产配置 owner 的环境变量。日志前缀为 `installed-config-`，位于 `output/extensions/checks/`。上一节记录的全 UI 失败不能因此称为全量已通过，七入口构建也不冒充 packaged.app 插件业务验收。
+
+本轮临时 PostgreSQL 清理前其他连接及测试 schema 为零；实际进程已退出，自有 root/socket 已删除，端口可重新绑定，记录为 `installed-config-postgres-owner-20261003.json` 和 `installed-config-postgres-cleanup-final-20261003.log`。用户现有 5719/5720 页面服务继续保留。
+
+部署文件、严格权限及操作顺序见[任务服务启动](./installed-plugin-task-startup.md#control-configuration-before-publication)。这完成的是已有真实安装账本上的首次 HTTP 配置；完整产品配置 UI、用户从空库安装到自动发布、真实资金/价格/结算、正式付费历史查询进程验收、短剧项目持久化及在线生成、ComfyUI 当前服务与第二个真实企业 API 仍需继续落地。目标保持进行中。
+
 ## 2026-10-03：已安装插件任务的正式 Control/Worker 连接
 
 已安装插件的业务动作现在可从原 BFF 会话进入正式 PostgreSQL Control，再由私有 Worker peer 核验实际安装包、配置与完整目标，最后走原 Application 的个人积分预留及 Run 事务。未配置时保留原默认 Agent、身份缓存及扩展路径；新旧执行装配不能混用。原宿主页面、CSS、设置布局与既有快照没有改动，Native 管理进程仅额外清理执行 peer 和任务配置的环境变量。

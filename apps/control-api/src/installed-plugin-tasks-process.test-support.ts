@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { realpath, writeFile } from "node:fs/promises";
+import { readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { PostgresDomainStore } from "@crewon/store";
 import { Pool } from "pg";
 import {
@@ -15,9 +15,12 @@ import {
   installedWorkerProcessFixture,
   type InstalledProcessChild,
 } from "../../runtime-worker/src/installed-plugin-worker-process.test-support.ts";
-import { prepareInstalledReleaseProcessInput } from "../../runtime-worker/src/installed-plugin-release-process.test-support.ts";
 import { professionalProviderFixture } from "../../runtime-worker/src/installed-plugin-ui-business-execution.provider.test-support.ts";
 import { installedPluginReleaseDigester as digester } from "../../runtime-worker/src/plugins/installed-plugin-release-document.ts";
+import {
+  installTaskProcessPackages,
+  prepareTaskProcessReleaseInput,
+} from "./installed-plugin-tasks-process-release.test-support.ts";
 import {
   taskProcessAuthorities,
   taskProcessBrowserEdge,
@@ -109,54 +112,28 @@ export async function installedTaskProcessFixture(t: TestContext) {
   t.after(close);
   workerFixture.environment.CREWON_CONTROL_DATABASE_URL = connectionString;
   workerFixture.environment.CREWON_CONTROL_DATABASE_SCHEMA = schema;
-  const initial = await PostgresDomainStore.open({
-    connectionString,
-    schema,
-    maxPoolSize: 1,
-  });
-  // Publication currently requires an operator-provided configuration. This is explicitly a
-  // deployment prerequisite, not an HTTP configuration, CLI-created configuration or paid Run.
-  const prepared = await prepareInstalledReleaseProcessInput(
-    workerFixture,
-    {
-      organization: "Named HTTPS Control/BFF process supplier fixture",
-      providerBaseUrl: `${supplier.baseUrl}/`,
-    },
-    { store: initial },
-  );
-  t.diagnostic(
-    "operator prerequisite: actual immutable install ledger and two configuration revisions; no task, funds, Agent or release published by setup",
-  );
-  const release = workerFixture.start("release");
-  assert.equal(
-    (await installedProcessCompletion(release)).code,
-    0,
-    release.stderr(),
-  );
-  assert.equal(
-    JSON.parse(release.stdout()).releaseId,
-    prepared.plan.bundle.releaseId,
-  );
   store = await PostgresDomainStore.open({
     connectionString,
     schema,
     maxPoolSize: 1,
   });
-  const credits = store.pluginCreditStore();
-  await credits.migrate();
-  assert.equal(await credits.getAccount(taskProcessCreditScope), null);
-  await credits.grant({
-    scope: taskProcessCreditScope,
-    grantId: "named-process-test-grant-only",
-    credits: "100",
+  const registrations = await installTaskProcessPackages({
+    fixture: workerFixture,
+    store,
   });
+  t.diagnostic(
+    "operator prerequisite: actual verifier/installer immutable bytes and installation ledger only; configurations and activation must use original HTTP, Agents/releases must use the actual CLI",
+  );
 
-  async function select(index: number) {
-    const entry = prepared.document.entries[index]!;
+  async function select(
+    index: number,
+    options: Readonly<{ state: "disabled" | "enabled" }> = { state: "enabled" },
+  ) {
+    const identity = registrations[index]!.identity;
     const ledger = store!.pluginInstallationStore();
     const current = await ledger.loadSelection({
       scope,
-      pluginId: entry.packageIdentity.pluginId,
+      pluginId: identity.pluginId,
     });
     assert.ok(current);
     // Explicit operator installation selection; activation and task creation use HTTP below.
@@ -167,56 +144,36 @@ export async function installedTaskProcessFixture(t: TestContext) {
       selection: {
         ...current,
         revision: current.revision + 1,
-        state: "enabled",
-        selectedPackageDigest: entry.packageIdentity.packageDigest,
+        state: options.state,
+        selectedPackageDigest: identity.packageDigest,
         updatedAt: new Date().toISOString(),
         updatedByActorId: actor.actorId,
         updatedByPrincipalId: actor.principalId,
       },
       receipt: {
-        idempotencyKey: `named-test-select-${index}`,
-        requestDigest: digester.sha256(`named-test-select-${index}`),
+        idempotencyKey: `named-test-select-${index}-${options.state}`,
+        requestDigest: digester.sha256(
+          `named-test-select-${index}-${options.state}`,
+        ),
       },
     });
     return result.selection;
   }
-  const selection = await select(0);
-  const peerPort = await taskProcessFreePort();
-  const worker = workerFixture.start("worker", {
-    CREWON_CONTROL_SECURITY_MODE: "production",
-    CREWON_WORKER_ONCE: "0",
-    CREWON_WORKER_SCAN_INTERVAL_MS: "30",
-    CREWON_INSTALLED_PLUGIN_PEER_PORT: String(peerPort),
-    CREWON_INSTALLED_PLUGIN_PEER_TOKEN: taskProcessPeerToken,
-    CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: "10000",
-  });
-  children.push(worker);
-  await waitTaskProcess(
-    "actual Worker private peer",
-    async () =>
-      worker
-        .stdout()
-        .includes(
-          `CrewON Installed Plugin Peer origin http://127.0.0.1:${peerPort}`,
-        ),
-    [worker],
-  );
-  const configPath = join(workerFixture.directory, "control-tasks.json");
   const endpoint = (path: string) => ({
     url: `${authority.origin}/${path}`,
     serviceTokenEnvironmentVariable: "NAMED_PROCESS_CONTROL_AUTHORITY_TOKEN",
   });
+  const metadataPath = join(
+    workerFixture.directory,
+    "control-configuration.json",
+  );
   await writeFile(
-    configPath,
+    metadataPath,
     JSON.stringify({
-      schemaVersion: "crewon.installed-plugin-control-tasks.v1",
+      schemaVersion: "crewon.installed-plugin-control-configuration.v1",
       installRoot: workerFixture.installRoot,
-      peer: {
-        origin: `http://127.0.0.1:${peerPort}`,
-        tokenEnvironmentVariable: "NAMED_PROCESS_PEER_TOKEN",
-      },
+      profileAuthority: endpoint("profile"),
       packageAuthority: endpoint("package"),
-      quoteAuthority: endpoint("quote"),
       timeoutMs: 10000,
       maximumPackages: 2,
     }),
@@ -227,7 +184,7 @@ export async function installedTaskProcessFixture(t: TestContext) {
   const controlPort = await taskProcessFreePort(),
     bffPort = await taskProcessFreePort();
   const controlOrigin = `http://127.0.0.1:${controlPort}`;
-  const controlEnvironment: NodeJS.ProcessEnv = {
+  let controlEnvironment: NodeJS.ProcessEnv = {
     ...workerFixture.environment,
     CREWON_CONTROL_SECURITY_MODE: "production",
     CREWON_CONTROL_PORT: String(controlPort),
@@ -246,33 +203,38 @@ export async function installedTaskProcessFixture(t: TestContext) {
     CREWON_ARTIFACT_DB_PATH: join(workerFixture.directory, "artifacts.sqlite"),
     CREWON_ARTIFACT_ENCRYPTION_KEY_PATH: keyPath,
     CREWON_ARTIFACT_ENCRYPTION_KEY_ID: "named-process-key",
-    CREWON_PLUGIN_UI_ENABLED: "1",
-    CREWON_PLUGIN_UI_INSTALL_ROOT: workerFixture.installRoot,
-    CREWON_PLUGIN_UI_PROFILE_AUTHORITY_URL: `${authority.origin}/profile`,
-    CREWON_PLUGIN_UI_PROFILE_AUTHORITY_TOKEN: taskProcessServiceToken,
-    CREWON_PLUGIN_UI_POLICY_AUTHORITY_URL: `${authority.origin}/policy`,
-    CREWON_PLUGIN_UI_POLICY_AUTHORITY_TOKEN: taskProcessServiceToken,
-    CREWON_PLUGIN_UI_AUTHORITY_TIMEOUT_MS: "10000",
-    CREWON_PLUGIN_UI_PUBLICATIONS_JSON: JSON.stringify(
-      prepared.document.entries
-        .map((entry) => ({
-          ...entry.packageIdentity,
-          publicAssets: ["ui.mjs"],
-        }))
-        .map(({ version: _version, ...publication }) => publication),
-    ),
-    CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH: await realpath(configPath),
+    CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH:
+      await realpath(metadataPath),
     NAMED_PROCESS_CONTROL_AUTHORITY_TOKEN: taskProcessServiceToken,
     NAMED_PROCESS_PEER_TOKEN: taskProcessPeerToken,
     CREWON_OUTBOX_SCAN_INTERVAL_MS: "30",
     CREWON_OUTBOX_RETENTION_MS: "off",
     CREWON_AUTOMATION_SCAN_INTERVAL_MS: "10000",
   };
-  const start = (entry: "control" | "bff", changes: NodeJS.ProcessEnv = {}) => {
+  const importCounterPath = join(
+    workerFixture.directory,
+    "actual-installed-module-loads.jsonl",
+  );
+  const importHookPath = join(
+    workerFixture.directory,
+    "test-only-installed-import-observer.mjs",
+  );
+  await writeFile(importCounterPath, "", { mode: 0o600 });
+  await writeFile(
+    importHookPath,
+    `import {registerHooks} from 'node:module';\nimport {appendFileSync} from 'node:fs';\nconst prefix=${JSON.stringify(`${pathToFileURL(await realpath(workerFixture.installRoot)).href}/`)};\nregisterHooks({load(url,context,nextLoad){if(url.startsWith(prefix)&&/\\.m?js(?:\\?|$)/u.test(url))appendFileSync(${JSON.stringify(importCounterPath)},JSON.stringify({url})+'\\n');return nextLoad(url,context);}});\n`,
+    { mode: 0o600 },
+  );
+  const start = (
+    entry: "control" | "bff",
+    changes: NodeJS.ProcessEnv = {},
+    observation: Readonly<{ installedImports?: boolean }> = {},
+  ) => {
     const child = spawn(
       process.execPath,
       [
         "--experimental-strip-types",
+        ...(observation.installedImports ? ["--import", importHookPath] : []),
         join(
           repository,
           `apps/${entry === "control" ? "control-api" : "web-bff"}/src/main.ts`,
@@ -316,11 +278,12 @@ export async function installedTaskProcessFixture(t: TestContext) {
     children.push(owned);
     return owned;
   };
-  const control = start("control");
+  const metadataControl = start("control", {}, { installedImports: true });
   await waitTaskProcess(
     "actual production Control",
-    async () => control.stdout().includes("CrewON Control API listening"),
-    [control, worker],
+    async () =>
+      metadataControl.stdout().includes("CrewON Control API listening"),
+    [metadataControl],
   );
   const bff = start("bff", {
     CREWON_WEB_PUBLIC_ORIGIN: browser.origin,
@@ -333,7 +296,7 @@ export async function installedTaskProcessFixture(t: TestContext) {
   await waitTaskProcess(
     "actual production BFF",
     async () => bff.stdout().includes("CrewON Web BFF listening"),
-    [bff, control, worker],
+    [bff, metadataControl],
   );
   browser.target(`http://127.0.0.1:${bffPort}`);
   const session = await browser.request("/control-api/session");
@@ -346,6 +309,289 @@ export async function installedTaskProcessFixture(t: TestContext) {
     method = body === undefined ? "GET" : "POST",
     idempotencyKey?: string,
   ) => browser.request(path, { method, body, csrfToken, idempotencyKey });
+
+  const pluginId = registrations[0]!.identity.pluginId;
+  const firstSelection = await store
+    .pluginInstallationStore()
+    .loadSelection({ scope, pluginId });
+  assert.ok(firstSelection);
+  assert.equal(firstSelection.state, "disabled");
+  assert.equal(
+    firstSelection.selectedPackageDigest,
+    registrations[0]!.identity.packageDigest,
+  );
+  const initialCatalog = await request("/api/v1/extensions");
+  assert.equal(initialCatalog.status, 200, initialCatalog.text);
+  assert.equal(initialCatalog.body.extensions.length, 1);
+  assert.equal(
+    initialCatalog.body.extensions[0].pluginVersion,
+    registrations[0]!.identity.version,
+  );
+  assert.deepEqual(
+    initialCatalog.body.extensions[0].configurationSchema,
+    registrations[0]!.manifest.configurationSchema,
+  );
+  const emptyConfiguration = await request(
+    `/api/v1/extensions/${pluginId}/configuration`,
+  );
+  assert.equal(emptyConfiguration.status, 200, emptyConfiguration.text);
+  assert.equal(emptyConfiguration.body.configuration, null);
+  const parameters = {
+    organization: "Named HTTPS Control/BFF process supplier fixture",
+    providerBaseUrl: `${supplier.baseUrl}/`,
+  };
+  const firstBody = {
+    pluginVersion: registrations[0]!.identity.version,
+    expectedRevision: 0,
+    parameters,
+    credentialBindings: [],
+  };
+  const firstConfiguration = await request(
+    `/api/v1/extensions/${pluginId}/configuration`,
+    firstBody,
+    "PUT",
+    "named-process-http-configuration-v1",
+  );
+  assert.equal(firstConfiguration.status, 200, firstConfiguration.text);
+  assert.equal(firstConfiguration.body.disposition, "created");
+  assert.equal(firstConfiguration.body.configuration.revision, 1);
+  assert.equal(
+    firstConfiguration.body.configuration.manifestDigest,
+    registrations[0]!.manifestDigest,
+  );
+  assert.equal(
+    firstConfiguration.body.configuration.implementationDigest,
+    registrations[0]!.implementationDigest,
+  );
+  const absentRuntime = await request(
+    `/api/v1/extensions/${pluginId}/activation`,
+    {
+      configurationRevision: 1,
+      expectedRevision: 0,
+      state: "enabled",
+      agentVersionId: "installed-release-process-plugin-1",
+    },
+    "PUT",
+    "named-process-cannot-activate-before-publication",
+  );
+  assert.equal(absentRuntime.status, 409, absentRuntime.text);
+  assert.equal(absentRuntime.body.error.code, "extension_runtime_unavailable");
+  assert.equal(
+    await store.extensionStore().loadExtensionActivation({
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      pluginId,
+    }),
+    null,
+  );
+
+  await select(1, { state: "disabled" });
+  const currentCatalog = await request("/api/v1/extensions");
+  assert.equal(currentCatalog.status, 200, currentCatalog.text);
+  assert.equal(currentCatalog.body.extensions.length, 1);
+  assert.equal(
+    currentCatalog.body.extensions[0].pluginVersion,
+    registrations[1]!.identity.version,
+  );
+  // A committed receipt is replayed before any package/metadata validation, even after selection changes.
+  authority.state.packagesAllowed = false;
+  const packageReadsBeforeReplay = authority.state.requests.filter(
+    (entry) => entry.path === "/package",
+  ).length;
+  let replayConfiguration: Awaited<ReturnType<typeof request>>;
+  try {
+    replayConfiguration = await request(
+      `/api/v1/extensions/${pluginId}/configuration`,
+      firstBody,
+      "PUT",
+      "named-process-http-configuration-v1",
+    );
+  } finally {
+    authority.state.packagesAllowed = true;
+  }
+  assert.equal(replayConfiguration.status, 200, replayConfiguration.text);
+  assert.equal(replayConfiguration.body.disposition, "replayed");
+  assert.deepEqual(
+    replayConfiguration.body.configuration,
+    firstConfiguration.body.configuration,
+  );
+  assert.equal(
+    authority.state.requests.filter((entry) => entry.path === "/package")
+      .length,
+    packageReadsBeforeReplay,
+  );
+  const secondConfiguration = await request(
+    `/api/v1/extensions/${pluginId}/configuration`,
+    {
+      ...firstBody,
+      pluginVersion: registrations[1]!.identity.version,
+      expectedRevision: 1,
+    },
+    "PUT",
+    "named-process-http-configuration-v2",
+  );
+  assert.equal(secondConfiguration.status, 200, secondConfiguration.text);
+  assert.equal(secondConfiguration.body.disposition, "created");
+  assert.equal(secondConfiguration.body.configuration.revision, 2);
+  assert.equal(
+    secondConfiguration.body.configuration.implementationDigest,
+    registrations[1]!.implementationDigest,
+  );
+
+  const zeroCounts: Record<string, number> = {};
+  for (const table of [
+    "run_snapshots",
+    "extension_run_bindings",
+    "extension_external_operations",
+    "extension_activations",
+    "agent_versions",
+    "agent_version_deployments",
+    "agent_version_release_bundles",
+    "agent_version_release_activations",
+    "active_agent_version_releases",
+  ]) {
+    const count = await database.query(
+      `SELECT count(*)::int AS count FROM "${schema}"."${table}"`,
+    );
+    zeroCounts[table] = count.rows[0].count;
+    assert.equal(
+      count.rows[0].count,
+      0,
+      `metadata-only HTTP cannot write ${table}`,
+    );
+  }
+  const creditTables = await database.query(
+    "SELECT tablename FROM pg_tables WHERE schemaname=$1 AND tablename LIKE 'plugin_credit_%'",
+    [schema],
+  );
+  assert.deepEqual(
+    creditTables.rows,
+    [],
+    "metadata-only must not initialize personal credit tables",
+  );
+  assert.equal(workerFixture.modelRequests.length, 0);
+  assert.equal(supplier.requests().length, 0);
+  assert.equal(
+    authority.state.requests.filter((entry) => entry.path === "/quote").length,
+    0,
+  );
+  assert.equal(
+    await readFile(importCounterPath, "utf8"),
+    "",
+    "actual Control metadata-only never imports installed ESM, so no setup/factory create can run",
+  );
+  await stopChild(metadataControl);
+  const prepublication = {
+    catalogVersions: [
+      initialCatalog.body.extensions[0].pluginVersion,
+      currentCatalog.body.extensions[0].pluginVersion,
+    ],
+    configurations: [
+      firstConfiguration.body.configuration,
+      secondConfiguration.body.configuration,
+    ],
+    replayAfterSelectionChanged: replayConfiguration.body.disposition,
+    activationBeforeReleaseStatus: absentRuntime.status,
+    disabledSelections: true,
+    zeroCounts,
+    creditTables: creditTables.rows,
+    installedModuleImports: 0,
+    modelRequests: 0,
+    supplierRequests: 0,
+    quoteRequests: 0,
+    workerStarted: false,
+    metadataControlClose: await metadataControl.completion,
+  };
+  t.diagnostic(
+    "actual metadata-only HTTP saved revisions1/2 with disabled selections; no Worker/peer/release/quote/funds, no installed ESM load/setup/create, zero publication/Run/operation rows and no credit tables",
+  );
+
+  const prepared = await prepareTaskProcessReleaseInput({
+    fixture: workerFixture,
+    store,
+    registrations,
+    configurations: prepublication.configurations,
+  });
+  const release = workerFixture.start("release");
+  assert.equal(
+    (await installedProcessCompletion(release)).code,
+    0,
+    release.stderr(),
+  );
+  assert.equal(
+    JSON.parse(release.stdout()).releaseId,
+    prepared.plan.bundle.releaseId,
+  );
+  const credits = store.pluginCreditStore();
+  await credits.migrate();
+  assert.equal(await credits.getAccount(taskProcessCreditScope), null);
+  await credits.grant({
+    scope: taskProcessCreditScope,
+    grantId: "named-process-test-grant-only",
+    credits: "100",
+  });
+  const selection = await select(0);
+  const peerPort = await taskProcessFreePort();
+  const worker = workerFixture.start("worker", {
+    CREWON_CONTROL_SECURITY_MODE: "production",
+    CREWON_WORKER_ONCE: "0",
+    CREWON_WORKER_SCAN_INTERVAL_MS: "30",
+    CREWON_INSTALLED_PLUGIN_PEER_PORT: String(peerPort),
+    CREWON_INSTALLED_PLUGIN_PEER_TOKEN: taskProcessPeerToken,
+    CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: "10000",
+  });
+  children.push(worker);
+  await waitTaskProcess(
+    "actual Worker private peer",
+    async () =>
+      worker
+        .stdout()
+        .includes(
+          `CrewON Installed Plugin Peer origin http://127.0.0.1:${peerPort}`,
+        ),
+    [worker],
+  );
+  const configPath = join(workerFixture.directory, "control-tasks.json");
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      schemaVersion: "crewon.installed-plugin-control-tasks.v1",
+      installRoot: workerFixture.installRoot,
+      peer: {
+        origin: `http://127.0.0.1:${peerPort}`,
+        tokenEnvironmentVariable: "NAMED_PROCESS_PEER_TOKEN",
+      },
+      packageAuthority: endpoint("package"),
+      quoteAuthority: endpoint("quote"),
+      timeoutMs: 10000,
+      maximumPackages: 2,
+    }),
+    { mode: 0o600 },
+  );
+  controlEnvironment = {
+    ...controlEnvironment,
+    CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH: undefined,
+    CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH: await realpath(configPath),
+    CREWON_PLUGIN_UI_ENABLED: "1",
+    CREWON_PLUGIN_UI_INSTALL_ROOT: workerFixture.installRoot,
+    CREWON_PLUGIN_UI_PROFILE_AUTHORITY_URL: `${authority.origin}/profile`,
+    CREWON_PLUGIN_UI_PROFILE_AUTHORITY_TOKEN: taskProcessServiceToken,
+    CREWON_PLUGIN_UI_POLICY_AUTHORITY_URL: `${authority.origin}/policy`,
+    CREWON_PLUGIN_UI_POLICY_AUTHORITY_TOKEN: taskProcessServiceToken,
+    CREWON_PLUGIN_UI_AUTHORITY_TIMEOUT_MS: "10000",
+    CREWON_PLUGIN_UI_PUBLICATIONS_JSON: JSON.stringify(
+      registrations.map(({ identity: { version: _version, ...identity } }) => ({
+        ...identity,
+        publicAssets: ["ui.mjs"],
+      })),
+    ),
+  };
+  const control = start("control");
+  await waitTaskProcess(
+    "actual full-task production Control",
+    async () => control.stdout().includes("CrewON Control API listening"),
+    [control, bff, worker],
+  );
   return {
     workerFixture,
     supplier,
@@ -358,7 +604,8 @@ export async function installedTaskProcessFixture(t: TestContext) {
     prepared,
     selection,
     select,
-    children,
+    children: children.filter((child) => child !== metadataControl),
+    prepublication,
     worker,
     control,
     bff,

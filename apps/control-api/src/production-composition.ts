@@ -81,6 +81,14 @@ import {
   createInstalledPluginTaskRuntime,
   type InstalledPluginTaskRuntime,
 } from "./installed-plugin-task-composition.ts";
+import {
+  assertInstalledPluginConfigurationConfig,
+  type InstalledPluginConfigurationConfig,
+} from "./installed-plugin-configuration-environment.ts";
+import {
+  createInstalledPluginConfigurationRuntime,
+  type InstalledPluginConfigurationRuntime,
+} from "./installed-plugin-configuration-composition.ts";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
@@ -101,6 +109,9 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
   pluginUi?: ProductionPluginUiConfig;
+  pluginConfiguration?: Readonly<{
+    configuration: InstalledPluginConfigurationConfig;
+  }>;
   pluginTasks?: Readonly<{ configuration: InstalledPluginTaskConfiguration }>;
   pluginInstallation?: Readonly<{
     configuration: ProductionPluginInstallationConfiguration;
@@ -142,6 +153,13 @@ export async function createProductionPostgresControlApi(
           });
     const productionConfig = {
       ...config,
+      ...(config.pluginConfiguration === undefined
+        ? {}
+        : {
+            pluginConfiguration: Object.freeze({
+              configuration: config.pluginConfiguration.configuration,
+            }),
+          }),
       ...(config.pluginTasks === undefined
         ? {}
         : {
@@ -225,6 +243,9 @@ async function composeProductionControlApi(
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   let pluginUiRuntime: ProductionPluginUiRuntime | undefined;
   let pluginTaskRuntime: InstalledPluginTaskRuntime | undefined;
+  let pluginConfigurationRuntime:
+    | InstalledPluginConfigurationRuntime
+    | undefined;
   let pluginInstallationRuntime:
     | ProductionPluginInstallationRuntime
     | undefined;
@@ -282,6 +303,19 @@ async function composeProductionControlApi(
           {
             ledger,
             clock,
+          },
+        );
+    }
+    if (config.pluginConfiguration !== undefined) {
+      pluginConfigurationRuntime =
+        await createInstalledPluginConfigurationRuntime(
+          config.pluginConfiguration.configuration,
+          {
+            store,
+            identity: config.identity as ProductionControlApiIdentity,
+            authorization: config.authorization,
+            clock,
+            digester,
           },
         );
     }
@@ -431,9 +465,12 @@ async function composeProductionControlApi(
             });
     const app = buildControlApi({
       pluginUi: pluginUiService,
-      extensions: pluginTaskRuntime?.extensions,
+      extensions:
+        pluginTaskRuntime?.extensions ?? pluginConfigurationRuntime?.extensions,
       extensionTasks: pluginTaskRuntime?.extensionTasks,
-      extensionReads: pluginTaskRuntime?.extensionReads,
+      extensionReads:
+        pluginTaskRuntime?.extensionReads ??
+        pluginConfigurationRuntime?.extensionReads,
       pluginInstallation: pluginInstallationRuntime?.service,
       pluginSources: pluginInstallationRuntime?.service,
       application,
@@ -483,6 +520,7 @@ async function composeProductionControlApi(
     app.addHook("onClose", async () => {
       await closeResources([
         () => pluginTaskRuntime?.close(),
+        () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),
         () => pluginInstallationRuntime?.close(),
         () => storageCapacity.close(),
@@ -508,6 +546,7 @@ async function composeProductionControlApi(
     try {
       await closeResources([
         () => pluginTaskRuntime?.close(),
+        () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),
         () => pluginInstallationRuntime?.close(),
         () => storageCapacity.close(),
@@ -529,6 +568,27 @@ async function composeProductionControlApi(
 function validateProductionConfig(
   config: ProductionPostgresControlApiConfig,
 ): void {
+  if (config.pluginConfiguration !== undefined) {
+    assertInstalledPluginConfigurationConfig(
+      config.pluginConfiguration.configuration,
+    );
+    if (
+      !(config.identity instanceof ProductionControlApiIdentity) ||
+      config.pluginTasks !== undefined
+    )
+      throw new Error("production_plugin_configuration_conflict");
+    const root = config.pluginConfiguration.configuration.installRoot;
+    if (
+      (config.pluginUi !== undefined &&
+        parseProductionPluginUiConfiguration(config.pluginUi.configuration)
+          .installRoot !== root) ||
+      (config.pluginInstallation !== undefined &&
+        parseProductionPluginInstallationConfiguration(
+          config.pluginInstallation.configuration,
+        ).installRoot !== root)
+    )
+      throw new Error("production_plugin_install_root_mismatch");
+  }
   if (config.pluginTasks !== undefined) {
     assertInstalledPluginTaskConfiguration(config.pluginTasks.configuration);
     if (

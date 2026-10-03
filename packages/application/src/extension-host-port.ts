@@ -12,7 +12,21 @@ export type ExtensionRegistration = Readonly<{
   implementationDigest: string;
 }>;
 
+/** Optional preparation of actual metadata; never prepares execution or grants readiness. */
+export type ExtensionCatalogPreparation = Readonly<{
+  actor: ActorContext;
+  request:
+    | Readonly<{ kind: "catalog" }>
+    | Readonly<{
+        kind: "registration";
+        pluginId: string;
+        pluginVersion: string;
+      }>;
+}>;
+
 export interface ExtensionCatalogPort {
+  /** Legacy reviewed catalogs omit this hook and perform no new I/O. */
+  prepare?(input: ExtensionCatalogPreparation): Promise<void>;
   list(): readonly ExtensionRegistration[];
   resolve(
     identity: Readonly<{ pluginId: string; pluginVersion: string }>,

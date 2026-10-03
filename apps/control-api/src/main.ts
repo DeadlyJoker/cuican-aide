@@ -10,6 +10,7 @@ import {
 import { createProductionPostgresControlApi } from "./production-composition.ts";
 import { resolveProductionPluginUiEnvironment } from "./production-plugin-ui-environment.ts";
 import { resolveProductionPluginInstallationEnvironment } from "./production-plugin-installation-environment.ts";
+import { loadInstalledPluginConfigurationEnvironment } from "./installed-plugin-configuration-environment.ts";
 import { loadInstalledPluginTaskEnvironment } from "./installed-plugin-task-environment.ts";
 import {
   HttpControlTokenVerifier,
@@ -52,8 +53,16 @@ const extensionEnvironment = resolveControlExtensionWorkerEnvironment(
 );
 const installedPluginTaskConfiguration =
   await loadInstalledPluginTaskEnvironment(process.env, securityMode);
+const installedPluginConfiguration =
+  await loadInstalledPluginConfigurationEnvironment(process.env, securityMode);
 if (
-  installedPluginTaskConfiguration !== undefined &&
+  installedPluginConfiguration !== undefined &&
+  installedPluginTaskConfiguration !== undefined
+)
+  throw new Error("installed_plugin_configuration_task_conflict");
+if (
+  (installedPluginTaskConfiguration !== undefined ||
+    installedPluginConfiguration !== undefined) &&
   extensionEnvironment !== undefined
 )
   throw new Error("installed_plugin_task_legacy_extension_conflict");
@@ -177,6 +186,13 @@ try {
       connectionString: productionConnectionString,
       identity,
       authorization,
+      ...(installedPluginConfiguration === undefined
+        ? {}
+        : {
+            pluginConfiguration: {
+              configuration: installedPluginConfiguration,
+            },
+          }),
       ...(installedPluginTaskConfiguration === undefined
         ? {}
         : {

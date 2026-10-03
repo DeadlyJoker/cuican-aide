@@ -153,6 +153,22 @@ export class ExtensionConfigurationApplicationService {
         });
       if (previous !== null)
         return { disposition: "replayed" as const, configuration: previous };
+      if (this.#dependencies.catalog.prepare !== undefined) {
+        await this.#dependencies.catalog.prepare({
+          actor,
+          request: {
+            kind: "registration",
+            pluginId: command.pluginId,
+            pluginVersion: command.pluginVersion,
+          },
+        });
+        await authorizeExtension(
+          this.#dependencies.authorization,
+          actor,
+          "extension:configure",
+          scope,
+        );
+      }
       const registration = requireExtensionRegistration(
         this.#dependencies.catalog,
         this.#dependencies.digester,
@@ -185,6 +201,13 @@ export class ExtensionConfigurationApplicationService {
         registration,
         configuration,
       });
+      if (this.#dependencies.catalog.prepare !== undefined)
+        await authorizeExtension(
+          this.#dependencies.authorization,
+          actor,
+          "extension:configure",
+          scope,
+        );
       return this.#dependencies.store.saveExtensionConfiguration({
         configuration,
         expectedRevision: command.expectedRevision,
@@ -249,6 +272,15 @@ export class ExtensionConfigurationApplicationService {
         );
       let target: ExtensionActivation["target"] = null;
       if (command.state === "enabled") {
+        if (this.#dependencies.catalog.prepare !== undefined)
+          await this.#dependencies.catalog.prepare({
+            actor,
+            request: {
+              kind: "registration",
+              pluginId: configuration.pluginId,
+              pluginVersion: configuration.pluginVersion,
+            },
+          });
         const registration = requireExtensionRegistration(
           this.#dependencies.catalog,
           this.#dependencies.digester,
@@ -307,6 +339,13 @@ export class ExtensionConfigurationApplicationService {
             "extension_execution_target_mismatch",
           );
       }
+      if (this.#dependencies.catalog.prepare !== undefined)
+        await authorizeExtension(
+          this.#dependencies.authorization,
+          actor,
+          "extension:activate",
+          scope,
+        );
       const activation = parseExtensionActivation({
         schemaVersion: "crewon.extension-activation.v0",
         ...scope,

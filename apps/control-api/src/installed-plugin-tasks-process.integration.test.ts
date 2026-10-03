@@ -17,7 +17,7 @@ import {
 } from "./installed-plugin-tasks-process-authorities.test-support.ts";
 
 test(
-  "actual production PG Control and BFF invoke an installed report through the private Worker peer and the original personal-credit transaction",
+  "actual production PG first-ever HTTP configuration and CLI publication lead to BFF-installed report tasks through the private Worker and personal-credit transaction",
   {
     timeout: 150_000,
     skip:
@@ -364,15 +364,15 @@ test(
         f.authority.state.requests.some((request) => request.path === "/quote"),
       );
       proof = {
-        schemaVersion: "crewon.installed-plugin-tasks-process-test-proof.v1",
+        schemaVersion: "crewon.installed-plugin-tasks-process-test-proof.v2",
         mode: "actual production PostgreSQL Control/BFF/Worker child processes",
         fixtureBoundaries: {
           operatorPrerequisite:
-            "actual immutable installation ledger, selected package and two configuration revisions; no Agent, release, task, funds or activation from setup",
+            "actual verifier/installer immutable bytes and installation ledger only; no configuration, Agent, release, task, funds or activation from setup",
           publication:
             "actual release-main child; one complete activated bundle",
           configuration:
-            "operator prepublication configuration prerequisite, then original public HTTP read and activation; not first-configuration product completion",
+            "first-ever original HTTP schema read, revisions1/2 with disabled selections and no peer/runtime/quote/funds, receipt-first replay after selection changes; original HTTP activation only after actual CLI publication",
           funding: "named-process-test-grant-only",
           quote:
             "named HTTPS authority fixture; 30 personal test credits per task",
@@ -386,6 +386,7 @@ test(
         },
         actor,
         scope,
+        prepublication: f.prepublication,
         releaseId: f.prepared.plan.bundle.releaseId,
         csrfMissingStatus: deniedCsrf.status,
         callerActorHeader: {
@@ -421,7 +422,7 @@ test(
         },
       };
       t.diagnostic(
-        "actual production children: PG Control + BFF + private installed Worker; two original HTTP actions, two personal test reservations, two version-pinned supplier POSTs, one ordinary default Run; operator configuration prerequisite only, no query or settlement claim",
+        "actual production children: metadata-only PG Control+BFF first-ever HTTP revisions1/2, then actual CLI publication and full-task Control+private Worker; two original HTTP actions, two personal test reservations, two version-pinned supplier POSTs, one ordinary default Run; operator installation only, no configuration seed/query/settlement claim",
       );
     } finally {
       await f.close();

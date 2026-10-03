@@ -58,6 +58,10 @@ export class ExtensionReadApplicationService {
   async getCatalog(actorInput: ActorContext) {
     return extensionUseCase(async () => {
       const actor = extensionActor(actorInput);
+      await this.#dependencies.catalog.prepare?.({
+        actor,
+        request: { kind: "catalog" },
+      });
       const entries = this.#dependencies.catalog.list();
       if (entries.length > 32)
         throw new ApplicationError("internal", "extension_catalog_invalid");
@@ -152,6 +156,14 @@ export class ExtensionReadApplicationService {
         scope.pluginId,
         configurationRevision,
       );
+      await this.#dependencies.catalog.prepare?.({
+        actor,
+        request: {
+          kind: "registration",
+          pluginId: configuration.pluginId,
+          pluginVersion: configuration.pluginVersion,
+        },
+      });
       const registration = requireExtensionRegistration(
         this.#dependencies.catalog,
         this.#dependencies.digester,

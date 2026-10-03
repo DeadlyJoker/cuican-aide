@@ -17,6 +17,14 @@ export {
   type InstalledPluginBusinessManifest,
 } from "./installed-plugin-business-manifest.ts";
 export {
+  loadInstalledPluginBusinessRegistration,
+  assertInstalledPluginBusinessRegistration,
+  revalidateInstalledPluginBusinessRegistration,
+  validateInstalledPluginConfiguration,
+  type InstalledPluginBusinessRegistration,
+  type InstalledPluginBusinessRegistrationInput,
+} from "./installed-plugin-business-registration.ts";
+export {
   LocalPluginInstallationHost,
   type LocalPluginInstallationHostDependencies,
 } from "./plugin-installation-local-host.ts";

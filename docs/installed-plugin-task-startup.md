@@ -10,9 +10,49 @@ Use Node.js 24 and pnpm 10. Keep the existing [web deployment](./deployment.md) 
 
 Control and Worker must use the same installation ledger, configuration and Run database, with the same tenant/space/profile and immutable installed packages available in their configured installation roots. Control's task and UI `installRoot` must be identical. Package approval, UI asset publication, current user permissions, execution readiness and credit admission are separate checks.
 
-Before starting Worker, use the [installed release CLI](./installed-plugin-release-publication.md) to publish the exact original model assets, derived Agents and final complete release bundle. The [Worker deployment configuration](./installed-plugin-worker-deployment.md) pins the actual installed package, profile, configuration revision and full execution target. Worker startup verifies this state; it does not install, publish, activate, grant credits or invent a configuration.
+Before starting Worker, use the original configuration HTTP routes to save the exact installed package's first configuration, then use the [installed release CLI](./installed-plugin-release-publication.md) to publish the original model assets, derived Agents and final complete release bundle. The [Worker deployment configuration](./installed-plugin-worker-deployment.md) pins that actual package, profile, configuration revision and full execution target. Worker startup verifies this state; it does not install, publish, activate, grant credits or invent a configuration.
 
-**First-ever configuration bootstrap remains incomplete.** Publication already requires the persisted extension configuration revision, while public configuration preparation depends on the verified published materialization. The process proof starts with an explicit operator-prepared installation ledger and configuration, then uses public configuration reads and activation. It is not evidence of a fresh-database, end-user bootstrap flow. Do not bypass this requirement with a fabricated Store row or readiness response.
+The configuration stage below can run before any Worker or release exists. It requires a real installed package and installation ledger prepared by the operator; it does not install from a browser or complete the end-user product configuration UI. Publication and activation remain explicit steps.
+
+## Control configuration before publication
+
+Set `CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH` to a private JSON file to start production PostgreSQL Control with configuration metadata only. Omitting the variable preserves the original path without reading a new file, allocating these authorities or migrating these plugin schemas. A defined empty value is invalid. Standalone Control and Windows reject this configuration.
+
+The path must be absolute and canonical. Its nonempty regular file must belong to the current OS user, have one hard link, no group/other permissions and no symlink path, and contain at most 64 KiB. Invalid UTF-8, unknown fields or identity/content changes while reading are rejected. Every field below is required:
+
+```json
+{
+  "schemaVersion": "crewon.installed-plugin-control-configuration.v1",
+  "installRoot": "/operator/approved/plugins",
+  "packageAuthority": {
+    "url": "https://policy.example/plugin-configuration/package",
+    "serviceTokenEnvironmentVariable": "PLUGIN_CONFIGURATION_PACKAGE_TOKEN"
+  },
+  "profileAuthority": {
+    "url": "https://identity.example/plugin-profile",
+    "serviceTokenEnvironmentVariable": "PLUGIN_CONFIGURATION_PROFILE_TOKEN"
+  },
+  "timeoutMs": 2000,
+  "maximumPackages": 32
+}
+```
+
+The endpoints require HTTPS without URL credentials, query or fragment and at most 2048 bytes. Token variable names match `[A-Z][A-Z0-9_]{0,127}`; their captured values contain 32–8192 printable ASCII characters and are redacted from configuration serialization. `timeoutMs` is an integer from 1 to 30000. `maximumPackages` is an integer from 1 to 32 and bounds the current selected packages inspected in a catalog request, including verified UI-only envelopes. Business catalog entries never exceed 32. Catalog enumeration scans at most 1600 namespace rows and rejects additional history; uninstalled rows do not consume the selected-package quota. This is not an unbounded ledger scan.
+
+Keep the original production request identity, Application policy, PostgreSQL, artifact and BFF settings. This metadata-only file needs no peer, quote authority or `CREWON_PLUGIN_UI_*` configuration. If UI or installation management is also configured, its installation root must match. The metadata-only opt-in conflicts with `CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH` and the old bundled extension configuration; use one configuration/task owner at a time.
+
+The profile service receives the current authenticated `{actor}` and returns exactly `{tenantId, spaceId, profileId}` with matching tenant/space. Package approval uses the existing `crewon.plugin-execution-package.v1` request, the exact installed plugin/publisher/version/package digest, that full profile scope and `purpose: "read"`. Its response is exactly `{outcome: "allow" | "deny"}`. Both channels require HTTP 200, valid UTF-8 JSON and at most 16 KiB including streamed bodies, and reject redirects. Current identity/profile are rechecked around these calls; Application `extension:read`, `extension:configure` and `extension:activate` permissions remain independent.
+
+Preparation reads the selected package from the real ledger and verifies its complete immutable installed bytes and business manifest. Both enabled and disabled selections can supply metadata; an uninstalled selection or a different selected version cannot. Verified UI-only packages do not become business registrations. The loader does not import Node/UI code, allocate an execution factory, call a model or supplier, quote, reserve credits, create a Run, publish an Agent or manufacture a readiness target. Nonempty credential bindings remain unsupported by the shared installed-business validator.
+
+Use the original authenticated HTTP routes through BFF:
+
+1. Read `GET /api/v1/extensions` for the selected package's actual configuration schema. `GET /api/v1/extensions/<pluginId>/configuration` returns `null` before the first save.
+2. Submit `PUT /api/v1/extensions/<pluginId>/configuration` with an `Idempotency-Key` header and `{pluginVersion, expectedRevision: 0, parameters, credentialBindings: []}`. Parameters must match that package's actual schema. The response supplies the persisted revision and original manifest/implementation/content digests; do not invent those fields.
+3. Build the operator release document from that saved configuration, then run the actual release CLI. Configuration, activation and Run bindings retain their original v0 tenant/space scope; the metadata preparation's profile check does not migrate them to a new schema.
+4. Close metadata-only Control and remove `CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH` before switching to the full task configuration below. After CLI publication, explicitly enable the selected installation, start the verified Worker/peer and task Control, then use the original activation route with the published Agent and saved configuration revision.
+
+Configuration GET and accepted configuration/activation receipt replay do not prepare metadata or read a package. They still require the original permission and current request identity/profile. New saves prepare the exact version, validate its schema and actual package, and recheck configure permission after preparation and host validation before writing. Disabled/revoked activation does not prepare metadata. Enabled activation lazily uses the actual Worker peer; without that runtime it returns `extension_runtime_unavailable` and writes no activation. Saving a configuration is never evidence that generation is ready.
 
 ## Worker private peer
 
@@ -45,7 +85,7 @@ The peer listens only on IPv4 loopback and accepts authenticated JSON POSTs at `
 
 ## Control task configuration
 
-Set `CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH` to an absolute canonical path to a private JSON file. Omitting the variable preserves the original Control path without allocating task authorities or running these plugin migrations. A defined empty value is invalid. The new opt-in cannot coexist with the old Control extension-worker configuration.
+Set `CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH` to an absolute canonical path to a private JSON file. Omitting the variable preserves the original Control path without allocating task authorities or running these plugin migrations. A defined empty value is invalid. The new opt-in cannot coexist with the metadata-only configuration above or the old Control extension-worker configuration.
 
 The file must be a nonempty regular file owned by the current OS user, have one hard link, no group/other permissions, no symlink path, and contain at most 64 KiB. Invalid UTF-8, unknown fields or file identity/content changes while reading are rejected. Every field below is required:
 
@@ -125,10 +165,12 @@ Wire limits are 512 KiB per message, 32 catalog rows, 16 KiB configuration, 64 K
 
 Close synchronously withdraws new peer/request/task authority and begins cancellation of outstanding service work. A timeout or disconnected caller can finish logically while the actual callback, fetch body or host borrow remains active. Its pending slot stays occupied until physical completion; timeout is not proof that the resource is gone.
 
-Worker joins peer server and generation/query hosts before closing the installed execution resolver; it then releases loaded release/authority resources before its Store. Control withdraws request and action owners and joins actual Node/peer/authority work before closing its parent Store. Startup failures use the same cleanup boundary, and repeated close shares the existing closing operation. A late commit retains its real accepted receipt rather than being reported as never submitted.
+Worker joins peer server and generation/query hosts before closing the installed execution resolver; it then releases loaded release/authority resources before its Store. Control withdraws request and action owners and joins actual Node/peer/authority work before closing its parent Store. Metadata-only Control synchronously withdraws its request, metadata and HTTP owners and joins actual package/profile work before its Store; it allocates no Node owner. Startup failures use the same cleanup boundary, and repeated close shares the existing closing operation. A late commit retains its real accepted receipt rather than being reported as never submitted.
 
-The actual production-process test uses PostgreSQL plus real `release-main`, Worker main, Control main and BFF children. It reads configuration and activates via the original public HTTP routes, mounts/invokes an installed Report action, submits both immutable versions, verifies idempotent admission, rejects a missing quote and subsequent withdrawn action, and runs an ordinary default Agent. Two named test reservations remain reserved after completion. Identity, model, quote, test grant and HTTP/SQLite supplier are explicit fixtures.
+The actual production-process test passed 1/1 with no skips. Its operator prerequisite installs actual verified immutable packages and their ledger; it seeds no configuration, activation, Agent or release. Metadata-only production PostgreSQL Control and HTTPS BFF first read the real schema and `null` configuration, then save revisions 1/2 via the original HTTP routes while selections remain disabled. After selection changes and package-read denial, the accepted old request replays without another package call. Enabled activation before publication returns 409. During this stage, nine Run/operation/activation/publication tables stay empty, plugin-credit tables are absent, and installed ESM, model, quote and supplier calls remain zero.
 
-Executable references are the [Control task configuration parser](../apps/control-api/src/installed-plugin-task-environment.ts), [Worker peer environment parser](../apps/runtime-worker/src/plugins/installed-plugin-peer-environment.ts), [private wire contract](../packages/contracts/src/installed-plugin-peer-api.ts), [production-process test](../apps/control-api/src/installed-plugin-tasks-process.integration.test.ts) and [Worker peer dual-Store/lifetime tests](../apps/runtime-worker/src/installed-plugin-peer.test.ts).
+It then uses the actual `release-main` child, Worker main/private peer and full-task Control/BFF, activates through original HTTP, mounts/invokes the installed Report action and submits both immutable versions. It verifies idempotent personal-credit admission, rejects a missing quote and subsequent withdrawn action, preserves a late committed receipt, and runs an ordinary default Agent. Two supplier POSTs and two named personal reservations are observed; those reservations remain reserved after completion. Identity, model, quote, test grant and HTTP/SQLite supplier are explicit fixtures. The focused log is `output/extensions/checks/installed-plugin-first-configuration-process-first-20261003.log`, and the proof is `output/extensions/checks/installed-plugin-tasks-process-proof-20261003.json`.
 
-This evidence does not claim first-ever persisted-configuration bootstrap, formal query task completion, settlement, live ComfyUI/enterprise API acceptance, Short Drama saved projects/generation, or packaged Electron application delivery. Installation/UI management and the old v0/default execution path remain available when these new opt-ins are omitted. The new installed path rejects incomplete authority rather than falling back to a fabricated v0 registration.
+Executable references are the [Control metadata configuration parser](../apps/control-api/src/installed-plugin-configuration-environment.ts), [configuration metadata owner](../apps/control-api/src/installed-plugin-configuration-metadata.ts), [Control task configuration parser](../apps/control-api/src/installed-plugin-task-environment.ts), [Worker peer environment parser](../apps/runtime-worker/src/plugins/installed-plugin-peer-environment.ts), [private wire contract](../packages/contracts/src/installed-plugin-peer-api.ts), [production-process test](../apps/control-api/src/installed-plugin-tasks-process.integration.test.ts) and [Worker peer dual-Store/lifetime tests](../apps/runtime-worker/src/installed-plugin-peer.test.ts).
+
+This evidence does not claim the complete product configuration UI, fresh-database end-user browser installation through automatic publication, formal query task completion, settlement, live ComfyUI/enterprise API acceptance, Short Drama saved projects/generation, or packaged Electron application delivery. Installation/UI management and the old v0/default execution path remain available when these new opt-ins are omitted. The new installed path rejects incomplete authority rather than falling back to a fabricated v0 registration.

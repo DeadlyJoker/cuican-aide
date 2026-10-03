@@ -4,7 +4,7 @@
 
 Control 支持显式启用已安装插件的 UI 目录、挂载及资源读取。生产 PostgreSQL 部署复用生产请求身份和现有 Web/BFF 会话，不创建账号、profile、权限 epoch 或积分余额；正式桌面的本机 SQLite 接线见下节，使用原 Native 单机身份与受控本机审批。未配置时保留原页面和路由。
 
-Worker 的已安装业务执行另有[私有部署协议](./installed-plugin-worker-deployment.md)。它显式读取真实安装包、已经发布的 Agent/配置及当前 HTTPS 权威；安装管理、UI 发布和执行权限分别检查。该接线已有实际子进程证据，真实业务身份服务、Control 动作桥、报价与积分结算仍需部署和验收。
+Worker 的已安装业务执行另有[私有部署协议](./installed-plugin-worker-deployment.md)。它显式读取真实安装包、已经发布的 Agent/配置及当前 HTTPS 权威；安装管理、UI 发布和执行权限分别检查。正式 Control 动作桥已接线，实际子进程证据使用具名服务夹具；真实业务身份、价格、资金及积分结算仍需部署和验收。
 
 ## 部署配置
 
@@ -97,9 +97,34 @@ Native 首次创建 `plugin-profile.json`，保存与实际单机 actor 绑定�
 
 正式 Electron 组件与完整 App 专项最终 2/2 通过，日志为 `output/extensions/checks/desktop-plugin-native-final-visual-green-20261003.log`。完整 App 使用实际 `dist-electron/main.mjs`、`dist/index.html`、原 preload/Native IPC 与真实 Control 子进程，不是 `packaged.app` 验收。首次安装与移走原交付目录后的第二次启动，都实际点击原用户栏的“登录企业账号”进入原登录页，再返回本机管理；随后逐一进入原 10 类正式设置、安装或恢复同一 profile 的短剧 UI，并加载实际 PNG。正式 Control 原本隐藏“电脑控制”设置，预览中的 11 类与此处 10 类证据不混用。账号保持未登录、provider 为 `null`，`live` 返回 200、`ready` 返回 503；没有在线 POST，12 个执行相关表仍为零行。实际界面截图 7 张与证明记录在 `output/extensions/checks/formal-file-app-final-visual-20261003/`，没有输入企业凭据或执行生成、扣费流程。
 
+## 发布前保存首个业务配置
+
+生产 PostgreSQL Control 可通过 `CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH` 启用配置专用元数据 owner。原安装账本和确切安装副本必须已经存在；当前 actor 经原身份验证，profile 由真实 HTTPS 权威解析，包须获得该完整 profile 与确切包身份的当前 `read` 批准。本入口不要求 Worker、已发布 Agent、模型、报价或 UI 发布配置。standalone、Windows、同时启用完整任务配置或旧 bundled extension 配置均拒绝；若同时配置安装/UI owner，其安装根必须一致。
+
+私有文件 schema 为 `crewon.installed-plugin-control-configuration.v1`，精确字段如下。完整无密钥示例、文件权限和原 HTTP 使用顺序见[任务启动的配置首配章节](./installed-plugin-task-startup.md#control-configuration-before-publication)。
+
+| 字段               | 内容                                                                            |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `schemaVersion`    | 上述固定 schema                                                                 |
+| `installRoot`      | 实际宿主安装根的规范绝对路径                                                    |
+| `packageAuthority` | `{url, serviceTokenEnvironmentVariable}`；HTTPS，使用原包许可协议的 `read` 用途 |
+| `profileAuthority` | 同样的 HTTPS/token 引用结构；接收真实 `{actor}`，返回确切 tenant/space/profile  |
+| `timeoutMs`        | 必填整数 1–30000                                                                |
+| `maximumPackages`  | 必填整数 1–32；限制目录检查的当前选中包，UI-only 包也占核验容量                 |
+
+该文件须为当前 OS 用户拥有的单链接普通文件，最多 64 KiB，禁止组/其他用户权限、符号链接、坏 UTF-8、未知字段和读取期间变化。服务秘密只从指定环境变量捕获，配置序列化脱敏。未配置时不分配此 owner 或执行其插件迁移；Native 本机管理启动清除这一生产私有配置，原本机审批不能代替企业请求、profile 或包许可权威。
+
+元数据读取从真实当前选择加载实际安装包，停用但仍选中的业务包也可用于首次配置；卸载或切换到其他版本后，旧准备结果不能用于新保存。共享 Host loader 核验完整包字节和真实 business manifest，不导入 Node/UI ESM、不分配 SDK 工厂、不授予 ready。目录业务项最多 32，最多扫描 1600 个 namespace，仍有更多历史时拒绝；已卸载记录不占当前选中包核验额度，不是无界遍历全部账本。
+
+原 `GET /api/v1/extensions` 提供实际 schema，原 configuration `PUT` 保存 revision、manifest/implementation/content digest；配置及 activation 仍为原 v0 tenant/space 作用域。保存重新检查准备、验证之后的 configure 权限。已接受的配置/activation 回执及 configuration GET 不读取新元数据或包，仍检查原权限和当前请求身份/profile。停用 activation 不准备元数据；未发布执行的 enabled activation 返回 `extension_runtime_unavailable`，不能借首配 owner 创建 target 或 task。
+
+首配之后，操作者根据原 HTTP 保存的配置构造严格 release document，运行实际发布 CLI，显式启用安装选择，再切换完整任务 Control 与 Worker 并启用业务 activation。这里接通的是已有真实安装账本之上的首次 HTTP 配置；完整产品配置 UI、浏览器从空库安装到自动发布的流程仍未交付。本轮不修改原 UI、CSS 或旧快照。
+
+该实际 PostgreSQL 子进程专项最终 1/1 通过、零 skip：前提只准备真实核验安装副本及账本，生产 metadata-only Control/BFF 通过原 HTTP 保存 revision 1/2，换版及撤回包读取许可后旧回执零新增包调用；首配阶段九个执行/发布表为零行、无独立插件积分表、无已安装 ESM/模型/报价/供应商调用，未发布 activation 返回 409。随后实际 CLI 发布、Worker main、完整任务 Control/BFF 消费这些配置，完成两版本动作和原个人积分预留。日志与证明边界见[任务启动的证据](./installed-plugin-task-startup.md#shutdown-and-evidence-limits)，测试身份、价格、资金及供应商均为具名夹具，不等于在线服务交付。
+
 ## 执行边界
 
-未配置业务执行时，生产 main 的动作仍明确返回 `plugin_ui_actions_unavailable`。显式 [已安装任务配置](./installed-plugin-task-startup.md) 现可接入真实当前请求、私有 Worker peer 与原个人积分准入；首次配置准备、真实资金/价格/结算及正式查询动作验收仍未完成。服务端组合 API 可以接收真实 `PluginUiActionPort`，该端口必须进入原 Run、Tool、operation 和个人积分准入，不可直接从界面调用 ComfyUI。
+未配置业务执行时，生产 main 的动作仍明确返回 `plugin_ui_actions_unavailable`。显式 [已安装任务配置](./installed-plugin-task-startup.md) 现可接入真实当前请求、私有 Worker peer 与原个人积分准入；发布前首个配置可通过上节原 HTTP 路径保存，真实资金/价格/结算、完整产品配置 UI、自动发布及正式查询动作验收仍未完成。服务端组合 API 可以接收真实 `PluginUiActionPort`，该端口必须进入原 Run、Tool、operation 和个人积分准入，不可直接从界面调用 ComfyUI。
 
 PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 session 锁，所有新安装写者遵守同一锁序；提交确认后才开放同步版本投影，旧回执不回退当前选择。拥有权不是权限，也不能瞬时证明尚未被客户端观察到的网络中断。Run 准入继续在自己的数据库事务内锁定实际选择行。
 

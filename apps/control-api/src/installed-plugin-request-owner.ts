@@ -27,8 +27,18 @@ import {
 } from "./plugin-security-validation.ts";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { requestContext } from "./request-context.ts";
+import type {
+  InstalledPluginConfigurationMetadataPort,
+  InstalledPluginMetadataPrepared,
+} from "./installed-plugin-configuration-metadata.ts";
 
-const serviceOwners = new WeakMap<object, InstalledPluginRequestOwner>();
+const serviceOwners = new WeakMap<
+  object,
+  Readonly<{
+    owner: InstalledPluginRequestOwner;
+    preparation: "execution" | "configuration";
+  }>
+>();
 const owners = new WeakSet<object>();
 
 type State = {
@@ -36,6 +46,8 @@ type State = {
   actor: ActorContext;
   scope: PluginProfileScope | null;
   prepared: InstalledPluginPeerPrepared | null;
+  metadata: InstalledPluginMetadataPrepared | null;
+  preparation: "execution" | "configuration";
   controller: AbortController;
   signal: AbortSignal;
   alive: boolean;
@@ -52,24 +64,45 @@ export class InstalledPluginRequestOwner {
   readonly #lifetime = new AbortController();
   readonly #identity: ProductionControlApiIdentity["resolveCurrentActor"];
   readonly #profile: PluginInstallationHostProfilePort["resolve"];
-  readonly #prepare: InstalledPluginPeerClient["prepare"];
+  readonly #prepare: InstalledPluginPeerClient["prepare"] | undefined;
+  readonly #metadata:
+    | InstalledPluginConfigurationMetadataPort["prepare"]
+    | undefined;
   #closing: Promise<void> | null = null;
 
   constructor(
     input: Readonly<{
       identity: Pick<ProductionControlApiIdentity, "resolveCurrentActor">;
       profiles: PluginInstallationHostProfilePort;
-      peer: Pick<InstalledPluginPeerClient, "prepare">;
+      peer?: Pick<InstalledPluginPeerClient, "prepare">;
+      metadata?: InstalledPluginConfigurationMetadataPort;
     }>,
   ) {
     owners.add(this);
     this.#identity = input.identity.resolveCurrentActor.bind(input.identity);
     this.#profile = input.profiles.resolve.bind(input.profiles);
-    this.#prepare = input.peer.prepare.bind(input.peer);
+    this.#prepare = input.peer?.prepare.bind(input.peer);
+    this.#metadata = input.metadata?.prepare.bind(input.metadata);
     this.catalog = Object.freeze({
-      list: () => this.#prepared().catalog.list(),
+      prepare: async (
+        value: Parameters<NonNullable<ExtensionCatalogPort["prepare"]>>[0],
+      ) => {
+        const state = this.#current();
+        if (!same(pluginSecurityActor(value.actor), state.actor)) denied();
+        if (state.preparation === "execution") return;
+        if (this.#metadata === undefined) denied();
+        await this.assertCurrent();
+        const prepared = await this.#metadata(
+          { actor: state.actor, scope: state.scope!, request: value.request },
+          { signal: state.signal },
+        );
+        this.#sameState(state);
+        await this.assertCurrent();
+        state.metadata = prepared;
+      },
+      list: () => this.#catalogPrepared().catalog.list(),
       resolve: (identity: Parameters<ExtensionCatalogPort["resolve"]>[0]) =>
-        this.#prepared().catalog.resolve(identity),
+        this.#catalogPrepared().catalog.resolve(identity),
     });
     this.host = Object.freeze({
       taskAdmissionMode: (
@@ -77,18 +110,26 @@ export class InstalledPluginRequestOwner {
           NonNullable<ExtensionHostPort["taskAdmissionMode"]>
         >[0],
       ) => {
-        const prepared = this.#prepared();
+        const prepared = this.#catalogPrepared();
         if (prepared.host.taskAdmissionMode?.(input) !== "installed") denied();
         return "installed" as const;
       },
       validateConfiguration: (
         input: Parameters<ExtensionHostPort["validateConfiguration"]>[0],
       ) =>
-        this.#call(input.actor, (prepared) =>
+        this.#configurationCall(input.actor, (prepared) =>
           prepared.host.validateConfiguration(input),
         ),
       evaluate: (input: Parameters<ExtensionHostPort["evaluate"]>[0]) =>
-        this.#call(input.actor, (prepared) => prepared.host.evaluate(input)),
+        this.#configurationCall(input.actor, async () => {
+          const prepared = await this.#executionPrepared();
+          return prepared === null
+            ? {
+                outcome: "unavailable" as const,
+                reasonCode: "extension_runtime_unavailable" as const,
+              }
+            : prepared.host.evaluate(input);
+        }),
     });
     this.pluginQueryHost = Object.freeze({
       resolveRegistration: (
@@ -109,6 +150,7 @@ export class InstalledPluginRequestOwner {
       request: ControlApiRequestContext;
       actor: ActorContext;
       signal?: AbortSignal;
+      preparation?: "configuration";
     }>,
     work: () => Promise<T>,
   ): Promise<T> {
@@ -119,6 +161,8 @@ export class InstalledPluginRequestOwner {
       actor: pluginSecurityActor(input.actor),
       scope: null,
       prepared: null,
+      metadata: null,
+      preparation: input.preparation ?? "execution",
       controller,
       signal: AbortSignal.any([
         controller.signal,
@@ -133,10 +177,13 @@ export class InstalledPluginRequestOwner {
       this.#storage.run(state, async () => {
         try {
           await this.assertCurrent();
-          state.prepared = await this.#prepare(
-            { actor: state.actor, scope: state.scope! },
-            { signal: state.signal },
-          );
+          if (state.preparation === "execution") {
+            if (this.#prepare === undefined) denied();
+            state.prepared = await this.#prepare(
+              { actor: state.actor, scope: state.scope! },
+              { signal: state.signal },
+            );
+          }
           await this.assertCurrent();
           // A committed original receipt may return after withdrawal. Admission and plain JSON
           // still perform their own current-authority checks inside the Application.
@@ -238,14 +285,45 @@ export class InstalledPluginRequestOwner {
     if (prepared === null) denied();
     return prepared;
   }
+  #catalogPrepared(): InstalledPluginMetadataPrepared {
+    const state = this.#current();
+    if (state.preparation === "execution") return this.#prepared();
+    if (state.metadata === null) denied();
+    return state.metadata;
+  }
+  async #executionPrepared(): Promise<InstalledPluginPeerPrepared | null> {
+    const state = this.#current();
+    if (state.prepared !== null) return state.prepared;
+    if (this.#prepare === undefined) return null;
+    const prepared = await this.#prepare(
+      { actor: state.actor, scope: state.scope! },
+      { signal: state.signal },
+    );
+    this.#sameState(state);
+    await this.assertCurrent();
+    state.prepared = prepared;
+    return prepared;
+  }
   async #call<T>(
     actor: ActorContext,
     work: (prepared: InstalledPluginPeerPrepared) => Promise<T>,
   ): Promise<T> {
+    return this.#authorizedCall(actor, () => work(this.#prepared()));
+  }
+  async #configurationCall<T>(
+    actor: ActorContext,
+    work: (prepared: InstalledPluginMetadataPrepared) => Promise<T>,
+  ): Promise<T> {
+    return this.#authorizedCall(actor, () => work(this.#catalogPrepared()));
+  }
+  async #authorizedCall<T>(
+    actor: ActorContext,
+    work: () => Promise<T>,
+  ): Promise<T> {
     const state = this.#current();
     if (!same(pluginSecurityActor(actor), state.actor)) denied();
     await this.assertCurrent();
-    const result = await work(this.#prepared());
+    const result = await work();
     this.#sameState(state);
     await this.assertCurrent();
     return result;
@@ -258,7 +336,11 @@ export function bindInstalledPluginRequestOwner<
     | ExtensionConfigurationApplicationService
     | ExtensionTaskApplicationService
     | ExtensionReadApplicationService,
->(service: T, owner: InstalledPluginRequestOwner): T {
+>(
+  service: T,
+  owner: InstalledPluginRequestOwner,
+  options?: Readonly<{ preparation: "configuration" }>,
+): T {
   if (
     (!(service instanceof ExtensionConfigurationApplicationService) &&
       !(service instanceof ExtensionTaskApplicationService) &&
@@ -267,7 +349,10 @@ export function bindInstalledPluginRequestOwner<
     serviceOwners.has(service)
   )
     denied();
-  serviceOwners.set(service, owner);
+  serviceOwners.set(
+    service,
+    Object.freeze({ owner, preparation: options?.preparation ?? "execution" }),
+  );
   return service;
 }
 
@@ -279,8 +364,9 @@ export async function withInstalledPluginHttpRequest<T>(
   actor: ActorContext,
   work: () => Promise<T>,
 ): Promise<T> {
-  const owner = serviceOwners.get(service);
-  if (owner === undefined) return work();
+  const binding = serviceOwners.get(service);
+  if (binding === undefined) return work();
+  const { owner } = binding;
   const controller = new AbortController();
   const abort = () => controller.abort();
   const closed = () => {
@@ -291,7 +377,14 @@ export async function withInstalledPluginHttpRequest<T>(
   if (request.raw.aborted || reply.raw.destroyed) abort();
   try {
     return await owner.run(
-      { request: requestContext(request), actor, signal: controller.signal },
+      {
+        request: requestContext(request),
+        actor,
+        signal: controller.signal,
+        ...(binding.preparation === "configuration"
+          ? { preparation: "configuration" as const }
+          : {}),
+      },
       async () => {
         const result = await work();
         // A read is not a durable mutation acknowledgement. Never return it after the

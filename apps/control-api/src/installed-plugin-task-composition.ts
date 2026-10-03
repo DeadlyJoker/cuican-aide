@@ -17,6 +17,10 @@ import {
   parsePluginProfileScope,
 } from "@crewon/domain";
 import { PostgresDomainStore } from "@crewon/store";
+import { InstalledPluginConfigurationMetadata } from "./installed-plugin-configuration-metadata.ts";
+import type { PluginActivationCandidate } from "@crewon/plugin-host";
+import type { ActorContext } from "@crewon/application";
+import type { PluginProfileScope } from "@crewon/domain";
 import { InstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
 import {
   bindInstalledPluginRequestOwner,
@@ -87,6 +91,7 @@ export async function createInstalledPluginTaskRuntime(
   );
   let requests: InstalledPluginRequestOwner | undefined;
   let owner: InstalledPluginTaskActionOwner | undefined;
+  let metadata: InstalledPluginConfigurationMetadata | undefined;
   try {
     const ledger = dependencies.store.pluginInstallationStore();
     await ledger.migrate();
@@ -120,10 +125,57 @@ export async function createInstalledPluginTaskRuntime(
         return scope;
       },
     });
+    const authorizePackage = async (
+      {
+        actor,
+        scope,
+        candidate,
+        purpose,
+      }: Readonly<{
+        actor: ActorContext;
+        scope: PluginProfileScope;
+        candidate: PluginActivationCandidate;
+        purpose: "read" | "submit";
+      }>,
+      signal: AbortSignal,
+    ) => {
+      signal.throwIfAborted();
+      if (!same(pluginSecurityActor(actor), current().currentActor())) denied();
+      await current().assertCurrent();
+      const response = pluginSecurityRecord(
+        await http.post(
+          configuration.packageAuthority,
+          {
+            schemaVersion: "crewon.plugin-execution-package.v1",
+            identity: {
+              pluginId: candidate.descriptor.pluginId,
+              publisherId: candidate.descriptor.publisherId,
+              version: candidate.descriptor.version,
+              packageDigest: candidate.packageDigest,
+            },
+            scope,
+            purpose,
+          },
+          AbortSignal.any([signal, current().currentSignal()]),
+        ),
+        ["outcome"],
+      );
+      await current().assertCurrent();
+      if (response.outcome !== "allow" && response.outcome !== "deny") denied();
+      return response.outcome;
+    };
+    metadata = new InstalledPluginConfigurationMetadata({
+      installRoot: configuration.installRoot,
+      installations: ledger,
+      maximumPackages: configuration.maximumPackages,
+      authorizeRead: (input, signal) =>
+        authorizePackage({ ...input, purpose: "read" }, signal),
+    });
     requests = new InstalledPluginRequestOwner({
       identity: dependencies.identity,
       profiles,
       peer,
+      metadata,
     });
     const authorizeBusiness = dependencies.authorization.authorize.bind(
       dependencies.authorization,
@@ -191,6 +243,7 @@ export async function createInstalledPluginTaskRuntime(
         digester: dependencies.digester,
       }),
       requests,
+      { preparation: "configuration" },
     );
     bindInstalledPluginRequestOwner(tasks, requests);
     const reads = bindInstalledPluginRequestOwner(
@@ -205,6 +258,7 @@ export async function createInstalledPluginTaskRuntime(
         digester: dependencies.digester,
       }),
       requests,
+      { preparation: "configuration" },
     );
     const committedTasks = new PluginUiCommittedTaskAuthority({
       extensions,
@@ -220,43 +274,14 @@ export async function createInstalledPluginTaskRuntime(
       authorization,
       resolveActor: (identity, signal) =>
         current().resolveActor(identity, signal),
-      authorizePackage: async (
-        { actor, scope, candidate, purpose },
-        signal,
-      ) => {
-        signal.throwIfAborted();
-        if (!same(pluginSecurityActor(actor), current().currentActor()))
-          denied();
-        await current().assertCurrent();
-        const response = pluginSecurityRecord(
-          await http.post(
-            configuration.packageAuthority,
-            {
-              schemaVersion: "crewon.plugin-execution-package.v1",
-              identity: {
-                pluginId: candidate.descriptor.pluginId,
-                publisherId: candidate.descriptor.publisherId,
-                version: candidate.descriptor.version,
-                packageDigest: candidate.packageDigest,
-              },
-              scope,
-              purpose,
-            },
-            AbortSignal.any([signal, current().currentSignal()]),
-          ),
-          ["outcome"],
-        );
-        await current().assertCurrent();
-        if (response.outcome !== "allow" && response.outcome !== "deny")
-          denied();
-        return response.outcome;
-      },
+      authorizePackage,
       clock: dependencies.clock,
       ids: { nextId: () => randomBytes(32).toString("base64url") },
       maximumPackages: configuration.maximumPackages,
     });
     const actualOwner = owner,
-      actualRequests = requests;
+      actualRequests = requests,
+      actualMetadata = metadata;
     let closing: Promise<void> | null = null;
     return Object.freeze({
       owner: actualOwner,
@@ -269,6 +294,7 @@ export async function createInstalledPluginTaskRuntime(
           // Withdraw request authority synchronously before joining the actual task/Node owner.
           () => actualRequests.close(),
           () => actualOwner.close(),
+          () => actualMetadata.close(),
           () => peer.close(),
           () => http.close(),
         ])),
@@ -278,6 +304,7 @@ export async function createInstalledPluginTaskRuntime(
       await closeAll([
         () => requests?.close(),
         () => owner?.close(),
+        () => metadata?.close(),
         () => peer.close(),
         () => http.close(),
       ]);

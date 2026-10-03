@@ -115,7 +115,7 @@ export async function taskProcessAuthorities(t: TestContext) {
               "crewon.plugin-execution-package.v1",
             );
             assert.deepEqual(body.scope, scope);
-            assert.equal(body.purpose, "submit");
+            assert.ok(body.purpose === "read" || body.purpose === "submit");
             assert.deepEqual(Object.keys(body.identity as object).sort(), [
               "packageDigest",
               "pluginId",
