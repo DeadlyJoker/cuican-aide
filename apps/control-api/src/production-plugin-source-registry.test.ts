@@ -59,7 +59,7 @@ test("approved source registry verifies real bytes without executing code and ne
     /production_plugin_source_not_found/u,
   );
 });
-test("startup refuses wrong approved identity, mutable bytes, links and public source roots", async (t) => {
+test("unavailable delivery bytes do not revoke configured identity or fabricate an installable source", async (t) => {
   const f = await productionSourceFixture(t);
   const source = await f.source();
   for (const changed of [
@@ -67,28 +67,54 @@ test("startup refuses wrong approved identity, mutable bytes, links and public s
     { ...source, publisherId: "other.publisher" },
     { ...source, version: "2.0.0" },
     { ...source, packageDigest: `sha256:${"f".repeat(64)}` },
-  ])
+  ]) {
+    const registry = await createProductionPluginSourceRegistry(
+      f.configuration([changed]),
+    );
+    assert.deepEqual(registry.list(), []);
+    assert.equal(
+      registry.authorizeCandidate({
+        descriptor: source.descriptor,
+        packageDigest: source.packageDigest,
+      }),
+      "deny",
+    );
     await assert.rejects(
-      createProductionPluginSourceRegistry(f.configuration([changed])),
+      registry.resolveSource(source.sourceId),
       /production_plugin_source_identity_mismatch/u,
     );
+  }
   await chmod(source.directory, 0o755);
+  const unsafe = await createProductionPluginSourceRegistry(
+    f.configuration([source]),
+  );
+  assert.deepEqual(unsafe.list(), []);
   await assert.rejects(
-    createProductionPluginSourceRegistry(f.configuration([source])),
+    unsafe.resolveSource(source.sourceId),
     /production_plugin_source_private_directory_required/u,
   );
   await chmod(source.directory, 0o700);
   const link = join(f.root, "linked");
   await symlink(source.directory, link);
-  await assert.rejects(
-    createProductionPluginSourceRegistry(
-      f.configuration([{ ...source, directory: link }]),
-    ),
+  const linked = await createProductionPluginSourceRegistry(
+    f.configuration([{ ...source, directory: link }]),
   );
+  assert.deepEqual(linked.list(), []);
+  await assert.rejects(linked.resolveSource(source.sourceId));
   await writeFile(join(source.directory, "node.mjs"), "tampered");
-  await assert.rejects(
-    createProductionPluginSourceRegistry(f.configuration([source])),
+  const corrupt = await createProductionPluginSourceRegistry(
+    f.configuration([source]),
   );
+  assert.deepEqual(corrupt.list(), []);
+  assert.equal(
+    corrupt.authorizeCandidate({
+      descriptor: source.descriptor,
+      packageDigest: source.packageDigest,
+    }),
+    "allow",
+  );
+  await assert.rejects(corrupt.resolveSource(source.sourceId));
+  await assert.rejects(lstat(f.marker), { code: "ENOENT" });
 });
 test("an approved source is reverified for each resolve and cannot change after startup approval", async (t) => {
   const f = await productionSourceFixture(t);
@@ -98,7 +124,7 @@ test("an approved source is reverified for each resolve and cannot change after 
   );
   await writeFile(join(source.directory, "node.mjs"), "tampered");
   await assert.rejects(registry.resolveSource(source.sourceId));
-  assert.equal(registry.list()[0]!.packageDigest, source.packageDigest);
+  assert.deepEqual(registry.list(), []);
   await assert.rejects(lstat(f.marker), { code: "ENOENT" });
 });
 test("rejects sources nested in installation root and over-budget public metadata without truncation", async (t) => {

@@ -41,6 +41,13 @@ import {
 import { DesktopExtensionHistoryCoordinator } from "./desktopExtensionHistoryCoordinator.ts";
 import { prepareDesktopExtensionCurrentUpgradeInputs } from "./desktopExtensionCurrentUpgradeInputs.ts";
 import type { DesktopCurrentRuntimeChildren } from "./desktopControlRuntime.ts";
+import {
+  clearDesktopPluginEnvironment,
+  DesktopPluginBootstrapOwner,
+  DesktopLocalManagementAccessEvents,
+  desktopPluginManagementEnvironment,
+  type DesktopLocalManagementAccess,
+} from "./desktopPluginManagementRuntime.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -115,6 +122,9 @@ export class RuntimeSupervisor {
   #probePort = 0;
   #children: ChildProcess[] = [];
   #currentChildren: DesktopCurrentRuntimeChildren | null = null;
+  #managementControl: ChildProcess | null = null;
+  #pluginBootstrap: DesktopPluginBootstrapOwner | null = null;
+  readonly #localManagementEvents = new DesktopLocalManagementAccessEvents();
   #runtimeAbort: AbortController | null = null;
   #history: DesktopExtensionHistoryCoordinator | null = null;
   #restart: Promise<void> = Promise.resolve();
@@ -166,6 +176,8 @@ export class RuntimeSupervisor {
   async start(): Promise<void> {
     if (this.#stopping !== null) await this.#stopping;
     if (this.#children.length > 0 || this.#startupAbort !== null) return;
+    if (this.#pluginBootstrap !== null)
+      throw new Error("desktop_plugin_bootstrap_cleanup_required");
     const configuration =
       this.#extensionRuntime?.() ??
       parseDesktopExtensionRuntimeConfiguration({
@@ -174,18 +186,58 @@ export class RuntimeSupervisor {
       });
     this.#logs.resume();
     const provider = this.#provider();
-    if (provider === null) {
-      this.#ready = false;
-      return;
-    }
     const startup = new AbortController();
     this.#startupAbort = startup;
     this.#runtimeAbort = startup;
     try {
+      const bootstrapOwner = new DesktopPluginBootstrapOwner({
+        dataDirectory: this.#dataDirectory,
+        actor: DESKTOP_RUNTIME_OWNER,
+        sessionEntropy: `${this.#sessionToken}:${this.#sessionGeneration}`,
+      });
+      this.#pluginBootstrap = bootstrapOwner;
+      const bootstrap = await bootstrapOwner.prepared();
+      startup.signal.throwIfAborted();
+      if (provider === null && bootstrap === null) {
+        await bootstrapOwner.close();
+        startup.signal.throwIfAborted();
+        if (this.#pluginBootstrap === bootstrapOwner)
+          this.#pluginBootstrap = null;
+        if (this.#runtimeAbort === startup) this.#runtimeAbort = null;
+        this.#ready = false;
+        return;
+      }
       this.#controlPort ||= await freePort();
-      this.#probePort ||= await freePort();
+      startup.signal.throwIfAborted();
       ensureStorage(this.#dataDirectory);
+      if (provider === null) {
+        const control = this.#spawnControl(
+          desktopPluginManagementEnvironment({
+            ambient: process.env,
+            dataDirectory: this.#dataDirectory,
+            controlPort: this.#controlPort,
+            origin: this.#origin,
+            csrfToken: this.#csrfToken,
+            sessionToken: this.#sessionToken,
+          }),
+        );
+        this.#children.push(control);
+        this.#managementControl = control;
+        await waitForReady(
+          `http://127.0.0.1:${this.#controlPort}/api/v1/health/live`,
+          [control],
+          startup.signal,
+        );
+        startup.signal.throwIfAborted();
+        this.#ready = true;
+        this.#localManagementEvents.notify();
+        this.#watchCurrentChildren();
+        return;
+      }
+      this.#probePort ||= await freePort();
+      startup.signal.throwIfAborted();
       const modelCatalog = await this.#resolveModelCatalog(provider);
+      startup.signal.throwIfAborted();
       const agentPlatformApiKey =
         this.#cloudAgentProfiles.length === 0
           ? null
@@ -255,8 +307,7 @@ export class RuntimeSupervisor {
         await startDesktopRuntimeChildren({
           environments: extensions,
           signal: startup.signal,
-          spawnControl: (environment) =>
-            this.#spawn("Control API", this.#paths.control, environment),
+          spawnControl: (environment) => this.#spawnControl(environment),
           spawnWorker: (environment) =>
             this.#spawn(
               "Runtime Worker",
@@ -299,6 +350,7 @@ export class RuntimeSupervisor {
       }
       startup.signal.throwIfAborted();
       this.#ready = true;
+      this.#localManagementEvents.notify();
       this.#watchCurrentChildren();
       if (
         extensions.enabled &&
@@ -324,15 +376,18 @@ export class RuntimeSupervisor {
     options: Readonly<{ scope: "pair" | "worker" }> = { scope: "pair" },
   ): void {
     const children = this.#currentChildren;
-    if (children === null) return;
+    const managementControl = this.#managementControl;
+    if (children === null && managementControl === null) return;
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = watchRuntimeChildren(
-      [
-        ...(options.scope === "pair"
-          ? [{ child: children.control, name: "Control API" }]
-          : []),
-        { child: children.worker, name: "Runtime Worker" },
-      ],
+      children === null
+        ? [{ child: managementControl!, name: "Control API" }]
+        : [
+            ...(options.scope === "pair"
+              ? [{ child: children.control, name: "Control API" }]
+              : []),
+            { child: children.worker, name: "Runtime Worker" },
+          ],
       ({ code, name, signal }) => {
         this.#invalidateSession();
         this.#stopWatchingChildren?.();
@@ -367,8 +422,7 @@ export class RuntimeSupervisor {
       resolveProvider: this.#resolveExtensionCredential!,
       spawnHistoricalWorker: (entry, environment) =>
         this.#spawn("Historical Runtime Worker", entry, environment, true),
-      spawnControl: (environment) =>
-        this.#spawn("Control API", this.#paths.control, environment),
+      spawnControl: (environment) => this.#spawnControl(environment),
       terminate: terminateRuntimeChild,
       trackChild: (child) => this.#children.push(child),
       releaseChild: (child) => {
@@ -396,11 +450,13 @@ export class RuntimeSupervisor {
           )
         )
           this.#ready = true;
+        this.#localManagementEvents.notify();
         this.#watchCurrentChildren();
       },
       finishControlReplacement: (children) => {
         this.#currentChildren = children;
         this.#ready = true;
+        this.#localManagementEvents.notify();
         this.#watchCurrentChildren();
       },
       waitForControlReady: (children, signal) =>
@@ -460,6 +516,7 @@ export class RuntimeSupervisor {
     this.#startupAbort = null;
     this.#runtimeAbort?.abort();
     this.#runtimeAbort = null;
+    this.#pluginBootstrap?.withdraw();
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
     const stopping = this.#stopOwnedRuntime();
@@ -473,6 +530,7 @@ export class RuntimeSupervisor {
 
   async #stopOwnedRuntime(): Promise<void> {
     const history = this.#history;
+    const bootstrap = this.#pluginBootstrap;
     let nativeCleanup = await this.#settleSessionCleanup();
     const results = await Promise.allSettled([history?.stop()]);
     await this.#stopChildren([...this.#children]);
@@ -484,7 +542,10 @@ export class RuntimeSupervisor {
     }
     if (this.#children.length === 0) {
       this.#currentChildren = null;
+      this.#managementControl = null;
       this.#history = null;
+      await bootstrap?.close();
+      if (this.#pluginBootstrap === bootstrap) this.#pluginBootstrap = null;
       if (nativeCleanup.some((v) => v.status === "rejected"))
         throw new Error("native_session_cleanup_failed");
       return;
@@ -515,10 +576,28 @@ export class RuntimeSupervisor {
     return this.#sessionGeneration;
   }
 
+  /** Only this native runtime's approved owner and live authenticated Control can publish access. */
+  localManagementAccess(): DesktopLocalManagementAccess | null {
+    if (!this.#pluginBootstrap?.enabled) return null;
+    try {
+      this.session();
+      return Object.freeze({
+        schemaVersion: "crewon.desktop-local-management-access.v1",
+        generation: this.#sessionGeneration,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  onLocalManagementAccessChanged(listener: () => void): () => void {
+    return this.#localManagementEvents.subscribe(listener);
+  }
+
   /** Native lifetime owner; never included in the renderer's bootstrap DTO. */
   currentControlOwner(): ChildProcess {
     this.session();
-    return this.#currentChildren!.control;
+    return this.#managementControl ?? this.#currentChildren!.control;
   }
 
   onSessionInvalidated(listener: () => void | Promise<void>): () => void {
@@ -529,6 +608,7 @@ export class RuntimeSupervisor {
   #invalidateSession(): void {
     this.#ready = false;
     this.#sessionGeneration++;
+    this.#localManagementEvents.notify();
     for (const listener of this.#sessionInvalidationListeners) {
       try {
         const cleanup = Promise.resolve(listener());
@@ -559,10 +639,15 @@ export class RuntimeSupervisor {
 
   session(): ControlRuntimeSession {
     const current = this.#currentChildren;
+    const children = this.#managementControl
+      ? [this.#managementControl]
+      : current
+        ? [current.control, current.worker]
+        : [];
     if (
       !this.#ready ||
-      current === null ||
-      [current.control, current.worker].some(
+      children.length === 0 ||
+      children.some(
         (child) => child.exitCode !== null || child.signalCode !== null,
       )
     ) {
@@ -661,7 +746,9 @@ export class RuntimeSupervisor {
       })),
     ];
     const environment: NodeJS.ProcessEnv = {
-      ...clearDesktopExtensionEnvironment(process.env),
+      ...clearDesktopPluginEnvironment(
+        clearDesktopExtensionEnvironment(process.env),
+      ),
       ELECTRON_RUN_AS_NODE: "1",
       NODE_ENV: "production",
       CREWON_ACTOR_ID: DESKTOP_RUNTIME_OWNER.actorId,
@@ -783,6 +870,16 @@ export class RuntimeSupervisor {
     );
     chmodSync(path, 0o600);
     return path;
+  }
+
+  #spawnControl(environment: NodeJS.ProcessEnv): ChildProcess {
+    return this.#spawn(
+      "Control API",
+      this.#paths.control,
+      this.#pluginBootstrap
+        ? this.#pluginBootstrap.controlEnvironment(environment)
+        : clearDesktopPluginEnvironment(environment),
+    );
   }
 
   #spawn(

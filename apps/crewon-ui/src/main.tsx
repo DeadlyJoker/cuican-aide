@@ -5,6 +5,7 @@ import { AgentPlatformAuthGate } from "./components/auth/AgentPlatformAuthGate";
 import { DesktopWindowFrame } from "./components/DesktopWindowFrame";
 import { Toaster } from "./components/ui/sonner";
 import { installDesktopFetch } from "./lib/desktop/desktopFetch";
+import { getDesktopBridge } from "./lib/desktop/desktopBridge";
 import { detectRuntimeSurface } from "./lib/platform";
 import { loadControlApiClient } from "./lib/control-runtime/controlRuntimeBootstrap";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "./lib/agent-platform/agentPlatformClient";
@@ -63,6 +64,13 @@ function CrewonRoot() {
       DESKTOP_PROVIDER_CHANGED_EVENT,
       reloadControlClient,
     );
+    const nativeRuntime = getDesktopBridge()?.runtime;
+    const unsubscribeNativeSession =
+      nativeRuntime?.onLocalManagementAccessChanged?.(() => {
+        if (!active) return;
+        setControlClient(null);
+        reloadControlClient();
+      });
     return () => {
       active = false;
       window.removeEventListener(
@@ -73,6 +81,7 @@ function CrewonRoot() {
         DESKTOP_PROVIDER_CHANGED_EVENT,
         reloadControlClient,
       );
+      unsubscribeNativeSession?.();
     };
   }, []);
 

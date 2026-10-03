@@ -60,6 +60,17 @@ const bridge: CrewonDesktopBridge = {
   },
   runtime: {
     bootstrap: () => invoke<unknown>("crewon:runtime:bootstrap"),
+    localManagementAccess: () =>
+      invoke<unknown>("crewon:runtime:local-management-access"),
+    onLocalManagementAccessChanged: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("crewon:runtime:local-management-access-changed", handler);
+      return () =>
+        ipcRenderer.removeListener(
+          "crewon:runtime:local-management-access-changed",
+          handler,
+        );
+    },
     reloadProvider: () => invoke<void>("crewon:runtime:reload-provider"),
     updateCloudAgentProfiles: (profiles) =>
       invoke<void>("crewon:runtime:update-cloud-agent-profiles", profiles),

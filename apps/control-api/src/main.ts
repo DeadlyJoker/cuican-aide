@@ -23,7 +23,9 @@ import {
   createPostgresControlApi,
   createStandaloneControlApi,
   createStandaloneControlApiWithExtensions,
+  createStandaloneControlApiWithPlugins,
 } from "./standalone-composition.ts";
+import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { resolveControlExtensionWorkerEnvironment } from "./extension-worker-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 import {
@@ -57,6 +59,13 @@ const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
   standaloneTenantId,
 );
 const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
+const desktopPluginBootstrapPath =
+  process.env.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH;
+if (
+  desktopPluginBootstrapPath !== undefined &&
+  (securityMode !== "standalone" || connectionString)
+)
+  throw new Error("desktop_plugin_standalone_sqlite_required");
 const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
   process.env,
   securityMode,
@@ -211,16 +220,28 @@ try {
     } else {
       const databasePath = requiredEnvironment("CREWON_CONTROL_DB_PATH");
       runtime =
-        extensionEnvironment === undefined
-          ? createStandaloneControlApi({
+        desktopPluginBootstrapPath !== undefined
+          ? await createStandaloneControlApiWithPlugins({
               ...standaloneConfig,
               databasePath,
+              desktopPlugins: await loadDesktopPluginConfiguration(
+                desktopPluginBootstrapPath,
+                { actor },
+              ),
+              ...(extensionEnvironment === undefined
+                ? {}
+                : { extensionWorker: extensionEnvironment.extensionWorker }),
             })
-          : await createStandaloneControlApiWithExtensions({
-              ...standaloneConfig,
-              databasePath,
-              extensionWorker: extensionEnvironment.extensionWorker,
-            });
+          : extensionEnvironment === undefined
+            ? createStandaloneControlApi({
+                ...standaloneConfig,
+                databasePath,
+              })
+            : await createStandaloneControlApiWithExtensions({
+                ...standaloneConfig,
+                databasePath,
+                extensionWorker: extensionEnvironment.extensionWorker,
+              });
     }
   }
 } catch (error) {

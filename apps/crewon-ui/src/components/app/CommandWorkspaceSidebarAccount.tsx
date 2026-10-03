@@ -1,7 +1,11 @@
-import { ChevronUp, KeyRound, LogOut, Settings2 } from "lucide-react";
+import { ChevronUp, KeyRound, LogIn, LogOut, Settings2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { Locale } from "../../lib/i18n";
 import type { AgentPlatformAccount } from "../auth/AgentPlatformAuthGate";
+import {
+  useDesktopLocalManagementAccess,
+  useDesktopLocalManagementLoginAction,
+} from "../../lib/desktop/DesktopLocalManagementContext";
 
 export function SidebarAccount({
   account,
@@ -12,6 +16,8 @@ export function SidebarAccount({
   locale?: Locale;
   onSettings?: () => void;
 }) {
+  const localManagement = useDesktopLocalManagementAccess() !== null;
+  const localLogin = useDesktopLocalManagementLoginAction();
   const displayName = account
     ? (
         account.user.display_name ||
@@ -48,9 +54,13 @@ export function SidebarAccount({
       : account.user.username !== displayName
         ? account.user.username
         : account.providerLabel
-    : locale === "zh"
-      ? "页面预览"
-      : "Page preview";
+    : localManagement
+      ? locale === "zh"
+        ? "本机管理"
+        : "Local management"
+      : locale === "zh"
+        ? "页面预览"
+        : "Page preview";
 
   return (
     <footer
@@ -108,6 +118,23 @@ export function SidebarAccount({
             >
               <Settings2 aria-hidden="true" />
               <span>{locale === "zh" ? "设置" : "Settings"}</span>
+            </button>
+          ) : null}
+          {!account && localLogin ? (
+            <button
+              role="menuitem"
+              type="button"
+              onClick={(event) => {
+                event.currentTarget.closest("details")?.removeAttribute("open");
+                localLogin();
+              }}
+            >
+              <LogIn aria-hidden="true" />
+              <span>
+                {locale === "zh"
+                  ? "登录企业账号"
+                  : "Sign in to enterprise account"}
+              </span>
             </button>
           ) : null}
           {account?.needsPassword ? (

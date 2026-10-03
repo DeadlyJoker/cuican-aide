@@ -435,7 +435,7 @@ type CommandWorkspaceProps = {
   onEnsureAssistantThread?: () => Promise<Thread | null>;
   onModeChange: (mode: WorkMode) => void;
   onOpenSettings?: () => void;
-  /** Explicit preview-host footer; defaults to the original authenticated-account behavior. */
+  /** Explicit signed-out footer; access remains separately authorized by the host. */
   showSignedOutAccount?: boolean;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onSceneChange?: (scene: CommandScene) => void;

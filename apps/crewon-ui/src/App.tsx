@@ -105,6 +105,7 @@ import {
   readAgentPlatformSnapshot,
 } from "./lib/agent-platform/agentPlatformClient";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
+import { useDesktopLocalManagementAccess } from "./lib/desktop/DesktopLocalManagementContext";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
@@ -131,6 +132,7 @@ export function App({
     useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
   const platformAccount = useAgentPlatformAccount();
+  const localManagementAccess = useDesktopLocalManagementAccess();
   const {
     clientRef,
     libraryLoadRequestRef,
@@ -1268,6 +1270,7 @@ export function App({
       <StreamingTextScope presentation={threadState.streamingTextPresentation}>
         <TranscriptNavigationScope runtime={controlThreadRuntime}>
           <AppCommandShellRoute
+            showSignedOutAccount={localManagementAccess !== null}
             hostModules={installedPlugins.hostModules}
             teamProgress={
               commandShellRuntime.selectedThreadId

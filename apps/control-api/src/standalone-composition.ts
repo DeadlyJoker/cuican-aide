@@ -38,6 +38,14 @@ import {
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
+import {
+  createDesktopPluginRuntime,
+  type DesktopPluginRuntime,
+} from "./desktop-plugin-runtime.ts";
+import {
+  parseDesktopPluginConfiguration,
+  type DesktopPluginConfiguration,
+} from "./desktop-plugin-configuration.ts";
 
 import { buildControlApi } from "./control-api.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
@@ -76,6 +84,10 @@ type PreparedControlExtensions = {
   operations: ExternalOperationStore & ExternalOperationQueryStore;
   failureCleanup?: Promise<void>;
   earlyFailureCleanup?: () => Promise<void>;
+};
+type PreparedControlPlugins = {
+  runtime: DesktopPluginRuntime;
+  failureCleanup?: Promise<void>;
 };
 
 type ControlApiCompositionConfig = Readonly<{
@@ -168,6 +180,68 @@ export async function createStandaloneControlApiWithExtensions(
   );
 }
 
+/** Native-approved SQLite opt-in; the old synchronous/default path performs no plugin I/O. */
+export async function createStandaloneControlApiWithPlugins(
+  config: StandaloneControlApiConfig &
+    Readonly<{
+      desktopPlugins: DesktopPluginConfiguration;
+      extensionWorker?: ExtensionWorkerConfig;
+    }>,
+): Promise<StandaloneControlApiRuntime> {
+  const configuration = parseDesktopPluginConfiguration(config.desktopPlugins);
+  if (
+    JSON.stringify(configuration.actor) !==
+    JSON.stringify({
+      principalId: config.actor.principalId,
+      actorId: config.actor.actorId,
+      tenantId: config.actor.tenantId,
+      spaceId: config.actor.spaceId,
+    })
+  )
+    throw new Error("desktop_plugin_owner_mismatch");
+  const pinned = pinExtensionCompositionConfig(config);
+  const store = new SqliteRunStore(pinned.databasePath);
+  let prepared: PreparedControlPlugins | undefined;
+  try {
+    prepared = {
+      runtime: await createDesktopPluginRuntime(
+        { configuration },
+        {
+          store,
+          clock: new SystemApplicationClock(),
+          digester: new NodeSha256ContentDigester(),
+        },
+      ),
+    };
+    const composed = {
+      ...pinned,
+      localStoragePaths: [
+        pinned.databasePath,
+        configuration.installRoot,
+        ...(pinned.localStoragePaths ?? []),
+      ],
+    };
+    return pinned.extensionWorker === undefined
+      ? composeControlApi(store, composed, undefined, prepared)
+      : await composeExtensionControlApi(
+          store,
+          composed,
+          pinned.extensionWorker,
+          prepared,
+        );
+  } catch (error) {
+    await closeOwners(
+      [
+        () => prepared?.failureCleanup ?? prepared?.runtime.close(),
+        () => config.artifactStore.close(),
+        () => store.close(),
+      ],
+      [error],
+    );
+    throw error;
+  }
+}
+
 export async function createPostgresControlApi(
   config: PostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
@@ -238,6 +312,7 @@ async function composeExtensionControlApi(
   store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
   worker: ExtensionWorkerConfig,
+  preparedPlugins?: PreparedControlPlugins,
 ): Promise<StandaloneControlApiRuntime> {
   let client: ExtensionHostRouter | null = null;
   let prepared: PreparedControlExtensions | undefined;
@@ -249,7 +324,7 @@ async function composeExtensionControlApi(
     const operations = store.externalOperationStore();
     await operations.migrate();
     prepared = { client, catalog, extensions, operations };
-    return composeControlApi(store, config, prepared);
+    return composeControlApi(store, config, prepared, preparedPlugins);
   } catch (error) {
     await closeOwners(
       [
@@ -257,6 +332,7 @@ async function composeExtensionControlApi(
           prepared?.failureCleanup ??
           prepared?.earlyFailureCleanup?.() ??
           config.artifactStore.close(),
+        () => preparedPlugins?.runtime.close(),
         () => client?.close(),
         () => store.close(),
       ],
@@ -288,6 +364,7 @@ function composeControlApi(
   store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
   preparedExtensions?: PreparedControlExtensions,
+  preparedPlugins?: PreparedControlPlugins,
 ): StandaloneControlApiRuntime {
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
@@ -297,6 +374,7 @@ function composeControlApi(
   if (preparedExtensions !== undefined) {
     preparedExtensions.earlyFailureCleanup = () =>
       closeOwners([
+        () => preparedPlugins?.runtime.close(),
         () => storageCapacity.close(),
         () => eventHub.close(),
         () => config.artifactStore.close(),
@@ -523,6 +601,9 @@ function composeControlApi(
       extensions,
       extensionTasks,
       extensionReads,
+      pluginInstallation: preparedPlugins?.runtime.installation,
+      pluginSources: preparedPlugins?.runtime.sources,
+      pluginUi: preparedPlugins?.runtime.ui,
       compactions,
       rollbacks,
       approvals,
@@ -570,15 +651,16 @@ function composeControlApi(
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
-      if (preparedExtensions !== undefined) {
+      if (preparedExtensions !== undefined || preparedPlugins !== undefined) {
         await closeOwners([
+          () => preparedPlugins?.runtime.close(),
           () => storageCapacity.close(),
           () => artifactMaintenance!.close(),
           () => automationScheduler!.close(),
           () => outboxDispatcher.close(),
           () => eventHub.close(),
           () => workspaceWorker?.close(),
-          () => preparedExtensions.client.close(),
+          () => preparedExtensions?.client.close(),
           () => config.artifactStore.close(),
           () => store.close(),
         ]);
@@ -604,8 +686,9 @@ function composeControlApi(
       workspaceQueries,
     };
   } catch (error) {
-    if (preparedExtensions !== undefined) {
-      preparedExtensions.failureCleanup = closeOwners([
+    if (preparedExtensions !== undefined || preparedPlugins !== undefined) {
+      const failureCleanup = closeOwners([
+        () => preparedPlugins?.runtime.close(),
         () => storageCapacity.close(),
         () => artifactMaintenance?.close(),
         () => automationScheduler?.close(),
@@ -614,6 +697,10 @@ function composeControlApi(
         () => workspaceWorker?.close(),
         () => config.artifactStore.close(),
       ]);
+      if (preparedExtensions !== undefined)
+        preparedExtensions.failureCleanup = failureCleanup;
+      if (preparedPlugins !== undefined)
+        preparedPlugins.failureCleanup = failureCleanup;
       throw error;
     }
     storageCapacity.close();

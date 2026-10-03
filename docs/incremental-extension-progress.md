@@ -6,6 +6,28 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：桌面 SQLite 安装启动与本机管理
+
+桌面 Native 从自身 `userData/control-runtime-v1` 读取明确的私有批准文件，派生真实本机 actor、持久 profile 与每次会话的 bootstrap。未配置批准时保留原启动路径，不扫描插件目录或创建插件 schema。批准文件与生成 bootstrap 拒绝链接、公开权限、超限字节及读取过程中的文件替换；原企业账号、PIM 身份和默认模型没有被本机管理许可替代。
+
+SQLite 安装账本新增实际文件锁 owner。每个完整 profile 的独立 SQLite 连接持有保留锁，普通安装写者取得相同锁；主账本仍使用短事务，原 Worker 写入不会因 profile owner 长期阻塞。选择在实际 COMMIT 后从当前持久行投影，回滚、旧回执与关闭后排队的提交不能重新发布旧实例。父 Store 先同步撤回资格，再等待实际 owner 关闭，最后关闭主数据库。
+
+没有模型凭据时，存在真实批准的桌面会话仅启动 Control 管理服务；live 可用与 Agent ready 分开。可选 Native 访问通知让原 App 打开本机管理，账号上下文仍为空；原左下角用户栏显示“本机管理”，沿用原菜单和设置路由。原菜单增加仅在实际本机管理中显示的“登录企业账号”，进入原登录页；返回本机管理必须仍持有当前 Native 许可。旧桥、Web 与缺少本机批准的路径保持原企业登录行为。会话失效立即撤回许可并清除旧 Control 客户端，晚到响应不能恢复旧目录。本轮没有修改 CSS、原设置导航或既有快照。
+
+独立安装副本与原下载目录的可用性分开。批准 tuple 仍由明确配置提供；缺失、损坏或不安全的来源不出现在可安装列表，新的 install/resolve 必须重新核验实际字节。冷启动及显式启用已安装副本核验副本完整字节、当前批准和服务依赖；撤销批准后业务与资产访问仍拒绝，元数据读取、停用和卸载仍可用于修复。恢复来源需要显式 resolve/install 或重新打开服务，列表不轮询磁盘。
+
+实际 SQLite owner 专项 **28/28**、原 Run Store **172/172**；Native bootstrap **29/29**，启动/撤回专项 **64/64**，原用户栏/设置与本机许可相关 UI **143/143**。登录入口、返回、撤回和原账号路径最后专项 **6 文件、112/112**。关闭与来源可用性实际 SQLite/PostgreSQL 专项 **36/36**，私有 bootstrap 最终回归 **11/11**，均零失败、零跳过。Control 类型、所有 packages 类型、正式 UI/Host 构建、UI lint 与七入口 runtime stage 已通过。
+
+最终 Electron 实际进程验收 **2 文件、2/2**：组件链使用最后七入口 bundle，完整 App 使用正式 `dist-electron/main.mjs` 和 `file://dist/index.html`、原 preload/IPC 与实际 source Control 子进程。两次 App 均通过原账号菜单进入原企业登录页，再凭当前 Native 许可返回本机管理；原 Control 模式实际显示的 **10 个设置分类**逐个导航成功。安装初始停用、显式启用后从实际安装目录加载短剧 ESM 与 PNG；移走原下载目录后，新 App 进程保持同 profile，从安装副本冷恢复，新的来源列表为空。live 为 200、Agent ready 为 503，外部 POST 为 0，12 张实际任务/Agent/发布相关表记录为 0；子进程与临时 profile 均已清理。初次截图采集曾早于绘制完成，现测试等待实际绘制后再采集，重跑仍 **2/2**。最终视觉证据为 `desktop-plugin-native-final-visual-green-20261003.log` 和 `formal-file-app-final-visual-20261003/formal-file-app-proof.json`，同目录保留实际截图。这里没有验收 packaged.app、真实企业在线登录、收费或在线生成。
+
+最终 Control 全量 **422 通过、1 项 Linux 进程用例在 macOS 跳过，共 423 项**；Store 全量连接真实 PostgreSQL，**1,457 通过、1 项“未配置 URL”的占位用例跳过，共 1,458 项**，均零失败。来源可用性改变后，旧组合测试仍要求损坏下载目录在打开数据库前阻断所有管理，这一旧契约在首次全量运行失败并保留日志；改为明确验证身份及配置仍在数据库打开前拒绝，并增加真实生产 PostgreSQL 冷管理、拒绝新安装及零变更代码导入的回归，专项 **4/4** 后重新执行上述全量。没有删除实际身份或包校验边界。日志为 `desktop-plugin-control-full-final-after-availability-20261003.log`、`desktop-plugin-store-full-final-20261003.log` 和 `plugin-production-composition-availability-20261003.log`。
+
+最后按技能要求执行完整 UI 检查，提供真实独立包和 runtime 环境以运行新增原生用例，结果为 **3,279 通过、8 未通过，共 3,287 项**，不能称全量 UI 为绿。失败为既有 TranscriptWindow 4 项、useControlThreadCatalog、AppWorkspaceContent、ControlCommandOfficeRoomAdapter 各 1 项，以及全量并行时的 soak 超时；soak 最后隔离运行 **4/4**，不能改写全量结果。旧断言、快照和全量规则保持。日志为 `desktop-plugin-ui-full-final-20261003.log` 与 `desktop-plugin-ui-soak-isolated-20261003.log`；绘制等待的最后测试夹具修订另由前述实际进程专项验证，没有把这轮全量称为修订后重跑结果。仓库格式及其余 53 个变更文件格式通过；`sqlite-run-store.ts` 的既有全文件格式问题在不含本轮改动的 `6216895c2` 同样存在，保留原高频文件无关格式，证据为 `desktop-plugin-source-format-baseline-20261003.{json,log}`。临时 PostgreSQL 在实际连接数为 0、仅剩 public schema 后正常停止并删除自有目录与 socket，日志为 `desktop-plugin-postgres-cleanup-20261003.log`。
+
+5719 的实际浏览器再次从左下角用户菜单进入原设置页并打开外观，11 个预览分类可见，截图为 `output/extensions/short-drama-preview/ui-settings-recovery/settings-final-20261003.png`。该预览未连接设置服务；服务端配置显示不可用，设备外观偏好可读，不能称为正式设置读写全部恢复。
+
+生产身份服务部署、Worker main 的真实独立包许可与业务桥、报价及独立积分结算、短剧项目持久化与在线生成、第二个真实企业 API 仍未完成。本轮只读访问用户 ComfyUI 地址的 `/` 和 `/queue` 均返回 HTTP 404，未提交新生图；证据为 `comfy-endpoint-{root,connectivity}-20261003.log`。完整目标保持进行中。
+
 ## 2026-10-03：原设置页与安装管理
 
 原用户栏的“设置”入口与 11 个设置分类保留。本轮再次从 5719 左下角账号菜单实际进入原设置页，外观页正常显示；这是离线页面预览，依赖后端的配置仍明确提示不可用。正式 App 切到设置时卸载主内容模块，插件没有改写全局导航、账号菜单或设置样式。

@@ -25,21 +25,33 @@ const registries = new WeakMap<
 const construction = Symbol("verified-production-plugin-source-registry");
 type Entry = Readonly<{
   source: ProductionPluginInstallationSource;
-  view: PluginSourceView;
+  directory: string | null;
+  view: PluginSourceView | null;
 }>;
 
 /** Approved private source identities. Actor permission is decided separately for every operation. */
 export class ProductionPluginSourceRegistry {
   readonly #entries: readonly Entry[];
+  readonly #installRoot: string;
+  readonly #views = new Map<string, PluginSourceView>();
+  readonly #directories = new Map<string, string>();
   #activeReads = 0;
   private constructor(
     entries: readonly Entry[],
     configuration: ProductionPluginInstallationConfiguration,
+    installRoot: string,
     token: symbol,
   ) {
     if (token !== construction)
       throw new Error("production_plugin_source_registry_required");
     this.#entries = entries;
+    this.#installRoot = installRoot;
+    for (const entry of entries) {
+      if (entry.view !== null)
+        this.#views.set(entry.source.sourceId, entry.view);
+      if (entry.directory !== null)
+        this.#directories.set(entry.source.sourceId, entry.directory);
+    }
     registries.set(this, configuration);
     Object.freeze(this);
   }
@@ -52,73 +64,65 @@ export class ProductionPluginSourceRegistry {
     const entries: Entry[] = [];
     const directories = new Set<string>();
     for (const source of parsed.sources) {
-      const directory = await privateDirectory(source.directory);
+      // Approval is the immutable configured identity. Availability belongs to the source bytes.
       if (
-        contains(installRoot, directory) ||
-        contains(directory, installRoot) ||
-        directories.has(directory)
+        contains(parsed.installRoot, source.directory) ||
+        contains(source.directory, parsed.installRoot) ||
+        contains(installRoot, source.directory) ||
+        contains(source.directory, installRoot)
       )
         throw new Error("production_plugin_source_directory_conflict");
-      directories.add(directory);
-      const snapshot = await verifyLocalPluginPackage({ directory });
-      assertIdentity(source, snapshot);
-      const view = parsePluginSourceView({
-        sourceId: source.sourceId,
-        pluginId: snapshot.descriptor.pluginId,
-        publisherId: snapshot.descriptor.publisherId,
-        version: snapshot.descriptor.version,
-        packageDigest: snapshot.packageDigest,
-        title: snapshot.descriptor.title,
-        description: snapshot.descriptor.description,
-      });
-      entries.push(
-        Object.freeze({
-          source: Object.freeze({ ...source, directory }),
-          view,
-        }),
-      );
+      let directory: string | null = null;
+      try {
+        directory = await privateDirectory(source.directory);
+      } catch {
+        // An absent or unsafe delivery directory cannot revoke an independently installed copy.
+      }
+      if (directory !== null) {
+        if (
+          contains(installRoot, directory) ||
+          contains(directory, installRoot) ||
+          directories.has(directory)
+        )
+          throw new Error("production_plugin_source_directory_conflict");
+        directories.add(directory);
+      }
+      let view: PluginSourceView | null = null;
+      if (directory !== null) {
+        try {
+          const snapshot = await verifyLocalPluginPackage({ directory });
+          assertIdentity(source, snapshot);
+          view = sourceView(source, snapshot.descriptor);
+        } catch {
+          // No invented metadata or installable listing for missing, corrupt or mismatched bytes.
+        }
+      }
+      entries.push(Object.freeze({ source, directory, view }));
     }
     entries.sort((a, b) =>
-      a.view.sourceId < b.view.sourceId
+      a.source.sourceId < b.source.sourceId
         ? -1
-        : a.view.sourceId > b.view.sourceId
+        : a.source.sourceId > b.source.sourceId
           ? 1
           : 0,
     );
-    // Any legal page fits the wire budget, including its largest possible cursor.
-    parsePluginSourceListResponse(
-      {
-        sources: entries.map((entry) => entry.view),
-        next: entries.at(-1)?.view.sourceId ?? null,
-      },
-      { afterSourceId: null, limit: Math.max(1, entries.length) },
+    assertCatalog(
+      entries.flatMap((entry) => (entry.view === null ? [] : [entry.view])),
     );
-    const longestCursor = entries.reduce<string | null>(
-      (longest, entry) =>
-        longest === null ||
-        Buffer.byteLength(JSON.stringify(entry.view.sourceId)) >
-          Buffer.byteLength(JSON.stringify(longest))
-          ? entry.view.sourceId
-          : longest,
-      null,
-    );
-    if (
-      Buffer.byteLength(
-        JSON.stringify({
-          sources: entries.map((entry) => entry.view),
-          next: longestCursor,
-        }),
-      ) > MAX_PLUGIN_CONTROL_RESPONSE_BYTES
-    )
-      throw new Error("production_plugin_source_catalog_budget_exceeded");
     return new ProductionPluginSourceRegistry(
       Object.freeze(entries),
       parsed,
+      installRoot,
       construction,
     );
   }
   list(): readonly PluginSourceView[] {
-    return Object.freeze(this.#entries.map((entry) => entry.view));
+    return Object.freeze(
+      this.#entries.flatMap(({ source }) => {
+        const view = this.#views.get(source.sourceId);
+        return view === undefined ? [] : [view];
+      }),
+    );
   }
   async resolveSource(sourceId: string): Promise<string> {
     const entry = this.#entries.find(
@@ -130,11 +134,35 @@ export class ProductionPluginSourceRegistry {
     this.#activeReads++;
     try {
       const directory = await privateDirectory(entry.source.directory);
-      if (directory !== entry.source.directory)
+      if (
+        this.#directories.has(sourceId) &&
+        directory !== this.#directories.get(sourceId)
+      )
         throw new Error("production_plugin_source_identity_mismatch");
+      if (
+        contains(this.#installRoot, directory) ||
+        contains(directory, this.#installRoot) ||
+        [...this.#directories].some(
+          ([id, original]) => id !== sourceId && original === directory,
+        )
+      )
+        throw new Error("production_plugin_source_directory_conflict");
       const snapshot = await verifyLocalPluginPackage({ directory });
       assertIdentity(entry.source, snapshot);
+      const view = sourceView(entry.source, snapshot.descriptor);
+      const prospective = new Map(this.#views).set(sourceId, view);
+      assertCatalog(
+        this.#entries.flatMap(({ source }) => {
+          const item = prospective.get(source.sourceId);
+          return item === undefined ? [] : [item];
+        }),
+      );
+      this.#directories.set(sourceId, directory);
+      this.#views.set(sourceId, view);
       return directory;
+    } catch (error) {
+      this.#views.delete(sourceId);
+      throw error;
     } finally {
       this.#activeReads--;
     }
@@ -181,6 +209,41 @@ export function assertProductionPluginSourceRegistry(
         "production_plugin_source_registry_configuration_mismatch",
       );
   }
+}
+function sourceView(
+  source: ProductionPluginInstallationSource,
+  descriptor: PluginPackageDescriptor,
+): PluginSourceView {
+  return parsePluginSourceView({
+    sourceId: source.sourceId,
+    pluginId: descriptor.pluginId,
+    publisherId: descriptor.publisherId,
+    version: descriptor.version,
+    packageDigest: source.packageDigest,
+    title: descriptor.title,
+    description: descriptor.description,
+  });
+}
+function assertCatalog(views: readonly PluginSourceView[]): void {
+  // Any legal page fits the wire budget, including its largest possible cursor.
+  parsePluginSourceListResponse(
+    { sources: views, next: views.at(-1)?.sourceId ?? null },
+    { afterSourceId: null, limit: Math.max(1, views.length) },
+  );
+  const longestCursor = views.reduce<string | null>(
+    (longest, view) =>
+      longest === null ||
+      Buffer.byteLength(JSON.stringify(view.sourceId)) >
+        Buffer.byteLength(JSON.stringify(longest))
+        ? view.sourceId
+        : longest,
+    null,
+  );
+  if (
+    Buffer.byteLength(JSON.stringify({ sources: views, next: longestCursor })) >
+    MAX_PLUGIN_CONTROL_RESPONSE_BYTES
+  )
+    throw new Error("production_plugin_source_catalog_budget_exceeded");
 }
 function assertIdentity(
   source: ProductionPluginInstallationSource,

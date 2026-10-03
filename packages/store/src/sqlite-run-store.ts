@@ -4,6 +4,8 @@ import type { SqliteExternalOperationStore } from "./sqlite-external-operation-s
 import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
 import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
+import { captureSqliteInstallationDatabase } from "./sqlite-plugin-installation-profile-lock.ts";
+import { SqlitePluginInstallationProfileLifetime } from "./sqlite-plugin-installation-profile-lifetime.ts";
 import {
   createSqliteExtensionStore,
   createSqliteExternalOperationStore,
@@ -668,6 +670,7 @@ export class SqliteRunStore implements DomainStore {
   readonly #officeAuthority: SqliteOfficeStore;
   readonly #officeThreads: SqliteOfficeThreadStore;
   #closed = false;
+  readonly #pluginProfileOwners = new SqlitePluginInstallationProfileLifetime();
 
   /** Read-only admission detection; construction never accesses or migrates plugin tables. */
   pluginTaskAdmissionProbe() {
@@ -721,6 +724,10 @@ export class SqliteRunStore implements DomainStore {
     return new SqlitePluginInstallationStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
+      registerOwner: (owner) => {
+        this.#assertOpen();
+        return this.#pluginProfileOwners.register(owner);
+      },
     });
   }
 
@@ -794,6 +801,7 @@ export class SqliteRunStore implements DomainStore {
     this.#database = new DatabaseSync(path, {
       enableForeignKeyConstraints: true,
     });
+    captureSqliteInstallationDatabase(this.#database);
     this.modelPricing = new SqliteModelPricingStore(this.#database, () => this.#assertOpen());
     this.modelSpending = new SqliteModelSpendingStore(this.#database, () => this.#assertOpen());
     this.executionProgress = new SqliteRunExecutionProgressStore(this.#database, input => {
@@ -863,12 +871,11 @@ export class SqliteRunStore implements DomainStore {
     }
   }
 
-  async close(): Promise<void> {
-    if (this.#closed) {
-      return;
-    }
-    this.#database.close();
-    this.#closed = true;
+  close(): Promise<void> {
+    return this.#pluginProfileOwners.close({
+      markHostClosed: () => { this.#closed = true; },
+      closeDatabase: () => this.#database.close(),
+    });
   }
 
   async loadOfficeThreadBinding(locator: OfficeThreadLocator) {

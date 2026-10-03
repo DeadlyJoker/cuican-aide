@@ -233,7 +233,7 @@ export function CommandSidebar({
   query: string;
   selectedLinkedThreadId: string | null;
   sidebarCollapsed?: boolean;
-  /** Explicit preview-host chrome; does not establish an authenticated account. */
+  /** Explicit signed-out chrome; does not establish an authenticated account. */
   showSignedOutAccount?: boolean;
   slots: CommandHomeSlots;
   workspaceAuthority: CommandWorkspaceAuthority;

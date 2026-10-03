@@ -41,3 +41,8 @@ export * from "./postgres-creative-project-store.ts";
 export * from "./sqlite-plugin-installation-store.ts";
 export * from "./postgres-plugin-installation-store.ts";
 export * from "./postgres-plugin-installation-profile-owner.ts";
+export {
+  SqlitePluginInstallationProfileOwner,
+  SQLITE_PLUGIN_PROFILE_OWNER_LIMITS,
+  type SqlitePluginInstallationProfileOwnerInput,
+} from "./sqlite-plugin-installation-profile-owner.ts";

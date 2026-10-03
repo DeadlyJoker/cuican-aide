@@ -1,6 +1,6 @@
 # 已安装插件的服务启动
 
-当前生产 Control 支持显式启用已安装插件的 UI 目录、挂载及资源读取。它复用生产请求身份和现有 Web/BFF 会话，不创建账号、profile、权限 epoch 或积分余额。未配置时保留原页面和路由。
+Control 支持显式启用已安装插件的 UI 目录、挂载及资源读取。生产 PostgreSQL 部署复用生产请求身份和现有 Web/BFF 会话，不创建账号、profile、权限 epoch 或积分余额；正式桌面的本机 SQLite 接线见下节，使用原 Native 单机身份与受控本机审批。未配置时保留原页面和路由。
 
 ## 部署配置
 
@@ -43,6 +43,56 @@ profile 服务接收服务端已验证的 `{ actor }`，返回 `{ tenantId, spac
 
 此处的 epoch 复核不能保证远端撤销在网络传递前被瞬时观察。运行状态也不代表生成或计费已就绪；生产 Worker main 的真实身份、包许可、业务动作、报价与结算继续单独装配。
 
+## 2026-10-03：正式桌面 SQLite 本机管理启动
+
+正式 Electron 从 `app.getPath("userData")/control-runtime-v1` 读取固定文件 `plugin-approvals.json`。这是实际应用数据目录，开发版和打包版的位置可能不同；不能用仓库目录、预览服务目录或 URL 参数代替。Native 只接受当前操作系统用户拥有的私有配置，不接受 Renderer 提交审批、安装路径或 actor。
+
+桌面复用既有 `DESKTOP_RUNTIME_OWNER` 单机 actor：`standalone-principal`、`standalone-actor`、`standalone-tenant`、`standalone-space`。请求凭据来自当前 Native 启动的真实 Control 会话；该身份与企业账号、PIM 账号及其 token 严格分开，不制造访客用户，也不把企业登录状态当成本机发布者批准。安装账本使用实际 `control.sqlite`，由 Native 持久化的本机 profile 限定作用域。
+
+审批文件只允许以下精确字段。这里的摘要和资产名是**待替换占位符**，示例不能直接作为有效配置使用：
+
+```json
+{
+  "schemaVersion": "crewon.desktop-plugin-approval.v1",
+  "sources": [
+    {
+      "sourceId": "short-drama-v1",
+      "directory": "/ABSOLUTE/PRIVATE/DELIVERY/short-drama/1.0.0",
+      "pluginId": "crewon.short-drama",
+      "publisherId": "example.publisher",
+      "version": "1.0.0",
+      "packageDigest": "<verifyLocalPluginPackage(...).packageDigest>"
+    }
+  ],
+  "publications": [
+    {
+      "pluginId": "crewon.short-drama",
+      "publisherId": "example.publisher",
+      "packageDigest": "<SAME_ACTUAL_VERIFIER_PACKAGE_DIGEST>",
+      "publicAssets": ["ui.mjs", "assets/<ACTUAL_APPROVED_PNG_FILENAME>.png"]
+    }
+  ]
+}
+```
+
+`sources` 最多 32 项，每项填写实际预构建包的完整 ID、发布者、版本及包核验器返回的 `sha256:<64 位小写十六进制>` 摘要；不能以描述文件自身的文件摘要、任意示例摘要或开发源码目录冒充完整包身份。同一包版本不可换字节、发布者或来源别名。来源目录是私有交付目录，不能与安装根重叠。`publications` 最多 32 项，每项最多 256 个声明内文件，必须精确匹配一项批准来源的包 ID、发布者和摘要。只批准 UI 入口及它实际引用的 chunk、CSS、图片等文件；不自动公开全部清单、Node 入口或业务清单。审批 JSON 总量最多 128 KiB，不能增加手填 actor、profile、epoch 或凭据字段。
+
+在 POSIX 平台，本机 runtime 数据目录、交付目录及 Native 创建的 `plugins` 安装根须由当前 OS 用户拥有并使用 `0700`；审批、profile 和每会话 bootstrap 文件使用 `0600`。禁止符号链接，配置文件还须为单链接普通文件；缺少 UID 支持或权限不符时拒绝配置。当前 Windows 不支持这套已配置的本机审批路径，不能以跳过权限检查启用；未配置时仍保持原桌面行为。
+
+Native 首次创建 `plugin-profile.json`，保存与实际单机 actor 绑定的 UUID profile；冷重开沿用该 profile 和安装账本。每个实际会话另生成私有 `plugin-bootstrap-<session hash>.json`，只向所属 Control 子进程传递 `CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH`，不向 Worker、release 进程或 Renderer 公开路径。审批 epoch 来自实际审批字节及 Native 会话生命周期，不是客户端 UUID；启动时审批不可变，修改批准后必须先失效旧会话、撤下入口并完成资源清理，再重启。该机制不宣称支持审批文件热更新。bootstrap 只在消费它的实际 Control 子进程终止后清理，不删除持久 profile、包或历史；文件中不写会话 token。
+
+安装先按批准来源核验实际清单、长度、文件字节和摘要，再复制到 `plugins/packages/<64 位裸摘要>` 的宿主拥有目录，账本首次记录为停用。启用、升级、回滚、停用及逻辑卸载沿用原 CAS 和幂等回执，卸载保留包、历史任务及业务数据。Node 恢复和 UI 读取均从实际安装副本核验完整字节及当前批准的 ID、发布者、版本、摘要，不再要求原交付目录保留；这不绕过当前审批、业务协议、必需服务或实际选择。
+
+来源目录的可用性与批准身份分开。启动时缺失、损坏或身份不符的交付目录不会进入来源列表，不能凭配置虚构标题、说明或可安装包；它也不会自动撤销已安装副本的批准身份。每次显式解析或安装重新核验实际来源字节，失败撤掉其列表项。修复交付目录后，须显式解析、安装尝试或重启 Control，实际核验成功才重新发现；普通列表读取不扫描磁盘，也没有文件 watcher。删除交付目录后仍能恢复确切安装副本，修改审批并重启后却不能继续启用被撤销的包；元数据读取、停用、卸载仍可用于修复管理状态。
+
+未放置 `plugin-approvals.json` 时不创建插件 profile、安装根或 bootstrap，也不执行新增插件 schema 迁移；原 provider 启动行为不变。批准配置存在且未配置模型 provider 时，仅启动真实管理 Control，并等待 `/api/v1/health/live`；`/api/v1/health/ready` 仍不就绪，不发布 AgentVersion、不启动 Worker、不创建 Run、报价、积分余额或结算服务。安装 Node 包不等于可执行：缺少声明的必需服务时启用拒绝。当前本机 UI 动作仍明确返回 `plugin_ui_actions_unavailable`。
+
+原 App 的本机管理入口通过新增可选 Native IPC 获取版本化许可，仅实际审批 owner 和当前存活 Control 会话可授予；Renderer 使用私有品牌，Native 会话变化立即撤销旧 generation 的入口并重新获取真实 ControlClient，迟到回复不能恢复旧访问。企业 account 保持 `null`，原用户栏标注“本机管理”，通过原菜单进入设置，在“工具与扩展”读取实际安装服务。同一原菜单可选择“登录企业账号”，关闭本机 App 展示并进入原企业登录页；未完成登录时，只有当前 Native 许可仍有效，才能点击“返回本机管理”。许可撤回后旧返回回调也不能恢复访问。登录成功沿用原认证端口返回的企业账号，不制造本机账号。旧 preload、Web、无批准配置及失败会话仍走原企业登录门禁；URL、localStorage、provider 凭据或 Renderer 布尔值不能授予本机访问。原页面样式、布局和默认快照不变，生成与模型就绪条件也不因此放宽。
+
+当前独立证据为真实磁盘 SQLite + 私有文件 + Control 路由专项 7/7、新 Native 审批文件检查 29/29，以及本机入口和原 UI 回归 143/143；随后登录导航与原 UI 专项 112/112 通过，包含菜单导航、当前许可返回、撤回后的旧回调拒绝及原认证端口账号路径。UI 和 Native 类型检查通过。入口测试使用明确的 Native bridge 夹具，登录测试使用原认证端口夹具，都不等于在线企业账号登录。
+
+正式 Electron 组件与完整 App 专项最终 2/2 通过，日志为 `output/extensions/checks/desktop-plugin-native-final-visual-green-20261003.log`。完整 App 使用实际 `dist-electron/main.mjs`、`dist/index.html`、原 preload/Native IPC 与真实 Control 子进程，不是 `packaged.app` 验收。首次安装与移走原交付目录后的第二次启动，都实际点击原用户栏的“登录企业账号”进入原登录页，再返回本机管理；随后逐一进入原 10 类正式设置、安装或恢复同一 profile 的短剧 UI，并加载实际 PNG。正式 Control 原本隐藏“电脑控制”设置，预览中的 11 类与此处 10 类证据不混用。账号保持未登录、provider 为 `null`，`live` 返回 200、`ready` 返回 503；没有在线 POST，12 个执行相关表仍为零行。实际界面截图 7 张与证明记录在 `output/extensions/checks/formal-file-app-final-visual-20261003/`，没有输入企业凭据或执行生成、扣费流程。
+
 ## 执行边界
 
 生产 main 尚未装配插件业务动作桥，动作明确返回 `plugin_ui_actions_unavailable`。服务端组合 API 可以接收真实 `PluginUiActionPort`，该端口必须进入原 Run、Tool、operation 和个人积分准入，不可直接从界面调用 ComfyUI。
@@ -53,7 +103,7 @@ PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 sessio
 
 该桥支持原 API 1 生成和 API 2 的生成/历史查询，包 ID 与原 extension ID 必须相同；尚无跨插件委托。查询只传 `sourceRunId` 和 `operationId`，从持久原任务核验原包、配置、目标和原个人报价，保存独立查询准入，不新增生成报价或积分预留。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
-Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证；短剧 UI-only 独立包已交付，并通过实包安装与通用 loader 的双库交互专项及原生浏览器验证。生产 PostgreSQL 安装管理已有上述接线；桌面端独立安装 bootstrap、短剧正式生成与项目持久化、Krea2 在线验收和第二个真实企业 API 尚未完成。原用户栏与设置已在 5719 和已安装的 5720 预览实际点击验证，11 类设置保留；当前离线预览的外观设置可用，其余后台设置仍未连接。
+Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证；短剧 UI-only 独立包已交付，并通过实包安装与通用 loader 的双库交互专项及原生浏览器验证。生产 PostgreSQL 安装管理已有上述接线；正式桌面 SQLite bootstrap 与本机管理入口已接线，其完整 App 验证边界见上节。短剧正式生成与项目持久化、Krea2 在线验收和第二个真实企业 API 尚未完成。原用户栏与设置已在 5719 和已安装的 5720 预览实际点击验证，11 类设置保留；当前离线预览的外观设置可用，其余后台设置仍未连接。
 
 ## 2026-10-03：Worker 已安装执行组合 API
 
@@ -77,7 +127,7 @@ Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已
 
 此前 resolver 32/32、实际 SQLite/PostgreSQL composition 26/26、router 11/11 专项已确认通过；本轮 Host 全量 202/202、正式 Worker 双库全量 1,521/1,521，均零失败、零跳过。Control 共 375 项：374 通过、1 项 Linux 进程用例在 macOS 跳过、零失败。全量日志为 `required-services-host-full-20261003.log`、`readiness-short-drama-worker-final-full-20261003.log`、`required-services-control-full-20261003.log`。真实安装执行专项通过 composition helper 构造 resolver 并接原 Worker，使用真实数据库、不可变文件和 Node ESM；模型、外部供应商、身份、包许可与报价为具名夹具。它没有验收完整生产 main、真实积分结算或在线生图 API。
 
-生产部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。已安装历史查询需要下述独立 provenance 和显式 query host；缺少真实端口时拒绝，不降级到当前包或旧目录。历史依赖闭包、短剧正式生成与项目持久化、安装管理及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
+生产任务执行部署仍需装配真实身份与包许可端口、下面的通用业务物化 API、业务动作桥及真实报价/积分结算。已安装历史查询需要下述独立 provenance 和显式 query host；缺少真实端口时拒绝，不降级到当前包或旧目录。历史依赖闭包、短剧正式生成与项目持久化及真实 API 验收继续待完成。不能以静态自授权、预览账号或测试证明补齐这些生产边界。
 
 ## 2026-10-03：独立短剧 UI-only 包
 
@@ -153,4 +203,4 @@ Electron 主进程注册私有 `crewon-plugin://ui` 通道，原页面 CSP 仅�
 
 会话失效同步关闭入口，实际 Control 停止或替换前等待读取、取消和挂载清理。仅在捕获的实际旧子进程已终止、操作全部结束且没有未知本地 reader 时，远端 mount 可按进程终态退休；取消失败仍保留隔离并报告清理失败。旧桥缺少此能力时不回退到任意 HTTP 或 blob 导入。
 
-专项 71/71 和实际 Electron 43.4.1 安装夹具已验证该通道，证据见实施进度。`trustedModule` 与普通 Renderer 同权，导入后的 ESM 无法卸载；此处不提供 iframe 沙箱，也不代表生产安装管理、业务动作桥或收费流程已接通。
+专项 71/71 和实际 Electron 43.4.1 安装夹具已验证该通道，证据见实施进度。`trustedModule` 与普通 Renderer 同权，导入后的 ESM 无法卸载；此通道不提供 iframe 沙箱，也不能独自证明生产安装管理、业务动作桥或收费流程已接通。

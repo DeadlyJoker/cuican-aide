@@ -5,6 +5,7 @@ import type {
 } from "@crewon/application";
 import {
   assertInstalledPluginPackageIdentity,
+  assertPluginProfileScope,
   assertPluginSelectionPackage,
   pluginInstallationDigest,
   pluginInstallationNamespaceId,
@@ -33,6 +34,16 @@ import {
   type InstallationIdentity,
   type PreparedInstallation,
 } from "./plugin-installation-store-records.ts";
+import {
+  captureSqliteInstallationDatabase,
+  withSqlitePluginInstallationWriter,
+} from "./sqlite-plugin-installation-profile-lock.ts";
+import {
+  assertSqlitePluginInstallationProfileBinding,
+  SqlitePluginInstallationProfileOwner,
+  type SqlitePluginInstallationProfileBinding,
+  type SqlitePluginInstallationProfileOwnerInput,
+} from "./sqlite-plugin-installation-profile-owner.ts";
 
 type Input<M extends keyof PluginInstallationStore> = Parameters<
   PluginInstallationStore[M]
@@ -43,11 +54,46 @@ const scopeFilter = "tenant_id=? AND space_id=? AND profile_id=?";
 export class SqlitePluginInstallationStore implements PluginInstallationStore {
   readonly #database: DatabaseSync;
   readonly #assertOpen: () => void;
-  constructor(input: { database: DatabaseSync; assertOpen(): void }) {
+  readonly #binding: SqlitePluginInstallationProfileBinding | undefined;
+  readonly #registerOwner:
+    | ((owner: SqlitePluginInstallationProfileOwner) => () => void)
+    | undefined;
+  constructor(input: {
+    database: DatabaseSync;
+    assertOpen(): void;
+    registerOwner?(owner: SqlitePluginInstallationProfileOwner): () => void;
+    /** Internal, branded owner binding; a structural DTO is rejected. */
+    binding?: SqlitePluginInstallationProfileBinding;
+  }) {
+    if (input.binding)
+      assertSqlitePluginInstallationProfileBinding(input.binding);
     this.#database = input.database;
-    this.#assertOpen = input.assertOpen;
+    captureSqliteInstallationDatabase(input.database);
+    this.#binding = input.binding;
+    this.#registerOwner = input.registerOwner;
+    this.#assertOpen = () => {
+      input.assertOpen();
+      input.binding?.assertOpen();
+    };
+  }
+  acquireProfileOwner(input: SqlitePluginInstallationProfileOwnerInput) {
+    this.#assertOpen();
+    if (this.#binding)
+      installationFailure("plugin_profile_owner_operation_invalid");
+    const { scope, value } = installationReadInput(input, ["onOwnershipLost"]);
+    if (typeof value.onOwnershipLost !== "function")
+      installationFailure("plugin_profile_owner_policy_missing");
+    return SqlitePluginInstallationProfileOwner.acquire({
+      scope,
+      onOwnershipLost: value.onOwnershipLost as (error: unknown) => void,
+      database: this.#database,
+      assertHostOpen: this.#assertOpen,
+      registerOwner: this.#registerOwner,
+    });
   }
   async migrate(): Promise<void> {
+    if (this.#binding)
+      installationFailure("plugin_profile_owner_operation_invalid");
     this.#transaction(
       () => migrateSqlitePluginInstallation(this.#database),
       false,
@@ -56,11 +102,13 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
   async loadPackage(input: Input<"loadPackage">) {
     this.#readable();
     const { scope, value } = installationReadInput(input, ["packageDigest"]);
+    this.#scope(scope);
     return this.#package(scope, pluginInstallationDigest(value.packageDigest));
   }
   async loadSelection(input: Input<"loadSelection">) {
     this.#readable();
     const { scope, value } = installationReadInput(input, ["pluginId"]);
+    this.#scope(scope);
     const selection = this.#selection(
       scope,
       pluginInstallationNamespaceId(value.pluginId),
@@ -75,6 +123,7 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
       "afterPackageDigest",
       "limit",
     ]);
+    this.#scope(scope);
     const pluginId =
       value.pluginId === null
         ? null
@@ -113,6 +162,7 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
       "afterPluginId",
       "limit",
     ]);
+    this.#scope(scope);
     const after =
       value.afterPluginId === null
         ? null
@@ -136,26 +186,58 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
   }
   async loadReceipt(input: Input<"loadReceipt">) {
     this.#readable();
-    return this.#receipt(installationReceiptIdentity(input));
+    const identity = installationReceiptIdentity(input);
+    this.#scope(identity.scope);
+    return this.#receipt(identity);
   }
   async recordInstalledPackage(input: Input<"recordInstalledPackage">) {
-    const result = this.#commit(prepareInstallation(input));
+    const result = await this.#commit(prepareInstallation(input));
     if (result.kind !== "install")
       installationFailure("plugin_installation_record_invalid");
     return result;
   }
   async commitSelection(input: Input<"commitSelection">) {
-    const result = this.#commit(prepareSelection(input));
+    const result = await this.#commit(prepareSelection(input));
     if (result.kind !== "select")
       installationFailure("plugin_installation_record_invalid");
     return result;
   }
-  #commit(prepared: PreparedInstallation): PluginInstallationMutationResult {
-    return this.#transaction(() => {
+  #commit(
+    prepared: PreparedInstallation,
+  ): Promise<PluginInstallationMutationResult> {
+    this.#assertOpen();
+    this.#scope(prepared.scope);
+    const operation = () => this.#commitNow(prepared);
+    return this.#binding
+      ? this.#binding.runMutation(operation)
+      : Promise.resolve(
+          withSqlitePluginInstallationWriter(
+            this.#database,
+            prepared.scope,
+            operation,
+          ),
+        );
+  }
+  #commitNow(prepared: PreparedInstallation): PluginInstallationMutationResult {
+    let publish = () => {};
+    const project = (result: PluginInstallationMutationResult) => {
+      if (this.#binding) {
+        const actual = this.#selection(
+          prepared.scope,
+          result.selection.pluginId,
+        );
+        publish = this.#binding.prepareProjection(
+          actual,
+          this.#selectionPackage(actual),
+        );
+      }
+      return result;
+    };
+    const result = this.#transaction(() => {
       const replay = this.#receipt(prepared);
       if (replay !== null) {
         verifyInstallationReplay(prepared, replay);
-        return replay;
+        return project(replay);
       }
       const pluginId =
         prepared.kind === "install"
@@ -206,8 +288,13 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
           result.selection.pluginId,
           installationJson(result),
         );
-      return result;
+      return project(result);
     });
+    publish();
+    return result;
+  }
+  #scope(scope: PluginProfileScope): void {
+    if (this.#binding) assertPluginProfileScope(this.#binding.scope, scope);
   }
   #package(scope: PluginProfileScope, digest: string) {
     return decodeInstallationPackage(
@@ -342,13 +429,18 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
     this.#versionSupported();
   }
   #versionSupported() {
-    assertPluginInstallationSchemaVersion(
-      this.#database
-        .prepare(
-          "SELECT id,version FROM plugin_installation_schema_version LIMIT 2",
-        )
-        .all() as { id: unknown; version: unknown }[],
-    );
+    try {
+      assertPluginInstallationSchemaVersion(
+        this.#database
+          .prepare(
+            "SELECT id,version FROM plugin_installation_schema_version LIMIT 2",
+          )
+          .all() as { id: unknown; version: unknown }[],
+      );
+    } catch (error) {
+      this.#binding?.invalidate(error);
+      throw error;
+    }
   }
   #transaction<T>(body: () => T, checkVersion = true): T {
     this.#assertOpen();

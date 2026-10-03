@@ -79,6 +79,9 @@ export interface CrewonDesktopBridge {
   };
   readonly runtime: {
     bootstrap(): Promise<unknown>;
+    /** Additive Native-approved, current local management access; absent on older preloads. */
+    localManagementAccess?(): Promise<unknown>;
+    onLocalManagementAccessChanged?(listener: () => void): () => void;
     reloadProvider(): Promise<void>;
     /**
      * Pushes cloud Agent profiles into the runtime supervisor so the runtime

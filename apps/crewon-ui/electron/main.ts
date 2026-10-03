@@ -190,6 +190,14 @@ async function launch(): Promise<void> {
   const removeSessionListener = runtime.onSessionInvalidated(() => {
     return pluginUiAssets.invalidate();
   });
+  const removeLocalManagementListener = runtime.onLocalManagementAccessChanged(
+    () => {
+      if (!window.isDestroyed() && !window.webContents.isDestroyed())
+        window.webContents.send(
+          "crewon:runtime:local-management-access-changed",
+        );
+    },
+  );
   registerIpc({
     agentPlatformCredentials,
     authority,
@@ -204,7 +212,10 @@ async function launch(): Promise<void> {
   await loadRenderer(window);
   desktopLog("renderer loaded");
 
-  window.on("closed", () => browserViews.destroyAll());
+  window.on("closed", () => {
+    removeLocalManagementListener();
+    browserViews.destroyAll();
+  });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0)
       void loadRenderer(createWindow());
@@ -216,6 +227,7 @@ async function launch(): Promise<void> {
     event.preventDefault();
     quitting = true;
     removeSessionListener();
+    removeLocalManagementListener();
     void pluginUiAssets
       .close()
       .catch(() => desktopLog("desktop_plugin_ui_cleanup_failed"))
@@ -315,6 +327,9 @@ function registerIpc(options: {
   };
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
+  handle("crewon:runtime:local-management-access", () =>
+    runtime.localManagementAccess(),
+  );
   bindDesktopPluginUiIpc(window, pluginUiAssets, ipcMain);
   handle("crewon:agent-platform-credentials:catalog", () =>
     agentPlatformCredentials.catalog(),

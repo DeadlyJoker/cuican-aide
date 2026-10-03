@@ -39,6 +39,11 @@ import {
   isPimLaunchSession,
   setPimLaunchToken,
 } from "../../lib/agent-platform/pimLaunchBridge";
+import {
+  DesktopLocalManagementAccessProvider,
+  useNativeLocalManagementAccess,
+} from "../../lib/desktop/DesktopLocalManagementContext";
+import { isDesktopLocalManagementAccess } from "../../lib/desktop/desktopLocalManagementAccess";
 
 type AuthMode = "login" | "register";
 
@@ -159,6 +164,7 @@ export function AgentPlatformAuthScreen({
   onModeChange,
   onSubmit,
   onWeComLogin,
+  onReturnToLocalManagement,
   wecomConfig,
 }: {
   busy: boolean;
@@ -168,6 +174,7 @@ export function AgentPlatformAuthScreen({
   onModeChange: (mode: AuthMode) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onWeComLogin: () => void;
+  onReturnToLocalManagement?: () => void;
   wecomConfig: WeComLoginConfig;
 }) {
   return (
@@ -319,6 +326,15 @@ export function AgentPlatformAuthScreen({
             </button>
           </form>
 
+          {onReturnToLocalManagement ? (
+            <button
+              className="crewon-auth-sso"
+              type="button"
+              onClick={onReturnToLocalManagement}
+            >
+              返回本机管理
+            </button>
+          ) : null}
           <footer>登录即表示同意企业账号与资源访问策略</footer>
         </div>
       </section>
@@ -327,6 +343,9 @@ export function AgentPlatformAuthScreen({
 }
 
 export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
+  const localManagementAccess = useNativeLocalManagementAccess();
+  const [enterpriseLoginRequested, setEnterpriseLoginRequested] =
+    useState(false);
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<AuthMode>("login");
@@ -498,6 +517,19 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     }
   }
 
+  if (!user && localManagementAccess && !enterpriseLoginRequested) {
+    return (
+      <DesktopLocalManagementAccessProvider
+        access={localManagementAccess}
+        onLoginAccount={() => setEnterpriseLoginRequested(true)}
+      >
+        <AgentPlatformAccountContext.Provider value={null}>
+          {children}
+        </AgentPlatformAccountContext.Provider>
+      </DesktopLocalManagementAccessProvider>
+    );
+  }
+
   if (checking) {
     return (
       <div className="crewon-auth-checking">
@@ -522,6 +554,15 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         }}
         onSubmit={submit}
         onWeComLogin={() => void loginWithWeCom()}
+        onReturnToLocalManagement={
+          localManagementAccess
+            ? () => {
+                if (isDesktopLocalManagementAccess(localManagementAccess)) {
+                  setEnterpriseLoginRequested(false);
+                }
+              }
+            : undefined
+        }
         wecomConfig={wecomConfig}
       />
     );

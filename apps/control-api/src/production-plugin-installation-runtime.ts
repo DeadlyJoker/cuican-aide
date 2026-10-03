@@ -111,6 +111,7 @@ export function createProductionPluginInstallationRuntime(
     dependencies.fetch,
   );
   const profiles = new Map<string, Promise<InstallationProfile>>();
+  const resolvedProfiles = new Set<InstallationProfile>();
   const physical = new Set<Promise<unknown>>();
   let closed = false;
   let closing: Promise<void> | null = null;
@@ -139,6 +140,10 @@ export function createProductionPluginInstallationRuntime(
         clock,
         digester,
         scope,
+      }).then((current) => {
+        resolvedProfiles.add(current);
+        if (closed) current.withdraw();
+        return current;
       });
       profiles.set(key, pending);
       void pending.catch(() => {
@@ -250,8 +255,7 @@ export function createProductionPluginInstallationRuntime(
       closed = true;
       const authorityClosing = authority.close();
       // Withdraw every existing profile synchronously before waiting for physical work.
-      for (const pending of profiles.values())
-        void pending.then((current) => current.withdraw()).catch(() => {});
+      for (const current of resolvedProfiles) current.withdraw();
       return (closing = (async () => {
         await Promise.allSettled([...physical]);
         await authorityClosing;
