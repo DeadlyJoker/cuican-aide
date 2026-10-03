@@ -6,6 +6,28 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：已安装插件任务的正式 Control/Worker 连接
+
+已安装插件的业务动作现在可从原 BFF 会话进入正式 PostgreSQL Control，再由私有 Worker peer 核验实际安装包、配置与完整目标，最后走原 Application 的个人积分预留及 Run 事务。未配置时保留原默认 Agent、身份缓存及扩展路径；新旧执行装配不能混用。原宿主页面、CSS、设置布局与既有快照没有改动，Native 管理进程仅额外清理执行 peer 和任务配置的环境变量。
+
+私有协议包含 catalog、配置校验、生成 readiness 及历史查询的两个操作。Control 为每个真实 HTTP 请求捕获作用域，关键等待前后重新核验当前会话主体与 profile，不接受页面传入的主体或保存 principal 作为授权。实际包的六字段身份与完整八字段目标逐项匹配，历史查询在 Worker 的同一父 Store 重读原 Run、个人预留、回执与外部操作；缺少原版本的真实物化时返回不可用，不替换为最新版本。目录允许明确配置与激活准备，不等于执行就绪。
+
+配置、包许可与报价通过严格私有文件和明确的 HTTPS 权威接入；没有默认积分、充值或价格。逻辑超时不释放仍在进行的物理操作容量，关闭先撤回资格，再等待网络、请求与真实 Node Host 清理，最后关闭原 Store。部署及当前限额见[任务服务启动](./installed-plugin-task-startup.md)。
+
+真实 PostgreSQL 的唯一 `release-main` 发布、正式 Worker/Control/BFF 子进程与原公开 HTTP 路径专项 **1/1**：两版页面动作各创建一个原 Run 并预留 **30 测试积分**，完整包与目标绑定持久化；同键重试没有第二次预留，缺报价创建 Run 为零，COMMIT 后 UI 撤权仍返回真实受理回执并拒绝下一次动作。两版供应商各 **1 次 POST**，模型共 **5 次请求**；普通默认 Agent 仍执行。所有正式子进程退出 0，独占 schema 清理为零。证据为 `installed-plugin-tasks-process-final-20261003.log` 和 `installed-plugin-tasks-process-proof-20261003.json`。
+
+该进程证据明确依赖操作者预存的真实配置修订。发布 loader 在 Worker 启动前校验这些修订，因此首次安装后从页面建立第一份配置的准备入口仍缺失，不能把本轮 HTTP 配置读取与激活称为首次配置闭环。资金、报价、身份、模型和报告供应商均为具名测试夹具；未验收在线收费、完整历史查询子进程、积分结算或真实企业 API。
+
+最终 Worker 全量 **1652/1652，零失败、零跳过**；Control 全量 **463 通过，1 项 Linux 进程用例在 macOS 跳过，共 464 项**；Contracts 全量 **210/210**。全部 packages、Control、Worker 类型检查、UI lint/build、Native 环境隔离 **10/10**、七入口桌面 runtime stage 与仓库 boundary 通过。SDK producer 完成后才启动本轮 Worker/Control 消费者。日志前缀为 `installed-peer-`，位于 `output/extensions/checks/`；这些构建不冒充 packaged.app 的插件业务验收。
+
+原 CommandWorkspace、设置路由及预览专项 **17 文件、153/153**，保留既有快照。项目技能的 `pnpm --filter @crewon/ui test -- CommandWorkspace` 实际执行为 `vitest run -- CommandWorkspace`，没有筛选测试，运行了全 UI；真实结果为 **3277 通过、8 失败、2 缺少独立原生环境的用例跳过，共 3287 项**，不能称 UI 全量为绿。失败仍为原 TranscriptWindow 4 项、useControlThreadCatalog、AppWorkspaceContent、ControlCommandOfficeRoomAdapter 各 1 项及并行 soak 超时；soak 隔离 **4/4**。全量日志为 `installed-peer-ui-full-final-20261003.log`；随后使用明确的 `pnpm exec vitest run` 筛选专项，日志为 `installed-peer-command-settings-final-20261003.log` 与 `installed-peer-ui-soak-isolated-20261003.log`。没有更新或删除旧快照以使检查通过。
+
+本轮测试 PostgreSQL 清理前其他连接为零、剩余测试 schema 为零，实际进程已退出，自有 root/socket 已删除，端口可重新绑定；记录为 `installed-peer-postgres-owner-20261003.json` 和 `installed-peer-postgres-cleanup-20261003.log`。用户现有 5719/5720 页面服务继续保留。
+
+5719 当前版本再次从左下角用户栏进入原设置页并打开外观；截图为 `output/extensions/short-drama-preview/ui-settings-recovery/settings-visible-recheck-20261003.jpg`。该页面为离线预览，依赖后端的常规配置显示不可用；用户原标签连接超时，实际点通的是新标签，不能称原标签已刷新。
+
+下一步仍按原目标补齐首次配置准备、真实资金及价格规则与结算、短剧项目持久化和在线生成、ComfyUI 当前服务及第二个实际企业 API。完整目标保持进行中。
+
 ## 2026-10-03：独立安装包的正式发布 CLI
 
 原 `release-main` 现在可显式消费严格的已安装插件配置和发布文档。新路径要求明确的 OS 发布操作者，包读取许可与原 Application 的发布/部署许可分别核验；未配置时沿用原 CLI/default Agent。实际包元数据在模型或数据库构造之前读取，发布前再次核验真实安装账本、原配置修订、实际字节和当前读取许可。

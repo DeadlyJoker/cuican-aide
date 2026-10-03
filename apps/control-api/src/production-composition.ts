@@ -73,6 +73,15 @@ import {
   createProductionPluginInstallationRuntime,
   type ProductionPluginInstallationRuntime,
 } from "./production-plugin-installation-runtime.ts";
+import {
+  assertInstalledPluginTaskConfiguration,
+  type InstalledPluginTaskConfiguration,
+} from "./installed-plugin-task-environment.ts";
+import {
+  createInstalledPluginTaskRuntime,
+  type InstalledPluginTaskRuntime,
+} from "./installed-plugin-task-composition.ts";
+import type { PluginUiControlService } from "./plugin-control-route.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -92,6 +101,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
   pluginUi?: ProductionPluginUiConfig;
+  pluginTasks?: Readonly<{ configuration: InstalledPluginTaskConfiguration }>;
   pluginInstallation?: Readonly<{
     configuration: ProductionPluginInstallationConfiguration;
   }>;
@@ -132,6 +142,13 @@ export async function createProductionPostgresControlApi(
           });
     const productionConfig = {
       ...config,
+      ...(config.pluginTasks === undefined
+        ? {}
+        : {
+            pluginTasks: Object.freeze({
+              configuration: config.pluginTasks.configuration,
+            }),
+          }),
       ...(pluginInstallation === undefined ? {} : { pluginInstallation }),
       ...(config.pluginUi === undefined
         ? {}
@@ -207,6 +224,7 @@ async function composeProductionControlApi(
   );
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   let pluginUiRuntime: ProductionPluginUiRuntime | undefined;
+  let pluginTaskRuntime: InstalledPluginTaskRuntime | undefined;
   let pluginInstallationRuntime:
     | ProductionPluginInstallationRuntime
     | undefined;
@@ -237,11 +255,35 @@ async function composeProductionControlApi(
             { ledger, clock, digester },
           );
       }
+      if (config.pluginTasks !== undefined && config.pluginUi !== undefined) {
+        pluginTaskRuntime = await createInstalledPluginTaskRuntime(
+          {
+            configuration: config.pluginTasks.configuration,
+            uiConfiguration: config.pluginUi.configuration,
+          },
+          {
+            store,
+            identity: config.identity as ProductionControlApiIdentity,
+            authorization: config.authorization,
+            clock,
+            ids,
+            digester,
+          },
+        );
+      }
       if (config.pluginUi !== undefined)
-        pluginUiRuntime = createProductionPluginUiRuntime(config.pluginUi, {
-          ledger,
-          clock,
-        });
+        pluginUiRuntime = createProductionPluginUiRuntime(
+          {
+            ...config.pluginUi,
+            ...(pluginTaskRuntime === undefined
+              ? {}
+              : { ownedTaskActions: pluginTaskRuntime.owner }),
+          },
+          {
+            ledger,
+            clock,
+          },
+        );
     }
     const workflowVersionStore = store.workflowVersionStore(digester);
     await workflowVersionStore.migrate();
@@ -374,8 +416,24 @@ async function composeProductionControlApi(
       store,
       authorization: config.authorization,
     });
+    const pluginUiService: PluginUiControlService | undefined =
+      pluginUiRuntime === undefined
+        ? undefined
+        : pluginTaskRuntime === undefined
+          ? pluginUiRuntime.service
+          : Object.freeze({
+              ...pluginUiRuntime.service,
+              invokeAuthenticatedRequest: (request, actor, input, signal) =>
+                pluginTaskRuntime!.requests.run(
+                  { request, actor, signal },
+                  () => pluginUiRuntime!.service.invoke(actor, input),
+                ),
+            });
     const app = buildControlApi({
-      pluginUi: pluginUiRuntime?.service,
+      pluginUi: pluginUiService,
+      extensions: pluginTaskRuntime?.extensions,
+      extensionTasks: pluginTaskRuntime?.extensionTasks,
+      extensionReads: pluginTaskRuntime?.extensionReads,
       pluginInstallation: pluginInstallationRuntime?.service,
       pluginSources: pluginInstallationRuntime?.service,
       application,
@@ -424,6 +482,7 @@ async function composeProductionControlApi(
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
       await closeResources([
+        () => pluginTaskRuntime?.close(),
         () => pluginUiRuntime?.close(),
         () => pluginInstallationRuntime?.close(),
         () => storageCapacity.close(),
@@ -448,6 +507,7 @@ async function composeProductionControlApi(
   } catch (error) {
     try {
       await closeResources([
+        () => pluginTaskRuntime?.close(),
         () => pluginUiRuntime?.close(),
         () => pluginInstallationRuntime?.close(),
         () => storageCapacity.close(),
@@ -469,6 +529,19 @@ async function composeProductionControlApi(
 function validateProductionConfig(
   config: ProductionPostgresControlApiConfig,
 ): void {
+  if (config.pluginTasks !== undefined) {
+    assertInstalledPluginTaskConfiguration(config.pluginTasks.configuration);
+    if (
+      !(config.identity instanceof ProductionControlApiIdentity) ||
+      config.pluginUi === undefined ||
+      config.pluginUi.actions !== undefined ||
+      config.pluginUi.committedTasks !== undefined ||
+      config.pluginUi.ownedTaskActions !== undefined ||
+      parseProductionPluginUiConfiguration(config.pluginUi.configuration)
+        .installRoot !== config.pluginTasks.configuration.installRoot
+    )
+      throw new Error("production_plugin_task_configuration_conflict");
+  }
   requireMethod(
     config.identity,
     "resolveActor",

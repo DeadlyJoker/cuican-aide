@@ -10,6 +10,7 @@ import {
 import { createProductionPostgresControlApi } from "./production-composition.ts";
 import { resolveProductionPluginUiEnvironment } from "./production-plugin-ui-environment.ts";
 import { resolveProductionPluginInstallationEnvironment } from "./production-plugin-installation-environment.ts";
+import { loadInstalledPluginTaskEnvironment } from "./installed-plugin-task-environment.ts";
 import {
   HttpControlTokenVerifier,
   HttpPolicyDecisionPort,
@@ -49,6 +50,13 @@ const extensionEnvironment = resolveControlExtensionWorkerEnvironment(
   process.env,
   securityMode,
 );
+const installedPluginTaskConfiguration =
+  await loadInstalledPluginTaskEnvironment(process.env, securityMode);
+if (
+  installedPluginTaskConfiguration !== undefined &&
+  extensionEnvironment !== undefined
+)
+  throw new Error("installed_plugin_task_legacy_extension_conflict");
 const activationGate = resolvePausedAdmission(process.env, securityMode);
 const standaloneTenantId =
   extensionEnvironment?.actor.tenantId ??
@@ -169,6 +177,11 @@ try {
       connectionString: productionConnectionString,
       identity,
       authorization,
+      ...(installedPluginTaskConfiguration === undefined
+        ? {}
+        : {
+            pluginTasks: { configuration: installedPluginTaskConfiguration },
+          }),
       ...(pluginUiConfiguration === undefined
         ? {}
         : { pluginUi: { configuration: pluginUiConfiguration } }),

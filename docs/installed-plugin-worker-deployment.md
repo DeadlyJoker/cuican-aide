@@ -39,7 +39,7 @@ The document has this shape:
 
 These URLs are illustrative. Every endpoint requires HTTPS without URL credentials, query parameters or fragments. Service tokens are captured from the named environment variables before database initialization, must contain 32–8192 printable ASCII characters, and are redacted from JSON serialization and inspection. They are never placed in plugin configuration or browser DTOs. Timeout is an explicit integer between 1 and 30000 ms.
 
-For historical observation, `historicalScope` is the exact `{tenantId, spaceId, profileId}` of the deployment. It does not confer permission. A plugin needing host JSON HTTP also requires an explicit `networkAuthority` endpoint with the same URL/token-reference shape. No DNS, transport or TLS bypass can be configured through this document.
+For the standalone historical query host, `historicalScope` is the exact `{tenantId, spaceId, profileId}` of the deployment. It does not confer permission. The installed private peer instead uses actual scopes declared by the loaded release and resolves the current profile even when `historicalScope` is null. A plugin needing host JSON HTTP also requires an explicit `networkAuthority` endpoint with the same URL/token-reference shape. No DNS, transport or TLS bypass can be configured through this document.
 
 Desktop-managed startup clears this execution configuration from its inherited environment. Its management approval file and local Native identity cannot substitute for execution authority.
 
@@ -106,4 +106,8 @@ Each factory creation rechecks the same Store, actual package bytes and current 
 
 To retain historical execution, publish explicit entries for each required old version alongside the new version. Selection changes and disabled state do not rewrite past Run pins or select the newest package for an old Run. Historical observation still requires current user/package authorization and its exact saved configuration/target.
 
-Independent pricing, credit funding/settlement, Control-to-Worker task admission and the Short Drama saved-project workflow remain separate integration work. This Worker deployment bridge alone does not make those product paths ready.
+## Private installed task peer
+
+Worker main can additionally enable its loopback installed peer with `CREWON_INSTALLED_PLUGIN_PEER_PORT` and `CREWON_INSTALLED_PLUGIN_PEER_TOKEN`; the optional deadline defaults to 10000 ms. All absent preserves the original startup. Partial settings, a peer without this installed execution configuration, and the old bundled extension host/runtime combination are rejected. The peer uses actual loaded metadata and the same Store/resolver for readiness; it does not submit a task or grant credits. It is separate from the old v0 extension HTTP wire.
+
+See [installed task startup](./installed-plugin-task-startup.md) for exact environment formats, Control's private task configuration, current-authority and personal-credit admission, historical readiness limits and physical shutdown. The peer's 32 distinct full-scope/package candidate bound is not a bound of 32 physical Node instances. Formal Control/BFF/Worker generation now has actual PostgreSQL process evidence with named service fixtures; first-ever configuration bootstrap, formal query task acceptance, real pricing/funding/settlement and the Short Drama saved-project workflow remain separate integration work.

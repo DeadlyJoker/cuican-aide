@@ -23,6 +23,7 @@ import {
 } from "./plugin-execution-io-network.ts";
 import { snapshotContext } from "./plugin-tool-runtime-adapter-data.ts";
 import type { InstalledPluginExecutionReadinessMetadata } from "./installed-plugin-execution-readiness-types.ts";
+import type { InstalledPluginExtensionHostDependencies } from "./installed-plugin-extension-host.ts";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 
 export type InstalledPluginReadAuthorityInput = Readonly<{
@@ -37,6 +38,8 @@ export type InstalledPluginWorkerAuthority = Readonly<{
     input: InstalledPluginReadAuthorityInput,
     signal: AbortSignal,
   ): Promise<"allow" | "deny">;
+  /** Fresh profile authority also serves generation peers when historical observation is disabled. */
+  resolveProfile: InstalledPluginExtensionHostDependencies["resolveProfile"];
   installedPluginExecution: InstalledPluginExecutionConfig;
   close(): Promise<void>;
 }>;
@@ -461,6 +464,7 @@ export function createInstalledPluginWorkerAuthority(
     installRoot: config.installRoot,
     releaseDocumentPath: config.releaseDocumentPath,
     authorizeRead: authorizePackage,
+    resolveProfile,
     installedPluginExecution: execution,
     close: () => http.close(),
   });

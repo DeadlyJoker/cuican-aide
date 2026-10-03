@@ -99,19 +99,19 @@ Native 首次创建 `plugin-profile.json`，保存与实际单机 actor 绑定�
 
 ## 执行边界
 
-生产 main 尚未装配插件业务动作桥，动作明确返回 `plugin_ui_actions_unavailable`。服务端组合 API 可以接收真实 `PluginUiActionPort`，该端口必须进入原 Run、Tool、operation 和个人积分准入，不可直接从界面调用 ComfyUI。
+未配置业务执行时，生产 main 的动作仍明确返回 `plugin_ui_actions_unavailable`。显式 [已安装任务配置](./installed-plugin-task-startup.md) 现可接入真实当前请求、私有 Worker peer 与原个人积分准入；首次配置准备、真实资金/价格/结算及正式查询动作验收仍未完成。服务端组合 API 可以接收真实 `PluginUiActionPort`，该端口必须进入原 Run、Tool、operation 和个人积分准入，不可直接从界面调用 ComfyUI。
 
 PostgreSQL 安装账本另提供 profile owner：专用连接持有真实 session 锁，所有新安装写者遵守同一锁序；提交确认后才开放同步版本投影，旧回执不回退当前选择。拥有权不是权限，也不能瞬时证明尚未被客户端观察到的网络中断。Run 准入继续在自己的数据库事务内锁定实际选择行。
 
 新内部 `createTaskFromPlugin` 路径通过原 Turn/Run 提交，显式 `migratePluginAdmissions()` 后，在同一事务保存独立包身份、profile、选择修订、调用者、权限 epoch、原 v0 binding 关联及真实个人报价。新生成缺少报价或存储准入能力时拒绝；已接受的重复请求返回原任务和原报价。v0 的摘要、回执和 HTTP 请求格式不变。SDK `crewon.tasks` API `1` 和 `PluginTaskActionBridge` 通过真实实例绑定的调用引用进入该路径，报价后通过必需的宿主 callback 复核当前插件准入；只有私有 `PluginUiCommittedTaskAuthority` 验证的原受理结果跳过提交后的当前选择 gate。SDK 任务桥的生产组合须同时注入 actions 与 committedTasks，SDK 本身不暴露句柄签发或核验能力。
 
-该桥支持原 API 1 生成和 API 2 的生成/历史查询，包 ID 与原 extension ID 必须相同；尚无跨插件委托。查询只传 `sourceRunId` 和 `operationId`，从持久原任务核验原包、配置、目标和原个人报价，保存独立查询准入，不新增生成报价或积分预留。生产 main 仍没有业务动作桥和真实报价的装配。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 的真实身份/包许可仍未接通，详见下节。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
+该桥支持原 API 1 生成和 API 2 的生成/历史查询，包 ID 与原 extension ID 必须相同；尚无跨插件委托。查询只传 `sourceRunId` 和 `operationId`，从持久原任务核验原包、配置、目标和原个人报价，保存独立查询准入，不新增生成报价或积分预留。正式 Control main 现可显式装配业务动作桥和 HTTPS 报价端口，详见[任务启动](./installed-plugin-task-startup.md)；端口接线不等于真实计价服务已经部署。SDK 执行工厂、Worker 按确切安装包执行及通用已安装业务物化已提供显式组合 API；生产 Worker main 已增加严格配置及当前身份/包许可端口，见[Worker 部署](./installed-plugin-worker-deployment.md)；真实服务部署仍须验收。同包专项已使用实际 HTTP 供应商夹具完成报告生成；它不代表在线企业 API 或真实生图计费已经接通。
 
 Web 资产通过现有同源 BFF 读取；Electron 的 `file://` 资产通道已实现，见末节。Krea2 已提供使用公开 SDK 的独立 Node/UI 包和真实双库 Worker 调用验证；短剧 UI-only 独立包已交付，并通过实包安装与通用 loader 的双库交互专项及原生浏览器验证。生产 PostgreSQL 安装管理已有上述接线；正式桌面 SQLite bootstrap 与本机管理入口已接线，其完整 App 验证边界见上节。短剧正式生成与项目持久化、Krea2 在线验收和第二个真实企业 API 尚未完成。原用户栏与设置已在 5719 和已安装的 5720 预览实际点击验证，11 类设置保留；当前离线预览的外观设置可用，其余后台设置仍未连接。
 
 ## 2026-10-03：Worker 已安装执行组合 API
 
-`createStandaloneRuntimeWorker` 与 `createPostgresRuntimeWorker` 支持可选 `installedPluginExecution`，由可信宿主传入以下字段。它是程序化组合配置，当前没有对应的生产 main 环境变量接线；上文 `CREWON_PLUGIN_UI_*` 变量只启用 Control 的 UI 服务，不能据此启动 Worker 插件执行。
+`createStandaloneRuntimeWorker` 与 `createPostgresRuntimeWorker` 支持可选 `installedPluginExecution`，由可信宿主传入以下字段。本节保留较早程序化组合 API 的字段；正式 main 现通过 `CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH` 接入严格发布及权威配置，见[Worker 部署](./installed-plugin-worker-deployment.md)。上文 `CREWON_PLUGIN_UI_*` 变量只启用 Control 的 UI 服务，不能据此启动 Worker 插件执行。
 
 | 字段               | 宿主责任                                                               |
 | ------------------ | ---------------------------------------------------------------------- |

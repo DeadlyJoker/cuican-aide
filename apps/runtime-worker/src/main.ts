@@ -49,6 +49,7 @@ import {
   createInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
 } from "./plugins/installed-plugin-worker-authority.ts";
+import { resolveInstalledPluginPeerEnvironment } from "./plugins/installed-plugin-peer-environment.ts";
 import { readInstalledPluginReleaseDocument } from "./plugins/installed-plugin-release-document.ts";
 import {
   loadInstalledPluginRelease,
@@ -78,6 +79,13 @@ const initialized = await (async () => {
     );
     const installedPluginConfigPath =
       environment[INSTALLED_PLUGIN_WORKER_CONFIG_ENV];
+    const installedPluginPeer =
+      resolveInstalledPluginPeerEnvironment(environment);
+    if (
+      installedPluginPeer !== undefined &&
+      installedPluginConfigPath === undefined
+    )
+      throw new Error("installed_plugin_peer_deployment_invalid");
     const installedPluginConfiguration =
       installedPluginConfigPath === undefined
         ? undefined
@@ -261,6 +269,7 @@ const initialized = await (async () => {
       extensionRuntime,
       installedPluginAuthority,
       installedPluginRelease,
+      installedPluginPeer,
       ambientProviderProbe,
       artifactAuthority,
       nativeWorkspaceReadCatalog,
@@ -295,6 +304,7 @@ const {
   extensionRuntime,
   installedPluginAuthority,
   installedPluginRelease,
+  installedPluginPeer,
   nativeWorkspaceReadCatalog,
   remoteMcpOwner,
   route,
@@ -389,6 +399,14 @@ try {
           installedPluginExecution:
             installedPluginAuthority!.installedPluginExecution,
           installedPluginAuthorityOwner: installedPluginAuthority!,
+          ...(installedPluginPeer === undefined
+            ? {}
+            : {
+                installedPluginPeer: {
+                  ...installedPluginPeer,
+                  resolveProfile: installedPluginAuthority!.resolveProfile,
+                },
+              }),
           additionalAgentVersions: installedPluginRelease.versions,
         }),
     ...(agentVersionRuntimeFactory === undefined
@@ -537,6 +555,11 @@ if (environment.CREWON_WORKER_ONCE === "1") {
   if (runtime.extensionHostOrigin !== null) {
     process.stdout.write(
       `CrewON Extension Host origin ${runtime.extensionHostOrigin}\n`,
+    );
+  }
+  if (runtime.installedPluginPeerOrigin !== null) {
+    process.stdout.write(
+      `CrewON Installed Plugin Peer origin ${runtime.installedPluginPeerOrigin}\n`,
     );
   }
   for (const line of runtimeNativeReadinessLines({

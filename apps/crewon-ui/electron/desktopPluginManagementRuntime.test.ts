@@ -21,6 +21,10 @@ describe("Native-owned plugin bootstrap lifetime", () => {
       CREWON_PLUGIN_INSTALLATION_CONFIGURATION_PATH: "/unapproved/install.json",
       CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: "/unapproved/bootstrap.json",
       CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH: "/unapproved/execute.json",
+      CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH: "/unapproved/tasks.json",
+      CREWON_INSTALLED_PLUGIN_PEER_PORT: "4322",
+      CREWON_INSTALLED_PLUGIN_PEER_TOKEN: "unapproved-worker-peer-token",
+      CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: "1000",
       CREWON_MODEL_API_KEY: "provider-secret",
     };
     expect(clearDesktopPluginEnvironment(ambient)).toEqual({

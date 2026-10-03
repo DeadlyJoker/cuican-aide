@@ -36,7 +36,10 @@ import {
 } from "@crewon/contracts";
 import type { InstalledPluginPackage, PluginSelection } from "@crewon/domain";
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { ControlApiIdentityPort } from "./control-api-ports.ts";
+import type {
+  ControlApiIdentityPort,
+  ControlApiRequestContext,
+} from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
 
 export type PluginControlRouteDependencies = Readonly<{
@@ -70,7 +73,16 @@ export type PluginUiControlService = Pick<
   | "readAsset"
   | "closeMount"
   | "invoke"
->;
+> &
+  Readonly<{
+    /** Private HTTP request evidence for an explicitly installed business task owner. */
+    invokeAuthenticatedRequest?(
+      request: ControlApiRequestContext,
+      actor: ActorContext,
+      input: Parameters<PluginUiApplicationService["invoke"]>[1],
+      signal: AbortSignal,
+    ): ReturnType<PluginUiApplicationService["invoke"]>;
+  }>;
 
 /** Installed packages use the existing request identity; references and metadata never authorize use. */
 export function registerPluginControlRoutes(
@@ -262,6 +274,8 @@ function registerUiRoutes(
     service: PluginUiControlService;
   }>,
 ): void {
+  const invokeAuthenticated =
+    dependencies.service.invokeAuthenticatedRequest?.bind(dependencies.service);
   app.get<{ Querystring: unknown }>(
     "/api/v1/plugins/ui/catalog",
     async (request, reply) => {
@@ -336,14 +350,31 @@ function registerUiRoutes(
     Querystring: unknown;
   }>("/api/v1/plugins/ui/mounts/:mountRef/actions", async (request, reply) => {
     pluginHeaders(reply);
-    const actor = await dependencies.identity.resolveActor(
-      requestContext(request),
-    );
+    const context = requestContext(request);
+    const actor = await dependencies.identity.resolveActor(context);
     parsePluginControlEmptyQuery(request.query);
-    const output = await dependencies.service.invoke(actor, {
+    const input = {
       ...parseInvokePluginUiActionRequest(request.body),
       mountRef: parsePluginControlMountRef(request.params.mountRef),
-    });
+    };
+    const cancelled = new AbortController();
+    const abort = () => cancelled.abort();
+    const closed = () => {
+      if (!reply.raw.writableEnded) abort();
+    };
+    request.raw.once("aborted", abort);
+    reply.raw.once("close", closed);
+    let output: Awaited<ReturnType<PluginUiApplicationService["invoke"]>>;
+    try {
+      if (request.raw.aborted || reply.raw.destroyed) abort();
+      output =
+        invokeAuthenticated === undefined
+          ? await dependencies.service.invoke(actor, input)
+          : await invokeAuthenticated(context, actor, input, cancelled.signal);
+    } finally {
+      request.raw.removeListener("aborted", abort);
+      reply.raw.removeListener("close", closed);
+    }
     return checkedResponse(() => parseInvokePluginUiActionResponse({ output }));
   });
   app.get<{

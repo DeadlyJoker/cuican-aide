@@ -45,6 +45,13 @@ import {
   type InstalledPluginExecutionConfig,
 } from "./plugins/installed-plugin-runtime-composition.ts";
 import type { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
+import {
+  captureInstalledPluginPeerOptions,
+  composeInstalledPluginPeer,
+  ownInstalledPluginPeerStop,
+  type InstalledPluginPeer,
+} from "./plugins/installed-plugin-peer-composition.ts";
+import type { InstalledPluginPeerCompositionConfig } from "./plugins/installed-plugin-peer-environment.ts";
 import type { InstalledPluginExecutionReadinessPort } from "./plugins/installed-plugin-execution-readiness.ts";
 import {
   prepareInstalledPluginReleaseComposition,
@@ -150,6 +157,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   /** Construct and own the installed execution resolver using this composition's actual stores. */
   installedPluginExecution?: InstalledPluginExecutionConfig;
   installedPluginRelease?: LoadedInstalledPluginRelease;
+  installedPluginPeer?: InstalledPluginPeerCompositionConfig;
   /** Trusted authority lifetime only; this closer never grants execution or payment permission. */
   installedPluginAuthorityOwner?: Readonly<{ close(): Promise<void> }>;
   additionalAgentVersionRuntimes?: readonly Readonly<{
@@ -204,6 +212,7 @@ export type StandaloneRuntimeWorker = Readonly<{
   providerProbeOrigin: string | null;
   workspacePrivateOrigin: string | null;
   extensionHostOrigin: string | null;
+  installedPluginPeerOrigin: string | null;
   pluginQueryHost: InstalledPluginQueryHost | null;
   /** Borrowed by the admission Host; close that Host before closing this Worker. */
   pluginExecutionReadiness: InstalledPluginExecutionReadinessPort | null;
@@ -304,6 +313,7 @@ function prepareComposition(
             input.installedPluginExecution,
           ),
         }),
+    ...captureInstalledPluginPeerOptions(input),
     ...(input.extensionHost === undefined
       ? {}
       : { extensionHost: Object.freeze({ ...input.extensionHost }) }),
@@ -591,7 +601,7 @@ async function composeRuntimeWorker(
       agentVersionRuntimeFactory ??
       sharedAgentVersionRuntimeFactory(config, toolRuntime),
   });
-  const runtimeResolverOwner = lifetime.own(runtimeResolver, { phase: "stop" });
+  lifetime.own(runtimeResolver, { phase: "stop" });
   const pluginQueryHost =
     config.installedPluginExecution?.historicalQuery === undefined
       ? null
@@ -603,32 +613,25 @@ async function composeRuntimeWorker(
           tenantId: config.runtimeTenantId,
           ...(executionReadiness === null ? {} : { executionReadiness }),
         });
-  if (pluginQueryHost !== null) {
-    const queryOwner = lifetime.own(pluginQueryHost, { phase: "stop" });
-    // A pending historical readiness borrower must finish before its resolver is fenced.
-    lifetime.own(
-      {
-        async close() {
-          const errors: unknown[] = [];
-          for (const owner of [queryOwner, runtimeResolverOwner]) {
-            try {
-              await owner.close();
-            } catch (error) {
-              errors.push(error);
-            }
-          }
-          if (errors.length)
-            throw new AggregateError(
-              errors,
-              "installed_plugin_query_cleanup_failed",
-            );
-        },
-      },
-      { phase: "stop" },
-    );
-    queryOwner.delegate();
-    runtimeResolverOwner.delegate();
-  }
+  if (pluginQueryHost !== null)
+    lifetime.own(pluginQueryHost, { phase: "stop" });
+  const installedPluginPeer: InstalledPluginPeer | null =
+    config.installedPluginPeer === undefined
+      ? null
+      : await composeInstalledPluginPeer({
+          config: config.installedPluginPeer,
+          release: config.installedPluginRelease!,
+          store,
+          runtimeResolver,
+          execution: config.installedPluginExecution!,
+          ...(executionReadiness === null ? {} : { executionReadiness }),
+        });
+  ownInstalledPluginPeerStop({
+    lifetime,
+    runtimeResolver,
+    queryHost: pluginQueryHost,
+    peer: installedPluginPeer,
+  });
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
     paths: config.localStoragePaths ?? [],
@@ -761,6 +764,7 @@ async function composeRuntimeWorker(
     providerProbeOrigin: providerProbeServer?.origin ?? null,
     workspacePrivateOrigin: workspacePrivateServer?.origin ?? null,
     extensionHostOrigin: extensionHostServer?.origin ?? null,
+    installedPluginPeerOrigin: installedPluginPeer?.origin ?? null,
     pluginQueryHost,
     pluginExecutionReadiness:
       executionReadiness === null

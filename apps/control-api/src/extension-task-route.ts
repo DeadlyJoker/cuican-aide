@@ -10,6 +10,7 @@ import {
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { wakeOutbox, type OutboxWakeupPort } from "./outbox-wakeup.ts";
 import { requestContext } from "./request-context.ts";
+import { withInstalledPluginHttpRequest } from "./installed-plugin-request-owner.ts";
 
 /** Task creation is opt-in and uses the existing authenticated Run/event boundary. */
 export function registerExtensionTaskRoutes(
@@ -26,18 +27,25 @@ export function registerExtensionTaskRoutes(
     Querystring: unknown;
   }>(
     "/api/v1/extensions/:pluginId/tasks",
-    async (request): Promise<ExtensionTaskMutationResponse> => {
+    async (request, reply): Promise<ExtensionTaskMutationResponse> => {
       const actor = await dependencies.identity.resolveActor(
         requestContext(request),
       );
       parseExtensionEmptyQuery(request.query);
-      const result = await dependencies.extensionTasks.createTask(actor, {
+      const input = {
         ...parseCreateExtensionTaskRequest(request.body),
         pluginId: parseExtensionPluginId(request.params.pluginId),
         idempotencyKey: parseExtensionIdempotencyKey(
           request.headers["idempotency-key"],
         ),
-      });
+      };
+      const result = await withInstalledPluginHttpRequest(
+        dependencies.extensionTasks,
+        request,
+        reply,
+        actor,
+        () => dependencies.extensionTasks.createTask(actor, input),
+      );
       const message = result.turn.messages[0];
       if (message === undefined || result.turn.messages.length !== 1)
         throw new Error("extension_turn_commit_invalid");

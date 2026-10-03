@@ -233,6 +233,23 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
   }
 
   async resolveActor(request: ControlApiRequestContext): Promise<ActorContext> {
+    return this.#resolve(request, true);
+  }
+
+  /** Sensitive task admission rechecks the actual token; a cached assertion is not current authority. */
+  async resolveCurrentActor(
+    request: ControlApiRequestContext,
+    signal: AbortSignal,
+  ): Promise<ActorContext> {
+    return this.#resolve(request, false, signal);
+  }
+
+  async #resolve(
+    request: ControlApiRequestContext,
+    useCache: boolean,
+    signal?: AbortSignal,
+  ): Promise<ActorContext> {
+    signal?.throwIfAborted();
     await this.#trustedBff.verify({
       method: request.method,
       url: request.url,
@@ -242,6 +259,7 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
         request.headers[PRODUCTION_BFF_AUTHORIZATION_HEADER],
       ),
     });
+    signal?.throwIfAborted();
     for (const header of ACTOR_INJECTION_HEADERS) {
       if (request.headers[header] !== undefined) {
         throw new ControlApiIdentityError(
@@ -263,7 +281,7 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
     const now = this.#now();
     const cacheKey = createHash("sha256").update(accessToken).digest("hex");
     const cached = this.#cache.get(cacheKey);
-    if (cached !== undefined) {
+    if (useCache && cached !== undefined) {
       if (cached.expiresAtMs > now) {
         this.#cache.delete(cacheKey);
         this.#cache.set(cacheKey, cached);
@@ -273,9 +291,21 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
     }
 
     let assertion: unknown;
+    let physical: Promise<unknown> | undefined;
     try {
-      assertion = await this.#deadline.run(this.#timeoutMs, (signal) =>
-        this.#tokens.verify({ accessToken, signal }),
+      assertion = await this.#deadline.run(
+        this.#timeoutMs,
+        (deadlineSignal) => {
+          const currentSignal =
+            signal === undefined
+              ? deadlineSignal
+              : AbortSignal.any([deadlineSignal, signal]);
+          physical = Promise.resolve().then(() => {
+            currentSignal.throwIfAborted();
+            return this.#tokens.verify({ accessToken, signal: currentSignal });
+          });
+          return physical;
+        },
       );
     } catch (error) {
       throw new ControlApiIdentityError(
@@ -283,13 +313,17 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
         "identity_verification_failed",
         { cause: error },
       );
+    } finally {
+      // Fresh admission owns the real verification work, even when the deadline rejects first.
+      if (!useCache) await physical?.catch(() => {});
     }
+    signal?.throwIfAborted();
     let verified: ReturnType<typeof parseIdentityAssertion>;
     try {
       verified = parseIdentityAssertion(assertion, {
         expectedIssuer: this.#expectedIssuer,
         expectedAudience: this.#expectedAudience,
-        now,
+        now: useCache ? now : this.#now(),
         maxAssertionLifetimeMs: this.#maxAssertionLifetimeMs,
       });
     } catch (error) {
@@ -302,7 +336,7 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
         { cause: error },
       );
     }
-    if (this.#cacheTtlMs > 0) {
+    if (useCache && this.#cacheTtlMs > 0) {
       this.#cache.set(cacheKey, {
         actor: structuredClone(verified.actor),
         expiresAtMs: Math.min(verified.expiresAtMs, now + this.#cacheTtlMs),

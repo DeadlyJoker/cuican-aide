@@ -14,6 +14,7 @@ import {
 } from "@crewon/contracts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
+import { withInstalledPluginHttpRequest } from "./installed-plugin-request-owner.ts";
 
 /** Explicit opt-in routes; all identity still comes from the existing authenticated Control boundary. */
 export function registerExtensionConfigurationRoutes(
@@ -25,16 +26,20 @@ export function registerExtensionConfigurationRoutes(
 ): void {
   app.get<{ Params: { pluginId: string }; Querystring: unknown }>(
     "/api/v1/extensions/:pluginId/configuration",
-    async (request): Promise<GetExtensionConfigurationResponse> => {
+    async (request, reply): Promise<GetExtensionConfigurationResponse> => {
       const actor = await dependencies.identity.resolveActor(
         requestContext(request),
       );
-      const configuration = await dependencies.extensions.getConfiguration(
+      const input = {
+        pluginId: parseExtensionPluginId(request.params.pluginId),
+        ...parseExtensionConfigurationQuery(request.query),
+      };
+      const configuration = await withInstalledPluginHttpRequest(
+        dependencies.extensions,
+        request,
+        reply,
         actor,
-        {
-          pluginId: parseExtensionPluginId(request.params.pluginId),
-          ...parseExtensionConfigurationQuery(request.query),
-        },
+        () => dependencies.extensions.getConfiguration(actor, input),
       );
       return {
         configuration:
@@ -48,18 +53,25 @@ export function registerExtensionConfigurationRoutes(
     Querystring: unknown;
   }>(
     "/api/v1/extensions/:pluginId/configuration",
-    async (request): Promise<ExtensionConfigurationMutationResponse> => {
+    async (request, reply): Promise<ExtensionConfigurationMutationResponse> => {
       const actor = await dependencies.identity.resolveActor(
         requestContext(request),
       );
       parseExtensionEmptyQuery(request.query);
-      const result = await dependencies.extensions.saveConfiguration(actor, {
+      const input = {
         ...parseSaveExtensionConfigurationRequest(request.body),
         pluginId: parseExtensionPluginId(request.params.pluginId),
         idempotencyKey: parseExtensionIdempotencyKey(
           request.headers["idempotency-key"],
         ),
-      });
+      };
+      const result = await withInstalledPluginHttpRequest(
+        dependencies.extensions,
+        request,
+        reply,
+        actor,
+        () => dependencies.extensions.saveConfiguration(actor, input),
+      );
       return {
         disposition: result.disposition,
         configuration: projectConfiguration(result.configuration),
@@ -68,15 +80,19 @@ export function registerExtensionConfigurationRoutes(
   );
   app.get<{ Params: { pluginId: string }; Querystring: unknown }>(
     "/api/v1/extensions/:pluginId/activation",
-    async (request): Promise<GetExtensionActivationResponse> => {
+    async (request, reply): Promise<GetExtensionActivationResponse> => {
       const actor = await dependencies.identity.resolveActor(
         requestContext(request),
       );
       parseExtensionEmptyQuery(request.query);
+      const pluginId = parseExtensionPluginId(request.params.pluginId);
       return {
-        activation: await dependencies.extensions.getActivation(
+        activation: await withInstalledPluginHttpRequest(
+          dependencies.extensions,
+          request,
+          reply,
           actor,
-          parseExtensionPluginId(request.params.pluginId),
+          () => dependencies.extensions.getActivation(actor, pluginId),
         ),
       };
     },
@@ -87,18 +103,25 @@ export function registerExtensionConfigurationRoutes(
     Querystring: unknown;
   }>(
     "/api/v1/extensions/:pluginId/activation",
-    async (request): Promise<ExtensionActivationMutationResponse> => {
+    async (request, reply): Promise<ExtensionActivationMutationResponse> => {
       const actor = await dependencies.identity.resolveActor(
         requestContext(request),
       );
       parseExtensionEmptyQuery(request.query);
-      return dependencies.extensions.setActivation(actor, {
+      const input = {
         ...parseSetExtensionActivationRequest(request.body),
         pluginId: parseExtensionPluginId(request.params.pluginId),
         idempotencyKey: parseExtensionIdempotencyKey(
           request.headers["idempotency-key"],
         ),
-      });
+      };
+      return withInstalledPluginHttpRequest(
+        dependencies.extensions,
+        request,
+        reply,
+        actor,
+        () => dependencies.extensions.setActivation(actor, input),
+      );
     },
   );
 }
