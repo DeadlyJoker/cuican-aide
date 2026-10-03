@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, chmod, rm, writeFile } from "node:fs/promises";
+import { access, chmod, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -16,6 +16,168 @@ import {
   scope,
   timestamp,
 } from "./plugin-installation-local-host.test-support.ts";
+
+test("a disabled Node version change verifies compatibility without import or activation; enabling still executes and rejects a failing setup", async (t) => {
+  const f = await localInstallationFixture(t);
+  const first = await f.packageSource("1.0.0");
+  const next = await f.packageSource("2.0.0", { failSetup: true });
+  await f.install(first, null, "install-disabled-first");
+  await f.install(next, 1, "install-disabled-next");
+  f.policy.denyActivation = true;
+  f.policy.incompatible = true;
+  await assert.rejects(
+    f.select(next.expectedPackageDigest, 1, "disabled", "select-disabled-next"),
+    { code: "fixture_data_schema_incompatible" },
+  );
+  assert.equal((await f.current())!.revision, 1);
+  await assert.rejects(access(next.marker), { code: "ENOENT" });
+  assert.deepEqual(f.policy.activationCandidates, []);
+  f.policy.incompatible = false;
+  const selected = await f.select(
+    next.expectedPackageDigest,
+    1,
+    "disabled",
+    "select-disabled-next",
+  );
+  assert.equal(selected.projection.outcome, "applied");
+  assert.equal(selected.mutation.selection.revision, 2);
+  assert.equal(selected.mutation.selection.state, "disabled");
+  assert.equal(
+    selected.mutation.selection.selectedPackageDigest,
+    next.expectedPackageDigest,
+  );
+  assert.equal(f.policy.compatibilityDescriptors.at(-1)?.version, "2.0.0");
+  assert.deepEqual(f.policy.activationCandidates, []);
+  assert.deepEqual(f.nodeHost.snapshot(), []);
+  assert.deepEqual(f.events, []);
+  await assert.rejects(access(first.marker), { code: "ENOENT" });
+  await assert.rejects(access(next.marker), { code: "ENOENT" });
+  f.policy.denyActivation = false;
+  await assert.rejects(
+    f.select(next.expectedPackageDigest, 2, "enabled", "enable-failing-next"),
+    (error: unknown) => {
+      assert.ok(error instanceof ApplicationError);
+      assert.equal(error.code, "plugin_installation_host_unavailable");
+      assert.ok(error.cause instanceof Error);
+      assert.equal(error.cause.message, "fixture_setup_failed");
+      return true;
+    },
+  );
+  assert.equal(await readFile(next.marker, "utf8"), "imported");
+  assert.deepEqual(f.events, ["setup:2.0.0", "dispose:2.0.0"]);
+  assert.equal(f.policy.activationCandidates.length, 1);
+  assert.equal((await f.current())!.revision, 2);
+  assert.equal((await f.current())!.state, "disabled");
+  assert.ok(
+    f.nodeHost.snapshot().every((instance) => instance.phase !== "accepting"),
+  );
+});
+
+test("selecting a different disabled UI-only version retains exact compatibility checks without asking activation authority", async (t) => {
+  const f = await localInstallationFixture(t);
+  const first = await f.packageSource("1.0.0", { entryKind: "uiOnly" });
+  const next = await f.packageSource("2.0.0", { entryKind: "uiOnly" });
+  await f.install(first, null, "install-disabled-ui-first");
+  await f.install(next, 1, "install-disabled-ui-next");
+  f.policy.denyActivation = true;
+  const result = await f.select(
+    next.expectedPackageDigest,
+    1,
+    "disabled",
+    "select-disabled-ui-next",
+  );
+  assert.equal(result.projection.outcome, "applied");
+  assert.equal(result.mutation.selection.state, "disabled");
+  assert.equal(
+    result.mutation.selection.selectedPackageDigest,
+    next.expectedPackageDigest,
+  );
+  assert.equal(f.policy.compatibilityDescriptors.at(-1)?.version, "2.0.0");
+  assert.equal(
+    f.policy.compatibilityDescriptors.at(-1)?.entrypoints.ui?.path,
+    "ui.mjs",
+  );
+  assert.deepEqual(f.policy.activationCandidates, []);
+  await assert.rejects(access(first.uiMarker), { code: "ENOENT" });
+  await assert.rejects(access(next.uiMarker), { code: "ENOENT" });
+  assert.deepEqual(f.nodeHost.snapshot(), []);
+  await assert.rejects(
+    f.select(next.expectedPackageDigest, 2, "enabled", "enable-denied-ui-next"),
+    { code: "plugin_activation_denied" },
+  );
+  assert.equal(f.policy.activationCandidates.length, 1);
+  assert.equal((await f.current())!.revision, 2);
+  await assert.rejects(access(next.uiMarker), { code: "ENOENT" });
+});
+
+test("changing an enabled Node version to a different disabled version withdraws new admission and retains original borrowers without importing the replacement", async (t) => {
+  const f = await localInstallationFixture(t);
+  const first = await f.packageSource("1.0.0");
+  const next = await f.packageSource("2.0.0", { failSetup: true });
+  await f.install(first, null, "install-enabled-first");
+  await f.select(first.expectedPackageDigest, 1, "enabled", "enable-first");
+  const borrowed = f.acquire(first.expectedPackageDigest);
+  await f.install(next, 2, "install-withdrawal-next");
+  const result = await f.select(
+    next.expectedPackageDigest,
+    2,
+    "disabled",
+    "select-disabled-replacement",
+  );
+  assert.equal(result.projection.outcome, "applied");
+  assert.equal(result.mutation.selection.state, "disabled");
+  assert.equal(f.read(borrowed), "1.0.0");
+  assert.throws(() => f.acquire(first.expectedPackageDigest), {
+    code: "plugin_instance_unavailable",
+  });
+  assert.throws(() => f.acquire(next.expectedPackageDigest), {
+    code: "plugin_instance_unavailable",
+  });
+  assert.equal(f.policy.activationCandidates.length, 1);
+  assert.deepEqual(f.events, ["setup:1.0.0"]);
+  await assert.rejects(access(next.marker), { code: "ENOENT" });
+  borrowed.release();
+  await f.local.drain();
+  assert.deepEqual(f.events, ["setup:1.0.0", "dispose:1.0.0"]);
+});
+
+test("disabled version changes reject installed bytes changed during the awaited compatibility check before updating durable selection", async (t) => {
+  const f = await localInstallationFixture(t);
+  const first = await f.packageSource("1.0.0");
+  const next = await f.packageSource("2.0.0", { failSetup: true });
+  await f.install(first, null, "install-safe-first");
+  await f.install(next, 1, "install-tampered-next");
+  f.policy.compatibility = async () => {
+    const path = join(
+      f.installRoot,
+      "packages",
+      next.expectedPackageDigest.slice(7),
+      "entry.mjs",
+    );
+    await chmod(path, 0o600);
+    await writeFile(path, "changed while compatibility policy awaited");
+  };
+  await assert.rejects(
+    f.select(next.expectedPackageDigest, 1, "disabled", "select-tampered-next"),
+    (error: unknown) => {
+      assert.ok(error instanceof ApplicationError);
+      assert.equal(error.code, "plugin_installation_host_unavailable");
+      assert.ok(error.cause instanceof LocalPluginPackageError);
+      assert.equal(error.cause.code, "plugin_package_file_size_mismatch");
+      return true;
+    },
+  );
+  assert.equal((await f.current())!.revision, 1);
+  assert.equal(
+    (await f.current())!.selectedPackageDigest,
+    first.expectedPackageDigest,
+  );
+  assert.equal(f.policy.compatibilityDescriptors.at(-1)?.version, "2.0.0");
+  assert.deepEqual(f.policy.activationCandidates, []);
+  assert.deepEqual(f.nodeHost.snapshot(), []);
+  assert.deepEqual(f.events, []);
+  await assert.rejects(access(next.marker), { code: "ENOENT" });
+});
 
 test("actual App/SQLite/immutable bytes/Node lifecycle upgrades, rolls back and retains business records on uninstall", async (t) => {
   const f = await localInstallationFixture(t);

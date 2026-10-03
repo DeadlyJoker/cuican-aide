@@ -84,7 +84,7 @@ test("SQLite close synchronously invalidates a real post-COMMIT candidate before
       authority: new DesktopPluginAuthority(configuration),
     },
     {
-      ledger,
+      store,
       clock: { now: () => "2026-10-03T04:00:00.000Z" },
       digester: {
         sha256: (value) =>

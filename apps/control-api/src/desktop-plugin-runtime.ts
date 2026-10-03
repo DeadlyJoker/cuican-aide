@@ -16,6 +16,10 @@ import {
 import { createDesktopPluginSourceRegistry } from "./desktop-plugin-source-registry.ts";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import {
+  createDesktopPluginConfigurationRuntime,
+  type DesktopPluginConfigurationRuntime,
+} from "./desktop-plugin-configuration-runtime.ts";
+import {
   createDesktopPluginInstallationRuntime,
   type DesktopPluginInstallationRuntime,
 } from "./desktop-plugin-installation-runtime.ts";
@@ -24,11 +28,13 @@ import type {
   PluginSourceControlService,
   PluginUiControlService,
 } from "./plugin-control-route.ts";
+import { StandaloneIdentity } from "./standalone-adapters.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
   sources: PluginSourceControlService;
   ui: PluginUiControlService;
+  configuration: DesktopPluginConfigurationRuntime;
   close(): Promise<void>;
 }>;
 
@@ -37,22 +43,34 @@ export async function createDesktopPluginRuntime(
   input: Readonly<{ configuration: DesktopPluginConfiguration }>,
   dependencies: Readonly<{
     store: SqliteRunStore;
+    identity: StandaloneIdentity;
     clock: ApplicationClock;
     digester: ContentDigester;
   }>,
 ): Promise<DesktopPluginRuntime> {
   if (!(dependencies.store instanceof SqliteRunStore))
     throw new Error("desktop_plugin_sqlite_store_required");
+  if (!(dependencies.identity instanceof StandaloneIdentity))
+    throw new Error("desktop_plugin_identity_required");
   const configuration = parseDesktopPluginConfiguration(input.configuration);
   const registry = await createDesktopPluginSourceRegistry(configuration);
   const authority = new DesktopPluginAuthority(configuration);
   const ledger = dependencies.store.pluginInstallationStore();
   let installation: DesktopPluginInstallationRuntime | null = null;
+  let configurationRuntime: DesktopPluginConfigurationRuntime | null = null;
   try {
     await ledger.migrate();
     installation = await createDesktopPluginInstallationRuntime(
       { configuration, registry, authority },
-      { ledger, clock: dependencies.clock, digester: dependencies.digester },
+      {
+        store: dependencies.store,
+        clock: dependencies.clock,
+        digester: dependencies.digester,
+      },
+    );
+    configurationRuntime = await createDesktopPluginConfigurationRuntime(
+      { configuration, registry, authority, installation },
+      dependencies,
     );
     let closed = false;
     let closing: Promise<void> | null = null;
@@ -140,24 +158,55 @@ export async function createDesktopPluginRuntime(
       invoke: (...args) => call(() => application.invoke(...args)),
     });
     const ownedInstallation = installation;
+    const ownedConfiguration = configurationRuntime;
     return Object.freeze({
       installation: ownedInstallation.service,
       sources: ownedInstallation.service,
       ui,
+      configuration: ownedConfiguration,
       close: () => {
         if (closing !== null) return closing;
         closed = true;
         authority.withdraw();
-        const installationClosing = ownedInstallation.close();
-        return (closing = (async () => {
-          await Promise.allSettled([...physical]);
-          await installationClosing;
-        })());
+        return (closing = closeAll([
+          () => Promise.allSettled([...physical]),
+          () => ownedConfiguration.close(),
+          () => ownedInstallation.close(),
+        ]));
       },
     });
   } catch (error) {
     authority.withdraw();
-    await installation?.close();
+    try {
+      await closeAll([
+        () => configurationRuntime?.close(),
+        () => installation?.close(),
+      ]);
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        "desktop_plugin_runtime_startup_cleanup_failed",
+      );
+    }
     throw error;
   }
+}
+
+async function closeAll(
+  actions: readonly (() => Promise<unknown> | undefined)[],
+): Promise<void> {
+  const results = await Promise.allSettled(
+    actions.map((action) => {
+      try {
+        return Promise.resolve(action());
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }),
+  );
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (failures.length)
+    throw new AggregateError(failures, "desktop_plugin_runtime_cleanup_failed");
 }

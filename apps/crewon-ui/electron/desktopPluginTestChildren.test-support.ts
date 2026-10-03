@@ -6,6 +6,7 @@ const execute = promisify(execFile);
 async function processes(): Promise<Map<number, ProcessIdentity>> {
   const { stdout } = await execute("ps", ["-axo", "pid=,ppid=,lstart="], {
     maxBuffer: 1024 * 1024,
+    timeout: 2000,
   });
   const result = new Map<number, ProcessIdentity>();
   for (const line of stdout.split("\n")) {
@@ -79,7 +80,21 @@ export function trackDesktopTestChildren(child: ChildProcess) {
           if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
         }
       }
-      return active;
+      const forced = active;
+      const retirementDeadline = Date.now() + 5000;
+      do {
+        const current = await processes();
+        active = forced.filter(
+          (candidate) =>
+            current.get(candidate)?.started === owned.get(candidate)?.started,
+        );
+        if (active.length === 0) return forced;
+        if (Date.now() < retirementDeadline)
+          await new Promise((accept) => setTimeout(accept, 20));
+      } while (Date.now() < retirementDeadline);
+      throw new Error(
+        "desktop_test_child_retirement_timeout:" + active.join(","),
+      );
     },
   });
 }

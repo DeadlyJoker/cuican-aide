@@ -250,6 +250,15 @@ export class DesktopInstallationProfile {
     });
   }
 
+  /** Observe the actual held SQLite claim, including its file and directory pins. */
+  assertOwnership(actor: ActorContext): void {
+    this.#available();
+    this.#dependencies.authority.assertScope(actor, this.#dependencies.scope);
+    this.#owner.snapshot();
+    this.#available();
+    this.#dependencies.authority.assertScope(actor, this.#dependencies.scope);
+  }
+
   withdraw(): void {
     this.#closed = true;
     this.#lifetime.abort();

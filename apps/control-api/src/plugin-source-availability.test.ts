@@ -19,9 +19,18 @@ import {
   postgresOptions,
 } from "./production-plugin-installation-runtime.test-support.ts";
 import { productionSourceFixture } from "./production-plugin-source.test-support.ts";
+import { StandaloneIdentity } from "./standalone-adapters.ts";
 
 type SourceFixture = Awaited<ReturnType<typeof productionSourceFixture>>;
 type Source = Awaited<ReturnType<SourceFixture["source"]>>;
+function desktopIdentity() {
+  return new StandaloneIdentity({
+    actor: managementActor,
+    sessionToken: "s".repeat(32),
+    csrfToken: "c".repeat(32),
+    allowedOrigins: ["crewon://desktop"],
+  });
+}
 function desktopConfiguration(f: SourceFixture, sources: readonly Source[]) {
   return parseDesktopPluginConfiguration({
     schemaVersion: "crewon.desktop-plugin-bootstrap.v1",
@@ -136,6 +145,7 @@ test("SQLite UI reads actual installed assets after source removal; approval wit
       { configuration: approved },
       {
         store: store!,
+        identity: desktopIdentity(),
         clock: { now: () => "2026-10-03T04:00:00.000Z" },
         digester: {
           sha256: (value) =>
@@ -238,6 +248,7 @@ for (const fault of ["missing", "corrupt", "unsafe"] as const) {
     store = new SqliteRunStore(join(f.root, "independent.sqlite"));
     const dependencies = {
       store,
+      identity: desktopIdentity(),
       clock: { now: () => "2026-10-03T04:00:00.000Z" },
       digester: {
         sha256: (value: string) =>

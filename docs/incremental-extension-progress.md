@@ -6,6 +6,24 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：正式 Native 原设置与 SQLite 业务首配
+
+正式 Electron Main、原 preload 和原 `dist/index.html → App` 已实际通过“用户栏 → 设置 → 工具与扩展”安装独立报告包并保存第一份业务参数。新 Main 进程在交付来源离线后打开同一 SQLite，原表单读回同一配置、修订 1 和回执，没有第二次 PUT。此次验收使用 Main 既有 source Control 子进程选项；不是 packaged `.app` 或在线供应商执行证明。实现、命令和范围见[桌面配置说明](./installed-plugin-native-configuration.md)。
+
+Native 配置 owner 与原 HTTP 路由共用同一个真实 `StandaloneIdentity`，观察同一父 Store 的实际 SQLite profile 锁和文件标识。读取、新保存与旧回执之前均检查当前身份及权限；实际第二个 Control 接管替换 sidecar 后，旧所有者拒绝请求且不能破坏新所有者。真实协调器的结构复制、另一个 Store、相同值的另一权限实例或注册表在迁移前拒绝。凭据引用仍只读，非空引用不被当作已实现凭据租约。
+
+原默认入口与旧 Worker 服务保留。Native 批准 ID 及实际安装账本保留的命名空间不能落入旧目录、任务、查询或旧回执，包括撤回全部批准和卸载后；同名命名空间启动拒绝。停用但仍选中的包可以配置。修复共享 Host 在停用状态换版本时误走 activation 准备的问题，仍验证新包字节与兼容性；启用继续走原生命周期及依赖校验，没有开放 Native 业务执行。
+
+新的 `pnpm --filter @crewon/ui test:installed-plugin-native-configuration` 先串行构建正式 UI、七个桌面 runtime bundle 与 Main/preload，再通过唯一共享 SDK pack producer 在仓外构建两版报告包。实际删除开发源码、依赖和 SDK tarball 后才启动消费者，结果 **1/1、零跳过**。真实 HTTP PUT 含 Bearer、Origin、CSRF 和原请求键；SQLite 只有一份配置和配置回执，线程、Run、发布、activation 与外部操作记录均为零。无 provider 的事实来自实际凭据文件；网络计数明确只观察 Main fetch，不声称整个 Control/Renderer/SDK 零出站。日志为 `native-plugin-configuration-official-20261003.log`，证明和保存/重开截图位于 `output/extensions/checks/native-plugin-configuration-app-20261003/`。
+
+最终配置行为 **18/18、零跳过**；共享 Host 全量 **209/209**；原 default/Native/legacy/source/shutdown 回归 **22 通过、6 项 PostgreSQL 条件跳过，共 28 项、零失败**。原正式 file App 与 Native 管理两项安装专项实际提供保留的短剧包及七入口 staged runtime，**2/2、零跳过**，日志为 `native-plugin-configuration-original-native-20261003.log`；该复验覆盖新增共享 tracker 的原调用方，不是 packaged `.app` 验收。Control/Host 类型、UI lint、boundary 与生产许可证检查通过。早期误用 Vitest 调用 Node 测试的空 suite 失败，以及 SDK 构建与 Control 类型检查重叠产生的声明读取失败日志保留；已用仓库实际 Node runner 及完成 SDK 生产后的类型检查复验，没有放宽断言。
+
+按项目技能实际运行 UI 全量，**3387 通过、8 失败、5 跳过，共 3400 项**，另有三个旧 obsolete snapshot，不能称全量通过。全部八项完整失败名、错误及首帧和 obsolete 名称与上一阶段一致，证据为 `native-plugin-configuration-ui-baseline-comparison-20261003.json`。本次普通全量未注入实包环境，既有 Krea 两项及新 Native 一项条件跳过；原两项 Krea 随后使用实际保留包运行 **2/2、零跳过**，新 Native 由正式专项运行通过。这个跳过归因来自实际启动环境、源码条件和数量变化，compact 日志并未直接列出跳过名称。
+
+原用户菜单、设置导航、首页/工作区组件、全局 CSS 和旧快照本轮均未修改。强杀后的测试清理现在等待真实子进程退场；仍将需要强杀视为生产关停失败，不用清理成功掩盖产品失败。测试 tracker 的实际正常退出与遗留子进程强杀退场另有独立 smoke 证据，不冒称产品关停验收。本次正式专项全部 Main/Control 子进程正常关闭，两个实际 Main PID 消失，消费者 userData 和 producer 临时产物已删除。5719 原进程继续运行；检查发现 5720 旧进程已经退出，已从保留的独立短剧包恢复新的预览进程，没有将旧 ready 文件或 PID 当作当前在线证据。清理及新预览的实际观察见 `native-plugin-configuration-owned-cleanup-final-20261003.log`。
+
+下一落地点是 Native 明确开启的 installed release/Worker 组合，再接独立真实执行身份与付款准入。SQLite 的原发布、Worker 和任务存储基础已有；Main 当前固定本机管理身份并清理任务/peer 配置，不能给 `standalone-principal` 注入余额后冒充登录用户付费。正式 installed release 仍拒绝与旧扩展共用同 Worker，该边界保留。Native/packaged 的实际生成与历史查询、完整 App 的 Krea2 在线服务、真实账户/资金/价格/结算、短剧持久项目和第二个实际企业 API 仍未完成，目标继续进行。
+
 ## 2026-10-03：完整 Web App 的安装模块执行与冷恢复
 
 正式 UI 构建的原 `index.html → main.tsx → AgentPlatformAuthGate → App` 已实际验收。原登录表单取得具名普通用户账号，原左下用户栏打开原设置导航，在“工具与扩展”读回真实安装包和配置；原 CSS 和设置 lazy CSS 实际加载。没有替换正式入口、注入 Control 客户端、Native 桥或改写宿主页面。完整专项及重复运行命令见[验收说明](./installed-plugin-full-app-acceptance.md)。

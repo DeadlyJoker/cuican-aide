@@ -14,7 +14,7 @@ import {
   extensionCanonicalJson,
   pluginInstallationOpaqueId,
 } from "@crewon/domain";
-import { SqlitePluginInstallationStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store";
 import {
   pluginSecurityActor,
   pluginSecurityRecord,
@@ -50,10 +50,50 @@ export type DesktopPluginInstallationService = Pick<
   }>;
 export type DesktopPluginInstallationRuntime = Readonly<{
   service: DesktopPluginInstallationService;
+  assertProfileOwnership(actor: ActorContext): void;
   close(): Promise<void>;
 }>;
+const runtimes = new WeakMap<
+  object,
+  Readonly<{
+    configuration: DesktopPluginConfiguration;
+    registry: DesktopPluginSourceRegistry;
+    authority: DesktopPluginAuthority;
+    store: SqliteRunStore;
+  }>
+>();
+
+/** Structural copies and another grant's coordinator never prove native profile ownership. */
+export function assertDesktopPluginInstallationRuntime(
+  value: unknown,
+  input: Readonly<{
+    configuration: DesktopPluginConfiguration;
+    registry: DesktopPluginSourceRegistry;
+    authority: DesktopPluginAuthority;
+    store: SqliteRunStore;
+  }>,
+): asserts value is DesktopPluginInstallationRuntime {
+  const issued =
+    value !== null && typeof value === "object"
+      ? runtimes.get(value)
+      : undefined;
+  if (issued === undefined)
+    throw new Error("desktop_plugin_installation_runtime_required");
+  if (
+    issued.registry !== input.registry ||
+    issued.authority !== input.authority ||
+    issued.store !== input.store ||
+    !installationSame(
+      issued.configuration,
+      parseDesktopPluginConfiguration(input.configuration),
+    )
+  )
+    throw new Error(
+      "desktop_plugin_installation_runtime_configuration_mismatch",
+    );
+}
 type Dependencies = Readonly<{
-  ledger: SqlitePluginInstallationStore;
+  store: SqliteRunStore;
   clock: ApplicationClock;
   digester: ContentDigester;
 }>;
@@ -90,12 +130,14 @@ export async function createDesktopPluginInstallationRuntime(
   const configuration = parseDesktopPluginConfiguration(input.configuration);
   assertDesktopPluginSourceRegistry(input.registry, configuration);
   if (
-    !(dependencies.ledger instanceof SqlitePluginInstallationStore) ||
+    !(dependencies.store instanceof SqliteRunStore) ||
     typeof dependencies.clock?.now !== "function" ||
     typeof dependencies.digester?.sha256 !== "function"
   )
     throw new Error("desktop_plugin_installation_dependencies_invalid");
   const registry = input.registry;
+  const store = dependencies.store;
+  const ledger = store.pluginInstallationStore();
   const clock = Object.freeze({
     now: dependencies.clock.now.bind(dependencies.clock),
   });
@@ -111,7 +153,7 @@ export async function createDesktopPluginInstallationRuntime(
     configuration,
     registry,
     authority,
-    ledger: dependencies.ledger,
+    ledger,
     clock,
     digester,
     scope: initialScope,
@@ -145,7 +187,7 @@ export async function createDesktopPluginInstallationRuntime(
         configuration,
         registry,
         authority,
-        ledger: dependencies.ledger,
+        ledger,
         clock,
         digester,
         scope,
@@ -257,8 +299,16 @@ export async function createDesktopPluginInstallationRuntime(
       );
     },
   });
-  return Object.freeze({
+  const runtime = Object.freeze({
     service,
+    assertProfileOwnership: (actorInput: ActorContext) => {
+      available();
+      const actor = pluginSecurityActor(actorInput);
+      authority.assertScope(actor, initialScope);
+      initialProfile.assertOwnership(actor);
+      available();
+      authority.assertScope(actor, initialScope);
+    },
     close: () => {
       if (closing !== null) return closing;
       closed = true;
@@ -284,6 +334,11 @@ export async function createDesktopPluginInstallationRuntime(
       })());
     },
   });
+  runtimes.set(
+    runtime,
+    Object.freeze({ configuration, registry, authority, store }),
+  );
+  return runtime;
 }
 
 function conflict(code: string): never {

@@ -218,8 +218,9 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
           instance.phase === "accepting",
       )?.identity;
     try {
+      const needsActivation = nextSelection.state === "enabled";
       const needsPackage =
-        nextSelection.state === "enabled" ||
+        needsActivation ||
         (nextSelection.state === "disabled" &&
           nextSelection.selectedPackageDigest !==
             currentSelection.selectedPackageDigest);
@@ -240,7 +241,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         ...preparedInput,
         descriptor,
       });
-      if (needsPackage && uiOnly) {
+      if (needsActivation && uiOnly) {
         if (
           (await this.#dependencies.authorizeActivation({
             ...authority,
@@ -259,7 +260,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
           installRoot: this.#dependencies.installRoot,
           package: pkg!,
         });
-      } else if (needsPackage) {
+      } else if (needsActivation) {
         node = await this.#dependencies.nodeHost.prepare({
           installRoot: this.#dependencies.installRoot,
           expectedPluginId: nextSelection.pluginId,
@@ -276,6 +277,13 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
               candidate,
             });
           },
+        });
+      } else if (needsPackage) {
+        // A disabled version change verifies bytes and compatibility without importing code
+        // or requesting activation. Compatibility may await host policy, so recheck its bytes.
+        await verifyInstalledSelectionPackage({
+          installRoot: this.#dependencies.installRoot,
+          package: pkg!,
         });
       }
     } catch (error) {

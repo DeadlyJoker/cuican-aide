@@ -22,9 +22,6 @@ import {
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
   WorkflowVersionApplicationService,
-  ExtensionConfigurationApplicationService,
-  ExtensionTaskApplicationService,
-  ExtensionReadApplicationService,
   type ActorContext,
   type ArtifactStorePort,
   type AutomationStore,
@@ -46,6 +43,10 @@ import {
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
+import {
+  composeStandaloneExtensionServices,
+  type DesktopPluginNamespaceMembership,
+} from "./desktop-plugin-extension-composition.ts";
 
 import { buildControlApi } from "./control-api.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
@@ -87,6 +88,9 @@ type PreparedControlExtensions = {
 };
 type PreparedControlPlugins = {
   runtime: DesktopPluginRuntime;
+  identity: StandaloneIdentity;
+  approvedPluginIds: readonly string[];
+  ownsNamespace: DesktopPluginNamespaceMembership;
   failureCleanup?: Promise<void>;
 };
 
@@ -203,15 +207,31 @@ export async function createStandaloneControlApiWithPlugins(
   const store = new SqliteRunStore(pinned.databasePath);
   let prepared: PreparedControlPlugins | undefined;
   try {
+    const identity = new StandaloneIdentity({
+      actor: pinned.actor,
+      sessionToken: pinned.sessionToken,
+      csrfToken: pinned.csrfToken,
+      allowedOrigins: pinned.allowedOrigins,
+    });
+    const runtime = await createDesktopPluginRuntime(
+      { configuration },
+      {
+        store,
+        identity,
+        clock: new SystemApplicationClock(),
+        digester: new NodeSha256ContentDigester(),
+      },
+    );
+    const namespaces = new Set(
+      configuration.sources.map((source) => source.pluginId),
+    );
     prepared = {
-      runtime: await createDesktopPluginRuntime(
-        { configuration },
-        {
-          store,
-          clock: new SystemApplicationClock(),
-          digester: new NodeSha256ContentDigester(),
-        },
-      ),
+      identity,
+      approvedPluginIds: [...namespaces],
+      runtime,
+      ownsNamespace: async (actor, pluginId) =>
+        namespaces.has(pluginId) ||
+        (await runtime.installation.getSelection(actor, { pluginId })) !== null,
     };
     const composed = {
       ...pinned,
@@ -319,6 +339,17 @@ async function composeExtensionControlApi(
   try {
     client = new ExtensionHostRouter(worker);
     const catalog = await client.loadCatalog(config.actor);
+    if (preparedPlugins !== undefined) {
+      for (const entry of catalog.list()) {
+        if (
+          await preparedPlugins.ownsNamespace(
+            config.actor,
+            entry.manifest.pluginId,
+          )
+        )
+          throw new Error("desktop_plugin_extension_namespace_conflict");
+      }
+    }
     const extensions = store.extensionStore();
     await extensions.migrate();
     const operations = store.externalOperationStore();
@@ -439,48 +470,26 @@ function composeControlApi(
       ids,
       digester,
     });
-    const extensions =
-      preparedExtensions === undefined
-        ? undefined
-        : new ExtensionConfigurationApplicationService({
-            store: preparedExtensions.extensions,
-            catalog: preparedExtensions.catalog,
-            host: preparedExtensions.client,
-            authorization,
-            clock,
-            digester,
-          });
-    const extensionTasks =
-      preparedExtensions === undefined
-        ? undefined
-        : new ExtensionTaskApplicationService({
-            store,
-            extensions: preparedExtensions.extensions,
-            operations: preparedExtensions.operations,
-            catalog: preparedExtensions.catalog,
-            host: preparedExtensions.client,
-            queryHost: preparedExtensions.client.queryHost,
-            ...(config.pluginQueryHost === undefined
-              ? {}
-              : { pluginQueryHost: config.pluginQueryHost }),
-            authorization,
-            clock,
-            ids,
-            digester,
-          });
-    const extensionReads =
-      preparedExtensions === undefined
-        ? undefined
-        : new ExtensionReadApplicationService({
-            runs: store,
-            agentVersions: store,
-            extensions: preparedExtensions.extensions,
-            operations: preparedExtensions.operations,
-            catalog: preparedExtensions.catalog,
-            host: preparedExtensions.client,
-            authorization,
-            digester,
-          });
+    const { extensions, extensionTasks, extensionReads } =
+      composeStandaloneExtensionServices({
+        store,
+        legacy: preparedExtensions,
+        native:
+          preparedPlugins === undefined
+            ? undefined
+            : {
+                installed: preparedPlugins.runtime.configuration,
+                approvedPluginIds: preparedPlugins.approvedPluginIds,
+                ownsNamespace: preparedPlugins.ownsNamespace,
+              },
+        authorization,
+        clock,
+        digester,
+        ids,
+        ...(config.pluginQueryHost === undefined
+          ? {}
+          : { pluginQueryHost: config.pluginQueryHost }),
+      });
     const compactions = new ThreadCompactionApplicationService({
       store,
       authorization,
@@ -630,12 +639,14 @@ function composeControlApi(
       agentVersionDigester: digester,
       workflowVersionDigester: digester,
       clock,
-      identity: new StandaloneIdentity({
-        actor: config.actor,
-        sessionToken: config.sessionToken,
-        csrfToken: config.csrfToken,
-        allowedOrigins: config.allowedOrigins,
-      }),
+      identity:
+        preparedPlugins?.identity ??
+        new StandaloneIdentity({
+          actor: config.actor,
+          sessionToken: config.sessionToken,
+          csrfToken: config.csrfToken,
+          allowedOrigins: config.allowedOrigins,
+        }),
       routeResolver,
       readiness: new StoreReadiness(store, {
         tenantId: config.actor.tenantId,

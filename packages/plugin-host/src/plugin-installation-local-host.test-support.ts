@@ -75,6 +75,7 @@ export async function localInstallationFixture(t: TestContext) {
     denyCommit: false,
     beforeFence: null as (() => void) | null,
     activation: null as (() => Promise<void>) | null,
+    compatibility: null as (() => Promise<void>) | null,
     activationCandidates: [] as PluginActivationCandidate[],
     compatibilityDescriptors: [] as (PluginPackageDescriptor | null)[],
   };
@@ -95,6 +96,7 @@ export async function localInstallationFixture(t: TestContext) {
     },
     validateCompatibility: async ({ descriptor }) => {
       policy.compatibilityDescriptors.push(descriptor);
+      await policy.compatibility?.();
       if (policy.incompatible)
         throw new ApplicationError(
           "conflict",

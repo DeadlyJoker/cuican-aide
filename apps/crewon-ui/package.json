@@ -19,6 +19,7 @@
     "desktop:host:lint": "tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:installed-plugin-task-context": "node scripts/test-installed-plugin-task-context.mjs",
+    "test:installed-plugin-native-configuration": "node scripts/test-installed-plugin-native-configuration.mjs",
     "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs"
   },
   "dependencies": {
