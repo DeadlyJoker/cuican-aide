@@ -1,6 +1,10 @@
 import {
   createPluginCreativeProjectClient,
   createPluginProjectGenerationReadClient,
+  createPluginProjectGenerationClient,
+  createPluginProjectGenerationContextClient,
+  parseProjectGenerationHostContext,
+  type ProjectGenerationHostContext,
   defineUiPlugin,
   type PluginUiProps,
 } from "@crewon/plugin-sdk/ui";
@@ -30,6 +34,21 @@ function dataFlag(data: PluginUiProps["data"], name: string): boolean {
     Object.getOwnPropertyDescriptor(data, name)?.value === true
   );
 }
+function generationContext(
+  data: PluginUiProps["data"],
+): ProjectGenerationHostContext | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const descriptor = Object.getOwnPropertyDescriptor(
+    data,
+    "projectGenerationContext",
+  );
+  if (!descriptor || !("value" in descriptor)) return null;
+  try {
+    return parseProjectGenerationHostContext(descriptor.value);
+  } catch {
+    return null;
+  }
+}
 
 /** Owns only this module's DOM. The shell, account and theme authority stay with CrewON. */
 export default defineUiPlugin({
@@ -58,6 +77,8 @@ export default defineUiPlugin({
       : new CreativeProjectController({
           projects: createPluginCreativeProjectClient(services),
           generations: createPluginProjectGenerationReadClient(services),
+          submissions: createPluginProjectGenerationClient(services),
+          contexts: createPluginProjectGenerationContextClient(services),
         });
     let disposed = false;
     let appliedTokens: string[] = [];
@@ -81,6 +102,7 @@ export default defineUiPlugin({
       }
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
+      controller?.setGenerationContext(generationContext(next.data));
       controller?.setReady(dataFlag(next.data, "pluginUiReady"));
       flushSync(() =>
         reactRoot.render(

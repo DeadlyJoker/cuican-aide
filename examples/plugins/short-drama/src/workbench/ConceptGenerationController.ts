@@ -2,6 +2,7 @@ import type { PluginProjectGenerationReadClient } from "@crewon/plugin-sdk/ui";
 import type {
   ConceptGenerationLocator,
   PublicConceptGeneration,
+  ProjectGenerationUiReceipt,
 } from "@crewon/plugin-sdk/contracts";
 
 export type ConceptGenerationSnapshot = Readonly<{
@@ -23,6 +24,7 @@ export class ConceptGenerationController {
   #key: string | null = null;
   #disposed = false;
   #pending: AbortController | null = null;
+  #expected: { key: string; receipt: ProjectGenerationUiReceipt } | null = null;
   constructor(client: PluginProjectGenerationReadClient) {
     this.#read = client.getConceptGeneration.bind(client);
   }
@@ -66,6 +68,16 @@ export class ConceptGenerationController {
     this.#update({ phase: "loading", generation: null });
     try {
       const response = await this.#read(source, { signal: controller.signal });
+      if (
+        current() &&
+        this.#expected?.key === key &&
+        (response.generation?.task.runId !== this.#expected.receipt.runId ||
+          response.generation?.task.threadId !==
+            this.#expected.receipt.threadId ||
+          response.generation?.task.configurationRevision !==
+            this.#expected.receipt.configurationRevision)
+      )
+        throw new Error("generation_receipt_record_mismatch");
       if (current())
         this.#update({ phase: "ready", generation: response.generation });
     } catch {
@@ -73,6 +85,23 @@ export class ConceptGenerationController {
     } finally {
       if (this.#pending === controller) this.#pending = null;
     }
+  }
+  expectReceipt(
+    source: ConceptGenerationLocator,
+    receipt: ProjectGenerationUiReceipt,
+  ) {
+    const key = JSON.stringify([
+      source.projectId,
+      source.assetId,
+      source.assetRevision,
+    ]);
+    if (
+      this.#expected?.key === key &&
+      this.#expected.receipt.runId === receipt.runId
+    )
+      return;
+    this.#expected = { key, receipt };
+    if (this.#key === key) void this.refresh();
   }
   dispose() {
     if (this.#disposed) return;

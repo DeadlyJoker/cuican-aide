@@ -1,5 +1,7 @@
 # 项目生成 UI 协议与跨插件回执
 
+2026-10-04 更新：独立短剧 5.0.0 的生成控件、真实就绪检查、原会话准备及模块重开后的未知请求恢复已接通，见[项目生成上下文](./installed-plugin-generation-context-actions.md)。下文 2026-10-03 的阶段验证保留历史范围；原操作查询、确切结果选用和完整应用重启恢复仍未完成。
+
 ## 2026-10-03：实际 Host / Control 调度已接通
 
 当前已实现 `PluginProjectGenerationActionBridge`、`PluginProjectGenerationExecutionBridge` 和 `InstalledPluginProjectGenerationOwner`。明确部署映射把实际安装的业务 UI 包关联到另一个实际安装的执行包；原 `PluginUiApplicationService` 注册并持有业务 UI context，执行端使用自己的包字节、安装 pin、当前策略及真实 Node 借用。没有复制或伪造目标 UI context，没有从插件 JSON 接受可信 actor、付款人、prompt 或执行配置。

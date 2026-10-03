@@ -4,6 +4,8 @@ import {
 } from "@crewon/contracts";
 import {
   parsePluginUiLease,
+  PROJECT_GENERATION_UI_ACTIONS,
+  parseProjectGenerationUiActionRequest,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type { ControlApiClient } from "@crewon/control-client";
@@ -32,6 +34,7 @@ import {
   createInstalledPluginTaskReceiptTransport,
   type InstalledPluginTaskReceiptEvent,
 } from "./installedPluginTaskReceipt";
+import type { InstalledPluginGenerationJournal } from "./installedPluginGenerationJournal";
 
 export function installedDesktopPluginUiAssets(): DesktopPluginUiAssets | null {
   const assets = getDesktopBridge()?.pluginUiAssets;
@@ -51,6 +54,7 @@ export function createDesktopPluginUiHost(
     assertCurrent: PluginUiCurrentScope;
     onDiagnostic(error: unknown): void;
     onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
+    generationJournal?: InstalledPluginGenerationJournal;
     importer?: PluginUiModuleImporter;
   }>,
 ): ControlPluginUiHost {
@@ -60,7 +64,7 @@ export function createDesktopPluginUiHost(
     options.assets.version !== DESKTOP_PLUGIN_UI_VERSION
   )
     uiFailure("plugin_ui_transport_unsupported");
-  const { client, assertCurrent } = options;
+  const { client, assertCurrent, generationJournal } = options;
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -103,6 +107,24 @@ export function createDesktopPluginUiHost(
         await validateLease(lease, signal);
       },
       async invoke(lease, input) {
+        if (input.action === PROJECT_GENERATION_UI_ACTIONS[0]) {
+          if (!generationJournal)
+            uiFailure("plugin_ui_generation_journal_unavailable");
+          const generation = parseProjectGenerationUiActionRequest({
+            action: input.action,
+            input: input.input,
+          });
+          const response = await generationJournal.invoke({
+            lease,
+            input: generation.input,
+            signal: input.signal,
+            assertCurrent,
+            request: (signal) =>
+              client.plugins.invoke(lease.mountRef, generation, { signal }),
+          });
+          assertPluginUiCurrent(assertCurrent, input.signal);
+          return response.output;
+        }
         assertPluginUiCurrent(assertCurrent, input.signal);
         const request = (signal: AbortSignal) =>
           client.plugins.invoke(

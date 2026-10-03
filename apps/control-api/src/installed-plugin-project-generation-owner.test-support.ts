@@ -32,6 +32,7 @@ import { extensionStoreDigester } from "../../../packages/store/src/extension-st
 import { timestamp } from "../../../packages/store/src/extension-store.test-support.ts";
 import { InstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
 import { InstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
+import { createCreativeProjectPluginUiRuntime } from "./creative-project-plugin-ui-composition.ts";
 import {
   actor,
   commandInput,
@@ -49,6 +50,11 @@ export const savedPrompt =
 export async function installedGenerationFixture(
   t: TestContext,
   backend: "sqlite" | "postgres" = "sqlite",
+  options: Readonly<{
+    contexts?: boolean;
+    serviceRequirements?: "optional";
+    metadata?: boolean;
+  }> = {},
 ) {
   const f = await ownedActionFixture(t, { backend, maxPoolSize: 1 });
   const projects = f.first.parent.creativeProjectStore();
@@ -115,8 +121,26 @@ export async function installedGenerationFixture(
           {
             service: "crewon.project-generations",
             apiVersion: "1",
-            optional: false,
+            optional: options.serviceRequirements === "optional",
           },
+          ...(options.contexts
+            ? [
+                {
+                  service: "crewon.project-generation-contexts",
+                  apiVersion: "1",
+                  optional: options.serviceRequirements === "optional",
+                },
+              ]
+            : []),
+          ...(options.metadata
+            ? [
+                {
+                  service: "crewon.creative-projects",
+                  apiVersion: "1",
+                  optional: false,
+                },
+              ]
+            : []),
         ],
         provides: [],
         contributions: [
@@ -175,6 +199,14 @@ export async function installedGenerationFixture(
     store: f.first.parent,
     extensions: f.first.store,
     operations: f.operations,
+    ...(options.contexts
+      ? {
+          host: {
+            ...f.taskDependencies.host,
+            taskAdmissionMode: () => "installed" as const,
+          },
+        }
+      : {}),
     ids: { nextId: () => randomUUID() },
     creativeProjects: {
       store: projects,
@@ -281,14 +313,22 @@ export async function installedGenerationFixture(
       expectedSelectionRevision: null,
     }),
   );
-  // Real branded Host availability is required; there is no invented Node service in the UI-only package.
+  const installMetadata = options.metadata
+    ? createCreativeProjectPluginUiRuntime({
+        projects: projectService,
+        configuration: { publications: [publication.source] },
+        authorization: { authorize: async () => undefined },
+      })
+    : undefined;
+  if (installMetadata !== undefined) t.after(() => installMetadata.close());
+  // Required services use their actual owner; known optional declarations never invent Node services.
   assertPluginUiHostServiceAvailability({
     scope: f.profile,
     candidate: {
       descriptor: source.descriptor,
       packageDigest: source.packageDigest,
     },
-    hostUiServices: owner.hostUiServices,
+    hostUiServices: installMetadata?.hostUiServices ?? owner.hostUiServices,
   });
   const sourceEnabled = await f.ledger.commitSelection(
     selectionRecipe(sourceInstalled.selection, "actual-business-enabled", {

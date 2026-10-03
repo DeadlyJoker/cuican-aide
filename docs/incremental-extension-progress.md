@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：项目生成上下文与独立短剧 5.0.0
+
+新增独立 `crewon.project-generation-contexts@1` 就绪检查，并沿原安装 source→target owner、Task Application、issuer、profile/PDP 与真实安装 pin 核验保存来源、CAS、配置和当前执行连接。检查不创建会话、Run 或积分预留；原 generateConcept 输入、回执及普通任务协议保持兼容。已知 optional 协议允许只读模块安装，不把缺失的生成 owner 视为服务可用。细节见[生成上下文与恢复协议](./installed-plugin-generation-context-actions.md)。
+
+通用模块宿主通过原 Control 客户端显式准备任务会话，通过账户范围 journal 保留确切 source pin、保存引用、线程 CAS 和原请求键。Web/Native 共用有界物理请求观察；关闭或超时后仍核对真实晚回执，已发送失败保留 UNKNOWN。换包时保留旧意图但禁止新 pin 重试，账号变更同步撤回。接受后通过保存来源核对原 Run/thread/configuration，再沿当前 runtime 打开原任务；不把业务 UI pluginId 当成执行包的归属。
+
+短剧 5.0.0 在原模块内增加已保存输入的生成按钮和恢复状态，保留原共享样式。未知请求禁止编辑、切换、归档和换键提交；重开模块恢复原保存来源。已有生成的同一版本需保存新修订后才能再生成。实际 SDK tarball 的仓外消费者严格编译后，以删除源码/依赖的发布 ESM 验证公开协议；旧 4.0.0 产物保留。
+
+分组检查均零跳过，不跨组求和：Contracts **318/318**、SDK **40/40**、Application **90/90**、Host **66/66**、Control **89/89**，后者包括实际 SQLite/单连接 PostgreSQL 和 TLS HTTP 就绪检查及原付费提交回归；独立发布 ESM **44/44**，业务模块 **10/10**。最终 UI 相关接线、journal、会话、原用户栏/设置及 CommandWorkspace 回归 **238/238**，UI lint/build、相关类型、boundary、格式与 diff 检查通过。新快照仅涉及模块生成控件和已保存输入提示；原 App、账号、设置、侧栏和共享 CSS 本阶段无改动。
+
+用户当前 5719 根路径继续提供 `bb93f1b79` 恢复的原 AuthGate/App，显式预览只在 `/plugin-preview.html`。2026-10-04 浏览器 inventory 仍报旧预览标题且设备锁定，未核验用户标签的实际 DOM 或真实登录后设置；不能以源码和测试替代这项屏幕验证。Control `/session` 的 503 不直接移除用户栏：已有效登录的用户仍可显示原账户与设置，只有 AuthGate 的实际身份初始化失败才会替换整个 App。此前全量 UI 九项失败仍保留。
+
+本阶段证据为 `output/extensions/checks/project-generation-context-ui-proof-20261004.json`，独立产物为 `output/extensions/installable-plugins/generation-ui-short-drama-20261004/short-drama/5.0.0`。自有 PG 55815 已正常停止并删除准确临时目录，既有 UI 服务保留。测试身份、定价与积分是明确夹具，未冒称生产人类账号或供应商调用。发布 ESM 与实际付费 HTTP/SQL 尚未作为同一次完整 App 生成链联合验收；内存 journal 不代表完整应用重启后的 UNKNOWN 持久恢复。
+
+完整目标继续进行。下一步仍包括原 operation 显式查询、确切图片选用及原请求的持久恢复；正式 Main/full App/packaged App 在线 Krea2、真实个人身份/插件钱包/价格权威、第二个实际企业 API 和完整 S0 尚未完成。
+
 ## 2026-10-03：独立插件读取保存生成，短剧 4.0.0 冷挂载恢复
 
 完成独立只读 `crewon.project-generation-reads@1` 的 Contracts、SDK、Host 与 Production Control 装配。唯一动作只接受保存项目、资产和输入修订，由原不可变关联查找原 Run；沿原 UI invoke 返回有界 JSON，不增加 Node 服务、任务回执类型或供应商循环。原 14 个元数据动作和唯一 generateConcept 保持兼容。协议细节见[保存生成只读 UI 协议](./project-generation-read-ui-protocol.md)。

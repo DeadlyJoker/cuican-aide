@@ -5,8 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createPluginCreativeProjectClient,
   createPluginProjectGenerationReadClient,
+  createPluginProjectGenerationClient,
+  createPluginProjectGenerationContextClient,
   type PluginCreativeProjectClient,
   type PluginProjectGenerationReadClient,
+  type PluginProjectGenerationClient,
+  type PluginProjectGenerationContextClient,
 } from "@crewon/plugin-sdk/ui";
 import {
   deferred,
@@ -20,6 +24,8 @@ const { CreativeProjectController } = await vi.importActual<{
   CreativeProjectController: new (ports: {
     projects: PluginCreativeProjectClient;
     generations: PluginProjectGenerationReadClient;
+    submissions: PluginProjectGenerationClient;
+    contexts: PluginProjectGenerationContextClient;
   }) => Controller;
 }>(
   new URL(
@@ -56,6 +62,8 @@ async function fixture(service: ReturnType<typeof metadataService>) {
   const controller = new CreativeProjectController({
     projects: createPluginCreativeProjectClient(service.services),
     generations: createPluginProjectGenerationReadClient(service.services),
+    submissions: createPluginProjectGenerationClient(service.services),
+    contexts: createPluginProjectGenerationContextClient(service.services),
   });
   const container = document.createElement("div");
   document.body.append(container);

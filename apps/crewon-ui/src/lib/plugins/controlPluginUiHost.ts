@@ -4,6 +4,8 @@ import {
 } from "@crewon/contracts";
 import {
   parsePluginUiLease,
+  PROJECT_GENERATION_UI_ACTIONS,
+  parseProjectGenerationUiActionRequest,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type { ControlApiClient } from "@crewon/control-client";
@@ -23,6 +25,7 @@ import {
   pluginUiControlRequest,
   type PluginUiCurrentScope,
 } from "./controlPluginUiSupport";
+import type { InstalledPluginGenerationJournal } from "./installedPluginGenerationJournal";
 
 export { checkedLeaseIdentity } from "./controlPluginUiSupport";
 export type ControlPluginUiHost = Readonly<{
@@ -45,11 +48,12 @@ export function createControlPluginUiHost(
     assertCurrent: PluginUiCurrentScope;
     onDiagnostic(error: unknown): void;
     onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
+    generationJournal?: InstalledPluginGenerationJournal;
     /** Explicit importer injection is for deterministic lifecycle tests; native URL import is the default. */
     importer?: PluginUiModuleImporter;
   }>,
 ): ControlPluginUiHost {
-  const { client, assertCurrent } = options;
+  const { client, assertCurrent, generationJournal } = options;
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -90,6 +94,24 @@ export function createControlPluginUiHost(
         await validateLease(lease, signal);
       },
       async invoke(lease, input) {
+        if (input.action === PROJECT_GENERATION_UI_ACTIONS[0]) {
+          if (!generationJournal)
+            uiFailure("plugin_ui_generation_journal_unavailable");
+          const generation = parseProjectGenerationUiActionRequest({
+            action: input.action,
+            input: input.input,
+          });
+          const response = await generationJournal.invoke({
+            lease,
+            input: generation.input,
+            signal: input.signal,
+            assertCurrent,
+            request: (signal) =>
+              client.plugins.invoke(lease.mountRef, generation, { signal }),
+          });
+          assertPluginUiCurrent(assertCurrent, input.signal);
+          return response.output;
+        }
         assertPluginUiCurrent(assertCurrent, input.signal);
         const request = (signal: AbortSignal) =>
           client.plugins.invoke(

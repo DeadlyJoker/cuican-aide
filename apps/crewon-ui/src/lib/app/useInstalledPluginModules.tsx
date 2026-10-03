@@ -27,6 +27,7 @@ import { readPluginUiTheme } from "../../components/plugins/pluginUiPresentation
 import { INSTALLED_PLUGIN_SELECTION_CHANGED } from "../plugins/installedPluginChanges";
 import { createInstalledPluginTaskReceipts } from "../plugins/installedPluginTaskReceipts";
 import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
+import { createInstalledPluginGenerationJournal } from "../plugins/installedPluginGenerationJournal";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -89,6 +90,22 @@ export function useInstalledPluginModules({
   const taskContextRef = useRef(taskContext);
   taskContextRef.current = taskContext;
   const taskContextEnabled = taskContext !== undefined;
+  const mountedGenerationJournal = useRef<ReturnType<
+    typeof createInstalledPluginGenerationJournal
+  > | null>(null);
+  const generationJournal = useMemo(
+    () =>
+      scope && taskContextEnabled
+        ? createInstalledPluginGenerationJournal({
+            assertCurrent: () => {
+              if (current.current !== scope || mountedScope.current !== scope)
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onDiagnostic,
+          })
+        : null,
+    [scope, taskContextEnabled, onDiagnostic],
+  );
   const receipts = useMemo(
     () =>
       scope && taskContextEnabled
@@ -105,6 +122,7 @@ export function useInstalledPluginModules({
   useLayoutEffect(() => {
     mountedScope.current = scope;
     mountedReceipts.current = receipts;
+    mountedGenerationJournal.current = generationJournal;
     return () => {
       if (
         mountedScope.current === scope &&
@@ -112,6 +130,7 @@ export function useInstalledPluginModules({
       ) {
         mountedScope.current = null;
         mountedReceipts.current = null;
+        mountedGenerationJournal.current = null;
       }
       // StrictMode immediately reattaches this same owner. Real withdrawal
       // fences synchronously and erases its recovery cache after that boundary.
@@ -121,9 +140,14 @@ export function useInstalledPluginModules({
           mountedReceipts.current !== receipts
         )
           receipts?.invalidate();
+        if (
+          mountedScope.current !== scope ||
+          mountedGenerationJournal.current !== generationJournal
+        )
+          generationJournal?.invalidate();
       });
     };
-  }, [scope, receipts]);
+  }, [scope, receipts, generationJournal]);
   const host = useMemo(
     () =>
       scope
@@ -142,9 +166,10 @@ export function useInstalledPluginModules({
             },
             onDiagnostic,
             ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
+            ...(generationJournal ? { generationJournal } : {}),
           })
         : null,
-    [scope, onDiagnostic, receipts],
+    [scope, onDiagnostic, receipts, generationJournal],
   );
   useLayoutEffect(() => {
     if (!scope?.assets) return;
@@ -190,7 +215,9 @@ export function useInstalledPluginModules({
       current.current = null;
       mountedScope.current = null;
       mountedReceipts.current = null;
+      mountedGenerationJournal.current = null;
       receipts?.invalidate();
+      generationJournal?.invalidate();
       setSuspendedClient(client);
       setSnapshot(null);
     };
@@ -200,7 +227,7 @@ export function useInstalledPluginModules({
         AGENT_PLATFORM_SESSION_CHANGED_EVENT,
         invalidate,
       );
-  }, [client, receipts]);
+  }, [client, receipts, generationJournal]);
   useEffect(() => {
     if (!scope || !host) return;
     const controller = new AbortController();
@@ -276,6 +303,35 @@ export function useInstalledPluginModules({
     [scope, taskRuntime, receipts],
   );
   const selectedTaskThreadId = taskContext?.selectedThreadId ?? null;
+  const generationPorts = useMemo(
+    () =>
+      scope && taskRuntime && generationJournal
+        ? {
+            client: scope.client,
+            runtime: taskRuntime,
+            journal: generationJournal,
+            assertSessionCurrent: () => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedGenerationJournal.current !== generationJournal
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onOpenTask: (threadId: string) => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedGenerationJournal.current !== generationJournal ||
+                taskContextRef.current?.runtime !== taskRuntime
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+              taskContextRef.current.onOpenTask(threadId);
+            },
+          }
+        : null,
+    [scope, taskRuntime, generationJournal],
+  );
   const taskRunIdsKey = JSON.stringify(taskContext?.runIds.slice(0, 8) ?? []);
   const taskRunIds = useMemo<readonly string[]>(
     () => Object.freeze(JSON.parse(taskRunIdsKey)),
@@ -298,6 +354,7 @@ export function useInstalledPluginModules({
               locale={locale}
               onDiagnostic={onDiagnostic}
               taskPorts={taskPorts}
+              generationPorts={generationPorts}
               selectedThreadId={selectedTaskThreadId}
               runIds={taskRunIds}
               onOpenTask={(threadId) => {
@@ -316,6 +373,7 @@ export function useInstalledPluginModules({
     locale,
     onDiagnostic,
     taskPorts,
+    generationPorts,
     selectedTaskThreadId,
     taskRunIds,
   ]);

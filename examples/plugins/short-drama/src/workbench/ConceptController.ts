@@ -1,11 +1,13 @@
 import type { ProjectDetails } from "./creative-project-controller";
 import { ConceptGenerationController } from "./ConceptGenerationController";
+import { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
 import type { PublicConceptAsset } from "@crewon/plugin-sdk/contracts";
 import type {
   ConceptDraft,
   ConceptIntent,
   ConceptPorts,
   ConceptSnapshot,
+  ConceptSelection,
 } from "./ConceptController.types";
 
 export function validConceptPrompt(prompt: string): boolean {
@@ -55,6 +57,7 @@ const initial = (): ConceptSnapshot => ({
 /** Owns confirmed concept inputs only; asset identity and input revision remain distinct. */
 export class ConceptController {
   readonly generations: ConceptGenerationController;
+  readonly submissions: ConceptGenerationIntentController;
   #ports: ConceptPorts;
   #details: ProjectDetails | null = null;
   #ready = false;
@@ -72,6 +75,23 @@ export class ConceptController {
   constructor(ports: ConceptPorts) {
     this.#ports = ports;
     this.generations = new ConceptGenerationController(ports.generationClient);
+    this.submissions = new ConceptGenerationIntentController({
+      client: ports.submissionClient,
+      contexts: ports.contextClient,
+      lockChanged: () => {
+        this.#ports.lockChanged(this.locked);
+        for (const listener of this.#listeners) listener();
+      },
+      accepted: (request, receipt) =>
+        this.generations.expectReceipt(request.reference, receipt),
+      restore: (request) => ports.restoreGenerationSource(request),
+      restored: () => {
+        if (!this.submissions.locked) void this.loadAssets();
+      },
+    });
+    this.generations.subscribe(() =>
+      this.submissions.setRecord(this.generations.getSnapshot()),
+    );
   }
   getSnapshot = (): ConceptSnapshot => this.#snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -79,7 +99,11 @@ export class ConceptController {
     return () => this.#listeners.delete(listener);
   };
   get locked(): boolean {
-    return this.#snapshot.saving || this.#snapshot.pendingKind !== null;
+    return (
+      this.#snapshot.saving ||
+      this.#snapshot.pendingKind !== null ||
+      this.submissions.locked
+    );
   }
   #update(change: Partial<ConceptSnapshot>) {
     if (this.#disposed) return;
@@ -96,6 +120,7 @@ export class ConceptController {
         : null,
       this.#ready,
     );
+    this.#bindSubmission();
     if (locked !== this.locked) this.#ports.lockChanged(this.locked);
     for (const listener of this.#listeners) listener();
   }
@@ -123,6 +148,49 @@ export class ConceptController {
       (changed || activated || this.#snapshot.phase === "idle")
     )
       void this.loadAssets();
+    this.#bindSubmission();
+  }
+  #bindSubmission() {
+    const selection = this.#snapshot.selection,
+      project = this.#details?.project;
+    this.submissions.bindSource(
+      selection && !this.#snapshot.editing && project
+        ? {
+            projectId: project.projectId,
+            assetId: selection.asset.assetId,
+            assetRevision: selection.revision.assetRevision,
+            expectedProjectRevision: project.revision,
+            expectedAssetMetadataRevision: selection.asset.revision,
+          }
+        : null,
+      project?.state === "active" && !this.#ports.projectBlocked(),
+      this.#ready,
+    );
+  }
+  adoptGenerationSelection(selection: ConceptSelection) {
+    if (
+      !this.#ready ||
+      this.#disposed ||
+      selection.asset.projectId !== this.#details?.project.projectId
+    )
+      return;
+    this.#remember();
+    this.#abortReads();
+    this.#update({
+      ...initial(),
+      phase: "ready",
+      assets: this.#assetsWith(selection.asset),
+      selection,
+      draft: {
+        name: selection.asset.name,
+        prompt: selection.revision.prompt,
+        source: selection.source,
+      },
+      editing: false,
+    });
+  }
+  preserveGenerationDraft() {
+    this.#remember();
   }
   #abortReads() {
     for (const controller of this.#reads.values()) controller.abort();
@@ -137,6 +205,7 @@ export class ConceptController {
     this.#write?.abort();
     this.#listeners.clear();
     this.generations.dispose();
+    this.submissions.dispose();
   }
   #reading(kind: "assets" | "selection" | "history" | "refresh") {
     this.#reads.get(kind)?.abort();
@@ -368,6 +437,7 @@ export class ConceptController {
     if (
       !this.#available() ||
       this.#snapshot.saving ||
+      this.submissions.locked ||
       !this.#snapshot.draft ||
       this.#details!.project.state === "archived"
     )
@@ -378,6 +448,7 @@ export class ConceptController {
     const draft = this.#snapshot.draft;
     return (
       this.#available() &&
+      !this.submissions.locked &&
       !this.#snapshot.saving &&
       Boolean(draft) &&
       this.#snapshot.editing &&
@@ -532,7 +603,7 @@ export class ConceptController {
     }
   }
   async #commit(intent: ConceptIntent) {
-    if (!this.#available() || this.#write) return;
+    if (!this.#available() || this.#write || this.submissions.locked) return;
     this.#intent = Object.freeze({
       ...intent,
       input: Object.freeze({

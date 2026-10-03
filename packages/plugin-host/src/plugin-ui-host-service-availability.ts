@@ -11,6 +11,8 @@ import {
   CREWON_PROJECT_GENERATIONS_API_VERSION,
   CREWON_PROJECT_GENERATION_READS_SERVICE,
   CREWON_PROJECT_GENERATION_READS_API_VERSION,
+  CREWON_PROJECT_GENERATION_CONTEXTS_SERVICE,
+  CREWON_PROJECT_GENERATION_CONTEXTS_API_VERSION,
   type PluginPackageDescriptor,
   type PluginServiceRequirement,
 } from "@crewon/contracts/plugins";
@@ -19,6 +21,10 @@ import {
   hasProjectGenerationHostAvailability,
   preserveProjectGenerationHostAvailability,
 } from "./plugin-project-generation-host-availability.ts";
+import {
+  hasProjectGenerationContextHostAvailability,
+  preserveProjectGenerationContextHostAvailability,
+} from "./plugin-project-generation-context-host-availability.ts";
 
 /** Host protocol availability never supplies a Node service or grants an invocation permission. */
 export type PluginUiHostServiceAvailabilityPort = Readonly<{
@@ -55,7 +61,7 @@ export function capturePluginUiHostServiceAvailability(
     callback,
     port,
   ) as PluginUiHostServiceAvailabilityPort["isAvailable"];
-  return preserveProjectGenerationHostAvailability(
+  const result = preserveProjectGenerationHostAvailability(
     port,
     Object.freeze({
       isAvailable: (input: Parameters<typeof captured>[0]) => {
@@ -67,9 +73,10 @@ export function capturePluginUiHostServiceAvailability(
       },
     }),
   );
+  return preserveProjectGenerationContextHostAvailability(port, result);
 }
 
-/** UI-only envelopes may only name explicitly assembled Host protocols. */
+/** Known optional protocols can be declared without an owner; required generation protocols need actual assembly. */
 export function assertUiOnlyServiceDeclarations(
   descriptor: PluginPackageDescriptor,
   hostUiServices?: PluginUiHostServiceAvailabilityPort,
@@ -85,14 +92,22 @@ export function assertUiOnlyServiceDeclarations(
           (requirement.service === CREWON_PROJECT_GENERATION_READS_SERVICE &&
             requirement.apiVersion ===
               CREWON_PROJECT_GENERATION_READS_API_VERSION) ||
+          (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
+            requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&
+            (requirement.optional ||
+              (hostUiServices !== undefined &&
+                hasProjectGenerationHostAvailability(hostUiServices)))) ||
+          (requirement.service === CREWON_PROJECT_GENERATION_CONTEXTS_SERVICE &&
+            requirement.apiVersion ===
+              CREWON_PROJECT_GENERATION_CONTEXTS_API_VERSION &&
+            (requirement.optional ||
+              (hostUiServices !== undefined &&
+                hasProjectGenerationContextHostAvailability(
+                  hostUiServices,
+                )))) ||
           (hostUiServices !== undefined &&
-            ((requirement.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
-              requirement.apiVersion ===
-                CREWON_CREATIVE_PROJECTS_API_VERSION) ||
-              (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
-                requirement.apiVersion ===
-                  CREWON_PROJECT_GENERATIONS_API_VERSION &&
-                hasProjectGenerationHostAvailability(hostUiServices))))
+            requirement.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
+            requirement.apiVersion === CREWON_CREATIVE_PROJECTS_API_VERSION)
         ),
     )
   )

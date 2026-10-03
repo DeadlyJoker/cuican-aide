@@ -9,6 +9,9 @@ import { PluginModuleMount } from "./PluginModuleMount";
 import { useInstalledPluginTaskContext } from "../../lib/plugins/useInstalledPluginTaskContext";
 import type { InstalledPluginTaskPorts } from "../../lib/plugins/useInstalledPluginTaskContext.types";
 import { InstalledPluginTaskControls } from "./InstalledPluginTaskControls";
+import { useInstalledPluginGenerationContext } from "../../lib/plugins/useInstalledPluginGenerationContext";
+import type { InstalledPluginGenerationPorts } from "../../lib/plugins/useInstalledPluginGenerationContext.types";
+import { InstalledPluginGenerationControls } from "./InstalledPluginGenerationControls";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
 type Monitor = {
@@ -25,6 +28,7 @@ export function InstalledPluginModule({
   locale,
   onDiagnostic,
   taskPorts = null,
+  generationPorts = null,
   selectedThreadId = null,
   runIds = [],
   onOpenTask,
@@ -36,6 +40,7 @@ export function InstalledPluginModule({
   locale: Locale;
   onDiagnostic(error: unknown): void;
   taskPorts?: InstalledPluginTaskPorts | null;
+  generationPorts?: InstalledPluginGenerationPorts | null;
   selectedThreadId?: string | null;
   runIds?: readonly string[];
   onOpenTask?(threadId: string): void;
@@ -45,6 +50,21 @@ export function InstalledPluginModule({
       requirement.service === "crewon.tasks" &&
       (requirement.apiVersion === "1" || requirement.apiVersion === "2"),
   );
+  const generationEnabled = [
+    "crewon.project-generations",
+    "crewon.project-generation-contexts",
+  ].every((service) =>
+    module.plugin.descriptor.requires.some(
+      (requirement) =>
+        requirement.service === service && requirement.apiVersion === "1",
+    ),
+  );
+  const generation = useInstalledPluginGenerationContext({
+    ports: generationEnabled ? generationPorts : null,
+    module,
+    active,
+    selectedThreadId,
+  });
   const tasks = useInstalledPluginTaskContext({
     ports: taskEnabled ? taskPorts : null,
     module,
@@ -150,6 +170,9 @@ export function InstalledPluginModule({
         ...(taskEnabled && taskPorts
           ? (tasks.data as Readonly<Record<string, PluginJsonValue>>)
           : {}),
+        ...(generationEnabled && generationPorts
+          ? { projectGenerationContext: generation.context }
+          : {}),
       }),
     }),
     [
@@ -159,6 +182,9 @@ export function InstalledPluginModule({
       taskEnabled,
       taskPorts,
       tasks.data,
+      generationEnabled,
+      generationPorts,
+      generation.context,
       ready,
       context,
     ],
@@ -177,6 +203,9 @@ export function InstalledPluginModule({
     );
   return (
     <>
+      {generationEnabled && generationPorts ? (
+        <InstalledPluginGenerationControls state={generation} locale={locale} />
+      ) : null}
       {taskEnabled && taskPorts && onOpenTask ? (
         <InstalledPluginTaskControls
           state={tasks}

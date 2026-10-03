@@ -9,6 +9,7 @@ import { useInstalledPluginModules } from "./useInstalledPluginModules";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 import { notifyInstalledPluginSelectionChanged } from "../plugins/installedPluginChanges";
 import type { InstalledPluginTaskPorts } from "../plugins/useInstalledPluginTaskContext.types";
+import type { InstalledPluginGenerationPorts } from "../plugins/useInstalledPluginGenerationContext.types";
 import type { createInstalledPluginTaskReceipts } from "../plugins/installedPluginTaskReceipts";
 import {
   controlUiClient,
@@ -560,5 +561,207 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect(source.snapshot()).toEqual([]);
     expect(state.hostModules).toEqual([]);
     stop();
+  });
+
+  it("preserves a generation journal through StrictMode, appearance updates and runtime reconnection, then erases it on a real account change", async () => {
+    const base = uiLease();
+    const lease = {
+      ...base,
+      descriptor: {
+        ...base.descriptor,
+        requires: [
+          {
+            service: "crewon.project-generations",
+            apiVersion: "1",
+            optional: true,
+          },
+          {
+            service: "crewon.project-generation-contexts",
+            apiVersion: "1",
+            optional: true,
+          },
+        ],
+      },
+    };
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [controlUiItem(lease)], next: null }),
+    );
+    const onOpenTask = vi.fn();
+    const runtime = { adoptExtensionTask: vi.fn(async () => {}) };
+    const taskContext = {
+      runtime,
+      selectedThreadId: null,
+      runIds: [],
+      onOpenTask,
+    };
+    await render(wire.client, { taskContext }, true);
+    const ports = () =>
+      (
+        presentation() as ReturnType<typeof presentation> & {
+          generationPorts: InstalledPluginGenerationPorts;
+        }
+      ).generationPorts;
+    const original = ports();
+    const input = {
+      reference: {
+        projectId: "project",
+        assetId: "asset",
+        assetRevision: 1,
+        expectedProjectRevision: 3,
+        expectedAssetMetadataRevision: 1,
+      },
+      threadId: "thread",
+      expectedThreadRevision: 1,
+      idempotencyKey: "original-generation-key",
+    };
+    const physical = deferred<{
+      output: {
+        disposition: string;
+        threadId: string;
+        threadRevision: number;
+        runId: string;
+        messageId: string;
+        configurationRevision: number;
+      };
+    }>();
+    const caller = new AbortController();
+    const pending = original.journal.invoke({
+      lease,
+      input,
+      signal: caller.signal,
+      request: () => physical.promise,
+    });
+    await flush();
+    caller.abort();
+    await expect(pending).rejects.toBeDefined();
+    expect(original.journal.snapshot()[0].phase).toBe("uncertain");
+    await render(
+      wire.client,
+      { taskContext, theme: "dark", locale: "en" },
+      true,
+    );
+    expect(ports().journal).toBe(original.journal);
+    const nextRuntime = { adoptExtensionTask: vi.fn(async () => {}) };
+    await render(
+      wire.client,
+      { taskContext: { ...taskContext, runtime: nextRuntime } },
+      true,
+    );
+    expect(ports().journal).toBe(original.journal);
+    expect(() => original.assertSessionCurrent()).not.toThrow();
+    expect(() => original.onOpenTask("thread")).toThrow(
+      "plugin_ui_session_changed",
+    );
+    physical.resolve({
+      output: {
+        disposition: "committed",
+        threadId: "thread",
+        threadRevision: 2,
+        runId: "accepted-run",
+        messageId: "accepted-message",
+        configurationRevision: 1,
+      },
+    });
+    await settle();
+    expect(original.journal.snapshot()[0].phase).toBe("accepted");
+    expect(runtime.adoptExtensionTask).not.toHaveBeenCalled();
+    expect(nextRuntime.adoptExtensionTask).not.toHaveBeenCalled();
+    const taskPorts = (
+      presentation() as ReturnType<typeof presentation> & {
+        taskPorts: InstalledPluginTaskPorts;
+      }
+    ).taskPorts;
+    expect(taskPorts.receiptSource.snapshot()).toEqual([]);
+    act(() =>
+      window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT)),
+    );
+    expect(original.journal.snapshot()).toEqual([]);
+    expect(() => original.assertSessionCurrent()).toThrow(
+      "plugin_ui_session_changed",
+    );
+  });
+
+  it("keeps an unresolved generation key while the installed source pin changes and blocks replacing it", async () => {
+    const base = uiLease();
+    const lease = {
+      ...base,
+      descriptor: {
+        ...base.descriptor,
+        requires: [
+          {
+            service: "crewon.project-generations",
+            apiVersion: "1",
+            optional: true,
+          },
+          {
+            service: "crewon.project-generation-contexts",
+            apiVersion: "1",
+            optional: true,
+          },
+        ],
+      },
+    };
+    let catalog = controlUiItem(lease);
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [catalog], next: null }),
+    );
+    const runtime = { adoptExtensionTask: vi.fn(async () => {}) };
+    const taskContext = {
+      runtime,
+      selectedThreadId: null,
+      runIds: [],
+      onOpenTask: vi.fn(),
+    };
+    await render(wire.client, { taskContext });
+    const ports = () =>
+      (
+        presentation() as ReturnType<typeof presentation> & {
+          generationPorts: InstalledPluginGenerationPorts;
+        }
+      ).generationPorts;
+    const original = ports().journal;
+    const input = {
+      reference: {
+        projectId: "project",
+        assetId: "asset",
+        assetRevision: 1,
+        expectedProjectRevision: 3,
+        expectedAssetMetadataRevision: 1,
+      },
+      threadId: "thread",
+      expectedThreadRevision: 1,
+      idempotencyKey: "original-key",
+    };
+    await expect(
+      original.invoke({
+        lease,
+        input,
+        signal: new AbortController().signal,
+        request: async () => {
+          throw new Error("sent outcome unknown");
+        },
+      }),
+    ).rejects.toThrow("sent outcome unknown");
+    const replacement = {
+      ...lease,
+      selectionRevision: 2,
+      packageDigest: `sha256:${"2".repeat(64)}`,
+    };
+    catalog = controlUiItem(replacement);
+    await refresh();
+    expect(ports().journal).toBe(original);
+    expect(original.current({ lease: replacement })?.input.idempotencyKey).toBe(
+      "original-key",
+    );
+    expect(original.current({ lease: replacement })?.retryable).toBe(false);
+    expect(() =>
+      original.register({
+        lease: replacement,
+        input: { ...input, idempotencyKey: "replacement-key" },
+      }),
+    ).toThrow();
+    expect(
+      wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
   });
 });

@@ -190,7 +190,11 @@ export function createProductionPluginUiRuntime(
           }
           if (metadataOwner?.supportsAction(request.action))
             return metadataOwner.actions.invoke(request);
-          if (request.action.startsWith("crewon.project-generations.")) {
+          if (
+            request.action === "crewon.project-generation-contexts" ||
+            request.action.startsWith("crewon.project-generation-contexts.") ||
+            request.action.startsWith("crewon.project-generations.")
+          ) {
             if (generationOwner === undefined)
               throw new ApplicationError(
                 "conflict",

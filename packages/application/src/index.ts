@@ -136,6 +136,11 @@ export {
   type ProjectGenerationExecutionAuthority,
 } from "./project-generation-execution-authority.ts";
 export { projectGenerationUiTaskCommand } from "./project-generation-task-receipt.ts";
+export type {
+  GetPublishedProjectGenerationReadinessInput,
+  PublishedProjectGenerationReadinessResult,
+  ProjectGenerationReadiness,
+} from "./project-generation-readiness-application-service.ts";
 export * from "./extension-read-application-service.ts";
 export * from "./creative-project-commands.ts";
 export * from "./creative-project-store-port.ts";

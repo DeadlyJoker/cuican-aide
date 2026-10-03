@@ -30,10 +30,12 @@ export function ConceptGenerationView({
   controller,
   name,
   blocked,
+  unconfirmed = false,
 }: {
   controller: ConceptGenerationController;
   name: string;
   blocked: boolean;
+  unconfirmed?: boolean;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -70,7 +72,9 @@ export function ConceptGenerationView({
       )}
       {snapshot.phase === "ready" && generation === null && (
         <p className="detail-note" role="status">
-          这个已保存版本还没有生成任务。
+          {unconfirmed
+            ? "原请求仍待确认，暂无可确认的任务记录。"
+            : "这个已保存版本还没有生成任务。"}
         </p>
       )}
       {generation && (

@@ -25,6 +25,7 @@ import {
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
 import { preserveProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
+import { preserveProjectGenerationContextHostAvailability } from "./plugin-project-generation-context-host-availability.ts";
 import { bridgeFields } from "./plugin-task-action-bridge-support.ts";
 import {
   captureProjectGenerationReadContext,
@@ -166,7 +167,10 @@ export class PluginProjectGenerationReadActionBridge {
     });
     return other === undefined
       ? port
-      : preserveProjectGenerationHostAvailability(other, port);
+      : preserveProjectGenerationContextHostAvailability(
+          other,
+          preserveProjectGenerationHostAvailability(other, port),
+        );
   }
 
   close(): Promise<void> {

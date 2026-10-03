@@ -52,6 +52,12 @@ export type {
 } from "./plugin-installation-recovery.ts";
 export { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";
 export {
+  PluginProjectGenerationContextActionBridge,
+  isPluginProjectGenerationContextActionBridge,
+  type PluginProjectGenerationContextActionBridgeDependencies,
+  type PluginProjectGenerationContextDispatchPort,
+} from "./plugin-project-generation-context-action-bridge.ts";
+export {
   PluginProjectGenerationReadActionBridge,
   isPluginProjectGenerationReadActionBridge,
   type PluginProjectGenerationReadActionBridgeDependencies,

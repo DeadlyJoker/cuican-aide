@@ -3,6 +3,7 @@ import { Image, Plus } from "lucide-react";
 import type { ConceptController } from "./ConceptController";
 import { ConceptEditor } from "./ConceptEditor";
 import { ConceptGenerationView } from "./ConceptGenerationView";
+import { ConceptGenerationActions } from "./ConceptGenerationActions";
 import type { ProjectDetails } from "./creative-project-controller";
 
 /** Shows saved inputs, immutable history and the original task records for the selected revision. */
@@ -100,11 +101,21 @@ export function ConceptWorkbench({
         </>
       )}
       {snapshot.selection && !snapshot.editing && (
-        <ConceptGenerationView
-          controller={controller.generations}
-          name={snapshot.selection.asset.name}
-          blocked={locked}
-        />
+        <>
+          <ConceptGenerationActions controller={controller.submissions} />
+          <ConceptGenerationView
+            controller={controller.generations}
+            name={snapshot.selection.asset.name}
+            blocked={locked}
+            unconfirmed={
+              controller.submissions.getSnapshot().intentPhase === "pending" ||
+              controller.submissions.getSnapshot().intentPhase === "uncertain"
+            }
+          />
+        </>
+      )}
+      {!snapshot.selection && controller.submissions.getSnapshot().request && (
+        <ConceptGenerationActions controller={controller.submissions} />
       )}
       {snapshot.error && (
         <p className="detail-note" role="alert">

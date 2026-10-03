@@ -50,6 +50,30 @@ function positiveRevision(input: unknown): number {
   return input;
 }
 
+/** Shared saved-input identity; other host protocols cannot add execution selectors. */
+export function parseProjectGenerationUiReference(
+  input: unknown,
+): ProjectGenerationUiReference {
+  const reference = pluginUiFields(input, [
+    "projectId",
+    "assetId",
+    "assetRevision",
+    "expectedProjectRevision",
+    "expectedAssetMetadataRevision",
+  ]);
+  return Object.freeze({
+    projectId: parseCreativeProjectId(reference.projectId),
+    assetId: parseCreativeProjectId(reference.assetId),
+    assetRevision: positiveRevision(reference.assetRevision),
+    expectedProjectRevision: positiveRevision(
+      reference.expectedProjectRevision,
+    ),
+    expectedAssetMetadataRevision: positiveRevision(
+      reference.expectedAssetMetadataRevision,
+    ),
+  });
+}
+
 /** Detached bounded business references only; the host supplies prompt, target and identity. */
 export function parseProjectGenerationUiActionRequest(
   input: unknown,
@@ -61,13 +85,7 @@ export function parseProjectGenerationUiActionRequest(
     parsePluginUiJsonValue(envelope.input, { maxBytes: 24 * 1024 }),
     ["reference", "threadId", "expectedThreadRevision", "idempotencyKey"],
   );
-  const reference = pluginUiFields(value.reference, [
-    "projectId",
-    "assetId",
-    "assetRevision",
-    "expectedProjectRevision",
-    "expectedAssetMetadataRevision",
-  ]);
+  const reference = parseProjectGenerationUiReference(value.reference);
   const expectedThreadRevision = positiveRevision(value.expectedThreadRevision);
   // The accepted receipt must contain the next safe integer revision.
   if (expectedThreadRevision === Number.MAX_SAFE_INTEGER)
@@ -75,17 +93,7 @@ export function parseProjectGenerationUiActionRequest(
   return Object.freeze({
     action: PROJECT_GENERATION_UI_ACTIONS[0],
     input: Object.freeze({
-      reference: Object.freeze({
-        projectId: parseCreativeProjectId(reference.projectId),
-        assetId: parseCreativeProjectId(reference.assetId),
-        assetRevision: positiveRevision(reference.assetRevision),
-        expectedProjectRevision: positiveRevision(
-          reference.expectedProjectRevision,
-        ),
-        expectedAssetMetadataRevision: positiveRevision(
-          reference.expectedAssetMetadataRevision,
-        ),
-      }),
+      reference,
       // These follow the original task's UTF-8 opaque identifier bounds.
       threadId: parseExtensionIdempotencyKey(value.threadId),
       expectedThreadRevision,

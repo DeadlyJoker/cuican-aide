@@ -13,6 +13,10 @@ import {
 import type { ProjectGenerationReference } from "@crewon/domain";
 import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
 import type { CreatePublishedProjectTaskInput } from "./project-generation-execution-authority.ts";
+import {
+  getPublishedProjectGenerationReadiness,
+  type GetPublishedProjectGenerationReadinessInput,
+} from "./project-generation-readiness-application-service.ts";
 import { parseExtensionTaskIntent as parseIntent } from "./extension-task-intent.ts";
 import {
   createExtensionRunBinding,
@@ -180,6 +184,13 @@ export class ExtensionTaskApplicationService {
       null,
       captured.captured,
     );
+  }
+
+  /** Advisory saved-source readiness; no quote, reservation, Node task or Run is created. */
+  getPublishedProjectGenerationReadiness(
+    input: GetPublishedProjectGenerationReadinessInput,
+  ) {
+    return getPublishedProjectGenerationReadiness(this.#dependencies, input);
   }
 
   async #createTask(

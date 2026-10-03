@@ -30,6 +30,8 @@ import {
   PluginNodeHost,
   PluginProjectGenerationActionBridge,
   PluginProjectGenerationExecutionBridge,
+  PluginProjectGenerationContextActionBridge,
+  type PluginProjectGenerationContextDispatchPort,
   type PluginActivationCandidate,
   type PluginNodePreparedActivation,
   type PluginProjectGenerationDispatchPort,
@@ -55,6 +57,7 @@ import {
   generationSavedPrompt,
   generationSelectionMatches,
 } from "./installed-plugin-project-generation-support.ts";
+import { installedProjectGenerationReadiness } from "./installed-plugin-project-generation-readiness.ts";
 
 export type InstalledPluginProjectGenerationDependencies = Readonly<{
   installRoot: string;
@@ -97,13 +100,16 @@ export function isInstalledPluginProjectGenerationOwner(
 
 /** Owns actual target Node resources while retaining the original business UI invocation. */
 export class InstalledPluginProjectGenerationOwner
-  implements PluginProjectGenerationDispatchPort
+  implements
+    PluginProjectGenerationDispatchPort,
+    PluginProjectGenerationContextDispatchPort
 {
   readonly taskOwner: InstalledPluginTaskActionOwner;
   readonly actions: PluginUiActionPort;
   readonly hostUiServices: PluginUiHostServiceAvailabilityPort;
   readonly #dependencies: InstalledPluginProjectGenerationDependencies;
   readonly #bridge: PluginProjectGenerationActionBridge;
+  readonly #contexts: PluginProjectGenerationContextActionBridge;
   readonly #lifetime = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
   readonly #pendingActions = new Set<Promise<unknown>>();
@@ -111,6 +117,7 @@ export class InstalledPluginProjectGenerationOwner
   readonly #cleanupFailures: unknown[] = [];
   readonly #maximum: number;
   readonly #submit: ExtensionTaskApplicationService["createPublishedProjectTaskFromPlugin"];
+  readonly #readiness: ExtensionTaskApplicationService["getPublishedProjectGenerationReadiness"];
   #closing: Promise<void> | null = null;
 
   constructor(
@@ -171,6 +178,10 @@ export class InstalledPluginProjectGenerationOwner
       input.tasks,
       "createPublishedProjectTaskFromPlugin",
     );
+    this.#readiness = generationMethod(
+      input.tasks,
+      "getPublishedProjectGenerationReadiness",
+    );
     this.taskOwner = input.taskOwner;
     this.#dependencies = Object.freeze({
       installRoot: generationInstallRoot(input.installRoot),
@@ -213,7 +224,16 @@ export class InstalledPluginProjectGenerationOwner
       },
       committedTasks: input.committedTasks,
     });
-    const actions = this.#bridge.actions(input.taskOwner.actions);
+    this.#contexts = new PluginProjectGenerationContextActionBridge({
+      publications,
+      contexts: {
+        getReadiness: (request) => this.getReadiness(request),
+        isAvailable: (request) => this.isAvailable(request),
+      },
+    });
+    const actions = this.#contexts.actions(
+      this.#bridge.actions(input.taskOwner.actions),
+    );
     this.actions = Object.freeze({
       invoke: (context: Parameters<PluginUiActionPort["invoke"]>[0]) => {
         const descriptor = Object.getOwnPropertyDescriptor(context, "action");
@@ -221,7 +241,8 @@ export class InstalledPluginProjectGenerationOwner
           !descriptor ||
           !("value" in descriptor) ||
           typeof descriptor.value !== "string" ||
-          !descriptor.value.startsWith("crewon.project-generations.")
+          (!descriptor.value.startsWith("crewon.project-generations.") &&
+            !descriptor.value.startsWith("crewon.project-generation-contexts."))
         )
           return actions.invoke(context);
         this.#available();
@@ -234,13 +255,18 @@ export class InstalledPluginProjectGenerationOwner
         return work;
       },
     });
-    this.hostUiServices = this.#bridge.hostUiServices(metadataServices);
+    this.hostUiServices = this.#contexts.hostUiServices(
+      this.#bridge.hostUiServices(metadataServices),
+    );
     owners.add(this);
     Object.freeze(this);
   }
 
   supportsAction(action: string): boolean {
-    return action === "crewon.project-generations.v1.generateConcept";
+    return (
+      action === "crewon.project-generations.v1.generateConcept" ||
+      action === "crewon.project-generation-contexts.v1.getReadiness"
+    );
   }
 
   isAvailable(
@@ -273,10 +299,34 @@ export class InstalledPluginProjectGenerationOwner
     return work;
   }
 
+  getReadiness(
+    input: Parameters<
+      PluginProjectGenerationContextDispatchPort["getReadiness"]
+    >[0],
+  ) {
+    this.#available();
+    if (this.#pending.size >= this.#maximum)
+      throw new ApplicationError("conflict", "project_generation_host_busy");
+    const work = installedProjectGenerationReadiness({
+      dependencies: this.#dependencies,
+      dispatch: input,
+      assertAvailable: () => this.#available(),
+      lifetime: this.#lifetime.signal,
+      read: this.#readiness,
+    });
+    this.#pending.add(work);
+    void work.then(
+      () => this.#pending.delete(work),
+      () => this.#pending.delete(work),
+    );
+    return work;
+  }
+
   close(): Promise<void> {
     if (this.#closing !== null) return this.#closing;
     this.#lifetime.abort();
     this.#bridge.close();
+    this.#contexts.close();
     for (const execution of this.#executions) execution.close();
     return (this.#closing = Promise.allSettled([
       ...this.#pending,

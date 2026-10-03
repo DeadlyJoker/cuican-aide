@@ -1,6 +1,8 @@
 import type {
   PluginCreativeProjectClient,
   PluginProjectGenerationReadClient,
+  PluginProjectGenerationClient,
+  PluginProjectGenerationContextClient,
 } from "@crewon/plugin-sdk/ui";
 import type {
   CreativeProjectUiInputMap,
@@ -8,6 +10,7 @@ import type {
   PublicConceptRevision,
   PublicCreativeProject,
   PublicProjectBrief,
+  ProjectGenerationUiInput,
 } from "@crewon/plugin-sdk/contracts";
 import type { ProjectDetails } from "./creative-project-controller";
 
@@ -52,6 +55,9 @@ export type ConceptIntent =
 export type ConceptPorts = Readonly<{
   client: PluginCreativeProjectClient;
   generationClient: PluginProjectGenerationReadClient;
+  submissionClient: PluginProjectGenerationClient;
+  contextClient: PluginProjectGenerationContextClient;
+  restoreGenerationSource(request: ProjectGenerationUiInput): Promise<boolean>;
   projectBlocked(): boolean;
   projectCommitted(project: PublicCreativeProject): void;
   lockChanged(locked: boolean): void;

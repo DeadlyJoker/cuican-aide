@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import { createContextClient } from "./dist/external-project-generation-context-ui.js";
+import {
+  input as contextInput,
+  context,
+  requirement as contextRequirement,
+} from "./dist/external-project-generation-context-contracts.js";
 import { createMetadataClient } from "./dist/external-creative-project-ui.js";
 import {
   requirement,
@@ -107,4 +113,29 @@ assert.deepEqual(await readClient.getConceptGeneration(locator), readResponse);
 assert.equal(readCalls, 1);
 console.log(
   "Independent saved-source read helper recovered the original task.",
+);
+assert.deepEqual(contextRequirement, {
+  service: "crewon.project-generation-contexts",
+  apiVersion: "1",
+  optional: true,
+});
+assert.equal(context.threadReady, false);
+let contextCalls = 0;
+const ready = {
+  reference: contextInput.reference,
+  readiness: { outcome: "ready" },
+};
+const contexts = createContextClient({
+  async invoke(action, input) {
+    assert.equal(action, "crewon.project-generation-contexts.v1.getReadiness");
+    assert.deepEqual(input, contextInput);
+    contextCalls++;
+    return ready;
+  },
+});
+assert.equal(contextCalls, 0);
+assert.deepEqual(await contexts.getReadiness(contextInput), ready);
+assert.equal(contextCalls, 1);
+console.log(
+  "Independent readiness helper returned a bounded hint without submitting a task.",
 );

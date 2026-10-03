@@ -17,6 +17,7 @@ import {
   type ProjectSnapshot,
 } from "./creative-project-controller";
 import { ConceptWorkbench } from "./ConceptWorkbench";
+import { ConceptGenerationActions } from "./ConceptGenerationActions";
 
 function SaveFeedback({
   controller,
@@ -141,9 +142,19 @@ export function ShortDramaPersistentWorkbench({
         </header>
         <div className="preview-strip">
           <span>项目与需求版本会保存，可在重新进入模块后读取</span>
-          <span>生图能力尚未接入，当前操作不创建生成任务</span>
+          <span>
+            {controller.concepts.submissions.hasHostContext
+              ? "生成仅使用已保存的概念版本，实际准入由宿主核验"
+              : "生图能力尚未接入，当前操作不创建生成任务"}
+          </span>
         </div>
         <div className="drama-content">
+          {!details &&
+            controller.concepts.submissions.getSnapshot().request && (
+              <ConceptGenerationActions
+                controller={controller.concepts.submissions}
+              />
+            )}
           {snapshot.phase === "waiting" ? (
             <p className="detail-note" role="status">
               正在等待模块就绪…
