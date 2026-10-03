@@ -201,6 +201,12 @@ export async function createProductionPostgresControlApi(
       config.pluginConfiguration === undefined
     )
       throw new Error("project_generation_read_ui_reader_required");
+    if (
+      creativeProjects?.generationReads !== undefined &&
+      config.pluginTasks === undefined &&
+      config.pluginConfiguration === undefined
+    )
+      throw new Error("project_generation_read_composition_required");
     assertProductionProjectSelectionComposition(config, creativeProjects);
     assertProjectQueryExecutionComposition({
       queries: creativeProjects?.pluginQueries,

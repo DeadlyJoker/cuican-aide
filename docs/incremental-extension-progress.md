@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：正式 Production Main 配置与三次真实进程恢复
+
+原 Main 已通过私有 `CREWON_PROJECT_COMPOSITION_CONFIG_PATH` 加载项目、生成/查询/选用及三类恢复批准，注入与原 Application 相同的真实动态 PDP。配置深冻结并核对每种原动作的完整 source publication；文件严格限制当前 OS 用户、单硬链接、私有权限、规范路径、64 KiB 和读取前后身份不变。未知身份、资金、URL 或代码字段拒绝。可选 `CREWON_CONTROL_DATABASE_MAX_POOL_SIZE=1` 传入原 Store，未配置保持旧默认；这两个新 opt-in 都拒绝 Standalone。缺少原 task/configuration reader 的历史读取配置现在在业务数据库打开前拒绝。原 App、用户栏、设置、两侧栏及共享 CSS 未修改。
+
+真实原 `main.ts` 在同一隔离 PostgreSQL 上实际启动、正常停止并 join 三次，分别核验新 mount、旧 mount 失效、持久 realm/账户/完整原 pin，以及生成、查询和选用的原 key、CAS 和请求体。stage 的 SQL COMMIT 后丢失实际客户端 ACK，没有业务 invoke；冷读取仅 GET、不产生 Run 或费用。父 Store 和三个 Main 子进程均实际观测 `max=1`、`total<=1` 及成功 acquire，不能只凭父进程选项推定子进程池大小。
+
+图片选用使用原 installed owner、实际核验的 Krea2 2.0.0 字节和不透明业务提交事实。SQL trigger 让独立的恢复确认事务失败后，HTTP 仍返回原真实成功，日志记录诊断；第三个进程读到原 UNKNOWN。显式使用原 key 重放核验后转为 accepted，返回原图片/回执且不覆盖另一次已提交的较新当前选用。生成与查询仅验证真实 owner 装配及三类暂存，没有执行 Worker、模型或供应商。
+
+分组检查均零跳过，存在重叠、不相加：新配置/私有文件/pool **11/11**、实际 Main 负向启动 **4/4**、原环境/身份/PDP/项目 factory 兼容 **44/44**、真实三次 Main 恢复 **1/1**、旧 source registry **5/5**。类型、boundary、格式及 diff 检查通过。首次进程用例末尾失败来自只观察 Promise 而遗漏原 callback Pool.connect 的 acquire；随后新增 SQL audit 又遇到 pg 已解码的 JSONB 对象。两项只修观测夹具，保留全部实际池与 audit 断言；业务代码未为通过检查降级。统一证据为 `output/extensions/checks/production-main-recovery-proof-20261004.json`。
+
+自有 PostgreSQL 49877 在全部消费者物理结束后检查 client backend 为 0，再正常停止；核验实际 PID 退出并删除准确数据/socket 目录。原用户完整 App 3210/5730 保持运行，设置页再次实际打开。测试身份/profile/PDP、原付费历史、图片结果和余额均为具名夹具，不代表生产身份或资金。
+
+下一步发布声明必需恢复能力的新独立短剧包，并在原完整 App 中联合验收冷挂载、真实在线保存/生成/查询/选用和重启恢复。旧 5/6/7 包保留，缺恢复服务的 Standalone/Native 不切换到新包。原 `createThread` 仍不在三类日志内；多来源 UNKNOWN 的人工解冲突、真实个人插件钱包/价格权威、第二个实际企业 API、完整 S0/E5 仍未完成，完整目标继续进行。
+
 ## 2026-10-04：原请求持久恢复协议、SQL 日志与宿主接线
 
 新增独立 `crewon.plugin-ui-recovery@1`，沿原 ControlClient、BFF、已安装挂载及业务动作保存生成、查询、图片选用的原请求。Host 首次 ready 前完整恢复三个通道；实际写动作先确认 stage 的 SQL ACK，再沿原业务 owner 执行。注册回复不明时不派发业务请求，冷恢复不自动提交，不换 key 或 CAS。旧插件没有声明时不增加恢复 I/O，原账户、设置、两侧栏、App 和共享样式本阶段没有修改。协议见[原请求持久恢复](./plugin-ui-durable-recovery-protocol.md)。

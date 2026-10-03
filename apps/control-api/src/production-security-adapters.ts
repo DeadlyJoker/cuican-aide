@@ -5,12 +5,14 @@ import {
   type AutomationAuthorizationPort,
   type AuthorizationDecision,
   type AuthorizationPort,
+  type CreativeProjectAuthorizationPort,
   type PluginInstallationAuthorizationPort,
 } from "@crewon/application";
 
 export type ControlAuthorizationRequest =
   | Parameters<AuthorizationPort["authorize"]>[0]
   | Parameters<AutomationAuthorizationPort["authorize"]>[0]
+  | Parameters<CreativeProjectAuthorizationPort["authorize"]>[0]
   | Parameters<PluginInstallationAuthorizationPort["authorize"]>[0];
 
 import {
@@ -354,7 +356,10 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
 }
 
 export class DynamicPolicyAuthorization
-  implements AuthorizationPort, AutomationAuthorizationPort
+  implements
+    AuthorizationPort,
+    AutomationAuthorizationPort,
+    CreativeProjectAuthorizationPort
 {
   readonly #policy: PolicyDecisionPort;
   readonly #deadline: SecurityDeadlinePort;

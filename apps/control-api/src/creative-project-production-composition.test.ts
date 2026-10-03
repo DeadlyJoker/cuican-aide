@@ -15,6 +15,7 @@ import {
 } from "./production-composition.ts";
 import { pluginUiProductionIdentity } from "./production-plugin-ui.test-support.ts";
 import { pluginRouteActor } from "./plugin-control-route.test-support.ts";
+import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
 
 const root = "/api/v1/creative-projects";
 const disabledScans = {
@@ -77,6 +78,130 @@ test("production project opt-in rejects missing and malformed borrowed policy be
   }
   assert.equal(opened, 0);
   assert.equal(authentication.reads(), 0);
+});
+
+test("production explicit generation reader rejects missing task/configuration owner before database or policy I/O", async (t) => {
+  let opened = 0;
+  let decisions = 0;
+  t.mock.method(PostgresDomainStore, "open", async () => {
+    opened++;
+    throw new Error("unexpected_database_open");
+  });
+  const authentication = pluginUiProductionIdentity();
+  const policy = {
+    authorize: async () => {
+      decisions++;
+      return { outcome: "allow" as const };
+    },
+  };
+  await assert.rejects(
+    createProductionPostgresControlApi({
+      connectionString: "unusable-connection",
+      identity: authentication.identity,
+      authorization: policy,
+      creativeProjects: {
+        authorization: policy,
+        generationReads: { version: "crewon.project-generation-read.v1" },
+      },
+      artifactStore: new InMemoryArtifactStore(),
+      artifactEncryptionKeyId: "fixture-key",
+    }),
+    /^Error: project_generation_read_composition_required$/u,
+  );
+  assert.equal(opened, 0);
+  assert.equal(authentication.reads(), 0);
+  assert.equal(decisions, 0);
+});
+
+test("production generation read UI preserves its original missing-reader error priority", async (t) => {
+  let opened = 0;
+  let decisions = 0;
+  t.mock.method(PostgresDomainStore, "open", async () => {
+    opened++;
+    throw new Error("unexpected_database_open");
+  });
+  const authentication = pluginUiProductionIdentity();
+  const policy = {
+    authorize: async () => {
+      decisions++;
+      return { outcome: "allow" as const };
+    },
+  };
+  const publication = {
+    pluginId: "fixture.drama",
+    packageDigest: `sha256:${"a".repeat(64)}`,
+    contributionId: "workbench",
+  };
+  await assert.rejects(
+    createProductionPostgresControlApi({
+      connectionString: "unusable-connection",
+      identity: authentication.identity,
+      authorization: policy,
+      creativeProjects: {
+        authorization: policy,
+        generationReads: { version: "crewon.project-generation-read.v1" },
+        generationReadUi: { publications: [publication] },
+      },
+      pluginUi: {
+        configuration: parseProductionPluginUiConfiguration({
+          installRoot: "/private/fixture-installed",
+          profileAuthority: {
+            url: "https://authority.example/profile",
+            serviceToken: "p".repeat(32),
+          },
+          policyAuthority: {
+            url: "https://authority.example/policy",
+            serviceToken: "s".repeat(32),
+          },
+          timeoutMs: 1000,
+          publications: [
+            {
+              pluginId: publication.pluginId,
+              packageDigest: publication.packageDigest,
+              publisherId: "fixture.publisher",
+              publicAssets: ["ui/index.js"],
+            },
+          ],
+        }),
+      },
+      artifactStore: new InMemoryArtifactStore(),
+      artifactEncryptionKeyId: "fixture-key",
+    }),
+    /^Error: project_generation_read_ui_reader_required$/u,
+  );
+  assert.equal(opened, 0);
+  assert.equal(authentication.reads(), 0);
+  assert.equal(decisions, 0);
+});
+
+test("production metadata project management without generation reads still reaches the original database boundary", async (t) => {
+  let opened = 0;
+  let decisions = 0;
+  t.mock.method(PostgresDomainStore, "open", async () => {
+    opened++;
+    throw new Error("fixture_database_boundary_reached");
+  });
+  const authentication = pluginUiProductionIdentity();
+  const policy = {
+    authorize: async () => {
+      decisions++;
+      return { outcome: "allow" as const };
+    },
+  };
+  await assert.rejects(
+    createProductionPostgresControlApi({
+      connectionString: "unusable-connection",
+      identity: authentication.identity,
+      authorization: policy,
+      creativeProjects: { authorization: policy },
+      artifactStore: new InMemoryArtifactStore(),
+      artifactEncryptionKeyId: "fixture-key",
+    }),
+    /^Error: fixture_database_boundary_reached$/u,
+  );
+  assert.equal(opened, 1);
+  assert.equal(authentication.reads(), 0);
+  assert.equal(decisions, 0);
 });
 
 async function postgresFixture(t: TestContext) {

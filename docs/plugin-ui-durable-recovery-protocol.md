@@ -1,6 +1,6 @@
 # 已安装插件原请求持久恢复协议
 
-日期：2026-10-04。状态：协议、SQL 日志、网页/桌面 renderer 宿主和显式 Production Control 组装已实现并通过分层验证。正式 Main、Standalone、Native 进程入口尚未接线，完整应用重启流程仍未验收，不代表 S0 已完成。当前证据见[实施进度](./incremental-extension-progress.md)。
+日期：2026-10-04。状态：协议、SQL 日志、网页/桌面 renderer 宿主及正式 Production Main 启动配置已实现。实际 Main 三次启动与原请求冷恢复已通过；生成/查询仅验证装配与暂存，图片选用验证真实业务提交和原键重放。Standalone/Native 未接入此配置，完整 App 在线生成及打包版流程仍未验收，不代表 S0 已完成。当前证据见[实施进度](./incremental-extension-progress.md)。
 
 ## 协议边界
 
@@ -33,6 +33,31 @@
 每个账户最多 32 条记录。新增请求只能淘汰最早的 accepted/refused，不能丢弃未确认请求。同一 kind/plugin/contribution 的未确认请求阻止新 key，跨窗口、档案或包版本也不能绕过。相同 key 的请求体必须完全一致。记录序号来自账户 SQL 锁，不能依赖客户端时间排序。
 
 注册与派发分别在同库事务内锁实际已安装 pin，并在 COMMIT 前复验调用存活和当前授权。PostgreSQL 复用借出的连接，支持 maxPoolSize=1，不在事务内再借连接；payload verifier 为同步纯函数，不调用网络或 SQL。身份与策略仍使用既有外部 authority fence，不能借恢复提示跳过当前检查。SQLite 在同步写事务前完成异步检查，并在 COMMIT 前保留同步 active fence。不完整或未知 schema 是错误，不能伪装为空记录。
+
+## 正式 Production Main 接线
+
+原 `apps/control-api/src/main.ts` 通过可选 `CREWON_PROJECT_COMPOSITION_CONFIG_PATH` 加载项目与恢复的部署数据。未配置时不读取新文件或创建项目服务；原默认启动保持。该路径仅支持 Production PostgreSQL，Standalone 明确拒绝。原 UI、[安装管理](./installed-plugin-service-startup.md)、[任务/配置启动](./installed-plugin-task-startup.md)及 BFF/身份/PDP 配置继续独立提供。
+
+文件必须使用绝对规范路径，是当前 OS 用户拥有的非空普通文件，只有一个硬链接且没有组/其他用户权限。路径不能经过符号链接；文件不超过 64 KiB，必须是有效 UTF-8 JSON。读取前后核验原 inode、内容大小、权限和纳秒时间，文件替换或未知字段导致启动失败。macOS 的 `/var` 别名需要先转换为真实 `/private/var` 路径。
+
+顶层只接受 `schemaVersion: "crewon.production-project-composition.v1"` 和以下可选字段，复用原配置结构：
+
+| 字段                | 含义                                                               |
+| ------------------- | ------------------------------------------------------------------ |
+| `pluginUi`          | 项目元数据动作批准的包/贡献列表                                    |
+| `pluginGenerations` | 原生成的 source→target 包/贡献/动作映射                            |
+| `pluginQueries`     | 原查询的 source→target 映射；必须配置 `generationReads`            |
+| `generationReads`   | `version: "crewon.project-generation-read.v1"`                     |
+| `generationReadUi`  | 原读取动作批准的包/贡献列表；必须配置 `generationReads`            |
+| `resultSelections`  | 原选用版本、`adapter: "comfyui-krea2"` 和真实业务身份 `identities` |
+| `selectionUi`       | 原选用动作批准的包/贡献列表；必须配置 `resultSelections`           |
+| `uiRecovery`        | 原恢复版本及包/贡献/三种原动作列表                                 |
+
+`identities` 中的每项只有 `pluginVersion`、`manifestDigest` 和 `implementationDigest`，来自已核验的实际 Krea2 业务包。选用复用原纯图片验证器；此文件不接受供应商 URL、执行代码、授权端口、账户、付款人、钱包或报价。原供应商地址仍从原持久化业务配置核验。
+
+每个恢复动作必须有同一完整 source publication 的生成、查询或选用 owner 配置。读取能力必须有实际 task/configuration reader；完整生成/查询仍需要真实任务配置和批准的 UI publication。缺失这些依赖在打开业务数据库前拒绝。Main 注入与其他原 Application 服务相同的真实 `DynamicPolicyAuthorization`，不会根据部署 JSON 授权用户。
+
+可选 `CREWON_CONTROL_DATABASE_MAX_POOL_SIZE` 仅接受 Production 下的规范十进制 `1`–`64`。缺省保持原 Pool 默认值；Standalone、前导零、空白、指数或越界值拒绝。它传给原 PostgreSQL Store，不创建第二个数据库或执行循环。
 
 ## 未知结果与确认
 

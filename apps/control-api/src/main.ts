@@ -10,6 +10,11 @@ import {
 import { createProductionPostgresControlApi } from "./production-composition.ts";
 import { resolveProductionPluginUiEnvironment } from "./production-plugin-ui-environment.ts";
 import { resolveProductionPluginInstallationEnvironment } from "./production-plugin-installation-environment.ts";
+import { resolveProductionDatabaseMaxPoolSize } from "./production-database-environment.ts";
+import {
+  loadProductionProjectEnvironment,
+  composeProductionProjectStartup,
+} from "./production-project-environment.ts";
 import { loadInstalledPluginConfigurationEnvironment } from "./installed-plugin-configuration-environment.ts";
 import { loadInstalledPluginTaskEnvironment } from "./installed-plugin-task-environment.ts";
 import {
@@ -56,6 +61,14 @@ const installedPluginTaskConfiguration =
   await loadInstalledPluginTaskEnvironment(process.env, securityMode);
 const installedPluginConfiguration =
   await loadInstalledPluginConfigurationEnvironment(process.env, securityMode);
+const projectStartup = await loadProductionProjectEnvironment(
+  process.env,
+  securityMode,
+);
+const maximumDatabasePoolSize = resolveProductionDatabaseMaxPoolSize(
+  process.env,
+  securityMode,
+);
 if (
   installedPluginConfiguration !== undefined &&
   installedPluginTaskConfiguration !== undefined
@@ -194,6 +207,10 @@ try {
       connectionString: productionConnectionString,
       identity,
       authorization,
+      ...composeProductionProjectStartup(projectStartup, authorization),
+      ...(maximumDatabasePoolSize === undefined
+        ? {}
+        : { maxPoolSize: maximumDatabasePoolSize }),
       ...(installedPluginConfiguration === undefined
         ? {}
         : {

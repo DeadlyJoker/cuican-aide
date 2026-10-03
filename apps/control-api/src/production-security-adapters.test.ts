@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { AuthorizationPort } from "@crewon/application";
+import type {
+  AuthorizationPort,
+  CreativeProjectAuthorizationPort,
+} from "@crewon/application";
 
 import { ControlApiIdentityError } from "./control-api-ports.ts";
 import {
@@ -245,6 +248,116 @@ test("applies the configured policy deadline", async () => {
   );
   assert.equal(deadline.timeoutMs, 987);
 });
+
+test("project policy locally denies tenant and space mismatches for every project action", async () => {
+  let calls = 0;
+  const authorization: CreativeProjectAuthorizationPort =
+    new DynamicPolicyAuthorization({
+      policy: {
+        async decide() {
+          calls += 1;
+          return { outcome: "allow" };
+        },
+      },
+      timeoutMs: 2_000,
+    });
+  for (const action of PROJECT_ACTIONS) {
+    const request = projectAuthorizationRequest(action);
+    for (const field of ["tenantId", "spaceId"] as const) {
+      assert.deepEqual(
+        await authorization.authorize({
+          ...request,
+          resource: { ...request.resource, [field]: "foreign-scope" },
+        }),
+        { outcome: "deny", reasonCode: "actor_scope_mismatch" },
+      );
+    }
+  }
+  assert.equal(calls, 0);
+});
+
+test("project policy preserves the authority's denial and rejects malformed decisions", async () => {
+  const requests: Parameters<PolicyDecisionPort["decide"]>[0][] = [];
+  let response: unknown = {
+    outcome: "deny",
+    reasonCode: "project_access_revoked",
+  };
+  const authorization: CreativeProjectAuthorizationPort =
+    new DynamicPolicyAuthorization({
+      policy: {
+        async decide(request) {
+          requests.push(request);
+          return response;
+        },
+      },
+      timeoutMs: 2_000,
+    });
+  for (const action of PROJECT_ACTIONS) {
+    const request = projectAuthorizationRequest(action);
+    assert.deepEqual(await authorization.authorize(request), response);
+    const actual = requests.at(-1)!;
+    const { signal, ...body } = actual;
+    assert.equal(signal.aborted, false);
+    assert.deepEqual(body, request);
+  }
+  response = { outcome: "allow", price: "not-a-policy-field" };
+  for (const action of PROJECT_ACTIONS)
+    await assert.rejects(
+      authorization.authorize(projectAuthorizationRequest(action)),
+      /policy_decision_invalid/u,
+    );
+});
+
+test("every project action uses the original configured policy deadline", async () => {
+  let calls = 0;
+  const deadline = new RejectingDeadline();
+  const authorization: CreativeProjectAuthorizationPort =
+    new DynamicPolicyAuthorization({
+      policy: {
+        async decide() {
+          calls += 1;
+          return { outcome: "allow" };
+        },
+      },
+      timeoutMs: 987,
+      deadline,
+    });
+  for (const action of PROJECT_ACTIONS) {
+    await assert.rejects(
+      authorization.authorize(projectAuthorizationRequest(action)),
+      /test_deadline/u,
+    );
+    assert.equal(deadline.timeoutMs, 987);
+  }
+  assert.equal(calls, 0);
+});
+
+const PROJECT_ACTIONS = [
+  "creativeProject:create",
+  "creativeProject:list",
+  "creativeProject:read",
+  "creativeProject:write",
+] as const;
+
+function projectAuthorizationRequest(
+  action: Parameters<
+    CreativeProjectAuthorizationPort["authorize"]
+  >[0]["action"],
+): Parameters<CreativeProjectAuthorizationPort["authorize"]>[0] {
+  return {
+    actor: ACTOR,
+    action,
+    resource: {
+      kind: "creativeProject",
+      tenantId: ACTOR.tenantId,
+      spaceId: ACTOR.spaceId,
+      projectId:
+        action === "creativeProject:create" || action === "creativeProject:list"
+          ? null
+          : "project-1",
+    },
+  };
+}
 
 class RejectingDeadline implements SecurityDeadlinePort {
   timeoutMs: number | null = null;

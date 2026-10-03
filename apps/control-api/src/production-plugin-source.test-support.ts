@@ -46,12 +46,14 @@ export async function productionSourceFixture(
     > & {
       validNode?: boolean;
       requiredService?: string;
+      requires?: PluginPackageDescriptor["requires"];
       uiOnly?: boolean;
     } = {},
   ) {
     const directory = join(root, sourceId);
     await mkdir(directory, { mode: 0o700 });
-    const { validNode, requiredService, uiOnly, ...metadata } = options;
+    const { validNode, requiredService, requires, uiOnly, ...metadata } =
+      options;
     const bytes = Buffer.from(
       validNode
         ? `import {appendFileSync} from 'node:fs';const log=(value)=>appendFileSync(${JSON.stringify(marker)},${JSON.stringify(sourceId)}+':'+value+'\\n');log('load');export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(options.pluginId ?? "test.report")},setup(){log('setup');return {dispose(){log('dispose');}};}};`
@@ -73,9 +75,11 @@ export async function productionSourceFixture(
         ui: uiOnly ? { path: entry, mode: "trustedModule" } : null,
       },
       businessManifestPath: null,
-      requires: requiredService
-        ? [{ service: requiredService, apiVersion: "1", optional: false }]
-        : [],
+      requires:
+        requires ??
+        (requiredService
+          ? [{ service: requiredService, apiVersion: "1", optional: false }]
+          : []),
       provides: [],
       contributions: uiOnly
         ? [
