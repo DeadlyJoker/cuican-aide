@@ -128,6 +128,7 @@ export * from "./plugin-query-task-support.ts";
 export * from "./extension-configuration-application-service.ts";
 export * from "./extension-execution-authorization.ts";
 export * from "./extension-task-application-service.ts";
+export type { ProjectGenerationApplicationPorts } from "./project-generation-application-support.ts";
 export * from "./extension-read-application-service.ts";
 export * from "./creative-project-commands.ts";
 export * from "./creative-project-store-port.ts";

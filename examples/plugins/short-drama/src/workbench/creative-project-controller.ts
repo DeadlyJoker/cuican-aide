@@ -1,4 +1,5 @@
 import type { PluginCreativeProjectClient } from "@crewon/plugin-sdk/ui";
+import { ConceptController } from "./ConceptController";
 import type {
   CreativeProjectUiInputMap,
   PublicCreativeProject,
@@ -40,6 +41,7 @@ export type ProjectSnapshot = Readonly<{
   briefs: readonly PublicProjectBrief[];
   nextBriefRevision: number | null;
   loadingBriefs: boolean;
+  conceptLocked: boolean;
 }>;
 
 export function briefBytes(text: string): number {
@@ -92,6 +94,7 @@ function mergeProjects(
 
 /** Public metadata only. The dispatcher supplies identity and authorization; no local demo fallback. */
 export class CreativeProjectController {
+  readonly concepts: ConceptController;
   #client: PluginCreativeProjectClient;
   #listeners = new Set<() => void>();
   #ready = false;
@@ -119,10 +122,29 @@ export class CreativeProjectController {
     briefs: [],
     nextBriefRevision: null,
     loadingBriefs: false,
+    conceptLocked: false,
   };
 
   constructor(client: PluginCreativeProjectClient) {
     this.#client = client;
+    this.concepts = new ConceptController({
+      client,
+      projectBlocked: () =>
+        Boolean(this.#write || this.#intent || !this.#ready),
+      lockChanged: (conceptLocked) => this.#update({ conceptLocked }),
+      projectCommitted: (project) => {
+        const details = this.#snapshot.details;
+        this.#update({
+          projects: mergeProjects(this.#snapshot.projects, [project]),
+          ...(details?.project.projectId === project.projectId &&
+          details.project.revision <= project.revision
+            ? { details: { ...details, project } }
+            : {}),
+        });
+      },
+      refreshProject: (projectId, signal) =>
+        this.#refreshConceptProject(projectId, signal),
+    });
   }
   getSnapshot = (): ProjectSnapshot => this.#snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -132,6 +154,7 @@ export class CreativeProjectController {
   #update(change: Partial<ProjectSnapshot>) {
     if (this.#disposed) return;
     this.#snapshot = { ...this.#snapshot, ...change };
+    this.concepts.bindProject(this.#snapshot.details, this.#ready);
     for (const listener of this.#listeners) listener();
   }
   #current(controller: AbortController): boolean {
@@ -165,11 +188,19 @@ export class CreativeProjectController {
     this.#disposed = true;
     this.#ready = false;
     this.#abort();
+    this.concepts.dispose();
     this.#listeners.clear();
   }
 
   async loadProjects(state = this.#snapshot.state, more = false) {
-    if (!this.#ready || this.#disposed || this.#write || this.#intent) return;
+    if (
+      !this.#ready ||
+      this.#disposed ||
+      this.#write ||
+      this.#intent ||
+      this.concepts.locked
+    )
+      return;
     const cursor = more ? this.#snapshot.nextCursor : null;
     if (more && !cursor) return;
     this.#list?.abort();
@@ -206,7 +237,7 @@ export class CreativeProjectController {
     }
   }
   closeProject() {
-    if (this.#write || this.#intent) return;
+    if (this.#write || this.#intent || this.concepts.locked) return;
     this.#detail?.abort();
     this.#history?.abort();
     this.#update({ details: null, opening: false, error: null, notice: null });
@@ -216,6 +247,7 @@ export class CreativeProjectController {
       !this.#ready ||
       this.#disposed ||
       this.#write ||
+      this.concepts.locked ||
       (this.#intent && !preserveDraft)
     )
       return;
@@ -266,11 +298,41 @@ export class CreativeProjectController {
       !details ||
       details.project.state === "archived" ||
       this.#write ||
+      this.concepts.locked ||
       this.#intent
     )
       return;
     this.#drafts.set(details.project.projectId, draft);
     this.#update({ draft, notice: null });
+  }
+  async #refreshConceptProject(
+    projectId: string,
+    signal: AbortSignal,
+  ): Promise<ProjectDetails | null> {
+    const current = () =>
+      this.#ready &&
+      !this.#disposed &&
+      !signal.aborted &&
+      this.#snapshot.details?.project.projectId === projectId;
+    const { project } = await this.#client.getProject(
+      { projectId },
+      { signal },
+    );
+    if (!current()) return null;
+    const { brief } = await this.#client.getBrief(
+      { projectId, briefRevision: project.latestBriefRevision },
+      { signal },
+    );
+    if (!current()) return null;
+    const previous = this.#snapshot.details!;
+    if (previous.project.revision > project.revision) return previous;
+    const details = { project, brief };
+    // Refresh the confirmed source and CAS while preserving the independent requirement draft.
+    this.#update({
+      details,
+      projects: mergeProjects(this.#snapshot.projects, [project]),
+    });
+    return details;
   }
   async loadBriefs(more = false) {
     const details = this.#snapshot.details;
@@ -326,7 +388,9 @@ export class CreativeProjectController {
       !validTitle(title) ||
       !validBrief(briefText) ||
       this.#intent ||
-      this.#write
+      this.concepts.locked ||
+      this.#write ||
+      this.concepts.locked
     )
       return;
     await this.#commit(
@@ -372,7 +436,7 @@ export class CreativeProjectController {
   }
   async setProjectState() {
     const { details, failure, conflictRefreshed } = this.#snapshot;
-    if (!details || this.#write) return;
+    if (!details || this.#write || this.concepts.locked) return;
     if (
       this.#intent &&
       (failure !== "conflict" ||
@@ -432,7 +496,8 @@ export class CreativeProjectController {
     }
   }
   async #commit(intent: MutationIntent) {
-    if (!this.#ready || this.#disposed || this.#write) return;
+    if (!this.#ready || this.#disposed || this.#write || this.concepts.locked)
+      return;
     this.#intent = intent;
     this.#list?.abort();
     this.#detail?.abort();
@@ -507,7 +572,11 @@ export class CreativeProjectController {
           : "保存结果尚未确认，请重试原请求。",
       });
     } finally {
-      if (this.#write === controller) this.#write = null;
+      if (this.#write === controller) {
+        this.#write = null;
+        // A newly created project can read its inputs after the project write settles.
+        this.concepts.bindProject(this.#snapshot.details, this.#ready);
+      }
     }
   }
 }

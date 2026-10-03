@@ -1,3 +1,16 @@
+import {
+  quoteExtensionTaskGeneration,
+  assertExtensionTaskCreditPrincipal,
+} from "./extension-task-credit-support.ts";
+import {
+  captureProjectGenerationTask,
+  commitProjectGenerationTask,
+  projectGenerationTaskAdmission,
+  type CapturedProjectGenerationTask,
+  type ProjectGenerationApplicationPorts,
+} from "./project-generation-application-support.ts";
+import type { ProjectGenerationReference } from "@crewon/domain";
+import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
 import { parseExtensionTaskIntent as parseIntent } from "./extension-task-intent.ts";
 import {
   createExtensionRunBinding,
@@ -10,9 +23,6 @@ import {
   validateExtensionTaskInput,
   type ExtensionRunBinding,
   type WorkflowSchemaValue,
-  createExtensionCreditAdmission,
-  assertExtensionCreditAdmission,
-  type ExtensionCreditAdmission,
   type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
@@ -83,6 +93,8 @@ export type ExtensionTaskApplicationDependencies = Readonly<{
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
   creditQuotes?: ExtensionCreditQuotePort;
+  /** Explicit project generation integration; ordinary tasks never read project metadata. */
+  creativeProjects?: ProjectGenerationApplicationPorts;
 }>;
 type Dependencies = ExtensionTaskApplicationDependencies;
 
@@ -137,11 +149,29 @@ export class ExtensionTaskApplicationService {
     );
   }
 
+  /** Internal host-issued project source and authority; the original public task body stays strict. */
+  async createProjectTaskFromPlugin(
+    actor: ActorContext,
+    command: CreateExtensionTaskCommand,
+    pin: PluginTaskAdmissionPin,
+    reference: ProjectGenerationReference,
+    authority: CreativeProjectCommitAuthority,
+  ) {
+    return this.#createTask(
+      actor,
+      command,
+      checkedPluginTaskPin(pin),
+      null,
+      captureProjectGenerationTask(reference, authority),
+    );
+  }
+
   async #createTask(
     actorInput: ActorContext,
     input: CreateExtensionTaskCommand,
     pin: PluginTaskAdmissionPin | null,
     commitAuthority: PluginTaskCommitAuthorityPort | null = null,
+    projectTask: CapturedProjectGenerationTask | null = null,
   ) {
     return extensionUseCase(async () => {
       const actor =
@@ -191,6 +221,19 @@ export class ExtensionTaskApplicationService {
         idempotencyKey,
         intent,
       };
+      const generation =
+        projectTask === null
+          ? null
+          : projectGenerationTaskAdmission({
+              captured: projectTask,
+              projects: this.#dependencies.creativeProjects,
+              extensions: this.#dependencies.extensions,
+              executionAuthorization: this.#dependencies.authorization,
+              digester: this.#dependencies.digester,
+              actor,
+              command,
+            });
+      if (generation !== null) await generation.assertCurrent();
       await authorizeExtension(
         this.#dependencies.authorization,
         actor,
@@ -209,7 +252,7 @@ export class ExtensionTaskApplicationService {
         intent.kind === "query"
           ? await this.#source(actor, scope.pluginId, intent)
           : null;
-      const receipt =
+      const taskReceipt =
         pin === null
           ? {
               actorId: actor.actorId,
@@ -225,13 +268,16 @@ export class ExtensionTaskApplicationService {
               ),
             }
           : pluginTaskReceipt(actor, command, pin, this.#dependencies.digester);
+      const receipt =
+        generation === null ? taskReceipt : generation.receipt(taskReceipt);
       const previous =
         await this.#dependencies.extensions.loadExtensionTurnReceipt({
           ...scope,
           receipt,
         });
       if (previous !== null) {
-        this.#assertCreditPrincipal(
+        assertExtensionTaskCreditPrincipal(
+          this.#dependencies.digester,
           actor,
           previous.creditAdmission,
           previous.binding,
@@ -251,6 +297,11 @@ export class ExtensionTaskApplicationService {
             receipt,
             digester: this.#dependencies.digester,
           });
+        }
+        if (generation !== null) {
+          await generation.assertSaved(previous.binding, receipt);
+          await generation.assertCurrent();
+          generation.assertActive();
         }
         return previous;
       }
@@ -363,6 +414,7 @@ export class ExtensionTaskApplicationService {
         intent.kind === "generate"
           ? validateExtensionTaskInput(registration.manifest, intent.input)
           : { kind: "query", operationId: intent.operationId };
+      if (generation !== null) await generation.assertNewInput(taskInput);
       if (queryHost !== undefined && source !== null)
         await this.#authorizeQuerySource(actor, scope.pluginId, source);
       const readinessInput = Object.freeze({
@@ -454,7 +506,8 @@ export class ExtensionTaskApplicationService {
       const creditAdmission =
         intent.kind === "generate" &&
         this.#dependencies.creditQuotes !== undefined
-          ? await this.#quoteGeneration(
+          ? await quoteExtensionTaskGeneration(
+              this.#dependencies,
               actor,
               binding,
               receipt,
@@ -476,6 +529,9 @@ export class ExtensionTaskApplicationService {
         binding,
         receipt,
         expectedActivationRevision: activation.revision,
+        ...(generation === null
+          ? {}
+          : { projectGeneration: generation.reference }),
         ...(creditAdmission === undefined ? {} : { creditAdmission }),
         ...(pin === null
           ? {}
@@ -492,8 +548,17 @@ export class ExtensionTaskApplicationService {
         await commitAuthority.assertCurrent({ actor, pin });
       const result = await (pin === null
         ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
-        : commitPluginTask(this.#dependencies.extensions, commitInput));
-      this.#assertCreditPrincipal(
+        : generation === null
+          ? commitPluginTask(this.#dependencies.extensions, commitInput)
+          : commitProjectGenerationTask(() =>
+              commitPluginTask(
+                this.#dependencies.extensions,
+                commitInput,
+                generation.commitOptions,
+              ),
+            ));
+      assertExtensionTaskCreditPrincipal(
+        this.#dependencies.digester,
         actor,
         result.creditAdmission,
         result.binding,
@@ -520,97 +585,10 @@ export class ExtensionTaskApplicationService {
           receipt,
           digester: this.#dependencies.digester,
         });
+      if (generation !== null)
+        await generation.assertSaved(result.binding, receipt);
       return result;
     });
-  }
-
-  async #quoteGeneration(
-    actor: ActorContext,
-    binding: ExtensionRunBinding,
-    receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
-    input: WorkflowSchemaValue,
-  ): Promise<ExtensionCreditAdmission> {
-    if (
-      this.#dependencies.extensions.creditAdmissionVersion !==
-      "crewon.extension-credit-admission.v0"
-    )
-      throw new ApplicationError(
-        "conflict",
-        "extension_credit_admission_unavailable",
-      );
-    let raw: unknown;
-    try {
-      raw = await this.#dependencies.creditQuotes!.quoteGeneration(
-        Object.freeze({
-          actor,
-          binding,
-          input: JSON.parse(
-            extensionCanonicalJson(input),
-          ) as WorkflowSchemaValue,
-          commandRequestDigest: receipt.requestDigest,
-        }),
-      );
-    } catch (error) {
-      if (error instanceof ApplicationError) throw error;
-      throw new ApplicationError(
-        "conflict",
-        "extension_credit_quote_unavailable",
-        { cause: error },
-      );
-    }
-    try {
-      const quote = extensionCommand(raw, [
-        "poolId",
-        "priceRevision",
-        "quotedCredits",
-      ]);
-      return createExtensionCreditAdmission(
-        {
-          binding,
-          receipt,
-          principalId: actor.principalId,
-          poolId: quote.poolId as string,
-          priceRevision: quote.priceRevision as number,
-          quotedCredits: quote.quotedCredits as string,
-        },
-        this.#dependencies.digester,
-      );
-    } catch (error) {
-      throw new ApplicationError("internal", "extension_credit_quote_invalid", {
-        cause: error,
-      });
-    }
-  }
-
-  #assertCreditPrincipal(
-    actor: ActorContext,
-    admission: ExtensionCreditAdmission | undefined,
-    binding: ExtensionRunBinding,
-    receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
-  ): void {
-    if (admission === undefined) return;
-    let checked: ExtensionCreditAdmission;
-    try {
-      checked = assertExtensionCreditAdmission(
-        { admission, binding, receipt },
-        this.#dependencies.digester,
-      );
-    } catch (error) {
-      throw new ApplicationError(
-        "internal",
-        "extension_credit_admission_invalid",
-        { cause: error },
-      );
-    }
-    if (
-      checked.reservation.scope.principalId !== actor.principalId ||
-      checked.tenantId !== actor.tenantId ||
-      checked.spaceId !== actor.spaceId
-    )
-      throw new ApplicationError(
-        "authorization",
-        "extension_credit_account_owner_mismatch",
-      );
   }
 
   async #authorizeThread(actor: ActorContext, threadId: string) {

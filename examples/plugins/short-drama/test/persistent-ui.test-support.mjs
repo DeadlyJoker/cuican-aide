@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 export const persistentProps = (
   ready = false,
   tokens = { "--text": "#202020" },
@@ -21,6 +22,21 @@ export function deferred() {
 const copy = (value) => structuredClone(value);
 const digest = (value) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
+const conceptReadMethods = new Set([
+  "getConceptAsset",
+  "listConceptAssets",
+  "getConceptRevision",
+  "listConceptRevisions",
+]);
+const compareIds = (left, right) => {
+  const a = [...left],
+    b = [...right];
+  for (let index = 0; index < Math.min(a.length, b.length); index++) {
+    const difference = a[index].codePointAt(0) - b[index].codePointAt(0);
+    if (difference !== 0) return difference;
+  }
+  return a.length - b.length;
+};
 
 /** Deterministic public-metadata dispatcher fixture; no database, identity or supplier claim. */
 export function metadataService({ pageSize = 20 } = {}) {
@@ -29,9 +45,11 @@ export function metadataService({ pageSize = 20 } = {}) {
   const calls = [];
   let ticks = 0;
   let serial = 0;
+  let assetSerial = 0;
   let refuse = false;
   let loseNextWrite = false;
   let listGate = null;
+  const conceptReadGates = new Map();
   const now = () =>
     new Date(Date.UTC(2026, 9, 3, 0, 0, 0, ++ticks)).toISOString();
   function append(record, text, at = now()) {
@@ -66,21 +84,114 @@ export function metadataService({ pageSize = 20 } = {}) {
         updatedAt: at,
       },
       briefs: [],
+      assets: new Map(),
     };
     records.set(projectId, record);
     return append(record, briefText, at);
   }
+  function failure(code) {
+    return Object.assign(new Error(code), { code });
+  }
   function conflict() {
-    return Object.assign(new Error("revision conflict"), {
-      code: "creative_project_revision_conflict",
+    return failure("creative_project_revision_conflict");
+  }
+  function projectRecord(projectId) {
+    const record = records.get(projectId);
+    if (!record) throw failure("creative_project_not_found");
+    return record;
+  }
+  function savedBrief(record, briefRevision) {
+    const brief = record.briefs.find(
+      (item) => item.briefRevision === briefRevision,
+    );
+    if (!brief) throw failure("creative_project_brief_not_found");
+    return brief;
+  }
+  function conceptRecord(record, assetId) {
+    const concept = record.assets.get(assetId);
+    if (!concept) throw failure("creative_project_asset_not_found");
+    return concept;
+  }
+  function assertActive(record) {
+    if (record.project.state !== "active")
+      throw failure("creative_project_archived");
+  }
+  function assertProjectRevision(record, expectedProjectRevision) {
+    if (record.project.revision !== expectedProjectRevision) throw conflict();
+  }
+  function saveConceptRevision(record, concept, briefRevision, prompt, at) {
+    const brief = savedBrief(record, briefRevision);
+    const revision = {
+      projectId: record.project.projectId,
+      assetId: concept.asset.assetId,
+      assetRevision: concept.asset.latestAssetRevision,
+      briefRevision: brief.briefRevision,
+      briefContentDigest: brief.contentDigest,
+      prompt,
+      createdAt: at,
+    };
+    const assetRevision = Object.freeze({
+      ...revision,
+      contentDigest: digest(JSON.stringify(revision)),
     });
+    concept.revisions = Object.freeze([...concept.revisions, assetRevision]);
+    record.project = {
+      ...record.project,
+      revision: record.project.revision + 1,
+      updatedAt: at,
+    };
+    return copy({
+      project: record.project,
+      asset: concept.asset,
+      assetRevision,
+    });
+  }
+  function createConcept(projectId, name, briefRevision, prompt) {
+    const record = projectRecord(projectId);
+    assertActive(record);
+    savedBrief(record, briefRevision);
+    const at = now();
+    const assetId = `concept/概念🎬\\中文 %2F ${++assetSerial}`;
+    const concept = {
+      asset: {
+        projectId,
+        assetId,
+        name,
+        revision: 1,
+        latestAssetRevision: 1,
+        createdAt: at,
+        updatedAt: at,
+      },
+      revisions: Object.freeze([]),
+    };
+    record.assets.set(assetId, concept);
+    return saveConceptRevision(record, concept, briefRevision, prompt, at);
+  }
+  function externalConceptRevision(projectId, assetId, briefRevision, prompt) {
+    const record = projectRecord(projectId);
+    assertActive(record);
+    savedBrief(record, briefRevision);
+    const concept = conceptRecord(record, assetId);
+    const at = now();
+    concept.asset = {
+      ...concept.asset,
+      revision: concept.asset.revision + 1,
+      latestAssetRevision: concept.asset.latestAssetRevision + 1,
+      updatedAt: at,
+    };
+    return saveConceptRevision(record, concept, briefRevision, prompt, at);
   }
   const services = {
     async invoke(action, input, options) {
-      calls.push({ action, input: copy(input), signal: options.signal });
+      calls.push({ action, input: copy(input), signal: options?.signal });
       assert.ok(action.startsWith("crewon.creative-projects.v1."));
       if (refuse) throw new Error("plugin_ui_action_not_permitted");
       const method = action.split(".").at(-1);
+      if (conceptReadGates.has(method)) {
+        const gate = conceptReadGates.get(method);
+        conceptReadGates.delete(method);
+        return gate.promise;
+      }
       if (method === "listProjects") {
         if (listGate) {
           const gate = listGate;
@@ -147,10 +258,53 @@ export function metadataService({ pageSize = 20 } = {}) {
             all.length > briefs.length ? briefs.at(-1).briefRevision : null,
         });
       }
-      const receipt = receipts.get(input.idempotencyKey);
+      if (conceptReadMethods.has(method)) {
+        const project = projectRecord(input.projectId);
+        if (method === "listConceptAssets") {
+          const { afterAssetId = null, limit = 20 } = input.query;
+          const all = [...project.assets.values()]
+            .map((concept) => concept.asset)
+            .filter(
+              (asset) =>
+                afterAssetId === null ||
+                compareIds(asset.assetId, afterAssetId) > 0,
+            )
+            .sort((left, right) => compareIds(left.assetId, right.assetId));
+          const assets = all.slice(0, Math.min(limit, pageSize));
+          return copy({
+            assets,
+            nextAfterAssetId:
+              all.length > assets.length ? assets.at(-1).assetId : null,
+          });
+        }
+        const concept = conceptRecord(project, input.assetId);
+        if (method === "getConceptAsset") return { asset: copy(concept.asset) };
+        if (method === "getConceptRevision") {
+          const assetRevision = concept.revisions.find(
+            (revision) => revision.assetRevision === input.assetRevision,
+          );
+          if (!assetRevision)
+            throw failure("creative_project_asset_revision_not_found");
+          return { assetRevision: copy(assetRevision) };
+        }
+        const { afterAssetRevision = 0, limit = 20 } = input.query;
+        const all = concept.revisions.filter(
+          (revision) => revision.assetRevision > afterAssetRevision,
+        );
+        const revisions = all.slice(0, Math.min(limit, pageSize));
+        return copy({
+          revisions,
+          nextAfterAssetRevision:
+            all.length > revisions.length
+              ? revisions.at(-1).assetRevision
+              : null,
+        });
+      }
+      const receiptKey = `${action}\0${input.idempotencyKey}`;
+      const receipt = receipts.get(receiptKey);
       if (receipt) {
-        assert.equal(action, receipt.action);
-        assert.deepEqual(input, receipt.input);
+        if (!isDeepStrictEqual(input, receipt.input))
+          throw failure("creative_project_idempotency_conflict");
         return copy({ ...receipt.output, disposition: "replayed" });
       }
       let output;
@@ -160,12 +314,41 @@ export function metadataService({ pageSize = 20 } = {}) {
           ...create(input.request.title, input.request.briefText),
         };
       else if (method === "appendBrief") {
-        if (record.project.revision !== input.request.expectedProjectRevision)
-          throw conflict();
-        assert.equal(record.project.state, "active");
+        assertProjectRevision(record, input.request.expectedProjectRevision);
+        assertActive(record);
         output = {
           disposition: "committed",
           ...append(record, input.request.text),
+        };
+      } else if (method === "createConcept") {
+        const project = projectRecord(input.projectId);
+        assertProjectRevision(project, input.request.expectedProjectRevision);
+        output = {
+          disposition: "committed",
+          ...createConcept(
+            input.projectId,
+            input.request.name,
+            input.request.briefRevision,
+            input.request.prompt,
+          ),
+        };
+      } else if (method === "appendConceptRevision") {
+        const project = projectRecord(input.projectId);
+        assertProjectRevision(project, input.request.expectedProjectRevision);
+        assertActive(project);
+        const concept = conceptRecord(project, input.assetId);
+        if (
+          concept.asset.revision !== input.request.expectedAssetMetadataRevision
+        )
+          throw failure("creative_project_asset_revision_conflict");
+        output = {
+          disposition: "committed",
+          ...externalConceptRevision(
+            input.projectId,
+            input.assetId,
+            input.request.briefRevision,
+            input.request.prompt,
+          ),
         };
       } else if (method === "setProjectState") {
         if (record.project.revision !== input.request.expectedProjectRevision)
@@ -178,7 +361,7 @@ export function metadataService({ pageSize = 20 } = {}) {
         };
         output = { disposition: "committed", project: copy(record.project) };
       } else throw new Error("Unexpected UI action: " + action);
-      receipts.set(input.idempotencyKey, {
+      receipts.set(receiptKey, {
         action,
         input: copy(input),
         output: copy(output),
@@ -195,8 +378,12 @@ export function metadataService({ pageSize = 20 } = {}) {
     calls,
     records,
     create,
+    createConcept,
+    externalConceptRevision,
     externalBrief(projectId, text) {
-      return append(records.get(projectId), text);
+      const record = projectRecord(projectId);
+      assertActive(record);
+      return append(record, text);
     },
     refuse(value) {
       refuse = value;
@@ -206,6 +393,10 @@ export function metadataService({ pageSize = 20 } = {}) {
     },
     gateList(gate) {
       listGate = gate;
+    },
+    gateConceptRead(method, gate) {
+      assert.ok(conceptReadMethods.has(method));
+      conceptReadGates.set(method, gate);
     },
     methodCalls(method) {
       return calls.filter((call) => call.action.endsWith("." + method));

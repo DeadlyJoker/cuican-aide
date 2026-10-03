@@ -1,6 +1,6 @@
 # AI 短剧工作台：产品方案与第一条项目闭环
 
-日期：2026-10-03。状态：已实现 S0 领域、应用及 SQLite/PostgreSQL 项目与输入修订存储，新增可显式启用的[项目公共 HTTP/BFF/Client 服务](./creative-project-public-service.md)，已提供[可点击页面预览](../artifacts/short-drama-workbench-preview/README.md)；正式插件页面保存、生成关联及选用仍待接线。依据[参考结论](./short-drama-workbench-reference.md)及[已验证的插件调用链](./incremental-extension-progress.md)。正式界面仍沿用 CrewON 的[设计约定](../.codex/skills/crewon-design-reference/SKILL.md)。
+日期：2026-10-03。状态：已实现 S0 领域、应用及 SQLite/PostgreSQL 项目与输入修订存储，新增可显式启用的[项目公共 HTTP/BFF/Client 服务](./creative-project-public-service.md)，已提供[可点击页面预览](../artifacts/short-drama-workbench-preview/README.md)；独立短剧 3.0.0 模块已接入实际项目/需求/概念输入保存与历史，[生成事务关联](./project-generation-link.md)已实现内部端口，模块生图及选用仍待接线。依据[参考结论](./short-drama-workbench-reference.md)及[已验证的插件调用链](./incremental-extension-progress.md)。正式界面仍沿用 CrewON 的[设计约定](../.codex/skills/crewon-design-reference/SKILL.md)。
 
 页面预览包含项目列表、项目概览和概念图详情，可体验需求修订、概念图新版本、模拟提交/查询/选用及记录弹窗。数据仅保存在当前页面内存，明确标注演示，不调用外部服务，不替代下文的实际项目闭环。现有首页、聊天与团队入口保持原行为。
 
@@ -8,7 +8,7 @@
 
 当前已经验证在线 Krea2 文生图的 Agent 调用、外部任务记录、查询、跨进程恢复及事件游标续读；另以本地模型/Comfy HTTPS 夹具完成同一次生产 UI 到实际 Node Worker 的保存、启用、生图、查询、原会话输出及真实 Control SSE 自动游标重连。两类证据分别记录于[实施进度](./incremental-extension-progress.md)，界面验收没有再次调用在线供应商。生产权威身份与第二个实际企业 API 继续属于原实施计划，不由短剧方案替代。
 
-本文落实“先跑通流程，再详细设计产品形态”的后一项设计工作。下文 S0–S4 是后续具体产品开发顺序，不反向扩大原 E0–E5 首期交付门槛；项目、需求及概念图输入修订的 Domain、Application、实际双库存储及公共元数据服务已实现，项目生成关联与正式页面保存仍待接线。任意 workspace/MCP/cloud 的完整历史冻结也不作为这个首个概念图流程的前置条件。
+本文落实“先跑通流程，再详细设计产品形态”的后一项设计工作。下文 S0–S4 是后续具体产品开发顺序，不反向扩大原 E0–E5 首期交付门槛；项目、需求及概念图输入修订的 Domain、Application、实际双库存储及公共元数据服务已实现，独立插件页面的项目、需求和概念输入保存已接通；项目[生成事务关联](./project-generation-link.md)已实现内部端口，模块生图与选用仍待接线。任意 workspace/MCP/cloud 的完整历史冻结也不作为这个首个概念图流程的前置条件。
 
 ## 产品定位与交付顺序
 
@@ -99,11 +99,11 @@ S0 使用三个页面层级：
 | ProjectGenerationLink | project/asset/revision、sourceThreadId、sourceRunId、源插件与不可变 binding 身份       | 与原任务准入同事务提交，不在 Run 启动后补关联                      |
 | OperationResultLink   | 同一生成关联、服务端核验的原 operationId、结果索引与观察信息                           | 从持久化原 operation 枚举产生；客户端不能绑定任意 operation 或 URL |
 
-当前实际存储已保存前四类对象及按 owner principal、审计 actor 和命令种类隔离的回执。ConceptAsset 的选用指针尚未实现；ProjectGenerationLink 和 OperationResultLink 未新增或接入原任务事务，表中的这些内容仍是后续设计。
+当前实际存储已保存前四类对象及按 owner principal、审计 actor 和命令种类隔离的回执。ProjectGenerationLink 已通过显式内部增量迁移加入原 Run/个人积分冻结事务，原 binding 和任务回执 v0 保持不变。ConceptAsset 的选用指针和 OperationResultLink 尚未实现，模块实际生成入口仍待可信宿主装配。
 
 当前基础实现前四项的元数据、输入规则及实际双库存储：项目创建时由服务端账号派生个人归属，需求和概念图描述追加不可变修订，概念图冻结确切需求修订及摘要，所有写入使用显式预期版本。标题与资产名称最多 160 个 Unicode 字符，需求最多 8KiB UTF-8，生成描述按现有 Krea2 的 2,000 个 UTF-16 单元限制；公共协议已通过严格请求、投影和双库 HTTP 行为验证，响应限制为 60KiB，列表最多 50 项并按实际返回项继续分页。归档拒绝新创作，保留旧版本读取、重命名及恢复。版本编号承担修订顺序，系统时钟回拨不会被误作版本冲突。
 
-Application 和可选 Control 装配要求明确注入当前访问策略与本人范围的 Store，未安装默认放行策略；未配置时不创建项目迁移或路由。生产装配继续要求真实 ProductionControlApiIdentity，本机管理身份不自动成为生产用户或付款人。实际 SQLite/PostgreSQL 适配器通过原宿主持有连接、显式独立迁移，创建项目与首版需求、其他元数据及输入修订均在一次事务中复核归属、预期版本、保存的需求并共同写入幂等回执。公共 DTO 省略 owner、tenant、space 与审计 actor。生成 Run、积分冻结、项目生成关联及已核验结果选用尚未接入，不提供任意 URL 关联或开始生图的方法。这里的输入修订不表示供应商已生成图片。
+Application 和可选 Control 装配要求明确注入当前访问策略与本人范围的 Store，未安装默认放行策略；未配置时不创建项目迁移或路由。生产装配继续要求真实 ProductionControlApiIdentity，本机管理身份不自动成为生产用户或付款人。实际 SQLite/PostgreSQL 适配器通过原宿主持有连接、显式独立迁移，创建项目与首版需求、其他元数据及输入修订均在一次事务中复核归属、预期版本、保存的需求并共同写入幂等回执。公共 DTO 省略 owner、tenant、space 与审计 actor。项目生成关联、原 Run 和积分冻结已通过内部端口同事务提交，公共服务及模块生成尚未装配；已核验结果选用尚未实现，不提供任意 URL 关联。这里的输入修订不表示供应商已生成图片。
 
 原 `ExtensionRunBinding` 继续保存配置修订与八字段目标；原 external operation 保存请求/动作摘要、供应商任务 ID、真实状态和结果引用。项目关联不复制密钥、私有 token 或整套启动环境，也不建立第二套执行状态机。查询 Run 引用原生成，结果更新原 operation；不会成为第二版概念图。
 
@@ -124,7 +124,7 @@ S0 的需求上限建议为 8KiB，标题 160 字符，生成描述沿现有 2,0
 | Worker                 | 明确阶段的有界指导和输出检查           | 原 AgentVersion / ToolBroker / Krea2 适配器，不重编核心循环 |
 | UI                     | 静态业务入口、项目/概念图视图          | 原会话导航、审批、任务状态与 SSE 恢复                       |
 
-新的项目生成命令应由 Control 解析业务归属，再使用同一插件任务准入用例；在存储层增加受控业务关联的原子提交配方。不能采用“先调用任务 API、再补项目 ID”的两个独立写入。一般插件任务请求的未知字段校验保持不变，不给现有 DTO 偷加未定义的 projectId。该扩展属于后续实施，须先比较实际事务代码，再冻结具体端口。
+新的项目生成命令应由 Control 解析业务归属，再使用同一插件任务准入用例；在存储层增加受控业务关联的原子提交配方。不能采用“先调用任务 API、再补项目 ID”的两个独立写入。一般插件任务请求的未知字段校验保持不变，不给现有 DTO 偷加未定义的 projectId。该[内部扩展](./project-generation-link.md)已实现严格引用、可信提交权威及双库原子配方；公开 Control/Host 生成动作和业务到执行插件的映射仍待实施。
 
 项目权限、源 Run 权限及原 operation 归属在服务端核对，并在异步 readiness/权限查询后提交前重核。所有命令保留预期 revision 与按当前 actor 隔离的幂等键；修改输入后重用旧键拒绝，丢失回复重试返回原任务与原业务关联。客户端保存中的临时状态不授予任务执行权。
 
@@ -136,9 +136,9 @@ S0 项目先限定创建者本人访问，并继续检查当前租户/空间及�
 
 1. 已完成生产 UI Controller、真实 ControlClient/ControlThreadRuntime、实际 Node release/Worker/Control 与本地模型/Comfy 服务的单条闭环，证明 UI 保存、启用、生成、查询、结果与重连不重复提交。该项仍是插件调用验收，尚无项目存储或选用动作；浏览器视觉检查和在线 Comfy 的证据分别保留。
 2. 已实现项目/需求/概念图输入修订的最小 Domain 规则与内部 Application 端口，不引入角色、剧集、镜头、视频字段来预建未来能力。
-3. 部分完成：已接 SQLite/PostgreSQL 的显式独立项目迁移、历史保存及记录与回执的原子提交，验证跨空间、并发修订、丢回复、回滚、重新打开及原核心/插件/积分版本兼容。项目生成关联加入原 Run/积分冻结事务仍待实施，不能据此认定生成准入已完成。
-4. 部分完成：项目 HTTP/BFF/Client 元数据与输入修订服务、可信授权策略显式启用、严格有界投影和双库冷恢复已接通。安装插件的[动作协议与 SDK helper](./installed-plugin-creative-project-actions.md)、可信本次调用的提交检查已实现；Host dispatcher、依赖可用性、ready 和正式模块入口仍待接线。保留原插件任务公共契约和默认关闭行为；新 Agent 执行仍需原实际 readiness。
+3. 部分完成：已接 SQLite/PostgreSQL 的显式独立项目迁移、历史保存及记录与回执的原子提交，验证跨空间、并发修订、丢回复、回滚、重新打开及原核心/插件/积分版本兼容。项目生成关联已通过内部端口加入原 Run/积分冻结事务，并验证回滚、槽位、撤权、重放及单连接池；模块/公开 Host 生成尚未装配，不能据此认定用户生成闭环已完成。
+4. 部分完成：项目 HTTP/BFF/Client 元数据与输入修订服务、可信授权策略显式启用、严格有界投影和双库冷恢复已接通。安装插件的[动作协议与 SDK helper](./installed-plugin-creative-project-actions.md)、可信本次调用的提交检查已实现；Host dispatcher、依赖可用性、ready 和独立短剧 3.0.0 模块的项目/需求/概念输入保存已接通；实际发行 ESM→DOM→Host HTTP→SQLite 冷恢复与包内输入历史、冲突和迟到读取已有验证。保留原插件任务公共契约和默认关闭行为；新 Agent 执行仍需原实际 readiness。
 5. 实现项目列表与概念图详情，覆盖真实 DOM 操作、刷新、SSE 重连、关闭后恢复、低高度与窄屏、焦点及原首页/团队路径。
 6. 取得用户选定的企业 API 与生产身份协议后继续原 E5/生产装配；视频、配音、参考图在对应 API 明确后按 S2–S4 逐步接入。
 
-S0 完成门槛：用户从项目界面完成需求保存、一次生图、原任务查询和选用；重启后可查原输入/配置/Run/operation 关系；旧修订不被新生成覆盖；双库行为一致；跨空间、撤权与冲突被拒绝；刷新/重连没有新的收费提交；普通聊天与团队路径保持原行为。当前完成产品与实施设计、交互预览及 Domain/Application/双库存储和公共元数据服务，尚无正式插件界面真实保存、项目生成关联或选用，不代表该门槛已达到。
+S0 完成门槛：用户从项目界面完成需求保存、一次生图、原任务查询和选用；重启后可查原输入/配置/Run/operation 关系；旧修订不被新生成覆盖；双库行为一致；跨空间、撤权与冲突被拒绝；刷新/重连没有新的收费提交；普通聊天与团队路径保持原行为。当前完成产品与实施设计、交互预览及 Domain/Application/双库存储和公共元数据服务，独立 3.0.0 插件界面已完成真实项目、需求和概念输入保存；项目生成关联的内部原子提交已实现；模块生图、原任务查询、结果关联和选用仍未完成，不代表该门槛已达到。

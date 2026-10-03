@@ -175,6 +175,7 @@ export function runInput(
 export async function extensionFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  options: Readonly<{ maxPoolSize?: number }> = {},
 ) {
   const dir = await mkdtemp(join(tmpdir(), "crewon-extension-"));
   const path = join(dir, "control.sqlite");
@@ -218,7 +219,7 @@ export async function extensionFixture(
         : await PostgresDomainStore.open({
             connectionString: connectionString!,
             schema,
-            maxPoolSize: 2,
+            maxPoolSize: options.maxPoolSize ?? 2,
           });
     opened.push(parent);
     const store = parent.extensionStore();

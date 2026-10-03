@@ -16,6 +16,7 @@ import type { ExtensionCreditQuotePort } from "./extension-credit-quote-port.ts"
 import type { CreateExtensionTaskCommand } from "./extension-task-application-service.ts";
 import type {
   CommitExtensionTurnInput,
+  CommitExtensionTurnOptions,
   ExtensionMutationReceipt,
   ExtensionStore,
 } from "./extension-store-port.ts";
@@ -203,9 +204,10 @@ export async function assertSavedPluginTask(
 export async function commitPluginTask(
   store: ExtensionStore,
   input: CommitExtensionTurnInput,
+  options?: CommitExtensionTurnOptions,
 ) {
   try {
-    return await store.commitExtensionTurn(input);
+    return await store.commitExtensionTurn(input, options);
   } catch (error) {
     if (
       error instanceof Error &&

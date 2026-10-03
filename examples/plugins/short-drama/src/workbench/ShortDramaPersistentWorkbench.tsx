@@ -4,7 +4,6 @@ import {
   Clock3,
   Film,
   FolderOpen,
-  Image,
   Layers3,
   Plus,
   Search,
@@ -17,6 +16,7 @@ import {
   validTitle,
   type ProjectSnapshot,
 } from "./creative-project-controller";
+import { ConceptWorkbench } from "./ConceptWorkbench";
 
 function SaveFeedback({
   controller,
@@ -92,7 +92,8 @@ export function ShortDramaPersistentWorkbench({
   const [brief, setBrief] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const { details } = snapshot;
-  const locked = snapshot.saving || snapshot.pendingKind !== null;
+  const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
+  const locked = projectLocked || snapshot.conceptLocked;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
     (project) =>
@@ -378,22 +379,11 @@ export function ShortDramaPersistentWorkbench({
                     需求改变会保存新版本，原始换行与空格会保留。
                   </div>
                 </section>
-                <section className="concept-panel">
-                  <div className="panel-heading">
-                    <h2>
-                      <Image size={17} />
-                      概念图
-                    </h2>
-                  </div>
-                  <div className="empty-state">
-                    <Image size={32} />
-                    <h2>先留住创作需求</h2>
-                    <p>概念输入与生成能力将在后续接入。</p>
-                  </div>
-                  <p className="detail-note">
-                    这里没有生成结果或选用记录；项目与需求保存不会创建生图任务。
-                  </p>
-                </section>
+                <ConceptWorkbench
+                  controller={controller.concepts}
+                  details={details}
+                  blocked={projectLocked || snapshot.opening}
+                />
               </div>
             </>
           )}

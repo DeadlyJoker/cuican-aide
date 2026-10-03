@@ -1,6 +1,16 @@
 import type { Pool, PoolClient } from "pg";
+import { commitPostgresExtensionTurn } from "./postgres-extension-turn-commit.ts";
 import {
-  CreditLedgerError,
+  migratePostgresProjectGenerations,
+  assertPostgresProjectGenerationSchema,
+} from "./project-generation-schema.ts";
+import {
+  decodeProjectGeneration,
+  projectGenerationReadSql,
+  projectGenerationLocator,
+  type ProjectGenerationCommitOptions,
+} from "./project-generation-store-support.ts";
+import {
   extensionOpaqueId,
   extensionRevision,
   parseExtensionActivation,
@@ -40,41 +50,19 @@ import {
   validateConfigurationSave,
   validateExtensionReceipt,
   validateExtensionRunCommit,
-  validateExtensionTurnCommit,
-  extensionTurnCommit,
-  extensionTurnResult,
   parseExtensionTurnReceipt,
 } from "./extension-store-records.ts";
 import {
   assertExtensionCreditAdmissionLink,
-  assertExtensionCreditReplayPrincipal,
   assertExtensionCreditSchemaVersion,
-  checkedExtensionCreditAdmission,
   decodeExtensionCreditAdmission,
   extensionCreditAdmissionSchemaSql,
 } from "./extension-credit-admission-records.ts";
 import { migratePostgresPluginCredits } from "./plugin-credit-schema.ts";
 import { migratePostgresPluginTaskAdmissionsWithPool } from "./plugin-task-admission-schema.ts";
 import { migratePostgresPluginQueryTasks } from "./plugin-query-task-schema.ts";
-import {
-  checkedPluginQueryTurn,
-  admitPostgresPluginQuery,
-  loadPostgresPluginQuery,
-  savePostgresPluginQuery,
-  assertPluginQueryReplay,
-} from "./plugin-query-task-store-support.ts";
-import {
-  admitPostgresPluginTask,
-  assertPluginTaskAdmissionReplay,
-  capturePluginTaskTurnInput,
-  checkedPluginTaskAdmission,
-  loadPostgresPluginTask,
-  savePostgresPluginTask,
-} from "./plugin-task-admission-store-support.ts";
-import {
-  lockPostgresPluginCreditAccount,
-  reservePostgresPluginCreditsWithinTransaction,
-} from "./postgres-plugin-credit-reservation.ts";
+import { loadPostgresPluginQuery } from "./plugin-query-task-store-support.ts";
+import { loadPostgresPluginTask } from "./plugin-task-admission-store-support.ts";
 import {
   assertCreditReservationReplay,
   creditScopeValues,
@@ -99,6 +87,12 @@ export class PostgresExtensionStore implements ExtensionStore {
     "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
+  #projectGenerationsEnabled = false;
+  get projectGenerationVersion() {
+    return this.#projectGenerationsEnabled
+      ? ("crewon.project-generation-link.v0" as const)
+      : undefined;
+  }
   readonly #pool: Pool;
   readonly #schema: string;
   readonly #schemaName: string;
@@ -182,6 +176,50 @@ export class PostgresExtensionStore implements ExtensionStore {
       schema: this.#schemaName,
       assertOpen: () => this.#host.assertOpen(),
     });
+  }
+
+  /** Explicit opt-in; ordinary extension migration does not inspect project metadata. */
+  async migrateProjectGenerations(): Promise<void> {
+    this.#host.assertOpen();
+    const client = await this.#pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [JSON.stringify(["project-generation-migration", this.#schemaName])],
+      );
+      await migratePostgresProjectGenerations(client, this.#schemaName);
+      this.#host.assertOpen();
+      await client.query("COMMIT");
+      this.#projectGenerationsEnabled = true;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  async loadProjectGenerationLink(input: ExtensionRunLocator) {
+    if (!this.#projectGenerationsEnabled)
+      throw new Error("project_generation_unavailable");
+    this.#host.assertOpen();
+    const locator = projectGenerationLocator(input);
+    const client = await this.#pool.connect();
+    try {
+      await assertPostgresProjectGenerationSchema(client, this.#schemaName);
+      const rows = await client.query(
+        projectGenerationReadSql(`${this.#schema}.`, true),
+        locator,
+      );
+      this.#host.assertOpen();
+      return decodeProjectGeneration(rows.rows[0], {
+        tenantId: locator[0],
+        spaceId: locator[1],
+        runId: locator[2],
+      });
+    } finally {
+      client.release();
+    }
   }
 
   async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
@@ -448,168 +486,30 @@ export class PostgresExtensionStore implements ExtensionStore {
     return admission;
   }
 
-  async commitExtensionTurn(input: CommitExtensionTurnInput) {
-    const pluginQuery = checkedPluginQueryTurn(input);
-    // Retain one snapshot while the PostgreSQL transaction awaits independent Store operations.
-    // Validate v1 exact fields/accessors before clone can flatten or invoke them.
-    const pluginAdmission = checkedPluginTaskAdmission(input);
-    const frozenInput =
-      pluginAdmission === undefined
-        ? structuredClone(input)
-        : capturePluginTaskTurnInput(input, pluginAdmission);
-    const binding = validateExtensionTurnCommit(frozenInput);
-    let creditPath = false;
-    return this.#transaction(
-      binding,
-      async (client) => {
-        const replay = await this.#receipt(
-          client,
-          binding,
-          "task",
-          frozenInput.receipt,
-        );
-        if (replay !== null) {
-          const result = parseExtensionTurnReceipt(
-            replay,
-            binding,
-            frozenInput.receipt,
-          );
-          assertExtensionCreditReplayPrincipal({
-            saved: result.creditAdmission,
-            requested: frozenInput.creditAdmission,
-          });
-          creditPath = result.creditAdmission !== undefined;
-          await this.#assertCreditLink(client, result.creditAdmission);
-          if (pluginAdmission !== undefined)
-            assertPluginTaskAdmissionReplay({
-              requested: pluginAdmission,
-              saved: await loadPostgresPluginTask(
-                client,
-                this.#schemaName,
-                result.binding,
-              ),
-              binding: result.binding,
-              receipt: frozenInput.receipt,
-              creditAdmission: result.creditAdmission,
-            });
-          if (pluginQuery !== undefined)
-            assertPluginQueryReplay(
-              pluginQuery,
-              await loadPostgresPluginQuery(
-                client,
-                this.#schemaName,
-                result.binding,
-              ),
-              result.binding,
-              frozenInput.receipt,
-            );
-          return result;
-        }
-        const creditAdmission = checkedExtensionCreditAdmission({
-          admission: frozenInput.creditAdmission,
-          binding,
-          receipt: frozenInput.receipt,
-        });
-        creditPath = creditAdmission !== undefined;
-        if (pluginAdmission !== undefined)
-          await admitPostgresPluginTask(
-            client,
-            this.#schemaName,
-            pluginAdmission,
-          );
-        if (pluginQuery !== undefined)
-          await admitPostgresPluginQuery(
-            client,
-            this.#schemaName,
-            pluginQuery,
-            binding,
-          );
-        await this.#admit(
-          client,
-          binding,
-          frozenInput.expectedActivationRevision,
-        );
-        if (creditAdmission !== undefined) {
-          await lockPostgresPluginCreditAccount({
-            client,
-            schema: this.#schemaName,
-            scope: creditAdmission.reservation.scope,
-            assertOpen: () => this.#host.assertOpen(),
-          });
-          try {
-            await reservePostgresPluginCreditsWithinTransaction({
-              client,
-              schema: this.#schemaName,
-              input: creditAdmission.reservation,
-              assertOpen: () => this.#host.assertOpen(),
-              requireNew: true,
-            });
-          } catch (error) {
-            if (
-              error instanceof CreditLedgerError &&
-              (error.code === "plugin_credit_idempotency_conflict" ||
-                error.code === "plugin_credit_reservation_id_conflict")
-            )
-              throw new Error("extension_credit_orphaned_reservation", {
-                cause: error,
-              });
-            throw error;
-          }
-        }
-        const turn = await this.#host.commitTurnWithinTransaction(
-          client,
-          extensionTurnCommit(frozenInput),
-        );
-        if (
-          turn.disposition !== "committed" ||
-          turn.runState.runId !== binding.runId
-        )
-          throw new Error("extension_unbound_turn_receipt");
-        await client.query(
-          `INSERT INTO ${this.#schema}.extension_run_bindings VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            ...extensionScopeValues(binding),
-            binding.runId,
-            binding.configurationRevision,
-            binding,
-          ],
-        );
-        if (creditAdmission !== undefined)
-          await client.query(
-            `INSERT INTO ${this.#schema}.extension_credit_admissions VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-            [
-              binding.tenantId,
-              binding.spaceId,
-              binding.runId,
-              creditAdmission.reservation.scope.principalId,
-              creditAdmission.reservation.scope.poolId,
-              creditAdmission.reservation.reservationId,
-              JSON.stringify(creditAdmission),
-            ],
-          );
-        if (pluginAdmission !== undefined)
-          await savePostgresPluginTask(
-            client,
-            this.#schemaName,
-            pluginAdmission,
-          );
-        if (pluginQuery !== undefined)
-          await savePostgresPluginQuery(client, this.#schemaName, pluginQuery);
-        const result = extensionTurnResult(turn, binding, creditAdmission);
-        await this.#saveReceipt(
-          client,
-          binding,
-          "task",
-          frozenInput.receipt,
-          result,
-        );
-        return result;
-      },
+  async commitExtensionTurn(
+    input: CommitExtensionTurnInput,
+    options?: ProjectGenerationCommitOptions,
+  ) {
+    return commitPostgresExtensionTurn(
       {
-        beforeCommit: () => {
-          if (creditPath) this.#host.assertOpen();
-        },
+        schema: this.#schemaName,
+        projectGenerationsEnabled: this.#projectGenerationsEnabled,
+        assertOpen: () => this.#host.assertOpen(),
+        transaction: (scope, body, options) =>
+          this.#transaction(scope, body, options),
+        receipt: (client, scope, kind, receipt) =>
+          this.#receipt(client, scope, kind, receipt),
+        saveReceipt: (client, scope, kind, receipt, result) =>
+          this.#saveReceipt(client, scope, kind, receipt, result),
+        assertCreditLink: (client, admission) =>
+          this.#assertCreditLink(client, admission),
+        admit: (client, binding, revision) =>
+          this.#admit(client, binding, revision),
+        commitTurn: (client, turn) =>
+          this.#host.commitTurnWithinTransaction(client, turn),
       },
+      input,
+      options,
     );
   }
 

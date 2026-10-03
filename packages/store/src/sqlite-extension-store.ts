@@ -1,6 +1,16 @@
+import { commitSqliteExtensionTurn } from "./sqlite-extension-turn-commit.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
-  CreditLedgerError,
+  migrateSqliteProjectGenerations,
+  assertSqliteProjectGenerationSchema,
+} from "./project-generation-schema.ts";
+import {
+  projectGenerationReadSql,
+  projectGenerationLocator,
+  decodeProjectGeneration,
+  type ProjectGenerationCommitOptions,
+} from "./project-generation-store-support.ts";
+import {
   extensionOpaqueId,
   extensionRevision,
   parseExtensionActivation,
@@ -41,34 +51,15 @@ import {
   validateConfigurationSave,
   validateExtensionReceipt,
   validateExtensionRunCommit,
-  validateExtensionTurnCommit,
-  extensionTurnCommit,
-  extensionTurnResult,
   parseExtensionTurnReceipt,
 } from "./extension-store-records.ts";
 import { migrateSqliteExternalOperations } from "./sqlite-external-operation-store.ts";
 import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
 import { migrateSqlitePluginTaskAdmissions } from "./plugin-task-admission-schema.ts";
 import { migrateSqlitePluginQueryTasks } from "./plugin-query-task-schema.ts";
+import { loadSqlitePluginQuery } from "./plugin-query-task-store-support.ts";
+import { loadSqlitePluginTask } from "./plugin-task-admission-store-support.ts";
 import {
-  checkedPluginQueryTurn,
-  admitSqlitePluginQuery,
-  loadSqlitePluginQuery,
-  saveSqlitePluginQuery,
-  assertPluginQueryReplay,
-} from "./plugin-query-task-store-support.ts";
-import {
-  admitSqlitePluginTask,
-  assertPluginTaskAdmissionReplay,
-  capturePluginTaskTurnInput,
-  checkedPluginTaskAdmission,
-  loadSqlitePluginTask,
-  saveSqlitePluginTask,
-} from "./plugin-task-admission-store-support.ts";
-import { reserveSqlitePluginCreditsWithinTransaction } from "./sqlite-plugin-credit-reservation.ts";
-import {
-  checkedExtensionCreditAdmission,
-  assertExtensionCreditReplayPrincipal,
   decodeExtensionCreditAdmission,
   assertExtensionCreditAdmissionLink,
   extensionCreditAdmissionSchemaSql,
@@ -94,6 +85,12 @@ export class SqliteExtensionStore implements ExtensionStore {
     "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
+  #projectGenerationsEnabled = false;
+  get projectGenerationVersion() {
+    return this.#projectGenerationsEnabled
+      ? ("crewon.project-generation-link.v0" as const)
+      : undefined;
+  }
   readonly #db: DatabaseSync;
   readonly #host: SqliteExtensionStoreHost;
   constructor(database: DatabaseSync, host: SqliteExtensionStoreHost) {
@@ -147,6 +144,26 @@ export class SqliteExtensionStore implements ExtensionStore {
       migrateSqlitePluginTaskAdmissions(this.#db);
       migrateSqlitePluginQueryTasks(this.#db);
     });
+  }
+
+  /** Explicit opt-in; ordinary extension migration does not inspect project metadata. */
+  async migrateProjectGenerations(): Promise<void> {
+    this.#transaction(() => migrateSqliteProjectGenerations(this.#db), {
+      beforeCommit: () => this.#host.assertOpen(),
+    });
+    this.#projectGenerationsEnabled = true;
+  }
+  async loadProjectGenerationLink(input: ExtensionRunLocator) {
+    if (!this.#projectGenerationsEnabled)
+      throw new Error("project_generation_unavailable");
+    this.#host.assertOpen();
+    assertSqliteProjectGenerationSchema(this.#db);
+    return decodeProjectGeneration(
+      this.#db
+        .prepare(projectGenerationReadSql())
+        .get(...projectGenerationLocator(input)),
+      input,
+    );
   }
 
   async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
@@ -350,99 +367,28 @@ export class SqliteExtensionStore implements ExtensionStore {
         );
   }
 
-  async commitExtensionTurn(input: CommitExtensionTurnInput) {
-    const pluginQuery = checkedPluginQueryTurn(input);
-    if (pluginQuery !== undefined)
-      input = structuredClone({ ...input, pluginQueryAdmission: pluginQuery });
-    const pluginAdmission = checkedPluginTaskAdmission(input);
-    if (pluginAdmission !== undefined)
-      input = capturePluginTaskTurnInput(input, pluginAdmission);
-    const binding = validateExtensionTurnCommit(input);
-    const creditAdmission = checkedExtensionCreditAdmission({
-      admission: input.creditAdmission,
-      binding,
-      receipt: input.receipt,
-    });
-    return this.#transaction(() => {
-      const replay = this.#receipt(binding, "task", input.receipt);
-      if (replay !== null) {
-        const saved = this.#verifyCreditReceipt(
-          parseExtensionTurnReceipt(replay, binding, input.receipt),
-        );
-        assertExtensionCreditReplayPrincipal({
-          saved: saved.creditAdmission,
-          requested: creditAdmission,
-        });
-        if (pluginAdmission !== undefined)
-          assertPluginTaskAdmissionReplay({
-            requested: pluginAdmission,
-            saved: loadSqlitePluginTask(this.#db, saved.binding),
-            binding: saved.binding,
-            receipt: input.receipt,
-            creditAdmission: saved.creditAdmission,
-          });
-        if (pluginQuery !== undefined)
-          assertPluginQueryReplay(
-            pluginQuery,
-            loadSqlitePluginQuery(this.#db, saved.binding),
-            saved.binding,
-            input.receipt,
-          );
-        return saved;
-      }
-      if (pluginAdmission !== undefined)
-        admitSqlitePluginTask(this.#db, pluginAdmission);
-      if (pluginQuery !== undefined)
-        admitSqlitePluginQuery(this.#db, pluginQuery, binding);
-      this.#admit(binding, input.expectedActivationRevision);
-      if (creditAdmission !== undefined) {
-        try {
-          const reserved = reserveSqlitePluginCreditsWithinTransaction(
-            this.#db,
-            creditAdmission.reservation,
-          );
-          if (reserved.disposition !== "created")
-            throw new Error("extension_credit_orphaned_reservation");
-        } catch (error) {
-          if (
-            error instanceof CreditLedgerError &&
-            [
-              "plugin_credit_idempotency_conflict",
-              "plugin_credit_reservation_id_conflict",
-            ].includes(error.code)
-          )
-            throw new Error("extension_credit_orphaned_reservation", {
-              cause: error,
-            });
-          throw error;
-        }
-      }
-      const turn = this.#host.commitTurnWithinTransaction(
-        extensionTurnCommit(input),
-      );
-      if (
-        turn.disposition !== "committed" ||
-        turn.runState.runId !== binding.runId
-      )
-        throw new Error("extension_unbound_turn_receipt");
-      this.#db
-        .prepare(`INSERT INTO extension_run_bindings VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(
-          ...extensionScopeValues(binding),
-          binding.runId,
-          binding.configurationRevision,
-          JSON.stringify(binding),
-        );
-      if (creditAdmission !== undefined)
-        this.#saveCreditAdmission(creditAdmission);
-      if (pluginAdmission !== undefined)
-        saveSqlitePluginTask(this.#db, pluginAdmission);
-      if (pluginQuery !== undefined)
-        saveSqlitePluginQuery(this.#db, pluginQuery);
-      const result = extensionTurnResult(turn, binding, creditAdmission);
-      this.#saveReceipt(binding, "task", input.receipt, result);
-      return result;
-    });
+  async commitExtensionTurn(
+    input: CommitExtensionTurnInput,
+    options?: ProjectGenerationCommitOptions,
+  ) {
+    return commitSqliteExtensionTurn(
+      {
+        database: this.#db,
+        projectGenerationsEnabled: this.#projectGenerationsEnabled,
+        assertOpen: () => this.#host.assertOpen(),
+        transaction: (body, hooks) => this.#transaction(body, hooks),
+        receipt: (scope, kind, receipt) => this.#receipt(scope, kind, receipt),
+        verifyCreditReceipt: (result) => this.#verifyCreditReceipt(result),
+        admit: (binding, revision) => this.#admit(binding, revision),
+        commitTurn: (recipe) => this.#host.commitTurnWithinTransaction(recipe),
+        saveCreditAdmission: (admission) =>
+          this.#saveCreditAdmission(admission),
+        saveReceipt: (scope, kind, receipt, result) =>
+          this.#saveReceipt(scope, kind, receipt, result),
+      },
+      input,
+      options,
+    );
   }
 
   #creditAdmission(
@@ -657,11 +603,12 @@ export class SqliteExtensionStore implements ExtensionStore {
         JSON.stringify(result),
       );
   }
-  #transaction<T>(body: () => T): T {
+  #transaction<T>(body: () => T, options: { beforeCommit?(): void } = {}): T {
     this.#host.assertOpen();
     this.#db.exec("BEGIN IMMEDIATE");
     try {
       const result = body();
+      options.beforeCommit?.();
       this.#db.exec("COMMIT");
       return result;
     } catch (error) {

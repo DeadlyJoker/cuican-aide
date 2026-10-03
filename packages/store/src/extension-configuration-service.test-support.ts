@@ -49,8 +49,9 @@ export const activateCommand: SetExtensionActivationCommand = {
 export async function configurationServiceFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  options: Readonly<{ maxPoolSize?: number }> = {},
 ) {
-  const f = await extensionFixture(t, backend);
+  const f = await extensionFixture(t, backend, options);
   const manifest = parseExtensionManifest(
     extensionManifestFixture(scope.pluginId),
   );

@@ -1,6 +1,6 @@
 # 短剧项目公共元数据服务
 
-2026-10-03：S0 项目、创作需求及概念图输入修订可通过 Control HTTP、同源 Web BFF 与 ControlClient 保存、分页读取和冷恢复。此步骤提供数据服务；安装插件的 SDK/Host action、正式工作台保存、生成关联及结果选用尚未接线。
+2026-10-03：S0 项目、创作需求及概念图输入修订可通过 Control HTTP、同源 Web BFF 与 ControlClient 保存、分页读取和冷恢复。同一服务已接入显式 Native/Production Host dispatcher 与独立短剧 3.0.0 模块，支持实际项目、需求及概念输入保存。[项目生成关联](./project-generation-link.md)已实现内部任务事务端口；工作台生图和结果选用尚未接线。
 
 ## 显式装配与权限
 
@@ -51,4 +51,4 @@ BFF 只代理明确项目路径和方法，在 URL 规范化前检查原目标�
 
 严格契约、客户端取消/期限、实际 SQLite 与 PostgreSQL HTTP、可选装配及真实 BFF→Control→SQLite 验证覆盖保存、不可变历史、账号隔离、撤权、并发 CAS、丢回复重放、归档、分页字节裁剪、回执失败回滚及同库重启恢复。PostgreSQL 验证使用隔离的本机 18.6 实例；具名测试身份不代替生产账号和钱包。
 
-安装插件动作协议、SDK helper 和可信调用提交检查已实现；下一步将同一公共服务接入明确 Host dispatcher、实际依赖可用性和 ready，再连接模块内的项目界面。生成关联仍需加入原 Run/个人积分冻结事务，结果选用只能引用已核验的原 operation。保留原用户栏、设置、侧栏、普通聊天和团队页面，完整 S0 门槛见[产品方案](./short-drama-workbench-product-plan.md#实施与验收顺序)。
+安装插件动作协议、SDK helper、明确 Host dispatcher、实际依赖可用性和 ready 已接通。独立 3.0.0 模块已通过实际发行 ESM→DOM→Host HTTP→SQLite 的项目、需求和概念输入历史保存/冷恢复验证；具名夹具没有运行模型、供应商或付费任务。[项目生成关联](./project-generation-link.md)已接入内部原 Run/个人积分冻结事务，模块提交尚未装配；结果选用只能引用已核验的原 operation。保留原用户栏、设置、侧栏、普通聊天和团队页面，完整 S0 门槛见[产品方案](./short-drama-workbench-product-plan.md#实施与验收顺序)。

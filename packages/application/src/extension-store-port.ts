@@ -6,7 +6,10 @@ import type {
   ExtensionCreditAdmission,
   PluginTaskAdmission,
   PluginQueryTaskAdmission,
+  ProjectGenerationReference,
+  ProjectGenerationLink,
 } from "@crewon/domain";
+import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
 import type {
   CommitTurnStartInput,
@@ -64,6 +67,12 @@ export type CommitExtensionTurnInput = Readonly<{
   /** Internal server-derived v1 pin; persisted separately without changing the v0 binding or receipt shape. */
   pluginAdmission?: PluginTaskAdmission;
   pluginQueryAdmission?: PluginQueryTaskAdmission;
+  /** Internal confirmed project source; committed atomically with the original Turn and credits. */
+  projectGeneration?: ProjectGenerationReference;
+}>;
+export type CommitExtensionTurnOptions = Readonly<{
+  /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
+  projectGenerationAuthority?: CreativeProjectCommitAuthority;
 }>;
 /** Adds the admitted user message and history to the existing immutable task receipt. */
 export type CommitExtensionTurnResult = CommitExtensionRunResult &
@@ -82,6 +91,10 @@ export interface ExtensionStore {
   readonly creditAdmissionVersion?: "crewon.extension-credit-admission.v0";
   readonly pluginAdmissionVersion?: "crewon.plugin-task-admission.v1";
   readonly pluginQueryAdmissionVersion?: "crewon.plugin-query-task-admission.v1";
+  readonly projectGenerationVersion?: "crewon.project-generation-link.v0";
+  loadProjectGenerationLink?(
+    input: ExtensionRunLocator,
+  ): Promise<ProjectGenerationLink | null>;
   loadPluginQueryTaskAdmission?(
     input: ExtensionRunLocator,
   ): Promise<PluginQueryTaskAdmission | null>;
@@ -114,6 +127,7 @@ export interface ExtensionStore {
   ): Promise<CommitExtensionRunResult>;
   commitExtensionTurn(
     input: CommitExtensionTurnInput,
+    options?: CommitExtensionTurnOptions,
   ): Promise<CommitExtensionTurnResult>;
   loadExtensionTurnReceipt(
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },

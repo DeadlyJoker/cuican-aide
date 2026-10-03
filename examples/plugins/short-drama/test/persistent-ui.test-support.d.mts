@@ -6,6 +6,8 @@ import type {
 import type {
   PublicCreativeProject,
   PublicProjectBrief,
+  PublicConceptAsset,
+  PublicConceptRevision,
 } from "@crewon/plugin-sdk/contracts";
 
 export function persistentProps(
@@ -19,18 +21,52 @@ export function deferred<T = unknown>(): {
   reject(error: unknown): void;
 };
 type Details = { project: PublicCreativeProject; brief: PublicProjectBrief };
+type ConceptDetails = {
+  project: PublicCreativeProject;
+  asset: PublicConceptAsset;
+  assetRevision: PublicConceptRevision;
+};
+type ConceptReadMethod =
+  | "getConceptAsset"
+  | "listConceptAssets"
+  | "getConceptRevision"
+  | "listConceptRevisions";
+type ConceptRecord = {
+  asset: PublicConceptAsset;
+  revisions: readonly PublicConceptRevision[];
+};
 type Call = { action: string; input: unknown; signal: AbortSignal };
 export function metadataService(options?: { pageSize?: number }): {
   services: PluginUiServices;
   calls: Call[];
   records: Map<
     string,
-    { project: PublicCreativeProject; briefs: PublicProjectBrief[] }
+    {
+      project: PublicCreativeProject;
+      briefs: PublicProjectBrief[];
+      assets: Map<string, ConceptRecord>;
+    }
   >;
   create(title: string, briefText: string): Details;
   externalBrief(projectId: string, text: string): Details;
+  createConcept(
+    projectId: string,
+    name: string,
+    briefRevision: number,
+    prompt: string,
+  ): ConceptDetails;
+  externalConceptRevision(
+    projectId: string,
+    assetId: string,
+    briefRevision: number,
+    prompt: string,
+  ): ConceptDetails;
   refuse(value: boolean): void;
   loseNextWrite(): void;
   gateList(gate: { promise: Promise<unknown> }): void;
+  gateConceptRead(
+    method: ConceptReadMethod,
+    gate: { promise: Promise<unknown> },
+  ): void;
   methodCalls(method: string): Call[];
 };

@@ -16,6 +16,8 @@ import { pathToFileURL } from "node:url";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
 import {
   parseInvokePluginUiActionResponse,
+  type CreativeProjectBriefMutationResponse,
+  type CreativeProjectConceptMutationResponse,
   type OpenPluginUiMountResponse,
 } from "@crewon/contracts";
 import type { PluginUiJsonValue } from "@crewon/contracts/plugins";
@@ -33,18 +35,15 @@ import {
   projectPluginDisabledScans,
   projectPluginHarness,
 } from "./creative-project-plugin.integration.test-support.ts";
+import {
+  installedCreativeProjectBrowser,
+  installedCreativeProjectControls,
+  until,
+} from "./creative-project-installed-ui.browser.test-support.ts";
 
 type NativeRuntime = Awaited<
   ReturnType<typeof createStandaloneControlApiWithPlugins>
 >;
-type TestBrowser = Readonly<Record<string, unknown>> & {
-  document: Document;
-  Event: typeof Event;
-  HTMLInputElement: typeof HTMLInputElement;
-  HTMLTextAreaElement: typeof HTMLTextAreaElement;
-  HTMLDialogElement: typeof HTMLDialogElement;
-  happyDOM: { close(): Promise<void> };
-};
 const actor = Object.freeze({
   principalId: "installed-ui-project-owner",
   actorId: "installed-ui-project-actor",
@@ -72,7 +71,7 @@ const packageDirectory = process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY;
 const happyDomModule = process.env.CREWON_TEST_HAPPY_DOM_MODULE;
 
 test(
-  "actual installed short-drama 2.0.0 DOM waits for Host ready, creates and versions a project through HTTP, and restores confirmed records after a cold SQLite restart",
+  "actual installed short-drama 3.0.0 DOM freezes saved concept sources, versions exact inputs through Host HTTP, and restores project and concept history after a cold SQLite restart",
   {
     skip:
       packageDirectory === undefined || happyDomModule === undefined
@@ -84,62 +83,27 @@ test(
     assert.ok(packageDirectory && isAbsolute(packageDirectory));
     assert.ok(happyDomModule && isAbsolute(happyDomModule));
     // An explicitly configured missing artifact fails; there is no source/demo/fake service fallback.
-    await readFile(happyDomModule);
-    const module = (await import(pathToFileURL(happyDomModule).href)) as Record<
-      string,
-      unknown
-    >;
-    assert.equal(typeof module.Window, "function");
-    const WindowConstructor = module.Window as new (options: {
-      url: string;
-    }) => TestBrowser;
-    const browser = new WindowConstructor({
-      url: "https://crewon.test/workspace",
-    });
-    const names = [
-      "window",
-      "document",
-      "navigator",
-      "Node",
-      "Element",
-      "HTMLElement",
-      "HTMLInputElement",
-      "HTMLTextAreaElement",
-      "HTMLDialogElement",
-      "Event",
-      "MouseEvent",
-      "KeyboardEvent",
-      "MutationObserver",
-    ];
-    const originals = new Map(
-      names.map((name) => [
-        name,
-        Object.getOwnPropertyDescriptor(globalThis, name),
-      ]),
-    );
-    for (const name of names)
-      Object.defineProperty(globalThis, name, {
-        value: name === "window" ? browser : browser[name],
-        writable: true,
-        configurable: true,
-      });
-    // HappyDOM supplies DOM state; native browser dialog top-layer behavior is a separate UI check.
-    browser.HTMLDialogElement.prototype.showModal = function () {
-      this.open = true;
-    };
-    browser.HTMLDialogElement.prototype.close = function () {
-      this.open = false;
+    const dom = await installedCreativeProjectBrowser(happyDomModule);
+    const { browser } = dom;
+    const originalFetch = globalThis.fetch;
+    const networkRequests: string[] = [];
+    globalThis.fetch = (input, init) => {
+      networkRequests.push(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url,
+      );
+      return originalFetch(input, init);
     };
     const instances = new Set<PluginUiInstance>();
     t.after(async () => {
       try {
         for (const instance of instances) await instance.dispose();
-        await browser.happyDOM.close();
       } finally {
-        for (const [name, original] of originals) {
-          if (original === undefined) Reflect.deleteProperty(globalThis, name);
-          else Object.defineProperty(globalThis, name, original);
-        }
+        globalThis.fetch = originalFetch;
+        await dom.close();
       }
     });
     const runtimes = new Set<NativeRuntime>();
@@ -157,7 +121,7 @@ test(
     await privateDirectories(directory);
     const verified = await verifyLocalPluginPackage({ directory });
     assert.equal(verified.descriptor.pluginId, "crewon.short-drama");
-    assert.equal(verified.descriptor.version, "2.0.0");
+    assert.equal(verified.descriptor.version, "3.0.0");
     assert.equal(verified.descriptor.entrypoints.node, null);
     assert.deepEqual(verified.descriptor.requires, [
       { service: "crewon.creative-projects", apiVersion: "1", optional: false },
@@ -304,30 +268,8 @@ test(
     );
     assert.equal(calls.length, 1);
     assert.equal(calls[0]!.action, "crewon.creative-projects.v1.listProjects");
-    const button = (label: string) => {
-      const found = Array.from(
-        ui.container.querySelectorAll<HTMLButtonElement>("button"),
-      ).find((item) => item.textContent?.trim() === label);
-      assert.ok(found, `missing installed UI button: ${label}`);
-      return found;
-    };
-    const enter = async (selector: string, text: string) => {
-      const element = ui.container.querySelector<
-        HTMLInputElement | HTMLTextAreaElement
-      >(selector);
-      assert.ok(element, `missing installed UI input: ${selector}`);
-      const prototype =
-        element instanceof browser.HTMLTextAreaElement
-          ? browser.HTMLTextAreaElement.prototype
-          : browser.HTMLInputElement.prototype;
-      Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(
-        element,
-        text,
-      );
-      element.dispatchEvent(new browser.Event("input", { bubbles: true }));
-      element.dispatchEvent(new browser.Event("change", { bubbles: true }));
-      await setTimeout(5);
-    };
+    const { button, conceptButton, prompt, enter } =
+      installedCreativeProjectControls(browser, () => ui.container);
     button("新建项目").click();
     await until(
       () =>
@@ -353,9 +295,8 @@ test(
       call.action.endsWith(".createProject"),
     );
     assert.equal(create.length, 1);
-    const created = create[0]!.output as {
-      project: { projectId: string; revision: number };
-    };
+    const created = create[0]!
+      .output as unknown as CreativeProjectBriefMutationResponse;
     const projectId = created.project.projectId;
     const secondBrief = " 第二版确认需求\n前后空格原样保存 ";
     await enter("#creative-brief", secondBrief);
@@ -367,6 +308,79 @@ test(
       ui.container.querySelector<HTMLTextAreaElement>("#creative-brief")!.value,
       secondBrief,
     );
+    await until(
+      () => ui.container.textContent!.includes("还没有概念输入"),
+      "actual empty concept input list",
+    );
+    button("新建概念输入").click();
+    await until(() => prompt() !== null, "new concept editor");
+    const conceptName = "雨夜来信概念";
+    const firstPrompt = " 雨夜旧信箱\n路灯映在积水上 ";
+    await enter('input[aria-label="概念名称"]', `  ${conceptName}  `);
+    await enter("#concept-prompt", firstPrompt);
+    assert.equal(
+      ui.container.querySelector(".concept-panel details p")!.textContent,
+      firstBrief,
+    );
+    assert.equal(button("保存概念输入").disabled, false);
+    button("保存概念输入").click();
+    await until(
+      () => ui.container.textContent!.includes("概念输入 v1 已保存"),
+      "confirmed first concept input through Host HTTP",
+    );
+    assert.equal(
+      ui.container.querySelector<HTMLTextAreaElement>("#creative-brief")!.value,
+      secondBrief,
+    );
+    const conceptCreate = calls.filter((call) =>
+      call.action.endsWith(".createConcept"),
+    );
+    assert.equal(conceptCreate.length, 1);
+    const firstConcept = conceptCreate[0]!
+      .output as unknown as CreativeProjectConceptMutationResponse;
+    const assetId = firstConcept.asset.assetId;
+    assert.equal(typeof assetId, "string");
+    assert.notEqual(assetId, String(firstConcept.assetRevision.assetRevision));
+    assert.equal(firstConcept.asset.name, conceptName);
+    assert.equal(firstConcept.assetRevision.prompt, firstPrompt);
+    assert.equal(firstConcept.assetRevision.briefRevision, 1);
+    assert.equal(
+      firstConcept.assetRevision.briefContentDigest,
+      created.brief.contentDigest,
+    );
+    assert.deepEqual(conceptCreate[0]!.input, {
+      projectId,
+      request: {
+        briefRevision: 1,
+        prompt: firstPrompt,
+        expectedProjectRevision: created.project.revision,
+        name: conceptName,
+      },
+      idempotencyKey: (
+        conceptCreate[0]!.input as {
+          idempotencyKey: string;
+        }
+      ).idempotencyKey,
+    });
+    assert.equal(
+      calls.filter((call) => call.action.endsWith(".appendBrief")).length,
+      0,
+    );
+    assert.deepEqual(
+      await h.invoke(lease, "crewon.creative-projects.v1.getConceptAsset", {
+        projectId,
+        assetId,
+      }),
+      { asset: firstConcept.asset },
+    );
+    assert.deepEqual(
+      await h.invoke(lease, "crewon.creative-projects.v1.getConceptRevision", {
+        projectId,
+        assetId,
+        assetRevision: 1,
+      }),
+      { assetRevision: firstConcept.assetRevision },
+    );
     assert.equal(button("保存为新版本").disabled, false);
     button("保存为新版本").click();
     await until(
@@ -377,6 +391,172 @@ test(
       calls.filter((call) => call.action.endsWith(".appendBrief")).length,
       1,
     );
+    assert.match(ui.container.textContent!, /来源：已保存需求 v1 · 旧需求/u);
+    button("编辑为新修订").click();
+    await until(() => prompt()?.readOnly === false, "editing first concept");
+    const secondPrompt = " 清晨窗边\n信封特写 ";
+    await enter("#concept-prompt", secondPrompt);
+    assert.equal(button("保存为新输入修订").disabled, true);
+    button("使用已保存需求 v2").click();
+    await until(
+      () =>
+        ui.container.textContent!.includes("来源：已保存需求 v2 · 当前需求"),
+      "explicit current saved source selection",
+    );
+    button("保存为新输入修订").click();
+    await until(
+      () => ui.container.textContent!.includes("概念输入 v2 已保存"),
+      "concept revision against the second saved brief",
+    );
+    const secondConcept = calls.filter((call) =>
+      call.action.endsWith(".appendConceptRevision"),
+    )[0]!.output as unknown as CreativeProjectConceptMutationResponse;
+    assert.equal(secondConcept.asset.assetId, assetId);
+    assert.equal(secondConcept.assetRevision.assetRevision, 2);
+    assert.equal(secondConcept.assetRevision.briefRevision, 2);
+    const savedSecondBrief = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.getBrief",
+      { projectId, briefRevision: 2 },
+    );
+    assert.equal(
+      secondConcept.assetRevision.briefContentDigest,
+      savedSecondBrief.brief.contentDigest,
+    );
+
+    button("查看输入历史").click();
+    await until(
+      () => ui.container.textContent!.includes("查看修订 v1"),
+      "first immutable concept revision in history",
+    );
+    button("查看修订 v1").click();
+    await until(
+      () => prompt()?.value === firstPrompt && prompt()?.readOnly === true,
+      "exact historical concept input",
+    );
+    button("编辑为新修订").click();
+    await until(() => prompt()?.readOnly === false, "historical source draft");
+    const thirdPrompt = " 仍沿用第一版故事\n雨夜信箱的不同构图 ";
+    await enter("#concept-prompt", thirdPrompt);
+    assert.equal(button("保存为新输入修订").disabled, true);
+    const acknowledge = ui.container.querySelector<HTMLInputElement>(
+      'input[aria-label="确认沿用需求 v1"]',
+    );
+    assert.ok(acknowledge);
+    assert.equal(acknowledge.checked, false);
+    acknowledge.click();
+    await until(
+      () => button("保存为新输入修订").disabled === false,
+      "explicit acknowledgement of the frozen first brief",
+    );
+    button("保存为新输入修订").click();
+    await until(
+      () => ui.container.textContent!.includes("概念输入 v3 已保存"),
+      "new concept input pinned to the first saved brief",
+    );
+    const thirdConcept = calls.filter((call) =>
+      call.action.endsWith(".appendConceptRevision"),
+    )[1]!.output as unknown as CreativeProjectConceptMutationResponse;
+    assert.equal(thirdConcept.asset.assetId, assetId);
+    assert.equal(thirdConcept.assetRevision.assetRevision, 3);
+    assert.equal(thirdConcept.assetRevision.briefRevision, 1);
+    assert.equal(
+      thirdConcept.assetRevision.briefContentDigest,
+      created.brief.contentDigest,
+    );
+    const revisionWrites = calls.filter((call) =>
+      call.action.endsWith(".appendConceptRevision"),
+    );
+    assert.equal(revisionWrites.length, 2);
+    for (const [index, call] of revisionWrites.entries()) {
+      const input = call.input as {
+        assetId: string;
+        request: {
+          expectedAssetMetadataRevision: number;
+          expectedProjectRevision: number;
+          briefRevision: number;
+        };
+      };
+      assert.equal(input.assetId, assetId);
+      assert.equal(input.request.expectedAssetMetadataRevision, index + 1);
+      assert.equal(input.request.briefRevision, index === 0 ? 2 : 1);
+      assert.equal(
+        input.request.expectedProjectRevision,
+        index === 0
+          ? firstConcept.project.revision + 1
+          : secondConcept.project.revision,
+      );
+    }
+    button("返回概念列表").click();
+    await until(() => prompt() === null, "concept list after confirmed input");
+    button("新建概念输入").click();
+    await until(() => prompt() !== null, "second stable concept asset editor");
+    const otherName = "另一幅独立画面";
+    await enter('input[aria-label="概念名称"]', otherName);
+    await enter("#concept-prompt", " 第二个资产的输入 ");
+    button("保存概念输入").click();
+    await until(
+      () => ui.container.textContent!.includes("概念输入 v1 已保存"),
+      "second concept asset through the same actual Host",
+    );
+    const otherConcept = calls.filter((call) =>
+      call.action.endsWith(".createConcept"),
+    )[1]!.output as unknown as CreativeProjectConceptMutationResponse;
+    assert.notEqual(otherConcept.asset.assetId, assetId);
+    button("返回概念列表").click();
+    await until(
+      () =>
+        ui.container.querySelectorAll(".concept-panel > button.version-card")
+          .length === 2,
+      "both persisted concept assets",
+    );
+    const assetsPage = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.listConceptAssets",
+      { projectId, query: { limit: 1 } },
+    );
+    assert.equal(assetsPage.assets.length, 1);
+    assert.equal(assetsPage.nextAfterAssetId, assetsPage.assets[0]!.assetId);
+    const assetsNext = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.listConceptAssets",
+      {
+        projectId,
+        query: { limit: 1, afterAssetId: assetsPage.nextAfterAssetId },
+      },
+    );
+    assert.equal(assetsNext.assets.length, 1);
+    assert.deepEqual(
+      [assetsPage.assets[0]!.assetId, assetsNext.assets[0]!.assetId].sort(),
+      [assetId, otherConcept.asset.assetId].sort(),
+    );
+    const revisionsPage = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.listConceptRevisions",
+      { projectId, assetId, query: { limit: 1 } },
+    );
+    assert.deepEqual(revisionsPage.revisions, [firstConcept.assetRevision]);
+    assert.equal(revisionsPage.nextAfterAssetRevision, 1);
+    const revisionsNext = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.listConceptRevisions",
+      { projectId, assetId, query: { limit: 1, afterAssetRevision: 1 } },
+    );
+    assert.deepEqual(revisionsNext.revisions, [secondConcept.assetRevision]);
+    const revisionsLast = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.listConceptRevisions",
+      { projectId, assetId, query: { limit: 1, afterAssetRevision: 2 } },
+    );
+    assert.deepEqual(revisionsLast.revisions, [thirdConcept.assetRevision]);
+    const exactHttpInput = await h.request(
+      "GET",
+      `/api/v1/creative-projects/${encodeURIComponent(projectId)}/concepts/${encodeURIComponent(assetId)}/revisions/1`,
+    );
+    assert.equal(exactHttpInput.statusCode, 200, exactHttpInput.body);
+    assert.deepEqual(exactHttpInput.json(), {
+      assetRevision: firstConcept.assetRevision,
+    });
     button("归档项目").click();
     await until(
       () =>
@@ -398,11 +578,11 @@ test(
     );
     button("v2 · 查看历史").click();
     await until(
-      () => ui.container.querySelectorAll(".version-card").length === 2,
+      () => ui.container.querySelectorAll("dialog .version-card").length === 2,
       "both immutable brief versions in dialog",
     );
     assert.deepEqual(
-      Array.from(ui.container.querySelectorAll(".version-card p")).map(
+      Array.from(ui.container.querySelectorAll("dialog .version-card p")).map(
         (element) => element.textContent,
       ),
       [secondBrief, firstBrief],
@@ -414,7 +594,7 @@ test(
     );
     assert.equal(current.project.state, "active");
     assert.equal(current.project.latestBriefRevision, 2);
-    assert.equal(current.project.revision, created.project.revision + 3);
+    assert.equal(current.project.revision, created.project.revision + 7);
     assert.deepEqual(
       (
         await h.invoke(lease, "crewon.creative-projects.v1.listBriefs", {
@@ -463,11 +643,11 @@ test(
     assert.ok(button("归档项目"));
     button("v2 · 查看历史").click();
     await until(
-      () => ui.container.querySelectorAll(".version-card").length === 2,
+      () => ui.container.querySelectorAll("dialog .version-card").length === 2,
       "cold-restored immutable brief history",
     );
     assert.deepEqual(
-      Array.from(ui.container.querySelectorAll(".version-card p")).map(
+      Array.from(ui.container.querySelectorAll("dialog .version-card p")).map(
         (element) => element.textContent,
       ),
       [secondBrief, firstBrief],
@@ -479,6 +659,99 @@ test(
     assert.equal(
       calls.filter((call) => call.action.endsWith(".appendBrief")).length,
       1,
+    );
+    ui.container
+      .querySelector<HTMLButtonElement>('[aria-label="关闭弹窗"]')!
+      .click();
+    await until(
+      () =>
+        ui.container.querySelector<HTMLDialogElement>("dialog")?.open === false,
+      "closed cold-restored brief history dialog",
+    );
+    await until(
+      () =>
+        ui.container.querySelectorAll(".concept-panel > button.version-card")
+          .length === 2,
+      "cold-restored stable concept asset list",
+    );
+    assert.match(conceptButton(conceptName).textContent!, /输入 v3/u);
+    conceptButton(conceptName).click();
+    await until(
+      () => prompt()?.value === thirdPrompt && prompt()?.readOnly === true,
+      "cold-restored exact latest concept input",
+    );
+    assert.match(ui.container.textContent!, /来源：已保存需求 v1 · 旧需求/u);
+    const restoredRead = calls
+      .filter((call) => call.action.endsWith(".getConceptRevision"))
+      .at(-1)!;
+    assert.deepEqual(restoredRead.input, {
+      projectId,
+      assetId,
+      assetRevision: 3,
+    });
+    button("查看输入历史").click();
+    await until(
+      () => ui.container.textContent!.includes("查看修订 v3"),
+      "cold-restored immutable concept history",
+    );
+    const expectedRevisions = [
+      firstConcept.assetRevision,
+      secondConcept.assetRevision,
+      thirdConcept.assetRevision,
+    ];
+    assert.deepEqual(
+      (
+        await h.invoke(
+          lease,
+          "crewon.creative-projects.v1.listConceptRevisions",
+          {
+            projectId,
+            assetId,
+            query: {},
+          },
+        )
+      ).revisions,
+      expectedRevisions,
+    );
+    button("查看修订 v1").click();
+    await until(
+      () => prompt()?.value === firstPrompt && prompt()?.readOnly === true,
+      "cold-restored first immutable concept input",
+    );
+    assert.deepEqual(
+      await h.invoke(lease, "crewon.creative-projects.v1.getConceptRevision", {
+        projectId,
+        assetId,
+        assetRevision: 1,
+      }),
+      { assetRevision: firstConcept.assetRevision },
+    );
+    assert.deepEqual(
+      await h.invoke(lease, "crewon.creative-projects.v1.getConceptAsset", {
+        projectId,
+        assetId,
+      }),
+      { asset: thirdConcept.asset },
+    );
+    assert.equal(
+      calls.filter((call) => call.action.endsWith(".createConcept")).length,
+      2,
+    );
+    assert.equal(
+      calls.filter((call) => call.action.endsWith(".appendConceptRevision"))
+        .length,
+      2,
+    );
+    assert.equal(
+      calls.every((call) =>
+        call.action.startsWith("crewon.creative-projects.v1."),
+      ),
+      true,
+    );
+    assert.equal(
+      networkRequests.length,
+      0,
+      "metadata UI must not contact a vendor or model",
     );
     const database = new DatabaseSync(databasePath);
     try {
@@ -492,6 +765,18 @@ test(
           .prepare("SELECT count(*) AS n FROM creative_project_briefs")
           .get()!.n,
         2,
+      );
+      assert.equal(
+        database
+          .prepare("SELECT count(*) AS n FROM creative_concept_assets")
+          .get()!.n,
+        2,
+      );
+      assert.equal(
+        database
+          .prepare("SELECT count(*) AS n FROM creative_concept_revisions")
+          .get()!.n,
+        4,
       );
       for (const table of ["run_snapshots", "threads", "messages", "outbox"])
         assert.equal(
@@ -512,14 +797,6 @@ test(
   },
 );
 
-async function until(predicate: () => boolean, description: string) {
-  const deadline = Date.now() + 5000;
-  while (!predicate()) {
-    if (Date.now() >= deadline)
-      assert.fail(`installed UI did not reach: ${description}`);
-    await setTimeout(5);
-  }
-}
 async function privateDirectories(directory: string): Promise<void> {
   await chmod(directory, 0o700);
   for (const entry of await readdir(directory, { withFileTypes: true })) {

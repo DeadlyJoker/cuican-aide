@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "2.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "3.0.0";
 if (version.length > 64 || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(version))
   throw new Error("example_version_invalid");
 const output = join(root, "dist", version);
@@ -75,7 +75,7 @@ const descriptor = parsePluginPackageDescriptor({
   version,
   title: "AI 短剧工作台",
   description:
-    "独立短剧工作台：保存与恢复项目和需求版本；生成服务待接入，不扣费。",
+    "独立短剧工作台：保存项目、需求和概念输入，查看版本历史；生成服务待接入，不扣费。",
   entrypoints: {
     node: null,
     ui: { path: "ui.mjs", mode: "trustedModule" },
