@@ -70,7 +70,13 @@ export type AdvanceExternalOperation = ExternalOperationLocator &
     updatedAt: string;
   }>;
 
-/** A successful reservation is permission for exactly one dispatch, never a retry token. */
+/**
+ * A newly created reservation permits one dispatch; replay never permits another.
+ * For an admitted paid generation, creation also requires its actual Run to be
+ * running without cancellation and its original personal credit hold to remain
+ * reserved. Those facts and creation are serialized in the parent database.
+ * Observing an existing operation remains independent of new-dispatch admission.
+ */
 export interface ExternalOperationStore {
   reserveExternalOperation(input: ReserveExternalOperation): Promise<
     Readonly<{

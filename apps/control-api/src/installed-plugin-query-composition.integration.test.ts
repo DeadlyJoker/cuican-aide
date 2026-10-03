@@ -18,6 +18,7 @@ import {
 import { RuntimeExtensionHostService } from "../../runtime-worker/src/extensions/extension-host-service.ts";
 import { startRuntimeExtensionHostServer } from "../../runtime-worker/src/extensions/extension-host-server.ts";
 import { seedThread } from "../../../packages/store/src/thread-store-conformance.test-support.ts";
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 import {
   createStandaloneControlApi,
   createStandaloneControlApiWithExtensions,
@@ -64,6 +65,7 @@ for (const backend of ["sqlite", "postgres"] as const)
         operationId = randomUUID();
       assert.ok(admission);
       // Source operation is deterministic persisted provider evidence, never a provider invocation.
+      await startExternalOperationFixtureRun(f.store, original.binding);
       await f.operations.reserveExternalOperation({
         tenantId: actor.tenantId,
         runId: original.binding.runId,

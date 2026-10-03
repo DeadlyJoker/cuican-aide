@@ -24,6 +24,7 @@ import {
 import { digest, scope, timestamp } from "./extension-store.test-support.ts";
 import { extensionStoreDigester } from "./extension-store-records.ts";
 import { seedThread } from "./thread-store-conformance.test-support.ts";
+import { startExternalOperationFixtureRun } from "./external-operation-run.test-support.ts";
 
 type Backend = "sqlite" | "postgres";
 type Storage = Awaited<ReturnType<typeof configurationServiceFixture>>["first"];
@@ -361,6 +362,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
       test("query tasks and cursor/receipt rereads never freeze another generation fee", async (t) => {
         const f = await fixture(t, backend);
         const generated = await f.task.createTask(actor, command);
+        await startExternalOperationFixtureRun(
+          f.first.parent,
+          generated.binding,
+        );
         const operationId = randomUUID();
         await f.operations.reserveExternalOperation({
           tenantId: actor.tenantId,

@@ -14,6 +14,7 @@ import {
 } from "./extension-configuration-service.test-support.ts";
 import { scope, timestamp, digest } from "./extension-store.test-support.ts";
 import { seedThread } from "./thread-store-conformance.test-support.ts";
+import { startExternalOperationFixtureRun } from "./external-operation-run.test-support.ts";
 import {
   installationRecipe,
   selectionRecipe,
@@ -111,6 +112,7 @@ export async function pluginQueryFixture(
     generation.binding,
   );
   assert.ok(sourceAdmission);
+  await startExternalOperationFixtureRun(f.first.parent, generation.binding);
   const operationId = randomUUID();
   await f.operations.reserveExternalOperation({
     tenantId: actor.tenantId,

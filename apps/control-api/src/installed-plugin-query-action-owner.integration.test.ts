@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { seedThread } from "../../../packages/store/src/thread-store-conformance.test-support.ts";
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 import { extensionStoreDigester } from "../../../packages/store/src/extension-store-records.ts";
 import {
   actor,
@@ -17,6 +18,7 @@ async function fixture(
   await f.invoke();
   const source = f.state.accepted[0]!,
     operationId = randomUUID();
+  await startExternalOperationFixtureRun(f.first.parent, source.binding);
   await f.operations.reserveExternalOperation({
     tenantId: actor.tenantId,
     runId: source.binding.runId,

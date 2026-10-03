@@ -10,6 +10,7 @@ import {
   businessExecutionFixture,
 } from "./installed-plugin-business-execution.integration.test-support.ts";
 import { businessPackageFixture } from "./installed-plugin-business.test-support.ts";
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 
 /** Actual installed ESM and SQLite provenance; these policies are test-owned, not production permission. */
 async function lifecycleFixture(t: TestContext) {
@@ -40,6 +41,7 @@ return {dispose(){f.disposes++;if(f.failCleanup)throw new Error('fixture_actual_
   assert.ok(admission);
   const operations = f.store.externalOperationStore();
   const operationId = randomUUID();
+  await startExternalOperationFixtureRun(f.store, original.binding);
   await operations.reserveExternalOperation({
     tenantId: actor.tenantId,
     runId: original.binding.runId,

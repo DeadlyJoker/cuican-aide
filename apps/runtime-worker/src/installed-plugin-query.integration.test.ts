@@ -14,6 +14,7 @@ import {
   scope,
 } from "./installed-plugin-business-execution.integration.test-support.ts";
 import { seedThread } from "../../../packages/store/src/thread-store-conformance.test-support.ts";
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 const digester = {
   sha256: (value: string) =>
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
@@ -36,6 +37,7 @@ for (const backend of ["sqlite", "postgres"] as const)
       const operations = f.store.externalOperationStore(),
         operationId = randomUUID();
       // Persisted deterministic provider record only; no external provider or model is dispatched in this test.
+      await startExternalOperationFixtureRun(f.store, original.binding);
       await operations.reserveExternalOperation({
         tenantId: actor.tenantId,
         runId: original.binding.runId,

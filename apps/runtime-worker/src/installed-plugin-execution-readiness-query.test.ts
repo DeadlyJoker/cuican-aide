@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 import { businessPackageFixture } from "./installed-plugin-business.test-support.ts";
 import {
   businessExecutionFixture,
@@ -76,6 +77,7 @@ for (const backend of ["sqlite", "postgres"] as const)
       assert.ok(admission);
       const operationId = randomUUID();
       // Named durable provider evidence only. This authorization test never executes a model or provider.
+      await startExternalOperationFixtureRun(f.store, original.binding);
       await f.operations.reserveExternalOperation({
         ...original.binding,
         operationId,

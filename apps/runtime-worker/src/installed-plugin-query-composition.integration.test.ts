@@ -4,6 +4,7 @@ import { createServer } from "node:net";
 import test from "node:test";
 import type { AuthorizationPort } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 import {
   InstalledPluginQueryHost,
   type InstalledPluginExecutionConfig,
@@ -48,6 +49,7 @@ async function paidSource(f: Fixture) {
     operationId = randomUUID();
   assert.ok(admission);
   // Deterministic provider record. This test never calls a model or external supplier.
+  await startExternalOperationFixtureRun(f.store, original.binding);
   await f.operations.reserveExternalOperation({
     tenantId: actor.tenantId,
     runId: original.binding.runId,
