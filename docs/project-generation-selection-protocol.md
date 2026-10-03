@@ -72,6 +72,10 @@ HTTP 读取和写入使用同一路径：`/api/v1/creative-projects/{projectId}/
 
 revision 为 0 当且仅当实际当前指针为空。未配置能力、未迁移或不完整 schema 是错误，不能伪装为空。读取允许归档和历史输入，继续检查当前项目、原执行插件与 Run 的读取权限。
 
+宿主另提供可选的 `props.data.projectGenerationSelectionContext` 恢复提示，版本为 `crewon.project-generation-selection-host-context.v1`，字段仅为 `version` 与 `intent`。intent 为 null，或包含完整原 request、`pending/uncertain/accepted/refused`、retryable 及原不可变 receipt；只有 uncertain 可以重试，只有 accepted 携带匹配原请求的回执。整个提示最多 24 KiB，拒绝 getter、额外字段及客户端构造的当前指针，不包含 Thread、运行范围、账号或付款信息。它不授予能力；新写仍沿真实当前挂载和原服务授权。
+
+选用恢复保留原账户与完整 source pin 审计，同一包的停用后重新启用可以使用当前真实有效的挂载显式重试原 key 和原输入；包、发布者、版本或贡献变更不能替换未知请求。此规则不改变原生成和查询 journal 的 pin 规则。accepted 回执与当前指针分开，页面必须另行 GET 当前选用；宿主不会用原回执覆盖较新选择。页面控件与账户 journal 正在接线；同一运行中重挂的恢复不代表应用进程重启后的持久恢复。
+
 `requiresConfirmation` 只比较选用输入与最新素材输入、所依赖需求与最新需求。修改描述或需求后，旧选用保留并提示重新确认；项目重命名不使选用过期。选用时间用于审计，版本承担顺序，时钟回拨不造成伪版本冲突。
 
 ## 来源与事务

@@ -3,6 +3,8 @@ import {
   type PluginProjectGenerationSelectionClient,
   type PluginUiServices,
   type ProjectGenerationSelectionUiInput,
+  parseProjectGenerationSelectionHostContext,
+  type ProjectGenerationSelectionHostContext,
 } from "@crewon/plugin-sdk/ui";
 export const createSelectionClient = (
   services: PluginUiServices,
@@ -26,4 +28,19 @@ export function checkTypes(
     // @ts-expect-error Selection reads cannot carry caller ownership or pricing.
     owner: "forged",
   });
+}
+
+export const parseRecovery = (
+  input: unknown,
+): ProjectGenerationSelectionHostContext =>
+  parseProjectGenerationSelectionHostContext(input);
+export function checkRecoveryTypes(
+  context: ProjectGenerationSelectionHostContext,
+): void {
+  // @ts-expect-error A historical receipt is not the actual current selection.
+  void context.current;
+  if (context.intent) {
+    // @ts-expect-error Recovery cannot rebase the original CAS before retrying.
+    context.intent.request.reference.expectedProjectRevision = 9;
+  }
 }

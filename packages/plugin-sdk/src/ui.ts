@@ -30,6 +30,8 @@ export {
   parseProjectGenerationHostContext,
   PROJECT_GENERATION_QUERY_HOST_CONTEXT_VERSION,
   parseProjectGenerationQueryHostContext,
+  PROJECT_GENERATION_SELECTION_HOST_CONTEXT_VERSION,
+  parseProjectGenerationSelectionHostContext,
 } from "./contracts.js";
 export {
   CREWON_CREATIVE_PROJECTS_SERVICE,
@@ -82,6 +84,8 @@ export type {
   ProjectGenerationHostIntent,
   ProjectGenerationQueryHostContext,
   ProjectGenerationQueryHostIntent,
+  ProjectGenerationSelectionHostContext,
+  ProjectGenerationSelectionHostIntent,
 } from "./contracts.js";
 
 /** Defines a UI ABI entry. Actual mounting and isolation belong to the host. */

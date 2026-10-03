@@ -4,6 +4,8 @@ import {
   createPluginProjectGenerationSelectionClient,
   CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE,
   CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION,
+  PROJECT_GENERATION_SELECTION_HOST_CONTEXT_VERSION,
+  parseProjectGenerationSelectionHostContext,
 } from "../dist/ui.js";
 import { PROJECT_GENERATION_SELECTION_UI_ACTIONS } from "../dist/contracts.js";
 
@@ -36,6 +38,27 @@ const receipt = () => ({
   selection: selected(),
 });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test("released recovery context preserves an old receipt without presenting it as the current pointer", () => {
+  const recovered = parseProjectGenerationSelectionHostContext({
+    version: PROJECT_GENERATION_SELECTION_HOST_CONTEXT_VERSION,
+    intent: {
+      request: input(),
+      phase: "accepted",
+      retryable: false,
+      receipt: { ...receipt(), disposition: "replayed" },
+    },
+  });
+  assert.equal(recovered.intent.request.resultIndex, 2);
+  assert.equal(recovered.intent.receipt.selectionRevision, 1);
+  assert.equal(Object.hasOwn(recovered, "current"), false);
+  assert.throws(() =>
+    parseProjectGenerationSelectionHostContext({
+      ...recovered,
+      current: { selectionRevision: 5, current: selected() },
+    }),
+  );
+});
 
 test("released ESM exports an independent two-action service without construction IO", async () => {
   let calls = 0;
