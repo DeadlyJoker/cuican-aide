@@ -62,10 +62,31 @@ export type DesktopPluginBootstrap = Readonly<{
   environment: Readonly<{ CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: string }>;
   scope: PluginProfileScope;
   authorityEpoch: string;
+  /** Present on the actual Native factory; optional only for pre-existing management consumers. */
+  assertCurrent?(): void;
   /** Invoke only after the Control process that consumed this file has stopped. */
   cleanup(): Promise<void>;
 }>;
-type FileSnapshot = Readonly<{ bytes: Buffer; metadata: Stats }>;
+type FileSnapshot = Readonly<{
+  bytes: Buffer;
+  metadata: Stats;
+  ancestors: ReturnType<typeof directoryPins>;
+}>;
+const issuedBootstraps = new WeakMap<
+  DesktopPluginBootstrap,
+  DesktopPluginBootstrapManifest
+>();
+
+/** A DTO or a copied bootstrap cannot issue Native runtime ownership. */
+export function assertDesktopPluginBootstrapIssued(
+  input: DesktopPluginBootstrap,
+): DesktopPluginBootstrapManifest {
+  const manifest = issuedBootstraps.get(input);
+  if (!manifest || typeof input.assertCurrent !== "function")
+    invalid("unissued");
+  input.assertCurrent();
+  return manifest;
+}
 
 /** Host-owned opt-in only. No package scan, implicit install, activation or business grant. */
 export async function prepareDesktopPluginBootstrap(
@@ -133,6 +154,7 @@ export async function prepareDesktopPluginBootstrap(
     invalid("profile");
   const installRoot = join(dataDirectory, "plugins");
   privateDirectory(installRoot, true);
+  const installationPins = directoryPins(installRoot);
   const authorityEpoch = digest(
     JSON.stringify({
       schemaVersion: "crewon.desktop-plugin-epoch.v1",
@@ -171,13 +193,20 @@ export async function prepareDesktopPluginBootstrap(
     throw error;
   }
   let cleaned = false;
-  return Object.freeze({
+  const result: DesktopPluginBootstrap = Object.freeze({
     bootstrapPath,
     environment: Object.freeze({
       CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: bootstrapPath,
     }),
     scope,
     authorityEpoch,
+    assertCurrent() {
+      if (cleaned) invalid("closed");
+      assertUnchanged(approvalPath, approval, MAX_BYTES);
+      assertUnchanged(profilePath, profile, 16 * 1024);
+      assertUnchanged(bootstrapPath, bootstrap, MAX_BYTES);
+      assertDirectories(installationPins);
+    },
     async cleanup() {
       if (cleaned) return;
       try {
@@ -193,6 +222,8 @@ export async function prepareDesktopPluginBootstrap(
       }
     },
   });
+  issuedBootstraps.set(result, manifest);
+  return result;
 }
 
 function parseApproval(input: unknown) {
@@ -334,7 +365,7 @@ function privateFile(path: string, maximum: number): FileSnapshot {
     )
       invalid("changed");
     assertDirectories(ancestors);
-    return Object.freeze({ bytes, metadata: before });
+    return Object.freeze({ bytes, metadata: before, ancestors });
   } finally {
     closeSync(fd);
   }
@@ -416,6 +447,7 @@ function assertUnchanged(
   expected: FileSnapshot,
   maximum: number,
 ): void {
+  assertDirectories(expected.ancestors);
   const actual = privateFile(path, maximum);
   if (
     !sameStat(actual.metadata, expected.metadata) ||

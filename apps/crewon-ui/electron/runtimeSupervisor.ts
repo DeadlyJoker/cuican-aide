@@ -48,6 +48,17 @@ import {
   desktopPluginManagementEnvironment,
   type DesktopLocalManagementAccess,
 } from "./desktopPluginManagementRuntime.ts";
+import {
+  isRuntimeChildTerminal,
+  observeRuntimeChildClose,
+  waitForRuntimeChildTerminalBefore,
+} from "./runtimeChildClose.ts";
+import {
+  prepareDesktopInstalledPluginRuntime,
+  type DesktopInstalledPluginRuntime,
+} from "./desktopInstalledPluginRuntime.ts";
+import type { DesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
+import { startDesktopInstalledPluginRuntimeChildren } from "./desktopInstalledPluginRuntimeChildren.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -111,6 +122,10 @@ export class RuntimeSupervisor {
     | (() => DesktopExtensionRuntimeConfiguration)
     | undefined;
   readonly #extensionDeadlineMs: number | undefined;
+  readonly #installedRuntime:
+    | (() => DesktopInstalledPluginRuntimeConfiguration)
+    | undefined;
+  readonly #installedDeadlineMs: number | undefined;
   readonly #resolveExtensionCredential:
     | ((
         input: ProviderRuntimeCredentialInput,
@@ -124,6 +139,10 @@ export class RuntimeSupervisor {
   #currentChildren: DesktopCurrentRuntimeChildren | null = null;
   #managementControl: ChildProcess | null = null;
   #pluginBootstrap: DesktopPluginBootstrapOwner | null = null;
+  #installedRuntimeOwner: DesktopInstalledPluginRuntime | null = null;
+  #installedStartupJoin: Promise<
+    Readonly<{ control: ChildProcess; worker: ChildProcess }>
+  > | null = null;
   readonly #localManagementEvents = new DesktopLocalManagementAccessEvents();
   #runtimeAbort: AbortController | null = null;
   #history: DesktopExtensionHistoryCoordinator | null = null;
@@ -155,6 +174,10 @@ export class RuntimeSupervisor {
         input: ProviderRuntimeCredentialInput,
       ) => ProviderRuntimeCredentialResolution;
     }>;
+    installedRuntime?: Readonly<{
+      configuration: () => DesktopInstalledPluginRuntimeConfiguration;
+      deadlineMs?: number;
+    }>;
     logOutputs?: { stdout: Writable; stderr: Writable };
   }) {
     this.#dataDirectory = options.dataDirectory;
@@ -166,6 +189,8 @@ export class RuntimeSupervisor {
     this.#workspaceRoot = options.workspaceRoot;
     this.#extensionRuntime = options.extensionRuntime?.configuration;
     this.#extensionDeadlineMs = options.extensionRuntime?.deadlineMs;
+    this.#installedRuntime = options.installedRuntime?.configuration;
+    this.#installedDeadlineMs = options.installedRuntime?.deadlineMs;
     this.#resolveExtensionCredential =
       options.extensionRuntime?.resolveProviderCredential;
     this.#logs = options.logOutputs
@@ -178,6 +203,8 @@ export class RuntimeSupervisor {
     if (this.#children.length > 0 || this.#startupAbort !== null) return;
     if (this.#pluginBootstrap !== null)
       throw new Error("desktop_plugin_bootstrap_cleanup_required");
+    if (this.#installedRuntimeOwner !== null)
+      throw new Error("desktop_installed_plugin_runtime_cleanup_required");
     const configuration =
       this.#extensionRuntime?.() ??
       parseDesktopExtensionRuntimeConfiguration({
@@ -251,6 +278,88 @@ export class RuntimeSupervisor {
       );
       const { sharedEnvironment, workerEnvironment } =
         agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
+      const installedConfiguration = this.#installedRuntime?.();
+      if (installedConfiguration?.enabled) {
+        const expectedProvider = { ...provider };
+        const assertProviderCurrent = () => {
+          const current = this.#provider();
+          if (
+            current === null ||
+            (["providerId", "endpoint", "modelId", "apiKey"] as const).some(
+              (field) => current[field] !== expectedProvider[field],
+            )
+          )
+            throw new Error("desktop_installed_plugin_provider_changed");
+        };
+        assertProviderCurrent();
+        if (configuration.enabled)
+          throw new Error("desktop_installed_plugin_legacy_runtime_conflict");
+        if (bootstrap === null)
+          throw new Error("desktop_installed_plugin_bootstrap_required");
+        const installed = prepareDesktopInstalledPluginRuntime({
+          configuration: installedConfiguration,
+          dataDirectory: this.#dataDirectory,
+          bootstrap,
+          provider,
+          sharedEnvironment: {
+            ...sharedEnvironment,
+            CREWON_MODEL_CREDENTIAL_REQUIRED:
+              provider.apiKey === null ? "0" : "1",
+          },
+          workerEnvironment: {
+            ...workerEnvironment,
+            CREWON_MODEL_CREDENTIAL_REQUIRED:
+              provider.apiKey === null ? "0" : "1",
+          },
+          deadlineMs: this.#installedDeadlineMs,
+          signal: startup.signal,
+        });
+        this.#installedRuntimeOwner = installed;
+        installed.assertCurrent();
+        await this.#runOnce(
+          "Runtime release",
+          this.#paths.release,
+          installed.release,
+          startup.signal,
+        );
+        assertProviderCurrent();
+        installed.assertCurrent();
+        startup.signal.throwIfAborted();
+        // Register before invoking an asynchronous child/challenge operation.
+        // stop() joins this physical work after withdrawing and stopping children.
+        const startingChildren = Promise.resolve().then(() =>
+          startDesktopInstalledPluginRuntimeChildren({
+            runtime: installed,
+            signal: startup.signal,
+            deadlineMs: this.#installedDeadlineMs,
+            spawnControl: (env) => this.#spawnControl(env),
+            spawnWorker: (env) =>
+              this.#spawn("Runtime Worker", this.#paths.worker, env, true),
+            trackChild: (child) => this.#children.push(child),
+          }),
+        );
+        this.#installedStartupJoin = startingChildren;
+        let control: ChildProcess, worker: ChildProcess;
+        try {
+          ({ control, worker } = await startingChildren);
+        } finally {
+          if (this.#installedStartupJoin === startingChildren)
+            this.#installedStartupJoin = null;
+        }
+        this.#currentChildren = { control, worker };
+        await waitForReady(
+          `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
+          [control, worker],
+          startup.signal,
+        );
+        assertProviderCurrent();
+        installed.assertCurrent();
+        startup.signal.throwIfAborted();
+        this.#ready = true;
+        this.#localManagementEvents.notify();
+        this.#watchCurrentChildren();
+        return;
+      }
       const initialExtensions = desktopExtensionRuntimeEnvironments({
         configuration,
         sharedEnvironment,
@@ -517,6 +626,7 @@ export class RuntimeSupervisor {
     this.#runtimeAbort?.abort();
     this.#runtimeAbort = null;
     this.#pluginBootstrap?.withdraw();
+    this.#installedRuntimeOwner?.withdraw();
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
     const stopping = this.#stopOwnedRuntime();
@@ -531,9 +641,24 @@ export class RuntimeSupervisor {
   async #stopOwnedRuntime(): Promise<void> {
     const history = this.#history;
     const bootstrap = this.#pluginBootstrap;
+    const installed = this.#installedRuntimeOwner;
+    const installedStartup = this.#installedStartupJoin;
     let nativeCleanup = await this.#settleSessionCleanup();
     const results = await Promise.allSettled([history?.stop()]);
-    await this.#stopChildren([...this.#children]);
+    const childStops = await Promise.allSettled([
+      this.#stopChildren([...this.#children]),
+    ]);
+    // Aborted startup may reject, but its actual HTTP/body work must finish
+    // before retiring its captured owner and the Native bootstrap files.
+    await Promise.allSettled([installedStartup]);
+    const childFailures = childStops.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+    if (childFailures.length > 0)
+      throw new AggregateError(
+        childFailures,
+        "runtime_children_shutdown_failed",
+      );
     if (nativeCleanup.some((v) => v.status === "rejected")) {
       // The actual managed Control may now be terminal. Reconcile its captured native owners,
       // while an uncertain local reader must continue to reject physical cleanup.
@@ -544,6 +669,9 @@ export class RuntimeSupervisor {
       this.#currentChildren = null;
       this.#managementControl = null;
       this.#history = null;
+      await installed?.close();
+      if (this.#installedRuntimeOwner === installed)
+        this.#installedRuntimeOwner = null;
       await bootstrap?.close();
       if (this.#pluginBootstrap === bootstrap) this.#pluginBootstrap = null;
       if (nativeCleanup.some((v) => v.status === "rejected"))
@@ -898,6 +1026,7 @@ export class RuntimeSupervisor {
         windowsHide: true,
       },
     );
+    observeRuntimeChildClose(child);
     forwardRuntimeChildLogs(child, name, this.#logs);
     return child;
   }
@@ -911,7 +1040,10 @@ export class RuntimeSupervisor {
     const child = this.#spawn(name, entry, environment);
     this.#children.push(child);
     try {
-      const exit = await waitForExitBefore(child, RUNTIME_ONCE_DEADLINE_MS);
+      const exit = await waitForRuntimeChildTerminalBefore(
+        child,
+        RUNTIME_ONCE_DEADLINE_MS,
+      );
       signal.throwIfAborted();
       if (exit === null) {
         await terminateRuntimeChild(child);
@@ -922,10 +1054,7 @@ export class RuntimeSupervisor {
         throw new Error(`${name} failed (${exitSignal ?? code ?? "unknown"})`);
     } finally {
       const index = this.#children.indexOf(child);
-      if (
-        index !== -1 &&
-        (child.exitCode !== null || child.signalCode !== null)
-      )
+      if (index !== -1 && isRuntimeChildTerminal(child))
         this.#children.splice(index, 1);
     }
   }
@@ -939,19 +1068,21 @@ export async function terminateRuntimeChild(
     gracefulExitMs?: number;
   }> = {},
 ): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  const gracefulExit = waitForExitBefore(
+  if (isRuntimeChildTerminal(child)) return;
+  const gracefulExit = waitForRuntimeChildTerminalBefore(
     child,
     options.gracefulExitMs ?? RUNTIME_CHILD_GRACEFUL_EXIT_MS,
   );
-  child.kill("SIGTERM");
+  if (child.exitCode === null && child.signalCode === null)
+    child.kill("SIGTERM");
   if ((await gracefulExit) !== null) return;
 
-  const forcedExit = waitForExitBefore(
+  const forcedExit = waitForRuntimeChildTerminalBefore(
     child,
     options.forcedExitMs ?? RUNTIME_CHILD_FORCED_EXIT_MS,
   );
-  child.kill("SIGKILL");
+  if (child.exitCode === null && child.signalCode === null)
+    child.kill("SIGKILL");
   if ((await forcedExit) === null) {
     throw new Error("runtime_child_shutdown_timeout");
   }
@@ -1365,41 +1496,6 @@ export function watchRuntimeChildren(
     }
   }
   return cleanup;
-}
-
-function waitForExitBefore(
-  child: ChildProcess,
-  timeoutMs: number,
-): Promise<{
-  code: number | null;
-  signal: NodeJS.Signals | null;
-} | null> {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
-  }
-  return new Promise((resolveExit) => {
-    let settled = false;
-    const finish = (
-      result: {
-        code: number | null;
-        signal: NodeJS.Signals | null;
-      } | null,
-    ) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.off("exit", onExit);
-      child.off("error", onError);
-      resolveExit(result);
-    };
-    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
-      finish({ code, signal });
-    const onError = () =>
-      finish({ code: child.exitCode, signal: child.signalCode });
-    const timer = setTimeout(() => finish(null), timeoutMs);
-    child.once("exit", onExit);
-    child.once("error", onError);
-  });
 }
 
 function executable(name: string): string {

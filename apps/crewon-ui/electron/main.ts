@@ -37,6 +37,7 @@ import {
 import { loadLocalEnvironment } from "./localEnvironment.ts";
 import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
+import { loadDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 import { RuntimeSupervisor, runtimePaths } from "./runtimeSupervisor.ts";
 import { loadDesktopExtensionRuntimeConfiguration } from "./desktopExtensionRuntime.ts";
 import {
@@ -141,6 +142,10 @@ async function launch(): Promise<void> {
         loadDesktopExtensionRuntimeConfiguration(runtimeDataDirectory),
       resolveProviderCredential: (binding) =>
         providers.resolveForRuntime(binding),
+    },
+    installedRuntime: {
+      configuration: () =>
+        loadDesktopInstalledPluginRuntimeConfiguration(runtimeDataDirectory),
     },
     paths,
     repositoryRoot,

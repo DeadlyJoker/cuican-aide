@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：Native 明确开启的安装包发布与 Worker 加载
+
+Electron Main 增加固定私有 `desktop-installed-plugin-runtime.json` 开启输入，捕获当前实际模型、Native profile、批准 tuple、安装副本和完整操作者发布文档，沿用原 `runtime-release`、Worker 和 Control。新逻辑独立于旧扩展开启路径；未开启时保持原默认路径，无模型时仍提供原安装和配置管理。原用户栏、设置导航、页面组件、全局 CSS 和旧快照本轮未修改。输入、边界和复现命令见[桌面加载说明](./installed-plugin-native-runtime.md)。
+
+Main 从实际 Worker 输出取得本次私有 loopback peer，用随机 token 挑战现有 v1 catalog，严格核对 requestId、完整 actor、profile、每项完整包身份、配置与执行目标；协议错误立即撤回。Control 不获得 installed task/peer 凭据或付款身份。停用包的空 catalog 只证明元数据加载，不能作为真实 Node/IO readiness。模块显式启用继续沿用原依赖规则，可选执行服务允许模块启用，但不授予业务执行。
+
+实际 source Supervisor、原 Control/release/Worker 子进程和 SQLite 专项 **3/3、零跳过**：通过真实 Native HTTP 安装停用包并首配，构造操作者文档后由原 CLI 发布，完成真实 HTTPS 权限检查、私有握手及原 Control ready；交付来源离线后新 Supervisor 冷恢复同一配置和发布事实。撤回包读取权限时在发布处拒绝，不启动 Worker/Control且不改变数据库。全程业务 Node、模型、供应商、Run 和资金记录为零。模型与权限是具名测试服务，完整默认 bundle 来自先前一次普通默认启动；尚未自动从空库和原设置准备发布输入，也不是正式 Main 开启或 packaged App 执行证明。最终日志为 `native-installed-runtime-process-final-20261003.log`。
+
+实际私有 HTTP 的原 Response 暂停交付时，stop/restart 等待物理挑战结束，保留 bootstrap 且不启动替代 children。即使实际 Worker PID 已消失，两个操作仍不能提前返回；释放原 Response 后停止和原 Control 重启完成。Native 子进程现在以实际 `close` 而非仅 `exitCode` 作为退休条件；真实 Node parent 退出但后代持有 stdout 的专项证明不提前删除其输入文件。退出不确定时继续保留所有者，不能用旧 PID 或文件推断已关停。
+
+最终固定配置/运行 owner/peer 专项 **85/85**，原 default/legacy/bootstrap/关闭回归 **69/69**，原 Native 配置行为 **18/18**。正式 Main、原 preload、原 file App 的用户栏/设置/安装及业务配置冷恢复复验 **2/2、零跳过**，证明位于 `output/extensions/checks/native-installed-runtime-original-app-20261003/`；该复验没有开启 installed execution。UI lint/build、Main 构建、七入口 runtime stage、boundary 和生产许可证检查均通过。
+
+早期误用 `pnpm test -- <files>` 实际跑了两次重叠的 UI 全量，分别为 **3473 通过、8 失败、5 跳过，共 3486 项**和 **3471 通过、10 失败、7 跳过，共 3488 项**，各有三个旧 obsolete snapshot，不能称全量通过。八个完整失败名、错误和首帧与前阶段相同；第二轮另有两项 localWorkspace 超时，随后正确隔离运行 **9/9**，不改写重叠全量结果。对照为 `native-installed-runtime-ui-early-baseline-comparison-20261003.json`，窄测试改用 `pnpm --filter @crewon/ui exec vitest run`。新实际测试最初误读安装 POST 回执形状，并将可选执行依赖误当作强依赖；按现有真实契约修正后通过，未修改产品依赖规则。只读安装副本的夹具清理失败也已修复，关停及实际 PID 结束后仅处理自有临时目录，保留原测试错误和失败日志。
+
+下一落地点是从原设置的真实 selection/configuration 和当前模型自动编译发布，再接真实 Node/IO 候选准备和执行许可。个人资金/价格/结算、独立真实用户执行身份、Native/packaged 与完整 App 的 Krea2 在线生成和历史查询、短剧持久项目及第二个实际企业 API 仍未完成，完整目标继续进行。
+
 ## 2026-10-03：正式 Native 原设置与 SQLite 业务首配
 
 正式 Electron Main、原 preload 和原 `dist/index.html → App` 已实际通过“用户栏 → 设置 → 工具与扩展”安装独立报告包并保存第一份业务参数。新 Main 进程在交付来源离线后打开同一 SQLite，原表单读回同一配置、修订 1 和回执，没有第二次 PUT。此次验收使用 Main 既有 source Control 子进程选项；不是 packaged `.app` 或在线供应商执行证明。实现、命令和范围见[桌面配置说明](./installed-plugin-native-configuration.md)。

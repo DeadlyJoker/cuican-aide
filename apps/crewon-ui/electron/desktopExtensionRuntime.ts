@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { isRuntimeChildTerminal } from "./runtimeChildClose.ts";
 import { createHash, randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -276,11 +277,7 @@ export async function settleDesktopRuntimeChildren(
 > {
   const results = await Promise.allSettled(children.map(terminate));
   return {
-    terminal: new Set(
-      children.filter(
-        (child) => child.exitCode !== null || child.signalCode !== null,
-      ),
-    ),
+    terminal: new Set(children.filter(isRuntimeChildTerminal)),
     failures: results.flatMap((result) =>
       result.status === "rejected" ? [result.reason] : [],
     ),
