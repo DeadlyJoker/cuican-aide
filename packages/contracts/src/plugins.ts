@@ -41,3 +41,13 @@ export {
   parseInstalledPluginPeerResponse,
 } from "./installed-plugin-peer-api.ts";
 export { InstalledPluginPeerContractError } from "./installed-plugin-peer-values.ts";
+export {
+  NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_SCHEMA,
+  NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_MAX_BYTES,
+  parseNativeInstalledPluginPreparationResult,
+  type NativeInstalledPluginPreparationResult,
+  type NativeInstalledPluginPreparationStatus,
+  type NativeInstalledPluginPreparationBlockedReason,
+  type NativeInstalledPluginPreparationPackageIdentity,
+  type NativeInstalledPluginPreparationTarget,
+} from "./native-installed-plugin-preparation-result.ts";

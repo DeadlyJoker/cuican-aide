@@ -23,6 +23,7 @@ import {
 import {
   assertNativeInstalledPluginPreparation,
   loadNativeInstalledPluginPreparation,
+  INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA,
   parseNativePreparationActor,
 } from "./installed-plugin-native-preparation-config.ts";
 import { nativePreparationFailure as fail } from "./installed-plugin-native-preparation-files.ts";
@@ -91,6 +92,11 @@ export async function prepareNativeInstalledPluginRelease(
     >,
     actor: request.actor as ActorContext,
   });
+  if (
+    loaded.configuration.schemaVersion !==
+    INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA
+  )
+    fail("configuration_invalid");
   const defaultAgentVersionId = extensionOpaqueId(
     request.defaultAgentVersionId,
   );

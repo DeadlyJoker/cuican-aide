@@ -25,8 +25,12 @@ export const INSTALLED_PLUGIN_NATIVE_PREPARATION_ENV =
   "CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH";
 export const INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA =
   "crewon.installed-plugin-native-preparation.v1";
+export const INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA =
+  "crewon.installed-plugin-native-preparation.v2";
 export type NativeInstalledPluginPreparationConfiguration = Readonly<{
-  schemaVersion: typeof INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA;
+  schemaVersion:
+    | typeof INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA
+    | typeof INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA;
   actor: ActorContext;
   scope: PluginProfileScope;
   approvedPackages: readonly InstalledPluginReleaseIdentity[];
@@ -41,6 +45,7 @@ export type LoadedNativeInstalledPluginPreparation = Readonly<{
   worker: InstalledPluginWorkerConfig;
   databasePath: string;
   documentPath: string;
+  resultPath: string;
   environment: Readonly<Record<string, string | undefined>>;
   files: NativePreparationFiles;
 }>;
@@ -94,15 +99,20 @@ export function parseNativeInstalledPluginPreparationConfiguration(
     "plugins",
     "workerConfigurationPath",
   ]);
-  if (value.schemaVersion !== INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA)
+  if (
+    value.schemaVersion !== INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA &&
+    value.schemaVersion !== INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA
+  )
     fail("configuration_invalid");
+  const candidates =
+    value.schemaVersion === INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA;
   const actor = parseNativePreparationActor(value.actor),
     scope = parsePluginProfileScope(value.scope);
   if (actor.tenantId !== scope.tenantId || actor.spaceId !== scope.spaceId)
     fail("scope_mismatch");
   if (
     !Array.isArray(value.approvedPackages) ||
-    value.approvedPackages.length < 1 ||
+    value.approvedPackages.length < (candidates ? 0 : 1) ||
     value.approvedPackages.length > 32 ||
     !Array.isArray(value.plugins) ||
     value.plugins.length < 1 ||
@@ -146,7 +156,7 @@ export function parseNativeInstalledPluginPreparationConfiguration(
     const pluginId = pluginInstallationNamespaceId(entry.pluginId);
     if (
       pluginIds.has(pluginId) ||
-      !publishers.has(pluginId) ||
+      (!candidates && !publishers.has(pluginId)) ||
       (entry.approvalRequirement !== "none" &&
         entry.approvalRequirement !== "perAction")
     )
@@ -158,7 +168,7 @@ export function parseNativeInstalledPluginPreparationConfiguration(
     });
   });
   return Object.freeze({
-    schemaVersion: INSTALLED_PLUGIN_NATIVE_PREPARATION_SCHEMA,
+    schemaVersion: value.schemaVersion,
     actor,
     scope,
     approvedPackages: Object.freeze(approvedPackages),
@@ -237,7 +247,8 @@ export function loadNativeInstalledPluginPreparation(
   )
     fail("actor_mismatch");
   const workerPath = join(directory, "worker.json"),
-    documentPath = join(directory, "release.json");
+    documentPath = join(directory, "release.json"),
+    resultPath = join(directory, "preparation-result.json");
   if (
     configuration.workerConfigurationPath !== workerPath ||
     (environment.CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH !== undefined &&
@@ -257,11 +268,18 @@ export function loadNativeInstalledPluginPreparation(
   )
     fail("scope_mismatch");
   files.assertAbsent(documentPath);
+  if (
+    configuration.schemaVersion === INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA
+  ) {
+    files.privateDirectory(worker.installRoot);
+    files.assertAbsent(resultPath);
+  }
   const result = Object.freeze({
     configuration,
     worker,
     databasePath,
     documentPath,
+    resultPath,
     environment: Object.freeze(environment),
     files,
   });

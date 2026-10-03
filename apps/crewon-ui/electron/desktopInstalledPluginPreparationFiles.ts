@@ -66,6 +66,7 @@ export function createDesktopInstalledPluginPreparationFiles(
     const preparationPath = join(directory, "preparation.json");
     const workerPath = join(directory, "worker.json");
     const releasePath = join(directory, "release.json");
+    const resultPath = join(directory, "preparation-result.json");
     const documents = input.buildDocuments({ workerPath, releasePath });
     for (const [path, value] of [
       [preparationPath, documents.preparation],
@@ -95,6 +96,22 @@ export function createDesktopInstalledPluginPreparationFiles(
       preparationPath,
       workerPath,
       releasePath,
+      resultPath,
+      assertReleaseAbsent() {
+        assertCurrent();
+        try {
+          lstatSync(releasePath);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          )
+            return;
+          throw error;
+        }
+        invalid("preparation_unexpected_release");
+      },
       assertCurrent,
       withdraw() {
         withdrawn = true;

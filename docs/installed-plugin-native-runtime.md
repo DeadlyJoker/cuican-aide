@@ -77,11 +77,13 @@ Main 只从实际运行数据目录读取 `desktop-installed-plugin-runtime.json
 
 示例地址和凭据名必须替换为真实部署输入。列表限 1–32 个不同插件，每项 `approvalRequirement` 为 `none` 或 `perAction`。Main 捕获实际固定文件、批准包集合、持久 Native profile 和模型绑定；只在自有 `0700` 随机目录创建 `0600` 的 `preparation.json` 与 `worker.json`。Renderer 不能提交临时路径或自行签发这些输入。
 
-原 `runtime-release` 首次以 `CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH` 模式运行：在分配默认工具前验证私有文件和环境，读取同一个 `control.sqlite` 的真实安装选择和最新业务配置，重新请求真实 actor/profile、包读取和策略许可，核验安装字节与业务 schema，然后生成同目录的 `release.json`。这一步不发布任何 Agent、不写 runtime bindings、不改变选择、不导入业务 Node。完整文档保持原 1 MiB 上限；较长合法模型定义和 32 项组合不会被通用扩展 JSON 的 64 KiB 序列化限制误拒绝。
+原 `runtime-release` 首次以 `CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH` 模式运行：在分配默认工具前验证私有文件和环境，读取同一个 `control.sqlite` 的真实安装选择和最新业务配置，重新请求真实 actor/profile、包读取和策略许可，核验安装字节与业务 schema。Main 当前生成 `crewon.installed-plugin-native-preparation.v2` 输入，CLI 逐项输出私有 `preparation-result.json`，并仅在至少一项可准备时生成同目录的原 `release.json`。旧准备输入 v1 及其严格整组拒绝行为保持兼容。这一步不发布任何 Agent、不写 runtime bindings、不改变选择、不导入业务 Node。完整发布文档保持原 1 MiB 上限；较长合法模型定义和 32 项组合不会被通用扩展 JSON 的 64 KiB 序列化限制误拒绝。
 
 Main 等待准备 CLI 的实际 `close`，重核全部所有者，再以原发布模式运行同一个 CLI。默认、独立模型 source 和插件 derived 资产在这一次发布中建立；不要求此前已启动或发布普通默认 Agent。source 使用当前模型的真实 binding、instructions/model/execution，独立清空默认工具和工作区依赖；配置修订、随机目录及凭据值不改变相同模型的 source 身份，配置或批准要求变化会改变 derived 目标。
 
-保存配置继续只是保存。下一次明确启动或重启才读取最新 revision；没有隐式热重启或业务执行。显式列出的插件已卸载、配置不匹配或权限被撤回时，当前私有开启模式拒绝启动。后续产品接线仍需处理单插件失效与卸载，保持宿主原有能力可用；v2 固定文件也仍是明确操作者开启输入，尚不是用户安装后的完整自动执行闭环。
+保存配置继续只是保存。下一次明确启动或重启才读取最新 revision；没有隐式热重启或业务执行。显式列出的插件已卸载、未批准、缺少首配、配置不兼容、安装字节不可用或读取权限被撤回时，只阻止该插件准备。有效子集仍通过原 issued v1 发布、Worker 和私有 catalog 核验；全部受阻则不生成 release，清除 installed/task/peer 与本次捕获的专用权限凭据后启动原普通默认 Agent。固定私有文件、环境、身份、profile 或租户边界损坏仍拒绝整个启动，不能作为插件失效吞掉。v2 固定文件仍是明确操作者开启输入，尚不是用户安装后的完整自动执行闭环。
+
+结果契约为 `crewon.installed-plugin-native-preparation-result.v1`，限制 128 KiB、1–32 项，按请求顺序逐项给出 `prepared` 或 `blocked`。prepared 含实际完整包 tuple、配置修订/摘要、批准要求及八字段目标；Main 与原发布文档逐项比较，不接受仅同名或同数量的结果。blocked 只含插件 ID 与固定原因枚举：`notInstalled`、`notApproved`、`configurationMissing`、`configurationIncompatible`、`packageUnavailable`、`readDenied`、`stateChanged`。准备 CLI 重核发现配置/选择竞争时，移除受影响候选并有界重建结果，不把已发现失效的候选输出为 prepared；这不承诺整个启动期间的原子 latest 或热更新。结果与可选发布文件均原子不覆盖写入，失败只能撤掉自身实际 inode；默认子进程也结束后才能清理本次准备所有者。
 
 ## 原运行链路
 
@@ -112,7 +114,7 @@ CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR=/absolute/independent/professional-packag
 
 固定配置/运行 owner/私有挑战检查 **85/85**，原默认/旧扩展/bootstrap/物理关闭回归 **69/69**，原 Native 配置行为 **18/18**，正式 Main/preload/file App 原用户栏、设置、安装和配置冷恢复专项 **2/2**，均零失败、零跳过。UI lint/build、Main 构建、七个 runtime bundle、boundary 和生产许可证检查通过。早期两次全量 UI 仍有旧失败，范围及完整日志见[实施进度](./incremental-extension-progress.md)；不能称全量 UI 通过。
 
-## v2 自动准备验收
+## v2 自动准备阶段验收（隔离变更之前）
 
 提供上述实际独立专业包，运行：
 
@@ -134,6 +136,23 @@ Worker 新准备及实际 CLI 前置拒绝 **16/16**，桌面配置/owner **79/7
 
 正式 Main/preload/file App 原用户栏、设置导航、安装和业务配置冷恢复专项 **2/2、零跳过**，日志和截图位于 `native-installed-automatic-original-app-20261003` 前缀。本轮未修改 Renderer、全局 CSS 或旧快照；此专项没有开启 installed execution。UI lint/build、Worker/Control 类型、Main 构建、七入口 runtime stage、生产 license、boundary 和格式检查通过。合计 240 通过、5 个 PostgreSQL 跳过，范围及夹具实际清理记录见 `native-installed-automatic-proof-20261003.json`。
 
+## v2 单插件隔离验收
+
+提供两个真正独立保留的包，在 Node.js 24 下运行：
+
+```bash
+CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR=/absolute/independent/professional-package \
+  CREWON_TEST_KREA_PLUGIN_DIR=/absolute/independent/krea2-package \
+  pnpm --filter @crewon/ui exec vitest run \
+  electron/desktopInstalledPluginRuntime.fault-isolation.process.integration.test.ts
+```
+
+实际 **7/7、零跳过**，日志 `native-installed-isolation-process-final-20261003.log`。HTTP 卸载、未首配和真实 HTTPS 撤回读取权限后，普通默认 Agent 都经真实模型请求、原 HTTP/SSE 与 SQLite completed Run 完成。有效 Krea2 与未首配专业包的混合情况只发布 Krea2，两个停用选择均保留。私有文件、actor 和 profile 损坏仍拒绝整个启动。插件 Node、供应商、task/admission/binding、外部操作和资金记录均为零；普通默认 Run 不是插件执行证明。
+
+原自动/手工/普通默认与物理关停进程回归 **6/6**；Worker 准备/隔离/实际 CLI **37/37**，Contracts 全量 **237/237**，桌面配置和 owner **101/101**，原 Supervisor/旧扩展/bootstrap/关闭和 children **88/88**，正式 Main/preload/file App 原设置与管理 **2/2**，均零跳过。原 Worker 发布回归 **50 通过、9 个 PostgreSQL 跳过**；未提供 PostgreSQL。UI lint/build、Main、七入口 stage、类型、license、boundary 与格式检查通过。总计 528 通过、9 个 PostgreSQL 跳过，实际独立包摘要与物理清理记录见 `native-installed-isolation-proof-20261003.json`。
+
+完整 Renderer、CSS 和旧快照未改；本次没有重跑全量 UI 或启动共享 SDK producer。上述测试权限/模型不代表生产权限或实际付款，正式 App 两项也没有开启插件业务执行。输入 v1 的严格拒绝保持兼容，v2 仍需要明确私有开启文件。
+
 ## 后续交付
 
-下一阶段完成 Native 候选激活、真实 Node/IO readiness、单插件故障与卸载隔离、独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。
+下一阶段完成 Native 候选激活、真实 Node/IO readiness、独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。

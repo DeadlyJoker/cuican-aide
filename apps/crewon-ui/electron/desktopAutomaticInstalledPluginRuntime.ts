@@ -1,5 +1,10 @@
 import { inspect, isDeepStrictEqual } from "node:util";
 import {
+  parseNativeInstalledPluginPreparationResult,
+  NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_MAX_BYTES,
+  type NativeInstalledPluginPreparationStatus,
+} from "@crewon/contracts/plugins";
+import {
   captureDesktopInstalledPluginRuntimeInputs,
   captureDesktopInstalledPluginAuthorityTokens,
   prepareDesktopInstalledPluginRuntime,
@@ -20,15 +25,42 @@ import {
 import { assertDesktopPluginBootstrapIssued } from "./desktopPluginBootstrap.ts";
 
 const PREPARATION_PATH = "CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH";
+export type AutomaticDesktopInstalledPluginRuntimeCompletion =
+  | Readonly<{
+      kind: "installed";
+      runtime: DesktopInstalledPluginRuntime;
+      statuses: readonly NativeInstalledPluginPreparationStatus[];
+    }>
+  | Readonly<{
+      kind: "default";
+      environments: Readonly<{
+        sharedEnvironment: Readonly<NodeJS.ProcessEnv>;
+        workerEnvironment: Readonly<NodeJS.ProcessEnv>;
+      }>;
+      statuses: readonly NativeInstalledPluginPreparationStatus[];
+    }>;
 export type AutomaticDesktopInstalledPluginRuntime = Readonly<{
   preparationEnvironment: Readonly<NodeJS.ProcessEnv>;
   assertCurrent(): void;
   withdraw(): void;
   /** After the preparation child has physically closed; this does not publish or activate. */
-  complete(): DesktopInstalledPluginRuntime;
+  complete(): AutomaticDesktopInstalledPluginRuntimeCompletion;
   /** Caller has joined preparation, publication, challenge and all consuming children. */
   close(): Promise<void>;
 }>;
+
+function freezeCompletion(
+  value: AutomaticDesktopInstalledPluginRuntimeCompletion,
+) {
+  Object.defineProperties(value, {
+    toJSON: { value: () => ({ kind: value.kind, statuses: value.statuses }) },
+    [inspect.custom]: {
+      value: () =>
+        `[AutomaticDesktopInstalledPluginRuntimeCompletion:${value.kind}]`,
+    },
+  });
+  return Object.freeze(value);
+}
 
 export function prepareAutomaticDesktopInstalledPluginRuntime(
   input: Omit<DesktopInstalledPluginRuntimeInput, "configuration"> &
@@ -88,6 +120,10 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     [PREPARATION_PATH]: files.preparationPath,
   };
   let runtime: DesktopInstalledPluginRuntime | null = null;
+  let completed: AutomaticDesktopInstalledPluginRuntimeCompletion | null = null;
+  let resultFile: ReturnType<
+    typeof captureDesktopInstalledPluginRuntimeDocument
+  > | null = null;
   let withdrawn = false;
   let closed = false;
   let closing: Promise<void> | null = null;
@@ -104,6 +140,8 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     if (!isDeepStrictEqual(current.provider, provider))
       invalid("provider_changed");
     files.assertCurrent();
+    resultFile?.assertCurrent();
+    if (completed?.kind === "default") files.assertReleaseAbsent();
     runtime?.assertCurrent();
     signal.throwIfAborted();
   };
@@ -122,8 +160,56 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     withdraw,
     complete() {
       assertCurrent();
-      if (runtime !== null) return runtime;
+      if (completed !== null) return completed;
       try {
+        resultFile = captureDesktopInstalledPluginRuntimeDocument(
+          files.resultPath,
+          NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_MAX_BYTES,
+        );
+        const result = parseNativeInstalledPluginPreparationResult(
+          resultFile.value,
+        );
+        if (
+          !isDeepStrictEqual(result.actor, manifest.actor) ||
+          !isDeepStrictEqual(result.scope, manifest.scope) ||
+          result.defaultAgentVersionId !== shared.CREWON_AGENT_VERSION_ID ||
+          result.plugins.length !== configuration.plugins.length ||
+          result.plugins.some(
+            (status, index) =>
+              status.pluginId !== configuration.plugins[index]!.pluginId ||
+              (status.state === "prepared" &&
+                status.approvalRequirement !==
+                  configuration.plugins[index]!.approvalRequirement),
+          )
+        )
+          invalid("preparation_result");
+        const prepared = result.plugins.filter(
+          (status) => status.state === "prepared",
+        );
+        if (prepared.length === 0) {
+          files.assertReleaseAbsent();
+          const defaultEnvironment = (input: NodeJS.ProcessEnv) => {
+            const environment = withoutDesktopInstalledPluginEnvironment(input);
+            for (const name of Object.keys(authorityTokens))
+              delete environment[name];
+            return Object.freeze(environment);
+          };
+          const defaultShared = defaultEnvironment(shared),
+            defaultWorker = defaultEnvironment(worker);
+          completed = freezeCompletion({
+            kind: "default" as const,
+            get environments() {
+              assertCurrent();
+              return Object.freeze({
+                sharedEnvironment: Object.freeze({ ...defaultShared }),
+                workerEnvironment: Object.freeze({ ...defaultWorker }),
+              });
+            },
+            statuses: result.plugins,
+          });
+          assertCurrent();
+          return completed;
+        }
         const output = captureDesktopInstalledPluginRuntimeDocument(
           files.releasePath,
           1024 * 1024,
@@ -131,20 +217,27 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
         const document = record(output.value);
         if (
           !Array.isArray(document.entries) ||
-          document.entries.length !== configuration.plugins.length
+          document.entries.length !== prepared.length
         )
           invalid("preparation_output");
         const seen = new Set<string>();
         for (const value of document.entries) {
           const entry = record(value);
           const identity = record(entry.packageIdentity);
-          const selected = configuration.plugins.find(
-            (plugin) => plugin.pluginId === identity.pluginId,
+          const selected = prepared.find(
+            (status) => status.pluginId === identity.pluginId,
           );
+          const config = record(entry.configuration);
           if (
             !selected ||
             seen.has(selected.pluginId) ||
-            selected.approvalRequirement !== entry.approvalRequirement
+            selected.approvalRequirement !== entry.approvalRequirement ||
+            !isDeepStrictEqual(selected.packageIdentity, identity) ||
+            !isDeepStrictEqual(selected.configuration, {
+              revision: config.revision,
+              contentDigest: config.contentDigest,
+            }) ||
+            !isDeepStrictEqual(selected.target, entry.target)
           )
             invalid("preparation_output");
           seen.add(selected.pluginId);
@@ -160,8 +253,13 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
           deadlineMs,
         });
         output.assertCurrent();
+        completed = freezeCompletion({
+          kind: "installed",
+          runtime,
+          statuses: result.plugins,
+        });
         assertCurrent();
-        return runtime;
+        return completed;
       } catch (error) {
         withdraw();
         throw error;

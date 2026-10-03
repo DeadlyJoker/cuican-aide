@@ -14,6 +14,7 @@ import {
   parseGetPluginSelectionResponse,
   parsePluginInstallationResponse,
 } from "@crewon/contracts";
+import { parseNativeInstalledPluginPreparationResult } from "@crewon/contracts/plugins";
 import {
   parseExtensionConfiguration,
   type ExtensionConfiguration,
@@ -22,6 +23,7 @@ import { SqliteRunStore } from "@crewon/store";
 import {
   installedPluginReleaseDigester as digester,
   readInstalledPluginReleaseDocument,
+  type InstalledPluginReleaseEntry,
 } from "../../runtime-worker/src/plugins/installed-plugin-release-document.ts";
 import { DESKTOP_RUNTIME_OWNER as actor } from "./desktopExtensionRuntime.ts";
 import { DESKTOP_INSTALLED_PLUGIN_RUNTIME_FILE } from "./desktopInstalledPluginRuntimeConfiguration.ts";
@@ -164,6 +166,15 @@ export async function automaticPreparationDirectories(dataDirectory: string) {
 
 /** Read the real Main/CLI output while its private owner is still alive. */
 export async function automaticPreparationSnapshot(dataDirectory: string) {
+  const snapshot = await automaticPreparationResultSnapshot(dataDirectory);
+  assert.ok(snapshot.document);
+  return { ...snapshot, document: snapshot.document };
+}
+
+/** Candidate statuses must match the actual optional release, including every identity and target. */
+export async function automaticPreparationResultSnapshot(
+  dataDirectory: string,
+) {
   const directories = await automaticPreparationDirectories(dataDirectory);
   assert.equal(directories.length, 1);
   const directory = join(dataDirectory, directories[0]!);
@@ -172,7 +183,13 @@ export async function automaticPreparationSnapshot(dataDirectory: string) {
   assert.equal(metadata.uid, process.getuid?.());
   assert.equal(metadata.mode & 0o777, 0o700);
   const names = (await readdir(directory)).sort();
-  assert.deepEqual(names, ["preparation.json", "release.json", "worker.json"]);
+  const hasRelease = names.includes("release.json");
+  assert.deepEqual(names, [
+    "preparation-result.json",
+    "preparation.json",
+    ...(hasRelease ? ["release.json"] : []),
+    "worker.json",
+  ]);
   const files = await Promise.all(
     names.map(async (name) => {
       const path = join(directory, name);
@@ -184,9 +201,16 @@ export async function automaticPreparationSnapshot(dataDirectory: string) {
       return { name, ino: stat.ino, bytes: await readFile(path) };
     }),
   );
-  const document = readInstalledPluginReleaseDocument(
-    join(directory, "release.json"),
+  const result = parseNativeInstalledPluginPreparationResult(
+    JSON.parse(
+      files
+        .find(({ name }) => name === "preparation-result.json")!
+        .bytes.toString("utf8"),
+    ),
   );
+  const document = hasRelease
+    ? readInstalledPluginReleaseDocument(join(directory, "release.json"))
+    : null;
   const worker = JSON.parse(
     files.find(({ name }) => name === "worker.json")!.bytes.toString("utf8"),
   );
@@ -204,19 +228,53 @@ export async function automaticPreparationSnapshot(dataDirectory: string) {
     join(directory, "worker.json"),
   );
   assert.deepEqual(preparation.actor, actor);
-  assert.deepEqual(preparation.scope, document.entries[0]!.scope);
-  assert.deepEqual(preparation.plugins, [
-    {
-      pluginId: document.entries[0]!.packageIdentity.pluginId,
-      approvalRequirement: document.entries[0]!.approvalRequirement,
-    },
-  ]);
-  assert.ok(
-    preparation.approvedPackages.some((identity: unknown) =>
-      isDeepStrictEqual(identity, document.entries[0]!.packageIdentity),
-    ),
+  assert.equal(
+    preparation.schemaVersion,
+    "crewon.installed-plugin-native-preparation.v2",
   );
-  return { directory, ino: metadata.ino, files, document };
+  assert.deepEqual(result.actor, actor);
+  assert.deepEqual(result.scope, preparation.scope);
+  assert.deepEqual(
+    result.plugins.map(({ pluginId }) => pluginId),
+    preparation.plugins.map(({ pluginId }: { pluginId: string }) => pluginId),
+  );
+  const prepared = result.plugins.filter(
+    (status) => status.state === "prepared",
+  );
+  assert.equal(hasRelease, prepared.length > 0);
+  if (document) {
+    assert.equal(document.defaultAgentVersionId, result.defaultAgentVersionId);
+    assert.equal(document.entries.length, prepared.length);
+    for (const status of prepared) {
+      const entry: InstalledPluginReleaseEntry | undefined =
+        document.entries.find(
+          ({ packageIdentity }) => packageIdentity.pluginId === status.pluginId,
+        );
+      assert.ok(entry);
+      assert.deepEqual(entry.scope, result.scope);
+      assert.deepEqual(status.packageIdentity, entry.packageIdentity);
+      assert.deepEqual(status.configuration, {
+        revision: entry.configuration.revision,
+        contentDigest: entry.configuration.contentDigest,
+      });
+      assert.equal(status.approvalRequirement, entry.approvalRequirement);
+      assert.deepEqual(status.target, entry.target);
+      assert.ok(
+        preparation.approvedPackages.some((identity: unknown) =>
+          isDeepStrictEqual(identity, entry.packageIdentity),
+        ),
+      );
+      assert.ok(
+        preparation.plugins.some((input: unknown) =>
+          isDeepStrictEqual(input, {
+            pluginId: status.pluginId,
+            approvalRequirement: status.approvalRequirement,
+          }),
+        ),
+      );
+    }
+  }
+  return { directory, ino: metadata.ino, files, document, result };
 }
 
 export async function automaticPublishedSnapshot(

@@ -24,6 +24,43 @@ import {
 import { nativePreparationFailure as fail } from "./installed-plugin-native-preparation-files.ts";
 import { nativePreparationCanonicalJson } from "./installed-plugin-native-preparation-json.ts";
 
+/** Validate the shared model/default inputs even when every requested plugin is blocked. */
+export function assertNativeInstalledPluginModelPreparation(
+  input: Readonly<{
+    bootstrapVersion: CompiledAgentVersion;
+    defaultAgentVersionId: string;
+    environment: Readonly<Record<string, string | undefined>>;
+  }>,
+): void {
+  resolveModelPreparation(
+    input.bootstrapVersion,
+    input.defaultAgentVersionId,
+    input.environment,
+  );
+}
+
+function resolveModelPreparation(
+  bootstrap: CompiledAgentVersion,
+  defaultAgentVersionId: string,
+  environment: Readonly<Record<string, string | undefined>>,
+) {
+  const resolved = resolveResponsesRuntimeConfiguration(environment),
+    route = resolveRuntimeBootstrapRoute(environment);
+  const credential = environment.CREWON_MODEL_CREDENTIAL_REQUIRED;
+  if (
+    (environment.CREWON_MODEL_ADAPTER !== undefined &&
+      environment.CREWON_MODEL_ADAPTER !== "responses") ||
+    (credential !== undefined && credential !== "0" && credential !== "1") ||
+    route.agentVersionId !== defaultAgentVersionId ||
+    bootstrap.agentVersionId !== defaultAgentVersionId ||
+    bootstrap.model.modelId !== resolved.config.model ||
+    bootstrap.model.adapterName !== "direct-responses" ||
+    bootstrap.model.maxOutputTokens !== resolved.config.maxOutputTokens
+  )
+    fail("model_mismatch");
+  return { resolved, route, credential };
+}
+
 /** Pure compilation and real materializer descriptions; no transport, tool runtime or plugin is created. */
 export function compileNativeInstalledPluginReleaseEntry(
   input: Readonly<{
@@ -40,20 +77,11 @@ export function compileNativeInstalledPluginReleaseEntry(
     nativePreparationCanonicalJson(input.bootstrapVersion),
     digester,
   );
-  const resolved = resolveResponsesRuntimeConfiguration(input.environment),
-    route = resolveRuntimeBootstrapRoute(input.environment);
-  const credential = input.environment.CREWON_MODEL_CREDENTIAL_REQUIRED;
-  if (
-    (input.environment.CREWON_MODEL_ADAPTER !== undefined &&
-      input.environment.CREWON_MODEL_ADAPTER !== "responses") ||
-    (credential !== undefined && credential !== "0" && credential !== "1") ||
-    route.agentVersionId !== input.defaultAgentVersionId ||
-    bootstrap.agentVersionId !== input.defaultAgentVersionId ||
-    bootstrap.model.modelId !== resolved.config.model ||
-    bootstrap.model.adapterName !== "direct-responses" ||
-    bootstrap.model.maxOutputTokens !== resolved.config.maxOutputTokens
-  )
-    fail("model_mismatch");
+  const { resolved, route, credential } = resolveModelPreparation(
+    bootstrap,
+    input.defaultAgentVersionId,
+    input.environment,
+  );
   const provider = Object.freeze({
     kind: "directResponses" as const,
     endpoint: resolved.config.endpoint,

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TestContext } from "node:test";
 import { compileAgentVersion } from "@crewon/agent-version";
+import type { ActorContext } from "@crewon/application";
 import {
   createExtensionConfiguration,
   parseExtensionManifest,
@@ -235,11 +236,15 @@ export async function nativePreparationFixture(t: TestContext) {
   }
   const state = {
     profile: { ...scope },
-    resolvedActor: { ...actor } as typeof actor | null,
+    resolvedActor: { ...actor } as ActorContext | null,
     packageAllowed: true,
     policyAllowed: true,
+    deniedPackageIds: new Set<string>(),
+    deniedPolicyPluginIds: new Set<string>(),
     requests: [] as string[],
-    beforeReply: null as ((path: string) => Promise<void>) | null,
+    beforeReply: null as
+      | ((path: string, request: Record<string, unknown>) => Promise<void>)
+      | null,
   };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, options) => {
@@ -249,19 +254,31 @@ export async function nativePreparationFixture(t: TestContext) {
         "native_preparation_unexpected_supplier_or_model_request",
       );
     state.requests.push(endpoint.pathname);
-    await state.beforeReply?.(endpoint.pathname);
     const request = JSON.parse(String(options?.body));
+    await state.beforeReply?.(endpoint.pathname, request);
     let reply: unknown;
     if (endpoint.pathname === "/actor") reply = state.resolvedActor;
     else if (endpoint.pathname === "/profile") reply = state.profile;
     else if (endpoint.pathname === "/package") {
       if (request.purpose !== "read")
         throw new Error("preparation_must_not_request_execution_grant");
-      reply = { outcome: state.packageAllowed ? "allow" : "deny" };
+      reply = {
+        outcome:
+          state.packageAllowed &&
+          !state.deniedPackageIds.has(request.identity.pluginId)
+            ? "allow"
+            : "deny",
+      };
     } else if (endpoint.pathname === "/policy") {
       if (request.action !== "extension:read")
         throw new Error("preparation_must_not_request_execution_permission");
-      reply = { outcome: state.policyAllowed ? "allow" : "deny" };
+      reply = {
+        outcome:
+          state.policyAllowed &&
+          !state.deniedPolicyPluginIds.has(request.resource.pluginId)
+            ? "allow"
+            : "deny",
+      };
     } else throw new Error("unexpected_native_authority");
     return new Response(JSON.stringify(reply), {
       status: 200,

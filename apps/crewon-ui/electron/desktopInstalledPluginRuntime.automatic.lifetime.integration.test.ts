@@ -32,7 +32,17 @@ it.runIf(packageDirectory !== undefined)(
         () => null,
         (error: unknown) => error,
       );
-      expect(await gate.entered).toEqual({ status: 200, hasBody: true });
+      expect(
+        await Promise.race([
+          gate.entered,
+          starting.then((result) => {
+            throw (
+              result ??
+              new Error("startup_finished_without_entering_real_catalog_gate")
+            );
+          }),
+        ]),
+      ).toEqual({ status: 200, hasBody: true });
       const preparation = await automaticPreparationSnapshot(f.dataDirectory);
       expect(preparation.document.entries[0]!.configuration).toEqual(
         f.configuration,

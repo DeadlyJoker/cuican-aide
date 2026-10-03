@@ -285,8 +285,9 @@ export class RuntimeSupervisor {
         modelCatalog,
         agentPlatformApiKey === null ? [] : this.#cloudAgentProfiles,
       );
-      const { sharedEnvironment, workerEnvironment } =
+      let { sharedEnvironment, workerEnvironment } =
         agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
+      let assertPreparedDefaultCurrent: (() => void) | undefined;
       const installedConfiguration = this.#installedRuntime?.();
       if (installedConfiguration?.enabled) {
         const expectedProvider = { ...provider };
@@ -322,7 +323,7 @@ export class RuntimeSupervisor {
           deadlineMs: this.#installedDeadlineMs,
           signal: startup.signal,
         };
-        let installed: DesktopInstalledPluginRuntime;
+        let installed: DesktopInstalledPluginRuntime | null = null;
         if (
           installedConfiguration.schemaVersion ===
           DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
@@ -342,59 +343,80 @@ export class RuntimeSupervisor {
           assertProviderCurrent();
           automatic.assertCurrent();
           startup.signal.throwIfAborted();
-          installed = automatic.complete();
+          const completed = automatic.complete();
+          for (const status of completed.statuses) {
+            if (status.state === "blocked")
+              this.#logs.write(
+                "stderr",
+                "Installed plugin preparation",
+                `${status.pluginId}:${status.reasonCode}\n`,
+              );
+          }
+          if (completed.kind === "installed") {
+            installed = completed.runtime;
+          } else {
+            ({ sharedEnvironment, workerEnvironment } = completed.environments);
+            assertPreparedDefaultCurrent = () => {
+              assertProviderCurrent();
+              automatic.assertCurrent();
+            };
+          }
         } else {
           installed = prepareDesktopInstalledPluginRuntime({
             ...installedInputs,
             configuration: installedConfiguration,
           });
         }
-        this.#installedRuntimeOwner = installed;
-        installed.assertCurrent();
-        await this.#runOnce(
-          "Runtime release",
-          this.#paths.release,
-          installed.release,
-          startup.signal,
-        );
-        assertProviderCurrent();
-        installed.assertCurrent();
-        startup.signal.throwIfAborted();
-        // Register before invoking an asynchronous child/challenge operation.
-        // stop() joins this physical work after withdrawing and stopping children.
-        const startingChildren = Promise.resolve().then(() =>
-          startDesktopInstalledPluginRuntimeChildren({
-            runtime: installed,
-            signal: startup.signal,
-            deadlineMs: this.#installedDeadlineMs,
-            spawnControl: (env) => this.#spawnControl(env),
-            spawnWorker: (env) =>
-              this.#spawn("Runtime Worker", this.#paths.worker, env, true),
-            trackChild: (child) => this.#children.push(child),
-          }),
-        );
-        this.#installedStartupJoin = startingChildren;
-        let control: ChildProcess, worker: ChildProcess;
-        try {
-          ({ control, worker } = await startingChildren);
-        } finally {
-          if (this.#installedStartupJoin === startingChildren)
-            this.#installedStartupJoin = null;
+        if (installed !== null) {
+          const installedRuntime = installed;
+          this.#installedRuntimeOwner = installedRuntime;
+          installed.assertCurrent();
+          await this.#runOnce(
+            "Runtime release",
+            this.#paths.release,
+            installed.release,
+            startup.signal,
+          );
+          assertProviderCurrent();
+          installed.assertCurrent();
+          startup.signal.throwIfAborted();
+          // Register before invoking an asynchronous child/challenge operation.
+          // stop() joins this physical work after withdrawing and stopping children.
+          const startingChildren = Promise.resolve().then(() =>
+            startDesktopInstalledPluginRuntimeChildren({
+              runtime: installedRuntime,
+              signal: startup.signal,
+              deadlineMs: this.#installedDeadlineMs,
+              spawnControl: (env) => this.#spawnControl(env),
+              spawnWorker: (env) =>
+                this.#spawn("Runtime Worker", this.#paths.worker, env, true),
+              trackChild: (child) => this.#children.push(child),
+            }),
+          );
+          this.#installedStartupJoin = startingChildren;
+          let control: ChildProcess, worker: ChildProcess;
+          try {
+            ({ control, worker } = await startingChildren);
+          } finally {
+            if (this.#installedStartupJoin === startingChildren)
+              this.#installedStartupJoin = null;
+          }
+          this.#currentChildren = { control, worker };
+          await waitForReady(
+            `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
+            [control, worker],
+            startup.signal,
+          );
+          assertProviderCurrent();
+          installed.assertCurrent();
+          startup.signal.throwIfAborted();
+          this.#ready = true;
+          this.#localManagementEvents.notify();
+          this.#watchCurrentChildren();
+          return;
         }
-        this.#currentChildren = { control, worker };
-        await waitForReady(
-          `http://127.0.0.1:${this.#controlPort}/api/v1/health/ready`,
-          [control, worker],
-          startup.signal,
-        );
-        assertProviderCurrent();
-        installed.assertCurrent();
-        startup.signal.throwIfAborted();
-        this.#ready = true;
-        this.#localManagementEvents.notify();
-        this.#watchCurrentChildren();
-        return;
       }
+      assertPreparedDefaultCurrent?.();
       const initialExtensions = desktopExtensionRuntimeEnvironments({
         configuration,
         sharedEnvironment,
@@ -432,6 +454,7 @@ export class RuntimeSupervisor {
       });
       let extensions = recovery.environments;
       startup.signal.throwIfAborted();
+      assertPreparedDefaultCurrent?.();
       await this.#runOnce(
         "Runtime release",
         this.#paths.release,
@@ -439,6 +462,7 @@ export class RuntimeSupervisor {
         startup.signal,
       );
       startup.signal.throwIfAborted();
+      assertPreparedDefaultCurrent?.();
       const prepared =
         recovery.attempt === null
           ? null
@@ -493,6 +517,7 @@ export class RuntimeSupervisor {
         );
       }
       startup.signal.throwIfAborted();
+      assertPreparedDefaultCurrent?.();
       this.#ready = true;
       this.#localManagementEvents.notify();
       this.#watchCurrentChildren();

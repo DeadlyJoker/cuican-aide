@@ -58,6 +58,7 @@ type ChildObservation = Readonly<{
   installed: boolean;
   peer: boolean;
   preparation: boolean;
+  task: boolean;
 }>;
 
 /** Actual source Supervisor children; HTTPS decisions require current private Native
@@ -577,6 +578,6 @@ export async function nativeBootstrapFiles(dataDirectory: string) {
 function observer(audit: string, imports: string, installRoot: string) {
   return `import {appendFileSync} from 'node:fs';import {registerHooks} from 'node:module';
 const env=process.env;const allowed=/^CREWON_(?:ACTOR_ID|PRINCIPAL_ID|TENANT_ID|SPACE_ID|AGENT_VERSION_ID|AUTHORITY_ID|RUNTIME_GENERATION|POLICY_SNAPSHOT_ID|DEV_AGENT_PROFILES_JSON|MODEL_(?:ADAPTER|ID|CATALOG_JSON|CONTEXT_WINDOW_TOKENS)|RESPONSES_(?:ENDPOINT|IDLE_TIMEOUT_MS|STREAM_MAX_RETRIES)|AUTO_COMPACT_AT_TOKENS|NATIVE_WORKSPACE_READ_ENABLED)$/;
-appendFileSync(${JSON.stringify(audit)},JSON.stringify({pid:process.pid,entry:process.argv[1],environment:Object.fromEntries(Object.entries(env).filter(([k])=>allowed.test(k))),nativeBootstrap:!!env.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH,authorityTokenPresent:!!env.${tokenName},installed:!!env.CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH,peer:!!env.CREWON_INSTALLED_PLUGIN_PEER_TOKEN,preparation:!!env.CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH})+'\\n',{mode:0o600});
+appendFileSync(${JSON.stringify(audit)},JSON.stringify({pid:process.pid,entry:process.argv[1],environment:Object.fromEntries(Object.entries(env).filter(([k])=>allowed.test(k))),nativeBootstrap:!!env.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH,authorityTokenPresent:!!env.${tokenName},installed:!!env.CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH,peer:!!env.CREWON_INSTALLED_PLUGIN_PEER_TOKEN,preparation:!!env.CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH,task:!!env.CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH})+'\\n',{mode:0o600});
 registerHooks({load(url,context,next){if(url.startsWith(${JSON.stringify(pathToFileURL(installRoot + "/").href)}))appendFileSync(${JSON.stringify(imports)},JSON.stringify({pid:process.pid,url})+'\\n',{mode:0o600});return next(url,context);}});`;
 }

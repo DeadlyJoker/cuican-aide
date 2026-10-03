@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：Native 单插件准备故障与卸载隔离
+
+Main 当前生成私有准备输入 v2，沿用同一个原 CLI、SQLite 与 HTTPS 权限核验。每个请求插件得到严格有界的 prepared/blocked 结果；卸载、未批准、缺少首配、业务配置不兼容、实际包字节不可用及读取权限撤回只阻止受影响候选。实际准备子集仍经原 v1 发布和 Worker/catalog 核验；全部受阻时不写 release，清除 installed/task/peer 及本次专用权限凭据，继续原普通默认发布和运行。身份、租户、profile、私有文件或未知权威协议错误仍整体拒绝。
+
+prepared 结果逐项关联完整实际包身份、配置修订/摘要、批准要求和八字段目标，不能只匹配名称或数量。准备 CLI 重核发现竞争时移除受影响候选并有界重建；不承诺启动全程原子 latest 或隐式热更新。两个输出都原子不覆盖写入，失败只能删除自身 inode。即使全部受阻，Main 仍保留结果及输入所有者，等待实际默认子进程终态后才清理。旧准备输入 v1 及其整组拒绝行为保持原义。协议与复现入口见[桌面加载说明](./installed-plugin-native-runtime.md)。
+
+新的真实 source Supervisor/CLI/Worker/Control/SQLite 专项 **7/7、零跳过**，日志 `native-installed-isolation-process-final-20261003.log`。通过实际 HTTP 卸载、未首配与 HTTPS 撤回包读取权限的三种场景，原默认 Agent 都完成真实 Responses 请求、原任务 HTTP/SSE 和同库 completed Run；每项只有一个普通 Run、一条 thread 和一次具名模型请求。真实独立 Krea2 包可准备和发布时，未首配的专业包单独 blocked，保留两个原停用选择；没有导入任一业务 Node，也没有模型或供应商请求。私有配置 0644、Native actor 与 profile 损坏在发布和正式子进程前拒绝。所有插件 task/admission/binding、供应商 IO、外部操作及资金记录为零；普通默认 Run 不作为插件执行证明。
+
+原 v1/自动 v2/普通默认及物理关停进程回归 **6/6、零跳过**。Worker 新隔离、原准备与实际 CLI 前置拒绝 **37/37**；Contracts 全量 **237/237**；桌面配置与原/新自动 owner **101/101**；原 Supervisor、旧扩展、bootstrap、真实管道关闭和 installed children **88/88**。原 Worker 发布文档/loader/bindings/CLI/publication 回归 **50 通过、9 个 PostgreSQL 跳过**；未提供 PostgreSQL，不将这九项计为完成。正式 Main/preload/file App 原用户栏、设置导航、安装和业务配置冷恢复 **2/2、零跳过**，截图与证据位于 `output/extensions/checks/native-installed-isolation-original-app-20261003/`。相关检查合计 **528 通过、9 个 PostgreSQL 跳过**，不重复计入首次窄跑后又被 Contracts 全量覆盖的 27 项。
+
+Contracts/Worker/Control 类型、UI lint/build、Main 构建、七入口 runtime stage、生产许可证、boundary 和格式检查通过。所有 Renderer、CSS、预览界面及旧快照保持开始版本；用户 5719 原页面已再次从左下角用户栏打开原设置页，最新截图为 `original-settings-user-entry-latest-20261003.jpg`。本轮没有启动共享 SDK producer，也没有重跑或声称全量 UI 通过；此前既有失败与 obsolete snapshot 仍按历史记录保留。
+
+早期失败日志保留：新增错误类的参数属性被 Node 24 strip-only 拒绝，改为显式字段赋值；两项夹具类型错误补充明确类型。真实 Krea2 副本保留了源的 0755，触发 Native 私有来源检查；仅核验并调整自有副本为 0700，原实包与产品校验未改。启动失败时等待 catalog gate 的测试现与原启动异常终态竞争，保证立即进入原物理清理，原成功路径、超时及全部断言保留。早期超时残留在确认实际进程已结束后仅清理自有目录；最终相关进程和临时目录均为零，用户 5719/5720 服务保留，两个独立包再次核验原摘要。日志、计数和清理记录见 `native-installed-isolation-proof-20261003.json`。
+
+该步骤完成准备阶段的单插件隔离。固定 v2 仍是明确操作者开启输入；具名权限与模型服务仍为测试服务。Native 实际 Node/IO 候选准备与激活、独立真实用户执行身份、个人资金/价格/结算、正式 Main/full App/packaged Krea2 在线生成和历史查询、短剧持久项目及第二个实际企业 API 仍未完成。下一落地点为真实候选 readiness 与激活，完整目标继续进行。
+
 ## 2026-10-03：Native 从保存配置和当前模型自动准备发布
 
 同一固定私有开启文件增加 v2，列表中的安装包不再要求操作者逐项构造 source/derived 文档。Main 捕获实际模型、批准集合与持久 Native profile，建立自有私有输入目录，第一次运行原 `runtime-release` 只读取实际 SQLite selection/latest configuration、重新核验真实 HTTPS actor/profile/package/read-policy 及安装字节，生成原 v1 发布文档。输入错误和旧扩展冲突在默认工具构造前拒绝；原 issued 文件 pin 在正式准备前再次核对。Main 等待准备 CLI 物理关闭后，第二次原 CLI 才发布完整 default/source/derived bundle，无需前置普通默认发布。协议、边界与复现命令见[桌面加载说明](./installed-plugin-native-runtime.md)。

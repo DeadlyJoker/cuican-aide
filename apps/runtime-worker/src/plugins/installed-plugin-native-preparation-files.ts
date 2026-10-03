@@ -63,7 +63,7 @@ function unchanged(pin: Pin): boolean {
 /** Captures real ancestor inodes and private inputs. SQLite contents may change legitimately. */
 export class NativePreparationFiles {
   readonly #pins = new Map<string, Pin>();
-  #output: Pin | null = null;
+  readonly #outputs = new Map<string, Pin>();
 
   #ancestors(path: string): void {
     let parent = dirname(path);
@@ -166,8 +166,8 @@ export class NativePreparationFiles {
     try {
       for (const pin of this.#pins.values())
         if (!unchanged(pin)) nativePreparationFailure("files_changed");
-      if (this.#output !== null && !unchanged(this.#output))
-        nativePreparationFailure("files_changed");
+      for (const pin of this.#outputs.values())
+        if (!unchanged(pin)) nativePreparationFailure("files_changed");
     } catch {
       nativePreparationFailure("files_changed");
     }
@@ -224,10 +224,10 @@ export class NativePreparationFiles {
       )
         nativePreparationFailure("files_changed");
       linkSync(staging, path);
-      this.#output = { path, stat: fstatSync(fd), contents: true };
+      this.#outputs.set(path, { path, stat: fstatSync(fd), contents: true });
       unlinkSync(staging);
       const stat = fstatSync(fd);
-      this.#output = { path, stat, contents: true };
+      this.#outputs.set(path, { path, stat, contents: true });
       if (stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600)
         nativePreparationFailure("file_invalid");
       this.assertCurrent();
@@ -259,16 +259,27 @@ export class NativePreparationFiles {
 
   /** A failed preparation may delete only the exact output inode it published. */
   discardOutput(): void {
-    const pin = this.#output;
-    if (pin === null) return;
-    const current = lstatSync(pin.path);
-    if (
-      current.dev !== pin.stat.dev ||
-      current.ino !== pin.stat.ino ||
-      current.isSymbolicLink()
-    )
-      nativePreparationFailure("output_ownership_lost");
-    unlinkSync(pin.path);
-    this.#output = null;
+    const errors: unknown[] = [];
+    for (const pin of this.#outputs.values()) {
+      try {
+        const current = lstatSync(pin.path);
+        if (
+          current.dev !== pin.stat.dev ||
+          current.ino !== pin.stat.ino ||
+          current.isSymbolicLink()
+        )
+          nativePreparationFailure("output_ownership_lost");
+        unlinkSync(pin.path);
+        this.#outputs.delete(pin.path);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length === 1) throw errors[0];
+    if (errors.length > 1)
+      throw new AggregateError(
+        errors,
+        "installed_plugin_native_preparation_output_cleanup_failed",
+      );
   }
 }

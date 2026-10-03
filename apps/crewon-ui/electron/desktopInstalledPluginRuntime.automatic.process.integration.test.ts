@@ -7,6 +7,7 @@ import {
   assertAutomaticManagementOnly,
   assertAutomaticNoExecution,
   automaticPreparationDirectories,
+  automaticPreparationResultSnapshot,
   automaticPreparationSnapshot,
   automaticPublishedSnapshot,
   nativeAutomaticProcessFixture,
@@ -201,21 +202,32 @@ it.runIf(packageDirectory !== undefined)(
       const beforeDeniedChildren = (await f.observations()).length;
       const beforeDeniedRequests = f.requests.length;
       f.denyPackages();
-      const refused = f.supervisor(true);
-      await expect(refused.start()).rejects.toThrow(
-        /Installed plugin preparation failed/u,
-      );
-      expect(() => refused.session()).toThrow("control_runtime_unavailable");
+      const isolated = f.supervisor(true);
+      await isolated.start();
+      expect(
+        (
+          await nativeProcessHttp(
+            isolated.session(),
+            "GET",
+            "/api/v1/health/ready",
+          )
+        ).status,
+      ).toBe(200);
       const deniedChildren = (await f.observations()).slice(
         beforeDeniedChildren,
       );
-      expect(deniedChildren).toHaveLength(1);
-      expect(
-        deniedChildren[0]!.entry.endsWith(
-          "/runtime-worker/src/release-main.ts",
-        ),
-      ).toBe(true);
-      expect(deniedChildren[0]!.preparation).toBe(true);
+      assertAutomaticChildren(deniedChildren, false);
+      const deniedPreparation = await automaticPreparationResultSnapshot(
+        f.dataDirectory,
+      );
+      expect(deniedPreparation.document).toBe(null);
+      expect(deniedPreparation.result.plugins).toEqual([
+        {
+          pluginId: f.sources[0]!.pluginId,
+          state: "blocked",
+          reasonCode: "readDenied",
+        },
+      ]);
       expect(
         f.requests
           .slice(beforeDeniedRequests)
@@ -223,8 +235,10 @@ it.runIf(packageDirectory !== undefined)(
             ({ path, body }) => path === "/package" && body.purpose === "read",
           ),
       ).toBe(true);
-      expect(nativeProcessFacts(f.databasePath)).toEqual(beforeDeniedFacts);
-      await refused.stop();
+      expect(nativeProcessFacts(f.databasePath).counts.agent_versions).toBe(
+        beforeDeniedFacts.counts.agent_versions,
+      );
+      await isolated.stop();
       expect(await automaticPreparationDirectories(f.dataDirectory)).toEqual(
         [],
       );
@@ -249,6 +263,7 @@ function assertAutomaticChildren(
       Awaited<ReturnType<typeof nativeAutomaticProcessFixture>>["observations"]
     >
   >,
+  installed = true,
 ) {
   assert.equal(rows.length, 4);
   const release = rows.filter((row) =>
@@ -258,8 +273,10 @@ function assertAutomaticChildren(
   assert.equal(release[0]!.preparation, true);
   assert.equal(release[0]!.installed, false);
   assert.equal(release[1]!.preparation, false);
-  assert.equal(release[1]!.installed, true);
-  assert.ok(release.every((row) => row.authorityTokenPresent && !row.peer));
+  assert.equal(release[1]!.installed, installed);
+  assert.equal(release[0]!.authorityTokenPresent, true);
+  assert.equal(release[1]!.authorityTokenPresent, installed);
+  assert.ok(release.every((row) => !row.peer && !row.task));
   assert.equal(
     release[0]!.environment.CREWON_AGENT_VERSION_ID,
     release[1]!.environment.CREWON_AGENT_VERSION_ID,
@@ -267,12 +284,12 @@ function assertAutomaticChildren(
   const worker = rows.find((row) =>
     row.entry.endsWith("/runtime-worker/src/main.ts"),
   );
-  assert.ok(
-    worker?.installed &&
-      worker.peer &&
-      worker.authorityTokenPresent &&
-      !worker.preparation,
-  );
+  assert.ok(worker);
+  assert.equal(worker.installed, installed);
+  assert.equal(worker.peer, installed);
+  assert.equal(worker.authorityTokenPresent, installed);
+  assert.equal(worker.preparation, false);
+  assert.equal(worker.task, false);
   const control = rows.find((row) =>
     row.entry.endsWith("/control-api/src/main.ts"),
   );
@@ -281,6 +298,7 @@ function assertAutomaticChildren(
     !control.installed &&
       !control.peer &&
       !control.preparation &&
+      !control.task &&
       !control.authorityTokenPresent,
   );
 }

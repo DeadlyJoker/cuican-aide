@@ -4,139 +4,24 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import {
-  prepareAutomaticDesktopInstalledPluginRuntime,
-  type AutomaticDesktopInstalledPluginRuntime,
-} from "./desktopAutomaticInstalledPluginRuntime.ts";
+import { prepareAutomaticDesktopInstalledPluginRuntime } from "./desktopAutomaticInstalledPluginRuntime.ts";
 import {
   DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
   DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
   loadDesktopInstalledPluginRuntimeConfiguration,
   parseDesktopInstalledPluginRuntimeConfiguration,
-  type EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration,
 } from "./desktopInstalledPluginRuntimeConfiguration.ts";
-import { desktopInstalledPluginRuntimeFixture } from "./desktopInstalledPluginRuntime.test-support.ts";
 import { DESKTOP_RUNTIME_OWNER } from "./desktopExtensionRuntime.ts";
+import {
+  directories,
+  withFixture,
+} from "./desktopAutomaticInstalledPluginRuntime.test-support.ts";
 
 const PREPARATION_PATH = "CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH";
-type Fixture = Awaited<ReturnType<typeof fixture>>;
-async function fixture() {
-  const original = await desktopInstalledPluginRuntimeFixture();
-  const {
-    actorAuthority,
-    policyAuthority,
-    profileAuthority,
-    packageAuthority,
-    networkAuthority,
-    timeoutMs,
-  } = original.workerConfiguration;
-  const value = {
-    schemaVersion: DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
-    enabled: true,
-    providerBinding: original.configuration.providerBinding,
-    plugins: [
-      {
-        pluginId: original.source.pluginId,
-        approvalRequirement: "none" as const,
-      },
-    ],
-    workerAuthorities: {
-      actorAuthority,
-      policyAuthority,
-      profileAuthority,
-      packageAuthority,
-      networkAuthority,
-      timeoutMs,
-    },
-  };
-  const owners = new Set<AutomaticDesktopInstalledPluginRuntime>();
-  function write(input: unknown = value) {
-    writeFileSync(original.configurationPath, JSON.stringify(input), {
-      mode: 0o600,
-    });
-  }
-  write();
-  function configuration(): EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration {
-    const loaded = loadDesktopInstalledPluginRuntimeConfiguration(
-      original.dataDirectory,
-    );
-    if (
-      !loaded.enabled ||
-      loaded.schemaVersion !== DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
-    )
-      throw new Error("fixture automatic configuration");
-    return loaded;
-  }
-  function prepare(config = configuration()) {
-    const owner = prepareAutomaticDesktopInstalledPluginRuntime({
-      ...original.input,
-      configuration: config,
-    });
-    owners.add(owner);
-    return owner;
-  }
-  function paths(owner: AutomaticDesktopInstalledPluginRuntime) {
-    const preparationPath = owner.preparationEnvironment[PREPARATION_PATH];
-    if (!preparationPath) throw new Error("fixture preparation path");
-    const directory = dirname(preparationPath);
-    return {
-      directory,
-      preparationPath,
-      workerPath: join(directory, "worker.json"),
-      releasePath: join(directory, "release.json"),
-    };
-  }
-  function read(path: string) {
-    return JSON.parse(readFileSync(path, "utf8"));
-  }
-  function output(
-    owner: AutomaticDesktopInstalledPluginRuntime,
-    document: unknown = original.release,
-  ) {
-    const result = paths(owner);
-    writeFileSync(result.releasePath, JSON.stringify(document), {
-      flag: "wx",
-      mode: 0o600,
-    });
-    return result;
-  }
-  async function close() {
-    await Promise.allSettled([...owners].map((owner) => owner.close()));
-    await original.bootstrap.cleanup();
-    rmSync(original.directory, { recursive: true, force: true });
-  }
-  return {
-    ...original,
-    operatorConfiguration: original.configuration,
-    value,
-    write,
-    configuration,
-    prepare,
-    paths,
-    read,
-    output,
-    close,
-  };
-}
-async function withFixture(run: (value: Fixture) => Promise<void>) {
-  const value = await fixture();
-  try {
-    await run(value);
-  } finally {
-    await value.close();
-  }
-}
-function directories(value: Fixture) {
-  return readdirSync(value.dataDirectory).filter((name) =>
-    name.startsWith(".installed-plugin-preparation-"),
-  );
-}
-
 describe("fixed Native v2 automatic preparation", () => {
   it("preserves v1 and accepts exact disabled v2 without introducing active fields", async () => {
     await withFixture(async (f) => {
@@ -186,7 +71,7 @@ describe("fixed Native v2 automatic preparation", () => {
       }
       const { sourceId: _id, directory: _source, ...identity } = f.source;
       expect(f.read(p.preparationPath)).toEqual({
-        schemaVersion: "crewon.installed-plugin-native-preparation.v1",
+        schemaVersion: "crewon.installed-plugin-native-preparation.v2",
         actor: DESKTOP_RUNTIME_OWNER,
         scope: f.bootstrap.scope,
         approvedPackages: [identity],
@@ -229,8 +114,12 @@ describe("fixed Native v2 automatic preparation", () => {
       const owner = f.prepare();
       const p = f.output(owner);
       // Synthetic compiled assets test the Native ownership boundary only, never publication/readiness.
-      const runtime = owner.complete();
-      expect(owner.complete()).toBe(runtime);
+      const completed = owner.complete();
+      expect(owner.complete()).toBe(completed);
+      if (completed.kind !== "installed")
+        throw new Error("fixture prepared runtime");
+      const { runtime } = completed;
+      expect(completed.statuses).toEqual(f.statuses());
       expect(
         runtime.release.CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH,
       ).toBe(p.workerPath);
@@ -245,6 +134,7 @@ describe("fixed Native v2 automatic preparation", () => {
       expect(runtime.control.NATIVE_INSTALLED_AUTHORITY_TOKEN).toBeUndefined();
       await runtime.close();
       expect(readdirSync(p.directory)).toEqual([
+        "preparation-result.json",
         "preparation.json",
         "release.json",
         "worker.json",
@@ -269,7 +159,10 @@ describe("fixed Native v2 automatic preparation", () => {
         owner.preparationEnvironment.NATIVE_INSTALLED_AUTHORITY_TOKEN,
       ).toBe(originalToken);
       f.output(owner);
-      expect(owner.complete().release.NATIVE_INSTALLED_AUTHORITY_TOKEN).toBe(
+      const completed = owner.complete();
+      if (completed.kind !== "installed")
+        throw new Error("fixture prepared runtime");
+      expect(completed.runtime.release.NATIVE_INSTALLED_AUTHORITY_TOKEN).toBe(
         originalToken,
       );
       f.provider.modelId = "changed-model";
@@ -310,7 +203,7 @@ describe("fixed Native v2 automatic preparation", () => {
       }
     });
   });
-  it.each(["config-copy", "bootstrap-copy", "unapproved", "wrong-data-root"])(
+  it.each(["config-copy", "bootstrap-copy", "wrong-data-root"])(
     "does not issue paths from %s",
     async (kind) => {
       await withFixture(async (f) => {
@@ -321,13 +214,6 @@ describe("fixed Native v2 automatic preparation", () => {
             DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
         )
           throw new Error("fixture type");
-        if (kind === "unapproved")
-          f.write({
-            ...f.value,
-            plugins: [
-              { pluginId: "other.plugin", approvalRequirement: "none" },
-            ],
-          });
         expect(() =>
           prepareAutomaticDesktopInstalledPluginRuntime({
             ...f.input,
@@ -369,13 +255,13 @@ describe("fixed Native v2 automatic preparation", () => {
       });
     },
   );
-  it.each(["preparation", "worker", "fixed-config", "release"])(
+  it.each(["preparation", "worker", "fixed-config", "release", "result"])(
     "rejects actual %s file drift",
     async (kind) => {
       await withFixture(async (f) => {
         const owner = f.prepare();
         const p = f.output(owner);
-        if (kind === "release") owner.complete();
+        if (kind === "release" || kind === "result") owner.complete();
         const path =
           kind === "preparation"
             ? p.preparationPath
@@ -383,7 +269,9 @@ describe("fixed Native v2 automatic preparation", () => {
               ? p.workerPath
               : kind === "fixed-config"
                 ? f.configurationPath
-                : p.releasePath;
+                : kind === "result"
+                  ? p.resultPath
+                  : p.releasePath;
         writeFileSync(path, readFileSync(path, "utf8") + " ");
         expect(() => owner.assertCurrent()).toThrow("file_changed");
       });

@@ -246,7 +246,7 @@ export function assertDesktopInstalledPluginRuntimeConfiguration(
   source.assertCurrent();
 }
 
-/** Only real v2/config+bootstrap owners can create this fixed, privately owned v1 preparation. */
+/** Only real v2/config+bootstrap owners can create these fixed, privately owned inputs. */
 export function createAutomaticDesktopInstalledPluginRuntimeFiles(
   input: Readonly<{
     configuration: EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration;
@@ -290,31 +290,13 @@ export function createAutomaticDesktopInstalledPluginRuntimeFiles(
       ),
     ).values(),
   ];
-  if (
-    approvedPackages.length === 0 ||
-    configuration.plugins.some(
-      (plugin) =>
-        !approvedPackages.some(
-          (identity) => identity.pluginId === plugin.pluginId,
-        ),
-    )
-  )
-    desktopInstalledPluginInvalid("package_unapproved");
-  for (const plugin of configuration.plugins) {
-    if (
-      new Set(
-        approvedPackages
-          .filter((identity) => identity.pluginId === plugin.pluginId)
-          .map((identity) => identity.publisherId),
-      ).size !== 1
-    )
-      desktopInstalledPluginInvalid("package_publisher_ambiguous");
-  }
+  // The v2 preparation child reports per-plugin approval/installation failures.
+  // Only its prepared subset can later pass the original issued v1 runtime gate.
   const files = createDesktopInstalledPluginPreparationFiles({
     dataDirectory,
     buildDocuments: ({ workerPath, releasePath }) => ({
       preparation: {
-        schemaVersion: "crewon.installed-plugin-native-preparation.v1",
+        schemaVersion: "crewon.installed-plugin-native-preparation.v2",
         actor: manifest.actor,
         scope: manifest.scope,
         approvedPackages,

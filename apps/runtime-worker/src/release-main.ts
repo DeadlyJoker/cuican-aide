@@ -57,7 +57,9 @@ import {
 } from "./installed-plugin-release-publication-composition.ts";
 import type { RuntimeAgentVersionReleaseActivationResult } from "./agent-version-release-composition.ts";
 import { prepareNativeInstalledPluginRelease } from "./plugins/installed-plugin-native-preparation.ts";
+import { prepareNativeInstalledPluginCandidates } from "./plugins/installed-plugin-native-candidates.ts";
 import {
+  INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA,
   assertNativeInstalledPluginPreparation,
   loadNativeInstalledPluginPreparation,
 } from "./plugins/installed-plugin-native-preparation-config.ts";
@@ -246,20 +248,45 @@ try {
   }
   if (nativePreparationPath !== undefined) {
     assertNativeInstalledPluginPreparation(nativePreparationInput!);
-    const prepared = await prepareNativeInstalledPluginRelease({
-      inputPath: nativePreparationPath,
-      environment,
-      actor,
-      bootstrapVersion,
-      defaultAgentVersionId: route.agentVersionId,
-    });
-    process.stdout.write(
-      `${JSON.stringify({
-        disposition: "prepared",
-        tenantId: actor.tenantId,
-        pluginCount: prepared.document.entries.length,
-      })}\n`,
-    );
+    if (
+      nativePreparationInput!.configuration.schemaVersion ===
+      INSTALLED_PLUGIN_NATIVE_CANDIDATES_SCHEMA
+    ) {
+      const prepared = await prepareNativeInstalledPluginCandidates({
+        inputPath: nativePreparationPath,
+        environment,
+        actor,
+        bootstrapVersion,
+        defaultAgentVersionId: route.agentVersionId,
+      });
+      process.stdout.write(
+        `${JSON.stringify({
+          disposition: "prepared",
+          tenantId: actor.tenantId,
+          pluginCount: prepared.result.plugins.filter(
+            (plugin) => plugin.state === "prepared",
+          ).length,
+          blockedPluginCount: prepared.result.plugins.filter(
+            (plugin) => plugin.state === "blocked",
+          ).length,
+        })}\n`,
+      );
+    } else {
+      const prepared = await prepareNativeInstalledPluginRelease({
+        inputPath: nativePreparationPath,
+        environment,
+        actor,
+        bootstrapVersion,
+        defaultAgentVersionId: route.agentVersionId,
+      });
+      process.stdout.write(
+        `${JSON.stringify({
+          disposition: "prepared",
+          tenantId: actor.tenantId,
+          pluginCount: prepared.document.entries.length,
+        })}\n`,
+      );
+    }
   } else {
     const loadedDeployments =
       generatedBindings === undefined
