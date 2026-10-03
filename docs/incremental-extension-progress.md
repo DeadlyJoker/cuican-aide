@@ -6,6 +6,16 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：独立短剧 8.0.0 必需恢复声明与仓外产物
+
+新包声明 `crewon.plugin-ui-recovery@1` 为必需服务，避免缺实际恢复端口的宿主先启用、再在模块 ready 前 hydrate 失败。模块复用原 Host 的三类上下文，无新增业务恢复调用；UI 源码、控制器和 CSS 未修改。旧 5/6/7 冻结产物及原 App/设置/侧栏继续保留。没有实际恢复服务的 Standalone/Native 当前不能启用 8.0.0。
+
+Root 在新的仓外目录复制 49 个源文件，只将 SDK 依赖指向已验证的真实 tarball，使用 Node.js 24/pnpm 10 离线安装固定依赖；严格编译、自持构建及发布 ESM **67/67** 通过。完整独立产物为 `output/extensions/installable-plugins/recovery-ui-short-drama-20261004/short-drama/8.0.0`。实际 Host verifier 核验七个声明文件和清单，真实 packageDigest 为 `sha256:adbeaeba542f88daf1266543b3e423365e5300225e9c18ee66a932253dbe5562`；它包含清单/目录/文件身份，与单独清单 SHA256 不同。
+
+原文件安装器在具名隔离根上确认 `installed` 和 `alreadyInstalled`，每次批准都核对确切包身份，再从实际安装字节复验；清理前恢复仅该夹具的目录权限，不改变原只读安装保护。没有创建用户 profile 的选择或 activation，没有 Worker、供应商、真实报价/积分操作。本阶段证据为 `output/extensions/checks/plugin-ui-recovery-ui8-proof-20261004.json`，实际 Main 三次恢复证据仍见下一节。
+
+下一步使用此真实新包及确切摘要同步可信批准配置，联合原 Host、Production Main 和原完整 App 验证 ready 前恢复与三类原请求；ESM 和文件安装不是完整界面或在线生图验收。当前用户 3210/5730 仍运行原 Standalone，不直接改其启动模式或切换新包。真实个人钱包/价格权威、第二个实际企业 API、完整 S0/E5 继续待完成。
+
 ## 2026-10-04：正式 Production Main 配置与三次真实进程恢复
 
 原 Main 已通过私有 `CREWON_PROJECT_COMPOSITION_CONFIG_PATH` 加载项目、生成/查询/选用及三类恢复批准，注入与原 Application 相同的真实动态 PDP。配置深冻结并核对每种原动作的完整 source publication；文件严格限制当前 OS 用户、单硬链接、私有权限、规范路径、64 KiB 和读取前后身份不变。未知身份、资金、URL 或代码字段拒绝。可选 `CREWON_CONTROL_DATABASE_MAX_POOL_SIZE=1` 传入原 Store，未配置保持旧默认；这两个新 opt-in 都拒绝 Standalone。缺少原 task/configuration reader 的历史读取配置现在在业务数据库打开前拒绝。原 App、用户栏、设置、两侧栏及共享 CSS 未修改。

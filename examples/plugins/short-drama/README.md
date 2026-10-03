@@ -4,20 +4,23 @@
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 7.0.0。它声明一个 `trustedModule/main.content` 页面、必须可用的 `crewon.creative-projects@1` 与可选的 `crewon.project-generation-reads@1`、`crewon.project-generation-contexts@1`、`crewon.project-generations@1`、`crewon.project-generation-queries@1`、`crewon.project-generation-selections@1` 服务；没有 Node 入口、业务能力清单或执行工厂。安装和启用须通过原可信发布者/包策略及宿主明确的服务批准；共享 DOM 模式不是安全沙箱。读取服务默认关闭或权限不可用时，页面明确提示读取失败，仍可使用原项目和输入保存功能。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 8.0.0。它声明一个 `trustedModule/main.content` 页面、必须可用的 `crewon.creative-projects@1`、`crewon.plugin-ui-recovery@1` 与可选的 `crewon.project-generation-reads@1`、`crewon.project-generation-contexts@1`、`crewon.project-generations@1`、`crewon.project-generation-queries@1`、`crewon.project-generation-selections@1` 服务；没有 Node 入口、业务能力清单或执行工厂。安装和启用须通过原可信发布者/包策略及宿主明确的服务批准；共享 DOM 模式不是安全沙箱。必须服务不可用时，宿主拒绝启用。启用后，读取服务默认关闭或权限不可用时，页面明确提示读取失败，仍可使用原项目和输入保存功能。
+
+8.0.0 通过宿主的恢复协议保留生成、查询和选用三类原请求：宿主在模块 ready 前读取恢复提示，写入前先持久 stage 并收到 ACK，再调用原业务动作。重新挂载仅恢复原输入与回执提示，不自动重发；结果未知时须明确重试原请求和原键。恢复仍要求同一 Control 数据库与 realm、实际账号及原包命名空间，并重新核验当前挂载与权限。声明本身不授予能力；当前需要显式组装恢复服务的 Production Host，尚未接入该服务的 Standalone/Native Host 不能启用此版本。旧 5.0.0、6.0.0、7.0.0 不声明该协议，其同进程恢复行为保留。创建会话的准备请求不属于这三类恢复动作。
+
+2026-10-04 已使用实际 SDK tarball 在仓外离线安装、严格编译并自持构建 8.0.0，发布 ESM 67/67 通过。产物位于仓库 `output/extensions/installable-plugins/recovery-ui-short-drama-20261004/short-drama/8.0.0`，实际 Host 校验完整文件，原文件安装器验证安装与重复安装；该安装仅为已清理的隔离文件夹具，没有创建用户 profile 的安装选择。原完整 App 中的此包挂载、实际在线生成/查询及进程重启联合验收仍待完成，不能把 ESM 和文件安装验证扩大为这些结论。
 
 ## 仓外构建
 
-使用 Node.js 24、pnpm 10.33.0。SDK 尚未发布到 registry，先由宿主的统一 SDK 分发步骤提供 `crewon-plugin-sdk-0.1.0.tgz`，再在复制后的独立项目中执行：
+使用 Node.js 24、pnpm 10.33.0。SDK 尚未发布到 registry，先由宿主的统一 SDK 分发步骤提供 `crewon-plugin-sdk-0.1.0.tgz`。在复制后的独立项目中，将 `package.json` 的 `dependencies["@crewon/plugin-sdk"]` 写为 `file:/absolute/sdk-output/crewon-plugin-sdk-0.1.0.tgz`，再执行以下命令；不能用示例版本占位值查询私有 SDK 的 registry 包：
 
 ```sh
-pnpm add /absolute/sdk-output/crewon-plugin-sdk-0.1.0.tgz
 pnpm install --ignore-scripts
 pnpm build
 pnpm test
 ```
 
-`dist/7.0.0/` 是完整预构建安装目录。`crewon.plugin.json` 清单包含 UI ESM、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=8.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0、2.0.0、3.0.0、4.0.0、5.0.0、6.0.0 安装包保持独立。
+默认构建生成完整预构建安装目录 `dist/8.0.0/`。`crewon.plugin.json` 清单包含 UI ESM、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=9.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0、2.0.0、3.0.0、4.0.0、5.0.0、6.0.0、7.0.0 安装包保持独立。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。
 
 ## 页面与生命周期
 
@@ -33,7 +36,7 @@ pnpm test
 
 “设为选用”绑定一张已核验的原结果，提交确切输入、operation ID/修订、原图片索引、当前项目和素材元数据 CAS、独立选用 CAS 及幂等键，不提交 URL、Run 或付款身份。当前图片必须通过独立 GET 读取；旧请求重放回执只证明原选择已确认，不能覆盖或冒充后来选中的图片。当前读取失败显示失败，不伪造空指针或版本 0。输入或需求改变后保留旧图片，并显示服务端的“需重新确认”；历史输入可在当前有效项目中明确选用。
 
-选用等待或回复未知时保留整个请求并锁定新写操作，不因刷新、换主题、重开或新元数据自动换键提交。只有宿主明确允许时，点击“重试原选用”才发送原请求与原键。相同包停用后重新启用，可以在当前真实挂载及权限重新核验后恢复；包、发布者、版本或贡献改变时禁止用新包替代原未知请求。宿主独立账户 journal 与 `projectGenerationSelectionContext` 只提供有界恢复提示，不授权操作或宣称当前选用；当前指针仍由插件通过 SDK 单独读取。此恢复保留于同一运行中的账户会话，尚不代表应用进程重启后的持久恢复。选用不创建任务、会话、积分预留或供应商请求。
+选用等待或回复未知时保留整个请求并锁定新写操作，不因刷新、换主题、重开或新元数据自动换键提交。只有宿主明确允许时，点击“重试原选用”才发送原请求与原键。相同包停用后重新启用，可以在当前真实挂载及权限重新核验后恢复；包、发布者、版本或贡献改变时禁止用新包替代原未知请求。宿主独立账户 journal 与 `projectGenerationSelectionContext` 只提供有界恢复提示，不授权操作或宣称当前选用；当前指针仍由插件通过 SDK 单独读取。7.0.0 的此恢复保留于同一运行中的账户会话，不代表应用进程重启后的持久恢复。选用不创建任务、会话、积分预留或供应商请求。
 
 只有可信预览显式传入 `props.data.shortDramaPreview=true` 才进入原演示模式：示例项目、概念图、模拟提交/查询和服务弹窗继续只改变内存演示状态。PNG 是已有测试样例；演示不调用生图或视频服务，不冻结或扣除积分。
 
