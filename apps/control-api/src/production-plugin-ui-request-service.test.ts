@@ -15,6 +15,8 @@ import type { PluginUiControlService } from "./plugin-control-route.ts";
 import { createProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
 import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
 import { createProductionPluginUiRequestService } from "./production-plugin-ui-request-service.ts";
+import { installedGenerationFixture } from "./installed-plugin-project-generation-owner.test-support.ts";
+import type { InstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
 
 const listCommand: InvokePluginUiActionCommand = {
   mountRef: "m".repeat(40),
@@ -124,6 +126,109 @@ function metadataFixture(t: TestContext) {
   t.after(() => runtime.close());
   return { runtime, profileReads: () => profileReads, ...identity };
 }
+
+test("unconfigured generation names never borrow task authority or fall through to ordinary UI actions", async (t) => {
+  const tasks = taskFixture(t);
+  let invoked = 0;
+  const ui = createProductionPluginUiRequestService({
+    ui: uiService(async () => {
+      invoked++;
+      return null;
+    }),
+    taskRequests: tasks.owner,
+  });
+  for (const action of [
+    "crewon.project-generations.v1.generateConcept",
+    "crewon.project-generations.v2.generateConcept",
+    "crewon.project-generations.",
+  ]) {
+    assert.throws(
+      () =>
+        ui.invokeAuthenticatedRequest!(
+          request,
+          actor,
+          { ...taskCommand, action },
+          new AbortController().signal,
+        ),
+      /plugin_ui_actions_unavailable/u,
+    );
+  }
+  assert.equal(invoked, 0);
+  assert.equal(tasks.preparations(), 0);
+  assert.equal(tasks.calls(), 0);
+});
+
+test("configured generation rejects unknown actions and identity or prompt injection before preparing execution", async (t) => {
+  const tasks = taskFixture(t);
+  const generation = await installedGenerationFixture(t);
+  let invoked = 0;
+  const ui = createProductionPluginUiRequestService({
+    ui: uiService(async () => {
+      invoked++;
+      return null;
+    }),
+    taskRequests: tasks.owner,
+    projectGenerations: generation.owner,
+  });
+  for (const action of [
+    "crewon.project-generations.v1.query",
+    "crewon.project-generations.v2.generateConcept",
+    "crewon.project-generations.",
+  ]) {
+    assert.throws(
+      () =>
+        ui.invokeAuthenticatedRequest!(
+          request,
+          actor,
+          { ...taskCommand, action, input: generation.request },
+          new AbortController().signal,
+        ),
+      /project_generation_ui_action_invalid/u,
+    );
+  }
+  for (const input of [
+    { ...generation.request, prompt: "browser override" },
+    { ...generation.request, principalId: "browser payer" },
+    { ...generation.request, executionPin: { pluginId: "browser target" } },
+  ]) {
+    assert.throws(
+      () =>
+        ui.invokeAuthenticatedRequest!(
+          request,
+          actor,
+          {
+            ...taskCommand,
+            action: "crewon.project-generations.v1.generateConcept",
+            input,
+          },
+          new AbortController().signal,
+        ),
+      /plugin_ui_fields_invalid/u,
+    );
+  }
+  assert.equal(invoked, 0);
+  assert.equal(tasks.preparations(), 0);
+  assert.equal(tasks.calls(), 0);
+  assert.equal(generation.nodeState.calls, 0);
+  assert.equal(generation.nodeState.quoteCalls, 0);
+  assert.equal((await generation.counts()).links, 0);
+});
+
+test("the generation HTTP dispatcher requires its actual owner brand and the original request owner", () => {
+  for (const projectGenerations of [
+    {},
+    { taskOwner: {}, actions: { invoke: async () => null } },
+  ])
+    assert.throws(
+      () =>
+        createProductionPluginUiRequestService({
+          ui: uiService(async () => null),
+          projectGenerations:
+            projectGenerations as unknown as InstalledPluginProjectGenerationOwner,
+        }),
+      /production_plugin_ui_generation_request_owner_invalid/u,
+    );
+});
 
 test("unknown reserved metadata names are rejected before execution peer preparation", async (t) => {
   const tasks = taskFixture(t);

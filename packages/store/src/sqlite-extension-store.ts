@@ -91,6 +91,11 @@ export class SqliteExtensionStore implements ExtensionStore {
       ? ("crewon.project-generation-link.v0" as const)
       : undefined;
   }
+  get projectGenerationPublicationVersion() {
+    return this.#projectGenerationsEnabled
+      ? ("crewon.project-generation-publication.v1" as const)
+      : undefined;
+  }
   readonly #db: DatabaseSync;
   readonly #host: SqliteExtensionStoreHost;
   constructor(database: DatabaseSync, host: SqliteExtensionStoreHost) {

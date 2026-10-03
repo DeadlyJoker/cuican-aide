@@ -61,6 +61,7 @@ import {
   projectGenerationValues,
   type ProjectGenerationCommitOptions,
 } from "./project-generation-store-support.ts";
+import { admitPostgresProjectGenerationPublication } from "./project-generation-publication-admission.ts";
 
 type PostgresExtensionTurnHost = Readonly<{
   schema: string;
@@ -192,7 +193,13 @@ export async function commitPostgresExtensionTurn(
         receipt: frozenInput.receipt,
       });
       creditPath = creditAdmission !== undefined;
-      if (pluginAdmission !== undefined)
+      if (prepared?.publication !== undefined)
+        await admitPostgresProjectGenerationPublication(
+          client,
+          host.schema,
+          prepared.publication,
+        );
+      else if (pluginAdmission !== undefined)
         await admitPostgresPluginTask(client, host.schema, pluginAdmission);
       if (pluginQuery !== undefined)
         await admitPostgresPluginQuery(

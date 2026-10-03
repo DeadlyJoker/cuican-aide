@@ -52,6 +52,19 @@ export type {
 } from "./plugin-installation-recovery.ts";
 export { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";
 export {
+  PluginProjectGenerationActionBridge,
+  type PluginProjectGenerationActionBridgeDependencies,
+  type PluginProjectGenerationDispatchPort,
+} from "./plugin-project-generation-action-bridge.ts";
+export { assertPluginProjectGenerationActionDeclaration } from "./plugin-project-generation-action-bridge-support.ts";
+export {
+  PluginProjectGenerationExecutionBridge,
+  type PluginProjectGenerationExecutionAuthority,
+  type PluginProjectGenerationExecutionInput,
+  type PluginProjectGenerationExecutionResult,
+  type PluginProjectGenerationExecutionBridgeDependencies,
+} from "./plugin-project-generation-execution-bridge.ts";
+export {
   capturePluginUiHostServiceAvailability,
   assertUiOnlyServiceDeclarations,
   assertPluginUiHostServiceAvailability,

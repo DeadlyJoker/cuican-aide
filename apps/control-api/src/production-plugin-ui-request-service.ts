@@ -2,22 +2,52 @@ import { ApplicationError } from "@crewon/application";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import type { ProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
+import { parseProjectGenerationUiActionRequest } from "@crewon/contracts/plugins";
+import {
+  isInstalledPluginProjectGenerationOwner,
+  type InstalledPluginProjectGenerationOwner,
+} from "./installed-plugin-project-generation-owner.ts";
 
 /** Metadata requests stay on their own authority path, including unsupported names. */
 export function createProductionPluginUiRequestService({
   ui,
   taskRequests,
   projects,
+  projectGenerations,
 }: Readonly<{
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
   projects?: ProductionCreativeProjectPluginRuntime;
+  projectGenerations?: InstalledPluginProjectGenerationOwner;
 }>): PluginUiControlService {
-  if (taskRequests === undefined && projects === undefined) return ui;
+  if (
+    projectGenerations !== undefined &&
+    (!isInstalledPluginProjectGenerationOwner(projectGenerations) ||
+      taskRequests === undefined)
+  )
+    throw new Error("production_plugin_ui_generation_request_owner_invalid");
+  if (
+    taskRequests === undefined &&
+    projects === undefined &&
+    projectGenerations === undefined
+  )
+    return ui;
   return Object.freeze({
     ...ui,
     invokeAuthenticatedRequest: (request, actor, command, signal) => {
       const invoke = () => ui.invoke(actor, command);
+      if (command.action.startsWith("crewon.project-generations.")) {
+        if (projectGenerations === undefined || taskRequests === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        parseProjectGenerationUiActionRequest({
+          action: command.action,
+          input: command.input,
+        });
+        return taskRequests.run({ request, actor, signal }, invoke);
+      }
       if (command.action.startsWith("crewon.creative-projects.")) {
         if (projects === undefined)
           throw new ApplicationError(

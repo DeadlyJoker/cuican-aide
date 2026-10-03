@@ -4,6 +4,8 @@ import type {
   CreativeProjectCommitAuthority,
   ExtensionMutationReceipt,
   ExtensionRunLocator,
+  CommitExtensionTurnOptions,
+  ProjectGenerationExecutionPublication,
 } from "@crewon/application";
 import { captureCreativeProjectCommitAuthority } from "@crewon/application";
 import {
@@ -26,14 +28,14 @@ import {
   decodeCreativeRevision,
   decodeCreativeBrief,
 } from "./creative-project-store-records.ts";
+import { captureProjectGenerationPublicationAdmission } from "./project-generation-publication-admission.ts";
 
-export type ProjectGenerationCommitOptions = Readonly<{
-  projectGenerationAuthority?: CreativeProjectCommitAuthority;
-}>;
+export type ProjectGenerationCommitOptions = CommitExtensionTurnOptions;
 export type PreparedProjectGeneration = Readonly<{
   reference: ProjectGenerationReference;
   actor: ActorContext;
   authority: CreativeProjectCommitAuthority;
+  publication?: ProjectGenerationExecutionPublication;
 }>;
 
 /** Capture the immutable reference and borrowed callbacks before any lock or policy await. */
@@ -50,7 +52,16 @@ export function captureProjectGeneration(
       (!field.enumerable || !Object.hasOwn(field, "value")))
   )
     throw new Error("project_generation_reference_invalid");
-  if (field?.value === undefined) return null;
+  if (field?.value === undefined) {
+    if (
+      options !== undefined &&
+      options !== null &&
+      typeof options === "object" &&
+      "projectGenerationPublication" in options
+    )
+      throw new Error("project_generation_reference_required");
+    return null;
+  }
   if (!enabled) throw new Error("project_generation_unavailable");
   const reference = parseProjectGenerationReference(field.value);
   if (
@@ -72,23 +83,51 @@ export function captureProjectGeneration(
     options,
     "projectGenerationAuthority",
   );
+  const publicationField = Object.getOwnPropertyDescriptor(
+    options,
+    "projectGenerationPublication",
+  );
   if (
-    keys.length !== 1 ||
-    keys[0] !== "projectGenerationAuthority" ||
+    keys.length !== (publicationField === undefined ? 1 : 2) ||
+    keys.some(
+      (key) =>
+        key !== "projectGenerationAuthority" &&
+        key !== "projectGenerationPublication",
+    ) ||
     authorityField === undefined ||
     !authorityField.enumerable ||
     !Object.hasOwn(authorityField, "value") ||
     authorityField.value === undefined
   )
     throw new Error("project_generation_authority_required");
+  if (
+    publicationField === undefined &&
+    "projectGenerationPublication" in options
+  )
+    throw new Error("project_generation_publication_invalid");
   const authority = captureCreativeProjectCommitAuthority({
     authority: authorityField.value,
   });
   if (authority === undefined)
     throw new Error("project_generation_authority_required");
+  if (
+    publicationField !== undefined &&
+    (!publicationField.enumerable ||
+      !Object.hasOwn(publicationField, "value") ||
+      publicationField.value === undefined)
+  )
+    throw new Error("project_generation_publication_invalid");
+  const publication =
+    publicationField === undefined
+      ? undefined
+      : captureProjectGenerationPublicationAdmission(
+          publicationField.value,
+          admission,
+        );
   return Object.freeze({
     reference,
     authority,
+    ...(publication === undefined ? {} : { publication }),
     actor: Object.freeze({
       tenantId: admission.tenantId,
       spaceId: admission.spaceId,

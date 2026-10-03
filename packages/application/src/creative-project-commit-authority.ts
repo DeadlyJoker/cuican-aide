@@ -2,6 +2,38 @@ import type {
   CreativeProjectCommitAuthority,
   CreativeProjectCommitOptions,
 } from "./creative-project-store-port.ts";
+import type { ProjectGenerationExecutionAuthority } from "./project-generation-execution-authority.ts";
+
+/** Capture distinct complete and transaction-safe fences before any await or lock acquisition. */
+export function captureCreativeProjectTransactionAuthority(
+  input: ProjectGenerationExecutionAuthority,
+): Readonly<{
+  preflight: CreativeProjectCommitAuthority;
+  transaction: CreativeProjectCommitAuthority;
+}> {
+  const methods = ownDataFields(input, [
+    "assertCurrent",
+    "assertTransactionCurrent",
+    "assertActive",
+  ]);
+  if (
+    typeof methods.assertCurrent !== "function" ||
+    typeof methods.assertTransactionCurrent !== "function" ||
+    typeof methods.assertActive !== "function"
+  )
+    invalid();
+  const assertActive = methods.assertActive.bind(input);
+  return Object.freeze({
+    preflight: Object.freeze({
+      assertCurrent: methods.assertCurrent.bind(input),
+      assertActive,
+    }),
+    transaction: Object.freeze({
+      assertCurrent: methods.assertTransactionCurrent.bind(input),
+      assertActive,
+    }),
+  });
+}
 
 /** Capture trusted callbacks without evaluating accessors or mutating the caller. */
 export function captureCreativeProjectCommitAuthority(

@@ -6,6 +6,46 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-03：跨插件项目生成的实际 Host / Control 调度
+
+已实现明确批准的业务 UI source → 独立执行 target 映射及实际 `InstalledPluginProjectGenerationOwner`。业务包继续使用原 registered UI context，目标包使用实际安装身份、字节核验、当前策略、声明动作和真实 Node 借用。UI-only 生成依赖由实际 owner 的受信 Host availability 提供；未知声明、错误 source/digest/contribution、缺少装配或 owner 关闭继续拒绝，不伪造 Node 服务或隐式授予执行。原普通任务动作和宿主页面保留原路径。
+
+Application 新显式 `createPublishedProjectTaskFromPlugin` 兼容旧内部生成。两端实际安装选择在原 SQLite/PG 事务中核验，PG 固定顺序 `FOR SHARE` 两端 selection/package，再沿原 client 取得项目互斥和积分锁；两端停用、卸载、换包与生成互斥。项目/输入/需求摘要、CAS、执行准入、原消息/history/Run/个人预留/增强回执/link 同事务提交。事务前的完整 UI current 与事务内的身份/profile/PDP、字节、active 检查分离，真实 `maxPoolSize: 1` 无嵌套池读取。默认路径不增加迁移或项目读取。
+
+Control 构造验证 task owner、任务服务、原 issuer 的同一配对和 issuer 已批准的明确映射，避免先收费后发现回执能力不匹配。实际目标 Node 仍通过原任务 ABI 提交；原 issuer 读取真实保存的任务事实及历史项目关联后签发原 context 的一次 opaque 回执。确认 COMMIT 后的元数据后改、两端卸载、撤权、挂载/owner/runtime 关闭不把已确认受理改为重试。重放保留一个 Run、一次报价和一次原个人预留。
+
+local management/standalone 不支持付费项目生成；新增明确配置捕获在打开 SQLite/PG 前拒绝 `pluginGenerations`，直接 composition 也拒绝，desktop 原保护保留。本机管理身份不能静默派生个人执行、付款、报价或资金权限。
+
+生成协议保持 `crewon.project-generations@1`、唯一 `generateConcept`、四字段输入和原六字段任务受理回执；沿现有 UI actions HTTP 路由，不增加公共任务 shape、action kind 或供应商状态机。协议及事务边界见[项目生成 UI 协议](./project-generation-ui-protocol.md)和[内部关联](./project-generation-link.md)。
+
+本阶段逐命令验收如下。每组均零跳过；原 issuer/任务回归在不同命令中可能重复，以下组别不跨组求和，也不与历史阶段计数合并。全部日志位于 `output/extensions/checks/`。
+
+| 检查范围                                                            | 最终结果 | 日志                                                                     |
+| ------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| Application 两端资格、内部生成兼容和原回执回归                      | 95/95    | `project-generation-publication-application-20261003.log`                |
+| 实际 SQLite/PG Store 与单连接 Application 提交                      | 20/20    | `project-generation-publication-store-20261003.log`                      |
+| 实际 PG 两端选择锁，停用/卸载/换包先后竞争                          | 12/12    | `project-generation-publication-locks-20261003.log`                      |
+| 原双库 Turn、付费、准入、metadata/link Store 回归                   | 162/162  | `project-generation-publication-store-regression-20261003.log`           |
+| 实际安装的 source UI → target Node → paid Turn → original issuer    | 24/24    | `installed-plugin-project-generation-owner-final-20261003.log`           |
+| 原实际 installed task owner 回归                                    | 21/21    | `installed-plugin-project-generation-owner-task-regression-20261003.log` |
+| Production UI runtime/HTTP、真实 SQL 与 CA 验证的 HTTPS profile/PDP | 10/10    | `production-project-generation-ui-integration-20261003.log`              |
+| 原 issuer 与明确 generation 配置/映射                               | 42/42    | `project-generation-configured-issuer-tests-20261003.log`                |
+| Control composition 与原装配回归                                    | 47/47    | `project-generation-control-composition-tests-20261003.log`              |
+| 最终 standalone 开库前拒绝、原 metadata/desktop/request 回归        | 30/30    | `project-generation-final-local-guard-tests-20261003.log`                |
+| Host 映射、availability、execution bridge 与原 task bridge          | 52/52    | `project-generation-host-bridges-tests-20261003.log`                     |
+
+实际 Control owner 与 HTTP 专项均使用真实 SQLite 和隔离的本机 PostgreSQL 18.6，PG 父 Store 为单连接池。Production UI 的 profile/PDP 经 TLS 1.3、实际 CA 及主机名校验；HTTP 由原 ProductionControlApiIdentity 的 BFF/session 测试身份和原 Fastify 路由解析，生成经过真正安装的 UI-only source 与原 Node 执行 fixture，没有制造 UI context 或事务回执。报价、充值和身份/profile/PDP 都是明确测试夹具，没有调用供应商，也不代表人类生产账号、钱包或正式结算。测试 TLS 端点随专项清理，PG 由本轮原所有者统一收尾，用户 5719/5720 预览未作为测试服务改动。
+
+Application/Store/Host/Control 类型与相关文件格式检查通过；Control 最终类型证据为 `production-project-generation-ui-types-final-20261003.log`。早期专项失败分别为测试把命令键与原任务增强键视为同一层、把 loadReceipt 的 replayed disposition 视为初次 committed；修正断言后保留完整 key/digest、回执内容及收费校验。真实 PG 锁观测最初读取事务缓存的活动快照，改为每次清除观测快照后继续验证真实阻塞 PID；没有改动产品锁序。原失败日志保留。
+
+下一步仍是独立短剧页面的生成按钮、真实能力状态与原线程准备、按项目/资产/输入读取原生成、原 operation 的显式查询、确切结果索引与选用保存。独立短剧 3.0.0 当前只交付项目/需求/概念输入保存和历史。本阶段没有完成这些 UI/查询/选用流程、人类身份钱包、正式 Main/full App/packaged Krea2 在线生成，也未验收完整 production runtime factory 或真实 HTTP disconnect request-owner 装配。旧默认路径不自动开启，原页面 shell 不改；完整目标继续进行。
+
+当前用户栏/设置问题仍在核对，没有完成真实登录后的设置验收，Control 缺失会话的问题尚未修复；仅有菜单或设置组件代码不能证明用户当前页面已恢复。以下历史页面验收不替代这次实际页面问题的确认。
+
+当前 5719 实际 HTML 仍加载 `artifacts/short-drama-workbench-preview/preview.tsx`，其 composition 把账号与 Control 客户端显式置空。已另在 `http://127.0.0.1:5730/` 启动正常原应用 `index.html → main.tsx → AgentPlatformAuthGate → App`，仅进程注入已有公开 PIM 地址。真实未登录 `/auth/me` 返回 401、企微配置接口返回 200，原登录页无 JavaScript 异常；没有使用伪造身份登录。原应用构建和用户栏/设置/CommandWorkspace 窄测 **153/153** 通过，源码、CSS、旧快照及两个旧预览均未改。证据见 `original-app-entry-20261003/proof.json`、`original-account-settings-ui-focused-tests-20261003.log` 与 `original-account-settings-ui-build-20261003.log`。
+
+首次按脚本传入 `--` 未限制 Vitest 范围，意外执行全量 UI，结果 **3659 通过、9 失败、39 跳过**；失败涉及 TranscriptWindow、catalog paging、组件协调依赖、旧 shell/office 快照及 soak 时间采样。保留完整 `original-account-settings-ui-tests-20261003.log`，没有修改这些断言或声称全量通过。实际用户标签仍因 CDP focus 超时无法读取；真实登录后的账户、后台设置及完整插件目录仍待合法会话接通后验收。
+
 ## 2026-10-03：实际 Host 元数据分发与独立短剧项目保存
 
 Native/Production 在原父 Store 上显式接入项目动作 owner，部署批准固定实际插件、包摘要和贡献。UI-only 包可以声明必须可用的 `crewon.creative-projects@1`；原安装启用、恢复和同步发布复验实际 owner，未知声明和关闭后的依赖继续拒绝。没有增加 Node 服务、执行 peer、公共 HTTP shape 或项目隔离 namespace；数据仍归 tenant/space/principal，默认未开启路径保持原行为。

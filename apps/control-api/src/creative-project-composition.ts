@@ -17,16 +17,26 @@ import {
   captureCreativeProjectPluginUiConfig,
   type CreativeProjectPluginUiConfig,
 } from "./creative-project-plugin-ui-composition.ts";
+import {
+  captureProjectGenerationPluginConfiguration,
+  type ProjectGenerationPluginConfiguration,
+} from "./project-generation-plugin-configuration.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
   pluginUi?: CreativeProjectPluginUiConfig;
+  pluginGenerations?: ProjectGenerationPluginConfiguration;
 }>;
 
 export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
+  readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
+    Readonly<{
+      store: CreativeProjectStore;
+      authorization: CreativeProjectAuthorizationPort;
+    }>;
   /** Composition owns auxiliary resources; the creator still owns the parent Store. */
   failureCleanup?: Promise<void>;
 };
@@ -45,7 +55,10 @@ export function captureCreativeProjectCompositionConfig(
   const fields = Object.getOwnPropertyDescriptors(input);
   if (
     Reflect.ownKeys(input).some(
-      (key) => key !== "authorization" && key !== "pluginUi",
+      (key) =>
+        key !== "authorization" &&
+        key !== "pluginUi" &&
+        key !== "pluginGenerations",
     ) ||
     !Object.hasOwn(fields, "authorization") ||
     !Object.hasOwn(fields.authorization!, "value")
@@ -58,6 +71,15 @@ export function captureCreativeProjectCompositionConfig(
   )
     throw new Error("creative_project_configuration_invalid");
   const pluginUi = captureCreativeProjectPluginUiConfig(pluginUiField?.value);
+  const generationsField = fields.pluginGenerations;
+  if (
+    generationsField !== undefined &&
+    (!Object.hasOwn(generationsField, "value") || !generationsField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const pluginGenerations = captureProjectGenerationPluginConfiguration(
+    generationsField?.value,
+  );
   const port = fields.authorization!.value as
     | CreativeProjectAuthorizationPort
     | null
@@ -78,11 +100,24 @@ export function captureCreativeProjectCompositionConfig(
           authorize: descriptor.value.bind(port),
         }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
+        ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
       });
     }
     target = Object.getPrototypeOf(target);
   }
   throw new Error("creative_project_authorization_required");
+}
+
+/** Local management has no verified personal paid execution authority. */
+export function captureStandaloneCreativeProjectCompositionConfig(
+  input: unknown,
+): CreativeProjectCompositionConfig | undefined {
+  const configuration = captureCreativeProjectCompositionConfig(input);
+  if (configuration?.pluginGenerations !== undefined)
+    throw new Error(
+      "standalone_project_generation_execution_authority_required",
+    );
+  return configuration;
 }
 
 /** Only an explicit opt-in touches the project adapter or its independent migration. */
@@ -97,6 +132,15 @@ export async function prepareCreativeProjects(
     ...(configuration.pluginUi === undefined
       ? {}
       : { pluginUi: configuration.pluginUi }),
+    ...(configuration.pluginGenerations === undefined
+      ? {}
+      : {
+          pluginGenerations: Object.freeze({
+            ...configuration.pluginGenerations,
+            store,
+            authorization: configuration.authorization,
+          }),
+        }),
     service: new CreativeProjectApplicationService({
       store,
       authorization: configuration.authorization,
@@ -121,6 +165,7 @@ export async function composeStandaloneCreativeProjects(input: {
   const config = input.config;
   if (config.creativeProjects === undefined)
     throw new Error("creative_project_configuration_invalid");
+  captureStandaloneCreativeProjectCompositionConfig(config.creativeProjects);
   const store = new SqliteRunStore(config.databasePath);
   let projects: PreparedCreativeProjects | undefined;
   try {

@@ -19,9 +19,13 @@ import {
 import { PostgresDomainStore } from "@crewon/store";
 import { InstalledPluginConfigurationMetadata } from "./installed-plugin-configuration-metadata.ts";
 import type { PluginActivationCandidate } from "@crewon/plugin-host";
+import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import type { ActorContext } from "@crewon/application";
 import type { PluginProfileScope } from "@crewon/domain";
 import { InstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
+import { InstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
+import type { PreparedCreativeProjects } from "./creative-project-composition.ts";
+import { assertProjectGenerationPluginPublications } from "./project-generation-plugin-configuration.ts";
 import {
   bindInstalledPluginRequestOwner,
   InstalledPluginRequestOwner,
@@ -49,6 +53,7 @@ import {
 
 export type InstalledPluginTaskRuntime = Readonly<{
   owner: InstalledPluginTaskActionOwner;
+  projectGenerations?: InstalledPluginProjectGenerationOwner;
   requests: InstalledPluginRequestOwner;
   extensions: ExtensionConfigurationApplicationService;
   extensionTasks: ExtensionTaskApplicationService;
@@ -70,11 +75,15 @@ export async function createInstalledPluginTaskRuntime(
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
     fetch?: typeof globalThis.fetch;
+    creativeProjects?: PreparedCreativeProjects;
+    metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): Promise<InstalledPluginTaskRuntime> {
   assertInstalledPluginTaskConfiguration(input.configuration);
   const configuration = input.configuration;
   const ui = parseProductionPluginUiConfiguration(input.uiConfiguration);
+  const generations = dependencies.creativeProjects?.pluginGenerations;
+  assertProjectGenerationPluginPublications(generations, ui.publications);
   if (
     !(dependencies.store instanceof PostgresDomainStore) ||
     !(dependencies.identity instanceof ProductionControlApiIdentity) ||
@@ -91,6 +100,7 @@ export async function createInstalledPluginTaskRuntime(
   );
   let requests: InstalledPluginRequestOwner | undefined;
   let owner: InstalledPluginTaskActionOwner | undefined;
+  let projectGenerations: InstalledPluginProjectGenerationOwner | undefined;
   let metadata: InstalledPluginConfigurationMetadata | undefined;
   try {
     const ledger = dependencies.store.pluginInstallationStore();
@@ -99,6 +109,7 @@ export async function createInstalledPluginTaskRuntime(
     await extensions.migrate();
     await extensions.migratePluginAdmissions();
     await extensions.migrateCredits();
+    if (generations !== undefined) await extensions.migrateProjectGenerations();
     const current = () => {
       if (requests === undefined)
         throw new Error("installed_plugin_request_authority_unavailable");
@@ -232,6 +243,14 @@ export async function createInstalledPluginTaskRuntime(
       ids: dependencies.ids,
       digester: dependencies.digester,
       creditQuotes: quotes,
+      ...(generations === undefined
+        ? {}
+        : {
+            creativeProjects: {
+              store: generations.store,
+              authorization: generations.authorization,
+            },
+          }),
     });
     const configurationService = bindInstalledPluginRequestOwner(
       new ExtensionConfigurationApplicationService({
@@ -264,6 +283,14 @@ export async function createInstalledPluginTaskRuntime(
       extensions,
       runs: dependencies.store,
       digester: dependencies.digester,
+      ...(generations === undefined
+        ? {}
+        : {
+            projectGenerations: {
+              publications: generations.publications,
+              projects: generations.store,
+            },
+          }),
     });
     owner = new InstalledPluginTaskActionOwner({
       installRoot: configuration.installRoot,
@@ -279,12 +306,39 @@ export async function createInstalledPluginTaskRuntime(
       ids: { nextId: () => randomBytes(32).toString("base64url") },
       maximumPackages: configuration.maximumPackages,
     });
+    if (generations !== undefined)
+      projectGenerations = new InstalledPluginProjectGenerationOwner(
+        {
+          installRoot: configuration.installRoot,
+          publications: generations.publications,
+          installations: ledger,
+          projects: generations.store,
+          tasks,
+          taskOwner: owner,
+          committedTasks,
+          profiles,
+          authorization,
+          resolveActor: (identity, signal) =>
+            current().resolveActor(identity, signal),
+          authorizePackage,
+          requestSignal: () => current().currentSignal(),
+          clock: dependencies.clock,
+          ids: { nextId: () => randomBytes(32).toString("base64url") },
+          digester: dependencies.digester,
+          maximumInvocations: configuration.maximumPackages,
+        },
+        dependencies.metadataHostUiServices,
+      );
     const actualOwner = owner,
       actualRequests = requests,
       actualMetadata = metadata;
+    const actualGenerations = projectGenerations;
     let closing: Promise<void> | null = null;
     return Object.freeze({
       owner: actualOwner,
+      ...(actualGenerations === undefined
+        ? {}
+        : { projectGenerations: actualGenerations }),
       requests: actualRequests,
       extensions: configurationService,
       extensionTasks: tasks,
@@ -293,6 +347,7 @@ export async function createInstalledPluginTaskRuntime(
         (closing ??= closeAll([
           // Withdraw request authority synchronously before joining the actual task/Node owner.
           () => actualRequests.close(),
+          () => actualGenerations?.close(),
           () => actualOwner.close(),
           () => actualMetadata.close(),
           () => peer.close(),
@@ -303,6 +358,7 @@ export async function createInstalledPluginTaskRuntime(
     try {
       await closeAll([
         () => requests?.close(),
+        () => projectGenerations?.close(),
         () => owner?.close(),
         () => metadata?.close(),
         () => peer.close(),

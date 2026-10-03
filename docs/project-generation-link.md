@@ -1,5 +1,23 @@
 # 项目生成关联：内部增量协议
 
+## 2026-10-03：跨插件 Host / Control 与原事务资格已实现
+
+当前可信 Host / Control 已接通明确批准的业务 UI 包到独立执行包的调度。新增 `ExtensionTaskApplicationService.createPublishedProjectTaskFromPlugin` 捕获保存引用、两端真实 pin、映射及本次调用资格，兼容原 `createProjectTaskFromPlugin` 内部路径。业务来源保持原 registered UI context；目标使用实际验证的 Node 包、原任务服务与自己的执行 pin，不接受插件 JSON 注入 owner、actor、付款人或可信提交回调。
+
+`projectGenerationPublicationVersion` 只在显式完成既有 `migrateProjectGenerations()` 后提供，不新增持久 schema 版本，也不改变原 link、binding、任务请求或回执 JSON。普通默认任务及普通项目 metadata 路径不因新调度读取或迁移关联表。
+
+本机管理/standalone 不支持付费项目生成；相关 creator 在开数据库前拒绝 `pluginGenerations`，直接 composition 也拒绝此配置，desktop 原保护仍保留。本机安装或管理账号不构成原个人执行、报价或钱包权限；明确测试资金也不改变这条部署边界。
+
+新提交在原 SQLite/PG Turn 事务中核验两端实际安装包及 selection。PostgreSQL 以固定顺序取得真实两端 selection/package 的 `FOR SHARE` 锁，沿用原事务 client，再取得项目互斥和积分账户锁；SQLite 保持原同步事务。锁等待期间的停用、卸载或换包不能使用旧 pin 继续收费。完整 UI current 检查放在事务前；事务资格只做当前身份/profile/PDP、磁盘字节和同步 active 检查，不通过共享池重新读项目或安装 Store。消息、history、Run、目标准入、原个人预留、增强回执和不可变 link 仍同事务提交。
+
+真实 Node 执行借用沿原严格任务 ABI 发起任务，不为业务 UI 创建第二份执行准入或付款身份。确认提交后由同一原 issuer 核验已保存事实并交付 opaque 回执；之后需求追加、归档、卸载、挂载/owner/runtime 关闭和策略撤回均不反向否定已确认的提交。幂等重放返回同一 Run、原报价、原 hold 和原关联，不再报价或预留。
+
+Application **95/95**、实际双库 Store/单连接 Application **20/20**、真实 PG 两端安装锁竞争 **12/12**、原 Turn/付费/metadata/link Store 回归 **162/162** 均零跳过。这四份日志分别是 `project-generation-publication-application-20261003.log`、`project-generation-publication-store-20261003.log`、`project-generation-publication-locks-20261003.log` 和 `project-generation-publication-store-regression-20261003.log`，位于 `output/extensions/checks/`。原回执组在其他检查中可能复跑，不跨组求和。实际 Control owner、Production UI HTTP/TLS、Host 及构造配置的分组证据见[实施进度](./incremental-extension-progress.md)。
+
+本阶段尚未接页面生成控件、按项目/资产/输入恢复原生成、operation 查询或结果选用；没有新增 `OperationResultLink` 或选用指针。测试身份、profile/PDP 与充值夹具不代表人类生产身份或钱包；实际 UI runtime/routes 的证明也不代表完整生产 factory 或正式 Main/full App 在线生图验收。
+
+以下既有章节保留内部关联前置阶段的记录；其中后续 Host / Control 接线的状态以本节为准。
+
 日期：2026-10-03。状态：已实现 Domain、Application 及 SQLite/PostgreSQL 内部适配器；尚未装配到生产 Control 或短剧模块的生成按钮。实际数据库验证与独立插件发行证据保存在 `output/extensions/checks/`。本协议不代表 S0 生图、查询和选用闭环已交付。
 
 ## 入口与身份

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, readFile, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -108,6 +108,39 @@ test("desktop default preserves absent plugin schema and existing identity while
       .statusCode,
     503,
   );
+});
+
+test("native metadata composition cannot silently grant paid project generation authority", async (t) => {
+  const f = await productionSourceFixture(t);
+  const path = join(f.root, "generation-authority.sqlite");
+  await assert.rejects(
+    createStandaloneControlApiWithPlugins({
+      ...baseConfig(path),
+      desktopPlugins: configuration(f.installRoot, []),
+      creativeProjects: {
+        authorization: { authorize: async () => ({ outcome: "allow" }) },
+        pluginGenerations: {
+          publications: [
+            {
+              source: {
+                pluginId: "fixture.drama",
+                packageDigest: "sha256:" + "a".repeat(64),
+                contributionId: "workbench",
+              },
+              target: {
+                pluginId: "fixture.krea2",
+                packageDigest: "sha256:" + "b".repeat(64),
+                contributionId: "workbench",
+                action: "image.generate",
+              },
+            },
+          ],
+        },
+      },
+    }),
+    /standalone_project_generation_execution_authority_required/u,
+  );
+  await assert.rejects(access(path), { code: "ENOENT" });
 });
 
 test("native-approved SQLite installs actual UI bytes, switches versions, reopens original receipts and keeps task/credit admission unavailable", async (t) => {

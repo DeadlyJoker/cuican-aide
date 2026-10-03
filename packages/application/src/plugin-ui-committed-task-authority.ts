@@ -34,7 +34,10 @@ import {
 import {
   parsePluginQueryTaskAdmission,
   parseExtensionRunBinding,
+  extensionCanonicalJson,
+  captureProjectGenerationPublications,
   type PluginTaskAdmissionPin,
+  type ProjectGenerationPublication,
 } from "@crewon/domain";
 import {
   assertSavedPluginQueryTask,
@@ -55,6 +58,31 @@ type VerifiedOutcome = Readonly<{
 }>;
 // A custom prototype makes an outcome invalid as plain JSON even without a configured authority.
 const outcomePrototype = Object.freeze(Object.create(null) as object);
+const generationAuthorities = new WeakMap<
+  object,
+  readonly ProjectGenerationPublication[]
+>();
+
+/** Construction capability only; this does not grant current execution or credit permission. */
+export function isPluginUiCommittedProjectGenerationAuthority(
+  input: Readonly<{
+    authority: unknown;
+    publications: readonly ProjectGenerationPublication[];
+  }>,
+): boolean {
+  if (input.authority === null || typeof input.authority !== "object")
+    return false;
+  const configured = generationAuthorities.get(input.authority);
+  if (configured === undefined) return false;
+  const publications = captureProjectGenerationPublications(input.publications);
+  return publications.every((publication) =>
+    configured.some(
+      (candidate) =>
+        extensionCanonicalJson(candidate) ===
+        extensionCanonicalJson(publication),
+    ),
+  );
+}
 
 /**
  * Trusted host-only receipt authority, not a plugin SDK or a current authorization grant.
@@ -86,6 +114,8 @@ export class PluginUiCommittedTaskAuthority
         dependencies.projectGenerations,
         this.#dependencies,
       );
+      if (this.#projectGenerations !== undefined)
+        generationAuthorities.set(this, this.#projectGenerations.publications);
     } catch (cause) {
       throw new ApplicationError(
         "internal",

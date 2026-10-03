@@ -65,6 +65,8 @@ export async function createDesktopPluginRuntime(
   if (!(dependencies.identity instanceof StandaloneIdentity))
     throw new Error("desktop_plugin_identity_required");
   const configuration = parseDesktopPluginConfiguration(input.configuration);
+  if (dependencies.creativeProjects?.pluginGenerations !== undefined)
+    throw new Error("desktop_project_generation_execution_authority_required");
   const registry = await createDesktopPluginSourceRegistry(configuration);
   const projectConfiguration = dependencies.creativeProjects?.pluginUi;
   assertCreativeProjectPluginPublications(

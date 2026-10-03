@@ -93,6 +93,11 @@ export class PostgresExtensionStore implements ExtensionStore {
       ? ("crewon.project-generation-link.v0" as const)
       : undefined;
   }
+  get projectGenerationPublicationVersion() {
+    return this.#projectGenerationsEnabled
+      ? ("crewon.project-generation-publication.v1" as const)
+      : undefined;
+  }
   readonly #pool: Pool;
   readonly #schema: string;
   readonly #schemaName: string;

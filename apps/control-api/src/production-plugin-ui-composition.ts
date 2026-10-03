@@ -30,6 +30,10 @@ import {
   isInstalledPluginTaskActionOwner,
   type InstalledPluginTaskActionOwner,
 } from "./installed-plugin-task-action-owner.ts";
+import {
+  isInstalledPluginProjectGenerationOwner,
+  type InstalledPluginProjectGenerationOwner,
+} from "./installed-plugin-project-generation-owner.ts";
 
 export type ProductionPluginUiConfig = Readonly<{
   configuration: ProductionPluginUiConfiguration;
@@ -41,6 +45,7 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedTaskActions?: InstalledPluginTaskActionOwner;
   /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
+  ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -62,6 +67,13 @@ export function createProductionPluginUiRuntime(
   const { actions, committedTasks, owner } =
     captureProductionPluginUiActions(input);
   const metadataOwner = input.ownedCreativeProjectActions;
+  const generationOwner = input.ownedProjectGenerationActions;
+  if (
+    generationOwner !== undefined &&
+    (!isInstalledPluginProjectGenerationOwner(generationOwner) ||
+      generationOwner.taskOwner !== owner)
+  )
+    throw new Error("production_plugin_ui_generation_owner_invalid");
   if (
     metadataOwner !== undefined &&
     !isPluginCreativeProjectActionOwner(metadataOwner)
@@ -151,6 +163,14 @@ export function createProductionPluginUiRuntime(
           available();
           if (metadataOwner?.supportsAction(request.action))
             return metadataOwner.actions.invoke(request);
+          if (request.action.startsWith("crewon.project-generations.")) {
+            if (generationOwner === undefined)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return generationOwner.actions.invoke(request);
+          }
           if (invokeAction === undefined)
             throw new ApplicationError(
               "conflict",
@@ -217,6 +237,7 @@ export function createProductionPluginUiRuntime(
       lifetime.abort();
       application = null;
       return (closing ??= Promise.allSettled([
+        generationOwner?.close(),
         owner?.close(),
         metadataOwner?.close(),
       ]).then((results) => {
@@ -247,6 +268,14 @@ export function captureProductionPluginUiActions(
   )
     throw new Error("production_plugin_ui_metadata_owner_invalid");
   const owner = input.ownedTaskActions;
+  if (
+    input.ownedProjectGenerationActions !== undefined &&
+    (!isInstalledPluginProjectGenerationOwner(
+      input.ownedProjectGenerationActions,
+    ) ||
+      input.ownedProjectGenerationActions.taskOwner !== owner)
+  )
+    throw new Error("production_plugin_ui_generation_owner_invalid");
   if (owner !== undefined) {
     if (!isInstalledPluginTaskActionOwner(owner))
       throw new Error("production_plugin_ui_action_owner_invalid");

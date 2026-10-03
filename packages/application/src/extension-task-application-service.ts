@@ -4,6 +4,7 @@ import {
 } from "./extension-task-credit-support.ts";
 import {
   captureProjectGenerationTask,
+  capturePublishedProjectGenerationTask,
   commitProjectGenerationTask,
   projectGenerationTaskAdmission,
   type CapturedProjectGenerationTask,
@@ -11,6 +12,7 @@ import {
 } from "./project-generation-application-support.ts";
 import type { ProjectGenerationReference } from "@crewon/domain";
 import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
+import type { CreatePublishedProjectTaskInput } from "./project-generation-execution-authority.ts";
 import { parseExtensionTaskIntent as parseIntent } from "./extension-task-intent.ts";
 import {
   createExtensionRunBinding,
@@ -163,6 +165,20 @@ export class ExtensionTaskApplicationService {
       checkedPluginTaskPin(pin),
       null,
       captureProjectGenerationTask(reference, authority),
+    );
+  }
+
+  /** Actual business and execution installation owners; ordinary task bodies cannot provide this qualification. */
+  async createPublishedProjectTaskFromPlugin(
+    input: CreatePublishedProjectTaskInput,
+  ) {
+    const captured = capturePublishedProjectGenerationTask(input);
+    return this.#createTask(
+      captured.actor,
+      captured.command,
+      captured.executionPin,
+      null,
+      captured.captured,
     );
   }
 
@@ -546,6 +562,7 @@ export class ExtensionTaskApplicationService {
       };
       if (pin !== null && commitAuthority !== null)
         await commitAuthority.assertCurrent({ actor, pin });
+      if (generation !== null) await generation.assertDispatchCurrent();
       const result = await (pin === null
         ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
         : generation === null

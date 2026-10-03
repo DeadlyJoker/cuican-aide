@@ -20,6 +20,7 @@ import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
   captureCreativeProjectCommitAuthority,
+  captureCreativeProjectTransactionAuthority,
 } from "./creative-project-commit-authority.ts";
 import {
   checkedCreativeAsset,
@@ -42,6 +43,12 @@ import {
 } from "./extension-application-support.ts";
 import type { CreateExtensionTaskCommand } from "./extension-task-application-service.ts";
 import { projectGenerationTaskReceipt } from "./project-generation-task-receipt.ts";
+import {
+  captureProjectGenerationExecutionPublication,
+  projectGenerationHostFields,
+  type CreatePublishedProjectTaskInput,
+  type ProjectGenerationExecutionPublication,
+} from "./project-generation-execution-authority.ts";
 
 /** Trusted host composition must supply the existing project store and its current access policy. */
 export type ProjectGenerationApplicationPorts = Readonly<{
@@ -52,7 +59,47 @@ export type ProjectGenerationApplicationPorts = Readonly<{
 export type CapturedProjectGenerationTask = Readonly<{
   reference: ProjectGenerationReference;
   authority: CreativeProjectCommitAuthority;
+  preflight?: CreativeProjectCommitAuthority;
+  publication?: ProjectGenerationExecutionPublication;
 }>;
+
+/** Explicit two-owner entry, separate from the compatible original internal generation recipe. */
+export function capturePublishedProjectGenerationTask(
+  input: CreatePublishedProjectTaskInput,
+) {
+  const value = projectGenerationHostFields(input, [
+    "actor",
+    "command",
+    "reference",
+    "publication",
+    "sourcePin",
+    "executionPin",
+    "authority",
+  ]);
+  const publication = captureProjectGenerationExecutionPublication({
+    publication:
+      value.publication as CreatePublishedProjectTaskInput["publication"],
+    sourcePin: value.sourcePin as CreatePublishedProjectTaskInput["sourcePin"],
+    executionPin:
+      value.executionPin as CreatePublishedProjectTaskInput["executionPin"],
+  });
+  const authority = captureCreativeProjectTransactionAuthority(
+    value.authority as CreatePublishedProjectTaskInput["authority"],
+  );
+  return Object.freeze({
+    actor: value.actor as ActorContext,
+    command: value.command as CreateExtensionTaskCommand,
+    executionPin: publication.executionPin,
+    captured: Object.freeze({
+      reference: creativeInput(() =>
+        parseProjectGenerationReference(value.reference),
+      ),
+      authority: authority.transaction,
+      preflight: authority.preflight,
+      publication,
+    }) satisfies CapturedProjectGenerationTask,
+  });
+}
 
 /** Called before any await; captures private host callbacks separately from bounded JSON. */
 export function captureProjectGenerationTask(
@@ -98,6 +145,15 @@ export function projectGenerationTaskAdmission(
     throw new ApplicationError(
       "validation",
       "creative_project_generation_intent_invalid",
+    );
+  if (
+    captured.publication !== undefined &&
+    extensions.projectGenerationPublicationVersion !==
+      "crewon.project-generation-publication.v1"
+  )
+    throw new ApplicationError(
+      "conflict",
+      "creative_project_generation_publication_unavailable",
     );
   const owner = creativeOwner(actor);
   const reference = captured.reference;
@@ -174,13 +230,22 @@ export function projectGenerationTaskAdmission(
   });
   const commitOptions: CommitExtensionTurnOptions = Object.freeze({
     projectGenerationAuthority: authority,
+    ...(captured.publication === undefined
+      ? {}
+      : { projectGenerationPublication: captured.publication }),
   });
   return Object.freeze({
     reference,
     commitOptions,
     async assertCurrent() {
+      await assertCreativeProjectCommitCurrent(captured.preflight);
+      assertCreativeProjectCommitActive(captured.preflight);
       await currentProject();
       await authorizePolicy();
+    },
+    async assertDispatchCurrent() {
+      await assertCreativeProjectCommitCurrent(captured.preflight);
+      assertCreativeProjectCommitActive(captured.preflight);
     },
     assertActive: () => assertCreativeProjectCommitActive(captured.authority),
     receipt(base: ExtensionMutationReceipt): ExtensionMutationReceipt {

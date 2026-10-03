@@ -58,6 +58,7 @@ import {
   projectGenerationValues,
   type ProjectGenerationCommitOptions,
 } from "./project-generation-store-support.ts";
+import { admitSqliteProjectGenerationPublication } from "./project-generation-publication-admission.ts";
 
 type SqliteExtensionTurnHost = Readonly<{
   database: DatabaseSync;
@@ -161,7 +162,12 @@ export async function commitSqliteExtensionTurn(
           });
         return saved;
       }
-      if (pluginAdmission !== undefined)
+      if (prepared?.publication !== undefined)
+        admitSqliteProjectGenerationPublication(
+          host.database,
+          prepared.publication,
+        );
+      else if (pluginAdmission !== undefined)
         admitSqlitePluginTask(host.database, pluginAdmission);
       if (pluginQuery !== undefined)
         admitSqlitePluginQuery(host.database, pluginQuery, binding);

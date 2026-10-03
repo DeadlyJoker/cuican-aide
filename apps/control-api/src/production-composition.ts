@@ -62,6 +62,9 @@ import {
   type ProductionPluginUiRuntime,
 } from "./production-plugin-ui-composition.ts";
 import { isInstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
+import { isInstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
+import { validateProductionConfig } from "./production-configuration-validation.ts";
+import { assertProjectGenerationExecutionComposition } from "./project-generation-plugin-configuration.ts";
 import {
   parseProductionPluginInstallationConfiguration,
   type ProductionPluginInstallationConfiguration,
@@ -74,18 +77,12 @@ import {
   createProductionPluginInstallationRuntime,
   type ProductionPluginInstallationRuntime,
 } from "./production-plugin-installation-runtime.ts";
-import {
-  assertInstalledPluginTaskConfiguration,
-  type InstalledPluginTaskConfiguration,
-} from "./installed-plugin-task-environment.ts";
+import { type InstalledPluginTaskConfiguration } from "./installed-plugin-task-environment.ts";
 import {
   createInstalledPluginTaskRuntime,
   type InstalledPluginTaskRuntime,
 } from "./installed-plugin-task-composition.ts";
-import {
-  assertInstalledPluginConfigurationConfig,
-  type InstalledPluginConfigurationConfig,
-} from "./installed-plugin-configuration-environment.ts";
+import { type InstalledPluginConfigurationConfig } from "./installed-plugin-configuration-environment.ts";
 import {
   createInstalledPluginConfigurationRuntime,
   type InstalledPluginConfigurationRuntime,
@@ -139,6 +136,8 @@ export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
   const ownedTaskActions = config.pluginUi?.ownedTaskActions;
+  const ownedProjectGenerationActions =
+    config.pluginUi?.ownedProjectGenerationActions;
   const ownedCreativeProjectActions =
     config.pluginUi?.ownedCreativeProjectActions;
   let store: PostgresDomainStore | undefined;
@@ -151,6 +150,13 @@ export async function createProductionPostgresControlApi(
       creativeProjects?.pluginUi,
       config.pluginUi?.configuration.publications,
     );
+    assertProjectGenerationExecutionComposition({
+      generations: creativeProjects?.pluginGenerations,
+      publications: config.pluginUi?.configuration.publications,
+      taskConfiguration: config.pluginTasks,
+      uiConfiguration: config.pluginUi,
+      ownedActions: ownedProjectGenerationActions,
+    });
     if (
       creativeProjects?.pluginUi !== undefined &&
       ownedCreativeProjectActions !== undefined
@@ -210,6 +216,9 @@ export async function createProductionPostgresControlApi(
                 ? {}
                 : { committedTasks: committedSnapshot }),
               ...(ownedTaskActions === undefined ? {} : { ownedTaskActions }),
+              ...(ownedProjectGenerationActions === undefined
+                ? {}
+                : { ownedProjectGenerationActions }),
               ...(ownedCreativeProjectActions === undefined
                 ? {}
                 : { ownedCreativeProjectActions }),
@@ -231,6 +240,12 @@ export async function createProductionPostgresControlApi(
     return await composeProductionControlApi(store, productionConfig, registry);
   } catch (error) {
     const failures: unknown[] = [];
+    if (isInstalledPluginProjectGenerationOwner(ownedProjectGenerationActions))
+      try {
+        await ownedProjectGenerationActions.close();
+      } catch (cleanupError) {
+        failures.push(cleanupError);
+      }
     if (isInstalledPluginTaskActionOwner(ownedTaskActions))
       try {
         await ownedTaskActions.close();
@@ -315,25 +330,7 @@ async function composeProductionControlApi(
       const ledger = store.pluginInstallationStore();
       // Plugin installation history has an explicit independent schema version.
       await ledger.migrate();
-      if (config.pluginInstallation !== undefined) {
-        if (registry === undefined)
-          throw new Error("production_plugin_source_registry_required");
-        pluginInstallationRuntime =
-          await createProductionPluginInstallationRuntime(
-            {
-              configuration: config.pluginInstallation.configuration,
-              registry,
-            },
-            {
-              ledger,
-              clock,
-              digester,
-              ...(projectPluginRuntime === undefined
-                ? {}
-                : { hostUiServices: projectPluginRuntime.hostUiServices }),
-            },
-          );
-      }
+      // The actual generation dispatcher must exist before installation recovery validates its declared Host service.
       if (config.pluginTasks !== undefined && config.pluginUi !== undefined) {
         pluginTaskRuntime = await createInstalledPluginTaskRuntime(
           {
@@ -347,8 +344,34 @@ async function composeProductionControlApi(
             clock,
             ids,
             digester,
+            ...(creativeProjects === undefined ? {} : { creativeProjects }),
+            ...(projectPluginRuntime === undefined
+              ? {}
+              : {
+                  metadataHostUiServices: projectPluginRuntime.hostUiServices,
+                }),
           },
         );
+      }
+      const hostUiServices =
+        pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+        projectPluginRuntime?.hostUiServices;
+      if (config.pluginInstallation !== undefined) {
+        if (registry === undefined)
+          throw new Error("production_plugin_source_registry_required");
+        pluginInstallationRuntime =
+          await createProductionPluginInstallationRuntime(
+            {
+              configuration: config.pluginInstallation.configuration,
+              registry,
+            },
+            {
+              ledger,
+              clock,
+              digester,
+              ...(hostUiServices === undefined ? {} : { hostUiServices }),
+            },
+          );
       }
       if (config.pluginUi !== undefined)
         pluginUiRuntime = createProductionPluginUiRuntime(
@@ -357,6 +380,12 @@ async function composeProductionControlApi(
             ...(pluginTaskRuntime === undefined
               ? {}
               : { ownedTaskActions: pluginTaskRuntime.owner }),
+            ...(pluginTaskRuntime?.projectGenerations === undefined
+              ? {}
+              : {
+                  ownedProjectGenerationActions:
+                    pluginTaskRuntime.projectGenerations,
+                }),
             ...(projectPluginRuntime === undefined
               ? {}
               : { ownedCreativeProjectActions: projectPluginRuntime.owner }),
@@ -518,6 +547,7 @@ async function composeProductionControlApi(
             ui: pluginUiRuntime.service,
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
+            projectGenerations: pluginTaskRuntime?.projectGenerations,
           });
     const app = buildControlApi({
       creativeProjects: creativeProjects?.service,
@@ -624,118 +654,6 @@ async function composeProductionControlApi(
   }
 }
 
-function validateProductionConfig(
-  config: ProductionPostgresControlApiConfig,
-): void {
-  if (
-    config.creativeProjects !== undefined &&
-    !(config.identity instanceof ProductionControlApiIdentity)
-  )
-    throw new Error("production_creative_project_identity_required");
-  if (config.pluginConfiguration !== undefined) {
-    assertInstalledPluginConfigurationConfig(
-      config.pluginConfiguration.configuration,
-    );
-    if (
-      !(config.identity instanceof ProductionControlApiIdentity) ||
-      config.pluginTasks !== undefined
-    )
-      throw new Error("production_plugin_configuration_conflict");
-    const root = config.pluginConfiguration.configuration.installRoot;
-    if (
-      (config.pluginUi !== undefined &&
-        parseProductionPluginUiConfiguration(config.pluginUi.configuration)
-          .installRoot !== root) ||
-      (config.pluginInstallation !== undefined &&
-        parseProductionPluginInstallationConfiguration(
-          config.pluginInstallation.configuration,
-        ).installRoot !== root)
-    )
-      throw new Error("production_plugin_install_root_mismatch");
-  }
-  if (config.pluginTasks !== undefined) {
-    assertInstalledPluginTaskConfiguration(config.pluginTasks.configuration);
-    if (
-      !(config.identity instanceof ProductionControlApiIdentity) ||
-      config.pluginUi === undefined ||
-      config.pluginUi.actions !== undefined ||
-      config.pluginUi.committedTasks !== undefined ||
-      config.pluginUi.ownedTaskActions !== undefined ||
-      parseProductionPluginUiConfiguration(config.pluginUi.configuration)
-        .installRoot !== config.pluginTasks.configuration.installRoot
-    )
-      throw new Error("production_plugin_task_configuration_conflict");
-  }
-  requireMethod(
-    config.identity,
-    "resolveActor",
-    "production_identity_required",
-  );
-  requireMethod(
-    config.authorization,
-    "authorize",
-    "production_authorization_required",
-  );
-  requireMethod(config.artifactStore, "close", "artifact_store_required");
-  if (config.pluginInstallation !== undefined) {
-    if (!(config.identity instanceof ProductionControlApiIdentity))
-      throw new Error("production_plugin_installation_identity_required");
-    parseProductionPluginInstallationConfiguration(
-      config.pluginInstallation.configuration,
-    );
-    if (
-      config.pluginUi !== undefined &&
-      parseProductionPluginInstallationConfiguration(
-        config.pluginInstallation.configuration,
-      ).installRoot !==
-        parseProductionPluginUiConfiguration(config.pluginUi.configuration)
-          .installRoot
-    )
-      throw new Error("production_plugin_install_root_mismatch");
-  }
-  if (config.pluginUi !== undefined) {
-    if (!(config.identity instanceof ProductionControlApiIdentity))
-      throw new Error("production_plugin_ui_identity_required");
-    parseProductionPluginUiConfiguration(config.pluginUi.configuration);
-    captureProductionPluginUiActions(config.pluginUi);
-    if (config.pluginUi.actions !== undefined)
-      requireMethod(
-        config.pluginUi.actions,
-        "invoke",
-        "production_plugin_ui_actions_invalid",
-      );
-    if (config.pluginUi.committedTasks !== undefined) {
-      requireMethod(
-        config.pluginUi.committedTasks,
-        "isOutcome",
-        "production_plugin_ui_committed_tasks_invalid",
-      );
-      requireMethod(
-        config.pluginUi.committedTasks,
-        "verify",
-        "production_plugin_ui_committed_tasks_invalid",
-      );
-    }
-  }
-  if (config.providerProbeWorkers !== undefined) {
-    requireMethod(
-      config.providerProbeWorkers,
-      "resolve",
-      "production_provider_probe_registry_invalid",
-    );
-  }
-  requireBounded(
-    config.connectionString,
-    8 * 1_024,
-    "production_database_url_invalid",
-  );
-  requireBounded(
-    config.artifactEncryptionKeyId,
-    512,
-    "artifact_encryption_key_id_invalid",
-  );
-}
-
 async function closeResources(
   tasks: readonly (() => void | Promise<void> | undefined)[],
 ): Promise<void> {
@@ -750,25 +668,5 @@ async function closeResources(
     throw new AggregateError(failures, "production_control_api_cleanup_failed");
 }
 
-function requireMethod(value: unknown, method: string, code: string): void {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    !(method in value) ||
-    typeof (value as Record<string, unknown>)[method] !== "function"
-  ) {
-    throw new Error(code);
-  }
-}
-
-function requireBounded(value: unknown, maximum: number, code: string): void {
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0 ||
-    value.length > maximum
-  ) {
-    throw new Error(code);
-  }
-}
 import { ArtifactRetentionMaintenance } from "./artifact-retention-maintenance.ts";
 import type { ArtifactRetentionPolicy } from "@crewon/application";

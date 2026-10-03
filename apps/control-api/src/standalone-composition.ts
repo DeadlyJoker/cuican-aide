@@ -45,7 +45,7 @@ import {
 } from "./desktop-plugin-configuration.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
 import {
-  captureCreativeProjectCompositionConfig,
+  captureStandaloneCreativeProjectCompositionConfig,
   composeStandaloneCreativeProjects,
   prepareCreativeProjects,
   type CreativeProjectCompositionConfig,
@@ -364,7 +364,7 @@ function pinExtensionCompositionConfig<
     ...(config.pluginQueryHost === undefined
       ? {}
       : { pluginQueryHost: capturePluginQueryHost(config.pluginQueryHost) }),
-    creativeProjects: captureCreativeProjectCompositionConfig(
+    creativeProjects: captureStandaloneCreativeProjectCompositionConfig(
       config.creativeProjects,
     ),
   });

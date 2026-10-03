@@ -15,6 +15,7 @@ import {
   type ExtensionRunBinding,
   type ExtensionCreditAdmission,
   type PluginTaskAdmission,
+  type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import { extensionStoreDigester } from "./extension-store-records.ts";
 import { assertPluginTaskAdmissionSchemaVersion } from "./plugin-task-admission-schema.ts";
@@ -109,7 +110,7 @@ function assertCreditPrincipal(
 }
 
 function assertSelection(
-  admission: PluginTaskAdmission,
+  admission: PluginTaskAdmissionPin,
   row: Row | undefined,
 ): void {
   if (row === undefined) throw new Error("plugin_task_admission_conflict");
@@ -149,6 +150,14 @@ export function admitSqlitePluginTask(
   database: DatabaseSync,
   admission: PluginTaskAdmission,
 ): void {
+  admitSqlitePluginTaskPin(database, admission);
+}
+
+/** Source UI-only selections do not create a second execution admission. */
+export function admitSqlitePluginTaskPin(
+  database: DatabaseSync,
+  admission: PluginTaskAdmissionPin,
+): void {
   sqliteVersion(database);
   const query = selectionQuery("").replaceAll(/\$[1-4]/gu, "?");
   assertSelection(
@@ -162,6 +171,14 @@ export async function admitPostgresPluginTask(
   client: PoolClient,
   schema: string,
   admission: PluginTaskAdmission,
+): Promise<void> {
+  await admitPostgresPluginTaskPin(client, schema, admission);
+}
+
+export async function admitPostgresPluginTaskPin(
+  client: PoolClient,
+  schema: string,
+  admission: PluginTaskAdmissionPin,
 ): Promise<void> {
   await postgresVersion(client, schema);
   const result = await client.query<Row>(
@@ -289,7 +306,7 @@ function json(value: unknown): unknown {
 function prefix(schema: string): string {
   return `${pluginInstallationSchemaName(schema)}.`;
 }
-function scope(value: PluginTaskAdmission): [string, string, string] {
+function scope(value: PluginTaskAdmissionPin): [string, string, string] {
   return [value.tenantId, value.spaceId, value.profileId];
 }
 function locator(value: ExtensionRunLocator): [string, string, string] {

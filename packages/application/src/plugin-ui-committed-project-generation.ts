@@ -88,6 +88,7 @@ export function prepareCommittedProjectGenerations(
   });
 
   return Object.freeze({
+    publications,
     async verify(
       input: Readonly<{
         context: PluginUiActionContext;

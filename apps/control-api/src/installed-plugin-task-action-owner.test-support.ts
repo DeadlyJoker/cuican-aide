@@ -76,11 +76,13 @@ export async function ownedActionFixture(
     setupFailure?: boolean;
     cleanupFailure?: boolean;
     queryTasks?: boolean;
+    maxPoolSize?: number;
   } = {},
 ) {
   const storage = await configurationServiceFixture(
     t,
     options.backend ?? "sqlite",
+    { maxPoolSize: options.maxPoolSize },
   );
   await storage.seedDeployment();
   await storage.service.saveConfiguration(actor, saveCommand);
@@ -425,6 +427,7 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(sco
   return {
     ...storage,
     extensionState: storage.state,
+    taskDependencies: storage.dependencies,
     owner,
     state,
     dependencies,

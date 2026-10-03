@@ -7,12 +7,18 @@ import {
 import {
   CREWON_CREATIVE_PROJECTS_SERVICE,
   CREWON_CREATIVE_PROJECTS_API_VERSION,
+  CREWON_PROJECT_GENERATIONS_SERVICE,
+  CREWON_PROJECT_GENERATIONS_API_VERSION,
   type PluginPackageDescriptor,
   type PluginServiceRequirement,
 } from "@crewon/contracts/plugins";
 import type { PluginActivationCandidate } from "./plugin-node-host.ts";
+import {
+  hasProjectGenerationHostAvailability,
+  preserveProjectGenerationHostAvailability,
+} from "./plugin-project-generation-host-availability.ts";
 
-/** Host metadata availability never supplies a Node service or grants an invocation permission. */
+/** Host protocol availability never supplies a Node service or grants an invocation permission. */
 export type PluginUiHostServiceAvailabilityPort = Readonly<{
   isAvailable(
     input: Readonly<{
@@ -47,18 +53,21 @@ export function capturePluginUiHostServiceAvailability(
     callback,
     port,
   ) as PluginUiHostServiceAvailabilityPort["isAvailable"];
-  return Object.freeze({
-    isAvailable: (input: Parameters<typeof captured>[0]) => {
-      try {
-        return synchronousAvailable(captured(input));
-      } catch {
-        return false;
-      }
-    },
-  });
+  return preserveProjectGenerationHostAvailability(
+    port,
+    Object.freeze({
+      isAvailable: (input: Parameters<typeof captured>[0]) => {
+        try {
+          return synchronousAvailable(captured(input));
+        } catch {
+          return false;
+        }
+      },
+    }),
+  );
 }
 
-/** UI-only envelopes may only name this explicitly provided Host metadata protocol. */
+/** UI-only envelopes may only name explicitly assembled Host protocols. */
 export function assertUiOnlyServiceDeclarations(
   descriptor: PluginPackageDescriptor,
   hostUiServices?: PluginUiHostServiceAvailabilityPort,
@@ -71,8 +80,13 @@ export function assertUiOnlyServiceDeclarations(
     descriptor.requires.some(
       (requirement) =>
         hostUiServices === undefined ||
-        requirement.service !== CREWON_CREATIVE_PROJECTS_SERVICE ||
-        requirement.apiVersion !== CREWON_CREATIVE_PROJECTS_API_VERSION,
+        !(
+          (requirement.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
+            requirement.apiVersion === CREWON_CREATIVE_PROJECTS_API_VERSION) ||
+          (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
+            requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&
+            hasProjectGenerationHostAvailability(hostUiServices))
+        ),
     )
   )
     unsupported();

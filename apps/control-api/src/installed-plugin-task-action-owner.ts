@@ -79,12 +79,35 @@ type Entry = {
   failed: boolean;
 };
 const owners = new WeakSet<object>();
+const ownerBindings = new WeakMap<
+  object,
+  Readonly<
+    Pick<InstalledPluginTaskActionOwnerDependencies, "tasks" | "committedTasks">
+  >
+>();
 
 /** Actual resource ownership, independent of the injected policy's decisions. */
 export function isInstalledPluginTaskActionOwner(
   input: unknown,
 ): input is InstalledPluginTaskActionOwner {
   return input !== null && typeof input === "object" && owners.has(input);
+}
+
+/** A generation dispatcher must use the task service and receipt issuer owned by this exact owner. */
+export function isInstalledPluginTaskActionOwnerBinding(
+  input: Readonly<{
+    owner: unknown;
+    tasks: unknown;
+    committedTasks: unknown;
+  }>,
+): boolean {
+  if (!isInstalledPluginTaskActionOwner(input.owner)) return false;
+  const binding = ownerBindings.get(input.owner);
+  return (
+    binding !== undefined &&
+    binding.tasks === input.tasks &&
+    binding.committedTasks === input.committedTasks
+  );
 }
 
 /** Trusted same-process actions only. This owner neither creates an actor nor supplies a price. */
@@ -141,6 +164,13 @@ export class InstalledPluginTaskActionOwner {
       invoke: (context: PluginUiActionContext) => this.#run(context),
     });
     owners.add(this);
+    ownerBindings.set(
+      this,
+      Object.freeze({
+        tasks: this.#dependencies.tasks,
+        committedTasks: this.#dependencies.committedTasks,
+      }),
+    );
     Object.freeze(this);
   }
 

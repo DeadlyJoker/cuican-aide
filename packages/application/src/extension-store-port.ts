@@ -10,6 +10,7 @@ import type {
   ProjectGenerationLink,
 } from "@crewon/domain";
 import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
+import type { ProjectGenerationExecutionPublication } from "./project-generation-execution-authority.ts";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
 import type {
   CommitTurnStartInput,
@@ -73,6 +74,8 @@ export type CommitExtensionTurnInput = Readonly<{
 export type CommitExtensionTurnOptions = Readonly<{
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
+  /** Detached source and execution installation pins; the Store locks both using its existing connection. */
+  projectGenerationPublication?: ProjectGenerationExecutionPublication;
 }>;
 /** Adds the admitted user message and history to the existing immutable task receipt. */
 export type CommitExtensionTurnResult = CommitExtensionRunResult &
@@ -92,6 +95,8 @@ export interface ExtensionStore {
   readonly pluginAdmissionVersion?: "crewon.plugin-task-admission.v1";
   readonly pluginQueryAdmissionVersion?: "crewon.plugin-query-task-admission.v1";
   readonly projectGenerationVersion?: "crewon.project-generation-link.v0";
+  /** Explicit support for two installed owners; absent on older adapters and before generation opt-in. */
+  readonly projectGenerationPublicationVersion?: "crewon.project-generation-publication.v1";
   loadProjectGenerationLink?(
     input: ExtensionRunLocator,
   ): Promise<ProjectGenerationLink | null>;
