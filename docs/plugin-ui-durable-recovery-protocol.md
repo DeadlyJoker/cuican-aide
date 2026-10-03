@@ -1,6 +1,6 @@
 # 已安装插件原请求持久恢复协议
 
-日期：2026-10-04。状态：协议、SQL 日志、网页/桌面 renderer 宿主及正式 Production Main 启动配置已实现。实际 Main 三次启动与原请求冷恢复已通过；生成/查询仅验证装配与暂存，图片选用验证真实业务提交和原键重放。Standalone/Native 未接入此配置，完整 App 在线生成及打包版流程仍未验收，不代表 S0 已完成。当前证据见[实施进度](./incremental-extension-progress.md)。
+日期：2026-10-04。状态：协议、SQL 日志、网页/桌面 renderer 宿主及正式 Production Main 启动配置已实现。独立短剧 9.0.0 已在原完整 Web App、Main/BFF 和全新浏览器 profile 中验证三类冷恢复、实际选用提交及进程重启后的原键重放；生成/查询仅 stage 与 hydrate，未执行其业务动作。Standalone/Native 未接入此配置，完整 App 在线生成及打包版流程仍未验收，不代表 S0 已完成。当前证据见[实施进度](./incremental-extension-progress.md)。
 
 ## 协议边界
 
@@ -63,6 +63,8 @@
 
 新 Host 首次 ready 之前必须完整读取并恢复三个 lane。恢复加载失败时保持不可用，不用空 intent 掩盖错误。冷恢复的 prepared/dispatched 都显示 UNKNOWN，保留原输入和原 key，没有自动业务 POST。所有 lane 先校验、全部写入宿主快照，再通知页面，避免历史 accepted 覆盖另一个未确认请求的来源。
 
+短剧 9.0.0 的显式原请求重试使用独立实时屏障：同一保存来源、确切 Host 请求且 retryable 的 UNKNOWN 可以逐一重放，仍保留原 key 和旧 CAS。任何实际业务写请求未结束、pending、来源恢复或冲突、元数据写入、编辑和未就绪都会阻止重试；回执已到但物理请求仍在途时也不能并发重试另一通道。新生成、查询、选用及元数据写入继续使用原锁。归档或后来增加的元数据版本不会替换原请求；当前授权仍由真实挂载与后端逐次核验。
+
 accepted 只能由原业务服务已经验证的、不透明提交事实确认，不能由浏览器写入。回执一旦确认不得回退；重放的 disposition 可以不同，但逻辑回执必须一致。图片的原回执与当前选用指针分开，当前状态仍需要单独读取。
 
 refused 只用于图片选用第一次真实派发的四类明确提交前 CAS 冲突：项目 revision、素材 revision、operation revision、选用 revision。持久派发次数必须仍为一，且没有 accepted 或并发重试。已有 UNKNOWN 的重试、普通网络错误、生成和查询错误都不能据此宣称未提交。
@@ -71,6 +73,8 @@ refused 只用于图片选用第一次真实派发的四类明确提交前 CAS �
 
 ## 验收范围
 
-联合验收需要覆盖注册 ACK 丢失、执行回复丢失、实际进程重启、同 key 不增加原 Run/收费、三个 lane 的完整恢复、来源/账户/档案变化、并发窗口、晚回执、32 条配额、不完整 schema、单连接 PostgreSQL 和旧包零额外 I/O。随后在原完整及打包 App 中验证真实 Krea2 保存、生成、查询和选用路径，并保留原用户栏、设置、侧栏和共享样式。
+实际 9.0.0 发布 ESM **78/78**、原 UI 窄回归 **21/21**及原完整 Web App 联合用例 **1/1、零跳过**通过，各组不相加。联合用例确认首次生成 stage 的 SQL ACK 丢失后无业务 invoke、ready 前三个 UNKNOWN 完整恢复且无自动 mutation、实际 selection owner 提交成功但独立 journal 确认失败、Main/BFF/browser 重启后显式原 key 重放。原回执 revision 1 与独立 GET 的较新当前指针 revision 2 分开保留，未回退当前选择；effects 的记录数量和具名 wallet 不变，Thread 基线 2 保持 2。原账号菜单和设置页可见，原 App 源、正式资产及共享 CSS 保持一致。证据见 `output/extensions/checks/plugin-ui-recovery-full-app-ui9-browser-20261004/full-app-parent-proof.json`。
+
+该联合用例的生成/查询只 stage 与 hydrate，选用使用具名原付费历史和图片结果，没有 Worker、模型、供应商或生产资金调用。零工具 catalog 仅证明原 App 只读连接。后续仍需原完整及打包 App 的真实 Krea2 保存、生成、查询与选用链路及实际企业 API 验收；此结果不等于 Native、S0 或 E5 已完成。账户/来源变化、并发、配额和 schema 等专项的既有验证范围分别见实施进度，不能由本次单一完整 App 用例推定全部覆盖。
 
 真实个人身份、插件钱包、价格权威和第二个企业 API 仍按[实施方案](./incremental-extension-subsystem-plan.md)完成，不能使用具名测试夹具冒充生产资金或生产身份。

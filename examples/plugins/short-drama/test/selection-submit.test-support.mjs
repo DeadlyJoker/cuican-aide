@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { queryService, operations } from "./query-submit.test-support.mjs";
-import { locator } from "./generation-submit.test-support.mjs";
+import { locator, reference } from "./generation-submit.test-support.mjs";
 
 export const selectionReadAction =
   "crewon.project-generation-selections.v1.getConceptSelection";
@@ -237,5 +237,51 @@ export function selectionService() {
     publish() {
       notify();
     },
+  };
+}
+
+/** Three captured recovery inputs; no stage or business mutation is performed. */
+export function selectionRecoveryInputs(service, saved) {
+  const thread = service.context().thread,
+    generation = {
+      reference: reference(saved),
+      threadId: thread.threadId,
+      expectedThreadRevision: thread.revision,
+      idempotencyKey: "original-generation-key",
+    },
+    query = {
+      reference: locator(saved),
+      operationId: operations[0],
+      threadId: thread.threadId,
+      expectedThreadRevision: thread.revision,
+      idempotencyKey: "original-query-key",
+    },
+    selection = {
+      reference: reference(saved),
+      operationId: operations[0],
+      expectedOperationRevision: 9,
+      resultIndex: 2,
+      expectedSelectionRevision: 0,
+      idempotencyKey: "original-selection-key",
+    },
+    uncertain = (request) => ({
+      request,
+      phase: "uncertain",
+      retryable: true,
+      receipt: null,
+    });
+  service.setIntent(uncertain(generation));
+  service.setQueryIntent(uncertain(query));
+  service.setSelectionIntent(uncertain(selection));
+  return { generation, query, selection };
+}
+
+/** Observe a confirmed hint while the original transport promise remains physically open. */
+export function delayBusinessResponse(service, action, gate) {
+  const invoke = service.services.invoke.bind(service.services);
+  service.services.invoke = async (...args) => {
+    const response = await invoke(...args);
+    if (args[0] === action) await gate.promise;
+    return response;
   };
 }

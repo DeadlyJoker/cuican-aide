@@ -36,20 +36,34 @@ export function bindConceptCapabilities(input: {
           expectedAssetMetadataRevision: selection.asset.revision,
         }
       : null;
+  const retryPolicy = {
+    originalRetryBlocked: () =>
+      input.blocked ||
+      input.recovery.conflict ||
+      input.metadataPending ||
+      input.editing ||
+      !input.ready ||
+      submissions.blocksOriginalRetry(source) ||
+      queries.blocksOriginalRetry(source) ||
+      images.blocksOriginalRetry(source),
+  };
   queries.bindSource(
     input.recovery.preservesHistory("query") ? null : source,
     input.ready,
     blocked || submissions.locked || images.locked,
+    retryPolicy,
   );
   submissions.bindSource(
     input.recovery.preservesHistory("generation") ? null : reference,
     project?.state === "active" && !blocked && !images.locked,
     input.ready,
+    retryPolicy,
   );
   images.bindSource(
     input.recovery.preservesHistory("selection") ? null : reference,
     project?.state === "active",
     input.ready,
     blocked || input.metadataPending || submissions.locked || queries.locked,
+    retryPolicy,
   );
 }

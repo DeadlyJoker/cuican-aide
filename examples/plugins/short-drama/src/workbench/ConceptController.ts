@@ -116,6 +116,21 @@ export class ConceptController {
         for (const listener of this.#listeners) listener();
       },
     });
+    let refreshingRetryGates = false;
+    const refreshRetryGates = () => {
+      if (refreshingRetryGates) return;
+      refreshingRetryGates = true;
+      try {
+        this.submissions.refreshOriginalRetryGate();
+        this.queries.refreshOriginalRetryGate();
+        this.images.refreshOriginalRetryGate();
+      } finally {
+        refreshingRetryGates = false;
+      }
+    };
+    this.submissions.subscribe(refreshRetryGates);
+    this.queries.subscribe(refreshRetryGates);
+    this.images.subscribe(refreshRetryGates);
     this.generations.subscribe(() => {
       this.submissions.setRecord(this.generations.getSnapshot());
       this.queries.setRecord(this.generations.getSnapshot());

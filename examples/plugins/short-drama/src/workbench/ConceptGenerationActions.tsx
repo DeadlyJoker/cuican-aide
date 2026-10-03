@@ -25,7 +25,7 @@ export function ConceptGenerationActions({
           </p>
           <button
             className="button secondary"
-            disabled={!state.retryable}
+            disabled={!controller.canRetry}
             onClick={() => void controller.retry()}
           >
             重试原生成请求

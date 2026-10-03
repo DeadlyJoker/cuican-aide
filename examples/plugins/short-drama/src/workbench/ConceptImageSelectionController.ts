@@ -11,6 +11,7 @@ import type { ConceptGenerationSnapshot } from "./ConceptGenerationController";
 import type {
   ConceptImageChoice,
   ConceptImageSelectionSnapshot,
+  ConceptOriginalRetryPolicy,
 } from "./ConceptImageSelectionController.types";
 
 const key = (value: unknown) => JSON.stringify(value);
@@ -47,6 +48,7 @@ export class ConceptImageSelectionController {
   #ready = false;
   #active = false;
   #blocked = false;
+  #originalRetryBlocked: (() => boolean) | null = null;
   #disposed = false;
   #lifetime = 0;
   #recoveryEpoch = 0;
@@ -79,6 +81,30 @@ export class ConceptImageSelectionController {
       this.#snapshot.recovery === "loading"
     );
   }
+  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
+    if (
+      this.#disposed ||
+      !this.#ready ||
+      this.#write !== null ||
+      this.#snapshot.intentPhase === "pending" ||
+      this.#snapshot.recovery === "loading"
+    )
+      return true;
+    if (this.#snapshot.intentPhase !== "uncertain") return false;
+    const request = this.#snapshot.request,
+      intent = this.#host?.intent;
+    return !(
+      source &&
+      request &&
+      this.#snapshot.recovery === "idle" &&
+      this.#snapshot.retryable &&
+      intent?.phase === "uncertain" &&
+      intent.retryable &&
+      key(intent.request) === key(request) &&
+      sourceKey(this.#source) === sourceKey(request.reference) &&
+      sourceKey(source) === sourceKey(request.reference)
+    );
+  }
   #update(change: Partial<ConceptImageSelectionSnapshot> = {}) {
     if (this.#disposed) return;
     const locked = this.locked;
@@ -91,6 +117,7 @@ export class ConceptImageSelectionController {
     active: boolean,
     ready: boolean,
     blocked: boolean,
+    retryPolicy?: ConceptOriginalRetryPolicy,
   ) {
     if (this.#disposed) return;
     const oldAsset = assetKey(this.#source),
@@ -99,6 +126,9 @@ export class ConceptImageSelectionController {
     this.#active = active;
     this.#ready = ready;
     this.#blocked = blocked;
+    this.#originalRetryBlocked = retryPolicy
+      ? retryPolicy.originalRetryBlocked.bind(retryPolicy)
+      : null;
     if (!ready) {
       if (wasReady) {
         ++this.#lifetime;
@@ -138,6 +168,9 @@ export class ConceptImageSelectionController {
       this.#binding = nextBinding;
       if (nextBinding) void this.refresh();
     }
+    this.#update();
+  }
+  refreshOriginalRetryGate() {
     this.#update();
   }
   setRecord(record: ConceptGenerationSnapshot) {
@@ -283,7 +316,7 @@ export class ConceptImageSelectionController {
     return Boolean(
       request &&
         this.#ready &&
-        !this.#blocked &&
+        !(this.#originalRetryBlocked?.() ?? this.#blocked) &&
         !this.#disposed &&
         !this.#write &&
         this.#snapshot.intentPhase === "uncertain" &&

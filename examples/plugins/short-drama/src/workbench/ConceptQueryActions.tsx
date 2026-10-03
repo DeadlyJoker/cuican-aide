@@ -53,7 +53,7 @@ export function ConceptQueryActions({
           </p>
           <button
             className="button secondary"
-            disabled={!state.retryable || state.recovery !== "idle"}
+            disabled={!controller.canRetry}
             onClick={() => void controller.retry()}
           >
             重试原查询

@@ -85,6 +85,8 @@ profile 服务接收服务端已验证的 `{ actor }`，返回 `{ tenantId, spac
 
 Native 首次创建 `plugin-profile.json`，保存与实际单机 actor 绑定的 UUID profile；冷重开沿用该 profile 和安装账本。每个实际会话另生成私有 `plugin-bootstrap-<session hash>.json`，只向所属 Control 子进程传递 `CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH`，不向 Worker、release 进程或 Renderer 公开路径。审批 epoch 来自实际审批字节及 Native 会话生命周期，不是客户端 UUID；启动时审批不可变，修改批准后必须先失效旧会话、撤下入口并完成资源清理，再重启。该机制不宣称支持审批文件热更新。bootstrap 只在消费它的实际 Control 子进程终止后清理，不删除持久 profile、包或历史；文件中不写会话 token。
 
+Native 启动清除继承环境中的 Production 项目配置 `CREWON_PROJECT_COMPOSITION_CONFIG_PATH` 和连接池配置 `CREWON_CONTROL_DATABASE_MAX_POOL_SIZE`，避免它们使原 Standalone 子进程启动失败；Native 自有 bootstrap 和原模型配置仍保留。修复提交 `457b80081` 的原 bootstrap 专项 **11/11**、Electron 类型检查通过，证据为 `output/extensions/checks/plugin-ui-recovery-native-environment-proof-20261004.json`。此项只验证启动环境隔离，未接通 Native 项目恢复或付费执行。
+
 安装先按批准来源核验实际清单、长度、文件字节和摘要，再复制到 `plugins/packages/<64 位裸摘要>` 的宿主拥有目录，账本首次记录为停用。启用、升级、回滚、停用及逻辑卸载沿用原 CAS 和幂等回执，卸载保留包、历史任务及业务数据。Node 恢复和 UI 读取均从实际安装副本核验完整字节及当前批准的 ID、发布者、版本、摘要，不再要求原交付目录保留；这不绕过当前审批、业务协议、必需服务或实际选择。
 
 来源目录的可用性与批准身份分开。启动时缺失、损坏或身份不符的交付目录不会进入来源列表，不能凭配置虚构标题、说明或可安装包；它也不会自动撤销已安装副本的批准身份。每次显式解析或安装重新核验实际来源字节，失败撤掉其列表项。修复交付目录后，须显式解析、安装尝试或重启 Control，实际核验成功才重新发现；普通列表读取不扫描磁盘，也没有文件 watcher。删除交付目录后仍能恢复确切安装副本，修改审批并重启后却不能继续启用被撤销的包；元数据读取、停用、卸载仍可用于修复管理状态。

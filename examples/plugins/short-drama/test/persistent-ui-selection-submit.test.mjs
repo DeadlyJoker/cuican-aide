@@ -12,10 +12,12 @@ import {
 import { queryAction, operations } from "./query-submit.test-support.mjs";
 import {
   selectionService,
+  selectionRecoveryInputs,
+  delayBusinessResponse,
   selectionReadAction,
   selectImageAction,
 } from "./selection-submit.test-support.mjs";
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "8.0.0",
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "9.0.0",
   directory =
     process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
     new URL(`../dist/${version}/`, import.meta.url).pathname;
@@ -72,6 +74,13 @@ const request = (saved, overrides = {}) => ({
   resultIndex: 2,
   expectedSelectionRevision: 0,
   idempotencyKey: "original-selection-key",
+  ...overrides,
+});
+const uncertain = (body, overrides = {}) => ({
+  request: body,
+  phase: "uncertain",
+  retryable: true,
+  receipt: null,
   ...overrides,
 });
 
@@ -544,6 +553,216 @@ test("an older accepted generation family cannot replace the UNKNOWN image sourc
     assert.deepEqual(service.callsFor(selectImageAction)[0].input, body);
     assert.equal(generationPanel(f).dataset.runId, otherGeneration.task.runId);
   } finally {
+    await f.dispose();
+  }
+});
+
+test("three same-source UNKNOWNs allow one explicit original selection retry while new writes and physical peer retries stay locked", async () => {
+  const service = selectionService(),
+    saved = savedConcept(service);
+  service.seedImages(saved);
+  const bodies = selectionRecoveryInputs(service, saved),
+    contexts = [service.context().intent, service.queryContext().intent],
+    f = await ready(service, saved, { open: false }),
+    gate = deferred();
+  try {
+    for (const action of [generateAction, queryAction, selectImageAction])
+      assert.equal(service.callsFor(action).length, 0);
+    for (const label of ["编辑为新修订", "归档项目", "返回概念列表"])
+      assert.equal(f.button(label).disabled, true, label);
+    assert.equal(f.container.querySelector("#creative-brief").disabled, true);
+    assert.equal(imageButton(f).disabled, true);
+    assert.equal(f.button("重试原选用").disabled, false);
+    const metadata = service.calls.filter((call) =>
+      call.action.startsWith("crewon.creative-projects."),
+    ).length;
+    service.gateSelectionWrite(gate);
+    await f.click(f.button("重试原选用"));
+    assert.deepEqual(
+      service.callsFor(selectImageAction).map((call) => call.input),
+      [bodies.selection],
+    );
+    for (const label of ["重试原生成请求", "重试原查询"]) {
+      assert.equal(f.button(label).disabled, true, label);
+      await f.click(f.button(label));
+    }
+    assert.equal(service.callsFor(generateAction).length, 0);
+    assert.equal(service.callsFor(queryAction).length, 0);
+    assert.equal(service.callsFor(selectImageAction).length, 1);
+    gate.resolve();
+    await settle();
+    assert.match(panel(f).textContent, /原选用请求已确认/u);
+    assert.equal(panel(f).dataset.selectionRevision, "1");
+    assert.deepEqual(
+      [service.context().intent, service.queryContext().intent],
+      contexts,
+    );
+    assert.equal(
+      service.calls.filter((call) =>
+        call.action.startsWith("crewon.creative-projects."),
+      ).length,
+      metadata,
+    );
+    assert.equal(
+      imageButton(f).disabled,
+      true,
+      "peer UNKNOWNs still prevent a new selection",
+    );
+    assert.equal(f.button("重试原生成请求").disabled, false);
+    assert.equal(f.button("重试原查询").disabled, false);
+  } finally {
+    gate.resolve();
+    await f.dispose();
+  }
+});
+
+for (const peer of ["generation", "query"])
+  for (const phase of ["pending", "unretryable", "foreign-source"])
+    test(`original selection retry refuses a ${peer} ${phase} intent`, async () => {
+      const service = selectionService(),
+        saved = savedConcept(service);
+      service.seedImages(saved);
+      const bodies = selectionRecoveryInputs(service, saved),
+        setPeer =
+          peer === "generation" ? service.setIntent : service.setQueryIntent,
+        body = bodies[peer];
+      if (phase === "foreign-source") {
+        const other = service.createConcept(
+          saved.project.projectId,
+          "其他来源",
+          1,
+          "不同输入",
+        );
+        body.reference =
+          peer === "generation" ? reference(other) : locator(other);
+      }
+      setPeer(
+        uncertain(
+          body,
+          phase === "pending"
+            ? { phase: "pending", retryable: false }
+            : phase === "unretryable"
+              ? { retryable: false }
+              : {},
+        ),
+      );
+      const f = await ready(service, saved, { open: false });
+      try {
+        assert.equal(f.button("重试原选用").disabled, true);
+        await f.click(f.button("重试原选用"));
+        for (const action of [generateAction, queryAction, selectImageAction])
+          assert.equal(service.callsFor(action).length, 0);
+        assert.deepEqual(
+          service.selectionContext().intent.request,
+          bodies.selection,
+        );
+        if (phase === "unretryable") {
+          setPeer(uncertain(body));
+          await settle();
+          assert.equal(
+            f.button("重试原选用").disabled,
+            false,
+            "retryability changes are observed while the peer stays UNKNOWN",
+          );
+        }
+      } finally {
+        await f.dispose();
+      }
+    });
+
+for (const action of [selectImageAction, generateAction, queryAction])
+  test(`an accepted ${action} hint cannot release other original retries before the physical request settles`, async () => {
+    const service = selectionService(),
+      saved = savedConcept(service);
+    service.seedImages(saved);
+    const bodies = selectionRecoveryInputs(service, saved),
+      gate = deferred();
+    delayBusinessResponse(service, action, gate);
+    const f = await ready(service, saved, { open: false }),
+      labels = new Map([
+        [selectImageAction, "重试原选用"],
+        [generateAction, "重试原生成请求"],
+        [queryAction, "重试原查询"],
+      ]);
+    try {
+      await f.click(f.button(labels.get(action)));
+      const intent =
+        action === selectImageAction
+          ? service.selectionContext().intent
+          : action === generateAction
+            ? service.context().intent
+            : service.queryContext().intent;
+      assert.equal(intent.phase, "accepted");
+      assert.equal(service.callsFor(action).length, 1);
+      const body =
+        action === selectImageAction
+          ? bodies.selection
+          : action === generateAction
+            ? bodies.generation
+            : bodies.query;
+      assert.deepEqual(service.callsFor(action)[0].input, body);
+      for (const [other, label] of labels) {
+        if (other === action) continue;
+        assert.equal(f.button(label).disabled, true, label);
+        await f.click(f.button(label));
+        assert.equal(service.callsFor(other).length, 0);
+      }
+      gate.resolve();
+      await settle();
+      for (const [other, label] of labels)
+        if (other !== action)
+          assert.equal(
+            f.button(label).disabled,
+            false,
+            "physical completion publishes the new retry gate",
+          );
+    } finally {
+      gate.resolve();
+      await f.dispose();
+    }
+  });
+
+test("a metadata write already in flight blocks every restored original retry until its physical response settles", async () => {
+  const service = selectionService(),
+    saved = savedConcept(service);
+  service.seedImages(saved);
+  const gate = deferred();
+  delayBusinessResponse(
+    service,
+    "crewon.creative-projects.v1.appendBrief",
+    gate,
+  );
+  const f = await ready(service, saved);
+  try {
+    await f.input(
+      f.container.querySelector("#creative-brief"),
+      "正在保存的新需求",
+    );
+    await f.click(f.button("保存为新版本"));
+    assert.equal(service.methodCalls("appendBrief").length, 1);
+    assert.equal(f.button("正在保存…").disabled, true);
+    const bodies = selectionRecoveryInputs(service, saved);
+    await settle();
+    for (const label of ["重试原选用", "重试原生成请求", "重试原查询"]) {
+      assert.equal(f.button(label).disabled, true, label);
+      await f.click(f.button(label));
+    }
+    for (const action of [selectImageAction, generateAction, queryAction])
+      assert.equal(service.callsFor(action).length, 0);
+    assert.deepEqual(
+      service.selectionContext().intent.request,
+      bodies.selection,
+    );
+    gate.resolve();
+    await settle();
+    assert.equal(
+      f.button("重试原选用").disabled,
+      false,
+      "later project CAS does not replace or prohibit the original key",
+    );
+    assert.equal(service.methodCalls("appendBrief").length, 1);
+  } finally {
+    gate.resolve();
     await f.dispose();
   }
 });

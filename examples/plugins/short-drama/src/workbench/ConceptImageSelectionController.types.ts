@@ -5,6 +5,10 @@ import type {
   SelectConceptImageResponse,
 } from "@crewon/plugin-sdk/contracts";
 
+export type ConceptOriginalRetryPolicy = Readonly<{
+  originalRetryBlocked(): boolean;
+}>;
+
 /** The visible generation, operation revision and original result index identify a choice. */
 export type ConceptImageChoice = Readonly<{
   reference: ConceptGenerationLocator;

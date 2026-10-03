@@ -8,6 +8,7 @@ import type {
   ProjectGenerationQueryUiReceipt,
 } from "@crewon/plugin-sdk/contracts";
 import type { ConceptGenerationSnapshot } from "./ConceptGenerationController";
+import type { ConceptOriginalRetryPolicy } from "./ConceptImageSelectionController.types";
 export type ConceptQuerySnapshot = Readonly<{
   intentPhase: "pending" | "uncertain" | "accepted" | "refused" | null;
   request: ProjectGenerationQueryUiInput | null;
@@ -45,6 +46,7 @@ export class ConceptQueryController {
   #record: ConceptGenerationSnapshot | null = null;
   #ready = false;
   #blocked = false;
+  #originalRetryBlocked: (() => boolean) | null = null;
   #disposed = false;
   #write: AbortController | null = null;
   #recoveryEpoch = 0;
@@ -78,6 +80,33 @@ export class ConceptQueryController {
   get hasHostContext() {
     return this.#host !== null;
   }
+  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
+    if (
+      this.#disposed ||
+      !this.#ready ||
+      this.#write !== null ||
+      this.#snapshot.intentPhase === "pending" ||
+      this.#snapshot.recovery === "loading"
+    )
+      return true;
+    if (this.#snapshot.intentPhase !== "uncertain") return false;
+    const request = this.#snapshot.request,
+      intent = this.#host?.intent;
+    return !(
+      source &&
+      request &&
+      this.#snapshot.recovery === "idle" &&
+      this.#snapshot.retryable &&
+      intent?.phase === "uncertain" &&
+      intent.retryable &&
+      key(intent.request) === key(request) &&
+      sourceKey(this.#source) === sourceKey(request.reference) &&
+      sourceKey(source) === sourceKey(request.reference)
+    );
+  }
+  refreshOriginalRetryGate() {
+    this.#update();
+  }
   #update(change: Partial<ConceptQuerySnapshot> = {}) {
     if (this.#disposed) return;
     const locked = this.locked;
@@ -89,11 +118,15 @@ export class ConceptQueryController {
     source: ConceptGenerationLocator | null,
     ready: boolean,
     blocked: boolean,
+    retryPolicy?: ConceptOriginalRetryPolicy,
   ) {
     if (this.#disposed) return;
     const wasReady = this.#ready;
     this.#ready = ready;
     this.#blocked = blocked;
+    this.#originalRetryBlocked = retryPolicy
+      ? retryPolicy.originalRetryBlocked.bind(retryPolicy)
+      : null;
     this.#source = source ? Object.freeze({ ...source }) : null;
     if (!ready) {
       this.#write?.abort();
@@ -216,22 +249,26 @@ export class ConceptQueryController {
     });
     await this.#submit(request);
   }
-  async retry() {
+  get canRetry() {
     const request = this.#snapshot.request,
       intent = this.#host?.intent;
-    if (
-      !request ||
-      !this.#ready ||
-      this.#blocked ||
-      this.#write ||
-      this.#snapshot.intentPhase !== "uncertain" ||
-      !this.#snapshot.retryable ||
-      intent?.phase !== "uncertain" ||
-      key(intent.request) !== key(request) ||
-      this.#snapshot.recovery !== "idle" ||
-      sourceKey(this.#source) !== sourceKey(request.reference)
-    )
-      return;
+    return Boolean(
+      request &&
+        this.#ready &&
+        !this.#disposed &&
+        !(this.#originalRetryBlocked?.() ?? this.#blocked) &&
+        !this.#write &&
+        this.#snapshot.intentPhase === "uncertain" &&
+        this.#snapshot.retryable &&
+        intent?.phase === "uncertain" &&
+        key(intent.request) === key(request) &&
+        this.#snapshot.recovery === "idle" &&
+        sourceKey(this.#source) === sourceKey(request.reference),
+    );
+  }
+  async retry() {
+    if (!this.canRetry) return;
+    const request = this.#snapshot.request!;
     this.#update({ intentPhase: "pending", retryable: false, reason: null });
     await this.#submit(request);
   }

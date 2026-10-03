@@ -4,11 +4,13 @@ import type {
   ProjectGenerationHostContext,
 } from "@crewon/plugin-sdk/ui";
 import type {
+  ConceptGenerationLocator,
   ProjectGenerationUiInput,
   ProjectGenerationUiReceipt,
   ProjectGenerationUiReference,
 } from "@crewon/plugin-sdk/contracts";
 import type { ConceptGenerationSnapshot } from "./ConceptGenerationController";
+import type { ConceptOriginalRetryPolicy } from "./ConceptImageSelectionController.types";
 
 export type ConceptGenerationIntentSnapshot = Readonly<{
   phase: "idle" | "checking" | "ready" | "unavailable";
@@ -21,7 +23,7 @@ export type ConceptGenerationIntentSnapshot = Readonly<{
   canGenerate: boolean;
 }>;
 const key = (value: unknown) => JSON.stringify(value);
-export const generationSourceKey = (source: ProjectGenerationUiReference) =>
+export const generationSourceKey = (source: ConceptGenerationLocator) =>
   key([source.projectId, source.assetId, source.assetRevision]);
 
 /** Keeps one exact intent. Display hints never authorize a paid task. */
@@ -52,6 +54,7 @@ export class ConceptGenerationIntentController {
   #seenHostIntent: string | null = null;
   #source: ProjectGenerationUiReference | null = null;
   #active = false;
+  #originalRetryBlocked: (() => boolean) | null = null;
   #ready = false;
   #record: ConceptGenerationSnapshot | null = null;
   #binding: string | null = null;
@@ -94,6 +97,35 @@ export class ConceptGenerationIntentController {
   get hasHostContext() {
     return this.#host !== null;
   }
+  blocksOriginalRetry(source: ConceptGenerationLocator | null) {
+    if (
+      this.#disposed ||
+      !this.#ready ||
+      this.#write !== null ||
+      this.#snapshot.intentPhase === "pending" ||
+      this.#snapshot.recovery === "loading"
+    )
+      return true;
+    if (this.#snapshot.intentPhase !== "uncertain") return false;
+    const request = this.#snapshot.request,
+      intent = this.#host?.intent;
+    return !(
+      source &&
+      this.#source &&
+      request &&
+      this.#snapshot.recovery === "idle" &&
+      this.#snapshot.retryable &&
+      intent?.phase === "uncertain" &&
+      intent.retryable &&
+      key(intent.request) === key(request) &&
+      generationSourceKey(this.#source) ===
+        generationSourceKey(request.reference) &&
+      generationSourceKey(source) === generationSourceKey(request.reference)
+    );
+  }
+  refreshOriginalRetryGate() {
+    this.#update({});
+  }
   #update(change: Partial<ConceptGenerationIntentSnapshot>) {
     if (this.#disposed) return;
     const locked = this.locked;
@@ -105,10 +137,14 @@ export class ConceptGenerationIntentController {
     source: ProjectGenerationUiReference | null,
     active: boolean,
     ready: boolean,
+    retryPolicy?: ConceptOriginalRetryPolicy,
   ) {
     if (this.#disposed) return;
     this.#source = source ? Object.freeze({ ...source }) : null;
     this.#active = active;
+    this.#originalRetryBlocked = retryPolicy
+      ? retryPolicy.originalRetryBlocked.bind(retryPolicy)
+      : null;
     const wasReady = this.#ready;
     this.#ready = ready;
     if (!ready) {
@@ -277,17 +313,22 @@ export class ConceptGenerationIntentController {
     });
     await this.#submit(request);
   }
-  async retry() {
+  get canRetry() {
     const request = this.#snapshot.request;
-    if (
-      !request ||
-      !this.#ready ||
-      this.#write ||
-      this.#snapshot.intentPhase !== "uncertain" ||
-      !this.#snapshot.retryable ||
-      key(this.#host?.intent?.request) !== key(request)
-    )
-      return;
+    return Boolean(
+      request &&
+        this.#ready &&
+        !this.#disposed &&
+        !this.#write &&
+        !(this.#originalRetryBlocked?.() ?? false) &&
+        this.#snapshot.intentPhase === "uncertain" &&
+        this.#snapshot.retryable &&
+        key(this.#host?.intent?.request) === key(request),
+    );
+  }
+  async retry() {
+    if (!this.canRetry) return;
+    const request = this.#snapshot.request!;
     this.#update({ intentPhase: "pending", retryable: false });
     await this.#submit(request);
   }
@@ -324,6 +365,7 @@ export class ConceptGenerationIntentController {
         });
     } finally {
       if (this.#write === controller) this.#write = null;
+      this.#update({});
     }
   }
   async restoreSource() {

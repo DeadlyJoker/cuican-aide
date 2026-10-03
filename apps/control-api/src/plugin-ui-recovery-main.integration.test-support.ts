@@ -46,6 +46,8 @@ import { taskProcessFreePort } from "./installed-plugin-tasks-process-authoritie
 import { TEST_CA_CERT } from "../../device-gateway/src/mtls-test-certificates.test-support.ts";
 import { PRODUCTION_BFF_AUTHORIZATION_HEADER } from "./production-security-adapters.ts";
 import { startMainRecoveryAuthorities } from "./plugin-ui-recovery-main-authorities.test-support.ts";
+import { mainRecoveryManagementEnvironment } from "./plugin-ui-recovery-main-management.test-support.ts";
+import { seedOriginalAppCatalog } from "./plugin-ui-recovery-main-catalog.test-support.ts";
 
 export const mainRecoveryActions = Object.freeze({
   generation: "crewon.project-generations.v1.generateConcept",
@@ -54,9 +56,17 @@ export const mainRecoveryActions = Object.freeze({
 });
 const repository = fileURLToPath(new URL("../../..", import.meta.url));
 const authorityToken = "named-main-authority-" + "a".repeat(32);
-const accessToken = "named-main-session-" + "s".repeat(32);
+const defaultAccessToken = "named-main-session-" + "s".repeat(32);
 const bffToken = "named-main-bff-" + "b".repeat(32);
-const browserOrigin = "https://named-main-browser.fixture.test";
+const defaultBrowserOrigin = "https://named-main-browser.fixture.test";
+export type RecoveryMainFixtureOptions = Readonly<{
+  sourcePackageDirectory?: string;
+  browserOrigin?: string;
+  sessionCookie?: string;
+  accessToken?: string;
+  installationManagement?: true;
+  originalAppCatalog?: true;
+}>;
 type PoolObservation = Readonly<{
   pid: number;
   phase: "connect" | "acquired";
@@ -66,7 +76,14 @@ type PoolObservation = Readonly<{
 
 /** Real original main.ts, TLS authorities and exact installed bytes. Paid history/funding/results
  * are explicitly seeded fixtures; no Worker, model, supplier execution or human funds are involved. */
-export async function recoveryMainFixture(t: TestContext) {
+export async function recoveryMainFixture(
+  t: TestContext,
+  options: RecoveryMainFixtureOptions = {},
+) {
+  const { sourcePackageDirectory, sessionCookie, installationManagement } =
+    options;
+  const browserOrigin = options.browserOrigin ?? defaultBrowserOrigin;
+  const accessToken = options.accessToken ?? defaultAccessToken;
   const cleanup: (() => unknown | Promise<unknown>)[] = [];
   const children: ReturnType<typeof startFullAppProcess>[] = [];
   const authorities: (() => Promise<void>)[] = [];
@@ -139,6 +156,8 @@ export async function recoveryMainFixture(t: TestContext) {
     principalId: "named-main-history-owner",
   };
   const profile = { ...scope, profileId: "named-main-profile" };
+  if (options.originalAppCatalog === true)
+    await seedOriginalAppCatalog(storage.first.parent, actor);
   const { pluginId: _pluginId, ...profileScope } = profile;
   const ledger = storage.first.parent.pluginInstallationStore();
   await ledger.migrate();
@@ -163,16 +182,14 @@ export async function recoveryMainFixture(t: TestContext) {
     );
     return { ...installed, enabled };
   };
-  const target = await deliver(
-    await realpath(
-      process.env.CREWON_TEST_KREA2_PACKAGE ??
-        join(
-          repository,
-          "output/extensions/installable-plugins/krea2-20261003/2.0.0",
-        ),
-    ),
-    "named-main-actual-krea2",
+  const targetDirectory = await realpath(
+    process.env.CREWON_TEST_KREA2_PACKAGE ??
+      join(
+        repository,
+        "output/extensions/installable-plugins/krea2-20261003/2.0.0",
+      ),
   );
+  const target = await deliver(targetDirectory, "named-main-actual-krea2");
   const registration = await loadInstalledPluginBusinessRegistration({
     installRoot: files.installRoot,
     expectedPluginId: target.descriptor.pluginId,
@@ -182,24 +199,45 @@ export async function recoveryMainFixture(t: TestContext) {
     authorizeRead: async () => "allow",
     signal: new AbortController().signal,
   });
-  const sourceBytes = await files.source("recovery-module", {
-    pluginId: "test.main-recovery",
-    publisherId: "test.main-recovery-publisher",
-    uiOnly: true,
-    requires: [
-      {
-        service: "crewon.plugin-ui-recovery",
-        apiVersion: "1",
-        optional: false,
-      },
-      ...[
-        "crewon.project-generations",
-        "crewon.project-generation-queries",
-        "crewon.project-generation-selections",
-      ].map((service) => ({ service, apiVersion: "1", optional: true })),
-    ],
-  });
-  const source = await deliver(sourceBytes.directory, "named-main-source");
+  const sourceDirectory =
+    sourcePackageDirectory ??
+    (
+      await files.source("recovery-module", {
+        pluginId: "test.main-recovery",
+        publisherId: "test.main-recovery-publisher",
+        uiOnly: true,
+        requires: [
+          {
+            service: "crewon.plugin-ui-recovery",
+            apiVersion: "1",
+            optional: false,
+          },
+          ...[
+            "crewon.project-generations",
+            "crewon.project-generation-queries",
+            "crewon.project-generation-selections",
+          ].map((service) => ({ service, apiVersion: "1", optional: true })),
+        ],
+      })
+    ).directory;
+  const source = await deliver(
+    await realpath(sourceDirectory),
+    "named-main-source",
+  );
+  const [contribution, ...otherContributions] =
+    source.descriptor.contributions.filter(
+      (item) => item.kind === "module" && item.slot === "main.content",
+    );
+  assert.ok(contribution?.kind === "module" && otherContributions.length === 0);
+  const ui = source.descriptor.entrypoints.ui;
+  assert.ok(ui?.mode === "trustedModule");
+  const publicAssets = Object.freeze(
+    source.descriptor.files
+      .map((file) => file.path)
+      .filter((path) => path === ui.path || path.startsWith("assets/"))
+      .sort(),
+  );
+  assert.ok(publicAssets.includes(ui.path));
   const metadata = storage.first.parent.creativeProjectStore();
   await metadata.migrate();
   const initial = await metadata.commitProjectCreation(
@@ -449,6 +487,7 @@ export async function recoveryMainFixture(t: TestContext) {
     tlsConnections: 0,
     failures: [] as unknown[],
     policyCalls: 0,
+    sessionCalls: 0,
   };
   const { authorityOrigin, peerOrigin } = await startMainRecoveryAuthorities({
     actor,
@@ -456,6 +495,10 @@ export async function recoveryMainFixture(t: TestContext) {
     accessToken,
     authorityToken,
     state,
+    ...(sessionCookie === undefined ? {} : { sessionCookie }),
+    ...(installationManagement === true
+      ? { installationPackages: [source, target] }
+      : {}),
     registerClose: (close) => authorities.push(close),
     async beforePolicy() {
       if (state.armConfirmationFault && !state.faultInstalled) {
@@ -476,7 +519,7 @@ export async function recoveryMainFixture(t: TestContext) {
   const sourcePublication = {
     pluginId: source.descriptor.pluginId,
     packageDigest: source.packageDigest,
-    contributionId: "workbench",
+    contributionId: contribution.id,
   };
   const projectPath = join(files.root, "project-composition.json");
   const taskPath = join(files.root, "installed-tasks.json");
@@ -484,6 +527,17 @@ export async function recoveryMainFixture(t: TestContext) {
   const keyPath = join(files.root, "artifact-key");
   const observerPath = join(files.root, "pool-connect-observer.mjs");
   const observationsPath = join(files.root, "physical-pool-observations.jsonl");
+  const managementEnvironment = await mainRecoveryManagementEnvironment({
+    enabled: installationManagement === true,
+    root: files.root,
+    installRoot: files.installRoot,
+    authorityOrigin,
+    authorityToken,
+    sourceDirectory,
+    targetDirectory,
+    source,
+    target,
+  });
   await writeFile(
     projectPath,
     JSON.stringify({
@@ -590,14 +644,7 @@ export async function recoveryMainFixture(t: TestContext) {
     CREWON_PLUGIN_UI_POLICY_AUTHORITY_URL: `${authorityOrigin}/policy`,
     CREWON_PLUGIN_UI_POLICY_AUTHORITY_TOKEN: authorityToken,
     CREWON_PLUGIN_UI_AUTHORITY_TIMEOUT_MS: "10000",
-    CREWON_PLUGIN_UI_PUBLICATIONS_JSON: JSON.stringify([
-      {
-        pluginId: source.descriptor.pluginId,
-        publisherId: source.descriptor.publisherId,
-        packageDigest: source.packageDigest,
-        publicAssets: ["ui.mjs"],
-      },
-    ]),
+    ...managementEnvironment,
     CREWON_PROJECT_COMPOSITION_CONFIG_PATH: projectPath,
     CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH: taskPath,
     NAMED_MAIN_AUTHORITY_TOKEN: authorityToken,
@@ -656,7 +703,7 @@ export async function recoveryMainFixture(t: TestContext) {
     const mount = () =>
       client.plugins.openMount({
         pluginId: source.descriptor.pluginId,
-        contributionId: "workbench",
+        contributionId: contribution.id,
         expectedSelectionRevision: source.enabled.selection.revision,
         expectedPackageDigest: source.packageDigest,
       });
@@ -675,7 +722,7 @@ export async function recoveryMainFixture(t: TestContext) {
   const effects = async () => ({
     counts: Object.fromEntries(
       await Promise.all(
-        generationTables.map(async (table) => [
+        [...generationTables, "threads"].map(async (table) => [
           table,
           await storage.count(table),
         ]),
@@ -727,6 +774,15 @@ export async function recoveryMainFixture(t: TestContext) {
     actor,
     config,
     source,
+    contribution,
+    publicAssets,
+    accessToken,
+    browserOrigin,
+    sessionAuthorityUrl:
+      sessionCookie === undefined ? undefined : `${authorityOrigin}/session`,
+    sessionAuthorityToken: authorityToken,
+    bffToken,
+    caPath,
     target,
     requests,
     selectionRequest,

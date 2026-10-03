@@ -4,6 +4,10 @@ import { createServer as httpsServer } from "node:https";
 import type { TLSSocket } from "node:tls";
 import type { ActorContext } from "@crewon/application";
 import {
+  mainRecoveryInstallationDecision,
+  type MainRecoveryManagementPackage,
+} from "./plugin-ui-recovery-main-management.test-support.ts";
+import {
   TEST_SERVER_CERT,
   TEST_SERVER_KEY,
 } from "../../device-gateway/src/mtls-test-certificates.test-support.ts";
@@ -19,11 +23,14 @@ export async function startMainRecoveryAuthorities(
     }>;
     accessToken: string;
     authorityToken: string;
+    sessionCookie?: string;
+    installationPackages?: readonly MainRecoveryManagementPackage[];
     state: {
       tlsConnections: number;
       peerCalls: number;
       quoteCalls: number;
       policyCalls: number;
+      sessionCalls: number;
       failures: unknown[];
     };
     beforePolicy(): Promise<void>;
@@ -35,6 +42,8 @@ export async function startMainRecoveryAuthorities(
     profileScope,
     accessToken,
     authorityToken,
+    sessionCookie,
+    installationPackages,
     state,
     beforePolicy,
     registerClose,
@@ -59,9 +68,24 @@ export async function startMainRecoveryAuthorities(
           assert.ok(size <= 128 * 1024);
           chunks.push(Buffer.from(chunk));
         }
-        const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        const body =
+          size === 0
+            ? null
+            : JSON.parse(Buffer.concat(chunks).toString("utf8"));
         let output: unknown;
-        if (request.url === "/verify") {
+        if (request.url === "/session" && sessionCookie !== undefined) {
+          assert.equal(body, null);
+          if (request.headers.cookie !== sessionCookie) {
+            response.writeHead(401).end();
+            return;
+          }
+          state.sessionCalls++;
+          output = {
+            controlAccessToken: accessToken,
+            expiresAt: new Date(Date.now() + 300_000).toISOString(),
+            sessionId: "named-main-web-session-" + "j".repeat(32),
+          };
+        } else if (request.url === "/verify") {
           assert.deepEqual(body, { accessToken });
           output = {
             ...actor,
@@ -73,6 +97,17 @@ export async function startMainRecoveryAuthorities(
         } else if (request.url === "/profile") {
           assert.deepEqual(body, { actor });
           output = profileScope;
+        } else if (
+          request.url === "/installation-policy" &&
+          installationPackages !== undefined
+        ) {
+          state.policyCalls++;
+          output = mainRecoveryInstallationDecision({
+            request: body,
+            actor,
+            profileScope,
+            packages: installationPackages,
+          });
         } else if (request.url === "/policy") {
           assert.deepEqual(body.actor, actor);
           state.policyCalls++;

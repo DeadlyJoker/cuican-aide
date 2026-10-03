@@ -32,3 +32,13 @@ CREWON_TEST_POSTGRES_URL='<isolated test PostgreSQL URL>' \
 Chromium 用隔离的 Electron BrowserWindow 加载 HTTPS Web 页面，禁用 Node integration、保持 context isolation，没有 Native 桥。这不证明正式 Electron Main/preload、file App 或 packaged App 的插件执行。
 
 SSE 响应和最终转录证明实际事件流可打开及结果恢复，不单独证明实时 delta 逐帧驱动 DOM，也不替代原任务运行时的 `Last-Event-ID`、断线重连与退出竞态覆盖。用户 ComfyUI 地址、第二个实际企业 API、真实个人资金来源/价格/结算和完整短剧持久项目仍需分别验收。
+
+## 2026-10-04：短剧 9.0.0 的原请求恢复联合验收
+
+`plugin-ui-recovery-short-drama-full-app.browser.integration.test.ts` 另行使用仓外构建、核验并实际安装的短剧 9.0.0，保持同一正式 App、登录、用户栏、设置导航与静态样式。真实包摘要为 `sha256:981c3bcdb7fc9c47186118a482bb1d8ec3dd1d4f95d3a09139f7a104dfba2334`；SDK tarball、旧 8.0.0 包、14 个保护源文件与 15 个正式 UI 资产均未改变。
+
+实际 PostgreSQL 注册 ACK 丢失后，首次 ready 前恢复生成、查询和选用三条原请求；挂载没有业务 POST。用户明确重试选用后，原业务提交成功而恢复确认事务故障。另一次明确选用把当前指针更新为 2；物理重启原 Main/BFF，并以新的浏览器目录登录后，沿原键重放仍返回原回执 1，独立读取的当前指针仍为 2。原请求、来源、键和 CAS 保持，三类请求不再互锁；插件内真实在途请求仍阻止其他重试。
+
+联合专项为 **1/1、0 跳过**，仓外发布 ESM **78/78**，原组件与既有快照 **21/21**。证据为 `output/extensions/checks/plugin-ui-recovery-full-app-ui9-browser-20261004/full-app-parent-proof.json` 及同目录截图；两个 Main、两个 BFF 和三个浏览器进程均已结束。旧 Main 默认启动专项仍为 **1/1、0 跳过**。
+
+本专项的生成和查询只注册及恢复提示，未调用其业务动作；App 连接使用具名零工具目录。历史、图片和资金是具名 SQL 夹具，行数与钱包状态保持，不代表全部历史字段逐字节核验，也不证明 Worker、模型、供应商、实际积分或 Native/打包版执行。前文报告专项的 Worker/SSE 证据仍独立保留。

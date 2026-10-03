@@ -6,6 +6,16 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：独立短剧 9.0.0 与原完整 Web App 重启恢复
+
+9.0.0 修复同一保存来源的三类 UNKNOWN 原请求互锁：宿主允许重试时，用户可以显式重放确切原请求；实际在途请求、来源冲突、元数据写入和未就绪仍阻止重试，新写操作继续锁定。原 key、输入及全部旧 CAS 保留。新包在仓外使用冻结 SDK 离线严格编译、自持构建，发布 ESM **78/78** 通过；原 UI 四文件窄回归 **21/21** 通过。实际 Host verifier 核验七个声明文件，产物为 `output/extensions/installable-plugins/recovery-ui9-short-drama-20261004/short-drama/9.0.0`，packageDigest 为 `sha256:981c3bcdb7fc9c47186118a482bb1d8ec3dd1d4f95d3a09139f7a104dfba2334`。旧 8.0.0 产物保持独立；原 App 的 14 个受保护源文件、15 份正式资产及 SDK 摘要均保持一致。
+
+真实原 Web App、Production Main、BFF 和三个全新浏览器 profile 的联合用例 **1/1、零跳过**通过。沿原 index/AuthGate、账号菜单、设置页和真实安装挂载，cold hydrate 恢复三个原 UNKNOWN，业务 mutation POST 为零。用户明确重试原选用后，实际 installed selection owner 提交并返回 revision 1 回执；独立 journal 确认事务被故障触发器拒绝，原业务成功仍返回。另一次选用提交当前指针 revision 2 后，实际停止并重启 Main/BFF/browser，再显式使用原 key 重放：返回原 revision 1 回执，单独读取的当前选用仍为 revision 2。生成和查询仅完成真实 owner 的 stage 与 hydrate，未执行其业务动作。
+
+证据为 `output/extensions/checks/plugin-ui-recovery-full-app-ui9-browser-20261004/full-app-parent-proof.json`，包含三次浏览器流程及设置截图、确切原请求/pin、stage ACK 时序、回执与独立当前指针、实际单连接池观测和清理终态。effects 的记录数量与具名 wallet 基线一致，Thread 数保持 2；这不是所有原付费历史字段的全量摘要验证。全部自有 Main/BFF/browser 已物理退休。上述分组范围不同，不相加为全量通过。
+
+历史付费记录、图片结果、身份/PDP、余额与零工具 App catalog 均为具名夹具；catalog 仅用于原 App 的只读连接，不证明 Worker 部署或生成/查询执行就绪。本阶段没有在线 Worker、模型、供应商或真实资金调用，也未验收 Native/打包 App。完整 S0/E5、真实个人插件钱包与定价、既有 ComfyUI 404 问题的实际重验及第二个企业 API 仍待完成，完整目标继续进行。
+
 ## 2026-10-04：独立短剧 8.0.0 必需恢复声明与仓外产物
 
 新包声明 `crewon.plugin-ui-recovery@1` 为必需服务，避免缺实际恢复端口的宿主先启用、再在模块 ready 前 hydrate 失败。模块复用原 Host 的三类上下文，无新增业务恢复调用；UI 源码、控制器和 CSS 未修改。旧 5/6/7 冻结产物及原 App/设置/侧栏继续保留。没有实际恢复服务的 Standalone/Native 当前不能启用 8.0.0。
