@@ -53,7 +53,7 @@ import {
   type CreativeProjectCompositionConfig,
   type PreparedCreativeProjects,
 } from "./creative-project-composition.ts";
-import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
+import { desktopProjectUiPublications } from "./desktop-project-history-plugin-runtime.ts";
 import {
   composeStandaloneExtensionServices,
   type DesktopPluginNamespaceMembership,
@@ -235,8 +235,8 @@ export async function createStandaloneControlApiWithPlugins(
   )
     throw new Error("desktop_plugin_owner_mismatch");
   const pinned = pinExtensionCompositionConfig(config);
-  assertCreativeProjectPluginPublications(
-    pinned.creativeProjects?.pluginUi,
+  desktopProjectUiPublications(
+    pinned.creativeProjects,
     configuration.publications,
   );
   const store = new SqliteRunStore(pinned.databasePath);

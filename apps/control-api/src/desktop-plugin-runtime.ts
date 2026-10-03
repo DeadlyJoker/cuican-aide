@@ -6,8 +6,12 @@ import {
   type ContentDigester,
   type PluginUiPackageContext,
   type PluginUiPackagePort,
+  type PluginUiActionPort,
 } from "@crewon/application";
-import { LocalPluginUiPackageReader } from "@crewon/plugin-host";
+import {
+  LocalPluginUiPackageReader,
+  type PluginUiHostServiceAvailabilityPort,
+} from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
 import {
   parseDesktopPluginConfiguration,
@@ -33,10 +37,15 @@ import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugi
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
 import type { PreparedCreativeProjects } from "./creative-project-composition.ts";
 import {
-  assertCreativeProjectPluginPublications,
   createCreativeProjectPluginUiRuntime,
   type CreativeProjectPluginUiRuntime,
 } from "./creative-project-plugin-ui-composition.ts";
+import {
+  createDesktopProjectHistoryPluginRuntime,
+  desktopProjectUiPublications,
+  type DesktopProjectHistoryPluginRuntime,
+} from "./desktop-project-history-plugin-runtime.ts";
+import { combineSelectionCommittedMetadata } from "./project-generation-selection-plugin-ui-owner.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -46,7 +55,7 @@ export type DesktopPluginRuntime = Readonly<{
   close(): Promise<void>;
 }>;
 
-/** Native metadata plus optional candidate/activation authority; no task, funding or model permission. */
+/** Native metadata and explicitly approved cold history; no task, funding or model permission. */
 export async function createDesktopPluginRuntime(
   input: Readonly<{
     configuration: DesktopPluginConfiguration;
@@ -67,21 +76,30 @@ export async function createDesktopPluginRuntime(
   const configuration = parseDesktopPluginConfiguration(input.configuration);
   if (dependencies.creativeProjects?.pluginGenerations !== undefined)
     throw new Error("desktop_project_generation_execution_authority_required");
+  if (dependencies.creativeProjects?.pluginQueries !== undefined)
+    throw new Error("desktop_project_query_execution_authority_required");
   const registry = await createDesktopPluginSourceRegistry(configuration);
   const projectConfiguration = dependencies.creativeProjects?.pluginUi;
-  assertCreativeProjectPluginPublications(
-    projectConfiguration,
+  const actionPublications = desktopProjectUiPublications(
+    dependencies.creativeProjects,
     configuration.publications,
   );
   const authority = new DesktopPluginAuthority(
     configuration,
-    projectConfiguration?.publications,
+    actionPublications,
   );
   const ledger = dependencies.store.pluginInstallationStore();
   let installation: DesktopPluginInstallationRuntime | null = null;
   let configurationRuntime: DesktopPluginConfigurationRuntime | null = null;
   let activation: DesktopInstalledPluginActivationOwner | null = null;
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
+  let history: DesktopProjectHistoryPluginRuntime | undefined;
+  const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
+    isAvailable: (input) =>
+      (history?.hostUiServices ?? projectUi?.hostUiServices)?.isAvailable(
+        input,
+      ) ?? false,
+  });
   try {
     await ledger.migrate();
     if (projectConfiguration !== undefined) {
@@ -107,9 +125,7 @@ export async function createDesktopPluginRuntime(
         store: dependencies.store,
         clock: dependencies.clock,
         digester: dependencies.digester,
-        ...(projectUi === undefined
-          ? {}
-          : { hostUiServices: projectUi.hostUiServices }),
+        hostUiServices,
       },
     );
     if (input.activation !== undefined) {
@@ -130,9 +146,23 @@ export async function createDesktopPluginRuntime(
         authority,
         installation,
         ...(activation === null ? {} : { activation }),
+        ...(dependencies.creativeProjects?.generationReads === undefined
+          ? {}
+          : { historyReads: { kind: "project-generation-history" as const } }),
       },
       dependencies,
     );
+    history = await createDesktopProjectHistoryPluginRuntime({
+      projects: dependencies.creativeProjects,
+      configuration,
+      installed: configurationRuntime,
+      store: dependencies.store,
+      clock: dependencies.clock,
+      digester: dependencies.digester,
+      ...(projectUi === undefined
+        ? {}
+        : { fallback: projectUi.hostUiServices }),
+    });
     let closed = false;
     let closing: Promise<void> | null = null;
     const physical = new Set<Promise<unknown>>();
@@ -178,6 +208,15 @@ export async function createDesktopPluginRuntime(
       verify: (context) => reader(context).verify(context),
       readAsset: (context) => reader(context).readAsset(context),
     };
+    const businessActions: PluginUiActionPort = {
+      invoke: async (context) => {
+        if (projectUi?.owner.supportsAction(context.action))
+          return projectUi.owner.actions.invoke(context);
+        if (history?.selectionRuntime?.owner.supportsAction(context.action))
+          return history.selectionRuntime.owner.actions.invoke(context);
+        throw new ApplicationError("conflict", "plugin_ui_actions_unavailable");
+      },
+    };
     const application = new PluginUiApplicationService({
       store: ledger,
       clock: dependencies.clock,
@@ -185,22 +224,19 @@ export async function createDesktopPluginRuntime(
       profiles: { resolve: (actor) => authority.profile(actor) },
       authorization: authority.ui,
       ids: { nextId: () => randomBytes(32).toString("base64url") },
-      actions: {
-        invoke: async (context) => {
-          if (
-            projectUi !== undefined &&
-            projectUi.owner.supportsAction(context.action)
-          )
-            return projectUi.owner.actions.invoke(context);
-          throw new ApplicationError(
-            "conflict",
-            "plugin_ui_actions_unavailable",
-          );
-        },
-      },
-      ...(projectUi === undefined
+      actions:
+        history?.readRuntime?.owner.actions(businessActions) ?? businessActions,
+      ...(history?.selectionRuntime === undefined && projectUi === undefined
         ? {}
-        : { committedMetadata: projectUi.owner.committedMetadata }),
+        : {
+            committedMetadata:
+              history?.selectionRuntime === undefined
+                ? projectUi!.owner.committedMetadata
+                : combineSelectionCommittedMetadata(
+                    history.selectionRuntime.owner.committedMetadata,
+                    projectUi?.owner.committedMetadata,
+                  ),
+          }),
     });
     const call = <T>(work: () => Promise<T>): Promise<T> => {
       available();
@@ -225,7 +261,7 @@ export async function createDesktopPluginRuntime(
       readAsset: (...args) => call(() => application.readAsset(...args)),
       closeMount: (...args) => call(() => application.closeMount(...args)),
       invoke: (...args) => {
-        if (projectUi === undefined)
+        if (projectUi === undefined && history?.selectionRuntime === undefined)
           return call(() => application.invoke(...args));
         available();
         // Only Application's opaque committed metadata path can bypass the late current fence.
@@ -234,6 +270,54 @@ export async function createDesktopPluginRuntime(
         void result.finally(() => physical.delete(result)).catch(() => {});
         return result;
       },
+      ...(history?.readRuntime === undefined &&
+      history?.selectionRuntime === undefined
+        ? {}
+        : {
+            invokeAuthenticatedRequest: ((request, actor, command, signal) => {
+              available();
+              const invoke = () => ui.invoke(actor, command);
+              if (
+                command.action === "crewon.project-generation-reads" ||
+                command.action.startsWith("crewon.project-generation-reads.")
+              ) {
+                if (history?.readRuntime === undefined)
+                  throw new ApplicationError(
+                    "conflict",
+                    "plugin_ui_actions_unavailable",
+                  );
+                return history.readRuntime.invokeAuthenticatedRequest(
+                  request,
+                  actor,
+                  command,
+                  signal,
+                  invoke,
+                );
+              }
+              if (
+                command.action === "crewon.project-generation-selections" ||
+                command.action.startsWith(
+                  "crewon.project-generation-selections.",
+                )
+              ) {
+                if (history?.selectionRuntime === undefined)
+                  throw new ApplicationError(
+                    "conflict",
+                    "plugin_ui_actions_unavailable",
+                  );
+                return history.selectionRuntime.invokeAuthenticatedRequest(
+                  request,
+                  actor,
+                  command,
+                  signal,
+                  invoke,
+                );
+              }
+              return invoke();
+            }) satisfies NonNullable<
+              PluginUiControlService["invokeAuthenticatedRequest"]
+            >,
+          }),
     });
     const ownedInstallation = installation;
     const ownedConfiguration = configurationRuntime;
@@ -250,6 +334,7 @@ export async function createDesktopPluginRuntime(
         return (closing = closeAll([
           () => Promise.allSettled([...physical]),
           () => projectUi?.close(),
+          () => history?.close(),
           () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
           () => ownedInstallation.close(),
@@ -261,6 +346,7 @@ export async function createDesktopPluginRuntime(
     try {
       await closeAll([
         () => projectUi?.close(),
+        () => history?.close(),
         () => configurationRuntime?.close(),
         () => activation?.close(),
         () => installation?.close(),

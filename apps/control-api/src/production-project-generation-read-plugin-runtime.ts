@@ -2,19 +2,8 @@ import {
   ApplicationError,
   ExtensionReadApplicationService,
   ProjectGenerationReadApplicationService,
-  type ActorContext,
-  type InvokePluginUiActionCommand,
 } from "@crewon/application";
-import { extensionCanonicalJson } from "@crewon/domain";
-import {
-  parseProjectGenerationReadUiActionRequest,
-  type PluginUiJsonValue,
-} from "@crewon/contracts/plugins";
-import {
-  PluginProjectGenerationReadActionBridge,
-  type PluginUiHostServiceAvailabilityPort,
-} from "@crewon/plugin-host";
-import type { ControlApiRequestContext } from "./control-api-ports.ts";
+import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import {
   AbortSecurityDeadline,
   ProductionControlApiIdentity,
@@ -26,25 +15,18 @@ import {
   InstalledPluginRequestOwner,
 } from "./installed-plugin-request-owner.ts";
 import type { ProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
-import { projectConceptGeneration } from "./project-generation-read-projection.ts";
 import {
   assertProjectGenerationReadPluginPublications,
   captureProjectGenerationReadPluginUiConfig,
   type ProjectGenerationReadPluginUiConfig,
 } from "./project-generation-read-plugin-ui-composition.ts";
+import {
+  createProjectGenerationReadPluginRuntime,
+  type ProjectGenerationReadPluginRuntime,
+} from "./project-history-plugin-runtime.ts";
 
-export type ProductionProjectGenerationReadPluginRuntime = Readonly<{
-  owner: PluginProjectGenerationReadActionBridge;
-  hostUiServices: PluginUiHostServiceAvailabilityPort;
-  invokeAuthenticatedRequest(
-    request: ControlApiRequestContext,
-    actor: ActorContext,
-    input: InvokePluginUiActionCommand,
-    signal: AbortSignal | undefined,
-    invoke: () => Promise<PluginUiJsonValue>,
-  ): Promise<PluginUiJsonValue>;
-  close(): Promise<void>;
-}>;
+export type ProductionProjectGenerationReadPluginRuntime =
+  ProjectGenerationReadPluginRuntime;
 
 /** Configuration-only current identity/profile scopes for both the source module and original task reader. */
 export function createProductionProjectGenerationReadPluginRuntime(
@@ -71,8 +53,7 @@ export function createProductionProjectGenerationReadPluginRuntime(
     configuration,
     input.ui.publications,
   );
-  const originalReads = captureInstalledPluginReadRequestScope(input.taskReads);
-  const get = input.reads.getConceptGeneration.bind(input.reads);
+  captureInstalledPluginReadRequestScope(input.taskReads);
   let requests: InstalledPluginRequestOwner | undefined;
   const deadline = new AbortSecurityDeadline();
   const profiles = new AuthorityPluginHostProfile({
@@ -94,62 +75,23 @@ export function createProductionProjectGenerationReadPluginRuntime(
     profiles,
   });
   const sourceRequests = requests;
-  let closed = false;
-  const owner = new PluginProjectGenerationReadActionBridge({
-    publications: configuration.publications,
-    reads: {
-      isAvailable: () => !closed,
-      getConceptGeneration: async ({ context, request, authority }) => {
-        await authority.assertCurrent();
-        await sourceRequests.assertCurrent();
-        await originalReads.assertCurrent();
-        if (
-          extensionCanonicalJson(context.actor) !==
-            extensionCanonicalJson(sourceRequests.currentActor()) ||
-          extensionCanonicalJson(context.scope) !==
-            extensionCanonicalJson(sourceRequests.currentScope()) ||
-          extensionCanonicalJson(context.actor) !==
-            extensionCanonicalJson(originalReads.currentActor()) ||
-          extensionCanonicalJson(context.scope) !==
-            extensionCanonicalJson(originalReads.currentScope())
-        )
-          unavailable();
-        const value = await get(context.actor, request);
-        await sourceRequests.assertCurrent();
-        await originalReads.assertCurrent();
-        await authority.assertCurrent();
-        return projectConceptGeneration(value);
-      },
-    },
+  const runtime = createProjectGenerationReadPluginRuntime({
+    configuration,
+    reads: input.reads,
+    taskReads: input.taskReads,
+    requests: sourceRequests,
+    publications: input.ui.publications,
+    ...(input.hostUiServices === undefined
+      ? {}
+      : { hostUiServices: input.hostUiServices }),
   });
   let closing: Promise<void> | undefined;
   return Object.freeze({
-    owner,
-    hostUiServices: owner.hostUiServices(input.hostUiServices),
-    invokeAuthenticatedRequest: (request, actor, command, signal, invoke) => {
-      parseProjectGenerationReadUiActionRequest({
-        action: command.action,
-        input: command.input,
-      });
-      return sourceRequests.run(
-        { request, actor, signal, preparation: "configuration" },
-        () =>
-          originalReads.run(
-            { request, actor, signal, preparation: "configuration" },
-            async () => {
-              const result = await invoke();
-              await originalReads.assertCurrent();
-              await sourceRequests.assertCurrent();
-              return result;
-            },
-          ),
-      );
-    },
+    ...runtime,
     close: () => {
-      closed = true;
       return (closing ??= Promise.allSettled([
         sourceRequests.close(),
-        owner.close(),
+        runtime.close(),
       ]).then((results) => {
         const failures = results.flatMap((result) =>
           result.status === "rejected" ? [result.reason] : [],

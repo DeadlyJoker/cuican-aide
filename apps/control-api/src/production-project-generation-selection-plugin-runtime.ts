@@ -2,16 +2,8 @@ import {
   ApplicationError,
   ExtensionReadApplicationService,
   ProjectConceptSelectionApplicationService,
-  type ActorContext,
-  type InvokePluginUiActionCommand,
 } from "@crewon/application";
-import { extensionCanonicalJson } from "@crewon/domain";
-import {
-  parseProjectGenerationSelectionUiActionRequest,
-  type PluginUiJsonValue,
-} from "@crewon/contracts/plugins";
 import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
-import type { ControlApiRequestContext } from "./control-api-ports.ts";
 import {
   AbortSecurityDeadline,
   ProductionControlApiIdentity,
@@ -27,20 +19,13 @@ import {
   assertCreativeProjectPluginPublications,
   type CreativeProjectPluginUiConfig,
 } from "./creative-project-plugin-ui-composition.ts";
-import { ProjectGenerationSelectionPluginUiOwner } from "./project-generation-selection-plugin-ui-owner.ts";
+import {
+  createProjectGenerationSelectionPluginRuntime,
+  type ProjectGenerationSelectionPluginRuntime,
+} from "./project-history-plugin-runtime.ts";
 
-export type ProductionProjectGenerationSelectionPluginRuntime = Readonly<{
-  owner: ProjectGenerationSelectionPluginUiOwner;
-  hostUiServices: PluginUiHostServiceAvailabilityPort;
-  invokeAuthenticatedRequest(
-    request: ControlApiRequestContext,
-    actor: ActorContext,
-    input: InvokePluginUiActionCommand,
-    signal: AbortSignal | undefined,
-    invoke: () => Promise<PluginUiJsonValue>,
-  ): Promise<PluginUiJsonValue>;
-  close(): Promise<void>;
-}>;
+export type ProductionProjectGenerationSelectionPluginRuntime =
+  ProjectGenerationSelectionPluginRuntime;
 
 /** Configuration-only source scope and original Run reader; selecting has no execution peer. */
 export function createProductionProjectGenerationSelectionPluginRuntime(
@@ -66,7 +51,7 @@ export function createProductionProjectGenerationSelectionPluginRuntime(
     input.configuration,
     input.ui.publications,
   );
-  const originalReads = captureInstalledPluginReadRequestScope(input.taskReads);
+  captureInstalledPluginReadRequestScope(input.taskReads);
   let requests: InstalledPluginRequestOwner | undefined;
   const deadline = new AbortSecurityDeadline();
   const profiles = new AuthorityPluginHostProfile({
@@ -88,59 +73,23 @@ export function createProductionProjectGenerationSelectionPluginRuntime(
     profiles,
   });
   const sourceRequests = requests;
-  const owner = new ProjectGenerationSelectionPluginUiOwner({
+  const runtime = createProjectGenerationSelectionPluginRuntime({
     configuration: input.configuration,
     selections: input.selections,
-    authorization: {
-      authorize: async (context) => {
-        await sourceRequests.assertCurrent();
-        await originalReads.assertCurrent();
-        if (
-          extensionCanonicalJson(context.actor) !==
-            extensionCanonicalJson(sourceRequests.currentActor()) ||
-          extensionCanonicalJson(context.scope) !==
-            extensionCanonicalJson(sourceRequests.currentScope()) ||
-          extensionCanonicalJson(context.actor) !==
-            extensionCanonicalJson(originalReads.currentActor()) ||
-          extensionCanonicalJson(context.scope) !==
-            extensionCanonicalJson(originalReads.currentScope())
-        )
-          unavailable();
-      },
-    },
+    taskReads: input.taskReads,
+    requests: sourceRequests,
+    publications: input.ui.publications,
+    ...(input.hostUiServices === undefined
+      ? {}
+      : { hostUiServices: input.hostUiServices }),
   });
   let closing: Promise<void> | undefined;
   return Object.freeze({
-    owner,
-    hostUiServices: owner.hostUiServices(input.hostUiServices),
-    invokeAuthenticatedRequest: (request, actor, command, signal, invoke) => {
-      const parsed = parseProjectGenerationSelectionUiActionRequest({
-        action: command.action,
-        input: command.input,
-      });
-      return sourceRequests.run(
-        { request, actor, signal, preparation: "configuration" },
-        () =>
-          originalReads.run(
-            { request, actor, signal, preparation: "configuration" },
-            async () => {
-              const value = await invoke();
-              if (
-                parsed.action ===
-                "crewon.project-generation-selections.v1.getConceptSelection"
-              ) {
-                await originalReads.assertCurrent();
-                await sourceRequests.assertCurrent();
-              }
-              return value;
-            },
-          ),
-      );
-    },
+    ...runtime,
     close: () =>
       (closing ??= Promise.allSettled([
         sourceRequests.close(),
-        owner.close(),
+        runtime.close(),
       ]).then((results) => {
         const failures = results.flatMap((r) =>
           r.status === "rejected" ? [r.reason] : [],

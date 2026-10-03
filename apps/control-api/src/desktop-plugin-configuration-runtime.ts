@@ -28,14 +28,19 @@ import {
   bindInstalledPluginRequestOwner,
   InstalledPluginRequestOwner,
 } from "./installed-plugin-request-owner.ts";
-import { pluginSecurityActor } from "./plugin-security-validation.ts";
+import {
+  pluginSecurityActor,
+  pluginSecurityRecord,
+} from "./plugin-security-validation.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
+import { createDesktopPluginHistoryAuthorization } from "./desktop-plugin-history-authorization.ts";
 
 export type DesktopPluginConfigurationRuntime = Readonly<{
   requests: InstalledPluginRequestOwner;
   extensions: ExtensionConfigurationApplicationService;
   extensionReads: ExtensionReadApplicationService;
+  historyAuthorization?: AuthorizationPort;
   close(): Promise<void>;
 }>;
 
@@ -47,6 +52,7 @@ export async function createDesktopPluginConfigurationRuntime(
     authority: DesktopPluginAuthority;
     installation: DesktopPluginInstallationRuntime;
     activation?: DesktopInstalledPluginActivationOwner;
+    historyReads?: Readonly<{ kind: "project-generation-history" }>;
   }>,
   dependencies: Readonly<{
     store: SqliteRunStore;
@@ -56,6 +62,12 @@ export async function createDesktopPluginConfigurationRuntime(
   }>,
 ): Promise<DesktopPluginConfigurationRuntime> {
   const configuration = parseDesktopPluginConfiguration(input.configuration);
+  const history =
+    input.historyReads === undefined
+      ? undefined
+      : pluginSecurityRecord(input.historyReads, ["kind"]);
+  if (history !== undefined && history.kind !== "project-generation-history")
+    throw new Error("desktop_plugin_history_configuration_invalid");
   assertDesktopPluginSourceRegistry(input.registry, configuration);
   if (
     !(dependencies.store instanceof SqliteRunStore) ||
@@ -167,6 +179,17 @@ export async function createDesktopPluginConfigurationRuntime(
         ? {}
         : { peer: input.activation.peer }),
     });
+    const historyAuthorization =
+      history === undefined
+        ? undefined
+        : createDesktopPluginHistoryAuthorization({
+            configuration,
+            authority,
+            installation,
+            requests,
+            store: dependencies.store,
+            digester,
+          });
     const authorization: AuthorizationPort = Object.freeze({
       authorize: async (
         value: Parameters<AuthorizationPort["authorize"]>[0],
@@ -231,7 +254,16 @@ export async function createDesktopPluginConfigurationRuntime(
         operations: dependencies.store.externalOperationStore(),
         catalog: requests.catalog,
         host: requests.host,
-        authorization,
+        authorization:
+          historyAuthorization === undefined
+            ? authorization
+            : {
+                authorize: (value) =>
+                  value.action === "extension:query" ||
+                  value.action === "run:read"
+                    ? historyAuthorization.authorize(value)
+                    : authorization.authorize(value),
+              },
         digester,
       }),
       requests,
@@ -244,6 +276,7 @@ export async function createDesktopPluginConfigurationRuntime(
       requests: actualRequests,
       extensions: configurationService,
       extensionReads: reads,
+      ...(historyAuthorization === undefined ? {} : { historyAuthorization }),
       close: () =>
         (closing ??= closeAll([
           () => actualRequests.close(),
