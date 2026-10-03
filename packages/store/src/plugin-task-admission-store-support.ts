@@ -9,7 +9,6 @@ import {
   assertPluginTaskAdmission,
   parsePluginTaskAdmission,
   parsePluginTaskAdmissionPin,
-  parsePluginSelection,
   parseInstalledPluginPackage,
   pluginInstallationOpaqueId,
   type ExtensionRunBinding,
@@ -20,6 +19,10 @@ import {
 import { extensionStoreDigester } from "./extension-store-records.ts";
 import { assertPluginTaskAdmissionSchemaVersion } from "./plugin-task-admission-schema.ts";
 import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
+import {
+  admitSqlitePluginInstallationPin,
+  admitPostgresPluginInstallationPin,
+} from "./plugin-installation-pin-store-support.ts";
 
 type PostgresReader = Pool | PoolClient;
 type Row = Record<string, unknown>;
@@ -109,36 +112,6 @@ function assertCreditPrincipal(
     throw new Error("plugin_task_credit_admission_required");
 }
 
-function assertSelection(
-  admission: PluginTaskAdmissionPin,
-  row: Row | undefined,
-): void {
-  if (row === undefined) throw new Error("plugin_task_admission_conflict");
-  const selection = parsePluginSelection(json(row.selection_json));
-  const pkg = parseInstalledPluginPackage(json(row.package_json));
-  if (
-    selection.state !== "enabled" ||
-    selection.revision !== admission.selectionRevision ||
-    selection.selectedPackageDigest !== admission.packageDigest ||
-    [selection, pkg].some(
-      (value) =>
-        value.tenantId !== admission.tenantId ||
-        value.spaceId !== admission.spaceId ||
-        value.profileId !== admission.profileId ||
-        value.pluginId !== admission.pluginId ||
-        value.publisherId !== admission.publisherId,
-    ) ||
-    pkg.packageDigest !== admission.packageDigest ||
-    pkg.version !== admission.version
-  )
-    throw new Error("plugin_task_admission_conflict");
-}
-
-const selectionQuery = (
-  prefix: string,
-) => `SELECT s.record_json AS selection_json,p.record_json AS package_json FROM ${prefix}plugin_profile_selections s
-  JOIN ${prefix}installed_plugin_packages p ON p.tenant_id=s.tenant_id AND p.space_id=s.space_id AND p.profile_id=s.profile_id AND p.package_digest=s.selected_package_digest
-  WHERE s.tenant_id=$1 AND s.space_id=$2 AND s.profile_id=$3 AND s.plugin_id=$4`;
 const admissionQuery = (
   prefix: string,
 ) => `SELECT a.*,b.binding_json,p.record_json AS package_json FROM ${prefix}plugin_task_admissions a
@@ -150,7 +123,7 @@ export function admitSqlitePluginTask(
   database: DatabaseSync,
   admission: PluginTaskAdmission,
 ): void {
-  admitSqlitePluginTaskPin(database, admission);
+  admitSqlitePluginTaskPin(database, installationPin(admission));
 }
 
 /** Source UI-only selections do not create a second execution admission. */
@@ -159,11 +132,11 @@ export function admitSqlitePluginTaskPin(
   admission: PluginTaskAdmissionPin,
 ): void {
   sqliteVersion(database);
-  const query = selectionQuery("").replaceAll(/\$[1-4]/gu, "?");
-  assertSelection(
-    admission,
-    database.prepare(query).get(...scope(admission), admission.pluginId),
-  );
+  try {
+    admitSqlitePluginInstallationPin(database, admission);
+  } catch (cause) {
+    throw new Error("plugin_task_admission_conflict", { cause });
+  }
 }
 
 /** Selection UPDATE takes the same row lock: keep this shared lock until the Run transaction commits. */
@@ -172,7 +145,7 @@ export async function admitPostgresPluginTask(
   schema: string,
   admission: PluginTaskAdmission,
 ): Promise<void> {
-  await admitPostgresPluginTaskPin(client, schema, admission);
+  await admitPostgresPluginTaskPin(client, schema, installationPin(admission));
 }
 
 export async function admitPostgresPluginTaskPin(
@@ -181,11 +154,11 @@ export async function admitPostgresPluginTaskPin(
   admission: PluginTaskAdmissionPin,
 ): Promise<void> {
   await postgresVersion(client, schema);
-  const result = await client.query<Row>(
-    `${selectionQuery(prefix(schema))} FOR SHARE OF s,p`,
-    [...scope(admission), admission.pluginId],
-  );
-  assertSelection(admission, result.rows[0]);
+  try {
+    await admitPostgresPluginInstallationPin(client, schema, admission);
+  } catch (cause) {
+    throw new Error("plugin_task_admission_conflict", { cause });
+  }
 }
 
 export function saveSqlitePluginTask(
@@ -340,4 +313,19 @@ function admissionValues(
     value.selectionRevision,
     value.extensionBindingDigest,
   ];
+}
+
+function installationPin(
+  admission: PluginTaskAdmission,
+): PluginTaskAdmissionPin {
+  const {
+    schemaVersion: _schema,
+    runId: _run,
+    threadId: _thread,
+    extensionBindingDigest: _binding,
+    requestDigest: _request,
+    idempotencyKey: _key,
+    ...pin
+  } = parsePluginTaskAdmission(admission);
+  return parsePluginTaskAdmissionPin(pin);
 }

@@ -54,6 +54,8 @@ export async function installedGenerationFixture(
     contexts?: boolean;
     serviceRequirements?: "optional";
     metadata?: boolean;
+    /** Verified independent business package bytes, never a replacement execution fixture. */
+    packageDirectory?: string;
   }> = {},
 ) {
   const f = await ownedActionFixture(t, { backend, maxPoolSize: 1 });
@@ -93,78 +95,87 @@ export async function installedGenerationFixture(
     expectedThreadRevision: commandInput.expectedThreadRevision,
     idempotencyKey: "installed-generation-user-intent",
   };
-  const sourceId = "example.installed-business-workbench";
+  let sourceId = "example.installed-business-workbench";
   const directory = await mkdtemp(
     join(tmpdir(), "crewon-business-generation-"),
   );
   let source;
   try {
-    const ui = `export default {apiVersion:'crewon.plugin-ui.v1',pluginId:${JSON.stringify(sourceId)},mount(){return {update(){},dispose(){}}}};`;
-    await writeFile(join(directory, "ui.mjs"), ui);
-    await writeFile(
-      join(directory, "crewon.plugin.json"),
-      JSON.stringify({
-        schemaVersion: "crewon.plugin-package.v1",
-        hostApi: "crewon.plugin-host.v1",
-        pluginId: sourceId,
-        version: "3.0.0",
-        title: "Installed business workbench",
-        description:
-          "UI-only business package; execution is independently installed.",
-        publisherId: "example.business-publisher",
-        entrypoints: {
-          node: null,
-          ui: { path: "ui.mjs", mode: "trustedModule" },
-        },
-        businessManifestPath: null,
-        requires: [
-          {
-            service: "crewon.project-generations",
-            apiVersion: "1",
-            optional: options.serviceRequirements === "optional",
+    if (options.packageDirectory !== undefined) {
+      source = await installLocalPluginPackage({
+        directory: options.packageDirectory,
+        installRoot: f.installRoot,
+        authorization: async () => ({ outcome: "allow" }),
+      });
+      sourceId = source.descriptor.pluginId;
+    } else {
+      const ui = `export default {apiVersion:'crewon.plugin-ui.v1',pluginId:${JSON.stringify(sourceId)},mount(){return {update(){},dispose(){}}}};`;
+      await writeFile(join(directory, "ui.mjs"), ui);
+      await writeFile(
+        join(directory, "crewon.plugin.json"),
+        JSON.stringify({
+          schemaVersion: "crewon.plugin-package.v1",
+          hostApi: "crewon.plugin-host.v1",
+          pluginId: sourceId,
+          version: "3.0.0",
+          title: "Installed business workbench",
+          description:
+            "UI-only business package; execution is independently installed.",
+          publisherId: "example.business-publisher",
+          entrypoints: {
+            node: null,
+            ui: { path: "ui.mjs", mode: "trustedModule" },
           },
-          ...(options.contexts
-            ? [
-                {
-                  service: "crewon.project-generation-contexts",
-                  apiVersion: "1",
-                  optional: options.serviceRequirements === "optional",
-                },
-              ]
-            : []),
-          ...(options.metadata
-            ? [
-                {
-                  service: "crewon.creative-projects",
-                  apiVersion: "1",
-                  optional: false,
-                },
-              ]
-            : []),
-        ],
-        provides: [],
-        contributions: [
-          {
-            id: "workbench",
-            kind: "module",
-            slot: "main.content",
-            title: "Business workbench",
-          },
-        ],
-        files: [
-          {
-            path: "ui.mjs",
-            byteLength: Buffer.byteLength(ui),
-            sha256: createHash("sha256").update(ui).digest("hex"),
-          },
-        ],
-      }),
-    );
-    source = await installLocalPluginPackage({
-      directory,
-      installRoot: f.installRoot,
-      authorization: async () => ({ outcome: "allow" }),
-    });
+          businessManifestPath: null,
+          requires: [
+            {
+              service: "crewon.project-generations",
+              apiVersion: "1",
+              optional: options.serviceRequirements === "optional",
+            },
+            ...(options.contexts
+              ? [
+                  {
+                    service: "crewon.project-generation-contexts",
+                    apiVersion: "1",
+                    optional: options.serviceRequirements === "optional",
+                  },
+                ]
+              : []),
+            ...(options.metadata
+              ? [
+                  {
+                    service: "crewon.creative-projects",
+                    apiVersion: "1",
+                    optional: false,
+                  },
+                ]
+              : []),
+          ],
+          provides: [],
+          contributions: [
+            {
+              id: "workbench",
+              kind: "module",
+              slot: "main.content",
+              title: "Business workbench",
+            },
+          ],
+          files: [
+            {
+              path: "ui.mjs",
+              byteLength: Buffer.byteLength(ui),
+              sha256: createHash("sha256").update(ui).digest("hex"),
+            },
+          ],
+        }),
+      );
+      source = await installLocalPluginPackage({
+        directory,
+        installRoot: f.installRoot,
+        authorization: async () => ({ outcome: "allow" }),
+      });
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

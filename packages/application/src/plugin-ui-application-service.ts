@@ -277,6 +277,11 @@ export class PluginUiApplicationService {
         context,
         () => this.#fence(actor, binding, "invoke"),
         () => this.#alive(binding),
+        command.action.startsWith("crewon.creative-projects.")
+          ? Object.freeze({
+              assertCurrent: () => this.#transactionFence(actor, binding),
+            })
+          : undefined,
       );
       try {
         const raw = await this.#dependencies.actions.invoke(context);
@@ -641,6 +646,48 @@ export class PluginUiApplicationService {
           "plugin_ui_authority_changed",
           "plugin_ui_profile_changed",
         ].includes(error.code)
+      )
+        this.#mounts.delete(binding.lease.mountRef);
+      throw error;
+    }
+    this.#alive(binding);
+  }
+  /** Installation rows are locked and checked by the metadata Store's existing transaction connection. */
+  async #transactionFence(
+    actor: ActorContext,
+    binding: MountBinding,
+  ): Promise<void> {
+    this.#alive(binding);
+    if (!uiSameActor(actor, binding.context.actor))
+      throw new ApplicationError("notFound", "plugin_ui_mount_unavailable");
+    try {
+      const resource = this.#resource(
+        binding.context.scope,
+        binding.context.selection.pluginId,
+        binding.context.package.packageDigest,
+        binding.context.selection.revision,
+        binding.lease.contributionId,
+      );
+      for (let check = 0; check < 2; check++) {
+        const epoch = await this.#authorize(
+          actor,
+          binding.context.scope,
+          "invoke",
+          resource,
+        );
+        this.#alive(binding);
+        if (epoch !== binding.authorityEpoch)
+          throw new ApplicationError(
+            "authorization",
+            "plugin_ui_authority_changed",
+          );
+      }
+    } catch (error) {
+      if (
+        error instanceof ApplicationError &&
+        ["plugin_ui_authority_changed", "plugin_ui_profile_changed"].includes(
+          error.code,
+        )
       )
         this.#mounts.delete(binding.lease.mountRef);
       throw error;

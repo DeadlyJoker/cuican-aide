@@ -3,6 +3,9 @@ import type {
   ProjectBriefRevision,
   ConceptAsset,
   ConceptAssetRevision,
+  PluginTaskAdmissionPin,
+  PluginSelection,
+  InstalledPluginPackage,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
 
@@ -60,10 +63,21 @@ type MutationIdentity = Readonly<{
 }>;
 
 /** Borrowed host authority for this exact invocation, never part of a persisted recipe. */
+export type CreativeProjectPluginCommitTransactionAuthority = Readonly<{
+  version: "crewon.creative-project-plugin-commit.v1";
+  /** Actual registered source invocation; the Store verifies installation rows on its borrowed connection. */
+  pin: PluginTaskAdmissionPin;
+  selection: PluginSelection;
+  package: InstalledPluginPackage;
+  /** External identity/profile/policy and local owner checks only; never borrows the installation pool. */
+  assertCurrent(): Promise<void>;
+}>;
+
 export type CreativeProjectCommitAuthority = Readonly<{
   assertCurrent(): Promise<void>;
   /** Synchronous local withdrawal check; returning a Promise does not establish commit authority. */
   assertActive(): void;
+  transaction?: CreativeProjectPluginCommitTransactionAuthority;
 }>;
 
 export type CreativeProjectCommitOptions = Readonly<{

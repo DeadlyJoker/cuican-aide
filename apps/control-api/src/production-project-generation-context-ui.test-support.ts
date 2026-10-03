@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import Fastify from "fastify";
+import {
+  ExtensionReadApplicationService,
+  ProjectGenerationReadApplicationService,
+} from "@crewon/application";
 import { PROJECT_GENERATION_CONTEXT_UI_ACTIONS } from "@crewon/contracts/plugins";
 import { errorResponse } from "./control-api-errors.ts";
 import { registerPluginControlRoutes } from "./plugin-control-route.ts";
 import { createProductionPluginUiRuntime } from "./production-plugin-ui-composition.ts";
 import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
 import { createProductionPluginUiRequestService } from "./production-plugin-ui-request-service.ts";
-import { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
+import {
+  bindInstalledPluginRequestOwner,
+  InstalledPluginRequestOwner,
+} from "./installed-plugin-request-owner.ts";
 import {
   installedGenerationFixture,
   actor,
@@ -19,6 +26,11 @@ import {
   StaticTrustedBffRequestVerifier,
 } from "./production-security-adapters.ts";
 import { createProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
+import {
+  createProductionProjectGenerationReadPluginRuntime,
+  type ProductionProjectGenerationReadPluginRuntime,
+} from "./production-project-generation-read-plugin-runtime.ts";
+import { extensionStoreDigester } from "../../../packages/store/src/extension-store-records.ts";
 
 function contextIdentity() {
   const origin = "https://project-generation-context.fixture.test";
@@ -66,11 +78,20 @@ function contextIdentity() {
 export async function generationContextHttpFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: Readonly<{ generationOwner?: "disabled" }> = {},
+  options: Readonly<{
+    generationOwner?: "disabled";
+    packageDirectory?: string;
+    metadata?: boolean;
+    generationReads?: boolean;
+  }> = {},
 ) {
   const disabled = options.generationOwner === "disabled";
   const f = await installedGenerationFixture(t, backend, {
     contexts: true,
+    ...(options.packageDirectory === undefined
+      ? {}
+      : { packageDirectory: options.packageDirectory }),
+    ...(options.metadata ? { metadata: true } : {}),
     ...(disabled
       ? { serviceRequirements: "optional" as const, metadata: true }
       : {}),
@@ -97,40 +118,26 @@ export async function generationContextHttpFixture(
     ],
     timeoutMs: 1000,
   });
-  const metadata = disabled
-    ? createProductionCreativeProjectPluginRuntime({
-        projects: {
-          service: f.projectService,
-          pluginUi: {
-            publications: [
-              {
-                pluginId: f.sourceId,
-                packageDigest: f.source.packageDigest,
-                contributionId: "workbench",
-              },
-            ],
+  const metadata =
+    disabled || options.metadata
+      ? createProductionCreativeProjectPluginRuntime({
+          projects: {
+            service: f.projectService,
+            pluginUi: {
+              publications: [
+                {
+                  pluginId: f.sourceId,
+                  packageDigest: f.source.packageDigest,
+                  contributionId: "workbench",
+                },
+              ],
+            },
           },
-        },
-        ui: configuration,
-        identity: authentication.identity,
-        fetch: authority.fetch,
-      })
-    : undefined;
-  const runtime = createProductionPluginUiRuntime(
-    {
-      configuration,
-      ...(disabled
-        ? {
-            ownedCreativeProjectActions: metadata!.owner,
-            hostUiServices: metadata!.hostUiServices,
-          }
-        : {
-            ownedTaskActions: f.taskOwner,
-            ownedProjectGenerationActions: f.owner,
-          }),
-    },
-    { ledger: f.ledger, clock: f.dependencies.clock, fetch: authority.fetch },
-  );
+          ui: configuration,
+          identity: authentication.identity,
+          fetch: authority.fetch,
+        })
+      : undefined;
   let preparations = 0;
   const requests = new InstalledPluginRequestOwner({
     identity: authentication.identity,
@@ -153,11 +160,69 @@ export async function generationContextHttpFixture(
       },
     },
   });
+  let savedReads: ProjectGenerationReadApplicationService | undefined;
+  let readRuntime: ProductionProjectGenerationReadPluginRuntime | undefined;
+  if (options.generationReads) {
+    // Existing actual paid writer migration from this same adapter; enabling reads never creates history.
+    await f.first.store.enableProjectGenerationReads();
+    const taskReads = new ExtensionReadApplicationService({
+      extensions: f.first.store,
+      operations: f.first.parent.externalOperationStore(),
+      runs: f.first.parent,
+      agentVersions: f.first.parent,
+      authorization: f.taskInputs.authorization,
+      catalog: f.taskInputs.catalog,
+      host: f.taskInputs.host,
+      digester: extensionStoreDigester,
+    });
+    bindInstalledPluginRequestOwner(taskReads, requests, {
+      preparation: "configuration",
+    });
+    savedReads = new ProjectGenerationReadApplicationService({
+      projects: f.projectService,
+      tasks: taskReads,
+      extensions: f.first.store,
+      digester: extensionStoreDigester,
+    });
+    readRuntime = createProductionProjectGenerationReadPluginRuntime({
+      configuration: { publications: [f.publication.source] },
+      reads: savedReads,
+      taskReads,
+      ui: configuration,
+      identity: authentication.identity,
+      fetch: authority.fetch,
+      ...(metadata === undefined
+        ? {}
+        : { hostUiServices: metadata.hostUiServices }),
+    });
+  }
+  const runtime = createProductionPluginUiRuntime(
+    {
+      configuration,
+      ...(disabled
+        ? {}
+        : {
+            ownedTaskActions: f.taskOwner,
+            ownedProjectGenerationActions: f.owner,
+          }),
+      ...(metadata === undefined
+        ? {}
+        : { ownedCreativeProjectActions: metadata.owner }),
+      ...(readRuntime === undefined
+        ? {}
+        : { ownedProjectGenerationReadActions: readRuntime.owner }),
+    },
+    { ledger: f.ledger, clock: f.dependencies.clock, fetch: authority.fetch },
+  );
   const ui = createProductionPluginUiRequestService({
     ui: runtime.service,
     ...(disabled
-      ? { projects: metadata }
+      ? {}
       : { taskRequests: requests, projectGenerations: f.owner }),
+    ...(metadata === undefined ? {} : { projects: metadata }),
+    ...(readRuntime === undefined
+      ? {}
+      : { projectGenerationReads: readRuntime }),
   });
   const app = Fastify({ trustProxy: false });
   app.setErrorHandler((error, req, reply) => {
@@ -172,6 +237,7 @@ export async function generationContextHttpFixture(
     await runtime.close();
     await requests.close();
     await metadata?.close();
+    await readRuntime?.close();
   });
   t.after(() => app.close());
   const opened = await app.inject({
@@ -207,6 +273,8 @@ export async function generationContextHttpFixture(
     runtime,
     requests,
     metadata,
+    savedReads,
+    readRuntime,
     app,
     httpLease: lease,
     invokeHttp: invoke,

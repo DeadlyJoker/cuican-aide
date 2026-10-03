@@ -181,6 +181,31 @@ export class PluginCreativeProjectActionOwner {
       );
     }
     let active = true;
+    const check = async (current: () => Promise<void>) => {
+      try {
+        authority.assertActive();
+        await current();
+        authority.assertActive();
+        // The production authorizer revalidates the current HTTP identity/profile using external ports.
+        const result: unknown = await this.#authorize(invocation, request);
+        if (result !== undefined)
+          throw new ApplicationError(
+            "authorization",
+            "plugin_creative_project_authorization_invalid",
+          );
+        authority.assertActive();
+        await current();
+        authority.assertActive();
+      } catch (error) {
+        active = false;
+        if (error instanceof ApplicationError) throw error;
+        throw new ApplicationError(
+          "authorization",
+          "plugin_creative_project_action_denied",
+          { cause: error },
+        );
+      }
+    };
     const authority: CreativeProjectCommitAuthority = Object.freeze({
       assertActive: () => {
         this.assertAvailable();
@@ -191,31 +216,16 @@ export class PluginCreativeProjectActionOwner {
           );
         invocationAuthority.assertActive();
       },
-      assertCurrent: async () => {
-        try {
-          authority.assertActive();
-          await invocationAuthority.assertCurrent();
-          authority.assertActive();
-          // Host registries, like the invocation registry, bind the original context object.
-          const result: unknown = await this.#authorize(invocation, request);
-          if (result !== undefined)
-            throw new ApplicationError(
-              "authorization",
-              "plugin_creative_project_authorization_invalid",
-            );
-          authority.assertActive();
-          await invocationAuthority.assertCurrent();
-          authority.assertActive();
-        } catch (error) {
-          active = false;
-          if (error instanceof ApplicationError) throw error;
-          throw new ApplicationError(
-            "authorization",
-            "plugin_creative_project_action_denied",
-            { cause: error },
-          );
-        }
-      },
+      assertCurrent: () => check(invocationAuthority.assertCurrent),
+      ...(invocationAuthority.transaction === undefined
+        ? {}
+        : {
+            transaction: Object.freeze({
+              ...invocationAuthority.transaction,
+              assertCurrent: () =>
+                check(invocationAuthority.transaction!.assertCurrent),
+            }),
+          }),
     });
     this.#pending++;
     try {

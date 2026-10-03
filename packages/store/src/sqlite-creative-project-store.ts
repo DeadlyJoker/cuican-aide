@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
+  assertCreativeProjectCommitTransactionCurrent,
   captureCreativeProjectCommitAuthority,
   type CreativeProjectCommitAuthority,
   type CreativeProjectCommitOptions,
@@ -33,6 +34,14 @@ import {
   verifyCreativeMutation,
   type PreparedCreativeMutation,
 } from "./creative-project-store-records.ts";
+import {
+  admitSqlitePluginInstallationPin,
+  assertSqlitePluginInstallationPinSchema,
+} from "./plugin-installation-pin-store-support.ts";
+import {
+  creativeProjectPluginCommitQualification,
+  assertCreativeProjectPluginCommitSelection,
+} from "./creative-project-plugin-commit-support.ts";
 
 type Input<Method extends keyof CreativeProjectStore> = Parameters<
   CreativeProjectStore[Method]
@@ -286,10 +295,26 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     prepared: PreparedCreativeMutation,
     authority: CreativeProjectCommitAuthority | undefined,
   ): Promise<CreativeProjectMutationResult> {
+    const qualification = creativeProjectPluginCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+    );
     // SQLite's transaction stays synchronous; external authority work happens before BEGIN.
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);
+    if (qualification !== undefined)
+      await assertCreativeProjectCommitTransactionCurrent(authority);
     return this.#transaction(() => {
+      if (qualification !== undefined) {
+        assertSqlitePluginInstallationPinSchema(this.#database);
+        const installation = admitSqlitePluginInstallationPin(
+          this.#database,
+          qualification.pin,
+        );
+        assertCreativeProjectPluginCommitSelection(qualification, installation);
+        this.#assertCommitActive(authority);
+      }
       const identity = creativeMutationIdentity({
         actor: prepared.actor,
         receipt: prepared.receipt,

@@ -1,7 +1,16 @@
 import type {
   CreativeProjectCommitAuthority,
   CreativeProjectCommitOptions,
+  CreativeProjectPluginCommitTransactionAuthority,
 } from "./creative-project-store-port.ts";
+import {
+  parseInstalledPluginPackage,
+  parsePluginSelection,
+  parsePluginTaskAdmissionPin,
+  type PluginTaskAdmissionPin,
+  type PluginSelection,
+  type InstalledPluginPackage,
+} from "@crewon/domain";
 import type { ProjectGenerationExecutionAuthority } from "./project-generation-execution-authority.ts";
 
 /** Capture distinct complete and transaction-safe fences before any await or lock acquisition. */
@@ -43,7 +52,11 @@ export function captureCreativeProjectCommitAuthority(
   const fields = ownDataFields(options, ["authority"]);
   const authority = fields.authority;
   if (authority === undefined) return undefined;
-  const methods = ownDataFields(authority, ["assertCurrent", "assertActive"]);
+  const methods = ownDataFields(authority, [
+    "assertCurrent",
+    "assertActive",
+    "transaction",
+  ]);
   if (
     typeof methods.assertCurrent !== "function" ||
     typeof methods.assertActive !== "function"
@@ -52,6 +65,61 @@ export function captureCreativeProjectCommitAuthority(
   return Object.freeze({
     assertCurrent: methods.assertCurrent.bind(authority),
     assertActive: methods.assertActive.bind(authority),
+    ...(methods.transaction === undefined
+      ? {}
+      : { transaction: capturePluginTransaction(methods.transaction) }),
+  });
+}
+
+function capturePluginTransaction(
+  input: unknown,
+): CreativeProjectPluginCommitTransactionAuthority {
+  const fields = ownDataFields(input, [
+    "version",
+    "pin",
+    "selection",
+    "package",
+    "assertCurrent",
+  ]);
+  if (
+    fields.version !== "crewon.creative-project-plugin-commit.v1" ||
+    typeof fields.assertCurrent !== "function"
+  )
+    invalid();
+  let pin: PluginTaskAdmissionPin;
+  let selection: PluginSelection;
+  let pkg: InstalledPluginPackage;
+  try {
+    pin = parsePluginTaskAdmissionPin(fields.pin);
+    selection = parsePluginSelection(fields.selection);
+    pkg = parseInstalledPluginPackage(fields.package);
+  } catch {
+    invalid();
+  }
+  if (
+    selection.state !== "enabled" ||
+    selection.revision !== pin.selectionRevision ||
+    selection.selectedPackageDigest !== pin.packageDigest ||
+    pkg.packageDigest !== pin.packageDigest ||
+    pkg.version !== pin.version ||
+    (
+      ["tenantId", "spaceId", "profileId", "pluginId", "publisherId"] as const
+    ).some((key) => selection[key] !== pin[key] || pkg[key] !== pin[key])
+  )
+    invalid();
+  const current = fields.assertCurrent.bind(input);
+  return Object.freeze({
+    version: "crewon.creative-project-plugin-commit.v1",
+    pin,
+    selection,
+    package: pkg,
+    assertCurrent: async () => {
+      const result: unknown = await current();
+      if (result !== undefined)
+        throw new Error(
+          "creative_project_commit_authority_async_result_invalid",
+        );
+    },
   });
 }
 
@@ -85,6 +153,17 @@ export async function assertCreativeProjectCommitCurrent(
 ): Promise<void> {
   if (authority === undefined) return;
   const result: unknown = await authority.assertCurrent();
+  if (result !== undefined)
+    throw new Error("creative_project_commit_authority_async_result_invalid");
+}
+
+/** The Store supplies installation checks on its own connection before invoking this external fence. */
+export async function assertCreativeProjectCommitTransactionCurrent(
+  authority: CreativeProjectCommitAuthority | undefined,
+): Promise<void> {
+  if (authority?.transaction === undefined)
+    return assertCreativeProjectCommitCurrent(authority);
+  const result: unknown = await authority.transaction.assertCurrent();
   if (result !== undefined)
     throw new Error("creative_project_commit_authority_async_result_invalid");
 }

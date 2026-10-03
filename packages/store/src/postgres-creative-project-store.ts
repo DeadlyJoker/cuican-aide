@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
+  assertCreativeProjectCommitTransactionCurrent,
   captureCreativeProjectCommitAuthority,
   type CreativeProjectCommitAuthority,
   type CreativeProjectCommitOptions,
@@ -37,6 +38,14 @@ import {
   type PreparedCreativeMutation,
 } from "./creative-project-store-records.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
+import {
+  admitPostgresPluginInstallationPin,
+  assertPostgresPluginInstallationPinSchema,
+} from "./plugin-installation-pin-store-support.ts";
+import {
+  creativeProjectPluginCommitQualification,
+  assertCreativeProjectPluginCommitSelection,
+} from "./creative-project-plugin-commit-support.ts";
 
 type ReadInput<Method extends keyof CreativeProjectStore> = Parameters<
   CreativeProjectStore[Method]
@@ -297,7 +306,24 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       receipt: prepared.receipt,
       kind: prepared.kind,
     });
+    const qualification = creativeProjectPluginCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+    );
     return this.#transaction(async (client) => {
+      if (qualification !== undefined) {
+        await assertPostgresPluginInstallationPinSchema(client, this.#schema);
+        const installation = await admitPostgresPluginInstallationPin(
+          client,
+          this.#schema,
+          qualification.pin,
+        );
+        assertCreativeProjectPluginCommitSelection(qualification, installation);
+        await assertCreativeProjectCommitTransactionCurrent(authority);
+        assertCreativeProjectCommitActive(authority);
+        this.#assertOpen();
+      }
       // Receipt first: retries may prepare a different server-generated project ID.
       await this.#lock(client, [
         "creative-project-receipt",
@@ -595,7 +621,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       const result = await body(client);
       // Revalidate after all SQL awaits, including lock waits and the final receipt INSERT.
       if (authority !== undefined)
-        await assertCreativeProjectCommitCurrent(authority);
+        await assertCreativeProjectCommitTransactionCurrent(authority);
       assertCreativeProjectCommitActive(authority);
       // A confirmed COMMIT remains successful even if the host closes while awaiting it.
       this.#assertOpen();
