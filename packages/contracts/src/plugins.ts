@@ -35,6 +35,8 @@ export {
   type InstalledPluginPeerReadinessResult,
   type InstalledPluginPeerRequest,
   type InstalledPluginPeerResponse,
+  type InstalledPluginPeerPrepareCandidateRequest,
+  type InstalledPluginPeerPrepareCandidateResponse,
 } from "./installed-plugin-peer-types.ts";
 export {
   parseInstalledPluginPeerRequest,

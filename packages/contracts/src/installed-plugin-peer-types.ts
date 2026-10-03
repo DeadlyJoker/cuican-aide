@@ -90,6 +90,11 @@ export type InstalledPluginPeerRequest = Common &
     | Readonly<{ operation: "catalog" }>
     | (ConfigurationRequest & Readonly<{ operation: "validateConfiguration" }>)
     | (ReadinessRequest & Readonly<{ operation: "readiness" }>)
+    | (ReadinessRequest &
+        Readonly<{
+          operation: "prepareCandidate";
+          expectedSelectionRevision: number;
+        }>)
     | Readonly<{
         operation: "queryResolveRegistration";
         expectedSource: InstalledPluginPeerExpectedSource;
@@ -118,6 +123,11 @@ export type InstalledPluginPeerResponse = Common &
       }>
     | (ConfigurationResponse & Readonly<{ operation: "validateConfiguration" }>)
     | (ReadinessResponse & Readonly<{ operation: "readiness" }>)
+    | (ReadinessResponse &
+        Readonly<{
+          operation: "prepareCandidate";
+          expectedSelectionRevision: number;
+        }>)
     | Readonly<{
         operation: "queryResolveRegistration";
         expectedSource: InstalledPluginPeerExpectedSource;
@@ -129,3 +139,13 @@ export type InstalledPluginPeerResponse = Common &
           expectedSource: InstalledPluginPeerExpectedSource;
         }>)
   );
+
+/** Candidate preparation is metadata/Node/IO preflight, never a Run grant. */
+export type InstalledPluginPeerPrepareCandidateRequest = Extract<
+  InstalledPluginPeerRequest,
+  { operation: "prepareCandidate" }
+>;
+export type InstalledPluginPeerPrepareCandidateResponse = Extract<
+  InstalledPluginPeerResponse,
+  { operation: "prepareCandidate" }
+>;

@@ -50,6 +50,14 @@ export type InstalledPluginPeerPrepared = Readonly<{
   host: ExtensionHostPort;
   pluginQueryHost: PluginQueryHostPort;
 }>;
+export type InstalledPluginPeerCandidatePreparationInput = Readonly<{
+  actor: ActorContext;
+  scope: PluginProfileScope;
+  identity: InstalledPluginPeerIdentity;
+  configuration: ExtensionConfiguration;
+  expectedTarget: ExtensionExecutionTarget;
+  expectedSelectionRevision: number;
+}>;
 type RegistrationMetadata = Readonly<{
   identity: InstalledPluginPeerIdentity;
   configurations: readonly Readonly<{
@@ -73,6 +81,62 @@ export class InstalledPluginPeerClient {
       configuration,
       dependencies,
     );
+  }
+  /** A disabled candidate can be prepared without changing catalog selection or granting a Run. */
+  async prepareCandidate(
+    input: InstalledPluginPeerCandidatePreparationInput,
+    options: Readonly<{ signal?: AbortSignal }> = {},
+  ): Promise<ExtensionReadiness> {
+    this.#transport.assertOpen();
+    const captured = installedPeerOwnRecord(input, [
+      "actor",
+      "scope",
+      "identity",
+      "configuration",
+      "expectedTarget",
+      "expectedSelectionRevision",
+    ]);
+    const optionsData = installedPeerOwnRecord(options, [], ["signal"]);
+    const signal = optionsData.signal as AbortSignal | undefined;
+    const request = parseInstalledPluginPeerRequest({
+      ...captured,
+      protocol: INSTALLED_PLUGIN_PEER_REQUEST_PROTOCOL,
+      requestId: randomUUID(),
+      operation: "prepareCandidate",
+    });
+    if (request.operation !== "prepareCandidate") invalid("request");
+    const actor = parseExtensionHostActor(request.actor);
+    const scope = parsePluginProfileScope(json(request.scope));
+    const configuration = parseExtensionConfiguration(
+      json(request.configuration),
+      digester,
+    );
+    const expectedTarget = parseExtensionExecutionTarget(
+      json(request.expectedTarget),
+    );
+    if (
+      actor.tenantId !== scope.tenantId ||
+      actor.spaceId !== scope.spaceId ||
+      configuration.tenantId !== actor.tenantId ||
+      configuration.spaceId !== actor.spaceId ||
+      configuration.pluginId !== request.identity.pluginId ||
+      configuration.pluginVersion !== request.identity.version ||
+      configuration.manifestDigest !== request.identity.manifestDigest ||
+      configuration.implementationDigest !==
+        request.identity.implementationDigest
+    )
+      invalid("request");
+    const response = await this.#transport.post(request, signal);
+    this.#transport.assertOpen();
+    if (
+      response.operation !== "prepareCandidate" ||
+      response.expectedSelectionRevision !==
+        request.expectedSelectionRevision ||
+      !same(response.expectedTarget, expectedTarget)
+    )
+      invalid("response");
+    assertEcho(response, request.identity, configuration);
+    return readiness(response.result, expectedTarget);
   }
   async prepare(
     input: Readonly<{ actor: ActorContext; scope: PluginProfileScope }>,

@@ -153,6 +153,12 @@ CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR=/absolute/independent/professional-packag
 
 完整 Renderer、CSS 和旧快照未改；本次没有重跑全量 UI 或启动共享 SDK producer。上述测试权限/模型不代表生产权限或实际付款，正式 App 两项也没有开启插件业务执行。输入 v1 的严格拒绝保持兼容，v2 仍需要明确私有开启文件。
 
+## 停用候选的真实 Node/IO 预检
+
+Worker 私有 peer 现在提供独立 `prepareCandidate` 操作，接受实际完整包身份、当前首配、原发布目标和停用 selection 的准确修订。它沿用同一 SQLite、resolver、Node 容器和 IO owner，反复校验实际身份、profile、安装字节、权限、latest 配置与部署；成功需要实际借用注册 factory，并通过声明服务的原 IO 预检。原 catalog 和普通 readiness 仍只接受启用选择。协议和兼容边界见[任务启动说明](./installed-plugin-task-startup.md#disabled-candidate-preparation-on-the-private-peer)。
+
+这是 Native 显式启用和激活之前的后台基础。Main/Control 尚未自动调用该操作，当前管理权限与页面保持原样。预检不会启用、激活、调用业务 factory.create、创建 Run、扣积分或请求供应商；公共 IP 的真实 DNS 通过也不代表 ComfyUI 在线生成成功。后续启用和业务执行仍须重新验证实时权限与状态，不能复用旧 ready 作为执行许可。
+
 ## 后续交付
 
-下一阶段完成 Native 候选激活、真实 Node/IO readiness、独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。
+下一阶段把停用候选预检接入 Native 的显式启用和业务激活，再完成独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。

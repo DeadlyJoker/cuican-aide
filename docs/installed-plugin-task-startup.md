@@ -93,6 +93,16 @@ CrewON Installed Plugin Peer origin http://127.0.0.1:<actual port>
 
 The peer listens only on IPv4 loopback and accepts authenticated JSON POSTs at `/private/v1/installed-plugins`. It is a private service channel on the same host/network namespace, not a browser endpoint. Its bearer token is not printed.
 
+## Disabled candidate preparation on the private peer
+
+The existing private v1 peer additionally accepts `operation: "prepareCandidate"`. This is an internal prerequisite for an explicit installation enable/activation flow; Native Main and Control do not yet invoke it automatically. It requires the existing exact actor and profile scope, all six package/business identity fields, the complete saved configuration, the complete eight-field published execution target, and `expectedSelectionRevision`, a positive safe integer. Its response echoes the identity, configuration digest, target and selection revision, and returns the existing ready/unavailable readiness result. An older peer that does not implement this operation is rejected; the client never falls back to ordinary readiness or catalog.
+
+Preparation requires the actual selection to remain **disabled** at that exact revision. The same parent Store must supply the latest saved configuration and deployment matching the loaded release. The Worker rechecks current actor/profile, package bytes and approval, selection, latest configuration and deployment around asynchronous work, loads the installed Node container, borrows its registered execution factory, and runs the original IO preflight for its declared services. Missing services, revoked authority, configuration or selection changes, and private network targets fail closed. The final authority/facts check and actual factory borrow precede a synchronous response; no additional remote identity call can reopen the candidate's checked snapshot.
+
+This result creates no installation state, activation, Run, task admission, quotation, reservation or supplier request. It does not call the business factory's `create` method. IO preflight verifies the configured network grant and public DNS policy; it is not supplier health or successful generation. Ordinary catalog/readiness still require an enabled selection, and historical query keeps its original saved Run checks. Preparation is not a grant that can be reused for a subsequent enable or paid request; those operations must independently recheck current authority and state.
+
+The wire addition preserves the original strict shapes of every other v1 operation. No public HTTP route, persisted schema, Worker authority configuration or browser credential is added.
+
 ## Control task configuration
 
 Set `CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH` to an absolute canonical path to a private JSON file. Omitting the variable preserves the original Control path without allocating task authorities or running these plugin migrations. A defined empty value is invalid. The new opt-in cannot coexist with the metadata-only configuration above or the old Control extension-worker configuration.

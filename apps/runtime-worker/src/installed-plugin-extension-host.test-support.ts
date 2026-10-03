@@ -53,6 +53,7 @@ export async function hostFixture(
     disposeFails?: boolean;
     maximumPackages?: number;
     secondVersion?: boolean;
+    selectionState?: "enabled" | "disabled";
   } = {},
 ) {
   const logs = await mkdtemp(join(tmpdir(), "crewon-installed-readiness-"));
@@ -193,7 +194,7 @@ ${options.disposeFails ? "throw new Error('readiness fixture disposal failed');"
       },
     });
   }
-  await select("enabled");
+  if (options.selectionState !== "disabled") await select("enabled");
   if (entries[1] !== undefined)
     await installations.recordInstalledPackage({
       scope,

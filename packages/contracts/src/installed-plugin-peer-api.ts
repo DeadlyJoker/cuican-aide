@@ -18,6 +18,7 @@ import {
   peerRecord,
   peerResult,
   peerScope,
+  peerSelectionRevision,
   peerSource,
   peerTarget,
 } from "./installed-plugin-peer-values.ts";
@@ -78,6 +79,25 @@ export function parseInstalledPluginPeerRequest(
             })
           : Object.freeze({ ...readiness, operation: "readiness" });
       }
+      case "prepareCandidate":
+        peerRecord(value, [
+          ...commonFields,
+          ...readinessFields,
+          "expectedSelectionRevision",
+        ]);
+        return Object.freeze({
+          ...common,
+          operation: "prepareCandidate",
+          identity: peerIdentity(value.identity),
+          configuration: peerJsonObject(
+            value.configuration,
+            limits.configurationBytes,
+          ),
+          expectedTarget: peerTarget(value.expectedTarget),
+          expectedSelectionRevision: peerSelectionRevision(
+            value.expectedSelectionRevision,
+          ),
+        });
       case "queryResolveRegistration":
         peerRecord(value, [...commonFields, "expectedSource"]);
         return Object.freeze({
@@ -174,6 +194,26 @@ export function parseInstalledPluginPeerResponse(
             })
           : Object.freeze({ ...readiness, operation: "readiness" });
       }
+      case "prepareCandidate":
+        peerRecord(value, [
+          ...commonFields,
+          "identity",
+          "configurationDigest",
+          "expectedTarget",
+          "expectedSelectionRevision",
+          "result",
+        ]);
+        return Object.freeze({
+          ...common,
+          operation: "prepareCandidate",
+          identity: peerIdentity(value.identity),
+          configurationDigest: peerDigest(value.configurationDigest),
+          expectedTarget: peerTarget(value.expectedTarget),
+          expectedSelectionRevision: peerSelectionRevision(
+            value.expectedSelectionRevision,
+          ),
+          result: peerResult(value.result),
+        });
       case "queryResolveRegistration":
         peerRecord(value, [...commonFields, "expectedSource", "registration"]);
         return Object.freeze({

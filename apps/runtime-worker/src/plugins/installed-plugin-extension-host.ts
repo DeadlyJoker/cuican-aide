@@ -6,12 +6,14 @@ import type {
   ExtensionHostPort,
   ExtensionReadiness,
   ExtensionRegistration,
+  ExtensionStore,
   PluginInstallationStore,
 } from "@crewon/application";
 import { parseExtensionHostActor } from "@crewon/contracts";
 import {
   extensionCanonicalJson,
   extensionOpaqueId,
+  parseExtensionManifest,
   parseInstalledPluginPackage,
   parsePluginProfileScope,
   parsePluginSelection,
@@ -25,17 +27,17 @@ import {
   type PluginExecutionPackageFailureOwner,
 } from "@crewon/plugin-host";
 import type { InstalledPluginExecutionReadinessPort } from "./installed-plugin-execution-readiness-types.ts";
-import type { AgentVersionRuntime } from "../agent-version-runtime.ts";
 import { StoreBackedAgentVersionRuntimeResolver } from "../store-backed-agent-version-runtime-resolver.ts";
-import { extensionToolDefinitions } from "../extensions/extension-tool-catalog.ts";
-import { parseRuntimeExtensionMaterialization } from "../extensions/extension-runtime-proof.ts";
-import { readInstalledPluginAgentRuntimeScope } from "./installed-plugin-agent-runtime-factory-proof.ts";
 import {
   assertInstalledPluginBusinessRegistration,
   revalidateInstalledPluginBusinessRegistration,
   validateInstalledPluginConfiguration,
   type InstalledPluginBusinessRegistration,
 } from "./installed-plugin-business-registration.ts";
+import {
+  evaluateInstalledPluginReadiness,
+  type InstalledPluginReadinessRequest,
+} from "./installed-plugin-readiness-core.ts";
 
 export type InstalledPluginExtensionHostDependencies = Readonly<{
   scope: PluginProfileScope;
@@ -61,17 +63,21 @@ export type InstalledPluginExtensionHostDependencies = Readonly<{
   ): Promise<"allow" | "deny">;
   runtimeResolver: StoreBackedAgentVersionRuntimeResolver;
   deployments: Pick<AgentVersionDeploymentStore, "loadAgentVersionDeployment">;
+  /** Candidate preparation alone requires the same parent's saved configuration store. */
+  configurations?: Pick<ExtensionStore, "loadLatestExtensionConfiguration">;
   /** Includes pending setup and failed physical cleanup, never more than 32. */
   maximumPackages?: number;
   /** Actual deployment-owned IO preflight. Legacy factories without declared services remain compatible. */
   executionReadiness?: InstalledPluginExecutionReadinessPort;
 }>;
 
-type Request = Readonly<{
+type Request = InstalledPluginReadinessRequest;
+export type InstalledPluginPrepareCandidateInput = Readonly<{
   actor: ActorContext;
-  registration: InstalledPluginBusinessRegistration;
+  registration: ExtensionRegistration;
   configuration: ExtensionConfiguration;
-  agentVersionId: string | null;
+  agentVersionId: string;
+  expectedSelectionRevision: number;
 }>;
 type PackageEntry = {
   loading: Promise<PluginExecutionPackage>;
@@ -91,6 +97,7 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
   readonly #packages = new Map<string, PackageEntry>();
   readonly #pending = new Set<Promise<unknown>>();
   readonly #controllers = new Set<AbortController>();
+  readonly #candidateFacts = new WeakMap<Request, string>();
   readonly #maximumPackages: number;
   readonly #acquire: StoreBackedAgentVersionRuntimeResolver["acquire"];
   #closed = false;
@@ -159,6 +166,16 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
           "loadAgentVersionDeployment",
         ),
       }),
+      ...(input.configurations === undefined
+        ? {}
+        : {
+            configurations: Object.freeze({
+              loadLatestExtensionConfiguration: method(
+                input.configurations,
+                "loadLatestExtensionConfiguration",
+              ),
+            }),
+          }),
     });
     this.#scope = scope;
     this.#maximumPackages = maximum;
@@ -214,197 +231,76 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
       input,
       extensionOpaqueId(input.agentVersionId),
     );
-    return this.#run(async (signal) => {
-      await this.#authorize(request, signal);
-      await revalidateInstalledPluginBusinessRegistration(
-        request.registration,
-        signal,
-      );
-      await this.#authorize(request, signal);
-      let lease: Awaited<
-        ReturnType<StoreBackedAgentVersionRuntimeResolver["acquire"]>
-      > = null;
-      let packageOwner: PluginExecutionPackage | null = null;
-      let packageCandidate: PluginActivationCandidate | null = null;
-      let finalReadiness: (() => ExtensionReadiness) | null = null;
-      try {
-        let result: ExtensionReadiness;
-        try {
-          const deployment =
-            await this.#dependencies.deployments.loadAgentVersionDeployment({
-              tenantId: this.#scope.tenantId,
-              agentVersionId: request.agentVersionId!,
-            });
-          await this.#authorize(request, signal);
-          if (deployment === null)
-            result = unavailable("extension_runtime_unavailable");
-          else {
-            lease = await this.#acquire({
-              tenantId: this.#scope.tenantId,
-              agentVersionId: request.agentVersionId!,
-            });
-            await this.#authorize(request, signal);
-            if (lease === null)
-              result = unavailable("extension_runtime_unavailable");
-            else {
-              result = this.#runtimeReadiness(
-                request,
-                lease.resource,
-                deployment,
-              );
-              if (result.outcome === "ready") {
-                const entry = await this.#package(request, signal);
-                if (entry.candidate === null)
-                  fail("installed_plugin_extension_host_candidate_missing");
-                packageCandidate = entry.candidate;
-                await this.#authorizeCandidate(
-                  request,
-                  entry.candidate,
-                  signal,
-                );
-                const owner = await entry.loading;
-                signal.throwIfAborted();
-                packageOwner = owner;
-                const currentDeployment =
-                  await this.#dependencies.deployments.loadAgentVersionDeployment(
-                    {
-                      tenantId: this.#scope.tenantId,
-                      agentVersionId: request.agentVersionId!,
-                    },
-                  );
-                await this.#authorize(request, signal);
-                if (!same(deployment, currentDeployment))
-                  result = unavailable("extension_runtime_unavailable");
-                else
-                  result = this.#runtimeReadiness(
-                    request,
-                    lease.resource,
-                    deployment,
-                  );
-                const runtime = lease.resource;
-                finalReadiness = () =>
-                  this.#runtimeReadiness(request, runtime, deployment);
-              }
-            }
-          }
-        } catch (error) {
-          signal.throwIfAborted();
-          result = unavailable("extension_runtime_unavailable");
-        }
-        // Runtime failures cannot turn a revoked caller into an authorized response.
-        await revalidateInstalledPluginBusinessRegistration(
-          request.registration,
-          signal,
-        );
-        if (result.outcome === "ready" && packageCandidate !== null) {
-          try {
-            await this.#authorizeCandidate(request, packageCandidate, signal);
-          } catch {
-            signal.throwIfAborted();
-            result = unavailable("extension_runtime_unavailable");
-          }
-        }
-        await this.#authorize(request, signal);
-        if (result.outcome === "ready") {
-          try {
-            if (finalReadiness === null)
-              fail("installed_plugin_extension_host_runtime_missing");
-            result = finalReadiness();
-            if (result.outcome !== "ready") return result;
-            if (packageOwner === null)
-              fail("installed_plugin_extension_host_owner_missing");
-            const borrow = packageOwner.acquire({
-              purpose: "newOperation",
-              authorizeBorrow: (identity) =>
-                !this.#closed &&
-                !signal.aborted &&
-                same(identity, {
-                  pluginId: request.registration.identity.pluginId,
-                  version: request.registration.identity.version,
-                  packageDigest: request.registration.identity.packageDigest,
-                })
-                  ? "allow"
-                  : "deny",
-            });
-            try {
-              const requiredServices = borrow.factory.requiredServices ?? [];
-              if (requiredServices.length > 0) {
-                const gate = this.#dependencies.executionReadiness;
-                if (gate === undefined)
-                  fail("installed_plugin_execution_services_unavailable");
-                await gate.assertReady(
-                  {
-                    metadata: {
-                      identity: request.registration.identity,
-                      scope: this.#scope,
-                      configuration: request.configuration,
-                      target: result.target,
-                      purpose: "submit",
-                    },
-                    requiredServices,
-                  },
-                  signal,
-                );
-                await this.#authorizeCandidate(
-                  request,
-                  packageCandidate!,
-                  signal,
-                );
-                await revalidateInstalledPluginBusinessRegistration(
-                  request.registration,
-                  signal,
-                );
-                const currentDeployment =
-                  await this.#dependencies.deployments.loadAgentVersionDeployment(
-                    {
-                      tenantId: this.#scope.tenantId,
-                      agentVersionId: request.agentVersionId!,
-                    },
-                  );
-                if (currentDeployment === null)
-                  fail("installed_plugin_extension_host_runtime_missing");
-                await this.#authorize(request, signal);
-                result = this.#runtimeReadiness(
-                  request,
-                  lease!.resource,
-                  currentDeployment,
-                );
-              }
-            } finally {
-              borrow.release();
-            }
-          } catch {
-            result = unavailable("extension_runtime_unavailable");
-          }
-        }
-        await this.#authorize(request, signal);
-        if (result.outcome === "ready") {
-          try {
-            if (packageOwner === null)
-              fail("installed_plugin_extension_host_owner_missing");
-            // Every asynchronous gate precedes this actual factory check and synchronous return.
-            const finalBorrow = packageOwner.acquire({
-              purpose: "newOperation",
-              authorizeBorrow: (identity) =>
-                !this.#closed &&
-                !signal.aborted &&
-                same(identity, {
-                  pluginId: request.registration.identity.pluginId,
-                  version: request.registration.identity.version,
-                  packageDigest: request.registration.identity.packageDigest,
-                })
-                  ? "allow"
-                  : "deny",
-            });
-            finalBorrow.release();
-          } catch {
-            result = unavailable("extension_runtime_unavailable");
-          }
-        }
-        return result;
-      } finally {
-        lease?.release();
-      }
+    return this.#run((signal) => this.#evaluate(request, signal));
+  }
+
+  /** Real disabled-package preflight. This does not enable, activate or execute a task. */
+  prepareCandidate(
+    input: InstalledPluginPrepareCandidateInput,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<ExtensionReadiness> {
+    const value = ownFields(input, [
+      "actor",
+      "registration",
+      "configuration",
+      "agentVersionId",
+      "expectedSelectionRevision",
+    ]);
+    const revision = value.expectedSelectionRevision;
+    if (!Number.isSafeInteger(revision) || (revision as number) < 1)
+      fail("installed_plugin_extension_host_selection_revision_invalid");
+    if (this.#dependencies.configurations === undefined)
+      fail("installed_plugin_extension_host_configurations_unavailable");
+    const registration = ownFields(value.registration, [
+      "manifest",
+      "manifestDigest",
+      "implementationDigest",
+    ]);
+    const candidateInput = {
+      actor: value.actor,
+      registration: {
+        manifest: parseExtensionManifest(registration.manifest),
+        manifestDigest: registration.manifestDigest,
+        implementationDigest: registration.implementationDigest,
+      },
+      configuration: value.configuration,
+    };
+    const request: Request = Object.freeze({
+      ...this.#request(
+        candidateInput as Parameters<
+          ExtensionHostPort["validateConfiguration"]
+        >[0],
+        extensionOpaqueId(value.agentVersionId),
+      ),
+      kind: "candidate",
+      agentVersionId: extensionOpaqueId(value.agentVersionId),
+      expectedSelectionRevision: revision as number,
+    });
+    const signal = candidateSignal(options);
+    return this.#run(
+      (ownedSignal) => this.#evaluate(request, ownedSignal),
+      signal,
+    );
+  }
+
+  #evaluate(
+    request: Request,
+    signal: AbortSignal,
+  ): Promise<ExtensionReadiness> {
+    return evaluateInstalledPluginReadiness({
+      request,
+      scope: this.#scope,
+      signal,
+      acquire: this.#acquire,
+      loadDeployment: this.#dependencies.deployments.loadAgentVersionDeployment,
+      authorize: () => this.#authorize(request, signal),
+      authorizeCandidate: (candidate) =>
+        this.#authorizeCandidate(request, candidate, signal),
+      openPackage: () => this.#package(request, signal),
+      isOpen: () => !this.#closed,
+      ...(this.#dependencies.executionReadiness === undefined
+        ? {}
+        : { executionReadiness: this.#dependencies.executionReadiness }),
     });
   }
 
@@ -455,6 +351,7 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
     )
       fail("installed_plugin_extension_host_scope_mismatch");
     return Object.freeze({
+      kind: "execution",
       actor,
       registration,
       configuration,
@@ -474,13 +371,22 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
     return registration;
   }
 
-  #run<T>(operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  #run<T>(
+    operation: (signal: AbortSignal) => Promise<T>,
+    externalSignal?: AbortSignal,
+  ): Promise<T> {
     const controller = new AbortController();
+    const signal =
+      externalSignal === undefined
+        ? controller.signal
+        : AbortSignal.any([controller.signal, externalSignal]);
     this.#controllers.add(controller);
-    const pending = operation(controller.signal).finally(() => {
-      this.#pending.delete(pending);
-      this.#controllers.delete(controller);
-    });
+    const pending = Promise.resolve()
+      .then(() => operation(signal))
+      .finally(() => {
+        this.#pending.delete(pending);
+        this.#controllers.delete(controller);
+      });
     this.#pending.add(pending);
     return pending;
   }
@@ -531,7 +437,10 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
     if (
       !same(scopeOf(selection), this.#scope) ||
       !same(scopeOf(installed), this.#scope) ||
-      selection.state !== "enabled" ||
+      (request.kind === "execution"
+        ? selection.state !== "enabled"
+        : selection.state !== "disabled" ||
+          selection.revision !== request.expectedSelectionRevision) ||
       selection.pluginId !== identity.pluginId ||
       selection.publisherId !== identity.publisherId ||
       selection.selectedPackageDigest !== identity.packageDigest ||
@@ -541,12 +450,46 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
       installed.packageDigest !== identity.packageDigest
     )
       fail("installed_plugin_extension_host_selection_unavailable");
-    return extensionCanonicalJson({
+    const facts = {
       actor: request.actor,
       profile,
       selection,
       installed,
+    };
+    if (request.kind === "execution") return extensionCanonicalJson(facts);
+    const configurations = this.#dependencies.configurations;
+    if (configurations === undefined)
+      fail("installed_plugin_extension_host_configurations_unavailable");
+    const latest = await configurations.loadLatestExtensionConfiguration({
+      tenantId: this.#scope.tenantId,
+      spaceId: this.#scope.spaceId,
+      pluginId: identity.pluginId,
     });
+    signal.throwIfAborted();
+    if (
+      latest === null ||
+      !same(
+        validateInstalledPluginConfiguration(request.registration, latest),
+        request.configuration,
+      )
+    )
+      fail("installed_plugin_extension_host_configuration_unavailable");
+    const deployment =
+      await this.#dependencies.deployments.loadAgentVersionDeployment({
+        tenantId: this.#scope.tenantId,
+        agentVersionId: request.agentVersionId,
+      });
+    signal.throwIfAborted();
+    const snapshot = extensionCanonicalJson({
+      ...facts,
+      configuration: latest,
+      deployment,
+    });
+    const original = this.#candidateFacts.get(request);
+    if (original === undefined) this.#candidateFacts.set(request, snapshot);
+    else if (original !== snapshot)
+      fail("installed_plugin_extension_host_authority_changed");
+    return snapshot;
   }
 
   async #authorize(request: Request, signal: AbortSignal): Promise<void> {
@@ -692,52 +635,6 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
       throw error;
     }
   }
-
-  #runtimeReadiness(
-    request: Request,
-    runtime: AgentVersionRuntime,
-    deployment: NonNullable<
-      Awaited<
-        ReturnType<AgentVersionDeploymentStore["loadAgentVersionDeployment"]>
-      >
-    >,
-  ): ExtensionReadiness {
-    if (runtime.executionAuthority !== "crewonKernel")
-      return unavailable("extension_execution_authority_unsupported");
-    if (
-      !same(readInstalledPluginAgentRuntimeScope(runtime), this.#scope) ||
-      runtime.extensions?.length !== 1
-    )
-      return unavailable("extension_implementation_unavailable");
-    const proof = parseRuntimeExtensionMaterialization(runtime.extensions[0]);
-    const target = proof.target;
-    const declared = extensionToolDefinitions(request.registration.manifest);
-    const actualTools = runtime.toolRuntime.definitions();
-    if (
-      !same(proof.configuration, request.configuration) ||
-      !same(project(proof.registration), project(request.registration)) ||
-      target.agentVersionId !== request.agentVersionId ||
-      runtime.version.agentVersionId !== target.agentVersionId ||
-      runtime.version.contentDigest !== target.agentVersionContentDigest ||
-      runtime.version.runtimeGeneration !== target.runtimeGeneration ||
-      runtime.version.policySnapshotId !== target.policySnapshotId ||
-      deployment.tenantId !== this.#scope.tenantId ||
-      deployment.agentVersionId !== target.agentVersionId ||
-      deployment.contentDigest !== target.agentVersionContentDigest ||
-      deployment.materializationDigest !== target.materializationDigest ||
-      deployment.authorityId !== target.authorityId ||
-      deployment.workspaceBindingId !== target.workspaceBindingId ||
-      !same(actualTools, runtime.version.tools) ||
-      !declared.every((definition) =>
-        runtime.version.tools.some((tool) => same(tool, definition)),
-      )
-    )
-      return unavailable("extension_runtime_unavailable");
-    return Object.freeze({
-      outcome: "ready",
-      target: JSON.parse(extensionCanonicalJson(target)),
-    });
-  }
 }
 
 function registrationKey(registration: ExtensionRegistration): string {
@@ -776,14 +673,55 @@ function method<T extends object, K extends keyof T>(owner: T, key: K): T[K] {
     fail("installed_plugin_extension_host_method_invalid");
   return callback.bind(owner) as T[K];
 }
-function unavailable(
-  reasonCode: Extract<
-    ExtensionReadiness,
-    { outcome: "unavailable" }
-  >["reasonCode"],
-): ExtensionReadiness {
-  return Object.freeze({ outcome: "unavailable", reasonCode });
-}
 function fail(code: string): never {
   throw new Error(code);
+}
+
+function ownFields(
+  input: unknown,
+  keys: readonly string[],
+): Record<string, unknown> {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    (Object.getPrototypeOf(input) !== Object.prototype &&
+      Object.getPrototypeOf(input) !== null) ||
+    !same(
+      Reflect.ownKeys(input)
+        .filter((key) => typeof key === "string")
+        .sort(),
+      [...keys].sort(),
+    ) ||
+    Reflect.ownKeys(input).some((key) => typeof key !== "string")
+  )
+    fail("installed_plugin_extension_host_candidate_input_invalid");
+  const result: Record<string, unknown> = Object.create(null);
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (
+      descriptor === undefined ||
+      !("value" in descriptor) ||
+      !descriptor.enumerable
+    )
+      fail("installed_plugin_extension_host_candidate_input_invalid");
+    result[key] = descriptor.value;
+  }
+  return result;
+}
+
+function candidateSignal(
+  options: Readonly<{ signal?: AbortSignal }> | undefined,
+): AbortSignal | undefined {
+  if (options === undefined) return undefined;
+  const keys = Reflect.ownKeys(options);
+  if (keys.length === 0) {
+    ownFields(options, []);
+    return undefined;
+  }
+  const value = ownFields(options, ["signal"]);
+  if (value.signal === undefined) return undefined;
+  if (!(value.signal instanceof AbortSignal))
+    fail("installed_plugin_extension_host_candidate_input_invalid");
+  return value.signal;
 }

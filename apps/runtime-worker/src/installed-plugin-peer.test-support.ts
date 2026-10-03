@@ -60,7 +60,10 @@ export async function peerFixture(
   t: TestContext,
   backend: "sqlite" | "postgres" = "sqlite",
   versions: 1 | 2 = 1,
-  options: Readonly<{ activate?: boolean }> = {},
+  options: Readonly<{
+    activate?: boolean;
+    selectionState?: "enabled" | "disabled";
+  }> = {},
 ) {
   const f = await installedReleaseFixture(t, backend, { versions });
   const extensions = f.store.extensionStore();
@@ -182,7 +185,7 @@ export async function peerFixture(
       },
     });
   }
-  await select("enabled");
+  if (options.selectionState !== "disabled") await select("enabled");
   const peer = await composeInstalledPluginPeer({
     config: { port: 0, token, deadlineMs: 1000, resolveProfile },
     release,

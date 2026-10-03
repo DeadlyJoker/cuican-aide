@@ -71,6 +71,11 @@ export function peerDigest(input: unknown): string {
     peerFail();
   return input;
 }
+export function peerSelectionRevision(input: unknown): number {
+  if (typeof input !== "number" || !Number.isSafeInteger(input) || input < 1)
+    peerFail();
+  return input;
+}
 export function peerActor(input: unknown): InstalledPluginPeerActor {
   const value = peerRecord(input, [
     "principalId",

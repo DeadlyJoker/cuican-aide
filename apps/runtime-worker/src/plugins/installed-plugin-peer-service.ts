@@ -152,6 +152,7 @@ export class InstalledPluginPeerService {
           entries: Object.freeze(group.entries),
           generation: new InstalledPluginExtensionHost({
             ...common,
+            configurations: input.store.extensionStore(),
             registrations: [...unique.values()],
             maximumPackages: unique.size,
           }),
@@ -280,13 +281,14 @@ export class InstalledPluginPeerService {
     }
     if (
       request.operation === "validateConfiguration" ||
-      request.operation === "readiness"
+      request.operation === "readiness" ||
+      request.operation === "prepareCandidate"
     ) {
       const rows = hosts.entries.filter((row) =>
         isDeepStrictEqual(row.identity, request.identity),
       );
       const row =
-        request.operation === "readiness"
+        request.operation !== "validateConfiguration"
           ? rows.find(
               (row) =>
                 isDeepStrictEqual(row.entry.target, request.expectedTarget) &&
@@ -314,23 +316,42 @@ export class InstalledPluginPeerService {
           configurationDigest: configuration.contentDigest,
         });
       }
-      const result = await hosts.generation.evaluate({
+      const readinessInput = {
         actor: request.actor,
         registration: project(row.registration),
         configuration,
         agentVersionId: row.entry.target.agentVersionId,
-      });
+      };
+      if (request.operation === "prepareCandidate")
+        await this.#current(request.actor, hosts.scope, signal);
+      const result =
+        request.operation === "prepareCandidate"
+          ? await hosts.generation.prepareCandidate(
+              {
+                ...readinessInput,
+                expectedSelectionRevision: request.expectedSelectionRevision,
+              },
+              { signal },
+            )
+          : await hosts.generation.evaluate(readinessInput);
       if (
         result.outcome === "ready" &&
         !isDeepStrictEqual(result.target, request.expectedTarget)
       )
         fail("target_mismatch");
-      await this.#current(request.actor, hosts.scope, signal);
+      // The candidate host's last actual facts check includes actor/profile and
+      // its fixed selection/configuration/deployment. No identity await may
+      // follow its final factory borrow and create a new metadata race window.
+      if (request.operation === "prepareCandidate") signal.throwIfAborted();
+      else await this.#current(request.actor, hosts.scope, signal);
       return parseInstalledPluginPeerResponse({
         ...response,
         identity: row.identity,
         configurationDigest: configuration.contentDigest,
         expectedTarget: request.expectedTarget,
+        ...(request.operation === "prepareCandidate"
+          ? { expectedSelectionRevision: request.expectedSelectionRevision }
+          : {}),
         result,
       });
     }

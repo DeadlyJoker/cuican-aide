@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：停用候选的真实 Node/IO 预检基础
+
+Worker 私有 peer 增加独立 `prepareCandidate`，Control 提供对应内部客户端。实际 selection 必须保持 disabled 且准确匹配修订；同一父 Store 的 latest 配置、完整包身份与八字段部署目标必须匹配原发布。每次预检固定首次完整事实快照，跨权限、安装字节、Node setup 和 IO 等待反复校验。实际注册 factory 的最终借用之后同步返回，避免 peer 追加异步身份核验重新打开状态竞争窗口。普通 catalog/readiness 的 enabled 条件与历史 query 原义保留；旧 peer 拒绝新操作，不回退。协议与兼容说明见[任务启动文档](./installed-plugin-task-startup.md#disabled-candidate-preparation-on-the-private-peer)。
+
+新 Worker 行为 **30/30**，合并原 Host/peer 回归后 **66 通过、2 个 PostgreSQL 条件跳过**；没有提供 PostgreSQL，不将这两项计为完成。覆盖真实安装 Node setup/factory borrow、同父 SQLite、Krea2 声明服务的实际 IO owner、latest 配置与准确选择修订、部署丢失、最终身份等待中的配置 CAS、撤权和取消后的物理清理。Contracts 全量 **252/252**（含 15 项新协议）；新客户端 **25/25**，原客户端 **18/18**。首次 40 项窄验的 15 项协议不再次计入合计。
+
+真实 source Supervisor/CLI/Worker/Control/SQLite 新专项 **9/9、零跳过**，使用两个保留的独立实包，沿用原 HTTP 安装、首配和 v2 发布。专业包的旧 factory 兼容性不冒称 IO 可用；Krea2 实际 factory 借用和 IO 预检通过真实公共 IP DNS，缺少 IO、私网目标、网络/包撤权及真实配置/选择 CAS 均拒绝旧候选。保持停用选择，业务 activation、插件 Run/admission、供应商、外部操作和资金记录为零；每项原默认 Agent 另行完成真实 Responses、任务 HTTP/SSE 和同库 completed Run。真实 HTTPS IO body 挂起时停机撤回请求、等待 Worker 及 IO owner 终态后清理准备文件，并能按同一停用配置重启。原 v1、v2、单插件故障隔离与实际关闭进程回归 **13/13、零跳过**。
+
+上述不重叠相关检查合计 **383 通过、2 个 PostgreSQL 条件跳过**。Contracts/Worker/Control 类型、UI lint/build、Main 构建、七入口 runtime stage、生产许可证、boundary 和格式检查通过。所有 Renderer、CSS、旧 UI 快照和原菜单/设置页面没有修改；5719 设置页仍可从左下角用户栏进入，截图 `original-settings-user-entry-current-20261003.jpg`。本轮没有启动共享 SDK producer，没有重跑或声称全量 UI 通过，也没有将 source 进程专项称为正式 Main/full App/packaged 执行。
+
+首次失败记录保留：测试尝试覆盖同版本不可变部署，被真实 Store 拒绝后未释放 setup 栅栏；改为仅自有 SQLite 夹具的实际部署行丢失，并让栅栏与真实操作终态竞争、在 finally 中释放，全部拒绝与清理断言保留。旧自动准备快照要求 networkAuthority 为 null，新 Native 测试改用自有助手精确匹配实际网络及全部权限配置，旧 null 断言未改。UI lint 的数组推断错误补充显式类型。早期自有测试进程确认退出后仅清理两个固定 inode 的自有目录，最终夹具目录与实际子进程均已退休，用户 5719/5720 原进程保留。实际包再次通过原 verifier，记录和日志见 `native-candidate-proof-20261003.json`。
+
+这是停用候选的后台基础，Main/Control 尚未把它接入显式启用和业务激活；预检不会调用业务 factory.create、创建收费 Run 或授予付款。当前用户 ComfyUI 地址的只读 `/`、`/queue`、`/system_stats` 均返回 404，没有提交生成请求，不能据此声称供应商在线或生成成功。下一落地点为 Native 显式启用前预检及原业务激活；独立真实用户执行身份、个人资金/价格/结算、正式 Main/full App/packaged Krea2 在线生成和历史查询、短剧持久项目与第二个实际企业 API 仍在原目标内，目标继续进行。
+
 ## 2026-10-03：Native 单插件准备故障与卸载隔离
 
 Main 当前生成私有准备输入 v2，沿用同一个原 CLI、SQLite 与 HTTPS 权限核验。每个请求插件得到严格有界的 prepared/blocked 结果；卸载、未批准、缺少首配、业务配置不兼容、实际包字节不可用及读取权限撤回只阻止受影响候选。实际准备子集仍经原 v1 发布和 Worker/catalog 核验；全部受阻时不写 release，清除 installed/task/peer 及本次专用权限凭据，继续原普通默认发布和运行。身份、租户、profile、私有文件或未知权威协议错误仍整体拒绝。
