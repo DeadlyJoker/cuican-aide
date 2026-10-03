@@ -768,31 +768,47 @@ export class SqliteRunStore implements DomainStore {
     options: SqliteWorkflowCompositionOptions = {},
   ) {
     this.#assertOpen();
-    return new ExperimentalSqliteWorkflowRunCompositionStore(this.#database, {
-      assertOpen: () => this.#assertOpen(),
-      now: () => readLeaseClock(this.#clock),
-      loadRun: (input) => this.#loadRun(input),
-      commitChildThread: (input) => this.#commitThread(input, { withinTransaction: true }),
-      commitChildRun: (input) => this.#commitRun(input, null, null, { withinTransaction: true }),
-      loadRootThread: (input) => this.#loadThread(input),
-      commitRootThread: (input) => this.#commitThread(input, { withinTransaction: true }),
-      commitRootRun: (input, lease) => this.#commitRun(input, lease, null, { withinTransaction: true }),
-      settleRootWork: (lease, now) => this.#settleWorkItemWithinTransaction(lease, now),
-      hasPendingProviderSwitch: (tenantId) => this.#hasPendingProviderSwitch(tenantId),
-      validateLease: (input, now) => {
-        this.#validateExecutionLease(
-          input.tenantId, input.runId, input.lease, now,
-        );
-        return this.#loadWorkItemMetadata(input.lease.workItemId).lease_expires_at_ms!;
+    return new ExperimentalSqliteWorkflowRunCompositionStore(
+      this.#database,
+      {
+        assertOpen: () => this.#assertOpen(),
+        now: () => readLeaseClock(this.#clock),
+        loadRun: (input) => this.#loadRun(input),
+        commitChildThread: (input) =>
+          this.#commitThread(input, { withinTransaction: true }),
+        commitChildRun: (input) =>
+          this.#commitRun(input, null, null, { withinTransaction: true }),
+        loadRootThread: (input) => this.#loadThread(input),
+        commitRootThread: (input) =>
+          this.#commitThread(input, { withinTransaction: true }),
+        commitRootRun: (input, lease) =>
+          this.#commitRun(input, lease, null, { withinTransaction: true }),
+        settleRootWork: (lease, now) =>
+          this.#settleWorkItemWithinTransaction(lease, now),
+        hasPendingProviderSwitch: (tenantId) =>
+          this.#hasPendingProviderSwitch(tenantId),
+        validateLease: (input, now) => {
+          this.#validateExecutionLease(
+            input.tenantId,
+            input.runId,
+            input.lease,
+            now,
+          );
+          return this.#loadWorkItemMetadata(input.lease.workItemId)
+            .lease_expires_at_ms!;
+        },
+        enqueue: (input) => {
+          validateWorkflowSchedulerWorkItems(
+            [input],
+            input.runId,
+            input.tenantId,
+            (id) => this.#workItemIdExists(id),
+          );
+          this.#writeWorkItems([input]);
+        },
       },
-      enqueue: (input) => {
-        validateWorkflowSchedulerWorkItems(
-          [input], input.runId, input.tenantId,
-          (id) => this.#workItemIdExists(id),
-        );
-        this.#writeWorkItems([input]);
-      },
-    }, options);
+      options,
+    );
   }
 
   constructor(path: string, options: { clock?: LeaseClock } = {}) {
@@ -802,18 +818,38 @@ export class SqliteRunStore implements DomainStore {
       enableForeignKeyConstraints: true,
     });
     captureSqliteInstallationDatabase(this.#database);
-    this.modelPricing = new SqliteModelPricingStore(this.#database, () => this.#assertOpen());
-    this.modelSpending = new SqliteModelSpendingStore(this.#database, () => this.#assertOpen());
-    this.executionProgress = new SqliteRunExecutionProgressStore(this.#database, input => {
-      this.#assertOpen();
-      validateRunExecutionProgressRun(input, this.#loadRun(input.scope));
-      this.#validateExecutionLease(input.scope.tenantId, input.scope.runId, input.lease, readLeaseClock(this.#clock));
-    });
-    this.compactionCheckpoints = new SqliteCompactionCheckpointStore(this.#database, input => {
-      this.#assertOpen();
-      validateCheckpointRun(input, this.#loadRun(input.scope));
-      this.#validateExecutionLease(input.scope.tenantId, input.scope.runId, input.lease, readLeaseClock(this.#clock));
-    });
+    this.modelPricing = new SqliteModelPricingStore(this.#database, () =>
+      this.#assertOpen(),
+    );
+    this.modelSpending = new SqliteModelSpendingStore(this.#database, () =>
+      this.#assertOpen(),
+    );
+    this.executionProgress = new SqliteRunExecutionProgressStore(
+      this.#database,
+      (input) => {
+        this.#assertOpen();
+        validateRunExecutionProgressRun(input, this.#loadRun(input.scope));
+        this.#validateExecutionLease(
+          input.scope.tenantId,
+          input.scope.runId,
+          input.lease,
+          readLeaseClock(this.#clock),
+        );
+      },
+    );
+    this.compactionCheckpoints = new SqliteCompactionCheckpointStore(
+      this.#database,
+      (input) => {
+        this.#assertOpen();
+        validateCheckpointRun(input, this.#loadRun(input.scope));
+        this.#validateExecutionLease(
+          input.scope.tenantId,
+          input.scope.runId,
+          input.lease,
+          readLeaseClock(this.#clock),
+        );
+      },
+    );
     this.messageWindows = new SqliteThreadMessageWindowStore(this.#database, {
       assertOpen: () => this.#assertOpen(),
       loadThread: (locator) => this.#loadThreadInSpace(locator),
@@ -873,7 +909,9 @@ export class SqliteRunStore implements DomainStore {
 
   close(): Promise<void> {
     return this.#pluginProfileOwners.close({
-      markHostClosed: () => { this.#closed = true; },
+      markHostClosed: () => {
+        this.#closed = true;
+      },
       closeDatabase: () => this.#database.close(),
     });
   }
@@ -1065,6 +1103,14 @@ export class SqliteRunStore implements DomainStore {
     tenantId: string;
     agentVersionId: string;
   }): Promise<AgentVersionAsset | null> {
+    return this.currentAgentVersion(input);
+  }
+
+  /** Checked synchronous snapshot on the actual parent connection for Native transaction guards. */
+  currentAgentVersion(input: {
+    tenantId: string;
+    agentVersionId: string;
+  }): AgentVersionAsset | null {
     this.#assertOpen();
     validateAgentVersionLocator(input);
     try {
@@ -1108,6 +1154,14 @@ export class SqliteRunStore implements DomainStore {
     tenantId: string;
     agentVersionId: string;
   }): Promise<AgentVersionDeployment | null> {
+    return this.currentAgentVersionDeployment(input);
+  }
+
+  /** Shares the parent connection, deployment validation and lifetime inside a selection transaction. */
+  currentAgentVersionDeployment(input: {
+    tenantId: string;
+    agentVersionId: string;
+  }): AgentVersionDeployment | null {
     this.#assertOpen();
     validateAgentVersionLocator(input);
     try {
@@ -2031,7 +2085,10 @@ export class SqliteRunStore implements DomainStore {
     return this.#commitThread(input);
   }
 
-  #commitThread(input: CommitThreadInput, options: { withinTransaction?: boolean } = {}): CommitThreadResult {
+  #commitThread(
+    input: CommitThreadInput,
+    options: { withinTransaction?: boolean } = {},
+  ): CommitThreadResult {
     this.#assertOpen();
     const threadId = validateThreadCommitInput(input);
     const fingerprint = input.idempotency.requestFingerprint;
@@ -3179,7 +3236,9 @@ export class SqliteRunStore implements DomainStore {
       ) {
         throw new RunStoreError("tool_approval_conflict");
       }
-      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
+      const run = this.#commitRun(input.commit, input.lease, null, {
+        withinTransaction: true,
+      });
       insertSqliteToolApproval(this.#database, input.approval);
       this.#retryWorkItemWithinTransaction(
         {
@@ -3245,7 +3304,9 @@ export class SqliteRunStore implements DomainStore {
       ) {
         throw new RunStoreError("approval_work_item_not_held");
       }
-      const run = this.#commitRun(input.commit, null, null, { withinTransaction: true });
+      const run = this.#commitRun(input.commit, null, null, {
+        withinTransaction: true,
+      });
       updateSqliteToolApproval(this.#database, current, approval);
       const wake = this.#database
         .prepare(
@@ -3295,7 +3356,9 @@ export class SqliteRunStore implements DomainStore {
         throw normalizeToolApprovalError(error);
       }
       validateApprovalRunCommit(approval, input.commit, "decide");
-      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
+      const run = this.#commitRun(input.commit, input.lease, null, {
+        withinTransaction: true,
+      });
       updateSqliteToolApproval(this.#database, current, approval);
       this.#database.exec("COMMIT");
       return clone({ approval, run });
@@ -3335,7 +3398,9 @@ export class SqliteRunStore implements DomainStore {
         throw normalizeToolApprovalError(error);
       }
       validateApprovalRunCommit(approval, input.commit, "decide");
-      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
+      const run = this.#commitRun(input.commit, input.lease, null, {
+        withinTransaction: true,
+      });
       updateSqliteToolApproval(this.#database, current, approval);
       this.#database.exec("COMMIT");
       return clone({ approval, run });
@@ -3368,7 +3433,9 @@ export class SqliteRunStore implements DomainStore {
       );
       if (existing !== null) {
         validateToolApprovalReplacementReplay(current, existing, input);
-        const run = this.#commitRun(input.commit, null, null, { withinTransaction: true });
+        const run = this.#commitRun(input.commit, null, null, {
+          withinTransaction: true,
+        });
         this.#database.exec("COMMIT");
         return clone({ approval: existing, run });
       }
@@ -3408,7 +3475,9 @@ export class SqliteRunStore implements DomainStore {
         input.replacement,
         input.commit,
       );
-      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
+      const run = this.#commitRun(input.commit, input.lease, null, {
+        withinTransaction: true,
+      });
       updateSqliteToolApproval(this.#database, current, superseded);
       insertSqliteToolApproval(this.#database, input.replacement);
       this.#retryWorkItemWithinTransaction(
@@ -3602,12 +3671,9 @@ export class SqliteRunStore implements DomainStore {
           checkpointDigest: null,
         },
       });
-      const run = this.#commitRun(
-        input.commit,
-        input.lease,
-        input.history,
-        { withinTransaction: true },
-      );
+      const run = this.#commitRun(input.commit, input.lease, input.history, {
+        withinTransaction: true,
+      });
       if (run.disposition === "committed" && nextGoal !== currentGoal) {
         this.#writeTurnStartGoal(
           input.goal,
@@ -3664,7 +3730,9 @@ export class SqliteRunStore implements DomainStore {
           failure: { code: "tool_outcome_unknown", retryable: true },
         },
       });
-      const run = this.#commitRun(input.commit, input.lease, null, { withinTransaction: true });
+      const run = this.#commitRun(input.commit, input.lease, null, {
+        withinTransaction: true,
+      });
       if (receipt !== current) {
         updateSqliteToolExecutionReceipt(this.#database, current, receipt);
       }
@@ -3912,12 +3980,9 @@ export class SqliteRunStore implements DomainStore {
               leaseEpoch: input.lease.leaseEpoch,
               attempt: input.attempt,
             });
-      const run = this.#commitRun(
-        input.commit,
-        input.lease,
-        input.history,
-        { withinTransaction: true },
-      );
+      const run = this.#commitRun(input.commit, input.lease, input.history, {
+        withinTransaction: true,
+      });
       if (run.disposition === "committed" && nextGoal !== currentGoal) {
         this.#writeTurnStartGoal(
           input.goal,
@@ -4006,16 +4071,17 @@ export class SqliteRunStore implements DomainStore {
           checkpointDigest: null,
         },
       });
-      const run = this.#commitRun(
-        input.commit,
-        input.lease,
-        input.history,
-        { withinTransaction: true },
-      );
+      const run = this.#commitRun(input.commit, input.lease, input.history, {
+        withinTransaction: true,
+      });
       if (input.completion === "completeRun") {
         this.#settleWorkItemWithinTransaction(input.lease, now);
       }
-      this.#database.prepare("DELETE FROM context_compaction_checkpoints WHERE tenant_id=? AND run_id=? AND step_id=?").run(input.commit.tenantId, runId, input.attempt.stepId);
+      this.#database
+        .prepare(
+          "DELETE FROM context_compaction_checkpoints WHERE tenant_id=? AND run_id=? AND step_id=?",
+        )
+        .run(input.commit.tenantId, runId, input.attempt.stepId);
       this.#database.exec("COMMIT");
       return clone({ run, step: execution.step, attempt: execution.attempt });
     } catch (error) {
@@ -4147,12 +4213,9 @@ export class SqliteRunStore implements DomainStore {
           execution.step,
         );
       }
-      const run = this.#commitRun(
-        input.commit,
-        input.lease,
-        input.history,
-        { withinTransaction: true },
-      );
+      const run = this.#commitRun(input.commit, input.lease, input.history, {
+        withinTransaction: true,
+      });
       this.#database
         .prepare(
           `INSERT INTO thread_model_states (tenant_id, thread_id, state_json, updated_at)
@@ -4334,7 +4397,9 @@ export class SqliteRunStore implements DomainStore {
       );
       if (options.workflowSchedulerAdmission) {
         validateWorkflowSchedulerWorkItems(
-          input.workItems, runId, input.tenantId,
+          input.workItems,
+          runId,
+          input.tenantId,
           (id) => this.#workItemIdExists(id),
         );
       } else {
@@ -4359,11 +4424,17 @@ export class SqliteRunStore implements DomainStore {
         input.events,
         this.#clock,
       );
-      signalSqliteWorkflowCancellationRequest(this.#database, next, input.events, {
-        loadRun: (locator) => this.#loadRun(locator),
-        commitChildRun: (commit) => this.#commitRun(commit, null, null, { withinTransaction: true }),
-        now: () => readLeaseClock(this.#clock),
-      });
+      signalSqliteWorkflowCancellationRequest(
+        this.#database,
+        next,
+        input.events,
+        {
+          loadRun: (locator) => this.#loadRun(locator),
+          commitChildRun: (commit) =>
+            this.#commitRun(commit, null, null, { withinTransaction: true }),
+          now: () => readLeaseClock(this.#clock),
+        },
+      );
       if (history !== null) {
         this.#writeModelHistoryItems(history.items);
       }

@@ -43,6 +43,7 @@ import {
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
+import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
 import {
   composeStandaloneExtensionServices,
   type DesktopPluginNamespaceMembership,
@@ -189,6 +190,7 @@ export async function createStandaloneControlApiWithPlugins(
   config: StandaloneControlApiConfig &
     Readonly<{
       desktopPlugins: DesktopPluginConfiguration;
+      desktopPluginActivation?: DesktopInstalledPluginActivationConfig;
       extensionWorker?: ExtensionWorkerConfig;
     }>,
 ): Promise<StandaloneControlApiRuntime> {
@@ -214,7 +216,12 @@ export async function createStandaloneControlApiWithPlugins(
       allowedOrigins: pinned.allowedOrigins,
     });
     const runtime = await createDesktopPluginRuntime(
-      { configuration },
+      {
+        configuration,
+        ...(config.desktopPluginActivation === undefined
+          ? {}
+          : { activation: config.desktopPluginActivation }),
+      },
       {
         store,
         identity,

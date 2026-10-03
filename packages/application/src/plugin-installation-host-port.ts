@@ -32,6 +32,11 @@ export type PluginInstallationPrepareSelectionInput = Readonly<{
   package: InstalledPluginPackage | null;
 }>;
 export type PluginPreparedSelection = Readonly<{
+  /** Synchronous local-facts fence inside the Store transaction, before any selection or receipt write.
+   * Asynchronous authority decisions must finish during prepareSelection. Replay does not call this. */
+  assertBeforeSelectionCommit?(
+    input: Readonly<{ selection: PluginSelection }>,
+  ): void;
   /** Optional current-authority refresh after confirmed Store COMMIT, before synchronous publication. */
   prepareCommit?(
     input: Readonly<{ selection: PluginSelection }>,

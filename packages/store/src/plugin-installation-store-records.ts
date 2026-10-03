@@ -28,7 +28,7 @@ export function installationFailure(code: string): never {
   throw new PluginInstallationError(code);
 }
 
-/** Strict fixed-shape internal recipes; no getters, hooks or arbitrary fragments are visited. */
+/** Strict fixed-shape internal recipes; no getters or arbitrary fragments are visited. */
 function installationRecord(
   input: unknown,
   fields: readonly string[],
@@ -76,6 +76,7 @@ export type PreparedInstallation = InstallationIdentity &
         kind: "select";
         selection: PluginSelection;
         expectedSelectionRevision: number;
+        beforeCommit?: NonNullable<CommitPluginSelectionInput["beforeCommit"]>;
       }>
   );
 
@@ -170,13 +171,20 @@ export function prepareInstallation(
 export function prepareSelection(
   input: CommitPluginSelectionInput,
 ): PreparedInstallation & { kind: "select" } {
+  const withGuard =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "beforeCommit");
   const value = installationRecord(input, [
     "scope",
     "actor",
     "receipt",
     "selection",
     "expectedSelectionRevision",
+    ...(withGuard ? ["beforeCommit"] : []),
   ]);
+  if (withGuard && typeof value.beforeCommit !== "function")
+    installationFailure("plugin_installation_before_commit_invalid");
   const id = identity(value, "select");
   const selection = parsePluginSelection(value.selection);
   assertPluginProfileScope(id.scope, selection);
@@ -198,7 +206,32 @@ export function prepareSelection(
     kind: "select",
     selection,
     expectedSelectionRevision,
+    ...(withGuard
+      ? {
+          beforeCommit: (
+            value.beforeCommit as NonNullable<
+              CommitPluginSelectionInput["beforeCommit"]
+            >
+          ).bind(input),
+        }
+      : {}),
   });
+}
+
+/** Only local synchronous work may run while a profile transaction is held. */
+export function assertSelectionCommitGuard(
+  prepared: PreparedInstallation,
+): void {
+  if (prepared.kind !== "select" || prepared.beforeCommit === undefined) return;
+  const returned: unknown = prepared.beforeCommit(
+    Object.freeze({ selection: prepared.selection }),
+  );
+  if (returned !== undefined) {
+    void Promise.resolve(returned).catch(() => {});
+    installationFailure(
+      "plugin_installation_before_commit_must_be_synchronous",
+    );
+  }
 }
 
 export function installationReadInput(

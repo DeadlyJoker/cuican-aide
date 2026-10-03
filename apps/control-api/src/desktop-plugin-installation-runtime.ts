@@ -30,6 +30,7 @@ import {
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import { installationSame } from "./production-plugin-installation-runtime-support.ts";
 import { DesktopInstallationProfile } from "./desktop-plugin-installation-profile.ts";
+import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 
 type Method =
   | "install"
@@ -51,6 +52,8 @@ export type DesktopPluginInstallationService = Pick<
 export type DesktopPluginInstallationRuntime = Readonly<{
   service: DesktopPluginInstallationService;
   assertProfileOwnership(actor: ActorContext): void;
+  assertProfileOwnershipForSelectionCommit(actor: ActorContext): void;
+  bindActivation(owner: DesktopInstalledPluginActivationOwner): void;
   close(): Promise<void>;
 }>;
 const runtimes = new WeakMap<
@@ -146,6 +149,12 @@ export async function createDesktopPluginInstallationRuntime(
   });
   const authority = input.authority;
   const profiles = new Map<string, Promise<DesktopInstallationProfile>>();
+  let activation: DesktopInstalledPluginActivationOwner | null = null;
+  const prepareBusinessCandidate: DesktopInstallationProfile["prepareBusinessCandidate"] =
+    (input, signal) =>
+      activation === null
+        ? Promise.resolve(null)
+        : activation.prepareSelection(input, signal);
   // Claim the actual file-backed profile before exposing either installation or UI routes.
   // This also rejects :memory: and competing Control owners at startup.
   const initialScope = await authority.profile(configuration.actor);
@@ -157,6 +166,7 @@ export async function createDesktopPluginInstallationRuntime(
     clock,
     digester,
     scope: initialScope,
+    prepareBusinessCandidate,
   });
   profiles.set(
     extensionCanonicalJson(initialScope),
@@ -191,6 +201,7 @@ export async function createDesktopPluginInstallationRuntime(
         clock,
         digester,
         scope,
+        prepareBusinessCandidate,
       }).then((current) => {
         resolvedProfiles.add(current);
         if (closed) current.withdraw();
@@ -308,6 +319,30 @@ export async function createDesktopPluginInstallationRuntime(
       initialProfile.assertOwnership(actor);
       available();
       authority.assertScope(actor, initialScope);
+    },
+    assertProfileOwnershipForSelectionCommit: (actorInput: ActorContext) => {
+      available();
+      const actor = pluginSecurityActor(actorInput);
+      authority.assertScope(actor, initialScope);
+      initialProfile.assertOwnershipForSelectionCommit(actor);
+      available();
+      authority.assertScope(actor, initialScope);
+    },
+    bindActivation: (owner: DesktopInstalledPluginActivationOwner) => {
+      available();
+      if (
+        activation !== null ||
+        !(owner instanceof DesktopInstalledPluginActivationOwner)
+      )
+        denied("desktop_plugin_activation_binding_invalid");
+      owner.assertBinding({
+        configuration,
+        registry,
+        authority,
+        store,
+        installation: runtime,
+      });
+      activation = owner;
     },
     close: () => {
       if (closing !== null) return closing;

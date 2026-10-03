@@ -30,6 +30,7 @@ import {
   installationScopeValues,
   prepareInstallation,
   prepareSelection,
+  assertSelectionCommitGuard,
   verifyInstallationMutation,
   verifyInstallationReplay,
   type InstallationIdentity,
@@ -310,6 +311,7 @@ export class PostgresPluginInstallationStore
           versionPackage,
           selectedPackage: await this.#selectionPackage(client, selection),
         });
+        assertSelectionCommitGuard(prepared);
         if (
           result.kind === "install" &&
           versionPackage === null &&

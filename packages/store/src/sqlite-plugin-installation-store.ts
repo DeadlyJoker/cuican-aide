@@ -29,6 +29,7 @@ import {
   installationScopeValues,
   prepareInstallation,
   prepareSelection,
+  assertSelectionCommitGuard,
   verifyInstallationMutation,
   verifyInstallationReplay,
   type InstallationIdentity,
@@ -100,12 +101,20 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
     );
   }
   async loadPackage(input: Input<"loadPackage">) {
+    return this.currentPackage(input);
+  }
+  /** Checked synchronous read on this exact connection, including inside its owned transaction. */
+  currentPackage(input: Input<"loadPackage">) {
     this.#readable();
     const { scope, value } = installationReadInput(input, ["packageDigest"]);
     this.#scope(scope);
     return this.#package(scope, pluginInstallationDigest(value.packageDigest));
   }
   async loadSelection(input: Input<"loadSelection">) {
+    return this.currentSelection(input);
+  }
+  /** Checked synchronous read on this exact connection, including selected-package integrity. */
+  currentSelection(input: Input<"loadSelection">) {
     this.#readable();
     const { scope, value } = installationReadInput(input, ["pluginId"]);
     this.#scope(scope);
@@ -262,6 +271,7 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
         versionPackage,
         selectedPackage: this.#selectionPackage(selection),
       });
+      assertSelectionCommitGuard(prepared);
       if (
         result.kind === "install" &&
         versionPackage === null &&

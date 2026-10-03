@@ -403,30 +403,37 @@ export function checkedPreparedSelection(
   input: unknown,
 ): PluginPreparedSelection {
   try {
-    const withPreparation =
-      input !== null &&
-      typeof input === "object" &&
-      Object.hasOwn(input, "prepareCommit");
-    const value = installationRecord(
-      input,
-      withPreparation
-        ? ["commit", "abort", "prepareCommit"]
-        : ["commit", "abort"],
+    const optional = ["prepareCommit", "assertBeforeSelectionCommit"] as const;
+    const included = optional.filter(
+      (field) =>
+        input !== null &&
+        typeof input === "object" &&
+        Object.hasOwn(input, field),
     );
+    const value = installationRecord(input, ["commit", "abort", ...included]);
     if (
       typeof value.commit !== "function" ||
       typeof value.abort !== "function" ||
-      (withPreparation && typeof value.prepareCommit !== "function")
+      included.some((field) => typeof value[field] !== "function")
     )
       throw new Error("plugin_installation_prepared_handle_invalid");
     return Object.freeze({
       commit: (value.commit as PluginPreparedSelection["commit"]).bind(input),
       abort: (value.abort as PluginPreparedSelection["abort"]).bind(input),
-      ...(withPreparation
+      ...(included.includes("prepareCommit")
         ? {
             prepareCommit: (
               value.prepareCommit as NonNullable<
                 PluginPreparedSelection["prepareCommit"]
+              >
+            ).bind(input),
+          }
+        : {}),
+      ...(included.includes("assertBeforeSelectionCommit")
+        ? {
+            assertBeforeSelectionCommit: (
+              value.assertBeforeSelectionCommit as NonNullable<
+                PluginPreparedSelection["assertBeforeSelectionCommit"]
               >
             ).bind(input),
           }

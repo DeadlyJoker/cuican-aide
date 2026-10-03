@@ -163,6 +163,11 @@ export class SqlitePluginInstallationProfileOwner {
         ?.selection ?? null
     );
   }
+  /** The actual held claim can be checked inside its owned transaction without exposing a projection. */
+  assertOwnership(): void {
+    this.#assertOpen();
+    if (!this.#initialized) throw new Error("plugin_profile_owner_not_ready");
+  }
   currentSelectedPackage(
     input: Readonly<{ scope: PluginProfileScope; pluginId: string }>,
   ): InstalledPluginPackage | null {

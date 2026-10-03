@@ -29,6 +29,8 @@ import type {
   PluginUiControlService,
 } from "./plugin-control-route.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
+import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
+import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -38,9 +40,12 @@ export type DesktopPluginRuntime = Readonly<{
   close(): Promise<void>;
 }>;
 
-/** Explicit native opt-in. No execution, task, pricing or model authority is created here. */
+/** Native metadata plus optional candidate/activation authority; no task, funding or model permission. */
 export async function createDesktopPluginRuntime(
-  input: Readonly<{ configuration: DesktopPluginConfiguration }>,
+  input: Readonly<{
+    configuration: DesktopPluginConfiguration;
+    activation?: DesktopInstalledPluginActivationConfig;
+  }>,
   dependencies: Readonly<{
     store: SqliteRunStore;
     identity: StandaloneIdentity;
@@ -58,6 +63,7 @@ export async function createDesktopPluginRuntime(
   const ledger = dependencies.store.pluginInstallationStore();
   let installation: DesktopPluginInstallationRuntime | null = null;
   let configurationRuntime: DesktopPluginConfigurationRuntime | null = null;
+  let activation: DesktopInstalledPluginActivationOwner | null = null;
   try {
     await ledger.migrate();
     installation = await createDesktopPluginInstallationRuntime(
@@ -68,8 +74,25 @@ export async function createDesktopPluginRuntime(
         digester: dependencies.digester,
       },
     );
+    if (input.activation !== undefined) {
+      activation = new DesktopInstalledPluginActivationOwner({
+        configuration,
+        activation: input.activation,
+        registry,
+        authority,
+        installation,
+        store: dependencies.store,
+      });
+      installation.bindActivation(activation);
+    }
     configurationRuntime = await createDesktopPluginConfigurationRuntime(
-      { configuration, registry, authority, installation },
+      {
+        configuration,
+        registry,
+        authority,
+        installation,
+        ...(activation === null ? {} : { activation }),
+      },
       dependencies,
     );
     let closed = false;
@@ -159,6 +182,7 @@ export async function createDesktopPluginRuntime(
     });
     const ownedInstallation = installation;
     const ownedConfiguration = configurationRuntime;
+    const ownedActivation = activation;
     return Object.freeze({
       installation: ownedInstallation.service,
       sources: ownedInstallation.service,
@@ -170,6 +194,7 @@ export async function createDesktopPluginRuntime(
         authority.withdraw();
         return (closing = closeAll([
           () => Promise.allSettled([...physical]),
+          () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
           () => ownedInstallation.close(),
         ]));
@@ -180,6 +205,7 @@ export async function createDesktopPluginRuntime(
     try {
       await closeAll([
         () => configurationRuntime?.close(),
+        () => activation?.close(),
         () => installation?.close(),
       ]);
     } catch (cleanup) {

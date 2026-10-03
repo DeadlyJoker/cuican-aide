@@ -41,6 +41,10 @@ export type CommitPluginSelectionInput = MutationIdentity &
   Readonly<{
     selection: PluginSelection;
     expectedSelectionRevision: number;
+    /** Internal synchronous callback, never part of a persisted receipt or public JSON shape.
+     * Called after receipt/CAS/full-record checks within the owned transaction, before writes.
+     * A throw or non-undefined return aborts the transaction; receipt replay skips the callback. */
+    beforeCommit?(input: Readonly<{ selection: PluginSelection }>): void;
   }>;
 
 /**

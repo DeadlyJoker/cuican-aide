@@ -55,6 +55,7 @@ import {
 } from "./runtimeChildClose.ts";
 import {
   prepareDesktopInstalledPluginRuntime,
+  clearDesktopInstalledPluginActivationEnvironment,
   type DesktopInstalledPluginRuntime,
 } from "./desktopInstalledPluginRuntime.ts";
 import type { DesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
@@ -63,7 +64,7 @@ import {
   prepareAutomaticDesktopInstalledPluginRuntime,
   type AutomaticDesktopInstalledPluginRuntime,
 } from "./desktopAutomaticInstalledPluginRuntime.ts";
-import { DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA } from "./desktopInstalledPluginRuntimeConfiguration.ts";
+import { isAutomaticDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -325,8 +326,9 @@ export class RuntimeSupervisor {
         };
         let installed: DesktopInstalledPluginRuntime | null = null;
         if (
-          installedConfiguration.schemaVersion ===
-          DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+          isAutomaticDesktopInstalledPluginRuntimeConfiguration(
+            installedConfiguration,
+          )
         ) {
           const automatic = prepareAutomaticDesktopInstalledPluginRuntime({
             ...installedInputs,
@@ -940,7 +942,9 @@ export class RuntimeSupervisor {
     ];
     const environment: NodeJS.ProcessEnv = {
       ...clearDesktopPluginEnvironment(
-        clearDesktopExtensionEnvironment(process.env),
+        clearDesktopExtensionEnvironment(
+          clearDesktopInstalledPluginActivationEnvironment(process.env),
+        ),
       ),
       ELECTRON_RUN_AS_NODE: "1",
       NODE_ENV: "production",

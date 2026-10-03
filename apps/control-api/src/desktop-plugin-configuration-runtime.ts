@@ -30,6 +30,7 @@ import {
 } from "./installed-plugin-request-owner.ts";
 import { pluginSecurityActor } from "./plugin-security-validation.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
+import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 
 export type DesktopPluginConfigurationRuntime = Readonly<{
   requests: InstalledPluginRequestOwner;
@@ -45,6 +46,7 @@ export async function createDesktopPluginConfigurationRuntime(
     registry: DesktopPluginSourceRegistry;
     authority: DesktopPluginAuthority;
     installation: DesktopPluginInstallationRuntime;
+    activation?: DesktopInstalledPluginActivationOwner;
   }>,
   dependencies: Readonly<{
     store: SqliteRunStore;
@@ -79,10 +81,28 @@ export async function createDesktopPluginConfigurationRuntime(
     store: dependencies.store,
   });
   const installation = input.installation;
+  if (input.activation !== undefined) {
+    if (!(input.activation instanceof DesktopInstalledPluginActivationOwner))
+      denied();
+    input.activation.assertBinding({
+      configuration,
+      registry,
+      authority,
+      installation,
+      store: dependencies.store,
+    });
+  }
   const assertOwner = (actor: ActorContext) => {
     authority.assertScope(actor, configuration.scope);
     installation.assertProfileOwnership(actor);
     authority.assertScope(actor, configuration.scope);
+    input.activation?.assertBinding({
+      configuration,
+      registry,
+      authority,
+      installation,
+      store: dependencies.store,
+    });
   };
   assertOwner(configuration.actor);
   let requests: InstalledPluginRequestOwner | undefined;
@@ -143,6 +163,9 @@ export async function createDesktopPluginConfigurationRuntime(
       },
       profiles,
       metadata,
+      ...(input.activation === undefined
+        ? {}
+        : { peer: input.activation.peer }),
     });
     const authorization: AuthorizationPort = Object.freeze({
       authorize: async (
@@ -153,6 +176,22 @@ export async function createDesktopPluginConfigurationRuntime(
         await current().assertCurrent();
         assertOwner(actor);
         const resource = value.resource;
+        if (
+          value.action === "extension:activate" &&
+          input.activation !== undefined &&
+          resource.kind === "extension" &&
+          resource.tenantId === configuration.scope.tenantId &&
+          resource.spaceId === configuration.scope.spaceId
+        ) {
+          const decision = await input.activation.authorizeActivate(
+            actor,
+            resource.pluginId,
+            current().currentSignal(),
+          );
+          await current().assertCurrent();
+          assertOwner(actor);
+          return decision;
+        }
         if (
           (value.action !== "extension:read" &&
             value.action !== "extension:configure") ||

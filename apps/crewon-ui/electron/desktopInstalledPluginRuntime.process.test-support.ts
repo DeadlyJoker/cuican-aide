@@ -60,11 +60,27 @@ type ChildObservation = Readonly<{
   preparation: boolean;
   task: boolean;
 }>;
+export type NativeInstalledProcessFixtureOptions = Readonly<{
+  authorityRequestAuditLimit?: number;
+}>;
 
 /** Actual source Supervisor children; HTTPS decisions require current private Native
  * profile/approval and installed SQLite facts. This named authority never grants payment. */
-export async function nativeInstalledProcessFixture(packageDirectory?: string) {
+export async function nativeInstalledProcessFixture(
+  packageDirectory?: string,
+  options: NativeInstalledProcessFixtureOptions = {},
+) {
   assert.match(process.version, /^v24\./u);
+  const authorityRequestAuditLimit =
+    options.authorityRequestAuditLimit === undefined
+      ? 512
+      : options.authorityRequestAuditLimit;
+  assert.ok(
+    Number.isSafeInteger(authorityRequestAuditLimit) &&
+      authorityRequestAuditLimit >= 512 &&
+      authorityRequestAuditLimit <= 2048,
+    "native_authority_request_audit_limit_invalid",
+  );
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), "crewon-native-installed-runtime-")),
   );
@@ -161,7 +177,7 @@ export async function nativeInstalledProcessFixture(packageDirectory?: string) {
           const body = JSON.parse(
             Buffer.concat(chunks).toString("utf8"),
           ) as Record<string, unknown>;
-          assert.ok(requests.length < 512);
+          assert.ok(requests.length < authorityRequestAuditLimit);
           requests.push({ path, body });
           const profile = await currentProfile();
           let result: unknown;

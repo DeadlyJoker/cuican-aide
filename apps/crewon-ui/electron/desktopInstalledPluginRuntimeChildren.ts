@@ -30,6 +30,9 @@ type ExpectedEntry = Pick<
 export type DesktopInstalledPluginRuntimeChildrenRuntime = Readonly<{
   worker: Readonly<NodeJS.ProcessEnv>;
   control: Readonly<NodeJS.ProcessEnv>;
+  controlAfterPeer?(
+    input: Readonly<{ origin: string }>,
+  ): Readonly<NodeJS.ProcessEnv>;
   token: string;
   scope: PluginProfileScope;
   expectedCatalogEntries: readonly ExpectedEntry[];
@@ -37,7 +40,7 @@ export type DesktopInstalledPluginRuntimeChildrenRuntime = Readonly<{
   withdraw(): void;
 }>;
 
-/** Challenges loaded metadata only. This does not grant execution or expose the peer to Control. */
+/** Challenges loaded metadata before the owner can issue explicit v3 candidate/activation input. */
 export async function startDesktopInstalledPluginRuntimeChildren(input: {
   runtime: DesktopInstalledPluginRuntimeChildrenRuntime;
   signal: AbortSignal;
@@ -49,6 +52,7 @@ export async function startDesktopInstalledPluginRuntimeChildren(input: {
   const runtime = input.runtime;
   const workerEnvironment = copyEnvironment(runtime.worker);
   const controlEnvironment = copyEnvironment(runtime.control);
+  const controlAfterPeer = runtime.controlAfterPeer?.bind(runtime);
   const token = runtime.token;
   if (!/^[a-f0-9]{64}$/u.test(token)) fail("token_invalid");
   const scope = parsePluginProfileScope(runtime.scope);
@@ -120,7 +124,11 @@ export async function startDesktopInstalledPluginRuntimeChildren(input: {
       revoke: () => revoke("challenge_failed"),
     });
     assertLive();
-    const control = spawnControl(controlEnvironment);
+    const challengedControl = controlAfterPeer
+      ? copyEnvironment(controlAfterPeer({ origin }))
+      : controlEnvironment;
+    assertLive();
+    const control = spawnControl(challengedControl);
     trackChild(control);
     if (control.exitCode !== null || control.signalCode !== null)
       fail("control_exited");

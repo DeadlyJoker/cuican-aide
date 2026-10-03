@@ -30,7 +30,7 @@ Main 只从实际运行数据目录读取 `desktop-installed-plugin-runtime.json
 }
 ```
 
-`workerConfigurationPath` 使用已有的 `crewon.installed-plugin-worker.v1` 私有协议，详见[服务启动](./installed-plugin-service-startup.md)。它包含真实安装目录、完整发布文档、HTTPS actor/policy/profile/package authority、可选的明确 network authority 和凭据环境变量引用。专用凭据变量可以使用 `NATIVE_INSTALLED_AUTHORITY_TOKEN`；不能引用默认 Control、模型或系统运行必需的变量。Main 将这些凭据仅交给 release/Worker 子进程。
+`workerConfigurationPath` 使用已有的 `crewon.installed-plugin-worker.v1` 私有协议，详见[服务启动](./installed-plugin-service-startup.md)。它包含真实安装目录、完整发布文档、HTTPS actor/policy/profile/package authority、可选的明确 network authority 和凭据环境变量引用。专用凭据变量可以使用 `NATIVE_INSTALLED_AUTHORITY_TOKEN`；不能引用默认 Control、模型或系统运行必需的变量。v1/v2 的 Main 将这些凭据仅交给 release/Worker 子进程；v3 显式复用引用的范围见下节。
 
 发布文档仍为既有 `crewon.installed-plugin-release.v1`。它必须使用同一 Native profile、实际批准的包身份、安装副本和已持久化的业务配置；模型来源必须是独立 `directResponses` binding，匹配当前真实模型与凭据引用。默认 Agent 的 shared 工具绑定不作为插件来源。v1 仍要求操作者预先构造完整文档，兼容原开启配置。
 
@@ -85,13 +85,40 @@ Main 等待准备 CLI 的实际 `close`，重核全部所有者，再以原发�
 
 结果契约为 `crewon.installed-plugin-native-preparation-result.v1`，限制 128 KiB、1–32 项，按请求顺序逐项给出 `prepared` 或 `blocked`。prepared 含实际完整包 tuple、配置修订/摘要、批准要求及八字段目标；Main 与原发布文档逐项比较，不接受仅同名或同数量的结果。blocked 只含插件 ID 与固定原因枚举：`notInstalled`、`notApproved`、`configurationMissing`、`configurationIncompatible`、`packageUnavailable`、`readDenied`、`stateChanged`。准备 CLI 重核发现配置/选择竞争时，移除受影响候选并有界重建结果，不把已发现失效的候选输出为 prepared；这不承诺整个启动期间的原子 latest 或热更新。结果与可选发布文件均原子不覆盖写入，失败只能撤掉自身实际 inode；默认子进程也结束后才能清理本次准备所有者。
 
+## 显式启用与业务激活 v3
+
+固定开启文件新增 `crewon.desktop-installed-plugin-runtime.v3`，保留 v2 的全部开启字段，并要求独立的激活权限端口：
+
+```json
+{
+  "activationAuthority": {
+    "url": "https://actual-authority.example/activate",
+    "serviceTokenEnvironmentVariable": "NATIVE_ACTIVATION_AUTHORITY_TOKEN"
+  }
+}
+```
+
+上面的片段须加入完整 v3 开启对象，不能单独作为配置。停用对象仍只含版本和 `enabled: false`。v1/v2 不接受该新字段，也不会自动获得激活权限。激活端口只接受 HTTPS；凭据仍为专用环境变量引用，不能引用系统、模型或 Control 运行必需的变量。
+
+Main 沿用 v2 的准备和原发布流程，等待真实 Worker catalog 挑战和响应体结束，再从本次已核验的完整发布条目、实际 Worker loopback origin、Native actor/profile 与安装根签发私有 `crewon.desktop-installed-plugin-activation.v1` 输入。它只写入自有 `0700` 目录中的 `0600` 普通文件，并只向本次 Control 传递文件路径、私有 peer token 和激活权限凭据。独立的激活凭据不交给 Worker；若它与既有 Worker 权限引用相同，Worker 保留原本所需的引用。Renderer、健康响应和公共配置不能读取这些凭据。
+
+私有输入限 1 MiB、1–32 条，固定八字段执行目标与完整六字段包身份；每项配置沿用 private peer 的 16 KiB 限制。协议只承载已发布业务元数据，不签发任务身份、付款身份、报价或供应商访问。Control 必须把输入绑定到实际 Native 注册表、批准集合、父 SQLite Store 和持有中的 profile owner；同形副本、不同实例和撤回的文件都不能接管该所有者。
+
+原安装 HTTP 对含 businessManifest 的业务包执行新的显式 `enable` 时，先对仍为 disabled 的准确 selection revision 调用真实 Worker `prepareCandidate`，核验实际 Node 工厂借用和声明服务的 IO 就绪，再准备本地 Node。UI-only 包保持原启用路径，已有 selection receipt 的幂等重放不重新预检。激活权限端口每次收到完整 actor、`extension:activate` 及当前 tenant/space/plugin 的 extension resource；只接受严格 `allow` 或带明确原因的 `deny`。停用候选的预检与权限等待结束后再次检查实际选择、包、最新配置和完整部署，不把旧 ready 当作新权限。
+
+本次 v3 业务模块启用的 selection 和 select receipt 写入之前，同步复核进入原 SQLite 事务，使用同一父连接核验当前 profile 所有权、selection/package、最新配置和部署。同步检查抛错会回滚；不会在事务内进行远程权限或网络等待。原幂等重放不再次调用该检查，回执也不保存函数。该检查是可选的内部端口，安装、停用、UI-only 启用及配置或 activation 保存保持各自原用例，不会自动获得新的业务复核。PostgreSQL 的通用 selection Store 同样提供事务内同步检查，但此处 Native 的实际所有者与就绪验收使用 SQLite，不宣称跨服务原子提交。
+
+模块启用与业务 activation 仍是两次原操作。模块启用不写 activation；业务 activation 通过原 `PUT /api/v1/extensions/:pluginId/activation`、真实启用包的 readiness 和原 CAS/回执保存。目标不匹配或配置已经变化时拒绝旧请求；更新配置仍需明确重启后准备新目标。没有显式 v3 的 Native Control 继续原 metadata-only 许可，不借用私有 peer。
+
+停止时先撤回新工作，再等待真实 HTTP/body、Worker/Control 和本地 Node 清理；所有消费者物理结束后才清理自有私有输入。清理须核对原文件字节和 inode、目录身份及准确子项；文件被改写或替换、目录出现未知子项时保留并报错，不递归删除。固定输入的变化由下一次所有者检查或重启检出，未提供文件监听或即时自动撤销。原固定开启文件不作为临时文件删除。此步骤不接通插件任务准入，不导入默认资金、不创建 Run，也不发送生成请求。
+
 ## 原运行链路
 
 Main 捕获实际文件、profile、批准集合和模型绑定，再运行既有 `runtime-release`。release 使用同一个 `control.sqlite`，通过原发布授权及事务发布完整 default/source/derived bundle；Worker 从同一个库验证实际资产、部署、配置和包字节。原默认 Agent、模型目录与已有工具路径保留。
 
 Main 随后启动既有 Worker，从实际输出读取新私有 peer 的 loopback origin，并使用本次启动随机 token 发起 `installed-plugin-peer.v1` catalog 请求。完整 principal/actor/tenant/space、profile 和 requestId 必须回显一致；每个返回的包、配置和完整执行目标必须属于准备的文档。停用业务包可以返回空目录，它证明管理请求及已发布元数据可加载，不证明 Node、IO 或供应商已经就绪。核验通过后才启动原 Control。
 
-当前 Control 不获得 installed peer 凭据、任务准入或付款身份。Native 管理许可不能替代执行许可。本次启动不隐式启用业务包、不创建收费 Run、不注入余额或报价，也不发送生成请求。安装管理中的显式模块启用继续沿用原依赖规则；声明可选执行服务的模块可以启用，但这不证明业务可执行。与旧扩展同时开启同一个 Worker 时明确拒绝。
+v1/v2 Control 不获得 installed peer 凭据；v3 仅获得上述显式启用和业务激活的私有端口。它们都不获得任务准入或付款身份。Native 管理许可不能替代执行许可。启动不隐式启用业务包、不创建收费 Run、不注入余额或报价，也不发送生成请求。安装管理中的显式模块启用继续沿用原依赖规则；必需而未实现的服务仍然拒绝，模块启用也不证明业务任务可执行。与旧扩展同时开启同一个 Worker 时明确拒绝。
 
 交付来源离线后继续使用已安装副本。取消、失败、停止和重启会先撤回新工作，再等待实际 preparation/release/Worker/Control 的 `close`，包括输出管道关闭；不能只凭 `exitCode` 删除仍被子进程消费的 bootstrap。实际 private peer 的 HTTP/body 挑战也必须结束，才能清理临时准备目录和 bootstrap。退出未知时保留所有者，拒绝开启下一次运行。固定操作者配置和 v1 操作者发布文件不作为临时文件删除。
 
@@ -157,8 +184,8 @@ CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR=/absolute/independent/professional-packag
 
 Worker 私有 peer 现在提供独立 `prepareCandidate` 操作，接受实际完整包身份、当前首配、原发布目标和停用 selection 的准确修订。它沿用同一 SQLite、resolver、Node 容器和 IO owner，反复校验实际身份、profile、安装字节、权限、latest 配置与部署；成功需要实际借用注册 factory，并通过声明服务的原 IO 预检。原 catalog 和普通 readiness 仍只接受启用选择。协议和兼容边界见[任务启动说明](./installed-plugin-task-startup.md#disabled-candidate-preparation-on-the-private-peer)。
 
-这是 Native 显式启用和激活之前的后台基础。Main/Control 尚未自动调用该操作，当前管理权限与页面保持原样。预检不会启用、激活、调用业务 factory.create、创建 Run、扣积分或请求供应商；公共 IP 的真实 DNS 通过也不代表 ComfyUI 在线生成成功。后续启用和业务执行仍须重新验证实时权限与状态，不能复用旧 ready 作为执行许可。
+v1/v2 保持该操作的原后台基础范围；显式 v3 按上节接入原 enable 和 activation。预检本身不会启用、激活、调用业务 factory.create、创建 Run、扣积分或请求供应商；公共 IP 的真实 DNS 通过也不代表 ComfyUI 在线生成成功。后续业务执行仍须重新验证实时权限与状态，不能复用旧 ready 作为执行许可。
 
 ## 后续交付
 
-下一阶段把停用候选预检接入 Native 的显式启用和业务激活，再完成独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。
+下一阶段完成 Native 的独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。v3 的实际验收结果与边界见[实施进度](./incremental-extension-progress.md)。

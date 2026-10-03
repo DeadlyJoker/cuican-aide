@@ -22,6 +22,7 @@ import {
   type DesktopPluginBootstrapManifest,
 } from "./desktopPluginBootstrap.ts";
 import type { ActiveProvider } from "./providerCredentials.ts";
+import { createDesktopInstalledPluginActivationFiles } from "./desktopInstalledPluginActivationFiles.ts";
 import {
   assertDesktopInstalledPluginRuntimeConfiguration,
   captureDesktopInstalledPluginRuntimeArtifact,
@@ -35,6 +36,7 @@ import {
   DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
   DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES,
   desktopInstalledPluginAuthorityEndpoints,
+  desktopInstalledPluginActivationAuthority,
   parseDesktopInstalledPluginWorkerAuthorities,
   type EnabledDesktopInstalledPluginRuntimeConfiguration,
 } from "./desktopInstalledPluginRuntimeConfiguration.ts";
@@ -53,8 +55,12 @@ export type DesktopInstalledPluginExpectedCatalogEntry = Pick<
 export type DesktopInstalledPluginRuntime = Readonly<{
   release: Readonly<NodeJS.ProcessEnv>;
   worker: Readonly<NodeJS.ProcessEnv>;
-  /** Original default Control only; no installed execution authority or peer credentials. */
+  /** Original default Control before the actual Worker challenge. */
   control: Readonly<NodeJS.ProcessEnv>;
+  /** After the actual challenge; v3 adds only scoped candidate/activation authority. */
+  controlAfterPeer(
+    input: Readonly<{ origin: string }>,
+  ): Readonly<NodeJS.ProcessEnv>;
   token: string;
   scope: PluginProfileScope;
   expectedCatalogEntries: readonly DesktopInstalledPluginExpectedCatalogEntry[];
@@ -101,6 +107,24 @@ export function prepareDesktopInstalledPluginRuntime(
     shared,
     worker,
   );
+  const activationAuthority =
+    desktopInstalledPluginActivationAuthority(configuration);
+  const activationTokens: Record<string, string> =
+    activationAuthority === null
+      ? {}
+      : captureDesktopInstalledPluginAuthorityTokens(
+          {
+            authorities: [
+              {
+                url: activationAuthority.url,
+                environmentVariable:
+                  activationAuthority.serviceTokenEnvironmentVariable,
+              },
+            ],
+          },
+          shared,
+          worker,
+        );
   const releaseFile = captureDesktopInstalledPluginRuntimeDocument(
     workerConfig.releaseDocumentPath,
     1024 * 1024,
@@ -126,6 +150,8 @@ export function prepareDesktopInstalledPluginRuntime(
     worker,
     provider,
     authorityTokens,
+    activationAuthority,
+    activationTokens,
     snapshots,
     expectedCatalogEntries,
   });
@@ -176,6 +202,10 @@ function createCapturedRuntime(
     Readonly<{
       input: DesktopInstalledPluginRuntimeInput;
       authorityTokens: Record<string, string>;
+      activationAuthority: ReturnType<
+        typeof desktopInstalledPluginActivationAuthority
+      >;
+      activationTokens: Record<string, string>;
       snapshots: readonly Snapshot[];
       expectedCatalogEntries: readonly DesktopInstalledPluginExpectedCatalogEntry[];
     }>,
@@ -191,6 +221,8 @@ function createCapturedRuntime(
     worker,
     provider,
     authorityTokens,
+    activationAuthority,
+    activationTokens,
     snapshots,
     expectedCatalogEntries,
   } = input;
@@ -218,9 +250,22 @@ function createCapturedRuntime(
     CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: String(deadlineMs),
   };
   const controlEnvironment = withoutDesktopInstalledPluginEnvironment(shared);
-  for (const name of Object.keys(authorityTokens))
+  for (const name of [
+    ...Object.keys(authorityTokens),
+    ...Object.keys(activationTokens),
+  ])
     delete controlEnvironment[name];
+  for (const name of Object.keys(activationTokens)) {
+    if (!Object.hasOwn(authorityTokens, name)) {
+      delete releaseEnvironment[name];
+      delete workerEnvironment[name];
+    }
+  }
   let control: NodeJS.ProcessEnv | null = controlEnvironment;
+  let activationFiles: ReturnType<
+    typeof createDesktopInstalledPluginActivationFiles
+  > | null = null;
+  let activationOrigin: string | null = null;
   let withdrawn = false;
   const assertCurrent = () => {
     if (withdrawn) invalid("withdrawn");
@@ -234,10 +279,12 @@ function createCapturedRuntime(
     if (!isDeepStrictEqual(copyProvider(input.input.provider), provider))
       invalid("provider_changed");
     for (const snapshot of snapshots) snapshot.assertCurrent();
+    activationFiles?.assertCurrent();
     signal.throwIfAborted();
   };
   const withdraw = () => {
     withdrawn = true;
+    activationFiles?.withdraw();
   };
   signal.addEventListener("abort", withdraw, { once: true });
   const result: DesktopInstalledPluginRuntime = {
@@ -253,6 +300,47 @@ function createCapturedRuntime(
       assertCurrent();
       return Object.freeze({ ...control });
     },
+    controlAfterPeer({ origin }) {
+      assertCurrent();
+      if (activationAuthority === null) return Object.freeze({ ...control });
+      if (activationOrigin !== null && activationOrigin !== origin)
+        invalid("activation_peer_changed");
+      if (activationFiles === null) {
+        activationFiles = createDesktopInstalledPluginActivationFiles({
+          dataDirectory,
+          configuration: {
+            schemaVersion: "crewon.desktop-installed-plugin-activation.v1",
+            actor: manifest.actor,
+            scope,
+            installRoot: manifest.installRoot,
+            peer: {
+              origin,
+              tokenEnvironmentVariable:
+                "CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN",
+            },
+            authority: activationAuthority,
+            timeoutMs: deadlineMs,
+            entries: expectedCatalogEntries.map(
+              ({ identity, configuration, configuredTarget }) => ({
+                identity,
+                configuration,
+                target: configuredTarget,
+              }),
+            ),
+          },
+        });
+        activationOrigin = origin;
+        control = {
+          ...control,
+          ...activationTokens,
+          CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH:
+            activationFiles.path,
+          CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN: token,
+        };
+      }
+      assertCurrent();
+      return Object.freeze({ ...control });
+    },
     get token() {
       assertCurrent();
       return token;
@@ -264,10 +352,15 @@ function createCapturedRuntime(
     async close() {
       withdraw();
       signal.removeEventListener("abort", withdraw);
+      activationFiles?.close();
       token = "";
       releaseEnvironment = workerEnvironment = control = null;
-      for (const name of Object.keys(authorityTokens)) {
+      for (const name of [
+        ...Object.keys(authorityTokens),
+        ...Object.keys(activationTokens),
+      ]) {
         delete authorityTokens[name];
+        delete activationTokens[name];
         delete shared[name];
         delete worker[name];
       }
@@ -573,6 +666,7 @@ function assertNativeEnvironment(
       (name) =>
         environment[name] !== undefined &&
         (name.startsWith("CREWON_EXTENSIONS") ||
+          name.startsWith("CREWON_DESKTOP_INSTALLED_PLUGIN_") ||
           name.startsWith("CREWON_EXTENSION_") ||
           (name.startsWith("CREWON_INSTALLED_PLUGIN_") &&
             !name.startsWith("CREWON_INSTALLED_PLUGIN_AUTHORITY_")) ||
@@ -643,6 +737,21 @@ export function withoutDesktopInstalledPluginEnvironment(
 ): NodeJS.ProcessEnv {
   const result = { ...input };
   for (const name of Object.keys(result))
-    if (name.startsWith("CREWON_INSTALLED_PLUGIN_")) delete result[name];
+    if (
+      name.startsWith("CREWON_INSTALLED_PLUGIN_") ||
+      name.startsWith("CREWON_DESKTOP_INSTALLED_PLUGIN_")
+    )
+      delete result[name];
   return result;
+}
+
+/** Ambient remnants never issue the private v3 bridge. Genuine Main output is added later. */
+export function clearDesktopInstalledPluginActivationEnvironment(
+  input: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(input).filter(
+      ([name]) => !name.startsWith("CREWON_DESKTOP_INSTALLED_PLUGIN_"),
+    ),
+  );
 }

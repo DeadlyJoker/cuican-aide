@@ -6,6 +6,24 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：Native 显式模块启用与原业务激活
+
+固定私有开启文件新增 v3，在 v2 的自动准备、原 CLI 发布和实际 Worker catalog 挑战之后，Main 才向本次 Control 签发私有激活输入。输入绑定完整包身份、保存配置、八字段部署目标、真实 loopback peer 和实际 Native profile；激活凭据与 Worker 既有权限引用分别捕获。v1/v2、未开启、全部候选受阻及 UI-only 路径保留原义。协议与限制见[Native 说明](./installed-plugin-native-runtime.md#显式启用与业务激活-v3)。
+
+新的业务模块 enable 在准确 disabled revision 上调用真实 `prepareCandidate`，通过实际 Node 工厂借用与声明服务 IO 后，再准备本地 Node；实际 HTTPS `extension:activate` 决策在这些等待之后重新核验。写 selection/select receipt 前，同步检查进入原 SQLite 事务，使用同一父连接复核实际 profile 所有权、包、选择、latest 配置和完整部署。原 projection 在事务发布前仍不可读，新增的窄 ownership 检查只证明正在持有的真实锁。检查拒绝或意外返回 Promise 均回滚；重放不重新执行检查，回执不存函数。PostgreSQL 提供同样的可选同步端口，本轮条件用例仍未实际运行。
+
+模块启用与业务 activation 继续分开。原 activation 用例保留授权、readiness、CAS 和幂等回执；已证明的错误目标或配置变化返回 409，未变化的普通 peer 故障仍保留原失败语义。Main 停止先撤回新工作，实际 HTTP/body 与子进程全部结束后才清理输入；清理核验原文件完整字节、inode、目录身份和子项，改写、替换或未知文件都保留并报错。没有新增固定输入监听、热重启、任务许可或付款许可。
+
+实际 source Supervisor/CLI/Worker/Control/SQLite 新专项 **12/12、零跳过**，使用原 verifier 重新核验的两个独立实包。通过原 HTTP 完成专业包与 Krea2 的显式启用、业务激活、重放、停止和同库重启恢复；缺少 IO、私网配置、网络/包/激活权限撤回、真实配置及选择 CAS、部署丢失均拒绝旧操作。第三个真实 allow 决策的响应体被暂缓时，仅删除自有 SQLite 的准确 Krea2 部署，释放原正向字节后仍返回 target mismatch 409，selection 保持 disabled 且 select receipt 为零。真实 HTTPS body 等待中的停止等待实际 socket 与两消费子进程关闭，随后文件退休，并能重启同一停用配置。所有这些业务检查没有调用 factory.create、创建插件 Run、扣积分或请求生成；负向场景中的原普通 Agent 另行完成具名模型 Responses、原任务 HTTP/SSE 与同库 completed Run。
+
+原 v1/v2、部分插件失效隔离、普通默认及物理关闭进程回归 **13/13、零跳过**。正式 Main/preload/file App 的原用户栏、十类设置、独立短剧 UI 安装与离线恢复、SQLite 业务首配和冷恢复 **2/2、零跳过**；这两项没有开启 v3 业务执行。截图与实际字节摘要位于 `native-activation-original-app-20261003/`。用户当前 5719 页面仍从左下角账号菜单进入原设置，相关 UI 专项 **91/91**；所有 Renderer、CSS 与旧快照保持本轮开始版本，5719/5720 原监听进程保留。
+
+其余不重叠相关检查：Contracts 全量 **264/264**，桌面配置/owner/旧 Supervisor **208/208**，Control 新激活及原 Native/request/peer **73/73**，Application/Store **62 通过、17 个 PostgreSQL 条件跳过**。合计 **725 通过、17 个条件跳过**，不重复计入窄跑、诊断或首次失败后的复验。Contracts/Application/Store/Control/Worker 类型、UI lint/build、Main 构建、七入口 runtime stage 与字节身份、生产许可证、boundary 和仓库格式检查通过。未运行共享 SDK producer，未重跑或声称全量 UI 通过。
+
+失败与修正记录保留：事务内原 profile snapshot 的 publication-pending fence 导致 500，新增只检查持有锁的接口并保留原 projection fence；错误目标与配置竞争的 private transport 错误需在 Native owner 核验真实事实后映射。部署晚变测试曾把排在自身 enable 后的 HTTP 读取作为等待条件，改为立即核对自有完整 SQLite 记录并释放响应；完整持久 selection 与公开 DTO 的比较补齐实际 scope、schema 与审计身份。多插件、重放和重启正例实际达到旧具名 authority 的 512 次记录预算；仅该新正例显式使用有界 2048 预算，所有旧例及另外十一例默认 512，产品 128 个并发槽和真实 10 秒期限未改。定位用的 Application/Worker 包装已移除。清理叶文件的遗漏补上真实文件系统拒删用例；旧 children 调用次序与夹具类型错误也已精确修正。详细范围、日志、实际包摘要、构建身份与物理清理记录见 `native-activation-proof-20261003.json`。
+
+本步骤完成 Native 的显式启用和原业务激活接线，具名测试权限和模型不提供生产用户或付款身份。下一落地点为独立真实用户执行身份及个人积分准入与结算；正式 Main/full App/packaged Krea2 在线生成和历史查询、短剧持久项目与第二个实际企业 API 仍在原目标内。最近一次用户 ComfyUI 地址的只读查询仍为 404，本轮没有向该服务提交任务。完整目标继续进行。
+
 ## 2026-10-03：停用候选的真实 Node/IO 预检基础
 
 Worker 私有 peer 增加独立 `prepareCandidate`，Control 提供对应内部客户端。实际 selection 必须保持 disabled 且准确匹配修订；同一父 Store 的 latest 配置、完整包身份与八字段部署目标必须匹配原发布。每次预检固定首次完整事实快照，跨权限、安装字节、Node setup 和 IO 等待反复校验。实际注册 factory 的最终借用之后同步返回，避免 peer 追加异步身份核验重新打开状态竞争窗口。普通 catalog/readiness 的 enabled 条件与历史 query 原义保留；旧 peer 拒绝新操作，不回退。协议与兼容说明见[任务启动文档](./installed-plugin-task-startup.md#disabled-candidate-preparation-on-the-private-peer)。

@@ -23,6 +23,8 @@ export const DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA =
   "crewon.desktop-installed-plugin-runtime.v1";
 export const DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA =
   "crewon.desktop-installed-plugin-runtime.v2";
+export const DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA =
+  "crewon.desktop-installed-plugin-runtime.v3";
 const MAX_BYTES = 128 * 1024;
 export const DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES = [
   "actorAuthority",
@@ -78,16 +80,31 @@ export type DesktopAutomaticInstalledPluginRuntimeConfiguration =
       plugins: readonly DesktopInstalledPluginPreparationSelection[];
       workerAuthorities: DesktopInstalledPluginWorkerAuthorities;
     }>;
+export type DesktopActivatableInstalledPluginRuntimeConfiguration =
+  | Readonly<{
+      schemaVersion: typeof DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
+      enabled: false;
+    }>
+  | Readonly<{
+      schemaVersion: typeof DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
+      enabled: true;
+      providerBinding: DesktopInstalledPluginProviderBinding;
+      plugins: readonly DesktopInstalledPluginPreparationSelection[];
+      workerAuthorities: DesktopInstalledPluginWorkerAuthorities;
+      activationAuthority: DesktopInstalledPluginAuthorityEndpoint;
+    }>;
 export type DesktopInstalledPluginRuntimeConfiguration =
   | DesktopOperatorInstalledPluginRuntimeConfiguration
-  | DesktopAutomaticInstalledPluginRuntimeConfiguration;
+  | DesktopAutomaticInstalledPluginRuntimeConfiguration
+  | DesktopActivatableInstalledPluginRuntimeConfiguration;
 export type EnabledDesktopInstalledPluginRuntimeConfiguration = Extract<
   DesktopInstalledPluginRuntimeConfiguration,
   { enabled: true }
 >;
 export type EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration =
   Extract<
-    DesktopAutomaticInstalledPluginRuntimeConfiguration,
+    | DesktopAutomaticInstalledPluginRuntimeConfiguration
+    | DesktopActivatableInstalledPluginRuntimeConfiguration,
     { enabled: true }
   >;
 
@@ -99,7 +116,11 @@ type FileSnapshot = Readonly<{
 }>;
 const issued = new WeakMap<
   EnabledDesktopInstalledPluginRuntimeConfiguration,
-  Readonly<{ dataDirectory: string; assertCurrent(): void }>
+  Readonly<{
+    dataDirectory: string;
+    assertCurrent(): void;
+    activationAuthority?: DesktopInstalledPluginAuthorityEndpoint;
+  }>
 >();
 
 /** A fixed Native opt-in. An absent file does not inspect other paths or create anything. */
@@ -134,6 +155,10 @@ export function loadDesktopInstalledPluginRuntimeConfiguration(
     issued.set(configuration, {
       dataDirectory: directory,
       assertCurrent: file.assertCurrent,
+      ...(configuration.schemaVersion ===
+      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+        ? { activationAuthority: configuration.activationAuthority }
+        : {}),
     });
   return configuration;
 }
@@ -143,8 +168,11 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
   input: unknown,
 ): DesktopInstalledPluginRuntimeConfiguration {
   const value = desktopInstalledPluginRecord(input);
+  const activatable =
+    value.schemaVersion === DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
   const automatic =
-    value.schemaVersion === DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
+    value.schemaVersion === DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
+    activatable;
   desktopInstalledPluginExactKeys(
     value,
     value.enabled === false
@@ -156,6 +184,7 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
             "providerBinding",
             "plugins",
             "workerAuthorities",
+            ...(activatable ? ["activationAuthority"] : []),
           ]
         : [
             "schemaVersion",
@@ -171,9 +200,11 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
     desktopInstalledPluginInvalid("configuration");
   if (value.enabled === false)
     return Object.freeze({
-      schemaVersion: automatic
-        ? DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
-        : DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+      schemaVersion: activatable
+        ? DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+        : automatic
+          ? DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+          : DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
       enabled: false,
     });
   if (value.enabled !== true) desktopInstalledPluginInvalid("configuration");
@@ -216,15 +247,26 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
       new Set(plugins.map((plugin) => plugin.pluginId)).size !== plugins.length
     )
       desktopInstalledPluginInvalid("plugin_selection_duplicate");
-    return Object.freeze({
-      schemaVersion: DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+    const prepared = {
       enabled: true,
       providerBinding,
       plugins: Object.freeze(plugins),
       workerAuthorities: parseDesktopInstalledPluginWorkerAuthorities(
         value.workerAuthorities,
       ),
-    });
+    } as const;
+    return activatable
+      ? Object.freeze({
+          ...prepared,
+          schemaVersion: DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+          activationAuthority: parseDesktopInstalledPluginAuthorityEndpoint(
+            value.activationAuthority,
+          ),
+        })
+      : Object.freeze({
+          ...prepared,
+          schemaVersion: DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+        });
   }
   return Object.freeze({
     schemaVersion: DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
@@ -246,7 +288,28 @@ export function assertDesktopInstalledPluginRuntimeConfiguration(
   source.assertCurrent();
 }
 
-/** Only real v2/config+bootstrap owners can create these fixed, privately owned inputs. */
+/** Only a genuinely issued v3 file or its private derived v1 owner carries activation opt-in. */
+export function desktopInstalledPluginActivationAuthority(
+  configuration: EnabledDesktopInstalledPluginRuntimeConfiguration,
+): DesktopInstalledPluginAuthorityEndpoint | null {
+  const source = issued.get(configuration);
+  if (!source) desktopInstalledPluginInvalid("configuration_unissued");
+  source.assertCurrent();
+  return source.activationAuthority ?? null;
+}
+
+export function isAutomaticDesktopInstalledPluginRuntimeConfiguration(
+  configuration: EnabledDesktopInstalledPluginRuntimeConfiguration,
+): configuration is EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration {
+  return (
+    configuration.schemaVersion ===
+      DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
+    configuration.schemaVersion ===
+      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+  );
+}
+
+/** Only real automatic-config/bootstrap owners can create these fixed private inputs. */
 export function createAutomaticDesktopInstalledPluginRuntimeFiles(
   input: Readonly<{
     configuration: EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration;
@@ -270,10 +333,7 @@ export function createAutomaticDesktopInstalledPluginRuntimeFiles(
     return manifest;
   };
   const manifest = assertCurrent();
-  if (
-    configuration.schemaVersion !==
-    DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
-  )
+  if (!isAutomaticDesktopInstalledPluginRuntimeConfiguration(configuration))
     desktopInstalledPluginInvalid("configuration_mode");
   const approvedPackages = [
     ...new Map(
@@ -320,6 +380,10 @@ export function createAutomaticDesktopInstalledPluginRuntimeFiles(
   });
   issued.set(derived, {
     dataDirectory,
+    ...(configuration.schemaVersion ===
+    DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+      ? { activationAuthority: configuration.activationAuthority }
+      : {}),
     assertCurrent() {
       assertCurrent();
       files.assertCurrent();
@@ -353,45 +417,46 @@ export function parseDesktopInstalledPluginWorkerAuthorities(
     DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES.map((name) => {
       if (name === "networkAuthority" && value[name] === null)
         return [name, null];
-      const endpoint = desktopInstalledPluginRecord(value[name]);
-      desktopInstalledPluginExactKeys(endpoint, [
-        "url",
-        "serviceTokenEnvironmentVariable",
-      ]);
-      const raw = desktopInstalledPluginText(endpoint.url, 2048);
-      if (/[\s?#]/u.test(raw))
-        desktopInstalledPluginInvalid("authority_endpoint");
-      const url = new URL(raw);
-      if (
-        url.protocol !== "https:" ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash
-      )
-        desktopInstalledPluginInvalid("authority_endpoint");
-      const environmentVariable = desktopInstalledPluginText(
-        endpoint.serviceTokenEnvironmentVariable,
-        128,
-      );
-      if (
-        !/^[A-Z][A-Z0-9_]{0,127}$/u.test(environmentVariable) ||
-        reservedEnvironment(environmentVariable)
-      )
-        desktopInstalledPluginInvalid("authority_reference");
-      return [
-        name,
-        Object.freeze({
-          url: url.href,
-          serviceTokenEnvironmentVariable: environmentVariable,
-        }),
-      ];
+      return [name, parseDesktopInstalledPluginAuthorityEndpoint(value[name])];
     }),
   );
   return Object.freeze({
     ...endpoints,
     timeoutMs: Number(value.timeoutMs),
   }) as DesktopInstalledPluginWorkerAuthorities;
+}
+function parseDesktopInstalledPluginAuthorityEndpoint(
+  input: unknown,
+): DesktopInstalledPluginAuthorityEndpoint {
+  const endpoint = desktopInstalledPluginRecord(input);
+  desktopInstalledPluginExactKeys(endpoint, [
+    "url",
+    "serviceTokenEnvironmentVariable",
+  ]);
+  const raw = desktopInstalledPluginText(endpoint.url, 2048);
+  if (/[\s?#]/u.test(raw)) desktopInstalledPluginInvalid("authority_endpoint");
+  const url = new URL(raw);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  )
+    desktopInstalledPluginInvalid("authority_endpoint");
+  const environmentVariable = desktopInstalledPluginText(
+    endpoint.serviceTokenEnvironmentVariable,
+    128,
+  );
+  if (
+    !/^[A-Z][A-Z0-9_]{0,127}$/u.test(environmentVariable) ||
+    reservedEnvironment(environmentVariable)
+  )
+    desktopInstalledPluginInvalid("authority_reference");
+  return Object.freeze({
+    url: url.href,
+    serviceTokenEnvironmentVariable: environmentVariable,
+  });
 }
 export function desktopInstalledPluginAuthorityEndpoints(
   input: DesktopInstalledPluginWorkerAuthorities,

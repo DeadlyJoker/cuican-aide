@@ -285,6 +285,11 @@ export class PluginInstallationApplicationService {
           selection: next,
           expectedSelectionRevision: command.expectedSelectionRevision,
           receipt,
+          ...(prepared.assertBeforeSelectionCommit === undefined
+            ? {}
+            : {
+                beforeCommit: prepared.assertBeforeSelectionCommit,
+              }),
         });
         mutation = checkedSelectionResult(raw, actor, scope, command, next);
       } catch (error) {

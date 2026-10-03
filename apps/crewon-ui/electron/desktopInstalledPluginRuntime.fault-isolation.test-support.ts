@@ -31,6 +31,7 @@ import {
   nativeInstalledProcessFixture,
   nativeProcessFacts,
   nativeProcessHttp,
+  type NativeInstalledProcessFixtureOptions,
 } from "./desktopInstalledPluginRuntime.process.test-support.ts";
 import {
   nativeIsolationModel,
@@ -45,9 +46,11 @@ type Source = NativeFixture["sources"][number];
 export async function nativeIsolationProcessFixture(
   professionalDirectory: string,
   kreaDirectory?: string,
+  options: NativeInstalledProcessFixtureOptions = {},
 ) {
   const f = await nativeInstalledProcessFixture(
     await realpath(professionalDirectory),
+    options,
   );
   let model: Awaited<ReturnType<typeof nativeIsolationModel>> | undefined;
   try {

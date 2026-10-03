@@ -33,6 +33,7 @@ import {
   type InstallationRecoveryRecord,
 } from "./production-plugin-installation-runtime-support.ts";
 import { verifyDesktopInstalledPackage } from "./desktop-plugin-runtime-support.ts";
+import type { DesktopPreparedBusinessCandidate } from "./desktop-installed-plugin-activation-owner.ts";
 type Method =
   | "install"
   | "select"
@@ -68,6 +69,10 @@ type ProfileDependencies = Readonly<{
   clock: ApplicationClock;
   digester: ContentDigester;
   scope: PluginProfileScope;
+  prepareBusinessCandidate?(
+    input: PluginInstallationPrepareSelectionInput,
+    signal: AbortSignal,
+  ): Promise<DesktopPreparedBusinessCandidate | null>;
 }>;
 
 export class DesktopInstallationProfile {
@@ -87,6 +92,13 @@ export class DesktopInstallationProfile {
   private constructor(dependencies: ProfileDependencies) {
     this.#dependencies = dependencies;
   }
+
+  readonly prepareBusinessCandidate = (
+    input: PluginInstallationPrepareSelectionInput,
+    signal: AbortSignal,
+  ): Promise<DesktopPreparedBusinessCandidate | null> =>
+    this.#dependencies.prepareBusinessCandidate?.(input, signal) ??
+    Promise.resolve(null);
 
   static async open(
     dependencies: ProfileDependencies,
@@ -259,6 +271,15 @@ export class DesktopInstallationProfile {
     this.#dependencies.authority.assertScope(actor, this.#dependencies.scope);
   }
 
+  /** A selection transaction may verify its actual held claim without exposing a pending projection. */
+  assertOwnershipForSelectionCommit(actor: ActorContext): void {
+    this.#available();
+    this.#dependencies.authority.assertScope(actor, this.#dependencies.scope);
+    this.#owner.assertOwnership();
+    this.#available();
+    this.#dependencies.authority.assertScope(actor, this.#dependencies.scope);
+  }
+
   withdraw(): void {
     this.#closed = true;
     this.#lifetime.abort();
@@ -361,6 +382,13 @@ export class DesktopInstallationProfile {
     input: PluginInstallationPrepareSelectionInput,
   ): Promise<PluginPreparedSelection> {
     const operation = this.#assertOperation(input.actor, input.scope);
+    // An explicitly published business candidate is proven while the durable selection is
+    // still disabled. No CAS, Node accepting state or task authority precedes that proof.
+    const business = await this.prepareBusinessCandidate(
+      input,
+      this.#lifetime.signal,
+    );
+    this.#assertOperation(input.actor, input.scope);
     // Only the actual new preparation may restore code: receipts, reads, install and withdrawal
     // have already taken their own paths in Application and never imply reactivation permission.
     if (!this.#recovered && input.nextSelection.state === "enabled") {
@@ -384,7 +412,15 @@ export class DesktopInstallationProfile {
         this.#operation = operation;
       }
     }
-    return this.#wrap(await this.#local.prepareSelection(input), input);
+    const local = await this.#local.prepareSelection(input);
+    try {
+      if (business !== null)
+        await business.refreshBeforeSelectionCommit(this.#lifetime.signal);
+      return this.#wrap(local, input, business);
+    } catch (error) {
+      await local.abort();
+      throw error;
+    }
   }
 
   #wrap(
@@ -393,6 +429,7 @@ export class DesktopInstallationProfile {
       PluginInstallationPrepareSelectionInput,
       "actor" | "scope" | "nextSelection"
     >,
+    business: DesktopPreparedBusinessCandidate | null = null,
   ): PluginPreparedSelection {
     const operation = this.#assertOperation(input.actor, input.scope);
     const selection = input.nextSelection;
@@ -403,6 +440,16 @@ export class DesktopInstallationProfile {
       if (operation.stamp?.handle === wrapped) operation.stamp = null;
     };
     wrapped = Object.freeze({
+      ...(business === null
+        ? {}
+        : {
+            assertBeforeSelectionCommit: ({
+              selection: raw,
+            }: Readonly<{ selection: PluginSelection }>) => {
+              this.#assertOperation(input.actor, input.scope);
+              business.assertBeforeSelectionCommit(parsePluginSelection(raw));
+            },
+          }),
       prepareCommit: async ({ selection: raw }) => {
         invalidate();
         if (
@@ -465,6 +512,11 @@ export class DesktopInstallationProfile {
           pluginId: selection.pluginId,
           packageDigest: selection.selectedPackageDigest,
         });
+        if (business !== null)
+          await business.assertBeforePublication(
+            selection,
+            this.#lifetime.signal,
+          );
         // No asynchronous operation follows the final real authority decision before stamp publication.
         if (!this.#confirmed(selection))
           conflict("plugin_installation_selection_changed");

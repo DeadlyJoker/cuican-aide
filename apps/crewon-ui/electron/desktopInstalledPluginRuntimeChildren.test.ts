@@ -323,8 +323,21 @@ it("tracks Worker before the actual v1 catalog challenge and starts original Con
       expect(Object.keys(value.environments[1]!)).not.toContain(
         "CREWON_INSTALLED_PLUGIN_PEER_TOKEN",
       );
+      expect(value.runtime.controlAfterPeer).toBeUndefined();
+      for (const name of [
+        "CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH",
+        "CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN",
+      ])
+        expect(Object.keys(value.environments[1]!)).not.toContain(name);
       expect(value.runtime.withdraw).not.toHaveBeenCalled();
-      expect(value.runtime.assertCurrent).toHaveBeenCalledTimes(5);
+      expect(value.runtime.assertCurrent).toHaveBeenCalledTimes(6);
+      // The fifth ownership check follows Control environment capture and precedes spawning.
+      // The final check still verifies that both tracked children remain live after spawning.
+      const checks = vi.mocked(value.runtime.assertCurrent).mock
+        .invocationCallOrder;
+      const controlSpawn = value.spawnControl.mock.invocationCallOrder[0]!;
+      expect(checks[4]!).toBeLessThan(controlSpawn);
+      expect(checks[5]!).toBeGreaterThan(controlSpawn);
     },
     async (request, response) => {
       await release.promise;

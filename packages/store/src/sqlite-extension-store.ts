@@ -229,6 +229,10 @@ export class SqliteExtensionStore implements ExtensionStore {
     return this.#configuration(input, input.revision);
   }
   async loadLatestExtensionConfiguration(input: ExtensionScope) {
+    return this.currentLatestExtensionConfiguration(input);
+  }
+  /** Native candidate commit guards read the actual parent connection inside its transaction. */
+  currentLatestExtensionConfiguration(input: ExtensionScope) {
     this.#host.assertOpen();
     return this.#latest(input);
   }

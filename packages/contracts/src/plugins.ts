@@ -44,6 +44,14 @@ export {
 } from "./installed-plugin-peer-api.ts";
 export { InstalledPluginPeerContractError } from "./installed-plugin-peer-values.ts";
 export {
+  DESKTOP_INSTALLED_PLUGIN_ACTIVATION_SCHEMA,
+  DESKTOP_INSTALLED_PLUGIN_ACTIVATION_MAX_BYTES,
+  DesktopInstalledPluginActivationContractError,
+  parseDesktopInstalledPluginActivationConfiguration,
+  type DesktopInstalledPluginActivationConfiguration,
+  type DesktopInstalledPluginActivationEntry,
+} from "./desktop-installed-plugin-activation-configuration.ts";
+export {
   NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_SCHEMA,
   NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_MAX_BYTES,
   parseNativeInstalledPluginPreparationResult,

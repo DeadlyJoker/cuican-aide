@@ -13,11 +13,12 @@ import {
   type DesktopInstalledPluginRuntimeInput,
 } from "./desktopInstalledPluginRuntime.ts";
 import {
-  DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
   assertDesktopInstalledPluginRuntimeConfiguration,
   createAutomaticDesktopInstalledPluginRuntimeFiles,
   captureDesktopInstalledPluginRuntimeDocument,
   desktopInstalledPluginAuthorityEndpoints,
+  desktopInstalledPluginActivationAuthority,
+  isAutomaticDesktopInstalledPluginRuntimeConfiguration,
   desktopInstalledPluginInvalid as invalid,
   desktopInstalledPluginRecord as record,
   type EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration,
@@ -79,10 +80,7 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     signal,
   } = captured;
   const configuration = input.configuration;
-  if (
-    configuration.schemaVersion !==
-    DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
-  )
+  if (!isAutomaticDesktopInstalledPluginRuntimeConfiguration(configuration))
     invalid("configuration_mode");
   const deadlineMs = input.deadlineMs ?? 20_000;
   if (
@@ -100,6 +98,24 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     shared,
     worker,
   );
+  const activationAuthority =
+    desktopInstalledPluginActivationAuthority(configuration);
+  const activationTokens: Record<string, string> =
+    activationAuthority === null
+      ? {}
+      : captureDesktopInstalledPluginAuthorityTokens(
+          {
+            authorities: [
+              {
+                url: activationAuthority.url,
+                environmentVariable:
+                  activationAuthority.serviceTokenEnvironmentVariable,
+              },
+            ],
+          },
+          shared,
+          worker,
+        );
   const validationInput = Object.freeze({
     configuration,
     dataDirectory,
@@ -119,6 +135,8 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     ...authorityTokens,
     [PREPARATION_PATH]: files.preparationPath,
   };
+  for (const name of Object.keys(activationTokens))
+    if (!Object.hasOwn(authorityTokens, name)) delete environment[name];
   let runtime: DesktopInstalledPluginRuntime | null = null;
   let completed: AutomaticDesktopInstalledPluginRuntimeCompletion | null = null;
   let resultFile: ReturnType<
@@ -190,7 +208,10 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
           files.assertReleaseAbsent();
           const defaultEnvironment = (input: NodeJS.ProcessEnv) => {
             const environment = withoutDesktopInstalledPluginEnvironment(input);
-            for (const name of Object.keys(authorityTokens))
+            for (const name of [
+              ...Object.keys(authorityTokens),
+              ...Object.keys(activationTokens),
+            ])
               delete environment[name];
             return Object.freeze(environment);
           };
@@ -273,8 +294,12 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
         files.close();
         signal.removeEventListener("abort", withdraw);
         environment = null;
-        for (const name of Object.keys(authorityTokens)) {
+        for (const name of [
+          ...Object.keys(authorityTokens),
+          ...Object.keys(activationTokens),
+        ]) {
           delete authorityTokens[name];
+          delete activationTokens[name];
           delete shared[name];
           delete worker[name];
         }
@@ -289,7 +314,7 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
   Object.defineProperties(owner, {
     toJSON: {
       value: () => ({
-        schemaVersion: DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+        schemaVersion: configuration.schemaVersion,
         scope: manifest.scope,
         withdrawn,
       }),

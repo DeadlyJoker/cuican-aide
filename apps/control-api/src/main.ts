@@ -28,6 +28,7 @@ import {
   createStandaloneControlApiWithPlugins,
 } from "./standalone-composition.ts";
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
+import { loadDesktopInstalledPluginActivationEnvironment } from "./desktop-installed-plugin-activation-environment.ts";
 import { resolveControlExtensionWorkerEnvironment } from "./extension-worker-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 import {
@@ -78,6 +79,13 @@ const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
 const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
 const desktopPluginBootstrapPath =
   process.env.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH;
+const desktopPluginActivation =
+  await loadDesktopInstalledPluginActivationEnvironment(process.env, {
+    securityMode,
+    ...(desktopPluginBootstrapPath === undefined
+      ? {}
+      : { desktopBootstrapPath: desktopPluginBootstrapPath }),
+  });
 if (
   desktopPluginBootstrapPath !== undefined &&
   (securityMode !== "standalone" || connectionString)
@@ -257,6 +265,9 @@ try {
                 desktopPluginBootstrapPath,
                 { actor },
               ),
+              ...(desktopPluginActivation === undefined
+                ? {}
+                : { desktopPluginActivation }),
               ...(extensionEnvironment === undefined
                 ? {}
                 : { extensionWorker: extensionEnvironment.extensionWorker }),
