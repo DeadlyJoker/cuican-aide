@@ -27,8 +27,11 @@ describe("Native-owned plugin bootstrap lifetime", () => {
       CREWON_INSTALLED_PLUGIN_PEER_PORT: "4322",
       CREWON_INSTALLED_PLUGIN_PEER_TOKEN: "unapproved-worker-peer-token",
       CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: "1000",
+      CREWON_PROJECT_COMPOSITION_CONFIG_PATH: "/unapproved/projects.json",
+      CREWON_CONTROL_DATABASE_MAX_POOL_SIZE: "1",
       CREWON_MODEL_API_KEY: "provider-secret",
     };
+    const originalAmbient = { ...ambient };
     expect(clearDesktopPluginEnvironment(ambient)).toEqual({
       PATH: ambient.PATH,
       CREWON_MODEL_API_KEY: ambient.CREWON_MODEL_API_KEY,
@@ -46,6 +49,8 @@ describe("Native-owned plugin bootstrap lifetime", () => {
     });
     expect(environment.CREWON_MODEL_API_KEY).toBeUndefined();
     expect(environment.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH).toBeUndefined();
+    expect(environment.CREWON_PROJECT_COMPOSITION_CONFIG_PATH).toBeUndefined();
+    expect(environment.CREWON_CONTROL_DATABASE_MAX_POOL_SIZE).toBeUndefined();
     expect(environment.CREWON_CONTROL_SECURITY_MODE).toBe("standalone");
     expect(environment.CREWON_CONTROL_DB_PATH).toBe(
       "/owned/desktop/control.sqlite",
@@ -60,6 +65,35 @@ describe("Native-owned plugin bootstrap lifetime", () => {
       DESKTOP_RUNTIME_OWNER.principalId,
     );
     expect(environment.PATH).toBe("/tools");
+    expect(ambient).toEqual(originalAmbient);
+  });
+
+  it("adds only the owned Native bootstrap after clearing production configuration", async () => {
+    const f = desktopPluginBootstrapFixture();
+    f.writeApproval();
+    const owner = new DesktopPluginBootstrapOwner(f.input);
+    const ambient = {
+      PATH: "/tools",
+      CREWON_MODEL_API_KEY: "configured-provider",
+      CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: "/ambient/bootstrap.json",
+      CREWON_PROJECT_COMPOSITION_CONFIG_PATH: "/ambient/projects.json",
+      CREWON_CONTROL_DATABASE_MAX_POOL_SIZE: "1",
+    };
+    const originalAmbient = { ...ambient };
+    try {
+      const bootstrap = await owner.prepared();
+      if (bootstrap === null)
+        throw new Error("actual_native_bootstrap_required");
+      expect(owner.controlEnvironment(ambient)).toEqual({
+        PATH: ambient.PATH,
+        CREWON_MODEL_API_KEY: ambient.CREWON_MODEL_API_KEY,
+        CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: bootstrap.bootstrapPath,
+      });
+      expect(ambient).toEqual(originalAmbient);
+    } finally {
+      await owner.close();
+      rmSync(f.directory, { recursive: true, force: true });
+    }
   });
 
   it("withdraws before preparation resumes and joins cleanup of the actual late file", async () => {

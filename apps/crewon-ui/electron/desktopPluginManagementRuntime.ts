@@ -19,7 +19,9 @@ export function clearDesktopPluginEnvironment(
       name.startsWith("CREWON_INSTALLED_PLUGIN_PEER_") ||
       name === "CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH" ||
       name === "CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH" ||
-      name === "CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH"
+      name === "CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH" ||
+      name === "CREWON_PROJECT_COMPOSITION_CONFIG_PATH" ||
+      name === "CREWON_CONTROL_DATABASE_MAX_POOL_SIZE"
     )
       delete result[name];
   }
