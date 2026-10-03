@@ -115,6 +115,7 @@ describe("agent-platform client mapping", () => {
       [AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY, "legacy-refresh"],
     ]);
     vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(staleToken, "legacy-refresh");
 
     await expect(getAgentPlatformAccessToken()).resolves.toBeNull();
     expect(values.has(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(false);
@@ -135,6 +136,7 @@ describe("agent-platform client mapping", () => {
       [AGENT_PLATFORM_TOKEN_STORAGE_KEY, token],
     ]);
     vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(token);
 
     await expect(getAgentPlatformAccessToken()).resolves.toBe(token);
     expect(values.get(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(token);
@@ -153,6 +155,7 @@ describe("agent-platform client mapping", () => {
       [AGENT_PLATFORM_TOKEN_STORAGE_KEY, token],
     ]);
     vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(token);
 
     await expect(getAgentPlatformAccessToken()).resolves.toBe(token);
   });
@@ -178,6 +181,7 @@ describe("agent-platform client mapping", () => {
       [AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY, "refresh-one"],
     ]);
     vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(expiringToken, "refresh-one");
     const fetchMock = vi.fn(async () =>
       Response.json({
         access_token: refreshedToken,

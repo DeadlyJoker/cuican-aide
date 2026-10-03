@@ -1,6 +1,9 @@
 import {
   agentPlatformBaseUrl,
-  getAgentPlatformAccessToken,
+  assertAgentPlatformSessionCurrent,
+  captureAgentPlatformSession,
+  getAgentPlatformAccessSession,
+  type AgentPlatformAccessSession,
 } from "../agent-platform/agentPlatformClient";
 
 export const PRINCIPAL_SESSION_SUBPROTOCOL = "crewon.principal-session.v1";
@@ -36,12 +39,17 @@ export async function createPrincipalSessionProtocols(
   options: {
     fetchImpl?: typeof fetch;
     readAccessToken?: () => Promise<string | null>;
+    readAccessSession?: () => Promise<AgentPlatformAccessSession>;
   } = {},
 ): Promise<string[]> {
   const fetchImpl = options.fetchImpl ?? fetch;
-  const accessToken = await (
-    options.readAccessToken ?? getAgentPlatformAccessToken
-  )();
+  const credential = await (options.readAccessSession !== undefined
+    ? options.readAccessSession()
+    : options.readAccessToken !== undefined
+      ? readInjectedAccessSession(options.readAccessToken)
+      : getAgentPlatformAccessSession());
+  assertAgentPlatformSessionCurrent(credential.session);
+  const accessToken = credential.accessToken;
   if (!accessToken) {
     throw new PrincipalSessionConnectionError();
   }
@@ -53,19 +61,32 @@ export async function createPrincipalSessionProtocols(
       Accept: "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
+    credential.session.signal,
   );
+  assertAgentPlatformSessionCurrent(credential.session);
   const bootstrapSession = parseSessionResponse(bootstrap);
   const exchanged = await postJson(
     fetchImpl,
     principalSessionExchangeUrl(serverUrl),
     {
-      Accept: "application/json",
+      "Accept": "application/json",
       "Content-Type": "application/json",
     },
+    credential.session.signal,
     JSON.stringify({ bootstrapToken: bootstrapSession.token }),
   );
+  assertAgentPlatformSessionCurrent(credential.session);
   const principalSession = parseSessionResponse(exchanged);
   return [PRINCIPAL_SESSION_SUBPROTOCOL, principalSession.token];
+}
+
+async function readInjectedAccessSession(
+  readAccessToken: () => Promise<string | null>,
+): Promise<AgentPlatformAccessSession> {
+  const session = captureAgentPlatformSession();
+  const accessToken = await readAccessToken();
+  assertAgentPlatformSessionCurrent(session);
+  return { accessToken, session };
 }
 
 export function principalSessionExchangeUrl(serverUrl: string): string {
@@ -93,6 +114,7 @@ async function postJson(
   fetchImpl: typeof fetch,
   url: string,
   headers: Record<string, string>,
+  signal: AbortSignal,
   body?: string,
 ): Promise<unknown> {
   let response: Response;
@@ -103,6 +125,7 @@ async function postJson(
       body,
       cache: "no-store",
       credentials: "same-origin",
+      signal,
     });
   } catch {
     throw new PrincipalSessionConnectionError();

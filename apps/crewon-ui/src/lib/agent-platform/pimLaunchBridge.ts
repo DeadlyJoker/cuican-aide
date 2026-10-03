@@ -13,14 +13,20 @@
  * The token IS the authentication — there is no separate login step.
  */
 
+import { notifyAgentPlatformSessionChanged } from "./agentPlatformSessionEvents";
+
 const PIM_LAUNCH_TOKEN_STORAGE_KEY = "pim_launch_token";
 
-/** In-memory fallback for environments without sessionStorage (tests, SSR). */
-let _memoryStore: string | null = null;
+/** Current module session wins over stale or unavailable browser persistence. */
+let activeToken: string | null = null;
+const tokenChangedListeners = new Set<() => void>();
 
 function browserSessionStorage(): Storage | null {
   try {
-    if (typeof window !== "undefined" && typeof sessionStorage !== "undefined") {
+    if (
+      typeof window !== "undefined" &&
+      typeof sessionStorage !== "undefined"
+    ) {
       // Accessing sessionStorage may throw in sandboxed iframes.
       void sessionStorage.length;
       return sessionStorage;
@@ -33,28 +39,36 @@ function browserSessionStorage(): Storage | null {
 
 function readStoredToken(): string | null {
   const storage = browserSessionStorage();
-  if (storage) {
-    return storage.getItem(PIM_LAUNCH_TOKEN_STORAGE_KEY) || null;
+  try {
+    if (storage) {
+      return normalizeLaunchToken(
+        storage.getItem(PIM_LAUNCH_TOKEN_STORAGE_KEY),
+      );
+    }
+  } catch {
+    // A method may fail even when reading sessionStorage.length succeeded.
   }
-  return _memoryStore;
+  return activeToken;
 }
 
 function writeStoredToken(token: string): void {
+  activeToken = token;
   const storage = browserSessionStorage();
-  if (storage) {
-    storage.setItem(PIM_LAUNCH_TOKEN_STORAGE_KEY, token);
-    return;
+  try {
+    storage?.setItem(PIM_LAUNCH_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Keep the current token when persistence is denied or full.
   }
-  _memoryStore = token;
 }
 
 function removeStoredToken(): void {
+  activeToken = null;
   const storage = browserSessionStorage();
-  if (storage) {
-    storage.removeItem(PIM_LAUNCH_TOKEN_STORAGE_KEY);
-    return;
+  try {
+    storage?.removeItem(PIM_LAUNCH_TOKEN_STORAGE_KEY);
+  } catch {
+    // A stale persisted token must not reactivate this cleared module session.
   }
-  _memoryStore = null;
 }
 
 /** One-shot, idempotent: called once on first script evaluation. */
@@ -63,21 +77,25 @@ function captureLaunchTokenFromUrl(): string | null {
 
   try {
     const params = new URLSearchParams(window.location.search);
-    const token =
-      params.get("pim_launch_token") ||
-      params.get("launch_token") ||
-      "";
+    const rawToken =
+      params.get("pim_launch_token") || params.get("launch_token") || "";
 
-    if (!token) return readStoredToken();
+    if (!rawToken) return readStoredToken();
 
-    writeStoredToken(token);
+    const token = normalizeLaunchToken(rawToken);
+    if (token === null) removeStoredToken();
+    else writeStoredToken(token);
 
     // Remove the token from the URL so it isn't bookmarked or shared.
     params.delete("pim_launch_token");
     params.delete("launch_token");
     const nextSearch = params.toString();
     const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash || ""}`;
-    window.history.replaceState({}, document.title, nextUrl);
+    try {
+      window.history.replaceState({}, document.title, nextUrl);
+    } catch {
+      // URL cleanup failure does not change the captured session.
+    }
 
     return token;
   } catch {
@@ -96,15 +114,33 @@ function normalizeLaunchToken(raw: string | null | undefined): string | null {
 }
 
 // Capture once at module load — before React mounts.
-const _launchToken = captureLaunchTokenFromUrl();
+activeToken = captureLaunchTokenFromUrl();
 
 /**
  * Return the active PIM launch token, if one was captured from the URL
  * or previously stored in sessionStorage.
  */
 export function getPimLaunchToken(): string | null {
-  const token = _launchToken || readStoredToken();
-  return normalizeLaunchToken(token);
+  return activeToken;
+}
+
+/** Internal synchronous invalidation, independent of the public UI event. */
+export function onPimLaunchTokenChanged(listener: () => void): () => void {
+  tokenChangedListeners.add(listener);
+  return () => {
+    tokenChangedListeners.delete(listener);
+  };
+}
+
+function notifyTokenChanged(notifySessionChanged: boolean): void {
+  for (const listener of [...tokenChangedListeners]) {
+    try {
+      listener();
+    } catch {
+      // One consumer cannot prevent other session owners from withdrawing.
+    }
+  }
+  if (notifySessionChanged) notifyAgentPlatformSessionChanged();
 }
 
 /**
@@ -123,12 +159,19 @@ export function isPimLaunchSession(): boolean {
 export function setPimLaunchToken(token: string): void {
   const normalized = normalizeLaunchToken(token);
   if (!normalized) return;
+  const previous = getPimLaunchToken();
   writeStoredToken(normalized);
+  if (previous !== normalized) notifyTokenChanged(true);
 }
 
 /** Discard the current PIM launch token. */
-export function clearPimLaunchToken(): void {
+export function clearPimLaunchToken(
+  options: Readonly<{ notifySessionChanged?: boolean }> = {},
+): void {
+  const previous = getPimLaunchToken();
   removeStoredToken();
+  if (previous !== null)
+    notifyTokenChanged(options.notifySessionChanged !== false);
 }
 
 /**

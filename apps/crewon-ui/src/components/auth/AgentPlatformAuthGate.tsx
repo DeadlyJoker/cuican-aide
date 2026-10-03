@@ -34,6 +34,10 @@ import {
   withAgentPlatformAuthBootstrapDeadline,
 } from "../../lib/agent-platform/agentPlatformAuthBootstrap";
 import {
+  assertAgentPlatformSessionCurrent,
+  captureAgentPlatformSession,
+} from "../../lib/agent-platform/agentPlatformClient";
+import {
   clearPimLaunchToken,
   getPimLaunchToken,
   isPimLaunchSession,
@@ -381,12 +385,19 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         // anchors the session. Use it to fetch the current user and skip
         // the login screen entirely.
         if (isPimLaunchSession()) {
+          const session = captureAgentPlatformSession();
           try {
             const currentUser = await withAgentPlatformAuthBootstrapDeadline(
               readAgentPlatformCurrentUser(),
             );
+            assertAgentPlatformSessionCurrent(session);
             if (!cancelled) setUser(currentUser);
           } catch {
+            try {
+              assertAgentPlatformSessionCurrent(session);
+            } catch {
+              return;
+            }
             // Token is invalid or expired — clear it and let the user
             // re-enter from PIM.
             if (!cancelled) {

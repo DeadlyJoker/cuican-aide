@@ -1,7 +1,23 @@
 import {
+  AgentPlatformAccessTokenOwner,
+  type AgentPlatformAccessSession,
+  type AgentPlatformSessionSnapshot,
+} from "./agentPlatformAccessTokenOwner";
+import { notifyAgentPlatformSessionChanged } from "./agentPlatformSessionEvents";
+export {
+  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+  AGENT_PLATFORM_TOKEN_STORAGE_KEY,
+} from "./agentPlatformAccessTokenOwner";
+export { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "./agentPlatformSessionEvents";
+export type {
+  AgentPlatformAccessSession,
+  AgentPlatformSessionSnapshot,
+} from "./agentPlatformAccessTokenOwner";
+import {
   clearPimLaunchToken,
   getPimLaunchToken,
   isPimLaunchSession,
+  onPimLaunchTokenChanged,
 } from "./pimLaunchBridge";
 import {
   MCP_GLYPHS,
@@ -211,6 +227,7 @@ type AgentPlatformUser = {
 type RequestOptions = {
   auth?: boolean;
   init?: RequestInit;
+  session?: AgentPlatformSessionSnapshot;
 };
 
 /** Dev-server proxy route. Rewritten to `PACKAGED_BASE_URL` outside dev. */
@@ -224,27 +241,19 @@ const DEFAULT_BASE_URL = "/agent-platform-api";
  */
 const PACKAGED_BASE_URL = "http://127.0.0.1:8000";
 const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/health";
-export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
-export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
-  "crewon-agent-platform-refresh-token";
-export const AGENT_PLATFORM_SESSION_CHANGED_EVENT =
-  "crewon-agent-platform-session-changed";
 const UNAVAILABLE_RETRY_MS = 30_000;
 
-function notifyAgentPlatformSessionChanged(): void {
-  if (
-    typeof window !== "undefined" &&
-    typeof window.dispatchEvent === "function" &&
-    typeof Event !== "undefined"
-  ) {
-    window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT));
-  }
-}
-
-let cachedToken: string | null = null;
-let cachedTokenExpiresAt = 0;
-let cachedTokenPromise: Promise<string | null> | null = null;
-let cachedBffUser: Record<string, unknown> | null = null;
+const accessTokenOwner = new AgentPlatformAccessTokenOwner({
+  baseUrl: agentPlatformBaseUrl,
+  envValue,
+  unifiedSsoEnabled: crewonUnifiedSsoEnabled,
+  pimToken: getPimLaunchToken,
+  unavailableError: (message) => new AgentPlatformUnavailableError(message),
+});
+let clearingPlatformSession = false;
+onPimLaunchTokenChanged(() => {
+  if (!clearingPlatformSession) accessTokenOwner.pimChanged();
+});
 let availabilityProbePromise: Promise<void> | null = null;
 let unavailableRetryAt = 0;
 
@@ -404,13 +413,10 @@ async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const headers = new Headers(options.init?.headers);
   if (options.auth) {
-    const token = await getAgentPlatformToken();
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
+    return (await authenticatedRequest<T>(path, options)).value;
   }
+  const headers = new Headers(options.init?.headers);
   // Attach PIM launch token when present — the backend uses it to
   // authorize LLM proxy calls against the PIM platform.
   if (isPimLaunchSession() && !headers.has("X-PIM-Launch-Token")) {
@@ -431,6 +437,34 @@ async function request<T>(
     );
   }
   return (await response.json()) as T;
+}
+
+async function authenticatedRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Readonly<{ value: T; session: AgentPlatformSessionSnapshot }>> {
+  const { response, session } = await agentPlatformAuthorizedSessionFetch({
+    path,
+    init: options.init,
+    session: options.session,
+  });
+  if (!response.ok) {
+    assertAgentPlatformSessionCurrent(session);
+    throw new Error(
+      `agent-platform ${path} failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  let value: T;
+  try {
+    value = (await response.json()) as T;
+  } catch (error) {
+    assertAgentPlatformSessionCurrent(session);
+    if (options.session) assertAgentPlatformSessionCurrent(options.session);
+    throw error;
+  }
+  assertAgentPlatformSessionCurrent(session);
+  if (options.session) assertAgentPlatformSessionCurrent(options.session);
+  return Object.freeze({ value, session });
 }
 
 export async function createAgentPlatformWorkflow(input: {
@@ -560,348 +594,166 @@ export function buildAgentPlatformWorkflowGraph(
   return { edges, nodes };
 }
 
-async function getAgentPlatformToken(): Promise<string | null> {
-  // When launched from a PIM showcase page, the launch token IS the
-  // authentication credential — use it directly without any login flow.
-  if (isPimLaunchSession()) {
-    const pimToken = getPimLaunchToken();
-    if (pimToken) return pimToken;
-  }
-
-  if (
-    cachedToken &&
-    tokenMatchesCurrentSessionRequirements(cachedToken) &&
-    Date.now() + 30_000 < cachedTokenExpiresAt
-  ) {
-    return cachedToken;
-  }
-
-  if (crewonUnifiedSsoEnabled()) {
-    cachedToken = null;
-    cachedTokenExpiresAt = 0;
-    localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
-    localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
-    if (cachedTokenPromise) {
-      return cachedTokenPromise;
-    }
-    cachedTokenPromise = obtainBffAccessToken().finally(() => {
-      cachedTokenPromise = null;
-    });
-    return cachedTokenPromise;
-  }
-
-  cachedToken = localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
-  if (cachedToken) {
-    cachedTokenExpiresAt = jwtExpiryMilliseconds(cachedToken);
-    if (tokenMatchesCurrentSessionRequirements(cachedToken)) {
-      if (
-        cachedTokenExpiresAt === 0 ||
-        Date.now() + 30_000 < cachedTokenExpiresAt
-      ) {
-        return cachedToken;
-      }
-    } else {
-      clearAgentPlatformSession();
-    }
-  }
-
-  if (cachedTokenPromise) {
-    return cachedTokenPromise;
-  }
-
-  cachedTokenPromise = restoreAgentPlatformToken().finally(() => {
-    cachedTokenPromise = null;
-  });
-  return cachedTokenPromise;
+export async function getAgentPlatformAccessToken(): Promise<string | null> {
+  return accessTokenOwner.accessToken();
 }
 
-export async function getAgentPlatformAccessToken(): Promise<string | null> {
-  return getAgentPlatformToken();
+/** Internal account lifetime evidence; it never supplies actor or billing authority. */
+export function captureAgentPlatformSession(): AgentPlatformSessionSnapshot {
+  return accessTokenOwner.capture();
+}
+
+export function assertAgentPlatformSessionCurrent(
+  session: AgentPlatformSessionSnapshot,
+): void {
+  accessTokenOwner.assertCurrent(session);
+}
+
+export function getAgentPlatformAccessSession(): Promise<AgentPlatformAccessSession> {
+  return accessTokenOwner.accessSession();
 }
 
 export function getAgentPlatformBffUserSnapshot(): Record<
   string,
   unknown
 > | null {
-  return crewonUnifiedSsoEnabled() ? cachedBffUser : null;
-}
-
-async function loginWithConfiguredDevAccount(): Promise<string | null> {
-  const username = envValue("VITE_AGENT_PLATFORM_DEV_USERNAME");
-  const password = envValue("VITE_AGENT_PLATFORM_DEV_PASSWORD");
-  if (!username || !password) {
-    return null;
-  }
-  const form = new URLSearchParams();
-  form.set("username", username);
-  form.set("password", password);
-
-  const response = await fetch(`${agentPlatformBaseUrl()}/api/v1/auth/login`, {
-    method: "POST",
-    body: form,
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-  });
-  if (!response.ok) {
-    return null;
-  }
-  const body = (await response.json()) as { access_token?: string };
-  if (!body.access_token) {
-    return null;
-  }
-  cachedToken = body.access_token;
-  cachedTokenExpiresAt = jwtExpiryMilliseconds(cachedToken);
-  localStorage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, cachedToken);
-  return cachedToken;
-}
-
-async function restoreAgentPlatformToken(): Promise<string | null> {
-  const refreshed = await refreshStoredAgentPlatformSession();
-  return refreshed ?? loginWithConfiguredDevAccount();
-}
-
-async function refreshStoredAgentPlatformSession(): Promise<string | null> {
-  const refreshToken = localStorage.getItem(
-    AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
-  );
-  if (!refreshToken) {
-    if (
-      cachedTokenExpiresAt > 0 &&
-      cachedTokenExpiresAt <= Date.now() + 30_000
-    ) {
-      clearAgentPlatformSession();
-    }
-    return null;
-  }
-  const form = new URLSearchParams({ refresh_token: refreshToken });
-  const response = await fetch(
-    `${agentPlatformBaseUrl()}/api/v1/auth/refresh`,
-    {
-      method: "POST",
-      body: form,
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      credentials: "same-origin",
-      cache: "no-store",
-    },
-  );
-  if (!response.ok) {
-    clearAgentPlatformSession();
-    return null;
-  }
-  const body = (await response.json()) as {
-    access_token?: string;
-    refresh_token?: string;
-  };
-  if (
-    !body.access_token ||
-    !tokenMatchesCurrentSessionRequirements(body.access_token)
-  ) {
-    clearAgentPlatformSession();
-    return null;
-  }
-  storeAgentPlatformSession(body.access_token, body.refresh_token);
-  return body.access_token;
-}
-
-async function obtainBffAccessToken(): Promise<string | null> {
-  const response = await fetch(
-    `${agentPlatformBaseUrl()}/sso/client/crewon/token`,
-    {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      credentials: "same-origin",
-      cache: "no-store",
-    },
-  );
-  if (response.status === 401) {
-    return null;
-  }
-  if (!response.ok) {
-    throw new AgentPlatformUnavailableError(
-      `SSO session token failed: ${response.status}`,
-    );
-  }
-  const body = (await response.json()) as {
-    access_token?: string;
-    expires_in?: number;
-    user?: Record<string, unknown>;
-  };
-  if (!body.access_token) {
-    return null;
-  }
-  cachedToken = body.access_token;
-  cachedTokenExpiresAt =
-    Date.now() + Math.max(0, Number(body.expires_in ?? 0)) * 1000;
-  cachedBffUser = body.user ?? null;
-  return cachedToken;
+  return accessTokenOwner.bffUser();
 }
 
 export function storeAgentPlatformSession(
   accessToken: string,
   refreshToken?: string | null,
 ): void {
-  cachedToken = accessToken;
-  cachedTokenExpiresAt = jwtExpiryMilliseconds(accessToken);
-  if (crewonUnifiedSsoEnabled()) {
-    localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
-    localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
-    notifyAgentPlatformSessionChanged();
-    return;
-  }
-  localStorage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, accessToken);
-  if (refreshToken) {
-    localStorage.setItem(
-      AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
-      refreshToken,
-    );
-  }
-  notifyAgentPlatformSessionChanged();
+  accessTokenOwner.store(accessToken, refreshToken);
+}
+
+export function publishAgentPlatformSession(input: {
+  session: AgentPlatformSessionSnapshot;
+  accessToken: string;
+  refreshToken?: string | null;
+}): AgentPlatformSessionSnapshot {
+  return accessTokenOwner.publish(input);
 }
 
 export function clearAgentPlatformSession(): void {
-  cachedToken = null;
-  cachedTokenExpiresAt = 0;
-  cachedBffUser = null;
-  clearPimLaunchToken();
-  if (typeof localStorage === "undefined") {
-    return;
+  withdrawAgentPlatformSession();
+}
+
+export function beginAgentPlatformInteractiveSession(): AgentPlatformSessionSnapshot {
+  const session = withdrawAgentPlatformSession();
+  assertAgentPlatformSessionCurrent(session);
+  return session;
+}
+
+function withdrawAgentPlatformSession(): AgentPlatformSessionSnapshot {
+  accessTokenOwner.clear({ notifySessionChanged: false });
+  const session = accessTokenOwner.capture();
+  clearingPlatformSession = true;
+  try {
+    clearPimLaunchToken({ notifySessionChanged: false });
+  } finally {
+    clearingPlatformSession = false;
   }
-  localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
-  localStorage.removeItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
   notifyAgentPlatformSessionChanged();
+  return session;
 }
 
 export async function clearAgentPlatformBffSession(
   options: { global?: boolean } = {},
 ): Promise<void> {
-  clearAgentPlatformSession();
-  if (!crewonUnifiedSsoEnabled()) {
-    return;
-  }
+  const session = beginAgentPlatformInteractiveSession();
+  if (!crewonUnifiedSsoEnabled()) return;
   const endpoint = options.global === false ? "logout" : "global-logout";
-  await fetch(`${agentPlatformBaseUrl()}/sso/client/crewon/${endpoint}`, {
-    method: "POST",
-    headers: { Accept: "application/json" },
-    credentials: "same-origin",
-    cache: "no-store",
-  });
+  const response = await fetch(
+    `${agentPlatformBaseUrl()}/sso/client/crewon/${endpoint}`,
+    {
+      method: "POST",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+      cache: "no-store",
+      signal: session.signal,
+    },
+  );
+  await response.body?.cancel();
+  assertAgentPlatformSessionCurrent(session);
+}
+
+export type AgentPlatformAuthorizedSessionResponse = Readonly<{
+  response: Response;
+  session: AgentPlatformSessionSnapshot;
+}>;
+
+export async function agentPlatformAuthorizedSessionFetch(input: {
+  path: string;
+  init?: RequestInit;
+  session?: AgentPlatformSessionSnapshot;
+}): Promise<AgentPlatformAuthorizedSessionResponse> {
+  const init = input.init ?? {};
+  const assertRequestedSession = () => {
+    if (input.session) assertAgentPlatformSessionCurrent(input.session);
+  };
+  assertRequestedSession();
+  const access = await getAgentPlatformAccessSession();
+  assertRequestedSession();
+  const requestWithAccess = async (current: AgentPlatformAccessSession) => {
+    assertRequestedSession();
+    assertAgentPlatformSessionCurrent(current.session);
+    const headers = new Headers(init.headers);
+    headers.set("Accept", headers.get("Accept") ?? "application/json");
+    if (current.accessToken)
+      headers.set("Authorization", `Bearer ${current.accessToken}`);
+    if (isPimLaunchSession() && !headers.has("X-PIM-Launch-Token")) {
+      const pimToken = getPimLaunchToken();
+      if (pimToken) headers.set("X-PIM-Launch-Token", pimToken);
+    }
+    let response: Response;
+    try {
+      response = await fetch(`${agentPlatformBaseUrl()}${input.path}`, {
+        ...init,
+        headers,
+        credentials: init.credentials ?? "same-origin",
+        signal: init.signal
+          ? AbortSignal.any([current.session.signal, init.signal])
+          : current.session.signal,
+      });
+    } catch (error) {
+      assertAgentPlatformSessionCurrent(current.session);
+      assertRequestedSession();
+      throw error;
+    }
+    try {
+      assertAgentPlatformSessionCurrent(current.session);
+      assertRequestedSession();
+    } catch (error) {
+      await response.body?.cancel().catch(() => {});
+      throw error;
+    }
+    return response;
+  };
+  const response = await requestWithAccess(access);
+  if (response.status !== 401)
+    return Object.freeze({ response, session: access.session });
+  const refreshed = await accessTokenOwner.retryRejectedToken(
+    access.session,
+    access.accessToken,
+  );
+  assertRequestedSession();
+  if (!refreshed?.accessToken) {
+    assertAgentPlatformSessionCurrent(access.session);
+    return Object.freeze({ response, session: access.session });
+  }
+  await response.body?.cancel();
+  assertRequestedSession();
+  assertAgentPlatformSessionCurrent(refreshed.session);
+  const retried = await requestWithAccess(refreshed);
+  return Object.freeze({ response: retried, session: refreshed.session });
 }
 
 export async function agentPlatformAuthorizedFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const token = await getAgentPlatformToken();
-  const requestWithToken = (accessToken: string | null) => {
-    const headers = new Headers(init.headers);
-    headers.set("Accept", headers.get("Accept") ?? "application/json");
-    if (accessToken) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
-    }
-    // Attach PIM launch token when present.
-    if (isPimLaunchSession() && !headers.has("X-PIM-Launch-Token")) {
-      const pimToken = getPimLaunchToken();
-      if (pimToken) {
-        headers.set("X-PIM-Launch-Token", pimToken);
-      }
-    }
-    return fetch(`${agentPlatformBaseUrl()}${path}`, {
-      ...init,
-      headers,
-      credentials: init.credentials ?? "same-origin",
-    });
-  };
-  const response = await requestWithToken(token);
-  if (
-    response.status !== 401 ||
-    crewonUnifiedSsoEnabled() ||
-    !localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)
-  ) {
-    return response;
-  }
-  cachedToken = null;
-  cachedTokenExpiresAt = 0;
-  localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
-  const refreshedToken = await getAgentPlatformToken();
-  return refreshedToken ? requestWithToken(refreshedToken) : response;
-}
-
-function jwtExpiryMilliseconds(token: string): number {
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) return 0;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = JSON.parse(
-      atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")),
-    ) as { exp?: number };
-    return typeof decoded.exp === "number" ? decoded.exp * 1000 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Whether a token carries the scoping the Principal Session flow needs.
- *
- * The guard exists to retire pre-Principal-Session tokens. It must not reject
- * tokens from a deployment that does not issue auth-session claims at all:
- * clearing those would log the user straight back out after a successful login,
- * with no way to recover. A token is only treated as stale when it shows
- * evidence of the claims but fails to satisfy them.
- */
-function tokenMatchesCurrentSessionRequirements(token: string): boolean {
-  if (envValue("VITE_CREWON_PRINCIPAL_SESSION_ENABLED") !== "true") {
-    return true;
-  }
-  const payload = jwtPayload(token);
-  if (!payload) {
-    return false;
-  }
-  if (
-    isPositiveInteger(payload.tenant_id) &&
-    isPositiveInteger(payload.space_id) &&
-    typeof payload.crewon_auth_session_id === "string" &&
-    payload.crewon_auth_session_id.length > 0 &&
-    isPositiveInteger(payload.crewon_auth_epoch)
-  ) {
-    return true;
-  }
-  return !serverIssuesAuthSessionClaims(payload);
-}
-
-/**
- * Whether the issuing server participates in the auth-session scheme.
- *
- * Servers that implement it always emit the session claims, so their absence
- * means the deployment predates the scheme rather than the token being stale.
- */
-function serverIssuesAuthSessionClaims(
-  payload: Record<string, unknown>,
-): boolean {
-  return "crewon_auth_session_id" in payload || "crewon_auth_epoch" in payload;
-}
-
-function jwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const payload = token.split(".")[1];
-    if (!payload) return null;
-    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = JSON.parse(
-      atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=")),
-    );
-    return isRecord(decoded) ? decoded : null;
-  } catch {
-    return null;
-  }
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value > 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return (await agentPlatformAuthorizedSessionFetch({ path, init })).response;
 }
 
 async function listPage<T>(
@@ -922,28 +774,34 @@ function settledError(result: PromiseSettledResult<unknown>): string {
 export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot> {
   await ensureAgentPlatformAvailable();
 
-  const currentUser = await request<AgentPlatformUser>("/api/v1/auth/me", {
-    auth: true,
-  });
+  const { value: currentUser, session } =
+    await authenticatedRequest<AgentPlatformUser>("/api/v1/auth/me");
+  assertAgentPlatformSessionCurrent(session);
 
   const results = await Promise.allSettled([
     listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
       auth: true,
+      session,
     }),
     listPage<PlatformKnowledgeBase>("/api/v1/knowledge/?page=1&page_size=100", {
       auth: true,
+      session,
     }),
     listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
       auth: true,
+      session,
     }),
     listPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100", {
       auth: true,
+      session,
     }),
     listPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100", {
       auth: true,
+      session,
     }),
     listPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100", {
       auth: true,
+      session,
     }),
     request<{
       source?: {
@@ -955,8 +813,9 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
         skills?: PlatformSkill[];
         mcp_servers?: PlatformMcpServer[];
       };
-    }>("/api/v1/crewon/catalog", { auth: true }),
+    }>("/api/v1/crewon/catalog", { auth: true, session }),
   ] as const);
+  assertAgentPlatformSessionCurrent(session);
 
   const settledItems = <T>(result: PromiseSettledResult<T[]>): T[] | null =>
     result.status === "fulfilled" ? result.value : null;
@@ -1154,6 +1013,7 @@ export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot
     mcp: mcpState,
   };
 
+  assertAgentPlatformSessionCurrent(session);
   return {
     agents,
     knowledgeBases,

@@ -3,7 +3,13 @@ import { ControlApiClient } from "@crewon/control-client";
 import { hasDesktopBridge } from "../platform";
 import { requireDesktopBridge } from "../desktop/desktopBridge";
 import { desktopBridgeFetch } from "../desktop/desktopFetch";
-import { getAgentPlatformAccessToken } from "../agent-platform/agentPlatformClient";
+import { AgentPlatformSessionResponse } from "./agentPlatformSessionResponse";
+import {
+  assertAgentPlatformSessionCurrent,
+  captureAgentPlatformSession,
+  getAgentPlatformAccessSession,
+  type AgentPlatformAccessSession,
+} from "../agent-platform/agentPlatformClient";
 import {
   getPimLaunchToken,
   isPimLaunchSession,
@@ -32,6 +38,7 @@ export type ControlRuntimeBootstrapDependencies = Readonly<{
   pageOrigin?: string;
   readDesktopSession?: () => Promise<unknown>;
   readWebAccessToken?: () => Promise<string | null>;
+  readWebAccessSession?: () => Promise<AgentPlatformAccessSession>;
   surface?: "desktop" | "web";
 }>;
 
@@ -63,14 +70,21 @@ export async function loadControlApiClient(
     }
 
     const pageOrigin = dependencies.pageOrigin ?? globalThis.location.origin;
-    const accessToken = await withBootstrapDeadline(
-      (dependencies.readWebAccessToken ?? getAgentPlatformAccessToken)(),
+    const credential = await withBootstrapDeadline(
+      dependencies.readWebAccessSession !== undefined
+        ? dependencies.readWebAccessSession()
+        : dependencies.readWebAccessToken !== undefined
+          ? readInjectedAccessSession(dependencies.readWebAccessToken)
+          : getAgentPlatformAccessSession(),
     );
+    assertAgentPlatformSessionCurrent(credential.session);
+    const accessToken = credential.accessToken;
     if (!accessToken) {
       throw new Error("control_runtime_pim_session_unavailable");
     }
     const webFetch = dependencies.fetch ?? globalThis.fetch;
-    const authenticatedFetch: typeof globalThis.fetch = (input, init) => {
+    const authenticatedFetch: typeof globalThis.fetch = async (input, init) => {
+      assertAgentPlatformSessionCurrent(credential.session);
       const headers = new Headers(
         input instanceof Request ? input.headers : undefined,
       );
@@ -84,10 +98,20 @@ export async function loadControlApiClient(
           headers.set("X-PIM-Launch-Token", launchToken);
         }
       }
-      return webFetch(input, {
+      const callerSignal =
+        init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      const response = await webFetch(input, {
         ...init,
         credentials: init?.credentials ?? "same-origin",
         headers,
+        signal: callerSignal
+          ? AbortSignal.any([credential.session.signal, callerSignal])
+          : credential.session.signal,
+      });
+      assertAgentPlatformSessionCurrent(credential.session);
+      return new AgentPlatformSessionResponse({
+        response,
+        session: credential.session,
       });
     };
     const session = parseWebSession(
@@ -96,6 +120,7 @@ export async function loadControlApiClient(
       ),
       pageOrigin,
     );
+    assertAgentPlatformSessionCurrent(credential.session);
     return new ControlApiClient({
       baseUrl: session.baseUrl,
       csrfToken: session.csrfToken,
@@ -105,6 +130,16 @@ export async function loadControlApiClient(
   } catch {
     return null;
   }
+}
+
+/** Named reader ports still belong to the session that started their lookup. */
+async function readInjectedAccessSession(
+  readAccessToken: () => Promise<string | null>,
+): Promise<AgentPlatformAccessSession> {
+  const session = captureAgentPlatformSession();
+  const accessToken = await readAccessToken();
+  assertAgentPlatformSessionCurrent(session);
+  return { accessToken, session };
 }
 
 /**
