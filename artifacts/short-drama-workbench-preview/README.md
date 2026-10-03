@@ -12,7 +12,9 @@
 node artifacts/short-drama-workbench-preview/preview-server.mjs
 ```
 
-使用仓库已固定的 Node.js 24 与 pnpm 依赖，打开 <http://127.0.0.1:5719/>。预览默认显示原 CrewON 首页；点击侧栏“AI 短剧”进入项目列表，打开《窗边的来信》查看需求和概念图，点击“生成新版本”可体验描述确认、提交、查询、选用。点击原导航返回原页面，模块内存编辑在页面刷新前保留。
+使用仓库已固定的 Node.js 24 与 pnpm 依赖。<http://127.0.0.1:5719/> 加载原应用 `index.html → main.tsx → AgentPlatformAuthGate → App`，使用原 Vite 配置及账号代理；账号服务地址沿原 `CREWON_AGENT_PLATFORM_TARGET` 配置，不能用预览身份代替真实登录。登录后从展开侧栏的左下角账号菜单进入原设置页。后台设置是否可用仍取决于原运行时及 Control 会话。
+
+独立设计预览改为显式地址 <http://127.0.0.1:5719/plugin-preview.html>，避免把无账号、无后台连接的预览当作原应用。此地址默认显示 CrewON 首页；点击侧栏“AI 短剧”进入项目列表，打开《窗边的来信》查看需求和概念图，点击“生成新版本”可体验描述确认、模拟提交、查询、选用。点击原导航返回原页面，模块内存编辑在页面刷新前保留。
 
 `assets/crewon-krea2-reference.png` 是之前真实 Krea2 连通验证保存的图片原字节副本，仅作为布局示意。它不是这些演示项目的生成产物；模拟查询不会生成或下载新图片。
 
