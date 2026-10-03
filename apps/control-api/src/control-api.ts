@@ -6,6 +6,8 @@ import { registerExtensionConfigurationRoutes } from "./extension-configuration-
 import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
 import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
+import { registerProjectGenerationReadRoutes } from "./project-generation-read-route.ts";
+import type { ProjectGenerationReadApplicationService } from "@crewon/application";
 import {
   registerPluginControlRoutes,
   type PluginUiControlService,
@@ -237,6 +239,7 @@ export type ControlApiDependencies = Readonly<{
   extensionTasks?: ExtensionTaskApplicationService | null;
   extensionReads?: ExtensionReadApplicationService | null;
   creativeProjects?: CreativeProjectApplicationService | null;
+  projectGenerationReads?: ProjectGenerationReadApplicationService | null;
   pluginInstallation?: PluginInstallationControlService | null;
   pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
@@ -364,6 +367,15 @@ export function buildControlApi(
     registerCreativeProjectRoutes(app, {
       identity: dependencies.identity,
       creativeProjects: dependencies.creativeProjects,
+    });
+  }
+  if (dependencies.projectGenerationReads != null) {
+    if (dependencies.extensionReads == null)
+      throw new Error("project_generation_read_composition_required");
+    registerProjectGenerationReadRoutes(app, {
+      identity: dependencies.identity,
+      projectGenerationReads: dependencies.projectGenerationReads,
+      extensionReads: dependencies.extensionReads,
     });
   }
   if (dependencies.extensions != null) {

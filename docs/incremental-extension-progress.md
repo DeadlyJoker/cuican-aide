@@ -6,6 +6,18 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-03：恢复当前地址的原应用入口，并接通保存生成的只读服务
+
+用户继续报告用户栏和设置缺失。对照改造前 `776484c57` 后确认原入口组件仍在，但用户当前 5719 根路径仍加载独立短剧预览，绕过原 AuthGate 和 App。现已纠正这一个开发入口：5719 `/` 使用正常 Vite 配置和原 `index.html → main.tsx → AgentPlatformAuthGate → App`，原 PIM 代理正常；独立无账号设计预览仅在明确的 `/plugin-preview.html` 加载。原页面组件、CSS 和快照未改，5720 和 5730 服务保留。修复提交为 `bb93f1b79`。
+
+实际 HTTP 核验 5719 根路径只加载 `main.tsx`，显式预览只加载 `preview.tsx`；真实未登录 `/auth/me` 为 401，企微配置为 200。用户栏/设置相关窄测 **44/44** 和原 UI 构建通过。浏览器当前标签绑定及刷新超时，没有声称当前用户标签已刷新或真实登录后设置已经在屏幕核验。Control 会话尚未接通，后台设置可用性不因恢复入口而自动完成；此前全量 UI 的九项失败记录仍保留。
+
+同时完成此前已开始的[保存生成只读服务](./project-generation-read.md)：公共 GET 和客户端只接受保存源三字段，由服务端原不可变 link 派生任务，复用原任务授权与保存的 operation 观察。读取不触发供应商、Run 或积分操作；历史读取不比较当前 CAS，归档仍可按当前权限读取。独立只读 enable 只检查既有 schema，不启用写能力；默认关闭。
+
+本阶段各命令分别通过：公共 Contracts **308/308**、原 ControlClient 全量 **165/165**、新 Application **14/14**、原 Application 读取回归 **44/44**、真实 SQLite/PG 新读取 **30/30**、原双库 Store 回归 **64/64**、Control/BFF/装配/原读取专项 **53/53**，均零跳过；不同命令中的重复回归不跨组求和。相关类型、生成一致性、格式及 boundary 检查通过。自有 PG 55813 已停止并删除准确自有临时目录；用户 UI 服务保留。证据在 `output/extensions/checks/project-generation-read-proof-20261003.json` 和 `original-account-settings-entry-restored-20261003/proof.json`。
+
+SDK/Host 读取及短剧生成按钮、真实能力与原线程准备、显式 operation 查询、确切图片选用仍未接入。真实执行身份、个人插件钱包和价格权威仍等待用户原问题的选择；正式 Main/full App 在线 Krea2、第二个实际企业 API 及完整 S0 尚未完成。完整目标继续进行。
+
 ## 2026-10-03：跨插件项目生成的实际 Host / Control 调度
 
 已实现明确批准的业务 UI source → 独立执行 target 映射及实际 `InstalledPluginProjectGenerationOwner`。业务包继续使用原 registered UI context，目标包使用实际安装身份、字节核验、当前策略、声明动作和真实 Node 借用。UI-only 生成依赖由实际 owner 的受信 Host availability 提供；未知声明、错误 source/digest/contribution、缺少装配或 owner 关闭继续拒绝，不伪造 Node 服务或隐式授予执行。原普通任务动作和宿主页面保留原路径。

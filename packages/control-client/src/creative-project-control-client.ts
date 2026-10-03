@@ -16,6 +16,8 @@ import {
   parseCreativeProjectRevision,
   parseGetConceptAssetResponse,
   parseGetConceptRevisionResponse,
+  parseConceptGenerationLocator,
+  parseGetConceptGenerationResponse,
   parseGetCreativeProjectResponse,
   parseGetProjectBriefResponse,
   parseProjectBriefListQuery,
@@ -23,6 +25,7 @@ import {
   parseRenameCreativeProjectRequest,
   parseSetCreativeProjectStateRequest,
   type AppendConceptAssetRevisionRequest,
+  type ConceptGenerationLocator,
   type AppendProjectBriefRequest,
   type CreateConceptAssetRequest,
   type CreateCreativeProjectRequest,
@@ -212,6 +215,21 @@ export class CreativeProjectControlClient {
         projectId: id,
         briefRevision: revision,
       }),
+    );
+  }
+  async getConceptGeneration(
+    input: ConceptGenerationLocator,
+    options: CreativeProjectControlRequestOptions = {},
+  ) {
+    const locator = this.#input(() => parseConceptGenerationLocator(input));
+    const result = await this.#json(
+      "GET",
+      `${conceptPath(locator.projectId, locator.assetId)}/revisions/${locator.assetRevision}/generation`,
+      null,
+      options,
+    );
+    return this.#output(() =>
+      parseGetConceptGenerationResponse(result, locator),
     );
   }
   async listBriefs(

@@ -105,7 +105,8 @@ export function creativeProjectProxyPolicy(input: {
       methods = ["GET", "POST"];
       query = "revisions";
     } else if (
-      parts.length === 5 &&
+      (parts.length === 5 ||
+        (parts.length === 6 && parts[5] === "generation")) &&
       parts[3] === "revisions" &&
       positiveRevision(parts[4]!)
     )

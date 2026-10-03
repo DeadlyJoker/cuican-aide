@@ -1344,6 +1344,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/creative-projects/{projectId}/concepts/{assetId}/revisions/{assetRevision}/generation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit read-only project-generation capability. Uses the current authenticated owner and saved project/input association to derive the original execution plugin and Run, then applies the original task read authorization. Empty query only. No supplier calls, polling, new Run, fees or result selection. */
+    get: operations["getConceptGeneration"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3264,6 +3281,59 @@ export interface components {
     ConceptRevisionListResponse: {
       revisions: components["schemas"]["PublicConceptRevision"][];
       nextAfterAssetRevision: number | null;
+    };
+    ConceptGenerationImage: {
+      /**
+       * Format: uri
+       * @description HTTPS result reference without credentials or fragment; no media bytes.
+       */
+      url: string;
+      filename: string;
+      /** @description Exact original images[] index; unaffected by response truncation. Never use the displayed array position to identify a saved result. */
+      resultIndex: number;
+    };
+    ConceptGenerationOperation: {
+      operationId: string;
+      sourceRunId: string;
+      /** @enum {string} */
+      status:
+        | "submitting"
+        | "submitted"
+        | "queued"
+        | "running"
+        | "succeeded"
+        | "failed"
+        | "unknownOutcome";
+      /** Format: date-time */
+      observedAt: string;
+      images: components["schemas"]["ConceptGenerationImage"][];
+      operationRevision: number;
+    };
+    ConceptGenerationTaskView: {
+      runId: string;
+      threadId: string;
+      pluginId: string;
+      pluginVersion: string;
+      configurationRevision: number;
+      runStatus: components["schemas"]["RunStatus"];
+      /** @description This projection always describes the original generation Run. */
+      sourceRunId: null;
+      operations: components["schemas"]["ConceptGenerationOperation"][];
+      truncated: boolean;
+    };
+    PublicConceptGeneration: {
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      projectId: string;
+      /** @description Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths. */
+      assetId: string;
+      assetRevision: number;
+      briefRevision: number;
+      /** Format: date-time */
+      createdAt: string;
+      task: components["schemas"]["ConceptGenerationTaskView"];
+    };
+    GetConceptGenerationResponse: {
+      generation: components["schemas"]["PublicConceptGeneration"] | null;
     };
   };
   responses: {
@@ -6643,6 +6713,35 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["GetConceptRevisionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getConceptGeneration: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        assetId: string;
+        assetRevision: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project data (maximum 60 KiB) */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetConceptGenerationResponse"];
         };
       };
       400: components["responses"]["Error"];

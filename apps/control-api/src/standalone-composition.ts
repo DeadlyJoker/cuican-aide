@@ -34,6 +34,7 @@ import {
   type PluginQueryHostPort,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import { composeProjectGenerationReadService } from "./project-generation-read-composition.ts";
 import type { FastifyInstance } from "fastify";
 import {
   createDesktopPluginRuntime,
@@ -652,6 +653,12 @@ function composeControlApi(
     });
     const app = buildControlApi({
       creativeProjects: preparedProjects?.service,
+      projectGenerationReads: composeProjectGenerationReadService({
+        projects: preparedProjects,
+        extensions: preparedProjects?.generationReadStore,
+        tasks: extensionReads,
+        digester,
+      }),
       application,
       offices,
       officeThreads,

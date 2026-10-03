@@ -1,6 +1,13 @@
 import type { Pool, PoolClient } from "pg";
 import { commitPostgresExtensionTurn } from "./postgres-extension-turn-commit.ts";
 import {
+  projectGenerationSourceLocator,
+  projectGenerationSourceValues,
+  projectGenerationSourceReadSql,
+  decodeProjectGenerationSource,
+  assertPostgresProjectGenerationReadSchema,
+} from "./project-generation-source-read.ts";
+import {
   migratePostgresProjectGenerations,
   assertPostgresProjectGenerationSchema,
 } from "./project-generation-schema.ts";
@@ -30,6 +37,7 @@ import type {
   CommitRunResult,
   ExtensionMutationReceipt,
   ExtensionRunLocator,
+  ProjectGenerationSourceLocator,
   ExtensionStore,
   SaveExtensionActivationInput,
   SaveExtensionConfigurationInput,
@@ -88,6 +96,12 @@ export class PostgresExtensionStore implements ExtensionStore {
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   #projectGenerationsEnabled = false;
+  #projectGenerationReadsEnabled = false;
+  get projectGenerationReadVersion() {
+    return this.#projectGenerationReadsEnabled
+      ? ("crewon.project-generation-read.v1" as const)
+      : undefined;
+  }
   get projectGenerationVersion() {
     return this.#projectGenerationsEnabled
       ? ("crewon.project-generation-link.v0" as const)
@@ -222,6 +236,46 @@ export class PostgresExtensionStore implements ExtensionStore {
         spaceId: locator[1],
         runId: locator[2],
       });
+    } finally {
+      client.release();
+    }
+  }
+  /** Verify existing immutable data only; never create schema or grant generation writes. */
+  async enableProjectGenerationReads(): Promise<void> {
+    this.#host.assertOpen();
+    const client = await this.#pool.connect();
+    try {
+      await assertPostgresProjectGenerationReadSchema(
+        client,
+        this.#schemaName,
+        `${this.#schema}.`,
+      );
+      this.#host.assertOpen();
+      this.#projectGenerationReadsEnabled = true;
+    } finally {
+      client.release();
+    }
+  }
+  async loadProjectGenerationLinkBySource(
+    input: ProjectGenerationSourceLocator,
+  ) {
+    if (!this.#projectGenerationReadsEnabled)
+      throw new Error("project_generation_read_unavailable");
+    this.#host.assertOpen();
+    const locator = projectGenerationSourceLocator(input);
+    const client = await this.#pool.connect();
+    try {
+      await assertPostgresProjectGenerationReadSchema(
+        client,
+        this.#schemaName,
+        `${this.#schema}.`,
+      );
+      const rows = await client.query(
+        projectGenerationSourceReadSql(`${this.#schema}.`, true),
+        projectGenerationSourceValues(locator),
+      );
+      this.#host.assertOpen();
+      return decodeProjectGenerationSource(rows.rows, locator);
     } finally {
       client.release();
     }

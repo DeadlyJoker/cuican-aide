@@ -1,4 +1,11 @@
 import { commitSqliteExtensionTurn } from "./sqlite-extension-turn-commit.ts";
+import {
+  projectGenerationSourceLocator,
+  projectGenerationSourceValues,
+  projectGenerationSourceReadSql,
+  decodeProjectGenerationSource,
+  assertSqliteProjectGenerationReadSchema,
+} from "./project-generation-source-read.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   migrateSqliteProjectGenerations,
@@ -31,6 +38,7 @@ import type {
   CommitRunResult,
   ExtensionMutationReceipt,
   ExtensionRunLocator,
+  ProjectGenerationSourceLocator,
   ExtensionStore,
   SaveExtensionActivationInput,
   SaveExtensionConfigurationInput,
@@ -86,6 +94,12 @@ export class SqliteExtensionStore implements ExtensionStore {
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
   #projectGenerationsEnabled = false;
+  #projectGenerationReadsEnabled = false;
+  get projectGenerationReadVersion() {
+    return this.#projectGenerationReadsEnabled
+      ? ("crewon.project-generation-read.v1" as const)
+      : undefined;
+  }
   get projectGenerationVersion() {
     return this.#projectGenerationsEnabled
       ? ("crewon.project-generation-link.v0" as const)
@@ -169,6 +183,27 @@ export class SqliteExtensionStore implements ExtensionStore {
         .get(...projectGenerationLocator(input)),
       input,
     );
+  }
+  /** Verify existing immutable data only; never create schema or grant generation writes. */
+  async enableProjectGenerationReads(): Promise<void> {
+    this.#host.assertOpen();
+    assertSqliteProjectGenerationReadSchema(this.#db);
+    this.#host.assertOpen();
+    this.#projectGenerationReadsEnabled = true;
+  }
+  async loadProjectGenerationLinkBySource(
+    input: ProjectGenerationSourceLocator,
+  ) {
+    if (!this.#projectGenerationReadsEnabled)
+      throw new Error("project_generation_read_unavailable");
+    this.#host.assertOpen();
+    const locator = projectGenerationSourceLocator(input);
+    assertSqliteProjectGenerationReadSchema(this.#db);
+    const rows = this.#db
+      .prepare(projectGenerationSourceReadSql())
+      .all(...projectGenerationSourceValues(locator));
+    this.#host.assertOpen();
+    return decodeProjectGenerationSource(rows, locator);
   }
 
   async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {

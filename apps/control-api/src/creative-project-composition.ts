@@ -21,17 +21,26 @@ import {
   captureProjectGenerationPluginConfiguration,
   type ProjectGenerationPluginConfiguration,
 } from "./project-generation-plugin-configuration.ts";
+import {
+  captureProjectGenerationReadConfiguration,
+  prepareProjectGenerationReadStore,
+  type ProjectGenerationReadConfiguration,
+  type ProjectGenerationReadStore,
+} from "./project-generation-read-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
+  generationReads?: ProjectGenerationReadConfiguration;
 }>;
 
 export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
+  readonly generationReads?: ProjectGenerationReadConfiguration;
+  readonly generationReadStore?: ProjectGenerationReadStore;
   readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
     Readonly<{
       store: CreativeProjectStore;
@@ -43,6 +52,7 @@ export type PreparedCreativeProjects = {
 
 type CreativeProjectStoreOwner = Readonly<{
   creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
+  extensionStore?(): ProjectGenerationReadStore;
 }>;
 
 /** Capture the borrowed method before asynchronous startup without changing the caller. */
@@ -58,7 +68,8 @@ export function captureCreativeProjectCompositionConfig(
       (key) =>
         key !== "authorization" &&
         key !== "pluginUi" &&
-        key !== "pluginGenerations",
+        key !== "pluginGenerations" &&
+        key !== "generationReads",
     ) ||
     !Object.hasOwn(fields, "authorization") ||
     !Object.hasOwn(fields.authorization!, "value")
@@ -79,6 +90,15 @@ export function captureCreativeProjectCompositionConfig(
     throw new Error("creative_project_configuration_invalid");
   const pluginGenerations = captureProjectGenerationPluginConfiguration(
     generationsField?.value,
+  );
+  const readsField = fields.generationReads;
+  if (
+    readsField !== undefined &&
+    (!Object.hasOwn(readsField, "value") || !readsField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const generationReads = captureProjectGenerationReadConfiguration(
+    readsField?.value,
   );
   const port = fields.authorization!.value as
     | CreativeProjectAuthorizationPort
@@ -101,6 +121,7 @@ export function captureCreativeProjectCompositionConfig(
         }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
+        ...(generationReads === undefined ? {} : { generationReads }),
       });
     }
     target = Object.getPrototypeOf(target);
@@ -126,9 +147,19 @@ export async function prepareCreativeProjects(
   configuration: CreativeProjectCompositionConfig | undefined,
 ): Promise<PreparedCreativeProjects | undefined> {
   if (configuration === undefined) return undefined;
+  // The paid composition performs its own explicit writer migration later.
+  const generationReadStore =
+    configuration.generationReads !== undefined &&
+    configuration.pluginGenerations === undefined
+      ? await prepareProjectGenerationReadStore(owner)
+      : undefined;
   const store = owner.creativeProjectStore();
   await store.migrate();
   return {
+    ...(configuration.generationReads === undefined
+      ? {}
+      : { generationReads: configuration.generationReads }),
+    ...(generationReadStore === undefined ? {} : { generationReadStore }),
     ...(configuration.pluginUi === undefined
       ? {}
       : { pluginUi: configuration.pluginUi }),

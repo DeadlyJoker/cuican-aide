@@ -32,6 +32,10 @@ import {
 import { PostgresDomainStore } from "@crewon/store";
 
 import { buildControlApi } from "./control-api.ts";
+import {
+  composeProjectGenerationReadService,
+  prepareProjectGenerationReadStore,
+} from "./project-generation-read-composition.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
@@ -549,15 +553,28 @@ async function composeProductionControlApi(
             projects: projectPluginRuntime,
             projectGenerations: pluginTaskRuntime?.projectGenerations,
           });
+    const extensionReads =
+      pluginTaskRuntime?.extensionReads ??
+      pluginConfigurationRuntime?.extensionReads;
+    const generationReadStore =
+      creativeProjects?.generationReadStore ??
+      (creativeProjects?.pluginGenerations === undefined
+        ? undefined
+        : await prepareProjectGenerationReadStore(store));
+    const projectGenerationReads = composeProjectGenerationReadService({
+      projects: creativeProjects,
+      extensions: generationReadStore,
+      tasks: extensionReads,
+      digester,
+    });
     const app = buildControlApi({
       creativeProjects: creativeProjects?.service,
+      projectGenerationReads,
       pluginUi: pluginUiService,
       extensions:
         pluginTaskRuntime?.extensions ?? pluginConfigurationRuntime?.extensions,
       extensionTasks: pluginTaskRuntime?.extensionTasks,
-      extensionReads:
-        pluginTaskRuntime?.extensionReads ??
-        pluginConfigurationRuntime?.extensionReads,
+      extensionReads,
       pluginInstallation: pluginInstallationRuntime?.service,
       pluginSources: pluginInstallationRuntime?.service,
       application,

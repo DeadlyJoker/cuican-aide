@@ -4617,11 +4617,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": [
-                "active",
-                "archived",
-                "all"
-              ],
+              "enum": ["active", "archived", "all"],
               "default": "active"
             }
           },
@@ -5476,6 +5472,73 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GetConceptRevisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/concepts/{assetId}/revisions/{assetRevision}/generation": {
+      "get": {
+        "operationId": "getConceptGeneration",
+        "description": "Explicit read-only project-generation capability. Uses the current authenticated owner and saved project/input association to derive the original execution plugin and Run, then applies the original task read authorization. Empty query only. No supplier calls, polling, new Run, fees or result selection.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier; no surrounding whitespace or control characters. Public input cannot supply an owner or account."
+            }
+          },
+          {
+            "name": "assetRevision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project data (maximum 60 KiB)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetConceptGenerationResponse"
                 }
               }
             }
@@ -12257,9 +12320,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "short-drama"
-            ]
+            "enum": ["short-drama"]
           },
           "title": {
             "type": "string",
@@ -12274,10 +12335,7 @@
           },
           "state": {
             "type": "string",
-            "enum": [
-              "active",
-              "archived"
-            ]
+            "enum": ["active", "archived"]
           },
           "latestBriefRevision": {
             "type": "integer",
@@ -12455,10 +12513,7 @@
       "CreateCreativeProjectRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "title",
-          "briefText"
-        ],
+        "required": ["title", "briefText"],
         "properties": {
           "title": {
             "type": "string",
@@ -12477,10 +12532,7 @@
       "RenameCreativeProjectRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "title",
-          "expectedProjectRevision"
-        ],
+        "required": ["title", "expectedProjectRevision"],
         "properties": {
           "title": {
             "type": "string",
@@ -12498,17 +12550,11 @@
       "SetCreativeProjectStateRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "state",
-          "expectedProjectRevision"
-        ],
+        "required": ["state", "expectedProjectRevision"],
         "properties": {
           "state": {
             "type": "string",
-            "enum": [
-              "active",
-              "archived"
-            ]
+            "enum": ["active", "archived"]
           },
           "expectedProjectRevision": {
             "type": "integer",
@@ -12520,10 +12566,7 @@
       "AppendProjectBriefRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "text",
-          "expectedProjectRevision"
-        ],
+        "required": ["text", "expectedProjectRevision"],
         "properties": {
           "text": {
             "type": "string",
@@ -12608,9 +12651,7 @@
       "GetCreativeProjectResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "project"
-        ],
+        "required": ["project"],
         "properties": {
           "project": {
             "$ref": "#/components/schemas/PublicCreativeProject"
@@ -12620,9 +12661,7 @@
       "GetProjectBriefResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "brief"
-        ],
+        "required": ["brief"],
         "properties": {
           "brief": {
             "$ref": "#/components/schemas/PublicProjectBrief"
@@ -12632,9 +12671,7 @@
       "GetConceptAssetResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "asset"
-        ],
+        "required": ["asset"],
         "properties": {
           "asset": {
             "$ref": "#/components/schemas/PublicConceptAsset"
@@ -12644,9 +12681,7 @@
       "GetConceptRevisionResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "assetRevision"
-        ],
+        "required": ["assetRevision"],
         "properties": {
           "assetRevision": {
             "$ref": "#/components/schemas/PublicConceptRevision"
@@ -12656,17 +12691,11 @@
       "CreativeProjectMetadataMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "project"
-        ],
+        "required": ["disposition", "project"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "project": {
             "$ref": "#/components/schemas/PublicCreativeProject"
@@ -12676,18 +12705,11 @@
       "CreativeProjectBriefMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "project",
-          "brief"
-        ],
+        "required": ["disposition", "project", "brief"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "project": {
             "$ref": "#/components/schemas/PublicCreativeProject"
@@ -12700,19 +12722,11 @@
       "CreativeProjectConceptMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "project",
-          "asset",
-          "assetRevision"
-        ],
+        "required": ["disposition", "project", "asset", "assetRevision"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "project": {
             "$ref": "#/components/schemas/PublicCreativeProject"
@@ -12728,10 +12742,7 @@
       "CreativeProjectListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "projects",
-          "nextCursor"
-        ],
+        "required": ["projects", "nextCursor"],
         "properties": {
           "projects": {
             "type": "array",
@@ -12741,10 +12752,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 1024
           }
         },
@@ -12753,10 +12761,7 @@
       "ProjectBriefListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "briefs",
-          "nextAfterBriefRevision"
-        ],
+        "required": ["briefs", "nextAfterBriefRevision"],
         "properties": {
           "briefs": {
             "type": "array",
@@ -12766,10 +12771,7 @@
             }
           },
           "nextAfterBriefRevision": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1,
             "maximum": 9007199254740991
           }
@@ -12779,10 +12781,7 @@
       "ConceptAssetListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "assets",
-          "nextAfterAssetId"
-        ],
+        "required": ["assets", "nextAfterAssetId"],
         "properties": {
           "assets": {
             "type": "array",
@@ -12792,10 +12791,7 @@
             }
           },
           "nextAfterAssetId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           }
@@ -12805,10 +12801,7 @@
       "ConceptRevisionListResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "revisions",
-          "nextAfterAssetRevision"
-        ],
+        "required": ["revisions", "nextAfterAssetRevision"],
         "properties": {
           "revisions": {
             "type": "array",
@@ -12818,15 +12811,215 @@
             }
           },
           "nextAfterAssetRevision": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1,
             "maximum": 9007199254740991
           }
         },
         "description": "Ascending revisions; continuation permits another read, not an exact hasMore claim. Response at most 60 KiB."
+      },
+      "ConceptGenerationImage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["url", "filename", "resultIndex"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "format": "uri",
+            "description": "HTTPS result reference without credentials or fragment; no media bytes."
+          },
+          "filename": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "resultIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15,
+            "description": "Exact original images[] index; unaffected by response truncation. Never use the displayed array position to identify a saved result."
+          }
+        }
+      },
+      "ConceptGenerationOperation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operationId",
+          "sourceRunId",
+          "status",
+          "observedAt",
+          "images",
+          "operationRevision"
+        ],
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36,
+            "pattern": "^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$"
+          },
+          "sourceRunId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "submitting",
+              "submitted",
+              "queued",
+              "running",
+              "succeeded",
+              "failed",
+              "unknownOutcome"
+            ]
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "images": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ConceptGenerationImage"
+            }
+          },
+          "operationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "ConceptGenerationTaskView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "threadId",
+          "pluginId",
+          "pluginVersion",
+          "configurationRevision",
+          "runStatus",
+          "sourceRunId",
+          "operations",
+          "truncated"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^(?!\\.{1,2}$)[^/\\\\]+$"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "pluginId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 48,
+            "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$"
+          },
+          "pluginVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+          },
+          "configurationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "runStatus": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "sourceRunId": {
+            "type": "null",
+            "description": "This projection always describes the original generation Run."
+          },
+          "operations": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/ConceptGenerationOperation"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PublicConceptGeneration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "assetId",
+          "assetRevision",
+          "briefRevision",
+          "createdAt",
+          "task"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "assetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Opaque Unicode identifier, at most 128 UTF-16 units; no surrounding whitespace, control characters, or complete dot path segments. IDs are encoded once in HTTP paths."
+          },
+          "assetRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "task": {
+            "$ref": "#/components/schemas/ConceptGenerationTaskView"
+          }
+        }
+      },
+      "GetConceptGenerationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["generation"],
+        "properties": {
+          "generation": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublicConceptGeneration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
       }
     }
   }

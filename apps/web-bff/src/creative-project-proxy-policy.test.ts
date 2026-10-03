@@ -86,6 +86,7 @@ test("declares every project route and leaves existing chat, team, plugin and SS
     [`${base}/project-1/concepts/asset-1`, ["GET"]],
     [`${base}/project-1/concepts/asset-1/revisions`, ["GET", "POST"]],
     [`${base}/project-1/concepts/asset-1/revisions/9007199254740991`, ["GET"]],
+    [`${base}/project-1/concepts/asset-1/revisions/1/generation`, ["GET"]],
   ] as const) {
     for (const method of methods)
       assert.deepEqual(policy(path, method), {
@@ -108,6 +109,69 @@ test("declares every project route and leaves existing chat, team, plugin and SS
     "/control-api/session",
   ])
     assert.equal(policy(path), null);
+});
+
+test("saved generation lookups admit only exact authenticated reads with no caller-selected task or result", async () => {
+  const path = `${base}/${encodeURIComponent("项目/%")}/concepts/${encodeURIComponent("资产/百分%")}/revisions/1/generation`;
+  assert.equal(policy(path)?.outcome, "allow");
+  for (const method of ["POST", "PUT", "HEAD", "OPTIONS"])
+    assert.deepEqual(policy(path, method), {
+      outcome: "deny",
+      status: 405,
+      code: "method_not_allowed",
+    });
+  for (const query of [
+    "?",
+    "?runId=forged",
+    "?pluginId=forged",
+    "?operationId=forged",
+    "?resultIndex=0",
+    "?limit=1&limit=1",
+  ])
+    assert.deepEqual(policy(`${path}${query}`), {
+      outcome: "deny",
+      status: 400,
+      code: "creative_project_query_invalid",
+    });
+  const calls: { url: string; headers: Headers; redirect?: RequestRedirect }[] =
+    [];
+  const app = bff(async (input, init) => {
+    calls.push({
+      url: String(input),
+      headers: new Headers(init?.headers),
+      redirect: init?.redirect,
+    });
+    return Response.json({ generation: null });
+  });
+  assert.equal((await app.handle(request(path))).status, 401);
+  assert.equal(calls.length, 0);
+  const response = await app.handle(
+    request(path, {
+      headers: {
+        cookie,
+        "authorization": "Bearer forged",
+        "x-crewon-principal-id": "forged",
+      },
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { generation: null });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.url, `${target}${path}`);
+  assert.equal(
+    calls[0]!.headers.get("authorization"),
+    `Bearer ${session.controlAccessToken}`,
+  );
+  assert.equal(calls[0]!.headers.get("x-crewon-principal-id"), null);
+  assert.equal(calls[0]!.headers.get("x-csrf-token"), null);
+  assert.equal(calls[0]!.redirect, "manual");
+  for (const suffix of ["/", "/query", "/selection", "/private", "/generation"])
+    assert.equal(
+      (await app.handle(request(`${path}${suffix}`, { headers: { cookie } })))
+        .status,
+      404,
+    );
+  assert.equal(calls.length, 1);
 });
 
 test("opaque IDs preserve the Domain Unicode and UTF-16 limits without decoding separators into routes", () => {

@@ -143,3 +143,4 @@ export * from "./creative-project-commit-authority.ts";
 export * from "./creative-project-authorization-port.ts";
 export * from "./creative-project-application-service.ts";
 export * from "./plugin-creative-project-action-owner.ts";
+export * from "./project-generation-read-application-service.ts";

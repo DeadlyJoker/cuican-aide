@@ -9,7 +9,10 @@ import type {
   ProjectGenerationReference,
   ProjectGenerationLink,
 } from "@crewon/domain";
-import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
+import type {
+  CreativeProjectCommitAuthority,
+  CreativeProjectOwnerScope,
+} from "./creative-project-store-port.ts";
 import type { ProjectGenerationExecutionPublication } from "./project-generation-execution-authority.ts";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
 import type {
@@ -44,6 +47,13 @@ export type ExtensionRunLocator = Readonly<{
   tenantId: string;
   spaceId: string;
   runId: string;
+}>;
+/** A saved input selected by the authorized project owner; never a caller-selected execution Run. */
+export type ProjectGenerationSourceLocator = Readonly<{
+  owner: CreativeProjectOwnerScope;
+  projectId: string;
+  assetId: string;
+  assetRevision: number;
 }>;
 export type CommitExtensionRunInput = Readonly<{
   commit: CommitRunInput;
@@ -97,6 +107,11 @@ export interface ExtensionStore {
   readonly projectGenerationVersion?: "crewon.project-generation-link.v0";
   /** Explicit support for two installed owners; absent on older adapters and before generation opt-in. */
   readonly projectGenerationPublicationVersion?: "crewon.project-generation-publication.v1";
+  /** Separate read-only opt-in; it does not grant generation writes or create any schema. */
+  readonly projectGenerationReadVersion?: "crewon.project-generation-read.v1";
+  loadProjectGenerationLinkBySource?(
+    input: ProjectGenerationSourceLocator,
+  ): Promise<ProjectGenerationLink | null>;
   loadProjectGenerationLink?(
     input: ExtensionRunLocator,
   ): Promise<ProjectGenerationLink | null>;

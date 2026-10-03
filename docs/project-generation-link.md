@@ -1,5 +1,11 @@
 # 项目生成关联：内部增量协议
 
+## 2026-10-03：按保存源读取原生成已实现
+
+公共只读 GET、客户端、真实 Application 与 SQLite/PostgreSQL 已接通，见[保存生成读取协议](./project-generation-read.md)。它通过本人源及当前任务权限复核原 link 和完整受理回执，返回原 Run、operationRevision 及核验图片的原始 resultIndex；历史归档可读，不触发供应商、Run 或积分写入。独立只读 enable 只验证既有 schema，不迁移、不启用付费写能力；默认关闭。
+
+SDK/Host 读取、独立插件生成页面、显式查询及结果选用仍未实现。以下章节保留前置阶段的范围。
+
 ## 2026-10-03：跨插件 Host / Control 与原事务资格已实现
 
 当前可信 Host / Control 已接通明确批准的业务 UI 包到独立执行包的调度。新增 `ExtensionTaskApplicationService.createPublishedProjectTaskFromPlugin` 捕获保存引用、两端真实 pin、映射及本次调用资格，兼容原 `createProjectTaskFromPlugin` 内部路径。业务来源保持原 registered UI context；目标使用实际验证的 Node 包、原任务服务与自己的执行 pin，不接受插件 JSON 注入 owner、actor、付款人或可信提交回调。
