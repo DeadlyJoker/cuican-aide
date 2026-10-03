@@ -28,6 +28,10 @@ import {
   type PluginUiCurrentScope,
 } from "./controlPluginUiSupport";
 import type { ControlPluginUiHost } from "./controlPluginUiHost";
+import {
+  createInstalledPluginTaskReceiptTransport,
+  type InstalledPluginTaskReceiptEvent,
+} from "./installedPluginTaskReceipt";
 
 export function installedDesktopPluginUiAssets(): DesktopPluginUiAssets | null {
   const assets = getDesktopBridge()?.pluginUiAssets;
@@ -46,6 +50,7 @@ export function createDesktopPluginUiHost(
     assets: DesktopPluginUiAssets;
     assertCurrent: PluginUiCurrentScope;
     onDiagnostic(error: unknown): void;
+    onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
     importer?: PluginUiModuleImporter;
   }>,
 ): ControlPluginUiHost {
@@ -56,6 +61,13 @@ export function createDesktopPluginUiHost(
   )
     uiFailure("plugin_ui_transport_unsupported");
   const { client, assertCurrent } = options;
+  const taskReceiptTransport = options.onTaskReceipt
+    ? createInstalledPluginTaskReceiptTransport({
+        assertCurrent,
+        onTaskReceipt: options.onTaskReceipt,
+        onDiagnostic: options.onDiagnostic,
+      })
+    : null;
   const adopt = options.assets.adopt.bind(options.assets);
   const release = options.assets.release.bind(options.assets);
   const invalidate = options.assets.invalidate.bind(options.assets);
@@ -92,15 +104,15 @@ export function createDesktopPluginUiHost(
       },
       async invoke(lease, input) {
         assertPluginUiCurrent(assertCurrent, input.signal);
-        const response = await pluginUiControlRequest(
-          (s) =>
-            client.plugins.invoke(
-              lease.mountRef,
-              { action: input.action, input: input.input },
-              { signal: s },
-            ),
-          input.signal,
-        );
+        const request = (signal: AbortSignal) =>
+          client.plugins.invoke(
+            lease.mountRef,
+            { action: input.action, input: input.input },
+            { signal },
+          );
+        const response = await (taskReceiptTransport
+          ? taskReceiptTransport(lease, input.signal, request)
+          : pluginUiControlRequest(request, input.signal));
         assertPluginUiCurrent(assertCurrent, input.signal);
         return response.output;
       },

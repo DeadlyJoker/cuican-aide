@@ -14,16 +14,25 @@ import {
   flush,
 } from "./pluginUiLoader.test-support";
 import { desktopPluginUiAssetUrl } from "../desktop/desktopPluginUiProtocol";
+import type { InstalledPluginTaskReceiptEvent } from "./installedPluginTaskReceipt";
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
-function fixture() {
+function fixture(
+  options: {
+    actionResponse?: () => Promise<Response> | Response;
+    onTaskReceipt?: (event: InstalledPluginTaskReceiptEvent) => void;
+  } = {},
+) {
   vi.stubGlobal("location", { protocol: "file:", origin: "null" });
   const lease = uiLease(),
     h = uiHarness();
-  const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
-    controlUiResponse(init?.method === "DELETE" ? { closed: true } : lease),
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+    init?.method === "POST" && String(input).endsWith("/actions")
+      ? (options.actionResponse?.() ??
+        controlUiResponse({ output: { accepted: true } }))
+      : controlUiResponse(init?.method === "DELETE" ? { closed: true } : lease),
   );
   const client = new ControlApiClient({
     baseUrl: "http://127.0.0.1:32100",
@@ -53,6 +62,7 @@ function fixture() {
     importer,
     assertCurrent,
     onDiagnostic: vi.fn(),
+    onTaskReceipt: options.onTaskReceipt,
   });
   return {
     lease,
@@ -130,5 +140,119 @@ describe("file renderer installed UI adapter", () => {
     ).rejects.toThrow("plugin_ui_native_binding_invalid");
     expect(f.assets.invalidate).toHaveBeenCalledTimes(1);
     expect(f.importer).not.toHaveBeenCalled();
+  });
+
+  it("retires its native mount while observing a same-session late committed task through the actual client", async () => {
+    const gate = deferred<Response>();
+    const observer = vi.fn();
+    const receipt = {
+      disposition: "committed",
+      threadId: "thread:1",
+      threadRevision: 2,
+      runId: "run:1",
+      messageId: "message:1",
+      configurationRevision: 1,
+    };
+    const f = fixture({
+      actionResponse: () => gate.promise,
+      onTaskReceipt: observer,
+    });
+    const lease = await f.host.acquireMount(
+      controlUiItem(f.lease),
+      "workbench",
+      new AbortController().signal,
+    );
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease,
+      props: uiProps(),
+    });
+    const called = f.h.instances[0].services.invoke(
+      "arbitrary.command",
+      null,
+      {},
+    );
+    const rejected = expect(called).rejects.toThrow(
+      "plugin_ui_operation_aborted",
+    );
+    await flush();
+    const request = f.fetch.mock.calls.find(([url]) =>
+      String(url).endsWith("/actions"),
+    )!;
+    await handle.stop();
+    await rejected;
+    expect(request[1]?.signal?.aborted).toBe(false);
+    expect(f.assets.release).toHaveBeenCalledExactlyOnceWith(
+      f.binding.bindingRef,
+    );
+    gate.resolve(controlUiResponse({ output: receipt }));
+    await flush();
+    expect(observer).toHaveBeenCalledExactlyOnceWith({
+      lease: f.lease,
+      receipt,
+    });
+    expect(f.h.root.textContent).toBe("");
+  });
+
+  it("withholds the confirmed hint from a replacement native session", async () => {
+    const gate = deferred<Response>();
+    const observer = vi.fn();
+    const f = fixture({
+      actionResponse: () => gate.promise,
+      onTaskReceipt: observer,
+    });
+    const lease = await f.host.acquireMount(
+      controlUiItem(f.lease),
+      "workbench",
+      new AbortController().signal,
+    );
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease,
+      props: uiProps(),
+    });
+    const called = f.h.instances[0].services.invoke("business", null, {});
+    const rejected = expect(called).rejects.toThrow("actual_scope_changed");
+    await flush();
+    f.revoke();
+    gate.resolve(
+      controlUiResponse({
+        output: {
+          disposition: "committed",
+          threadId: "thread:1",
+          threadRevision: 2,
+          runId: "run:1",
+          messageId: "message:1",
+          configurationRevision: 1,
+        },
+      }),
+    );
+    await rejected;
+    await handle.stop();
+    expect(observer).not.toHaveBeenCalled();
+  });
+
+  it("preserves ordinary read output without interpreting its action name as task authority", async () => {
+    const observer = vi.fn();
+    const output = { runId: "read-only-data" };
+    const f = fixture({
+      actionResponse: () => controlUiResponse({ output }),
+      onTaskReceipt: observer,
+    });
+    const lease = await f.host.acquireMount(
+      controlUiItem(f.lease),
+      "workbench",
+      new AbortController().signal,
+    );
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease,
+      props: uiProps(),
+    });
+    await expect(
+      f.h.instances[0].services.invoke("tasks.request", null, {}),
+    ).resolves.toEqual(output);
+    await handle.stop();
+    expect(observer).not.toHaveBeenCalled();
   });
 });

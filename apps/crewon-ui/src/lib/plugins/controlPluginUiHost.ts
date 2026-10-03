@@ -13,6 +13,10 @@ import {
 } from "./trustedPluginUiLoader";
 import { uiFailure } from "./pluginUiValidation";
 import {
+  createInstalledPluginTaskReceiptTransport,
+  type InstalledPluginTaskReceiptEvent,
+} from "./installedPluginTaskReceipt";
+import {
   assertPluginUiCurrent,
   checkedLeaseIdentity,
   pluginUiCatalogIdentity,
@@ -40,11 +44,19 @@ export function createControlPluginUiHost(
     client: ControlApiClient;
     assertCurrent: PluginUiCurrentScope;
     onDiagnostic(error: unknown): void;
+    onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
     /** Explicit importer injection is for deterministic lifecycle tests; native URL import is the default. */
     importer?: PluginUiModuleImporter;
   }>,
 ): ControlPluginUiHost {
   const { client, assertCurrent } = options;
+  const taskReceiptTransport = options.onTaskReceipt
+    ? createInstalledPluginTaskReceiptTransport({
+        assertCurrent,
+        onTaskReceipt: options.onTaskReceipt,
+        onDiagnostic: options.onDiagnostic,
+      })
+    : null;
   if (
     typeof location === "undefined" ||
     (location.protocol !== "https:" && location.protocol !== "http:")
@@ -79,15 +91,15 @@ export function createControlPluginUiHost(
       },
       async invoke(lease, input) {
         assertPluginUiCurrent(assertCurrent, input.signal);
-        const response = await pluginUiControlRequest(
-          (signal) =>
-            client.plugins.invoke(
-              lease.mountRef,
-              { action: input.action, input: input.input },
-              { signal },
-            ),
-          input.signal,
-        );
+        const request = (signal: AbortSignal) =>
+          client.plugins.invoke(
+            lease.mountRef,
+            { action: input.action, input: input.input },
+            { signal },
+          );
+        const response = await (taskReceiptTransport
+          ? taskReceiptTransport(lease, input.signal, request)
+          : pluginUiControlRequest(request, input.signal));
         assertPluginUiCurrent(assertCurrent, input.signal);
         return response.output;
       },

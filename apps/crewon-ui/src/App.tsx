@@ -153,12 +153,6 @@ export function App({
     setTheme,
     theme,
   } = useAppShellRuntimeState();
-  const installedPlugins = useInstalledPluginModules({
-    client: controlClient,
-    sessionKey: platformAccount ? String(platformAccount.user.id) : null,
-    theme,
-    locale,
-  });
   const {
     appView,
     appViewRef,
@@ -420,6 +414,25 @@ export function App({
     activeTurnId,
     renderCommandShell,
     selectedThread,
+  });
+  const installedPlugins = useInstalledPluginModules({
+    client: controlClient,
+    sessionKey: platformAccount ? String(platformAccount.user.id) : null,
+    theme,
+    locale,
+    taskContext: {
+      runtime: controlRuntimeConnected ? controlThreadRuntime : null,
+      selectedThreadId: commandShellRuntime.selectedThreadId,
+      runIds:
+        commandShellRuntime.selectedThread?.turns
+          .slice(-8)
+          .map((turn) => turn.id)
+          .reverse() ?? [],
+      onOpenTask: (threadId) => {
+        setSelectedThreadId(threadId);
+        setAppView("chat");
+      },
+    },
   });
   const commandProgressRunId =
     commandShellRuntime.activeTurnId ??

@@ -1,10 +1,14 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { PluginUiLease } from "@crewon/contracts/plugins";
 import type { PluginUiProps, PluginUiTheme } from "@crewon/plugin-sdk/ui";
+import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
 import type { ControlPluginUiHost } from "../../lib/plugins/controlPluginUiHost";
 import type { ControlPluginUiModule } from "../../lib/plugins/controlPluginUiCatalog";
 import type { Locale } from "../../lib/i18n";
 import { PluginModuleMount } from "./PluginModuleMount";
+import { useInstalledPluginTaskContext } from "../../lib/plugins/useInstalledPluginTaskContext";
+import type { InstalledPluginTaskPorts } from "../../lib/plugins/useInstalledPluginTaskContext.types";
+import { InstalledPluginTaskControls } from "./InstalledPluginTaskControls";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
 type Monitor = {
@@ -20,6 +24,10 @@ export function InstalledPluginModule({
   theme,
   locale,
   onDiagnostic,
+  taskPorts = null,
+  selectedThreadId = null,
+  runIds = [],
+  onOpenTask,
 }: Readonly<{
   host: ControlPluginUiHost;
   module: ControlPluginUiModule;
@@ -27,7 +35,23 @@ export function InstalledPluginModule({
   theme: PluginUiTheme;
   locale: Locale;
   onDiagnostic(error: unknown): void;
+  taskPorts?: InstalledPluginTaskPorts | null;
+  selectedThreadId?: string | null;
+  runIds?: readonly string[];
+  onOpenTask?(threadId: string): void;
 }>) {
+  const taskEnabled = module.plugin.descriptor.requires.some(
+    (requirement) =>
+      requirement.service === "crewon.tasks" &&
+      (requirement.apiVersion === "1" || requirement.apiVersion === "2"),
+  );
+  const tasks = useInstalledPluginTaskContext({
+    ports: taskEnabled ? taskPorts : null,
+    module,
+    active,
+    selectedThreadId,
+    runIds,
+  });
   // Catalog refresh recreates DTOs. Only a changed host or complete package/contribution pin replaces this instance.
   const modulePin = useMemo(
     () =>
@@ -120,9 +144,14 @@ export function InstalledPluginModule({
       schemaVersion: "crewon.plugin-ui-props.v1",
       contributionId: module.contributionId,
       theme,
-      data: Object.freeze({ locale }),
+      data: Object.freeze({
+        locale,
+        ...(taskEnabled && taskPorts
+          ? (tasks.data as Readonly<Record<string, PluginJsonValue>>)
+          : {}),
+      }),
     }),
-    [module.contributionId, theme, locale],
+    [module.contributionId, theme, locale, taskEnabled, taskPorts, tasks.data],
   );
   const onMounted = useCallback(() => {
     if (current.current === context && context.active) setReady(context);
@@ -138,6 +167,13 @@ export function InstalledPluginModule({
     );
   return (
     <>
+      {taskEnabled && taskPorts && onOpenTask ? (
+        <InstalledPluginTaskControls
+          state={tasks}
+          locale={locale}
+          onOpenTask={onOpenTask}
+        />
+      ) : null}
       {ready !== context ? (
         <p role="status">
           {locale === "zh" ? "正在加载模块…" : "Loading module…"}

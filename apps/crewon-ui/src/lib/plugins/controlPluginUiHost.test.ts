@@ -7,6 +7,7 @@ import {
   checkedLeaseIdentity,
   createControlPluginUiHost,
 } from "./controlPluginUiHost";
+import type { InstalledPluginTaskReceiptEvent } from "./installedPluginTaskReceipt";
 import {
   controlUiClient,
   controlUiItem,
@@ -32,6 +33,7 @@ function fixture(
     readLease?: () => PluginUiLease;
     closeFails?: boolean;
     actionResponse?: () => Promise<Response> | Response;
+    onTaskReceipt?: (event: InstalledPluginTaskReceiptEvent) => void;
   } = {},
 ) {
   const lease = uiLease();
@@ -62,6 +64,7 @@ function fixture(
     assertCurrent,
     onDiagnostic,
     importer,
+    onTaskReceipt: overrides.onTaskReceipt,
   });
   return {
     ...wire,
@@ -339,6 +342,132 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     );
     await check;
     await handle.stop();
+  });
+
+  it("observes a same-session committed receipt after module navigation while cancelling delivery to disposed plugin code", async () => {
+    const gate = deferred<Response>();
+    const observer = vi.fn();
+    const receipt = {
+      disposition: "committed",
+      threadId: "thread:1",
+      threadRevision: 2,
+      runId: "run:1",
+      messageId: "message:1",
+      configurationRevision: 1,
+    };
+    const f = fixture({
+      actionResponse: () => gate.promise,
+      onTaskReceipt: observer,
+    });
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease: f.lease,
+      props: uiProps(),
+    });
+    handles.push(handle);
+    const called = f.h.instances[0].services.invoke(
+      "arbitrary.business.command",
+      null,
+      {},
+    );
+    const rejected = expect(called).rejects.toThrow(
+      "plugin_ui_operation_aborted",
+    );
+    await flush();
+    const request = f.fetch.mock.calls.find(([url]) =>
+      String(url).endsWith("/actions"),
+    )!;
+    await handle.stop();
+    await rejected;
+    expect(request[1]?.signal?.aborted).toBe(false);
+    gate.resolve(controlUiResponse({ output: receipt }));
+    await flush();
+    expect(observer).toHaveBeenCalledExactlyOnceWith({
+      lease: f.lease,
+      receipt,
+    });
+    expect(f.h.instances[0].dispose).toHaveBeenCalledTimes(1);
+    expect(f.h.root.textContent).toBe("");
+  });
+
+  it("does not publish a late receipt to a replacement account session", async () => {
+    const gate = deferred<Response>();
+    const observer = vi.fn();
+    const f = fixture({
+      actionResponse: () => gate.promise,
+      onTaskReceipt: observer,
+    });
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease: f.lease,
+      props: uiProps(),
+    });
+    handles.push(handle);
+    const called = f.h.instances[0].services.invoke("task", null, {});
+    const rejected = expect(called).rejects.toThrow("captured_session_revoked");
+    await flush();
+    f.revoke();
+    gate.resolve(
+      controlUiResponse({
+        output: {
+          disposition: "committed",
+          threadId: "thread:1",
+          threadRevision: 2,
+          runId: "run:1",
+          messageId: "message:1",
+          configurationRevision: 1,
+        },
+      }),
+    );
+    await rejected;
+    expect(observer).not.toHaveBeenCalled();
+  });
+
+  it("keeps ordinary or extra-field action output ordinary even with a receipt observer", async () => {
+    const observer = vi.fn();
+    const output = { accepted: true, runId: "run:1" };
+    const f = fixture({
+      actionResponse: () => controlUiResponse({ output }),
+      onTaskReceipt: observer,
+    });
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease: f.lease,
+      props: uiProps(),
+    });
+    handles.push(handle);
+    await expect(
+      f.h.instances[0].services.invoke("tasks.request", null, {}),
+    ).resolves.toEqual(output);
+    expect(observer).not.toHaveBeenCalled();
+  });
+
+  it("diagnoses a receipt observer failure without rejecting a confirmed response", async () => {
+    const receipt = {
+      disposition: "replayed",
+      threadId: "thread:1",
+      threadRevision: 2,
+      runId: "run:1",
+      messageId: "message:1",
+      configurationRevision: 1,
+    };
+    const failure = new Error("host_task_projection_unavailable");
+    const f = fixture({
+      actionResponse: () => controlUiResponse({ output: receipt }),
+      onTaskReceipt() {
+        throw failure;
+      },
+    });
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease: f.lease,
+      props: uiProps(),
+    });
+    handles.push(handle);
+    await expect(
+      f.h.instances[0].services.invoke("business", null, {}),
+    ).resolves.toEqual(receipt);
+    expect(f.onDiagnostic).toHaveBeenCalledExactlyOnceWith(failure);
   });
 
   it("rejects file renderers and cross-origin API configuration before acquiring or importing", () => {

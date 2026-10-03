@@ -6,6 +6,26 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新全量结果以首节为准。
 
+## 2026-10-03：已安装模块的任务上下文与连续查询
+
+原 `App` 通过通用宿主为声明 `crewon.tasks@1/@2` 的独立页面提供实际会话修订、至多八项公开任务和用户明确选择的生成操作。没有当前会话时，打开模块不创建 Thread/Run；点击通用“创建任务”后才使用原认证客户端创建目标并读取真实修订。新目标暂不切换 App 选择，业务草稿继续保留；点击“打开任务”才进入原会话。没有 Krea 名称专用的宿主分支，SDK、公开 HTTP 与持久形状没有改动，详见[任务上下文协议](./installed-plugin-ui-task-context.md)。
+
+Web/Native 只观察当前客户端实际返回的完整六字段任务回执。同账号晚到 COMMIT 保存为有界恢复提示，模块重新读取实际任务、核对插件/会话/配置后才调用原 `ControlThreadRuntime.adoptExtensionTask`；原 Run、转录、SSE 和重连继续负责执行。缓存每账号至多三十二项、每插件八项，账号变更同步撤回清空，完整当前包 pin 才可作为当前模块接回。StrictMode 的同一所有者临时重挂不丢恢复提示，真实撤回仍失效。
+
+同一客户端的元数据和创建请求共用一个实际物理槽及至多十六个等待者；取消和期限不提前释放尚未结束的 HTTP。排队期间退出或撤权后，创建 POST/确认 GET 在实际派发前再次拒绝，三项实际客户端回归覆盖这处竞态。已发送且结果未知的创建仍保留同一 body/key 重试。元数据暂时不可读时，同一所有者保留核验过的结果和来源、禁用新业务意图；真正切换会话、包或账号才撤回旧上下文。
+
+Krea2 UI 确认受理后等待真实修订更新，再以新键连续生成或查询。未知结果锁定原请求和描述；查询始终引用用户选定的原 `sourceRunId/operationId`，不将查询 Run 当作生成来源。公开任务状态和 HTTPS 结果引用可见，不自动下载图片。独立 bundle 的真实 UI 单元专项 **18/18**，实际安装式 UI/Worker 的 SQLite/PostgreSQL 原查询重放、停用冷启动与 B 查询旧 A 专项 **6/6、零跳过**；原双库行为断言未改。两版当前产物位于 `output/extensions/installable-plugins/task-context-20261003/krea2/<version>`，不是已在用户生产 profile 启用的声明。
+
+新的 `pnpm --filter @crewon/ui test:installed-plugin-task-context` 复用唯一 SDK producer，仓外构建后实际删除开发源码及依赖，再运行真实包/正式模块/原 typed 客户端/Runtime/SSE 的两项组件集成，**2/2、零跳过**。具名 HTTP 响应夹具覆盖显式创建、实际修订 1/2/3、连续原操作查询、`Last-Event-ID` 恢复及退出后的晚到 COMMIT；不是正式 Control server、真实 payer/provider 或 full App 验收。普通 UI 测试缺少包夹具时不运行这两项，空/坏目录硬失败；本轮专项和最终全量均实际提供包并运行。日志为 `installed-plugin-task-context-official-producer-consumer-final-20261003.log`。
+
+最终通用接线与原任务流专项 **14 文件、106/106**，原工作区/Chrome/设置/样式/架构专项 **8 文件、114/114**。UI lint/build、boundary 通过。最终全 UI **3389 通过、8 失败、2 跳过，共 3399 项**，另有三个旧 obsolete snapshot；不能称全量通过。八项完整名称、错误及首帧仍与 `02b8856b4` 前阶段日志相同：TranscriptWindow 四项，线程目录/工作区/Office 各一项和 soak 超时；未修改这些旧失败或旧快照。日志为 `installed-plugin-task-context-{connected,original-ui,ui-full,ui-lint,ui-build}-frozen-20261003.log`，对比证据为 `installed-plugin-task-context-ui-baseline-comparison-final-20261003.json`。
+
+原全局 CSS、用户菜单、设置导航和左右栏源文件逐字节保持本轮开始版本；新增样式仅通用任务控件的 CSS Module 和两份新快照。5719 浏览器实际再次进入原设置外观页，并验证 1280px 下左栏 232px、右工作台 480px，主内容占剩余 568px，不遮盖。证据为 `installed-plugin-task-context-original-shell-20261003.json` 和同前缀命令/工作台/设置截图。该页仍为离线预览，后端配置暂不可用，不能作为正式配置写入或在线生成证明。
+
+全部实际消费者结束后，自有 PostgreSQL 核对其他连接和测试 schema 为零，停机、清除 PID/root/socket 并重新绑定端口；外部 producer 的开发目录及错误放置的自有 scratch 已删除，正式产物保留。记录为 `installed-plugin-task-context-owned-cleanup-final-20261003.log`；新增专项自身的 producer/consumer 临时目录也已清理。用户 5719/5720 服务继续保留。
+
+本阶段补齐生产页面的通用接线与组件/双库验证。正式 Main/full App/packaged App 的实际生成与历史查询、真实身份/价格/资金及结算、短剧持久项目和第二个真实企业 API 仍未完成。用户 ComfyUI 地址的只读检查仍为 404，恢复地址与资金价格来源问题尚待确认；没有将夹具当作在线生成。下一落地点是完整 App 的实际任务路径，目标继续进行。
+
 ## 2026-10-03：原设置页中的通用已安装插件配置
 
 原用户栏、设置导航、全局 CSS 和既有快照保持本轮开始时的版本。正式 `CommandSettingsRoute` 在已有“工具与扩展 → 已安装插件”卡片内增加“业务配置”，沿用原公共控件；没有新设置分类或插件专用宿主分支。仍选中的停用包可配置，卸载后入口撤下。旧的只接安装客户端的组件调用保持原 DOM，配置能力由正式设置组合显式传入。

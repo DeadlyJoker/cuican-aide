@@ -25,6 +25,8 @@ import type { Theme } from "../theme";
 import { InstalledPluginModule } from "../../components/plugins/InstalledPluginModule";
 import { readPluginUiTheme } from "../../components/plugins/pluginUiPresentation";
 import { INSTALLED_PLUGIN_SELECTION_CHANGED } from "../plugins/installedPluginChanges";
+import { createInstalledPluginTaskReceipts } from "../plugins/installedPluginTaskReceipts";
+import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -36,12 +38,20 @@ export function useInstalledPluginModules({
   sessionKey,
   theme,
   locale,
+  taskContext,
 }: Readonly<{
   client: ControlApiClient | null;
   /** A host account lifecycle key only; HTTP authority continues to come from its authenticated session. */
   sessionKey: string | null;
   theme: Theme;
   locale: Locale;
+  /** Formal host composition; portable modules never receive these ports. */
+  taskContext?: Readonly<{
+    runtime: Pick<ControlThreadRuntime, "adoptExtensionTask"> | null;
+    selectedThreadId: string | null;
+    runIds: readonly string[];
+    onOpenTask(threadId: string): void;
+  }>;
 }>) {
   const [suspendedClient, setSuspendedClient] =
     useState<ControlApiClient | null>(null);
@@ -72,6 +82,48 @@ export function useInstalledPluginModules({
   }, [client, suspendedClient, sessionKey]);
   const current = useRef(scope);
   current.current = scope;
+  const mountedScope = useRef<typeof scope>(null);
+  const mountedReceipts = useRef<ReturnType<
+    typeof createInstalledPluginTaskReceipts
+  > | null>(null);
+  const taskContextRef = useRef(taskContext);
+  taskContextRef.current = taskContext;
+  const taskContextEnabled = taskContext !== undefined;
+  const receipts = useMemo(
+    () =>
+      scope && taskContextEnabled
+        ? createInstalledPluginTaskReceipts({
+            assertCurrent: () => {
+              if (current.current !== scope || mountedScope.current !== scope)
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onDiagnostic,
+          })
+        : null,
+    [scope, taskContextEnabled, onDiagnostic],
+  );
+  useLayoutEffect(() => {
+    mountedScope.current = scope;
+    mountedReceipts.current = receipts;
+    return () => {
+      if (
+        mountedScope.current === scope &&
+        mountedReceipts.current === receipts
+      ) {
+        mountedScope.current = null;
+        mountedReceipts.current = null;
+      }
+      // StrictMode immediately reattaches this same owner. Real withdrawal
+      // fences synchronously and erases its recovery cache after that boundary.
+      queueMicrotask(() => {
+        if (
+          mountedScope.current !== scope ||
+          mountedReceipts.current !== receipts
+        )
+          receipts?.invalidate();
+      });
+    };
+  }, [scope, receipts]);
   const host = useMemo(
     () =>
       scope
@@ -81,13 +133,18 @@ export function useInstalledPluginModules({
             client: scope.client,
             assets: scope.assets!,
             assertCurrent: () => {
-              if (current.current !== scope)
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedReceipts.current !== receipts
+              )
                 throw new PluginUiLoaderError("plugin_ui_session_changed");
             },
             onDiagnostic,
+            ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
           })
         : null,
-    [scope, onDiagnostic],
+    [scope, onDiagnostic, receipts],
   );
   useLayoutEffect(() => {
     if (!scope?.assets) return;
@@ -131,6 +188,9 @@ export function useInstalledPluginModules({
     const invalidate = () => {
       // Withdraw before a replacement client bootstrap finishes, including a bootstrap that fails.
       current.current = null;
+      mountedScope.current = null;
+      mountedReceipts.current = null;
+      receipts?.invalidate();
       setSuspendedClient(client);
       setSnapshot(null);
     };
@@ -140,7 +200,7 @@ export function useInstalledPluginModules({
         AGENT_PLATFORM_SESSION_CHANGED_EVENT,
         invalidate,
       );
-  }, [client]);
+  }, [client, receipts]);
   useEffect(() => {
     if (!scope || !host) return;
     const controller = new AbortController();
@@ -194,6 +254,33 @@ export function useInstalledPluginModules({
     };
   }, [scope, host, onDiagnostic, catalogRevision]);
   const catalog = snapshot?.scope === scope ? snapshot.catalog : null;
+  const taskRuntime = taskContext?.runtime ?? null;
+  const taskPorts = useMemo(
+    () =>
+      scope && taskRuntime && receipts
+        ? {
+            client: scope.client,
+            runtime: taskRuntime,
+            receiptSource: receipts,
+            assertSessionCurrent: () => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedReceipts.current !== receipts ||
+                taskContextRef.current?.runtime !== taskRuntime
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+          }
+        : null,
+    [scope, taskRuntime, receipts],
+  );
+  const selectedTaskThreadId = taskContext?.selectedThreadId ?? null;
+  const taskRunIdsKey = JSON.stringify(taskContext?.runIds.slice(0, 8) ?? []);
+  const taskRunIds = useMemo<readonly string[]>(
+    () => Object.freeze(JSON.parse(taskRunIdsKey)),
+    [taskRunIdsKey],
+  );
   const hostModules = useMemo<readonly CommandWorkspaceHostModule[]>(() => {
     if (!host || !catalog) return EMPTY_MODULES;
     return Object.freeze(
@@ -210,11 +297,27 @@ export function useInstalledPluginModules({
               theme={presentation}
               locale={locale}
               onDiagnostic={onDiagnostic}
+              taskPorts={taskPorts}
+              selectedThreadId={selectedTaskThreadId}
+              runIds={taskRunIds}
+              onOpenTask={(threadId) => {
+                taskPorts?.assertSessionCurrent();
+                if (taskPorts) taskContextRef.current?.onOpenTask(threadId);
+              }}
             />
           ),
         }),
       ),
     );
-  }, [host, catalog, presentation, locale, onDiagnostic]);
+  }, [
+    host,
+    catalog,
+    presentation,
+    locale,
+    onDiagnostic,
+    taskPorts,
+    selectedTaskThreadId,
+    taskRunIds,
+  ]);
   return { hostModules, getDiagnostics: () => diagnostics.current };
 }

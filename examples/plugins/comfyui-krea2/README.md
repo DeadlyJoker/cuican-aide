@@ -8,7 +8,9 @@
 
 宿主配置为 `{ "baseUrl": "https://approved-comfyui.example/" }`，不含凭据。地址必须是无用户信息、查询或片段的 HTTPS 根地址。宿主负责当前用户权限、个人独立积分报价和预留、固定服务地址的 DNS 与网络策略、请求限额、持久外部操作，以及原任务系统的运行和回执。执行工厂需要宿主提供 `PluginExecutionServices` 的 `externalOperations`、`jsonHttp` 和真实审批模式；缺失时明确拒绝执行。插件不会自行打开数据库或发起直接网络请求。
 
-UI 贡献为 `studio`，提供 `image.generate` 和 `image.query`。宿主通过 UI 数据投影传入 `threadId`、`expectedThreadRevision`，可传入 `idempotencyKey`、`input.prompt`。查询另外需要投影真实 `sourceRunId`、`operationId`，可提供独立 `queryIdempotencyKey`。查询仅传源引用给 `crewon.tasks@2`，宿主从持久原任务解析原包版本、配置、目标和当前权限。每个按钮保存一次幂等请求，未知受理结果重试同一请求。
+UI 贡献为 `studio`，提供 `image.generate` 和 `image.query`。宿主通过 UI 数据投影传入真实 `threadId`、`expectedThreadRevision`，可传入 `idempotencyKey`、`input.prompt`。查询另外需要投影用户明确选中的 `sourceRunId`、`operationId`，可提供独立 `queryIdempotencyKey`。查询仅传源引用给 `crewon.tasks@2`，宿主从持久原任务解析原包版本、配置、目标和当前权限。
+
+确认回执后等待宿主实际会话版本更新，再允许以新键连续提交；固定投影键仅用于该动作的首个意图。未知结果保存冻结的完整请求和键，锁定描述与另一动作，只允许重试同一请求。可选 `taskContextReady=false` 阻止新意图，不删除未知请求；旧宿主没有此字段时保持兼容。真正切换会话或查询来源撤回相应旧意图，晚到结果不能覆盖新上下文。`tasks` 或 `task` 可提供公开任务状态与结果引用，页面不由结果列表猜测查询来源。宿主通用接线见[任务上下文](../../../docs/installed-plugin-ui-task-context.md)。
 
 执行工具保留 `crewon_comfyui_krea2__submit`、`crewon_comfyui_krea2__observe`。提交前先持久预留，只有 `created` 加一次性调度凭证才允许 `POST /prompt`；已存在操作、恢复和查询均只读取。ComfyUI 的 `prompt_id` 是关联标识，不是服务端去重保证。超时、断线或查无历史都不允许重新提交。查询读取 `/history/<id>`、必要时读取 `/queue`，只采信输出节点 `29` 的真实结果。图片结果仅包含经过校验的 `/view` 引用，不下载图片。取消不会调用全局 `/interrupt`。
 

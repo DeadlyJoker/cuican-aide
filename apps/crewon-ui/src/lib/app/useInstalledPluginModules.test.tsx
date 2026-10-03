@@ -8,6 +8,8 @@ import type { PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import { useInstalledPluginModules } from "./useInstalledPluginModules";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 import { notifyInstalledPluginSelectionChanged } from "../plugins/installedPluginChanges";
+import type { InstalledPluginTaskPorts } from "../plugins/useInstalledPluginTaskContext.types";
+import type { createInstalledPluginTaskReceipts } from "../plugins/installedPluginTaskReceipts";
 import {
   controlUiClient,
   controlUiItem,
@@ -504,5 +506,59 @@ describe("installed plugin directory App composition (real Control client)", () 
       await vi.advanceTimersByTimeAsync(20_000);
     });
     expect(wire.fetch).toHaveBeenCalledTimes(count);
+  });
+
+  it("keeps the formal task recovery owner usable after StrictMode reattachment and withdraws it on a session change", async () => {
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [item("example.a")], next: null }),
+    );
+    const runtime = { adoptExtensionTask: vi.fn(async () => {}) };
+    await render(
+      wire.client,
+      {
+        taskContext: {
+          runtime,
+          selectedThreadId: null,
+          runIds: [],
+          onOpenTask: vi.fn(),
+        },
+      },
+      true,
+    );
+    const props = presentation() as ReturnType<typeof presentation> & {
+      taskPorts: InstalledPluginTaskPorts;
+    };
+    expect(props.taskPorts).not.toBeNull();
+    const source = props.taskPorts.receiptSource as ReturnType<
+      typeof createInstalledPluginTaskReceipts
+    >;
+    const observed = vi.fn();
+    const stop = source.subscribe(observed);
+    source.observe({
+      lease: uiLease(),
+      receipt: {
+        disposition: "committed",
+        threadId: "thread-recovery",
+        threadRevision: 2,
+        runId: "run-recovery",
+        messageId: "message-recovery",
+        configurationRevision: 1,
+      },
+    });
+    expect(observed).toHaveBeenCalledTimes(1);
+    expect(source.snapshot()).toHaveLength(1);
+    expect(runtime.adoptExtensionTask).not.toHaveBeenCalled();
+    expect(
+      wire.fetch.mock.calls.every((call) => call[1]?.method === "GET"),
+    ).toBe(true);
+    act(() =>
+      window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT)),
+    );
+    expect(() => props.taskPorts.assertSessionCurrent()).toThrow(
+      "plugin_ui_session_changed",
+    );
+    expect(source.snapshot()).toEqual([]);
+    expect(state.hostModules).toEqual([]);
+    stop();
   });
 });

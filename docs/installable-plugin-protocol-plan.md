@@ -62,6 +62,8 @@ SDK 类型、manifest 校验或安装按钮单独通过均不能称为“支持�
 
 ## 当前实现与下一步
 
+原 `App` 现增加通用已安装模块的[真实任务上下文与回执接线](./installed-plugin-ui-task-context.md)：实际 Control 会话版本、用户显式创建目标、公开任务投影、原生成来源选择及原 Runtime/SSE 接回。Web/Native 观察同一完整受理回执，同账号晚到 COMMIT 有界保留，账号变更撤回；元数据失败不清掉未知业务意图。Krea2 页面确认后可连续提交及查询。SDK、公开 HTTP 形状、全局 CSS 和原导航不变。这仍需完整正式 App/Main/packaged App 与在线业务验收，不能把组件和双库夹具作为全部交付证明。
+
 [`@crewon/plugin-sdk`](../packages/plugin-sdk/README.md) 的 `0.1.0` 本地分发提供 `/contracts`、`/node`、`/ui` 三个明确入口；ESM JS 和声明闭包随包提供，不含私有运行时依赖、宿主源码或 React。Node 定义和 UI 定义的校验不会调用业务代码。SDK 已通过真实仓外安装、Node 专用无 DOM 类型编译和 UI 类型编译；UI 的 `mount/update/dispose` 已接到通用加载器及实际安装目录浏览器夹具，短剧原演示界面已迁为独立 UI-only 包，并通过真实双库安装与通用 loader 交互验收；真实项目保存和生成仍待接入。
 
 私有 [`@crewon/plugin-host`](../packages/plugin-host/src/index.ts) 接收预构建目录，核验全部实际文件与 SHA-256、目录边界及限额，拒绝链接、非普通文件和未声明文件。宿主明确批准后，以独占 staging、同摘要锁和原子发布安装到 `packages/<完整摘要>`。不运行构建脚本，不从源码包自动安装依赖；开发者需将 SDK 和运行依赖构建进声明的产物。受控来源目录与原设置页的正式安装管理已接通，桌面批准由 Native 私有配置提供；业务 `.tgz` 解包输入及真实多用户权限权威的部署仍待验收。

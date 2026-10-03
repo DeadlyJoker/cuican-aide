@@ -18,6 +18,7 @@
     "lint": "tsc -b --noEmit && pnpm desktop:host:lint",
     "desktop:host:lint": "tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:installed-plugin-task-context": "node scripts/test-installed-plugin-task-context.mjs",
     "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs"
   },
   "dependencies": {
