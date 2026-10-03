@@ -1,6 +1,6 @@
 # 概念图结果选用协议
 
-日期：2026-10-04。状态：独立协议、Domain/Application、SQLite/PostgreSQL 存储、HTTP/BFF/Client、SDK 和实际已安装 UI owner 已接通并通过分层验证；短剧页面尚未接入本协议，完整 S0 验收仍在推进。
+日期：2026-10-04。状态：独立协议、Domain/Application、SQLite/PostgreSQL 存储、HTTP/BFF/Client、SDK、实际已安装 UI owner 与独立短剧 7.0.0 页面已接通并通过分层验证；完整 App 在线流程及进程重启后的 UNKNOWN 持久恢复仍在推进。
 
 ## 范围
 
@@ -74,7 +74,9 @@ revision 为 0 当且仅当实际当前指针为空。未配置能力、未迁�
 
 宿主另提供可选的 `props.data.projectGenerationSelectionContext` 恢复提示，版本为 `crewon.project-generation-selection-host-context.v1`，字段仅为 `version` 与 `intent`。intent 为 null，或包含完整原 request、`pending/uncertain/accepted/refused`、retryable 及原不可变 receipt；只有 uncertain 可以重试，只有 accepted 携带匹配原请求的回执。整个提示最多 24 KiB，拒绝 getter、额外字段及客户端构造的当前指针，不包含 Thread、运行范围、账号或付款信息。它不授予能力；新写仍沿真实当前挂载和原服务授权。
 
-选用恢复保留原账户与完整 source pin 审计，同一包的停用后重新启用可以使用当前真实有效的挂载显式重试原 key 和原输入；包、发布者、版本或贡献变更不能替换未知请求。此规则不改变原生成和查询 journal 的 pin 规则。accepted 回执与当前指针分开，页面必须另行 GET 当前选用；宿主不会用原回执覆盖较新选择。页面控件与账户 journal 正在接线；同一运行中重挂的恢复不代表应用进程重启后的持久恢复。
+选用恢复保留原账户与完整 source pin 审计，同一包的停用后重新启用可以使用当前真实有效的挂载显式重试原 key 和原输入；包、发布者、版本或贡献变更不能替换未知请求。此规则不改变原生成和查询 journal 的 pin 规则。accepted 回执与当前指针分开，页面必须另行 GET 当前选用；宿主不会用原回执覆盖较新选择。独立短剧 7.0.0 的页面控件与账户 journal 已接通；同一运行中重挂的恢复不代表应用进程重启后的持久恢复。
+
+首次实际派发收到明确的项目、素材、operation 或选用版本冲突时，journal 可以记录 refused；页面显式读取真实元数据与当前指针后等待下一次用户点击，不自动重基或提交。已有 UNKNOWN 的原请求随后得到相同冲突也不能证明先前未提交，必须保留原输入和原 key。网络错误、回复缺失、超时或坏响应继续保持 UNKNOWN；已确认的回执不会回退。
 
 `requiresConfirmation` 只比较选用输入与最新素材输入、所依赖需求与最新需求。修改描述或需求后，旧选用保留并提示重新确认；项目重命名不使选用过期。选用时间用于审计，版本承担顺序，时钟回拨不造成伪版本冲突。
 

@@ -1,3 +1,4 @@
+import type { InstalledPluginProjectSelectionJournal } from "./installedPluginProjectSelectionJournal";
 import {
   parsePluginUiCatalogResponse,
   type PluginUiCatalogItem,
@@ -6,6 +7,9 @@ import {
   parsePluginUiLease,
   PROJECT_GENERATION_UI_ACTIONS,
   PROJECT_GENERATION_QUERY_UI_ACTIONS,
+  PROJECT_GENERATION_SELECTION_UI_ACTIONS,
+  parseProjectGenerationSelectionUiActionRequest,
+  parseProjectGenerationSelectionUiActionResponse,
   parseProjectGenerationUiActionRequest,
   parseProjectGenerationQueryUiActionRequest,
   type PluginUiLease,
@@ -53,12 +57,18 @@ export function createControlPluginUiHost(
     onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
     generationJournal?: InstalledPluginGenerationJournal;
     projectQueryJournal?: InstalledPluginProjectQueryJournal;
+    selectionJournal?: InstalledPluginProjectSelectionJournal;
     /** Explicit importer injection is for deterministic lifecycle tests; native URL import is the default. */
     importer?: PluginUiModuleImporter;
   }>,
 ): ControlPluginUiHost {
-  const { client, assertCurrent, generationJournal, projectQueryJournal } =
-    options;
+  const {
+    client,
+    assertCurrent,
+    generationJournal,
+    projectQueryJournal,
+    selectionJournal,
+  } = options;
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -99,6 +109,42 @@ export function createControlPluginUiHost(
         await validateLease(lease, signal);
       },
       async invoke(lease, input) {
+        if (
+          PROJECT_GENERATION_SELECTION_UI_ACTIONS.some(
+            (action) => action === input.action,
+          )
+        ) {
+          const selection = parseProjectGenerationSelectionUiActionRequest({
+            action: input.action,
+            input: input.input,
+          });
+          if (selection.action === PROJECT_GENERATION_SELECTION_UI_ACTIONS[1]) {
+            if (!selectionJournal)
+              uiFailure("plugin_ui_project_selection_journal_unavailable");
+            const response = await selectionJournal.invoke({
+              lease,
+              input: selection.input,
+              signal: input.signal,
+              assertCurrent,
+              request: (signal) =>
+                client.plugins.invoke(lease.mountRef, selection, { signal }),
+            });
+            assertPluginUiCurrent(assertCurrent, input.signal);
+            return response.output;
+          }
+          // GET is an authenticated observation, separate from all mutation/task journals.
+          assertPluginUiCurrent(assertCurrent, input.signal);
+          const response = await pluginUiControlRequest(
+            (signal) =>
+              client.plugins.invoke(lease.mountRef, selection, { signal }),
+            input.signal,
+          );
+          assertPluginUiCurrent(assertCurrent, input.signal);
+          return parseProjectGenerationSelectionUiActionResponse(
+            selection,
+            response.output,
+          );
+        }
         if (input.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0]) {
           if (!projectQueryJournal)
             uiFailure("plugin_ui_project_query_journal_unavailable");

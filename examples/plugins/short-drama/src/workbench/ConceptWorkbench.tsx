@@ -5,6 +5,7 @@ import { ConceptEditor } from "./ConceptEditor";
 import { ConceptGenerationView } from "./ConceptGenerationView";
 import { ConceptQueryActions } from "./ConceptQueryActions";
 import { ConceptGenerationActions } from "./ConceptGenerationActions";
+import { ConceptImageSelectionActions } from "./ConceptImageSelectionActions";
 import type { ProjectDetails } from "./creative-project-controller";
 
 /** Shows saved inputs, immutable history and the original task records for the selected revision. */
@@ -106,6 +107,7 @@ export function ConceptWorkbench({
           <ConceptGenerationActions controller={controller.submissions} />
           <ConceptGenerationView
             queries={controller.queries}
+            images={controller.images}
             controller={controller.generations}
             name={snapshot.selection.asset.name}
             blocked={locked}
@@ -123,6 +125,7 @@ export function ConceptWorkbench({
       {!snapshot.selection && controller.queries.getSnapshot().request && (
         <ConceptQueryActions controller={controller.queries} />
       )}
+      <ConceptImageSelectionActions controller={controller.images} />
       {snapshot.error && (
         <p className="detail-note" role="alert">
           {snapshot.error}

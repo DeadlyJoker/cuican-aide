@@ -9,11 +9,13 @@ import {
   createPluginProjectGenerationClient,
   createPluginProjectGenerationContextClient,
   createPluginProjectGenerationQueryClient,
+  createPluginProjectGenerationSelectionClient,
   type PluginCreativeProjectClient,
   type PluginProjectGenerationReadClient,
   type PluginProjectGenerationClient,
   type PluginProjectGenerationContextClient,
   type PluginProjectGenerationQueryClient,
+  type PluginProjectGenerationSelectionClient,
 } from "@crewon/plugin-sdk/ui";
 import { metadataService } from "../../../../../examples/plugins/short-drama/test/persistent-ui.test-support.mjs";
 import { flush } from "../../lib/plugins/pluginUiLoader.test-support";
@@ -28,6 +30,7 @@ const { CreativeProjectController } = await vi.importActual<{
     submissions: PluginProjectGenerationClient;
     contexts: PluginProjectGenerationContextClient;
     queries: PluginProjectGenerationQueryClient;
+    selections: PluginProjectGenerationSelectionClient;
   }) => Controller;
 }>(
   new URL(
@@ -68,6 +71,7 @@ async function fixture(service: ReturnType<typeof metadataService>) {
     submissions: createPluginProjectGenerationClient(service.services),
     contexts: createPluginProjectGenerationContextClient(service.services),
     queries: createPluginProjectGenerationQueryClient(service.services),
+    selections: createPluginProjectGenerationSelectionClient(service.services),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -129,6 +133,9 @@ describe("independent short-drama persistent presentation", () => {
       submissions: createPluginProjectGenerationClient(service.services),
       contexts: createPluginProjectGenerationContextClient(service.services),
       queries: createPluginProjectGenerationQueryClient(service.services),
+      selections: createPluginProjectGenerationSelectionClient(
+        service.services,
+      ),
     });
     const markup = renderToStaticMarkup(
       <ShortDramaPersistentWorkbench controller={controller} />,

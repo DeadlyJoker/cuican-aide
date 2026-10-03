@@ -26,6 +26,11 @@ import {
 } from "../../lib/plugins/useInstalledPluginProjectQueryContext";
 import { InstalledPluginProjectQueryControls } from "./InstalledPluginProjectQueryControls";
 
+import {
+  useInstalledPluginProjectSelectionContext,
+  type InstalledPluginProjectSelectionPorts,
+} from "../../lib/plugins/useInstalledPluginProjectSelectionContext";
+
 const LEASE_CHECK_INTERVAL_MS = 1_000;
 type Monitor = {
   controller: AbortController;
@@ -43,6 +48,7 @@ export function InstalledPluginModule({
   taskPorts = null,
   generationPorts = null,
   projectQueryPorts = null,
+  selectionPorts = null,
   selectedThreadId = null,
   runIds = [],
   onOpenTask,
@@ -56,6 +62,7 @@ export function InstalledPluginModule({
   taskPorts?: InstalledPluginTaskPorts | null;
   generationPorts?: InstalledPluginGenerationPorts | null;
   projectQueryPorts?: InstalledPluginProjectQueryPorts | null;
+  selectionPorts?: InstalledPluginProjectSelectionPorts | null;
   selectedThreadId?: string | null;
   runIds?: readonly string[];
   onOpenTask?(threadId: string): void;
@@ -110,6 +117,16 @@ export function InstalledPluginModule({
     module.key,
     generation.refresh,
   ]);
+  const selectionEnabled = module.plugin.descriptor.requires.some(
+    (item) =>
+      item.service === "crewon.project-generation-selections" &&
+      item.apiVersion === "1",
+  );
+  const selection = useInstalledPluginProjectSelectionContext({
+    ports: selectionEnabled ? selectionPorts : null,
+    module,
+    active,
+  });
   const tasks = useInstalledPluginTaskContext({
     ports: taskEnabled ? taskPorts : null,
     module,
@@ -221,6 +238,9 @@ export function InstalledPluginModule({
         ...(queryEnabled && projectQueryPorts
           ? { projectGenerationQueryContext: projectQuery.context }
           : {}),
+        ...(selectionEnabled && selectionPorts
+          ? { projectGenerationSelectionContext: selection.context }
+          : {}),
       }),
     }),
     [
@@ -236,6 +256,9 @@ export function InstalledPluginModule({
       queryEnabled,
       projectQueryPorts,
       projectQuery.context,
+      selectionEnabled,
+      selectionPorts,
+      selection.context,
       ready,
       context,
     ],

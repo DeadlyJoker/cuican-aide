@@ -6,6 +6,8 @@ import type {
 import type { ConceptQueryController } from "./ConceptQueryController";
 import { ConceptQueryOperationButton } from "./ConceptQueryActions";
 import type { ConceptGenerationController } from "./ConceptGenerationController";
+import type { ConceptImageSelectionController } from "./ConceptImageSelectionController";
+import { ConceptImageSelectionButton } from "./ConceptImageSelectionActions";
 
 const runLabels: Record<ConceptGenerationTaskView["runStatus"], string> = {
   queued: "排队中",
@@ -31,12 +33,14 @@ const operationLabels: Record<ConceptGenerationOperation["status"], string> = {
 export function ConceptGenerationView({
   controller,
   queries,
+  images,
   name,
   blocked,
   unconfirmed = false,
 }: {
   controller: ConceptGenerationController;
   queries: ConceptQueryController;
+  images: ConceptImageSelectionController;
   name: string;
   blocked: boolean;
   unconfirmed?: boolean;
@@ -124,6 +128,19 @@ export function ConceptGenerationView({
                   <p className="detail-note">
                     结果 {image.resultIndex + 1} · {image.filename}
                   </p>
+                  <ConceptImageSelectionButton
+                    controller={images}
+                    choice={{
+                      reference: {
+                        projectId: generation.projectId,
+                        assetId: generation.assetId,
+                        assetRevision: generation.assetRevision,
+                      },
+                      operationId: operation.operationId,
+                      operationRevision: operation.operationRevision,
+                      resultIndex: image.resultIndex,
+                    }}
+                  />
                 </div>
               ))}
             </div>

@@ -4,6 +4,8 @@ import type {
   PluginProjectGenerationClient,
   PluginProjectGenerationContextClient,
   PluginProjectGenerationQueryClient,
+  PluginProjectGenerationSelectionClient,
+  ProjectGenerationSelectionHostContext,
   ProjectGenerationQueryHostContext,
   ProjectGenerationHostContext,
 } from "@crewon/plugin-sdk/ui";
@@ -106,6 +108,7 @@ export class CreativeProjectController {
   readonly concepts: ConceptController;
   readonly #generationRecovery: GenerationSourceRecovery;
   readonly #queryRecovery: GenerationSourceRecovery;
+  readonly #selectionRecovery: GenerationSourceRecovery;
   #client: PluginCreativeProjectClient;
   #listeners = new Set<() => void>();
   #ready = false;
@@ -142,6 +145,7 @@ export class CreativeProjectController {
     submissions: PluginProjectGenerationClient;
     contexts: PluginProjectGenerationContextClient;
     queries: PluginProjectGenerationQueryClient;
+    selections: PluginProjectGenerationSelectionClient;
   }) {
     const client = ports.projects;
     this.#client = client;
@@ -151,6 +155,9 @@ export class CreativeProjectController {
       submissionClient: ports.submissions,
       contextClient: ports.contexts,
       queryClient: ports.queries,
+      selectionClient: ports.selections,
+      restoreSelectionSource: (request) =>
+        this.#selectionRecovery.restore(request),
       restoreQuerySource: (request) => this.#queryRecovery.restore(request),
       restoreGenerationSource: (request) =>
         this.#generationRecovery.restore(request),
@@ -175,6 +182,22 @@ export class CreativeProjectController {
       selection: import("./ConceptController.types").ConceptSelection,
     ) => {
       if (!this.#ready || this.#disposed) return;
+      const imageRequest = this.concepts.images.getSnapshot().request;
+      if (
+        this.concepts.images.locked &&
+        imageRequest &&
+        JSON.stringify([
+          imageRequest.reference.projectId,
+          imageRequest.reference.assetId,
+          imageRequest.reference.assetRevision,
+        ]) !==
+          JSON.stringify([
+            selection.asset.projectId,
+            selection.asset.assetId,
+            selection.revision.assetRevision,
+          ])
+      )
+        throw new Error("selection_source_recovery_mismatch");
       this.concepts.preserveGenerationDraft();
       this.#detail?.abort();
       this.#update({
@@ -209,6 +232,28 @@ export class CreativeProjectController {
       },
     );
     this.#queryRecovery = new GenerationSourceRecovery(client, applyRecovery);
+    this.#selectionRecovery = new GenerationSourceRecovery(
+      client,
+      (details, selection) => {
+        const request = this.concepts.images.getSnapshot().request;
+        if (
+          !this.concepts.images.hasHostContext ||
+          !request ||
+          JSON.stringify([
+            request.reference.projectId,
+            request.reference.assetId,
+            request.reference.assetRevision,
+          ]) !==
+            JSON.stringify([
+              selection.asset.projectId,
+              selection.asset.assetId,
+              selection.revision.assetRevision,
+            ])
+        )
+          throw new Error("selection_source_recovery_invalidated");
+        applyRecovery(details, selection);
+      },
+    );
   }
   getSnapshot = (): ProjectSnapshot => this.#snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -233,6 +278,7 @@ export class CreativeProjectController {
       void this.loadProjects(this.#snapshot.state);
       this.concepts.submissions.resume();
       this.concepts.queries.resume();
+      this.concepts.images.resume();
     } else {
       this.#abort();
       this.#update({
@@ -251,9 +297,15 @@ export class CreativeProjectController {
     this.concepts.queries.setHostContext(context);
     this.#update({});
   }
+  setSelectionContext(context: ProjectGenerationSelectionHostContext | null) {
+    if (!context) this.#selectionRecovery.abort();
+    this.concepts.images.setHostContext(context);
+    this.#update({});
+  }
   #abort() {
     this.#generationRecovery.abort();
     this.#queryRecovery.abort();
+    this.#selectionRecovery.abort();
     for (const controller of [
       this.#list,
       this.#detail,
@@ -270,6 +322,7 @@ export class CreativeProjectController {
     this.concepts.dispose();
     this.#generationRecovery.dispose();
     this.#queryRecovery.dispose();
+    this.#selectionRecovery.dispose();
     this.#listeners.clear();
   }
 

@@ -30,6 +30,7 @@ import type { ControlThreadRuntime } from "../control-runtime/controlThreadRunti
 import { createInstalledPluginGenerationJournal } from "../plugins/installedPluginGenerationJournal";
 
 import { createInstalledPluginProjectQueryJournal } from "../plugins/installedPluginProjectQueryJournal";
+import { createInstalledPluginProjectSelectionJournal } from "../plugins/installedPluginProjectSelectionJournal";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -124,6 +125,22 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskContextEnabled, onDiagnostic],
   );
+  const mountedSelectionJournal = useRef<ReturnType<
+    typeof createInstalledPluginProjectSelectionJournal
+  > | null>(null);
+  const selectionJournal = useMemo(
+    () =>
+      scope
+        ? createInstalledPluginProjectSelectionJournal({
+            assertCurrent: () => {
+              if (current.current !== scope || mountedScope.current !== scope)
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onDiagnostic,
+          })
+        : null,
+    [scope, onDiagnostic],
+  );
   const receipts = useMemo(
     () =>
       scope && taskContextEnabled
@@ -142,6 +159,7 @@ export function useInstalledPluginModules({
     mountedReceipts.current = receipts;
     mountedGenerationJournal.current = generationJournal;
     mountedQueryJournal.current = projectQueryJournal;
+    mountedSelectionJournal.current = selectionJournal;
     return () => {
       if (
         mountedScope.current === scope &&
@@ -151,6 +169,7 @@ export function useInstalledPluginModules({
         mountedReceipts.current = null;
         mountedGenerationJournal.current = null;
         mountedQueryJournal.current = null;
+        mountedSelectionJournal.current = null;
       }
       // StrictMode immediately reattaches this same owner. Real withdrawal
       // fences synchronously and erases its recovery cache after that boundary.
@@ -170,9 +189,20 @@ export function useInstalledPluginModules({
           mountedQueryJournal.current !== projectQueryJournal
         )
           projectQueryJournal?.invalidate();
+        if (
+          mountedScope.current !== scope ||
+          mountedSelectionJournal.current !== selectionJournal
+        )
+          selectionJournal?.invalidate();
       });
     };
-  }, [scope, receipts, generationJournal, projectQueryJournal]);
+  }, [
+    scope,
+    receipts,
+    generationJournal,
+    projectQueryJournal,
+    selectionJournal,
+  ]);
   const host = useMemo(
     () =>
       scope
@@ -193,9 +223,17 @@ export function useInstalledPluginModules({
             ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
             ...(generationJournal ? { generationJournal } : {}),
             ...(projectQueryJournal ? { projectQueryJournal } : {}),
+            ...(selectionJournal ? { selectionJournal } : {}),
           })
         : null,
-    [scope, onDiagnostic, receipts, generationJournal, projectQueryJournal],
+    [
+      scope,
+      onDiagnostic,
+      receipts,
+      generationJournal,
+      projectQueryJournal,
+      selectionJournal,
+    ],
   );
   useLayoutEffect(() => {
     if (!scope?.assets) return;
@@ -243,9 +281,11 @@ export function useInstalledPluginModules({
       mountedReceipts.current = null;
       mountedGenerationJournal.current = null;
       mountedQueryJournal.current = null;
+      mountedSelectionJournal.current = null;
       receipts?.invalidate();
       generationJournal?.invalidate();
       projectQueryJournal?.invalidate();
+      selectionJournal?.invalidate();
       setSuspendedClient(client);
       setSnapshot(null);
     };
@@ -255,7 +295,13 @@ export function useInstalledPluginModules({
         AGENT_PLATFORM_SESSION_CHANGED_EVENT,
         invalidate,
       );
-  }, [client, receipts, generationJournal, projectQueryJournal]);
+  }, [
+    client,
+    receipts,
+    generationJournal,
+    projectQueryJournal,
+    selectionJournal,
+  ]);
   useEffect(() => {
     if (!scope || !host) return;
     const controller = new AbortController();
@@ -390,6 +436,23 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskRuntime, projectQueryJournal],
   );
+  const selectionPorts = useMemo(
+    () =>
+      scope && selectionJournal
+        ? {
+            journal: selectionJournal,
+            assertSessionCurrent: () => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedSelectionJournal.current !== selectionJournal
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+          }
+        : null,
+    [scope, selectionJournal],
+  );
   const taskRunIdsKey = JSON.stringify(taskContext?.runIds.slice(0, 8) ?? []);
   const taskRunIds = useMemo<readonly string[]>(
     () => Object.freeze(JSON.parse(taskRunIdsKey)),
@@ -414,6 +477,7 @@ export function useInstalledPluginModules({
               taskPorts={taskPorts}
               generationPorts={generationPorts}
               projectQueryPorts={projectQueryPorts}
+              selectionPorts={selectionPorts}
               selectedThreadId={selectedTaskThreadId}
               runIds={taskRunIds}
               onOpenTask={(threadId) => {
@@ -434,6 +498,7 @@ export function useInstalledPluginModules({
     taskPorts,
     generationPorts,
     projectQueryPorts,
+    selectionPorts,
     selectedTaskThreadId,
     taskRunIds,
   ]);

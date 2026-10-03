@@ -19,6 +19,7 @@ import {
 import { ConceptWorkbench } from "./ConceptWorkbench";
 import { ConceptGenerationActions } from "./ConceptGenerationActions";
 import { ConceptQueryActions } from "./ConceptQueryActions";
+import { ConceptImageSelectionActions } from "./ConceptImageSelectionActions";
 
 function SaveFeedback({
   controller,
@@ -158,6 +159,11 @@ export function ShortDramaPersistentWorkbench({
             )}
           {!details && controller.concepts.queries.getSnapshot().request && (
             <ConceptQueryActions controller={controller.concepts.queries} />
+          )}
+          {!details && controller.concepts.images.getSnapshot().request && (
+            <ConceptImageSelectionActions
+              controller={controller.concepts.images}
+            />
           )}
           {snapshot.phase === "waiting" ? (
             <p className="detail-note" role="status">

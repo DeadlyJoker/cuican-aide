@@ -3,6 +3,9 @@ import {
   createPluginProjectGenerationReadClient,
   createPluginProjectGenerationClient,
   createPluginProjectGenerationQueryClient,
+  createPluginProjectGenerationSelectionClient,
+  parseProjectGenerationSelectionHostContext,
+  type ProjectGenerationSelectionHostContext,
   parseProjectGenerationQueryHostContext,
   type ProjectGenerationQueryHostContext,
   createPluginProjectGenerationContextClient,
@@ -69,6 +72,22 @@ function queryContext(
   }
 }
 
+function selectionContext(
+  data: PluginUiProps["data"],
+): ProjectGenerationSelectionHostContext | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const descriptor = Object.getOwnPropertyDescriptor(
+    data,
+    "projectGenerationSelectionContext",
+  );
+  if (!descriptor || !("value" in descriptor)) return null;
+  try {
+    return parseProjectGenerationSelectionHostContext(descriptor.value);
+  } catch {
+    return null;
+  }
+}
+
 /** Owns only this module's DOM. The shell, account and theme authority stay with CrewON. */
 export default defineUiPlugin({
   apiVersion: "crewon.plugin-ui.v1",
@@ -99,6 +118,7 @@ export default defineUiPlugin({
           submissions: createPluginProjectGenerationClient(services),
           contexts: createPluginProjectGenerationContextClient(services),
           queries: createPluginProjectGenerationQueryClient(services),
+          selections: createPluginProjectGenerationSelectionClient(services),
         });
     let disposed = false;
     let appliedTokens: string[] = [];
@@ -122,6 +142,7 @@ export default defineUiPlugin({
       }
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
+      controller?.setSelectionContext(selectionContext(next.data));
       controller?.setGenerationContext(generationContext(next.data));
       controller?.setQueryContext(queryContext(next.data));
       controller?.setReady(dataFlag(next.data, "pluginUiReady"));

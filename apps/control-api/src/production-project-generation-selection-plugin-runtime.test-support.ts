@@ -23,6 +23,8 @@ import { createProductionPluginUiRuntime } from "./production-plugin-ui-composit
 import { createProductionPluginUiRequestService } from "./production-plugin-ui-request-service.ts";
 import { registerPluginControlRoutes } from "./plugin-control-route.ts";
 import { registerProjectGenerationSelectionRoutes } from "./project-generation-selection-route.ts";
+import { createProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
+import { createProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import { errorResponse } from "./control-api-errors.ts";
 
 /** Actual installed source bytes, original current HTTP identity/profile and same SQL saved paid history.
@@ -30,14 +32,18 @@ import { errorResponse } from "./control-api-errors.ts";
 export async function productionConceptSelectionUiFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  options: Readonly<{ packageDirectory?: string }> = {},
 ) {
   const history = await conceptSelectionHttpFixture(t, backend);
   const files = await productionSourceFixture(t);
-  const source = await files.source("selection-ui", {
-    pluginId: "test.exact-selection",
-    uiOnly: true,
-    requiredService: "crewon.project-generation-selections",
-  });
+  const source =
+    options.packageDirectory === undefined
+      ? await files.source("selection-ui", {
+          pluginId: "test.exact-selection",
+          uiOnly: true,
+          requiredService: "crewon.project-generation-selections",
+        })
+      : { directory: options.packageDirectory };
   const installed = await installLocalPluginPackage({
     directory: source.directory,
     installRoot: files.installRoot,
@@ -154,25 +160,62 @@ export async function productionConceptSelectionUiFixture(
       return value;
     },
   );
+  const publications = [
+    {
+      pluginId: installed.descriptor.pluginId,
+      packageDigest: installed.packageDigest,
+      contributionId: "workbench",
+    },
+  ];
+  const metadata =
+    options.packageDirectory === undefined
+      ? undefined
+      : createProductionCreativeProjectPluginRuntime({
+          projects: {
+            service: history.projects,
+            pluginUi: { publications },
+          },
+          ui: configuration,
+          identity,
+          fetch,
+        });
+  const readRuntime =
+    options.packageDirectory === undefined
+      ? undefined
+      : createProductionProjectGenerationReadPluginRuntime({
+          configuration: { publications },
+          reads: history.service,
+          taskReads: history.reads,
+          ui: configuration,
+          identity,
+          fetch,
+          ...(metadata === undefined
+            ? {}
+            : { hostUiServices: metadata.hostUiServices }),
+        });
   const selectionRuntime =
     createProductionProjectGenerationSelectionPluginRuntime({
-      configuration: {
-        publications: [
-          {
-            pluginId: installed.descriptor.pluginId,
-            packageDigest: installed.packageDigest,
-            contributionId: "workbench",
-          },
-        ],
-      },
+      configuration: { publications },
       selections: history.selectionService,
       taskReads: history.reads,
       ui: configuration,
       identity,
       fetch,
+      ...(readRuntime === undefined
+        ? {}
+        : { hostUiServices: readRuntime.hostUiServices }),
     });
   const uiRuntime = createProductionPluginUiRuntime(
-    { configuration, ownedProjectSelectionActions: selectionRuntime.owner },
+    {
+      configuration,
+      ownedProjectSelectionActions: selectionRuntime.owner,
+      ...(metadata === undefined
+        ? {}
+        : { ownedCreativeProjectActions: metadata.owner }),
+      ...(readRuntime === undefined
+        ? {}
+        : { ownedProjectGenerationReadActions: readRuntime.owner }),
+    },
     { ledger, clock: { now: () => new Date().toISOString() }, fetch },
   );
   const app = Fastify();
@@ -183,6 +226,10 @@ export async function productionConceptSelectionUiFixture(
   const ui = createProductionPluginUiRequestService({
     ui: uiRuntime.service,
     projectSelections: selectionRuntime,
+    ...(metadata === undefined ? {} : { projects: metadata }),
+    ...(readRuntime === undefined
+      ? {}
+      : { projectGenerationReads: readRuntime }),
   });
   registerPluginControlRoutes(app, { identity, pluginUi: ui });
   registerProjectGenerationSelectionRoutes(app, {
@@ -194,6 +241,8 @@ export async function productionConceptSelectionUiFixture(
     await app.close();
     await uiRuntime.close();
     await selectionRuntime.close();
+    await readRuntime?.close();
+    await metadata?.close();
     await originalRequests.close();
   });
   const headers = {
@@ -201,6 +250,11 @@ export async function productionConceptSelectionUiFixture(
     origin: "https://selection-bff.test",
   };
   const mount = async () => {
+    const current = await ledger.loadSelection({
+      scope: profile,
+      pluginId: installed.descriptor.pluginId,
+    });
+    assert.ok(current);
     const result = await app.inject({
       method: "POST",
       url: "/api/v1/plugins/ui/mounts",
@@ -208,7 +262,7 @@ export async function productionConceptSelectionUiFixture(
       payload: {
         pluginId: installed.descriptor.pluginId,
         contributionId: "workbench",
-        expectedSelectionRevision: selected.selection.revision,
+        expectedSelectionRevision: current.revision,
         expectedPackageDigest: installed.packageDigest,
       },
     });
@@ -244,5 +298,8 @@ export async function productionConceptSelectionUiFixture(
     selectionRuntime,
     uiRuntime,
     originalRequests,
+    files,
+    metadata,
+    readRuntime,
   };
 }

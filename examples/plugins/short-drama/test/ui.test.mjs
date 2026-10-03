@@ -12,7 +12,7 @@ import {
   settle,
 } from "./ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "6.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "7.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -39,6 +39,11 @@ test("ships a UI-only, self-contained package and the original locally scoped st
     { service: "crewon.project-generations", apiVersion: "1", optional: true },
     {
       service: "crewon.project-generation-queries",
+      apiVersion: "1",
+      optional: true,
+    },
+    {
+      service: "crewon.project-generation-selections",
       apiVersion: "1",
       optional: true,
     },

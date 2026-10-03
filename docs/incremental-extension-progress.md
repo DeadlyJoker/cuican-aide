@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：独立短剧 7.0.0 图片选用与宿主恢复
+
+独立短剧包在原概念图模块中增加确切图片的“选用这张图”、当前选用和需重新确认提示。控制器只通过公开 SDK 指定已保存输入、真实 operation revision、原始图片索引、元数据/选用 CAS 和原 key；当前指针单独 GET，不把旧命令回执作为当前图片。未知请求锁住编辑、切换、归档及新生成/查询/选用；首次明确冲突可以显式刷新真实版本后重新选择，已有 UNKNOWN 不换键。无选用 Host context 时保留原页面和旧快照。
+
+通用宿主增加有界的独立账户 selection journal，复用原 Web/Native 客户端和已安装模块；不依赖任务线程或执行 runtime，不自动派发恢复请求。关闭 UI 后仍观察原物理回复，同包重新授权通过当前真实挂载显式重试，换包及换账户拒绝借用旧意图。公开恢复提示只包含原请求、状态及不可变回执，不携带当前指针或授权。协议见[图片选用协议](./project-generation-selection-protocol.md)。原 App、账号、设置、两侧栏、控件和共享 CSS 均未修改。
+
+仓外消费者离线安装实际 SDK tarball，严格 TypeScript 编译及自持 ESM 构建通过；实际 7.0.0 新旧发布 ESM **67/67**、Host 与业务模块窄回归 **239/239**、原 CommandWorkspace/用户栏/设置窄回归 **145/145**，均零跳过。实际 7.0.0 ESM 的 DOM 点击沿真实 ControlClient、真实账户 journal、注册 HTTP 和同一 SQLite/单连接 PostgreSQL 验证 **8/8**，覆盖丢确认回复、关闭重开、原 key 显式重试、迟到确认、旧回执不覆盖新指针、输入过期、撤权和真实包替换；原 Production 专项 **6/6**。各组可能重叠，不跨组求和。UI build/lint、Control 类型、boundary、格式与 diff 检查通过。
+
+独立产物为 `output/extensions/installable-plugins/selection-ui-short-drama-20261004/short-drama/7.0.0`，7 个固定摘要文件及 manifest 已校验，原 5.0.0/6.0.0 保留，插件原 CSS 摘要不变。统一证据为 `output/extensions/checks/project-selection-ui-proof-20261004.json`。首次 ESM 两项失败来自测试未退订已关闭 UI 和误要求 readiness 撤回后保留已隐藏 panel，仅修测试并加强重挂只读断言；首次实际双库两项失败来自测试遗漏原元数据 request 包装，仅修测试，发布业务字节未变。按 skill 的 `test -- CommandWorkspace` 未限制 Vitest 范围，意外执行全量 UI：**3847 通过、9 失败、39 跳过**，失败仍为此前记录的 TranscriptWindow/catalog、旧 shell/office 快照、协调依赖及 soak；正确指定过滤的窄回归通过，没有改动这些既有断言或声称全量 UI 已绿。
+
+自有 PostgreSQL 62070 在全部实际消费者结束后停止，并核验进程、准确数据目录与独立 socket 目录清理；首次启动仅因 macOS socket 路径过长失败，改为自有短路径后使用同一隔离集群。原完整 App 服务保留，实际用户标签已再次打开原“常规”设置页，屏幕证据为 `account-settings-live-20261004/settings-verified.jpg`。
+
+本阶段的原付费历史、身份/profile/PDP、积分和报价均为具名测试夹具，没有在线 Worker、模型或供应商调用，也没有新增 Run 或费用。完整目标继续进行：同一次完整 App 在线保存/生成/查询/选用、进程重启后的 UNKNOWN 持久恢复、真实个人插件钱包与价格权威、第二个企业 API、完整 S0/E5 仍未完成。下一步优先补原请求的持久恢复，再联合验收完整应用链路。
+
 ## 2026-10-04：确切图片选用服务与双库事务
 
 新增独立 `crewon.project-generation-selections@1`、GET/PUT 公共服务和严格 SDK，用户只指定已保存输入、确切 operation/revision/resultIndex、元数据 CAS、独立选用 CAS 和原请求键。服务端核验原付费生成、配置、准入、任务回执及原始结果，再原子保存不可变 OperationResultLink、独立当前选用指针和不可变选用命令回执。旧 key 重放返回原回执，不覆盖较新的选择；修改创作输入后保留旧选用并标记需重新确认，项目重命名不使图片过期。细节见[图片选用协议](./project-generation-selection-protocol.md)。

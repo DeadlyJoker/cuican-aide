@@ -23,6 +23,13 @@ import { InstalledPluginModule } from "./InstalledPluginModule";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
+import { createInstalledPluginProjectSelectionJournal } from "../../lib/plugins/installedPluginProjectSelectionJournal";
+import {
+  selectionJournalLease,
+  selectionJournalInput,
+  selectionJournalReceipt,
+} from "../../lib/plugins/installedPluginProjectSelection.test-support";
+
 const roots: Root[] = [];
 const light: PluginUiTheme = { mode: "light", tokens: { "--text": "#202020" } };
 const dark: PluginUiTheme = { mode: "dark", tokens: { "--text": "#eeeeee" } };
@@ -47,9 +54,9 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-function fixture() {
+function fixture(selectionEnabled = false) {
   const h = uiHarness();
-  const lease = uiLease();
+  const lease = selectionEnabled ? selectionJournalLease() : uiLease();
   const leases = new Map<string, PluginUiLease>();
   let serial = 0;
   let revoked = false;
@@ -87,12 +94,25 @@ function fixture() {
   const importer = vi.fn(
     async (_url: string): Promise<unknown> => ({ default: h.definition }),
   );
+  const selectionJournal = createInstalledPluginProjectSelectionJournal({
+    assertCurrent() {
+      if (!current) throw new Error("fixture_session_revoked");
+    },
+    onDiagnostic: diagnostic,
+  });
+  const selectionPorts = {
+    journal: selectionJournal,
+    assertSessionCurrent() {
+      if (!current) throw new Error("fixture_session_revoked");
+    },
+  };
   const host = createControlPluginUiHost({
     client: wire.client,
     assertCurrent() {
       if (!current) throw new Error("fixture_session_revoked");
     },
     importer,
+    ...(selectionEnabled ? { selectionJournal } : {}),
     onDiagnostic: diagnostic,
   });
   const module: ControlPluginUiModule = {
@@ -127,6 +147,7 @@ function fixture() {
           theme={theme}
           locale={locale}
           onDiagnostic={onDiagnostic}
+          {...(selectionEnabled ? { selectionPorts } : {})}
         />,
       );
       await settle();
@@ -144,6 +165,7 @@ function fixture() {
     render,
     importer,
     diagnostic,
+    selectionJournal,
     requests,
     opened: () =>
       requests("POST").filter(([url]) => !String(url).endsWith("/actions")),
@@ -403,5 +425,75 @@ describe("installed module composition (real authenticated host, explicit import
     expect(f.h.instances[0].dispose).toHaveBeenCalledTimes(1);
     expect(f.closed()).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  it("publishes selection recovery only in module data without adding host controls or changing styles, and recovers through reopening", async () => {
+    const f = fixture(true),
+      style = document.documentElement.getAttribute("style"),
+      theme = document.documentElement.dataset.theme;
+    await f.render(true);
+    const initial = JSON.parse(f.container.textContent!);
+    expect(initial.projectGenerationSelectionContext).toEqual({
+      version: "crewon.project-generation-selection-host-context.v1",
+      intent: null,
+    });
+    const shape = () =>
+      [...f.container.querySelectorAll("*")].map((node) => [
+        node.tagName,
+        node.getAttribute("class"),
+        node.getAttribute("role"),
+      ]);
+    const originalShape = shape();
+    await act(async () => {
+      await f.selectionJournal
+        .invoke({
+          lease: f.lease,
+          input: selectionJournalInput(),
+          signal: new AbortController().signal,
+          request: async () => {
+            throw new Error("lost reply");
+          },
+        })
+        .catch(() => {});
+      await settle();
+    });
+    expect(
+      JSON.parse(f.container.textContent!).projectGenerationSelectionContext
+        .intent,
+    ).toMatchObject({
+      phase: "uncertain",
+      request: selectionJournalInput(),
+      retryable: true,
+    });
+    expect(shape()).toEqual(originalShape);
+    expect(f.container.querySelector("button")).toBeNull();
+    await f.render(false);
+    await f.render(true, dark, "en");
+    expect(
+      JSON.parse(f.container.textContent!).projectGenerationSelectionContext
+        .intent.request,
+    ).toEqual(selectionJournalInput());
+    expect(
+      f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+    ).toHaveLength(0);
+    await act(async () => {
+      await f.selectionJournal.invoke({
+        lease: f.lease,
+        input: selectionJournalInput(),
+        signal: new AbortController().signal,
+        request: async () => ({ output: selectionJournalReceipt() }),
+      });
+      await settle();
+    });
+    const data = JSON.parse(f.container.textContent!);
+    expect(data.projectGenerationSelectionContext.intent).toMatchObject({
+      phase: "accepted",
+      receipt: selectionJournalReceipt(),
+      retryable: false,
+    });
+    expect(data.projectGenerationSelectionContext).not.toHaveProperty(
+      "current",
+    );
+    expect(document.documentElement.getAttribute("style")).toBe(style);
+    expect(document.documentElement.dataset.theme).toBe(theme);
   });
 });

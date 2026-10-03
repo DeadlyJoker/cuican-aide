@@ -1,6 +1,8 @@
 import type { ProjectDetails } from "./creative-project-controller";
 import { ConceptGenerationController } from "./ConceptGenerationController";
 import { ConceptQueryController } from "./ConceptQueryController";
+import { ConceptImageSelectionController } from "./ConceptImageSelectionController";
+import { bindConceptCapabilities } from "./ConceptCapabilityBinding";
 import { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
 import type { PublicConceptAsset } from "@crewon/plugin-sdk/contracts";
 import type {
@@ -60,6 +62,7 @@ export class ConceptController {
   readonly generations: ConceptGenerationController;
   readonly submissions: ConceptGenerationIntentController;
   readonly queries: ConceptQueryController;
+  readonly images: ConceptImageSelectionController;
   #ports: ConceptPorts;
   #details: ProjectDetails | null = null;
   #ready = false;
@@ -105,9 +108,18 @@ export class ConceptController {
         if (!this.queries.locked) void this.loadAssets();
       },
     });
+    this.images = new ConceptImageSelectionController({
+      client: ports.selectionClient,
+      restore: (request) => ports.restoreSelectionSource(request),
+      lockChanged: () => {
+        this.#ports.lockChanged(this.locked);
+        for (const listener of this.#listeners) listener();
+      },
+    });
     this.generations.subscribe(() => {
       this.submissions.setRecord(this.generations.getSnapshot());
       this.queries.setRecord(this.generations.getSnapshot());
+      this.images.setRecord(this.generations.getSnapshot());
     });
   }
   getSnapshot = (): ConceptSnapshot => this.#snapshot;
@@ -120,7 +132,8 @@ export class ConceptController {
       this.#snapshot.saving ||
       this.#snapshot.pendingKind !== null ||
       this.submissions.locked ||
-      this.queries.locked
+      this.queries.locked ||
+      this.images.locked
     );
   }
   #update(change: Partial<ConceptSnapshot>) {
@@ -169,32 +182,18 @@ export class ConceptController {
     this.#bindSubmission();
   }
   #bindSubmission() {
-    const selection = this.#snapshot.selection,
-      project = this.#details?.project;
-    this.queries.bindSource(
-      selection && !this.#snapshot.editing
-        ? {
-            projectId: selection.asset.projectId,
-            assetId: selection.asset.assetId,
-            assetRevision: selection.revision.assetRevision,
-          }
-        : null,
-      this.#ready,
-      this.#ports.projectBlocked() || this.submissions.locked,
-    );
-    this.submissions.bindSource(
-      selection && !this.#snapshot.editing && project
-        ? {
-            projectId: project.projectId,
-            assetId: selection.asset.assetId,
-            assetRevision: selection.revision.assetRevision,
-            expectedProjectRevision: project.revision,
-            expectedAssetMetadataRevision: selection.asset.revision,
-          }
-        : null,
-      project?.state === "active" && !this.#ports.projectBlocked(),
-      this.#ready,
-    );
+    bindConceptCapabilities({
+      selection: this.#snapshot.selection,
+      project: this.#details?.project,
+      editing: this.#snapshot.editing,
+      ready: this.#ready,
+      blocked: this.#ports.projectBlocked(),
+      metadataPending:
+        this.#snapshot.saving || this.#snapshot.pendingKind !== null,
+      submissions: this.submissions,
+      queries: this.queries,
+      images: this.images,
+    });
   }
   adoptGenerationSelection(selection: ConceptSelection) {
     if (
@@ -236,6 +235,7 @@ export class ConceptController {
     this.generations.dispose();
     this.submissions.dispose();
     this.queries.dispose();
+    this.images.dispose();
   }
   #reading(kind: "assets" | "selection" | "history" | "refresh") {
     this.#reads.get(kind)?.abort();
@@ -468,6 +468,7 @@ export class ConceptController {
       !this.#available() ||
       this.#snapshot.saving ||
       this.submissions.locked ||
+      this.images.locked ||
       !this.#snapshot.draft ||
       this.#details!.project.state === "archived"
     )
@@ -479,6 +480,7 @@ export class ConceptController {
     return (
       this.#available() &&
       !this.submissions.locked &&
+      !this.images.locked &&
       !this.#snapshot.saving &&
       Boolean(draft) &&
       this.#snapshot.editing &&
@@ -633,7 +635,13 @@ export class ConceptController {
     }
   }
   async #commit(intent: ConceptIntent) {
-    if (!this.#available() || this.#write || this.submissions.locked) return;
+    if (
+      !this.#available() ||
+      this.#write ||
+      this.submissions.locked ||
+      this.images.locked
+    )
+      return;
     this.#intent = Object.freeze({
       ...intent,
       input: Object.freeze({

@@ -8,11 +8,13 @@ import {
   createPluginProjectGenerationClient,
   createPluginProjectGenerationContextClient,
   createPluginProjectGenerationQueryClient,
+  createPluginProjectGenerationSelectionClient,
   type PluginCreativeProjectClient,
   type PluginProjectGenerationReadClient,
   type PluginProjectGenerationClient,
   type PluginProjectGenerationContextClient,
   type PluginProjectGenerationQueryClient,
+  type PluginProjectGenerationSelectionClient,
 } from "@crewon/plugin-sdk/ui";
 import {
   deferred,
@@ -29,6 +31,7 @@ const { CreativeProjectController } = await vi.importActual<{
     submissions: PluginProjectGenerationClient;
     contexts: PluginProjectGenerationContextClient;
     queries: PluginProjectGenerationQueryClient;
+    selections: PluginProjectGenerationSelectionClient;
   }) => Controller;
 }>(
   new URL(
@@ -68,6 +71,7 @@ async function fixture(service: ReturnType<typeof metadataService>) {
     submissions: createPluginProjectGenerationClient(service.services),
     contexts: createPluginProjectGenerationContextClient(service.services),
     queries: createPluginProjectGenerationQueryClient(service.services),
+    selections: createPluginProjectGenerationSelectionClient(service.services),
   });
   const container = document.createElement("div");
   document.body.append(container);

@@ -28,6 +28,13 @@ import {
   queryJournalInput,
 } from "../plugins/installedPluginProjectQuery.test-support";
 
+import type { InstalledPluginProjectSelectionPorts } from "../plugins/useInstalledPluginProjectSelectionContext";
+import {
+  selectionJournalLease,
+  selectionJournalInput,
+  selectionJournalReceipt,
+} from "../plugins/installedPluginProjectSelection.test-support";
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 type Input = Parameters<typeof useInstalledPluginModules>[0];
 type State = ReturnType<typeof useInstalledPluginModules>;
@@ -841,6 +848,108 @@ describe("installed plugin directory App composition (real Control client)", () 
     ).toBe(true);
     expect(
       replacement.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+  });
+  it("assembles selection recovery without a task context, runtime or Thread and retains it through StrictMode, theme and catalog regrant", async () => {
+    const lease = selectionJournalLease();
+    let catalog = controlUiItem(lease);
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [catalog], next: null }),
+    );
+    await render(wire.client, {}, true);
+    const ports = () =>
+      presentation() as ReturnType<typeof presentation> & {
+        selectionPorts: InstalledPluginProjectSelectionPorts;
+        projectQueryPorts: InstalledPluginProjectQueryPorts | null;
+        generationPorts: InstalledPluginGenerationPorts | null;
+      };
+    expect(ports().projectQueryPorts).toBeNull();
+    expect(ports().generationPorts).toBeNull();
+    const journal = ports().selectionPorts.journal,
+      input = selectionJournalInput();
+    await journal
+      .invoke({
+        lease,
+        input,
+        signal: new AbortController().signal,
+        request: async () => {
+          throw new Error("sent selection unknown");
+        },
+      })
+      .catch(() => {});
+    await render(
+      wire.client,
+      {
+        theme: "dark",
+        locale: "en",
+        taskContext: {
+          runtime: null,
+          selectedThreadId: null,
+          runIds: [],
+          onOpenTask: vi.fn(),
+        },
+      },
+      true,
+    );
+    expect(ports().selectionPorts.journal).toBe(journal);
+    catalog = controlUiItem({ ...lease, selectionRevision: 8 });
+    await refresh();
+    expect(ports().selectionPorts.journal).toBe(journal);
+    expect(
+      journal.current({ lease: { ...lease, selectionRevision: 8 } }),
+    ).toMatchObject({
+      input,
+      phase: "uncertain",
+      retryable: true,
+      sourcePin: { selectionRevision: 1 },
+    });
+    expect(
+      wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+    await act(async () =>
+      window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT)),
+    );
+    expect(state.hostModules).toEqual([]);
+    expect(journal.snapshot()).toEqual([]);
+    const replacement = controlUiClient(() =>
+      controlUiResponse({ plugins: [controlUiItem(lease)], next: null }),
+    );
+    await render(replacement.client, { sessionKey: "replacement-account" });
+    expect(ports().selectionPorts.journal).not.toBe(journal);
+    expect(ports().selectionPorts.journal.snapshot()).toEqual([]);
+    expect(
+      replacement.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+  });
+  it("a changed session key fences a selection's physical reply before any replacement journal can expose it", async () => {
+    const lease = selectionJournalLease();
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [controlUiItem(lease)], next: null }),
+    );
+    await render(wire.client);
+    const ports = () =>
+      presentation() as ReturnType<typeof presentation> & {
+        selectionPorts: InstalledPluginProjectSelectionPorts;
+      };
+    const journal = ports().selectionPorts.journal,
+      gate = deferred<{ output: ReturnType<typeof selectionJournalReceipt> }>();
+    const call = journal.invoke({
+      lease,
+      input: selectionJournalInput(),
+      signal: new AbortController().signal,
+      request: () => gate.promise,
+    });
+    void call.catch(() => {});
+    await settle();
+    expect(journal.snapshot()[0].phase).toBe("pending");
+    await render(wire.client, { sessionKey: "another-account" });
+    gate.resolve({ output: selectionJournalReceipt() });
+    await expect(call).rejects.toThrow();
+    expect(journal.snapshot()).toEqual([]);
+    expect(ports().selectionPorts.journal).not.toBe(journal);
+    expect(ports().selectionPorts.journal.snapshot()).toEqual([]);
+    expect(
+      wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
     ).toBe(true);
   });
 });
