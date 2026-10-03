@@ -23,6 +23,7 @@ import type {
   PluginUiActionPort,
   PluginUiActionContext,
   PluginUiCommittedTaskPort,
+  PluginUiCommittedMetadataPort,
   PluginUiAuthorizationAction,
   PluginUiAuthorizationPort,
   PluginUiAuthorizationResource,
@@ -71,6 +72,8 @@ export type PluginUiApplicationDependencies = Readonly<{
   actions: PluginUiActionPort;
   /** Trusted host receipt authority only; never supplied by a plugin or inferred from its JSON. */
   committedTasks?: PluginUiCommittedTaskPort;
+  /** Separate trusted metadata receipt owner; does not authorize task/Run admission. */
+  committedMetadata?: PluginUiCommittedMetadataPort;
   ids: PluginUiOpaqueIdPort;
   clock: ApplicationClock;
   /** Only lower limits are accepted; there is no unbounded lease or byte configuration. */
@@ -112,6 +115,10 @@ export class PluginUiApplicationService {
     if (dependencies.committedTasks !== undefined)
       for (const method of ["isOutcome", "verify"] as const)
         if (typeof dependencies.committedTasks?.[method] !== "function")
+          throw new ApplicationError("internal", "plugin_ui_port_missing");
+    if (dependencies.committedMetadata !== undefined)
+      for (const method of ["isOutcome", "verify"] as const)
+        if (typeof dependencies.committedMetadata?.[method] !== "function")
           throw new ApplicationError("internal", "plugin_ui_port_missing");
     this.#limits = uiOutput(() => {
       const value =
@@ -278,6 +285,13 @@ export class PluginUiApplicationService {
           // The original transaction already admitted this task. Later selection/lease changes cannot
           // turn that accepted receipt into a retry signal; ordinary JSON retains the read fence below.
           const result = authority.verify(context, raw);
+          return uiOutput(() => parsePluginUiJsonValue(result));
+        }
+        const metadata = this.#dependencies.committedMetadata;
+        if (metadata?.isOutcome(raw) === true) {
+          // A confirmed metadata commit has its own private owner; later withdrawal cannot turn it
+          // into a retry signal, and this path conveys no task or credit admission.
+          const result = metadata.verify(context, raw);
           return uiOutput(() => parsePluginUiJsonValue(result));
         }
         const result = uiOutput(() => parsePluginUiJsonValue(raw));

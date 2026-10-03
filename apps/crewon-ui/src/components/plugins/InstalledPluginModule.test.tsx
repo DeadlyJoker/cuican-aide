@@ -167,6 +167,49 @@ function fixture() {
 }
 
 describe("installed module composition (real authenticated host, explicit importer fixture)", () => {
+  it("publishes a false-to-true ready update and permits the first invocation only after real activation", async () => {
+    const f = fixture();
+    const seen: boolean[] = [];
+    let invocation: Promise<unknown> | null = null;
+    f.importer.mockImplementation(async () => ({
+      default: {
+        ...f.h.definition,
+        mount(
+          root: HTMLElement,
+          props: Parameters<typeof f.h.definition.mount>[1],
+          services: Parameters<typeof f.h.definition.mount>[2],
+        ) {
+          seen.push((props.data as { pluginUiReady: boolean }).pluginUiReady);
+          const instance = f.h.definition.mount(root, props, services);
+          return {
+            async update(next: Parameters<typeof f.h.definition.mount>[1]) {
+              const ready = (next.data as { pluginUiReady: boolean })
+                .pluginUiReady;
+              seen.push(ready);
+              if (ready && !invocation)
+                invocation = services.invoke("query", null, {});
+              return (await instance).update(next);
+            },
+            async dispose() {
+              return (await instance).dispose();
+            },
+          };
+        },
+      },
+    }));
+    await f.render(true);
+    expect(seen[0]).toBe(false);
+    expect(seen).toContain(true);
+    await expect(invocation).resolves.toEqual({ accepted: true });
+    expect(
+      f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+    ).toHaveLength(1);
+    await f.render(true, dark);
+    expect(
+      f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+    ).toHaveLength(1);
+  });
+
   it("loads only an active module, updates host props, and closes every lease when leaving", async () => {
     const f = fixture();
     const originalTheme = document.documentElement.dataset.theme;
@@ -187,7 +230,11 @@ describe("installed module composition (real authenticated host, explicit import
       schemaVersion: "crewon.plugin-ui-props.v1",
       contributionId: "workbench",
       theme: light,
-      data: { locale: "zh" },
+      data: { locale: "zh", pluginUiReady: false },
+    });
+    expect(instance.update.mock.calls.at(-1)?.[0].data).toEqual({
+      locale: "zh",
+      pluginUiReady: true,
     });
     await f.render(true, dark, "en");
     expect(f.opened()).toHaveLength(1);
@@ -195,7 +242,7 @@ describe("installed module composition (real authenticated host, explicit import
     expect(instance.update.mock.calls.at(-1)?.[0]).toEqual({
       ...instance.props,
       theme: dark,
-      data: { locale: "en" },
+      data: { locale: "en", pluginUiReady: true },
     });
     await f.render(true, dark, "en", f.diagnostic, {
       ...f.module,

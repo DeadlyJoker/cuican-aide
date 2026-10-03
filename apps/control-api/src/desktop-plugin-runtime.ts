@@ -31,6 +31,12 @@ import type {
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
+import type { PreparedCreativeProjects } from "./creative-project-composition.ts";
+import {
+  assertCreativeProjectPluginPublications,
+  createCreativeProjectPluginUiRuntime,
+  type CreativeProjectPluginUiRuntime,
+} from "./creative-project-plugin-ui-composition.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -51,6 +57,7 @@ export async function createDesktopPluginRuntime(
     identity: StandaloneIdentity;
     clock: ApplicationClock;
     digester: ContentDigester;
+    creativeProjects?: PreparedCreativeProjects;
   }>,
 ): Promise<DesktopPluginRuntime> {
   if (!(dependencies.store instanceof SqliteRunStore))
@@ -59,19 +66,48 @@ export async function createDesktopPluginRuntime(
     throw new Error("desktop_plugin_identity_required");
   const configuration = parseDesktopPluginConfiguration(input.configuration);
   const registry = await createDesktopPluginSourceRegistry(configuration);
-  const authority = new DesktopPluginAuthority(configuration);
+  const projectConfiguration = dependencies.creativeProjects?.pluginUi;
+  assertCreativeProjectPluginPublications(
+    projectConfiguration,
+    configuration.publications,
+  );
+  const authority = new DesktopPluginAuthority(
+    configuration,
+    projectConfiguration?.publications,
+  );
   const ledger = dependencies.store.pluginInstallationStore();
   let installation: DesktopPluginInstallationRuntime | null = null;
   let configurationRuntime: DesktopPluginConfigurationRuntime | null = null;
   let activation: DesktopInstalledPluginActivationOwner | null = null;
+  let projectUi: CreativeProjectPluginUiRuntime | undefined;
   try {
     await ledger.migrate();
+    if (projectConfiguration !== undefined) {
+      projectUi = createCreativeProjectPluginUiRuntime({
+        projects: dependencies.creativeProjects!.service,
+        configuration: projectConfiguration,
+        authorization: {
+          authorize: async (context) => {
+            authority.assertScope(context.actor, context.scope);
+            if (installation === null)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            installation.assertProfileOwnership(context.actor);
+          },
+        },
+      });
+    }
     installation = await createDesktopPluginInstallationRuntime(
       { configuration, registry, authority },
       {
         store: dependencies.store,
         clock: dependencies.clock,
         digester: dependencies.digester,
+        ...(projectUi === undefined
+          ? {}
+          : { hostUiServices: projectUi.hostUiServices }),
       },
     );
     if (input.activation !== undefined) {
@@ -148,13 +184,21 @@ export async function createDesktopPluginRuntime(
       authorization: authority.ui,
       ids: { nextId: () => randomBytes(32).toString("base64url") },
       actions: {
-        invoke: async () => {
+        invoke: async (context) => {
+          if (
+            projectUi !== undefined &&
+            projectUi.owner.supportsAction(context.action)
+          )
+            return projectUi.owner.actions.invoke(context);
           throw new ApplicationError(
             "conflict",
             "plugin_ui_actions_unavailable",
           );
         },
       },
+      ...(projectUi === undefined
+        ? {}
+        : { committedMetadata: projectUi.owner.committedMetadata }),
     });
     const call = <T>(work: () => Promise<T>): Promise<T> => {
       available();
@@ -178,7 +222,16 @@ export async function createDesktopPluginRuntime(
         call(() => application.validateMount(...args)),
       readAsset: (...args) => call(() => application.readAsset(...args)),
       closeMount: (...args) => call(() => application.closeMount(...args)),
-      invoke: (...args) => call(() => application.invoke(...args)),
+      invoke: (...args) => {
+        if (projectUi === undefined)
+          return call(() => application.invoke(...args));
+        available();
+        // Only Application's opaque committed metadata path can bypass the late current fence.
+        const result = application.invoke(...args);
+        physical.add(result);
+        void result.finally(() => physical.delete(result)).catch(() => {});
+        return result;
+      },
     });
     const ownedInstallation = installation;
     const ownedConfiguration = configurationRuntime;
@@ -194,6 +247,7 @@ export async function createDesktopPluginRuntime(
         authority.withdraw();
         return (closing = closeAll([
           () => Promise.allSettled([...physical]),
+          () => projectUi?.close(),
           () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
           () => ownedInstallation.close(),
@@ -204,6 +258,7 @@ export async function createDesktopPluginRuntime(
     authority.withdraw();
     try {
       await closeAll([
+        () => projectUi?.close(),
         () => configurationRuntime?.close(),
         () => activation?.close(),
         () => installation?.close(),

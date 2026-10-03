@@ -1,9 +1,15 @@
-import { defineUiPlugin, type PluginUiProps } from "@crewon/plugin-sdk/ui";
+import {
+  createPluginCreativeProjectClient,
+  defineUiPlugin,
+  type PluginUiProps,
+} from "@crewon/plugin-sdk/ui";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ShortDramaWorkbenchPreview } from "./workbench/ShortDramaWorkbenchPreview";
 import stylesheet from "./workbench/ShortDramaWorkbenchPreview.css";
 import referenceImage from "./assets/crewon-krea2-reference.png";
+import { CreativeProjectController } from "./workbench/creative-project-controller";
+import { ShortDramaPersistentWorkbench } from "./workbench/ShortDramaPersistentWorkbench";
 
 const contributionId = "workbench";
 
@@ -15,11 +21,20 @@ function assertContribution(props: PluginUiProps) {
     throw new Error("short_drama_ui_contribution_invalid");
 }
 
+function dataFlag(data: PluginUiProps["data"], name: string): boolean {
+  return (
+    data !== null &&
+    typeof data === "object" &&
+    !Array.isArray(data) &&
+    Object.getOwnPropertyDescriptor(data, name)?.value === true
+  );
+}
+
 /** Owns only this module's DOM. The shell, account and theme authority stay with CrewON. */
 export default defineUiPlugin({
   apiVersion: "crewon.plugin-ui.v1",
   pluginId: "crewon.short-drama",
-  mount(root, props) {
+  mount(root, props, services) {
     assertContribution(props);
     const owner = root.ownerDocument.createElement("div");
     owner.dataset.shortDramaPlugin = "";
@@ -36,6 +51,12 @@ export default defineUiPlugin({
     owner.append(style, content);
     root.append(owner);
     const reactRoot = createRoot(content);
+    const preview = dataFlag(props.data, "shortDramaPreview");
+    const controller = preview
+      ? null
+      : new CreativeProjectController(
+          createPluginCreativeProjectClient(services),
+        );
     let disposed = false;
     let appliedTokens: string[] = [];
     function update(next: PluginUiProps) {
@@ -58,17 +79,23 @@ export default defineUiPlugin({
       }
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
+      controller?.setReady(dataFlag(next.data, "pluginUiReady"));
+      flushSync(() =>
+        reactRoot.render(
+          controller ? (
+            <ShortDramaPersistentWorkbench controller={controller} />
+          ) : (
+            <ShortDramaWorkbenchPreview
+              referenceImage={new URL(referenceImage, import.meta.url).href}
+            />
+          ),
+        ),
+      );
     }
     try {
       update(props);
-      flushSync(() =>
-        reactRoot.render(
-          <ShortDramaWorkbenchPreview
-            referenceImage={new URL(referenceImage, import.meta.url).href}
-          />,
-        ),
-      );
     } catch (error) {
+      controller?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -81,6 +108,7 @@ export default defineUiPlugin({
       dispose() {
         if (disposed) return;
         disposed = true;
+        controller?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

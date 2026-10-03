@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-03：实际 Host 元数据分发与独立短剧项目保存
+
+Native/Production 在原父 Store 上显式接入项目动作 owner，部署批准固定实际插件、包摘要和贡献。UI-only 包可以声明必须可用的 `crewon.creative-projects@1`；原安装启用、恢复和同步发布复验实际 owner，未知声明和关闭后的依赖继续拒绝。没有增加 Node 服务、执行 peer、公共 HTTP shape 或项目隔离 namespace；数据仍归 tenant/space/principal，默认未开启路径保持原行为。
+
+生产 metadata 请求复用真实 HTTP 身份/profile owner，独立于任务准备。最终读取重新核对身份，未知项目动作不触发 Worker preparation；写入沿用每次 invocation 的提交前资格，确认 COMMIT 后通过独立、不可伪造的 committed-metadata 回执交付。原任务回执和普通 JSON 后置检查保留，两类 owner 不授予彼此权限，关闭等待物理操作结束后再关闭父 Store。
+
+独立短剧 2.0.0 包在仓外安装实际 SDK tarball 并构建，自持 React、UI ESM、图片和许可；只依赖公开 SDK。实际激活后才传 `pluginUiReady=true`，默认读取真实项目，提供新建、需求版本、归档/恢复和冷挂载读取。草稿/主题更新不触发重复读取，冲突保留原文并要求确认，未知响应保留原键重试。服务不可用显示明确状态；原演示仅由可信预览显式开启，不冒充已保存数据。概念输入页面和生图仍待接线。
+
+最终不重叠窄测 **259 通过、零跳过**：Application 78、Host 可用性/原安装恢复 45、Control 真实 SQLite/PostgreSQL 与原装配 53、原账号设置/模块与新 ready/UI 61、仓外编译 ESM 13、实际安装 UI→HTTP→SQLite 冷恢复 1、原 installed UI 双库回归 8。实际安装专项从 Host HTTP 读取并核验编译 ESM，再由 DOM 操作创建项目和两版需求；关闭真实 runtime，使用同数据库/安装根启动新实例并加载新模块，恢复同一记录。PG 使用实际隔离本机 18.6；身份/profile/PDP 是具名测试服务，不能据此宣称生产账户或正式 App 验收。运行期间没有供应商、生成 Run 或积分调用。
+
+Application/Host/Control 类型、UI lint 与正式 build、boundary 和仓库格式检查通过。外部包首轮测试失败来自创建 fixture 的时间戳违反真实响应契约、必选依赖断言遗漏及冷挂载计数基线；只修测试并保留原文/CAS/恢复断言。新增安装 UI 测试的 DOM NodeList 类型改为 Array.from，未放宽 tsconfig。证明、失败日志、独立包位置及自有资源清理见 `output/extensions/checks/creative-project-host-proof-20261003.json`。
+
+用户报告的原账号栏与设置仍从展开左栏后的左下账号菜单进入。5719 实际返回的当前 Vite 模块包含未登录 footer、真实设置状态切换及原设置组件；本轮 37 项该路径测试与构建通过。宿主 shell、CSS、原账号设置组件和旧快照没有改，5719/5720 原服务保留。Mac 锁屏且浏览器绑定超时，没有新的屏幕证据，也未声称用户当前标签已刷新；已询问消失的具体位置以继续定位。
+
+下一步仍是概念输入页面、项目生成与原 Run/个人冻结同事务关联、已核验结果选用。真实用户执行身份/积分后端归属仍等待用户选择；正式 Main/full App/packaged Krea2 在线生成及历史查询、第二个实际企业 API 未完成。完整目标继续进行。
+
 ## 2026-10-03：项目动作协议、独立 SDK 与提交前资格
 
 在上一阶段公共项目服务基础上，新增 14 个严格 metadata 动作及 `createPluginCreativeProjectClient(services)`，沿用原 UI invocation，不新增 Node action kind、HTTP shape 或数据库 schema。协议复用公开 DTO，输入最多 24KiB、响应最多 60KiB，不能传入账号、付款或凭据。SDK 实际 tarball 在仓外离线安装，纯 ES2022 contracts 与 DOM UI 独立编译，三个公开入口和 29 个自持声明通过验证；helper 固定实际 dispatcher/caller signal，取消后不交付迟到响应。细节见[插件项目动作协议](./installed-plugin-creative-project-actions.md)。

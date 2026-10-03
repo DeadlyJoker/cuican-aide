@@ -1,6 +1,6 @@
 # 安装插件的创作项目动作协议
 
-状态：已实现动作契约、可独立分发的 SDK helper 与每次调用的提交前检查。正式 Host dispatcher、依赖可用性投影、模块 ready 和页面保存仍待接线。定义协议或安装 SDK 不会使该服务自动可用。
+状态：已接入显式开启的 Native/Production Host dispatcher、真实 UI-only 依赖可用性检查、实际激活 ready 和独立短剧页面的项目/需求保存。定义协议或安装 SDK 不会使该服务自动可用。生图、概念输入页面和积分关联仍待接线。
 
 项目公共服务见[公共元数据接口](./creative-project-public-service.md)。当前 kind 固定为 `short-drama`，归属仍是 tenant/space/principal；本协议没有增加 plugin/profile/package 数据隔离。
 
@@ -50,10 +50,12 @@ SQLite 在 BEGIN 前做异步授权检查，事务内部保持同步，实际写
 
 此边界保证 COMMIT 派发前已观察到的撤权生效，不保证远端授权策略与数据库之间有全局原子性。已确认 COMMIT 不因后来撤权而改成保存失败，原回执仍可由当前合法调用恢复。
 
-## 后续接线门槛
+## 实际宿主与模块接线
 
-Host 仍需显式核验真实包、贡献、模块启用与实际依赖可用性，再把这些 metadata 动作接入 dispatcher，复用当前真实用户身份和项目授权。UI-only 包不能通过伪造 Node 服务绕过安装限制。已有任务动作和 committed-task 交付语义必须保留。
+可信部署配置通过 `creativeProjects.pluginUi.publications` 固定实际 pluginId、packageDigest 和 contributionId，并须属于原宿主批准的包。仅明确的 `crewon.creative-projects@1` 依赖可由该实际 owner 提供；安装启用、恢复和同步发布均复验。UI-only 包没有伪造 Node 服务，未知版本/服务和服务提供声明仍拒绝，已关闭 owner 同步报告不可用。依赖可用不授予用户权限，项目调用仍检查实际 invocation、原 UI policy、请求身份/profile 与项目授权。
 
-模块 mount 时应等待实际激活 ready；当前 staged mount 不允许调用，不能用微任务延迟猜测就绪。普通 JSON 动作仍执行原交付后检查：若保存已确认、页面随后关闭，响应可能被拒绝，本轮测试证明原回执可以恢复，但尚未实现专用 committed-metadata 交付。
+模块在实际激活后才收到 `props.data.pluginUiReady=true`，staged mount 不调用服务。新短剧包默认读取真实项目并保存需求，不可用时显示明确状态，不退回演示数据。模块更新保留草稿；版本冲突保留原文并要求确认新版本，响应未知时保留原输入与幂等键重试。
 
-正式页面保存、项目生成与原 Run/个人积分冻结的同事务关联、已核验结果选用、生产身份与钱包及真实供应商验收仍未完成。该协议只扩展模块能力，保留原用户栏、设置和侧栏样式。
+已确认写入由独立、不可伪造且只消费一次的 committed-metadata owner 交付；任务回执继续使用原 committed-task owner。普通 JSON 和项目读取保留交付后的当前资格检查，生产读取在最终 UI 检查后再次核对真实请求身份/profile。两类回执不能替换或授予彼此权限，关闭会等待实际在途操作结束后再关闭父 Store。
+
+项目/需求保存已接入独立编译页面；概念输入页面、项目生成与原 Run/个人积分冻结的同事务关联、已核验结果选用、正式 App 的生产身份与钱包及真实供应商验收仍未完成。该协议只扩展模块能力，保留原用户栏、设置和侧栏样式。

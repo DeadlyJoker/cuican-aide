@@ -17,8 +17,11 @@ import {
 import {
   LocalPluginInstallationHost,
   PluginNodeHost,
+  assertPluginUiHostServiceAvailability,
+  capturePluginUiHostServiceAvailability,
   type PluginActivationCandidate,
   type PluginNodeCommitCandidate,
+  type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import type {
   PostgresPluginInstallationStore,
@@ -58,6 +61,7 @@ type PublicationStamp = Readonly<{
   selection: PluginSelection;
   identity: PluginNodeCommitCandidate["identity"] | null;
   dependencies: PluginNodeCommitCandidate["dependencyIdentities"];
+  uiCandidate: PluginActivationCandidate | null;
   epoch: string;
 }>;
 type ProfileDependencies = Readonly<{
@@ -68,6 +72,7 @@ type ProfileDependencies = Readonly<{
   clock: ApplicationClock;
   digester: ContentDigester;
   scope: PluginProfileScope;
+  hostUiServices?: PluginUiHostServiceAvailabilityPort;
 }>;
 
 export class InstallationProfile {
@@ -85,7 +90,12 @@ export class InstallationProfile {
   #closing: Promise<void> | null = null;
 
   private constructor(dependencies: ProfileDependencies) {
-    this.#dependencies = dependencies;
+    this.#dependencies = Object.freeze({
+      ...dependencies,
+      hostUiServices: capturePluginUiHostServiceAvailability(
+        dependencies.hostUiServices,
+      ),
+    });
   }
 
   static async open(
@@ -112,6 +122,7 @@ export class InstallationProfile {
       profile: dependencies.scope,
       installRoot: dependencies.configuration.installRoot,
       nodeHost: this.#node,
+      hostUiServices: dependencies.hostUiServices,
       resolveSource: async ({ actor, scope, sourceId }) => {
         this.#assertOperation(actor, scope);
         const directory = await dependencies.registry.resolveSource(sourceId);
@@ -152,23 +163,31 @@ export class InstallationProfile {
             package: input.package,
             registry: dependencies.registry,
             signal: this.#lifetime.signal,
+            hostUiServices: dependencies.hostUiServices,
           });
         if (
           input.nextSelection.state === "enabled" &&
           input.descriptor !== null
-        )
-          for (const requirement of input.descriptor.requires)
-            if (
-              !requirement.optional &&
-              !this.#node
-                .serviceIdentities()
-                .some(
-                  (service) =>
-                    service.service === requirement.service &&
-                    service.apiVersion === requirement.apiVersion,
-                )
-            )
-              conflict("plugin_dependency_unavailable");
+        ) {
+          if (input.descriptor.entrypoints.node === null)
+            this.#checkUiServices({
+              descriptor: input.descriptor,
+              packageDigest: input.package!.packageDigest,
+            });
+          else
+            for (const requirement of input.descriptor.requires)
+              if (
+                !requirement.optional &&
+                !this.#node
+                  .serviceIdentities()
+                  .some(
+                    (service) =>
+                      service.service === requirement.service &&
+                      service.apiVersion === requirement.apiVersion,
+                  )
+              )
+                conflict("plugin_dependency_unavailable");
+        }
         this.#available();
       },
       authorizeCommit: ({ actor, scope, selection, candidate }) => {
@@ -414,6 +433,7 @@ export class InstallationProfile {
               package: pkg,
               registry: this.#dependencies.registry,
               signal: this.#lifetime.signal,
+              hostUiServices: this.#dependencies.hostUiServices,
             }),
             packageDigest: pkg.packageDigest,
           };
@@ -435,6 +455,7 @@ export class InstallationProfile {
           conflict("plugin_installation_candidate_missing");
         const dependencies = Object.freeze(
           candidate?.descriptor.requires.flatMap((requirement) => {
+            if (candidate?.descriptor.entrypoints.node === null) return [];
             const actual = this.#node
               .serviceIdentities()
               .find(
@@ -446,6 +467,9 @@ export class InstallationProfile {
           }) ?? [],
         );
         this.#checkDependencies(dependencies);
+        const uiCandidate =
+          candidate?.descriptor.entrypoints.node === null ? candidate : null;
+        this.#checkUiServices(uiCandidate);
         const epoch = await this.#fresh({
           actor: input.actor,
           scope: input.scope,
@@ -457,11 +481,13 @@ export class InstallationProfile {
         if (!this.#confirmed(selection))
           conflict("plugin_installation_selection_changed");
         this.#checkDependencies(dependencies);
+        this.#checkUiServices(uiCandidate);
         operation.stamp = Object.freeze({
           handle: wrapped,
           selection,
           identity,
           dependencies,
+          uiCandidate,
           epoch,
         });
       },
@@ -504,6 +530,7 @@ export class InstallationProfile {
       !this.#confirmed(selection)
     )
       return "deny";
+    this.#checkUiServices(stamp.uiCandidate);
     if (candidate === null) return stamp.identity === null ? "allow" : "deny";
     if (
       candidate.identity !== stamp.identity ||
@@ -525,6 +552,17 @@ export class InstallationProfile {
     }
     this.#checkDependencies(stamp.dependencies);
     return "allow";
+  }
+
+  #checkUiServices(candidate: PluginActivationCandidate | null): void {
+    this.#available();
+    if (candidate !== null)
+      assertPluginUiHostServiceAvailability({
+        scope: this.#dependencies.scope,
+        candidate,
+        hostUiServices: this.#dependencies.hostUiServices,
+      });
+    this.#available();
   }
 
   #checkDependencies(
@@ -591,6 +629,7 @@ export class InstallationProfile {
               package: pkg,
               registry: this.#dependencies.registry,
               signal: this.#lifetime.signal,
+              hostUiServices: this.#dependencies.hostUiServices,
             });
       records.push(
         Object.freeze({ selection, package: pkg, descriptor, epoch }),
@@ -598,7 +637,11 @@ export class InstallationProfile {
     }
     const published: PluginNodeCommitCandidate["identity"][] = [];
     try {
-      for (const record of orderInstallationRecoveries(records, this.#node)) {
+      for (const record of orderInstallationRecoveries(
+        records,
+        this.#node,
+        this.#dependencies.hostUiServices,
+      )) {
         const operation: Operation = {
           actor,
           scope: snapshot.scope,
@@ -628,6 +671,7 @@ export class InstallationProfile {
                   package: record.package,
                   registry: this.#dependencies.registry,
                   signal: this.#lifetime.signal,
+                  hostUiServices: this.#dependencies.hostUiServices,
                 });
             },
           },

@@ -25,6 +25,7 @@ import type {
   PluginInstalledSelectionRecoveryInput,
   PluginInstalledSelectionRecoveryPolicy,
 } from "./plugin-installation-recovery.ts";
+import type { PluginUiHostServiceAvailabilityPort } from "./plugin-ui-host-service-availability.ts";
 
 export const recoveryActor: ActorContext = Object.freeze({
   tenantId: "tenant",
@@ -252,7 +253,12 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(plu
     };
   }
 
-  function host(profile = recoveryProfile) {
+  function host(
+    profile = recoveryProfile,
+    input: Readonly<{
+      hostUiServices?: PluginUiHostServiceAvailabilityPort;
+    }> = {},
+  ) {
     const policy = {
       denyCurrent: false,
       denyActivation: false,
@@ -283,6 +289,7 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(plu
       profile,
       installRoot,
       nodeHost: node,
+      hostUiServices: input.hostUiServices,
       resolveSource: async () => {
         throw new Error("recovery_must_not_resolve_source");
       },

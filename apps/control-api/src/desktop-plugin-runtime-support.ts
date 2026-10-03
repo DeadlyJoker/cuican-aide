@@ -9,6 +9,8 @@ import type { PluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   readInstalledPluginBusinessManifest,
   verifyLocalPluginPackage,
+  assertUiOnlyServiceDeclarations,
+  type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import type { DesktopPluginSourceRegistry } from "./desktop-plugin-source-registry.ts";
 
@@ -23,6 +25,7 @@ export async function verifyDesktopInstalledPackage(
     package: InstalledPluginPackage;
     registry: DesktopPluginSourceRegistry;
     signal: AbortSignal;
+    hostUiServices?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): Promise<PluginPackageDescriptor> {
   const pkg = input.package;
@@ -43,14 +46,7 @@ export async function verifyDesktopInstalledPackage(
       "authorization",
       "plugin_installation_package_unapproved",
     );
-  if (
-    descriptor.entrypoints.node === null &&
-    (descriptor.requires.length || descriptor.provides.length)
-  )
-    throw new ApplicationError(
-      "conflict",
-      "plugin_ui_only_services_unsupported",
-    );
+  assertUiOnlyServiceDeclarations(descriptor, input.hostUiServices);
   if (descriptor.businessManifestPath !== null) {
     const snapshot = await readInstalledPluginBusinessManifest({
       installRoot: input.installRoot,

@@ -7,6 +7,7 @@ import type { PluginIdentity } from "@crewon/plugin-sdk/node";
 import type { LocalPluginInstallationHostDependencies } from "./plugin-installation-local-host.ts";
 import type { PluginNodePreparedActivation } from "./plugin-node-host.ts";
 import { verifyInstalledSelectionPackage } from "./plugin-installation-package-support.ts";
+import { assertPluginUiHostServiceAvailability } from "./plugin-ui-host-service-availability.ts";
 import {
   assertRecoveryCurrent,
   orderRecoveries,
@@ -43,6 +44,7 @@ export async function prepareInstalledSelectionRecovery(
       input,
       host.dependencies.installRoot,
       policy,
+      host.dependencies.hostUiServices,
     );
     return await prepareVerifiedRecovery(host, verified, policy, release);
   } catch (error) {
@@ -82,11 +84,20 @@ export async function recoverInstalledSelections(
     const verified: VerifiedRecovery[] = [];
     for (const input of items) {
       verified.push(
-        await verifyRecovery(input, host.dependencies.installRoot, policy),
+        await verifyRecovery(
+          input,
+          host.dependencies.installRoot,
+          policy,
+          host.dependencies.hostUiServices,
+        ),
       );
       for (const current of items) assertRecoveryCurrent(current, policy);
     }
-    const ordered = orderRecoveries(verified, nodeHost);
+    const ordered = orderRecoveries(
+      verified,
+      nodeHost,
+      host.dependencies.hostUiServices,
+    );
     for (const record of ordered) {
       for (const current of items) assertRecoveryCurrent(current, policy);
       const previous = acceptingIdentity(host, record.input.selection.pluginId);
@@ -171,6 +182,14 @@ async function prepareVerifiedRecovery(
   try {
     assertRecoveryCurrent(input, policy);
     if (selection.state === "enabled" && uiOnly) {
+      assertPluginUiHostServiceAvailability({
+        scope,
+        candidate: {
+          descriptor: verified.descriptor!,
+          packageDigest: pkg!.packageDigest,
+        },
+        hostUiServices: host.dependencies.hostUiServices,
+      });
       const outcome = await host.dependencies.authorizeActivation({
         actor,
         scope,
@@ -185,6 +204,15 @@ async function prepareVerifiedRecovery(
       await verifyInstalledSelectionPackage({
         installRoot: host.dependencies.installRoot,
         package: pkg!,
+        hostUiServices: host.dependencies.hostUiServices,
+      });
+      assertPluginUiHostServiceAvailability({
+        scope,
+        candidate: {
+          descriptor: verified.descriptor!,
+          packageDigest: pkg!.packageDigest,
+        },
+        hostUiServices: host.dependencies.hostUiServices,
       });
       assertRecoveryCurrent(input, policy);
       checkPrevious();
@@ -261,6 +289,15 @@ async function prepareVerifiedRecovery(
             },
           });
         } else {
+          if (selection.state === "enabled" && uiOnly)
+            assertPluginUiHostServiceAvailability({
+              scope,
+              candidate: {
+                descriptor: verified.descriptor!,
+                packageDigest: pkg!.packageDigest,
+              },
+              hostUiServices: host.dependencies.hostUiServices,
+            });
           const outcome = host.dependencies.authorizeCommit({
             actor,
             scope,
@@ -274,6 +311,15 @@ async function prepareVerifiedRecovery(
               "authorization",
               "plugin_selection_commit_denied",
             );
+          if (selection.state === "enabled" && uiOnly)
+            assertPluginUiHostServiceAvailability({
+              scope,
+              candidate: {
+                descriptor: verified.descriptor!,
+                packageDigest: pkg!.packageDigest,
+              },
+              hostUiServices: host.dependencies.hostUiServices,
+            });
           host.dependencies.nodeHost.deactivate(selection.pluginId);
         }
         phase = "committed";

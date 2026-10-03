@@ -52,6 +52,12 @@ export type {
 } from "./plugin-installation-recovery.ts";
 export { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";
 export {
+  capturePluginUiHostServiceAvailability,
+  assertUiOnlyServiceDeclarations,
+  assertPluginUiHostServiceAvailability,
+  type PluginUiHostServiceAvailabilityPort,
+} from "./plugin-ui-host-service-availability.ts";
+export {
   PluginExecutionRegistry,
   PluginExecutionRegistryError,
 } from "./plugin-execution-registry.ts";

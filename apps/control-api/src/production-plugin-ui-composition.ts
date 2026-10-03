@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
   PluginUiApplicationService,
+  isPluginCreativeProjectActionOwner,
+  type PluginCreativeProjectActionOwner,
   type ApplicationClock,
   type PluginInstallationStore,
   type PluginUiActionPort,
@@ -37,6 +39,8 @@ export type ProductionPluginUiConfig = Readonly<{
   committedTasks?: PluginUiCommittedTaskPort;
   /** Transfers the actual Node/task resources together with their durable-receipt authority. */
   ownedTaskActions?: InstalledPluginTaskActionOwner;
+  /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
+  ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
 }>;
 export type ProductionPluginUiRuntime = Readonly<{
   service: PluginUiControlService;
@@ -57,6 +61,12 @@ export function createProductionPluginUiRuntime(
   );
   const { actions, committedTasks, owner } =
     captureProductionPluginUiActions(input);
+  const metadataOwner = input.ownedCreativeProjectActions;
+  if (
+    metadataOwner !== undefined &&
+    !isPluginCreativeProjectActionOwner(metadataOwner)
+  )
+    throw new Error("production_plugin_ui_metadata_owner_invalid");
   if (actions !== undefined && typeof actions?.invoke !== "function")
     throw new Error("production_plugin_ui_actions_invalid");
   const invokeAction = actions?.invoke.bind(actions);
@@ -139,6 +149,8 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (metadataOwner?.supportsAction(request.action))
+            return metadataOwner.actions.invoke(request);
           if (invokeAction === undefined)
             throw new ApplicationError(
               "conflict",
@@ -150,6 +162,9 @@ export function createProductionPluginUiRuntime(
       ...(committedSnapshot === undefined
         ? {}
         : { committedTasks: committedSnapshot }),
+      ...(metadataOwner === undefined
+        ? {}
+        : { committedMetadata: metadataOwner.committedMetadata }),
     });
   const call = async <T>(
     work: (service: PluginUiApplicationService) => Promise<T>,
@@ -185,7 +200,7 @@ export function createProductionPluginUiRuntime(
     readAsset: (...args) => call((current) => current.readAsset(...args)),
     closeMount: (...args) => call((current) => current.closeMount(...args)),
     invoke: (...args) => {
-      if (committedSnapshot === undefined)
+      if (committedSnapshot === undefined && metadataOwner === undefined)
         return call((current) => current.invoke(...args));
       available();
       const current = application;
@@ -201,7 +216,19 @@ export function createProductionPluginUiRuntime(
     close: () => {
       lifetime.abort();
       application = null;
-      return (closing ??= owner?.close() ?? Promise.resolve());
+      return (closing ??= Promise.allSettled([
+        owner?.close(),
+        metadataOwner?.close(),
+      ]).then((results) => {
+        const failures = results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
+        );
+        if (failures.length)
+          throw new AggregateError(
+            failures,
+            "production_plugin_ui_cleanup_failed",
+          );
+      }));
     },
   });
 }
@@ -214,6 +241,11 @@ export function captureProductionPluginUiActions(
   committedTasks: PluginUiCommittedTaskPort | undefined;
   owner: InstalledPluginTaskActionOwner | undefined;
 }> {
+  if (
+    input.ownedCreativeProjectActions !== undefined &&
+    !isPluginCreativeProjectActionOwner(input.ownedCreativeProjectActions)
+  )
+    throw new Error("production_plugin_ui_metadata_owner_invalid");
   const owner = input.ownedTaskActions;
   if (owner !== undefined) {
     if (!isInstalledPluginTaskActionOwner(owner))

@@ -21,6 +21,7 @@ import {
   ModelProviderSettingsApplicationService,
   OfficeApplicationService,
   WorkflowVersionApplicationService,
+  isPluginCreativeProjectActionOwner,
   type ArtifactStorePort,
   type AutomationAuthorizationPort,
   type AutomationStore,
@@ -90,11 +91,17 @@ import {
   type InstalledPluginConfigurationRuntime,
 } from "./installed-plugin-configuration-composition.ts";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
+import { createProductionPluginUiRequestService } from "./production-plugin-ui-request-service.ts";
 import {
   captureCreativeProjectCompositionConfig,
   prepareCreativeProjects,
   type CreativeProjectCompositionConfig,
 } from "./creative-project-composition.ts";
+import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
+import {
+  createProductionCreativeProjectPluginRuntime,
+  type ProductionCreativeProjectPluginRuntime,
+} from "./production-creative-project-plugin-runtime.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   storageAdmission?: StorageAdmissionPort;
@@ -132,12 +139,23 @@ export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
   const ownedTaskActions = config.pluginUi?.ownedTaskActions;
+  const ownedCreativeProjectActions =
+    config.pluginUi?.ownedCreativeProjectActions;
   let store: PostgresDomainStore | undefined;
   try {
     validateProductionConfig(config);
     const creativeProjects = captureCreativeProjectCompositionConfig(
       config.creativeProjects,
     );
+    assertCreativeProjectPluginPublications(
+      creativeProjects?.pluginUi,
+      config.pluginUi?.configuration.publications,
+    );
+    if (
+      creativeProjects?.pluginUi !== undefined &&
+      ownedCreativeProjectActions !== undefined
+    )
+      throw new Error("creative_project_plugin_actions_conflict");
     // Capture the pure deployment settings before PostgreSQL's asynchronous open.
     const actions = config.pluginUi?.actions;
     const actionSnapshot =
@@ -192,6 +210,9 @@ export async function createProductionPostgresControlApi(
                 ? {}
                 : { committedTasks: committedSnapshot }),
               ...(ownedTaskActions === undefined ? {} : { ownedTaskActions }),
+              ...(ownedCreativeProjectActions === undefined
+                ? {}
+                : { ownedCreativeProjectActions }),
             }),
           }),
     });
@@ -213,6 +234,12 @@ export async function createProductionPostgresControlApi(
     if (isInstalledPluginTaskActionOwner(ownedTaskActions))
       try {
         await ownedTaskActions.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
+    if (isPluginCreativeProjectActionOwner(ownedCreativeProjectActions))
+      try {
+        await ownedCreativeProjectActions.close();
       } catch (failure) {
         failures.push(failure);
       }
@@ -259,6 +286,7 @@ async function composeProductionControlApi(
   let pluginInstallationRuntime:
     | ProductionPluginInstallationRuntime
     | undefined;
+  let projectPluginRuntime: ProductionCreativeProjectPluginRuntime | undefined;
   try {
     artifactMaintenance = new ArtifactRetentionMaintenance(
       config.artifactStore.retention,
@@ -271,6 +299,15 @@ async function composeProductionControlApi(
       store,
       config.creativeProjects,
     );
+    if (
+      creativeProjects?.pluginUi !== undefined &&
+      config.pluginUi !== undefined
+    )
+      projectPluginRuntime = createProductionCreativeProjectPluginRuntime({
+        projects: creativeProjects,
+        ui: config.pluginUi.configuration,
+        identity: config.identity as ProductionControlApiIdentity,
+      });
     if (
       config.pluginUi !== undefined ||
       config.pluginInstallation !== undefined
@@ -287,7 +324,14 @@ async function composeProductionControlApi(
               configuration: config.pluginInstallation.configuration,
               registry,
             },
-            { ledger, clock, digester },
+            {
+              ledger,
+              clock,
+              digester,
+              ...(projectPluginRuntime === undefined
+                ? {}
+                : { hostUiServices: projectPluginRuntime.hostUiServices }),
+            },
           );
       }
       if (config.pluginTasks !== undefined && config.pluginUi !== undefined) {
@@ -313,6 +357,9 @@ async function composeProductionControlApi(
             ...(pluginTaskRuntime === undefined
               ? {}
               : { ownedTaskActions: pluginTaskRuntime.owner }),
+            ...(projectPluginRuntime === undefined
+              ? {}
+              : { ownedCreativeProjectActions: projectPluginRuntime.owner }),
           },
           {
             ledger,
@@ -467,16 +514,11 @@ async function composeProductionControlApi(
     const pluginUiService: PluginUiControlService | undefined =
       pluginUiRuntime === undefined
         ? undefined
-        : pluginTaskRuntime === undefined
-          ? pluginUiRuntime.service
-          : Object.freeze({
-              ...pluginUiRuntime.service,
-              invokeAuthenticatedRequest: (request, actor, input, signal) =>
-                pluginTaskRuntime!.requests.run(
-                  { request, actor, signal },
-                  () => pluginUiRuntime!.service.invoke(actor, input),
-                ),
-            });
+        : createProductionPluginUiRequestService({
+            ui: pluginUiRuntime.service,
+            taskRequests: pluginTaskRuntime?.requests,
+            projects: projectPluginRuntime,
+          });
     const app = buildControlApi({
       creativeProjects: creativeProjects?.service,
       pluginUi: pluginUiService,
@@ -534,6 +576,7 @@ async function composeProductionControlApi(
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
       await closeResources([
+        () => projectPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),
@@ -560,6 +603,7 @@ async function composeProductionControlApi(
   } catch (error) {
     try {
       await closeResources([
+        () => projectPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
         () => pluginConfigurationRuntime?.close(),
         () => pluginUiRuntime?.close(),

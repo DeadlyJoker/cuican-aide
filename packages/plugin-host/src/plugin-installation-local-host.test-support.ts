@@ -27,6 +27,7 @@ import {
   type PluginNodeLease,
 } from "./plugin-node-host.ts";
 import { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
+import type { PluginUiHostServiceAvailabilityPort } from "./plugin-ui-host-service-availability.ts";
 
 export const actor: ActorContext = Object.freeze({
   tenantId: "tenant",
@@ -46,7 +47,12 @@ export const digester = {
 };
 
 /** Real local bytes, Node instances and SQLite; policies are explicit deterministic fixtures. */
-export async function localInstallationFixture(t: TestContext) {
+export async function localInstallationFixture(
+  t: TestContext,
+  input: Readonly<{
+    hostUiServices?: PluginUiHostServiceAvailabilityPort;
+  }> = {},
+) {
   const root = await mkdtemp(join(tmpdir(), "crewon-plugin-ledger-host-"));
   await chmod(root, 0o700);
   const installRoot = join(root, "installed");
@@ -83,6 +89,7 @@ export async function localInstallationFixture(t: TestContext) {
     profile: scope,
     installRoot,
     nodeHost,
+    hostUiServices: input.hostUiServices,
     resolveSource: async ({ sourceId, actor: who }) => {
       if (who.principalId !== actor.principalId || !sources.has(sourceId))
         throw new ApplicationError("notFound", "fixture_source_unknown");

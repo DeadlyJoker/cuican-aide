@@ -36,6 +36,86 @@ function reactRoot() {
 }
 
 describe("PluginModuleMount completion notification", () => {
+  it("does not update an old handle with replacement-owner props or deliver its completion to the new callback", async () => {
+    const mounting = deferred<void>();
+    const updating = deferred<void>();
+    const replacement = deferred<ReturnType<typeof uiLease>>();
+    const h = uiHarness();
+    let serial = 0;
+    h.importModule.mockImplementation(async () => ({
+      default: {
+        ...h.definition,
+        async mount(
+          root: HTMLElement,
+          props: PluginUiProps,
+          services: PluginUiServices,
+        ) {
+          const instance = await h.definition.mount(root, props, services);
+          const first = ++serial === 1;
+          if (first) await mounting.promise;
+          return {
+            async update(next: PluginUiProps) {
+              if (first) await updating.promise;
+              return instance.update(next);
+            },
+            dispose: instance.dispose,
+          };
+        },
+      },
+    }));
+    const mounted = reactRoot();
+    const originalCallback = vi.fn();
+    const newCallback = vi.fn();
+    const onError = vi.fn();
+    const originalAcquire = vi.fn(async () => uiLease());
+    const replacementAcquire = vi.fn(() => replacement.promise);
+    const render = async (
+      acquireMount = originalAcquire,
+      props = uiProps({ title: "original" }),
+      onMounted = originalCallback,
+    ) => {
+      await act(async () => {
+        mounted.root.render(
+          <PluginModuleMount
+            active
+            loader={h.loader}
+            acquireMount={acquireMount}
+            mountKey="same-key"
+            props={props}
+            onMounted={onMounted}
+            onError={onError}
+          />,
+        );
+        await settle();
+      });
+    };
+    await render();
+    await render(originalAcquire, uiProps({ title: "old-current" }));
+    mounting.resolve();
+    await act(settle);
+    expect(
+      mounted.container.querySelector("[data-plugin-ui-root]"),
+    ).not.toBeNull();
+    await render(
+      replacementAcquire,
+      uiProps({ title: "new-owner", pluginUiReady: false }),
+      newCallback,
+    );
+    updating.resolve();
+    await act(settle);
+    expect(
+      h.instances[0].update.mock.calls.map(([props]) => props.data),
+    ).toEqual([{ title: "old-current" }]);
+    expect(originalCallback).not.toHaveBeenCalled();
+    expect(newCallback).not.toHaveBeenCalled();
+    replacement.resolve(uiLease(2));
+    await act(settle);
+    expect(newCallback).toHaveBeenCalledTimes(1);
+    expect(originalCallback).not.toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    expect(mounted.container.textContent).toContain("new-owner");
+  });
+
   it("notifies the latest host callback only after publication and the awaited current props update", async () => {
     const imported = deferred<unknown>();
     const updating = deferred<void>();

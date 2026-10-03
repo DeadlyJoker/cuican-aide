@@ -38,7 +38,7 @@ export const props = (tokens = { "--text": "#202020" }, mode = "light") => ({
   schemaVersion: "crewon.plugin-ui-props.v1",
   contributionId: "workbench",
   theme: { mode, tokens },
-  data: { locale: "zh" },
+  data: { locale: "zh", shortDramaPreview: true },
 });
 
 export async function settle() {
@@ -47,17 +47,21 @@ export async function settle() {
   await setImmediate();
 }
 
-export function fixture(definition) {
+export function fixture(definition, configuration = {}) {
   const container = document.createElement("div");
   document.body.append(container);
   let calls = 0;
-  const services = {
+  const services = configuration.services ?? {
     async invoke() {
       calls += 1;
       throw new Error("demo_must_not_invoke_tasks");
     },
   };
-  const instance = definition.mount(container, props(), services);
+  const instance = definition.mount(
+    container,
+    configuration.props ?? props(),
+    services,
+  );
   assert.equal(typeof instance.update, "function");
   assert.equal(typeof instance.dispose, "function");
   const button = (label) => {

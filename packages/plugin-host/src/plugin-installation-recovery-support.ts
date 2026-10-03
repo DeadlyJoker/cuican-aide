@@ -13,6 +13,10 @@ import {
 import type { PluginPackageDescriptor } from "@crewon/contracts/plugins";
 import { verifyInstalledSelectionPackage } from "./plugin-installation-package-support.ts";
 import type { PluginNodeHost } from "./plugin-node-host.ts";
+import {
+  assertPluginUiHostServiceAvailability,
+  type PluginUiHostServiceAvailabilityPort,
+} from "./plugin-ui-host-service-availability.ts";
 
 /** A current host-issued actor; installedByActorId is historical audit, never startup authority. */
 export type PluginInstalledSelectionRecoveryInput = Readonly<{
@@ -136,6 +140,7 @@ export async function verifyRecovery(
   input: PluginInstalledSelectionRecoveryInput,
   installRoot: string,
   policy: PluginInstalledSelectionRecoveryPolicy,
+  hostUiServices?: PluginUiHostServiceAvailabilityPort,
 ): Promise<VerifiedRecovery> {
   assertRecoveryCurrent(input, policy);
   let descriptor: PluginPackageDescriptor | null = null;
@@ -144,11 +149,22 @@ export async function verifyRecovery(
     descriptor = await verifyInstalledSelectionPackage({
       installRoot,
       package: pkg,
+      hostUiServices,
     });
     assertRecoveryCurrent(input, policy);
   }
   await policy.validateCompatibility(Object.freeze({ ...input, descriptor }));
   assertRecoveryCurrent(input, policy);
+  if (
+    input.selection.state === "enabled" &&
+    descriptor !== null &&
+    input.package !== null
+  )
+    assertPluginUiHostServiceAvailability({
+      scope: input.scope,
+      candidate: { descriptor, packageDigest: input.package.packageDigest },
+      hostUiServices,
+    });
   return Object.freeze({ input, descriptor });
 }
 
@@ -156,6 +172,7 @@ export async function verifyRecovery(
 export function orderRecoveries(
   records: readonly VerifiedRecovery[],
   nodeHost: PluginNodeHost,
+  hostUiServices?: PluginUiHostServiceAvailabilityPort,
 ): readonly VerifiedRecovery[] {
   const replacing = new Set(
     records.map(({ input }) => input.selection.pluginId),
@@ -190,6 +207,18 @@ export function orderRecoveries(
   for (const record of records) {
     const dependencies = new Set<VerifiedRecovery>();
     if (record.input.selection.state === "enabled") {
+      if (record.descriptor!.entrypoints.node === null) {
+        assertPluginUiHostServiceAvailability({
+          scope: record.input.scope,
+          candidate: {
+            descriptor: record.descriptor!,
+            packageDigest: record.input.package!.packageDigest,
+          },
+          hostUiServices,
+        });
+        remaining.set(record, dependencies);
+        continue;
+      }
       for (const requirement of record.descriptor!.requires) {
         if (requirement.optional) continue;
         const provider = available.get(requirement.service);

@@ -38,6 +38,11 @@ import {
   type PluginInstalledSelectionRecoveryInput,
   type PluginInstalledSelectionRecoveryPolicy,
 } from "./plugin-installation-recovery.ts";
+import {
+  assertPluginUiHostServiceAvailability,
+  capturePluginUiHostServiceAvailability,
+  type PluginUiHostServiceAvailabilityPort,
+} from "./plugin-ui-host-service-availability.ts";
 
 type Authority = Readonly<{ actor: ActorContext; scope: PluginProfileScope }>;
 
@@ -46,6 +51,8 @@ export type LocalPluginInstallationHostDependencies = Readonly<{
   profile: PluginProfileScope;
   installRoot: string;
   nodeHost: PluginNodeHost;
+  /** Explicit Host metadata availability; absent preserves legacy UI-only declarations. */
+  hostUiServices?: PluginUiHostServiceAvailabilityPort;
   /** Host registry must enforce immutable source ownership; clients never supply a directory. */
   resolveSource(
     input: Authority & Readonly<{ sourceId: string }>,
@@ -91,6 +98,9 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
     this.#dependencies = Object.freeze({
       ...dependencies,
       profile: this.#profile,
+      hostUiServices: capturePluginUiHostServiceAvailability(
+        dependencies.hostUiServices,
+      ),
     });
     for (const name of [
       "resolveSource",
@@ -209,6 +219,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
     const release = await this.#lock();
     let node: PluginNodePreparedActivation | null = null;
     let uiOnly = false;
+    let uiCandidate: PluginActivationCandidate | null = null;
     // Only the coordinator owns new selection changes. This is not a Run-admission lock.
     const previous = this.#dependencies.nodeHost
       .snapshot()
@@ -234,14 +245,25 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         descriptor = await verifyInstalledSelectionPackage({
           installRoot: this.#dependencies.installRoot,
           package: pkg,
+          hostUiServices: this.#dependencies.hostUiServices,
         });
         uiOnly = descriptor.entrypoints.node === null;
+        if (uiOnly)
+          uiCandidate = Object.freeze({
+            descriptor,
+            packageDigest: pkg.packageDigest,
+          });
       }
       await this.#dependencies.validateCompatibility({
         ...preparedInput,
         descriptor,
       });
       if (needsActivation && uiOnly) {
+        assertPluginUiHostServiceAvailability({
+          scope: authority.scope,
+          candidate: uiCandidate!,
+          hostUiServices: this.#dependencies.hostUiServices,
+        });
         if (
           (await this.#dependencies.authorizeActivation({
             ...authority,
@@ -259,6 +281,12 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         await verifyInstalledSelectionPackage({
           installRoot: this.#dependencies.installRoot,
           package: pkg!,
+          hostUiServices: this.#dependencies.hostUiServices,
+        });
+        assertPluginUiHostServiceAvailability({
+          scope: authority.scope,
+          candidate: uiCandidate!,
+          hostUiServices: this.#dependencies.hostUiServices,
         });
       } else if (needsActivation) {
         node = await this.#dependencies.nodeHost.prepare({
@@ -284,6 +312,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         await verifyInstalledSelectionPackage({
           installRoot: this.#dependencies.installRoot,
           package: pkg!,
+          hostUiServices: this.#dependencies.hostUiServices,
         });
       }
     } catch (error) {
@@ -349,6 +378,12 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
                 }),
             });
           } else {
+            if (nextSelection.state === "enabled" && uiCandidate !== null)
+              assertPluginUiHostServiceAvailability({
+                scope: authority.scope,
+                candidate: uiCandidate,
+                hostUiServices: this.#dependencies.hostUiServices,
+              });
             if (
               this.#dependencies.authorizeCommit({
                 ...authority,
@@ -360,6 +395,12 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
                 "authorization",
                 "plugin_selection_commit_denied",
               );
+            if (nextSelection.state === "enabled" && uiCandidate !== null)
+              assertPluginUiHostServiceAvailability({
+                scope: authority.scope,
+                candidate: uiCandidate,
+                hostUiServices: this.#dependencies.hostUiServices,
+              });
             checkPrevious();
             this.#dependencies.nodeHost.deactivate(nextSelection.pluginId);
             if (candidate) this.#trackCleanup(candidate.abort());

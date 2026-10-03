@@ -51,6 +51,7 @@ import {
   type CreativeProjectCompositionConfig,
   type PreparedCreativeProjects,
 } from "./creative-project-composition.ts";
+import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
 import {
   composeStandaloneExtensionServices,
   type DesktopPluginNamespaceMembership,
@@ -232,8 +233,13 @@ export async function createStandaloneControlApiWithPlugins(
   )
     throw new Error("desktop_plugin_owner_mismatch");
   const pinned = pinExtensionCompositionConfig(config);
+  assertCreativeProjectPluginPublications(
+    pinned.creativeProjects?.pluginUi,
+    configuration.publications,
+  );
   const store = new SqliteRunStore(pinned.databasePath);
   let prepared: PreparedControlPlugins | undefined;
+  let projects: PreparedCreativeProjects | undefined;
   try {
     const identity = new StandaloneIdentity({
       actor: pinned.actor,
@@ -241,6 +247,7 @@ export async function createStandaloneControlApiWithPlugins(
       csrfToken: pinned.csrfToken,
       allowedOrigins: pinned.allowedOrigins,
     });
+    projects = await prepareCreativeProjects(store, pinned.creativeProjects);
     const runtime = await createDesktopPluginRuntime(
       {
         configuration,
@@ -253,6 +260,7 @@ export async function createStandaloneControlApiWithPlugins(
         identity,
         clock: new SystemApplicationClock(),
         digester: new NodeSha256ContentDigester(),
+        ...(projects === undefined ? {} : { creativeProjects: projects }),
       },
     );
     const namespaces = new Set(
@@ -275,18 +283,13 @@ export async function createStandaloneControlApiWithPlugins(
       ],
     };
     if (pinned.extensionWorker === undefined)
-      return composeControlApi(
-        store,
-        composed,
-        undefined,
-        prepared,
-        await prepareCreativeProjects(store, pinned.creativeProjects),
-      );
+      return composeControlApi(store, composed, undefined, prepared, projects);
     return await composeExtensionControlApi(
       store,
       composed,
       pinned.extensionWorker,
       prepared,
+      projects,
     );
   } catch (error) {
     await closeOwners(
@@ -387,6 +390,7 @@ async function composeExtensionControlApi(
   config: ControlApiCompositionConfig,
   worker: ExtensionWorkerConfig,
   preparedPlugins?: PreparedControlPlugins,
+  preparedProjects?: PreparedCreativeProjects,
 ): Promise<StandaloneControlApiRuntime> {
   let client: ExtensionHostRouter | null = null;
   let prepared: PreparedControlExtensions | undefined;
@@ -414,7 +418,8 @@ async function composeExtensionControlApi(
       config,
       prepared,
       preparedPlugins,
-      await prepareCreativeProjects(store, config.creativeProjects),
+      preparedProjects ??
+        (await prepareCreativeProjects(store, config.creativeProjects)),
     );
   } catch (error) {
     const ownedCleanup =

@@ -31,6 +31,10 @@ import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import { installationSame } from "./production-plugin-installation-runtime-support.ts";
 import { DesktopInstallationProfile } from "./desktop-plugin-installation-profile.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
+import {
+  capturePluginUiHostServiceAvailability,
+  type PluginUiHostServiceAvailabilityPort,
+} from "@crewon/plugin-host";
 
 type Method =
   | "install"
@@ -99,6 +103,7 @@ type Dependencies = Readonly<{
   store: SqliteRunStore;
   clock: ApplicationClock;
   digester: ContentDigester;
+  hostUiServices?: PluginUiHostServiceAvailabilityPort;
 }>;
 const inputFields: Record<Method, readonly string[]> = {
   install: [
@@ -139,6 +144,9 @@ export async function createDesktopPluginInstallationRuntime(
   )
     throw new Error("desktop_plugin_installation_dependencies_invalid");
   const registry = input.registry;
+  const hostUiServices = capturePluginUiHostServiceAvailability(
+    dependencies.hostUiServices,
+  );
   const store = dependencies.store;
   const ledger = store.pluginInstallationStore();
   const clock = Object.freeze({
@@ -167,6 +175,7 @@ export async function createDesktopPluginInstallationRuntime(
     digester,
     scope: initialScope,
     prepareBusinessCandidate,
+    hostUiServices,
   });
   profiles.set(
     extensionCanonicalJson(initialScope),
@@ -202,6 +211,7 @@ export async function createDesktopPluginInstallationRuntime(
         digester,
         scope,
         prepareBusinessCandidate,
+        hostUiServices,
       }).then((current) => {
         resolvedProfiles.add(current);
         if (closed) current.withdraw();

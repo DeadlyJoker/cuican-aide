@@ -1,0 +1,141 @@
+import { ApplicationError } from "@crewon/application";
+import {
+  parsePluginProfileScope,
+  pluginInstallationDigest,
+  type PluginProfileScope,
+} from "@crewon/domain";
+import {
+  CREWON_CREATIVE_PROJECTS_SERVICE,
+  CREWON_CREATIVE_PROJECTS_API_VERSION,
+  type PluginPackageDescriptor,
+  type PluginServiceRequirement,
+} from "@crewon/contracts/plugins";
+import type { PluginActivationCandidate } from "./plugin-node-host.ts";
+
+/** Host metadata availability never supplies a Node service or grants an invocation permission. */
+export type PluginUiHostServiceAvailabilityPort = Readonly<{
+  isAvailable(
+    input: Readonly<{
+      scope: PluginProfileScope;
+      candidate: PluginActivationCandidate;
+      requirement: PluginServiceRequirement;
+    }>,
+  ): boolean;
+}>;
+
+/** Capture the trusted callback once; getters, later method replacement and async answers fail closed. */
+export function capturePluginUiHostServiceAvailability(
+  port: PluginUiHostServiceAvailabilityPort | undefined,
+): PluginUiHostServiceAvailabilityPort | undefined {
+  if (port === undefined) return undefined;
+  if (port === null || typeof port !== "object") invalidPort();
+  let owner: object | null = port;
+  let callback: unknown;
+  for (
+    let depth = 0;
+    owner !== null && depth < 16;
+    depth++, owner = Object.getPrototypeOf(owner)
+  ) {
+    const own = Object.getOwnPropertyDescriptor(owner, "isAvailable");
+    if (own === undefined) continue;
+    if (!("value" in own) || typeof own.value !== "function") invalidPort();
+    callback = own.value;
+    break;
+  }
+  if (typeof callback !== "function") invalidPort();
+  const captured = Function.prototype.bind.call(
+    callback,
+    port,
+  ) as PluginUiHostServiceAvailabilityPort["isAvailable"];
+  return Object.freeze({
+    isAvailable: (input: Parameters<typeof captured>[0]) => {
+      try {
+        return synchronousAvailable(captured(input));
+      } catch {
+        return false;
+      }
+    },
+  });
+}
+
+/** UI-only envelopes may only name this explicitly provided Host metadata protocol. */
+export function assertUiOnlyServiceDeclarations(
+  descriptor: PluginPackageDescriptor,
+  hostUiServices?: PluginUiHostServiceAvailabilityPort,
+): void {
+  if (descriptor.entrypoints.node !== null) return;
+  if (descriptor.requires.length !== 0 && hostUiServices !== undefined)
+    capturePluginUiHostServiceAvailability(hostUiServices);
+  if (
+    descriptor.provides.length !== 0 ||
+    descriptor.requires.some(
+      (requirement) =>
+        hostUiServices === undefined ||
+        requirement.service !== CREWON_CREATIVE_PROJECTS_SERVICE ||
+        requirement.apiVersion !== CREWON_CREATIVE_PROJECTS_API_VERSION,
+    )
+  )
+    unsupported();
+}
+
+/** Invoke at enabled preparation, every recovery preflight and the final synchronous publication fence. */
+export function assertPluginUiHostServiceAvailability(
+  input: Readonly<{
+    scope: PluginProfileScope;
+    candidate: PluginActivationCandidate;
+    hostUiServices?: PluginUiHostServiceAvailabilityPort;
+  }>,
+): void {
+  const { descriptor } = input.candidate;
+  assertUiOnlyServiceDeclarations(descriptor, input.hostUiServices);
+  if (descriptor.entrypoints.node !== null) return;
+  const scope = parsePluginProfileScope(input.scope);
+  const candidate = Object.freeze({
+    descriptor,
+    packageDigest: pluginInstallationDigest(input.candidate.packageDigest),
+  });
+  for (const requirement of descriptor.requires) {
+    if (requirement.optional) continue;
+    let available = false;
+    try {
+      available = synchronousAvailable(
+        input.hostUiServices?.isAvailable(
+          Object.freeze({ scope, candidate, requirement }),
+        ),
+      );
+    } catch {
+      /* Availability failures never broaden an enabled selection. */
+    }
+    if (!available)
+      throw new ApplicationError("conflict", "plugin_dependency_unavailable");
+  }
+}
+function synchronousAvailable(answer: unknown): boolean {
+  if (answer === true) return true;
+  // Observe a real Promise's late rejection without consulting arbitrary then getters.
+  // Async or thenable answers never postpone the synchronous publication decision.
+  if (
+    (typeof answer === "object" && answer !== null) ||
+    typeof answer === "function"
+  ) {
+    try {
+      Promise.prototype.then.call(
+        answer,
+        () => undefined,
+        () => undefined,
+      );
+    } catch {
+      /* A non-Promise answer is unavailable. */
+    }
+  }
+  return false;
+}
+function unsupported(): never {
+  throw new ApplicationError("conflict", "plugin_ui_only_services_unsupported");
+}
+function invalidPort(): never {
+  throw new ApplicationError(
+    "internal",
+    "plugin_ui_host_service_availability_invalid",
+  );
+}

@@ -210,6 +210,12 @@ export class InstalledPluginRequestOwner {
     return this.#current().actor;
   }
 
+  currentScope(): PluginProfileScope {
+    const scope = this.#current().scope;
+    if (scope === null) denied();
+    return parsePluginProfileScope(scope);
+  }
+
   async resolveActor(
     owner: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
     signal: AbortSignal,

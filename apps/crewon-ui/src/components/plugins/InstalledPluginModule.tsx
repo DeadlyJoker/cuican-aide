@@ -146,12 +146,22 @@ export function InstalledPluginModule({
       theme,
       data: Object.freeze({
         locale,
+        pluginUiReady: ready === context,
         ...(taskEnabled && taskPorts
           ? (tasks.data as Readonly<Record<string, PluginJsonValue>>)
           : {}),
       }),
     }),
-    [module.contributionId, theme, locale, taskEnabled, taskPorts, tasks.data],
+    [
+      module.contributionId,
+      theme,
+      locale,
+      taskEnabled,
+      taskPorts,
+      tasks.data,
+      ready,
+      context,
+    ],
   );
   const onMounted = useCallback(() => {
     if (current.current === context && context.active) setReady(context);

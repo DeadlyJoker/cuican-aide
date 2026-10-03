@@ -30,6 +30,10 @@ import {
 import { ProductionPluginInstallationAuthority } from "./production-plugin-installation-authority.ts";
 import { installationSame } from "./production-plugin-installation-runtime-support.ts";
 import { InstallationProfile } from "./production-plugin-installation-profile.ts";
+import {
+  capturePluginUiHostServiceAvailability,
+  type PluginUiHostServiceAvailabilityPort,
+} from "@crewon/plugin-host";
 
 type Method =
   | "install"
@@ -57,6 +61,7 @@ type Dependencies = Readonly<{
   clock: ApplicationClock;
   digester: ContentDigester;
   fetch?: typeof globalThis.fetch;
+  hostUiServices?: PluginUiHostServiceAvailabilityPort;
 }>;
 const inputFields: Record<Method, readonly string[]> = {
   install: [
@@ -100,6 +105,9 @@ export function createProductionPluginInstallationRuntime(
   )
     throw new Error("production_plugin_installation_dependencies_invalid");
   const registry = input.registry;
+  const hostUiServices = capturePluginUiHostServiceAvailability(
+    dependencies.hostUiServices,
+  );
   const clock = Object.freeze({
     now: dependencies.clock.now.bind(dependencies.clock),
   });
@@ -140,6 +148,7 @@ export function createProductionPluginInstallationRuntime(
         clock,
         digester,
         scope,
+        hostUiServices,
       }).then((current) => {
         resolvedProfiles.add(current);
         if (closed) current.withdraw();

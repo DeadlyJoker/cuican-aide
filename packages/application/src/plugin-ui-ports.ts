@@ -83,6 +83,20 @@ export interface PluginUiCommittedTaskPort {
     outcome: PluginUiCommittedTaskOutcome,
   ): PluginUiJsonValue;
 }
+declare const pluginUiCommittedMetadataOutcomeTag: unique symbol;
+/** Host-only metadata receipt, separately owned from task/Run admission. */
+export type PluginUiCommittedMetadataOutcome = Readonly<{
+  [pluginUiCommittedMetadataOutcomeTag]: true;
+}>;
+export interface PluginUiCommittedMetadataPort {
+  /** Recognizes only outcomes issued after the owner's actual metadata Service returned. */
+  isOutcome(input: unknown): input is PluginUiCommittedMetadataOutcome;
+  /** Single-use projection for the original invocation; never grants current action authority. */
+  verify(
+    context: PluginUiActionContext,
+    outcome: PluginUiCommittedMetadataOutcome,
+  ): PluginUiJsonValue;
+}
 export interface PluginUiActionPort {
   /**
    * Required host allowlist and dispatch fence. Rechecks current durable selection/authority at actual
@@ -92,5 +106,9 @@ export interface PluginUiActionPort {
    */
   invoke(
     input: PluginUiActionContext,
-  ): Promise<PluginUiJsonValue | PluginUiCommittedTaskOutcome>;
+  ): Promise<
+    | PluginUiJsonValue
+    | PluginUiCommittedTaskOutcome
+    | PluginUiCommittedMetadataOutcome
+  >;
 }

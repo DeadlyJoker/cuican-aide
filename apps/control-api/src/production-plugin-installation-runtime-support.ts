@@ -10,7 +10,10 @@ import type { PluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   readInstalledPluginBusinessManifest,
   verifyLocalPluginPackage,
+  assertUiOnlyServiceDeclarations,
+  assertPluginUiHostServiceAvailability,
   type PluginNodeHost,
+  type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import type { ProductionPluginSourceRegistry } from "./production-plugin-source-registry.ts";
 
@@ -25,6 +28,7 @@ export async function verifyProductionInstalledPackage(
     package: InstalledPluginPackage;
     registry: ProductionPluginSourceRegistry;
     signal: AbortSignal;
+    hostUiServices?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): Promise<PluginPackageDescriptor> {
   const pkg = input.package;
@@ -45,14 +49,7 @@ export async function verifyProductionInstalledPackage(
       "authorization",
       "plugin_installation_package_unapproved",
     );
-  if (
-    descriptor.entrypoints.node === null &&
-    (descriptor.requires.length || descriptor.provides.length)
-  )
-    throw new ApplicationError(
-      "conflict",
-      "plugin_ui_only_services_unsupported",
-    );
+  assertUiOnlyServiceDeclarations(descriptor, input.hostUiServices);
   if (descriptor.businessManifestPath !== null) {
     const snapshot = await readInstalledPluginBusinessManifest({
       installRoot: input.installRoot,
@@ -89,6 +86,7 @@ export type InstallationRecoveryRecord = Readonly<{
 export function orderInstallationRecoveries(
   records: readonly InstallationRecoveryRecord[],
   node: PluginNodeHost,
+  hostUiServices?: PluginUiHostServiceAvailabilityPort,
 ): readonly InstallationRecoveryRecord[] {
   const replacing = new Set(records.map((record) => record.selection.pluginId));
   const available = new Map<
@@ -119,6 +117,22 @@ export function orderInstallationRecoveries(
   for (const record of records) {
     const dependencies = new Set<InstallationRecoveryRecord>();
     if (record.selection.state === "enabled") {
+      if (record.descriptor!.entrypoints.node === null) {
+        assertPluginUiHostServiceAvailability({
+          scope: {
+            tenantId: record.selection.tenantId,
+            spaceId: record.selection.spaceId,
+            profileId: record.selection.profileId,
+          },
+          candidate: {
+            descriptor: record.descriptor!,
+            packageDigest: record.package!.packageDigest,
+          },
+          hostUiServices,
+        });
+        pending.set(record, dependencies);
+        continue;
+      }
       for (const requirement of record.descriptor!.requires) {
         if (requirement.optional) continue;
         const provider = available.get(requirement.service);

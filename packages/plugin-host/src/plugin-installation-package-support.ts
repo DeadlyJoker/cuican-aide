@@ -7,25 +7,17 @@ import {
   pinDirectory,
 } from "./local-plugin-package-files.ts";
 import { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
-
-/** Node service declarations cannot be satisfied by a browser-only entry. */
-export function assertUiOnlyServiceDeclarations(
-  descriptor: PluginPackageDescriptor,
-): void {
-  if (
-    descriptor.entrypoints.node === null &&
-    (descriptor.requires.length !== 0 || descriptor.provides.length !== 0)
-  )
-    throw new ApplicationError(
-      "conflict",
-      "plugin_ui_only_services_unsupported",
-    );
-}
+import {
+  assertUiOnlyServiceDeclarations,
+  type PluginUiHostServiceAvailabilityPort,
+} from "./plugin-ui-host-service-availability.ts";
+export { assertUiOnlyServiceDeclarations } from "./plugin-ui-host-service-availability.ts";
 
 /** Actual installed bytes and identity, with the same private-root boundary as Node activation. */
 export async function verifyInstalledSelectionPackage(input: {
   installRoot: string;
   package: InstalledPluginPackage;
+  hostUiServices?: PluginUiHostServiceAvailabilityPort;
 }): Promise<PluginPackageDescriptor> {
   const root = await pinDirectory(input.installRoot);
   if (
@@ -52,6 +44,6 @@ export async function verifyInstalledSelectionPackage(input: {
   )
     throw new ApplicationError("internal", "plugin_installed_bytes_mismatch");
   await assertDirectoryPins([root, packages], false);
-  assertUiOnlyServiceDeclarations(descriptor);
+  assertUiOnlyServiceDeclarations(descriptor, input.hostUiServices);
   return descriptor;
 }

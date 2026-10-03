@@ -3,6 +3,7 @@ import {
   type ActorContext,
   type PluginInstallationAuthorizationAction,
   type PluginUiAuthorizationPort,
+  type PluginCreativeProjectActionPublication,
 } from "@crewon/application";
 import { type PluginProfileScope } from "@crewon/domain";
 import { installationSame } from "./production-plugin-installation-runtime-support.ts";
@@ -15,13 +16,32 @@ import {
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
+import {
+  assertCreativeProjectPluginPublications,
+  captureCreativeProjectPluginUiConfig,
+} from "./creative-project-plugin-ui-composition.ts";
 
 /** A native-approved local owner grant for this Control lifetime. Configuration changes require restart. */
 export class DesktopPluginAuthority {
   readonly #configuration: DesktopPluginConfiguration;
+  readonly #metadataPublications: readonly PluginCreativeProjectActionPublication[];
   #closed = false;
-  constructor(configuration: DesktopPluginConfiguration) {
+  constructor(
+    configuration: DesktopPluginConfiguration,
+    metadataPublications?: readonly PluginCreativeProjectActionPublication[],
+  ) {
     this.#configuration = parseDesktopPluginConfiguration(configuration);
+    const metadata =
+      metadataPublications === undefined
+        ? undefined
+        : captureCreativeProjectPluginUiConfig({
+            publications: metadataPublications,
+          });
+    assertCreativeProjectPluginPublications(
+      metadata,
+      this.#configuration.publications,
+    );
+    this.#metadataPublications = metadata?.publications ?? [];
   }
   assertActor(input: ActorContext): void {
     if (this.#closed) denied("desktop_plugin_authority_closed");
@@ -75,7 +95,15 @@ export class DesktopPluginAuthority {
       } catch {
         return { outcome: "deny", reasonCode: "desktop_plugin_owner_mismatch" };
       }
-      if (request.action === "invoke")
+      if (
+        request.action === "invoke" &&
+        !this.#metadataPublications.some(
+          (publication) =>
+            publication.pluginId === request.resource.pluginId &&
+            publication.packageDigest === request.resource.packageDigest &&
+            publication.contributionId === request.resource.contributionId,
+        )
+      )
         return { outcome: "deny", reasonCode: "plugin_ui_actions_unavailable" };
       if (
         request.resource.pluginId !== null &&

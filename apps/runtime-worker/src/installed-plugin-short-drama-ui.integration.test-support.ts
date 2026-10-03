@@ -109,7 +109,7 @@ export const shortDramaProps = (
   schemaVersion: "crewon.plugin-ui-props.v1",
   contributionId: "workbench",
   theme: { mode, tokens },
-  data: { locale: "zh" },
+  data: { locale: "zh", shortDramaPreview: true },
 });
 
 export async function settleShortDrama() {

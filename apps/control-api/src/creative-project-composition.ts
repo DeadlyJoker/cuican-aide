@@ -13,14 +13,20 @@ import {
   SystemApplicationClock,
   UuidV7ApplicationIdGenerator,
 } from "./standalone-adapters.ts";
+import {
+  captureCreativeProjectPluginUiConfig,
+  type CreativeProjectPluginUiConfig,
+} from "./creative-project-plugin-ui-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
+  pluginUi?: CreativeProjectPluginUiConfig;
 }>;
 
 export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
+  readonly pluginUi?: CreativeProjectPluginUiConfig;
   /** Composition owns auxiliary resources; the creator still owns the parent Store. */
   failureCleanup?: Promise<void>;
 };
@@ -38,11 +44,20 @@ export function captureCreativeProjectCompositionConfig(
     throw new Error("creative_project_configuration_invalid");
   const fields = Object.getOwnPropertyDescriptors(input);
   if (
-    Reflect.ownKeys(input).length !== 1 ||
+    Reflect.ownKeys(input).some(
+      (key) => key !== "authorization" && key !== "pluginUi",
+    ) ||
     !Object.hasOwn(fields, "authorization") ||
     !Object.hasOwn(fields.authorization!, "value")
   )
     throw new Error("creative_project_configuration_invalid");
+  const pluginUiField = fields.pluginUi;
+  if (
+    pluginUiField !== undefined &&
+    (!Object.hasOwn(pluginUiField, "value") || !pluginUiField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const pluginUi = captureCreativeProjectPluginUiConfig(pluginUiField?.value);
   const port = fields.authorization!.value as
     | CreativeProjectAuthorizationPort
     | null
@@ -62,6 +77,7 @@ export function captureCreativeProjectCompositionConfig(
         authorization: Object.freeze({
           authorize: descriptor.value.bind(port),
         }),
+        ...(pluginUi === undefined ? {} : { pluginUi }),
       });
     }
     target = Object.getPrototypeOf(target);
@@ -78,6 +94,9 @@ export async function prepareCreativeProjects(
   const store = owner.creativeProjectStore();
   await store.migrate();
   return {
+    ...(configuration.pluginUi === undefined
+      ? {}
+      : { pluginUi: configuration.pluginUi }),
     service: new CreativeProjectApplicationService({
       store,
       authorization: configuration.authorization,
