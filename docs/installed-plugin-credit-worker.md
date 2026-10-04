@@ -37,6 +37,8 @@
 
 `migrate: true` 才执行原最终决定迁移和独立恢复迁移。恢复迁移只增加 `plugin_credit_settlement_recovery_schema_version` 与四列恢复索引，不补建、伪造或修复原安装准入 schema；部分或不兼容 schema 拒绝启动。正常部署可先显式完成迁移，再使用 `migrate: false`。
 
+Native 使用[独立环境投影](./native-plugin-credit-environment.md)，在原桌面启动边界只向当前 Worker 交付明确捕获的财务路径与 token。共享 runtime、模型目录和工作区子进程清理这些明确引用；保留名称冲突拒绝启动。原没有 provider 的 management 入口不因此新增结算 Worker。
+
 ## 财务 HTTP 协议
 
 授权请求 `POST` 使用 `crewon.plugin-credit-settlement-authorization.v1`，携带完整 scope、authorityId、authorityRevision。allow 响应必须精确返回同一 scope 和权威修订，以及非空 `authorityEpoch` 和规范 UTC `expiresAt`；deny 不提供 epoch 或期限。接受的期限不得超过本次请求开始时间加 `maxAuthorizationAgeMs`。同时核验 UTC 与单调时钟，不因系统时钟后退延长许可。

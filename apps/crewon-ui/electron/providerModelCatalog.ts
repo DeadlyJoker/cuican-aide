@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import type { ProviderCredentialStore } from "./providerCredentials.ts";
 import { nodeArguments, type RuntimePaths } from "./runtimeSupervisor.ts";
 import { processRuntimeLogs } from "./processRuntimeLogs.ts";
+import { desktopPluginCreditSettlementSharedEnvironment } from "./desktopPluginCreditSettlementEnvironment.ts";
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
 const MAX_MODELS = 32;
@@ -169,7 +170,10 @@ function runCatalogProbe(
       process.execPath,
       nodeArguments(paths.modelCatalog, paths.source),
       {
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+        env: desktopPluginCreditSettlementSharedEnvironment({
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: "1",
+        }),
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
       },

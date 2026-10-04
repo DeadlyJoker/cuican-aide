@@ -6,6 +6,18 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 财务环境隔离与原打包三类 prepared 恢复
+
+在 `ce27cecf640535fb7729ef72551dbd3608033e30` 基线上补齐 [Native 财务环境投影](./native-plugin-credit-environment.md)。原 v1 0600 文件和明确 token refs 在启动时捕获；只有当前 Worker 注入捕获值，共享 runtime、目录探测、独立 management、工作区命令/Git 与 Windows 清退环境移除这些明确字段。最终 spawn 复核文件 pin，文件变化或 overlay 冲突永久撤回同 owner；没有 opt-in 时零财务文件读取，不猜测未声明 token。原 provider-null 入口不新增财务 Worker。该边界只限制被动环境继承，没有 watcher，也不抵御同 UID、可信 Node 或显式同名模型凭据选择。
+
+财务投影、实际 Supervisor/目录子进程及管理入口组合 **66/66**；工作区实际 Node child 与原容量/清退回归 **33/33**（新专项 **7/7**）；原自动安装、activation、任务、项目和报告 Source 链路 **六文件、68/68**。均零跳过、实际退出码 0。Host 类型、boundary、格式和保留检查通过；初次类型检查的测试变量索引类型问题保留，后续仅补类型声明。分组按实际范围记录，不求和，不把 custom child 的环境测试当作财务 HTTPS 或生产结算验收。
+
+[真实 `.app` 三类 prepared 恢复](./native-packaged-prepared-recovery.md)最终 **1/1、零跳过、退出码 0**：原账号→十类 Settings 安装/启用原短剧9，原表单保存项目/概念并用宿主按钮创建 Thread；原鉴权 ControlApiClient stage 三条真实 ACK，固定 selection revision 2。原 Main 与子进程物理退场后，新 Main 从原 recovery GET 在模块 ready 前读回完整 pin、原 request/key/CAS，实际页面显示三类 UNKNOWN。查询/选用 operation 明确不存在，receipt null、dispatch 0；冷启动所有业务写入增量为 0，原账务、Run、供应商操作及项目关联保持，报价 0、初始具名 100 积分保持。未声称三个业务按钮产生了 ACK、成功图片历史/选用或完整 S0。
+
+前两次打包失败为测试 selector 范围及 DB JSON 读取方式，均仅修测试并保留首次日志/截图。最终七张原页面截图保留；自然打包身份、asar/runtime 摘要与实际子进程退场核验。自有测试目录编译原 Host/runtime 并复制正式 Renderer，未重建 SDK/冻结包、正式前端或发布插件包；14 个原 UI 文件、15 个正式资产、60 个 SDK 源文件、旧发行包8/9/10、0600 生产映射和用户五个进程保持。primary 人类工作未改。统一证据为 `output/extensions/checks/native-financial-isolation-proof-20261004.json`。
+
+`2026-10-04T05:24:59.493Z` 对用户原 ComfyUI 首页、`/queue` 与 `/system_stats` 的真实只读 GET 均返回 404，TLS 校验开启，POST 为 0。本轮未提交用户生图任务或生产财务请求。真实个人身份/入账/价格/失败规则与 HTTPS 财务服务、Native Krea2 实际公网生成/原 operation 查询、同次原完整 App 在线 S0、全部插件打包恢复/执行和用户选定实际企业 API 的 E5 仍未完成，完整目标 ACTIVE。
+
 ## 2026-10-04：Worker 有界恢复与独立财务部署
 
 在 `bde673948f6d07dfd6428ec8405294a0c15a6ec2` 基线上接通[Worker 插件积分结算](./installed-plugin-credit-worker.md)：明确 tenant/space/profile 的原安装 admission 索引分页、独立 0600 文件配置与 HTTPS 财务权威、后台单轮调度，以及父 Store 与财务 owner 的共同事务 fence。未配置时原 Worker 不访问结算 Store、不迁移、不新增财务请求；原用户栏、Settings、侧栏和样式保持。

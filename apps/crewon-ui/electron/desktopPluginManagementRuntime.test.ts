@@ -10,10 +10,42 @@ import {
   DesktopPluginBootstrapOwner,
   desktopPluginManagementEnvironment,
 } from "./desktopPluginManagementRuntime.ts";
+import { DESKTOP_PLUGIN_CREDIT_SETTLEMENT_CONFIG_ENV } from "./desktopPluginCreditSettlementEnvironment.ts";
+import { desktopFinancialEnvironmentFixture } from "./desktopPluginCreditSettlementEnvironment.test-support.ts";
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe("Native-owned plugin bootstrap lifetime", () => {
+  it("removes exact financial refs including non-CrewON names before management-only Control", () => {
+    const f = desktopFinancialEnvironmentFixture();
+    try {
+      const ambient: NodeJS.ProcessEnv = {
+        ...f.environment,
+        NAMED_UNRELATED_TOKEN: "unrelated-management-value",
+      };
+      const environment = desktopPluginManagementEnvironment({
+        ambient,
+        dataDirectory: f.directory,
+        controlPort: 4321,
+        origin: "http://crewon.localhost",
+        csrfToken: "native-csrf",
+        sessionToken: "native-session",
+      });
+      expect(
+        environment[DESKTOP_PLUGIN_CREDIT_SETTLEMENT_CONFIG_ENV],
+      ).toBeUndefined();
+      expect(environment[f.authorizationName]).toBeUndefined();
+      expect(environment[f.decisionName]).toBeUndefined();
+      expect(environment.NAMED_UNRELATED_TOKEN).toBe(
+        "unrelated-management-value",
+      );
+      expect(environment.CREWON_CONTROL_SECURITY_MODE).toBe("standalone");
+      expect(ambient[f.authorizationName]).toBe(f.authorizationToken);
+    } finally {
+      f.cleanup();
+    }
+  });
+
   it("clears ambient grants and reuses the original artifact store without mutating the caller", () => {
     const ambient = {
       PATH: "/tools",

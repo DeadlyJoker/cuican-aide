@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { desktopPluginCreditSettlementSharedEnvironment } from "./desktopPluginCreditSettlementEnvironment.ts";
 import { join } from "node:path";
 import { DESKTOP_RUNTIME_OWNER } from "./desktopExtensionRuntime.ts";
 import {
@@ -128,7 +129,7 @@ export function desktopPluginManagementEnvironment(
     sessionToken: string;
   }>,
 ): NodeJS.ProcessEnv {
-  const ambient = { ...input.ambient };
+  const ambient = desktopPluginCreditSettlementSharedEnvironment(input.ambient);
   // There is no configured model, worker, remote policy or production authority in this mode.
   for (const name of Object.keys(ambient)) {
     if (name.startsWith("CREWON_")) delete ambient[name];

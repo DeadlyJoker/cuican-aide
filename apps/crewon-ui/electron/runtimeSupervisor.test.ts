@@ -1,7 +1,11 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { desktopPluginManagementFixture } from "./desktopPluginManagementRuntime.test-support.ts";
+import { desktopFinancialEnvironmentFixture } from "./desktopPluginCreditSettlementEnvironment.test-support.ts";
 
 import {
   RuntimeSupervisor,
@@ -14,6 +18,60 @@ import {
   terminateRuntimeChild,
   watchRuntimeChildren,
 } from "./runtimeSupervisor.ts";
+
+afterEach(() => vi.unstubAllEnvs());
+
+it.each(["configured", "absent"] as const)(
+  "isolates declared financial environment at actual Native child spawn with provider %s",
+  async (provider) => {
+    const finance = desktopFinancialEnvironmentFixture();
+    for (const [name, value] of Object.entries(finance.environment))
+      vi.stubEnv(name, value);
+    const f = desktopPluginManagementFixture({ provider, approval: "present" });
+    const audit = join(f.directory, "financial-environment.jsonl");
+    for (const kind of ["release", "worker", "control"]) {
+      const entry = join(f.directory, `${kind}.mjs`);
+      writeFileSync(
+        entry,
+        finance.childAudit(audit, kind) + readFileSync(entry, "utf8"),
+      );
+    }
+    try {
+      await f.owner.start();
+      const records = readFileSync(audit, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(records.map((record) => record.kind).sort()).toEqual(
+        provider === "configured"
+          ? ["control", "release", "worker"]
+          : ["control"],
+      );
+      for (const record of records) {
+        if (record.kind === "worker") {
+          expect(record.path).toBe(finance.path);
+          expect(record.authorization).toBe(finance.authorizationToken);
+          expect(record.decision).toBe(finance.decisionToken);
+        } else {
+          expect(record.path).toBeNull();
+          expect(record.authorization).toBeNull();
+          expect(record.decision).toBeNull();
+        }
+        expect(record.unrelated).toBe(
+          provider === "configured"
+            ? finance.environment.CREWON_FINANCIAL_UNDECLARED_TOKEN
+            : null,
+        );
+      }
+      expect(
+        f.records().filter((record) => record.kind === "worker"),
+      ).toHaveLength(provider === "configured" ? 1 : 0);
+    } finally {
+      await f.close();
+      finance.cleanup();
+    }
+  },
+);
 
 describe("desktop runtime identity", () => {
   it("injects the Agent Platform key only into a cloned worker environment", () => {

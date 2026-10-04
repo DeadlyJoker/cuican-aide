@@ -65,6 +65,10 @@ import {
   type AutomaticDesktopInstalledPluginRuntime,
 } from "./desktopAutomaticInstalledPluginRuntime.ts";
 import { isAutomaticDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
+import {
+  captureDesktopPluginCreditSettlementEnvironment,
+  type DesktopPluginCreditSettlementEnvironment,
+} from "./desktopPluginCreditSettlementEnvironment.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -146,6 +150,7 @@ export class RuntimeSupervisor {
   #managementControl: ChildProcess | null = null;
   #pluginBootstrap: DesktopPluginBootstrapOwner | null = null;
   #installedRuntimeOwner: DesktopInstalledPluginRuntime | null = null;
+  #financialEnvironment: DesktopPluginCreditSettlementEnvironment | null = null;
   #automaticInstalledRuntimeOwner: AutomaticDesktopInstalledPluginRuntime | null =
     null;
   #installedStartupJoin: Promise<
@@ -227,6 +232,8 @@ export class RuntimeSupervisor {
     this.#startupAbort = startup;
     this.#runtimeAbort = startup;
     try {
+      this.#financialEnvironment =
+        captureDesktopPluginCreditSettlementEnvironment(process.env);
       const bootstrapOwner = new DesktopPluginBootstrapOwner({
         dataDirectory: this.#dataDirectory,
         actor: DESKTOP_RUNTIME_OWNER,
@@ -241,6 +248,8 @@ export class RuntimeSupervisor {
         if (this.#pluginBootstrap === bootstrapOwner)
           this.#pluginBootstrap = null;
         if (this.#runtimeAbort === startup) this.#runtimeAbort = null;
+        this.#financialEnvironment.close();
+        this.#financialEnvironment = null;
         this.#ready = false;
         return;
       }
@@ -391,7 +400,10 @@ export class RuntimeSupervisor {
               deadlineMs: this.#installedDeadlineMs,
               spawnControl: (env) => this.#spawnControl(env),
               spawnWorker: (env) =>
-                this.#spawn("Runtime Worker", this.#paths.worker, env, true),
+                this.#spawn("Runtime Worker", this.#paths.worker, env, {
+                  stdin: "pipe",
+                  financialRole: "worker",
+                }),
               trackChild: (child) => this.#children.push(child),
             }),
           );
@@ -479,12 +491,10 @@ export class RuntimeSupervisor {
           signal: startup.signal,
           spawnControl: (environment) => this.#spawnControl(environment),
           spawnWorker: (environment) =>
-            this.#spawn(
-              "Runtime Worker",
-              this.#paths.worker,
-              environment,
-              true,
-            ),
+            this.#spawn("Runtime Worker", this.#paths.worker, environment, {
+              stdin: "pipe",
+              financialRole: "worker",
+            }),
           trackChild: (child) => this.#children.push(child),
         });
       this.#currentChildren = { control, worker };
@@ -592,7 +602,9 @@ export class RuntimeSupervisor {
       deadlineMs: this.#extensionDeadlineMs,
       resolveProvider: this.#resolveExtensionCredential!,
       spawnHistoricalWorker: (entry, environment) =>
-        this.#spawn("Historical Runtime Worker", entry, environment, true),
+        this.#spawn("Historical Runtime Worker", entry, environment, {
+          stdin: "pipe",
+        }),
       spawnControl: (environment) => this.#spawnControl(environment),
       terminate: terminateRuntimeChild,
       trackChild: (child) => this.#children.push(child),
@@ -730,6 +742,8 @@ export class RuntimeSupervisor {
       nativeCleanup = await this.#settleSessionCleanup();
     }
     if (this.#children.length === 0) {
+      this.#financialEnvironment?.close();
+      this.#financialEnvironment = null;
       this.#currentChildren = null;
       this.#managementControl = null;
       this.#history = null;
@@ -943,7 +957,11 @@ export class RuntimeSupervisor {
     const environment: NodeJS.ProcessEnv = {
       ...clearDesktopPluginEnvironment(
         clearDesktopExtensionEnvironment(
-          clearDesktopInstalledPluginActivationEnvironment(process.env),
+          clearDesktopInstalledPluginActivationEnvironment(
+            this.#financialEnvironment!.project(process.env, {
+              role: "shared",
+            }),
+          ),
         ),
       ),
       ELECTRON_RUN_AS_NODE: "1",
@@ -1083,15 +1101,20 @@ export class RuntimeSupervisor {
     name: string,
     entry: string,
     environment: NodeJS.ProcessEnv,
-    keepStdin = false,
+    options: Readonly<{ stdin?: "pipe"; financialRole?: "worker" }> = {},
   ): ChildProcess {
+    if (this.#financialEnvironment === null)
+      throw new Error("desktop_runtime_environment_unprepared");
+    const projected = this.#financialEnvironment.project(environment, {
+      role: options.financialRole ?? "shared",
+    });
     const child = spawn(
       process.execPath,
       nodeArguments(entry, this.#paths.source),
       {
         cwd: this.#repositoryRoot ?? process.resourcesPath,
-        env: environment,
-        stdio: [keepStdin ? "pipe" : "ignore", "pipe", "pipe"],
+        env: projected,
+        stdio: [options.stdin ?? "ignore", "pipe", "pipe"],
         windowsHide: true,
       },
     );

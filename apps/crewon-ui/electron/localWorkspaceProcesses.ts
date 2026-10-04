@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { desktopPluginCreditSettlementSharedEnvironment } from "./desktopPluginCreditSettlementEnvironment.ts";
 
 const MAX_ACTIVE_OPERATIONS = 4;
 const MAX_OPERATION_MS = 30_000;
@@ -97,10 +98,15 @@ function runProcess(
   return new Promise((resolveRun, reject) => {
     const closeLease = retain();
     let child: ReturnType<typeof spawn>;
+    let safeEnvironment: NodeJS.ProcessEnv;
     try {
+      safeEnvironment = desktopPluginCreditSettlementSharedEnvironment(
+        process.env,
+        { launchEnvironment: request.environment ?? process.env },
+      );
       child = spawn(request.command, request.args, {
         cwd: request.cwd,
-        env: request.environment ?? process.env,
+        env: safeEnvironment,
         detached: process.platform !== "win32",
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
@@ -166,7 +172,12 @@ function runProcess(
             "taskkill.exe",
           ),
           ["/PID", String(child.pid), "/T", "/F"],
-          { stdio: "ignore", windowsHide: true, shell: false },
+          {
+            env: safeEnvironment,
+            stdio: "ignore",
+            windowsHide: true,
+            shell: false,
+          },
         );
       } catch {
         closeCleanupLease();
