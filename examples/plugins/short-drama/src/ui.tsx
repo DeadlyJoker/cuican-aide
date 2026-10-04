@@ -1,6 +1,5 @@
 import {
   createPluginCreativeProjectClient,
-  createPluginProjectGenerationReadClient,
   createPluginProjectGenerationClient,
   createPluginProjectGenerationQueryClient,
   createPluginProjectGenerationSelectionClient,
@@ -22,6 +21,7 @@ import referenceImage from "./assets/crewon-krea2-reference.png";
 import { CreativeProjectController } from "./workbench/creative-project-controller";
 import { ShortDramaPersistentWorkbench } from "./workbench/ShortDramaPersistentWorkbench";
 import { PluginWriteActivity } from "./workbench/PluginWriteActivity";
+import { createGenerationRecordReadClient } from "./workbench/GenerationRecordReadClient";
 
 const contributionId = "workbench";
 
@@ -120,7 +120,7 @@ export default defineUiPlugin({
       ? null
       : new CreativeProjectController({
           projects: createPluginCreativeProjectClient(clients),
-          generations: createPluginProjectGenerationReadClient(clients),
+          generations: createGenerationRecordReadClient(clients),
           submissions: createPluginProjectGenerationClient(clients),
           contexts: createPluginProjectGenerationContextClient(clients),
           queries: createPluginProjectGenerationQueryClient(clients),

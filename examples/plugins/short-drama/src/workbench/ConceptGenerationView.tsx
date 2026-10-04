@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import type {
   ConceptGenerationTaskView,
   ConceptGenerationOperation,
@@ -45,15 +45,30 @@ export function ConceptGenerationView({
   blocked: boolean;
   unconfirmed?: boolean;
 }) {
+  const panel = useRef<HTMLElement>(null);
   const snapshot = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
     controller.getSnapshot,
   );
   const { generation } = snapshot;
+  const hasSource = snapshot.source !== null;
+  useEffect(() => {
+    const document = panel.current?.ownerDocument;
+    if (!document) return;
+    const updateVisibility = () =>
+      controller.setVisible(document.visibilityState !== "hidden");
+    updateVisibility();
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", updateVisibility);
+      controller.setVisible(false);
+    };
+  }, [controller, hasSource]);
   if (snapshot.source === null) return null;
   return (
     <section
+      ref={panel}
       className="detail-panel"
       aria-label="已保存输入的生成记录"
       data-run-id={generation?.task.runId}
@@ -62,7 +77,7 @@ export function ConceptGenerationView({
         <h2>输入 v{snapshot.source.assetRevision} 的生成记录</h2>
         <button
           className="text-button"
-          disabled={blocked || snapshot.phase === "loading"}
+          disabled={blocked || snapshot.reading}
           onClick={() => void controller.refresh()}
         >
           刷新任务记录
@@ -76,6 +91,16 @@ export function ConceptGenerationView({
       {snapshot.phase === "unavailable" && (
         <p className="detail-note" role="alert">
           任务记录暂时无法读取，请重试。
+        </p>
+      )}
+      {snapshot.observation === "watching" && (
+        <p className="detail-note" role="status">
+          正在自动更新任务记录…
+        </p>
+      )}
+      {snapshot.observation === "exhausted" && (
+        <p className="detail-note" role="status">
+          自动更新已暂停，可点击“刷新任务记录”继续读取。
         </p>
       )}
       {snapshot.phase === "ready" && generation === null && (

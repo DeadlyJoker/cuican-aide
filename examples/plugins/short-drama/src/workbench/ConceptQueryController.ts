@@ -34,7 +34,10 @@ export class ConceptQueryController {
   readonly #query: PluginProjectGenerationQueryClient["queryConceptGeneration"];
   readonly #ports: Readonly<{
     lockChanged(): void;
-    accepted(): void;
+    accepted(
+      request: ProjectGenerationQueryUiInput,
+      receipt: ProjectGenerationQueryUiReceipt,
+    ): void;
     restore(request: ProjectGenerationQueryUiInput): Promise<boolean>;
     restored(): void;
   }>;
@@ -53,7 +56,10 @@ export class ConceptQueryController {
   constructor(ports: {
     client: PluginProjectGenerationQueryClient;
     lockChanged(): void;
-    accepted(): void;
+    accepted(
+      request: ProjectGenerationQueryUiInput,
+      receipt: ProjectGenerationQueryUiReceipt,
+    ): void;
     restore(request: ProjectGenerationQueryUiInput): Promise<boolean>;
     restored(): void;
   }) {
@@ -189,7 +195,8 @@ export class ConceptQueryController {
           reason: null,
         });
         if (changed) void this.restoreSource();
-        if (intent.phase === "accepted") this.#ports.accepted();
+        if (intent.phase === "accepted" && intent.receipt)
+          this.#ports.accepted(intent.request, intent.receipt);
       }
     } else if (
       this.#snapshot.intentPhase === "uncertain" &&
@@ -294,7 +301,7 @@ export class ConceptQueryController {
           retryable: false,
           reason: null,
         });
-        this.#ports.accepted();
+        this.#ports.accepted(request, receipt);
       }
     } catch {
       if (

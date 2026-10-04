@@ -100,9 +100,8 @@ export class ConceptController {
         this.#ports.lockChanged(this.locked);
         for (const listener of this.#listeners) listener();
       },
-      accepted: () => {
-        if (this.#ready) void this.generations.refresh();
-      },
+      accepted: (request, receipt) =>
+        this.generations.expectQueryReceipt(request.reference, receipt),
       restore: (request) => ports.restoreQuerySource(request),
       restored: () => {
         if (!this.queries.locked) void this.loadAssets();

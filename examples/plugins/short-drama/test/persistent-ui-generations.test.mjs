@@ -9,7 +9,7 @@ import {
   persistentProps,
 } from "./persistent-ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "10.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "11.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -392,7 +392,7 @@ test("hides saved results while editing or restoring an unsaved draft and reads 
   }
 });
 
-test("aborts a superseded generation read and prevents its late reply from replacing another asset's record", async () => {
+test("joins a superseded generation read and prevents its late reply from replacing another asset's record", async () => {
   const service = metadataService();
   const first = savedConcept(service, "第一幅保存画面");
   const second = service.createConcept(
@@ -422,13 +422,16 @@ test("aborts a superseded generation read and prevents its late reply from repla
     await f.click(f.button("返回概念列表"));
     assert.equal(delayed.signal.aborted, true);
     await f.click(assetButton(f, second.asset.name));
-    assertReadCall(generationCalls(service).at(-1), locator(second));
-    assertImages(f, [secondImage]);
+    assert.equal(generationCalls(service).length, 1);
+    assertImages(f, []);
+    assert.match(generationPanel(f).textContent, /正在读取任务记录/u);
     gate.resolve({
       generation: publicGeneration(first, { images: [firstImage] }),
     });
     await settle();
+    assertReadCall(generationCalls(service).at(-1), locator(second));
     assertImages(f, [secondImage]);
+    assert.ok(!generationPanel(f).textContent.includes(firstImage.filename));
     assert.equal(
       f.container.querySelector("#concept-prompt").value,
       second.assetRevision.prompt,
