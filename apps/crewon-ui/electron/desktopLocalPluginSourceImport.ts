@@ -30,6 +30,7 @@ import {
   invalid,
   parseJson,
   pinParents,
+  protectOwnedPluginImportSource,
   readApproval,
   removePending,
   type DirectoryPin,
@@ -350,6 +351,12 @@ class LocalSourceImporter {
         );
         if (installed.directory !== source.directory)
           invalid("source_copy_path");
+        const ownedSourcePins = protectOwnedPluginImportSource({
+          sourceRoot,
+          directory: installed.directory,
+          packageDigest: installed.packageDigest,
+          sourceRootPins,
+        });
         const pending = createPending(
           this.#approvalPath + PENDING_SUFFIX,
           bytes,
@@ -361,6 +368,7 @@ class LocalSourceImporter {
           this.#ticketCurrent(ticket, signal);
           this.#approvalCurrent(ticket);
           assertParents(sourceRootPins);
+          assertParents(ownedSourcePins);
           // Stop may take time. Re-read the selected original bytes before committing approval.
           const finalSource = await verifyLocalPluginPackage({
             directory: ticket.directory,
@@ -384,12 +392,14 @@ class LocalSourceImporter {
             ticket.view,
           );
           assertParents(sourceRootPins);
+          assertParents(ownedSourcePins);
           this.#approvalCurrent(ticket);
           assertFile(pending.path, pending.snapshot, MAX_APPROVAL_BYTES);
           // No await between the final owner/CAS checks and this commit. Electron's
           // single-instance owner is required; this is not a same-UID OS sandbox.
           this.#ticketCurrent(ticket, signal);
           this.#approvalCurrent(ticket);
+          assertParents(ownedSourcePins);
           assertFile(pending.path, pending.snapshot, MAX_APPROVAL_BYTES);
           commitApproval({
             approvalPath: this.#approvalPath,

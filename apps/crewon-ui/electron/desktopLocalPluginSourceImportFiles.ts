@@ -1,6 +1,7 @@
 import {
   closeSync,
   constants,
+  fchmodSync,
   fstatSync,
   fsyncSync,
   linkSync,
@@ -156,6 +157,82 @@ export function ensurePrivateDirectory(path: string): void {
     mkdirSync(path, { mode: 0o700 });
   }
   assertPrivateDirectory(path);
+}
+
+/** Only the verified Main-owned digest copy becomes a private catalogue source. */
+export function protectOwnedPluginImportSource(
+  input: Readonly<{
+    sourceRoot: string;
+    directory: string;
+    packageDigest: string;
+    sourceRootPins: readonly DirectoryPin[];
+  }>,
+): readonly DirectoryPin[] {
+  if (
+    !/^sha256:[a-f0-9]{64}$/u.test(input.packageDigest) ||
+    input.sourceRootPins[0]?.path !== input.sourceRoot ||
+    input.directory !==
+      join(input.sourceRoot, "packages", input.packageDigest.slice(7))
+  )
+    invalid("source_copy_path");
+  assertParents(input.sourceRootPins);
+  assertPrivateDirectory(input.sourceRoot);
+  const parent = dirname(input.directory);
+  assertPrivateDirectory(parent);
+  const parents = pinParents(parent);
+  assertParents(input.sourceRootPins);
+  const before = lstatSync(input.directory);
+  const uid = process.getuid?.();
+  if (
+    uid === undefined ||
+    !before.isDirectory() ||
+    before.isSymbolicLink() ||
+    before.uid !== uid ||
+    ![0o555, 0o500].includes(before.mode & 0o7777)
+  )
+    invalid("source_copy_directory");
+  if (
+    !Number.isInteger(constants.O_NOFOLLOW) ||
+    constants.O_NOFOLLOW === 0 ||
+    !Number.isInteger(constants.O_DIRECTORY) ||
+    constants.O_DIRECTORY === 0
+  )
+    invalid("nofollow_unavailable");
+  const fd = openSync(
+    input.directory,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_DIRECTORY,
+  );
+  try {
+    const opened = fstatSync(fd);
+    if (!opened.isDirectory() || !sameFile(before, opened))
+      invalid("source_copy_changed");
+    assertParents(parents);
+    assertParents(input.sourceRootPins);
+    // The installer publishes immutable 0555 roots. Native catalogue sources
+    // additionally require owner-only traversal. Never chmod the selected path.
+    if ((opened.mode & 0o7777) !== 0o500) fchmodSync(fd, 0o500);
+    const protectedDirectory = fstatSync(fd);
+    if (
+      !protectedDirectory.isDirectory() ||
+      protectedDirectory.dev !== before.dev ||
+      protectedDirectory.ino !== before.ino ||
+      protectedDirectory.uid !== before.uid ||
+      protectedDirectory.nlink !== before.nlink ||
+      protectedDirectory.size !== before.size ||
+      protectedDirectory.mtimeMs !== before.mtimeMs ||
+      (protectedDirectory.mode & 0o7777) !== 0o500 ||
+      !sameFile(protectedDirectory, lstatSync(input.directory))
+    )
+      invalid("source_copy_changed");
+    assertParents(parents);
+    assertParents(input.sourceRootPins);
+    return Object.freeze([
+      Object.freeze({ path: input.directory, metadata: protectedDirectory }),
+      ...parents,
+    ]);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export function readApproval(path: string): FileSnapshot | null {

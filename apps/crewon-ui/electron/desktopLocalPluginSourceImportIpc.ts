@@ -1,5 +1,8 @@
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from "electron";
-import type { DesktopLocalPluginSourceConfirmation } from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
+import type {
+  DesktopLocalPluginSourceConfirmation,
+  DesktopLocalPluginSourceImportStatus,
+} from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
 import {
   createDesktopLocalPluginSourceImporter,
   type DesktopLocalPluginSourceImporter,
@@ -10,9 +13,16 @@ const CHANNELS = [
   "crewon:plugin-sources:preview-v1",
   "crewon:plugin-sources:confirm-v1",
   "crewon:plugin-sources:cancel-v1",
+  "crewon:plugin-sources:status-v1",
 ] as const;
 export const DESKTOP_PLUGIN_SOURCE_OWNER_CHANGED =
   "crewon:plugin-sources:owner-changed-v1";
+export const DESKTOP_PLUGIN_SOURCE_STATUS_CHANGED =
+  "crewon:plugin-sources:status-changed-v1";
+type StatusSlot = {
+  generation: number;
+  value: DesktopLocalPluginSourceImportStatus;
+};
 
 /** Native directory paths never cross the isolated preload boundary. */
 export function bindDesktopLocalPluginSourceImportIpc(
@@ -44,13 +54,26 @@ export function bindDesktopLocalPluginSourceImportIpc(
   let closed = false;
   let expectedStop = false;
   let holdOwnNotifications = false;
+  // One bounded, memory-only receipt. Its document fence is separate from the
+  // original runtime access, which still withdraws during every physical stop.
+  let status: StatusSlot | null = null;
 
   const notify = () => {
     if (!window.isDestroyed() && !contents.isDestroyed())
       contents.send(DESKTOP_PLUGIN_SOURCE_OWNER_CHANGED);
   };
+  const notifyStatus = () => {
+    if (window.isDestroyed() || contents.isDestroyed()) return;
+    try {
+      contents.send(DESKTOP_PLUGIN_SOURCE_STATUS_CHANGED);
+    } catch {
+      // A diagnostic notification cannot rewrite the approval's commit outcome.
+      input.diagnostic("desktop_plugin_source_status_notification_failed");
+    }
+  };
   const withdraw = () => {
     documentGeneration++;
+    status = null;
     const previous = importer;
     importer = null;
     if (previous) {
@@ -139,6 +162,28 @@ export function bindDesktopLocalPluginSourceImportIpc(
       const command = current.claimPreview(
         args[0] as DesktopLocalPluginSourceConfirmation,
       );
+      const identity = Object.freeze({
+        previewId: command.previewId,
+        pluginId: command.pluginId,
+        publisherId: command.publisherId,
+        version: command.version,
+        packageDigest: command.packageDigest,
+      });
+      const slot: StatusSlot = {
+        generation: documentGeneration,
+        value: Object.freeze({
+          ...identity,
+          state: "pending",
+        }),
+      };
+      status = slot;
+      notifyStatus();
+      const publish = (value: DesktopLocalPluginSourceImportStatus) => {
+        if (status !== slot || closed || slot.generation !== documentGeneration)
+          return;
+        slot.value = value;
+        notifyStatus();
+      };
       holdOwnNotifications = true;
       try {
         const result = await runtime.mutateWhileStopped({
@@ -163,11 +208,30 @@ export function bindDesktopLocalPluginSourceImportIpc(
           },
         });
         // Approval is committed. A later document change cannot turn it into a rollback.
-        return Object.freeze({
+        const confirmed = Object.freeze({
           ...result.value,
           restartRequired: result.runtimeStatus === "restartRequired",
           runtimeStatus: result.runtimeStatus,
         });
+        // Store before joining importer cleanup. A cleanup rejection may reject
+        // the invocation, but cannot turn the committed approval into failure.
+        publish(
+          Object.freeze({
+            ...identity,
+            state: "committed",
+            result: confirmed,
+          }),
+        );
+        return confirmed;
+      } catch (error) {
+        publish(
+          Object.freeze({
+            ...identity,
+            state: "failed",
+            code: "desktop_plugin_source_import_failed",
+          }),
+        );
+        throw error;
       } finally {
         holdOwnNotifications = false;
         if (importer === current) importer = null;
@@ -182,6 +246,24 @@ export function bindDesktopLocalPluginSourceImportIpc(
     if (args.length !== 1)
       throw new Error("desktop_plugin_source_request_invalid");
     importer?.cancelPreview(args[0] as Readonly<{ previewId: string }>);
+  });
+  ipc.handle(CHANNELS[3], (event, ...args: unknown[]) => {
+    const assertCurrent = guard(event);
+    if (args.length !== 1)
+      throw new Error("desktop_plugin_source_request_invalid");
+    const previewId = statusPreviewId(args[0]);
+    assertCurrent();
+    // Reading during a live confirmation neither competes with its mutation
+    // flight nor constructs an importer, opens a dialog or starts a runtime.
+    if (
+      status === null ||
+      status.generation !== documentGeneration ||
+      status.value.previewId !== previewId
+    )
+      return null;
+    const copy = copyStatus(status.value);
+    assertCurrent();
+    return copy;
   });
 
   const removeInvalidation = runtime.onSessionInvalidated(() => {
@@ -228,6 +310,36 @@ export function bindDesktopLocalPluginSourceImportIpc(
     );
   });
   return Object.freeze({ close });
+}
+
+function statusPreviewId(input: unknown): string {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    Object.getPrototypeOf(input) !== Object.prototype
+  )
+    throw new Error("desktop_plugin_source_request_invalid");
+  const descriptors = Object.getOwnPropertyDescriptors(input);
+  const keys = Reflect.ownKeys(descriptors);
+  const field = descriptors.previewId;
+  if (
+    keys.length !== 1 ||
+    keys[0] !== "previewId" ||
+    !field?.enumerable ||
+    !Object.hasOwn(field, "value") ||
+    typeof field.value !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/u.test(field.value)
+  )
+    throw new Error("desktop_plugin_source_request_invalid");
+  return field.value;
+}
+
+function copyStatus(
+  value: DesktopLocalPluginSourceImportStatus,
+): DesktopLocalPluginSourceImportStatus {
+  return value.state === "committed"
+    ? Object.freeze({ ...value, result: Object.freeze({ ...value.result }) })
+    : Object.freeze({ ...value });
 }
 
 function sameRenderer(actual: string, expected: string): boolean {

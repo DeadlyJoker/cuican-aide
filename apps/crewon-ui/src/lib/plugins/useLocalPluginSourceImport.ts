@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   DesktopLocalPluginSourceImportClient,
+  DesktopLocalPluginSourceConfirmed,
   DesktopLocalPluginSourcePreview,
 } from "../desktop/desktopLocalPluginSourceImportProtocol";
+import {
+  clearLocalPluginSourceImportTicket,
+  localPluginSourceImportTicket,
+  retainLocalPluginSourceImportTicket,
+  validateLocalPluginSourceImportResult,
+  validateLocalPluginSourceImportStatus,
+} from "./localPluginSourceImportRecovery";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 import type { Locale } from "../i18n";
 
@@ -25,6 +33,8 @@ type Owner = {
   retired: boolean;
   operation: Readonly<{ kind: "preview" | "confirm"; token: symbol }> | null;
   preview: DesktopLocalPluginSourcePreview | null;
+  statusRead: number;
+  terminalResult: boolean;
 };
 const EMPTY: State = Object.freeze({
   preview: null,
@@ -60,6 +70,79 @@ export function useLocalPluginSourceImport({
     owner.current === current &&
     !current.retired &&
     sameBinding(requested.current, current.binding);
+  const showResult = (
+    current: Owner,
+    result: DesktopLocalPluginSourceConfirmed,
+  ) => {
+    current.terminalResult = true;
+    current.preview = null;
+    setState({
+      ...EMPTY,
+      feedback:
+        result.runtimeStatus === "restartRequired"
+          ? text(
+              "来源已保存。请重启 CrewON 后安装，再选择是否启用。",
+              "Source saved. Restart CrewON, then install it and choose whether to enable it.",
+            )
+          : text(
+              "来源已添加。请在可安装插件中安装，再选择是否启用。",
+              "Source added. Install it from Available, then choose whether to enable it.",
+            ),
+    });
+  };
+  const showUnconfirmed = () =>
+    setState({
+      ...EMPTY,
+      error: text(
+        "添加结果未确认，请刷新插件列表后检查；需要时重新选择目录。",
+        "The result is unconfirmed. Refresh the plugin list to check, then choose the directory again if needed.",
+      ),
+    });
+  const recoverStatus = async (current: Owner): Promise<boolean> => {
+    const ticket = localPluginSourceImportTicket(current.binding);
+    const read = current.binding.client.readStatus;
+    if (!ticket || typeof read !== "function" || !alive(current)) return false;
+    const sequence = ++current.statusRead;
+    try {
+      const result = await read({ previewId: ticket.identity.previewId });
+      if (
+        !alive(current) ||
+        current.statusRead !== sequence ||
+        localPluginSourceImportTicket(current.binding) !== ticket
+      )
+        return false;
+      if (result === null) {
+        if (current.operation?.kind !== "confirm" && !current.terminalResult)
+          showUnconfirmed();
+        return false;
+      }
+      validateLocalPluginSourceImportStatus(result, ticket);
+      if (result.state === "committed") showResult(current, result.result);
+      else if (result.state === "failed") {
+        current.terminalResult = true;
+        current.preview = null;
+        setState({
+          ...EMPTY,
+          error: text(
+            "添加来源失败，请检查插件列表后重新选择目录。",
+            "Adding the source failed. Check the plugin list, then choose the directory again.",
+          ),
+        });
+      } else if (!current.terminalResult) {
+        setState({ ...EMPTY, busy: true });
+      }
+      return true;
+    } catch {
+      if (
+        alive(current) &&
+        current.statusRead === sequence &&
+        localPluginSourceImportTicket(current.binding) === ticket &&
+        !current.terminalResult
+      )
+        showUnconfirmed();
+      return false;
+    }
+  };
 
   useEffect(() => {
     setState({ ...EMPTY });
@@ -68,6 +151,8 @@ export function useLocalPluginSourceImport({
       retired: false,
       operation: null,
       preview: null,
+      statusRead: 0,
+      terminalResult: false,
     };
     owner.current = current;
     const withdraw = (reason: "owner" | "account") => {
@@ -75,6 +160,7 @@ export function useLocalPluginSourceImport({
       const confirming = current.operation?.kind === "confirm";
       current.retired = true;
       current.operation = null;
+      clearLocalPluginSourceImportTicket(current.binding);
       discard(current);
       setState(
         reason === "owner" && confirming
@@ -97,9 +183,24 @@ export function useLocalPluginSourceImport({
     const withdrawOwner = () => withdraw("owner");
     const withdrawAccount = () => withdraw("account");
     let unsubscribe: (() => void) | undefined;
+    let unsubscribeStatus: (() => void) | undefined;
     try {
       unsubscribe = client.subscribeOwnerChanged(withdrawOwner);
       if (typeof unsubscribe !== "function") throw new Error("invalid_owner");
+      if (
+        typeof client.readStatus === "function" &&
+        typeof client.subscribeStatusChanged === "function"
+      ) {
+        unsubscribeStatus = client.subscribeStatusChanged(
+          () => void recoverStatus(current),
+        );
+        if (typeof unsubscribeStatus !== "function")
+          throw new Error("invalid_status_listener");
+        if (localPluginSourceImportTicket(current.binding)) {
+          setState({ ...EMPTY, busy: true });
+          void recoverStatus(current);
+        }
+      }
     } catch {
       withdrawOwner();
     }
@@ -112,6 +213,7 @@ export function useLocalPluginSourceImport({
       current.operation = null;
       discard(current);
       unsubscribe?.();
+      unsubscribeStatus?.();
       window.removeEventListener(
         AGENT_PLATFORM_SESSION_CHANGED_EVENT,
         withdrawAccount,
@@ -122,6 +224,9 @@ export function useLocalPluginSourceImport({
   const previewDirectory = async () => {
     const current = owner.current;
     if (!current || !alive(current) || current.operation !== null) return;
+    clearLocalPluginSourceImportTicket(current.binding);
+    current.terminalResult = false;
+    current.statusRead++;
     discard(current);
     const operation = { kind: "preview" as const, token: Symbol("preview") };
     current.operation = operation;
@@ -228,44 +333,20 @@ export function useLocalPluginSourceImport({
         snapshot.publicAssets.length !== 0 && snapshot.trustUiModule,
     });
     setState({ ...snapshot, busy: true, error: null, feedback: null });
+    retainLocalPluginSourceImportTicket(current.binding, command);
     try {
       const result = await current.binding.client.confirmPreview(command);
       if (!alive(current) || current.operation !== operation) return;
-      if (
-        result.pluginId !== preview.pluginId ||
-        result.publisherId !== preview.publisherId ||
-        result.version !== preview.version ||
-        result.packageDigest !== preview.packageDigest ||
-        result.restartRequired !==
-          (result.runtimeStatus === "restartRequired") ||
-        (result.runtimeStatus !== "ready" &&
-          result.runtimeStatus !== "restartRequired")
-      )
-        throw new Error("invalid_confirmation");
-      current.preview = null;
-      setState({
-        ...EMPTY,
-        feedback:
-          result.runtimeStatus === "restartRequired"
-            ? text(
-                "来源已保存。请重启 CrewON 后安装，再选择是否启用。",
-                "Source saved. Restart CrewON, then install it and choose whether to enable it.",
-              )
-            : text(
-                "来源已添加。请在可安装插件中安装，再选择是否启用。",
-                "Source added. Install it from Available, then choose whether to enable it.",
-              ),
-      });
+      validateLocalPluginSourceImportResult(result, preview);
+      showResult(current, result);
     } catch {
       if (alive(current) && current.operation === operation) {
+        // Cleanup or a renderer transport error cannot overturn Main's committed
+        // receipt. Read the same opaque ticket; never retry the mutation here.
+        if ((await recoverStatus(current)) || !alive(current)) return;
+        if (current.terminalResult) return;
         discard(current);
-        setState({
-          ...EMPTY,
-          error: text(
-            "添加结果未确认，请刷新插件列表后检查；需要时重新选择目录。",
-            "The result is unconfirmed. Refresh the plugin list to check, then choose the directory again if needed.",
-          ),
-        });
+        showUnconfirmed();
       }
     } finally {
       if (current.operation === operation) current.operation = null;

@@ -107,6 +107,7 @@ import {
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import { useDesktopLocalManagementAccess } from "./lib/desktop/DesktopLocalManagementContext";
 import { useDesktopPluginSourceImportAccess } from "./lib/desktop/useDesktopPluginSourceImportAccess";
+import { useLocalPluginSourceImportSettingsRecovery } from "./lib/plugins/useLocalPluginSourceImportSettingsRecovery";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
@@ -975,6 +976,10 @@ export function App({
     setSettingsSection,
     setTheme,
     shouldAutoCloseInspector,
+  });
+  useLocalPluginSourceImportSettingsRecovery(localSourceImport, (section) => {
+    openSettings();
+    openSettingsSection(section);
   });
   useAppStateRefsEffect([
     [openLibrary, openLibraryRef],

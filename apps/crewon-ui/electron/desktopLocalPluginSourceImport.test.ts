@@ -145,7 +145,7 @@ describe("Native Main local prebuilt source import", () => {
     expect(readFileSync(join(source.directory, "crewon.plugin.json"))).toEqual(
       beforeBytes,
     );
-    expect(lstatSync(source.directory).mode & 0o777).toBe(0o555);
+    expect(lstatSync(source.directory).mode & 0o777).toBe(0o500);
     expect(lstatSync(f.approvalPath).mode & 0o777).toBe(0o600);
     expect(lstatSync(f.approvalPath).nlink).toBe(1);
     expect(existsSync(f.pendingPath)).toBe(false);

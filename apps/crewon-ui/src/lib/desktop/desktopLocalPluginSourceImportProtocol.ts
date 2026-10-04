@@ -43,6 +43,26 @@ export type DesktopLocalPluginSourceConfirmed = Readonly<{
   runtimeStatus: "ready" | "restartRequired";
 }>;
 
+/** One Native document's current confirmation; never an execution authority. */
+export type DesktopLocalPluginSourceImportStatus = Readonly<{
+  previewId: string;
+  pluginId: string;
+  publisherId: string;
+  version: string;
+  packageDigest: string;
+}> &
+  (
+    | Readonly<{ state: "pending" }>
+    | Readonly<{
+        state: "committed";
+        result: DesktopLocalPluginSourceConfirmed;
+      }>
+    | Readonly<{
+        state: "failed";
+        code: "desktop_plugin_source_import_failed";
+      }>
+  );
+
 export interface DesktopLocalPluginSourceImportClient {
   readonly version: typeof DESKTOP_LOCAL_PLUGIN_SOURCE_IMPORT_VERSION;
   previewDirectory(): Promise<DesktopLocalPluginSourcePreview | null>;
@@ -51,6 +71,11 @@ export interface DesktopLocalPluginSourceImportClient {
   ): Promise<DesktopLocalPluginSourceConfirmed>;
   cancelPreview(request: Readonly<{ previewId: string }>): Promise<void>;
   subscribeOwnerChanged(listener: () => void): () => void;
+  /** Additive readback: older v1 preloads may not expose these methods. */
+  readStatus?(
+    request: Readonly<{ previewId: string }>,
+  ): Promise<DesktopLocalPluginSourceImportStatus | null>;
+  subscribeStatusChanged?(listener: () => void): () => void;
 }
 
 export type DesktopLocalPluginSourceImportAccess = Readonly<{

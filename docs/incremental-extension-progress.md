@@ -6,6 +6,30 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 目录导入、原安装启用与离线来源冷读取
+
+在 `664c181f6d7751025831abf46143ad2453930e14` 基线上推进[本地插件来源导入](./native-local-plugin-source-import.md)。真实 `.app` 首次核验发现：Main 已提交来源，但自己的 runtime stop 导致原 Settings/AuthGate 子树卸载，App 返回后回执和设置位置丢失。Main 现仅在原文档内保留一个绑定精确 opaque previewId 与完整包身份的 pending/committed/failed 状态，添加可选 `readStatus` 和独立状态事件，兼容旧 v1 client。读取不竞争确认的 mutation flight、不重启、不重新审批；外部失效、导航、崩溃和关闭清除状态，晚到完成不能恢复已撤回状态。已提交回执先于 importer 清理保存，清理失败不改写为未提交。
+
+Renderer 在组件外只保留同实际 preload client 与账号键的一张身份票据，原设置或 AuthGate 重挂后先订阅再读回，旧回执受 owner、票据与请求顺序检查。明确确认导致整个 App 重挂时，只恢复原「工具与扩展」一次；预览、普通浏览、旧 preload 或账号/owner 改变不触发该导航。原 runtime 访问与 AuthGate 仍在 stop 时撤回，未保持旧权限，也未修改全局 CSS、原账户菜单或 AuthGate。
+
+第二次真实目录核验还发现原 installer 的 0555 来源副本与原 Control 注册器的 owner-only 目录约束冲突：审批已写入，目录仍不列出该来源。修复仅作用于 Main 自有且完整身份校验通过的 `plugin-import-sources/packages/<digest>` 根；nofollow 目录 fd 经 UID/dev/inode 与父目录复核后 `fchmod` 为 0500，随后再次核验路径、fd、父目录及最终包身份。实际安装副本保留原 0555，开发者目录不改权限或文件，原 installer 和 Control 私有目录检查未放宽。原 Core 的一项来源权限期望更新为 0500，另建独立目录验收文件；未扩展原 958 行测试文件。
+
+最终 Host 六文件 **152/152**、UI 十九文件 **199/199**，均零跳过；范围分别记录，不求和。Host 组合含原来源注册器列出/解析、实际 SQLite 服务从导入来源安装且初始停用、开发字节/权限不变、Node 未执行、原 0555 未批准副本和失败 precommit 副本精确重试、fd 打开前替换/符号链接拒绝。UI 组合含票据 owner/账号撤回、状态读回顺序、旧能力兼容和原设置/侧栏。日志分别为 `output/extensions/checks/native-import-receipt-host-pipeline-final-20261004.log` 与 `output/extensions/checks/native-import-receipt-ui-shell-final-20261004.log`；这些窄回归不覆盖此前全量 UI 的全部失败。
+
+首次真实 `.app` 的回执丢失、0555 来源不可见截图与记录保留，未通过修改运行中副本权限伪造验收。新增目录测试首次三项失败和 Host 类型错误来自服务回执层级与 macOS 只读目录 rename 故障设置；只修新测试的正确回执访问及测试自有副本故障设置，产品安全约束保持。最终目录专项与原 Core 两文件 **63/63** 已包含在上述 Host 组合，不能再相加。
+
+真实 `.app` 专项的自有目录 `42EBFi` 已完成手动 CUA、真实 SQLite 和 OS 进程的暖/冷验收；这不是 Vitest「1/1」。从原用户栏进入设置，真实 macOS 选择器选择初始未批准的独立短剧 **1.0.0** 包。默认未勾选公开资源与信任，只选 `ui.mjs`、PNG 并明确确认 UI 信任；原 Main 自重启后恢复原设置页，显示已添加回执和两个实际来源。预览阶段原审批与安装记录未变，添加来源后追加精确审批但尚无安装记录。随后从原页面 Install，实际初始 Disabled、selection revision 1、安装回执 1；再明确 Enable，实际 Enabled、revision 2、回执 2。Back 后原侧栏加载真实插件页面与 PNG；开发文件摘要和权限保持。
+
+暖 Main `7794` 经原退出操作自然 exit 0，原 Control `7948/20165` 物理退场。冷前仅在自有测试目录把选择来源与 Main 导入来源改名下线，恢复原 inode/权限且不改审批，独立 0555 安装副本保持。新 Main `58526` 使用同 app/asar/userData，自然 packaged 身份与 asar 摘要吻合；原侧栏从实际安装副本加载演示 UI 与真实 PNG。再次从原账户进入十类设置，Installed Enabled；Available 只列出在线保留来源，缺失的 1.0.0 来源不显示。上次 Main 的内存回执不跨进程恢复，冷启动没有自动再导入、安装或启用。暖/冷 records、approval、businessCounts 与审批摘要精确一致，选择 revision 2 和两个回执保持；冷 Main 也自然 exit 0，原 Control 退场记录保留。
+
+最终统一证明为 `output/extensions/checks/native-local-import-packaged-accepted-20261004/accepted-proof.json`，对应 `output/extensions/checks/native-local-import-packaged-accepted-proof-20261004.log`。暖/冷审批 SHA、三表完整记录与业务计数严格一致，编译源码和最终正式 Renderer 文件摘要与打包证明吻合；专项五 PID `7794/7948/20165/58526/58575` 均 ESRCH，四次自有临时根已清理，九张最终截图留存。汇总脚本首次误用 `copiedRenderer` 字段，只读检查阶段失败且未清理；修正为 `rendererFiles` 后最终 exit 0，最终 boundary 也 exit 0。
+
+证据目录为 `output/extensions/checks/native-local-import-packaged-accepted-20261004/`，包含 chooser、默认预览、回执恢复、原安装停用/启用、暖/冷模块与 PNG 截图，以及身份、来源下线、安装副本摘要、SQLite 与进程退出事实。Thread、Message、Run 和外部 operation 记录为 0；积分、任务准入及项目 schema 未建立，以 null 记录，不能称真实积分余额为 0。本轮没有生成，1.0.0 UI 包验证安装与页面交付，不代替短剧 9/10 的完整业务或真实资金验收。
+
+最终保留审计 `output/extensions/checks/native-local-import-packaged-final-preservation-20261004.json` 的 SHA-256 为 `3c7d4f6d95d9c63644caaa3c54e0fc6855f318a078a29483359b74a1aee0a5f9`。本轮基线的 13 个受保护原 UI 文件（不含本轮 App 新增五行）、60 个 SDK 源文件及冻结 tarball、九个原发行包、0600 生产映射、五个原用户 PID 的命令/监听及 primary 人类工作保持。正式 Renderer 为新增能力有意重建，不沿用旧 15 资产字节未变的声明。
+
+用户当前原 IAB `5730` 已实际通过账号菜单进入十类设置；`5719` 根地址是原 AuthGate 登录页，不能把两个服务视为同一个已登录页面。本轮不请求用户 ComfyUI 或生产财务服务；此前 ComfyUI 404 保持，未反复探测。真实个人身份/入账/价格/失败结算、Native Krea2 公网生成/原 operation 查询、同次原完整 App 在线 S0、全部插件打包链路及用户指定实际企业 API 的 E5 仍未完成，完整目标 ACTIVE。
+
 ## 2026-10-04：原设置页的 Native 本地插件来源入口
 
 在 `a535e758a12665e4efc565643cb9d8d195d9f21c` 基线上补齐[本机目录导入](./native-local-plugin-source-import.md)。原 Settings 的「工具与扩展」新增可选 Native 能力；目录只由 Main 原生选择器提供，Renderer 只收到有界预览和一次性身份。原账号菜单、CommandWorkspace、侧栏、全局 CSS 和既有安装组件保持基线字节。实际 IAB 再次从原用户栏进入完整设置页；原折叠侧栏隐藏用户栏的行为未改。

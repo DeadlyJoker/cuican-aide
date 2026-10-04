@@ -45,6 +45,16 @@ const bridge: CrewonDesktopBridge = {
       invoke("crewon:plugin-sources:confirm-v1", request),
     cancelPreview: (request) =>
       invoke("crewon:plugin-sources:cancel-v1", request),
+    readStatus: (request) => invoke("crewon:plugin-sources:status-v1", request),
+    subscribeStatusChanged: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("crewon:plugin-sources:status-changed-v1", handler);
+      return () =>
+        ipcRenderer.removeListener(
+          "crewon:plugin-sources:status-changed-v1",
+          handler,
+        );
+    },
     subscribeOwnerChanged: (listener) => {
       const handler = () => listener();
       ipcRenderer.on("crewon:plugin-sources:owner-changed-v1", handler);

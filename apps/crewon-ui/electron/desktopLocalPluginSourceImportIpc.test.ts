@@ -1,15 +1,23 @@
 import { EventEmitter } from "node:events";
 import type { BrowserWindow, IpcMain, IpcMainInvokeEvent } from "electron";
 import { describe, expect, it, vi } from "vitest";
-import { bindDesktopLocalPluginSourceImportIpc } from "./desktopLocalPluginSourceImportIpc.ts";
+import {
+  bindDesktopLocalPluginSourceImportIpc,
+  DESKTOP_PLUGIN_SOURCE_OWNER_CHANGED,
+  DESKTOP_PLUGIN_SOURCE_STATUS_CHANGED,
+} from "./desktopLocalPluginSourceImportIpc.ts";
 import { runRuntimeStoppedMutation } from "./runtimeStoppedMutation.ts";
 import type { RuntimeStoppedMutationOptions } from "./runtimeStoppedMutation.ts";
 import type { DesktopLocalPluginSourceImporter } from "./desktopLocalPluginSourceImport.ts";
-import type { DesktopLocalPluginSourcePreview } from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
+import type {
+  DesktopLocalPluginSourceImportStatus,
+  DesktopLocalPluginSourcePreview,
+} from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
 
 const PREVIEW = "crewon:plugin-sources:preview-v1";
 const CONFIRM = "crewon:plugin-sources:confirm-v1";
 const CANCEL = "crewon:plugin-sources:cancel-v1";
+const STATUS = "crewon:plugin-sources:status-v1";
 const RENDERER = "file:///application/dist/index.html";
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -73,7 +81,7 @@ function fixture(rendererUrl = RENDERER) {
   };
   let assertCurrent = () => {};
   const preview: DesktopLocalPluginSourcePreview = {
-    previewId: "opaque-main-ticket",
+    previewId: "a".repeat(43),
     expiresAt: Date.now() + 60_000,
     pluginId: "example.local-plugin",
     publisherId: "example.publisher",
@@ -303,6 +311,12 @@ describe("Native plugin source import IPC ownership", () => {
         runtimeStatus: "restartRequired",
         restartRequired: true,
       });
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toMatchObject({
+        state: "committed",
+        result: { runtimeStatus: "restartRequired", restartRequired: true },
+      });
     } finally {
       await f.owner.close();
     }
@@ -344,5 +358,305 @@ describe("Native plugin source import IPC ownership", () => {
     } finally {
       await f.owner.close();
     }
+  });
+
+  it("reads one pending receipt during the physical stop without competing with its mutation", async () => {
+    const f = fixture();
+    const stopped = deferred<void>();
+    f.stop.mockImplementation(async () => {
+      f.invalidated();
+      await stopped.promise;
+    });
+    await f.invoke(PREVIEW);
+    const pending = f.invoke(CONFIRM, f.confirm);
+    await vi.waitFor(() => expect(f.stop).toHaveBeenCalledTimes(1));
+    try {
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toEqual({
+        state: "pending",
+        previewId: f.preview.previewId,
+        pluginId: f.preview.pluginId,
+        publisherId: f.preview.publisherId,
+        version: f.preview.version,
+        packageDigest: f.preview.packageDigest,
+      });
+      await expect(f.invoke(PREVIEW)).rejects.toThrow("busy");
+      expect(f.chooseDirectory).toHaveBeenCalledTimes(1);
+      expect(f.createImporter).toHaveBeenCalledTimes(1);
+      expect(f.core.confirmPreview).not.toHaveBeenCalled();
+      // Original Settings cleanup may release its preview while the document's
+      // accepted confirmation and readback remain owned by Main.
+      await f.invoke(CANCEL, { previewId: f.preview.previewId });
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toMatchObject({ state: "pending" });
+      expect(f.contents.send).toHaveBeenCalledWith(
+        DESKTOP_PLUGIN_SOURCE_STATUS_CHANGED,
+      );
+      expect(f.contents.send).not.toHaveBeenCalledWith(
+        DESKTOP_PLUGIN_SOURCE_OWNER_CHANGED,
+      );
+      stopped.resolve();
+      await expect(pending).resolves.toMatchObject({
+        runtimeStatus: "ready",
+      });
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toMatchObject({
+        state: "committed",
+        result: { runtimeStatus: "ready", restartRequired: false },
+      });
+      expect(f.stop).toHaveBeenCalledTimes(1);
+      expect(f.start).toHaveBeenCalledTimes(1);
+    } finally {
+      stopped.resolve();
+      await pending;
+      await f.owner.close();
+    }
+  });
+
+  it("returns detached exact identity and receipt copies without publishing paths or mutable consent", async () => {
+    const f = fixture();
+    try {
+      await f.invoke(PREVIEW);
+      await f.invoke(CONFIRM, f.confirm);
+      const request = { previewId: f.preview.previewId };
+      type Committed = Extract<
+        DesktopLocalPluginSourceImportStatus,
+        { state: "committed" }
+      >;
+      const first = (await f.invoke(STATUS, request)) as Committed;
+      const second = (await f.invoke(STATUS, request)) as Committed;
+      expect(first).toEqual(second);
+      expect(first).not.toBe(second);
+      expect(first.result).not.toBe(second.result);
+      expect(Object.isFrozen(first)).toBe(true);
+      expect(Object.isFrozen(first.result)).toBe(true);
+      const rendererCopy = structuredClone(first);
+      Object.assign(rendererCopy.result, { sourceId: "foreign-source" });
+      Object.assign(rendererCopy, { pluginId: "foreign-plugin" });
+      await expect(f.invoke(STATUS, request)).resolves.toEqual(second);
+      expect(Object.keys(first).sort()).toEqual(
+        [
+          "state",
+          "previewId",
+          "pluginId",
+          "publisherId",
+          "version",
+          "packageDigest",
+          "result",
+        ].sort(),
+      );
+      expect(JSON.stringify(first)).not.toContain("/human");
+      expect(JSON.stringify(first)).not.toContain("publicAssets");
+      expect(JSON.stringify(first)).not.toContain("trustUiModule");
+      Object.assign(f.preview, { pluginId: "changed-fixture-input" });
+      f.confirm.pluginId = "changed-fixture-consent";
+      await expect(f.invoke(STATUS, request)).resolves.toEqual(second);
+    } finally {
+      await f.owner.close();
+    }
+  });
+
+  it("reads no status before confirmation and never grants a foreign opaque ticket", async () => {
+    const f = fixture();
+    try {
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toBeNull();
+      expect(f.chooseDirectory).not.toHaveBeenCalled();
+      expect(f.createImporter).not.toHaveBeenCalled();
+      expect(f.stop).not.toHaveBeenCalled();
+      await expect(f.invoke(STATUS)).rejects.toThrow("request_invalid");
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }, "extra"),
+      ).rejects.toThrow("request_invalid");
+      await f.invoke(PREVIEW);
+      await f.invoke(CONFIRM, f.confirm);
+      await expect(
+        f.invoke(STATUS, { previewId: "b".repeat(43) }),
+      ).resolves.toBeNull();
+    } finally {
+      await f.owner.close();
+    }
+  });
+
+  it.each(["foreign sender", "iframe", "other file", "other dev path"])(
+    "rejects a status read from %s",
+    async (kind) => {
+      const f = fixture(
+        kind === "other dev path"
+          ? "http://127.0.0.1:9999/index.html"
+          : RENDERER,
+      );
+      try {
+        await f.invoke(PREVIEW);
+        await f.invoke(CONFIRM, f.confirm);
+        const event = f.event();
+        if (kind === "foreign sender") Object.assign(event, { sender: {} });
+        if (kind === "iframe") Object.assign(event, { senderFrame: {} });
+        if (kind === "other file")
+          f.contents.mainFrame.url = "file:///tmp/attacker.html";
+        if (kind === "other dev path")
+          f.contents.mainFrame.url = "http://127.0.0.1:9999/attacker.html";
+        await expect(
+          Promise.resolve().then(() =>
+            f.handlers.get(STATUS)!(event, {
+              previewId: f.preview.previewId,
+            }),
+          ),
+        ).rejects.toThrow("sender_invalid");
+      } finally {
+        await f.owner.close();
+      }
+    },
+  );
+
+  it.each([
+    null,
+    "a".repeat(43),
+    { previewId: "wrong-length" },
+    { previewId: "a".repeat(43), directory: "/renderer/path" },
+    Object.assign(Object.create(null), { previewId: "a".repeat(43) }),
+    {
+      get previewId() {
+        throw new Error("getter_must_not_execute");
+      },
+    },
+  ])(
+    "rejects malformed status request %# without reading accessors",
+    async (request) => {
+      const f = fixture();
+      try {
+        await expect(f.invoke(STATUS, request)).rejects.toThrow(
+          "request_invalid",
+        );
+        expect(f.createImporter).not.toHaveBeenCalled();
+      } finally {
+        await f.owner.close();
+      }
+    },
+  );
+
+  it.each(["external invalidation", "navigation", "crash"])(
+    "clears a committed receipt on %s",
+    async (kind) => {
+      const f = fixture();
+      try {
+        await f.invoke(PREVIEW);
+        await f.invoke(CONFIRM, f.confirm);
+        if (kind === "external invalidation") f.invalidated();
+        else if (kind === "navigation")
+          f.contents.emit("did-start-navigation", {
+            isMainFrame: true,
+            isSameDocument: false,
+          });
+        else f.contents.emit("render-process-gone");
+        await expect(
+          f.invoke(STATUS, { previewId: f.preview.previewId }),
+        ).resolves.toBeNull();
+      } finally {
+        await f.owner.close();
+      }
+    },
+  );
+
+  it("cannot resurrect a receipt after external withdrawal during the post-commit restart", async () => {
+    const f = fixture();
+    const startup = deferred<void>();
+    f.start.mockReturnValue(startup.promise);
+    await f.invoke(PREVIEW);
+    const pending = f.invoke(CONFIRM, f.confirm);
+    await vi.waitFor(() => expect(f.start).toHaveBeenCalledTimes(1));
+    try {
+      f.invalidated();
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toBeNull();
+      startup.resolve();
+      await expect(pending).resolves.toMatchObject({
+        sourceId: "local-import-named",
+      });
+      await expect(
+        f.invoke(STATUS, { previewId: f.preview.previewId }),
+      ).resolves.toBeNull();
+    } finally {
+      startup.resolve();
+      await pending;
+      await f.owner.close();
+    }
+  });
+
+  it("records only a fixed failure code and exact identity when confirmation fails", async () => {
+    const f = fixture();
+    vi.mocked(f.core.confirmPreview).mockRejectedValue(
+      new Error("secret_path=/human/developer/plugin"),
+    );
+    try {
+      await f.invoke(PREVIEW);
+      await expect(f.invoke(CONFIRM, f.confirm)).rejects.toThrow("secret_path");
+      const read = await f.invoke(STATUS, { previewId: f.preview.previewId });
+      expect(read).toEqual({
+        state: "failed",
+        previewId: f.preview.previewId,
+        pluginId: f.preview.pluginId,
+        publisherId: f.preview.publisherId,
+        version: f.preview.version,
+        packageDigest: f.preview.packageDigest,
+        code: "desktop_plugin_source_import_failed",
+      });
+      expect(JSON.stringify(read)).not.toContain("secret_path");
+    } finally {
+      await f.owner.close();
+    }
+  });
+
+  it("retains a committed receipt even when the invocation rejects while joining cleanup", async () => {
+    const f = fixture();
+    const cleanup = deferred<void>();
+    vi.mocked(f.core.close).mockReturnValue(cleanup.promise);
+    await f.invoke(PREVIEW);
+    const pending = f.invoke(CONFIRM, f.confirm);
+    await vi.waitFor(() => expect(f.core.close).toHaveBeenCalledTimes(1));
+    const request = { previewId: f.preview.previewId };
+    await expect(f.invoke(STATUS, request)).resolves.toMatchObject({
+      state: "committed",
+      result: { runtimeStatus: "ready", restartRequired: false },
+    });
+    const rejected = expect(pending).rejects.toThrow("named_cleanup_failure");
+    cleanup.reject(new Error("named_cleanup_failure"));
+    await rejected;
+    await expect(f.invoke(STATUS, request)).resolves.toMatchObject({
+      state: "committed",
+      result: { runtimeStatus: "ready", restartRequired: false },
+    });
+    await expect(f.owner.close()).rejects.toThrow("named_cleanup_failure");
+    expect(f.handlers.size).toBe(0);
+  });
+
+  it("replaces its single receipt on the next claim and rejects readback after close", async () => {
+    const f = fixture();
+    await f.invoke(PREVIEW);
+    await f.invoke(CONFIRM, f.confirm);
+    const originalTicket = f.preview.previewId;
+    Object.assign(f.preview, { previewId: "b".repeat(43) });
+    f.confirm.previewId = f.preview.previewId;
+    await f.invoke(PREVIEW);
+    await f.invoke(CONFIRM, f.confirm);
+    await expect(
+      f.invoke(STATUS, { previewId: originalTicket }),
+    ).resolves.toBeNull();
+    await expect(
+      f.invoke(STATUS, { previewId: f.preview.previewId }),
+    ).resolves.toMatchObject({ state: "committed" });
+    const retainedHandler = f.handlers.get(STATUS)!;
+    await f.owner.close();
+    await expect(
+      Promise.resolve().then(() =>
+        retainedHandler(f.event(), { previewId: f.preview.previewId }),
+      ),
+    ).rejects.toThrow("sender_invalid");
+    expect(f.handlers.size).toBe(0);
   });
 });
