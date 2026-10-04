@@ -24,6 +24,10 @@
 
 原冷回执专项只增加既有 HTTP 阶段计时，仍 **1/1、零跳过**：warm generation action 2376.8ms，cold 同键 stage 210.7ms、完整 action 回执 1726.9ms，串行共 1937.6ms，未复现实际页面超过 5 秒。HTTP 20 秒测试预算、故障注入、授权、返回与生产行为均未改变；全部自有 runtime 子进程已物理退出，模型和供应商请求为零。类型、boundary 与格式检查通过，日志为 `native-generation-cold-ack-http-timing-20261005.log`。另以原 Main HTTP transport 与原 Renderer bridge fetch 对自有 loopback 服务只读检查 **7/7**，真实 Node headers/body/EOF 在 1–28ms 完成且预算归零，证据为 `native-desktop-http-eof-readonly-20261005.json`；未经过 Electron IPC 或 Chromium，不能代替实际页面链路。继续按这两种环境的差异定位，不据此增加生产超时。
 
+补充隐藏 Electron 运输专项 **1/1、零跳过**：原 preload、真实 IPC、原 HTTP transport/reply、原 `installDesktopFetch` 的真实 Chromium 全局 fetch delegate 完成四种自有 loopback 响应，包括 JSON GET、自有 JSON POST 的 2244B 模拟 ACK、分片 UTF-8 和空 200。全部读到 EOF，耗时 2.6–43.6ms；POST 模拟 ACK 为 7.5ms。窗口始终未显示或聚焦，Main 和 Renderer 预算归零，所有自有进程、服务和 socket 物理退场，成功临时目录已清理。原 IPC 相关两文件回归 **36/36** 和 Host 类型检查通过；生产代码、实际 profile 和用户窗口未改。证据为 `native-desktop-http-electron-accepted-20261005/electron-http-results.json` 及该目录 retirement 文件。三条 IPC 注册为 test-owned，**未覆盖正式 Main 私有注册、Control 或实际生成请求**，不能据此断言实际超时已修复。遵循既有 Native 专项的显式入口，在 Node 24 下执行 `CREWON_TEST_ELECTRON_HTTP_EOF=1 pnpm --filter @crewon/ui exec vitest run electron/desktopHttp.electron.integration.test.ts`；可将 `CREWON_ELECTRON_HTTP_EOF_EVIDENCE_DIRECTORY` 指向新的自有绝对目录保留证据。默认普通 UI 套件不启动 Electron，默认未执行不计为专项通过。
+
+只读调用链核查确认，同键回放核对原资金、完整 pin 与持久项目后直接返回原 receipt；ACK 对 Run 核对不可变绑定，不因 `submitting` operation 启动新生成或查询。真实 Krea 的 reserve/advance、Run reconciliation 和 Control journal 写事务内均为同步 SQL；供应商网络与异步权限等待在这些事务之间，未发现网络等待期间持有 SQLite 写锁。`busy_timeout=5000` 仍只是争用时的上限，没有实际锁等待证据。当前实际包没有服务端请求阶段日志，后续需定位正式 Main/Control 的实际 headers、响应读取和执行阶段差异；不把隔离测试通过扩为原任务 ACK 或完整在线 S0 验收。
+
 旧预览网页 5730 仍使用原 3210/3211 后端进程，没有重启加载本轮后端修复；实际桌面有自己从当前安装包启动的 Control/Worker。不能以旧网页证明当前桌面绑定或插件执行结果。完整目标继续 ACTIVE，后置个人积分与用户选定的第二个企业 API 仍分别列为后续阶段。
 
 ## 2026-10-04：新 ComfyUI 地址与桌面代码同步
