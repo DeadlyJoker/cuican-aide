@@ -2,7 +2,11 @@
 
 状态：ACTIVE，已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
-2026-10-04 当前范围：新增[编译后 Native 原窗口验收](./native-compiled-report-window.md)。实际原 Main、preload、BrowserWindow、Control、Worker 与正式 Renderer，从原用户栏进入十类设置，再用原侧栏专业报告模块创建 Thread、刷新上下文、提交报告并显示实际完成结果。原 Renderer 逐字节复制，未重建；原 Native 协议加载独立 professional 1.0.0 实包。唯一真实 UI 请求由具名 PDP 一次性绑定原 key，原 paid receipt、admission、pin、profile、选择和 deployment 核验保留。Source 与 Main 的显式空私有工作区对齐，产品代码、冲突和网络保护未修改。
+2026-10-04 当前范围：新增[真正打包应用的报告验收](./native-packaged-report-window.md)，真实 `.app` 原生可执行文件保留原 `dist-electron/main.mjs`、七项 Resources/runtime、实际 scoped identity 和逐字节 Renderer；原用户栏→十类 Settings→原模块提交→实际报告完成→物理冷 Main 读取已首次 **1/1、零跳过、退出码 0**。原 `--user-data-dir` 隔离用户目录，外部 inspector 只观察原已运行 Main，原 fuses、窗口、preload、网络和保护不改。当前页面中英文标签均按原 UI 读取，不设置语言偏好。最终八文件组合 **34 通过、1 环境跳过、0 失败**；补齐短剧目录后原跳过项目专项单独 **1/1、零跳过**，两组实际退出码均为 0；不称组合零跳过。已完成范围和待验收边界以[实施进度](./incremental-extension-progress.md)首节为准。
+
+真实 report 的资金、价格、模型和供应商仍为具名测试边界，spent 0；不能算生产结算或 E5。Native Krea2 实际公网执行、可用 ComfyUI 的同次原完整 App S0、真实个人身份/资金/价格/结算、全部插件打包链路和用户选定企业 API 的 E5 仍未完成。当前阶段仅测试/说明，以 `c499da519b8c12b74120b9f588feef133ee23063` 保留原 UI/账号/Settings/侧栏/全局 CSS、正式资产、SDK、旧发行包、映射与用户服务，不声称全部等于最初 `776484c57`，不碰 primary 的人类工作。以下编译窗口和 Source 章节为各自历史范围。
+
+2026-10-04 编译窗口历史范围：新增[编译后 Native 原窗口验收](./native-compiled-report-window.md)。实际原 Main、preload、BrowserWindow、Control、Worker 与正式 Renderer，从原用户栏进入十类设置，再用原侧栏专业报告模块创建 Thread、刷新上下文、提交报告并显示实际完成结果。原 Renderer 逐字节复制，未重建；原 Native 协议加载独立 professional 1.0.0 实包。唯一真实 UI 请求由具名 PDP 一次性绑定原 key，原 paid receipt、admission、pin、profile、选择和 deployment 核验保留。Source 与 Main 的显式空私有工作区对齐，产品代码、冲突和网络保护未修改。
 
 原窗口流程只有一次报价、两次具名 Responses 请求、一次供应商 POST 和 completed 工具回执；可用 70、预留 30、spent 0，资金/价格仍为具名测试边界。原 Main 物理退出后，新 Main 只读取同一持久 Thread 文本与模块 completed 状态，事实和调用次数保持。两次原模型目录子进程分别实际探测；Thread SSE 为 HTTP 200/event-stream，不证明实时 delta、执行中断线或自动重连。冷回执仅是 launcher 原回执定位，不是 report v1 表单恢复或再次调用。
 

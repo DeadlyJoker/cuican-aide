@@ -6,6 +6,16 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：真实打包应用的原入口与报告任务
+
+在 `c499da519b8c12b74120b9f588feef133ee23063` 基线上，真实 macOS arm64 `CrewON.app` 专项首次 **1/1、零跳过、退出码 0**。原 builder 使用原 manifest/main、完整七项 runtime 和逐字节复制的正式 Renderer；实际 `.app` 原生可执行文件通过原 `--user-data-dir` 隔离目录启动，外部 inspector 核对自然 packaged 身份后加载观察器，没有入口 wrapper、开发 alias、窗口或 preload 替换。细节见[真正打包应用验收](./native-packaged-report-window.md)。
+
+原用户栏进入十类 Settings、原模块创建任务并提交报告、原任务显示实际 assistant 文本和 completed Run；原 Main 物理退出后，新 Main 读取同一 Thread 和模块状态。实际 OS 祖先与精确 Resources/runtime argv 记录原 Control、Worker、release、模型目录和工作区 MCP；不回注被 packaged 过滤的 `NODE_OPTIONS` 或沿用开发版 import 观测。两次原目录分别探测，Thread SSE 返回 200/event-stream。脚本适配真实中英文页面，语言偏好和产品界面未修改。
+
+一次报价、两次具名 Responses、一次供应商 POST 和原 completed 工具回执保持；钱包可用 70、预留 30、spent 0，仅为具名测试资金/价格。冷读取没有再次调用报告表单，不扩为 report v1 表单 durable recovery 或执行中断线重连。最终八文件组合实际 **34 通过、1 跳过、0 失败、退出码 0**；原项目恢复专项因缺少短剧目录环境被跳过，补齐环境后单独 **1/1、零跳过、退出码 0**。所选三十五项行为均实际覆盖，但不称组合零跳过。Host 类型、boundary、格式和保留检查通过；统一证明为 `output/extensions/checks/native-packaged-report-proof-20261004.json`。
+
+本阶段仅新测试和说明，原 UI/账号/Settings/侧栏/全局 CSS、SDK/冻结包、正式 Renderer、旧独立发行包、生产映射与用户服务保持，不碰 primary 的人类修改。真实打包报告不等于签名、公证、安装发行或所有插件的打包链路。完整目标继续 ACTIVE：Native Krea2 实际公网生成/查询、可用 ComfyUI 的同次原完整 App S0、真实个人身份/资金/价格/结算和用户选定实际企业 API 的 E5 未完成；`createThread` 不在三类恢复内。本阶段没有请求用户原 ComfyUI。
+
 ## 2026-10-04：编译后 Native 原窗口提交报告任务与冷读取
 
 在 `be4cebd39d7bb470b08645b1fd3a76faa172226e` 基线上，新增原编译后 Main、preload、BrowserWindow 和完整 App 的实际报告窗口专项。原 Control、Worker、release 与模型目录子进程编译到独占临时布局；正式 Renderer 逐字节复制，未重建。原 Main 创建窗口、会话、IPC、HTTP 和 Native UI 资产协议，原保留 professional 1.0.0 UI 从真实协议加载。原用户栏进入十类 Settings，再从原侧栏模块创建 Thread、刷新原上下文、提交报告、查看实际 assistant 文本和 completed Run。具体范围见[编译后原窗口验收](./native-compiled-report-window.md)。
