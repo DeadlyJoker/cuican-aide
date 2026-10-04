@@ -118,6 +118,7 @@ import {
   type ExtensionConfigurationQuery,
 } from "./extension-control-client.ts";
 import { PluginControlClient } from "./plugin-control-client.ts";
+import { PluginCreditControlClient } from "./plugin-credit-control-client.ts";
 import { CreativeProjectControlClient } from "./creative-project-control-client.ts";
 import type {
   CreateExtensionTaskRequest,
@@ -218,6 +219,7 @@ export class ControlApiClient {
   readonly #origin: string | null;
   readonly #fetch: typeof globalThis.fetch;
   #pluginClient: PluginControlClient | null = null;
+  #pluginCreditClient: PluginCreditControlClient | null = null;
   #creativeProjectClient: CreativeProjectControlClient | null = null;
 
   constructor(config: ControlApiClientConfig) {
@@ -1604,6 +1606,14 @@ export class ControlApiClient {
 
   get plugins(): PluginControlClient {
     return (this.#pluginClient ??= new PluginControlClient({
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
+      protocolError: (code) => new ControlApiProtocolError(code),
+    }));
+  }
+
+  get pluginCredits(): PluginCreditControlClient {
+    return (this.#pluginCreditClient ??= new PluginCreditControlClient({
       json: (method, path, body, options) =>
         this.#json(method, path, body, options),
       protocolError: (code) => new ControlApiProtocolError(code),

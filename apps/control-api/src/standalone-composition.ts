@@ -69,6 +69,7 @@ import {
 } from "./desktop-plugin-extension-composition.ts";
 
 import { buildControlApi } from "./control-api.ts";
+import { composePluginCreditReads } from "./plugin-credit-read-composition.ts";
 import { closeStandaloneCompositionOwners as closeOwners } from "./standalone-composition-cleanup.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
@@ -716,6 +717,10 @@ function composeControlApi(
       digester,
     });
     const app = buildControlApi({
+      pluginCreditReads: composePluginCreditReads(
+        store.pluginCreditStore(),
+        authorization,
+      ),
       creativeProjects: preparedProjects?.service,
       projectGenerationReads,
       projectConceptSelections: composeOwnedProjectGenerationSelectionService({

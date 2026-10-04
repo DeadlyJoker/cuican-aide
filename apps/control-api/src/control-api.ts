@@ -17,6 +17,10 @@ import {
   type PluginSourceControlService,
 } from "./plugin-control-route.ts";
 import type { ExtensionReadApplicationService } from "@crewon/application";
+import {
+  registerPluginCreditReadRoutes,
+  type PluginCreditReadControlService,
+} from "./plugin-credit-read-route.ts";
 import type { CreativeProjectApplicationService } from "@crewon/application";
 import type { ExtensionConfigurationApplicationService } from "@crewon/application";
 import type { ExtensionTaskApplicationService } from "@crewon/application";
@@ -246,6 +250,7 @@ export type ControlApiDependencies = Readonly<{
   pluginInstallation?: PluginInstallationControlService | null;
   pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
+  pluginCreditReads?: PluginCreditReadControlService | null;
   officeThreads?: OfficeThreadApplicationService | null;
   threads: ThreadApplicationService;
   taskChanges: ThreadTaskChangeQueryService;
@@ -366,6 +371,11 @@ export function buildControlApi(
   registerModelPricingRoutes(app, dependencies);
   registerModelSpendingRoutes(app, dependencies);
   registerPluginControlRoutes(app, dependencies);
+  if (dependencies.pluginCreditReads != null)
+    registerPluginCreditReadRoutes(app, {
+      identity: dependencies.identity,
+      service: dependencies.pluginCreditReads,
+    });
   if (dependencies.creativeProjects != null) {
     registerCreativeProjectRoutes(app, {
       identity: dependencies.identity,

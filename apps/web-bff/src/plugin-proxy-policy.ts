@@ -1,3 +1,9 @@
+import {
+  MAX_PLUGIN_CREDIT_READ_RESPONSE_BYTES,
+  parsePluginCreditAccountsQuery,
+  parsePluginCreditEntriesQuery,
+} from "@crewon/contracts";
+
 const PREFIX = "/api/v1/plugins";
 export const PLUGIN_PROXY_DEADLINE_MS = 10_000;
 export const PLUGIN_JSON_RESPONSE_MAX_BYTES = 128 * 1024;
@@ -58,10 +64,20 @@ export function pluginProxyPolicy(input: {
     return denied(404, "route_not_found");
   const suffix = input.pathname.slice(PREFIX.length);
   let methods: readonly string[];
-  let query: "packages" | "selections" | "sources" | "empty" = "empty";
+  let query:
+    | "packages"
+    | "selections"
+    | "sources"
+    | "creditAccounts"
+    | "creditEntries"
+    | "empty" = "empty";
   let responseKind: "json" | "asset" = "json";
   let responseMaxBytes = PLUGIN_JSON_RESPONSE_MAX_BYTES;
-  if (suffix === "/sources") {
+  if (suffix === "/credits/accounts" || suffix === "/credits/entries") {
+    methods = ["GET"];
+    query = suffix === "/credits/accounts" ? "creditAccounts" : "creditEntries";
+    responseMaxBytes = MAX_PLUGIN_CREDIT_READ_RESPONSE_BYTES;
+  } else if (suffix === "/sources") {
     methods = ["GET"];
     query = "sources";
   } else if (suffix === "/packages") {
@@ -166,8 +182,16 @@ function assetPath(parts: readonly string[]): boolean {
 }
 function validQuery(
   search: string,
-  kind: "packages" | "selections" | "sources" | "empty",
+  kind:
+    | "packages"
+    | "selections"
+    | "sources"
+    | "creditAccounts"
+    | "creditEntries"
+    | "empty",
 ): boolean {
+  if (kind === "creditAccounts" || kind === "creditEntries")
+    return validCreditQuery(search, kind);
   if (search === "") return true;
   if (kind === "empty" || search.length > 2048 || !search.startsWith("?"))
     return false;
@@ -197,6 +221,32 @@ function validQuery(
     } else if (!namespace(value)) return false;
   }
   return true;
+}
+function validCreditQuery(
+  search: string,
+  kind: "creditAccounts" | "creditEntries",
+): boolean {
+  if (
+    search.length > 2048 ||
+    (search !== "" &&
+      (!search.startsWith("?") ||
+        search
+          .slice(1)
+          .split("&")
+          .some((part) => part === "")))
+  )
+    return false;
+  const query = new URLSearchParams(search);
+  if ([...query.keys()].some((key) => query.getAll(key).length !== 1))
+    return false;
+  try {
+    const fields = Object.fromEntries(query);
+    if (kind === "creditAccounts") parsePluginCreditAccountsQuery(fields);
+    else parsePluginCreditEntriesQuery(fields);
+    return true;
+  } catch {
+    return false;
+  }
 }
 function sourceId(value: string): boolean {
   return (

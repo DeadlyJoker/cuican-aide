@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：原设置中的独立插件积分查询
+
+在 `93f4e811dbfb01ca4e378102771d748100de6984` 基线上接通[只读积分查询](./plugin-credit-read-settings.md)：原账本的本人账户/流水分页、独立 `pluginCredit:read` 权威、两条只读 HTTP 路由、原 BFF/认证客户端和「工具与扩展」卡片。读取不迁移、建账户或赠送积分；未配置与空账户分开，未知账户返回 404。所有金额为精确字符串，返回不包含身份、拨款或预占内部引用。
+
+生产 Main 沿用真实 PDP，旧组合配置缺少新授权时只拒绝新积分读取；Standalone 保留原固定主体。独立审查发现 Native 固定本机会话不是平台个人账户，页面已明确标注本机账本与个人积分尚未接通；真实身份绑定仍未完成。原用户栏、设置导航、CommandWorkspace、左右侧栏与全局样式没有改造。
+
+原双库写入/lifecycle与新读页验证 **50/50**、新 Application **14/14**、新 Contracts **11/11** 均零跳过通过；实际 HTTP+认证客户端核验真实入账/预留/结算后的精确金额与三条流水，读取前后账本保持。最终原 UI 七文件 **103/103**、Client 三文件 **30/30**、BFF 两文件 **25/25** 均零跳过；Control 五文件 **28 项通过、1 项原 PostgreSQL 冷管理测试因缺少该测试环境跳过**，没有把跳过计为通过。各组合按实际范围记录，不相加。UI 曾因 `pnpm test --` 误跑全量，已对本次 Vitest 主进程发送 SIGINT 并确认退出码 130；全量结果不计通过，随后使用 `pnpm exec vitest run` 按文件精确重跑。首轮 build/lint 的新增测试用了不存在的 general section，修为原 environment 后 UI 构建、Renderer/Host lint、Control/BFF 类型、boundary、源码格式和仓库格式均通过；没有修改产品来规避检查。
+
+真实只读 Web 页面验收以 `output/extensions/checks/plugin-credit-ui-acceptance-20261004/acceptance-final.json` 为准：原常规/外观/工具导航往返，原外观工厂使用具名内存偏好，未写用户偏好。真实 SQLite 具名 grant100、reserve30、settle18 后显示 **82/0/18/100**，三条流水与预留修订的历史 **70/30** 分开；11 个实际 Fastify 请求全为 GET，其中五次积分读取均 200/no-store、十次政策检查。完整账本在读取前后及关闭后严格一致；DOM 证据不冒充完整浏览器网络统计。其它未部署的插件目录/偏好服务保持真实不可用，不伪造成功。
+
+自有测试 PID79400、65478/65480 监听和 SQLite 消费者均已退出，专用 PG 也已物理退役并清理。保留核验 `plugin-credit-preservation-final-20261004.json` 确认 13 个原 UI/CSS 文件、五个原设置/App 路由、60 个 SDK 文件及冻结包、九个原发行插件、0600 生产映射、五个用户服务与 primary Git 工作状态保持。正式 Renderer 为新能力有意重建，不宣称旧构建资产字节不变。原用户标签仍保持设置页。
+
+本轮只使用具名测试身份和资金，没有生产充值、扣费或请求用户 ComfyUI。真实个人身份/入账/价格/失败结算、Native Krea2 公网生成/原 operation 查询、同次原完整 App 在线 S0、全部插件打包链路及用户指定实际企业 API 的 E5 仍未完成，完整目标 ACTIVE。
+
 ## 2026-10-04：Native 目录导入、原安装启用与离线来源冷读取
 
 在 `664c181f6d7751025831abf46143ad2453930e14` 基线上推进[本地插件来源导入](./native-local-plugin-source-import.md)。真实 `.app` 首次核验发现：Main 已提交来源，但自己的 runtime stop 导致原 Settings/AuthGate 子树卸载，App 返回后回执和设置位置丢失。Main 现仅在原文档内保留一个绑定精确 opaque previewId 与完整包身份的 pending/committed/failed 状态，添加可选 `readStatus` 和独立状态事件，兼容旧 v1 client。读取不竞争确认的 mutation flight、不重启、不重新审批；外部失效、导航、崩溃和关闭清除状态，晚到完成不能恢复已撤回状态。已提交回执先于 importer 清理保存，清理失败不改写为未提交。

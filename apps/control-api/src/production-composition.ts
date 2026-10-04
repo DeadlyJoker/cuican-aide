@@ -27,6 +27,7 @@ import {
   type AutomationAuthorizationPort,
   type AutomationStore,
   type AuthorizationPort,
+  type PluginCreditReadAuthorizationPort,
   type DomainStore,
   type ProjectGenerationReadApplicationService,
   type ModelProviderSettingsStore,
@@ -35,6 +36,7 @@ import { PostgresDomainStore } from "@crewon/store";
 import { isPluginProjectGenerationReadActionBridge } from "@crewon/plugin-host";
 
 import { buildControlApi } from "./control-api.ts";
+import { composePluginCreditReads } from "./plugin-credit-read-composition.ts";
 import {
   composeProjectGenerationReadService,
   prepareProjectGenerationReadStore,
@@ -137,6 +139,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   statementTimeoutMs?: number;
   identity: ControlApiIdentityPort;
   authorization: AuthorizationPort & AutomationAuthorizationPort;
+  pluginCreditAuthorization?: PluginCreditReadAuthorizationPort;
   heartbeatIntervalMs?: number | null;
   outboxScanIntervalMs?: number | null;
   outboxRetention?: OutboxRetentionPolicy | null;
@@ -693,6 +696,10 @@ async function composeProductionControlApi(
       digester,
     });
     const app = buildControlApi({
+      pluginCreditReads: composePluginCreditReads(
+        store.pluginCreditStore(),
+        config.pluginCreditAuthorization,
+      ),
       projectConceptSelections: projectSelections,
       creativeProjects: creativeProjects?.service,
       projectGenerationReads,

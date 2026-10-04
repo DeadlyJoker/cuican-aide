@@ -1,5 +1,11 @@
 import type { Pool, PoolClient } from "pg";
-import type { PluginCreditEntry, PluginCreditStore } from "@crewon/application";
+import type {
+  PluginCreditEntry,
+  PluginCreditStore,
+  PluginCreditReadStore,
+  PluginCreditAccountListInput,
+  PluginCreditEntriesReadInput,
+} from "@crewon/application";
 import {
   CreditLedgerError,
   createCreditAccount,
@@ -18,6 +24,7 @@ import {
   pluginCreditSchemaName,
 } from "./plugin-credit-schema.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
+import { PostgresPluginCreditRead } from "./postgres-plugin-credit-read.ts";
 import {
   lockPostgresPluginCreditAccount,
   reservePostgresPluginCreditsWithinTransaction,
@@ -34,7 +41,9 @@ import {
 } from "./plugin-credit-support.ts";
 
 /** Host-owned Pool. All plugins sharing a personal pool serialize on the same account lock. */
-export class PostgresPluginCreditStore implements PluginCreditStore {
+export class PostgresPluginCreditStore
+  implements PluginCreditStore, PluginCreditReadStore
+{
   readonly #pool: Pool;
   readonly #schema: string;
   readonly #prefix: string;
@@ -45,6 +54,22 @@ export class PostgresPluginCreditStore implements PluginCreditStore {
     this.#schema = input.schema;
     this.#pool = input.pool;
     this.#assertOpen = input.assertOpen;
+  }
+
+  async listAccounts(input: PluginCreditAccountListInput) {
+    return new PostgresPluginCreditRead({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#assertOpen,
+    }).listAccounts(input);
+  }
+
+  async readEntries(input: PluginCreditEntriesReadInput) {
+    return new PostgresPluginCreditRead({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#assertOpen,
+    }).readEntries(input);
   }
 
   async migrate(): Promise<void> {

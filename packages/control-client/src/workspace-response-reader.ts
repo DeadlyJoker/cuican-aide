@@ -14,6 +14,7 @@ export async function readBoundedWorkspaceJson(
       !Number.isSafeInteger(Number(contentLength)) ||
       Number(contentLength) > maximumBytes)
   ) {
+    void response.body?.cancel().catch(() => undefined);
     throw protocolError("control_client_workspace_response_too_large");
   }
   if (response.body === null) {

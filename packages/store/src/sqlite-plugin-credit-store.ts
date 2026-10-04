@@ -1,5 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { PluginCreditEntry, PluginCreditStore } from "@crewon/application";
+import type {
+  PluginCreditEntry,
+  PluginCreditStore,
+  PluginCreditReadStore,
+  PluginCreditAccountListInput,
+  PluginCreditEntriesReadInput,
+} from "@crewon/application";
 import {
   CreditLedgerError,
   createCreditAccount,
@@ -15,6 +21,7 @@ import {
 } from "@crewon/domain";
 import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
 import { reserveSqlitePluginCreditsWithinTransaction } from "./sqlite-plugin-credit-reservation.ts";
+import { SqlitePluginCreditRead } from "./sqlite-plugin-credit-read.ts";
 import {
   creditAmount,
   creditEntriesQuery,
@@ -27,13 +34,29 @@ import {
 } from "./plugin-credit-support.ts";
 
 /** Host-owned connection. Construction neither migrates nor creates funded accounts. */
-export class SqlitePluginCreditStore implements PluginCreditStore {
+export class SqlitePluginCreditStore
+  implements PluginCreditStore, PluginCreditReadStore
+{
   readonly #database: DatabaseSync;
   readonly #assertOpen: () => void;
 
   constructor(input: { database: DatabaseSync; assertOpen(): void }) {
     this.#database = input.database;
     this.#assertOpen = input.assertOpen;
+  }
+
+  async listAccounts(input: PluginCreditAccountListInput) {
+    return new SqlitePluginCreditRead({
+      database: this.#database,
+      assertOpen: this.#assertOpen,
+    }).listAccounts(input);
+  }
+
+  async readEntries(input: PluginCreditEntriesReadInput) {
+    return new SqlitePluginCreditRead({
+      database: this.#database,
+      assertOpen: this.#assertOpen,
+    }).readEntries(input);
   }
 
   async migrate(): Promise<void> {

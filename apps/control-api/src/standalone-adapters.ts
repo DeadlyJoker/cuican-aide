@@ -17,6 +17,7 @@ import {
   type ApplicationIdKind,
   type AuthorizationDecision,
   type AuthorizationPort,
+  type PluginCreditReadAuthorizationPort,
   type ContentDigester,
   type AgentVersionStore,
   type AgentVersionReleaseStore,
@@ -89,7 +90,10 @@ export class StandaloneIdentity implements ControlApiIdentityPort {
 }
 
 export class StandaloneAuthorization
-  implements AuthorizationPort, AutomationAuthorizationPort
+  implements
+    AuthorizationPort,
+    AutomationAuthorizationPort,
+    PluginCreditReadAuthorizationPort
 {
   readonly #actor: ActorContext;
 
@@ -100,7 +104,8 @@ export class StandaloneAuthorization
   async authorize(
     request:
       | Parameters<AuthorizationPort["authorize"]>[0]
-      | Parameters<AutomationAuthorizationPort["authorize"]>[0],
+      | Parameters<AutomationAuthorizationPort["authorize"]>[0]
+      | Parameters<PluginCreditReadAuthorizationPort["authorize"]>[0],
   ): Promise<AuthorizationDecision> {
     if (
       request.actor.principalId !== this.#actor.principalId ||
@@ -109,6 +114,12 @@ export class StandaloneAuthorization
       request.actor.spaceId !== this.#actor.spaceId ||
       request.resource.tenantId !== this.#actor.tenantId ||
       request.resource.spaceId !== this.#actor.spaceId
+    ) {
+      return { outcome: "deny", reasonCode: "standalone_scope_mismatch" };
+    }
+    if (
+      request.resource.kind === "pluginCredit" &&
+      request.resource.principalId !== this.#actor.principalId
     ) {
       return { outcome: "deny", reasonCode: "standalone_scope_mismatch" };
     }

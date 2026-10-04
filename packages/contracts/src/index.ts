@@ -47,3 +47,4 @@ export * from "./workspace-changes.ts";
 export * from "./thread-active-run-contract.ts";
 export * from "./runtime-bootstrap-inputs.ts";
 export * from "./runtime-bootstrap-replay.ts";
+export * from "./plugin-credit-read-contract.ts";

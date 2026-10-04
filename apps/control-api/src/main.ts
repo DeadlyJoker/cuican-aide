@@ -288,6 +288,7 @@ try {
       connectionString: productionConnectionString,
       identity,
       authorization,
+      pluginCreditAuthorization: authorization,
       ...composeProductionProjectStartup(projectStartup, authorization),
       ...(maximumDatabasePoolSize === undefined
         ? {}

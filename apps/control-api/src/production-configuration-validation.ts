@@ -59,6 +59,12 @@ export function validateProductionConfig(
     "authorize",
     "production_authorization_required",
   );
+  if (config.pluginCreditAuthorization !== undefined)
+    requireMethod(
+      config.pluginCreditAuthorization,
+      "authorize",
+      "production_plugin_credit_authorization_required",
+    );
   requireMethod(config.artifactStore, "close", "artifact_store_required");
   if (config.pluginInstallation !== undefined) {
     if (!(config.identity instanceof ProductionControlApiIdentity))

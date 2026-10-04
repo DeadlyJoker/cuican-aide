@@ -170,3 +170,6 @@ export * from "./project-generation-image-result-verifier.ts";
 export * from "./project-concept-selection-store-port.ts";
 export * from "./project-concept-selection-application-service.ts";
 export * from "./plugin-ui-intent-journal-store.ts";
+export * from "./plugin-credit-read-store-port.ts";
+export * from "./plugin-credit-read-authorization-port.ts";
+export * from "./plugin-credit-read-application-service.ts";

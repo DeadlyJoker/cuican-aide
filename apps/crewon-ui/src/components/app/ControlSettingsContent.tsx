@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ControlApiClient } from "@crewon/control-client";
 import type { AgentPlatformUser } from "../../lib/agent-platform/agentPlatformSession";
 import type { Locale } from "../../lib/i18n";
-import { detectRuntimeSurface } from "../../lib/platform";
+import { detectRuntimeSurface, hasDesktopBridge } from "../../lib/platform";
 import {
   controlSettingsPanel,
   type SettingsCatalogState,
@@ -19,6 +19,7 @@ import type { TaskPackDraftHandler } from "../../lib/plugin/prepareTaskPackDraft
 import type { InstalledPluginConfigurationClient } from "../../lib/plugins/useInstalledPluginConfiguration";
 import type { DesktopLocalPluginSourceImportAccess } from "../../lib/desktop/desktopLocalPluginSourceImportProtocol";
 import { InstalledPluginSettingsLocalImport } from "../settings/InstalledPluginSettingsLocalImport";
+import { InstalledPluginCreditSettings } from "../settings/InstalledPluginCreditSettings";
 
 export function ControlSettingsContent({
   activeSection,
@@ -32,7 +33,7 @@ export function ControlSettingsContent({
 }: {
   activeSection: SettingsSection;
   client: Pick<ControlApiClient, "getActiveAgentVersionCatalog"> &
-    Partial<Pick<ControlApiClient, "plugins">>;
+    Partial<Pick<ControlApiClient, "plugins" | "pluginCredits">>;
   pluginConfigurationClient?: InstalledPluginConfigurationClient;
   localSourceImport?: DesktopLocalPluginSourceImportAccess | null;
   locale: Locale;
@@ -87,6 +88,18 @@ export function ControlSettingsContent({
         <InstalledPluginSettings
           client={client.plugins}
           configurationClient={pluginConfigurationClient}
+          locale={locale}
+        />
+      )}
+      {activeSection === "mcp-servers" && client.pluginCredits && (
+        <InstalledPluginCreditSettings
+          client={client.pluginCredits}
+          accountSource={hasDesktopBridge() ? "localDevice" : "currentUser"}
+          ownerKey={
+            platformUser
+              ? String(platformUser.id)
+              : (localSourceImport?.ownerKey ?? "local-management")
+          }
           locale={locale}
         />
       )}

@@ -7,13 +7,15 @@ import {
   type AuthorizationPort,
   type CreativeProjectAuthorizationPort,
   type PluginInstallationAuthorizationPort,
+  type PluginCreditReadAuthorizationPort,
 } from "@crewon/application";
 
 export type ControlAuthorizationRequest =
   | Parameters<AuthorizationPort["authorize"]>[0]
   | Parameters<AutomationAuthorizationPort["authorize"]>[0]
   | Parameters<CreativeProjectAuthorizationPort["authorize"]>[0]
-  | Parameters<PluginInstallationAuthorizationPort["authorize"]>[0];
+  | Parameters<PluginInstallationAuthorizationPort["authorize"]>[0]
+  | Parameters<PluginCreditReadAuthorizationPort["authorize"]>[0];
 
 import {
   ControlApiIdentityError,
@@ -359,7 +361,8 @@ export class DynamicPolicyAuthorization
   implements
     AuthorizationPort,
     AutomationAuthorizationPort,
-    CreativeProjectAuthorizationPort
+    CreativeProjectAuthorizationPort,
+    PluginCreditReadAuthorizationPort
 {
   readonly #policy: PolicyDecisionPort;
   readonly #deadline: SecurityDeadlinePort;
@@ -390,6 +393,12 @@ export class DynamicPolicyAuthorization
     if (
       request.actor.tenantId !== request.resource.tenantId ||
       request.actor.spaceId !== request.resource.spaceId
+    ) {
+      return { outcome: "deny", reasonCode: "actor_scope_mismatch" };
+    }
+    if (
+      request.resource.kind === "pluginCredit" &&
+      request.resource.principalId !== request.actor.principalId
     ) {
       return { outcome: "deny", reasonCode: "actor_scope_mismatch" };
     }
