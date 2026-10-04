@@ -102,7 +102,9 @@ export async function nativeIsolationProcessFixture(
     }
     model =
       options.installedReportExecution === undefined
-        ? await nativeIsolationModel(f.provider.apiKey)
+        ? await nativeIsolationModel(f.provider.apiKey, {
+            catalogModelId: options.isolationModelCatalog?.modelId,
+          })
         : await nativeInstalledReportModel(
             f.provider.apiKey,
             { subject: options.installedReportExecution.subject },

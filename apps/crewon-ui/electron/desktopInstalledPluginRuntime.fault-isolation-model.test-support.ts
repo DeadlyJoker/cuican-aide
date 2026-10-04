@@ -9,11 +9,17 @@ export const ordinaryNativeResponse =
   "The existing default Agent remains available.";
 
 /** A real named Responses HTTP provider. It emits text only and cannot execute plugin tools. */
-export async function nativeIsolationModel(apiKey: string) {
+export async function nativeIsolationModel(
+  apiKey: string,
+  options: Readonly<{ catalogModelId?: string }> = {},
+) {
+  if (options.catalogModelId !== undefined)
+    assert.match(options.catalogModelId, /^[a-z][a-z0-9-]{0,63}$/u);
   const requests: Record<string, unknown>[] = [];
   const failures: unknown[] = [];
   const pending = new Set<Promise<void>>();
   let supplierRequests = 0;
+  let catalogRequests = 0;
   const server = createServer(
     { key: TEST_SERVER_KEY, cert: TEST_SERVER_CERT, minVersion: "TLSv1.3" },
     (request, response) => {
@@ -21,6 +27,30 @@ export async function nativeIsolationModel(apiKey: string) {
         if (request.url?.startsWith("/supplier/")) {
           supplierRequests++;
           response.writeHead(500).end();
+          return;
+        }
+        if (
+          options.catalogModelId !== undefined &&
+          request.url === "/v1/models"
+        ) {
+          assert.equal(request.method, "GET");
+          assert.equal(request.headers.authorization, `Bearer ${apiKey}`);
+          for await (const chunk of request)
+            assert.equal(Buffer.byteLength(chunk), 0);
+          assert.ok(++catalogRequests <= 16);
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(
+            JSON.stringify({
+              object: "list",
+              data: [
+                {
+                  id: options.catalogModelId,
+                  object: "model",
+                  owned_by: "named-native-isolation-fixture",
+                },
+              ],
+            }),
+          );
           return;
         }
         assert.equal(request.url, "/v1/responses");
@@ -119,6 +149,7 @@ export async function nativeIsolationModel(apiKey: string) {
     supplier: `${origin}/supplier/`,
     requests,
     supplierRequests: () => supplierRequests,
+    catalogRequests: () => catalogRequests,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve, reject) =>

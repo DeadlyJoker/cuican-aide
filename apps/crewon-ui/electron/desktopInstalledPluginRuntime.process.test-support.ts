@@ -75,6 +75,7 @@ export type NativeInstalledProcessFixtureOptions = Readonly<{
   workspaceLayout?: "unbound" | "empty-private";
   installedReportExecution?: NativeNamedReportExecutionConfiguration;
   reportModelCatalog?: Readonly<{ modelId: string }>;
+  isolationModelCatalog?: Readonly<{ modelId: string }>;
 }>;
 
 /** Actual source Supervisor children; HTTPS decisions require current private Native

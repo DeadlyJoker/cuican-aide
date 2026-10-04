@@ -2,6 +2,8 @@
 
 状态：ACTIVE，已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
+2026-10-04 当前范围：原 `.app` 的[短剧9安装与项目输入](./native-packaged-projects-window.md)专项首次 **1/1、零跳过、退出码 0**，从原账号/Settings 实际安装、启用并加载原独立包，保存项目和概念；物理冷 Main 读取后停用、卸载、重新安装启用，原业务身份、修订和元数据回执保持。仅使用原项目 owner 与具名初始100积分夹具，没有任务、报价、预留、供应商或模型执行增量。原 Source/报告/编译/打包最终组合 **九文件、36/36、零跳过、退出码 0**，Host 类型、boundary、格式及保留检查通过。该范围以 `70296ae86dbd452d0942f26d9829586b2e5d5eea` 保留原前端/SDK/正式资产/旧发行/用户服务，不扩为打包版三条未知请求恢复、在线 S0 或真实结算；完整目标继续 ACTIVE。最新证据以[实施进度](./incremental-extension-progress.md)首节为准，下段报告为前一阶段。
+
 2026-10-04 当前范围：新增[真正打包应用的报告验收](./native-packaged-report-window.md)，真实 `.app` 原生可执行文件保留原 `dist-electron/main.mjs`、七项 Resources/runtime、实际 scoped identity 和逐字节 Renderer；原用户栏→十类 Settings→原模块提交→实际报告完成→物理冷 Main 读取已首次 **1/1、零跳过、退出码 0**。原 `--user-data-dir` 隔离用户目录，外部 inspector 只观察原已运行 Main，原 fuses、窗口、preload、网络和保护不改。当前页面中英文标签均按原 UI 读取，不设置语言偏好。最终八文件组合 **34 通过、1 环境跳过、0 失败**；补齐短剧目录后原跳过项目专项单独 **1/1、零跳过**，两组实际退出码均为 0；不称组合零跳过。已完成范围和待验收边界以[实施进度](./incremental-extension-progress.md)首节为准。
 
 真实 report 的资金、价格、模型和供应商仍为具名测试边界，spent 0；不能算生产结算或 E5。Native Krea2 实际公网执行、可用 ComfyUI 的同次原完整 App S0、真实个人身份/资金/价格/结算、全部插件打包链路和用户选定企业 API 的 E5 仍未完成。当前阶段仅测试/说明，以 `c499da519b8c12b74120b9f588feef133ee23063` 保留原 UI/账号/Settings/侧栏/全局 CSS、正式资产、SDK、旧发行包、映射与用户服务，不声称全部等于最初 `776484c57`，不碰 primary 的人类工作。以下编译窗口和 Source 章节为各自历史范围。
