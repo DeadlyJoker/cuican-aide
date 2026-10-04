@@ -1,6 +1,7 @@
 import {
   parseProjectGenerationUiActionRequest,
   parseProjectGenerationUiActionResponse,
+  parsePluginUiJsonValue,
 } from "@crewon/contracts/plugins";
 import {
   assertProjectGenerationExecutionPublication,
@@ -23,7 +24,7 @@ import type { PluginUiActionContext } from "./plugin-ui-ports.ts";
 import type { RunStore } from "./run-store-port.ts";
 import {
   assertSavedPluginTask,
-  pluginTaskReceipt,
+  resolvePluginTaskReceipt,
 } from "./extension-plugin-task-support.ts";
 import {
   checkedCreativeProject,
@@ -38,10 +39,7 @@ import {
   committedTaskProjection,
   assertCommittedRun,
 } from "./plugin-ui-committed-task-support.ts";
-import {
-  projectGenerationTaskReceipt,
-  projectGenerationUiTaskCommand,
-} from "./project-generation-task-receipt.ts";
+import { projectGenerationUiTaskCommand } from "./project-generation-task-receipt.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 
 export type CommittedProjectGenerationConfiguration = Readonly<{
@@ -80,11 +78,18 @@ export function prepareCommittedProjectGenerations(
   const loadLink = captureMethod(extensions, "loadProjectGenerationLink")!;
   const loadReceipt = captureMethod(extensions, "loadExtensionTurnReceipt");
   const loadAdmission = captureMethod(extensions, "loadPluginTaskAdmission")!;
+  const loadAdmissionByReceipt = captureOptionalMethod(
+    extensions,
+    "loadPluginTaskAdmissionByReceipt",
+  );
   const loadRun = captureMethod(dependencies.runs, "loadRunInSpace");
   const sha256 = captureMethod(dependencies.digester, "sha256");
   const digester = Object.freeze({ sha256 });
   const admissions = Object.freeze({
     loadPluginTaskAdmission: loadAdmission,
+    ...(loadAdmissionByReceipt === undefined
+      ? {}
+      : { loadPluginTaskAdmissionByReceipt: loadAdmissionByReceipt }),
   });
 
   return Object.freeze({
@@ -150,13 +155,26 @@ export function prepareCommittedProjectGenerations(
         extensionCanonicalJson(expectedCommand)
       )
         throw new Error("plugin_ui_project_generation_command_mismatch");
-      const receipt = projectGenerationTaskReceipt(
-        pluginTaskReceipt(context.actor, command, executionPin, digester),
-        request.input.reference,
+      // The original opaque transaction result must be detached before the new
+      // historical lookup awaits; later caller mutation cannot replace COMMIT.
+      const claimedInput = parsePluginUiJsonValue(value.result);
+      uiRecord(claimedInput, [
+        "schemaVersion",
+        "turn",
+        "run",
+        "binding",
+        "creditAdmission",
+      ]);
+      const { receipt, receiptPin } = await resolvePluginTaskReceipt({
+        store: admissions,
+        actor: context.actor,
+        command,
+        pin: executionPin,
         digester,
-      );
+        projectGeneration: request.input.reference,
+      });
       const claimed = committedTaskResult(
-        value.result as CommitExtensionTurnResult,
+        claimedInput as unknown as CommitExtensionTurnResult,
         command,
         executionPin,
         receipt,
@@ -180,7 +198,7 @@ export function prepareCommittedProjectGenerations(
         throw new Error("plugin_ui_committed_receipt_mismatch");
       await assertSavedPluginTask({
         store: admissions,
-        pin: executionPin,
+        pin: receiptPin,
         binding: saved.binding,
         threadId: command.threadId,
         receipt,
@@ -289,6 +307,16 @@ function captureMethod<T extends object, K extends keyof T>(
   owner: T,
   key: K,
 ): T[K] {
+  const method = captureOptionalMethod(owner, key);
+  if (method === undefined)
+    throw new Error("plugin_ui_project_generation_read_adapter_missing");
+  return method;
+}
+
+function captureOptionalMethod<T extends object, K extends keyof T>(
+  owner: T,
+  key: K,
+): T[K] | undefined {
   for (
     let target: object | null = owner;
     target !== null;
@@ -296,9 +324,11 @@ function captureMethod<T extends object, K extends keyof T>(
   ) {
     const field = Object.getOwnPropertyDescriptor(target, key);
     if (field === undefined) continue;
+    if (Object.hasOwn(field, "value") && field.value === undefined)
+      return undefined;
     if (!Object.hasOwn(field, "value") || typeof field.value !== "function")
       throw new Error("plugin_ui_project_generation_read_adapter_invalid");
     return field.value.bind(owner) as T[K];
   }
-  throw new Error("plugin_ui_project_generation_read_adapter_missing");
+  return undefined;
 }

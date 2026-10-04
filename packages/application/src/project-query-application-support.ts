@@ -2,6 +2,10 @@ import {
   assertProjectQueryReplay,
   extensionCanonicalJson,
   parseProjectQueryReference,
+  parseProjectQueryLink,
+  parsePluginTaskAdmissionPin,
+  type PluginQueryTaskAdmission,
+  type ProjectQueryLink,
   type ExtensionRunBinding,
   type ProjectGenerationLink,
   type ProjectQueryReference,
@@ -38,6 +42,8 @@ import {
 } from "./project-query-execution-authority.ts";
 import { projectQueryTaskReceipt } from "./project-query-task-receipt.ts";
 import type { PluginQuerySource } from "./plugin-query-source.ts";
+import type { ContentDigester } from "./application-runtime-ports.ts";
+import { queryAdmissionPin } from "./plugin-query-task-support.ts";
 
 export type CapturedProjectQueryTask = Readonly<{
   reference: ProjectQueryReference;
@@ -237,6 +243,7 @@ export async function prepareProjectQueryTask(
     async assertSaved(
       binding: ExtensionRunBinding,
       receipt: ExtensionMutationReceipt,
+      historicalAdmission: PluginQueryTaskAdmission | null = null,
     ) {
       const saved = await loadQuery({
         tenantId: actor.tenantId,
@@ -245,7 +252,13 @@ export async function prepareProjectQueryTask(
       });
       if (saved === null)
         throw new ApplicationError("internal", "project_query_link_missing");
-      creativeStored(() =>
+      creativeStored(() => {
+        const publication = projectQueryReplayPublication({
+          link: saved,
+          current: captured.publication,
+          historicalAdmission,
+          digester: d.digester,
+        });
         assertProjectQueryReplay(
           {
             link: saved,
@@ -254,12 +267,57 @@ export async function prepareProjectQueryTask(
             actor,
             binding,
             receipt,
-            ...captured.publication,
+            ...publication,
           },
           d.digester,
-        ),
-      );
+        );
+      });
     },
+  });
+}
+
+/** Only a verified receipt admission permits historical epochs from the actual saved link. */
+export function projectQueryReplayPublication(
+  input: Readonly<{
+    link: ProjectQueryLink;
+    current: ProjectQueryExecutionPublication;
+    historicalAdmission: PluginQueryTaskAdmission | null;
+    digester: ContentDigester;
+  }>,
+): ProjectQueryExecutionPublication {
+  const current = captureProjectQueryExecutionPublication(input.current);
+  if (input.historicalAdmission === null) return current;
+  const link = parseProjectQueryLink(input.link, input.digester);
+  const admission = input.historicalAdmission;
+  const sourcePin = parsePluginTaskAdmissionPin({
+    ...current.sourcePin,
+    authorityEpoch: link.sourcePin.authorityEpoch,
+  });
+  const executionPin = parsePluginTaskAdmissionPin({
+    ...current.executionPin,
+    authorityEpoch: link.executionPin.authorityEpoch,
+  });
+  if (
+    extensionCanonicalJson(sourcePin) !==
+      extensionCanonicalJson(link.sourcePin) ||
+    extensionCanonicalJson(executionPin) !==
+      extensionCanonicalJson(link.executionPin) ||
+    extensionCanonicalJson(queryAdmissionPin(admission)) !==
+      extensionCanonicalJson(link.executionPin) ||
+    extensionCanonicalJson(current.publication) !==
+      extensionCanonicalJson(link.publication) ||
+    admission.runId !== link.binding.runId ||
+    admission.threadId !== link.binding.threadId ||
+    admission.extensionBindingDigest !== link.binding.bindingDigest ||
+    admission.operationId !== link.operationId ||
+    admission.idempotencyKey !== link.receipt.idempotencyKey ||
+    admission.requestDigest !== link.receipt.requestDigest
+  )
+    throw new ApplicationError("conflict", "project_query_replay_mismatch");
+  return Object.freeze({
+    publication: current.publication,
+    sourcePin,
+    executionPin,
   });
 }
 

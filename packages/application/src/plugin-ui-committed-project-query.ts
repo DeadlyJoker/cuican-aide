@@ -44,12 +44,11 @@ import {
 import { loadPluginQuerySourceProof } from "./plugin-query-source.ts";
 import {
   assertSavedPluginQueryTask,
-  pluginQueryTaskReceipt,
+  capturePluginQueryReceiptLookup,
+  resolvePluginQueryTaskReceipt,
 } from "./plugin-query-task-support.ts";
-import {
-  projectGenerationQueryUiTaskCommand,
-  projectQueryTaskReceipt,
-} from "./project-query-task-receipt.ts";
+import { projectGenerationQueryUiTaskCommand } from "./project-query-task-receipt.ts";
+import { projectQueryReplayPublication } from "./project-query-application-support.ts";
 
 export type CommittedProjectQueryConfiguration = Readonly<{
   publications: readonly ProjectQueryPublication[];
@@ -96,6 +95,7 @@ export function prepareCommittedProjectQueries(
   });
   const admissions = Object.freeze({
     loadPluginQueryTaskAdmission: method(store, "loadPluginQueryTaskAdmission"),
+    ...capturePluginQueryReceiptLookup(store),
   });
   const loadQuery = method(store, "loadProjectQueryLink"),
     loadGeneration = method(store, "loadProjectGenerationLinkBySource"),
@@ -232,20 +232,19 @@ export function prepareCommittedProjectQueries(
         configuration.pluginVersion !== source.admission.version
       )
         throw new Error("plugin_query_source_configuration_mismatch");
-      const receipt = projectQueryTaskReceipt(
-        pluginQueryTaskReceipt(
-          context.actor,
-          command,
-          executionPin,
-          source,
-          digester,
-        ),
-        {
+      const resolvedReceipt = await resolvePluginQueryTaskReceipt({
+        store: admissions,
+        actor: context.actor,
+        command,
+        pin: executionPin,
+        source,
+        digester,
+        project: {
           reference: request.input.reference,
           generationLinkDigest: generation.contentDigest,
         },
-        digester,
-      );
+      });
+      const receipt = resolvedReceipt.receipt;
       const claimed = committedTaskResult(
         claim,
         command,
@@ -272,7 +271,7 @@ export function prepareCommittedProjectQueries(
         throw new Error("plugin_ui_committed_receipt_mismatch");
       await assertSavedPluginQueryTask({
         store: admissions,
-        pin: executionPin,
+        pin: resolvedReceipt.receiptPin,
         source,
         binding: saved.binding,
         receipt,
@@ -286,6 +285,12 @@ export function prepareCommittedProjectQueries(
       if (linkRaw === null)
         throw new Error("plugin_ui_project_query_link_missing");
       const link = parseProjectQueryLink(linkRaw, digester);
+      const historicalPublication = projectQueryReplayPublication({
+        link,
+        current: { publication, sourcePin, executionPin },
+        historicalAdmission: resolvedReceipt.historicalAdmission,
+        digester,
+      });
       assertProjectQueryReplay(
         {
           link,
@@ -294,9 +299,7 @@ export function prepareCommittedProjectQueries(
           actor: context.actor,
           binding: saved.binding,
           receipt,
-          publication,
-          sourcePin,
-          executionPin,
+          ...historicalPublication,
         },
         digester,
       );
@@ -308,9 +311,7 @@ export function prepareCommittedProjectQueries(
           queryAdmission: query,
           binding: saved.binding,
           receipt,
-          publication,
-          sourcePin,
-          executionPin,
+          ...historicalPublication,
           at: link.createdAt,
         },
         digester,

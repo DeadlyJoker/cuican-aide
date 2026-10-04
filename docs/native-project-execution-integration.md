@@ -1,6 +1,6 @@
 # Native 项目生成、查询与恢复装配
 
-状态：ACTIVE。本文记录增量接线，不表示完整短剧在线流程、真实收费或打包 App 已交付。原首页、用户栏、设置、侧栏和公共样式保持。
+状态：ACTIVE。实际 Native Source Supervisor 三次启动已验证生成、查询的原回执跨 epoch 重放和三类 journal 恢复；不表示完整短剧在线流程、真实收费或打包 App 已交付。原首页、用户栏、设置、侧栏和公共样式保持。
 
 ## 批准数据与执行权限
 
@@ -28,12 +28,26 @@ Main 在创建 Artifact、数据库和 registry 之前加载实际私有 bootstr
 
 生成由原 Application 创建 Turn/Run 并完成个人积分事务；查询创建独立 Turn/Run，复用原付费来源，不新增报价或积分预留。查询仍是显式操作；恢复日志不自动重新生成、不重新报价、不更换原 key/input/CAS。`createThread` 仍不属于三类恢复协议。
 
+Native 调用将 recovery 请求范围放在外层，把实际执行、历史读取或选用请求范围放在内层。这样实际准备好的 execution 状态不会被 recovery 的 configuration metadata 状态遮蔽。内层接收外层实际 `currentSignal`，继续受到原 HTTP、request owner 和 recovery 生命周期取消约束；关闭仍等待物理调用及确认事务结束。这个顺序不放宽 request-owner guard，也不增加已验证 COMMIT 后的当前权限检查。
+
+## 原回执跨 epoch 重放
+
+生成沿原 task v1 摘要和项目 reference wrapper 计算最终回执。查历史前捕获 actor、完整 pin、command、项目 reference 与真实 digester receiver；通过原精确存量主键及完整作用域取得实际 admission，仅恢复其已保存 execution `authorityEpoch`，再核验完整 pin、原 command 和最终 wrapper 摘要。每个候选回执只包装一层，不能拿未包装的普通任务摘要替代项目回执。
+
+查询使用独立可选的 `loadPluginQueryTaskAdmissionByReceipt`，不借用生成准入。实际 SQLite/PostgreSQL adapter 先按原 task receipt 主键读取并核验完整查询 Turn、query admission、binding、原付费来源 admission/Turn/积分准入/预留和原 operation 记录；只在精确 key 不存在时返回空，损坏或错域的历史证明不能伪装为空后新建任务。Application 再核验原 source、operation、完整执行 pin 和原查询 wrapper 摘要。
+
+项目查询还必须读取实际不可变 query link。已验证历史 admission 的执行 pin、Run、Thread、binding、operation、原 key 和摘要均与该 link 相同后，才允许从它恢复 source 与 execution 两个已保存 epoch。两个 pin 的其余字段、publication、保存 reference、原输入和旧 Thread CAS 保持精确；只有当前 epoch 变化不能产生新业务身份。没有可选历史 reader 的旧 adapter 保留严格 epoch 匹配，不获得跨 epoch 恢复能力。
+
+历史证明不授予当前权限。生成和查询仍核验当前 actor/profile、包/贡献/动作、selection revision、原安装/执行 owner 与项目、任务、Thread、Run PDP；新 epoch 下撤权仍拒绝原键重放。成功回放返回原 Turn/Run、报价、积分和链接，不重复报价、预留或改写历史 pin。
+
 ## 验证范围与后续
 
-统一证据为 `output/extensions/checks/native-project-execution-proof-20261004.json`。实际测试、文件摘要、首次失败及修复后结果以该证据及其日志为准；组间重叠，不累加。
+前一装配阶段的基线为 `ee2fc065e`，证据为 `output/extensions/checks/native-project-execution-proof-20261004.json`。本轮跨 epoch 证据归档路径为 `output/extensions/checks/native-project-epoch-proof-20261004.json`；实际测试、文件摘要、首次失败及修复后结果以对应证据及其日志为准，分组重叠、不累加。
 
-本阶段验证严格契约、实际私有文件签发与加载、Native 实际装配、原 Main 和 Source Supervisor 兼容。测试中的身份、PDP、peer readiness、执行目标和历史数据是明确具名夹具，不能扩大为真实用户收费、供应商或模型执行验收。
+实际 Source Supervisor 集成 **1/1、零跳过**通过。用原 release CLI、Worker/Main 子进程、实际 FileIssued 私有 v3 文件、HTTP/ControlClient 和同一文件 SQLite 启动并物理停止三次，真实轮换 session/CSRF、bootstrap/task epoch 和 activation digest；旧 token 与 mountRef 拒绝。第一轮保存项目和概念图，当前任务 PDP 拒绝时没有新 Run、积分副作用或报价；允许后原生成提交仅产生一次 30 积分报价和预留，钱包初始 100 积分是明确具名测试资金，Worker 实际执行授权仍被拒绝。
 
-下一步必须真实轮换 Source Supervisor 的 session/bootstrap epoch 后，生成和查询仍用原 key/input/旧 CAS 返回原回执。当前普通任务的历史 epoch 恢复已经实现；项目生成的 wrapper 回执及查询的 source/execution 双 pin 仍需分别处理，不能固定 epoch 或放宽完整 pin、价格、项目 reference 和当前 PDP 来通过验收。
+第一轮所有进程物理停止后，测试才通过原 Run reducer 将来源 Run 从 queued 推进为 running，并预留具名 operation 记录，作为查询历史夹具；它不是 Worker、模型或供应商完成证明。第二轮原生成 key/input/旧 CAS 返回原回执，原不可变业务记录、wallet 和报价次数保持；随后显式查询创建一个独立 Turn/Run，不增加生成 admission、报价、积分预留或流水。Worker 同样拒绝执行，查询 Run 通过原客户端显式取消。第三轮三类 journal 的原请求与回执完整恢复，原查询 key/input/旧 CAS 返回原回执，当前 PDP 拒绝仍有效；选用只保持 prepared、派发次数 0、回执为空，没有提交图片选用。
+
+最终 Application 专项与原兼容组合 **117/117**、实际 SQLite 与自持 PostgreSQL 18 专项 **106/106**、Control runtime 与实际 Native Main 组合 **68/68**、原及新增 Source/activation/IO 组合 **32/32**均通过、零跳过；上述三 epoch 专项包含在 Source 组合内，各组重叠、不累加。Application、Store、Control、Host 类型及 boundary/license 检查通过。自持 PostgreSQL 的所有测试消费者结束后已停止并物理 join、清理。测试中的身份、PDP、peer readiness、执行目标、100/30 积分和 operation 是明确具名夹具；这些结果不是 renderer、真实用户收费、供应商或模型执行验收。
 
 完整目标还要求 Native Worker 实际执行、可用 ComfyUI 的同次完整 App 保存→生成→显式查询→图片选用→重启恢复、真实个人钱包/价格/结算、编译后的 Electron 完整链路及 E5 第二个真实企业 API。原用户配置、安装选择、生产映射、SDK 和已发行插件包没有在本阶段更新。

@@ -34,6 +34,10 @@ import {
 } from "./desktopInstalledPluginRuntime.activation.process.test-support.ts";
 import { parseDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 import {
+  prepareNativeTaskProjectApproval,
+  retainNativeProjectUiSource,
+} from "./desktopInstalledPluginRuntime.projects.process.test-support.ts";
+import {
   nativeProcessHttp,
   type NativeInstalledProcessFixtureOptions,
 } from "./desktopInstalledPluginRuntime.process.test-support.ts";
@@ -88,12 +92,18 @@ export type NativeTaskProcessLive = Readonly<{
  * never granted. This fixture proves admission and replay, not paid completion or
  * the compiled Electron renderer. Retained package bytes are only verified/copied. */
 export async function nativeTaskProcessFixture(
-  input: Readonly<{ professionalDirectory: string; kreaDirectory: string }>,
-  options: NativeInstalledProcessFixtureOptions = {},
+  input: Readonly<{
+    professionalDirectory: string;
+    kreaDirectory: string;
+    projectUiDirectory?: string;
+  }>,
+  options: NativeInstalledProcessFixtureOptions &
+    Readonly<{ scenario?: "ordinary-task" | "project-recovery" }> = {},
 ) {
+  const { scenario = "ordinary-task", ...nativeOptions } = options;
   const f = await nativeActivationProcessFixture(
     { ...input, network: "public" },
-    { authorityRequestAuditLimit: 2048, ...options },
+    { authorityRequestAuditLimit: 2048, ...nativeOptions },
   );
   let authorities:
     | Awaited<ReturnType<typeof createNativeTaskMainAuthorities>>
@@ -112,6 +122,11 @@ export async function nativeTaskProcessFixture(
     );
     assert.ok(approvedSource);
     const source = approvedSource;
+    const executionSource =
+      scenario === "ordinary-task"
+        ? source
+        : f.sources.find(({ pluginId }) => pluginId === "crewon.comfyui-krea2");
+    assert.ok(executionSource);
     const verified = await verifyLocalPluginPackage({
       directory: source.directory,
     });
@@ -122,10 +137,17 @@ export async function nativeTaskProcessFixture(
       verified.descriptor.contributions.some(({ id }) => id === "studio"),
     );
     assert.ok(verified.descriptor.businessManifestPath);
+    const executionPackage = await verifyLocalPluginPackage({
+      directory: executionSource.directory,
+    });
+    assert.ok(executionPackage.descriptor.businessManifestPath);
     const manifest = parseExtensionManifest(
       JSON.parse(
         await readFile(
-          join(source.directory, verified.descriptor.businessManifestPath),
+          join(
+            executionSource.directory,
+            executionPackage.descriptor.businessManifestPath,
+          ),
           "utf8",
         ),
       ),
@@ -135,8 +157,30 @@ export async function nativeTaskProcessFixture(
     assert.equal((await selected.json()).mutation.selection.revision, 2);
     const activated = await businessActivate(f, professional);
     assert.equal(activated.status, 200, await activated.clone().text());
+    if (scenario === "project-recovery") {
+      const executionSelected = await moduleEnable(f, executionSource.pluginId);
+      assert.equal(
+        executionSelected.status,
+        200,
+        await executionSelected.clone().text(),
+      );
+      assert.equal(
+        (await executionSelected.json()).mutation.selection.revision,
+        2,
+      );
+      const executionActivated = await businessActivate(
+        f,
+        executionSource.pluginId,
+      );
+      assert.equal(
+        executionActivated.status,
+        200,
+        await executionActivated.clone().text(),
+      );
+    }
     const entry = f.preparation.document.entries.find(
-      ({ packageIdentity }) => packageIdentity.pluginId === professional,
+      ({ packageIdentity }) =>
+        packageIdentity.pluginId === executionSource.pluginId,
     );
     assert.ok(entry);
     const scope = await f.currentProfile();
@@ -176,11 +220,42 @@ export async function nativeTaskProcessFixture(
     } finally {
       await funding.close();
     }
+    const uiSource =
+      scenario === "project-recovery"
+        ? await retainNativeProjectUiSource({
+            directory: f.directory,
+            dataDirectory: f.dataDirectory,
+            packageDirectory: input.projectUiDirectory!,
+          })
+        : source;
+    if (uiSource !== source) f.sources.push(uiSource);
+    const projects =
+      scenario === "project-recovery"
+        ? await prepareNativeTaskProjectApproval({
+            dataDirectory: f.dataDirectory,
+            source: uiSource,
+            target: executionSource,
+            configuration: entry.configuration,
+          })
+        : undefined;
+    if (projects) f.authority.expectProjectExecutionApproval();
     authorities = await createNativeTaskMainAuthorities({
       actor,
       scope,
       entry: catalog.entries[0]!,
       poolId: creditScope.poolId,
+      ...(scenario === "ordinary-task"
+        ? {}
+        : {
+            additionalPackages: [
+              {
+                pluginId: uiSource.pluginId,
+                publisherId: uiSource.publisherId,
+                version: uiSource.version,
+                packageDigest: uiSource.packageDigest,
+              },
+            ],
+          }),
     });
     const taskAuthorities = authorities;
     const endpoint = (path: string, name: (typeof tokenNames)[number]) => ({
@@ -190,10 +265,19 @@ export async function nativeTaskProcessFixture(
     const settings: DesktopInstalledPluginTaskExecutionSettings = {
       uiPublications: [
         {
-          pluginId: source.pluginId,
-          packageDigest: source.packageDigest,
-          contributionId: "studio",
+          pluginId: uiSource.pluginId,
+          packageDigest: uiSource.packageDigest,
+          contributionId: scenario === "ordinary-task" ? "studio" : "workbench",
         },
+        ...(scenario === "ordinary-task"
+          ? []
+          : [
+              {
+                pluginId: executionSource.pluginId,
+                packageDigest: executionSource.packageDigest,
+                contributionId: "studio",
+              },
+            ]),
       ],
       taskPolicyAuthority: endpoint("tasks", "TEST_NATIVE_TASK_POLICY_TOKEN"),
       uiPolicyAuthority: endpoint("ui", "TEST_NATIVE_UI_POLICY_TOKEN"),
@@ -327,9 +411,10 @@ export async function nativeTaskProcessFixture(
           observations: children,
           mount: () =>
             client.plugins.openMount({
-              pluginId: source.pluginId,
-              contributionId: "studio",
-              expectedPackageDigest: source.packageDigest,
+              pluginId: uiSource.pluginId,
+              contributionId:
+                scenario === "ordinary-task" ? "studio" : "workbench",
+              expectedPackageDigest: uiSource.packageDigest,
               expectedSelectionRevision: 2,
             }),
           async stop() {
@@ -403,7 +488,7 @@ export async function nativeTaskProcessFixture(
       });
     }
     const readTask = (current: NativeTaskProcessLive, runId: string) =>
-      current.client.getExtensionTask(source.pluginId, runId);
+      current.client.getExtensionTask(executionSource.pluginId, runId);
     async function waitWorkerExecutionDenied(
       runId: string,
       waitOptions: Readonly<{ timeoutMs?: number }> = {},
@@ -505,7 +590,9 @@ export async function nativeTaskProcessFixture(
       fixedPath: f.fixedPath,
       actor,
       scope,
-      source,
+      source: uiSource,
+      executionSource,
+      projects,
       creditScope,
       settings,
       configuration: v4,

@@ -19,6 +19,7 @@ import type { IsolationFixture } from "./desktopInstalledPluginRuntime.fault-iso
 import {
   DESKTOP_PLUGIN_APPROVAL_FILE,
   DESKTOP_PLUGIN_APPROVAL_SCHEMA,
+  DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3,
 } from "./desktopPluginBootstrap.ts";
 import { DESKTOP_RUNTIME_OWNER as actor } from "./desktopExtensionRuntime.ts";
 
@@ -42,6 +43,17 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
   let activationAllowed = true,
     networkAllowed = true,
     packageAllowed = true;
+  let historicalObservation:
+    | Readonly<{
+        pluginId: string;
+        publisherId: string;
+        version: string;
+        packageDigest: string;
+      }>
+    | undefined;
+  let approvalSchema:
+    | typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA
+    | typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 = DESKTOP_PLUGIN_APPROVAL_SCHEMA;
   async function packageFacts(identity: unknown, scope: unknown) {
     const current = await f.currentProfile();
     if (!current || !same(current, scope)) return false;
@@ -52,7 +64,7 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
     assert.equal(privateFile.mode & 0o777, 0o600);
     assert.equal(privateFile.nlink, 1);
     const approval = JSON.parse(await readFile(approvalPath, "utf8"));
-    assert.equal(approval.schemaVersion, DESKTOP_PLUGIN_APPROVAL_SCHEMA);
+    assert.equal(approval.schemaVersion, approvalSchema);
     const source = f.sources.find(
       ({ sourceId: _id, directory: _directory, ...tuple }) =>
         same(tuple, identity),
@@ -192,7 +204,12 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
             body.schemaVersion,
             "crewon.plugin-execution-package.v1",
           );
-          assert.ok(body.purpose === "read" || body.purpose === "submit");
+          assert.ok(
+            body.purpose === "read" ||
+              body.purpose === "submit" ||
+              (body.purpose === "observe" &&
+                same(body.identity, historicalObservation)),
+          );
           result = {
             outcome:
               packageAllowed && (await packageFacts(body.identity, body.scope))
@@ -217,7 +234,11 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
             "scope",
             "target",
           ]);
-          assert.equal(metadata.purpose, "submit");
+          assert.ok(
+            metadata.purpose === "submit" ||
+              (metadata.purpose === "observe" &&
+                same(metadata.identity, historicalObservation)),
+          );
           const identity = metadata.identity as { pluginId: string };
           result =
             networkAllowed &&
@@ -225,7 +246,9 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
               ? {
                   baseUrlParameter: "baseUrl",
                   paths: [
-                    { method: "POST", path: "/prompt" },
+                    ...(metadata.purpose === "submit"
+                      ? [{ method: "POST", path: "/prompt" }]
+                      : []),
                     { method: "GET", operationPathPrefix: "/history/" },
                     { method: "GET", path: "/queue" },
                   ],
@@ -317,6 +340,23 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
   return {
     origin: `https://localhost:${address.port}`,
     requests,
+    expectProjectExecutionApproval() {
+      assert.equal(approvalSchema, DESKTOP_PLUGIN_APPROVAL_SCHEMA);
+      approvalSchema = DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3;
+    },
+    allowNamedHistoricalQueryObservation(
+      identity: NonNullable<typeof historicalObservation>,
+    ) {
+      assert.equal(approvalSchema, DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3);
+      assert.equal(historicalObservation, undefined);
+      assert.ok(
+        f.sources.some(
+          ({ sourceId: _source, directory: _directory, ...tuple }) =>
+            same(tuple, identity),
+        ),
+      );
+      historicalObservation = Object.freeze({ ...identity });
+    },
     denyActivation: () => {
       activationAllowed = false;
     },

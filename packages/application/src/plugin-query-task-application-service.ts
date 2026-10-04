@@ -35,7 +35,8 @@ import {
 } from "./plugin-query-source.ts";
 import {
   assertSavedPluginQueryTask,
-  pluginQueryTaskReceipt,
+  capturePluginQueryReceiptLookup,
+  resolvePluginQueryTaskReceipt,
 } from "./plugin-query-task-support.ts";
 import {
   capturePublishedProjectQueryTask,
@@ -119,6 +120,7 @@ export class PluginQueryTaskApplicationService {
       });
       const d = this.#dependencies,
         host: PluginQueryHostPort | undefined = d.pluginQueryHost;
+      const receiptStore = capturePluginQueryReceiptLookup(d.extensions);
       if (
         d.extensions.pluginQueryAdmissionVersion !==
           "crewon.plugin-query-task-admission.v1" ||
@@ -157,15 +159,16 @@ export class PluginQueryTaskApplicationService {
       };
       const source = await loadPluginQuerySource(sourceInput);
       project?.assertSource(source);
-      const baseReceipt = pluginQueryTaskReceipt(
+      const resolvedReceipt = await resolvePluginQueryTaskReceipt({
+        store: receiptStore,
         actor,
         command,
         pin,
         source,
-        d.digester,
-      );
-      const receipt =
-        project === null ? baseReceipt : project.receipt(baseReceipt);
+        digester: d.digester,
+        ...(project === null ? {} : { project: project.sidecar }),
+      });
+      const receipt = resolvedReceipt.receipt;
       const previous = await d.extensions.loadExtensionTurnReceipt({
         ...scope,
         receipt,
@@ -173,7 +176,7 @@ export class PluginQueryTaskApplicationService {
       if (previous !== null) {
         await assertSavedPluginQueryTask({
           store: d.extensions,
-          pin,
+          pin: resolvedReceipt.receiptPin,
           source,
           binding: previous.binding,
           receipt,
@@ -182,7 +185,11 @@ export class PluginQueryTaskApplicationService {
         await authorize();
         await this.#authorizeThread(actor, command.threadId);
         await authority?.assertCurrent({ actor, pin });
-        await project?.assertSaved(previous.binding, receipt);
+        await project?.assertSaved(
+          previous.binding,
+          receipt,
+          resolvedReceipt.historicalAdmission,
+        );
         await project?.assertCurrent();
         return previous;
       }

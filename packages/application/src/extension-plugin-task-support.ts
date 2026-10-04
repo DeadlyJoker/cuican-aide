@@ -5,10 +5,12 @@ import {
   extensionOpaqueId,
   parsePluginTaskAdmissionPin,
   parsePluginTaskAdmission,
+  parseProjectGenerationReference,
   pluginInstallationOpaqueId,
   type PluginTaskAdmission,
   type PluginTaskAdmissionPin,
   type ExtensionRunBinding,
+  type ProjectGenerationReference,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
@@ -22,6 +24,7 @@ import type {
   ExtensionStore,
 } from "./extension-store-port.ts";
 import { extensionCommand } from "./extension-application-support.ts";
+import { projectGenerationTaskReceipt } from "./project-generation-task-receipt.ts";
 
 /** Trusted host callback, never a plugin or HTTP-supplied identity/permission claim. */
 export interface PluginTaskCommitAuthorityPort {
@@ -130,7 +133,8 @@ export function pluginTaskReceipt(
     ),
   });
 }
-/** Ordinary task replay keeps the original full-pin v1 digest and audit epoch.
+/** Replay keeps the original full-pin v1 digest and audit epoch, including the
+ * existing project-generation wrapper when a captured reference is supplied.
  * The current invocation remains independently authorized with its fresh pin. */
 export async function resolvePluginTaskReceipt(
   input: Readonly<{
@@ -139,6 +143,7 @@ export async function resolvePluginTaskReceipt(
     command: CreateExtensionTaskCommand;
     pin: PluginTaskAdmissionPin;
     digester: ContentDigester;
+    projectGeneration?: ProjectGenerationReference;
   }>,
 ): Promise<
   Readonly<{
@@ -151,10 +156,24 @@ export async function resolvePluginTaskReceipt(
   const command = JSON.parse(
     extensionCanonicalJson(input.command),
   ) as CreateExtensionTaskCommand;
-  const receipt = pluginTaskReceipt(actor, command, pin, input.digester);
-  const lookup = input.store.loadPluginTaskAdmissionByReceipt;
+  const reference =
+    input.projectGeneration === undefined
+      ? undefined
+      : parseProjectGenerationReference(input.projectGeneration);
+  const digester = Object.freeze({
+    sha256: input.digester.sha256.bind(input.digester),
+  });
+  const makeReceipt = (receiptPin: PluginTaskAdmissionPin) => {
+    const base = pluginTaskReceipt(actor, command, receiptPin, digester);
+    return reference === undefined
+      ? base
+      : projectGenerationTaskReceipt(base, reference, digester);
+  };
+  const receipt = makeReceipt(pin);
+  const store = input.store;
+  const lookup = store.loadPluginTaskAdmissionByReceipt;
   if (lookup === undefined) return { receipt, receiptPin: pin };
-  const saved = await lookup.call(input.store, {
+  const saved = await lookup.call(store, {
     tenantId: pin.tenantId,
     spaceId: pin.spaceId,
     profileId: pin.profileId,
@@ -187,12 +206,7 @@ export async function resolvePluginTaskReceipt(
     ...pin,
     authorityEpoch: previous.authorityEpoch,
   });
-  const historical = pluginTaskReceipt(
-    actor,
-    command,
-    receiptPin,
-    input.digester,
-  );
+  const historical = makeReceipt(receiptPin);
   if (
     extensionCanonicalJson(previousPin) !==
       extensionCanonicalJson(receiptPin) ||

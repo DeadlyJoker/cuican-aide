@@ -43,7 +43,8 @@ import {
 } from "@crewon/domain";
 import {
   assertSavedPluginQueryTask,
-  pluginQueryTaskReceipt,
+  capturePluginQueryReceiptLookup,
+  resolvePluginQueryTaskReceipt,
 } from "./plugin-query-task-support.ts";
 import {
   prepareCommittedProjectQueries,
@@ -365,6 +366,9 @@ export class PluginUiCommittedTaskAuthority
       const claim = parsePluginUiJsonValue(
         value.result,
       ) as unknown as CommitExtensionTurnResult;
+      const receiptStore = capturePluginQueryReceiptLookup(
+        this.#dependencies.extensions,
+      );
       const raw =
         await this.#dependencies.extensions.loadPluginQueryTaskAdmission?.({
           tenantId: pin.tenantId,
@@ -388,13 +392,14 @@ export class PluginUiCommittedTaskAuthority
         ),
         operationId: query.operationId,
       };
-      const receipt = pluginQueryTaskReceipt(
-        context.actor,
+      const { receipt, receiptPin } = await resolvePluginQueryTaskReceipt({
+        store: receiptStore,
+        actor: context.actor,
         command,
         pin,
         source,
-        this.#dependencies.digester,
-      );
+        digester: this.#dependencies.digester,
+      });
       const claimed = committedTaskResult(
         claim,
         command,
@@ -424,7 +429,7 @@ export class PluginUiCommittedTaskAuthority
         throw new Error("plugin_ui_committed_receipt_mismatch");
       await assertSavedPluginQueryTask({
         store: this.#dependencies.extensions,
-        pin,
+        pin: receiptPin,
         source,
         binding: saved.binding,
         receipt,

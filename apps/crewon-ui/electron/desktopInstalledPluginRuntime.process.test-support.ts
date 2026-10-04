@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   chmod,
   cp,
@@ -19,7 +20,11 @@ import { Writable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import { SqliteRunStore } from "@crewon/store";
-import { parsePluginProfileScope } from "@crewon/domain";
+import {
+  assertExtensionCreditAdmission,
+  parsePluginProfileScope,
+  type PluginTaskAdmission,
+} from "@crewon/domain";
 import { verifyLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-verifier.ts";
 import {
   TEST_CA_CERT,
@@ -146,6 +151,10 @@ export async function nativeInstalledProcessFixture(
   let denyPackages = false;
   let supplierRequests = 0;
   let modelRequests = 0;
+  const namedHistoricalReads = new Map<
+    string,
+    Readonly<{ admission: PluginTaskAdmission; threadId: string }>
+  >();
   const server = createServer(
     { key: TEST_SERVER_KEY, cert: TEST_SERVER_CERT, minVersion: "TLSv1.3" },
     (request, response) => {
@@ -224,7 +233,19 @@ export async function nativeInstalledProcessFixture(
                 allowed &&= sources.some(
                   (source) => source.pluginId === resource.pluginId,
                 );
-              else if (body.action === "agentVersion:read") {
+              else if (body.action === "extension:query")
+                allowed &&= [...namedHistoricalReads.values()].some(
+                  ({ admission }) =>
+                    admission.profileId === profile!.profileId &&
+                    admission.pluginId === resource.pluginId,
+                );
+              else if (body.action === "run:read") {
+                const grant = namedHistoricalReads.get(String(resource.runId));
+                allowed &&=
+                  grant !== undefined &&
+                  grant.admission.profileId === profile!.profileId &&
+                  grant.threadId === resource.threadId;
+              } else if (body.action === "agentVersion:read") {
                 const store = new SqliteRunStore(databasePath);
                 try {
                   allowed &&=
@@ -393,8 +414,71 @@ export async function nativeInstalledProcessFixture(
     logs,
     currentProfile,
     observations,
+    authorityFailures: () =>
+      failures.map((error) =>
+        error instanceof Error ? error.stack : String(error),
+      ),
     modelRequests: () => modelRequests,
     supplierRequests: () => supplierRequests,
+    /** Exact named paid history only; default fixtures retain no Run/query grant. */
+    async allowNamedHistoricalQueryRead(
+      input: Readonly<{ pluginId: string; runId: string }>,
+    ) {
+      assert.ok(
+        namedHistoricalReads.size < 8 && !namedHistoricalReads.has(input.runId),
+      );
+      const profile = await currentProfile();
+      assert.ok(profile);
+      const store = new SqliteRunStore(databasePath);
+      try {
+        const locator = {
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          runId: input.runId,
+        };
+        const extensions = store.extensionStore();
+        const admission = await extensions.loadPluginTaskAdmission(locator);
+        const binding = await extensions.loadExtensionRunBinding(locator);
+        assert.ok(admission && binding && binding.source === null);
+        assert.equal(admission.pluginId, input.pluginId);
+        assert.equal(admission.profileId, profile.profileId);
+        assert.equal(admission.principalId, actor.principalId);
+        assert.equal(admission.actorId, actor.actorId);
+        assert.ok(
+          sources.some(
+            (source) =>
+              source.pluginId === admission.pluginId &&
+              source.publisherId === admission.publisherId &&
+              source.version === admission.version &&
+              source.packageDigest === admission.packageDigest,
+          ),
+        );
+        const receipt = {
+          actorId: admission.actorId,
+          idempotencyKey: admission.idempotencyKey,
+          requestDigest: admission.requestDigest,
+        };
+        const saved = await extensions.loadExtensionTurnReceipt({
+          ...binding,
+          receipt,
+        });
+        assert.ok(saved?.creditAdmission);
+        const credit = assertExtensionCreditAdmission(
+          { admission: saved.creditAdmission, binding, receipt },
+          {
+            sha256: (value) =>
+              `sha256:${createHash("sha256").update(value).digest("hex")}`,
+          },
+        );
+        assert.equal(credit.reservation.scope.principalId, actor.principalId);
+        namedHistoricalReads.set(
+          input.runId,
+          Object.freeze({ admission, threadId: binding.threadId }),
+        );
+      } finally {
+        await store.close();
+      }
+    },
     denyPackages: () => {
       denyPackages = true;
     },

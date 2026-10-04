@@ -6,6 +6,7 @@ import {
 } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import type { Server } from "node:net";
+import { isDeepStrictEqual } from "node:util";
 import {
   INSTALLED_PLUGIN_PEER_PRIVATE_PATH,
   INSTALLED_PLUGIN_PEER_RESPONSE_PROTOCOL,
@@ -75,6 +76,10 @@ export async function createNativeTaskMainAuthorities(
     scope: InstalledPluginPeerScope;
     entry: InstalledPluginPeerCatalogEntry;
     poolId: string;
+    additionalPackages?: readonly Pick<
+      InstalledPluginPeerCatalogEntry["identity"],
+      "pluginId" | "publisherId" | "version" | "packageDigest"
+    >[];
   }>,
 ) {
   const state: NativeTaskMainAuthorityState = {
@@ -142,12 +147,18 @@ export async function createNativeTaskMainAuthorities(
             "crewon.plugin-execution-package.v1",
           );
           assert.deepEqual(body.scope, input.scope);
-          assert.deepEqual(body.identity, {
+          const targetIdentity = {
             pluginId: input.entry.identity.pluginId,
             publisherId: input.entry.identity.publisherId,
             version: input.entry.identity.version,
             packageDigest: input.entry.identity.packageDigest,
-          });
+          };
+          assert.ok(
+            [targetIdentity, ...(input.additionalPackages ?? [])].some(
+              (identity) => isDeepStrictEqual(body.identity, identity),
+            ),
+            "named_main_exact_package_not_approved",
+          );
           assert.ok(body.purpose === "read" || body.purpose === "submit");
         } else {
           assert.deepEqual(body.actor, input.actor);

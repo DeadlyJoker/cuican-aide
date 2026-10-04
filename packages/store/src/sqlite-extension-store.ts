@@ -71,7 +71,10 @@ import { migrateSqliteExternalOperations } from "./sqlite-external-operation-sto
 import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
 import { migrateSqlitePluginTaskAdmissions } from "./plugin-task-admission-schema.ts";
 import { migrateSqlitePluginQueryTasks } from "./plugin-query-task-schema.ts";
-import { loadSqlitePluginQuery } from "./plugin-query-task-store-support.ts";
+import {
+  loadSqlitePluginQuery,
+  loadSqlitePluginQueryByReceipt,
+} from "./plugin-query-task-store-support.ts";
 import {
   loadSqlitePluginTask,
   loadSqlitePluginTaskByReceipt,
@@ -251,6 +254,17 @@ export class SqliteExtensionStore implements ExtensionStore {
   async loadPluginQueryTaskAdmission(input: ExtensionRunLocator) {
     this.#host.assertOpen();
     return loadSqlitePluginQuery(this.#db, input);
+  }
+
+  async loadPluginQueryTaskAdmissionByReceipt(input: PluginTaskReceiptLocator) {
+    this.#host.assertOpen();
+    const admission = await loadSqlitePluginQueryByReceipt(
+      this.#db,
+      input,
+      this,
+    );
+    this.#host.assertOpen();
+    return admission;
   }
 
   async loadPluginTaskAdmission(input: ExtensionRunLocator) {

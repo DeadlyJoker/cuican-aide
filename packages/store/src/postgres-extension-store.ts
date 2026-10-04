@@ -55,7 +55,10 @@ import {
 import { migratePostgresPluginCredits } from "./plugin-credit-schema.ts";
 import { migratePostgresPluginTaskAdmissionsWithPool } from "./plugin-task-admission-schema.ts";
 import { migratePostgresPluginQueryTasks } from "./plugin-query-task-schema.ts";
-import { loadPostgresPluginQuery } from "./plugin-query-task-store-support.ts";
+import {
+  loadPostgresPluginQuery,
+  loadPostgresPluginQueryByReceipt,
+} from "./plugin-query-task-store-support.ts";
 import {
   loadPostgresPluginTask,
   loadPostgresPluginTaskByReceipt,
@@ -228,6 +231,18 @@ export class PostgresExtensionStore implements ExtensionStore {
     );
     this.#host.assertOpen();
     return value;
+  }
+
+  async loadPluginQueryTaskAdmissionByReceipt(input: PluginTaskReceiptLocator) {
+    this.#host.assertOpen();
+    const admission = await loadPostgresPluginQueryByReceipt(
+      this.#pool,
+      this.#schemaName,
+      input,
+      this,
+    );
+    this.#host.assertOpen();
+    return admission;
   }
 
   async loadPluginTaskAdmission(input: ExtensionRunLocator) {

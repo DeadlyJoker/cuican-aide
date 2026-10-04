@@ -152,6 +152,10 @@ export interface ExtensionStore {
   loadPluginTaskAdmissionByReceipt?(
     input: PluginTaskReceiptLocator,
   ): Promise<PluginTaskAdmission | null>;
+  /** Separate query evidence: validates the original paid source; never grants generation authority. */
+  loadPluginQueryTaskAdmissionByReceipt?(
+    input: PluginTaskReceiptLocator,
+  ): Promise<PluginQueryTaskAdmission | null>;
   saveExtensionConfiguration(
     input: SaveExtensionConfigurationInput,
   ): Promise<SaveExtensionConfigurationResult>;

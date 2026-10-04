@@ -486,76 +486,82 @@ export async function createDesktopPluginRuntime(
         : {
             invokeAuthenticatedRequest: ((request, actor, command, signal) => {
               available();
-              const invoke = () =>
-                recovery === undefined
-                  ? ui.invoke(actor, command)
-                  : recovery.run(request, actor, signal, () =>
-                      ui.invoke(actor, command),
+              const invoke = () => ui.invoke(actor, command);
+              const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (projectUi?.owner.supportsAction(command.action))
+                  return invoke();
+                if (
+                  command.action === "crewon.project-generations" ||
+                  command.action.startsWith("crewon.project-generations.") ||
+                  command.action === "crewon.project-generation-contexts" ||
+                  command.action.startsWith(
+                    "crewon.project-generation-contexts.",
+                  ) ||
+                  command.action === "crewon.project-generation-queries" ||
+                  command.action.startsWith(
+                    "crewon.project-generation-queries.",
+                  )
+                ) {
+                  if (taskRuntime === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "plugin_ui_actions_unavailable",
                     );
-              if (projectUi?.owner.supportsAction(command.action))
+                  return taskRuntime.core.requests.run(
+                    { request, actor, signal: requestSignal },
+                    invoke,
+                  );
+                }
+                if (
+                  command.action === "crewon.project-generation-reads" ||
+                  command.action.startsWith("crewon.project-generation-reads.")
+                ) {
+                  if (history?.readRuntime === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "plugin_ui_actions_unavailable",
+                    );
+                  return history.readRuntime.invokeAuthenticatedRequest(
+                    request,
+                    actor,
+                    command,
+                    requestSignal,
+                    invoke,
+                  );
+                }
+                if (
+                  command.action === "crewon.project-generation-selections" ||
+                  command.action.startsWith(
+                    "crewon.project-generation-selections.",
+                  )
+                ) {
+                  if (history?.selectionRuntime === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "plugin_ui_actions_unavailable",
+                    );
+                  return history.selectionRuntime.invokeAuthenticatedRequest(
+                    request,
+                    actor,
+                    command,
+                    requestSignal,
+                    invoke,
+                  );
+                }
+                if (taskRuntime !== undefined)
+                  return taskRuntime.core.requests.run(
+                    { request, actor, signal: requestSignal },
+                    invoke,
+                  );
                 return invoke();
-              if (
-                command.action === "crewon.project-generations" ||
-                command.action.startsWith("crewon.project-generations.") ||
-                command.action === "crewon.project-generation-contexts" ||
-                command.action.startsWith(
-                  "crewon.project-generation-contexts.",
-                ) ||
-                command.action === "crewon.project-generation-queries" ||
-                command.action.startsWith("crewon.project-generation-queries.")
-              ) {
-                if (taskRuntime === undefined)
-                  throw new ApplicationError(
-                    "conflict",
-                    "plugin_ui_actions_unavailable",
+              };
+              // Recovery owns the enclosing lifetime. The business request must remain
+              // innermost so its prepared execution state is not shadowed by metadata.
+              return recovery === undefined
+                ? dispatch(signal)
+                : recovery.run(request, actor, signal, () =>
+                    dispatch(configurationRuntime!.requests.currentSignal()),
                   );
-                return taskRuntime.core.requests.run(
-                  { request, actor, signal },
-                  invoke,
-                );
-              }
-              if (
-                command.action === "crewon.project-generation-reads" ||
-                command.action.startsWith("crewon.project-generation-reads.")
-              ) {
-                if (history?.readRuntime === undefined)
-                  throw new ApplicationError(
-                    "conflict",
-                    "plugin_ui_actions_unavailable",
-                  );
-                return history.readRuntime.invokeAuthenticatedRequest(
-                  request,
-                  actor,
-                  command,
-                  signal,
-                  invoke,
-                );
-              }
-              if (
-                command.action === "crewon.project-generation-selections" ||
-                command.action.startsWith(
-                  "crewon.project-generation-selections.",
-                )
-              ) {
-                if (history?.selectionRuntime === undefined)
-                  throw new ApplicationError(
-                    "conflict",
-                    "plugin_ui_actions_unavailable",
-                  );
-                return history.selectionRuntime.invokeAuthenticatedRequest(
-                  request,
-                  actor,
-                  command,
-                  signal,
-                  invoke,
-                );
-              }
-              if (taskRuntime !== undefined)
-                return taskRuntime.core.requests.run(
-                  { request, actor, signal },
-                  invoke,
-                );
-              return invoke();
             }) satisfies NonNullable<
               PluginUiControlService["invokeAuthenticatedRequest"]
             >,

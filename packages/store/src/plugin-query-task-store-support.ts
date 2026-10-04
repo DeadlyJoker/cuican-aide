@@ -4,16 +4,26 @@ import type {
   CommitExtensionTurnInput,
   ExtensionRunLocator,
   ExtensionMutationReceipt,
+  ExtensionStore,
+  PluginTaskReceiptLocator,
 } from "@crewon/application";
 import {
   assertPluginQueryTaskAdmission,
+  assertPluginTaskAdmission,
   extensionCanonicalJson,
   parseExtensionRunBinding,
   parsePluginQueryTaskAdmission,
   type PluginQueryTaskAdmission,
   type ExtensionRunBinding,
+  pluginInstallationOpaqueId,
+  pluginInstallationNamespaceId,
 } from "@crewon/domain";
-import { extensionStoreDigester } from "./extension-store-records.ts";
+import {
+  extensionStoreDigester,
+  parseExtensionTurnReceipt,
+  validateExtensionReceipt,
+} from "./extension-store-records.ts";
+import { parseExternalOperationQueryRecord } from "./external-operation-record.ts";
 import {
   admitSqlitePluginTask,
   admitPostgresPluginTask,
@@ -304,6 +314,232 @@ export async function loadPostgresPluginQuery(
   }
   return query;
 }
+
+type QuerySourceReceiptStore = Pick<ExtensionStore, "loadExtensionTurnReceipt">;
+const queryReceiptScopeFields = [
+  "tenantId",
+  "spaceId",
+  "profileId",
+  "pluginId",
+  "principalId",
+  "actorId",
+  "idempotencyKey",
+] as const;
+
+/** Historical query evidence is separate from ordinary paid generation admission. */
+export async function loadSqlitePluginQueryByReceipt(
+  db: DatabaseSync,
+  input: PluginTaskReceiptLocator,
+  sourceReceipts: QuerySourceReceiptStore,
+): Promise<PluginQueryTaskAdmission | null> {
+  const locator = captureQueryReceiptLocator(input);
+  const row = db
+    .prepare(queryReceiptSql("").replaceAll(/\$[1-5]/gu, "?"))
+    .get(...queryReceiptValues(locator));
+  if (row === undefined) return null;
+  const saved = parseQueryAdmissionReceipt(row, locator);
+  const query = checkedQueryReceiptAdmission(
+    locator,
+    saved,
+    loadSqlitePluginQuery(db, saved.binding),
+  );
+  await assertQuerySourceReceipt(query, sourceReceipts);
+  const operation = db
+    .prepare(
+      "SELECT record_json FROM extension_external_operations WHERE tenant_id=? AND run_id=? AND binding_digest=? AND operation_id=?",
+    )
+    .get(
+      query.source.tenantId,
+      query.source.runId,
+      query.source.extensionBindingDigest,
+      query.operationId,
+    );
+  assertQueryOperationRecord(query, operation);
+  return query;
+}
+
+export async function loadPostgresPluginQueryByReceipt(
+  client: Pool | PoolClient,
+  schema: string,
+  input: PluginTaskReceiptLocator,
+  sourceReceipts: QuerySourceReceiptStore,
+): Promise<PluginQueryTaskAdmission | null> {
+  // Caller-owned identity is captured before the first asynchronous SQL read.
+  const locator = captureQueryReceiptLocator(input);
+  const prefix = `${pluginInstallationSchemaName(schema)}.`;
+  const result = await client.query(
+    queryReceiptSql(prefix),
+    queryReceiptValues(locator),
+  );
+  if (result.rows.length === 0) return null;
+  if (result.rows.length !== 1)
+    throw new Error("plugin_query_admission_record_invalid");
+  const saved = parseQueryAdmissionReceipt(result.rows[0], locator);
+  const query = checkedQueryReceiptAdmission(
+    locator,
+    saved,
+    await loadPostgresPluginQuery(client, schema, saved.binding),
+  );
+  await assertQuerySourceReceipt(query, sourceReceipts);
+  const operation = await client.query(
+    `SELECT record_json FROM ${prefix}extension_external_operations WHERE tenant_id=$1 AND run_id=$2 AND binding_digest=$3 AND operation_id=$4`,
+    [
+      query.source.tenantId,
+      query.source.runId,
+      query.source.extensionBindingDigest,
+      query.operationId,
+    ],
+  );
+  if (operation.rows.length !== 1)
+    throw new Error("plugin_query_source_invalid");
+  assertQueryOperationRecord(query, operation.rows[0]);
+  return query;
+}
+
+function captureQueryReceiptLocator(
+  input: PluginTaskReceiptLocator,
+): PluginTaskReceiptLocator {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input))
+  )
+    throw new Error("plugin_installation_object_invalid");
+  const keys = Reflect.ownKeys(input);
+  if (
+    keys.length !== queryReceiptScopeFields.length ||
+    keys.some(
+      (key) =>
+        typeof key !== "string" ||
+        !queryReceiptScopeFields.includes(
+          key as (typeof queryReceiptScopeFields)[number],
+        ),
+    )
+  )
+    throw new Error("plugin_installation_fields_invalid");
+  const fields = Object.fromEntries(
+    queryReceiptScopeFields.map((name) => {
+      const descriptor = Object.getOwnPropertyDescriptor(input, name);
+      if (
+        !descriptor ||
+        !Object.hasOwn(descriptor, "value") ||
+        !descriptor.enumerable
+      )
+        throw new Error("plugin_installation_fields_invalid");
+      return [name, descriptor.value];
+    }),
+  );
+  return Object.freeze({
+    tenantId: pluginInstallationOpaqueId(fields.tenantId),
+    spaceId: pluginInstallationOpaqueId(fields.spaceId),
+    profileId: pluginInstallationOpaqueId(fields.profileId),
+    pluginId: pluginInstallationNamespaceId(fields.pluginId),
+    principalId: pluginInstallationOpaqueId(fields.principalId),
+    actorId: pluginInstallationOpaqueId(fields.actorId),
+    idempotencyKey: pluginInstallationOpaqueId(fields.idempotencyKey),
+  });
+}
+
+const queryReceiptSql = (prefix: string) =>
+  `SELECT request_digest,result_json FROM ${prefix}extension_mutation_receipts WHERE tenant_id=$1 AND space_id=$2 AND plugin_id=$3 AND kind='task' AND actor_id=$4 AND idempotency_key=$5`;
+const queryReceiptValues = (locator: PluginTaskReceiptLocator) => [
+  locator.tenantId,
+  locator.spaceId,
+  locator.pluginId,
+  locator.actorId,
+  locator.idempotencyKey,
+];
+
+function parseQueryAdmissionReceipt(
+  row: Record<string, unknown>,
+  locator: PluginTaskReceiptLocator,
+) {
+  const receipt = Object.freeze({
+    actorId: locator.actorId,
+    idempotencyKey: locator.idempotencyKey,
+    requestDigest: row.request_digest as string,
+  });
+  validateExtensionReceipt(receipt);
+  const saved = parseExtensionTurnReceipt(
+    json(row.result_json),
+    locator,
+    receipt,
+  );
+  if (saved.binding.source === null || saved.creditAdmission !== undefined)
+    throw new Error("plugin_query_admission_binding_mismatch");
+  return { ...saved, receipt };
+}
+
+function checkedQueryReceiptAdmission(
+  locator: PluginTaskReceiptLocator,
+  saved: ReturnType<typeof parseQueryAdmissionReceipt>,
+  query: PluginQueryTaskAdmission | null,
+): PluginQueryTaskAdmission {
+  if (query === null) throw new Error("plugin_query_admission_missing");
+  if (
+    queryReceiptScopeFields.some((name) => query[name] !== locator[name]) ||
+    query.runId !== saved.binding.runId ||
+    query.threadId !== saved.binding.threadId ||
+    query.extensionBindingDigest !== saved.binding.bindingDigest ||
+    query.requestDigest !== saved.receipt.requestDigest ||
+    query.source.runId !== saved.binding.source?.runId ||
+    query.source.extensionBindingDigest !==
+      saved.binding.source?.bindingDigest ||
+    query.operationId !== saved.binding.source?.operationId
+  )
+    throw new Error("plugin_query_admission_record_invalid");
+  return query;
+}
+
+async function assertQuerySourceReceipt(
+  query: PluginQueryTaskAdmission,
+  sourceReceipts: QuerySourceReceiptStore,
+): Promise<void> {
+  const source = query.source;
+  const receipt = {
+    actorId: source.actorId,
+    idempotencyKey: source.idempotencyKey,
+    requestDigest: source.requestDigest,
+  };
+  // The actual adapter's receipt read also verifies immutable credit admission
+  // and reservation records; the query itself never receives a second quote.
+  const saved = await sourceReceipts.loadExtensionTurnReceipt({
+    tenantId: source.tenantId,
+    spaceId: source.spaceId,
+    pluginId: source.pluginId,
+    receipt,
+  });
+  if (
+    saved === null ||
+    saved.binding.source !== null ||
+    saved.creditAdmission === undefined ||
+    saved.creditAdmission.reservation.scope.principalId !== source.principalId
+  )
+    throw new Error("plugin_query_source_invalid");
+  assertPluginTaskAdmission(
+    { admission: source, binding: saved.binding, receipt },
+    extensionStoreDigester,
+  );
+}
+
+function assertQueryOperationRecord(
+  query: PluginQueryTaskAdmission,
+  row: Record<string, unknown> | undefined,
+): void {
+  if (row === undefined) throw new Error("plugin_query_source_invalid");
+  parseExternalOperationQueryRecord({
+    record: json(row.record_json),
+    query: {
+      tenantId: query.source.tenantId,
+      runId: query.source.runId,
+      bindingDigest: query.source.extensionBindingDigest,
+      limit: 1,
+    },
+    operationId: query.operationId,
+  });
+}
+
 export function assertPluginQueryReplay(
   requested: PluginQueryTaskAdmission,
   saved: PluginQueryTaskAdmission | null,

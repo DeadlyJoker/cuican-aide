@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 生成、查询原回执跨真实 epoch 恢复
+
+基于已提交的 `ee2fc065e`，生成和查询已接通独立历史 receipt 证明。生成查精确存量 admission，仅恢复已保存 execution epoch，原 task v1 摘要及项目 reference wrapper 保持且只包装一层；查询的可选精确 receipt reader 核验实际 query Turn/admission/binding、原付费来源 Turn/admission/积分准入/预留及 operation，再通过实际不可变 query link 恢复 source/execution 两个历史 epoch。其余完整 pin、selection revision、publication、原 reference/input、旧 CAS 和当前 PDP 保持精确；旧 adapter 没有历史 reader 时仍严格匹配 epoch。原回执、报价、预留和历史链接不改写。协议见[Native 项目执行](./native-project-execution-integration.md)与[持久恢复](./plugin-ui-durable-recovery-protocol.md)。
+
+实际 Native Source Supervisor 专项 **1/1、零跳过**通过：保留的短剧 9.0.0 UI 与 Krea2 1.0.0 Node 实包经原 release CLI、实际 Worker/Main 子进程、FileIssued 私有 v3 文件、HTTP/ControlClient 和同一文件 SQLite 运行三次新 session/bootstrap/task epoch，并逐轮物理停止。第一轮实际保存项目和概念图；当前任务 PDP 拒绝时没有新 Run、积分副作用或报价，允许后原生成只产生一次 30 积分报价和预留，初始 100 积分是具名测试资金。Worker 执行授权实际被拒绝，没有供应商调用。
+
+第一轮全部进程停止后，测试才通过原 Run reducer 将来源 Run 从 queued 推进为 running，并预留具名 operation 作为查询历史，不能把它当作模型或供应商完成。第二轮用原生成 key/input/旧 CAS 返回原回执，原不可变业务记录、wallet 和报价次数保持；随后显式查询创建独立 Turn/Run，不新增生成 admission、报价、积分预留或流水，Worker 拒绝后由原客户端显式取消查询。第三轮完整读回三 lane journal 的原请求/回执，原查询 key/input/旧 CAS 返回原回执；当前 PDP 撤权仍拒绝重放，旧 token/mountRef 拒绝。图片选用仅 prepared、派发次数 0、回执为空，没有实际选用提交。
+
+Native authenticated invoke 的 recovery 请求范围改为外层，执行/历史读取/选用请求范围置于内层，传入外层实际 `currentSignal`；原 execution preparation 不再被 metadata 遮蔽。HTTP 与 owner/recovery 关闭取消继续传递，物理 Promise 和确认事务仍被等待；request-owner guard 保持，不增加原 opaque COMMIT 后的当前权限 fence。
+
+最终 Application 专项与原兼容组合 **117/117**、实际 SQLite 与自持 PostgreSQL 18 专项 **106/106**、Control runtime 与实际 Native Main 组合 **68/68**、原及新增 Source/activation/IO 组合 **32/32**均通过、零跳过；上述三 epoch 专项包含在 Source 组合内，分组重叠、不相加。Application、Store、Control、Host 类型及 boundary/license 检查通过，自持 PostgreSQL 在全部消费者结束后已停止并物理 join、清理。本轮证据归档路径为 `output/extensions/checks/native-project-epoch-proof-20261004.json`，修复前失败与真实退出结果一并保留。
+
+原 UI/用户栏/设置/两侧栏及公共样式、14 个 UI 源文件、15 个正式资产、60 个 SDK 文件、冻结 SDK tarball、生产映射和三个既有独立发行包的保留检查通过；原用户进程保持。本轮没有 renderer、在线付费完成或真实资金验收，也未更新用户配置。`createThread` 仍在三类恢复协议之外。完整目标继续 ACTIVE：Native Worker 实际执行、真实钱包/价格/结算、可用 ComfyUI 的同次完整 App 保存→生成→显式查询→选用→重启恢复 S0、编译后 Electron/打包完整 App 和 E5 第二个真实企业 API 仍待完成。
+
 ## 2026-10-04：Native 项目生成、查询与三类恢复装配
 
 已新增独立私有 approval/bootstrap v3 与 `crewon.desktop-project-execution.v1`，把生成、显式查询和图片选用的 source/target/action 映射及三类恢复绑定实际 FileIssued bootstrap、task、activation、request owner 和 SQLite。原 v1/v2 与普通 Standalone 的付费映射拒绝保持；DTO、副本或布尔就绪端口不能替代实际 owner。协议见[Native 项目执行接线](./native-project-execution-integration.md)。
