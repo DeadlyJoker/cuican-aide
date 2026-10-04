@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
+import { withToolExecutionCapacity } from "./tool-execution-capacity.ts";
 import { composeInstalledPluginToolRuntime as compose } from "./plugins/installed-plugin-tool-runtime-router.ts";
 import {
   brokerFixture,
@@ -17,6 +18,54 @@ import {
   tick,
   trackedRuntime,
 } from "./installed-plugin-tool-runtime-router.test-support.ts";
+
+test("workspace ownership preparation is scoped to local tools and does not block an unbound plugin Run", async () => {
+  const f = brokerFixture();
+  let localLookups = 0;
+  const router = compose({
+    ...f,
+    base: {
+      ...f.base,
+      prepareExecution: async () => {
+        localLookups++;
+        throw new Error("desktop_workspace_thread_unbound");
+      },
+    },
+    pluginToolNames: [pluginName],
+  });
+  const pluginCommand = execution(pluginName);
+  const plugin = await withToolExecutionCapacity(
+    {
+      runtime: router,
+      tenantId: "tenant",
+      command: pluginCommand,
+      signal: signal(),
+      operation: "execute",
+    },
+    (execute) => execute(),
+  );
+  assert.equal(plugin.status, "completed");
+  assert.equal(localLookups, 0);
+  let admitted = false;
+  await assert.rejects(
+    withToolExecutionCapacity(
+      {
+        runtime: router,
+        tenantId: "tenant",
+        command: execution(coreNames[0]),
+        signal: signal(),
+        operation: "execute",
+      },
+      async (execute) => {
+        admitted = true;
+        return execute();
+      },
+    ),
+    /thread_unbound/,
+  );
+  assert.equal(admitted, false);
+  assert.equal(localLookups, 1);
+});
 
 test("retains the original complete catalog order and routes policy, execution and recovery to their exact owner", async () => {
   const f = brokerFixture();

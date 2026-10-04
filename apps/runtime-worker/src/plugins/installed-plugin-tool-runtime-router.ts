@@ -80,6 +80,10 @@ export function composeInstalledPluginToolRuntime(
       commandOwner(command).reconcile(command, signal),
     cancel: (command, signal) => commandOwner(command).cancel(command, signal),
   };
+  if (owners.some((owner) => owner.prepareExecution !== undefined))
+    result.prepareExecution = async (command, signal) => {
+      await commandOwner(command).prepareExecution?.(command, signal);
+    };
   if (owners.some((owner) => owner.reserveExecution !== undefined))
     result.reserveExecution = (command, signal, options) =>
       commandOwner(command).reserveExecution?.(command, signal, options);
@@ -169,6 +173,7 @@ function captureRuntime(runtime: ToolRuntimePort): ToolRuntimePort {
   ] as const)
     Object.assign(captured, { [name]: captureMethod(runtime, name, true) });
   for (const name of [
+    "prepareExecution",
     "reserveExecution",
     "acknowledgeExecutionResult",
     "readRetainedExecutionResult",

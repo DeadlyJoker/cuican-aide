@@ -8,6 +8,7 @@ import type {
 } from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
 import { verifyLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-verifier.ts";
 import { installLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-installer.ts";
+import { composeDesktopLocalPluginProjectApproval } from "./desktopLocalPluginProjectApproval.ts";
 import {
   DESKTOP_PLUGIN_APPROVAL_FILE,
   DESKTOP_PLUGIN_APPROVAL_SCHEMA,
@@ -315,10 +316,14 @@ class LocalSourceImporter {
                 },
               ];
         // Reject limits, duplicate versions and publisher drift before allocating a copy.
-        const next = parseDesktopPluginApproval({
-          ...previous,
-          sources: [...previous.sources, source],
-          publications,
+        const next = composeDesktopLocalPluginProjectApproval({
+          approval: parseDesktopPluginApproval({
+            ...previous,
+            sources: [...previous.sources, source],
+            publications,
+          }),
+          descriptor: fresh.descriptor,
+          packageDigest: fresh.packageDigest,
         });
         const bytes = Buffer.from(JSON.stringify(next));
         if (bytes.byteLength > MAX_APPROVAL_BYTES) invalid("approval_size");

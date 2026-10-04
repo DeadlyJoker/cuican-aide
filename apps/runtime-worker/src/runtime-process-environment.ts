@@ -21,6 +21,7 @@ import {
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { createConfiguredLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
+import { DesktopThreadWorkspaceToolRuntime } from "./desktop-thread-workspace-runtime.ts";
 
 import {
   parseNonNegativeInteger,
@@ -109,14 +110,39 @@ export async function createConfiguredToolRuntime(
     if (pimSandbox !== undefined) {
       runtimes.push(pimSandbox);
     }
-    const localWorkspace =
-      createConfiguredLocalWorkspaceCommandToolRuntime(environment);
-    if (localWorkspace !== undefined) {
-      runtimes.push(localWorkspace);
+    const registryPath = environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH;
+    if (
+      registryPath !== undefined &&
+      environment.CREWON_CONTROL_SECURITY_MODE !== "standalone"
+    ) {
+      throw new Error("desktop_workspace_registry_forbidden");
     }
-    const mcp = await createConfiguredMcpRuntime(environment);
-    if (mcp !== undefined) {
-      runtimes.push(mcp);
+    const workspaceTools = await createWorkspaceTools(environment);
+    if (workspaceTools !== undefined) {
+      if (registryPath === undefined) runtimes.push(workspaceTools);
+      else {
+        const databasePath = environment.CREWON_CONTROL_DB_PATH;
+        const tenantId = environment.CREWON_TENANT_ID;
+        const spaceId = environment.CREWON_SPACE_ID;
+        if (!databasePath || !tenantId || !spaceId) {
+          await workspaceTools.close?.();
+          throw new Error("desktop_workspace_registry_configuration_invalid");
+        }
+        runtimes.push(
+          new DesktopThreadWorkspaceToolRuntime(workspaceTools, {
+            registryPath,
+            databasePath,
+            tenantId,
+            spaceId,
+            createRuntime: async (root) => {
+              const runtime = await createWorkspaceTools(environment, root);
+              if (runtime === undefined)
+                throw new Error("desktop_workspace_tools_unavailable");
+              return runtime;
+            },
+          }),
+        );
+      }
     }
     const deviceConfigPath = environment.CREWON_DEVICE_TOOL_CONFIG_PATH?.trim();
     if (deviceConfigPath) {
@@ -140,6 +166,7 @@ export async function createConfiguredToolRuntime(
 
 async function createConfiguredMcpRuntime(
   environment: Readonly<Record<string, string | undefined>>,
+  workspaceRoot?: string,
 ): Promise<McpRuntimeGroup | undefined> {
   const path = environment.CREWON_MCP_STDIO_CONFIG_PATH?.trim();
   if (!path) {
@@ -155,12 +182,52 @@ async function createConfiguredMcpRuntime(
   } catch (error) {
     throw new Error("CREWON_MCP_STDIO_CONFIG_invalid", { cause: error });
   }
-  const runtime = createStdioMcpRuntimeGroup(parseMcpStdioConfig(input));
+  const config = parseMcpStdioConfig(input);
+  if (
+    workspaceRoot !== undefined &&
+    config.servers.some((server) => server.serverId !== "workspace_checks")
+  ) {
+    throw new Error("desktop_workspace_mcp_configuration_invalid");
+  }
+  const runtime = createStdioMcpRuntimeGroup(
+    workspaceRoot === undefined
+      ? config
+      : {
+          ...config,
+          servers: config.servers.map((server) => ({
+            ...server,
+            cwd: workspaceRoot,
+            env: { ...server.env, CREWON_LOCAL_WORKSPACE_ROOT: workspaceRoot },
+          })),
+        },
+  );
   try {
     await runtime.connect(new AbortController().signal);
     return runtime;
   } catch (error) {
     await runtime.close().catch(() => {});
+    throw error;
+  }
+}
+
+async function createWorkspaceTools(
+  environment: Readonly<Record<string, string | undefined>>,
+  workspaceRoot?: string,
+): Promise<ToolRuntimePort | undefined> {
+  const local = createConfiguredLocalWorkspaceCommandToolRuntime(
+    workspaceRoot === undefined
+      ? environment
+      : {
+          ...environment,
+          CREWON_DESKTOP_WORKSPACE_ROOT: workspaceRoot,
+        },
+  );
+  try {
+    const mcp = await createConfiguredMcpRuntime(environment, workspaceRoot);
+    if (local && mcp) return new CompositeToolRuntime([local, mcp]);
+    return local ?? mcp;
+  } catch (error) {
+    await local?.close?.();
     throw error;
   }
 }

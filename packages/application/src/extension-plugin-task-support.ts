@@ -90,17 +90,30 @@ export function pluginTaskActor(
     );
   return actor;
 }
-export function requirePluginTaskStore(store: ExtensionStore): void {
+export function requirePluginTaskStore(
+  store: ExtensionStore,
+  mode: "metered" | "unmetered" = "metered",
+): void {
   if (
     store.pluginAdmissionVersion !== "crewon.plugin-task-admission.v1" ||
     typeof store.loadPluginTaskAdmission !== "function"
   )
     throw new ApplicationError("conflict", "plugin_task_admission_unavailable");
-  if (store.creditAdmissionVersion !== "crewon.extension-credit-admission.v0")
+  if (
+    mode === "metered" &&
+    store.creditAdmissionVersion !== "crewon.extension-credit-admission.v0"
+  )
     throw new ApplicationError(
       "conflict",
       "extension_credit_admission_unavailable",
     );
+  if (
+    mode === "unmetered" &&
+    (store.unmeteredAdmissionVersion !==
+      "crewon.plugin-task-unmetered-admission.v1" ||
+      typeof store.loadPluginTaskUnmeteredAdmission !== "function")
+  )
+    throw new ApplicationError("conflict", "plugin_task_unmetered_unavailable");
 }
 export function requirePluginTaskQuotes(
   quotes: ExtensionCreditQuotePort | undefined,

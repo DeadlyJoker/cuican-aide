@@ -367,6 +367,40 @@ test("the original task receipt key/digest and immutable binding are crosschecke
   await assert.rejects(f.load(), /extension_idempotency_conflict/);
 });
 
+test("installed generation receipts require exactly one verified funding proof", async (t) => {
+  const f = await installedRunContextFixture(t);
+  const original = structuredClone(f.task);
+  for (const mode of ["missing", "both"] as const) {
+    const { creditAdmission: _credit, ...unfunded } = original;
+    const changed =
+      mode === "missing"
+        ? unfunded
+        : {
+            ...original,
+            unmeteredAdmission: {
+              schemaVersion: "unverified-negative-proof",
+            },
+          };
+    const extensions = new Proxy(f.first.store, {
+      get(source, name) {
+        if (name === "loadExtensionTurnReceipt") return async () => changed;
+        const value = Reflect.get(source, name, source) as unknown;
+        return typeof value === "function" ? value.bind(source) : value;
+      },
+    });
+    const reader = new InstalledPluginRunContext({
+      ...f.dependencies,
+      extensions,
+    });
+    await assert.rejects(
+      f.load("submit", reader),
+      /plugin_task_credit_admission_required/u,
+      mode,
+    );
+  }
+  assert.ok(await f.load());
+});
+
 test("a well-formed receipt for a different immutable binding cannot supply this Run's context", async (t) => {
   const f = await installedRunContextFixture(t);
   const changed = createExtensionRunBinding(

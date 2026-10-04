@@ -82,7 +82,8 @@ export function captureProjectQuery(
     query === undefined ||
     input.projectGeneration !== undefined ||
     input.pluginAdmission !== undefined ||
-    input.creditAdmission !== undefined
+    input.creditAdmission !== undefined ||
+    input.unmeteredAdmission !== undefined
   )
     throw new Error("project_query_admission_required");
   const source = creativeStoreRecord(field.value, [
@@ -367,6 +368,7 @@ function decode(
   );
   if (
     saved.creditAdmission !== undefined ||
+    saved.unmeteredAdmission !== undefined ||
     saved.run.events[0]?.occurredAt !== link.createdAt
   )
     throw new Error("project_query_receipt_identity_mismatch");

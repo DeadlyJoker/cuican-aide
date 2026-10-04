@@ -1,17 +1,9 @@
-import { createHash, randomBytes } from "node:crypto";
+import { captureDesktopInstalledPluginRelease } from "./desktopInstalledPluginReleaseCapture.ts";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { inspect, isDeepStrictEqual } from "node:util";
-import { parseCompiledAgentVersion } from "@crewon/agent-version";
-import { parseRuntimeBindingConfig } from "@crewon/agent-version/runtime-bindings";
+import { type InstalledPluginPeerCatalogEntry } from "@crewon/contracts/plugins";
 import {
-  parsePluginPackageDescriptor,
-  PLUGIN_PACKAGE_DESCRIPTOR_PATH,
-  PLUGIN_PACKAGE_LIMITS,
-  type InstalledPluginPeerCatalogEntry,
-} from "@crewon/contracts/plugins";
-import {
-  parseExtensionConfiguration,
-  parseExtensionExecutionTarget,
   parsePluginProfileScope,
   type PluginProfileScope,
 } from "@crewon/domain";
@@ -48,10 +40,6 @@ import {
 
 const EXECUTION_PATH = "CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH";
 const authorityNames = DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES;
-const digester = {
-  sha256: (value: string) =>
-    `sha256:${createHash("sha256").update(value).digest("hex")}`,
-};
 type Snapshot = Readonly<{ assertCurrent(): void }>;
 export type DesktopInstalledPluginExpectedCatalogEntry = Pick<
   InstalledPluginPeerCatalogEntry,
@@ -143,7 +131,7 @@ export function prepareDesktopInstalledPluginRuntime(
   });
   const snapshots: Snapshot[] = [workerFile, releaseFile];
   try {
-    const expectedCatalogEntries = captureRelease(
+    const expectedCatalogEntries = captureDesktopInstalledPluginRelease(
       releaseFile.value,
       manifest,
       shared,
@@ -489,206 +477,6 @@ export function captureDesktopInstalledPluginAuthorityTokens(
   return tokens;
 }
 
-function captureRelease(
-  input: unknown,
-  bootstrap: DesktopPluginBootstrapManifest,
-  environment: NodeJS.ProcessEnv,
-  configuration: EnabledDesktopInstalledPluginRuntimeConfiguration,
-  authorityTokens: Readonly<Record<string, string>>,
-  snapshots: Snapshot[],
-): readonly DesktopInstalledPluginExpectedCatalogEntry[] {
-  const value = record(input);
-  desktopInstalledPluginExactKeys(value, [
-    "schemaVersion",
-    "tenantId",
-    "defaultAgentVersionId",
-    "entries",
-  ]);
-  if (
-    value.schemaVersion !== "crewon.installed-plugin-release.v1" ||
-    value.tenantId !== bootstrap.scope.tenantId ||
-    value.defaultAgentVersionId !== environment.CREWON_AGENT_VERSION_ID ||
-    !Array.isArray(value.entries) ||
-    value.entries.length < 1 ||
-    value.entries.length > 32
-  )
-    invalid("release");
-  const versions = new Set<string>();
-  const capturedPackages = new Set<string>();
-  const entries = value.entries.map(
-    (raw): DesktopInstalledPluginExpectedCatalogEntry => {
-      const entry = record(raw);
-      desktopInstalledPluginExactKeys(entry, [
-        "scope",
-        "packageIdentity",
-        "configuration",
-        "approvalRequirement",
-        "modelSource",
-        "version",
-        "target",
-      ]);
-      if (
-        !isDeepStrictEqual(
-          parsePluginProfileScope(entry.scope),
-          bootstrap.scope,
-        ) ||
-        (entry.approvalRequirement !== "none" &&
-          entry.approvalRequirement !== "perAction")
-      )
-        invalid("release_scope");
-      const identity = record(entry.packageIdentity);
-      desktopInstalledPluginExactKeys(identity, [
-        "pluginId",
-        "publisherId",
-        "version",
-        "packageDigest",
-      ]);
-      const source = bootstrap.sources.find(
-        (candidate) =>
-          candidate.pluginId === identity.pluginId &&
-          candidate.publisherId === identity.publisherId &&
-          candidate.version === identity.version &&
-          candidate.packageDigest === identity.packageDigest,
-      );
-      if (!source) invalid("release_package_unapproved");
-      const config = parseExtensionConfiguration(entry.configuration, digester);
-      if (
-        config.tenantId !== bootstrap.scope.tenantId ||
-        config.spaceId !== bootstrap.scope.spaceId ||
-        config.pluginId !== source.pluginId ||
-        config.pluginVersion !== source.version
-      )
-        invalid("release_configuration");
-      const modelSource = record(entry.modelSource);
-      desktopInstalledPluginExactKeys(modelSource, [
-        "executionAuthority",
-        "runtimeBinding",
-        "version",
-        "deployment",
-      ]);
-      const binding = parseRuntimeBindingConfig({
-        schemaVersion: "crewon.agent-version-runtime-bindings.v0",
-        bindings: [modelSource.runtimeBinding],
-      }).bindings[0]!;
-      const base = parseCompiledAgentVersion(
-        JSON.stringify(modelSource.version),
-        digester,
-      );
-      const provider = configuration.providerBinding;
-      if (
-        modelSource.executionAuthority !== "crewonKernel" ||
-        binding.provider.kind !== "directResponses" ||
-        binding.toolRuntimeMode !== "independent" ||
-        binding.extensionConfigPath !== undefined ||
-        binding.mcpStdioConfigPath !== null ||
-        binding.deviceToolConfigPath !== null ||
-        binding.remoteMcpConfigPath !== null ||
-        binding.workspaceBindingId !== null ||
-        binding.tenantId !== bootstrap.scope.tenantId ||
-        binding.agentVersionId !== base.agentVersionId ||
-        binding.contentDigest !== base.contentDigest ||
-        binding.agentVersionId === value.defaultAgentVersionId ||
-        binding.provider.endpoint !== provider.responsesEndpoint ||
-        base.model.modelId !== provider.modelId ||
-        (binding.provider.apiKeyEnvironment !== null) !==
-          provider.credentialRequired
-      )
-        invalid("model_source");
-      const key = binding.provider.apiKeyEnvironment;
-      if (
-        key !== null &&
-        (Object.hasOwn(authorityTokens, key) || key !== "CREWON_MODEL_API_KEY")
-      )
-        invalid("model_credential_reference");
-      const deployment = record(modelSource.deployment);
-      if (
-        deployment.tenantId !== bootstrap.scope.tenantId ||
-        deployment.agentVersionId !== base.agentVersionId ||
-        deployment.contentDigest !== base.contentDigest ||
-        deployment.authorityId !== binding.authorityId ||
-        deployment.workspaceBindingId !== binding.workspaceBindingId
-      )
-        invalid("model_deployment");
-      const version = parseCompiledAgentVersion(
-        JSON.stringify(entry.version),
-        digester,
-      );
-      const target = parseExtensionExecutionTarget(entry.target);
-      if (
-        versions.has(version.agentVersionId) ||
-        version.agentVersionId === value.defaultAgentVersionId ||
-        version.agentVersionId === base.agentVersionId ||
-        version.model.modelId !== provider.modelId ||
-        target.executionAuthority !== "crewonKernel" ||
-        target.agentVersionId !== version.agentVersionId ||
-        target.agentVersionContentDigest !== version.contentDigest ||
-        target.runtimeGeneration !== version.runtimeGeneration ||
-        target.policySnapshotId !== version.policySnapshotId
-      )
-        invalid("release_target");
-      versions.add(version.agentVersionId);
-      if (!capturedPackages.has(source.packageDigest)) {
-        capturePackage(
-          join(
-            bootstrap.installRoot,
-            "packages",
-            source.packageDigest.slice(7),
-          ),
-          source,
-          snapshots,
-        );
-        capturedPackages.add(source.packageDigest);
-      }
-      return Object.freeze({
-        identity: Object.freeze({
-          pluginId: source.pluginId,
-          publisherId: source.publisherId,
-          version: source.version,
-          packageDigest: source.packageDigest,
-          manifestDigest: config.manifestDigest,
-          implementationDigest: config.implementationDigest,
-        }),
-        configuration:
-          config as unknown as InstalledPluginPeerCatalogEntry["configuration"],
-        configuredTarget:
-          target as unknown as InstalledPluginPeerCatalogEntry["configuredTarget"],
-      });
-    },
-  );
-  return Object.freeze(entries);
-}
-function capturePackage(
-  directory: string,
-  identity: DesktopPluginBootstrapManifest["sources"][number],
-  snapshots: Snapshot[],
-): void {
-  snapshots.push(captureDesktopInstalledPluginRuntimeDirectory(directory));
-  const file = captureDesktopInstalledPluginRuntimeDocument(
-    join(directory, PLUGIN_PACKAGE_DESCRIPTOR_PATH),
-    PLUGIN_PACKAGE_LIMITS.descriptorBytes,
-    "package",
-  );
-  const descriptor = parsePluginPackageDescriptor(file.value);
-  if (
-    descriptor.pluginId !== identity.pluginId ||
-    descriptor.publisherId !== identity.publisherId ||
-    descriptor.version !== identity.version
-  )
-    invalid("package_identity");
-  snapshots.push(file);
-  let total = 0;
-  for (const artifact of descriptor.files) {
-    total += artifact.byteLength;
-    if (artifact.byteLength > 32 * 1024 * 1024 || total > 128 * 1024 * 1024)
-      invalid("package_limit");
-    snapshots.push(
-      captureDesktopInstalledPluginRuntimeArtifact(
-        join(directory, artifact.path),
-        artifact.byteLength,
-      ),
-    );
-  }
-}
 function assertNativeEnvironment(
   environment: NodeJS.ProcessEnv,
   dataDirectory: string,
@@ -772,6 +560,7 @@ export function withoutDesktopInstalledPluginEnvironment(
   const result = { ...input };
   for (const name of Object.keys(result))
     if (
+      name.startsWith("CREWON_DESKTOP_NATIVE_PLUGIN_") ||
       name.startsWith("CREWON_INSTALLED_PLUGIN_") ||
       name.startsWith("CREWON_DESKTOP_INSTALLED_PLUGIN_")
     )

@@ -81,6 +81,7 @@ export type PaletteItemWithCommand = CommandPaletteItem & {
 
 export type CommandLinkedThread = {
   cwd: string | null;
+  workspaceId?: string | null;
   id: string;
   preview: string;
   scope?: CommandSidebarThreadScope;
@@ -102,11 +103,15 @@ export type CommandWorkspaceAuthority = "control" | "legacy";
  */
 export type CommandControlWorkspaceNav = {
   name: string | null;
+  workspaceId?: string | null;
+  workspaces?: readonly { workspaceId: string; displayName: string }[];
   busy: boolean;
+  threadWorkspaceReady?: boolean;
   revisionKey?: string | null;
   error?: string | null;
   onClear?: () => void;
   onSelect?: () => void;
+  onActivate?: (workspaceId: string) => void;
 };
 
 export function readCommandSidebarWorkspaceRoster(

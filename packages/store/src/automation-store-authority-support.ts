@@ -21,6 +21,7 @@ import {
 } from "@crewon/application";
 import {
   parseAutomationInvocationBinding,
+  normalizeThreadStateWorkspace,
   parseAutomationInvocationOrigin,
   reduceRunLifecycleEvent,
   reduceThreadLifecycleEvent,
@@ -447,9 +448,11 @@ export function validateAutomationInvocationReceiptAuthority(
     stableJson(authority.record) !== stableJson(result.record) ||
     authority.thread === null ||
     reducedThread === null ||
-    stableJson(authority.thread) !== stableJson(reducedThread) ||
+    stableJson(normalizeThreadStateWorkspace(authority.thread)) !==
+      stableJson(reducedThread) ||
     receiptThreadState === null ||
-    stableJson(receiptThreadState) !== stableJson(result.threadState) ||
+    stableJson(receiptThreadState) !==
+      stableJson(normalizeThreadStateWorkspace(result.threadState)) ||
     receiptThreadEvent === undefined ||
     stableJson(receiptThreadEvent) !== stableJson(result.threadEvent) ||
     authority.message === null ||

@@ -1,3 +1,11 @@
+import {
+  assertPluginTaskFunding,
+  type PluginTaskUnmeteredAdmission,
+} from "@crewon/domain";
+import {
+  verifySqliteUnmeteredReceipt,
+  verifyPostgresUnmeteredReceipt,
+} from "./plugin-task-unmetered-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import type {
@@ -60,7 +68,13 @@ export function checkedPluginTaskAdmission(
     { admission, binding: input.binding, receipt: input.receipt },
     extensionStoreDigester,
   );
-  assertCreditPrincipal(admission, input.creditAdmission);
+  assertCreditPrincipal(
+    admission,
+    input.creditAdmission,
+    input.unmeteredAdmission,
+    input.binding,
+    input.receipt,
+  );
   if (input.binding.source !== null)
     throw new Error("plugin_task_query_admission_unsupported");
   return admission;
@@ -72,6 +86,7 @@ export function assertPluginTaskAdmissionReplay(input: {
   binding: ExtensionRunBinding;
   receipt: ExtensionMutationReceipt;
   creditAdmission: ExtensionCreditAdmission | undefined;
+  unmeteredAdmission?: PluginTaskUnmeteredAdmission;
 }): void {
   if (input.requested === undefined && input.saved === null) return;
   if (input.requested === undefined || input.saved === null)
@@ -80,7 +95,13 @@ export function assertPluginTaskAdmissionReplay(input: {
     { admission: input.saved, binding: input.binding, receipt: input.receipt },
     extensionStoreDigester,
   );
-  assertCreditPrincipal(input.saved, input.creditAdmission);
+  assertCreditPrincipal(
+    input.saved,
+    input.creditAdmission,
+    input.unmeteredAdmission,
+    input.binding,
+    input.receipt,
+  );
   const pin = (value: PluginTaskAdmission) =>
     parsePluginTaskAdmissionPin(
       Object.fromEntries(
@@ -109,13 +130,29 @@ export function assertPluginTaskAdmissionReplay(input: {
 function assertCreditPrincipal(
   admission: PluginTaskAdmission,
   credit: ExtensionCreditAdmission | undefined,
+  unmetered: PluginTaskUnmeteredAdmission | undefined,
+  binding: ExtensionRunBinding,
+  receipt: ExtensionMutationReceipt,
 ): void {
-  if (
-    credit === undefined ||
-    credit.reservation.scope.tenantId !== admission.tenantId ||
-    credit.reservation.scope.principalId !== admission.principalId
-  )
-    throw new Error("plugin_task_credit_admission_required");
+  if (unmetered === undefined) {
+    if (
+      credit === undefined ||
+      credit.reservation.scope.tenantId !== admission.tenantId ||
+      credit.reservation.scope.principalId !== admission.principalId
+    )
+      throw new Error("plugin_task_credit_admission_required");
+  } else
+    assertPluginTaskFunding(
+      {
+        creditAdmission: credit,
+        unmeteredAdmission: unmetered,
+        binding,
+        receipt,
+        principalId: admission.principalId,
+        task: admission,
+      },
+      extensionStoreDigester,
+    );
 }
 
 export const admissionQuery = (
@@ -222,6 +259,7 @@ export function loadSqlitePluginTaskByReceipt(
     .get(...receiptLocatorValues(captured)) as Row | undefined;
   if (row === undefined) return null;
   const saved = parseTaskAdmissionReceipt(row, captured);
+  verifySqliteUnmeteredReceipt(database, saved);
   return checkedReceiptAdmission(
     captured,
     saved,
@@ -244,6 +282,7 @@ export async function loadPostgresPluginTaskByReceipt(
   if (result.rows.length !== 1)
     throw new Error("plugin_task_admission_record_invalid");
   const saved = parseTaskAdmissionReceipt(result.rows[0]!, captured);
+  await verifyPostgresUnmeteredReceipt(client, schema, saved);
   return checkedReceiptAdmission(
     captured,
     saved,
@@ -351,7 +390,13 @@ function checkedReceiptAdmission(
     { admission, binding: saved.binding, receipt: saved.receipt },
     extensionStoreDigester,
   );
-  assertCreditPrincipal(admission, saved.creditAdmission);
+  assertCreditPrincipal(
+    admission,
+    saved.creditAdmission,
+    saved.unmeteredAdmission,
+    saved.binding,
+    saved.receipt,
+  );
   return admission;
 }
 

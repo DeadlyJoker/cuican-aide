@@ -21,6 +21,7 @@ const position = {
 };
 const thread = (threadId = "thread-4") => ({
   threadId,
+  workspaceId: null,
   title: "缓存 é",
   status: "active",
   revision: 1,
@@ -188,4 +189,15 @@ test("catalog accepts native SQLite and PostgreSQL ordering for mixed historical
     };
     assert.deepEqual(parseThreadCatalogResponse(value, query), value);
   }
+});
+
+
+test("catalog normalizes legacy workspace ownership and preserves explicit ownership on reconnect", () => {
+  const query = { ...filter, limit: 2, position: null };
+  const { workspaceId: _, ...legacy } = thread();
+  const response = { schemaVersion: "crewon.thread-catalog.v0", data: [legacy], scannedCount: 1, olderCursor: null, newerCursor: null };
+  assert.equal(parseThreadCatalogResponse(response, query).data[0]?.workspaceId, null);
+  const bound = { ...response, data: [{ ...legacy, workspaceId: "workspace-a" }] };
+  assert.equal(parseThreadCatalogResponse(bound, query).data[0]?.workspaceId, "workspace-a");
+  assert.throws(() => parseThreadCatalogResponse({ ...response, data: [{ ...legacy, workspaceId: "/tmp/forged" }] }, query));
 });

@@ -9,6 +9,7 @@ import {
 import {
   validateModelHistoryItem,
   validateThreadState,
+  normalizeThreadStateWorkspace,
   type ModelHistoryItem,
   type ThreadState,
 } from "@crewon/domain";
@@ -104,7 +105,7 @@ export function decodePostgresThreadState(
   ) {
     throw new RunStoreError("stored_thread_state_invalid");
   }
-  return structuredClone(state);
+  return normalizeThreadStateWorkspace(structuredClone(state));
 }
 
 export function decodePostgresMessage(
@@ -218,18 +219,22 @@ export function decodePostgresThreadReceipt(
   ) {
     throw new RunStoreError("thread_idempotency_receipt_invalid");
   }
-  return structuredClone(result);
+  return {
+    ...structuredClone(result),
+    state: normalizeThreadStateWorkspace(result.state),
+  };
 }
 
 export function decodePostgresThreadRollbackReceipt(
   row: PostgresThreadReceiptRow,
 ): CommitThreadRollbackResult {
-  return structuredClone(
+  const result = structuredClone(
     storedObject<CommitThreadRollbackResult>(
       row.result_json,
       "thread_rollback_receipt_invalid",
     ),
   );
+  return { ...result, state: normalizeThreadStateWorkspace(result.state) };
 }
 
 export function safeInteger(value: string | number): number {

@@ -2430,7 +2430,7 @@ export class RuntimeWorker {
       event: Extract<KernelAgentEvent, { type: "tool.requested" }>;
       receipt: ToolExecutionReceiptState;
       attempt: RunAttemptIdentity | null;
-      preflight?: () => void;
+      preflight?: () => Promise<void>;
       resolve: () => Promise<ToolExecutionResolution>;
     }> = [];
     for (const event of calls) {
@@ -2568,8 +2568,9 @@ export class RuntimeWorker {
         receipt,
         attempt:
           prepared.attempt === null ? null : attemptIdentity(prepared.attempt),
-        preflight: () => {
-          if (!shouldExecute) preflightToolExecutionCapacity(capacityInput());
+        preflight: async () => {
+          if (!shouldExecute)
+            await preflightToolExecutionCapacity(capacityInput());
         },
         resolve: () =>
           withToolExecutionCapacity(capacityInput(), async (execute) => {
@@ -2609,7 +2610,7 @@ export class RuntimeWorker {
       ),
     );
     if (canRunInParallel)
-      for (const prepared of preparedCalls) prepared.preflight?.();
+      for (const prepared of preparedCalls) await prepared.preflight?.();
     const resolved = await resolveToolBatch({
       mode: canRunInParallel ? "parallel" : "sequential",
       shouldContinue: ({ resolution }) => resolution.status === "completed",

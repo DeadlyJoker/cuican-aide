@@ -5,6 +5,7 @@ import type {
   ExtensionScope,
   ExtensionCreditAdmission,
   PluginTaskAdmission,
+  PluginTaskUnmeteredAdmission,
   PluginQueryTaskAdmission,
   ProjectGenerationReference,
   ProjectGenerationLink,
@@ -18,6 +19,7 @@ import type {
 import type { ProjectGenerationExecutionPublication } from "./project-generation-execution-authority.ts";
 import type { ProjectQueryExecutionPublication } from "./project-query-execution-authority.ts";
 import type { CommitRunInput, CommitRunResult } from "./run-store-port.ts";
+import type { PluginTaskUnmeteredPreparedAuthority } from "./plugin-task-unmetered-authority-port.ts";
 import type {
   CommitTurnStartInput,
   CommitTurnStartResult,
@@ -80,6 +82,7 @@ export type CommitExtensionRunResult = Readonly<{
   binding: ExtensionRunBinding;
   /** Present only for a newly priced generation; old receipts remain unchanged. */
   creditAdmission?: ExtensionCreditAdmission;
+  unmeteredAdmission?: PluginTaskUnmeteredAdmission;
 }>;
 export type CommitExtensionTurnInput = Readonly<{
   turn: CommitTurnStartInput;
@@ -88,6 +91,7 @@ export type CommitExtensionTurnInput = Readonly<{
   receipt: ExtensionMutationReceipt;
   /** Server-derived payer and quote; frozen in the same transaction as the user Turn. */
   creditAdmission?: ExtensionCreditAdmission;
+  unmeteredAdmission?: PluginTaskUnmeteredAdmission;
   /** Internal server-derived v1 pin; persisted separately without changing the v0 binding or receipt shape. */
   pluginAdmission?: PluginTaskAdmission;
   pluginQueryAdmission?: PluginQueryTaskAdmission;
@@ -100,6 +104,7 @@ export type CommitExtensionTurnInput = Readonly<{
   }>;
 }>;
 export type CommitExtensionTurnOptions = Readonly<{
+  unmeteredAuthority?: PluginTaskUnmeteredPreparedAuthority;
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
   /** Detached source and execution installation pins; the Store locks both using its existing connection. */
@@ -125,6 +130,10 @@ export interface ExtensionStore {
   /** Older adapters cannot silently accept a paid task without reserving its credits. */
   readonly creditAdmissionVersion?: "crewon.extension-credit-admission.v0";
   readonly pluginAdmissionVersion?: "crewon.plugin-task-admission.v1";
+  readonly unmeteredAdmissionVersion?: "crewon.plugin-task-unmetered-admission.v1";
+  loadPluginTaskUnmeteredAdmission?(
+    input: ExtensionRunLocator,
+  ): Promise<PluginTaskUnmeteredAdmission | null>;
   readonly pluginQueryAdmissionVersion?: "crewon.plugin-query-task-admission.v1";
   readonly projectGenerationVersion?: "crewon.project-generation-link.v0";
   /** Explicit support for two installed owners; absent on older adapters and before generation opt-in. */

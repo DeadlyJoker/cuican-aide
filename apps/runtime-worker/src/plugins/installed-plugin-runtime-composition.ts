@@ -10,6 +10,7 @@ import {
   type InstalledPluginQueryHostDependencies,
 } from "./installed-plugin-query-host.ts";
 import type { StoreBackedAgentVersionRuntimeResolver } from "../store-backed-agent-version-runtime-resolver.ts";
+import type { InstalledPluginExtensionHostDependencies } from "./installed-plugin-extension-host.ts";
 import {
   InstalledPluginRunContext,
   type InstalledPluginRunContextDependencies,
@@ -33,6 +34,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   authorization: AuthorizationPort;
   resolveActor: InstalledPluginRunContextDependencies["resolveActor"];
   authorizePackage: InstalledPluginRuntimeResolverDependencies["authorizePackage"];
+  authorizeCandidatePackage?: InstalledPluginExtensionHostDependencies["authorizeCandidatePackage"];
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoConfig;
   /** Historical observation is an explicit profile-scoped deployment, never today's catalog. */
@@ -53,6 +55,8 @@ export function captureInstalledPluginExecutionConfig(
     typeof config.authorization?.authorize !== "function" ||
     typeof config.resolveActor !== "function" ||
     typeof config.authorizePackage !== "function" ||
+    (config.authorizeCandidatePackage !== undefined &&
+      typeof config.authorizeCandidatePackage !== "function") ||
     (config.maximumRuntimes !== undefined &&
       (!Number.isSafeInteger(config.maximumRuntimes) ||
         config.maximumRuntimes < 1 ||
@@ -66,6 +70,12 @@ export function captureInstalledPluginExecutionConfig(
     }),
     resolveActor: config.resolveActor.bind(config),
     authorizePackage: config.authorizePackage.bind(config),
+    ...(config.authorizeCandidatePackage === undefined
+      ? {}
+      : {
+          authorizeCandidatePackage:
+            config.authorizeCandidatePackage.bind(config),
+        }),
     ...(config.executionIo === undefined
       ? {}
       : {

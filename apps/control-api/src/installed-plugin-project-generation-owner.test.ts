@@ -44,6 +44,15 @@ for (const backend of ["sqlite", "postgres"] as const) {
       assert.equal(f.nodeState.setups, 0);
       const before = await f.counts();
       const output = await f.invoke();
+      assert.ok(
+        f.state.packagePurposes.some((item) => item.pluginId === f.sourceId),
+      );
+      assert.ok(
+        f.state.packagePurposes.every(
+          (item) =>
+            item.purpose === (item.pluginId === f.sourceId ? "read" : "submit"),
+        ),
+      );
       const accepted = f.nodeState.accepted[0]!;
       const submission = f.state.submissions[0]!;
       const context = f.state.lastContext!;
@@ -182,6 +191,57 @@ for (const backend of ["sqlite", "postgres"] as const) {
       assert.equal(await f.count("run_snapshots"), 1);
     },
   );
+
+  test(
+    `${backend} same-package generation does not substitute source read for target execution permission`,
+    options,
+    async (t) => {
+      const f = await installedGenerationFixture(t, backend, {
+        samePackage: true,
+      });
+      assert.equal(f.sourceId, f.installed.descriptor.pluginId);
+      assert.equal(f.source.packageDigest, f.installed.packageDigest);
+      f.state.targetPackageAllowed = false;
+      const before = await f.counts(),
+        account = await f.credits.getAccount(creditScope);
+      await assert.rejects(
+        f.invoke(),
+        /project_generation_execution_package_denied/,
+      );
+      assert.deepEqual(f.state.packagePurposes.slice(0, 2), [
+        { pluginId: f.sourceId, purpose: "read" },
+        { pluginId: f.sourceId, purpose: "submit" },
+      ]);
+      assert.deepEqual(await f.counts(), before);
+      assert.deepEqual(await f.credits.getAccount(creditScope), account);
+      assert.equal(f.nodeState.setups, 0);
+      assert.equal(f.nodeState.calls, 0);
+      assert.equal(f.nodeState.quoteCalls, 0);
+    },
+  );
+
+  for (const denied of ["source-read", "target-submit"] as const)
+    test(
+      `${backend} generation rejects missing ${denied} permission before opening execution Node`,
+      options,
+      async (t) => {
+        const f = await installedGenerationFixture(t, backend);
+        if (denied === "source-read") f.state.sourcePackageAllowed = false;
+        else f.state.targetPackageAllowed = false;
+        const before = await f.counts(),
+          account = await f.credits.getAccount(creditScope);
+        await assert.rejects(
+          f.invoke(),
+          /project_generation_execution_package_denied/,
+        );
+        assert.deepEqual(await f.counts(), before);
+        assert.deepEqual(await f.credits.getAccount(creditScope), account);
+        assert.equal(f.nodeState.calls, 0);
+        assert.equal(f.nodeState.setups, 0);
+        assert.equal(f.nodeState.quoteCalls, 0);
+        assert.equal(f.state.submissions.length, 0);
+      },
+    );
 
   for (const change of [
     "source-policy",

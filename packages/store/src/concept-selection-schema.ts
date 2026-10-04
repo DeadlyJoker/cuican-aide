@@ -1,3 +1,7 @@
+import {
+  sqliteUnmeteredSchema,
+  postgresUnmeteredSchema,
+} from "./plugin-task-unmetered-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
@@ -195,14 +199,13 @@ function version(rows: readonly Record<string, unknown>[]) {
     throw new Error("concept_selection_schema_version_unsupported");
 }
 function assertBaseVersions(rows: readonly Record<string, unknown>[]) {
-  if (rows.length !== 4 || rows.some((r) => r.id !== 1 || r.version !== 1))
+  if (rows.length !== 3 || rows.some((r) => r.id !== 1 || r.version !== 1))
     throw new Error("concept_selection_source_schema_version_unsupported");
 }
 function baseVersionSql(prefix: string) {
   return [
     "extension_schema_version",
     "plugin_task_admission_schema_version",
-    "extension_credit_schema_version",
     "plugin_installation_schema_version",
   ]
     .map((t) => `SELECT id,version FROM ${prefix}${t}`)
@@ -236,6 +239,22 @@ export function assertSqliteConceptSelectionSchema(db: DatabaseSync): void {
   assertSqliteProjectGenerationSchema(db);
   db.prepare(baseSql("")).all();
   assertBaseVersions(db.prepare(baseVersionSql("")).all());
+  if (
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_schema WHERE name='extension_credit_schema_version'",
+      )
+      .get() !== undefined
+  )
+    version(
+      db
+        .prepare(
+          "SELECT id,version FROM extension_credit_schema_version LIMIT 2",
+        )
+        .all(),
+    );
+  else if (!sqliteUnmeteredSchema(db))
+    throw new Error("concept_selection_source_schema_version_unsupported");
   const expected = new Map<string, string>(
     specs("", false).map((s) => [s.name, tableSql(s, false, "")]),
   );
@@ -259,6 +278,22 @@ export function migrateSqliteConceptSelections(db: DatabaseSync): void {
   assertSqliteProjectGenerationSchema(db);
   db.prepare(baseSql("")).all();
   assertBaseVersions(db.prepare(baseVersionSql("")).all());
+  if (
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_schema WHERE name='extension_credit_schema_version'",
+      )
+      .get() !== undefined
+  )
+    version(
+      db
+        .prepare(
+          "SELECT id,version FROM extension_credit_schema_version LIMIT 2",
+        )
+        .all(),
+    );
+  else if (!sqliteUnmeteredSchema(db))
+    throw new Error("concept_selection_source_schema_version_unsupported");
   if (sqliteObjects(db).length === 0) {
     for (const spec of specs("", false)) db.exec(tableSql(spec, false, ""));
     db.prepare(`INSERT INTO ${versionTable} VALUES(1,1)`).run();
@@ -284,6 +319,20 @@ export async function assertPostgresConceptSelectionSchema(
   await assertPostgresProjectGenerationSchema(client, schema);
   await client.query(baseSql(prefix));
   assertBaseVersions((await client.query(baseVersionSql(prefix))).rows);
+  const credit = await client.query(
+    "SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname='extension_credit_schema_version'",
+    [schema],
+  );
+  if (credit.rows.length > 0)
+    version(
+      (
+        await client.query(
+          `SELECT id,version FROM ${prefix}extension_credit_schema_version LIMIT 2`,
+        )
+      ).rows,
+    );
+  else if (!(await postgresUnmeteredSchema(client, schema)))
+    throw new Error("concept_selection_source_schema_version_unsupported");
   if ((await pgObjects(client, schema)).length !== 4)
     throw new Error("concept_selection_schema_incomplete");
   version(
@@ -363,6 +412,20 @@ export async function migratePostgresConceptSelections(
   await assertPostgresProjectGenerationSchema(client, schema);
   await client.query(baseSql(prefix));
   assertBaseVersions((await client.query(baseVersionSql(prefix))).rows);
+  const credit = await client.query(
+    "SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname='extension_credit_schema_version'",
+    [schema],
+  );
+  if (credit.rows.length > 0)
+    version(
+      (
+        await client.query(
+          `SELECT id,version FROM ${prefix}extension_credit_schema_version LIMIT 2`,
+        )
+      ).rows,
+    );
+  else if (!(await postgresUnmeteredSchema(client, schema)))
+    throw new Error("concept_selection_source_schema_version_unsupported");
   if ((await pgObjects(client, schema)).length === 0) {
     for (const spec of specs(prefix, true))
       await client.query(tableSql(spec, true, prefix));

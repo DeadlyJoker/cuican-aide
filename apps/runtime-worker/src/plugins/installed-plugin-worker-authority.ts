@@ -25,6 +25,8 @@ import { snapshotContext } from "./plugin-tool-runtime-adapter-data.ts";
 import type { InstalledPluginExecutionReadinessMetadata } from "./installed-plugin-execution-readiness-types.ts";
 import type { InstalledPluginExtensionHostDependencies } from "./installed-plugin-extension-host.ts";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
+import type { InstalledPluginAuthorityConfig } from "./installed-plugin-authority-config.ts";
+import { createInstalledPluginNativeWorkerAuthority } from "./installed-plugin-native-authority.ts";
 
 export type InstalledPluginReadAuthorityInput = Readonly<{
   identity: InstalledPluginReleaseIdentity;
@@ -308,9 +310,11 @@ class AuthorityHttpOwner {
 
 /** A deployment-owned authority bridge. Responses are current decisions, never cached grants. */
 export function createInstalledPluginWorkerAuthority(
-  config: InstalledPluginWorkerConfig,
+  config: InstalledPluginAuthorityConfig,
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): InstalledPluginWorkerAuthority {
+  if ("nativeAuthorityPath" in config)
+    return createInstalledPluginNativeWorkerAuthority(config);
   assertInstalledPluginWorkerConfig(config);
   const http = new AuthorityHttpOwner(config, fetch);
   const authorizePackage = async (

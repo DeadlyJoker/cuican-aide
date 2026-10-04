@@ -4,10 +4,8 @@ import {
   createInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
 } from "./installed-plugin-worker-authority.ts";
-import {
-  INSTALLED_PLUGIN_WORKER_CONFIG_ENV,
-  loadInstalledPluginWorkerConfig,
-} from "./installed-plugin-worker-config.ts";
+import { INSTALLED_PLUGIN_WORKER_CONFIG_ENV } from "./installed-plugin-worker-config.ts";
+import { loadInstalledPluginAuthorityConfig } from "./installed-plugin-authority-config.ts";
 import { readInstalledPluginReleaseDocument } from "./installed-plugin-release-document.ts";
 import {
   loadInstalledPluginRelease,
@@ -84,7 +82,7 @@ export async function loadInstalledPluginReleaseCliInput(
     }
   }
   input.signal?.throwIfAborted();
-  const config = loadInstalledPluginWorkerConfig(path, input.environment);
+  const config = loadInstalledPluginAuthorityConfig(path, input.environment);
   const document = readInstalledPluginReleaseDocument(
     config.releaseDocumentPath,
   );

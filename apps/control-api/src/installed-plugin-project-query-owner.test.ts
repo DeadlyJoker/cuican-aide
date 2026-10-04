@@ -38,6 +38,15 @@ for (const backend of ["sqlite", "postgres"] as const) {
         account = await f.credits.getAccount(creditScope),
         quoteCalls = f.nodeState.quoteCalls;
       const output = await f.invoke();
+      assert.ok(
+        f.state.packagePurposes.some((item) => item.pluginId === f.sourceId),
+      );
+      assert.ok(
+        f.state.packagePurposes.every(
+          (item) =>
+            item.purpose === (item.pluginId === f.sourceId ? "read" : "submit"),
+        ),
+      );
       const result = f.state.accepted[0]!,
         submitted = f.state.submissions[0]!;
       assert.deepEqual(output, {
@@ -136,6 +145,30 @@ for (const backend of ["sqlite", "postgres"] as const) {
       assert.deepEqual(await f.credits.getAccount(creditScope), account);
     },
   );
+
+  for (const denied of ["source-read", "target-submit"] as const)
+    test(
+      `${backend} query rejects missing ${denied} permission without adding a Run or calling execution Node`,
+      options,
+      async (t) => {
+        const f = await installedProjectQueryFixture(t, backend);
+        if (denied === "source-read") f.state.sourcePackageAllowed = false;
+        else f.state.targetPackageAllowed = false;
+        const before = await f.counts(),
+          account = await f.credits.getAccount(creditScope),
+          calls = f.nodeState.calls,
+          setups = f.nodeState.setups;
+        await assert.rejects(
+          f.invoke(),
+          /project_query_execution_package_denied/,
+        );
+        assert.deepEqual(await f.counts(), before);
+        assert.deepEqual(await f.credits.getAccount(creditScope), account);
+        assert.equal(f.nodeState.calls, calls);
+        assert.equal(f.nodeState.setups, setups);
+        assert.equal(f.state.submissions.length, 0);
+      },
+    );
 
   for (const change of [
     "source-policy",

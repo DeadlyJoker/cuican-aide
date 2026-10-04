@@ -44,12 +44,17 @@ export type PluginUiRecoveryPublication = Readonly<{
   contributionId: string;
   actions: readonly PluginUiRecoveryRequest["action"][];
 }>;
+export type PluginUiRecoveryPublicationMode =
+  | "business-actions"
+  | "metadata-read";
 export type PluginUiRecoveryApplicationDependencies = Readonly<{
   store: PluginUiIntentJournalStore;
   publications: readonly PluginUiRecoveryPublication[];
   clock: ApplicationClock;
   digester: ContentDigester;
   onDiagnostic(error: unknown): void;
+  /** Native metadata reads may bind an exact module without admitting any business action. */
+  publicationMode?: PluginUiRecoveryPublicationMode;
   /** Actual HTTP identity/profile fence; it performs no Store reads. */
   authorization?: Readonly<{
     assertCurrent(context: PluginUiActionContext): Promise<void>;
@@ -88,6 +93,9 @@ export class PluginUiRecoveryApplicationService
       "clock",
       "digester",
       "onDiagnostic",
+      ...(Object.hasOwn(dependencies, "publicationMode")
+        ? ["publicationMode"]
+        : []),
       ...(Object.hasOwn(dependencies, "authorization")
         ? ["authorization"]
         : []),
@@ -104,6 +112,7 @@ export class PluginUiRecoveryApplicationService
     this.#store = store;
     this.#publications = capturePluginUiRecoveryPublications(
       dependencies.publications,
+      { publicationMode: dependencies.publicationMode ?? "business-actions" },
     );
     this.#clock = Object.freeze({ now: method(dependencies.clock, "now") });
     this.#digester = Object.freeze({
@@ -447,7 +456,12 @@ export class PluginUiRecoveryApplicationService
 
 export function capturePluginUiRecoveryPublications(
   input: unknown,
+  options: Readonly<{ publicationMode: PluginUiRecoveryPublicationMode }> = {
+    publicationMode: "business-actions",
+  },
 ): readonly PluginUiRecoveryPublication[] {
+  const mode = uiRecord(options, ["publicationMode"]).publicationMode;
+  if (mode !== "business-actions" && mode !== "metadata-read") invalid();
   if (
     !Array.isArray(input) ||
     Object.getPrototypeOf(input) !== Array.prototype ||
@@ -469,7 +483,7 @@ export function capturePluginUiRecoveryPublications(
     if (
       !Array.isArray(value.actions) ||
       Object.getPrototypeOf(value.actions) !== Array.prototype ||
-      value.actions.length < 1 ||
+      value.actions.length < (mode === "metadata-read" ? 0 : 1) ||
       value.actions.length > 3 ||
       Reflect.ownKeys(value.actions).length !== value.actions.length + 1
     )

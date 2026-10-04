@@ -1,11 +1,60 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { InstalledPluginExtensionHost } from "./plugins/installed-plugin-extension-host.ts";
 import {
   candidateFixture,
   awaitCandidateGate,
   gate,
   scope,
 } from "./installed-plugin-candidate.test-support.ts";
+
+test("dedicated candidate permission is captured and used only for preparation; execution retains submit authority", async (t) => {
+  const f = await candidateFixture(t);
+  let candidateChecks = 0,
+    candidateAllowed = true;
+  const dependencies = {
+    ...f.dependencies,
+    configurations: f.configurations,
+    async authorizeCandidatePackage(
+      input: Parameters<
+        NonNullable<typeof f.dependencies.authorizeCandidatePackage>
+      >[0],
+    ) {
+      candidateChecks++;
+      assert.deepEqual(input.scope, scope);
+      assert.equal(input.expectedSelectionRevision, f.selection.revision);
+      assert.equal(
+        input.candidate.packageDigest,
+        f.entry.registration.identity.packageDigest,
+      );
+      return candidateAllowed ? ("allow" as const) : ("deny" as const);
+    },
+  };
+  const host = new InstalledPluginExtensionHost(dependencies);
+  dependencies.authorizeCandidatePackage = async () =>
+    assert.fail("replaced candidate callback");
+  try {
+    f.state.packageAllowed = false;
+    assert.equal((await host.prepareCandidate(f.request)).outcome, "ready");
+    assert.ok(candidateChecks > 0);
+    assert.equal(f.state.packageChecks, 0);
+    candidateAllowed = false;
+    assert.equal(
+      (await host.prepareCandidate(f.request)).outcome,
+      "unavailable",
+    );
+    await f.select("enabled");
+    const checksBeforeExecution = candidateChecks;
+    assert.equal((await host.evaluate(f.request)).outcome, "unavailable");
+    assert.equal(candidateChecks, checksBeforeExecution);
+    assert.ok(f.state.packageChecks > 0);
+    f.state.packageAllowed = true;
+    assert.equal((await host.evaluate(f.request)).outcome, "ready");
+    assert.equal(candidateChecks, checksBeforeExecution);
+  } finally {
+    await host.close();
+  }
+});
 
 test("first-installed disabled candidate borrows the real Node factory without enabling, activating or executing", async (t) => {
   const f = await candidateFixture(t);

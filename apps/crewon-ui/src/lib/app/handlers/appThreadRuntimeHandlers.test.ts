@@ -186,8 +186,9 @@ describe("app thread runtime handlers", () => {
   });
 
   it("wires thread list actions with current archived state and dialog dependencies", async () => {
-    const runSelectionRead: NonNullable<SelectThreadActionParams["runSelectionRead"]> =
-      (_threadId, read) => read(new AbortController().signal);
+    const runSelectionRead: NonNullable<
+      SelectThreadActionParams["runSelectionRead"]
+    > = (_threadId, read) => read(new AbortController().signal);
     const confirm = vi.fn(() => true);
     const prompt = vi.fn(() => "Renamed");
     const selected = thread("thread-2");
@@ -250,6 +251,25 @@ describe("app thread runtime handlers", () => {
       selectedThreadId: "selected-thread",
       text: "hello",
     });
+  });
+
+  it("freezes new-message workspace ownership and does not select its late result after a workspace switch", async () => {
+    let current = true;
+    const setSelectedThreadId = vi.fn();
+    const handlers = createAppThreadRuntimeHandlers(
+      createParams({
+        creationWorkspaceId: "workspace-a",
+        isCreationWorkspaceCurrent: () => current,
+        setSelectedThreadId,
+      }),
+    );
+    await handlers.sendMessageInNewThread("Build report");
+    await threadMessageSpy.sendParams?.createThread("Build report");
+    expect(threadMessageSpy.createParams?.workspaceId).toBe("workspace-a");
+    current = false;
+    threadMessageSpy.createParams?.setSelectedThreadId("late-thread-a");
+    threadMessageSpy.sendParams?.setSelectedThreadId("late-thread-a");
+    expect(setSelectedThreadId).not.toHaveBeenCalled();
   });
 
   it("passes Provider execution preparation into the standard thread creator", async () => {

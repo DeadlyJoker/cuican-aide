@@ -46,6 +46,7 @@ export function mergeThreadMetadata(
     name: incoming.name,
     preview: incoming.preview,
     updatedAt: incoming.updatedAt,
+    ...("workspaceId" in incoming ? { workspaceId: incoming.workspaceId } : {}),
   };
 }
 

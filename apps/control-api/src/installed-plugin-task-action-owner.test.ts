@@ -48,6 +48,8 @@ test("owned production actions lazily open the actual installed Node package and
   assert.equal(f.state.setups, 1);
   assert.equal(f.state.execution, undefined);
   assert.equal(f.state.calls, 1);
+  assert.ok(f.state.packagePurposes.length > 0);
+  assert.ok(f.state.packagePurposes.every((purpose) => purpose === "submit"));
   const after = await f.counts();
   for (const table of Object.keys(before))
     assert.equal(after[table], before[table]! + 1, table);

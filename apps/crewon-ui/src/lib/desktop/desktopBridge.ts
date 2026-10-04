@@ -4,7 +4,37 @@ import type {
 } from "./desktopHttpProtocol.ts";
 import type { DesktopPluginUiAssets } from "./desktopPluginUiProtocol.ts";
 import type { DesktopLocalPluginSourceImportClient } from "./desktopLocalPluginSourceImportProtocol.ts";
+import type {
+  ErrorCategory,
+  PluginSelectionResponse,
+  SelectPluginPackageRequest,
+} from "@crewon/contracts";
 export const DESKTOP_BRIDGE_VERSION = 1 as const;
+
+export type DesktopPluginSelectionRequest = Readonly<{
+  pluginId: string;
+  request: SelectPluginPackageRequest;
+  idempotencyKey: string;
+}>;
+
+export type DesktopPluginSelectionReply =
+  | Readonly<{ ok: true; value: PluginSelectionResponse }>
+  | Readonly<{
+      ok: false;
+      error:
+        | Readonly<{
+            kind: "http";
+            status: number;
+            category: ErrorCategory;
+            code: string;
+            message: string;
+            requestId: string;
+          }>
+        | Readonly<{
+            kind: "unknown";
+            code: "desktop_native_plugin_business_activation_failed";
+          }>;
+    }>;
 
 /**
  * A cloud Agent profile entry that the renderer sends to the main process so
@@ -85,6 +115,10 @@ export interface CrewonDesktopBridge {
     /** Additive Native-approved, current local management access; absent on older preloads. */
     localManagementAccess?(): Promise<unknown>;
     onLocalManagementAccessChanged?(listener: () => void): () => void;
+    /** Select through the original Control API and finish Native business activation; absent on older preloads. */
+    setPluginSelection?(
+      input: DesktopPluginSelectionRequest,
+    ): Promise<DesktopPluginSelectionReply>;
     reloadProvider(): Promise<void>;
     /**
      * Pushes cloud Agent profiles into the runtime supervisor so the runtime
@@ -111,6 +145,7 @@ export interface CrewonDesktopBridge {
   readonly workspace: {
     status(): Promise<unknown>;
     selectAndRegister(request: unknown): Promise<unknown>;
+    activate(workspaceId: string, request: unknown): Promise<unknown>;
     clear(request: unknown): Promise<unknown>;
     pickDirectory(title?: string): Promise<string | null>;
   };

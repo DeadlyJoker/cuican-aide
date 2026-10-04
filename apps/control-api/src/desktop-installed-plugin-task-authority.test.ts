@@ -22,6 +22,50 @@ const nativeOnly = { skip: process.platform === "win32" };
 const withdrawn = /desktop_plugin_task_authority_unavailable/;
 
 test(
+  "remote package policy independently authorizes read and submit and rechecks changed permission for the same installed identity",
+  nativeOnly,
+  async (t) => {
+    const f = await nativeTaskAuthorityFixture(t);
+    let allowedPurpose: "read" | "submit" = "read";
+    f.state.before.package = async () => {
+      const input = f.calls.at(-1)!.input as { purpose: "read" | "submit" };
+      f.state.responses.package = {
+        outcome: input.purpose === allowedPurpose ? "allow" : "deny",
+      };
+    };
+    const authorize = (purpose: "read" | "submit") =>
+      f.run(() =>
+        f.owner.authorizePackage(
+          { ...f.packageRequest, purpose },
+          f.installed.requests.currentSignal(),
+        ),
+      );
+    assert.equal(await authorize("read"), "allow");
+    assert.equal(await authorize("submit"), "deny");
+    allowedPurpose = "submit";
+    assert.equal(await authorize("read"), "deny");
+    assert.equal(await authorize("submit"), "allow");
+    const calls = f.calls.filter((call) => call.role === "package");
+    assert.deepEqual(
+      calls.map((call) => call.input),
+      ["read", "submit", "read", "submit"].map((purpose) => ({
+        schemaVersion: "crewon.plugin-execution-package.v1",
+        identity: {
+          pluginId: f.source.pluginId,
+          publisherId: f.source.publisherId,
+          version: f.source.version,
+          packageDigest: f.source.packageDigest,
+        },
+        scope,
+        purpose,
+      })),
+    );
+    assert.equal(f.peerCalls.length, 0);
+    assert.ok(f.calls.every((call) => call.role === "package"));
+  },
+);
+
+test(
   "Native authority uses real request/profile and independent task/package/exact quote policies without activation permission",
   nativeOnly,
   async (t) => {

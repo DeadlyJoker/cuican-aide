@@ -61,6 +61,33 @@ test("metadata-only approval neither adds history nor selection nor recovery", (
   );
 });
 
+test("Native metadata recovery binds the exact project module without a history or business action grant", () => {
+  const value = {
+    version: DESKTOP_PROJECT_HISTORY_VERSION,
+    pluginUi: grant,
+    uiRecovery: { ...recovery, publications: [{ ...source, actions: [] }] },
+  };
+  const parsed = parseDesktopProjectHistoryConfiguration(value, options);
+  assert.deepEqual(parsed, value);
+  assert.ok(Object.isFrozen(parsed.uiRecovery!.publications[0]!.actions));
+  assert.equal(parsed.generationReads, undefined);
+  assert.equal(parsed.resultSelections, undefined);
+  for (const changed of [
+    { ...value, pluginUi: undefined },
+    {
+      ...value,
+      uiRecovery: {
+        ...recovery,
+        publications: [{ ...source, contributionId: "other", actions: [] }],
+      },
+    },
+    { ...value, uiRecovery: recovery },
+  ])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(changed, options),
+    );
+});
+
 for (const field of [
   "authorization",
   "actor",

@@ -289,6 +289,10 @@ export async function installedProjectQueryFixture(
     targetEpoch: "query-execution-policy",
     sourcePackageAllowed: true,
     targetPackageAllowed: true,
+    packagePurposes: [] as Array<{
+      pluginId: string;
+      purpose: "read" | "submit";
+    }>,
     request: new AbortController(),
     submissions: [] as CreatePublishedProjectQueryTaskInput[],
     lastContext: null as PluginUiActionContext | null,
@@ -406,10 +410,14 @@ export async function installedProjectQueryFixture(
       signal: AbortSignal,
     ): Promise<"allow" | "deny"> => {
       signal.throwIfAborted();
+      state.packagePurposes.push({
+        pluginId: input.candidate.descriptor.pluginId,
+        purpose: input.purpose,
+      });
       return (
         input.candidate.descriptor.pluginId === sourceId
-          ? state.sourcePackageAllowed
-          : state.targetPackageAllowed
+          ? state.sourcePackageAllowed && input.purpose === "read"
+          : state.targetPackageAllowed && input.purpose === "submit"
       )
         ? "allow"
         : "deny";

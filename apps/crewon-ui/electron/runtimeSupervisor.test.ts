@@ -162,27 +162,33 @@ describe("desktop runtime identity", () => {
     expect(requestedOrigins).toEqual(["https://platform.example"]);
   });
 
-  it("binds the selected workspace independently from the read-only MCP", () => {
+  it("binds the stable workspace tool catalog and live registry independently from the read-only MCP", () => {
     const environment: NodeJS.ProcessEnv = {
       CREWON_DESKTOP_WORKSPACE_ROOT: "/stale/workspace",
       CREWON_MCP_STDIO_CONFIG_PATH: "/stale/mcp.json",
+      CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH: "/stale/registry.json",
     };
 
     bindDesktopWorkspaceEnvironment(environment, {
       mcpConfig: null,
       workspace: "/selected/workspace",
+      registryPath: "/native/desktop-workspace.json",
     });
 
     expect(environment.CREWON_DESKTOP_WORKSPACE_ROOT).toBe(
       "/selected/workspace",
     );
     expect(environment.CREWON_MCP_STDIO_CONFIG_PATH).toBeUndefined();
+    expect(environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH).toBe(
+      "/native/desktop-workspace.json",
+    );
 
     bindDesktopWorkspaceEnvironment(environment, {
       mcpConfig: null,
       workspace: null,
     });
     expect(environment.CREWON_DESKTOP_WORKSPACE_ROOT).toBeUndefined();
+    expect(environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH).toBeUndefined();
   });
 
   it("publishes a new immutable AgentVersion when local MCP materialization changes", () => {

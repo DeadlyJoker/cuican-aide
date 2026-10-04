@@ -1,3 +1,11 @@
+import { prepareNativeDesktopInstalledPluginRuntime } from "./desktopNativeInstalledPluginRuntime.ts";
+import { ControlApiClient } from "@crewon/control-client";
+import type { PluginSelectionResponse } from "@crewon/contracts";
+import {
+  parseDesktopPluginSelectionCommand,
+  restoreDesktopNativePluginBusinessActivations,
+  setDesktopPluginSelectionWithNativeBusinessActivation,
+} from "./desktopNativePluginBusinessActivation.ts";
 import { writeDesktopConfigAtomically } from "./desktopConfigFile.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -132,7 +140,6 @@ export class RuntimeSupervisor {
     provider: ActiveProvider,
   ) => Promise<readonly string[] | null>;
   readonly #agentPlatformApiKeyForOrigin: (origin: string) => string | null;
-  readonly #workspaceRoot: () => string | null;
   readonly #extensionRuntime:
     | (() => DesktopExtensionRuntimeConfiguration)
     | undefined;
@@ -161,6 +168,7 @@ export class RuntimeSupervisor {
   #installedStartupJoin: Promise<
     Readonly<{ control: ChildProcess; worker: ChildProcess }>
   > | null = null;
+  readonly #nativePluginOperations = new Set<Promise<unknown>>();
   readonly #localManagementEvents = new DesktopLocalManagementAccessEvents();
   #runtimeAbort: AbortController | null = null;
   #history: DesktopExtensionHistoryCoordinator | null = null;
@@ -184,7 +192,8 @@ export class RuntimeSupervisor {
       provider: ActiveProvider,
     ) => Promise<readonly string[] | null>;
     agentPlatformApiKeyForOrigin: (origin: string) => string | null;
-    workspaceRoot: () => string | null;
+    /** Legacy constructor compatibility; actual execution binds the Thread's registered workspace. */
+    workspaceRoot?: () => string | null;
     extensionRuntime?: Readonly<{
       configuration: () => DesktopExtensionRuntimeConfiguration;
       deadlineMs?: number;
@@ -204,7 +213,6 @@ export class RuntimeSupervisor {
     this.#provider = options.provider;
     this.#providerModelCatalog = options.providerModelCatalog;
     this.#agentPlatformApiKeyForOrigin = options.agentPlatformApiKeyForOrigin;
-    this.#workspaceRoot = options.workspaceRoot;
     this.#extensionRuntime = options.extensionRuntime?.configuration;
     this.#extensionDeadlineMs = options.extensionRuntime?.deadlineMs;
     this.#installedRuntime = options.installedRuntime?.configuration;
@@ -304,7 +312,28 @@ export class RuntimeSupervisor {
         agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
       let assertPreparedDefaultCurrent: (() => void) | undefined;
       const installedConfiguration = this.#installedRuntime?.();
-      if (installedConfiguration?.enabled) {
+      let nativeInstalled: AutomaticDesktopInstalledPluginRuntime | null = null;
+      if (!installedConfiguration?.enabled && bootstrap !== null) {
+        try {
+          nativeInstalled = prepareNativeDesktopInstalledPluginRuntime({
+            dataDirectory: this.#dataDirectory,
+            bootstrap,
+            provider,
+            sharedEnvironment,
+            workerEnvironment,
+            signal: startup.signal,
+            deadlineMs: this.#installedDeadlineMs,
+          });
+        } catch (error) {
+          startup.signal.throwIfAborted();
+          this.#logs.write(
+            "stderr",
+            "Native plugin preparation",
+            `${error instanceof Error ? error.name : "Error"}:native_plugin_policy_unavailable\n`,
+          );
+        }
+      }
+      if (installedConfiguration?.enabled || nativeInstalled !== null) {
         const expectedProvider = { ...provider };
         const assertProviderCurrent = () => {
           const current = this.#provider();
@@ -340,14 +369,20 @@ export class RuntimeSupervisor {
         };
         let installed: DesktopInstalledPluginRuntime | null = null;
         if (
-          isAutomaticDesktopInstalledPluginRuntimeConfiguration(
-            installedConfiguration,
-          )
+          nativeInstalled !== null ||
+          (installedConfiguration?.enabled &&
+            isAutomaticDesktopInstalledPluginRuntimeConfiguration(
+              installedConfiguration,
+            ))
         ) {
-          const automatic = prepareAutomaticDesktopInstalledPluginRuntime({
-            ...installedInputs,
-            configuration: installedConfiguration,
-          });
+          const automatic =
+            nativeInstalled ??
+            prepareAutomaticDesktopInstalledPluginRuntime({
+              ...installedInputs,
+              configuration: installedConfiguration as Parameters<
+                typeof prepareAutomaticDesktopInstalledPluginRuntime
+              >[0]["configuration"],
+            });
           this.#automaticInstalledRuntimeOwner = automatic;
           automatic.assertCurrent();
           await this.#runOnce(
@@ -380,7 +415,9 @@ export class RuntimeSupervisor {
         } else {
           installed = prepareDesktopInstalledPluginRuntime({
             ...installedInputs,
-            configuration: installedConfiguration,
+            configuration: installedConfiguration as Parameters<
+              typeof prepareDesktopInstalledPluginRuntime
+            >[0]["configuration"],
           });
         }
         if (installed !== null) {
@@ -429,6 +466,43 @@ export class RuntimeSupervisor {
           assertProviderCurrent();
           installed.assertCurrent();
           startup.signal.throwIfAborted();
+          if (nativeInstalled !== null) {
+            const restoration = restoreDesktopNativePluginBusinessActivations({
+              runtime: installedRuntime,
+              client: new ControlApiClient({
+                baseUrl: `http://127.0.0.1:${this.#controlPort}/`,
+                accessToken: this.#sessionToken,
+                csrfToken: this.#csrfToken,
+                origin: this.#origin,
+              }),
+              signal: AbortSignal.any([
+                startup.signal,
+                AbortSignal.timeout(30000),
+              ]),
+            });
+            this.#nativePluginOperations.add(restoration);
+            try {
+              for (const issue of await restoration)
+                this.#logs.write(
+                  "stderr",
+                  "Native plugin activation",
+                  `${issue.pluginId}:${issue.reasonCode}\n`,
+                );
+            } catch {
+              // Plugin activation failure must not disable ordinary chat. Withdrawal still aborts startup.
+              startup.signal.throwIfAborted();
+              installed.assertCurrent();
+              this.#logs.write(
+                "stderr",
+                "Native plugin activation",
+                "desktop_native_plugin_business_activation_restore_failed\n",
+              );
+            } finally {
+              this.#nativePluginOperations.delete(restoration);
+            }
+            startup.signal.throwIfAborted();
+            installed.assertCurrent();
+          }
           this.#ready = true;
           this.#localManagementEvents.notify();
           this.#watchCurrentChildren();
@@ -753,6 +827,7 @@ export class RuntimeSupervisor {
     // Aborted startup may reject, but its actual HTTP/body work must finish
     // before retiring its captured owner and the Native bootstrap files.
     await Promise.allSettled([installedStartup]);
+    await Promise.allSettled([...this.#nativePluginOperations]);
     const childFailures = childStops.flatMap((result) =>
       result.status === "rejected" ? [result.reason] : [],
     );
@@ -897,6 +972,32 @@ export class RuntimeSupervisor {
     };
   }
 
+  /** Native selection and business activation share the current Main-owned Control session. */
+  async setPluginSelection(input: unknown): Promise<PluginSelectionResponse> {
+    if (this.#nativePluginOperations.size >= 128)
+      throw new Error("desktop_native_plugin_business_capacity_exceeded");
+    const command = parseDesktopPluginSelectionCommand(input);
+    const session = this.session();
+    const lifetime = this.#runtimeAbort;
+    if (lifetime === null) throw new Error("control_runtime_unavailable");
+    const operation = setDesktopPluginSelectionWithNativeBusinessActivation({
+      runtime: this.#installedRuntimeOwner,
+      nativePreparation: this.#automaticInstalledRuntimeOwner,
+      client: new ControlApiClient({
+        ...session,
+        accessToken: session.sessionToken,
+      }),
+      command,
+      signal: AbortSignal.any([lifetime.signal, AbortSignal.timeout(30000)]),
+    });
+    this.#nativePluginOperations.add(operation);
+    try {
+      return await operation;
+    } finally {
+      this.#nativePluginOperations.delete(operation);
+    }
+  }
+
   logStatus() {
     return this.#logs.status();
   }
@@ -946,9 +1047,11 @@ export class RuntimeSupervisor {
           "你是本地独立验证智能体。逐项检查证据并明确通过、不通过或缺失证据。",
       },
     ] as const;
-    const workspace = this.#workspaceRoot();
-    const mcpConfig =
-      workspace === null ? null : this.#writeMcpConfig(workspace);
+    // Selection changes do not rematerialize the default Agent. Worker tool
+    // execution resolves the Thread's immutable workspace through the registry.
+    const workspace = join(this.#dataDirectory, "workspace-tool-catalog");
+    mkdirSync(workspace, { recursive: true, mode: 0o700 });
+    const mcpConfig = this.#writeMcpConfig(workspace);
     const fingerprint = desktopRuntimeFingerprint({
       providerId: provider.providerId,
       endpoint: provider.endpoint,
@@ -1040,7 +1143,11 @@ export class RuntimeSupervisor {
       CREWON_SPACE_ID: DESKTOP_RUNTIME_OWNER.spaceId,
       CREWON_TENANT_ID: DESKTOP_RUNTIME_OWNER.tenantId,
     };
-    bindDesktopWorkspaceEnvironment(environment, { mcpConfig, workspace });
+    bindDesktopWorkspaceEnvironment(environment, {
+      mcpConfig,
+      workspace,
+      registryPath: join(this.#dataDirectory, "desktop-workspace.json"),
+    });
     for (const name of [
       "CREWON_AGENT_PLATFORM_API_KEY",
       "CREWON_CONTROL_DATABASE_URL",
@@ -1231,14 +1338,18 @@ export function desktopRuntimeFingerprint(input: {
     .digest("hex");
 }
 
-/** Binds only the workspace selected by the desktop, clearing ambient values. */
+/** Binds the desktop-owned stable tool catalog and registry, clearing ambient values. */
 export function bindDesktopWorkspaceEnvironment(
   environment: NodeJS.ProcessEnv,
   binding: Readonly<{
     mcpConfig: string | null;
     workspace: string | null;
+    registryPath?: string;
   }>,
 ): void {
+  delete environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH;
+  if (binding.registryPath !== undefined)
+    environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH = binding.registryPath;
   if (binding.mcpConfig === null) {
     delete environment.CREWON_MCP_STDIO_CONFIG_PATH;
   } else {

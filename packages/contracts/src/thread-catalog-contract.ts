@@ -2,6 +2,8 @@ import type { components } from "./generated/control-api.ts";
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
   formatThreadCursor,
+  normalizeThreadViewWorkspace,
+  parseThreadWorkspaceId,
   parseThreadId,
   parseThreadListQuery,
 } from "./control-api-contract.ts";
@@ -243,7 +245,10 @@ export function parseThreadCatalogResponse(
         !record(value) ||
         !fields.every((key) => Object.hasOwn(value, key)) ||
         Object.keys(value).some(
-          (key) => !fields.includes(key) && key !== "displayTitle",
+          (key) =>
+            !fields.includes(key) &&
+            key !== "displayTitle" &&
+            key !== "workspaceId",
         ) ||
         value.status !== query.status ||
         !integer(value.revision, 1) ||
@@ -266,6 +271,7 @@ export function parseThreadCatalogResponse(
       )
         fail();
       parseThreadId(value.threadId);
+      parseThreadWorkspaceId(value.workspaceId);
       if (value.forkedFromThreadId !== null)
         parseThreadId(value.forkedFromThreadId);
       const thread = value as components["schemas"]["ThreadView"];
@@ -312,7 +318,11 @@ export function parseThreadCatalogResponse(
         )
           fail();
     }
-    return structuredClone(input) as ThreadCatalogResponse;
+    const response = structuredClone(input) as ThreadCatalogResponse;
+    return {
+      ...response,
+      data: response.data.map(normalizeThreadViewWorkspace),
+    };
   } catch {
     return fail("thread_catalog_response_invalid");
   }

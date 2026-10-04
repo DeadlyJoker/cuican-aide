@@ -116,7 +116,7 @@ export function parseDesktopProjectHistoryConfiguration(
       (selectionUi !== undefined && resultSelections === undefined)
     )
       invalid();
-    const uiRecovery = recovery(value.uiRecovery, selectionUi);
+    const uiRecovery = recovery(value.uiRecovery, selectionUi, pluginUi);
     return Object.freeze({
       version: DESKTOP_PROJECT_HISTORY_VERSION,
       ...(pluginUi === undefined ? {} : { pluginUi }),
@@ -226,11 +226,11 @@ function selections(
 function recovery(
   input: unknown,
   selections: Publications | undefined,
+  metadata: Publications | undefined,
 ): DesktopProjectHistoryConfiguration["uiRecovery"] {
   if (input === undefined) return undefined;
   const value = pluginControlRecord(input, ["version", "publications"]);
-  if (value.version !== PLUGIN_UI_RECOVERY_VERSION || selections === undefined)
-    invalid();
+  if (value.version !== PLUGIN_UI_RECOVERY_VERSION) invalid();
   const items = dense(value.publications, { minimum: 1, maximum: 32 }).map(
     (input) => {
       const item = pluginControlRecord(input, [
@@ -244,17 +244,19 @@ function recovery(
         packageDigest: item.packageDigest,
         contributionId: item.contributionId,
       });
-      const actions = dense(item.actions, { minimum: 1, maximum: 1 });
+      const actions = dense(item.actions, { minimum: 0, maximum: 1 });
       if (
-        actions[0] !== SELECT_ACTION ||
-        !selections.publications.some(
+        (actions.length > 0 && actions[0] !== SELECT_ACTION) ||
+        !(actions.length === 0 ? metadata : selections)?.publications.some(
           (approved) => JSON.stringify(approved) === JSON.stringify(source),
         )
       )
         invalid();
       return Object.freeze({
         ...source,
-        actions: Object.freeze([SELECT_ACTION] as const),
+        actions: Object.freeze(
+          actions.length === 0 ? [] : ([SELECT_ACTION] as const),
+        ),
       });
     },
   );

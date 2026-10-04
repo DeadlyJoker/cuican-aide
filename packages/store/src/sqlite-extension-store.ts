@@ -1,4 +1,9 @@
 import {
+  migrateSqliteUnmeteredPluginAdmissions,
+  loadSqlitePluginTaskUnmeteredAdmission,
+  verifySqliteUnmeteredReceipt,
+} from "./plugin-task-unmetered-store-support.ts";
+import {
   migrateSqliteProjectQueries,
   assertSqliteProjectQuerySchema,
 } from "./project-query-schema.ts";
@@ -9,6 +14,7 @@ import {
   projectGenerationSourceValues,
   projectGenerationSourceReadSql,
   decodeProjectGenerationSource,
+  verifySqliteProjectSourceFunding,
   assertSqliteProjectGenerationReadSchema,
 } from "./project-generation-source-read.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -105,6 +111,22 @@ export class SqliteExtensionStore implements ExtensionStore {
     "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
+  #unmeteredEnabled = false;
+  get unmeteredAdmissionVersion() {
+    return this.#unmeteredEnabled
+      ? ("crewon.plugin-task-unmetered-admission.v1" as const)
+      : undefined;
+  }
+  async migrateUnmeteredPluginAdmissions(): Promise<void> {
+    this.#transaction(() => migrateSqliteUnmeteredPluginAdmissions(this.#db), {
+      beforeCommit: () => this.#host.assertOpen(),
+    });
+    this.#unmeteredEnabled = true;
+  }
+  async loadPluginTaskUnmeteredAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    return loadSqlitePluginTaskUnmeteredAdmission(this.#db, input);
+  }
   #projectGenerationsEnabled = false;
   #projectQueriesEnabled = false;
   get projectQueryVersion() {
@@ -226,7 +248,9 @@ export class SqliteExtensionStore implements ExtensionStore {
       .prepare(projectGenerationSourceReadSql())
       .all(...projectGenerationSourceValues(locator));
     this.#host.assertOpen();
-    return decodeProjectGenerationSource(rows, locator);
+    const link = decodeProjectGenerationSource(rows, locator);
+    verifySqliteProjectSourceFunding(this.#db, rows, link);
+    return link;
   }
 
   /** Query opt-in verifies existing generation history and never grants generation writes. */
@@ -477,6 +501,7 @@ export class SqliteExtensionStore implements ExtensionStore {
     return commitSqliteExtensionTurn(
       {
         database: this.#db,
+        unmeteredEnabled: this.#unmeteredEnabled,
         projectGenerationsEnabled: this.#projectGenerationsEnabled,
         projectQueriesEnabled: this.#projectQueriesEnabled,
         assertOpen: () => this.#host.assertOpen(),
@@ -526,6 +551,7 @@ export class SqliteExtensionStore implements ExtensionStore {
   }
 
   #verifyCreditReceipt<T extends CommitExtensionRunResult>(result: T): T {
+    verifySqliteUnmeteredReceipt(this.#db, result);
     if (result.creditAdmission !== undefined)
       this.#verifyCreditAdmission(result.creditAdmission);
     return result;

@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-05：Native 插件安装与工作空间回退修复
+
+本机桌面已更新为 **0.1.12**，安装的 `app.asar` 和七个 runtime bundle 与 managed 源码构建一致，证据为 `output/extensions/checks/native-generation-funding-install-20261005.json`。更新前正常退出，八个实际 App 进程均物理退场；原 0.1.11 安装包与完整 profile 已私有备份，原 profile 保留原位。原账号、设置、CSS、SDK、旧发行目录、primary 人类工作及五个用户 Web 服务均保留。实际 Native Settings 已安装并启用独立短剧 11.0.0 和 Krea2 1.0.0；用户提供的新 ComfyUI 地址已保存。项目「夜航 · 插件流程验收」的需求 v1 和概念输入 v1 已从同一实际用户库冷读取。
+
+之前重打包使用的插件分支漏掉了历史工作空间修复 `0d073c3dc`、`98c51b79f`，导致多目录 registry 和会话执行目录回退。现恢复持久 `workspaceId`、v2 多目录配置、侧栏真实归组、首次发送和 Worker 按 Run → Thread → workspaceId 解析目录。实际 profile 从更新前完整备份恢复四个原空间 ID 和目录，六个已有绑定会话全部可解析；未重写旧会话。桌面实测打开 A/B 历史会话会跟随其所属目录，切换时五个运行 PID 保持，证据为 `workspace-binding-native-switch-20261005.json`。两目录实际文件工具/命令执行与重开测试及 source/packaged 进程检查分别提供自动化证据，不能代替真实外部生图。
+
+积分按用户要求后置。本机使用显式 unmetered 准入，原计费路径继续严格校验，不创建钱包、赠款或零金额报价。实际页面准备检查暴露了来源 UI 包与目标执行包的权限用途混用：纯短剧 UI 包被要求具备 Node 提交授权。旧 0.1.10 的独立实际桌面进程复现相同 `project_generation_execution_package_denied`；现改为来源 `read`、目标 `submit`，执行授权仍只覆盖 Krea2。随后修复启用选择却缺失原业务 activation 的 `extension_access_revoked`：Native 启用和冷启动均接原业务激活接口，Source/packaged 各 **3/3**、设置接线 **44/44** 通过。不以空记录放行或手写 SQL 代替产品接线。
+
+真实 0.1.11 页面沿已保存输入受理的唯一生成 Run 为 `R-SYNhSmWFe29SPwW8rHREftDBthKs-yOWffSOsJwr8`，保留唯一 generation/unmetered admission。Worker 无条件读取旧 creditAdmission 的 `extension_json_invalid` 和已提交回执的外层捕获问题均已修复，严格校验恰好一种资金模式，查询禁止新增资金证明。另修复业务 ID producer 与消费协议的偶发冲突：两个任务工厂为新的 32 字节随机 ID 增加固定 alnum 前缀；Worker 与 ActionIntent 仅兼容旧 43 字符首 `-`/`_` Run ID，返回原字节，其他身份规则不变。Source 与最终 packaged 原 HTTP stage/ACK → 实际 Worker beginRunAttempt 各 **1/1**，旧 ID 完整工具执行、错绑定拒绝及资金范围 **42/42**，原 Contracts **438/438**、Tool broker **50/50**；各范围不相加。实际原 receipt 的七项只读解析也通过。这些测试均不发送供应商请求。
+
+0.1.12 实际重开后原 Run 已进入工具调用，持久原 operation 为 `4263a1da-d6fe-eac4-aaec-f05a1e4f7485`，目前 `submitting` revision 1、providerOperationId 为 null，Run 为 `reconciling`。本机系统代理启用 `127.0.0.1:7890`，系统 DNS 把实际 ComfyUI 域名解析为 Fake-IP `198.18.12.7`；原网络策略判为 private 并在 Pinned HTTP 发送前返回 `network_egress_denied`。插件 catch 将内层错误归为 unknownOutcome，持久记录不能证明历史 POST 是否已送达；不据此重新提交或手改 operation。已询问用户选择此域名真实 DNS 或系统代理支持，尚未改用户网络。原请求的实际 UI 回执仍 UNKNOWN，当前纯解析及 epoch/pin 核对通过，继续定位真实恢复传输。实际计数仍为原 Run 一份、operation 一份、unmetered admission 一份，尚无 query/selection。原输入、配置、Run、请求均保留；在线原 operation 查询、确切图片选用及冷恢复未验收，不能称生图成功。
+
+独立真实 Native 冷回执进程专项 **1/1**：真实 commit 与原 issuer 确认后，仅测试内丢失 ACK，HTTP 500 留下 dispatched journal 和唯一原 receipt；自有进程物理关闭后重新 Main preparation、新 epoch 和新 mount，GET 恢复保留原请求，同键 stage replay/POST action 返回 200，并把 journal 更新为 accepted。Run、receipt、funding 和项目 link 均仍一份，供应商 operation 为零；非 loopback 发送被测试拦截且未触发。此证据没有复现实际页面 UNKNOWN，不代替该页面或在线 S0。日志为 `native-generation-cold-ack-process-20261005.log`。
+
+旧预览网页 5730 仍使用原 3210/3211 后端进程，没有重启加载本轮后端修复；实际桌面有自己从当前安装包启动的 Control/Worker。不能以旧网页证明当前桌面绑定或插件执行结果。完整目标继续 ACTIVE，后置个人积分与用户选定的第二个企业 API 仍分别列为后续阶段。
+
 ## 2026-10-04：新 ComfyUI 地址与桌面代码同步
 
 用户明确将积分后置，先确认可用，并要求基础功能保持原版一致。新的无鉴权 ComfyUI 地址为 `https://u564342-7908818e1ac4.westd.seetacloud.com:8443/`；实际 `/queue`、`/system_stats` 和工作流节点/模型读取成功。使用用户原 Krea2 API 工作流、明确的单张 1MP 验证输入，真实提交一次 POST，操作 `e90c0ad2-d1ae-4930-bd22-c31040691be3` 经 running 到 succeeded，取得 **768×1368 PNG**。图片与完整回执位于 `output/extensions/checks/comfyui-new-address-live-20261004/`；节点兼容检查为 `comfyui-krea2-new-service-object-info-20261004.json`。这是实际外部 API 流程验证，不冒称正式短剧插件、个人积分或完整 App 生成闭环已经验收。

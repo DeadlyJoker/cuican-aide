@@ -91,6 +91,8 @@ const bridge: CrewonDesktopBridge = {
   },
   runtime: {
     bootstrap: () => invoke<unknown>("crewon:runtime:bootstrap"),
+    setPluginSelection: (request) =>
+      invoke("crewon:plugins:set-selection", request),
     localManagementAccess: () =>
       invoke<unknown>("crewon:runtime:local-management-access"),
     onLocalManagementAccessChanged: (listener) => {
@@ -127,6 +129,8 @@ const bridge: CrewonDesktopBridge = {
     status: () => invoke<unknown>("crewon:workspace:status"),
     selectAndRegister: (request) =>
       invoke<unknown>("crewon:workspace:select-and-register", request),
+    activate: (workspaceId, request) =>
+      invoke<unknown>("crewon:workspace:activate", workspaceId, request),
     clear: (request) => invoke<unknown>("crewon:workspace:clear", request),
     pickDirectory: (title) =>
       invoke<string | null>("crewon:workspace:pick-directory", title),

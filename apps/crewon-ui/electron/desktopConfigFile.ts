@@ -14,7 +14,7 @@ const CONFIG_LIMITS = new Map([
   ["extension-recovery-startup.json", 256 * 1024],
   ["provider-credentials.json", 512 * 1024],
   ["agent-platform-credentials.json", 256 * 1024],
-  ["desktop-workspace.json", 16 * 1024],
+  ["desktop-workspace.json", 128 * 1024],
   ["desktop-model-catalog-cache.json", 32 * 1024],
 ]);
 const PENDING_SUFFIX = ".pending-v1";

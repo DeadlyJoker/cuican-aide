@@ -1,3 +1,8 @@
+import {
+  migratePostgresUnmeteredWithPool,
+  loadPostgresPluginTaskUnmeteredAdmission,
+  verifyPostgresUnmeteredReceipt,
+} from "./plugin-task-unmetered-store-support.ts";
 import type { Pool, PoolClient } from "pg";
 import { commitPostgresExtensionTurn } from "./postgres-extension-turn-commit.ts";
 import { PostgresProjectAssociations } from "./postgres-project-associations.ts";
@@ -87,6 +92,30 @@ export class PostgresExtensionStore implements ExtensionStore {
     "crewon.plugin-query-task-admission.v1" as const;
   readonly creditAdmissionVersion =
     "crewon.extension-credit-admission.v0" as const;
+  #unmeteredEnabled = false;
+  get unmeteredAdmissionVersion() {
+    return this.#unmeteredEnabled
+      ? ("crewon.plugin-task-unmetered-admission.v1" as const)
+      : undefined;
+  }
+  async migrateUnmeteredPluginAdmissions(): Promise<void> {
+    await migratePostgresUnmeteredWithPool({
+      pool: this.#pool,
+      schema: this.#schemaName,
+      assertOpen: () => this.#host.assertOpen(),
+    });
+    this.#unmeteredEnabled = true;
+  }
+  async loadPluginTaskUnmeteredAdmission(input: ExtensionRunLocator) {
+    this.#host.assertOpen();
+    const result = await loadPostgresPluginTaskUnmeteredAdmission(
+      this.#pool,
+      this.#schemaName,
+      input,
+    );
+    this.#host.assertOpen();
+    return result;
+  }
   readonly #projects: PostgresProjectAssociations;
   get projectGenerationReadVersion() {
     return this.#projects.readsEnabled
@@ -448,6 +477,8 @@ export class PostgresExtensionStore implements ExtensionStore {
     if (value === null) return null;
     const result = parseExtensionTaskReceipt(value, input, input.receipt);
     await this.#assertCreditLink(this.#pool, result.creditAdmission);
+    await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
+    this.#host.assertOpen();
     return result;
   }
 
@@ -467,6 +498,8 @@ export class PostgresExtensionStore implements ExtensionStore {
           input.receipt,
         );
         await this.#assertCreditLink(client, result.creditAdmission);
+        await verifyPostgresUnmeteredReceipt(client, this.#schemaName, result);
+        this.#host.assertOpen();
         return result;
       }
       await this.#admit(client, binding, input.expectedActivationRevision);
@@ -499,6 +532,8 @@ export class PostgresExtensionStore implements ExtensionStore {
     if (value === null) return null;
     const result = parseExtensionTurnReceipt(value, input, input.receipt);
     await this.#assertCreditLink(this.#pool, result.creditAdmission);
+    await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
+    this.#host.assertOpen();
     return result;
   }
 
@@ -516,6 +551,7 @@ export class PostgresExtensionStore implements ExtensionStore {
     return commitPostgresExtensionTurn(
       {
         schema: this.#schemaName,
+        unmeteredEnabled: this.#unmeteredEnabled,
         projectGenerationsEnabled: this.#projects.generationsEnabled,
         projectQueriesEnabled: this.#projects.queriesEnabled,
         assertOpen: () => this.#host.assertOpen(),

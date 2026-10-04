@@ -79,6 +79,11 @@ class AgentVersionScopedToolRuntime implements ToolRuntimePort {
     return this.#runtime.execute(command, signal);
   }
 
+  async prepareExecution(command: ToolExecutionCommand, signal: AbortSignal) {
+    this.#requireAllowed(command.kind, command.name);
+    await this.#runtime.prepareExecution?.(command, signal);
+  }
+
   reserveExecution(
     command: ToolExecutionCommand,
     signal: AbortSignal,

@@ -88,6 +88,57 @@ test("new execution schema reuses metadata validation without inventing a task m
   );
 });
 
+test("Native v3 can retain metadata recovery without adding or borrowing any execution mapping", () => {
+  const value = {
+    version: DESKTOP_PROJECT_EXECUTION_VERSION,
+    pluginUi: valid.pluginUi,
+    uiRecovery: {
+      version: "crewon.plugin-ui-recovery.v1",
+      publications: [{ ...source, actions: [] }],
+    },
+  };
+  const parsed = parseDesktopProjectExecutionConfiguration(value, options);
+  assert.deepEqual(parsed, value);
+  assert.equal(parsed.pluginGenerations, undefined);
+  assert.equal(parsed.pluginQueries, undefined);
+  for (const changed of [
+    { ...value, pluginUi: undefined },
+    {
+      ...value,
+      uiRecovery: {
+        ...value.uiRecovery,
+        publications: [{ ...source, contributionId: "other", actions: [] }],
+      },
+    },
+    {
+      ...value,
+      uiRecovery: {
+        ...value.uiRecovery,
+        publications: [{ ...source, actions: [generate] }],
+      },
+    },
+  ])
+    assert.throws(() =>
+      parseDesktopProjectExecutionConfiguration(changed, options),
+    );
+  const metadataSource = { ...source, contributionId: "metadata-only" };
+  const mixed = {
+    ...valid,
+    pluginUi: { publications: [source, metadataSource] },
+    uiRecovery: {
+      ...valid.uiRecovery,
+      publications: [
+        ...valid.uiRecovery.publications,
+        { ...metadataSource, actions: [] },
+      ],
+    },
+  };
+  assert.deepEqual(
+    parseDesktopProjectExecutionConfiguration(mixed, options),
+    mixed,
+  );
+});
+
 test("history v1 remains strict and cannot receive the new mapping or recovery authority", () => {
   for (const field of ["pluginGenerations", "pluginQueries"] as const)
     assert.throws(() =>

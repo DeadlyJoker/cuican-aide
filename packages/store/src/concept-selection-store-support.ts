@@ -1,3 +1,8 @@
+import { assertPluginTaskFunding } from "@crewon/domain";
+import {
+  decodePluginTaskUnmeteredRecord,
+  assertUnmeteredReceipt,
+} from "./plugin-task-unmetered-store-support.ts";
 import {
   selectionFields,
   jsonRecord,
@@ -342,33 +347,56 @@ function* source(
     { admission, binding: link.binding, receipt: link.receipt },
     digester,
   );
-  const creditRows = yield* query(
-      d,
-      `SELECT * FROM ${d.prefix}extension_credit_admissions WHERE tenant_id=$1 AND run_id=$2`,
-      [actor.tenantId, link.binding.runId],
-    ),
-    creditRow = creditRows[0];
-  const credit = decodeExtensionCreditAdmission(
-    creditRow as Parameters<typeof decodeExtensionCreditAdmission>[0],
-  );
-  if (!credit || credit.reservation.scope.principalId !== actor.principalId)
-    throw new Error("concept_selection_paid_proof_invalid");
-  assertExtensionCreditAdmission(
-    { admission: credit, binding: link.binding, receipt: link.receipt },
-    digester,
-  );
   const originalReceipt = parseExtensionTurnReceipt(
-    jsonRecord(rows[0]?.stored_result_json) as Parameters<
-      typeof parseExtensionTurnReceipt
-    >[0],
+    jsonRecord(rows[0]?.stored_result_json),
     link.binding,
     link.receipt,
   );
-  if (
-    extensionCanonicalJson(originalReceipt.creditAdmission) !==
-    extensionCanonicalJson(credit)
-  )
-    throw new Error("concept_selection_paid_proof_invalid");
+  assertPluginTaskFunding(
+    {
+      creditAdmission: originalReceipt.creditAdmission,
+      unmeteredAdmission: originalReceipt.unmeteredAdmission,
+      binding: link.binding,
+      receipt: link.receipt,
+      principalId: actor.principalId,
+      task: admission,
+    },
+    digester,
+  );
+  if (originalReceipt.unmeteredAdmission !== undefined) {
+    const proofRows = yield* query(
+      d,
+      `SELECT * FROM ${d.prefix}plugin_task_unmetered_admissions WHERE tenant_id=$1 AND space_id=$2 AND run_id=$3`,
+      [actor.tenantId, actor.spaceId, link.binding.runId],
+    );
+    const row = proofRows[0];
+    const proof = decodePluginTaskUnmeteredRecord(
+      row === undefined
+        ? undefined
+        : { ...row, task_json: admission, binding_json: link.binding },
+    );
+    assertUnmeteredReceipt(originalReceipt, proof);
+  } else {
+    const creditRows = yield* query(
+      d,
+      `SELECT * FROM ${d.prefix}extension_credit_admissions WHERE tenant_id=$1 AND run_id=$2`,
+      [actor.tenantId, link.binding.runId],
+    );
+    const credit = decodeExtensionCreditAdmission(
+      creditRows[0] as Parameters<typeof decodeExtensionCreditAdmission>[0],
+    );
+    if (!credit || credit.reservation.scope.principalId !== actor.principalId)
+      throw new Error("concept_selection_paid_proof_invalid");
+    assertExtensionCreditAdmission(
+      { admission: credit, binding: link.binding, receipt: link.receipt },
+      digester,
+    );
+    if (
+      extensionCanonicalJson(originalReceipt.creditAdmission) !==
+      extensionCanonicalJson(credit)
+    )
+      throw new Error("concept_selection_paid_proof_invalid");
+  }
   const configRows = yield* query(
       d,
       `SELECT * FROM ${d.prefix}extension_configurations WHERE tenant_id=$1 AND space_id=$2 AND plugin_id=$3 AND revision=$4`,

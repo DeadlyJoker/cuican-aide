@@ -1,5 +1,6 @@
 import {
   isModelHistoryMessageBacked,
+  normalizeThreadStateWorkspace,
   projectEffectiveModelHistory,
   reduceThreadLifecycleEvent,
   validateModelHistoryItem,
@@ -74,7 +75,8 @@ export function validateThreadRollbackResult(
         artifacts.event,
       );
       if (
-        canonicalJson(result.state) !== canonicalJson(expectedState) ||
+        canonicalJson(normalizeThreadStateWorkspace(result.state)) !==
+          canonicalJson(expectedState) ||
         canonicalJson(result.event) !== canonicalJson(artifacts.event) ||
         canonicalJson(result.marker) !== canonicalJson(artifacts.marker) ||
         canonicalJson(
@@ -113,7 +115,7 @@ function validateResultShape(result: CommitThreadRollbackResult): void {
     ]) ||
     (result.disposition !== "committed" && result.disposition !== "replayed") ||
     !isPlainObject(result.state) ||
-    !hasExactKeys(result.state, [
+    !hasExactKeys(normalizeThreadStateWorkspace(result.state), [
       "threadId",
       "tenantId",
       "spaceId",
@@ -130,6 +132,7 @@ function validateResultShape(result: CommitThreadRollbackResult): void {
       "deletedByActorId",
       "forkedFromThreadId",
       "forkedThroughHistorySequence",
+      "workspaceId",
     ]) ||
     !isPlainObject(result.event) ||
     !hasExactKeys(result.event, [

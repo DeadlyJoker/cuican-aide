@@ -117,6 +117,11 @@ import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWork
 import { useControlSandboxCapabilities } from "./lib/control-runtime/useControlSandboxCapabilities";
 import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
+import { controlThreadWorkspaceId } from "./lib/control-runtime/controlThreadWorkspace";
+import {
+  useControlThreadWorkspaceSelection,
+  useControlWorkspaceCreationScope,
+} from "./lib/control-runtime/useControlThreadWorkspaceSelection";
 import { desktopSandboxClient } from "./lib/desktop/desktopSandboxClient";
 import { providerCredentialStore } from "./lib/model-provider/providerCredentialStore";
 
@@ -285,6 +290,14 @@ export function App({
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
     selectedThreadId,
   });
+  const creationWorkspaceId =
+    controlClient === null
+      ? undefined
+      : (controlWorkspace.nativeWorkspace?.workspaceId ?? null);
+  const isCreationWorkspaceCurrent = useControlWorkspaceCreationScope(
+    controlClient,
+    creationWorkspaceId,
+  );
   const workspaceUiAuthority = "control" as const;
   const authoritativeThreadGoal =
     workspaceUiAuthority === "control" ? controlThreadGoal : threadGoal;
@@ -370,6 +383,23 @@ export function App({
     setThreads: threadState.setThreads,
   });
   const threadRuntimeClient = threadAuthority.client;
+  const selectedWorkspaceReady =
+    controlWorkspace.nativeWorkspace === null ||
+    (!controlWorkspace.nativeBusy &&
+      controlWorkspace.nativeWorkspace.availability === "available" &&
+      (!selectedThread ||
+        controlThreadWorkspaceId(selectedThread) ===
+          controlWorkspace.nativeWorkspace.workspaceId));
+  useControlThreadWorkspaceSelection({
+    identity: controlClient,
+    selectedThread,
+    nativeWorkspaceId: controlWorkspace.nativeWorkspace?.workspaceId ?? null,
+    available: controlWorkspace.mutationAuthority === "desktop",
+    busy: controlWorkspace.nativeBusy,
+    activate: controlWorkspace.activateNativeWorkspace,
+    clear: controlWorkspace.clearNativeWorkspace,
+    onError: setWorkspaceSelectError,
+  });
   const threadRuntimeConnected = threadAuthority.connected;
   const threadConnectionState = threadAuthority.connectionState;
   const controlCommandModelOptions = useControlCommandModelOptions({
@@ -406,7 +436,14 @@ export function App({
       isSingleConversationThread(thread) &&
       (catalogVisibleIds === null || catalogVisibleIds.has(thread.id)),
   );
-  const assistantThread = latestAssistantThread(threads);
+  const assistantThread = latestAssistantThread(
+    threads.filter(
+      (thread) =>
+        controlClient === null ||
+        controlThreadWorkspaceId(thread) ===
+          (controlWorkspace.nativeWorkspace?.workspaceId ?? null),
+    ),
+  );
   const sidebarSelectedThreadId = conversationThreads.some(
     (thread) => thread.id === selectedThreadId,
   )
@@ -801,6 +838,8 @@ export function App({
     activeTurnId,
     ...workspaceStatus,
     client: threadRuntimeClient,
+    creationWorkspaceId,
+    isCreationWorkspaceCurrent,
     confirm: requestConfirm,
     demoResponse: t.demoResponse,
     getShowArchivedThreads: () => showArchivedThreadsRef.current,
@@ -1382,27 +1421,44 @@ export function App({
                 ? null
                 : {
                     name: controlWorkspace.nativeWorkspace?.displayName ?? null,
+                    workspaceId:
+                      controlWorkspace.nativeWorkspace?.workspaceId ?? null,
+                    workspaces: controlWorkspace.nativeWorkspaces,
                     busy: controlWorkspace.nativeBusy,
+                    threadWorkspaceReady: selectedWorkspaceReady,
                     revisionKey: controlWorkspace.nativeWorkspaceRevision,
                     error: workspaceSelectError,
                     onSelect:
                       controlWorkspace.mutationAuthority === "desktop"
                         ? () => {
                             setWorkspaceSelectError(null);
-                            controlWorkspace
+                            void controlWorkspace
                               .selectNativeWorkspace()
-                              .catch((error: unknown) => {
+                              .then((committed) => {
+                                if (committed)
+                                  startCommandShellDraftThread(null);
+                              })
+                              .catch(() => {
                                 setWorkspaceSelectError(
-                                  error instanceof Error
-                                    ? error.message
-                                    : String(error),
+                                  "添加工作空间失败，请检查目录后重试。",
                                 );
-                                /*
-                                 * A failed mutation flips the authority projection to
-                                 * unavailable and would hide the picker button until
-                                 * reload; re-reading the native status restores it when
-                                 * the underlying authority is still healthy.
-                                 */
+                                void controlWorkspace
+                                  .refreshNativeAuthority()
+                                  .catch(() => undefined);
+                              });
+                          }
+                        : undefined,
+                    onActivate:
+                      controlWorkspace.mutationAuthority === "desktop"
+                        ? (workspaceId) => {
+                            startCommandShellDraftThread(null);
+                            setWorkspaceSelectError(null);
+                            void controlWorkspace
+                              .activateNativeWorkspace(workspaceId)
+                              .catch(() => {
+                                setWorkspaceSelectError(
+                                  "切换工作空间失败，请检查目录后重试。",
+                                );
                                 void controlWorkspace
                                   .refreshNativeAuthority()
                                   .catch(() => undefined);
@@ -1410,10 +1466,26 @@ export function App({
                           }
                         : undefined,
                     onClear:
-                      controlWorkspace.mutationAuthority === "desktop" &&
-                      (controlWorkspace.nativeWorkspace?.displayName ??
-                        null) !== null
-                        ? controlWorkspace.clearNativeWorkspace
+                      controlWorkspace.mutationAuthority === "desktop"
+                        ? () => {
+                            startCommandShellDraftThread(null);
+                            setWorkspaceSelectError(null);
+                            if (
+                              controlWorkspace.nativeWorkspace?.workspaceId !==
+                              null
+                            ) {
+                              void controlWorkspace
+                                .clearNativeWorkspace()
+                                .catch(() => {
+                                  setWorkspaceSelectError(
+                                    "取消工作空间选择失败，请重试。",
+                                  );
+                                  void controlWorkspace
+                                    .refreshNativeAuthority()
+                                    .catch(() => undefined);
+                                });
+                            }
+                          }
                         : undefined,
                   }
             }
@@ -1422,7 +1494,7 @@ export function App({
               commandValue: terminalCommand,
               disabled:
                 workspaceUiAuthority === "control"
-                  ? !controlRuntimeConnected
+                  ? !controlRuntimeConnected || !selectedWorkspaceReady
                   : !isConnected && !isDemo,
               locale,
               open: capabilityDockOpen,

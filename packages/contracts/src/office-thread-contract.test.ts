@@ -51,7 +51,10 @@ test("Office association commands accept only a server-owned create and an expli
 });
 
 test("association responses validate Office identity, bounded Thread metadata, and mutation disposition", () => {
-  assert.deepEqual(parseOfficeThreadResponse(snapshot, version), snapshot);
+  assert.deepEqual(parseOfficeThreadResponse(snapshot, version), {
+    ...snapshot,
+    thread: { ...thread, workspaceId: null },
+  });
   assert.equal(
     parseOfficeThreadResponse({ ...snapshot, thread: null }, version).thread,
     null,
@@ -96,5 +99,30 @@ test("association responses validate Office identity, bounded Thread metadata, a
       { ...snapshot, disposition, history: [] },
     ])
       assert.throws(() => parseOfficeThreadMutationResponse(invalid, expected));
+  }
+});
+
+test("Office association responses preserve explicit workspace ownership and normalize legacy absence without mutating input", () => {
+  assert.equal(
+    parseOfficeThreadResponse(snapshot, version).thread?.workspaceId,
+    null,
+  );
+  assert.equal(Object.hasOwn(thread, "workspaceId"), false);
+  for (const workspaceId of [null, "workspace-1"] as const) {
+    const candidate = {
+      ...snapshot,
+      thread: { ...thread, workspaceId },
+    };
+    assert.deepEqual(parseOfficeThreadResponse(candidate, version), candidate);
+    for (const operation of ["create", "bind"] as const) {
+      const disposition = operation === "create" ? "created" : "bound";
+      assert.deepEqual(
+        parseOfficeThreadMutationResponse(
+          { ...candidate, disposition },
+          { officeVersionId: version, operation },
+        ).thread,
+        candidate.thread,
+      );
+    }
   }
 });

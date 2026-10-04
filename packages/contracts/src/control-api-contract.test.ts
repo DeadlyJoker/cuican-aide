@@ -569,6 +569,35 @@ test("freezes strict Thread and text Message authority without client scope fiel
     title: "Planning",
   });
   assert.deepEqual(
+    parseCreateThreadRequest({ title: null, workspaceId: "workspace-a" }),
+    { title: null, workspaceId: "workspace-a" },
+  );
+  assert.deepEqual(
+    parseCreateThreadRequest({ title: null, workspaceId: null }),
+    { title: null, workspaceId: null },
+  );
+  for (const workspaceId of [
+    "/tmp/project",
+    "../project",
+    "",
+    " workspace-a",
+    1,
+  ]) {
+    assert.throws(
+      () => parseCreateThreadRequest({ title: null, workspaceId }),
+      isContractError,
+    );
+  }
+  assert.throws(
+    () =>
+      parseForkThreadRequest({
+        expectedRevision: 1,
+        throughHistorySequence: null,
+        workspaceId: "workspace-b",
+      }),
+    isContractError,
+  );
+  assert.deepEqual(
     parseAppendThreadMessageRequest({
       expectedRevision: 1,
       content: "hello",

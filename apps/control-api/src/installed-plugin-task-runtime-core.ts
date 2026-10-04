@@ -12,6 +12,8 @@ import {
   type AuthorizationPort,
   type ContentDigester,
   type ExtensionCreditQuotePort,
+  type PluginTaskUnmeteredAuthorityPort,
+  capturePluginTaskUnmeteredAuthority,
   type PluginInstallationHostProfilePort,
   type PluginUiAuthorizationPort,
 } from "@crewon/application";
@@ -58,7 +60,8 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   businessAuthorization: AuthorizationPort;
   uiAuthorization: PluginUiAuthorizationPort;
   authorizePackage: InstalledPluginTaskActionOwnerDependencies["authorizePackage"];
-  creditQuotes: ExtensionCreditQuotePort;
+  creditQuotes?: ExtensionCreditQuotePort;
+  unmeteredTasks?: PluginTaskUnmeteredAuthorityPort;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
@@ -116,7 +119,8 @@ export async function createInstalledPluginTaskRuntimeCore(
     "businessAuthorization",
     "uiAuthorization",
     "authorizePackage",
-    "creditQuotes",
+    ...(Object.hasOwn(provided, "creditQuotes") ? ["creditQuotes"] : []),
+    ...(Object.hasOwn(provided, "unmeteredTasks") ? ["unmeteredTasks"] : []),
     "clock",
     "ids",
     "digester",
@@ -150,7 +154,19 @@ export async function createInstalledPluginTaskRuntimeCore(
   const authorizeBusiness = method(input.businessAuthorization, "authorize");
   const authorizeUi = method(input.uiAuthorization, "authorize");
   const authorizePackage = method(input, "authorizePackage");
-  const quote = method(input.creditQuotes, "quoteGeneration");
+  if (
+    (input.unmeteredTasks === undefined) ===
+    (input.creditQuotes === undefined)
+  )
+    invalid();
+  const quote =
+    input.creditQuotes === undefined
+      ? undefined
+      : method(input.creditQuotes, "quoteGeneration");
+  const prepareUnmetered =
+    input.unmeteredTasks === undefined
+      ? undefined
+      : method(input.unmeteredTasks, "prepareGeneration");
   const clock = Object.freeze({ now: method(input.clock, "now") });
   const ids = Object.freeze({ nextId: method(input.ids, "nextId") });
   const digester = Object.freeze({ sha256: method(input.digester, "sha256") });
@@ -204,16 +220,47 @@ export async function createInstalledPluginTaskRuntimeCore(
       active();
       return result;
     };
-  const creditQuotes: ExtensionCreditQuotePort = Object.freeze({
-    quoteGeneration: async (
-      request: Parameters<ExtensionCreditQuotePort["quoteGeneration"]>[0],
-    ) => {
-      active();
-      const result = await quote(request);
-      active();
-      return result;
-    },
-  });
+  const creditQuotes: ExtensionCreditQuotePort | undefined =
+    quote === undefined
+      ? undefined
+      : Object.freeze({
+          quoteGeneration: async (
+            request: Parameters<ExtensionCreditQuotePort["quoteGeneration"]>[0],
+          ) => {
+            active();
+            const result = await quote(request);
+            active();
+            return result;
+          },
+        });
+  const unmeteredTasks: PluginTaskUnmeteredAuthorityPort | undefined =
+    prepareUnmetered === undefined
+      ? undefined
+      : Object.freeze({
+          prepareGeneration: async (
+            request: Parameters<
+              PluginTaskUnmeteredAuthorityPort["prepareGeneration"]
+            >[0],
+          ) => {
+            active();
+            const result = capturePluginTaskUnmeteredAuthority(
+              await prepareUnmetered(request),
+            );
+            active();
+            return Object.freeze({
+              authorization: result.authorization,
+              assertCurrent: async () => {
+                active();
+                await result.assertCurrent();
+                active();
+              },
+              assertActive: () => {
+                active();
+                result.assertActive();
+              },
+            });
+          },
+        });
   type ServiceBehavior = "read" | "mutation";
   const track = <T>(
     work: () => Promise<T>,
@@ -259,7 +306,11 @@ export async function createInstalledPluginTaskRuntimeCore(
     const extensions = input.store.extensionStore();
     await extensions.migrate();
     await extensions.migratePluginAdmissions();
-    await extensions.migrateCredits();
+    if (unmeteredTasks === undefined) {
+      await extensions.migrateCredits();
+    } else {
+      await extensions.migrateUnmeteredPluginAdmissions();
+    }
     if (generations !== undefined) await extensions.migrateProjectGenerations();
     if (queries !== undefined) {
       await extensions.migrateProjectQueries();
@@ -307,7 +358,8 @@ export async function createInstalledPluginTaskRuntimeCore(
         clock,
         ids,
         digester,
-        creditQuotes,
+        ...(creditQuotes === undefined ? {} : { creditQuotes }),
+        ...(unmeteredTasks === undefined ? {} : { unmeteredTasks }),
         ...(projectGenerationReads === undefined
           ? {}
           : { projectGenerationReads }),

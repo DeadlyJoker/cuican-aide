@@ -1,4 +1,8 @@
 import {
+  requirePluginTaskFinancialMode,
+  preparePluginTaskUnmeteredAuthority,
+} from "./plugin-task-unmetered-support.ts";
+import {
   extensionCanonicalJson,
   parseExtensionActivation,
   parseExtensionConfiguration,
@@ -29,7 +33,6 @@ import {
 } from "./extension-application-support.ts";
 import {
   pluginTaskActor,
-  requirePluginTaskQuotes,
   requirePluginTaskStore,
 } from "./extension-plugin-task-support.ts";
 import {
@@ -59,7 +62,7 @@ export type PublishedProjectGenerationReadinessResult = Readonly<{
   readiness: ProjectGenerationReadiness;
 }>;
 
-/** Read-only preparation on the actual paid task dependencies. It never allocates an intent or a quote. */
+/** Read-only preparation on the actual installed task dependencies. It never allocates an intent or a quote. */
 export async function getPublishedProjectGenerationReadiness(
   dependencies: ExtensionTaskApplicationDependencies,
   input: GetPublishedProjectGenerationReadinessInput,
@@ -170,8 +173,21 @@ export async function getPublishedProjectGenerationReadiness(
         reasonCode: "project_generation_input_unavailable",
       });
     try {
-      requirePluginTaskStore(dependencies.extensions);
-      requirePluginTaskQuotes(dependencies.creditQuotes);
+      requirePluginTaskStore(
+        dependencies.extensions,
+        dependencies.unmeteredTasks === undefined ? "metered" : "unmetered",
+      );
+      requirePluginTaskFinancialMode(
+        dependencies.extensions,
+        dependencies.creditQuotes,
+        dependencies.unmeteredTasks,
+      );
+      await preparePluginTaskUnmeteredAuthority(
+        dependencies.unmeteredTasks,
+        actor,
+        executionPin,
+      );
+      await fence();
     } catch (error) {
       if (!(error instanceof ApplicationError) || error.category !== "conflict")
         throw error;

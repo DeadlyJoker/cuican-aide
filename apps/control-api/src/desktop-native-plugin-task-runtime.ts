@@ -1,0 +1,134 @@
+import type { ApplicationClock, ContentDigester } from "@crewon/application";
+import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
+import type {
+  PreparedCreativeProjects,
+  CreativeProjectCompositionConfig,
+} from "./creative-project-composition.ts";
+import {
+  DesktopNativePluginTaskAuthority,
+  type DesktopNativePluginTaskBinding,
+} from "./desktop-native-plugin-task-authority.ts";
+import {
+  assertDesktopNativePluginControlComposition,
+  type DesktopNativePluginControlConfig,
+} from "./desktop-native-plugin-control-environment.ts";
+import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
+import {
+  createInstalledPluginTaskRuntimeCore,
+  type InstalledPluginTaskRuntimeCore,
+} from "./installed-plugin-task-runtime-core.ts";
+import { createPluginTaskApplicationIds } from "./plugin-task-application-ids.ts";
+
+export type DesktopNativePluginTaskRuntime = Readonly<{
+  authority: DesktopNativePluginTaskAuthority;
+  core: InstalledPluginTaskRuntimeCore;
+  close(): Promise<void>;
+}>;
+export function assertDesktopNativePluginTaskComposition(
+  input: Readonly<{
+    configuration: DesktopPluginConfiguration;
+    nativeControl: DesktopNativePluginControlConfig;
+    creativeProjects?: Pick<
+      CreativeProjectCompositionConfig,
+      "pluginGenerations" | "pluginQueries"
+    >;
+  }>,
+): void {
+  assertDesktopNativePluginControlComposition(input);
+  for (const mapping of [
+    ...(input.creativeProjects?.pluginGenerations?.publications ?? []),
+    ...(input.creativeProjects?.pluginQueries?.publications ?? []),
+  ]) {
+    if (
+      !input.configuration.publications.some(
+        (grant) =>
+          grant.pluginId === mapping.source.pluginId &&
+          grant.packageDigest === mapping.source.packageDigest,
+      ) ||
+      !input.nativeControl.publication.entries.some(
+        (entry) =>
+          entry.identity.pluginId === mapping.target.pluginId &&
+          entry.identity.packageDigest === mapping.target.packageDigest,
+      )
+    )
+      throw new Error("desktop_native_plugin_project_mapping_unapproved");
+  }
+}
+export async function createDesktopNativePluginTaskRuntime(
+  input: DesktopNativePluginTaskBinding,
+  dependencies: Readonly<{
+    clock: ApplicationClock;
+    digester: ContentDigester;
+    creativeProjects?: PreparedCreativeProjects;
+    metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
+  }>,
+): Promise<DesktopNativePluginTaskRuntime> {
+  assertDesktopNativePluginTaskComposition({
+    ...input,
+    creativeProjects: dependencies.creativeProjects,
+  });
+  const authority = new DesktopNativePluginTaskAuthority(input);
+  let core: InstalledPluginTaskRuntimeCore | undefined;
+  try {
+    core = await createInstalledPluginTaskRuntimeCore({
+      store: input.store,
+      requests: authority.requests,
+      installRoot: input.configuration.installRoot,
+      maximumPackages: 32,
+      publications: input.configuration.publications,
+      profiles: authority.profiles,
+      businessAuthorization: authority.businessAuthorization,
+      uiAuthorization: authority.uiAuthorization,
+      authorizePackage: authority.authorizePackage,
+      unmeteredTasks: authority.unmeteredTasks,
+      clock: dependencies.clock,
+      ids: createPluginTaskApplicationIds(),
+      digester: dependencies.digester,
+      ...(dependencies.creativeProjects === undefined
+        ? {}
+        : { creativeProjects: dependencies.creativeProjects }),
+      ...(dependencies.metadataHostUiServices === undefined
+        ? {}
+        : { metadataHostUiServices: dependencies.metadataHostUiServices }),
+    });
+    const owned = core;
+    let closing: Promise<void> | undefined;
+    return Object.freeze({
+      authority,
+      core: owned,
+      close: () =>
+        (closing ??= closeAll([() => authority.close(), () => owned.close()])),
+    });
+  } catch (error) {
+    try {
+      await closeAll([() => authority.close(), () => core?.close()]);
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        "desktop_native_plugin_task_startup_cleanup_failed",
+      );
+    }
+    throw error;
+  }
+}
+async function closeAll(
+  actions: readonly (() => Promise<void> | undefined)[],
+): Promise<void> {
+  const results = await Promise.allSettled(
+      actions.map((action) => {
+        try {
+          return Promise.resolve(action());
+        } catch (error) {
+          return Promise.reject(error);
+        }
+      }),
+    ),
+    failures = results.flatMap((result) =>
+      result.status === "rejected" ? [result.reason] : [],
+    );
+  if (failures.length)
+    throw new AggregateError(
+      failures,
+      "desktop_native_plugin_task_cleanup_failed",
+    );
+}

@@ -1,3 +1,9 @@
+import { assertUnmeteredReplay } from "./plugin-task-unmetered-store-support.ts";
+import {
+  captureUnmeteredTurn,
+  savePostgresPluginTaskUnmeteredAdmission,
+  verifyPostgresUnmeteredReceipt,
+} from "./plugin-task-unmetered-store-support.ts";
 import type { PoolClient } from "pg";
 import type {
   CommitExtensionTurnInput,
@@ -75,6 +81,7 @@ import {
 
 type PostgresExtensionTurnHost = Readonly<{
   schema: string;
+  unmeteredEnabled: boolean;
   projectGenerationsEnabled: boolean;
   projectQueriesEnabled: boolean;
   assertOpen(): void;
@@ -117,6 +124,10 @@ export async function commitPostgresExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ) {
+  const unmetered = captureUnmeteredTurn(input, host.unmeteredEnabled, options);
+  if (unmetered.admission !== undefined)
+    input = { ...input, unmeteredAdmission: unmetered.admission };
+  options = unmetered.projectOptions;
   const pluginQuery = checkedPluginQueryTurn(input);
   const projectQuery = captureProjectQuery(
     input,
@@ -150,6 +161,10 @@ export async function commitPostgresExtensionTurn(
       ? structuredClone(input)
       : capturePluginTaskTurnInput(input, pluginAdmission);
   const binding = validateExtensionTurnCommit(frozenInput);
+  if (unmetered.authority !== undefined) {
+    await unmetered.authority.assertCurrent();
+    unmetered.authority.assertActive();
+  }
   if (prepared !== null)
     await assertCreativeProjectCommitCurrent(prepared.authority);
   assertCreativeProjectCommitActive(prepared?.authority);
@@ -182,6 +197,8 @@ export async function commitPostgresExtensionTurn(
           binding,
           frozenInput.receipt,
         );
+        await verifyPostgresUnmeteredReceipt(client, host.schema, result);
+        assertUnmeteredReplay(result.unmeteredAdmission, unmetered.admission);
         assertExtensionCreditReplayPrincipal({
           saved: result.creditAdmission,
           requested: frozenInput.creditAdmission,
@@ -199,6 +216,7 @@ export async function commitPostgresExtensionTurn(
             binding: result.binding,
             receipt: frozenInput.receipt,
             creditAdmission: result.creditAdmission,
+            unmeteredAdmission: result.unmeteredAdmission,
           });
         if (pluginQuery !== undefined)
           assertPluginQueryReplay(
@@ -356,9 +374,20 @@ export async function commitPostgresExtensionTurn(
         );
       if (pluginAdmission !== undefined)
         await savePostgresPluginTask(client, host.schema, pluginAdmission);
+      if (unmetered.admission !== undefined)
+        await savePostgresPluginTaskUnmeteredAdmission(
+          client,
+          host.schema,
+          unmetered.admission,
+        );
       if (pluginQuery !== undefined)
         await savePostgresPluginQuery(client, host.schema, pluginQuery);
-      const result = extensionTurnResult(turn, binding, creditAdmission);
+      const result = extensionTurnResult(
+        turn,
+        binding,
+        creditAdmission,
+        unmetered.admission,
+      );
       await host.saveReceipt(
         client,
         binding,
@@ -380,10 +409,16 @@ export async function commitPostgresExtensionTurn(
         await assertCreativeProjectCommitCurrent(prepared.authority);
       if (projectQuery !== null)
         await assertCreativeProjectCommitCurrent(projectQuery.authority);
+      if (unmetered.authority !== undefined)
+        await unmetered.authority.assertCurrent();
       return result;
     },
     {
       beforeCommit: () => {
+        if (unmetered.authority !== undefined) {
+          host.assertOpen();
+          unmetered.authority.assertActive();
+        }
         if (creditPath) host.assertOpen();
         assertCreativeProjectCommitActive(prepared?.authority);
         assertCreativeProjectCommitActive(projectQuery?.authority);

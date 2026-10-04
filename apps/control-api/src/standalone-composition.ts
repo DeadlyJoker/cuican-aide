@@ -2,6 +2,7 @@ import { ModelPricingApplicationService } from "@crewon/application";
 import { ModelSpendingApplicationService } from "@crewon/application";
 import { OfficeThreadApplicationService } from "@crewon/application";
 import type { StorageAdmissionPort } from "@crewon/application";
+import { createDesktopWorkspaceAdmission } from "./desktop-workspace-admission.ts";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
@@ -45,6 +46,10 @@ import {
   createDesktopPluginRuntime,
   type DesktopPluginRuntime,
 } from "./desktop-plugin-runtime.ts";
+import {
+  assertDesktopNativePluginControlComposition,
+  type DesktopNativePluginControlConfig,
+} from "./desktop-native-plugin-control-environment.ts";
 import { captureDesktopProjectRecoveryStartup } from "./desktop-project-startup.ts";
 import { captureDesktopProjectCompositionConfig } from "./desktop-project-execution-startup.ts";
 import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
@@ -117,6 +122,7 @@ type PreparedControlPlugins = {
 };
 
 type ControlApiCompositionConfig = Readonly<{
+  desktopWorkspaceRegistryPath?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -231,11 +237,37 @@ export async function createStandaloneControlApiWithPlugins(
       desktopPlugins: DesktopPluginConfiguration;
       desktopPluginActivation?: DesktopInstalledPluginActivationConfig;
       desktopPluginTasks?: DesktopInstalledPluginTaskConfig;
+      desktopNativePluginControl?: DesktopNativePluginControlConfig;
       uiRecovery?: PluginUiRecoveryConfiguration;
       extensionWorker?: ExtensionWorkerConfig;
     }>,
 ): Promise<StandaloneControlApiRuntime> {
   const configuration = parseDesktopPluginConfiguration(config.desktopPlugins);
+  const nativeField = Object.getOwnPropertyDescriptor(
+    config,
+    "desktopNativePluginControl",
+  );
+  if (
+    (nativeField === undefined && "desktopNativePluginControl" in config) ||
+    (nativeField !== undefined &&
+      (!nativeField.enumerable || !("value" in nativeField)))
+  )
+    throw new Error("desktop_native_plugin_control_configuration_invalid");
+  const nativeControl = nativeField?.value as
+    | DesktopNativePluginControlConfig
+    | undefined;
+  if (nativeControl !== undefined) {
+    assertDesktopNativePluginControlComposition({
+      configuration: config.desktopPlugins,
+      nativeControl,
+    });
+    if (
+      nativeControl.authority.controlDatabasePath !== config.databasePath ||
+      config.desktopPluginTasks !== undefined ||
+      config.desktopPluginActivation !== undefined
+    )
+      throw new Error("desktop_native_plugin_authority_conflict");
+  }
   const taskStartup = captureDesktopInstalledPluginTaskStartup(
     config,
     configuration,
@@ -255,6 +287,7 @@ export async function createStandaloneControlApiWithPlugins(
     tasks: taskStartup.tasks,
     activation: taskStartup.activation,
     projects: config.creativeProjects,
+    ...(nativeControl === undefined ? {} : { nativeControl }),
   });
   const uiRecovery = captureDesktopProjectRecoveryStartup({
     runtimeConfiguration: config,
@@ -278,10 +311,13 @@ export async function createStandaloneControlApiWithPlugins(
       csrfToken: pinned.csrfToken,
       allowedOrigins: pinned.allowedOrigins,
     });
-    projects = await prepareCreativeProjects(store, pinned.creativeProjects);
+    projects = await prepareCreativeProjects(store, pinned.creativeProjects, {
+      financialMode: nativeControl === undefined ? "metered" : "unmetered",
+    });
     const runtime = await createDesktopPluginRuntime(
       {
         configuration: config.desktopPlugins,
+        ...(nativeControl === undefined ? {} : { nativeControl }),
         ...(uiRecovery === undefined ? {} : { uiRecovery }),
         ...(taskStartup.activation === undefined
           ? {}
@@ -555,6 +591,10 @@ function composeControlApi(
       digester,
     });
     const threads = new ThreadApplicationService({
+      workspaceAdmission: createDesktopWorkspaceAdmission(
+        config.desktopWorkspaceRegistryPath,
+        config.actor,
+      ),
       store,
       authorization,
       clock,

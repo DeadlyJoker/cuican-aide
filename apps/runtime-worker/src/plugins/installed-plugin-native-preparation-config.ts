@@ -11,9 +11,9 @@ import {
 } from "@crewon/domain";
 import { ioJson, ioRecord } from "./plugin-execution-io-network.ts";
 import {
-  parseInstalledPluginWorkerConfig,
-  type InstalledPluginWorkerConfig,
-} from "./installed-plugin-worker-config.ts";
+  parseInstalledPluginAuthorityConfig,
+  type InstalledPluginAuthorityConfig,
+} from "./installed-plugin-authority-config.ts";
 import type { InstalledPluginReleaseIdentity } from "./installed-plugin-release-document.ts";
 import {
   NativePreparationFiles,
@@ -42,7 +42,7 @@ export type NativeInstalledPluginPreparationConfiguration = Readonly<{
 }>;
 export type LoadedNativeInstalledPluginPreparation = Readonly<{
   configuration: NativeInstalledPluginPreparationConfiguration;
-  worker: InstalledPluginWorkerConfig;
+  worker: InstalledPluginAuthorityConfig;
   databasePath: string;
   documentPath: string;
   resultPath: string;
@@ -255,7 +255,7 @@ export function loadNativeInstalledPluginPreparation(
       environment.CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH !== workerPath)
   )
     fail("path_invalid");
-  const worker = parseInstalledPluginWorkerConfig(
+  const worker = parseInstalledPluginAuthorityConfig(
     files.readJson(workerPath),
     environment,
   );

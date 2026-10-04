@@ -32,6 +32,7 @@ test("projects the Thread and its SSE cursor from one canonical state", () => {
     thread: {
       threadId: "thread-1",
       title: "Thread",
+      workspaceId: null,
       status: "active",
       revision: 4,
       lastMessageSequence: 2,
@@ -44,6 +45,13 @@ test("projects the Thread and its SSE cursor from one canonical state", () => {
     },
     eventSequence: 4,
   });
+  const boundSnapshot = projectThreadSnapshot({
+    ...state,
+    workspaceId: "workspace-1",
+  });
+  assert.equal(boundSnapshot.thread.workspaceId, "workspace-1");
+  assert.equal(boundSnapshot.thread.threadId, state.threadId);
+  assert.equal(boundSnapshot.eventSequence, state.lastEventSequence);
   assert.throws(
     () => projectThreadSnapshot({ ...state, lastEventSequence: 3 }),
     /thread_snapshot_event_sequence_invalid/u,

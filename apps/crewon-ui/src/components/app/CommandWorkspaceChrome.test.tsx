@@ -407,6 +407,11 @@ describe("CommandSidebar", () => {
         activeView="command"
         controlWorkspace={{
           name: "cuican-aide",
+          workspaceId: "workspace-a",
+          workspaces: [
+            { workspaceId: "workspace-a", displayName: "cuican-aide" },
+          ],
+          onActivate: vi.fn(),
           busy: false,
           onClear: vi.fn(),
           onSelect: vi.fn(),
@@ -417,6 +422,7 @@ describe("CommandSidebar", () => {
           {
             cwd: null,
             id: "thread-control",
+            workspaceId: "workspace-a",
             preview: "Safe preview",
             title: "Control task",
             updatedLabel: "Today",
@@ -442,8 +448,8 @@ describe("CommandSidebar", () => {
     expect(markup).toContain('aria-label="工作空间和对话"');
     expect(markup).toContain("cuican-aide");
     expect(markup).toContain("Control task");
-    expect(markup).toContain('aria-label="更换工作空间"');
-    expect(markup).toContain('aria-label="解除与「cuican-aide」的绑定"');
+    expect(markup).toContain('aria-label="新增空间"');
+    expect(markup).toContain('aria-label="取消选择工作空间"');
     expect(markup).toContain('aria-label="归档会话"');
     expect(markup).toContain('data-archive-thread-id="thread-control"');
     expect(markup).not.toContain("command-thread-operations-rail");
@@ -474,7 +480,7 @@ describe("CommandSidebar", () => {
       />,
     );
 
-    expect(markup).toContain('aria-label="选择工作空间"');
+    expect(markup).toContain('aria-label="新增空间"');
     expect(markup).toContain("尚未绑定本机文件夹作为工作空间。");
   });
 
@@ -510,7 +516,7 @@ describe("CommandSidebar", () => {
     expect(markup).toContain(
       "工作空间切换失败：desktop_workspace_transitioning",
     );
-    expect(markup).toContain('aria-label="选择工作空间"');
+    expect(markup).toContain('aria-label="新增空间"');
     expect(
       markup.slice(
         markup.indexOf('<p class="sidebar-error-hint"'),

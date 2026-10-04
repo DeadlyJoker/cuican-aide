@@ -20,7 +20,10 @@ import {
   type PluginUiIntentRecord,
 } from "@crewon/domain";
 import { PluginUiApplicationService } from "./plugin-ui-application-service.ts";
-import { PluginUiRecoveryApplicationService } from "./plugin-ui-recovery-application-service.ts";
+import {
+  PluginUiRecoveryApplicationService,
+  type PluginUiRecoveryPublicationMode,
+} from "./plugin-ui-recovery-application-service.ts";
 import { createPluginUiIntentPayloadVerifier } from "./plugin-ui-recovery-codec.ts";
 import type { PluginUiIntentJournalStore } from "./plugin-ui-intent-journal-store.ts";
 import type {
@@ -124,7 +127,12 @@ export function recoveryReceipt(request: PluginUiRecoveryRequest) {
 
 /** Application-only doubles with real Domain transitions and actual UI invocation registration; no SQL proof. */
 export function recoveryFixture(
-  options: { declared?: boolean; configured?: boolean } = {},
+  options: {
+    declared?: boolean;
+    configured?: boolean;
+    publicationMode?: PluginUiRecoveryPublicationMode;
+    actions?: readonly PluginUiRecoveryRequest["action"][];
+  } = {},
 ) {
   const original = uiFixture();
   const { state } = original;
@@ -280,12 +288,15 @@ export function recoveryFixture(
   };
   const recovery = new PluginUiRecoveryApplicationService({
     store,
+    ...(options.publicationMode === undefined
+      ? {}
+      : { publicationMode: options.publicationMode }),
     publications: [
       {
         pluginId: state.package.pluginId,
         packageDigest: state.package.packageDigest,
         contributionId: "workbench",
-        actions: [
+        actions: options.actions ?? [
           recoveryRequest("generation").action,
           recoveryRequest("query").action,
           recoveryRequest("selection").action,

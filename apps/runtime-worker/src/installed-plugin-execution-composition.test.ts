@@ -159,6 +159,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
         { name: "authorization method", fields: { authorization: {} } },
         { name: "actor resolver", fields: { resolveActor: undefined } },
         { name: "publisher approval", fields: { authorizePackage: undefined } },
+        {
+          name: "candidate publisher approval",
+          fields: { authorizeCandidatePackage: "allow" },
+        },
         { name: "zero capacity", fields: { maximumRuntimes: 0 } },
         { name: "excess capacity", fields: { maximumRuntimes: 33 } },
         { name: "fractional capacity", fields: { maximumRuntimes: 1.5 } },
@@ -272,6 +276,7 @@ test("installed execution snapshot retains authority function identities and the
   const authorizationCalls: unknown[] = [];
   const actorCalls: unknown[] = [];
   const packageCalls: unknown[] = [];
+  const candidatePackageCalls: unknown[] = [];
   const authorization: AuthorizationPort = {
     async authorize(input) {
       authorizationCalls.push(this, input);
@@ -290,6 +295,10 @@ test("installed execution snapshot retains authority function identities and the
       packageCalls.push(this, input, signal);
       return "deny" as const;
     },
+    async authorizeCandidatePackage(input: unknown, signal: AbortSignal) {
+      candidatePackageCalls.push(this, input, signal);
+      return "deny" as const;
+    },
   };
   const captured = captureInstalledPluginExecutionConfig(config);
   config.installRoot = "changed-relative-root";
@@ -297,6 +306,8 @@ test("installed execution snapshot retains authority function identities and the
   authorization.authorize = async () => assert.fail("replacement authority");
   config.resolveActor = async () => assert.fail("replacement actor resolver");
   config.authorizePackage = async () => assert.fail("replacement publisher");
+  config.authorizeCandidatePackage = async () =>
+    assert.fail("replacement candidate publisher");
   const signal = new AbortController().signal;
   const actor = {
     principalId: "principal-1",
@@ -321,9 +332,18 @@ test("installed execution snapshot retains authority function identities and the
   assert.equal(await captured.resolveActor(actor, signal), null);
   const packageInput = {} as Parameters<typeof captured.authorizePackage>[0];
   assert.equal(await captured.authorizePackage(packageInput, signal), "deny");
+  assert.ok(captured.authorizeCandidatePackage);
+  const candidateInput = {} as Parameters<
+    typeof captured.authorizeCandidatePackage
+  >[0];
+  assert.equal(
+    await captured.authorizeCandidatePackage(candidateInput, signal),
+    "deny",
+  );
   assert.deepEqual(authorizationCalls, [authorization, request]);
   assert.deepEqual(actorCalls, [config, actor, signal]);
   assert.deepEqual(packageCalls, [config, packageInput, signal]);
+  assert.deepEqual(candidatePackageCalls, [config, candidateInput, signal]);
   assert.equal(captured.installRoot, "/host/installed-plugins");
   assert.equal(captured.maximumRuntimes, 3);
   assert.equal(Object.isFrozen(captured), true);

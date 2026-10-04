@@ -35,6 +35,7 @@ import {
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { loadDesktopInstalledPluginActivationEnvironment } from "./desktop-installed-plugin-activation-environment.ts";
+import { loadDesktopNativePluginControlEnvironment } from "./desktop-native-plugin-control-environment.ts";
 import { loadDesktopInstalledPluginTaskEnvironment } from "./desktop-installed-plugin-task-environment.ts";
 import {
   captureDesktopInstalledPluginTaskStartup,
@@ -42,6 +43,7 @@ import {
 } from "./desktop-installed-plugin-task-startup.ts";
 import { resolveControlExtensionWorkerEnvironment } from "./extension-worker-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
+import { resolveDesktopWorkspaceRegistryPath } from "./desktop-workspace-admission.ts";
 import {
   candidateReadinessLine,
   resolvePausedAdmission,
@@ -90,6 +92,10 @@ if (
 )
   throw new Error("installed_plugin_task_legacy_extension_conflict");
 const activationGate = resolvePausedAdmission(process.env, securityMode);
+const desktopWorkspaceRegistryPath = resolveDesktopWorkspaceRegistryPath(
+  process.env,
+  securityMode,
+);
 const standaloneTenantId =
   extensionEnvironment?.actor.tenantId ??
   environmentOr(
@@ -139,6 +145,25 @@ const desktopPluginTasks =
                 desktopTaskEnvironment.CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH,
             }),
       });
+const desktopNativePluginControl = loadDesktopNativePluginControlEnvironment(
+  desktopEnvironment,
+  {
+    securityMode,
+    ...(desktopPluginBootstrapPath === undefined
+      ? {}
+      : { desktopBootstrapPath: desktopPluginBootstrapPath }),
+    ...(desktopEnvironment.CREWON_CONTROL_DB_PATH === undefined
+      ? {}
+      : { databasePath: desktopEnvironment.CREWON_CONTROL_DB_PATH }),
+  },
+);
+if (
+  desktopNativePluginControl !== undefined &&
+  (connectionString ||
+    desktopPluginTasks !== undefined ||
+    desktopPluginActivation !== undefined)
+)
+  throw new Error("desktop_native_plugin_authority_conflict");
 // An explicit Native bootstrap is validated before allocating artifact or business persistence.
 const desktopTaskActor =
   desktopPluginBootstrapPath === undefined
@@ -178,6 +203,9 @@ const desktopProjectStartup =
     : composeDesktopProjectStartup({
         configuration: desktopTaskBootstrap,
         actor: desktopTaskActor,
+        ...(desktopNativePluginControl === undefined
+          ? {}
+          : { nativeControl: desktopNativePluginControl }),
         ...(desktopPluginTasks === undefined
           ? {}
           : { tasks: desktopPluginTasks }),
@@ -333,6 +361,7 @@ try {
     const standaloneConfig = {
       ...sharedConfig,
       actor,
+      desktopWorkspaceRegistryPath,
       defaultAgentVersionId: environmentOr(
         "CREWON_AGENT_VERSION_ID",
         "default-agent-v1",
@@ -372,10 +401,16 @@ try {
               ...standaloneConfig,
               databasePath,
               desktopPlugins,
+              ...(desktopNativePluginControl === undefined
+                ? {}
+                : { desktopNativePluginControl }),
               ...(desktopProjectStartup ??
                 composeDesktopProjectStartup({
                   configuration: desktopPlugins,
                   actor,
+                  ...(desktopNativePluginControl === undefined
+                    ? {}
+                    : { nativeControl: desktopNativePluginControl }),
                   ...(desktopPluginTasks === undefined
                     ? {}
                     : { tasks: desktopPluginTasks }),

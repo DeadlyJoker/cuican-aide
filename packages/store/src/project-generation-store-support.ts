@@ -1,3 +1,4 @@
+import { assertPluginTaskFunding } from "@crewon/domain";
 import type {
   ActorContext,
   CommitExtensionTurnInput,
@@ -64,14 +65,25 @@ export function captureProjectGeneration(
   }
   if (!enabled) throw new Error("project_generation_unavailable");
   const reference = parseProjectGenerationReference(field.value);
-  if (
-    admission === undefined ||
-    input.creditAdmission === undefined ||
-    input.creditAdmission.reservation.scope.principalId !==
-      admission.principalId ||
-    input.creditAdmission.reservation.scope.tenantId !== admission.tenantId
-  )
+  if (admission === undefined)
     throw new Error("project_generation_paid_plugin_admission_required");
+  try {
+    assertPluginTaskFunding(
+      {
+        creditAdmission: input.creditAdmission,
+        unmeteredAdmission: input.unmeteredAdmission,
+        binding: input.binding,
+        receipt: input.receipt,
+        principalId: admission.principalId,
+        task: admission,
+      },
+      extensionStoreDigester,
+    );
+  } catch (cause) {
+    throw new Error("project_generation_paid_plugin_admission_required", {
+      cause,
+    });
+  }
   if (
     options === undefined ||
     options === null ||

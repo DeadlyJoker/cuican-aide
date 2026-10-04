@@ -14,6 +14,10 @@ import type {
 import type { Locale } from "../i18n";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 import { notifyInstalledPluginSelectionChanged } from "./installedPluginChanges";
+import {
+  NativePluginSelectionOutcomeUnknownError,
+  setPluginInstallationSelection,
+} from "./pluginInstallationSelection";
 
 export type PluginInstallationSettingsClient = Pick<
   PluginControlClient,
@@ -198,12 +202,13 @@ export function usePluginInstallationSettings(
             : "Version installed. Choose whether to enable it below.",
         );
       } else {
-        const result = await client.setSelection(
-          command.pluginId,
-          command.request,
-          command.key,
-          { signal },
-        );
+        const result = await setPluginInstallationSelection({
+          client,
+          pluginId: command.pluginId,
+          request: command.request,
+          idempotencyKey: command.key,
+          signal,
+        });
         if (!available()) return;
         // This hint withdraws old UI immediately; the next directory still comes from the server.
         notifyInstalledPluginSelectionChanged({
@@ -233,6 +238,28 @@ export function usePluginInstallationSettings(
       setRetryable(!known && intent.current !== null);
       setError(pluginInstallationError(cause, locale));
       if (known) refresh();
+      else if (
+        cause instanceof NativePluginSelectionOutcomeUnknownError &&
+        intent.current?.kind === "select"
+      ) {
+        // A failed activation can follow COMMIT. Withdraw stale modules using only an authenticated current read.
+        const command = intent.current;
+        try {
+          const currentSelection = await client.getSelection(command.pluginId, {
+            signal,
+          });
+          if (!available()) return;
+          notifyInstalledPluginSelectionChanged({
+            pluginId: command.pluginId,
+            ...(currentSelection.selection === null
+              ? {}
+              : { selection: currentSelection.selection }),
+          });
+          refresh();
+        } catch {
+          // A failed/withdrawn read cannot change the unknown outcome or the original retry intent.
+        }
+      }
     } finally {
       if (available()) {
         mutationRunning.current = false;

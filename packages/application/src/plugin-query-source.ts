@@ -1,5 +1,5 @@
+import { assertPluginTaskFunding } from "@crewon/domain";
 import {
-  assertExtensionCreditAdmission,
   assertPluginTaskAdmission,
   extensionCanonicalJson,
   parseExtensionRunBinding,
@@ -200,15 +200,17 @@ async function verifyPluginQuerySourceStorage(
       "conflict",
       "plugin_query_source_receipt_invalid",
     );
-  const credit = assertExtensionCreditAdmission(
-    { admission: saved.creditAdmission!, binding, receipt },
+  assertPluginTaskFunding(
+    {
+      creditAdmission: saved.creditAdmission,
+      unmeteredAdmission: saved.unmeteredAdmission,
+      binding,
+      receipt,
+      principalId: admission.principalId,
+      task: admission,
+    },
     input.digester,
   );
-  if (credit.reservation.scope.principalId !== admission.principalId)
-    throw new ApplicationError(
-      "conflict",
-      "plugin_query_source_receipt_invalid",
-    );
   const operation = await input.operations.loadExternalOperation({
     tenantId: locator.tenantId,
     runId: binding.runId,

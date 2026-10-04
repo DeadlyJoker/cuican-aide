@@ -11,6 +11,7 @@ import {
   type PluginUiIntentJournalStore,
   type PluginUiIntentPayloadVerifier,
   type PluginUiRecoveryPublication,
+  type PluginUiRecoveryPublicationMode,
 } from "@crewon/application";
 import {
   CREWON_PLUGIN_UI_RECOVERY_SERVICE,
@@ -123,13 +124,19 @@ export type ProductionPluginUiRecoveryRuntime = Readonly<{
 
 export function capturePluginUiRecoveryConfiguration(
   input: unknown,
+  options: Readonly<{ publicationMode: PluginUiRecoveryPublicationMode }> = {
+    publicationMode: "business-actions",
+  },
 ): PluginUiRecoveryConfiguration | undefined {
   if (input === undefined) return undefined;
   const value = pluginSecurityRecord(input, ["version", "publications"]);
   if (value.version !== PLUGIN_UI_RECOVERY_VERSION) invalid();
   return Object.freeze({
     version: PLUGIN_UI_RECOVERY_VERSION,
-    publications: capturePluginUiRecoveryPublications(value.publications),
+    publications: capturePluginUiRecoveryPublications(
+      value.publications,
+      options,
+    ),
   });
 }
 

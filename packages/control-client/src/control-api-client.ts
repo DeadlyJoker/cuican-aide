@@ -1,3 +1,4 @@
+import { parseThreadWorkspaceId, normalizeThreadViewWorkspace } from "@crewon/contracts";
 import {
   MAX_OFFICE_THREAD_RESPONSE_BYTES,
   parseOfficeThreadResponse,
@@ -2151,19 +2152,23 @@ function parseGetThreadResponse(
 ): GetThreadResponse {
   if (
     !hasExactKeys(input, ["eventSequence", "thread"]) ||
-    !hasExactKeys(input.thread, [
-      "archivedAt",
-      "createdAt",
-      "deletedAt",
-      "forkedFromThreadId",
-      "forkedThroughHistorySequence",
-      "lastMessageSequence",
-      "revision",
-      "status",
-      "threadId",
-      "title",
-      "updatedAt",
-    ]) ||
+    !hasExactKeys(
+      input.thread,
+      [
+        "archivedAt",
+        "createdAt",
+        "deletedAt",
+        "forkedFromThreadId",
+        "forkedThroughHistorySequence",
+        "lastMessageSequence",
+        "revision",
+        "status",
+        "threadId",
+        "title",
+        "updatedAt",
+      ],
+      ["workspaceId"],
+    ) ||
     typeof input.thread.threadId !== "string" ||
     input.thread.threadId !== expectedThreadId ||
     !Number.isSafeInteger(input.eventSequence) ||
@@ -2189,7 +2194,16 @@ function parseGetThreadResponse(
   ) {
     throw new ControlApiProtocolError("control_client_thread_snapshot_invalid");
   }
-  return structuredClone(input) as GetThreadResponse;
+  try {
+    parseThreadWorkspaceId(input.thread.workspaceId);
+    const response = structuredClone(input) as GetThreadResponse;
+    return {
+      ...response,
+      thread: normalizeThreadViewWorkspace(response.thread),
+    };
+  } catch {
+    throw new ControlApiProtocolError("control_client_thread_snapshot_invalid");
+  }
 }
 
 function parseListThreadRunsResponse(
@@ -2360,11 +2374,15 @@ function isAutomationSchedule(input: unknown): input is AutomationSchedule {
 function hasExactKeys(
   value: unknown,
   expected: readonly string[],
+  optional: readonly string[] = [],
 ): value is Record<string, unknown> {
   return (
     isPlainObject(value) &&
-    JSON.stringify(Object.keys(value).sort()) ===
-      JSON.stringify([...expected].sort())
+    JSON.stringify(
+      Object.keys(value)
+        .filter((key) => !optional.includes(key))
+        .sort(),
+    ) === JSON.stringify([...expected].sort())
   );
 }
 

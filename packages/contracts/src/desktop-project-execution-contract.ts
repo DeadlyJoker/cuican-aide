@@ -103,6 +103,7 @@ export function parseDesktopProjectExecutionConfiguration(
     if (pluginQueries !== undefined && data.generationReads === undefined)
       invalid();
     const uiRecovery = recovery(value.uiRecovery, {
+      metadata: data.pluginUi?.publications,
       generation: pluginGenerations?.publications.map((item) => item.source),
       query: pluginQueries?.publications.map((item) => item.source),
       selection: data.selectionUi?.publications,
@@ -198,6 +199,7 @@ function mappings(
 function recovery(
   input: unknown,
   grants: Readonly<{
+    metadata: readonly DesktopProjectHistoryPublication[] | undefined;
     generation: readonly DesktopProjectHistoryPublication[] | undefined;
     query: readonly DesktopProjectHistoryPublication[] | undefined;
     selection: readonly DesktopProjectHistoryPublication[] | undefined;
@@ -218,7 +220,7 @@ function recovery(
       packageDigest: item.packageDigest,
       contributionId: item.contributionId,
     });
-    const actions = dense(item.actions, 1, 3).map(
+    const actions = dense(item.actions, 0, 3).map(
       (action): DesktopProjectExecutionRecoveryAction => {
         const sources =
           action === GENERATE
@@ -237,6 +239,13 @@ function recovery(
         return action as DesktopProjectExecutionRecoveryAction;
       },
     );
+    if (
+      actions.length === 0 &&
+      !grants.metadata?.some(
+        (grant) => JSON.stringify(grant) === JSON.stringify(captured),
+      )
+    )
+      invalid();
     if (new Set(actions).size !== actions.length) invalid();
     return Object.freeze({ ...captured, actions: Object.freeze(actions) });
   });

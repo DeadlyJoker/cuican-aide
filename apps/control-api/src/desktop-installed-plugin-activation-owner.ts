@@ -27,11 +27,16 @@ import {
   type DesktopInstalledPluginActivationConfiguration,
 } from "@crewon/contracts/plugins";
 import {
-  assertDesktopInstalledPluginActivationConfig,
   assertDesktopInstalledPluginActivationConfigCurrent,
   type DesktopInstalledPluginActivationConfig,
 } from "./desktop-installed-plugin-activation-environment.ts";
 import { DesktopInstalledPluginActivationAuthority } from "./desktop-installed-plugin-activation-authority.ts";
+import { DesktopNativePluginActivationAuthority } from "./desktop-native-plugin-activation-authority.ts";
+import {
+  assertDesktopNativePluginControlConfigCurrent,
+  isDesktopNativePluginControlConfig,
+  type DesktopNativePluginControlConfig,
+} from "./desktop-native-plugin-control-environment.ts";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import {
   parseDesktopPluginConfiguration,
@@ -64,12 +69,15 @@ const digester = Object.freeze({
 });
 type OwnerDependencies = Readonly<{
   configuration: DesktopPluginConfiguration;
-  activation: DesktopInstalledPluginActivationConfig;
+  activation: DesktopPluginActivationConfig;
   registry: DesktopPluginSourceRegistry;
   authority: DesktopPluginAuthority;
   installation: DesktopPluginInstallationRuntime;
   store: SqliteRunStore;
 }>;
+export type DesktopPluginActivationConfig =
+  | DesktopInstalledPluginActivationConfig
+  | DesktopNativePluginControlConfig;
 export type DesktopPreparedBusinessCandidate = Readonly<{
   refreshBeforeSelectionCommit(signal: AbortSignal): Promise<void>;
   assertBeforeSelectionCommit(selection: PluginSelection): void;
@@ -85,7 +93,9 @@ export class DesktopInstalledPluginActivationOwner {
   readonly #dependencies: OwnerDependencies;
   readonly #hostUiServices: PluginUiHostServiceAvailabilityPort | undefined;
   readonly #peer: InstalledPluginPeerClient;
-  readonly #policy: DesktopInstalledPluginActivationAuthority;
+  readonly #policy:
+    | DesktopInstalledPluginActivationAuthority
+    | DesktopNativePluginActivationAuthority;
   readonly #entries: readonly Entry[];
   readonly #lifetime = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
@@ -97,7 +107,7 @@ export class DesktopInstalledPluginActivationOwner {
       hostUiServices?: PluginUiHostServiceAvailabilityPort;
     }> = {},
   ) {
-    assertDesktopInstalledPluginActivationConfig(input.activation);
+    assertActivation(input.activation);
     const configuration = parseDesktopPluginConfiguration(input.configuration);
     assertDesktopPluginSourceRegistry(input.registry, configuration);
     assertDesktopPluginInstallationRuntime(input.installation, {
@@ -159,10 +169,11 @@ export class DesktopInstalledPluginActivationOwner {
       },
       { fetch: transports.fetch },
     );
-    this.#policy = new DesktopInstalledPluginActivationAuthority(
-      input.activation,
-      { fetch: transports.fetch },
-    );
+    this.#policy = isDesktopNativePluginControlConfig(input.activation)
+      ? new DesktopNativePluginActivationAuthority(input.activation)
+      : new DesktopInstalledPluginActivationAuthority(input.activation, {
+          fetch: transports.fetch,
+        });
     this.#assertOwner(configuration.actor);
     owners.add(this);
   }
@@ -405,17 +416,13 @@ export class DesktopInstalledPluginActivationOwner {
   }
   #assertOwner(actorInput: ActorContext): void {
     this.#lifetime.signal.throwIfAborted();
-    assertDesktopInstalledPluginActivationConfigCurrent(
-      this.#dependencies.activation,
-    );
+    assertActivation(this.#dependencies.activation);
     const actor = pluginSecurityActor(actorInput);
     this.#dependencies.authority.assertScope(
       actor,
       this.#dependencies.configuration.scope,
     );
-    assertDesktopInstalledPluginActivationConfigCurrent(
-      this.#dependencies.activation,
-    );
+    assertActivation(this.#dependencies.activation);
     this.#dependencies.installation.assertProfileOwnership(actor);
     this.#dependencies.authority.assertScope(
       actor,
@@ -425,9 +432,7 @@ export class DesktopInstalledPluginActivationOwner {
   }
   #assertSelectionCommitOwner(actorInput: ActorContext): void {
     this.#lifetime.signal.throwIfAborted();
-    assertDesktopInstalledPluginActivationConfigCurrent(
-      this.#dependencies.activation,
-    );
+    assertActivation(this.#dependencies.activation);
     const actor = pluginSecurityActor(actorInput);
     this.#dependencies.authority.assertScope(
       actor,
@@ -440,9 +445,7 @@ export class DesktopInstalledPluginActivationOwner {
       actor,
       this.#dependencies.configuration.scope,
     );
-    assertDesktopInstalledPluginActivationConfigCurrent(
-      this.#dependencies.activation,
-    );
+    assertActivation(this.#dependencies.activation);
     this.#lifetime.signal.throwIfAborted();
   }
   async #facts(actor: ActorContext, entry: Entry, signal: AbortSignal) {
@@ -615,6 +618,11 @@ export class DesktopInstalledPluginActivationOwner {
 }
 function same(a: unknown, b: unknown) {
   return extensionCanonicalJson(a) === extensionCanonicalJson(b);
+}
+function assertActivation(value: DesktopPluginActivationConfig): void {
+  if (isDesktopNativePluginControlConfig(value))
+    assertDesktopNativePluginControlConfigCurrent(value);
+  else assertDesktopInstalledPluginActivationConfigCurrent(value);
 }
 function denied(): never {
   throw new ApplicationError(

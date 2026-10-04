@@ -1,6 +1,9 @@
+import {
+  assertPluginTaskFunding,
+  type PluginTaskUnmeteredAdmission,
+} from "@crewon/domain";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
-  assertExtensionCreditAdmission,
   extensionCanonicalJson,
   extensionOpaqueId,
   extensionTimestamp,
@@ -175,7 +178,15 @@ export function committedTaskResult(
   const value = uiRecord(
     copied,
     query === undefined
-      ? ["schemaVersion", "turn", "run", "binding", "creditAdmission"]
+      ? [
+          "schemaVersion",
+          "turn",
+          "run",
+          "binding",
+          Object.hasOwn(copied as object, "unmeteredAdmission")
+            ? "unmeteredAdmission"
+            : "creditAdmission",
+        ]
       : ["schemaVersion", "turn", "run", "binding"],
   );
   const turn = uiRecord(value.turn, [
@@ -204,17 +215,21 @@ export function committedTaskResult(
   )
     throw new Error("plugin_ui_committed_receipt_invalid");
   const binding = parseExtensionRunBinding(value.binding, digester);
-  const credit =
-    query === undefined
-      ? assertExtensionCreditAdmission(
-          {
-            admission: value.creditAdmission as ExtensionCreditAdmission,
-            binding,
-            receipt,
-          },
-          digester,
-        )
-      : undefined;
+  if (query === undefined)
+    assertPluginTaskFunding(
+      {
+        creditAdmission: value.creditAdmission as
+          | ExtensionCreditAdmission
+          | undefined,
+        unmeteredAdmission: value.unmeteredAdmission as
+          | PluginTaskUnmeteredAdmission
+          | undefined,
+        binding,
+        receipt,
+        principalId: pin.principalId,
+      },
+      digester,
+    );
   if (
     (query === undefined
       ? binding.source !== null
@@ -227,9 +242,7 @@ export function committedTaskResult(
     binding.threadId !== command.threadId ||
     binding.tenantId !== pin.tenantId ||
     binding.spaceId !== pin.spaceId ||
-    binding.actorId !== pin.actorId ||
-    (credit !== undefined &&
-      credit.reservation.scope.principalId !== pin.principalId)
+    binding.actorId !== pin.actorId
   )
     throw new Error("plugin_ui_committed_receipt_identity_invalid");
   const result = copied as unknown as CommitExtensionTurnResult;

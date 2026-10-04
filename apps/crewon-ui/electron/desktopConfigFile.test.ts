@@ -117,7 +117,7 @@ describe("bounded desktop configuration staging", () => {
   it("rejects unknown targets and oversized UTF-8 before creating staging", () => {
     const { path, directory } = fixture();
     expect(() =>
-      writeDesktopConfigAtomically(path, "界".repeat(6_000)),
+      writeDesktopConfigAtomically(path, "界".repeat(44_000)),
     ).toThrow("desktop_config_too_large");
     expect(() =>
       writeDesktopConfigAtomically(join(directory, "history.json"), "x"),
@@ -186,7 +186,7 @@ describe("bounded desktop configuration staging", () => {
       if (kind === "symlink") symlinkSync(other, pending);
       else if (kind === "hardlink") linkSync(other, pending);
       else if (kind === "directory") mkdirSync(pending);
-      else writeFileSync(pending, Buffer.alloc(16 * 1024 + 1));
+      else writeFileSync(pending, Buffer.alloc(128 * 1024 + 1));
       expect(
         discardInterruptedDesktopConfigWrites({
           dataDirectory: directory,

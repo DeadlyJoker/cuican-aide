@@ -1,3 +1,7 @@
+import {
+  assertPluginTaskUnmeteredAdmission,
+  type PluginTaskUnmeteredAdmission,
+} from "@crewon/domain";
 import { createHash } from "node:crypto";
 import {
   extensionCanonicalJson,
@@ -260,11 +264,13 @@ export function extensionTurnResult(
   turn: CommitTurnStartResult,
   binding: ExtensionRunBinding,
   creditAdmission?: ExtensionCreditAdmission,
+  unmeteredAdmission?: PluginTaskUnmeteredAdmission,
 ): CommitExtensionTurnResult {
   return {
     schemaVersion: "crewon.extension-turn-admission.v0",
     binding,
     ...(creditAdmission === undefined ? {} : { creditAdmission }),
+    ...(unmeteredAdmission === undefined ? {} : { unmeteredAdmission }),
     turn,
     run: {
       disposition: turn.disposition,
@@ -282,7 +288,11 @@ export function parseExtensionTurnReceipt(
   receipt: ExtensionMutationReceipt,
 ): CommitExtensionTurnResult {
   const value = input as CommitExtensionTurnResult;
-  const { run, binding } = parseExtensionTaskReceipt(input, scope, receipt);
+  const { run, binding, unmeteredAdmission } = parseExtensionTaskReceipt(
+    input,
+    scope,
+    receipt,
+  );
   const creditAdmission =
     value.creditAdmission === undefined
       ? undefined
@@ -351,6 +361,7 @@ export function parseExtensionTurnReceipt(
     binding,
     turn: { ...turn, disposition: "replayed" },
     ...(creditAdmission === undefined ? {} : { creditAdmission }),
+    ...(unmeteredAdmission === undefined ? {} : { unmeteredAdmission }),
   };
 }
 
@@ -381,10 +392,20 @@ export function parseExtensionTaskReceipt(
           { admission: value.creditAdmission, binding, receipt },
           extensionStoreDigester,
         );
+  if (creditAdmission !== undefined && value.unmeteredAdmission !== undefined)
+    throw new Error("plugin_task_unmetered_mode_conflict");
+  const unmeteredAdmission =
+    value.unmeteredAdmission === undefined
+      ? undefined
+      : assertPluginTaskUnmeteredAdmission(
+          { admission: value.unmeteredAdmission, binding, receipt },
+          extensionStoreDigester,
+        );
   return {
     run: { ...value.run, disposition: "replayed" },
     binding,
     ...(creditAdmission === undefined ? {} : { creditAdmission }),
+    ...(unmeteredAdmission === undefined ? {} : { unmeteredAdmission }),
   };
 }
 

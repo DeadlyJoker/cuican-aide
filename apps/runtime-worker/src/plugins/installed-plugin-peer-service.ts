@@ -152,6 +152,12 @@ export class InstalledPluginPeerService {
           entries: Object.freeze(group.entries),
           generation: new InstalledPluginExtensionHost({
             ...common,
+            ...(this.#execution.authorizeCandidatePackage === undefined
+              ? {}
+              : {
+                  authorizeCandidatePackage:
+                    this.#execution.authorizeCandidatePackage,
+                }),
             configurations: input.store.extensionStore(),
             registrations: [...unique.values()],
             maximumPackages: unique.size,

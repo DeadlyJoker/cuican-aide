@@ -13,6 +13,7 @@ import type {
 } from "@crewon/contracts";
 import {
   projectPublicThreadGoalEvent,
+  normalizeThreadWorkspaceId,
   type ThreadGoal,
   type ThreadGoalEvent,
   type ThreadLifecycleEvent,
@@ -25,6 +26,7 @@ export function projectThread(state: ThreadState): ThreadView {
   return {
     threadId: state.threadId,
     title: state.title,
+    workspaceId: normalizeThreadWorkspaceId(state.workspaceId),
     status: state.status,
     revision: state.revision,
     lastMessageSequence: state.lastMessageSequence,

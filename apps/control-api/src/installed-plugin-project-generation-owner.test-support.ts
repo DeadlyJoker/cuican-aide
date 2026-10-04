@@ -54,11 +54,22 @@ export async function installedGenerationFixture(
     contexts?: boolean;
     serviceRequirements?: "optional";
     metadata?: boolean;
+    samePackage?: boolean;
     /** Verified independent business package bytes, never a replacement execution fixture. */
     packageDirectory?: string;
   }> = {},
 ) {
-  const f = await ownedActionFixture(t, { backend, maxPoolSize: 1 });
+  const f = await ownedActionFixture(t, {
+    backend,
+    maxPoolSize: 1,
+    ...(options.samePackage
+      ? {
+          projectGenerationServices: options.contexts
+            ? ("contexts" as const)
+            : ("generation" as const),
+        }
+      : {}),
+  });
   const projects = f.first.parent.creativeProjectStore();
   await projects.migrate();
   await f.first.store.migrateProjectGenerations();
@@ -101,7 +112,10 @@ export async function installedGenerationFixture(
   );
   let source;
   try {
-    if (options.packageDirectory !== undefined) {
+    if (options.samePackage) {
+      source = f.installed;
+      sourceId = source.descriptor.pluginId;
+    } else if (options.packageDirectory !== undefined) {
       source = await installLocalPluginPackage({
         directory: options.packageDirectory,
         installRoot: f.installRoot,
@@ -197,6 +211,10 @@ export async function installedGenerationFixture(
     targetDenied: false,
     sourcePackageAllowed: true,
     targetPackageAllowed: true,
+    packagePurposes: [] as Array<{
+      pluginId: string;
+      purpose: "read" | "submit";
+    }>,
     sourceEpoch: "business-policy-1",
     targetEpoch: "execution-policy-1",
     permissions: [] as Parameters<PluginUiAuthorizationPort["authorize"]>[0][],
@@ -292,10 +310,16 @@ export async function installedGenerationFixture(
       signal.throwIfAborted();
       f.state.packageReads++;
       await f.state.onPackage?.();
+      state.packagePurposes.push({
+        pluginId: input.candidate.descriptor.pluginId,
+        purpose: input.purpose,
+      });
       return (
-        input.candidate.descriptor.pluginId === sourceId
-          ? state.sourcePackageAllowed
-          : state.targetPackageAllowed
+        input.purpose === "read"
+          ? input.candidate.descriptor.pluginId === sourceId &&
+            state.sourcePackageAllowed
+          : input.candidate.descriptor.pluginId === scope.pluginId &&
+            state.targetPackageAllowed
       )
         ? "allow"
         : "deny";
@@ -313,17 +337,19 @@ export async function installedGenerationFixture(
     await owner.close();
     await taskOwner.close();
   });
-  const sourceInstalled = await f.ledger.recordInstalledPackage(
-    installationRecipe("actual-business-installed", {
-      actor,
-      scope: f.profile,
-      pluginId: sourceId,
-      version: source.descriptor.version,
-      publisherId: source.descriptor.publisherId,
-      packageDigest: source.packageDigest,
-      expectedSelectionRevision: null,
-    }),
-  );
+  const sourceInstalled = options.samePackage
+    ? { selection: f.installed.selection }
+    : await f.ledger.recordInstalledPackage(
+        installationRecipe("actual-business-installed", {
+          actor,
+          scope: f.profile,
+          pluginId: sourceId,
+          version: source.descriptor.version,
+          publisherId: source.descriptor.publisherId,
+          packageDigest: source.packageDigest,
+          expectedSelectionRevision: null,
+        }),
+      );
   const installMetadata = options.metadata
     ? createCreativeProjectPluginUiRuntime({
         projects: projectService,
@@ -341,12 +367,14 @@ export async function installedGenerationFixture(
     },
     hostUiServices: installMetadata?.hostUiServices ?? owner.hostUiServices,
   });
-  const sourceEnabled = await f.ledger.commitSelection(
-    selectionRecipe(sourceInstalled.selection, "actual-business-enabled", {
-      actor,
-      packageDigest: source.packageDigest,
-    }),
-  );
+  const sourceEnabled = options.samePackage
+    ? { selection: f.installed.selection }
+    : await f.ledger.commitSelection(
+        selectionRecipe(sourceInstalled.selection, "actual-business-enabled", {
+          actor,
+          packageDigest: source.packageDigest,
+        }),
+      );
   const service = new PluginUiApplicationService({
     store: f.ledger,
     clock: f.dependencies.clock,

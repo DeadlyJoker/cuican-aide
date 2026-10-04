@@ -160,6 +160,11 @@ export type ToolExecutionReservation = Readonly<{
 
 /** Executes external effects and can reconcile the same action after a crash. */
 export interface ToolExecutionProviderPort {
+  /** Host-only async ownership lookup before reserving synchronous capacity. */
+  prepareExecution?(
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+  ): Promise<void>;
   reserveExecution?(
     command: ToolExecutionCommand,
     signal: AbortSignal,

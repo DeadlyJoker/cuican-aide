@@ -26,6 +26,7 @@ export type ControlWorkspaceMutationAuthority =
 
 export type SafeNativeWorkspaceSnapshot = Readonly<{
   availability: DesktopWorkspaceAvailability;
+  workspaceId: string | null;
   displayName: string | null;
 }>;
 
@@ -42,6 +43,10 @@ export type ControlWorkspaceCompositionSnapshot = Readonly<{
   nativeBusy: boolean;
   safeError: ControlWorkspaceSafeError | null;
   nativeWorkspace: SafeNativeWorkspaceSnapshot | null;
+  nativeWorkspaces: readonly Readonly<{
+    workspaceId: string;
+    displayName: string;
+  }>[];
   nativeWorkspaceRevision: string | null;
 }>;
 
@@ -62,7 +67,9 @@ export interface ControlWorkspaceRuntimePort {
  */
 export class ControlWorkspaceRuntimeComposition {
   readonly #controlConfigured: boolean;
-  readonly #idempotencyKey: (operation: "clear" | "select") => string;
+  readonly #idempotencyKey: (
+    operation: "activate" | "clear" | "select",
+  ) => string;
   readonly #nativeAuthority: DesktopWorkspaceAuthorityPort | null;
   readonly #rehydrateThreadAuthority:
     | ((threadId: string) => Promise<void>)
@@ -84,7 +91,7 @@ export class ControlWorkspaceRuntimeComposition {
     controlConfigured: boolean;
     nativeAuthority: DesktopWorkspaceAuthorityPort | null;
     runtime: ControlWorkspaceRuntimePort;
-    idempotencyKey?: (operation: "clear" | "select") => string;
+    idempotencyKey?: (operation: "activate" | "clear" | "select") => string;
     rehydrateThreadAuthority?: (threadId: string) => Promise<void>;
   }) {
     this.#controlConfigured = config.controlConfigured;
@@ -147,7 +154,7 @@ export class ControlWorkspaceRuntimeComposition {
     await this.#runtime.cancel(this.#requireSelectedThread(), executionId);
   }
 
-  async selectNativeWorkspace(): Promise<void> {
+  async selectNativeWorkspace(): Promise<boolean> {
     const authority = this.#requireNativeAuthority();
     const before = this.#requireAvailableNativeStatus();
     const generation = this.#beginNativeMutation();
@@ -156,11 +163,12 @@ export class ControlWorkspaceRuntimeComposition {
         expectedRevision: before.revision,
         idempotencyKey: this.#idempotencyKey("select"),
       });
-      if (!this.#isAuthorityCurrent(generation)) return;
+      if (!this.#isAuthorityCurrent(generation)) return false;
       this.#nativeStatus = response.snapshot;
       if (response.outcome === "committed") {
         await this.#rehydrateAfterNativeMutation(authority, generation);
       }
+      return response.outcome === "committed";
     } catch (error) {
       this.#recordNativeError(error, generation);
       throw error;
@@ -177,6 +185,27 @@ export class ControlWorkspaceRuntimeComposition {
       const response = await authority.clear({
         expectedRevision: before.revision,
         idempotencyKey: this.#idempotencyKey("clear"),
+      });
+      if (!this.#isAuthorityCurrent(generation)) return;
+      this.#nativeStatus = response.snapshot;
+      await this.#rehydrateAfterNativeMutation(authority, generation);
+    } catch (error) {
+      this.#recordNativeError(error, generation);
+      throw error;
+    } finally {
+      this.#finishNativeMutation(generation);
+    }
+  }
+
+  async activateNativeWorkspace(workspaceId: string): Promise<void> {
+    const authority = this.#requireNativeAuthority();
+    const before = this.#requireAvailableNativeStatus();
+    if (before.current?.workspaceId === workspaceId) return;
+    const generation = this.#beginNativeMutation();
+    try {
+      const response = await authority.activate(workspaceId, {
+        expectedRevision: before.revision,
+        idempotencyKey: this.#idempotencyKey("activate"),
       });
       if (!this.#isAuthorityCurrent(generation)) return;
       this.#nativeStatus = response.snapshot;
@@ -207,7 +236,7 @@ export class ControlWorkspaceRuntimeComposition {
       confirmed = await authority.status();
     } catch {
       if (this.#isAuthorityCurrent(generation)) {
-        this.#safeError = "rehydrationFailed";
+        this.#safeError = "nativeUnavailable";
         this.#publish();
       }
       return;
@@ -236,9 +265,22 @@ export class ControlWorkspaceRuntimeComposition {
         return;
       }
       await this.#runtime.selectThread(selectedThreadId);
+      if (
+        !this.#isAuthorityCurrent(generation) ||
+        threadGeneration !== this.#threadGeneration
+      ) {
+        return;
+      }
       this.#safeError = null;
       this.#publish();
-    } catch {
+    } catch (error) {
+      if (
+        !this.#isAuthorityCurrent(generation) ||
+        threadGeneration !== this.#threadGeneration ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
+        return;
+      }
       this.#safeError = "rehydrationFailed";
       this.#publish();
     }
@@ -323,12 +365,13 @@ export class ControlWorkspaceRuntimeComposition {
         ? null
         : {
             availability: this.#nativeStatus?.availability ?? "unavailable",
+            workspaceId: this.#nativeStatus?.current?.workspaceId ?? null,
             displayName: this.#nativeStatus?.current?.displayName ?? null,
           };
+    // Thread refresh errors do not revoke independently confirmed native scope.
     const unsafeOutcome =
       this.#safeError === "nativeUnavailable" ||
-      this.#safeError === "nativeUnknown" ||
-      this.#safeError === "rehydrationFailed";
+      this.#safeError === "nativeUnknown";
     const mutationAuthority =
       !this.#controlConfigured || unsafeOutcome
         ? "unavailable"
@@ -347,6 +390,7 @@ export class ControlWorkspaceRuntimeComposition {
       nativeBusy: this.#nativeBusy,
       safeError: this.#safeError,
       nativeWorkspace,
+      nativeWorkspaces: this.#nativeStatus?.workspaces ?? [],
       nativeWorkspaceRevision:
         this.#nativeStatus === null
           ? null
@@ -372,13 +416,18 @@ export function useControlWorkspaceRuntime(params: {
   nativeBusy: boolean;
   safeError: ControlWorkspaceSafeError | null;
   nativeWorkspace: SafeNativeWorkspaceSnapshot | null;
+  nativeWorkspaces: readonly Readonly<{
+    workspaceId: string;
+    displayName: string;
+  }>[];
   nativeWorkspaceRevision: string | null;
   create: () => Promise<void>;
   reconcile: (executionId: string) => Promise<void>;
   cancel: (executionId: string) => Promise<void>;
   refreshNativeAuthority: () => Promise<void>;
-  selectNativeWorkspace: () => Promise<void>;
+  selectNativeWorkspace: () => Promise<boolean>;
   clearNativeWorkspace: () => Promise<void>;
+  activateNativeWorkspace: (workspaceId: string) => Promise<void>;
 }> {
   const composition = useMemo(
     () =>
@@ -421,6 +470,7 @@ export function useControlWorkspaceRuntime(params: {
       nativeBusy: snapshot.nativeBusy,
       safeError: snapshot.safeError,
       nativeWorkspace: snapshot.nativeWorkspace,
+      nativeWorkspaces: snapshot.nativeWorkspaces,
       nativeWorkspaceRevision: snapshot.nativeWorkspaceRevision,
       create: () => composition.create(),
       reconcile: (executionId: string) => composition.reconcile(executionId),
@@ -428,6 +478,8 @@ export function useControlWorkspaceRuntime(params: {
       refreshNativeAuthority: () => composition.refreshNativeAuthority(),
       selectNativeWorkspace: () => composition.selectNativeWorkspace(),
       clearNativeWorkspace: () => composition.clearNativeWorkspace(),
+      activateNativeWorkspace: (workspaceId: string) =>
+        composition.activateNativeWorkspace(workspaceId),
     }),
     [composition, snapshot],
   );

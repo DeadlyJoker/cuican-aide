@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
   type ApplicationClock,
@@ -29,6 +28,7 @@ import {
   createInstalledPluginTaskRuntimeCore,
   type InstalledPluginTaskRuntimeCore,
 } from "./installed-plugin-task-runtime-core.ts";
+import { createPluginTaskApplicationIds } from "./plugin-task-application-ids.ts";
 
 export type DesktopInstalledPluginTaskRuntime = Readonly<{
   authority: DesktopInstalledPluginTaskAuthority;
@@ -164,7 +164,7 @@ export async function createDesktopInstalledPluginTaskRuntime(
       authorizePackage: authority.authorizePackage,
       creditQuotes: authority.creditQuotes,
       clock: dependencies.clock,
-      ids: { nextId: () => randomBytes(32).toString("base64url") },
+      ids: createPluginTaskApplicationIds(),
       digester: dependencies.digester,
       ...(dependencies.creativeProjects === undefined
         ? {}

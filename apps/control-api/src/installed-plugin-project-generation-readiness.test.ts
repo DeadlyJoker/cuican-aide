@@ -31,6 +31,15 @@ for (const backend of ["sqlite", "postgres"] as const) {
         reference: f.reference,
         readiness: { outcome: "ready" },
       });
+      assert.ok(
+        f.state.packagePurposes.some((item) => item.pluginId === f.sourceId),
+      );
+      assert.ok(
+        f.state.packagePurposes.every(
+          (item) =>
+            item.purpose === (item.pluginId === f.sourceId ? "read" : "submit"),
+        ),
+      );
       assert.equal(f.state.lastContext?.action, action);
       assert.equal(f.state.lastContext?.package.pluginId, f.sourceId);
       assert.equal(f.state.lastContext?.lease, f.lease);
@@ -55,6 +64,63 @@ for (const backend of ["sqlite", "postgres"] as const) {
       });
     },
   );
+
+  test(
+    `${backend} same-package readiness still requires submit after source read succeeds`,
+    options,
+    async (t) => {
+      const f = await installedGenerationFixture(t, backend, {
+        contexts: true,
+        samePackage: true,
+      });
+      assert.equal(f.sourceId, f.installed.descriptor.pluginId);
+      assert.equal(f.source.packageDigest, f.installed.packageDigest);
+      assert.deepEqual(await f.invoke({ reference: f.reference }, action), {
+        reference: f.reference,
+        readiness: { outcome: "ready" },
+      });
+      assert.ok(f.state.packagePurposes.length >= 2);
+      assert.deepEqual(f.state.packagePurposes.slice(0, 2), [
+        { pluginId: f.sourceId, purpose: "read" },
+        { pluginId: f.sourceId, purpose: "submit" },
+      ]);
+      f.state.targetPackageAllowed = false;
+      const before = await f.counts();
+      await assert.rejects(
+        f.invoke({ reference: f.reference }, action),
+        /project_generation_execution_package_denied/,
+      );
+      assert.deepEqual(await f.counts(), before);
+      assert.equal(f.nodeState.setups, 0);
+      assert.equal(f.nodeState.calls, 0);
+      assert.equal(f.nodeState.quoteCalls, 0);
+    },
+  );
+
+  for (const denied of ["source-read", "target-submit"] as const)
+    test(
+      `${backend} readonly readiness rejects missing ${denied} permission before Node or task allocation`,
+      options,
+      async (t) => {
+        const f = await installedGenerationFixture(t, backend, {
+          contexts: true,
+        });
+        if (denied === "source-read") f.state.sourcePackageAllowed = false;
+        else f.state.targetPackageAllowed = false;
+        const before = await f.counts();
+        await assert.rejects(
+          f.invoke({ reference: f.reference }, action),
+          (error: unknown) =>
+            error instanceof ApplicationError &&
+            error.code === "project_generation_execution_package_denied",
+        );
+        assert.deepEqual(await f.counts(), before);
+        assert.equal(f.nodeState.calls, 0);
+        assert.equal(f.nodeState.setups, 0);
+        assert.equal(f.nodeState.quoteCalls, 0);
+        assert.equal(f.state.submissions.length, 0);
+      },
+    );
 
   test(
     `${backend} exact saved CAS and archive produce input-unavailable, not an admission or generated record`,

@@ -74,11 +74,23 @@ export type DesktopPluginRuntime = Readonly<{
 }>;
 
 /** Native metadata/history and independent task opt-in; this factory never funds accounts. */
+import {
+  assertDesktopNativePluginControlComposition,
+  assertDesktopNativePluginControlConfigCurrent,
+  type DesktopNativePluginControlConfig,
+} from "./desktop-native-plugin-control-environment.ts";
+import {
+  assertDesktopNativePluginTaskComposition,
+  createDesktopNativePluginTaskRuntime,
+  type DesktopNativePluginTaskRuntime,
+} from "./desktop-native-plugin-task-runtime.ts";
+
 export async function createDesktopPluginRuntime(
   input: Readonly<{
     configuration: DesktopPluginConfiguration;
     activation?: DesktopInstalledPluginActivationConfig;
     tasks?: DesktopInstalledPluginTaskConfig;
+    nativeControl?: DesktopNativePluginControlConfig;
     uiRecovery?: PluginUiRecoveryConfiguration;
   }>,
   dependencies: Readonly<{
@@ -132,14 +144,30 @@ export async function createDesktopPluginRuntime(
       throw new Error("desktop_project_execution_authority_required");
   }
   const tasks = input.tasks;
-  const activationConfiguration = input.activation;
+  const nativeControl = input.nativeControl;
+  if (nativeControl !== undefined) {
+    if (tasks !== undefined || input.activation !== undefined)
+      throw new Error("desktop_native_plugin_authority_conflict");
+    assertDesktopNativePluginControlComposition({
+      configuration: input.configuration,
+      nativeControl,
+    });
+    assertDesktopNativePluginTaskComposition({
+      configuration: input.configuration,
+      nativeControl,
+      creativeProjects: dependencies.creativeProjects,
+    });
+  }
+  const activationConfiguration = nativeControl ?? input.activation;
   if (
     tasks === undefined &&
+    nativeControl === undefined &&
     dependencies.creativeProjects?.pluginGenerations !== undefined
   )
     throw new Error("desktop_project_generation_execution_authority_required");
   if (
     tasks === undefined &&
+    nativeControl === undefined &&
     dependencies.creativeProjects?.pluginQueries !== undefined
   )
     throw new Error("desktop_project_query_execution_authority_required");
@@ -147,13 +175,14 @@ export async function createDesktopPluginRuntime(
     assertDesktopInstalledPluginTaskComposition({
       configuration: input.configuration,
       tasks,
-      activation: activationConfiguration,
+      activation: input.activation,
       creativeProjects: dependencies.creativeProjects,
       digester: dependencies.digester,
     });
   const recoveryConfiguration = assertDesktopPluginUiRecoveryConfiguration({
     configuration: input.uiRecovery,
     publications: configuration.publications,
+    metadataUi: dependencies.creativeProjects?.pluginUi,
     selectionUi: dependencies.creativeProjects?.selectionUi,
     ...(dependencies.creativeProjects?.pluginGenerations === undefined
       ? {}
@@ -189,9 +218,12 @@ export async function createDesktopPluginRuntime(
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
-  let taskRuntime: DesktopInstalledPluginTaskRuntime | undefined;
+  let taskRuntime:
+    | DesktopInstalledPluginTaskRuntime
+    | DesktopNativePluginTaskRuntime
+    | undefined;
   const deferredServices =
-    tasks === undefined
+    tasks === undefined && nativeControl === undefined
       ? undefined
       : createDeferredPluginUiHostServiceAvailability();
   const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
@@ -296,6 +328,7 @@ export async function createDesktopPluginRuntime(
     recovery = await prepareDesktopPluginUiRecovery({
       configuration: recoveryConfiguration,
       publications: configuration.publications,
+      metadataUi: dependencies.creativeProjects?.pluginUi,
       selectionUi: dependencies.creativeProjects?.selectionUi,
       ...(dependencies.creativeProjects?.pluginGenerations === undefined
         ? {}
@@ -337,6 +370,8 @@ export async function createDesktopPluginRuntime(
         throw new ApplicationError("conflict", "desktop_plugin_runtime_closed");
       if (projectExecution)
         assertDesktopPluginConfigurationFileCurrent(input.configuration);
+      if (nativeControl !== undefined)
+        assertDesktopNativePluginControlConfigCurrent(nativeControl);
     };
     const reader = (context: PluginUiPackageContext) => {
       available();
@@ -402,7 +437,10 @@ export async function createDesktopPluginRuntime(
         authorize: (provided) => {
           const request = pluginSecurityUiRequest(provided);
           const taskPackage =
-            tasks?.publication.uiPublications.some(
+            (nativeControl === undefined
+              ? tasks?.publication.uiPublications
+              : configuration.publications
+            )?.some(
               (grant) =>
                 grant.pluginId === request.resource.pluginId &&
                 grant.packageDigest === request.resource.packageDigest,
@@ -617,7 +655,7 @@ export async function createDesktopPluginRuntime(
   async function prepareTasks(
     metadataHostUiServices: PluginUiHostServiceAvailabilityPort | undefined,
   ) {
-    if (tasks === undefined) return;
+    if (tasks === undefined && nativeControl === undefined) return;
     if (
       taskRuntime !== undefined ||
       activation === null ||
@@ -629,11 +667,40 @@ export async function createDesktopPluginRuntime(
         "authorization",
         "desktop_plugin_task_authority_unavailable",
       );
+    if (nativeControl !== undefined) {
+      taskRuntime = await createDesktopNativePluginTaskRuntime(
+        {
+          configuration: input.configuration,
+          nativeControl,
+          activationOwner: activation,
+          installed: configurationRuntime,
+          registry,
+          authority,
+          installation,
+          store: dependencies.store,
+        },
+        {
+          clock: dependencies.clock,
+          digester: dependencies.digester,
+          creativeProjects: dependencies.creativeProjects,
+          ...(metadataHostUiServices === undefined
+            ? {}
+            : { metadataHostUiServices }),
+        },
+      );
+      return;
+    }
+    if (
+      tasks === undefined ||
+      activationConfiguration !== input.activation ||
+      input.activation === undefined
+    )
+      throw new Error("desktop_plugin_task_authority_unavailable");
     taskRuntime = await createDesktopInstalledPluginTaskRuntime(
       {
         configuration: input.configuration,
         tasks,
-        activation: activationConfiguration,
+        activation: input.activation,
         activationOwner: activation,
         installed: configurationRuntime,
         registry,

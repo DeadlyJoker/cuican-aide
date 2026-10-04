@@ -11,7 +11,7 @@ import type {
 } from "@crewon/application";
 import { loadPluginQuerySource } from "@crewon/application";
 import {
-  assertExtensionCreditAdmission,
+  assertPluginTaskFunding,
   assertPluginTaskAdmission,
   extensionCanonicalJson,
   extensionOpaqueId,
@@ -542,17 +542,25 @@ function validateReceipt(
       extensionCanonicalJson(saved.turn.runEvents)
   )
     fail("installed_plugin_task_receipt_mismatch");
-  const credit =
-    query === null
-      ? assertExtensionCreditAdmission(
-          { admission: saved.creditAdmission!, binding, receipt },
-          digester,
-        )
-      : undefined;
-  if (
-    (query !== null && saved.creditAdmission !== undefined) ||
-    (credit !== undefined &&
-      credit.reservation.scope.principalId !== admission.principalId)
+  if (query === null)
+    assertPluginTaskFunding(
+      {
+        ...(saved.creditAdmission === undefined
+          ? {}
+          : { creditAdmission: saved.creditAdmission }),
+        ...(saved.unmeteredAdmission === undefined
+          ? {}
+          : { unmeteredAdmission: saved.unmeteredAdmission }),
+        binding,
+        receipt,
+        principalId: admission.principalId,
+        task: admission,
+      },
+      digester,
+    );
+  else if (
+    saved.creditAdmission !== undefined ||
+    saved.unmeteredAdmission !== undefined
   )
     fail("installed_plugin_task_receipt_owner_mismatch");
   const messages = saved.turn.messages;

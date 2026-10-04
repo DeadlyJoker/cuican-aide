@@ -42,7 +42,10 @@ import {
   installationRecipe,
   selectionRecipe,
 } from "../../../packages/store/src/plugin-installation-store.test-support.ts";
-import { InstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
+import {
+  InstalledPluginTaskActionOwner,
+  type InstalledPluginTaskActionOwnerDependencies,
+} from "./installed-plugin-task-action-owner.ts";
 
 export { actor, scope };
 export const commandInput = Object.freeze({
@@ -77,6 +80,7 @@ export async function ownedActionFixture(
     cleanupFailure?: boolean;
     queryTasks?: boolean;
     maxPoolSize?: number;
+    projectGenerationServices?: "generation" | "contexts";
   } = {},
 ) {
   const storage = await configurationServiceFixture(
@@ -117,6 +121,7 @@ export async function ownedActionFixture(
     denyUi: false,
     allowPackage: true,
     packageReads: 0,
+    packagePurposes: [] as Array<"read" | "submit">,
     actorReads: 0,
     quoteCalls: 0,
     setups: 0,
@@ -205,6 +210,24 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(sco
             optional: true,
           },
           { service: "crewon.execution", apiVersion: "1", optional: true },
+          ...(options.projectGenerationServices !== undefined
+            ? [
+                {
+                  service: "crewon.project-generations",
+                  apiVersion: "1",
+                  optional: false,
+                },
+              ]
+            : []),
+          ...(options.projectGenerationServices === "contexts"
+            ? [
+                {
+                  service: "crewon.project-generation-contexts",
+                  apiVersion: "1",
+                  optional: false,
+                },
+              ]
+            : []),
         ],
         provides: [{ service: scope.pluginId, apiVersion: "1" }],
         contributions: [
@@ -336,10 +359,13 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(sco
       return state.actor === null ? null : { ...state.actor };
     },
     authorizePackage: async (
-      _input: unknown,
+      input: Parameters<
+        InstalledPluginTaskActionOwnerDependencies["authorizePackage"]
+      >[0],
       _signal: AbortSignal,
     ): Promise<"allow" | "deny"> => {
       state.packageReads++;
+      state.packagePurposes.push(input.purpose);
       await state.onPackage?.();
       return state.allowPackage ? "allow" : "deny";
     },

@@ -56,6 +56,7 @@ type Publication = Readonly<{ pluginId: string; packageDigest: string }>;
 type Approval = Readonly<{
   configuration: PluginUiRecoveryConfiguration | undefined;
   publications: readonly Publication[];
+  metadataUi?: CreativeProjectPluginUiConfig;
   selectionUi: CreativeProjectPluginUiConfig | undefined;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -73,7 +74,9 @@ function captureApproval(input: Approval) {
   try {
     const configuration = capturePluginUiRecoveryConfiguration(
       input.configuration,
+      { publicationMode: "metadata-read" },
     )!;
+    const metadataUi = captureCreativeProjectPluginUiConfig(input.metadataUi);
     const selectionUi = captureCreativeProjectPluginUiConfig(input.selectionUi);
     const generations = captureProjectGenerationPluginConfiguration(
       input.pluginGenerations,
@@ -86,6 +89,13 @@ function captureApproval(input: Approval) {
             approved.pluginId === publication.pluginId &&
             approved.packageDigest === publication.packageDigest,
         ) ||
+        (publication.actions.length === 0 &&
+          !metadataUi?.publications.some(
+            (approved) =>
+              approved.pluginId === publication.pluginId &&
+              approved.packageDigest === publication.packageDigest &&
+              approved.contributionId === publication.contributionId,
+          )) ||
         publication.actions.some((action) => {
           const sources =
             action === generationAction
@@ -238,6 +248,7 @@ export async function prepareDesktopPluginUiRecovery(
   };
   const service = new PluginUiRecoveryApplicationService({
     store,
+    publicationMode: "metadata-read",
     publications: configuration.publications,
     clock,
     digester,

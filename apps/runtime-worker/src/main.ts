@@ -41,10 +41,8 @@ import {
 import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-process-environment.ts";
 import { loadExtensionReleaseInput } from "./extensions/extension-release-input.ts";
 import type { RuntimeExtensionCompositionConfig } from "./extensions/extension-runtime-composition.ts";
-import {
-  INSTALLED_PLUGIN_WORKER_CONFIG_ENV,
-  loadInstalledPluginWorkerConfig,
-} from "./plugins/installed-plugin-worker-config.ts";
+import { INSTALLED_PLUGIN_WORKER_CONFIG_ENV } from "./plugins/installed-plugin-worker-config.ts";
+import { loadInstalledPluginAuthorityConfig } from "./plugins/installed-plugin-authority-config.ts";
 import {
   createInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
@@ -97,7 +95,7 @@ const initialized = await (async () => {
     const installedPluginConfiguration =
       installedPluginConfigPath === undefined
         ? undefined
-        : loadInstalledPluginWorkerConfig(
+        : loadInstalledPluginAuthorityConfig(
             installedPluginConfigPath,
             environment,
           );

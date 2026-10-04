@@ -33,7 +33,10 @@ export const actionIntentJsonSchema = {
   ],
   properties: {
     schemaVersion: { const: "crewon.action-intent.v0" },
-    runId: opaqueId,
+    runId: {
+      type: "string",
+      pattern: "^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,511}|[-_][A-Za-z0-9_-]{42})$",
+    },
     segmentId: opaqueId,
     callId: opaqueId,
     tool: {

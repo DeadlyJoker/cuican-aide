@@ -74,7 +74,7 @@ export type InstalledPluginProjectQueryDependencies = Readonly<{
       actor: ActorContext;
       scope: import("@crewon/domain").PluginProfileScope;
       candidate: PluginActivationCandidate;
-      purpose: "submit";
+      purpose: "read" | "submit";
     }>,
     signal: AbortSignal,
   ): Promise<"allow" | "deny">;
@@ -437,9 +437,9 @@ export class InstalledPluginProjectQueryOwner
       active();
       if (!generationSame(currentScope, scope))
         generationDenied("project_query_profile_changed");
-      for (const [pin, pkg, candidate] of [
-        [sourcePin, sourcePackage, sourceCandidate],
-        [executionPin, target.package, targetCandidate],
+      for (const [pin, pkg, candidate, purpose] of [
+        [sourcePin, sourcePackage, sourceCandidate, "read"],
+        [executionPin, target.package, targetCandidate, "submit"],
       ] as const) {
         if ((await policy(pin)) !== pin.authorityEpoch)
           generationDenied("project_query_plugin_authority_changed");
@@ -452,7 +452,7 @@ export class InstalledPluginProjectQueryOwner
         active();
         if (
           (await this.#dependencies.authorizePackage(
-            { actor, scope, candidate, purpose: "submit" },
+            { actor, scope, candidate, purpose },
             signal,
           )) !== "allow"
         )

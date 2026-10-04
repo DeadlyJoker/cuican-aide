@@ -118,3 +118,5 @@ export {
   type CreativeProjectBriefMutationResponse,
   type CreativeProjectConceptMutationResponse,
 } from "./creative-project-control-contract.ts";
+
+export * from "./desktop-native-plugin-authority-contract.ts";

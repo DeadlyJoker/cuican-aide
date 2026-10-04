@@ -174,6 +174,85 @@ function baseSendParams(
 }
 
 describe("thread message actions", () => {
+  it("starts a newly created Control conversation on the first send while selection history refreshes", async () => {
+    const f = transcriptFixture(0);
+    f.runtime.setThreadEventStreamFocus(null);
+    const state = threadState([]);
+    const created = {
+      ...thread({ status: { type: "notLoaded" } }),
+      workspaceId: "workspace-new",
+    };
+    const startThread = vi.fn(async () => created);
+    const resume = f.runtime.resumeThread.bind(f.runtime);
+    const resumeThread = vi
+      .spyOn(f.runtime, "resumeThread")
+      .mockImplementation((threadId) => {
+        const pending = resume(threadId);
+        // Selection can refresh the same transcript independently of sending.
+        // A new Run must not depend on that replaceable history read.
+        void f.runtime.readThread(threadId).catch(() => undefined);
+        return pending;
+      });
+    try {
+      await sendMessageAction(
+        baseSendParams({
+          client: f.runtime,
+          createThread: (initialPrompt) =>
+            createThreadAction({
+              client: { startThread },
+              initialPrompt,
+              createDemoThread: () => {
+                throw new Error("unexpected demo");
+              },
+              isConnected: true,
+              locale: "en",
+              preserveThreadsAfterConnectionLoss() {},
+              resolveBackendCwd: async () => undefined,
+              workspaceId: "workspace-new",
+              setNotice: state.setNotice,
+              setSelectedThreadId: state.setSelectedThreadId,
+              setSidebarOpen() {},
+              setThreads: state.setThreads,
+              shouldAutoCloseSidebar: () => false,
+            }),
+          selectedThread: null,
+          selectedThreadId: null,
+          pendingComposerMentions: [],
+          text: "Generate a spring poster",
+          setComposerValue: state.setComposerValue,
+          setNotice: state.setNotice,
+          setThreads: state.setThreads,
+          setSelectedThreadId: state.setSelectedThreadId,
+          setActiveTurnByThread: state.setActiveTurnByThread,
+          setIsSending: state.setIsSending,
+        }),
+      );
+      expect(state.notice).toBeNull();
+      expect(resumeThread).not.toHaveBeenCalled();
+      expect(startThread).toHaveBeenCalledExactlyOnceWith(
+        undefined,
+        "app_server",
+        undefined,
+        "workspace-new",
+      );
+      expect(f.mutations).toHaveLength(1);
+      expect(f.mutations[0]).toMatchObject({
+        path: "/api/v1/threads/thread-1/turns",
+        body: { content: "Generate a spring poster" },
+      });
+      expect(state.selectedThreadId).toBe("thread-1");
+      expect(state.threads).toHaveLength(1);
+      expect(state.threads[0]).toMatchObject({
+        workspaceId: "workspace-new",
+        turns: [expect.objectContaining({ id: "run-replacement" })],
+      });
+      expect(state.composerValue).toBe("");
+      expect(state.activeTurns).toEqual({ "thread-1": "run-replacement" });
+      expect(state.isSending).toBe(false);
+    } finally {
+      f.runtime.close();
+    }
+  });
   it("uses the actual Control runtime's subscribed updates without starting the fallback refresh loop", async () => {
     vi.useFakeTimers();
     const onTextDelta = vi.fn();

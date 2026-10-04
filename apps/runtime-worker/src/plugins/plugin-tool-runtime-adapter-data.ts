@@ -189,6 +189,12 @@ export function opaque(input: unknown): string {
     invalid("plugin_tool_identity_invalid");
   return input;
 }
+/** Older installed task owners minted immutable Run IDs from 32 base64url bytes. */
+function runIdentity(input: unknown): string {
+  if (typeof input === "string" && /^[-_][A-Za-z0-9_-]{42}$/u.test(input))
+    return input;
+  return opaque(input);
+}
 function identifier(input: unknown): string {
   if (
     typeof input !== "string" ||
@@ -232,7 +238,7 @@ export function snapshotContext(
     "inputDigest",
     "source",
   ]);
-  opaque(run.runId);
+  runIdentity(run.runId);
   opaque(run.threadId);
   digest(run.bindingDigest);
   digest(run.inputDigest);
@@ -242,7 +248,7 @@ export function snapshotContext(
       "operationId",
       "bindingDigest",
     ]);
-    opaque(source.runId);
+    runIdentity(source.runId);
     opaque(source.operationId);
     digest(source.bindingDigest);
   }
@@ -592,6 +598,6 @@ export function checkedScopedMetadata(
   return Object.freeze({
     ...checkedMetadata(metadata),
     tenantId: opaque(tenantId),
-    runId: opaque(runId),
+    runId: runIdentity(runId),
   });
 }

@@ -1,3 +1,4 @@
+import { assertSqliteUnmeteredDispatch } from "./plugin-task-unmetered-operation-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   extensionCanonicalJson,
@@ -88,6 +89,7 @@ export class SqliteExternalOperationStore
         return { disposition: "existing" as const, operation: saved };
       }
       this.#assertPaidDispatch(operation);
+      assertSqliteUnmeteredDispatch(this.#database, operation);
       const inserted = this.#database
         .prepare(
           `INSERT INTO extension_external_operations

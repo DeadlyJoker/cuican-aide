@@ -1,3 +1,8 @@
+import { assertUnmeteredReplay } from "./plugin-task-unmetered-store-support.ts";
+import {
+  captureUnmeteredTurn,
+  saveSqlitePluginTaskUnmeteredAdmission,
+} from "./plugin-task-unmetered-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type {
   CommitExtensionTurnInput,
@@ -72,6 +77,7 @@ import {
 
 type SqliteExtensionTurnHost = Readonly<{
   database: DatabaseSync;
+  unmeteredEnabled: boolean;
   projectGenerationsEnabled: boolean;
   projectQueriesEnabled: boolean;
   assertOpen(): void;
@@ -98,12 +104,16 @@ type SqliteExtensionTurnHost = Readonly<{
   ): void;
 }>;
 
-/** Optional project source and original paid Turn share the same synchronous SQLite commit. */
+/** Optional project source and explicit task financial mode share the original synchronous SQLite commit. */
 export async function commitSqliteExtensionTurn(
   host: SqliteExtensionTurnHost,
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const unmetered = captureUnmeteredTurn(input, host.unmeteredEnabled, options);
+  if (unmetered.admission !== undefined)
+    input = { ...input, unmeteredAdmission: unmetered.admission };
+  options = unmetered.projectOptions;
   const pluginQuery = checkedPluginQueryTurn(input);
   const projectQuery = captureProjectQuery(
     input,
@@ -141,6 +151,10 @@ export async function commitSqliteExtensionTurn(
     binding,
     receipt: input.receipt,
   });
+  if (unmetered.authority !== undefined) {
+    await unmetered.authority.assertCurrent();
+    unmetered.authority.assertActive();
+  }
   if (prepared !== null) {
     await assertCreativeProjectCommitCurrent(prepared.authority);
     assertCreativeProjectCommitActive(prepared.authority);
@@ -162,6 +176,7 @@ export async function commitSqliteExtensionTurn(
         const saved = host.verifyCreditReceipt(
           parseExtensionTurnReceipt(replay, binding, input.receipt),
         );
+        assertUnmeteredReplay(saved.unmeteredAdmission, unmetered.admission);
         assertExtensionCreditReplayPrincipal({
           saved: saved.creditAdmission,
           requested: creditAdmission,
@@ -173,6 +188,7 @@ export async function commitSqliteExtensionTurn(
             binding: saved.binding,
             receipt: input.receipt,
             creditAdmission: saved.creditAdmission,
+            unmeteredAdmission: saved.unmeteredAdmission,
           });
         if (pluginQuery !== undefined)
           assertPluginQueryReplay(
@@ -276,9 +292,19 @@ export async function commitSqliteExtensionTurn(
         host.saveCreditAdmission(creditAdmission);
       if (pluginAdmission !== undefined)
         saveSqlitePluginTask(host.database, pluginAdmission);
+      if (unmetered.admission !== undefined)
+        saveSqlitePluginTaskUnmeteredAdmission(
+          host.database,
+          unmetered.admission,
+        );
       if (pluginQuery !== undefined)
         saveSqlitePluginQuery(host.database, pluginQuery);
-      const result = extensionTurnResult(turn, binding, creditAdmission);
+      const result = extensionTurnResult(
+        turn,
+        binding,
+        creditAdmission,
+        unmetered.admission,
+      );
       host.saveReceipt(binding, "task", input.receipt, result);
       if (projectLink !== undefined)
         host.database
@@ -292,6 +318,10 @@ export async function commitSqliteExtensionTurn(
     },
     {
       beforeCommit: () => {
+        if (unmetered.authority !== undefined) {
+          host.assertOpen();
+          unmetered.authority.assertActive();
+        }
         if (prepared !== null) host.assertOpen();
         assertCreativeProjectCommitActive(prepared?.authority);
         assertCreativeProjectCommitActive(projectQuery?.authority);

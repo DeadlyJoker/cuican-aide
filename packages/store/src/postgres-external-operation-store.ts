@@ -1,3 +1,4 @@
+import { assertPostgresUnmeteredDispatch } from "./plugin-task-unmetered-operation-support.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertExtensionCreditAdmission,
@@ -110,6 +111,11 @@ export class PostgresExternalOperationStore
           result = { disposition: "existing" as const, operation: raced };
         } else {
           await this.#assertNewPaidOperation(client, operation, admission);
+          await assertPostgresUnmeteredDispatch(
+            client,
+            this.#schema,
+            operation,
+          );
           result = await this.#insert(client, operation);
         }
         this.#host?.assertOpen();

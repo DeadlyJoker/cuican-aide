@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { actionIntentJsonSchema } from "./action-intent-schema.ts";
-import { parseActionIntent } from "./action-intent.ts";
+import { canonicalActionIntent, parseActionIntent } from "./action-intent.ts";
 import { ContractValidationError } from "./contract-validation-error.ts";
 
 const intent = {
@@ -36,6 +36,93 @@ test("accepts a bounded ActionIntent with every security binding explicit", () =
   assert.deepEqual(
     [...actionIntentJsonSchema.required].sort(),
     Object.keys(intent).sort(),
+  );
+});
+
+test("preserves historical 32-byte base64url Run IDs in parsed and canonical intents", () => {
+  const runIdPattern = new RegExp(
+    actionIntentJsonSchema.properties.runId.pattern,
+    "u",
+  );
+  for (const runId of [
+    `-${"A".repeat(42)}`,
+    `_${"A".repeat(42)}`,
+    "run-1",
+    `plugin-${"A".repeat(43)}`,
+    "a".repeat(512),
+  ]) {
+    const candidate = { ...intent, runId };
+    assert.equal(parseActionIntent(candidate).runId, runId);
+    assert.equal(JSON.parse(canonicalActionIntent(candidate)).runId, runId);
+    assert.equal(runIdPattern.test(runId), true, runId);
+  }
+});
+
+test("rejects malformed historical Run IDs consistently in parser and schema", () => {
+  const runIdPattern = new RegExp(
+    actionIntentJsonSchema.properties.runId.pattern,
+    "u",
+  );
+  for (const runId of [
+    "",
+    "-",
+    "_",
+    `-${"A".repeat(41)}`,
+    `_${"A".repeat(43)}`,
+    `-${"A".repeat(41)}.`,
+    `_${"A".repeat(41)}:`,
+    `-${"A".repeat(41)}/`,
+    `_${"A".repeat(41)} `,
+    "/run-1",
+    "a".repeat(513),
+  ]) {
+    assert.throws(
+      () => parseActionIntent({ ...intent, runId }),
+      hasCode("action_run_id_invalid"),
+      runId,
+    );
+    assert.equal(runIdPattern.test(runId), false, runId);
+  }
+  for (const runId of [null, 1, {}, []]) {
+    assert.throws(
+      () => parseActionIntent({ ...intent, runId }),
+      hasCode("action_run_id_invalid"),
+    );
+  }
+});
+
+test("keeps historical Run ID compatibility out of all other opaque bindings", () => {
+  const historicalId = `_${"A".repeat(42)}`;
+  for (const [field, code] of [
+    ["segmentId", "action_segment_id_invalid"],
+    ["callId", "action_call_id_invalid"],
+    ["policySnapshotId", "action_policy_snapshot_invalid"],
+    ["workspaceBindingId", "action_workspace_binding_invalid"],
+    ["resourceBindingId", "action_resource_binding_invalid"],
+    ["credentialBindingId", "action_credential_binding_invalid"],
+  ] as const) {
+    assert.throws(
+      () => parseActionIntent({ ...intent, [field]: historicalId }),
+      hasCode(code),
+    );
+    const schema = actionIntentJsonSchema.properties[field];
+    const opaque = "pattern" in schema ? schema : schema.oneOf[0];
+    assert.equal(new RegExp(opaque.pattern, "u").test(historicalId), false);
+  }
+  assert.throws(
+    () =>
+      parseActionIntent({
+        ...intent,
+        executionTarget: { kind: "remote", bindingId: historicalId },
+      }),
+    hasCode("action_execution_binding_invalid"),
+  );
+  assert.equal(
+    new RegExp(
+      actionIntentJsonSchema.properties.executionTarget.properties.bindingId.pattern,
+      "u",
+    ).test(historicalId),
+    false,
   );
 });
 

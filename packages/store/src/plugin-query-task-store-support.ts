@@ -1,3 +1,8 @@
+import { assertPluginTaskFunding } from "@crewon/domain";
+import {
+  sqlitePluginTaskFundingPrincipal,
+  postgresPluginTaskFundingPrincipal,
+} from "./plugin-task-unmetered-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import type {
@@ -56,7 +61,8 @@ export function checkedPluginQueryTurn(
   if (field.value === undefined) return undefined;
   if (
     input.pluginAdmission !== undefined ||
-    input.creditAdmission !== undefined
+    input.creditAdmission !== undefined ||
+    input.unmeteredAdmission !== undefined
   )
     throw new Error("plugin_query_credit_or_generation_conflict");
   const query = parsePluginQueryTaskAdmission(field.value),
@@ -140,13 +146,11 @@ function validateSqliteSource(
     .get(query.tenantId, query.source.runId) as
     | { binding_json: unknown }
     | undefined;
-  const credit = db
-    .prepare(
-      "SELECT principal_id FROM extension_credit_admissions WHERE tenant_id=? AND run_id=?",
-    )
-    .get(query.tenantId, query.source.runId) as
-    | { principal_id: unknown }
-    | undefined;
+  const sourcePrincipal = sqlitePluginTaskFundingPrincipal(db, {
+    tenantId: query.tenantId,
+    spaceId: query.spaceId,
+    runId: query.source.runId,
+  });
   const operation = db
     .prepare(
       "SELECT 1 FROM extension_external_operations WHERE tenant_id=? AND run_id=? AND binding_digest=? AND operation_id=?",
@@ -162,7 +166,7 @@ function validateSqliteSource(
     binding,
     json(raw?.binding_json),
     original,
-    credit?.principal_id,
+    sourcePrincipal,
     operation,
   );
 }
@@ -189,7 +193,7 @@ async function validatePostgresSource(
     runId: query.source.runId,
   });
   const raw = await client.query(
-    `SELECT b.binding_json,c.principal_id FROM ${prefix}extension_run_bindings b JOIN ${prefix}extension_credit_admissions c ON c.tenant_id=b.tenant_id AND c.run_id=b.run_id WHERE b.tenant_id=$1 AND b.run_id=$2`,
+    `SELECT b.binding_json FROM ${prefix}extension_run_bindings b WHERE b.tenant_id=$1 AND b.run_id=$2`,
     [query.tenantId, query.source.runId],
   );
   const operation = await client.query(
@@ -206,7 +210,11 @@ async function validatePostgresSource(
     binding,
     json(raw.rows[0]?.binding_json),
     original,
-    raw.rows[0]?.principal_id,
+    await postgresPluginTaskFundingPrincipal(client, schema, {
+      tenantId: query.tenantId,
+      spaceId: query.spaceId,
+      runId: query.source.runId,
+    }),
     operation.rows[0],
   );
 }
@@ -510,13 +518,19 @@ async function assertQuerySourceReceipt(
     pluginId: source.pluginId,
     receipt,
   });
-  if (
-    saved === null ||
-    saved.binding.source !== null ||
-    saved.creditAdmission === undefined ||
-    saved.creditAdmission.reservation.scope.principalId !== source.principalId
-  )
+  if (saved === null || saved.binding.source !== null)
     throw new Error("plugin_query_source_invalid");
+  assertPluginTaskFunding(
+    {
+      creditAdmission: saved.creditAdmission,
+      unmeteredAdmission: saved.unmeteredAdmission,
+      binding: saved.binding,
+      receipt,
+      principalId: source.principalId,
+      task: source,
+    },
+    extensionStoreDigester,
+  );
   assertPluginTaskAdmission(
     { admission: source, binding: saved.binding, receipt },
     extensionStoreDigester,

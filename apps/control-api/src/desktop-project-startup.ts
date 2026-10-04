@@ -20,6 +20,7 @@ import { pluginSecurityActor } from "./plugin-security-validation.ts";
 import { assertDesktopPluginUiRecoveryConfiguration } from "./desktop-plugin-ui-recovery.ts";
 import type { DesktopInstalledPluginTaskConfig } from "./desktop-installed-plugin-task-environment.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
+import type { DesktopNativePluginControlConfig } from "./desktop-native-plugin-control-environment.ts";
 import { issueDesktopProjectExecutionConfiguration } from "./desktop-project-execution-startup.ts";
 
 /** Issued private bootstrap data selects existing local capabilities; no supplier, quote or cloud policy is created. */
@@ -29,6 +30,7 @@ export function composeDesktopProjectStartup(
     actor: ActorContext;
     tasks?: DesktopInstalledPluginTaskConfig;
     activation?: DesktopInstalledPluginActivationConfig;
+    nativeControl?: DesktopNativePluginControlConfig;
   }>,
 ): Readonly<{
   creativeProjects?: CreativeProjectCompositionConfig;
@@ -110,8 +112,13 @@ export function composeDesktopProjectStartup(
     tasks: input.tasks,
     activation: input.activation,
     projects: captured,
+    ...(input.nativeControl === undefined
+      ? {}
+      : { nativeControl: input.nativeControl }),
   })!;
-  const recovery = capturePluginUiRecoveryConfiguration(uiRecovery);
+  const recovery = capturePluginUiRecoveryConfiguration(uiRecovery, {
+    publicationMode: "metadata-read",
+  });
   return Object.freeze({
     creativeProjects,
     ...(recovery === undefined ? {} : { uiRecovery: recovery }),
@@ -135,8 +142,11 @@ export function captureDesktopProjectRecoveryStartup(
   if (field !== undefined && (!field.enumerable || !("value" in field)))
     throw new Error("desktop_plugin_ui_recovery_configuration_invalid");
   return assertDesktopPluginUiRecoveryConfiguration({
-    configuration: capturePluginUiRecoveryConfiguration(field?.value),
+    configuration: capturePluginUiRecoveryConfiguration(field?.value, {
+      publicationMode: "metadata-read",
+    }),
     publications: input.publications,
+    metadataUi: input.projects?.pluginUi,
     selectionUi: input.projects?.selectionUi,
     pluginGenerations: input.projects?.pluginGenerations,
     pluginQueries: input.projects?.pluginQueries,

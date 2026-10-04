@@ -1552,6 +1552,8 @@ export interface components {
       run: components["schemas"]["RunView"];
     };
     CreateThreadRequest: {
+      /** @description Immutable opaque workspace identity. Omission on legacy data is normalized to null. Filesystem paths are never accepted. */
+      workspaceId?: string | null;
       title: string | null;
     };
     AppendThreadMessageRequest: {
@@ -1582,6 +1584,8 @@ export interface components {
     /** @enum {string} */
     ThreadStatus: "active" | "archived" | "deleted";
     ThreadView: {
+      /** @description Immutable opaque workspace identity. Omission on legacy data is normalized to null. Filesystem paths are never accepted. */
+      workspaceId?: string | null;
       threadId: string;
       title: string | null;
       /** @description Optional bounded display-only fallback for historical unnamed conversations. Not an authoritative title or a thread revision change. */

@@ -72,6 +72,13 @@ export class CompositeToolRuntime implements ToolRuntimePort {
     return this.#route(command.kind, command.name).execute(command, signal);
   }
 
+  async prepareExecution(command: ToolExecutionCommand, signal: AbortSignal) {
+    await this.#route(command.kind, command.name).prepareExecution?.(
+      command,
+      signal,
+    );
+  }
+
   reserveExecution(
     command: ToolExecutionCommand,
     signal: AbortSignal,

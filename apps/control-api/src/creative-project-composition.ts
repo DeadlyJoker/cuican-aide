@@ -230,6 +230,9 @@ export function captureStandaloneCreativeProjectCompositionConfig(
 export async function prepareCreativeProjects(
   owner: CreativeProjectStoreOwner,
   configuration: CreativeProjectCompositionConfig | undefined,
+  options: Readonly<{ financialMode: "metered" | "unmetered" }> = {
+    financialMode: "metered",
+  },
 ): Promise<PreparedCreativeProjects | undefined> {
   if (configuration === undefined) return undefined;
   // Paid composition issues its own read/writer adapters after establishing the
@@ -256,7 +259,11 @@ export async function prepareCreativeProjects(
     const extensions = owner.extensionStore();
     await extensions.migrate();
     await extensions.migratePluginAdmissions();
-    await extensions.migrateCredits();
+    if (options.financialMode === "unmetered") {
+      await extensions.migrateUnmeteredPluginAdmissions();
+    } else {
+      await extensions.migrateCredits();
+    }
     await extensions.migrateProjectGenerations();
   }
   const selectionStore =

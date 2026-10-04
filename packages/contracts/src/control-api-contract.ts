@@ -171,14 +171,36 @@ export type ResourceListQuery = Readonly<{
   limit: number;
 }>;
 
+/** Canonical safe workspace token. Missing legacy ownership is explicitly null. */
+export function parseThreadWorkspaceId(input: unknown): string | null {
+  if (input === undefined || input === null) return null;
+  if (
+    typeof input !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(input)
+  ) {
+    throw new ContractValidationError("thread_workspace_id_invalid");
+  }
+  return input;
+}
+
+export function normalizeThreadViewWorkspace<T extends ThreadView>(
+  thread: T,
+): T & { workspaceId: string | null } {
+  return { ...thread, workspaceId: parseThreadWorkspaceId(thread.workspaceId) };
+}
+
 export function parseCreateThreadRequest(input: unknown): CreateThreadRequest {
-  if (!hasExactKeys(input, ["title"])) {
+  if (!hasExactKeys(input, ["title"], ["workspaceId"])) {
     throw new ContractValidationError("create_thread_fields_invalid");
   }
+  const workspace = Object.hasOwn(input, "workspaceId")
+    ? { workspaceId: parseThreadWorkspaceId(input.workspaceId) }
+    : {};
   if (input.title === null) {
-    return { title: null };
+    return { title: null, ...workspace };
   }
   return {
+    ...workspace,
     title: requireBoundedString(
       input.title,
       MAX_THREAD_TITLE_LENGTH,
@@ -1319,11 +1341,14 @@ function requireThreadGoalObjective(input: unknown): string {
 function hasExactKeys(
   input: unknown,
   expectedKeys: readonly string[],
+  optionalKeys: readonly string[] = [],
 ): input is Record<string, unknown> {
   if (!isPlainObject(input)) {
     return false;
   }
-  const actualKeys = Object.keys(input).sort();
+  const actualKeys = Object.keys(input)
+    .filter((key) => !optionalKeys.includes(key))
+    .sort();
   const expected = [...expectedKeys].sort();
   return (
     actualKeys.length === expected.length &&

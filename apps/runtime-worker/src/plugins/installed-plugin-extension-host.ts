@@ -61,6 +61,15 @@ export type InstalledPluginExtensionHostDependencies = Readonly<{
     }>,
     signal: AbortSignal,
   ): Promise<"allow" | "deny">;
+  /** Preparation is revision-bound and never conveys permission to submit a Run. */
+  authorizeCandidatePackage?(
+    input: Readonly<{
+      candidate: PluginActivationCandidate;
+      scope: PluginProfileScope;
+      expectedSelectionRevision: number;
+    }>,
+    signal: AbortSignal,
+  ): Promise<"allow" | "deny">;
   runtimeResolver: StoreBackedAgentVersionRuntimeResolver;
   deployments: Pick<AgentVersionDeploymentStore, "loadAgentVersionDeployment">;
   /** Candidate preparation alone requires the same parent's saved configuration store. */
@@ -152,6 +161,14 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
       resolveActor: method(input, "resolveActor"),
       resolveProfile: method(input, "resolveProfile"),
       authorizePackage: method(input, "authorizePackage"),
+      ...(input.authorizeCandidatePackage === undefined
+        ? {}
+        : {
+            authorizeCandidatePackage: method(
+              input,
+              "authorizeCandidatePackage",
+            ),
+          }),
       runtimeResolver: input.runtimeResolver,
       ...(input.executionReadiness === undefined
         ? {}
@@ -544,10 +561,21 @@ export class InstalledPluginExtensionHost implements ExtensionHostPort {
       request.registration,
       signal,
     );
-    const decision = await this.#dependencies.authorizePackage(
-      { candidate, scope: this.#scope, purpose: "submit" },
-      signal,
-    );
+    const decision =
+      request.kind === "candidate" &&
+      this.#dependencies.authorizeCandidatePackage !== undefined
+        ? await this.#dependencies.authorizeCandidatePackage(
+            {
+              candidate,
+              scope: this.#scope,
+              expectedSelectionRevision: request.expectedSelectionRevision,
+            },
+            signal,
+          )
+        : await this.#dependencies.authorizePackage(
+            { candidate, scope: this.#scope, purpose: "submit" },
+            signal,
+          );
     signal.throwIfAborted();
     if (decision !== "allow")
       fail("installed_plugin_extension_host_package_forbidden");

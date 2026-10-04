@@ -1,4 +1,5 @@
 import { discardInterruptedDesktopConfigWrites } from "./desktopConfigFile.ts";
+import { ControlApiClientError } from "@crewon/control-client";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -16,6 +17,7 @@ import electronUpdater from "electron-updater";
 declare const __CREWON_DESKTOP_TRUSTED_ACCOUNT_ORIGIN__: string | null;
 
 import type {
+  DesktopPluginSelectionReply,
   DesktopHttpRequest,
   DesktopUpdateProgress,
 } from "../src/lib/desktop/desktopBridge.ts";
@@ -172,13 +174,6 @@ async function launch(): Promise<void> {
         { paths, providers },
       );
       return result.status === "ok" ? result.models : null;
-    },
-    workspaceRoot: () => {
-      try {
-        return authority.root();
-      } catch {
-        return null;
-      }
     },
   });
   desktopLog(`provider=${providers.active()?.providerId ?? "unconfigured"}`);
@@ -365,6 +360,32 @@ function registerIpc(options: {
   };
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
+  handle(
+    "crewon:plugins:set-selection",
+    async (request: unknown): Promise<DesktopPluginSelectionReply> => {
+      try {
+        return { ok: true, value: await runtime.setPluginSelection(request) };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof ControlApiClientError
+              ? {
+                  kind: "http",
+                  status: error.status,
+                  category: error.category,
+                  code: error.code,
+                  message: error.message,
+                  requestId: error.requestId,
+                }
+              : {
+                  kind: "unknown",
+                  code: "desktop_native_plugin_business_activation_failed",
+                },
+        };
+      }
+    },
+  );
   handle("crewon:runtime:local-management-access", () =>
     runtime.localManagementAccess(),
   );
@@ -433,20 +454,19 @@ function registerIpc(options: {
   });
   handle("crewon:workspace:select-and-register", async (request: unknown) => {
     const result = await dialog.showOpenDialog(window, {
-      title: "选择本地工作区",
+      title: "新增本地工作空间",
       properties: ["openDirectory", "createDirectory"],
     });
     if (result.canceled || result.filePaths[0] === undefined)
       return authority.canceled(request);
-    const response = authority.select(result.filePaths[0], request);
-    await runtime.restart();
-    return response;
+    return authority.select(result.filePaths[0], request);
   });
-  handle("crewon:workspace:clear", async (request: unknown) => {
-    const response = authority.clear(request);
-    await runtime.restart();
-    return response;
-  });
+  handle("crewon:workspace:activate", (workspaceId: string, request: unknown) =>
+    authority.activate(workspaceId, request),
+  );
+  handle("crewon:workspace:clear", (request: unknown) =>
+    authority.clear(request),
+  );
   handle("crewon:providers:catalog", () => providers.catalog());
   handle("crewon:providers:activate", (providerId: string) =>
     providers.activate(providerId),

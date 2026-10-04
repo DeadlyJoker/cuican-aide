@@ -47,6 +47,7 @@ type ThreadMessageClient = {
     cwd?: string,
     threadSource?: ThreadSource,
     settings?: ThreadRuntimeSettings,
+    workspaceId?: string | null,
   ): Promise<Thread>;
   startThreadWithExecutionContext?(
     workspaceKey: string,
@@ -122,6 +123,7 @@ export type CreateThreadActionParams = {
   threadSettings?: ThreadRuntimeSettings;
   threadSource?: ThreadSource;
   workspaceCwd?: string | null;
+  workspaceId?: string | null;
   executionContextPreparation?: ThreadExecutionContextPreparation | null;
 };
 
@@ -243,6 +245,7 @@ export async function createThreadAction({
   threadSettings,
   threadSource = "app_server",
   workspaceCwd,
+  workspaceId,
   executionContextPreparation,
 }: CreateThreadActionParams): Promise<Thread | null> {
   if (!isConnected) {
@@ -280,6 +283,7 @@ export async function createThreadAction({
         threadCwd || undefined,
         threadSource,
         threadSettings,
+        ...(workspaceId === undefined ? [] : [workspaceId]),
       );
     }
     if (thread) {
@@ -399,7 +403,8 @@ export async function sendMessageAction({
     }
 
     const resumedThread =
-      activeThread.status.type === "notLoaded"
+      // Creation already established this conversation; selection may replace a history read.
+      !createdThreadForMessage && activeThread.status.type === "notLoaded"
         ? await client?.resumeThread(activeThread.id)
         : activeThread;
 

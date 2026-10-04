@@ -163,7 +163,9 @@ export function prepareCommittedProjectGenerations(
         "turn",
         "run",
         "binding",
-        "creditAdmission",
+        Object.hasOwn(claimedInput as object, "unmeteredAdmission")
+          ? "unmeteredAdmission"
+          : "creditAdmission",
       ]);
       const { receipt, receiptPin } = await resolvePluginTaskReceipt({
         store: admissions,

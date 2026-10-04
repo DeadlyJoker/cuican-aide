@@ -22,6 +22,116 @@ const request = {
 } as const;
 
 describe("desktopWorkspaceAuthorityAdapter", () => {
+  it("activates an existing stable workspace without sending its private path", async () => {
+    const first = { workspaceId: "workspace-first", displayName: "project" };
+    const second = { workspaceId: "workspace-second", displayName: "project" };
+    const before = status({ current: second, workspaces: [first, second] });
+    const after = status({
+      revision: 5,
+      current: first,
+      workspaces: [first, second],
+    });
+    const invoke = vi
+      .fn<Invoke>()
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce({ outcome: "committed", snapshot: after });
+    await expect(
+      createDesktopWorkspaceAuthorityAdapter(invoke).activate(
+        first.workspaceId,
+        request,
+      ),
+    ).resolves.toEqual({ outcome: "committed", snapshot: after });
+    expect(invoke.mock.calls).toEqual([
+      ["desktop_workspace_status"],
+      [
+        "desktop_workspace_activate",
+        { workspaceId: first.workspaceId, request },
+      ],
+    ]);
+  });
+
+  it("allows adding a workspace while preserving existing IDs and accepts clearing only the active workspace", async () => {
+    const first = { workspaceId: "workspace-first", displayName: "first" };
+    const second = { workspaceId: "workspace-second", displayName: "second" };
+    const before = status({ current: first, workspaces: [first] });
+    const after = status({
+      revision: 5,
+      current: second,
+      workspaces: [first, second],
+    });
+    const invoke = vi
+      .fn<Invoke>()
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce({ outcome: "committed", snapshot: after });
+    await expect(
+      createDesktopWorkspaceAuthorityAdapter(invoke).selectAndRegister(request),
+    ).resolves.toEqual({ outcome: "committed", snapshot: after });
+    const clearInvoke = vi
+      .fn<Invoke>()
+      .mockResolvedValueOnce(after)
+      .mockResolvedValueOnce({
+        outcome: "committed",
+        snapshot: { ...after, revision: 6, current: null },
+      });
+    await expect(
+      createDesktopWorkspaceAuthorityAdapter(clearInvoke).clear({
+        ...request,
+        expectedRevision: 5,
+      }),
+    ).resolves.toMatchObject({
+      snapshot: { current: null, workspaces: [first, second] },
+    });
+  });
+
+  it("rejects duplicate IDs, unknown active IDs, private paths and oversized rosters", async () => {
+    const first = { workspaceId: "workspace-first", displayName: "first" };
+    for (const malformed of [
+      status({ current: first, workspaces: [first, first] }),
+      status({ current: first, workspaces: [] }),
+      status({
+        current: null,
+        workspaces: [{ ...first, workspaceId: "/private/root" }],
+      }),
+      status({
+        current: null,
+        workspaces: [{ ...first, root: "/private/root" } as typeof first],
+      }),
+      status({
+        current: null,
+        workspaces: Array.from({ length: 101 }, (_, index) => ({
+          ...first,
+          workspaceId: `workspace-${index}`,
+        })),
+      }),
+    ]) {
+      await expect(
+        createDesktopWorkspaceAuthorityAdapter(
+          vi.fn<Invoke>().mockResolvedValue(malformed),
+        ).status(),
+      ).rejects.toBeInstanceOf(DesktopWorkspaceProtocolError);
+    }
+  });
+
+  it("rejects mutations that silently remove an existing workspace", async () => {
+    const first = { workspaceId: "workspace-first", displayName: "first" };
+    const second = { workspaceId: "workspace-second", displayName: "second" };
+    const before = status({ current: first, workspaces: [first, second] });
+    for (const action of ["selectAndRegister", "clear"] as const) {
+      const after = status({
+        revision: 5,
+        current: action === "clear" ? null : second,
+        workspaces: [second],
+      });
+      const invoke = vi
+        .fn<Invoke>()
+        .mockResolvedValueOnce(before)
+        .mockResolvedValue({ outcome: "committed", snapshot: after });
+      await expect(
+        createDesktopWorkspaceAuthorityAdapter(invoke)[action](request),
+      ).rejects.toBeInstanceOf(DesktopWorkspaceUnknownOutcomeError);
+    }
+  });
+
   it("parses only the redacted exact status wire", async () => {
     const expected = status({ current: { displayName: "cuican-aide" } });
     const invoke = vi.fn<Invoke>().mockResolvedValue(expected);

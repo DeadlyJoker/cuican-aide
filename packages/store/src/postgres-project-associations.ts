@@ -17,6 +17,7 @@ import {
   projectGenerationSourceValues,
   projectGenerationSourceReadSql,
   decodeProjectGenerationSource,
+  verifyPostgresProjectSourceFunding,
   assertPostgresProjectGenerationReadSchema,
 } from "./project-generation-source-read.ts";
 import {
@@ -127,7 +128,15 @@ export class PostgresProjectAssociations {
         projectGenerationSourceValues(locator),
       );
       this.#assertOpen();
-      return decodeProjectGenerationSource(rows.rows, locator);
+      const link = decodeProjectGenerationSource(rows.rows, locator);
+      await verifyPostgresProjectSourceFunding(
+        client,
+        this.#schemaName,
+        rows.rows,
+        link,
+      );
+      this.#assertOpen();
+      return link;
     } finally {
       client.release();
     }

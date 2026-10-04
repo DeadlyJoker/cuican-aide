@@ -1,3 +1,13 @@
+import type { PluginTaskUnmeteredAuthorityPort } from "./plugin-task-unmetered-authority-port.ts";
+import {
+  capturePluginTaskUnmeteredPort,
+  requirePluginTaskFinancialMode,
+  preparePluginTaskUnmeteredAuthority,
+  pluginTaskFinancialOptions,
+  pluginTaskUnmeteredProof,
+  assertSavedPluginTaskFunding,
+} from "./plugin-task-unmetered-support.ts";
+import { loadExtensionLegacyQuerySource } from "./extension-legacy-query-source.ts";
 import {
   quoteExtensionTaskGeneration,
   assertExtensionTaskCreditPrincipal,
@@ -27,7 +37,6 @@ import {
   parseExtensionActivation,
   parseExtensionConfiguration,
   parseExtensionExecutionTarget,
-  parseExtensionRunBinding,
   validateExtensionTaskInput,
   type ExtensionRunBinding,
   type WorkflowSchemaValue,
@@ -70,7 +79,6 @@ import {
   pluginTaskAdmission,
   pluginTaskReceipt,
   resolvePluginTaskReceipt,
-  requirePluginTaskQuotes,
   requirePluginTaskStore,
   type PluginTaskCommitAuthorityPort,
 } from "./extension-plugin-task-support.ts";
@@ -102,6 +110,7 @@ export type ExtensionTaskApplicationDependencies = Readonly<{
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
   creditQuotes?: ExtensionCreditQuotePort;
+  unmeteredTasks?: PluginTaskUnmeteredAuthorityPort;
   /** Explicit project generation integration; ordinary tasks never read project metadata. */
   creativeProjects?: ProjectGenerationApplicationPorts;
   projectGenerationReads?: ProjectGenerationReadApplicationService;
@@ -111,10 +120,14 @@ type Dependencies = ExtensionTaskApplicationDependencies;
 /** Creates an opt-in user Turn through the existing execution authority and one storage transaction. */
 export class ExtensionTaskApplicationService {
   readonly #dependencies: Dependencies;
+  readonly #unmeteredTasks: PluginTaskUnmeteredAuthorityPort | undefined;
   readonly #turns: TurnApplicationService;
   readonly #taskAdmissionMode: ExtensionHostPort["taskAdmissionMode"];
   constructor(dependencies: Dependencies) {
     this.#dependencies = dependencies;
+    this.#unmeteredTasks = capturePluginTaskUnmeteredPort(
+      dependencies.unmeteredTasks,
+    );
     this.#turns = new TurnApplicationService(dependencies);
     const taskAdmissionMode = dependencies.host.taskAdmissionMode;
     this.#taskAdmissionMode =
@@ -202,7 +215,10 @@ export class ExtensionTaskApplicationService {
   getPublishedProjectGenerationReadiness(
     input: GetPublishedProjectGenerationReadinessInput,
   ) {
-    return getPublishedProjectGenerationReadiness(this.#dependencies, input);
+    return getPublishedProjectGenerationReadiness(
+      { ...this.#dependencies, unmeteredTasks: this.#unmeteredTasks },
+      input,
+    );
   }
 
   async #createTask(
@@ -249,7 +265,10 @@ export class ExtensionTaskApplicationService {
             "authorization",
             "plugin_task_admission_owner_mismatch",
           );
-        requirePluginTaskStore(this.#dependencies.extensions);
+        requirePluginTaskStore(
+          this.#dependencies.extensions,
+          this.#unmeteredTasks === undefined ? "metered" : "unmetered",
+        );
       }
       const queryHost =
         intent.kind === "query" ? this.#dependencies.queryHost : undefined;
@@ -344,11 +363,12 @@ export class ExtensionTaskApplicationService {
           receipt,
         );
         if (pin !== null) {
-          if (previous.creditAdmission === undefined)
-            throw new ApplicationError(
-              "internal",
-              "extension_credit_admission_missing",
-            );
+          assertSavedPluginTaskFunding(
+            previous,
+            actor,
+            receipt,
+            this.#dependencies.digester,
+          );
           await assertSavedPluginTask({
             store: this.#dependencies.extensions,
             pin: pluginReceipt?.receiptPin ?? pin,
@@ -366,7 +386,16 @@ export class ExtensionTaskApplicationService {
         return previous;
       }
       if (pin !== null)
-        requirePluginTaskQuotes(this.#dependencies.creditQuotes);
+        requirePluginTaskFinancialMode(
+          this.#dependencies.extensions,
+          this.#dependencies.creditQuotes,
+          this.#unmeteredTasks,
+        );
+      const unmeteredAuthority = await preparePluginTaskUnmeteredAuthority(
+        this.#unmeteredTasks,
+        actor,
+        pin,
+      );
       const activationValue =
         await this.#dependencies.extensions.loadExtensionActivation(scope);
       if (activationValue === null)
@@ -565,6 +594,7 @@ export class ExtensionTaskApplicationService {
         await this.#authorizeQuerySource(actor, scope.pluginId, source);
       const creditAdmission =
         intent.kind === "generate" &&
+        unmeteredAuthority === null &&
         this.#dependencies.creditQuotes !== undefined
           ? await quoteExtensionTaskGeneration(
               this.#dependencies,
@@ -574,7 +604,7 @@ export class ExtensionTaskApplicationService {
               taskInput as WorkflowSchemaValue,
             )
           : undefined;
-      if (creditAdmission !== undefined) {
+      if (creditAdmission !== undefined || unmeteredAuthority !== null) {
         // A price-policy await cannot retain permission that was revoked in the meantime.
         await authorizeExtension(
           this.#dependencies.authorization,
@@ -584,6 +614,24 @@ export class ExtensionTaskApplicationService {
         );
         await this.#authorizeThread(actor, threadId);
       }
+      const taskAdmission =
+        pin === null
+          ? undefined
+          : pluginTaskAdmission(
+              pin,
+              binding,
+              receipt,
+              this.#dependencies.digester,
+            );
+      const unmeteredAdmission = pluginTaskUnmeteredProof(
+        unmeteredAuthority,
+        taskAdmission,
+        this.#dependencies.digester,
+      );
+      const commitOptions = pluginTaskFinancialOptions(
+        unmeteredAuthority,
+        generation?.commitOptions,
+      );
       const commitInput = {
         turn,
         binding,
@@ -593,29 +641,31 @@ export class ExtensionTaskApplicationService {
           ? {}
           : { projectGeneration: generation.reference }),
         ...(creditAdmission === undefined ? {} : { creditAdmission }),
-        ...(pin === null
+        ...(taskAdmission === undefined
           ? {}
-          : {
-              pluginAdmission: pluginTaskAdmission(
-                pin,
-                binding,
-                receipt,
-                this.#dependencies.digester,
-              ),
-            }),
+          : { pluginAdmission: taskAdmission }),
+        ...(unmeteredAdmission === undefined ? {} : { unmeteredAdmission }),
       };
+      if (unmeteredAuthority !== null) {
+        await unmeteredAuthority.assertCurrent();
+        unmeteredAuthority.assertActive();
+      }
       if (pin !== null && commitAuthority !== null)
         await commitAuthority.assertCurrent({ actor, pin });
       if (generation !== null) await generation.assertDispatchCurrent();
       const result = await (pin === null
         ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
         : generation === null
-          ? commitPluginTask(this.#dependencies.extensions, commitInput)
+          ? commitPluginTask(
+              this.#dependencies.extensions,
+              commitInput,
+              commitOptions,
+            )
           : commitProjectGenerationTask(() =>
               commitPluginTask(
                 this.#dependencies.extensions,
                 commitInput,
-                generation.commitOptions,
+                commitOptions,
               ),
             ));
       assertExtensionTaskCreditPrincipal(
@@ -633,6 +683,13 @@ export class ExtensionTaskApplicationService {
         throw new ApplicationError(
           "internal",
           "extension_credit_admission_missing",
+        );
+      if (pin !== null)
+        assertSavedPluginTaskFunding(
+          result,
+          actor,
+          receipt,
+          this.#dependencies.digester,
         );
       if (pin !== null)
         await assertSavedPluginTask({
@@ -714,108 +771,11 @@ export class ExtensionTaskApplicationService {
     pluginId: string,
     intent: Extract<ExtensionTaskIntent, { kind: "query" }>,
   ): Promise<ExtensionRunBinding> {
-    const run = await this.#dependencies.store.loadRunInSpace({
-      tenantId: actor.tenantId,
-      spaceId: actor.spaceId,
-      runId: intent.sourceRunId,
-    });
-    if (run === null)
-      throw new ApplicationError(
-        "notFound",
-        "extension_query_source_not_found",
-      );
-    const owner = Object.freeze({
-      tenantId: run.tenantId,
-      spaceId: run.spaceId,
-      runId: run.runId,
-      threadId: run.threadId,
-      actorId: run.createdByActorId,
-      agentVersionId: run.agentVersionId,
-      authorityId: run.authorityId,
-      runtimeGeneration: run.runtimeGeneration,
-      policySnapshotId: run.policySnapshotId,
-      workspaceBindingId: run.workspaceBindingId,
-    });
-    if (
-      owner.tenantId !== actor.tenantId ||
-      owner.spaceId !== actor.spaceId ||
-      owner.runId !== intent.sourceRunId
-    )
-      throw new ApplicationError("internal", "extension_query_source_invalid");
-    const permission = await this.#dependencies.authorization.authorize({
+    return loadExtensionLegacyQuerySource(
+      this.#dependencies,
       actor,
-      action: "run:read",
-      resource: {
-        kind: "run",
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        threadId: owner.threadId,
-        runId: owner.runId,
-      },
-    });
-    if (permission.outcome !== "allow")
-      throw new ApplicationError("authorization", "authorization_denied");
-    const value = await this.#dependencies.extensions.loadExtensionRunBinding({
-      tenantId: actor.tenantId,
-      spaceId: actor.spaceId,
-      runId: owner.runId,
-    });
-    if (value === null)
-      throw new ApplicationError(
-        "notFound",
-        "extension_query_source_not_found",
-      );
-    const source = parseExtensionRunBinding(value, this.#dependencies.digester);
-    if (
-      source.pluginId !== pluginId ||
-      source.source !== null ||
-      source.threadId !== owner.threadId
-    )
-      throw new ApplicationError(
-        "notFound",
-        "extension_query_source_not_found",
-      );
-    if (
-      source.tenantId !== actor.tenantId ||
-      source.spaceId !== actor.spaceId ||
-      source.runId !== owner.runId ||
-      source.actorId !== owner.actorId ||
-      [
-        "agentVersionId",
-        "authorityId",
-        "runtimeGeneration",
-        "policySnapshotId",
-        "workspaceBindingId",
-      ].some(
-        (key) =>
-          source.target[key as keyof typeof source.target] !==
-          owner[key as keyof typeof owner],
-      )
-    )
-      throw new ApplicationError("internal", "extension_query_source_invalid");
-    const operation = await this.#dependencies.operations.loadExternalOperation(
-      {
-        tenantId: actor.tenantId,
-        runId: source.runId,
-        bindingDigest: source.bindingDigest,
-        operationId: intent.operationId,
-      },
+      pluginId,
+      intent,
     );
-    if (operation === null)
-      throw new ApplicationError(
-        "notFound",
-        "extension_query_source_not_found",
-      );
-    if (
-      operation.tenantId !== actor.tenantId ||
-      operation.runId !== source.runId ||
-      operation.bindingDigest !== source.bindingDigest ||
-      operation.operationId !== intent.operationId
-    )
-      throw new ApplicationError(
-        "internal",
-        "external_operation_identity_conflict",
-      );
-    return source;
   }
 }

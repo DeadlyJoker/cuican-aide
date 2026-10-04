@@ -16,6 +16,11 @@ import {
   type DesktopInstalledPluginTaskConfig,
 } from "./desktop-installed-plugin-task-environment.ts";
 import { assertDesktopInstalledPluginTaskComposition } from "./desktop-installed-plugin-task-runtime.ts";
+import { assertDesktopNativePluginTaskComposition } from "./desktop-native-plugin-task-runtime.ts";
+import {
+  assertDesktopNativePluginControlConfigCurrent,
+  type DesktopNativePluginControlConfig,
+} from "./desktop-native-plugin-control-environment.ts";
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 
 type ExecutionInput = Readonly<{
@@ -23,12 +28,14 @@ type ExecutionInput = Readonly<{
   tasks: DesktopInstalledPluginTaskConfig | undefined;
   activation: DesktopInstalledPluginActivationConfig | undefined;
   projects: CreativeProjectCompositionConfig | undefined;
+  nativeControl?: DesktopNativePluginControlConfig;
 }>;
 type Issue = Readonly<{
   bootstrap: DesktopPluginConfiguration;
   configurationDigest: string;
-  tasks: DesktopInstalledPluginTaskConfig;
-  activation: DesktopInstalledPluginActivationConfig;
+  tasks: DesktopInstalledPluginTaskConfig | undefined;
+  activation: DesktopInstalledPluginActivationConfig | undefined;
+  nativeControl: DesktopNativePluginControlConfig | undefined;
 }>;
 const issued = new WeakMap<object, Issue>();
 
@@ -48,8 +55,10 @@ export function issueDesktopProjectExecutionConfiguration(
   if (
     input.configuration.schemaVersion !==
       "crewon.desktop-plugin-bootstrap.v3" ||
-    input.tasks === undefined ||
-    input.activation === undefined
+    (input.nativeControl === undefined &&
+      (input.tasks === undefined || input.activation === undefined)) ||
+    (input.nativeControl !== undefined &&
+      (input.tasks !== undefined || input.activation !== undefined))
   )
     unavailable();
   for (const key of [
@@ -66,15 +75,8 @@ export function issueDesktopProjectExecutionConfiguration(
     )
       unavailable();
   }
-  assertDesktopInstalledPluginTaskConfigFileIssued(input.tasks);
   const digester = new NodeSha256ContentDigester();
-  assertDesktopInstalledPluginTaskComposition({
-    configuration: input.configuration,
-    tasks: input.tasks,
-    activation: input.activation,
-    creativeProjects: projects,
-    digester,
-  });
+  assertComposition(input, projects, digester);
   issued.set(
     projects!,
     Object.freeze({
@@ -82,6 +84,7 @@ export function issueDesktopProjectExecutionConfiguration(
       configurationDigest: digest(input.configuration, digester),
       tasks: input.tasks,
       activation: input.activation,
+      nativeControl: input.nativeControl,
     }),
   );
   return projects;
@@ -104,21 +107,21 @@ export function captureDesktopProjectCompositionConfig(
   if (
     proof === undefined ||
     proof.tasks !== input.tasks ||
-    proof.activation !== input.activation
+    proof.activation !== input.activation ||
+    proof.nativeControl !== input.nativeControl
   )
     unavailable();
   assertDesktopPluginConfigurationFileCurrent(proof.bootstrap);
-  assertDesktopInstalledPluginTaskConfigFileIssued(proof.tasks);
+  if (proof.nativeControl !== undefined)
+    assertDesktopNativePluginControlConfigCurrent(proof.nativeControl);
+  else {
+    if (proof.tasks === undefined) unavailable();
+    assertDesktopInstalledPluginTaskConfigFileIssued(proof.tasks);
+  }
   const digester = new NodeSha256ContentDigester();
   if (digest(input.configuration, digester) !== proof.configurationDigest)
     unavailable();
-  assertDesktopInstalledPluginTaskComposition({
-    configuration: input.configuration,
-    tasks: proof.tasks,
-    activation: proof.activation,
-    creativeProjects: projects,
-    digester,
-  });
+  assertComposition(input, projects, digester);
   return projects;
 }
 
@@ -138,4 +141,31 @@ function digest(
 }
 function unavailable(): never {
   throw new Error("desktop_project_execution_authority_required");
+}
+
+function assertComposition(
+  input: ExecutionInput,
+  projects: CreativeProjectCompositionConfig | undefined,
+  digester: ContentDigester,
+): void {
+  if (input.nativeControl !== undefined) {
+    if (input.tasks !== undefined || input.activation !== undefined)
+      unavailable();
+    assertDesktopNativePluginTaskComposition({
+      configuration: input.configuration,
+      nativeControl: input.nativeControl,
+      creativeProjects: projects,
+    });
+  } else {
+    if (input.tasks === undefined || input.activation === undefined)
+      unavailable();
+    assertDesktopInstalledPluginTaskConfigFileIssued(input.tasks);
+    assertDesktopInstalledPluginTaskComposition({
+      configuration: input.configuration,
+      tasks: input.tasks,
+      activation: input.activation,
+      creativeProjects: projects,
+      digester,
+    });
+  }
 }

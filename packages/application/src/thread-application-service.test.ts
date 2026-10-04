@@ -840,3 +840,40 @@ function hasApplicationError(
     error.category === category &&
     error.code === code;
 }
+
+
+test("creates an immutable workspace binding and forks into the source workspace", async () => {
+  const store = new RecordingThreadStore();
+  const service = threadService(store, ["thread-1", "created-1"]);
+  const created = await service.createThread(actor(), {
+    kind: "thread.create", idempotencyKey: "workspace-create", title: null, workspaceId: "workspace-a",
+  });
+  assert.equal(created.state.workspaceId, "workspace-a");
+  assert.equal((await service.getThread(actor(), created.state.threadId)).workspaceId, "workspace-a");
+  const source = forkSourceFixture();
+  const forkStore = new ForkRecordingThreadStore(
+    { ...threadState(), revision: 9, workspaceId: "workspace-a" }, source.history, source.messages,
+  );
+  const forks = threadService(forkStore, Array.from({ length: 16 }, (_, index) => `workspace-fork-${index}`));
+  const command = { kind: "thread.fork" as const, idempotencyKey: "workspace-fork", sourceThreadId: "thread-1", expectedSourceRevision: 9, throughHistorySequence: null };
+  await assert.rejects(forks.forkThread(actor(), { ...command, workspaceId: "workspace-b" } as typeof command), hasApplicationError("validation", "thread_workspace_immutable"));
+  assert.equal((await forks.forkThread(actor(), command)).state.workspaceId, "workspace-a");
+});
+
+test("workspace admission is server-owned and runs before a create can commit", async () => {
+  const store = new RecordingThreadStore();
+  const admitted: string[] = [];
+  const service = new ThreadApplicationService({
+    store, authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: new IncrementingClock(), ids: new ScriptedIds(["thread-1", "created-1"]),
+    digester: { sha256: () => `sha256:${"a".repeat(64)}` },
+    workspaceAdmission: { admit: async ({ workspaceId }) => {
+      admitted.push(workspaceId);
+      if (workspaceId !== "workspace-a") throw new ApplicationError("notFound", "workspace_not_found");
+    } },
+  });
+  await assert.rejects(service.createThread(actor(), { kind: "thread.create", idempotencyKey: "bad", title: null, workspaceId: "workspace-b" }), hasApplicationError("notFound", "workspace_not_found"));
+  const created = await service.createThread(actor(), { kind: "thread.create", idempotencyKey: "good", title: null, workspaceId: "workspace-a" });
+  assert.equal(created.state.workspaceId, "workspace-a");
+  assert.deepEqual(admitted, ["workspace-b", "workspace-a"]);
+});

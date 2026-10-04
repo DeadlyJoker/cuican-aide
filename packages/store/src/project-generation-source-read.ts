@@ -1,3 +1,8 @@
+import {
+  verifySqliteUnmeteredReceipt,
+  verifyPostgresUnmeteredReceipt,
+} from "./plugin-task-unmetered-store-support.ts";
+import { assertPluginTaskFunding } from "@crewon/domain";
 import type { ProjectGenerationSourceLocator } from "@crewon/application";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
@@ -13,7 +18,10 @@ import {
   decodeCreativeProject,
 } from "./creative-project-store-records.ts";
 import { decodeProjectGeneration } from "./project-generation-store-support.ts";
-import { parseExtensionTurnReceipt } from "./extension-store-records.ts";
+import {
+  extensionStoreDigester,
+  parseExtensionTurnReceipt,
+} from "./extension-store-records.ts";
 import {
   assertSqliteProjectGenerationSchema,
   assertPostgresProjectGenerationSchema,
@@ -146,13 +154,48 @@ export function decodeProjectGenerationSource(
   );
   if (
     extensionCanonicalJson(receipt.binding) !==
-      extensionCanonicalJson(link.binding) ||
-    receipt.creditAdmission === undefined ||
-    receipt.creditAdmission.reservation.scope.principalId !==
-      locator.owner.principalId ||
-    receipt.creditAdmission.reservation.scope.tenantId !==
-      locator.owner.tenantId
+    extensionCanonicalJson(link.binding)
   )
     throw new Error("project_generation_receipt_identity_mismatch");
+  assertPluginTaskFunding(
+    {
+      creditAdmission: receipt.creditAdmission,
+      unmeteredAdmission: receipt.unmeteredAdmission,
+      binding: link.binding,
+      receipt: link.receipt,
+      principalId: locator.owner.principalId,
+    },
+    extensionStoreDigester,
+  );
   return link;
+}
+
+export function verifySqliteProjectSourceFunding(
+  database: DatabaseSync,
+  rows: readonly Record<string, unknown>[],
+  link: ProjectGenerationLink | null,
+): void {
+  if (link === null) return;
+  const raw = rows[0]!.stored_result_json;
+  const receipt = parseExtensionTurnReceipt(
+    typeof raw === "string" ? JSON.parse(raw) : raw,
+    link.binding,
+    link.receipt,
+  );
+  verifySqliteUnmeteredReceipt(database, receipt);
+}
+export async function verifyPostgresProjectSourceFunding(
+  client: PoolClient,
+  schema: string,
+  rows: readonly Record<string, unknown>[],
+  link: ProjectGenerationLink | null,
+): Promise<void> {
+  if (link === null) return;
+  const raw = rows[0]!.stored_result_json;
+  const receipt = parseExtensionTurnReceipt(
+    typeof raw === "string" ? JSON.parse(raw) : raw,
+    link.binding,
+    link.receipt,
+  );
+  await verifyPostgresUnmeteredReceipt(client, schema, receipt);
 }

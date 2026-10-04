@@ -1,5 +1,8 @@
 import { RunStoreError } from "@crewon/application";
-import type { ThreadLifecycleEvent } from "@crewon/domain";
+import {
+  validateThreadLifecycleEvent,
+  type ThreadLifecycleEvent,
+} from "@crewon/domain";
 
 import { parseQueueTimestamp } from "./store-invariants.ts";
 
@@ -23,6 +26,7 @@ export function decodeStoredThreadEvent(
     if (!isThreadLifecycleEvent(value)) {
       throw new Error("thread_event_shape_invalid");
     }
+    validateThreadLifecycleEvent(value);
     const sequence = Number(row.sequence);
     if (
       !Number.isSafeInteger(sequence) ||

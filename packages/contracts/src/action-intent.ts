@@ -51,8 +51,8 @@ export function parseActionIntent(input: unknown): ActionIntent {
   if (intent.schemaVersion !== "crewon.action-intent.v0") {
     throw new ContractValidationError("action_intent_version_unsupported");
   }
+  requireRunId(intent.runId);
   for (const [value, code] of [
-    [intent.runId, "action_run_id_invalid"],
     [intent.segmentId, "action_segment_id_invalid"],
     [intent.callId, "action_call_id_invalid"],
     [intent.policySnapshotId, "action_policy_snapshot_invalid"],
@@ -162,6 +162,16 @@ function requireOpaqueId(
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/.test(value)
   ) {
     throw new ContractValidationError(code);
+  }
+}
+
+function requireRunId(value: unknown): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/.test(value) &&
+      !/^[-_][A-Za-z0-9_-]{42}$/.test(value))
+  ) {
+    throw new ContractValidationError("action_run_id_invalid");
   }
 }
 

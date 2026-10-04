@@ -126,6 +126,8 @@ export type { PluginTaskCommitAuthorityPort } from "./extension-plugin-task-supp
 export * from "./extension-credit-quote-port.ts";
 export * from "./external-operation-store-port.ts";
 export * from "./extension-store-port.ts";
+export * from "./plugin-task-unmetered-authority-port.ts";
+export { capturePluginTaskUnmeteredAuthority } from "./plugin-task-unmetered-support.ts";
 export * from "./extension-host-port.ts";
 export * from "./extension-query-host-port.ts";
 export {
@@ -160,6 +162,7 @@ export type {
 } from "./project-generation-readiness-application-service.ts";
 export * from "./extension-read-application-service.ts";
 export * from "./creative-project-commands.ts";
+export type { ThreadWorkspaceAdmissionPort } from "./thread-workspace-admission-port.ts";
 export * from "./creative-project-store-port.ts";
 export * from "./creative-project-commit-authority.ts";
 export * from "./creative-project-authorization-port.ts";

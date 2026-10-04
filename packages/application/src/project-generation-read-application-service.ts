@@ -1,6 +1,6 @@
+import { assertPluginTaskFunding } from "@crewon/domain";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
-  assertExtensionCreditAdmission,
   creativeProjectOpaqueId,
   creativeProjectRevision,
   extensionCanonicalJson,
@@ -217,23 +217,19 @@ function assertReceipt(
     receipt.schemaVersion !== "crewon.extension-turn-admission.v0" ||
     extensionCanonicalJson(
       parseExtensionRunBinding(receipt.binding, digester),
-    ) !== extensionCanonicalJson(link.binding) ||
-    receipt.creditAdmission === undefined
+    ) !== extensionCanonicalJson(link.binding)
   )
     throw new Error("project_generation_receipt_identity_mismatch");
-  const credit = assertExtensionCreditAdmission(
+  assertPluginTaskFunding(
     {
-      admission: receipt.creditAdmission,
+      creditAdmission: receipt.creditAdmission,
+      unmeteredAdmission: receipt.unmeteredAdmission,
       binding: link.binding,
       receipt: link.receipt,
+      principalId: link.ownerPrincipalId,
     },
     digester,
   );
-  if (
-    credit.reservation.scope.principalId !== link.ownerPrincipalId ||
-    credit.reservation.scope.tenantId !== link.tenantId
-  )
-    throw new Error("project_generation_receipt_owner_mismatch");
   const event = receipt.run.events[0];
   if (receipt.run.events.length !== 1 || event?.type !== "run.created")
     throw new Error("project_generation_receipt_run_invalid");

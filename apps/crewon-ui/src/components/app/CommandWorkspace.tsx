@@ -2,6 +2,7 @@ import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavi
 import { Plus, ShieldCheck } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
+import { controlThreadWorkspaceId } from "../../lib/control-runtime/controlThreadWorkspace";
 import type { WorkflowRunUpdatedNotification } from "@crewon/app-server-protocol/v2/WorkflowRunUpdatedNotification";
 import {
   type ChangeEvent,
@@ -2143,7 +2144,10 @@ export function CommandWorkspace({
           const scope = commandSidebarThreadScope(thread);
           const workspacePath =
             workspaceAuthority === "control"
-              ? (controlWorkspaceNav?.name ?? "")
+              ? (controlWorkspaceNav?.workspaces?.find(
+                  (workspace) =>
+                    workspace.workspaceId === controlThreadWorkspaceId(thread),
+                )?.displayName ?? "")
               : (thread.cwd ?? "");
           const workspaceLabel =
             workspacePath
@@ -2154,6 +2158,10 @@ export function CommandWorkspace({
               .pop() ?? (locale === "zh" ? "无工作空间" : "No workspace");
           return {
             cwd: workspaceAuthority === "legacy" ? (thread.cwd ?? null) : null,
+            workspaceId:
+              workspaceAuthority === "control"
+                ? controlThreadWorkspaceId(thread)
+                : undefined,
             id: thread.id,
             preview: thread.preview,
             scope,
@@ -2174,7 +2182,7 @@ export function CommandWorkspace({
       locale,
       viewedThreadId,
       sidebarSeenThreadEvents,
-      controlWorkspaceNav?.name,
+      controlWorkspaceNav?.workspaces,
       workspaceAuthority,
     ],
   );

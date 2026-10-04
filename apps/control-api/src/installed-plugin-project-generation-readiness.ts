@@ -179,9 +179,9 @@ export async function installedProjectGenerationReadiness(
     active();
     if (!generationSame(currentScope, scope))
       generationDenied("project_generation_profile_changed");
-    for (const [pin, pkg, candidate] of [
-      [sourcePin, sourcePackage, sourceCandidate],
-      [executionPin, target.package, targetCandidate],
+    for (const [pin, pkg, candidate, purpose] of [
+      [sourcePin, sourcePackage, sourceCandidate, "read"],
+      [executionPin, target.package, targetCandidate, "submit"],
     ] as const) {
       if ((await policy(pin)) !== pin.authorityEpoch)
         generationDenied("project_generation_plugin_authority_changed");
@@ -194,7 +194,7 @@ export async function installedProjectGenerationReadiness(
       active();
       if (
         (await dependencies.authorizePackage(
-          { actor, scope, candidate, purpose: "submit" },
+          { actor, scope, candidate, purpose },
           signal,
         )) !== "allow"
       )

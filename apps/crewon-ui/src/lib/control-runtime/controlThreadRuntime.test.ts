@@ -1475,14 +1475,81 @@ describe("Control thread runtime", () => {
     await runtime.startThread(undefined, "assistant");
 
     expect(client.createThread).toHaveBeenCalledWith(
-      { title: "CrewON Assistant" },
+      { title: "CrewON Assistant", workspaceId: null },
       "thread.create:test",
       { signal: expect.any(AbortSignal) },
     );
     runtime.close();
   });
 
-  it("reuses an Assistant outside the first catalog page instead of creating a second model history", async () => {
+    it("creates ordinary conversations with their captured workspace ID and projects the server owner", async () => {
+    const createThread = vi.fn<ControlApiClient["createThread"]>(
+      async (body) => ({
+        disposition: "committed" as const,
+        thread: threadView({ workspaceId: body.workspaceId ?? null }),
+      }),
+    );
+    const client = Object.assign(fakeClient({ messages: [], runs: [] }), {
+      createThread,
+    });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    try {
+      const first = await runtime.startThread(
+        undefined,
+        "control-api",
+        undefined,
+        "workspace-a",
+      );
+      const second = await runtime.startThread(
+        undefined,
+        "control-api",
+        undefined,
+        "workspace-b",
+      );
+      expect(first).toMatchObject({ workspaceId: "workspace-a", cwd: "" });
+      expect(second).toMatchObject({ workspaceId: "workspace-b", cwd: "" });
+      expect(createThread.mock.calls.map(([body]) => body)).toEqual([
+        { title: null, workspaceId: "workspace-a" },
+        { title: null, workspaceId: "workspace-b" },
+      ]);
+      expect(controlThreadSummary(threadView())).toMatchObject({
+        workspaceId: null,
+      });
+    } finally {
+      runtime.close();
+    }
+  });
+
+  it("does not adopt another workspace's Assistant when creating an Assistant in this workspace", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    client.getThreadCatalog.mockResolvedValue({
+      schemaVersion: "crewon.thread-catalog.v0",
+      data: [
+        threadView({ title: "CrewON Assistant", workspaceId: "workspace-a" }),
+      ],
+      scannedCount: 1,
+      olderCursor: null,
+      newerCursor: null,
+    });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    try {
+      await runtime.startThread(
+        undefined,
+        "assistant",
+        undefined,
+        "workspace-b",
+      );
+      expect(client.createThread).toHaveBeenCalledWith(
+        { title: "CrewON Assistant", workspaceId: "workspace-b" },
+        expect.any(String),
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(client.getThread).not.toHaveBeenCalled();
+    } finally {
+      runtime.close();
+    }
+  });
+it("reuses an Assistant outside the first catalog page instead of creating a second model history", async () => {
     const client = fakeClient({ messages: [], runs: [] });
     const assistant = threadView({ title: "CrewON Assistant" });
     client.getThread.mockResolvedValue({ thread: assistant, eventSequence: assistant.revision });

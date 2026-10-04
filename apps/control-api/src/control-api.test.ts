@@ -1484,25 +1484,42 @@ test("serves health and strict authenticated Run create/get/cancel commands", as
   });
 
   const windowResponse = await runtime.app.inject({
-    method: "GET", url: "/api/v1/threads/thread-1/message-window?limit=1", headers: readHeaders(),
+    method: "GET",
+    url: "/api/v1/threads/thread-1/message-window?limit=1",
+    headers: readHeaders(),
   });
   assert.equal(windowResponse.statusCode, 200, windowResponse.body);
   assert.deepEqual(windowResponse.json(), {
-    schemaVersion: "crewon.message-window.v0", threadId: "thread-1", threadRevision: 2,
-    eventSequence: 2, headMessageSequence: 1, data: [messageAppendedBody.message], olderCursor: null, newerCursor: null,
+    schemaVersion: "crewon.message-window.v0",
+    threadId: "thread-1",
+    threadRevision: 2,
+    eventSequence: 2,
+    headMessageSequence: 1,
+    data: [messageAppendedBody.message],
+    olderCursor: null,
+    newerCursor: null,
   });
   assert.equal(windowResponse.headers["cache-control"], "no-store");
 
   const catalog = await runtime.app.inject({
-    method: "GET", url: "/api/v1/thread-catalog?limit=1", headers: readHeaders(),
+    method: "GET",
+    url: "/api/v1/thread-catalog?limit=1",
+    headers: readHeaders(),
   });
   assert.equal(catalog.statusCode, 200, catalog.body);
   assert.equal(catalog.headers["cache-control"], "no-store");
   assert.deepEqual(catalog.json().data, [messageAppendedBody.thread]);
   assert.equal(catalog.json().scannedCount, 1);
-  const anonymousCatalog = await runtime.app.inject({ method: "GET", url: "/api/v1/thread-catalog" });
+  const anonymousCatalog = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/thread-catalog",
+  });
   assert.equal(anonymousCatalog.statusCode, 401);
-  const injectedCatalog = await runtime.app.inject({ method: "GET", url: "/api/v1/thread-catalog?spaceId=other", headers: readHeaders() });
+  const injectedCatalog = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/thread-catalog?spaceId=other",
+    headers: readHeaders(),
+  });
   assert.equal(injectedCatalog.statusCode, 400);
 
   const threadList = await runtime.app.inject({
@@ -3246,7 +3263,17 @@ test("projects provider continuation metadata in client and audit views", () => 
 
   assert.deepEqual(projectRunEventForView(event, "client"), expected);
   assert.deepEqual(projectRunEventForView(event, "audit"), expected);
-  const empty = { ...event, data: { ...event.data, emptyContinuation: { stepId: "private-step", attemptId: "private-attempt", contextRevision: "private-context" } } };
+  const empty = {
+    ...event,
+    data: {
+      ...event.data,
+      emptyContinuation: {
+        stepId: "private-step",
+        attemptId: "private-attempt",
+        contextRevision: "private-context",
+      },
+    },
+  };
   assert.deepEqual(projectRunEventForView(empty, "client"), expected);
   assert.deepEqual(projectRunEventForView(empty, "audit"), expected);
 });
@@ -4203,3 +4230,88 @@ function runStartedEvent(sequence: number): RunLifecycleEvent {
     data: {},
   };
 }
+
+test("workspace ownership stays unique through create, catalog, reopen and fork", async (context) => {
+  const { app } = await testRuntime(context);
+  const create = async (workspaceId: string, key: string) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/threads",
+      headers: jsonMutationHeaders(key),
+      payload: { title: key, workspaceId },
+    });
+    assert.equal(response.statusCode, 201, response.body);
+    return response.json<ThreadMutationResponse>().thread;
+  };
+  const first = await create("workspace-a", "workspace-first");
+  const second = await create("workspace-b", "workspace-second");
+  assert.equal(first.workspaceId, "workspace-a");
+  const rebindReplay = await app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: jsonMutationHeaders("workspace-first"),
+    payload: { title: "workspace-first", workspaceId: "workspace-b" },
+  });
+  assert.equal(rebindReplay.statusCode, 409, rebindReplay.body);
+  assert.equal(second.workspaceId, "workspace-b");
+  const reopened = await app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${first.threadId}`,
+    headers: readHeaders(),
+  });
+  assert.equal(reopened.statusCode, 200, reopened.body);
+  assert.equal(
+    reopened.json<GetThreadResponse>().thread.workspaceId,
+    "workspace-a",
+  );
+  const catalog = await app.inject({
+    method: "GET",
+    url: "/api/v1/threads?limit=100",
+    headers: readHeaders(),
+  });
+  assert.deepEqual(
+    new Set(
+      catalog
+        .json<ListThreadsResponse>()
+        .data.map((thread) => thread.workspaceId),
+    ),
+    new Set(["workspace-a", "workspace-b"]),
+  );
+  const fork = await app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${first.threadId}/forks`,
+    headers: jsonMutationHeaders("workspace-fork"),
+    payload: { expectedRevision: first.revision, throughHistorySequence: null },
+  });
+  assert.equal(fork.statusCode, 201, fork.body);
+  assert.equal(
+    fork.json<ThreadMutationResponse>().thread.workspaceId,
+    "workspace-a",
+  );
+  for (const [url, payload] of [
+    [
+      `/api/v1/threads/${first.threadId}/forks`,
+      {
+        expectedRevision: first.revision,
+        throughHistorySequence: null,
+        workspaceId: "workspace-b",
+      },
+    ],
+    [
+      `/api/v1/threads/${first.threadId}:rename`,
+      {
+        expectedRevision: first.revision,
+        title: "Changed",
+        workspaceId: "workspace-b",
+      },
+    ],
+  ] as const) {
+    const rejected = await app.inject({
+      method: "POST",
+      url,
+      headers: jsonMutationHeaders(`reject-${url}`),
+      payload,
+    });
+    assert.equal(rejected.statusCode, 400, rejected.body);
+  }
+});

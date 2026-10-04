@@ -52,7 +52,7 @@ export type InstalledPluginTaskActionOwnerDependencies = Readonly<{
       actor: ActorContext;
       scope: PluginProfileScope;
       candidate: PluginActivationCandidate;
-      purpose: "submit";
+      purpose: "read" | "submit";
     }>,
     signal: AbortSignal,
   ): Promise<"allow" | "deny">;
