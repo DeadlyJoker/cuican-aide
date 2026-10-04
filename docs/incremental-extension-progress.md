@@ -6,6 +6,18 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：编译后 Native 原窗口提交报告任务与冷读取
+
+在 `be4cebd39d7bb470b08645b1fd3a76faa172226e` 基线上，新增原编译后 Main、preload、BrowserWindow 和完整 App 的实际报告窗口专项。原 Control、Worker、release 与模型目录子进程编译到独占临时布局；正式 Renderer 逐字节复制，未重建。原 Main 创建窗口、会话、IPC、HTTP 和 Native UI 资产协议，原保留 professional 1.0.0 UI 从真实协议加载。原用户栏进入十类 Settings，再从原侧栏模块创建 Thread、刷新原上下文、提交报告、查看实际 assistant 文本和 completed Run。具体范围见[编译后原窗口验收](./native-compiled-report-window.md)。
+
+父测试仅给实际 UI 生成的原 key 一次性绑定具名 PDP；原 Worker 仍核验真实保存的 paid receipt、admission、完整 pin、配置、profile、选择与 deployment。实际执行 Control/Worker 均加载原安装 Node 字节，只产生一次报价、两次 Responses 请求、一次供应商 POST 和 completed 工具回执。初始 100 与每次 30 是具名测试资金和价格，余额 70、预留 30、spent 0；报告的 ComfyUI operation 为 0，未验收真实收费或结算。
+
+物理停止后新 Main 从原任务读回同一持久 Thread 文本，原模块刷新显示 completed，数据库事实、钱包及调用次数保持。冷阶段回执是 launcher 原回执定位，未再次调用报告 action；不声称 report v1 表单 durable recovery。两次 Main 的原目录探测分别产生实际增量，原 Thread SSE 均为 HTTP 200/event-stream；没有实时 delta、执行中断线或自动重连验收。
+
+新窗口专项与原 Source/activation/IO 最终组合 **7 个文件、34/34、零跳过**，包含窗口专项 **1/1**，真实退出码为 0；Host 类型、boundary、格式和保留检查通过。统一证据为 `output/extensions/checks/native-compiled-report-proof-20261004.json`，保存十一张实际页面。修复前失败保留：新 driver ESM ready 死锁、初始 Source 与 Main 工具目录不一致、UI 上下文异步更新及冷阶段不应要求再次导入执行 action。产品冲突、许可和网络保护未放宽。
+
+本阶段仅改测试和说明；以本阶段前一提交保留 UI、账号/Settings、侧栏、全局 CSS、正式资产、SDK、三个旧发行包、生产映射与用户服务，不对最初 `776484c57` 作全部字节一致声明，不碰 primary 的人类修改。开发路径 alias 指向实际 compiled `.mjs`，仍不是 packaged `.app`。完整目标继续 ACTIVE：Native Krea2 的实际公网生成/原 operation 查询、可用 ComfyUI 的同次原完整 App S0、真实个人身份/资金/价格/结算、打包完整链路与用户选定实际企业 API 的 E5 待完成；`createThread` 不在三类恢复内。本阶段没有请求用户原 ComfyUI。
+
 ## 2026-10-04：Native 独立报告的实际 Worker 执行与冷重放
 
 在前一阶段 `77b3e2c693` 基线上，新增实际 Native Source 报告专项。保留的仓外 `example.professional` 1.0.0 实包经原安装/配置/启用、Source Supervisor、release CLI、FileIssued 私有任务配置、实际 Worker/Main、HTTP/ControlClient 和同一文件 SQLite 执行。Control 加载原 Node action，经原 Task Application 提交；Worker 加载原 execution factory，通过原 HTTPS Responses、Agent/Tool Broker 和报告包自身 HTTP adapter 完成一次具名供应商调用。原 metadata 默认和拒绝测试保持，没有产品执行开关、第二运行时、传输替换或人工 Run/admission/tool/supplier 结果记录。详细边界见[Native 报告执行](./native-installed-plugin-report-execution.md)。

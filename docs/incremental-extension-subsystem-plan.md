@@ -2,7 +2,15 @@
 
 状态：ACTIVE，已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
-2026-10-04 最新范围：新增[Native 独立报告的实际 Worker 执行](./native-installed-plugin-report-execution.md)。保留的仓外 professional 1.0.0 实包沿原 Source Supervisor→release CLI→Worker/Main、FileIssued/HTTP/同一 SQLite，通过实际 HTTPS Responses 和报告包自身原 HTTP adapter 完成具名供应商调用、原工具回执及 assistant 结果；未增加产品执行开关、运行时或替换网络传输。显式具名存量请求 PDP 只允许精确已提交的原任务，原 metadata 默认保持拒绝。第二项不同 key/Thread 的明确任务仍被 Worker 拒绝并由原客户端取消；冷启动后原 key/input/旧 CAS 返回同一原回执，旧 session/mount 和当前 Main PDP 拒绝有效，没有进一步供应商 POST、模型请求或报价。
+2026-10-04 当前范围：新增[编译后 Native 原窗口验收](./native-compiled-report-window.md)。实际原 Main、preload、BrowserWindow、Control、Worker 与正式 Renderer，从原用户栏进入十类设置，再用原侧栏专业报告模块创建 Thread、刷新上下文、提交报告并显示实际完成结果。原 Renderer 逐字节复制，未重建；原 Native 协议加载独立 professional 1.0.0 实包。唯一真实 UI 请求由具名 PDP 一次性绑定原 key，原 paid receipt、admission、pin、profile、选择和 deployment 核验保留。Source 与 Main 的显式空私有工作区对齐，产品代码、冲突和网络保护未修改。
+
+原窗口流程只有一次报价、两次具名 Responses 请求、一次供应商 POST 和 completed 工具回执；可用 70、预留 30、spent 0，资金/价格仍为具名测试边界。原 Main 物理退出后，新 Main 只读取同一持久 Thread 文本与模块 completed 状态，事实和调用次数保持。两次原模型目录子进程分别实际探测；Thread SSE 为 HTTP 200/event-stream，不证明实时 delta、执行中断线或自动重连。冷回执仅是 launcher 原回执定位，不是 report v1 表单恢复或再次调用。
+
+新窗口与原 Source/activation/IO 最终组合 **7 个文件、34/34、零跳过**，包含窗口专项 **1/1**，实际退出码为 0；Host 类型、boundary、格式和保留检查通过。统一证据为 `output/extensions/checks/native-compiled-report-proof-20261004.json`，包含十一张实际页面。本阶段前一 `be4cebd39d7bb470b08645b1fd3a76faa172226e` 是保留基线；UI、账号/设置/两侧栏、全局 CSS、正式资产、SDK、旧发行包、生产映射与用户服务保持，不声称全部等于最初 `776484c57`，不修改 primary 的人类工作。实际 compiled 开发布局仍不是 packaged `.app`，报告测试供应商不算 E5。
+
+完整目标 ACTIVE：Native Krea2 的实际公网生成/原 operation 查询、可用 ComfyUI 的同次原完整 App S0、真实个人身份/钱包/资金/价格/结算、打包完整链路和用户选定的第二个实际企业 API 的 E5 尚未完成，`createThread` 仍不在三类恢复内。前一 Source 报告专项及其 **33/33**、Worker **4/4** 证明保持[原范围](./native-installed-plugin-report-execution.md)，不与本轮分组求和。以下为 Source 阶段记录。
+
+2026-10-04 Source 范围：新增[Native 独立报告的实际 Worker 执行](./native-installed-plugin-report-execution.md)。保留的仓外 professional 1.0.0 实包沿原 Source Supervisor→release CLI→Worker/Main、FileIssued/HTTP/同一 SQLite，通过实际 HTTPS Responses 和报告包自身原 HTTP adapter 完成具名供应商调用、原工具回执及 assistant 结果；未增加产品执行开关、运行时或替换网络传输。显式具名存量请求 PDP 只允许精确已提交的原任务，原 metadata 默认保持拒绝。第二项不同 key/Thread 的明确任务仍被 Worker 拒绝并由原客户端取消；冷启动后原 key/input/旧 CAS 返回同一原回执，旧 session/mount 和当前 Main PDP 拒绝有效，没有进一步供应商 POST、模型请求或报价。
 
 最新验收：原 Source/activation/IO 与新增报告组合 **6 个文件、33/33、零跳过**，其中实际报告专项 **1/1**；原 Worker 旧/当前包执行及三类拒绝进程组合 **4/4、零跳过**通过。Host、Worker 类型、boundary 及保留检查通过，分组范围不同、不求和。100 初始积分与每次 30 报价、身份/PDP、模型和供应商是具名测试边界；第一项完成后余额 70、预留 30、spent 0，不代表真实收费或结算。报告使用 `ToolExecutionReceipt`，其 ComfyUI external operation 数量为 0。SSE 仅验收已完成任务的持久事件流、`afterSequence` 和冷读取，没有执行中断线、自动重连或 renderer 验收。统一证据为 `output/extensions/checks/native-report-execution-proof-20261004.json`，部分失败及真实退出结果保留。
 

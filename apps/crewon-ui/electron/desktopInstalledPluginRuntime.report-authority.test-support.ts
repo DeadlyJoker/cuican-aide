@@ -23,7 +23,7 @@ import type { DESKTOP_RUNTIME_OWNER } from "./desktopExtensionRuntime.ts";
 type NativeNamedReportActor = typeof DESKTOP_RUNTIME_OWNER;
 
 export type NativeNamedReportExecutionConfiguration = Readonly<{
-  idempotencyKey: string;
+  idempotencyKey: string | null;
   providerBaseUrl: string;
   subject: string;
 }>;
@@ -41,6 +41,7 @@ export type NativeNamedReportExecutionAuthority = Readonly<{
       resource: Record<string, unknown>;
     }>,
   ): Promise<boolean>;
+  bindRequestKey(key: string): void;
   denyExecution(): void;
   readonly decisions: readonly NativeNamedReportExecutionDecision[];
 }>;
@@ -98,7 +99,10 @@ export function createNativeNamedReportExecutionAuthority(
   );
   assert.ok(subject.length > 0 && Buffer.byteLength(subject) <= 8192);
   const configuration = Object.freeze({
-    idempotencyKey: extensionOpaqueId(fields.idempotencyKey),
+    idempotencyKey:
+      fields.idempotencyKey === null
+        ? null
+        : extensionOpaqueId(fields.idempotencyKey),
     providerBaseUrl,
     subject,
   });
@@ -106,6 +110,7 @@ export function createNativeNamedReportExecutionAuthority(
   assert.ok(isAbsolute(databasePath) && resolve(databasePath) === databasePath);
   const resolveProfile = input.resolveProfile.bind(input);
   const decisions: NativeNamedReportExecutionDecision[] = [];
+  let requestKey = configuration.idempotencyKey;
   let executionDenied = false;
   let databaseIdentity: Readonly<{ dev: number; ino: number }> | undefined;
   let parentIdentity: Readonly<{ dev: number; ino: number }> | undefined;
@@ -137,6 +142,7 @@ export function createNativeNamedReportExecutionAuthority(
   async function savedReport(
     resource: Readonly<Record<string, unknown>>,
     execution: boolean,
+    idempotencyKey: string,
   ): Promise<string> {
     const current = await resolveProfile();
     assert.ok(current);
@@ -156,7 +162,7 @@ export function createNativeNamedReportExecutionAuthority(
             actor.principalId,
             actor.actorId,
             pluginId,
-            configuration.idempotencyKey,
+            idempotencyKey,
           ]),
         )
         .slice(7)}`;
@@ -230,7 +236,7 @@ export function createNativeNamedReportExecutionAuthority(
               pluginId,
               threadId: binding.threadId,
               expectedThreadRevision: saved.turn.threadState.revision - 1,
-              idempotencyKey: configuration.idempotencyKey,
+              idempotencyKey,
               intent: {
                 kind: "generate",
                 input: { subject: configuration.subject },
@@ -436,11 +442,16 @@ export function createNativeNamedReportExecutionAuthority(
           extensionOpaqueId(candidateResource.runId);
         }
         resource = candidateResource;
-        runId = await savedReport(resource, execution);
-        allowed = !execution || !executionDenied;
-        reasonCode = allowed
-          ? "named_report_saved_paid_authority"
-          : "named_report_execution_revoked";
+        const selectedRequestKey = requestKey;
+        if (selectedRequestKey === null) {
+          reasonCode = "named_report_request_key_unbound";
+        } else {
+          runId = await savedReport(resource, execution, selectedRequestKey);
+          allowed = !execution || !executionDenied;
+          reasonCode = allowed
+            ? "named_report_saved_paid_authority"
+            : "named_report_execution_revoked";
+        }
       } catch {
         allowed = false;
       }
@@ -450,6 +461,10 @@ export function createNativeNamedReportExecutionAuthority(
         Object.freeze({ action, resource, allowed, reasonCode, runId }),
       );
       return allowed;
+    },
+    bindRequestKey(key: string) {
+      assert.equal(requestKey, null, "named_report_request_key_already_bound");
+      requestKey = extensionOpaqueId(key);
     },
     denyExecution() {
       executionDenied = true;

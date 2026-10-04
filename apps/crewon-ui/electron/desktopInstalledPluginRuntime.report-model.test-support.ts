@@ -18,6 +18,7 @@ type ResponsesItem = Record<string, unknown>;
 export async function nativeInstalledReportModel(
   apiKey: string,
   input: Readonly<{ subject: string }>,
+  options: Readonly<{ catalogModelId?: string }> = {},
 ) {
   assert.ok(typeof apiKey === "string" && apiKey.length > 0);
   assert.ok(
@@ -26,11 +27,22 @@ export async function nativeInstalledReportModel(
       input.subject.length <= 2_000,
     "native_report_model_subject_invalid",
   );
+  const catalogModelId = options.catalogModelId;
+  if (catalogModelId !== undefined)
+    assert.ok(
+      typeof catalogModelId === "string" &&
+        catalogModelId.length > 0 &&
+        catalogModelId.trim() === catalogModelId &&
+        Buffer.byteLength(catalogModelId) <= 256 &&
+        !/[\u0000-\u001f\u007f]/u.test(catalogModelId),
+      "native_report_model_catalog_id_invalid",
+    );
   const subject = input.subject;
   const requests: Record<string, unknown>[] = [];
   const failures: unknown[] = [];
   const pending = new Set<Promise<void>>();
   let supplierRequests = 0;
+  let catalogRequests = 0;
   let emittedCallId: string | null = null;
   let completed = false;
   let closing: Promise<void> | null = null;
@@ -46,6 +58,26 @@ export async function nativeInstalledReportModel(
         if (request.url?.startsWith("/supplier/")) {
           supplierRequests++;
           response.writeHead(500).end();
+          return;
+        }
+        if (catalogModelId !== undefined && request.url === "/v1/models") {
+          assert.equal(request.method, "GET");
+          assert.equal(request.headers.authorization, `Bearer ${apiKey}`);
+          assert.ok(catalogRequests < 32, "native_report_model_catalog_count");
+          catalogRequests++;
+          let bytes = 0;
+          for await (const chunk of request) {
+            bytes += Buffer.byteLength(chunk);
+            assert.ok(bytes <= 256 * 1024, "native_report_model_request_limit");
+          }
+          assert.equal(bytes, 0, "native_report_model_catalog_body_invalid");
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(
+            JSON.stringify({
+              object: "list",
+              data: [{ id: catalogModelId, object: "model" }],
+            }),
+          );
           return;
         }
         assert.equal(request.url, "/v1/responses");
@@ -191,6 +223,7 @@ export async function nativeInstalledReportModel(
     supplier: `${origin}/supplier/`,
     requests,
     supplierRequests: () => supplierRequests,
+    catalogRequests: () => catalogRequests,
     close(): Promise<void> {
       withdrawn = true;
       return (closing ??= (async () => {

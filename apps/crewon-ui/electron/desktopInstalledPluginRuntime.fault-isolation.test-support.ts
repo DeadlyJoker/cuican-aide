@@ -42,6 +42,8 @@ import type { ControlRuntimeSession } from "./runtimeSupervisor.ts";
 
 type NativeFixture = Awaited<ReturnType<typeof nativeInstalledProcessFixture>>;
 type Source = NativeFixture["sources"][number];
+type IsolationModel = Awaited<ReturnType<typeof nativeIsolationModel>> &
+  Readonly<{ catalogRequests?: () => number }>;
 
 /** Sources are independently retained real bundles, copied without changing IDs or bytes. */
 export async function nativeIsolationProcessFixture(
@@ -53,7 +55,7 @@ export async function nativeIsolationProcessFixture(
     await realpath(professionalDirectory),
     options,
   );
-  let model: Awaited<ReturnType<typeof nativeIsolationModel>> | undefined;
+  let model: IsolationModel | undefined;
   try {
     if (kreaDirectory !== undefined) {
       const original = await verifyLocalPluginPackage({
@@ -101,9 +103,11 @@ export async function nativeIsolationProcessFixture(
     model =
       options.installedReportExecution === undefined
         ? await nativeIsolationModel(f.provider.apiKey)
-        : await nativeInstalledReportModel(f.provider.apiKey, {
-            subject: options.installedReportExecution.subject,
-          });
+        : await nativeInstalledReportModel(
+            f.provider.apiKey,
+            { subject: options.installedReportExecution.subject },
+            { catalogModelId: options.reportModelCatalog?.modelId },
+          );
     f.provider.endpoint = model.endpoint;
     const ownedModel = model;
     let closing: Promise<void> | null = null;

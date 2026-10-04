@@ -71,7 +71,10 @@ type ChildObservation = Readonly<{
 }>;
 export type NativeInstalledProcessFixtureOptions = Readonly<{
   authorityRequestAuditLimit?: number;
+  storageLayout?: "source-fixture" | "formal-electron-user-data";
+  workspaceLayout?: "unbound" | "empty-private";
   installedReportExecution?: NativeNamedReportExecutionConfiguration;
+  reportModelCatalog?: Readonly<{ modelId: string }>;
 }>;
 
 /** Actual source Supervisor children; HTTPS decisions require current private Native
@@ -81,6 +84,20 @@ export async function nativeInstalledProcessFixture(
   options: NativeInstalledProcessFixtureOptions = {},
 ) {
   assert.match(process.version, /^v24\./u);
+  const storageLayout =
+    options.storageLayout === undefined
+      ? "source-fixture"
+      : options.storageLayout;
+  assert.ok(
+    storageLayout === "source-fixture" ||
+      storageLayout === "formal-electron-user-data",
+    "native_storage_layout_invalid",
+  );
+  const workspaceLayout = options.workspaceLayout ?? "unbound";
+  assert.ok(
+    workspaceLayout === "unbound" || workspaceLayout === "empty-private",
+    "native_workspace_layout_invalid",
+  );
   const authorityRequestAuditLimit =
     options.authorityRequestAuditLimit === undefined
       ? 512
@@ -96,7 +113,16 @@ export async function nativeInstalledProcessFixture(
   );
   const ownedRoot = await lstat(directory);
   assert.ok(ownedRoot.isDirectory() && ownedRoot.uid === process.getuid?.());
-  const dataDirectory = join(directory, "runtime");
+  const workspaceDirectory =
+    workspaceLayout === "empty-private" ? join(directory, "workspace") : null;
+  if (workspaceDirectory !== null)
+    await mkdir(workspaceDirectory, { mode: 0o700 });
+  const dataDirectory = join(
+    directory,
+    storageLayout === "formal-electron-user-data"
+      ? "control-runtime-v1"
+      : "runtime",
+  );
   await mkdir(dataDirectory, { mode: 0o700 });
   const databasePath = join(dataDirectory, "control.sqlite");
   const auditPath = join(directory, "children.jsonl");
@@ -352,7 +378,7 @@ export async function nativeInstalledProcessFixture(
       provider: () => (configured ? provider : null),
       providerModelCatalog: async () => [provider.modelId],
       agentPlatformApiKeyForOrigin: () => null,
-      workspaceRoot: () => null,
+      workspaceRoot: () => workspaceDirectory,
       ...(installed
         ? {
             installedRuntime: {
@@ -433,6 +459,7 @@ export async function nativeInstalledProcessFixture(
   }
   return {
     directory,
+    workspaceDirectory,
     dataDirectory,
     databasePath,
     provider,
