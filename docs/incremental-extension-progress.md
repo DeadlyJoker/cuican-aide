@@ -20,6 +20,10 @@
 
 独立真实 Native 冷回执进程专项 **1/1**：真实 commit 与原 issuer 确认后，仅测试内丢失 ACK，HTTP 500 留下 dispatched journal 和唯一原 receipt；自有进程物理关闭后重新 Main preparation、新 epoch 和新 mount，GET 恢复保留原请求，同键 stage replay/POST action 返回 200，并把 journal 更新为 accepted。Run、receipt、funding 和项目 link 均仍一份，供应商 operation 为零；非 loopback 发送被测试拦截且未触发。此证据没有复现实际页面 UNKNOWN，不代替该页面或在线 S0。日志为 `native-generation-cold-ack-process-20261005.log`。
 
+随后对实际 Native 原请求设置临时、不暂停执行的诊断点，捕获到 journal 的 `AbortError`，并确认 **5 秒 job timer 触发时 sent 与 businessSent 均为 true**。三个原 UI 同键重试后，原 journal 为 dispatched revision 8、attempt 7；原 Run、operation、unmetered admission 和项目 link 各一份，未创建第二个生成任务。临时诊断点、异常暂停及 Console 过滤均已清理，桌面回到原任务页。证据为 `native-original-ack-stage-logpoints-20261005.txt`、`native-original-ack-abort-logpoint-20261005.png` 和 `native-original-ack-live-counts-20261005.json`。这些记录证明页面预算取消了已开始的业务请求，**尚不能判定服务端哪个阶段耗时或实际业务响应是否已返回**。
+
+原冷回执专项只增加既有 HTTP 阶段计时，仍 **1/1、零跳过**：warm generation action 2376.8ms，cold 同键 stage 210.7ms、完整 action 回执 1726.9ms，串行共 1937.6ms，未复现实际页面超过 5 秒。HTTP 20 秒测试预算、故障注入、授权、返回与生产行为均未改变；全部自有 runtime 子进程已物理退出，模型和供应商请求为零。类型、boundary 与格式检查通过，日志为 `native-generation-cold-ack-http-timing-20261005.log`。另以原 Main HTTP transport 与原 Renderer bridge fetch 对自有 loopback 服务只读检查 **7/7**，真实 Node headers/body/EOF 在 1–28ms 完成且预算归零，证据为 `native-desktop-http-eof-readonly-20261005.json`；未经过 Electron IPC 或 Chromium，不能代替实际页面链路。继续按这两种环境的差异定位，不据此增加生产超时。
+
 旧预览网页 5730 仍使用原 3210/3211 后端进程，没有重启加载本轮后端修复；实际桌面有自己从当前安装包启动的 Control/Worker。不能以旧网页证明当前桌面绑定或插件执行结果。完整目标继续 ACTIVE，后置个人积分与用户选定的第二个企业 API 仍分别列为后续阶段。
 
 ## 2026-10-04：新 ComfyUI 地址与桌面代码同步

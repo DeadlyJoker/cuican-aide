@@ -20,6 +20,19 @@ test(
       process.env.CREWON_TEST_SHORT_DRAMA_PLUGIN_DIR === undefined,
   },
   async (t) => {
+    const measure = async <T>(phase: string, work: () => Promise<T>) => {
+      const startedAt = performance.now();
+      try {
+        return await work();
+      } finally {
+        t.diagnostic(
+          JSON.stringify({
+            phase,
+            elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
+          }),
+        );
+      }
+    };
     const directory = await mkdtemp(
       join(await realpath(tmpdir()), "crewon-native-generation-cold-ack-"),
     );
@@ -50,24 +63,34 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
     );
     const sourceDirectory = process.env.CREWON_TEST_SHORT_DRAMA_PLUGIN_DIR;
     assert.ok(sourceDirectory, "independent UI-only Short Drama is required");
-    const f = await nativeLocalProcessFixture(t, {
-      projectSourceDirectory: sourceDirectory,
-      diagnosticImport: checkpoint,
-    });
+    const f = await measure("fixture.prepare", () =>
+      nativeLocalProcessFixture(t, {
+        projectSourceDirectory: sourceDirectory,
+        diagnosticImport: checkpoint,
+      }),
+    );
     t.after(() => rm(directory, { recursive: true, force: true }));
-    await f.runRelease(f.owner.preparationEnvironment);
+    await measure("warm.preparation.release", () =>
+      f.runRelease(f.owner.preparationEnvironment),
+    );
     const first = f.owner.complete();
     assert.equal(first.kind, "installed");
     if (first.kind !== "installed") return;
-    await f.runRelease(first.runtime.release);
-    const bridge = await f.prepareProjectBridge(
-      first.runtime.expectedCatalogEntries[0]!,
+    await measure("warm.first.release", () =>
+      f.runRelease(first.runtime.release),
     );
-    await f.runRelease(bridge.preparationEnvironment);
+    const bridge = await measure("warm.main.prepareProjectBridge", () =>
+      f.prepareProjectBridge(first.runtime.expectedCatalogEntries[0]!),
+    );
+    await measure("warm.bridge.preparation.release", () =>
+      f.runRelease(bridge.preparationEnvironment),
+    );
     const prepared = bridge.complete();
     assert.equal(prepared.kind, "installed");
     if (prepared.kind !== "installed") return;
-    await f.runRelease(prepared.runtime.release);
+    await measure("warm.prepared.release", () =>
+      f.runRelease(prepared.runtime.release),
+    );
     const start = async (runtime: typeof prepared.runtime) => {
       const current = await startDesktopInstalledPluginRuntimeChildren({
         runtime,
@@ -80,7 +103,9 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
       await f.waitForControl(current.control);
       return current;
     };
-    const current = await start(prepared.runtime);
+    const current = await measure("warm.runtime.start", () =>
+      start(prepared.runtime),
+    );
     const client = new ControlApiClient({
       baseUrl: `http://127.0.0.1:${f.port}/`,
       accessToken: f.sessionToken,
@@ -89,20 +114,24 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
     });
     for (const plugin of [f.identity, f.projectSource!.identity]) {
       try {
-        await setDesktopPluginSelectionWithNativeBusinessActivation({
-          runtime: prepared.runtime,
-          client,
-          command: {
-            pluginId: plugin.pluginId,
-            request: {
-              expectedSelectionRevision: 1,
-              state: "enabled",
-              selectedPackageDigest: plugin.packageDigest,
-            },
-            idempotencyKey: `native-cold-enable-${plugin.pluginId}`,
-          },
-          signal: new AbortController().signal,
-        });
+        await measure(
+          plugin === f.identity ? "warm.enable.target" : "warm.enable.source",
+          () =>
+            setDesktopPluginSelectionWithNativeBusinessActivation({
+              runtime: prepared.runtime,
+              client,
+              command: {
+                pluginId: plugin.pluginId,
+                request: {
+                  expectedSelectionRevision: 1,
+                  state: "enabled",
+                  selectedPackageDigest: plugin.packageDigest,
+                },
+                idempotencyKey: `native-cold-enable-${plugin.pluginId}`,
+              },
+              signal: new AbortController().signal,
+            }),
+        );
       } catch (error) {
         throw new Error(
           `Native enable failed: ${error instanceof Error ? error.message : "unknown"}; external attempt=${await readFile(networkMarker, "utf8").catch(() => "none")}; Worker diagnostics=${f.logs(current.worker).stderr}`,
@@ -132,9 +161,11 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
       return JSON.parse(response.body);
     };
     const thread = (
-      await client.createThread(
-        { title: "Original Native cold acknowledgement", workspaceId: null },
-        "native-cold-thread",
+      await measure("warm.http.thread.create", () =>
+        client.createThread(
+          { title: "Original Native cold acknowledgement", workspaceId: null },
+          "native-cold-thread",
+        ),
       )
     ).thread;
     const mount = () =>
@@ -144,30 +175,26 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
         expectedSelectionRevision: 2,
         expectedPackageDigest: f.projectSource!.identity.packageDigest,
       });
-    const lease = await mount();
+    const lease = await measure("warm.http.mount", mount);
     const action = (mountRef: string, action: string, input: object) =>
       success(`/api/v1/plugins/ui/mounts/${mountRef}/actions`, {
         action,
         input,
       });
     const project = (
-      await action(
-        lease.mountRef,
-        "crewon.creative-projects.v1.createProject",
-        {
+      await measure("warm.http.project.create", () =>
+        action(lease.mountRef, "crewon.creative-projects.v1.createProject", {
           request: {
             title: "Original cold receipt",
             briefText: "No inference",
           },
           idempotencyKey: "native-cold-project",
-        },
+        }),
       )
     ).output;
     const concept = (
-      await action(
-        lease.mountRef,
-        "crewon.creative-projects.v1.createConcept",
-        {
+      await measure("warm.http.concept.create", () =>
+        action(lease.mountRef, "crewon.creative-projects.v1.createConcept", {
           projectId: project.project.projectId,
           request: {
             briefRevision: project.brief.briefRevision,
@@ -176,7 +203,7 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
             expectedProjectRevision: project.project.revision,
           },
           idempotencyKey: "native-cold-concept",
-        },
+        }),
       )
     ).output;
     const request = {
@@ -195,13 +222,15 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
       },
     };
     assert.equal(
-      (await client.plugins.stageRecovery(lease.mountRef, request)).intent
-        .phase,
+      (
+        await measure("warm.http.recovery.stage", () =>
+          client.plugins.stageRecovery(lease.mountRef, request),
+        )
+      ).intent.phase,
       "prepared",
     );
-    const lost = await post(
-      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
-      request,
+    const lost = await measure("warm.http.generation.actions", () =>
+      post(`/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`, request),
     );
     assert.equal(lost.status, 500, lost.body);
     assert.equal(JSON.parse(lost.body).error.code, "plugin_ui_unavailable");
@@ -254,36 +283,61 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
       creative_project_generation_links: 1,
       extension_external_operations: 0,
     });
-    await terminateRuntimeChild(current.control);
-    await terminateRuntimeChild(current.worker);
-    const coldOwner = await f.prepareProjectBridge(
-      prepared.runtime.expectedCatalogEntries[0]!,
+    await measure("warm.control.close", () =>
+      terminateRuntimeChild(current.control),
     );
-    await f.runRelease(coldOwner.preparationEnvironment);
+    await measure("warm.worker.close", () =>
+      terminateRuntimeChild(current.worker),
+    );
+    const coldOwner = await measure("cold.main.prepareProjectBridge", () =>
+      f.prepareProjectBridge(prepared.runtime.expectedCatalogEntries[0]!),
+    );
+    await measure("cold.preparation.release", () =>
+      f.runRelease(coldOwner.preparationEnvironment),
+    );
     const coldPrepared = coldOwner.complete();
     assert.equal(coldPrepared.kind, "installed");
     if (coldPrepared.kind !== "installed") return;
-    await f.runRelease(coldPrepared.runtime.release);
-    const cold = await start(coldPrepared.runtime);
+    await measure("cold.prepared.release", () =>
+      f.runRelease(coldPrepared.runtime.release),
+    );
+    const cold = await measure("cold.runtime.start", () =>
+      start(coldPrepared.runtime),
+    );
+    t.after(() => {
+      t.diagnostic(
+        JSON.stringify({
+          phase: "fixture.cleanup",
+          runtimeChildrenPhysicallyJoined: [
+            current.control,
+            current.worker,
+            cold.control,
+            cold.worker,
+          ].every(
+            (child) => child.exitCode !== null || child.signalCode !== null,
+          ),
+        }),
+      );
+    });
     assert.notEqual(cold.control.pid, current.control.pid);
     assert.notEqual(cold.worker.pid, current.worker.pid);
-    const coldLease = await mount();
+    const coldLease = await measure("cold.http.mount", mount);
     assert.notEqual(coldLease.mountRef, lease.mountRef);
-    const hints = await client.plugins.getRecovery(coldLease.mountRef);
+    const hints = await measure("cold.http.recovery.get", () =>
+      client.plugins.getRecovery(coldLease.mountRef),
+    );
     assert.equal(hints.intents.length, 1);
     assert.equal(hints.intents[0]!.phase, "dispatched");
     assert.equal(hints.intents[0]!.retryable, true);
     assert.deepEqual(hints.intents[0]!.request, request);
     assert.deepEqual(readState().intent, before.intent);
     assert.deepEqual(readState().counts, before.counts);
-    const restaged = await client.plugins.stageRecovery(
-      coldLease.mountRef,
-      request,
+    const restaged = await measure("cold.http.recovery.stage.replay", () =>
+      client.plugins.stageRecovery(coldLease.mountRef, request),
     );
     assert.equal(restaged.disposition, "replayed");
-    const replay = await post(
-      `/api/v1/plugins/ui/mounts/${coldLease.mountRef}/actions`,
-      request,
+    const replay = await measure("cold.http.generation.actions.replay", () =>
+      post(`/api/v1/plugins/ui/mounts/${coldLease.mountRef}/actions`, request),
     );
     assert.equal(
       replay.status,
@@ -310,7 +364,11 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
     assert.equal(after.intent.rawIdempotencyKey, request.input.idempotencyKey);
     assert.deepEqual(JSON.parse(after.intent.receiptJson), output);
     assert.equal(
-      (await client.plugins.getRecovery(coldLease.mountRef)).intents[0]!.phase,
+      (
+        await measure("cold.http.recovery.accepted.get", () =>
+          client.plugins.getRecovery(coldLease.mountRef),
+        )
+      ).intents[0]!.phase,
       "accepted",
     );
     assert.equal(await readFile(networkMarker, "utf8").catch(() => null), null);
