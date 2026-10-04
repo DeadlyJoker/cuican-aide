@@ -106,6 +106,7 @@ import {
 } from "./lib/agent-platform/agentPlatformClient";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import { useDesktopLocalManagementAccess } from "./lib/desktop/DesktopLocalManagementContext";
+import { useDesktopPluginSourceImportAccess } from "./lib/desktop/useDesktopPluginSourceImportAccess";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
@@ -133,6 +134,11 @@ export function App({
   // Who you are in CrewON. The model account below is a separate credential.
   const platformAccount = useAgentPlatformAccount();
   const localManagementAccess = useDesktopLocalManagementAccess();
+  const localSourceImport = useDesktopPluginSourceImportAccess(
+    platformAccount?.user
+      ? `account:${platformAccount.user.id}`
+      : "native-local",
+  );
   const {
     clientRef,
     libraryLoadRequestRef,
@@ -1244,6 +1250,7 @@ export function App({
           })
         }
         controlClient={controlClient}
+        localSourceImport={localSourceImport}
         platformUser={platformAccount?.user ?? null}
         activeSection={settingsSection}
         dataMode={

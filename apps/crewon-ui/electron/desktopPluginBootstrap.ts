@@ -48,7 +48,7 @@ const PROFILE_FILE = "plugin-profile.json";
 const PROFILE_SCHEMA = "crewon.desktop-plugin-profile.v1";
 const MAX_BYTES = 128 * 1024;
 
-type Source = Readonly<{
+export type DesktopPluginApprovalSource = Readonly<{
   sourceId: string;
   directory: string;
   pluginId: string;
@@ -56,7 +56,7 @@ type Source = Readonly<{
   version: string;
   packageDigest: string;
 }>;
-type Publication = Readonly<{
+export type DesktopPluginApprovalPublication = Readonly<{
   pluginId: string;
   publisherId: string;
   packageDigest: string;
@@ -67,8 +67,8 @@ type BootstrapManifestFields = Readonly<{
   scope: PluginProfileScope;
   authorityEpoch: string;
   installRoot: string;
-  sources: readonly Source[];
-  publications: readonly Publication[];
+  sources: readonly DesktopPluginApprovalSource[];
+  publications: readonly DesktopPluginApprovalPublication[];
 }>;
 export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
   (
@@ -82,9 +82,9 @@ export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
         projects: DesktopProjectExecutionConfiguration;
       }>
   );
-type ApprovalSettings = Readonly<{
-  sources: readonly Source[];
-  publications: readonly Publication[];
+export type DesktopPluginApprovalSettings = Readonly<{
+  sources: readonly DesktopPluginApprovalSource[];
+  publications: readonly DesktopPluginApprovalPublication[];
 }> &
   (
     | Readonly<{ schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA }>
@@ -155,7 +155,7 @@ export async function prepareDesktopPluginBootstrap(
   }
   privateDirectory(dataDirectory, false);
   const approval = privateFile(approvalPath, MAX_BYTES);
-  const settings = parseApproval(json(approval.bytes));
+  const settings = parseDesktopPluginApproval(json(approval.bytes));
   const profilePath = join(dataDirectory, PROFILE_FILE);
   let profile: FileSnapshot;
   try {
@@ -282,7 +282,10 @@ export async function prepareDesktopPluginBootstrap(
   return result;
 }
 
-function parseApproval(input: unknown): ApprovalSettings {
+/** Strict existing approval data only; this parser grants no runtime authority. */
+export function parseDesktopPluginApproval(
+  input: unknown,
+): DesktopPluginApprovalSettings {
   if (input === null || typeof input !== "object") invalid("shape");
   const schemaVersion = Object.getOwnPropertyDescriptor(
     input,
@@ -306,89 +309,93 @@ function parseApproval(input: unknown): ApprovalSettings {
     digests = new Set<string>(),
     versions = new Set<string>();
   const publishers = new Map<string, string>();
-  const sources = dense(value.sources, 32).map((raw): Source => {
-    const source = record(raw, [
-      "sourceId",
-      "directory",
-      "pluginId",
-      "publisherId",
-      "version",
-      "packageDigest",
-    ]);
-    const checked = parsePluginSourceView({
-      sourceId: source.sourceId,
-      pluginId: source.pluginId,
-      publisherId: source.publisherId,
-      version: source.version,
-      packageDigest: source.packageDigest,
-      title: "Approved source",
-      description: "Native host approval",
-    });
-    const directory = absolutePath(source.directory);
-    const version = `${checked.pluginId}@${checked.version}`;
-    if (
-      ids.has(checked.sourceId) ||
-      directories.has(directory) ||
-      digests.has(checked.packageDigest) ||
-      versions.has(version) ||
-      (publishers.has(checked.pluginId) &&
-        publishers.get(checked.pluginId) !== checked.publisherId)
-    )
-      invalid("approval");
-    ids.add(checked.sourceId);
-    directories.add(directory);
-    digests.add(checked.packageDigest);
-    versions.add(version);
-    publishers.set(checked.pluginId, checked.publisherId);
-    return Object.freeze({
-      sourceId: checked.sourceId,
-      directory,
-      pluginId: checked.pluginId,
-      publisherId: checked.publisherId,
-      version: checked.version,
-      packageDigest: checked.packageDigest,
-    });
-  });
-  const approved = new Set<string>();
-  const publications = dense(value.publications, 32).map((raw): Publication => {
-    const publication = record(raw, [
-      "pluginId",
-      "publisherId",
-      "packageDigest",
-      "publicAssets",
-    ]);
-    const checked = parsePluginSourceView({
-      sourceId: "publication",
-      pluginId: publication.pluginId,
-      publisherId: publication.publisherId,
-      packageDigest: publication.packageDigest,
-      version: "0.0.0",
-      title: "Publication",
-      description: "Native host approval",
-    });
-    const publicAssets = dense(publication.publicAssets, 256).map(
-      parsePluginControlAssetPath,
-    );
-    if (
-      !publicAssets.length ||
-      new Set(publicAssets).size !== publicAssets.length ||
-      approved.has(checked.packageDigest) ||
-      !sources.some(
-        (source) =>
-          source.pluginId === checked.pluginId &&
-          source.publisherId === checked.publisherId &&
-          source.packageDigest === checked.packageDigest,
+  const sources = dense(value.sources, 32).map(
+    (raw): DesktopPluginApprovalSource => {
+      const source = record(raw, [
+        "sourceId",
+        "directory",
+        "pluginId",
+        "publisherId",
+        "version",
+        "packageDigest",
+      ]);
+      const checked = parsePluginSourceView({
+        sourceId: source.sourceId,
+        pluginId: source.pluginId,
+        publisherId: source.publisherId,
+        version: source.version,
+        packageDigest: source.packageDigest,
+        title: "Approved source",
+        description: "Native host approval",
+      });
+      const directory = absolutePath(source.directory);
+      const version = `${checked.pluginId}@${checked.version}`;
+      if (
+        ids.has(checked.sourceId) ||
+        directories.has(directory) ||
+        digests.has(checked.packageDigest) ||
+        versions.has(version) ||
+        (publishers.has(checked.pluginId) &&
+          publishers.get(checked.pluginId) !== checked.publisherId)
       )
-    )
-      invalid("approval");
-    approved.add(checked.packageDigest);
-    return Object.freeze({
-      pluginId: checked.pluginId,
-      publisherId: checked.publisherId,
-      packageDigest: checked.packageDigest,
-      publicAssets: Object.freeze(publicAssets),
-    });
-  });
+        invalid("approval");
+      ids.add(checked.sourceId);
+      directories.add(directory);
+      digests.add(checked.packageDigest);
+      versions.add(version);
+      publishers.set(checked.pluginId, checked.publisherId);
+      return Object.freeze({
+        sourceId: checked.sourceId,
+        directory,
+        pluginId: checked.pluginId,
+        publisherId: checked.publisherId,
+        version: checked.version,
+        packageDigest: checked.packageDigest,
+      });
+    },
+  );
+  const approved = new Set<string>();
+  const publications = dense(value.publications, 32).map(
+    (raw): DesktopPluginApprovalPublication => {
+      const publication = record(raw, [
+        "pluginId",
+        "publisherId",
+        "packageDigest",
+        "publicAssets",
+      ]);
+      const checked = parsePluginSourceView({
+        sourceId: "publication",
+        pluginId: publication.pluginId,
+        publisherId: publication.publisherId,
+        packageDigest: publication.packageDigest,
+        version: "0.0.0",
+        title: "Publication",
+        description: "Native host approval",
+      });
+      const publicAssets = dense(publication.publicAssets, 256).map(
+        parsePluginControlAssetPath,
+      );
+      if (
+        !publicAssets.length ||
+        new Set(publicAssets).size !== publicAssets.length ||
+        approved.has(checked.packageDigest) ||
+        !sources.some(
+          (source) =>
+            source.pluginId === checked.pluginId &&
+            source.publisherId === checked.publisherId &&
+            source.packageDigest === checked.packageDigest,
+        )
+      )
+        invalid("approval");
+      approved.add(checked.packageDigest);
+      return Object.freeze({
+        pluginId: checked.pluginId,
+        publisherId: checked.publisherId,
+        packageDigest: checked.packageDigest,
+        publicAssets: Object.freeze(publicAssets),
+      });
+    },
+  );
   const settings = {
     sources: Object.freeze(sources),
     publications: Object.freeze(publications),

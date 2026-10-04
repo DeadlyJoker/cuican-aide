@@ -15,10 +15,13 @@ import {
   type SettingsDataMode,
 } from "../settings/SettingsContent";
 import { SettingsNavigation } from "../settings/SettingsNavigation";
+import { InstalledPluginSettingsLocalImport } from "../settings/InstalledPluginSettingsLocalImport";
+import type { DesktopLocalPluginSourceImportAccess } from "../../lib/desktop/desktopLocalPluginSourceImportProtocol";
 
 export type CommandSettingsRouteProps = {
   onPrepareTaskPack?: TaskPackDraftHandler;
   controlClient?: ControlApiClient | null;
+  localSourceImport?: DesktopLocalPluginSourceImportAccess | null;
   platformUser?: AgentPlatformUser | null;
   activeSection: SettingsSection;
   dataMode: SettingsDataMode;
@@ -38,6 +41,7 @@ export type CommandSettingsRouteProps = {
 export function CommandSettingsRoute({
   onPrepareTaskPack,
   controlClient = null,
+  localSourceImport = null,
   platformUser = null,
   activeSection,
   dataMode,
@@ -92,6 +96,7 @@ export function CommandSettingsRoute({
               key={activeSection}
               activeSection={activeSection}
               client={controlClient}
+              localSourceImport={localSourceImport}
               pluginConfigurationClient={controlClient}
               locale={locale}
               platformUser={platformUser}
@@ -108,7 +113,17 @@ export function CommandSettingsRoute({
               onPanelFieldChange={onPanelFieldChange}
               onPanelFieldCommit={onPanelFieldCommit}
               onSectionChange={onSectionChange}
-            />
+            >
+              {activeSection === "mcp-servers" &&
+                dataMode !== "demo" &&
+                localSourceImport && (
+                  <InstalledPluginSettingsLocalImport
+                    client={localSourceImport.client}
+                    ownerKey={localSourceImport.ownerKey}
+                    locale={locale}
+                  />
+                )}
+            </SettingsContent>
           )}
         </section>
       </section>

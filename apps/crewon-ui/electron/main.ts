@@ -1,6 +1,6 @@
 import { discardInterruptedDesktopConfigWrites } from "./desktopConfigFile.ts";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   app,
@@ -26,6 +26,8 @@ import { DesktopHttpTransport } from "./desktopHttp.ts";
 import { bindDesktopHttpLifetime } from "./desktopHttpLifetime.ts";
 import { desktopHttpReply } from "./desktopHttpReply.ts";
 import { DesktopPluginUiAssetBroker } from "./desktopPluginUiAssets.ts";
+import { bindDesktopLocalPluginSourceImportIpc } from "./desktopLocalPluginSourceImportIpc.ts";
+import { recoverDesktopLocalPluginSourceImport } from "./desktopLocalPluginSourceImport.ts";
 import {
   bindDesktopPluginUiProtocol,
   bindDesktopPluginUiIpc,
@@ -110,6 +112,12 @@ async function launch(): Promise<void> {
       `configuration staging retained: ${configurationCleanup.retained}`,
     );
   }
+  const sourceImportRecovery = recoverDesktopLocalPluginSourceImport({
+    dataDirectory: runtimeDataDirectory,
+    ownsSingleInstance: ownsInstance,
+  });
+  if (sourceImportRecovery.retained)
+    desktopLog("desktop_plugin_source_import_staging_retained");
   const authority = new LocalWorkspaceAuthority(
     runtimeDataDirectory,
     process.env.CREWON_DESKTOP_WORKSPACE_ROOT?.trim() ||
@@ -181,6 +189,23 @@ async function launch(): Promise<void> {
   });
 
   const window = createWindow();
+  const pluginSourceImports = bindDesktopLocalPluginSourceImportIpc({
+    window,
+    ipc: ipcMain,
+    dataDirectory: runtimeDataDirectory,
+    rendererUrl:
+      process.env.CREWON_UI_DEV_URL?.trim() ||
+      pathToFileURL(join(moduleDirectory, "../dist/index.html")).href,
+    runtime,
+    chooseDirectory: async () => {
+      const result = await dialog.showOpenDialog(window, {
+        title: "选择已构建的 CrewON 插件目录",
+        properties: ["openDirectory"],
+      });
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    },
+    diagnostic: desktopLog,
+  });
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
   const pluginUiAssets = new DesktopPluginUiAssetBroker({
@@ -233,8 +258,9 @@ async function launch(): Promise<void> {
     quitting = true;
     removeSessionListener();
     removeLocalManagementListener();
-    void pluginUiAssets
+    void pluginSourceImports
       .close()
+      .then(() => pluginUiAssets.close())
       .catch(() => desktopLog("desktop_plugin_ui_cleanup_failed"))
       .then(() => runtime?.stop())
       .catch(() => desktopLog("runtime_shutdown_failed"))

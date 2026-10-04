@@ -20,6 +20,10 @@ import {
   type DesktopPluginUiAssets,
   type DesktopPluginUiBinding,
 } from "../src/lib/desktop/desktopPluginUiProtocol.ts";
+import {
+  DESKTOP_LOCAL_PLUGIN_SOURCE_IMPORT_VERSION,
+  type DesktopLocalPluginSourceImportClient,
+} from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>;
@@ -34,6 +38,23 @@ const invokeHttp = async <T>(channel: string, value: unknown): Promise<T> => {
 
 const bridge: CrewonDesktopBridge = {
   version: DESKTOP_BRIDGE_VERSION,
+  pluginSourceImports: Object.freeze<DesktopLocalPluginSourceImportClient>({
+    version: DESKTOP_LOCAL_PLUGIN_SOURCE_IMPORT_VERSION,
+    previewDirectory: () => invoke("crewon:plugin-sources:preview-v1"),
+    confirmPreview: (request) =>
+      invoke("crewon:plugin-sources:confirm-v1", request),
+    cancelPreview: (request) =>
+      invoke("crewon:plugin-sources:cancel-v1", request),
+    subscribeOwnerChanged: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("crewon:plugin-sources:owner-changed-v1", handler);
+      return () =>
+        ipcRenderer.removeListener(
+          "crewon:plugin-sources:owner-changed-v1",
+          handler,
+        );
+    },
+  }),
   pluginUiAssets: Object.freeze<DesktopPluginUiAssets>({
     version: DESKTOP_PLUGIN_UI_VERSION,
     adopt: (input) =>

@@ -69,6 +69,11 @@ import {
   captureDesktopPluginCreditSettlementEnvironment,
   type DesktopPluginCreditSettlementEnvironment,
 } from "./desktopPluginCreditSettlementEnvironment.ts";
+import {
+  runRuntimeStoppedMutation,
+  type RuntimeStoppedMutationOptions,
+  type RuntimeStoppedMutationResult,
+} from "./runtimeStoppedMutation.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -665,6 +670,27 @@ export class RuntimeSupervisor {
         await this.start();
       });
     return this.#restart;
+  }
+
+  /** Serializes private configuration changes with every original queued restart. */
+  mutateWhileStopped<T>(
+    options: RuntimeStoppedMutationOptions<T>,
+  ): Promise<RuntimeStoppedMutationResult<T>> {
+    const operation = this.#restart
+      .catch(() => {})
+      .then(() =>
+        runRuntimeStoppedMutation(options, {
+          stop: () => this.stop(),
+          start: () => this.start(),
+          assertReady: () => {
+            this.session();
+          },
+        }),
+      );
+    this.#restart = operation.then(() => {});
+    // The caller owns the result; observe the derived queue tail as well.
+    void this.#restart.catch(() => {});
+    return operation;
   }
 
   /** Updates cloud Agent profiles and restarts the runtime so they take effect. */

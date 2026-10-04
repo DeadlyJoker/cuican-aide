@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：原设置页的 Native 本地插件来源入口
+
+在 `a535e758a12665e4efc565643cb9d8d195d9f21c` 基线上补齐[本机目录导入](./native-local-plugin-source-import.md)。原 Settings 的「工具与扩展」新增可选 Native 能力；目录只由 Main 原生选择器提供，Renderer 只收到有界预览和一次性身份。原账号菜单、CommandWorkspace、侧栏、全局 CSS 和既有安装组件保持基线字节。实际 IAB 再次从原用户栏进入完整设置页；原折叠侧栏隐藏用户栏的行为未改。
+
+用户明确选择包信任和 UI 公开文件后，Main 在自重启前同步锁定精确确认，避免原 Control client/管理会话更新导致组件卸载取消自己的请求。原 Supervisor 重启队列串行 stop、物理清退、复制与原审批 CAS、start。预览取消只释放尚未批准的预览；真实文档或外部会话失效仍 abort 并 join 完整 IPC，包括提交后的启动。私有复制与实际安装分离，保留原 v1/v2/v3 项目审批；不自动安装、启用、执行、报价或授予业务权限。提交后启动失败返回已添加且待重启；首次审批硬链接残留只在完整私有身份吻合时安全冷恢复，不推广未提交 staging。
+
+最终核心/IPC/原 Bootstrap/Supervisor 组合 **5 文件、127/127、零跳过**；独立组件、原 Settings 和基础 CommandWorkspace **4 文件、82/82、零跳过**；原侧栏/CommandWorkspace 及旧 preload/Web 无能力回归 **16 文件、146/146、零跳过**，各组存在重叠，不求和。UI lint、抽取后的 Host 类型、原 Renderer/Host 构建与 boundary 通过。核心和私有文件模块分别保持约 600/400 行，不引入第二运行时或新构建系统。
+
+末尾校正新回执的 `restartRequired` 与实际 `runtimeStatus`，启动成功为 false、已提交但启动失败为 true；UI 严格核验两者一致。旧固定 true 的 UI guard 在窄回归中确实拒绝两个成功回执，修正后 Main IPC/组件组合 **2 文件、32/32、零跳过**，UI lint、Host 和 Renderer 最终构建通过。该失败日志也保留，不把重启成功再表示为必须重启。
+
+首次类型检查的测试字面量/变量初始化错误和新组件测试按钮定位错误已修复，日志保留。新增实际重启影响说明后，只更新该新组件预览快照对应的一行，最终再跑 **19/19**。首次 `pnpm test --` 实际误选全量：4,100 通过、10 失败、49 跳过，不称全量绿色；其中新组件的一项已在上述窄回归通过，七项旧 UI 基线失败见原界面阶段。另一个未修改的架构测试仍报告原 `AgentPlatformAuthGate.pim-generation.test.tsx` 引用；单 Worker 复核中原 soak 时限用例通过，架构项仍失败。未放宽旧断言、期限或删测试。当前阶段验证与保护记录位于 `output/extensions/checks/native-local-import-*.log/json`。
+
+本阶段有意重建正式 Renderer 以包含新入口，不沿用上一阶段「15 资产字节未变」声明。原 SDK/冻结包、旧发行包、生产映射和用户服务继续保留，primary 人类工作未编辑。原 AuthGate 的首次未登录/无审批门槛保持：新 route 支持 Control catalogue 尚未连接，不等于首次签出完整 App 可达性。新版真正 `.app` 的目录选择→导入→原安装/启用→模块→冷启动路径尚未专项验收。
+
+本轮未请求用户 ComfyUI 或生产财务服务；此前原 ComfyUI 404 事实保持，未反复探测。真实个人身份/入账/定价/失败规则、Native Krea2 公网生成/原 operation 查询、同次原完整 App 在线 S0、全部插件打包链路及用户指定实际企业 API 的 E5 仍未完成，完整目标 ACTIVE。
+
 ## 2026-10-04：实际财务 HTTPS、Worker Main 与原打包报告结算
 
 在 `622d071fb0333fe9b9e83b6357e5535fd5406c9a` 基线上增加[实际 HTTPS 验收](./native-plugin-credit-https-verification.md)，本阶段只改 test/support 和说明。原 Main、独立 0600 财务文件与 token refs、原 fetch/TLS 和原 Store 结算服务保持；不新增产品权限开关或改原 PDP。具名 HTTPS helper 使用原测试 CA，严格 scope/epoch/字段与 body 上限，并实际等待 server、socket close 事件和 handler promise 退场。

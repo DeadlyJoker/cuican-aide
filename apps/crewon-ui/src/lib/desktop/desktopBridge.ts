@@ -3,6 +3,7 @@ import type {
   DESKTOP_HTTP_VERSION,
 } from "./desktopHttpProtocol.ts";
 import type { DesktopPluginUiAssets } from "./desktopPluginUiProtocol.ts";
+import type { DesktopLocalPluginSourceImportClient } from "./desktopLocalPluginSourceImportProtocol.ts";
 export const DESKTOP_BRIDGE_VERSION = 1 as const;
 
 /**
@@ -70,6 +71,8 @@ export interface CrewonDesktopBridge {
   readonly version: typeof DESKTOP_BRIDGE_VERSION;
   /** Additive capability: older desktop preloads remain valid and cannot load installed UI assets. */
   readonly pluginUiAssets?: DesktopPluginUiAssets;
+  /** Additive Native chooser and approval capability; absent on Web and older preloads. */
+  readonly pluginSourceImports?: DesktopLocalPluginSourceImportClient;
   readonly agentPlatformCredentials: {
     catalog(): Promise<AgentPlatformCredentialCatalog>;
     upsert(
