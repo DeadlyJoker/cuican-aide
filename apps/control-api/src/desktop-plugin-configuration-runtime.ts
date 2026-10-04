@@ -44,6 +44,50 @@ export type DesktopPluginConfigurationRuntime = Readonly<{
   close(): Promise<void>;
 }>;
 
+type RuntimeBinding = Readonly<{
+  configuration: DesktopPluginConfiguration;
+  registry: DesktopPluginSourceRegistry;
+  authority: DesktopPluginAuthority;
+  installation: DesktopPluginInstallationRuntime;
+  activation: DesktopInstalledPluginActivationOwner | undefined;
+  store: SqliteRunStore;
+}>;
+const runtimes = new WeakMap<
+  object,
+  RuntimeBinding & Readonly<{ assertActive(): void }>
+>();
+
+/** An execution borrower must share the actual Native request/peer owner, not a copied runtime DTO. */
+export function assertDesktopPluginConfigurationRuntime(
+  value: unknown,
+  binding: RuntimeBinding,
+): asserts value is DesktopPluginConfigurationRuntime {
+  const issued =
+    value !== null && typeof value === "object"
+      ? runtimes.get(value)
+      : undefined;
+  if (
+    issued === undefined ||
+    issued.registry !== binding.registry ||
+    issued.authority !== binding.authority ||
+    issued.installation !== binding.installation ||
+    issued.activation !== binding.activation ||
+    issued.store !== binding.store ||
+    !same(
+      issued.configuration,
+      parseDesktopPluginConfiguration(binding.configuration),
+    )
+  )
+    denied();
+  issued.assertActive();
+  binding.authority.assertScope(
+    issued.configuration.actor,
+    issued.configuration.scope,
+  );
+  binding.installation.assertProfileOwnership(issued.configuration.actor);
+  issued.assertActive();
+}
+
 /** Native-owned SQLite configuration metadata, without execution or personal funding authority. */
 export async function createDesktopPluginConfigurationRuntime(
   input: Readonly<{
@@ -78,6 +122,7 @@ export async function createDesktopPluginConfigurationRuntime(
   )
     throw new Error("desktop_plugin_configuration_dependencies_invalid");
   const { authority, registry } = input;
+  const activation = input.activation;
   const clock = Object.freeze({
     now: dependencies.clock.now.bind(dependencies.clock),
   });
@@ -93,10 +138,10 @@ export async function createDesktopPluginConfigurationRuntime(
     store: dependencies.store,
   });
   const installation = input.installation;
-  if (input.activation !== undefined) {
-    if (!(input.activation instanceof DesktopInstalledPluginActivationOwner))
+  if (activation !== undefined) {
+    if (!(activation instanceof DesktopInstalledPluginActivationOwner))
       denied();
-    input.activation.assertBinding({
+    activation.assertBinding({
       configuration,
       registry,
       authority,
@@ -108,7 +153,7 @@ export async function createDesktopPluginConfigurationRuntime(
     authority.assertScope(actor, configuration.scope);
     installation.assertProfileOwnership(actor);
     authority.assertScope(actor, configuration.scope);
-    input.activation?.assertBinding({
+    activation?.assertBinding({
       configuration,
       registry,
       authority,
@@ -175,9 +220,7 @@ export async function createDesktopPluginConfigurationRuntime(
       },
       profiles,
       metadata,
-      ...(input.activation === undefined
-        ? {}
-        : { peer: input.activation.peer }),
+      ...(activation === undefined ? {} : { peer: activation.peer }),
     });
     const historyAuthorization =
       history === undefined
@@ -201,12 +244,12 @@ export async function createDesktopPluginConfigurationRuntime(
         const resource = value.resource;
         if (
           value.action === "extension:activate" &&
-          input.activation !== undefined &&
+          activation !== undefined &&
           resource.kind === "extension" &&
           resource.tenantId === configuration.scope.tenantId &&
           resource.spaceId === configuration.scope.spaceId
         ) {
-          const decision = await input.activation.authorizeActivate(
+          const decision = await activation.authorizeActivate(
             actor,
             resource.pluginId,
             current().currentSignal(),
@@ -272,17 +315,36 @@ export async function createDesktopPluginConfigurationRuntime(
     const actualRequests = requests,
       actualMetadata = metadata;
     let closing: Promise<void> | null = null;
-    return Object.freeze({
+    let closed = false;
+    const assertActive = () => {
+      if (closed) denied();
+    };
+    const runtime = Object.freeze({
       requests: actualRequests,
       extensions: configurationService,
       extensionReads: reads,
       ...(historyAuthorization === undefined ? {} : { historyAuthorization }),
-      close: () =>
-        (closing ??= closeAll([
+      close: () => {
+        closed = true;
+        return (closing ??= closeAll([
           () => actualRequests.close(),
           () => actualMetadata.close(),
-        ])),
+        ]));
+      },
     });
+    runtimes.set(
+      runtime,
+      Object.freeze({
+        configuration,
+        registry,
+        authority,
+        installation,
+        activation,
+        store: dependencies.store,
+        assertActive,
+      }),
+    );
+    return runtime;
   } catch (error) {
     try {
       await closeAll([() => requests?.close(), () => metadata?.close()]);

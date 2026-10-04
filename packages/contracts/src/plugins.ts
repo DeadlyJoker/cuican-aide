@@ -52,6 +52,15 @@ export {
   type DesktopInstalledPluginActivationEntry,
 } from "./desktop-installed-plugin-activation-configuration.ts";
 export {
+  DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_SCHEMA,
+  DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_MAX_BYTES,
+  DesktopInstalledPluginTaskConfigurationError,
+  parseDesktopInstalledPluginTaskConfiguration,
+  type DesktopInstalledPluginTaskConfiguration,
+  type DesktopInstalledPluginTaskAuthorityReference,
+  type DesktopInstalledPluginTaskUiPublication,
+} from "./desktop-installed-plugin-task-configuration.ts";
+export {
   NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_SCHEMA,
   NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_MAX_BYTES,
   parseNativeInstalledPluginPreparationResult,

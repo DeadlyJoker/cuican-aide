@@ -6,6 +6,14 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 独立任务执行配置与真实工厂
+
+已增加独立 `crewon.desktop-installed-plugin-tasks.v1`、实际私有文件 loader 和 Native 任务 authority，严格绑定同一真实 configuration/request/activation owner、安装源和 SQLite。原启用审批不授予任务、UI、执行包、报价或资金权限；可信程序可以通过原 Native factory 提交已安装 Node action，沿原 Application/Turn/Run/个人积分事务执行。原键重放不重复预留，关闭等待真实物理调用，COMMIT 后保留原 opaque 回执。必需 Host 服务的 deferred 接线只跟随实际 private brand，布尔端口不能伪装就绪。具体协议与边界见[Native 任务执行接线](./native-installed-plugin-task-execution.md)。
+
+新契约/loader **38/38**、完整 Contracts **388/388**、原 Native 配置/启用 **35/35**、独立 authority/真实 Native factory **27/27**、新/原必需 Host 窄组合 **42/42**、完整 Host **308/308**、原 Native history/recovery/core **65/65**和原 Standalone Main 两次实际启动 **1/1**通过，各组重叠、不相加，最终均零失败和零跳过。类型、boundary、license、格式和 diff 检查通过；原失败夹具日志保留，产品批准和事务条件未放宽。统一证据为 `output/extensions/checks/native-task-execution-proof-20261004.json`。
+
+实际 factory 测试的身份/PDP、peer readiness、个人测试积分和报价为明确具名夹具，没有 Worker、模型、供应商或真实资金调用；原 Main 回归没有打开新任务配置。Main/Electron FileIssued opt-in、HTTP 任务读取的独立授权、Native 短剧生成/查询与三类恢复、真实资金/价格/结算、可用 ComfyUI 在线 S0、打包完整链路和 E5 尚未完成。原 UI/用户栏/设置/侧栏源码与正式资产、冻结 SDK tarball、生产映射及短剧 8/9/10 包摘要一致；Host 类型脚本曾隐式重建 SDK，但未改变 SDK 源码或冻结包。本轮未重建前端、未更新用户配置、未重新轮询原 ComfyUI，原用户服务保留，设置页再次实际打开。
+
 ## 2026-10-04：共享安装任务核心与 SQLite 执行机制
 
 将原 Production 任务、生成和查询的实际 Application/owner 装配提取为共享核心，支持原 SQLite/PostgreSQL 并借用实际签发的 request owner；宿主显式提供 profile、授权和报价。Production 身份、严格配置、peer 与 HTTP authority 保留。核心不创建钱包、资金或身份，metadata-only 仍不能执行；关闭等待真实操作，迟到读取拒绝，真实 COMMIT 保留原 opaque 成功回执。Native Main 的执行 opt-in、生成/查询 owner 和三类恢复尚未接通，不能因共享机制完成而标记短剧可执行。协议与验证范围见[共享任务核心](./installed-plugin-task-runtime-core.md)。

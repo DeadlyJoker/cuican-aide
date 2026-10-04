@@ -188,6 +188,21 @@ export class DesktopInstalledPluginActivationOwner {
         return this.#prepared(result, signal);
       }),
   });
+  /** Borrowing the peer requires this exact issued activation configuration; it lends no task permission. */
+  assertTaskPeerBorrow(
+    input: Pick<
+      OwnerDependencies,
+      | "configuration"
+      | "registry"
+      | "authority"
+      | "installation"
+      | "store"
+      | "activation"
+    >,
+  ): void {
+    if (input.activation !== this.#dependencies.activation) denied();
+    this.assertBinding(input);
+  }
   authorizeActivate(
     actor: ActorContext,
     pluginId: string,

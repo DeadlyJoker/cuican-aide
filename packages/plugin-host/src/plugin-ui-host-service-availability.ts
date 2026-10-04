@@ -23,6 +23,7 @@ import {
   type PluginServiceRequirement,
 } from "@crewon/contracts/plugins";
 import type { PluginActivationCandidate } from "./plugin-node-host.ts";
+import { preserveDeferredPluginUiHostServiceAvailability } from "./plugin-ui-deferred-host-service-availability.ts";
 import {
   hasProjectGenerationHostAvailability,
   preserveProjectGenerationHostAvailability,
@@ -84,9 +85,12 @@ export function capturePluginUiHostServiceAvailability(
       },
     }),
   );
-  return preserveProjectGenerationQueryHostAvailability(
+  return preserveDeferredPluginUiHostServiceAvailability(
     port,
-    preserveProjectGenerationContextHostAvailability(port, result),
+    preserveProjectGenerationQueryHostAvailability(
+      port,
+      preserveProjectGenerationContextHostAvailability(port, result),
+    ),
   );
 }
 

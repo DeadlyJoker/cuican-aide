@@ -86,6 +86,10 @@ export {
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
 export {
+  createDeferredPluginUiHostServiceAvailability,
+  type DeferredPluginUiHostServiceAvailability,
+} from "./plugin-ui-deferred-host-service-availability.ts";
+export {
   PluginExecutionRegistry,
   PluginExecutionRegistryError,
 } from "./plugin-execution-registry.ts";

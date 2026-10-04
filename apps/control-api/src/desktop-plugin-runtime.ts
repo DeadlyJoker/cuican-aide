@@ -10,6 +10,7 @@ import {
 } from "@crewon/application";
 import {
   LocalPluginUiPackageReader,
+  createDeferredPluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
@@ -52,20 +53,30 @@ import {
   prepareDesktopPluginUiRecovery,
   type DesktopPluginUiRecoveryRuntime,
 } from "./desktop-plugin-ui-recovery.ts";
+import type { DesktopInstalledPluginTaskConfig } from "./desktop-installed-plugin-task-environment.ts";
+import {
+  assertDesktopInstalledPluginTaskComposition,
+  createDesktopInstalledPluginTaskRuntime,
+  type DesktopInstalledPluginTaskRuntime,
+} from "./desktop-installed-plugin-task-runtime.ts";
+import type { InstalledPluginTaskRuntimeCore } from "./installed-plugin-task-runtime-core.ts";
+import { pluginSecurityUiRequest } from "./plugin-security-validation.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
   sources: PluginSourceControlService;
   ui: PluginUiControlService;
   configuration: DesktopPluginConfigurationRuntime;
+  tasks?: InstalledPluginTaskRuntimeCore;
   close(): Promise<void>;
 }>;
 
-/** Native metadata and explicitly approved cold history; no task, funding or model permission. */
+/** Native metadata/history and independent task opt-in; this factory never funds accounts. */
 export async function createDesktopPluginRuntime(
   input: Readonly<{
     configuration: DesktopPluginConfiguration;
     activation?: DesktopInstalledPluginActivationConfig;
+    tasks?: DesktopInstalledPluginTaskConfig;
     uiRecovery?: PluginUiRecoveryConfiguration;
   }>,
   dependencies: Readonly<{
@@ -74,6 +85,7 @@ export async function createDesktopPluginRuntime(
     clock: ApplicationClock;
     digester: ContentDigester;
     creativeProjects?: PreparedCreativeProjects;
+    fetch?: typeof globalThis.fetch;
   }>,
 ): Promise<DesktopPluginRuntime> {
   if (!(dependencies.store instanceof SqliteRunStore))
@@ -81,10 +93,26 @@ export async function createDesktopPluginRuntime(
   if (!(dependencies.identity instanceof StandaloneIdentity))
     throw new Error("desktop_plugin_identity_required");
   const configuration = parseDesktopPluginConfiguration(input.configuration);
-  if (dependencies.creativeProjects?.pluginGenerations !== undefined)
+  const tasks = input.tasks;
+  const activationConfiguration = input.activation;
+  if (
+    tasks === undefined &&
+    dependencies.creativeProjects?.pluginGenerations !== undefined
+  )
     throw new Error("desktop_project_generation_execution_authority_required");
-  if (dependencies.creativeProjects?.pluginQueries !== undefined)
+  if (
+    tasks === undefined &&
+    dependencies.creativeProjects?.pluginQueries !== undefined
+  )
     throw new Error("desktop_project_query_execution_authority_required");
+  if (tasks !== undefined)
+    assertDesktopInstalledPluginTaskComposition({
+      configuration,
+      tasks,
+      activation: activationConfiguration,
+      creativeProjects: dependencies.creativeProjects,
+      digester: dependencies.digester,
+    });
   const recoveryConfiguration = assertDesktopPluginUiRecoveryConfiguration({
     configuration: input.uiRecovery,
     publications: configuration.publications,
@@ -107,10 +135,17 @@ export async function createDesktopPluginRuntime(
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
+  let taskRuntime: DesktopInstalledPluginTaskRuntime | undefined;
+  const deferredServices =
+    tasks === undefined
+      ? undefined
+      : createDeferredPluginUiHostServiceAvailability();
   const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (input) =>
       (
         recovery?.hostUiServices ??
+        taskRuntime?.core.projectQueries?.hostUiServices ??
+        taskRuntime?.core.projectGenerations?.hostUiServices ??
         history?.hostUiServices ??
         projectUi?.hostUiServices
       )?.isAvailable(input) ?? false,
@@ -140,18 +175,21 @@ export async function createDesktopPluginRuntime(
         store: dependencies.store,
         clock: dependencies.clock,
         digester: dependencies.digester,
-        hostUiServices,
+        hostUiServices: deferredServices?.port ?? hostUiServices,
       },
     );
-    if (input.activation !== undefined) {
-      activation = new DesktopInstalledPluginActivationOwner({
-        configuration,
-        activation: input.activation,
-        registry,
-        authority,
-        installation,
-        store: dependencies.store,
-      });
+    if (activationConfiguration !== undefined) {
+      activation = new DesktopInstalledPluginActivationOwner(
+        {
+          configuration,
+          activation: activationConfiguration,
+          registry,
+          authority,
+          installation,
+          store: dependencies.store,
+        },
+        { fetch: dependencies.fetch },
+      );
       installation.bindActivation(activation);
     }
     configurationRuntime = await createDesktopPluginConfigurationRuntime(
@@ -178,6 +216,43 @@ export async function createDesktopPluginRuntime(
         ? {}
         : { fallback: projectUi.hostUiServices }),
     });
+    if (tasks !== undefined) {
+      if (activation === null || activationConfiguration === undefined)
+        throw new ApplicationError(
+          "authorization",
+          "desktop_plugin_task_authority_unavailable",
+        );
+      taskRuntime = await createDesktopInstalledPluginTaskRuntime(
+        {
+          configuration,
+          tasks,
+          activation: activationConfiguration,
+          activationOwner: activation,
+          installed: configurationRuntime,
+          registry,
+          authority,
+          installation,
+          store: dependencies.store,
+        },
+        {
+          clock: dependencies.clock,
+          digester: dependencies.digester,
+          creativeProjects: dependencies.creativeProjects,
+          fetch: dependencies.fetch,
+          ...(history?.hostUiServices === undefined && projectUi === undefined
+            ? {}
+            : {
+                metadataHostUiServices:
+                  history?.hostUiServices ?? projectUi!.hostUiServices,
+              }),
+        },
+      );
+    }
+    const businessHostUiServices =
+      taskRuntime?.core.projectQueries?.hostUiServices ??
+      taskRuntime?.core.projectGenerations?.hostUiServices ??
+      history?.hostUiServices ??
+      projectUi?.hostUiServices;
     recovery = await prepareDesktopPluginUiRecovery({
       configuration: recoveryConfiguration,
       publications: configuration.publications,
@@ -187,13 +262,16 @@ export async function createDesktopPluginRuntime(
       selection: history?.selectionRuntime?.owner,
       clock: dependencies.clock,
       digester: dependencies.digester,
-      ...(history?.hostUiServices === undefined && projectUi === undefined
+      ...(businessHostUiServices === undefined
         ? {}
-        : { fallback: history?.hostUiServices ?? projectUi!.hostUiServices }),
+        : { fallback: businessHostUiServices }),
       onDiagnostic: () => {
         process.emitWarning("plugin_ui_recovery_persistence_failed");
       },
     });
+    deferredServices?.bind(
+      recovery?.hostUiServices ?? businessHostUiServices ?? hostUiServices,
+    );
     let closed = false;
     let closing: Promise<void> | null = null;
     const physical = new Set<Promise<unknown>>();
@@ -245,6 +323,14 @@ export async function createDesktopPluginRuntime(
           return projectUi.owner.actions.invoke(context);
         if (history?.selectionRuntime?.owner.supportsAction(context.action))
           return history.selectionRuntime.owner.actions.invoke(context);
+        if (
+          taskRuntime?.core.projectGenerations?.supportsAction(context.action)
+        )
+          return taskRuntime.core.projectGenerations.actions.invoke(context);
+        if (taskRuntime?.core.projectQueries?.supportsAction(context.action))
+          return taskRuntime.core.projectQueries.actions.invoke(context);
+        if (taskRuntime !== undefined)
+          return taskRuntime.core.owner.actions.invoke(context);
         throw new ApplicationError("conflict", "plugin_ui_actions_unavailable");
       },
     };
@@ -253,11 +339,27 @@ export async function createDesktopPluginRuntime(
       clock: dependencies.clock,
       packages,
       profiles: { resolve: (actor) => authority.profile(actor) },
-      authorization: authority.ui,
+      authorization: {
+        authorize: (provided) => {
+          const request = pluginSecurityUiRequest(provided);
+          const taskPackage =
+            tasks?.publication.uiPublications.some(
+              (grant) =>
+                grant.pluginId === request.resource.pluginId &&
+                grant.packageDigest === request.resource.packageDigest,
+            ) === true;
+          return taskPackage && taskRuntime !== undefined
+            ? taskRuntime.authority.uiAuthorization.authorize(request)
+            : authority.ui.authorize(request);
+        },
+      },
       ids: { nextId: () => randomBytes(32).toString("base64url") },
       actions:
         history?.readRuntime?.owner.actions(businessActions) ?? businessActions,
       ...(recovery === undefined ? {} : { recovery: recovery.service }),
+      ...(taskRuntime === undefined
+        ? {}
+        : { committedTasks: taskRuntime.core.owner.committedTasks }),
       ...(history?.selectionRuntime === undefined && projectUi === undefined
         ? {}
         : {
@@ -304,10 +406,14 @@ export async function createDesktopPluginRuntime(
             recoveryAuthenticatedRequest: recovery.run,
           }),
       invoke: (...args) => {
-        if (projectUi === undefined && history?.selectionRuntime === undefined)
+        if (
+          projectUi === undefined &&
+          history?.selectionRuntime === undefined &&
+          taskRuntime === undefined
+        )
           return call(() => application.invoke(...args));
         available();
-        // Only Application's opaque committed metadata path can bypass the late current fence.
+        // Only Application's genuine committed outcomes can bypass the late current fence.
         const result = application.invoke(...args);
         physical.add(result);
         void result.finally(() => physical.delete(result)).catch(() => {});
@@ -315,7 +421,8 @@ export async function createDesktopPluginRuntime(
       },
       ...(history?.readRuntime === undefined &&
       history?.selectionRuntime === undefined &&
-      recovery === undefined
+      recovery === undefined &&
+      taskRuntime === undefined
         ? {}
         : {
             invokeAuthenticatedRequest: ((request, actor, command, signal) => {
@@ -326,6 +433,28 @@ export async function createDesktopPluginRuntime(
                   : recovery.run(request, actor, signal, () =>
                       ui.invoke(actor, command),
                     );
+              if (projectUi?.owner.supportsAction(command.action))
+                return invoke();
+              if (
+                command.action === "crewon.project-generations" ||
+                command.action.startsWith("crewon.project-generations.") ||
+                command.action === "crewon.project-generation-contexts" ||
+                command.action.startsWith(
+                  "crewon.project-generation-contexts.",
+                ) ||
+                command.action === "crewon.project-generation-queries" ||
+                command.action.startsWith("crewon.project-generation-queries.")
+              ) {
+                if (taskRuntime === undefined)
+                  throw new ApplicationError(
+                    "conflict",
+                    "plugin_ui_actions_unavailable",
+                  );
+                return taskRuntime.core.requests.run(
+                  { request, actor, signal },
+                  invoke,
+                );
+              }
               if (
                 command.action === "crewon.project-generation-reads" ||
                 command.action.startsWith("crewon.project-generation-reads.")
@@ -362,6 +491,11 @@ export async function createDesktopPluginRuntime(
                   invoke,
                 );
               }
+              if (taskRuntime !== undefined)
+                return taskRuntime.core.requests.run(
+                  { request, actor, signal },
+                  invoke,
+                );
               return invoke();
             }) satisfies NonNullable<
               PluginUiControlService["invokeAuthenticatedRequest"]
@@ -376,11 +510,14 @@ export async function createDesktopPluginRuntime(
       sources: ownedInstallation.service,
       ui,
       configuration: ownedConfiguration,
+      ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),
       close: () => {
         if (closing !== null) return closing;
         closed = true;
+        deferredServices?.close();
         authority.withdraw();
         return (closing = closeAll([
+          () => taskRuntime?.close(),
           () => Promise.allSettled([...physical]),
           () => recovery?.close(),
           () => projectUi?.close(),
@@ -392,9 +529,11 @@ export async function createDesktopPluginRuntime(
       },
     });
   } catch (error) {
+    deferredServices?.close();
     authority.withdraw();
     try {
       await closeAll([
+        () => taskRuntime?.close(),
         () => recovery?.close(),
         () => projectUi?.close(),
         () => history?.close(),

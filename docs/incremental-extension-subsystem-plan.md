@@ -2,7 +2,7 @@
 
 状态：已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
-2026-10-04 最新范围：独立短剧 9.0.0 已通过原完整 Web App/Main/BFF 的三类原请求冷恢复和实际选用重启重放，生成/查询仅 stage 与 hydrate。Native 已增量接通独立私有审批 v2、Main、历史读取和选用恢复日志，保留 v1 与原前端；具体范围见[Native 接线](./native-plugin-history-integration.md)。原任务/生成/查询装配现已提取为支持实际 SQLite/PostgreSQL 的[共享任务核心](./installed-plugin-task-runtime-core.md)，真实 SQLite 和原 Production 进程验证通过，Native 执行 opt-in 尚未接通。[精确证据与未完成项](./incremental-extension-progress.md)保留 S0/E5、Native 付费执行及打包全链路、真实钱包/定价及外部 API 的验收边界。
+2026-10-04 最新范围：独立短剧 9.0.0 已通过原完整 Web App/Main/BFF 的三类原请求冷恢复和实际选用重启重放，生成/查询仅 stage 与 hydrate。Native 已增量接通独立私有审批 v2、Main、历史读取和选用恢复日志，保留 v1 与原前端；具体范围见[Native 接线](./native-plugin-history-integration.md)。原任务/生成/查询装配已提取为支持实际 SQLite/PostgreSQL 的[共享任务核心](./installed-plugin-task-runtime-core.md)。新增[Native 独立任务执行配置与真实工厂](./native-installed-plugin-task-execution.md)，实际已安装 Node action、原 SQLite Run/个人积分预留和重放验证通过；正式 Main/Electron 的 FileIssued 执行 opt-in、Native 短剧生成/查询和三类恢复仍待接通。[精确证据与未完成项](./incremental-extension-progress.md)保留 S0/E5、Native 付费执行及打包全链路、真实钱包/定价及外部 API 的验收边界。
 
 2026-10-02 范围补充：用户明确插件必须可插拔，可独立开发并安装。下文 E0–E5 的静态调用试点是已有阶段范围；随宿主构建与排除动态安装的约束不再代表最终交付。后续优先按[可安装插件协议与实施顺序](./installable-plugin-protocol-plan.md)补齐公开 SDK、实际包安装与 Node/UI 加载，再把短剧业务模块作为独立包接入；现有首页、团队、聊天及旧执行绑定保持兼容。
 
