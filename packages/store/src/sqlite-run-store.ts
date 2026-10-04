@@ -6,6 +6,7 @@ import type { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import { createSqlitePluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
+import { SqlitePluginCreditSettlementStore } from "./sqlite-plugin-credit-settlement-store.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
 import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
 import { captureSqliteInstallationDatabase } from "./sqlite-plugin-installation-profile-lock.ts";
@@ -709,6 +710,15 @@ export class SqliteRunStore implements DomainStore {
   /** Shares the parent connection and lifetime; credit migration and funding remain explicit. */
   pluginCreditStore(): SqlitePluginCreditStore {
     return createSqlitePluginCreditStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Original Run/credit connection; settlement migration and authority remain explicit. */
+  pluginCreditSettlementStore(): SqlitePluginCreditSettlementStore {
+    this.#assertOpen();
+    return new SqlitePluginCreditSettlementStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
     });

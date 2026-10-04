@@ -5,6 +5,7 @@ import type { ProjectGenerationImageResultVerifier } from "@crewon/application";
 import { PostgresExtensionStore } from "./postgres-extension-store.ts";
 import { createPostgresPluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
+import { PostgresPluginCreditSettlementStore } from "./postgres-plugin-credit-settlement-store.ts";
 import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
@@ -200,6 +201,16 @@ export class PostgresDomainStore
   pluginCreditStore(): PostgresPluginCreditStore {
     this.assertOpen();
     return new PostgresPluginCreditStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Original Run/credit pool and lifetime; no migration, funding or policy during construction. */
+  pluginCreditSettlementStore(): PostgresPluginCreditSettlementStore {
+    this.assertOpen();
+    return new PostgresPluginCreditSettlementStore({
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
