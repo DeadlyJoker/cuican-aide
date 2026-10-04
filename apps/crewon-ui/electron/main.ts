@@ -13,6 +13,8 @@ import {
 } from "electron";
 import electronUpdater from "electron-updater";
 
+declare const __CREWON_DESKTOP_TRUSTED_ACCOUNT_ORIGIN__: string | null;
+
 import type {
   DesktopHttpRequest,
   DesktopUpdateProgress,
@@ -346,7 +348,12 @@ function registerIpc(options: {
     sandbox,
     window,
   } = options;
-  const desktopHttp = new DesktopHttpTransport();
+  const desktopHttp = new DesktopHttpTransport({
+    trustedAccountOrigin:
+      typeof __CREWON_DESKTOP_TRUSTED_ACCOUNT_ORIGIN__ === "undefined"
+        ? null
+        : __CREWON_DESKTOP_TRUSTED_ACCOUNT_ORIGIN__,
+  });
   const handle = <T extends unknown[]>(
     channel: string,
     listener: (...args: T) => unknown,

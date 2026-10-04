@@ -70,6 +70,27 @@ coordinator, device gateway, and local workspace MCP into
 `apps/crewon-ui/desktop-resources/runtime`, then bundles them with the Electron
 host and React renderer. No native backend is built or shipped.
 
+## Account backend in packaged builds
+
+The renderer and Electron host must use the same public account backend when
+building a desktop package. A development proxy path such as `/agent-platform`
+is replaced with `VITE_AGENT_PLATFORM_RUNTIME_BASE_URL`, falling back to
+`CREWON_AGENT_PLATFORM_TARGET` and then the existing local backend. An absolute
+`VITE_AGENT_PLATFORM_BASE_URL` or `VITE_AGENT_PLATFORM_API_BASE_URL` keeps its
+configured destination.
+
+For a package using the existing hosted account service:
+
+```bash
+CREWON_AGENT_PLATFORM_TARGET=https://pim.aicuican.com pnpm --filter @crewon/ui desktop:pack
+```
+
+The host derives one exact HTTPS account origin from these public build inputs.
+The desktop HTTP bridge otherwise keeps its original loopback restriction,
+response limits, TLS checks and redirect rejection. The origin does not come
+from renderer requests, and a different host, subdomain or port is rejected.
+No account credentials are included in the build configuration.
+
 ## Updating
 
 `electron-updater` reads the GitHub release metadata configured in

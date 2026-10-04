@@ -330,6 +330,68 @@ describe("desktop HTTP pull transport", () => {
     });
     expect(await transport.read(input.requestId)).toEqual({ type: "end" });
   });
+  it("rejects the public account service unless its origin is explicitly trusted", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    vi.stubGlobal("fetch", fetch);
+    const transport = owner();
+    await expect(
+      transport.fetch(
+        request({ url: "https://pim.aicuican.com/api/v1/auth/wecom/config" }),
+      ),
+    ).rejects.toThrow("desktop_http_url_invalid");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("uses the explicit account origin while preserving loopback requests and redirect rejection", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () => new Response(null),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const transport = owner({
+      trustedAccountOrigin: "https://pim.aicuican.com",
+    });
+    for (const url of [
+      "https://pim.aicuican.com/api/v1/health",
+      "https://pim.aicuican.com/api/v1/auth/wecom/config",
+      "https://pim.aicuican.com/api/v1/auth/login",
+      "http://127.0.0.1:3210/api/v1/health/live",
+    ]) {
+      const input = request({ url });
+      await transport.fetch(input);
+      expect(fetch.mock.calls.at(-1)![0]).toBe(url);
+      expect(fetch.mock.calls.at(-1)![1]).toMatchObject({ redirect: "error" });
+      expect(await transport.read(input.requestId)).toEqual({ type: "end" });
+    }
+  });
+  it("does not extend account trust to another host, subdomain, port, scheme or URL credentials", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    vi.stubGlobal("fetch", fetch);
+    const transport = owner({
+      trustedAccountOrigin: "https://pim.aicuican.com",
+    });
+    for (const url of [
+      "https://example.com/api/v1/auth/me",
+      "https://login.pim.aicuican.com/api/v1/auth/me",
+      "https://pim.aicuican.com.example/api/v1/auth/me",
+      "https://pim.aicuican.com:8443/api/v1/auth/me",
+      "http://pim.aicuican.com/api/v1/auth/me",
+      "https://user:password@pim.aicuican.com/api/v1/auth/me",
+    ])
+      await expect(transport.fetch(request({ url }))).rejects.toThrow(
+        "desktop_http_url_invalid",
+      );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("rejects invalid account origin configuration before admitting requests", () => {
+    for (const trustedAccountOrigin of [
+      "http://pim.aicuican.com",
+      "https://pim.aicuican.com/api",
+      "https://pim.aicuican.com?session=fixture",
+      "https://user:password@pim.aicuican.com",
+    ])
+      expect(() => owner({ trustedAccountOrigin })).toThrow(
+        "desktop_http_account_origin_invalid",
+      );
+  });
   it("finishes bodyless statuses and releases failed handshakes", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>();
     vi.stubGlobal("fetch", fetch);

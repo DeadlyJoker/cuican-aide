@@ -56,6 +56,121 @@ describe("agent-platform base URL", () => {
     expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
   });
 
+  it("uses the configured runtime backend for packaged desktop login and Agent invocation", () => {
+    stubLocation(
+      "file:///Applications/CrewON.app/Contents/Resources/app.asar/dist/index.html",
+      { desktop: true },
+    );
+    vi.stubEnv(
+      "VITE_AGENT_PLATFORM_RUNTIME_BASE_URL",
+      "https://pim.aicuican.com",
+    );
+
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
+    expect(agentPlatformInvocationUrl("/api/v1/open/agent/93/chat")).toBe(
+      "https://pim.aicuican.com/api/v1/open/agent/93/chat",
+    );
+  });
+
+  it.each([
+    "file:///C:/Program%20Files/CrewON/resources/index.html",
+    "http://crewon.localhost/",
+  ])("uses the configured runtime backend without a proxy at %s", (href) => {
+    stubLocation(href, { desktop: true });
+    vi.stubEnv("VITE_AGENT_PLATFORM_BASE_URL", "/custom-proxy");
+    vi.stubEnv(
+      "VITE_AGENT_PLATFORM_RUNTIME_BASE_URL",
+      " https://platform.example/backend/ ",
+    );
+
+    expect(agentPlatformBaseUrl()).toBe("https://platform.example/backend");
+  });
+
+  it.each(["", "   "])(
+    "keeps the local fallback for an empty runtime backend %j",
+    (backend) => {
+      stubLocation(
+        "file:///Applications/CrewON.app/Contents/Resources/index.html",
+        { desktop: true },
+      );
+      vi.stubEnv("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL", backend);
+
+      expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    },
+  );
+
+  it("keeps the development proxy with a configured runtime backend", () => {
+    stubLocation("http://127.0.0.1:5175/", { desktop: true });
+    vi.stubEnv(
+      "VITE_AGENT_PLATFORM_RUNTIME_BASE_URL",
+      "https://pim.aicuican.com",
+    );
+
+    expect(agentPlatformBaseUrl()).toBe("/agent-platform-api");
+  });
+
+  it("keeps an absolute base override ahead of the runtime backend", () => {
+    stubLocation(
+      "file:///Applications/CrewON.app/Contents/Resources/index.html",
+      { desktop: true },
+    );
+    vi.stubEnv("VITE_AGENT_PLATFORM_BASE_URL", "https://platform.example/api/");
+    vi.stubEnv(
+      "VITE_AGENT_PLATFORM_RUNTIME_BASE_URL",
+      "https://pim.aicuican.com",
+    );
+
+    expect(agentPlatformBaseUrl()).toBe("https://platform.example/api");
+    expect(agentPlatformInvocationUrl("/api/v1/open/agent/93/chat")).toBe(
+      "https://platform.example/api/v1/open/agent/93/chat",
+    );
+  });
+
+  it.each([
+    "http://127.0.0.1:8000/",
+    "http://localhost:8000/",
+    "http://[::1]:8000/",
+  ])("preserves the explicit loopback runtime backend %s", (backend) => {
+    stubLocation(
+      "file:///Applications/CrewON.app/Contents/Resources/index.html",
+      { desktop: true },
+    );
+    vi.stubEnv("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL", backend);
+
+    expect(agentPlatformBaseUrl()).toBe(backend.slice(0, -1));
+  });
+
+  it.each([
+    "/agent-platform-api",
+    "//platform.example",
+    "https:platform.example",
+    "file:///tmp/platform",
+    "javascript:alert(1)",
+    "http://platform.example",
+    "https://user:password@platform.example",
+    "https://@platform.example",
+    "https://platform.example/?session=value",
+    "https://platform.example/?",
+    "https://platform.example/#fragment",
+    "https://platform.example/#",
+    "https://platform.example/inner\npath",
+    "https://platform.example:70000",
+    `https://platform.example/${"x".repeat(2_048)}`,
+  ])("rejects an invalid configured runtime backend %j", (backend) => {
+    stubLocation(
+      "file:///Applications/CrewON.app/Contents/Resources/index.html",
+      { desktop: true },
+    );
+    vi.stubEnv("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL", backend);
+
+    expect(() => agentPlatformBaseUrl()).toThrow(
+      "agent_platform_invocation_url_invalid",
+    );
+    expect(() =>
+      agentPlatformInvocationUrl("/api/v1/open/agent/93/chat"),
+    ).toThrow("agent_platform_invocation_url_invalid");
+  });
+
   it("leaves an absolute override alone in a packaged build", () => {
     // A deployment pointing at a hosted backend must survive packaging.
     stubLocation(

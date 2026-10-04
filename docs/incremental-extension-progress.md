@@ -6,6 +6,18 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：新 ComfyUI 地址与桌面代码同步
+
+用户明确将积分后置，先确认可用，并要求基础功能保持原版一致。新的无鉴权 ComfyUI 地址为 `https://u564342-7908818e1ac4.westd.seetacloud.com:8443/`；实际 `/queue`、`/system_stats` 和工作流节点/模型读取成功。使用用户原 Krea2 API 工作流、明确的单张 1MP 验证输入，真实提交一次 POST，操作 `e90c0ad2-d1ae-4930-bd22-c31040691be3` 经 running 到 succeeded，取得 **768×1368 PNG**。图片与完整回执位于 `output/extensions/checks/comfyui-new-address-live-20261004/`；节点兼容检查为 `comfyui-krea2-new-service-object-info-20261004.json`。这是实际外部 API 流程验证，不冒称正式短剧插件、个人积分或完整 App 生成闭环已经验收。
+
+本机 `/Applications/CrewON.app` 的真实版本原为 **0.1.7**，没有当前源码的完整构建身份。按用户要求，从当前 managed 源码重新构建 **0.1.8**，实际替换本机安装。发现并修复两处打包账号连接问题：Renderer 的相对代理路径在 packaged 页面错误退回本地 8000；新的有界 HTTP bridge 默认只接受 loopback，因此合法原账号服务 HTTPS 请求也被拒绝。现复用同一公开构建配置得到真实账号 backend，Main 仅额外允许该精确 HTTPS origin。其他远端、子域、端口及 URL 凭据继续拒绝，TLS、重定向拒绝及原传输预算保持。构建方式见[桌面交付说明](./desktop-release.md)。
+
+最终实际完整 pack、八文件 **179/179** 回归、Renderer/Host 类型检查、boundary 和仓库格式检查通过。另以原 DesktopHttpTransport 对原账号服务公开 health 进行无凭据 GET，实际返回 200、流读取结束并释放全部预算。最终安装的 app.asar 及七个 Runtime bundle 均与本次生成的安装包字节一致；证据为 `output/extensions/checks/desktop-source-sync-install-current.json`。原包和完整原用户数据均保留在 gitignored 私有备份目录，错误启动阶段的数据也各自保留；最终启动前恢复原完整用户数据。
+
+实际 Native 窗口已恢复原账号和历史会话，账号菜单可进入原十类设置；“工具与扩展”出现真实“选择本机插件目录”入口。原左右栏可打开和折叠，主内容随左栏展开重新占位，没有插件遮罩。最终截图为 `desktop-source-sync-original-shell-20261004.png`、`desktop-source-sync-sidebar-collapsed-20261004.png` 及 `desktop-source-sync-tools-20261004.png`。13 个原账号/设置/左右栏与样式文件、5 个原路由、60 个 SDK 源文件、冻结 SDK tarball、九个原发行包、生产映射、五个用户 Web 服务及 primary 人类工作均通过保留核对。没有改原界面 CSS、导航或基础功能实现。
+
+本机此环境尚未开启插件管理，个人插件积分尚未接通；本轮没有添加信任、安装、启用插件，也没有新增 Agent 任务。桌面源码同步及真实外部 API 恢复已完成；完整插件目标仍有原先剩余工作，积分按用户要求后置，不把本轮验收扩大为完整目标完成。
+
 ## 2026-10-04：当前真实接入前置复核
 
 在 `9373c8e8ea17dac4f2a70446e8837f65ce13a837` 当前源码上复核，独立短剧 11 的自动记录读取已经提交；上一目标回合完成实现、实际检查及提交，属于有进展。完整目标仍 ACTIVE。本轮未发现需要新增 Krea2 执行协议的代码缺陷，现有 Worker 已有真实网络授权、固定公开 HTTPS 传输和原 operation 查询；Native 专项的 metadata-only 拒绝是具名测试边界，不能据此声称正式执行缺少实现。

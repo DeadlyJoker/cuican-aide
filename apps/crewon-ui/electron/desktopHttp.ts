@@ -7,6 +7,7 @@ import {
   isDesktopEventStream,
   type DesktopHttpReadResult,
 } from "../src/lib/desktop/desktopHttpProtocol.ts";
+import { parseDesktopTrustedAccountOrigin } from "./desktopAccountOrigin.ts";
 
 type RequestState = {
   id: string;
@@ -30,7 +31,16 @@ export class DesktopHttpTransport {
   readonly #requests = new Map<string, RequestState>();
   #requestBytes = 0;
   readonly #consumerIdleMs: number;
-  constructor(options: { consumerIdleMs?: number } = {}) {
+  readonly #trustedAccountOrigin: string | null;
+  constructor(
+    options: {
+      consumerIdleMs?: number;
+      trustedAccountOrigin?: string | null;
+    } = {},
+  ) {
+    this.#trustedAccountOrigin = parseDesktopTrustedAccountOrigin(
+      options.trustedAccountOrigin,
+    );
     this.#consumerIdleMs = options.consumerIdleMs ?? limits.consumerIdleMs;
     if (
       !Number.isSafeInteger(this.#consumerIdleMs) ||
@@ -50,7 +60,7 @@ export class DesktopHttpTransport {
   }
 
   async fetch(request: DesktopHttpRequest): Promise<DesktopHttpResponse> {
-    validateRequest(request);
+    validateRequest(request, this.#trustedAccountOrigin);
     if (this.#requests.has(request.requestId))
       throw new Error("desktop_http_request_id_conflict");
     const bytes = request.body?.byteLength ?? 0;
@@ -239,7 +249,10 @@ function validateHeaders(
       throw new Error("desktop_http_headers_too_large");
   }
 }
-function validateRequest(request: DesktopHttpRequest): void {
+function validateRequest(
+  request: DesktopHttpRequest,
+  trustedAccountOrigin: string | null,
+): void {
   if (typeof request !== "object" || request === null)
     throw new Error("desktop_http_request_invalid");
   validateId(request.requestId);
@@ -261,7 +274,7 @@ function validateRequest(request: DesktopHttpRequest): void {
     /^127(?:\.\d{1,3}){3}$/u.test(url.hostname);
   if (
     (url.protocol !== "http:" && url.protocol !== "https:") ||
-    !loopback ||
+    (!loopback && url.origin !== trustedAccountOrigin) ||
     url.username ||
     url.password
   )
