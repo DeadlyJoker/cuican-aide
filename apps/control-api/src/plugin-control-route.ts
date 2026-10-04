@@ -42,6 +42,7 @@ import type {
 } from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
 import { registerPluginUiRecoveryRoutes } from "./plugin-ui-recovery-route.ts";
+import { runPluginGenerationDiagnostics } from "./installed-plugin-invocation-diagnostics.ts";
 
 export type PluginControlRouteDependencies = Readonly<{
   identity: ControlApiIdentityPort;
@@ -381,10 +382,14 @@ function registerUiRoutes(
     let output: Awaited<ReturnType<PluginUiApplicationService["invoke"]>>;
     try {
       if (request.raw.aborted || reply.raw.destroyed) abort();
-      output =
-        invokeAuthenticated === undefined
-          ? await dependencies.service.invoke(actor, input)
-          : await invokeAuthenticated(context, actor, input, cancelled.signal);
+      output = await runPluginGenerationDiagnostics(
+        request.id,
+        input.action,
+        () =>
+          invokeAuthenticated === undefined
+            ? dependencies.service.invoke(actor, input)
+            : invokeAuthenticated(context, actor, input, cancelled.signal),
+      );
     } finally {
       request.raw.removeListener("aborted", abort);
       reply.raw.removeListener("close", closed);

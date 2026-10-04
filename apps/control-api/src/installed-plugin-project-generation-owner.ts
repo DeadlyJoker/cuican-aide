@@ -58,6 +58,7 @@ import {
   generationSelectionMatches,
 } from "./installed-plugin-project-generation-support.ts";
 import { installedProjectGenerationReadiness } from "./installed-plugin-project-generation-readiness.ts";
+import { observePluginGenerationPhase as observe } from "./installed-plugin-invocation-diagnostics.ts";
 
 export type InstalledPluginProjectGenerationDependencies = Readonly<{
   installRoot: string;
@@ -392,25 +393,31 @@ export class InstalledPluginProjectGenerationOwner
       authority.assertActive();
     };
     active();
-    await authority.assertCurrent();
+    await observe("generation.current", () => authority.assertCurrent());
     active();
-    const target = await generationInstalledPackage({
-      installations: this.#dependencies.installations,
-      scope,
-      pluginId: publication.target.pluginId,
-      packageDigest: publication.target.packageDigest,
-      assertActive: active,
-    });
-    const sourceCandidate = await generationCandidate({
-      installRoot: this.#dependencies.installRoot,
-      package: sourcePackage,
-      signal,
-    });
-    const targetCandidate = await generationCandidate({
-      installRoot: this.#dependencies.installRoot,
-      package: target.package,
-      signal,
-    });
+    const target = await observe("generation.target-package", () =>
+      generationInstalledPackage({
+        installations: this.#dependencies.installations,
+        scope,
+        pluginId: publication.target.pluginId,
+        packageDigest: publication.target.packageDigest,
+        assertActive: active,
+      }),
+    );
+    const sourceCandidate = await observe("generation.source-bytes", () =>
+      generationCandidate({
+        installRoot: this.#dependencies.installRoot,
+        package: sourcePackage,
+        signal,
+      }),
+    );
+    const targetCandidate = await observe("generation.target-bytes", () =>
+      generationCandidate({
+        installRoot: this.#dependencies.installRoot,
+        package: target.package,
+        signal,
+      }),
+    );
     active();
     if (targetCandidate.descriptor.entrypoints.node === null)
       generationDenied("project_generation_execution_entry_missing");
@@ -444,12 +451,14 @@ export class InstalledPluginProjectGenerationOwner
         generationDenied("project_generation_plugin_authority_changed");
       return decision.authorityEpoch;
     };
-    const targetEpoch = await policy({
-      pluginId: target.package.pluginId,
-      packageDigest: target.package.packageDigest,
-      selectionRevision: target.selection.revision,
-      contributionId: publication.target.contributionId,
-    });
+    const targetEpoch = await observe("generation.target-policy", () =>
+      policy({
+        pluginId: target.package.pluginId,
+        packageDigest: target.package.packageDigest,
+        selectionRevision: target.selection.revision,
+        contributionId: publication.target.contributionId,
+      }),
+    );
     const executionPin = parsePluginTaskAdmissionPin({
       ...scope,
       ...actor,
@@ -536,18 +545,20 @@ export class InstalledPluginProjectGenerationOwner
       active();
     };
     const executionAuthority = Object.freeze({
-      assertCurrent: current,
+      assertCurrent: () => observe("generation.current", current),
       assertTransactionCurrent: transactionCurrent,
       assertActive: active,
     });
-    await current();
-    const prompt = await generationSavedPrompt({
-      projects: this.#dependencies.projects,
-      actor,
-      reference: parsed.input.reference,
-      digester: this.#dependencies.digester,
-      assertActive: active,
-    });
+    await observe("generation.current", current);
+    const prompt = await observe("generation.saved-prompt", () =>
+      generationSavedPrompt({
+        projects: this.#dependencies.projects,
+        actor,
+        reference: parsed.input.reference,
+        digester: this.#dependencies.digester,
+        assertActive: active,
+      }),
+    );
     const command = projectGenerationUiTaskCommand(
       { sourcePin, executionPin, request: parsed.input, prompt },
       this.#dependencies.digester,
@@ -565,18 +576,20 @@ export class InstalledPluginProjectGenerationOwner
     let output: PluginProjectGenerationExecutionResult | undefined;
     let failure: unknown;
     try {
-      prepared = await host.prepare({
-        installRoot: this.#dependencies.installRoot,
-        expectedPluginId: executionPin.pluginId,
-        expectedPackageDigest: executionPin.packageDigest,
-        authorizeActivation: async (candidate) => {
-          if (!generationSame(candidate, targetCandidate))
-            generationDenied("project_generation_plugin_bytes_changed");
-          await current();
-          return "allow" as const;
-        },
-      });
-      await current();
+      prepared = await observe("generation.node-prepare", () =>
+        host.prepare({
+          installRoot: this.#dependencies.installRoot,
+          expectedPluginId: executionPin.pluginId,
+          expectedPackageDigest: executionPin.packageDigest,
+          authorizeActivation: async (candidate) => {
+            if (!generationSame(candidate, targetCandidate))
+              generationDenied("project_generation_plugin_bytes_changed");
+            await observe("generation.current", current);
+            return "allow" as const;
+          },
+        }),
+      );
+      await observe("generation.node-current", current);
       prepared.commit({
         authorizeCommit: (candidate) => {
           active();
@@ -588,30 +601,34 @@ export class InstalledPluginProjectGenerationOwner
         },
       });
       committed = true;
-      output = await bridge.execute(host, {
-        context,
-        publication,
-        sourcePin,
-        executionPin,
-        request: parsed.input,
-        targetCandidate,
-        command,
-        authority: executionAuthority,
-        commit: ({
-          command: capturedCommand,
-          executionPin: capturedPin,
-          authority: capturedAuthority,
-        }) =>
-          this.#submit({
-            actor,
+      output = await observe("generation.node-execute", () =>
+        bridge.execute(host, {
+          context,
+          publication,
+          sourcePin,
+          executionPin,
+          request: parsed.input,
+          targetCandidate,
+          command,
+          authority: executionAuthority,
+          commit: ({
             command: capturedCommand,
-            reference: parsed.input.reference,
-            publication,
-            sourcePin,
             executionPin: capturedPin,
             authority: capturedAuthority,
-          }),
-      });
+          }) =>
+            observe("generation.task-commit", () =>
+              this.#submit({
+                actor,
+                command: capturedCommand,
+                reference: parsed.input.reference,
+                publication,
+                sourcePin,
+                executionPin: capturedPin,
+                authority: capturedAuthority,
+              }),
+            ),
+        }),
+      );
     } catch (error) {
       failure = error;
     } finally {
@@ -626,7 +643,7 @@ export class InstalledPluginProjectGenerationOwner
           cleanup.push(error);
         }
       try {
-        await host.close();
+        await observe("generation.node-close", () => host.close());
       } catch (error) {
         cleanup.push(error);
       }

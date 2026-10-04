@@ -96,7 +96,11 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
         runtime,
         signal: new AbortController().signal,
         spawnWorker: (environment) => f.start("worker", environment),
-        spawnControl: (environment) => f.start("control", environment),
+        spawnControl: (environment) =>
+          f.start("control", {
+            ...environment,
+            CREWON_PLUGIN_INVOCATION_DIAGNOSTICS: "1",
+          }),
         trackChild: () => {},
         deadlineMs: 20_000,
       });
@@ -372,6 +376,41 @@ const originalBegin=SqliteRunStore.prototype.beginRunAttempt;SqliteRunStore.prot
       "accepted",
     );
     assert.equal(await readFile(networkMarker, "utf8").catch(() => null), null);
+    const diagnosticPrefix = "CREWON_PLUGIN_INVOCATION_DIAGNOSTIC:";
+    const stages = f
+      .logs(cold.control)
+      .stderr.split("\n")
+      .filter((line) => line.startsWith(diagnosticPrefix))
+      .map(
+        (line) =>
+          JSON.parse(line.slice(diagnosticPrefix.length)) as {
+            requestId: string;
+            pid: number;
+            elapsedMs: number;
+            sequence: number;
+            phase: string;
+            status: "start" | "end" | "error";
+          },
+      );
+    assert.ok(stages.length > 0 && stages.length <= 96);
+    assert.equal(new Set(stages.map((entry) => entry.requestId)).size, 1);
+    assert.ok(stages.every((entry) => entry.pid === cold.control.pid));
+    for (const phase of [
+      "generation.node-prepare",
+      "generation.task-commit",
+      "generation.node-close",
+      "route.invoke",
+    ]) {
+      assert.ok(
+        stages.some((entry) => entry.phase === phase && entry.status === "end"),
+        phase,
+      );
+    }
+    assert.equal(
+      stages.some((entry) => entry.status === "error"),
+      false,
+    );
+    t.diagnostic(JSON.stringify({ coldGenerationInvocationStages: stages }));
     assert.ok(
       (await f.audit()).every((entry) =>
         entry.origin.startsWith("http://127.0.0.1:"),
