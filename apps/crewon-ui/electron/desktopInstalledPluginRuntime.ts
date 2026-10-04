@@ -22,7 +22,12 @@ import {
   type DesktopPluginBootstrapManifest,
 } from "./desktopPluginBootstrap.ts";
 import type { ActiveProvider } from "./providerCredentials.ts";
-import { createDesktopInstalledPluginActivationFiles } from "./desktopInstalledPluginActivationFiles.ts";
+import { createDesktopInstalledPluginRuntimeActivationFiles } from "./desktopInstalledPluginActivationFiles.ts";
+import {
+  captureDesktopInstalledPluginTaskRuntimePublication,
+  closeDesktopInstalledPluginRuntimePublicationFiles,
+  failDesktopInstalledPluginTaskPublicationCapture,
+} from "./desktopInstalledPluginTaskRuntimePublication.ts";
 import {
   assertDesktopInstalledPluginRuntimeConfiguration,
   captureDesktopInstalledPluginRuntimeArtifact,
@@ -57,7 +62,7 @@ export type DesktopInstalledPluginRuntime = Readonly<{
   worker: Readonly<NodeJS.ProcessEnv>;
   /** Original default Control before the actual Worker challenge. */
   control: Readonly<NodeJS.ProcessEnv>;
-  /** After the actual challenge; v3 adds only scoped candidate/activation authority. */
+  /** After the actual challenge; v3 adds activation, v4 independently issues task input. */
   controlAfterPeer(
     input: Readonly<{ origin: string }>,
   ): Readonly<NodeJS.ProcessEnv>;
@@ -129,32 +134,51 @@ export function prepareDesktopInstalledPluginRuntime(
     workerConfig.releaseDocumentPath,
     1024 * 1024,
   );
-  const snapshots: Snapshot[] = [workerFile, releaseFile];
-  const expectedCatalogEntries = captureRelease(
-    releaseFile.value,
-    manifest,
-    shared,
+  const taskPublication = captureDesktopInstalledPluginTaskRuntimePublication({
     configuration,
-    authorityTokens,
-    snapshots,
-  );
-  return createCapturedRuntime({
-    input,
-    signal,
     dataDirectory,
-    configuration,
     bootstrap,
-    manifest,
-    scope,
-    shared,
-    worker,
-    provider,
-    authorityTokens,
-    activationAuthority,
-    activationTokens,
-    snapshots,
-    expectedCatalogEntries,
+    sharedEnvironment: shared,
+    workerEnvironment: worker,
   });
+  const snapshots: Snapshot[] = [workerFile, releaseFile];
+  try {
+    const expectedCatalogEntries = captureRelease(
+      releaseFile.value,
+      manifest,
+      shared,
+      configuration,
+      authorityTokens,
+      snapshots,
+    );
+    return createCapturedRuntime({
+      input,
+      signal,
+      dataDirectory,
+      configuration,
+      bootstrap,
+      manifest,
+      scope,
+      shared,
+      worker,
+      provider,
+      authorityTokens,
+      activationAuthority,
+      activationTokens,
+      taskPublication,
+      snapshots,
+      expectedCatalogEntries,
+    });
+  } catch (error) {
+    failDesktopInstalledPluginTaskPublicationCapture({
+      error,
+      tasks: taskPublication,
+      shared,
+      worker,
+      authorityTokens,
+      activationTokens,
+    });
+  }
 }
 
 /** Internal Native input capture shared by v1 publication and v2 preparation; no file issuance. */
@@ -206,6 +230,9 @@ function createCapturedRuntime(
         typeof desktopInstalledPluginActivationAuthority
       >;
       activationTokens: Record<string, string>;
+      taskPublication: ReturnType<
+        typeof captureDesktopInstalledPluginTaskRuntimePublication
+      >;
       snapshots: readonly Snapshot[];
       expectedCatalogEntries: readonly DesktopInstalledPluginExpectedCatalogEntry[];
     }>,
@@ -223,6 +250,7 @@ function createCapturedRuntime(
     authorityTokens,
     activationAuthority,
     activationTokens,
+    taskPublication,
     snapshots,
     expectedCatalogEntries,
   } = input;
@@ -249,7 +277,17 @@ function createCapturedRuntime(
     CREWON_INSTALLED_PLUGIN_PEER_TOKEN: token,
     CREWON_INSTALLED_PLUGIN_PEER_DEADLINE_MS: String(deadlineMs),
   };
-  const controlEnvironment = withoutDesktopInstalledPluginEnvironment(shared);
+  if (taskPublication !== null) {
+    releaseEnvironment = taskPublication.project(
+      releaseEnvironment,
+      authorityTokens,
+    );
+    workerEnvironment = taskPublication.project(
+      workerEnvironment,
+      authorityTokens,
+    );
+  }
+  let controlEnvironment = withoutDesktopInstalledPluginEnvironment(shared);
   for (const name of [
     ...Object.keys(authorityTokens),
     ...Object.keys(activationTokens),
@@ -261,9 +299,11 @@ function createCapturedRuntime(
       delete workerEnvironment[name];
     }
   }
+  if (taskPublication !== null)
+    controlEnvironment = taskPublication.project(controlEnvironment);
   let control: NodeJS.ProcessEnv | null = controlEnvironment;
   let activationFiles: ReturnType<
-    typeof createDesktopInstalledPluginActivationFiles
+    typeof createDesktopInstalledPluginRuntimeActivationFiles
   > | null = null;
   let activationOrigin: string | null = null;
   let withdrawn = false;
@@ -280,11 +320,13 @@ function createCapturedRuntime(
       invalid("provider_changed");
     for (const snapshot of snapshots) snapshot.assertCurrent();
     activationFiles?.assertCurrent();
+    taskPublication?.assertCurrent();
     signal.throwIfAborted();
   };
   const withdraw = () => {
     withdrawn = true;
     activationFiles?.withdraw();
+    taskPublication?.withdraw();
   };
   signal.addEventListener("abort", withdraw, { once: true });
   const result: DesktopInstalledPluginRuntime = {
@@ -306,28 +348,13 @@ function createCapturedRuntime(
       if (activationOrigin !== null && activationOrigin !== origin)
         invalid("activation_peer_changed");
       if (activationFiles === null) {
-        activationFiles = createDesktopInstalledPluginActivationFiles({
+        activationFiles = createDesktopInstalledPluginRuntimeActivationFiles({
           dataDirectory,
-          configuration: {
-            schemaVersion: "crewon.desktop-installed-plugin-activation.v1",
-            actor: manifest.actor,
-            scope,
-            installRoot: manifest.installRoot,
-            peer: {
-              origin,
-              tokenEnvironmentVariable:
-                "CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN",
-            },
-            authority: activationAuthority,
-            timeoutMs: deadlineMs,
-            entries: expectedCatalogEntries.map(
-              ({ identity, configuration, configuredTarget }) => ({
-                identity,
-                configuration,
-                target: configuredTarget,
-              }),
-            ),
-          },
+          bootstrap,
+          origin,
+          authority: activationAuthority,
+          timeoutMs: deadlineMs,
+          entries: expectedCatalogEntries,
         });
         activationOrigin = origin;
         control = {
@@ -338,6 +365,8 @@ function createCapturedRuntime(
           CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN: token,
         };
       }
+      if (taskPublication !== null)
+        control = taskPublication.controlAfterPeer(control!, activationFiles);
       assertCurrent();
       return Object.freeze({ ...control });
     },
@@ -352,17 +381,24 @@ function createCapturedRuntime(
     async close() {
       withdraw();
       signal.removeEventListener("abort", withdraw);
-      activationFiles?.close();
-      token = "";
-      releaseEnvironment = workerEnvironment = control = null;
-      for (const name of [
-        ...Object.keys(authorityTokens),
-        ...Object.keys(activationTokens),
-      ]) {
-        delete authorityTokens[name];
-        delete activationTokens[name];
-        delete shared[name];
-        delete worker[name];
+      try {
+        closeDesktopInstalledPluginRuntimePublicationFiles({
+          tasks: taskPublication,
+          activation: activationFiles,
+        });
+      } finally {
+        token = "";
+        releaseEnvironment = workerEnvironment = control = null;
+        for (const name of [
+          ...Object.keys(authorityTokens),
+          ...Object.keys(activationTokens),
+          ...(taskPublication?.environmentNames ?? []),
+        ]) {
+          delete authorityTokens[name];
+          delete activationTokens[name];
+          delete shared[name];
+          delete worker[name];
+        }
       }
     },
   };
@@ -377,8 +413,6 @@ function createCapturedRuntime(
     withdraw();
     signal.removeEventListener("abort", withdraw);
     token = "";
-    for (const name of Object.keys(authorityTokens))
-      delete authorityTokens[name];
     throw error;
   }
 }

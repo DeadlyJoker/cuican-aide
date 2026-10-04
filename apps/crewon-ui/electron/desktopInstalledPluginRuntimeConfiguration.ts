@@ -10,12 +10,16 @@ import {
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { parseExtensionRecoveryProviderBinding } from "@crewon/agent-version/extension-recovery";
+import {
+  parseDesktopInstalledPluginTaskExecutionSettings,
+  type DesktopInstalledPluginTaskExecutionSettings,
+} from "@crewon/contracts/plugins";
 import { DESKTOP_RUNTIME_OWNER } from "./desktopExtensionRuntime.ts";
 import {
   assertDesktopPluginBootstrapIssued,
   type DesktopPluginBootstrap,
 } from "./desktopPluginBootstrap.ts";
-import { createDesktopInstalledPluginPreparationFiles } from "./desktopInstalledPluginPreparationFiles.ts";
+import { createDesktopAutomaticInstalledPluginPreparationFiles } from "./desktopAutomaticInstalledPluginRuntimeFiles.ts";
 
 export const DESKTOP_INSTALLED_PLUGIN_RUNTIME_FILE =
   "desktop-installed-plugin-runtime.json";
@@ -25,6 +29,8 @@ export const DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA =
   "crewon.desktop-installed-plugin-runtime.v2";
 export const DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA =
   "crewon.desktop-installed-plugin-runtime.v3";
+export const DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA =
+  "crewon.desktop-installed-plugin-runtime.v4";
 const MAX_BYTES = 128 * 1024;
 export const DESKTOP_INSTALLED_PLUGIN_AUTHORITY_NAMES = [
   "actorAuthority",
@@ -93,10 +99,25 @@ export type DesktopActivatableInstalledPluginRuntimeConfiguration =
       workerAuthorities: DesktopInstalledPluginWorkerAuthorities;
       activationAuthority: DesktopInstalledPluginAuthorityEndpoint;
     }>;
+export type DesktopTaskEnabledInstalledPluginRuntimeConfiguration =
+  | Readonly<{
+      schemaVersion: typeof DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
+      enabled: false;
+    }>
+  | Readonly<{
+      schemaVersion: typeof DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
+      enabled: true;
+      providerBinding: DesktopInstalledPluginProviderBinding;
+      plugins: readonly DesktopInstalledPluginPreparationSelection[];
+      workerAuthorities: DesktopInstalledPluginWorkerAuthorities;
+      activationAuthority: DesktopInstalledPluginAuthorityEndpoint;
+      taskExecution: DesktopInstalledPluginTaskExecutionSettings;
+    }>;
 export type DesktopInstalledPluginRuntimeConfiguration =
   | DesktopOperatorInstalledPluginRuntimeConfiguration
   | DesktopAutomaticInstalledPluginRuntimeConfiguration
-  | DesktopActivatableInstalledPluginRuntimeConfiguration;
+  | DesktopActivatableInstalledPluginRuntimeConfiguration
+  | DesktopTaskEnabledInstalledPluginRuntimeConfiguration;
 export type EnabledDesktopInstalledPluginRuntimeConfiguration = Extract<
   DesktopInstalledPluginRuntimeConfiguration,
   { enabled: true }
@@ -104,7 +125,8 @@ export type EnabledDesktopInstalledPluginRuntimeConfiguration = Extract<
 export type EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration =
   Extract<
     | DesktopAutomaticInstalledPluginRuntimeConfiguration
-    | DesktopActivatableInstalledPluginRuntimeConfiguration,
+    | DesktopActivatableInstalledPluginRuntimeConfiguration
+    | DesktopTaskEnabledInstalledPluginRuntimeConfiguration,
     { enabled: true }
   >;
 
@@ -120,6 +142,7 @@ const issued = new WeakMap<
     dataDirectory: string;
     assertCurrent(): void;
     activationAuthority?: DesktopInstalledPluginAuthorityEndpoint;
+    taskExecution?: DesktopInstalledPluginTaskExecutionSettings;
   }>
 >();
 
@@ -156,8 +179,14 @@ export function loadDesktopInstalledPluginRuntimeConfiguration(
       dataDirectory: directory,
       assertCurrent: file.assertCurrent,
       ...(configuration.schemaVersion ===
-      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+        DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
+      configuration.schemaVersion ===
+        DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA
         ? { activationAuthority: configuration.activationAuthority }
+        : {}),
+      ...(configuration.schemaVersion ===
+      DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+        ? { taskExecution: configuration.taskExecution }
         : {}),
     });
   return configuration;
@@ -168,8 +197,12 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
   input: unknown,
 ): DesktopInstalledPluginRuntimeConfiguration {
   const value = desktopInstalledPluginRecord(input);
+  const taskEnabled =
+    value.schemaVersion ===
+    DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
   const activatable =
-    value.schemaVersion === DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA;
+    value.schemaVersion ===
+      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA || taskEnabled;
   const automatic =
     value.schemaVersion === DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
     activatable;
@@ -185,6 +218,7 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
             "plugins",
             "workerAuthorities",
             ...(activatable ? ["activationAuthority"] : []),
+            ...(taskEnabled ? ["taskExecution"] : []),
           ]
         : [
             "schemaVersion",
@@ -200,11 +234,13 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
     desktopInstalledPluginInvalid("configuration");
   if (value.enabled === false)
     return Object.freeze({
-      schemaVersion: activatable
-        ? DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
-        : automatic
-          ? DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
-          : DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+      schemaVersion: taskEnabled
+        ? DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+        : activatable
+          ? DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+          : automatic
+            ? DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+            : DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
       enabled: false,
     });
   if (value.enabled !== true) desktopInstalledPluginInvalid("configuration");
@@ -255,6 +291,17 @@ export function parseDesktopInstalledPluginRuntimeConfiguration(
         value.workerAuthorities,
       ),
     } as const;
+    if (taskEnabled)
+      return Object.freeze({
+        ...prepared,
+        schemaVersion: DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
+        activationAuthority: parseDesktopInstalledPluginAuthorityEndpoint(
+          value.activationAuthority,
+        ),
+        taskExecution: parseDesktopInstalledPluginTaskExecutionSettings(
+          value.taskExecution,
+        ),
+      });
     return activatable
       ? Object.freeze({
           ...prepared,
@@ -288,7 +335,7 @@ export function assertDesktopInstalledPluginRuntimeConfiguration(
   source.assertCurrent();
 }
 
-/** Only a genuinely issued v3 file or its private derived v1 owner carries activation opt-in. */
+/** Only a genuinely issued v3/v4 file or its private derived v1 owner carries activation opt-in. */
 export function desktopInstalledPluginActivationAuthority(
   configuration: EnabledDesktopInstalledPluginRuntimeConfiguration,
 ): DesktopInstalledPluginAuthorityEndpoint | null {
@@ -298,6 +345,16 @@ export function desktopInstalledPluginActivationAuthority(
   return source.activationAuthority ?? null;
 }
 
+/** Settings are carried only by the actual v4 file owner and its private derived v1 configuration. */
+export function desktopInstalledPluginTaskExecutionSettings(
+  configuration: EnabledDesktopInstalledPluginRuntimeConfiguration,
+): DesktopInstalledPluginTaskExecutionSettings | null {
+  const source = issued.get(configuration);
+  if (!source) desktopInstalledPluginInvalid("configuration_unissued");
+  source.assertCurrent();
+  return source.taskExecution ?? null;
+}
+
 export function isAutomaticDesktopInstalledPluginRuntimeConfiguration(
   configuration: EnabledDesktopInstalledPluginRuntimeConfiguration,
 ): configuration is EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration {
@@ -305,7 +362,9 @@ export function isAutomaticDesktopInstalledPluginRuntimeConfiguration(
     configuration.schemaVersion ===
       DESKTOP_AUTOMATIC_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
     configuration.schemaVersion ===
-      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
+    configuration.schemaVersion ===
+      DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA
   );
 }
 
@@ -335,42 +394,13 @@ export function createAutomaticDesktopInstalledPluginRuntimeFiles(
   const manifest = assertCurrent();
   if (!isAutomaticDesktopInstalledPluginRuntimeConfiguration(configuration))
     desktopInstalledPluginInvalid("configuration_mode");
-  const approvedPackages = [
-    ...new Map(
-      manifest.sources.map(
-        ({ pluginId, publisherId, version, packageDigest }) => {
-          const identity = Object.freeze({
-            pluginId,
-            publisherId,
-            version,
-            packageDigest,
-          });
-          return [JSON.stringify(identity), identity] as const;
-        },
-      ),
-    ).values(),
-  ];
-  // The v2 preparation child reports per-plugin approval/installation failures.
-  // Only its prepared subset can later pass the original issued v1 runtime gate.
-  const files = createDesktopInstalledPluginPreparationFiles({
+  const taskExecution =
+    desktopInstalledPluginTaskExecutionSettings(configuration);
+  const files = createDesktopAutomaticInstalledPluginPreparationFiles({
     dataDirectory,
-    buildDocuments: ({ workerPath, releasePath }) => ({
-      preparation: {
-        schemaVersion: "crewon.installed-plugin-native-preparation.v2",
-        actor: manifest.actor,
-        scope: manifest.scope,
-        approvedPackages,
-        plugins: configuration.plugins,
-        workerConfigurationPath: workerPath,
-      },
-      worker: {
-        schemaVersion: "crewon.installed-plugin-worker.v1",
-        installRoot: manifest.installRoot,
-        releaseDocumentPath: releasePath,
-        ...configuration.workerAuthorities,
-        historicalScope: null,
-      },
-    }),
+    manifest,
+    configuration,
+    taskExecution,
   });
   const derived = Object.freeze({
     schemaVersion: DESKTOP_INSTALLED_PLUGIN_RUNTIME_SCHEMA,
@@ -381,9 +411,12 @@ export function createAutomaticDesktopInstalledPluginRuntimeFiles(
   issued.set(derived, {
     dataDirectory,
     ...(configuration.schemaVersion ===
-    DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA
+      DESKTOP_ACTIVATABLE_INSTALLED_PLUGIN_RUNTIME_SCHEMA ||
+    configuration.schemaVersion ===
+      DESKTOP_TASK_ENABLED_INSTALLED_PLUGIN_RUNTIME_SCHEMA
       ? { activationAuthority: configuration.activationAuthority }
       : {}),
+    ...(taskExecution === null ? {} : { taskExecution }),
     assertCurrent() {
       assertCurrent();
       files.assertCurrent();

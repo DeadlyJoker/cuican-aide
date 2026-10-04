@@ -22,6 +22,7 @@ import type {
   CommitRunResult,
   ExtensionMutationReceipt,
   ExtensionRunLocator,
+  PluginTaskReceiptLocator,
   ProjectGenerationSourceLocator,
   ExtensionStore,
   SaveExtensionActivationInput,
@@ -55,7 +56,10 @@ import { migratePostgresPluginCredits } from "./plugin-credit-schema.ts";
 import { migratePostgresPluginTaskAdmissionsWithPool } from "./plugin-task-admission-schema.ts";
 import { migratePostgresPluginQueryTasks } from "./plugin-query-task-schema.ts";
 import { loadPostgresPluginQuery } from "./plugin-query-task-store-support.ts";
-import { loadPostgresPluginTask } from "./plugin-task-admission-store-support.ts";
+import {
+  loadPostgresPluginTask,
+  loadPostgresPluginTaskByReceipt,
+} from "./plugin-task-admission-store-support.ts";
 import {
   assertCreditReservationReplay,
   creditScopeValues,
@@ -229,6 +233,17 @@ export class PostgresExtensionStore implements ExtensionStore {
   async loadPluginTaskAdmission(input: ExtensionRunLocator) {
     this.#host.assertOpen();
     const admission = await loadPostgresPluginTask(
+      this.#pool,
+      this.#schemaName,
+      input,
+    );
+    this.#host.assertOpen();
+    return admission;
+  }
+
+  async loadPluginTaskAdmissionByReceipt(input: PluginTaskReceiptLocator) {
+    this.#host.assertOpen();
+    const admission = await loadPostgresPluginTaskByReceipt(
       this.#pool,
       this.#schemaName,
       input,

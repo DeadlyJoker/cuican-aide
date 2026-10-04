@@ -56,7 +56,9 @@ export {
   DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_MAX_BYTES,
   DesktopInstalledPluginTaskConfigurationError,
   parseDesktopInstalledPluginTaskConfiguration,
+  parseDesktopInstalledPluginTaskExecutionSettings,
   type DesktopInstalledPluginTaskConfiguration,
+  type DesktopInstalledPluginTaskExecutionSettings,
   type DesktopInstalledPluginTaskAuthorityReference,
   type DesktopInstalledPluginTaskUiPublication,
 } from "./desktop-installed-plugin-task-configuration.ts";

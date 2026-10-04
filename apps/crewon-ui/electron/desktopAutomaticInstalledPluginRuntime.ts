@@ -24,6 +24,10 @@ import {
   type EnabledDesktopAutomaticInstalledPluginRuntimeConfiguration,
 } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 import { assertDesktopPluginBootstrapIssued } from "./desktopPluginBootstrap.ts";
+import {
+  captureDesktopInstalledPluginTaskRuntimePublication,
+  failDesktopInstalledPluginTaskPublicationCapture,
+} from "./desktopInstalledPluginTaskRuntimePublication.ts";
 
 const PREPARATION_PATH = "CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH";
 export type AutomaticDesktopInstalledPluginRuntimeCompletion =
@@ -125,11 +129,32 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     workerEnvironment: worker,
     signal,
   });
-  const files = createAutomaticDesktopInstalledPluginRuntimeFiles({
+  const taskPublication = captureDesktopInstalledPluginTaskRuntimePublication({
     configuration,
     dataDirectory,
     bootstrap,
+    sharedEnvironment: shared,
+    workerEnvironment: worker,
   });
+  let files: ReturnType<
+    typeof createAutomaticDesktopInstalledPluginRuntimeFiles
+  >;
+  try {
+    files = createAutomaticDesktopInstalledPluginRuntimeFiles({
+      configuration,
+      dataDirectory,
+      bootstrap,
+    });
+  } catch (error) {
+    failDesktopInstalledPluginTaskPublicationCapture({
+      error,
+      tasks: taskPublication,
+      shared,
+      worker,
+      authorityTokens,
+      activationTokens,
+    });
+  }
   let environment: NodeJS.ProcessEnv | null = {
     ...withoutDesktopInstalledPluginEnvironment(shared),
     ...authorityTokens,
@@ -137,6 +162,20 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
   };
   for (const name of Object.keys(activationTokens))
     if (!Object.hasOwn(authorityTokens, name)) delete environment[name];
+  try {
+    if (taskPublication !== null)
+      environment = taskPublication.project(environment, authorityTokens);
+  } catch (error) {
+    failDesktopInstalledPluginTaskPublicationCapture({
+      error,
+      tasks: taskPublication,
+      shared,
+      worker,
+      authorityTokens,
+      activationTokens,
+      cleanup: () => files.close(),
+    });
+  }
   let runtime: DesktopInstalledPluginRuntime | null = null;
   let completed: AutomaticDesktopInstalledPluginRuntimeCompletion | null = null;
   let resultFile: ReturnType<
@@ -161,12 +200,14 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
     resultFile?.assertCurrent();
     if (completed?.kind === "default") files.assertReleaseAbsent();
     runtime?.assertCurrent();
+    taskPublication?.assertCurrent();
     signal.throwIfAborted();
   };
   const withdraw = () => {
     withdrawn = true;
     files.withdraw();
     runtime?.withdraw();
+    taskPublication?.withdraw();
   };
   signal.addEventListener("abort", withdraw, { once: true });
   const owner: AutomaticDesktopInstalledPluginRuntime = {
@@ -207,7 +248,8 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
         if (prepared.length === 0) {
           files.assertReleaseAbsent();
           const defaultEnvironment = (input: NodeJS.ProcessEnv) => {
-            const environment = withoutDesktopInstalledPluginEnvironment(input);
+            const values = withoutDesktopInstalledPluginEnvironment(input);
+            const environment = taskPublication?.project(values) ?? values;
             for (const name of [
               ...Object.keys(authorityTokens),
               ...Object.keys(activationTokens),
@@ -290,19 +332,43 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
       withdraw();
       if (closing !== null) return closing;
       closing = (async () => {
-        await runtime?.close();
-        files.close();
-        signal.removeEventListener("abort", withdraw);
-        environment = null;
-        for (const name of [
-          ...Object.keys(authorityTokens),
-          ...Object.keys(activationTokens),
-        ]) {
-          delete authorityTokens[name];
-          delete activationTokens[name];
-          delete shared[name];
-          delete worker[name];
+        const failures: unknown[] = [];
+        try {
+          if (taskPublication === null) {
+            await runtime?.close();
+            files.close();
+          } else {
+            for (const action of [
+              () => runtime?.close(),
+              () => taskPublication.close(),
+              () => files.close(),
+            ]) {
+              try {
+                await action();
+              } catch (error) {
+                failures.push(error);
+              }
+            }
+          }
+        } finally {
+          signal.removeEventListener("abort", withdraw);
+          environment = null;
+          for (const name of [
+            ...Object.keys(authorityTokens),
+            ...Object.keys(activationTokens),
+            ...(taskPublication?.environmentNames ?? []),
+          ]) {
+            delete authorityTokens[name];
+            delete activationTokens[name];
+            delete shared[name];
+            delete worker[name];
+          }
         }
+        if (failures.length)
+          throw new AggregateError(
+            failures,
+            "desktop_installed_plugin_preparation_cleanup_failed",
+          );
         closed = true;
       })();
       void closing.catch(() => {
@@ -329,7 +395,14 @@ export function prepareAutomaticDesktopInstalledPluginRuntime(
   } catch (error) {
     withdraw();
     signal.removeEventListener("abort", withdraw);
-    files.close();
-    throw error;
+    failDesktopInstalledPluginTaskPublicationCapture({
+      error,
+      tasks: taskPublication,
+      shared,
+      worker,
+      authorityTokens,
+      activationTokens,
+      cleanup: () => files.close(),
+    });
   }
 }

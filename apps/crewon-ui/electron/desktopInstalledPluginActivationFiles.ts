@@ -11,6 +11,8 @@ import { join } from "node:path";
 import {
   DESKTOP_INSTALLED_PLUGIN_ACTIVATION_MAX_BYTES,
   parseDesktopInstalledPluginActivationConfiguration,
+  type DesktopInstalledPluginActivationConfiguration,
+  type InstalledPluginPeerCatalogEntry,
 } from "@crewon/contracts/plugins";
 import {
   captureDesktopInstalledPluginRuntimeDirectory,
@@ -18,8 +20,79 @@ import {
   desktopInstalledPluginAbsolutePath,
   desktopInstalledPluginInvalid as invalid,
 } from "./desktopInstalledPluginRuntimeConfiguration.ts";
+import {
+  assertDesktopPluginBootstrapIssued,
+  type DesktopPluginBootstrap,
+} from "./desktopPluginBootstrap.ts";
 
 const MAX_BYTES = DESKTOP_INSTALLED_PLUGIN_ACTIVATION_MAX_BYTES;
+
+export type DesktopInstalledPluginActivationFiles = Readonly<{
+  path: string;
+  assertCurrent(): void;
+  withdraw(): void;
+  close(): void;
+}>;
+const issued = new WeakMap<
+  object,
+  Readonly<{
+    dataDirectory: string;
+    publication: DesktopInstalledPluginActivationConfiguration;
+    assertCurrent(): void;
+  }>
+>();
+
+/** Only the genuine private file owner can supply an activation publication for task issuance. */
+export function assertDesktopInstalledPluginActivationFilesIssued(
+  value: unknown,
+  dataDirectory: string,
+): DesktopInstalledPluginActivationConfiguration {
+  const source =
+    value !== null && typeof value === "object" ? issued.get(value) : undefined;
+  if (!source || source.dataDirectory !== dataDirectory)
+    invalid("activation_unissued");
+  source.assertCurrent();
+  return source.publication;
+}
+
+/** The Native runtime's current bootstrap supplies the actor, profile and approved installation root. */
+export function createDesktopInstalledPluginRuntimeActivationFiles(
+  input: Readonly<{
+    dataDirectory: string;
+    bootstrap: DesktopPluginBootstrap;
+    origin: string;
+    authority: DesktopInstalledPluginActivationConfiguration["authority"];
+    timeoutMs: number;
+    entries: readonly Pick<
+      InstalledPluginPeerCatalogEntry,
+      "identity" | "configuration" | "configuredTarget"
+    >[];
+  }>,
+): DesktopInstalledPluginActivationFiles {
+  const manifest = assertDesktopPluginBootstrapIssued(input.bootstrap);
+  return createDesktopInstalledPluginActivationFiles({
+    dataDirectory: input.dataDirectory,
+    configuration: {
+      schemaVersion: "crewon.desktop-installed-plugin-activation.v1",
+      actor: manifest.actor,
+      scope: manifest.scope,
+      installRoot: manifest.installRoot,
+      peer: {
+        origin: input.origin,
+        tokenEnvironmentVariable: "CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN",
+      },
+      authority: input.authority,
+      timeoutMs: input.timeoutMs,
+      entries: input.entries.map(
+        ({ identity, configuration, configuredTarget }) => ({
+          identity,
+          configuration,
+          target: configuredTarget,
+        }),
+      ),
+    },
+  });
+}
 
 /** Storage owned by Main. The caller must have joined all consumers before close. */
 export function createDesktopInstalledPluginActivationFiles(
@@ -101,7 +174,7 @@ export function createDesktopInstalledPluginActivationFiles(
       file!.assertCurrent();
     };
     assertCurrent();
-    return Object.freeze({
+    const result: DesktopInstalledPluginActivationFiles = Object.freeze({
       path,
       assertCurrent,
       withdraw() {
@@ -109,6 +182,12 @@ export function createDesktopInstalledPluginActivationFiles(
       },
       close,
     });
+    issued.set(result, {
+      dataDirectory,
+      publication: configuration,
+      assertCurrent,
+    });
+    return result;
   } catch (error) {
     try {
       close();

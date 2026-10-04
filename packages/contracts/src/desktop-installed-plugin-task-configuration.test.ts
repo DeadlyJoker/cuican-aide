@@ -5,6 +5,8 @@ import {
   DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_MAX_BYTES,
   DesktopInstalledPluginTaskConfigurationError,
   parseDesktopInstalledPluginTaskConfiguration as parse,
+  parseDesktopInstalledPluginTaskExecutionSettings as parseSettings,
+  type DesktopInstalledPluginTaskExecutionSettings,
   type DesktopInstalledPluginTaskAuthorityReference,
   type DesktopInstalledPluginTaskUiPublication,
 } from "./plugins.ts";
@@ -71,6 +73,199 @@ function rejects(input: unknown) {
     },
   );
 }
+
+function settingsFixture() {
+  const {
+    uiPublications,
+    taskPolicyAuthority,
+    uiPolicyAuthority,
+    packageAuthority,
+    quoteAuthority,
+    timeoutMs,
+    maximumPackages,
+  } = fixture();
+  return {
+    uiPublications,
+    taskPolicyAuthority,
+    uiPolicyAuthority,
+    packageAuthority,
+    quoteAuthority,
+    timeoutMs,
+    maximumPackages,
+  };
+}
+function rejectsSettings(input: unknown) {
+  assert.throws(
+    () => parseSettings(input),
+    (error: unknown) => {
+      assert.ok(error instanceof DesktopInstalledPluginTaskConfigurationError);
+      assert.equal(
+        error.code,
+        "desktop_installed_plugin_task_configuration_invalid",
+      );
+      return true;
+    },
+  );
+}
+
+test("task execution settings export only seven detached frozen role fields", () => {
+  const input = settingsFixture();
+  const actual: DesktopInstalledPluginTaskExecutionSettings =
+    parseSettings(input);
+  assert.deepEqual(actual, input);
+  assert.equal(Object.keys(actual).length, 7);
+  assert.notEqual(actual.uiPublications, input.uiPublications);
+  input.uiPublications[0]!.contributionId = "changed";
+  input.quoteAuthority.url = "https://changed.example/quotes";
+  assert.equal(actual.uiPublications[0]!.contributionId, "workspace");
+  assert.equal(actual.quoteAuthority.url, "https://authority.example/quotes");
+  for (const value of [
+    actual,
+    actual.uiPublications,
+    ...actual.uiPublications,
+    ...authorityFields.map((field) => actual[field]),
+  ])
+    assert.ok(Object.isFrozen(value));
+  assert.deepEqual(parse(fixture()), {
+    ...fixture(),
+    ...parseSettings(settingsFixture()),
+  });
+});
+
+test("settings require their exact shape and cannot carry publication identity or an implicit grant", () => {
+  for (const field of Object.keys(settingsFixture())) {
+    const input: Record<string, unknown> = { ...settingsFixture() };
+    delete input[field];
+    rejectsSettings(input);
+  }
+  for (const field of [
+    "schemaVersion",
+    "actor",
+    "scope",
+    "authorityEpoch",
+    "installRoot",
+    "activationDigest",
+    "peer",
+    "activationAuthority",
+    "walletId",
+    "credits",
+    "priceRevision",
+    "serviceToken",
+  ])
+    rejectsSettings({ ...settingsFixture(), [field]: "not-issued" });
+  rejectsSettings(fixture());
+  rejects(settingsFixture());
+  for (const input of [null, undefined, [], "{}", 1, true])
+    rejectsSettings(input);
+});
+
+test("settings reuse the same four explicit HTTPS and protected environment reference guards", () => {
+  for (const field of authorityFields) {
+    for (const override of [
+      { url: "http://authority.example/tasks" },
+      { url: "https://user@authority.example/tasks" },
+      { url: "https://authority.example/tasks?token=secret" },
+      { url: "https://authority.example/tasks#" },
+      { serviceTokenEnvironmentVariable: "CREWON_CONTROL_SESSION_TOKEN" },
+      { serviceTokenEnvironmentVariable: "NODE_OPTIONS" },
+      { serviceToken: "raw-secret" },
+    ])
+      rejectsSettings({
+        ...settingsFixture(),
+        [field]: { ...fixture()[field], ...override },
+      });
+  }
+  const reference = settingsFixture().taskPolicyAuthority;
+  const sameRoles = parseSettings({
+    ...settingsFixture(),
+    taskPolicyAuthority: reference,
+    uiPolicyAuthority: reference,
+    packageAuthority: reference,
+    quoteAuthority: reference,
+  });
+  assert.deepEqual(sameRoles.quoteAuthority, reference);
+  const literal = "https://AUTHORITY.example:443/tasks";
+  assert.equal(
+    parseSettings({
+      ...settingsFixture(),
+      taskPolicyAuthority: { ...reference, url: literal },
+    }).taskPolicyAuthority.url,
+    literal,
+  );
+});
+
+test("settings apply the original dense tuple, timeout and package bounds", () => {
+  const publication = settingsFixture().uiPublications[0]!;
+  for (const uiPublications of [
+    [],
+    Array(1),
+    Array(33).fill(publication),
+    [publication, { ...publication }],
+  ])
+    rejectsSettings({ ...settingsFixture(), uiPublications });
+  for (const timeoutMs of [999, 30001, 1000.5, NaN, Infinity])
+    rejectsSettings({ ...settingsFixture(), timeoutMs });
+  for (const maximumPackages of [0, 33, 1.5])
+    rejectsSettings({ ...settingsFixture(), maximumPackages });
+  for (const timeoutMs of [1000, 30000])
+    for (const maximumPackages of [1, 32])
+      assert.equal(
+        parseSettings({ ...settingsFixture(), timeoutMs, maximumPackages })
+          .maximumPackages,
+        maximumPackages,
+      );
+});
+
+test("settings reject nondata shapes without invoking getters or serializers", () => {
+  let calls = 0;
+  const getter = () => {
+    calls++;
+    throw new Error("must not run");
+  };
+  for (const field of Object.keys(settingsFixture())) {
+    const input = settingsFixture();
+    Object.defineProperty(input, field, { enumerable: true, get: getter });
+    rejectsSettings(input);
+  }
+  const tuple = settingsFixture();
+  Object.defineProperty(tuple.uiPublications[0]!, "packageDigest", {
+    enumerable: true,
+    get: getter,
+  });
+  rejectsSettings(tuple);
+  const symbol = settingsFixture();
+  Object.defineProperty(symbol, Symbol("grant"), { value: "allow" });
+  rejectsSettings(symbol);
+  const hidden = settingsFixture();
+  Object.defineProperty(hidden, "maximumPackages", {
+    value: 32,
+    enumerable: false,
+  });
+  rejectsSettings(hidden);
+  rejectsSettings(
+    Object.assign(
+      Object.create({ inherited: true }) as object,
+      settingsFixture(),
+    ),
+  );
+  rejectsSettings({ ...settingsFixture(), toJSON: getter });
+  const cycle: Record<string, unknown> = {};
+  cycle.self = cycle;
+  rejectsSettings({ ...settingsFixture(), quoteAuthority: cycle });
+  rejectsSettings({
+    ...settingsFixture(),
+    oversized: "x".repeat(
+      DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_MAX_BYTES,
+    ),
+  });
+  assert.equal(calls, 0);
+  assert.deepEqual(
+    parseSettings(
+      Object.assign(Object.create(null) as object, settingsFixture()),
+    ),
+    settingsFixture(),
+  );
+});
 
 test("independent Native task publication exports detached, deeply frozen data", () => {
   const input = fixture();

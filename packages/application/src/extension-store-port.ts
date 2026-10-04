@@ -51,6 +51,16 @@ export type ExtensionRunLocator = Readonly<{
   spaceId: string;
   runId: string;
 }>;
+/** Host-only lookup of historical provenance; it is neither permission nor a receipt digest bypass. */
+export type PluginTaskReceiptLocator = Readonly<{
+  tenantId: string;
+  spaceId: string;
+  profileId: string;
+  pluginId: string;
+  principalId: string;
+  actorId: string;
+  idempotencyKey: string;
+}>;
 /** A saved input selected by the authorized project owner; never a caller-selected execution Run. */
 export type ProjectGenerationSourceLocator = Readonly<{
   owner: CreativeProjectOwnerScope;
@@ -137,6 +147,10 @@ export interface ExtensionStore {
   ): Promise<PluginQueryTaskAdmission | null>;
   loadPluginTaskAdmission?(
     input: ExtensionRunLocator,
+  ): Promise<PluginTaskAdmission | null>;
+  /** Optional compatibility read. Callers must reconstruct and strictly verify the original v1 command digest. */
+  loadPluginTaskAdmissionByReceipt?(
+    input: PluginTaskReceiptLocator,
   ): Promise<PluginTaskAdmission | null>;
   saveExtensionConfiguration(
     input: SaveExtensionConfigurationInput,

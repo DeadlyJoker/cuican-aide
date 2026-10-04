@@ -4,6 +4,7 @@ import type {
   CommitExtensionTurnInput,
   ExtensionMutationReceipt,
   ExtensionRunLocator,
+  PluginTaskReceiptLocator,
 } from "@crewon/application";
 import {
   assertPluginTaskAdmission,
@@ -11,12 +12,17 @@ import {
   parsePluginTaskAdmissionPin,
   parseInstalledPluginPackage,
   pluginInstallationOpaqueId,
+  pluginInstallationNamespaceId,
   type ExtensionRunBinding,
   type ExtensionCreditAdmission,
   type PluginTaskAdmission,
   type PluginTaskAdmissionPin,
 } from "@crewon/domain";
-import { extensionStoreDigester } from "./extension-store-records.ts";
+import {
+  extensionStoreDigester,
+  parseExtensionTurnReceipt,
+  validateExtensionReceipt,
+} from "./extension-store-records.ts";
 import { assertPluginTaskAdmissionSchemaVersion } from "./plugin-task-admission-schema.ts";
 import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
 import {
@@ -203,6 +209,150 @@ export async function loadPostgresPluginTask(
     locator(input),
   );
   return decodePluginTaskAdmissionRecord(result.rows[0]);
+}
+
+/** One indexed receipt lookup; the saved v1 pin is evidence, never fresh admission authority. */
+export function loadSqlitePluginTaskByReceipt(
+  database: DatabaseSync,
+  input: PluginTaskReceiptLocator,
+): PluginTaskAdmission | null {
+  const captured = captureReceiptLocator(input);
+  const row = database
+    .prepare(receiptAdmissionQuery("").replaceAll(/\$[1-5]/gu, "?"))
+    .get(...receiptLocatorValues(captured)) as Row | undefined;
+  if (row === undefined) return null;
+  const saved = parseTaskAdmissionReceipt(row, captured);
+  return checkedReceiptAdmission(
+    captured,
+    saved,
+    loadSqlitePluginTask(database, saved.binding),
+  );
+}
+
+export async function loadPostgresPluginTaskByReceipt(
+  client: PostgresReader,
+  schema: string,
+  input: PluginTaskReceiptLocator,
+): Promise<PluginTaskAdmission | null> {
+  // Capture all caller-owned fields before the first asynchronous database read.
+  const captured = captureReceiptLocator(input);
+  const result = await client.query<Row>(
+    receiptAdmissionQuery(prefix(schema)),
+    receiptLocatorValues(captured),
+  );
+  if (result.rows.length === 0) return null;
+  if (result.rows.length !== 1)
+    throw new Error("plugin_task_admission_record_invalid");
+  const saved = parseTaskAdmissionReceipt(result.rows[0]!, captured);
+  return checkedReceiptAdmission(
+    captured,
+    saved,
+    await loadPostgresPluginTask(client, schema, saved.binding),
+  );
+}
+
+function captureReceiptLocator(
+  input: PluginTaskReceiptLocator,
+): PluginTaskReceiptLocator {
+  const names = [
+    "tenantId",
+    "spaceId",
+    "profileId",
+    "pluginId",
+    "principalId",
+    "actorId",
+    "idempotencyKey",
+  ] as const;
+  if (input === null || typeof input !== "object" || Array.isArray(input))
+    throw new Error("plugin_installation_object_invalid");
+  const prototype = Object.getPrototypeOf(input);
+  if (prototype !== Object.prototype && prototype !== null)
+    throw new Error("plugin_installation_object_invalid");
+  const keys = Reflect.ownKeys(input);
+  if (
+    keys.length !== names.length ||
+    keys.some(
+      (key) =>
+        typeof key !== "string" ||
+        !names.includes(key as (typeof names)[number]),
+    )
+  )
+    throw new Error("plugin_installation_fields_invalid");
+  const fields = Object.fromEntries(
+    names.map((name) => {
+      const descriptor = Object.getOwnPropertyDescriptor(input, name);
+      if (
+        !descriptor ||
+        !Object.hasOwn(descriptor, "value") ||
+        !descriptor.enumerable
+      )
+        throw new Error("plugin_installation_fields_invalid");
+      return [name, descriptor.value];
+    }),
+  );
+  return Object.freeze({
+    tenantId: pluginInstallationOpaqueId(fields.tenantId),
+    spaceId: pluginInstallationOpaqueId(fields.spaceId),
+    profileId: pluginInstallationOpaqueId(fields.profileId),
+    pluginId: pluginInstallationNamespaceId(fields.pluginId),
+    principalId: pluginInstallationOpaqueId(fields.principalId),
+    actorId: pluginInstallationOpaqueId(fields.actorId),
+    idempotencyKey: pluginInstallationOpaqueId(fields.idempotencyKey),
+  });
+}
+const receiptAdmissionQuery = (prefix: string) =>
+  `SELECT request_digest,result_json FROM ${prefix}extension_mutation_receipts WHERE tenant_id=$1 AND space_id=$2 AND plugin_id=$3 AND kind='task' AND actor_id=$4 AND idempotency_key=$5`;
+const receiptLocatorValues = (input: PluginTaskReceiptLocator) => [
+  input.tenantId,
+  input.spaceId,
+  input.pluginId,
+  input.actorId,
+  input.idempotencyKey,
+];
+function parseTaskAdmissionReceipt(row: Row, input: PluginTaskReceiptLocator) {
+  const receipt = Object.freeze({
+    actorId: input.actorId,
+    idempotencyKey: input.idempotencyKey,
+    requestDigest: row.request_digest as string,
+  });
+  validateExtensionReceipt(receipt);
+  const saved = parseExtensionTurnReceipt(
+    json(row.result_json),
+    input,
+    receipt,
+  );
+  if (saved.binding.source !== null)
+    throw new Error("plugin_task_query_admission_unsupported");
+  return { ...saved, receipt };
+}
+function checkedReceiptAdmission(
+  input: PluginTaskReceiptLocator,
+  saved: ReturnType<typeof parseTaskAdmissionReceipt>,
+  admission: PluginTaskAdmission | null,
+): PluginTaskAdmission {
+  if (admission === null) throw new Error("plugin_task_admission_missing");
+  if (
+    [
+      "tenantId",
+      "spaceId",
+      "profileId",
+      "pluginId",
+      "principalId",
+      "actorId",
+      "idempotencyKey",
+    ].some(
+      (key) =>
+        admission[key as keyof PluginTaskReceiptLocator] !==
+        input[key as keyof PluginTaskReceiptLocator],
+    )
+  )
+    throw new Error("plugin_task_admission_record_invalid");
+  assertPluginTaskAdmission(
+    { admission, binding: saved.binding, receipt: saved.receipt },
+    extensionStoreDigester,
+  );
+  assertCreditPrincipal(admission, saved.creditAdmission);
+  return admission;
 }
 
 export function decodePluginTaskAdmissionRecord(

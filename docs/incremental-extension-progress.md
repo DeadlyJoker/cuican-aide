@@ -1,10 +1,20 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：进行中，不能据此认为完整插件子系统已经交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：ACTIVE（进行中），不能据此认为完整插件子系统已经交付。
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-04：Native v4 Electron source 私有任务签发与冷重启重放
+
+Native v4 已接通 Electron source Supervisor、实际 release/Main/Worker 子进程和独立私有任务配置签发。任务权限来自显式配置的独立 authority，不借用模块激活权限，也不提供默认钱包或报价。协议见[Electron 私有任务签发](./native-installed-plugin-task-electron.md)。真实 source 进程专项 **3/3 通过、零跳过**；Worker 保持 metadata-only 边界，拒绝执行并显式取消，本轮不代表付费任务完成，也不代表 packaged App 或编译后 Electron 完整 App 验收。
+
+Contracts **393/393**、新旧 Electron owner **46/46**、Native runtime 组合 **170/170**、普通 Application **44/44**、项目/查询 **59/59**通过。实际 SQLite 与自持 PostgreSQL 18 的 receipt/admission/Application 专项 **45/45 通过、零跳过**；Control、Store、Host 类型检查通过。旧 v3 启用/IO 回归沿原证据的 `task-context-20261003/krea2/1.0.0` 实包 **12/12、零跳过**通过。这些分组存在重叠，不能相加。初次错用没有声明所需 IO 服务的早期 Krea 包及其他修复前失败日志保留；未修改旧用例或扩大批准来通过检查。统一证据为 `output/extensions/checks/native-task-electron-proof-20261004.json`。
+
+冷重启回执兼容仅通过精确存量主键和完整作用域查询历史 admission，恢复旧 authorityEpoch 后核验原 v1 fingerprint。selectionRevision、其余全部 pin、command、CAS 和当前 PDP 仍须精确匹配；原回执、报价与资金记录不变。首次事务中不同 epoch 的竞争仍严格冲突，后续显式使用原键重试才可核对已存回执，不放宽通用幂等摘要规则。
+
+本轮未修改原 UI、Settings、两侧栏、资产、SDK、生产映射或既有独立插件发行包；原设置已再次在实际页面打开。Native 短剧生成/查询及三类恢复、真实钱包/价格/结算、可用 ComfyUI 的同次完整 App S0、编译后 Electron 完整 App 和 E5 尚未完成，完整目标继续 ACTIVE。
 
 ## 2026-10-04：Native Main 文件签发接线与独立任务读取
 

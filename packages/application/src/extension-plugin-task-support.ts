@@ -4,6 +4,7 @@ import {
   extensionDigest,
   extensionOpaqueId,
   parsePluginTaskAdmissionPin,
+  parsePluginTaskAdmission,
   pluginInstallationOpaqueId,
   type PluginTaskAdmission,
   type PluginTaskAdmissionPin,
@@ -129,6 +130,80 @@ export function pluginTaskReceipt(
     ),
   });
 }
+/** Ordinary task replay keeps the original full-pin v1 digest and audit epoch.
+ * The current invocation remains independently authorized with its fresh pin. */
+export async function resolvePluginTaskReceipt(
+  input: Readonly<{
+    store: Pick<ExtensionStore, "loadPluginTaskAdmissionByReceipt">;
+    actor: ActorContext;
+    command: CreateExtensionTaskCommand;
+    pin: PluginTaskAdmissionPin;
+    digester: ContentDigester;
+  }>,
+): Promise<
+  Readonly<{
+    receipt: ExtensionMutationReceipt;
+    receiptPin: PluginTaskAdmissionPin;
+  }>
+> {
+  const pin = checkedPluginTaskPin(input.pin);
+  const actor = pluginTaskActor(input.actor, pin);
+  const command = JSON.parse(
+    extensionCanonicalJson(input.command),
+  ) as CreateExtensionTaskCommand;
+  const receipt = pluginTaskReceipt(actor, command, pin, input.digester);
+  const lookup = input.store.loadPluginTaskAdmissionByReceipt;
+  if (lookup === undefined) return { receipt, receiptPin: pin };
+  const saved = await lookup.call(input.store, {
+    tenantId: pin.tenantId,
+    spaceId: pin.spaceId,
+    profileId: pin.profileId,
+    pluginId: pin.pluginId,
+    principalId: pin.principalId,
+    actorId: pin.actorId,
+    idempotencyKey: receipt.idempotencyKey,
+  });
+  if (saved === null) return { receipt, receiptPin: pin };
+  let previous: PluginTaskAdmission;
+  try {
+    previous = parsePluginTaskAdmission(saved);
+  } catch (cause) {
+    throw new ApplicationError("internal", "plugin_task_admission_invalid", {
+      cause,
+    });
+  }
+  const {
+    schemaVersion: _schema,
+    runId: _run,
+    threadId: _thread,
+    extensionBindingDigest: _binding,
+    requestDigest: _request,
+    idempotencyKey: _key,
+    ...previousPin
+  } = previous;
+  // Selection revision and every business/identity field remain exact. Only
+  // the historical issuance epoch is restored while verifying original data.
+  const receiptPin = checkedPluginTaskPin({
+    ...pin,
+    authorityEpoch: previous.authorityEpoch,
+  });
+  const historical = pluginTaskReceipt(
+    actor,
+    command,
+    receiptPin,
+    input.digester,
+  );
+  if (
+    extensionCanonicalJson(previousPin) !==
+      extensionCanonicalJson(receiptPin) ||
+    previous.threadId !== command.threadId ||
+    previous.idempotencyKey !== historical.idempotencyKey ||
+    previous.requestDigest !== historical.requestDigest
+  )
+    throw new ApplicationError("conflict", "extension_idempotency_conflict");
+  return { receipt: historical, receiptPin };
+}
+
 export function pluginTaskAdmission(
   pin: PluginTaskAdmissionPin,
   binding: ExtensionRunBinding,

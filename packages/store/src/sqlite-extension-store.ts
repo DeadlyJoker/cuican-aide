@@ -43,6 +43,7 @@ import type {
   CommitRunResult,
   ExtensionMutationReceipt,
   ExtensionRunLocator,
+  PluginTaskReceiptLocator,
   ProjectGenerationSourceLocator,
   ExtensionStore,
   SaveExtensionActivationInput,
@@ -71,7 +72,10 @@ import { migrateSqlitePluginCredits } from "./plugin-credit-schema.ts";
 import { migrateSqlitePluginTaskAdmissions } from "./plugin-task-admission-schema.ts";
 import { migrateSqlitePluginQueryTasks } from "./plugin-query-task-schema.ts";
 import { loadSqlitePluginQuery } from "./plugin-query-task-store-support.ts";
-import { loadSqlitePluginTask } from "./plugin-task-admission-store-support.ts";
+import {
+  loadSqlitePluginTask,
+  loadSqlitePluginTaskByReceipt,
+} from "./plugin-task-admission-store-support.ts";
 import {
   decodeExtensionCreditAdmission,
   assertExtensionCreditAdmissionLink,
@@ -252,6 +256,13 @@ export class SqliteExtensionStore implements ExtensionStore {
   async loadPluginTaskAdmission(input: ExtensionRunLocator) {
     this.#host.assertOpen();
     return loadSqlitePluginTask(this.#db, input);
+  }
+
+  async loadPluginTaskAdmissionByReceipt(input: PluginTaskReceiptLocator) {
+    this.#host.assertOpen();
+    const admission = loadSqlitePluginTaskByReceipt(this.#db, input);
+    this.#host.assertOpen();
+    return admission;
   }
 
   /** Explicit billing opt-in. Ordinary plugin migration never creates or reads credit tables. */

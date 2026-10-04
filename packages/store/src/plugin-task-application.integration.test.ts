@@ -138,6 +138,18 @@ for (const backend of ["sqlite", "postgres"] as const)
         (await credits.getAccount(creditScope))?.reservedCredits,
         "23",
       );
+      const renewed = await create().createTaskFromPlugin(actor, command, {
+        ...pin,
+        authorityEpoch: "fixture-renewed-current-plugin-epoch",
+      });
+      assert.equal(renewed.run.disposition, "replayed");
+      assert.deepEqual(renewed.binding, accepted.binding);
+      assert.deepEqual(renewed.creditAdmission, accepted.creditAdmission);
+      assert.deepEqual(
+        await f.first.store.loadPluginTaskAdmission(accepted.binding),
+        persisted,
+      );
+      assert.equal(quoteCalls, 1);
       await installs.commitSelection(
         selectionRecipe(enabled.selection, "installed-app-uninstall", {
           actor,

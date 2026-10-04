@@ -15,7 +15,7 @@ import type {
 } from "./plugin-ui-ports.ts";
 import {
   assertSavedPluginTask,
-  pluginTaskReceipt,
+  resolvePluginTaskReceipt,
   requirePluginTaskStore,
 } from "./extension-plugin-task-support.ts";
 import {
@@ -269,14 +269,18 @@ export class PluginUiCommittedTaskAuthority
         value.command as CreateExtensionTaskCommand,
         pin,
       );
-      const receipt = pluginTaskReceipt(
-        context.actor,
+      const claimedInput = parsePluginUiJsonValue(
+        value.result,
+      ) as unknown as CommitExtensionTurnResult;
+      const { receipt, receiptPin } = await resolvePluginTaskReceipt({
+        store: this.#dependencies.extensions,
+        actor: context.actor,
         command,
         pin,
-        this.#dependencies.digester,
-      );
+        digester: this.#dependencies.digester,
+      });
       const claimed = committedTaskResult(
-        value.result as CommitExtensionTurnResult,
+        claimedInput,
         command,
         pin,
         receipt,
@@ -300,7 +304,7 @@ export class PluginUiCommittedTaskAuthority
         throw new Error("plugin_ui_committed_receipt_mismatch");
       await assertSavedPluginTask({
         store: this.#dependencies.extensions,
-        pin,
+        pin: receiptPin,
         binding: saved.binding,
         threadId: command.threadId,
         receipt,

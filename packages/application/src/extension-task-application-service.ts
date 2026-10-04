@@ -69,6 +69,7 @@ import {
   pluginTaskActor,
   pluginTaskAdmission,
   pluginTaskReceipt,
+  resolvePluginTaskReceipt,
   requirePluginTaskQuotes,
   requirePluginTaskStore,
   type PluginTaskCommitAuthorityPort,
@@ -290,6 +291,16 @@ export class ExtensionTaskApplicationService {
         intent.kind === "query"
           ? await this.#source(actor, scope.pluginId, intent)
           : null;
+      const ordinaryReceipt =
+        pin !== null && generation === null
+          ? await resolvePluginTaskReceipt({
+              store: this.#dependencies.extensions,
+              actor,
+              command,
+              pin,
+              digester: this.#dependencies.digester,
+            })
+          : null;
       const taskReceipt =
         pin === null
           ? {
@@ -305,7 +316,13 @@ export class ExtensionTaskApplicationService {
                 }),
               ),
             }
-          : pluginTaskReceipt(actor, command, pin, this.#dependencies.digester);
+          : (ordinaryReceipt?.receipt ??
+            pluginTaskReceipt(
+              actor,
+              command,
+              pin,
+              this.#dependencies.digester,
+            ));
       const receipt =
         generation === null ? taskReceipt : generation.receipt(taskReceipt);
       const previous =
@@ -329,7 +346,7 @@ export class ExtensionTaskApplicationService {
             );
           await assertSavedPluginTask({
             store: this.#dependencies.extensions,
-            pin,
+            pin: ordinaryReceipt?.receiptPin ?? pin,
             binding: previous.binding,
             threadId,
             receipt,

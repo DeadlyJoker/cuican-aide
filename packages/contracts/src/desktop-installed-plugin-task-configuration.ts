@@ -27,14 +27,8 @@ export type DesktopInstalledPluginTaskUiPublication = Readonly<{
   packageDigest: string;
   contributionId: string;
 }>;
-export type DesktopInstalledPluginTaskConfiguration = Readonly<{
-  schemaVersion: typeof DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_SCHEMA;
-  actor: InstalledPluginPeerActor;
-  scope: InstalledPluginPeerScope;
-  authorityEpoch: string;
-  installRoot: string;
-  /** SHA-256 of the parsed activation publication's canonical JSON, excluding runtime secrets; file provenance is separate. */
-  activationDigest: string;
+/** Explicit execution role settings only; these data do not issue a Native publication. */
+export type DesktopInstalledPluginTaskExecutionSettings = Readonly<{
   uiPublications: readonly DesktopInstalledPluginTaskUiPublication[];
   taskPolicyAuthority: DesktopInstalledPluginTaskAuthorityReference;
   uiPolicyAuthority: DesktopInstalledPluginTaskAuthorityReference;
@@ -43,6 +37,26 @@ export type DesktopInstalledPluginTaskConfiguration = Readonly<{
   timeoutMs: number;
   maximumPackages: number;
 }>;
+export type DesktopInstalledPluginTaskConfiguration = Readonly<{
+  schemaVersion: typeof DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_SCHEMA;
+  actor: InstalledPluginPeerActor;
+  scope: InstalledPluginPeerScope;
+  authorityEpoch: string;
+  installRoot: string;
+  /** SHA-256 of the parsed activation publication's canonical JSON, excluding runtime secrets; file provenance is separate. */
+  activationDigest: string;
+}> &
+  DesktopInstalledPluginTaskExecutionSettings;
+
+const SETTINGS_FIELDS = [
+  "uiPublications",
+  "taskPolicyAuthority",
+  "uiPolicyAuthority",
+  "packageAuthority",
+  "quoteAuthority",
+  "timeoutMs",
+  "maximumPackages",
+] as const;
 
 export class DesktopInstalledPluginTaskConfigurationError extends ContractValidationError {
   constructor() {
@@ -141,6 +155,73 @@ function installRoot(input: unknown): string {
   return input;
 }
 
+function taskExecutionSettings(
+  value: Record<string, unknown>,
+): DesktopInstalledPluginTaskExecutionSettings {
+  if (
+    typeof value.timeoutMs !== "number" ||
+    !Number.isSafeInteger(value.timeoutMs) ||
+    value.timeoutMs < 1000 ||
+    value.timeoutMs > 30000 ||
+    typeof value.maximumPackages !== "number" ||
+    !Number.isSafeInteger(value.maximumPackages) ||
+    value.maximumPackages < 1 ||
+    value.maximumPackages > 32 ||
+    !Array.isArray(value.uiPublications) ||
+    value.uiPublications.length < 1 ||
+    value.uiPublications.length > 32
+  )
+    invalid();
+  const seen = new Set<string>();
+  const uiPublications = value.uiPublications.map((inputPublication) => {
+    const publication = pluginControlRecord(inputPublication, [
+      "pluginId",
+      "packageDigest",
+      "contributionId",
+    ]);
+    const parsed = Object.freeze({
+      pluginId: parsePluginControlPluginId(publication.pluginId),
+      packageDigest: parsePluginControlPackageDigest(publication.packageDigest),
+      contributionId: parsePluginControlPluginId(publication.contributionId),
+    });
+    const tuple = JSON.stringify([
+      parsed.pluginId,
+      parsed.packageDigest,
+      parsed.contributionId,
+    ]);
+    if (seen.has(tuple)) invalid();
+    seen.add(tuple);
+    return parsed;
+  });
+  return Object.freeze({
+    uiPublications: Object.freeze(uiPublications),
+    taskPolicyAuthority: authority(value.taskPolicyAuthority),
+    uiPolicyAuthority: authority(value.uiPolicyAuthority),
+    packageAuthority: authority(value.packageAuthority),
+    quoteAuthority: authority(value.quoteAuthority),
+    timeoutMs: value.timeoutMs,
+    maximumPackages: value.maximumPackages,
+  });
+}
+
+/** Pure bounded settings; only the actual Native file owner can later bind actor, profile and publication facts. */
+export function parseDesktopInstalledPluginTaskExecutionSettings(
+  input: unknown,
+): DesktopInstalledPluginTaskExecutionSettings {
+  try {
+    return taskExecutionSettings(
+      pluginControlRecord(
+        copyPluginControlJson(input, {
+          maxBytes: DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_MAX_BYTES,
+        }),
+        SETTINGS_FIELDS,
+      ),
+    );
+  } catch {
+    invalid();
+  }
+}
+
 /** Detached bounded data only. Receiving owners must bind the digest, scope and UI grants to current Native facts. */
 export function parseDesktopInstalledPluginTaskConfiguration(
   input: unknown,
@@ -157,60 +238,21 @@ export function parseDesktopInstalledPluginTaskConfiguration(
         "authorityEpoch",
         "installRoot",
         "activationDigest",
-        "uiPublications",
-        "taskPolicyAuthority",
-        "uiPolicyAuthority",
-        "packageAuthority",
-        "quoteAuthority",
-        "timeoutMs",
-        "maximumPackages",
+        ...SETTINGS_FIELDS,
       ],
     );
     if (
       value.schemaVersion !==
         DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_SCHEMA ||
       typeof value.authorityEpoch !== "string" ||
-      !/^[A-Za-z0-9_-]{32,128}$/u.test(value.authorityEpoch) ||
-      typeof value.timeoutMs !== "number" ||
-      !Number.isSafeInteger(value.timeoutMs) ||
-      value.timeoutMs < 1000 ||
-      value.timeoutMs > 30000 ||
-      typeof value.maximumPackages !== "number" ||
-      !Number.isSafeInteger(value.maximumPackages) ||
-      value.maximumPackages < 1 ||
-      value.maximumPackages > 32 ||
-      !Array.isArray(value.uiPublications) ||
-      value.uiPublications.length < 1 ||
-      value.uiPublications.length > 32
+      !/^[A-Za-z0-9_-]{32,128}$/u.test(value.authorityEpoch)
     )
       invalid();
     const actor = peerActor(value.actor);
     const scope = peerScope(value.scope);
     if (actor.tenantId !== scope.tenantId || actor.spaceId !== scope.spaceId)
       invalid();
-    const seen = new Set<string>();
-    const uiPublications = value.uiPublications.map((inputPublication) => {
-      const publication = pluginControlRecord(inputPublication, [
-        "pluginId",
-        "packageDigest",
-        "contributionId",
-      ]);
-      const parsed = Object.freeze({
-        pluginId: parsePluginControlPluginId(publication.pluginId),
-        packageDigest: parsePluginControlPackageDigest(
-          publication.packageDigest,
-        ),
-        contributionId: parsePluginControlPluginId(publication.contributionId),
-      });
-      const tuple = JSON.stringify([
-        parsed.pluginId,
-        parsed.packageDigest,
-        parsed.contributionId,
-      ]);
-      if (seen.has(tuple)) invalid();
-      seen.add(tuple);
-      return parsed;
-    });
+    const settings = taskExecutionSettings(value);
     return Object.freeze({
       schemaVersion: DESKTOP_INSTALLED_PLUGIN_TASK_CONFIGURATION_SCHEMA,
       actor,
@@ -218,13 +260,7 @@ export function parseDesktopInstalledPluginTaskConfiguration(
       authorityEpoch: value.authorityEpoch,
       installRoot: installRoot(value.installRoot),
       activationDigest: parsePluginControlPackageDigest(value.activationDigest),
-      uiPublications: Object.freeze(uiPublications),
-      taskPolicyAuthority: authority(value.taskPolicyAuthority),
-      uiPolicyAuthority: authority(value.uiPolicyAuthority),
-      packageAuthority: authority(value.packageAuthority),
-      quoteAuthority: authority(value.quoteAuthority),
-      timeoutMs: value.timeoutMs,
-      maximumPackages: value.maximumPackages,
+      ...settings,
     });
   } catch {
     invalid();
