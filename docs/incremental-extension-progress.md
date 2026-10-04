@@ -6,6 +6,22 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：实际财务 HTTPS、Worker Main 与原打包报告结算
+
+在 `622d071fb0333fe9b9e83b6357e5535fd5406c9a` 基线上增加[实际 HTTPS 验收](./native-plugin-credit-https-verification.md)，本阶段只改 test/support 和说明。原 Main、独立 0600 财务文件与 token refs、原 fetch/TLS 和原 Store 结算服务保持；不新增产品权限开关或改原 PDP。具名 HTTPS helper 使用原测试 CA，严格 scope/epoch/字段与 body 上限，并实际等待 server、socket close 事件和 handler promise 退场。
+
+实际 Worker Main 专项最终 **10/10、零跳过、退出码 0**，保留原六项 no-opt-in/配置/tenant 行为，增加 MCP 真启动后的 deny 与 held close、原 v1 paid 索引扫描/授权刷新/hold/settle18、撤权后不能复活、SIGTERM 中止真实挂起响应体。冷 Main 等待 existing finalization 读取后的第 4 次授权响应完成，原账与事件保持，没有第二次金额决定。Main 夹具由原 Store API 准备终态业务事实，未将其称为真实供应商执行。原配置/authority/coordinator/bootstrap 四文件回归 **78/78**，原 Native 环境/Supervisor/Source 报告三文件 **54/54**，均零跳过、退出码 0；各组范围单独记录，不求和。
+
+真正 `.app` 专项最终 **1/1、零跳过、退出码 0**：原账号菜单→十类 Settings→原 professional 1.0.0 模块→真实 UI 提交→原 Agent/Tool/报告 HTTP adapter 完成。独立 HTTPS 只作一次明确 18 积分决定，绑定原 ready=true、完整 v1 pin、completed Run/工具/work items 与非 running attempts；持久决定等于真实 HTTP 响应，包含 decisionId。原账务三笔为 grant100/reserve30/settle18，钱包可用 **82**、预占 **0**、spent **18**，一次报价、两次具名模型请求、一次供应商 POST。
+
+原 Main 12514 与冷 Main 14237 及 16 个原 runtime 子进程均物理消失，全部 18 个 PID 经 Root 复核 ESRCH，自有 userData 已清理。冷 owner 第 6 次授权响应完成，证明 `migrate:true` 下原 Service 已读 existing finalization；所有供应商 GET/POST/DELETE、执行/报价和原业务事实、回执及不可变决定保持。目录探测及财务授权可重新发生，实际共 137 次授权、1 次金额决定，不能声称全部 HTTP 为零。原 App 历史页面读取不扩为 report v1 表单恢复、实时 delta 或执行中断线重连。十一张最终原页面截图保留。
+
+首次类型错误、Main 测试 HTTP 清退的 socket close 观察时序问题和打包测试暖/冷对象 prototype 比较失败全部保留。均只修测试类型、等待真实 close 事件及一致的完整快照；产品保护与行为不放宽。打包首轮已经走到暖结算和冷读取，但首次失败不计为通过。最终 Host/Worker 类型、boundary、license 和格式检查及保留摘要，以统一证据 `output/extensions/checks/native-financial-http-proof-20261004.json` 为准。
+
+原 UI 14 文件、正式 Renderer 15 资产、SDK 60 源文件/冻结包、短剧8/9/10、0600 生产映射与用户五个服务保持；只在自有目录编译原 Host/runtime/.app，未重建正式前端或发行插件，primary 人类工作未改。当前 IAB 原账号菜单已实际打开设置页并保存 `settings-entry-visible-20261004.jpg`，未改偏好。原侧栏折叠时隐藏用户栏，展开后账号菜单仍可进入设置。
+
+本阶段身份/PDP、模型、供应商、入账/报价/收费规则均为具名测试输入，不是生产个人积分、真实企业 API 或用户 ComfyUI；本轮用户 ComfyUI POST 为 0，未重复探测此前 404 状态。真实身份/入账/定价/失败规则及 HTTPS 财务服务、Native Krea2 公网生成/原 operation 查询、同次完整 App 在线 S0、全部插件打包链路和用户选定实际企业 API 的 E5 仍未完成，完整目标 ACTIVE。
+
 ## 2026-10-04：Native 财务环境隔离与原打包三类 prepared 恢复
 
 在 `ce27cecf640535fb7729ef72551dbd3608033e30` 基线上补齐 [Native 财务环境投影](./native-plugin-credit-environment.md)。原 v1 0600 文件和明确 token refs 在启动时捕获；只有当前 Worker 注入捕获值，共享 runtime、目录探测、独立 management、工作区命令/Git 与 Windows 清退环境移除这些明确字段。最终 spawn 复核文件 pin，文件变化或 overlay 冲突永久撤回同 owner；没有 opt-in 时零财务文件读取，不猜测未声明 token。原 provider-null 入口不新增财务 Worker。该边界只限制被动环境继承，没有 watcher，也不抵御同 UID、可信 Node 或显式同名模型凭据选择。

@@ -63,4 +63,6 @@ Store factory 捕获独立 owner 的同步 `assertCurrent`，与父 Store 生命
 
 实际 SQLite/独占 Unix socket PostgreSQL 18 用于分页、索引损坏、owner 撤回、资金/事件保持、Worker 原发布装配和重新打开后的原决定读取。普通 Worker 的流式/Tool continuation 专项同时挂起真实 coordinator 的具名 Store scan，核对新一轮请求上下文与关闭等待。财务 HTTP 单测使用明确的 fetch 夹具；个人身份、资金、规则与金额均为具名测试值。
 
-同进程新 composition / 新连接不等于 OS 崩溃重启；fixture HTTPS/模型不等于生产财务服务或 ComfyUI。实际结果、退出码和首次失败以[实施进度](./incremental-extension-progress.md)和 `output/extensions/checks/credit-settlement-worker-proof-20261004.json` 为准。真实身份、资金入账、价格/失败规则，以及 Native 在线生成、同次完整 App S0、所有插件打包链路和实际企业 API 的 E5 仍需验收。
+后续[实际 Main 与打包报告专项](./native-plugin-credit-https-verification.md)使用真实 HTTPS server、原测试 CA 和原 fetch 验证授权、拒绝、hold/settle、原 MCP 退场及冷读取。真正 `.app` 的原 UI→Worker→报告 adapter 执行与独立 18 积分决定核验分开于只准备原 Store 终态事实的 Main 专项；身份、资金、模型、供应商和财务规则仍是具名测试值。
+
+同进程新 composition / 新连接不等于 OS 崩溃重启；fixture HTTPS/模型不等于生产财务服务或 ComfyUI。实际结果、退出码和首次失败以[实施进度](./incremental-extension-progress.md)及各阶段统一证据为准。真实身份、资金入账、价格/失败规则，以及 Native 在线生成、同次完整 App S0、所有插件打包链路和实际企业 API 的 E5 仍需验收。
