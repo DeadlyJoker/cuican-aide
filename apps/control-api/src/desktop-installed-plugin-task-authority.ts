@@ -19,6 +19,7 @@ import {
 import { SqliteRunStore } from "@crewon/store";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import {
+  assertDesktopPluginConfigurationFileCurrent,
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
@@ -81,6 +82,7 @@ const resourceFields = {
 /** Independent Native task policies and exact quotes. Borrows the already issued request/activation peer; never activates or funds. */
 export class DesktopInstalledPluginTaskAuthority {
   readonly #binding: Binding;
+  readonly #fileConfiguration: DesktopPluginConfiguration | undefined;
   readonly #digester: ContentDigester;
   readonly #http: InstalledPluginTaskHttpAuthority;
   readonly #quote: InstalledPluginCreditQuoteAuthority;
@@ -97,6 +99,12 @@ export class DesktopInstalledPluginTaskAuthority {
     }>,
   ) {
     const configuration = parseDesktopPluginConfiguration(input.configuration);
+    this.#fileConfiguration =
+      configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3"
+        ? input.configuration
+        : undefined;
+    if (this.#fileConfiguration !== undefined)
+      assertDesktopPluginConfigurationFileCurrent(this.#fileConfiguration);
     if (
       !(input.store instanceof SqliteRunStore) ||
       !(input.authority instanceof DesktopPluginAuthority) ||
@@ -164,6 +172,8 @@ export class DesktopInstalledPluginTaskAuthority {
   assertBinding(input: Binding): void {
     if (
       !issued.has(this) ||
+      (this.#fileConfiguration !== undefined &&
+        input.configuration !== this.#fileConfiguration) ||
       input.tasks !== this.#binding.tasks ||
       input.activation !== this.#binding.activation ||
       input.activationOwner !== this.#binding.activationOwner ||
@@ -386,6 +396,8 @@ export class DesktopInstalledPluginTaskAuthority {
   #assertOwner(actor: ActorContext): void {
     try {
       this.#lifetime.signal.throwIfAborted();
+      if (this.#fileConfiguration !== undefined)
+        assertDesktopPluginConfigurationFileCurrent(this.#fileConfiguration);
       assertDesktopInstalledPluginTaskConfigCurrent(this.#binding.tasks);
       assertDesktopInstalledPluginActivationConfigCurrent(
         this.#binding.activation,

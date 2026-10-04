@@ -6,17 +6,22 @@ import {
 } from "@crewon/application";
 import { extensionCanonicalJson } from "@crewon/domain";
 import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
-import type { PreparedCreativeProjects } from "./creative-project-composition.ts";
+import type {
+  CreativeProjectCompositionConfig,
+  PreparedCreativeProjects,
+} from "./creative-project-composition.ts";
 import {
   assertDesktopInstalledPluginActivationConfigCurrent,
   type DesktopInstalledPluginActivationConfig,
 } from "./desktop-installed-plugin-activation-environment.ts";
 import { DesktopInstalledPluginTaskAuthority } from "./desktop-installed-plugin-task-authority.ts";
 import {
+  assertDesktopInstalledPluginTaskConfigFileIssued,
   assertDesktopInstalledPluginTaskConfigCurrent,
   type DesktopInstalledPluginTaskConfig,
 } from "./desktop-installed-plugin-task-environment.ts";
 import {
+  assertDesktopPluginConfigurationFileCurrent,
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
@@ -37,7 +42,10 @@ export function assertDesktopInstalledPluginTaskComposition(
     configuration: DesktopPluginConfiguration;
     tasks: DesktopInstalledPluginTaskConfig;
     activation: DesktopInstalledPluginActivationConfig | undefined;
-    creativeProjects?: PreparedCreativeProjects;
+    creativeProjects?: Pick<
+      CreativeProjectCompositionConfig,
+      "pluginGenerations" | "pluginQueries"
+    >;
     digester: ContentDigester;
   }>,
 ): void {
@@ -45,6 +53,25 @@ export function assertDesktopInstalledPluginTaskComposition(
   if (input.activation === undefined) denied();
   assertDesktopInstalledPluginActivationConfigCurrent(input.activation);
   const configuration = parseDesktopPluginConfiguration(input.configuration);
+  if (
+    input.creativeProjects?.pluginGenerations !== undefined ||
+    input.creativeProjects?.pluginQueries !== undefined
+  ) {
+    if (configuration.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+      denied();
+    assertDesktopPluginConfigurationFileCurrent(input.configuration);
+    assertDesktopInstalledPluginTaskConfigFileIssued(input.tasks);
+    for (const lane of ["pluginGenerations", "pluginQueries"] as const) {
+      const mapping = input.creativeProjects[lane];
+      if (
+        !same(
+          mapping === undefined ? null : { publications: mapping.publications },
+          configuration.projects[lane] ?? null,
+        )
+      )
+        denied();
+    }
+  }
   const publication = input.tasks.publication;
   if (
     !same(publication.actor, configuration.actor) ||

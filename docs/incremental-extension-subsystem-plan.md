@@ -2,11 +2,11 @@
 
 状态：ACTIVE，已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
-2026-10-04 最新范围：独立短剧 9.0.0 已通过原完整 Web App/Main/BFF 的三类原请求冷恢复和实际选用重启重放，生成/查询仅 stage 与 hydrate。Native 已增量接通独立私有审批 v2、Main、历史读取和选用恢复日志，保留 v1 与原前端；具体范围见[Native 接线](./native-plugin-history-integration.md)。原任务/生成/查询装配已提取为支持实际 SQLite/PostgreSQL 的[共享任务核心](./installed-plugin-task-runtime-core.md)。[Native 独立任务执行配置与工厂](./native-installed-plugin-task-execution.md)已接通[Standalone Main 的 FileIssued 执行 opt-in 和独立 HTTP 任务读取](./native-installed-plugin-task-main.md)。本轮 Native v4 已落地[Electron source Supervisor 的独立私有任务签发](./native-installed-plugin-task-electron.md)，装配实际 release/Main/Worker 子进程；Worker 仍为 metadata-only，拒绝执行并显式取消，不能视为付费完成或 packaged App。
+2026-10-04 最新范围：独立短剧 9.0.0 已通过原完整 Web App/Main/BFF 的三类原请求冷恢复和实际选用重启重放，生成/查询仅 stage 与 hydrate。Native 已增量接通私有审批、Main、历史读取与选用，原任务/生成/查询装配提取为支持实际 SQLite/PostgreSQL 的[共享任务核心](./installed-plugin-task-runtime-core.md)。[独立任务执行配置与工厂](./native-installed-plugin-task-execution.md)、[Main 的 FileIssued 执行 opt-in](./native-installed-plugin-task-main.md)和[Electron source 私有任务签发](./native-installed-plugin-task-electron.md)已落地。本轮新增[Native 项目执行批准与三类恢复装配](./native-project-execution-integration.md)，实际生成/查询/选用 owners 借用同一真实 core、请求 owner 与 SQLite；保留旧审批、普通 Standalone 和原前端。Worker 仍为 metadata-only，不能视为付费完成或 packaged App。
 
-最新验收：真实 source 进程 **3/3、零跳过**；Contracts **393/393**、新旧 Electron owner **46/46**、Native runtime 组合 **170/170**、普通 Application **44/44**、项目/查询 **59/59**通过；实际 SQLite 与自持 PostgreSQL 18 的 receipt/admission/Application 专项 **45/45、零跳过**。旧 v3 启用/IO 沿原历史 Krea 实包 **12/12、零跳过**通过。Control、Store、Host 类型检查通过，分组重叠、不相加。冷重启仅以精确存量主键和完整作用域查询历史 admission，恢复旧 epoch 核验原 v1 fingerprint；selectionRevision、其他 pin、command、CAS 和当前 PDP 仍精确，原回执、报价和资金不变。
+最新验收：实际 Native 组合及兼容回归 **107/107**、新实际 factory **12/12**、runtime/启动兼容 **56/56**、Contracts **402/402**、Electron bootstrap **56/56**、真实 Main **9/9**、原 source/activation/IO **31/31**与 SQLite/自持 PostgreSQL 18 专项 **40/40**通过，零跳过，分组重叠、不相加。类型、boundary、license 和格式检查通过。原 ordinary source 任务已验收真实 epoch 轮换和精确历史回执；本轮生成/查询只验收实际 factory 的三 lane 暂存、读回与 owner 关闭重建。原 key/input/CAS、完整 pin、当前 PDP、报价及资金规则未放宽，尚不能声明生成/查询跨真实 epoch 业务重放通过。
 
-本轮原 UI、Settings、两侧栏、资产、SDK、生产映射及既有独立插件发行包未改，实际页面原设置已再次打开。完整目标保持 ACTIVE；Native 短剧生成/查询及三类恢复、真实钱包/价格/结算、可用 ComfyUI 的同次完整 App S0、编译后 Electron 完整 App 和 E5 尚未完成。[精确证据与未完成项](./incremental-extension-progress.md)保留这些验收边界，后文历史阶段不作为最新完成声明。
+本轮原 UI、Settings、两侧栏、资产、SDK、生产映射及既有独立插件发行包未改，实际页面原设置已再次打开。完整目标保持 ACTIVE；生成/查询跨实际 epoch 回执恢复、Native Worker 实际执行、真实钱包/价格/结算、可用 ComfyUI 的同次完整 App S0、编译后 Electron 完整 App 和 E5 尚未完成。[精确证据与未完成项](./incremental-extension-progress.md)保留这些验收边界，后文历史阶段不作为最新完成声明。
 
 2026-10-02 范围补充：用户明确插件必须可插拔，可独立开发并安装。下文 E0–E5 的静态调用试点是已有阶段范围；随宿主构建与排除动态安装的约束不再代表最终交付。后续优先按[可安装插件协议与实施顺序](./installable-plugin-protocol-plan.md)补齐公开 SDK、实际包安装与 Node/UI 加载，再把短剧业务模块作为独立包接入；现有首页、团队、聊天及旧执行绑定保持兼容。
 

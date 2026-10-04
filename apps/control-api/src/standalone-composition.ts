@@ -34,7 +34,11 @@ import {
   type PluginQueryHostPort,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
-import { composeProjectGenerationReadService } from "./project-generation-read-composition.ts";
+import {
+  composeProjectGenerationReadService,
+  prepareProjectGenerationReadStore,
+} from "./project-generation-read-composition.ts";
+import { assertInstalledPluginTaskRuntimeCoreBinding } from "./installed-plugin-task-runtime-core.ts";
 import { composeOwnedProjectGenerationSelectionService } from "./project-generation-selection-composition.ts";
 import type { FastifyInstance } from "fastify";
 import {
@@ -42,6 +46,7 @@ import {
   type DesktopPluginRuntime,
 } from "./desktop-plugin-runtime.ts";
 import { captureDesktopProjectRecoveryStartup } from "./desktop-project-startup.ts";
+import { captureDesktopProjectCompositionConfig } from "./desktop-project-execution-startup.ts";
 import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 import {
   parseDesktopPluginConfiguration,
@@ -244,14 +249,20 @@ export async function createStandaloneControlApiWithPlugins(
     })
   )
     throw new Error("desktop_plugin_owner_mismatch");
+  const capturedProjects = captureDesktopProjectCompositionConfig({
+    configuration: config.desktopPlugins,
+    tasks: taskStartup.tasks,
+    activation: taskStartup.activation,
+    projects: config.creativeProjects,
+  });
   const uiRecovery = captureDesktopProjectRecoveryStartup({
     runtimeConfiguration: config,
     publications: configuration.publications,
-    projects: captureStandaloneCreativeProjectCompositionConfig(
-      config.creativeProjects,
-    ),
+    projects: capturedProjects,
   });
-  const pinned = pinExtensionCompositionConfig(config);
+  const pinned = pinExtensionCompositionConfig(config, {
+    creativeProjects: capturedProjects,
+  });
   desktopProjectUiPublications(
     pinned.creativeProjects,
     configuration.publications,
@@ -269,7 +280,7 @@ export async function createStandaloneControlApiWithPlugins(
     projects = await prepareCreativeProjects(store, pinned.creativeProjects);
     const runtime = await createDesktopPluginRuntime(
       {
-        configuration,
+        configuration: config.desktopPlugins,
         ...(uiRecovery === undefined ? {} : { uiRecovery }),
         ...(taskStartup.activation === undefined
           ? {}
@@ -297,6 +308,20 @@ export async function createStandaloneControlApiWithPlugins(
         namespaces.has(pluginId) ||
         (await runtime.installation.getSelection(actor, { pluginId })) !== null,
     };
+    if (
+      projects?.generationReads !== undefined &&
+      projects.generationReadStore === undefined &&
+      runtime.tasks !== undefined
+    ) {
+      assertInstalledPluginTaskRuntimeCoreBinding(runtime.tasks, {
+        store,
+        requests: runtime.configuration.requests,
+      });
+      projects = {
+        ...projects,
+        generationReadStore: await prepareProjectGenerationReadStore(store),
+      };
+    }
     const composed = {
       ...pinned,
       localStoragePaths: [
@@ -371,7 +396,12 @@ function pinExtensionCompositionConfig<
   T extends ControlApiCompositionConfig & {
     extensionWorker?: ExtensionWorkerConfig;
   },
->(config: T): T {
+>(
+  config: T,
+  captured?: Readonly<{
+    creativeProjects: CreativeProjectCompositionConfig | undefined;
+  }>,
+): T {
   return Object.freeze({
     ...config,
     actor: structuredClone(config.actor),
@@ -387,9 +417,12 @@ function pinExtensionCompositionConfig<
     ...(config.pluginQueryHost === undefined
       ? {}
       : { pluginQueryHost: capturePluginQueryHost(config.pluginQueryHost) }),
-    creativeProjects: captureStandaloneCreativeProjectCompositionConfig(
-      config.creativeProjects,
-    ),
+    creativeProjects:
+      captured === undefined
+        ? captureStandaloneCreativeProjectCompositionConfig(
+            config.creativeProjects,
+          )
+        : captured.creativeProjects,
   });
 }
 function capturePluginQueryHost(

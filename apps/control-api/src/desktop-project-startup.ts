@@ -7,6 +7,7 @@ import { extensionCanonicalJson } from "@crewon/domain";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { parseDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import {
+  captureCreativeProjectCompositionConfig,
   captureStandaloneCreativeProjectCompositionConfig,
   type CreativeProjectCompositionConfig,
 } from "./creative-project-composition.ts";
@@ -17,12 +18,17 @@ import {
 } from "./plugin-ui-recovery-composition.ts";
 import { pluginSecurityActor } from "./plugin-security-validation.ts";
 import { assertDesktopPluginUiRecoveryConfiguration } from "./desktop-plugin-ui-recovery.ts";
+import type { DesktopInstalledPluginTaskConfig } from "./desktop-installed-plugin-task-environment.ts";
+import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
+import { issueDesktopProjectExecutionConfiguration } from "./desktop-project-execution-startup.ts";
 
 /** Issued private bootstrap data selects existing local capabilities; no supplier, quote or cloud policy is created. */
 export function composeDesktopProjectStartup(
   input: Readonly<{
     configuration: DesktopPluginConfiguration;
     actor: ActorContext;
+    tasks?: DesktopInstalledPluginTaskConfig;
+    activation?: DesktopInstalledPluginActivationConfig;
   }>,
 ): Readonly<{
   creativeProjects?: CreativeProjectCompositionConfig;
@@ -81,7 +87,11 @@ export function composeDesktopProjectStartup(
       }
     },
   });
-  const creativeProjects = captureStandaloneCreativeProjectCompositionConfig({
+  const capture =
+    configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3"
+      ? captureCreativeProjectCompositionConfig
+      : captureStandaloneCreativeProjectCompositionConfig;
+  const captured = capture({
     ...data,
     authorization,
     ...(resultSelections === undefined
@@ -94,6 +104,12 @@ export function composeDesktopProjectStartup(
             }),
           },
         }),
+  })!;
+  const creativeProjects = issueDesktopProjectExecutionConfiguration({
+    configuration: input.configuration,
+    tasks: input.tasks,
+    activation: input.activation,
+    projects: captured,
   })!;
   const recovery = capturePluginUiRecoveryConfiguration(uiRecovery);
   return Object.freeze({
@@ -122,5 +138,7 @@ export function captureDesktopProjectRecoveryStartup(
     configuration: capturePluginUiRecoveryConfiguration(field?.value),
     publications: input.publications,
     selectionUi: input.projects?.selectionUi,
+    pluginGenerations: input.projects?.pluginGenerations,
+    pluginQueries: input.projects?.pluginQueries,
   });
 }

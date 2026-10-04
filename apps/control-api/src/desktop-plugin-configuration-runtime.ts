@@ -16,6 +16,7 @@ import {
   type DesktopPluginInstallationRuntime,
 } from "./desktop-plugin-installation-runtime.ts";
 import {
+  assertDesktopPluginConfigurationFileCurrent,
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
@@ -106,6 +107,12 @@ export async function createDesktopPluginConfigurationRuntime(
   }>,
 ): Promise<DesktopPluginConfigurationRuntime> {
   const configuration = parseDesktopPluginConfiguration(input.configuration);
+  const fileConfiguration =
+    configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3"
+      ? input.configuration
+      : undefined;
+  if (fileConfiguration !== undefined)
+    assertDesktopPluginConfigurationFileCurrent(fileConfiguration);
   const history =
     input.historyReads === undefined
       ? undefined
@@ -150,6 +157,8 @@ export async function createDesktopPluginConfigurationRuntime(
     });
   }
   const assertOwner = (actor: ActorContext) => {
+    if (fileConfiguration !== undefined)
+      assertDesktopPluginConfigurationFileCurrent(fileConfiguration);
     authority.assertScope(actor, configuration.scope);
     installation.assertProfileOwnership(actor);
     authority.assertScope(actor, configuration.scope);

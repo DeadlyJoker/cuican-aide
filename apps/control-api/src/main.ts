@@ -139,9 +139,9 @@ const desktopPluginTasks =
                 desktopTaskEnvironment.CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH,
             }),
       });
-// Only the explicit task path moves bootstrap validation before resource allocation.
+// An explicit Native bootstrap is validated before allocating artifact or business persistence.
 const desktopTaskActor =
-  desktopPluginTasks === undefined
+  desktopPluginBootstrapPath === undefined
     ? undefined
     : (extensionEnvironment?.actor ?? {
         principalId: environmentOr(
@@ -172,6 +172,19 @@ if (desktopTaskBootstrap !== undefined)
     { desktopPluginTasks, desktopPluginActivation },
     desktopTaskBootstrap,
   );
+const desktopProjectStartup =
+  desktopTaskBootstrap === undefined || desktopTaskActor === undefined
+    ? undefined
+    : composeDesktopProjectStartup({
+        configuration: desktopTaskBootstrap,
+        actor: desktopTaskActor,
+        ...(desktopPluginTasks === undefined
+          ? {}
+          : { tasks: desktopPluginTasks }),
+        ...(desktopPluginActivation === undefined
+          ? {}
+          : { activation: desktopPluginActivation }),
+      });
 const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
   process.env,
   securityMode,
@@ -358,10 +371,17 @@ try {
               ...standaloneConfig,
               databasePath,
               desktopPlugins,
-              ...composeDesktopProjectStartup({
-                configuration: desktopPlugins,
-                actor,
-              }),
+              ...(desktopProjectStartup ??
+                composeDesktopProjectStartup({
+                  configuration: desktopPlugins,
+                  actor,
+                  ...(desktopPluginTasks === undefined
+                    ? {}
+                    : { tasks: desktopPluginTasks }),
+                  ...(desktopPluginActivation === undefined
+                    ? {}
+                    : { activation: desktopPluginActivation }),
+                })),
               ...(desktopPluginActivation === undefined
                 ? {}
                 : { desktopPluginActivation }),

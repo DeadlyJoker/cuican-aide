@@ -13,6 +13,7 @@ import {
   pluginSecurityUiRequest,
 } from "./plugin-security-validation.ts";
 import {
+  assertDesktopPluginConfigurationFileCurrent,
   parseDesktopPluginConfiguration,
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
@@ -24,6 +25,7 @@ import {
 /** A native-approved local owner grant for this Control lifetime. Configuration changes require restart. */
 export class DesktopPluginAuthority {
   readonly #configuration: DesktopPluginConfiguration;
+  readonly #fileConfiguration: DesktopPluginConfiguration | undefined;
   readonly #metadataPublications: readonly PluginCreativeProjectActionPublication[];
   #closed = false;
   constructor(
@@ -31,6 +33,12 @@ export class DesktopPluginAuthority {
     metadataPublications?: readonly PluginCreativeProjectActionPublication[],
   ) {
     this.#configuration = parseDesktopPluginConfiguration(configuration);
+    this.#fileConfiguration =
+      this.#configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3"
+        ? configuration
+        : undefined;
+    if (this.#fileConfiguration !== undefined)
+      assertDesktopPluginConfigurationFileCurrent(this.#fileConfiguration);
     const metadata =
       metadataPublications === undefined
         ? undefined
@@ -45,6 +53,8 @@ export class DesktopPluginAuthority {
   }
   assertActor(input: ActorContext): void {
     if (this.#closed) denied("desktop_plugin_authority_closed");
+    if (this.#fileConfiguration !== undefined)
+      assertDesktopPluginConfigurationFileCurrent(this.#fileConfiguration);
     if (
       !installationSame(pluginSecurityActor(input), this.#configuration.actor)
     )

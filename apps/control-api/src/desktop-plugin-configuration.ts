@@ -1,4 +1,11 @@
-import { constants } from "node:fs";
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+} from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import type { BigIntStats } from "node:fs";
@@ -9,6 +16,10 @@ import {
   parseDesktopProjectHistoryConfiguration,
   type DesktopProjectHistoryConfiguration,
 } from "@crewon/contracts";
+import {
+  parseDesktopProjectExecutionConfiguration,
+  type DesktopProjectExecutionConfiguration,
+} from "@crewon/contracts/plugins";
 import {
   parsePluginProfileScope,
   pluginInstallationDigest,
@@ -50,8 +61,21 @@ export type DesktopPluginConfiguration = DesktopPluginConfigurationBase &
         schemaVersion: "crewon.desktop-plugin-bootstrap.v2";
         projects: DesktopProjectHistoryConfiguration;
       }>
+    | Readonly<{
+        schemaVersion: "crewon.desktop-plugin-bootstrap.v3";
+        projects: DesktopProjectExecutionConfiguration;
+      }>
   );
 const parsed = new WeakSet<object>();
+const fileIssued = new WeakMap<
+  DesktopPluginConfiguration,
+  Readonly<{
+    filename: string;
+    leaf: BigIntStats;
+    bytes: Buffer;
+    directories: readonly Readonly<{ path: string; stat: BigIntStats }>[];
+  }>
+>();
 const MAX_BYTES = 256 * 1024;
 
 export function parseDesktopPluginConfiguration(
@@ -66,6 +90,7 @@ export function parseDesktopPluginConfiguration(
         : undefined;
     if (!schema?.enumerable || !Object.hasOwn(schema, "value")) invalid();
     const v2 = schema.value === "crewon.desktop-plugin-bootstrap.v2";
+    const v3 = schema.value === "crewon.desktop-plugin-bootstrap.v3";
     const value = pluginSecurityRecord(input, [
       "schemaVersion",
       "actor",
@@ -74,10 +99,12 @@ export function parseDesktopPluginConfiguration(
       "installRoot",
       "sources",
       "publications",
-      ...(v2 ? ["projects"] : []),
+      ...(v2 || v3 ? ["projects"] : []),
     ]);
     if (
-      (!v2 && value.schemaVersion !== "crewon.desktop-plugin-bootstrap.v1") ||
+      (!v2 &&
+        !v3 &&
+        value.schemaVersion !== "crewon.desktop-plugin-bootstrap.v1") ||
       typeof value.authorityEpoch !== "string" ||
       !/^[A-Za-z0-9_-]{32,128}$/u.test(value.authorityEpoch)
     )
@@ -181,18 +208,32 @@ export function parseDesktopPluginConfiguration(
       publications: Object.freeze(publications),
     };
     const configuration = Object.freeze(
-      v2
+      v3
         ? {
-            schemaVersion: "crewon.desktop-plugin-bootstrap.v2" as const,
+            schemaVersion: "crewon.desktop-plugin-bootstrap.v3" as const,
             ...common,
-            projects: parseDesktopProjectHistoryConfiguration(value.projects, {
-              publications,
-            }),
+            projects: parseDesktopProjectExecutionConfiguration(
+              value.projects,
+              {
+                publications,
+              },
+            ),
           }
-        : {
-            schemaVersion: "crewon.desktop-plugin-bootstrap.v1" as const,
-            ...common,
-          },
+        : v2
+          ? {
+              schemaVersion: "crewon.desktop-plugin-bootstrap.v2" as const,
+              ...common,
+              projects: parseDesktopProjectHistoryConfiguration(
+                value.projects,
+                {
+                  publications,
+                },
+              ),
+            }
+          : {
+              schemaVersion: "crewon.desktop-plugin-bootstrap.v1" as const,
+              ...common,
+            },
     );
     if (Buffer.byteLength(JSON.stringify(configuration)) > MAX_BYTES) invalid();
     parsed.add(configuration);
@@ -273,10 +314,96 @@ export async function loadDesktopPluginConfiguration(
       )
         invalid();
     }
+    fileIssued.set(
+      configuration,
+      Object.freeze({
+        filename,
+        leaf: after,
+        bytes: Buffer.from(bytes.subarray(0, length)),
+        directories: Object.freeze(paths.slice(1)),
+      }),
+    );
     return configuration;
   } finally {
     await file.close();
   }
+}
+
+/** Only the original private-file load can authorize the new Native execution startup. */
+export function assertDesktopPluginConfigurationFileCurrent(
+  value: DesktopPluginConfiguration,
+): void {
+  try {
+    const issued = fileIssued.get(value);
+    if (issued === undefined) invalid();
+    const directories = () => {
+      for (const pin of issued.directories) {
+        const current = lstatSync(pin.path, { bigint: true });
+        if (
+          !current.isDirectory() ||
+          current.isSymbolicLink() ||
+          current.dev !== pin.stat.dev ||
+          current.ino !== pin.stat.ino ||
+          current.mode !== pin.stat.mode ||
+          current.uid !== pin.stat.uid
+        )
+          invalid();
+      }
+    };
+    directories();
+    const before = lstatSync(issued.filename, { bigint: true });
+    if (
+      !before.isFile() ||
+      before.isSymbolicLink() ||
+      !sameLeaf(before, issued.leaf)
+    )
+      invalid();
+    const fd = openSync(
+      issued.filename,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    try {
+      if (!sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf)) invalid();
+      const storage = Buffer.allocUnsafe(MAX_BYTES + 1);
+      let length = 0;
+      while (length < storage.length) {
+        const count = readSync(
+          fd,
+          storage,
+          length,
+          storage.length - length,
+          null,
+        );
+        if (count === 0) break;
+        length += count;
+      }
+      if (
+        length !== Number(issued.leaf.size) ||
+        !storage.subarray(0, length).equals(issued.bytes) ||
+        !sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf) ||
+        !sameLeaf(lstatSync(issued.filename, { bigint: true }), issued.leaf)
+      )
+        invalid();
+      directories();
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    invalid();
+  }
+}
+function sameLeaf(a: BigIntStats, b: BigIntStats): boolean {
+  return (
+    a.dev === b.dev &&
+    a.ino === b.ino &&
+    a.mode === b.mode &&
+    a.uid === b.uid &&
+    a.nlink === 1n &&
+    a.nlink === b.nlink &&
+    a.size === b.size &&
+    a.mtimeNs === b.mtimeNs &&
+    a.ctimeNs === b.ctimeNs
+  );
 }
 
 /** Pin the actual leaf and ancestors before opening, then recheck after the bounded read. */

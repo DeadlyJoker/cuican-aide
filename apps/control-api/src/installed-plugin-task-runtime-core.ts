@@ -66,6 +66,36 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
 }>;
 
+const coreBindings = new WeakMap<
+  object,
+  Readonly<{
+    store: InstalledPluginTaskRuntimeCoreInput["store"];
+    requests: InstalledPluginRequestOwner;
+    assertActive(): void;
+  }>
+>();
+
+/** A Native recovery borrower must retain this exact parent and issued request lifetime. */
+export function assertInstalledPluginTaskRuntimeCoreBinding(
+  core: unknown,
+  input: Readonly<{
+    store: InstalledPluginTaskRuntimeCoreInput["store"];
+    requests: InstalledPluginRequestOwner;
+  }>,
+): asserts core is InstalledPluginTaskRuntimeCore {
+  const binding =
+    core !== null && typeof core === "object"
+      ? coreBindings.get(core)
+      : undefined;
+  if (
+    binding === undefined ||
+    binding.store !== input.store ||
+    binding.requests !== input.requests
+  )
+    invalid();
+  binding.assertActive();
+}
+
 /** Borrows an issued request owner and the real parent store; explicitly migrates execution, never identity, prices or funds. */
 export async function createInstalledPluginTaskRuntimeCore(
   provided: InstalledPluginTaskRuntimeCoreInput,
@@ -400,7 +430,7 @@ export async function createInstalledPluginTaskRuntimeCore(
     const actualGenerations = projectGenerations;
     const actualQueries = projectQueries;
     let closing: Promise<void> | null = null;
-    return Object.freeze({
+    const core: InstalledPluginTaskRuntimeCore = Object.freeze({
       owner: actualOwner,
       ...(actualGenerations === undefined
         ? {}
@@ -423,6 +453,11 @@ export async function createInstalledPluginTaskRuntimeCore(
         ]));
       },
     });
+    coreBindings.set(
+      core,
+      Object.freeze({ store: input.store, requests, assertActive: active }),
+    );
+    return core;
   } catch (error) {
     lifetime.abort();
     try {

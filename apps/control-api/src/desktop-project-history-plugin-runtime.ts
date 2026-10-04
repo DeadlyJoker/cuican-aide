@@ -10,7 +10,14 @@ import type { PreparedCreativeProjects } from "./creative-project-composition.ts
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import type { DesktopPluginConfigurationRuntime } from "./desktop-plugin-configuration-runtime.ts";
 import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
-import { composeProjectGenerationReadService } from "./project-generation-read-composition.ts";
+import {
+  composeProjectGenerationReadService,
+  prepareProjectGenerationReadStore,
+} from "./project-generation-read-composition.ts";
+import {
+  assertInstalledPluginTaskRuntimeCoreBinding,
+  type InstalledPluginTaskRuntimeCore,
+} from "./installed-plugin-task-runtime-core.ts";
 import { composeProjectGenerationSelectionService } from "./project-generation-selection-composition.ts";
 import {
   createProjectGenerationReadPluginRuntime,
@@ -64,20 +71,32 @@ export async function createDesktopProjectHistoryPluginRuntime(
     store: SqliteRunStore;
     clock: ApplicationClock;
     digester: ContentDigester;
+    tasks?: InstalledPluginTaskRuntimeCore;
     fallback?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): Promise<DesktopProjectHistoryPluginRuntime | undefined> {
   const projects = input.projects;
   if (projects?.generationReads === undefined) return undefined;
-  if (
-    projects.generationReadStore === undefined ||
-    input.installed.historyAuthorization === undefined
-  )
+  if (input.installed.historyAuthorization === undefined)
     throw new Error("desktop_project_history_authority_required");
+  if (input.tasks !== undefined)
+    assertInstalledPluginTaskRuntimeCoreBinding(input.tasks, {
+      store: input.store,
+      requests: input.installed.requests,
+    });
+  if (projects.generationReadStore === undefined && input.tasks === undefined)
+    throw new Error("desktop_project_history_authority_required");
+  // The real task core has already migrated paid records. This separately issued
+  // adapter only enables reads; an absent core retains the original history gate.
+  const extensions =
+    projects.generationReadStore ??
+    (await prepareProjectGenerationReadStore(input.store));
+  const taskReads =
+    input.tasks?.extensionReads ?? input.installed.extensionReads;
   const reads = composeProjectGenerationReadService({
     projects,
-    extensions: projects.generationReadStore,
-    tasks: input.installed.extensionReads,
+    extensions,
+    tasks: taskReads,
     digester: input.digester,
   });
   if (reads === undefined)
@@ -90,7 +109,7 @@ export async function createDesktopProjectHistoryPluginRuntime(
       readRuntime = createProjectGenerationReadPluginRuntime({
         configuration: projects.generationReadUi,
         reads,
-        taskReads: input.installed.extensionReads,
+        taskReads,
         requests: input.installed.requests,
         publications: input.configuration.publications,
         ...(hostUiServices === undefined ? {} : { hostUiServices }),
@@ -100,7 +119,7 @@ export async function createDesktopProjectHistoryPluginRuntime(
     const selections = composeProjectGenerationSelectionService({
       projects,
       generationReads: reads,
-      extensions: projects.generationReadStore,
+      extensions,
       operations: input.store.externalOperationStore(),
       authorization: input.installed.historyAuthorization,
       clock: input.clock,
@@ -112,7 +131,7 @@ export async function createDesktopProjectHistoryPluginRuntime(
       selectionRuntime = createProjectGenerationSelectionPluginRuntime({
         configuration: projects.selectionUi,
         selections,
-        taskReads: input.installed.extensionReads,
+        taskReads,
         requests: input.installed.requests,
         publications: input.configuration.publications,
         ...(hostUiServices === undefined ? {} : { hostUiServices }),

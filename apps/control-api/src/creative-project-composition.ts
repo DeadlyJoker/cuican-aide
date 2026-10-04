@@ -3,7 +3,7 @@ import {
   type CreativeProjectAuthorizationPort,
   type CreativeProjectStore,
 } from "@crewon/application";
-import { SqliteRunStore } from "@crewon/store";
+import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type {
   StandaloneControlApiConfig,
   StandaloneControlApiRuntime,
@@ -232,7 +232,8 @@ export async function prepareCreativeProjects(
   configuration: CreativeProjectCompositionConfig | undefined,
 ): Promise<PreparedCreativeProjects | undefined> {
   if (configuration === undefined) return undefined;
-  // The paid composition performs its own explicit writer migration later.
+  // Paid composition issues its own read/writer adapters after establishing the
+  // actual source schemas; history-only composition never creates those schemas.
   const generationReadStore =
     configuration.generationReads !== undefined &&
     configuration.pluginGenerations === undefined
@@ -240,6 +241,24 @@ export async function prepareCreativeProjects(
       : undefined;
   const store = owner.creativeProjectStore();
   await store.migrate();
+  if (
+    configuration.pluginGenerations !== undefined &&
+    configuration.resultSelections !== undefined
+  ) {
+    if (
+      !(owner instanceof SqliteRunStore) &&
+      !(owner instanceof PostgresDomainStore)
+    )
+      throw new Error("project_generation_selection_composition_required");
+    // A fresh paid composition must establish the real source schemas before
+    // selection migration. The later core still enables its own writer adapter.
+    await owner.pluginInstallationStore().migrate();
+    const extensions = owner.extensionStore();
+    await extensions.migrate();
+    await extensions.migratePluginAdmissions();
+    await extensions.migrateCredits();
+    await extensions.migrateProjectGenerations();
+  }
   const selectionStore =
     configuration.resultSelections === undefined
       ? undefined

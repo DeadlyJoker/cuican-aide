@@ -16,8 +16,10 @@ import {
   type PluginSelection,
 } from "@crewon/domain";
 import {
+  capturePluginUiHostServiceAvailability,
   loadInstalledPluginBusinessRegistration,
   validateInstalledPluginConfiguration,
+  type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
 import {
@@ -81,6 +83,7 @@ const owners = new WeakSet<object>();
 /** A preparation remains owned by the actual native profile and exact published business tuple. */
 export class DesktopInstalledPluginActivationOwner {
   readonly #dependencies: OwnerDependencies;
+  readonly #hostUiServices: PluginUiHostServiceAvailabilityPort | undefined;
   readonly #peer: InstalledPluginPeerClient;
   readonly #policy: DesktopInstalledPluginActivationAuthority;
   readonly #entries: readonly Entry[];
@@ -89,7 +92,10 @@ export class DesktopInstalledPluginActivationOwner {
   #closing: Promise<void> | null = null;
   constructor(
     input: OwnerDependencies,
-    transports: Readonly<{ fetch?: typeof globalThis.fetch }> = {},
+    transports: Readonly<{
+      fetch?: typeof globalThis.fetch;
+      hostUiServices?: PluginUiHostServiceAvailabilityPort;
+    }> = {},
   ) {
     assertDesktopInstalledPluginActivationConfig(input.activation);
     const configuration = parseDesktopPluginConfiguration(input.configuration);
@@ -123,6 +129,9 @@ export class DesktopInstalledPluginActivationOwner {
     )
       denied();
     this.#dependencies = Object.freeze({ ...input, configuration });
+    this.#hostUiServices = capturePluginUiHostServiceAvailability(
+      transports.hostUiServices,
+    );
     this.#entries = Object.freeze(
       publication.entries.map((entry) => {
         const compiled = parseExtensionConfiguration(
@@ -148,11 +157,11 @@ export class DesktopInstalledPluginActivationOwner {
         deadlineMs: publication.timeoutMs,
         maximumRequests: 128,
       },
-      transports,
+      { fetch: transports.fetch },
     );
     this.#policy = new DesktopInstalledPluginActivationAuthority(
       input.activation,
-      transports,
+      { fetch: transports.fetch },
     );
     this.#assertOwner(configuration.actor);
     owners.add(this);
@@ -230,6 +239,9 @@ export class DesktopInstalledPluginActivationOwner {
         package: input.package,
         registry: this.#dependencies.registry,
         signal: current,
+        ...(this.#hostUiServices === undefined
+          ? {}
+          : { hostUiServices: this.#hostUiServices }),
       });
       this.#assertOwner(input.actor);
       if (descriptor.businessManifestPath === null) return null;

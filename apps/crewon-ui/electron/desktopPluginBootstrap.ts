@@ -22,6 +22,10 @@ import {
   type ExtensionHostActor,
 } from "@crewon/contracts";
 import {
+  parseDesktopProjectExecutionConfiguration,
+  type DesktopProjectExecutionConfiguration,
+} from "@crewon/contracts/plugins";
+import {
   parsePluginProfileScope,
   type PluginProfileScope,
 } from "@crewon/domain";
@@ -32,10 +36,14 @@ export const DESKTOP_PLUGIN_APPROVAL_SCHEMA =
   "crewon.desktop-plugin-approval.v1";
 export const DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2 =
   "crewon.desktop-plugin-approval.v2";
+export const DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 =
+  "crewon.desktop-plugin-approval.v3";
 export const DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA =
   "crewon.desktop-plugin-bootstrap.v1";
 export const DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2 =
   "crewon.desktop-plugin-bootstrap.v2";
+export const DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3 =
+  "crewon.desktop-plugin-bootstrap.v3";
 const PROFILE_FILE = "plugin-profile.json";
 const PROFILE_SCHEMA = "crewon.desktop-plugin-profile.v1";
 const MAX_BYTES = 128 * 1024;
@@ -69,6 +77,10 @@ export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
         schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2;
         projects: DesktopProjectHistoryConfiguration;
       }>
+    | Readonly<{
+        schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3;
+        projects: DesktopProjectExecutionConfiguration;
+      }>
   );
 type ApprovalSettings = Readonly<{
   sources: readonly Source[];
@@ -79,6 +91,10 @@ type ApprovalSettings = Readonly<{
     | Readonly<{
         schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2;
         projects: DesktopProjectHistoryConfiguration;
+      }>
+    | Readonly<{
+        schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3;
+        projects: DesktopProjectExecutionConfiguration;
       }>
   );
 export type DesktopPluginBootstrap = Readonly<{
@@ -195,16 +211,22 @@ export async function prepareDesktopPluginBootstrap(
     publications: settings.publications,
   };
   const manifest: DesktopPluginBootstrapManifest =
-    settings.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+    settings.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
       ? Object.freeze({
-          schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2,
+          schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3,
           ...manifestFields,
           projects: settings.projects,
         })
-      : Object.freeze({
-          schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA,
-          ...manifestFields,
-        });
+      : settings.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+        ? Object.freeze({
+            schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V2,
+            ...manifestFields,
+            projects: settings.projects,
+          })
+        : Object.freeze({
+            schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA,
+            ...manifestFields,
+          });
   const bytes = Buffer.from(JSON.stringify(manifest));
   if (bytes.byteLength > MAX_BYTES) invalid("size");
   const bootstrapPath = join(
@@ -268,13 +290,15 @@ function parseApproval(input: unknown): ApprovalSettings {
   )?.value;
   const value = record(
     input,
-    schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+    schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2 ||
+      schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
       ? ["schemaVersion", "sources", "publications", "projects"]
       : ["schemaVersion", "sources", "publications"],
   );
   if (
     value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA &&
-    value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+    value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2 &&
+    value.schemaVersion !== DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
   )
     invalid("approval");
   const ids = new Set<string>(),
@@ -369,18 +393,26 @@ function parseApproval(input: unknown): ApprovalSettings {
     sources: Object.freeze(sources),
     publications: Object.freeze(publications),
   };
-  return value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+  return value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
     ? Object.freeze({
-        schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2,
+        schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3,
         ...settings,
-        projects: parseDesktopProjectHistoryConfiguration(value.projects, {
+        projects: parseDesktopProjectExecutionConfiguration(value.projects, {
           publications: settings.publications,
         }),
       })
-    : Object.freeze({
-        schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA,
-        ...settings,
-      });
+    : value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
+      ? Object.freeze({
+          schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2,
+          ...settings,
+          projects: parseDesktopProjectHistoryConfiguration(value.projects, {
+            publications: settings.publications,
+          }),
+        })
+      : Object.freeze({
+          schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA,
+          ...settings,
+        });
 }
 
 function privateFile(path: string, maximum: number): FileSnapshot {

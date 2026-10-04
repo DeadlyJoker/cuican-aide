@@ -6,6 +6,16 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 项目生成、查询与三类恢复装配
+
+已新增独立私有 approval/bootstrap v3 与 `crewon.desktop-project-execution.v1`，把生成、显式查询和图片选用的 source/target/action 映射及三类恢复绑定实际 FileIssued bootstrap、task、activation、request owner 和 SQLite。原 v1/v2 与普通 Standalone 的付费映射拒绝保持；DTO、副本或布尔就绪端口不能替代实际 owner。协议见[Native 项目执行接线](./native-project-execution-integration.md)。
+
+真实 Native factory 验证三类原请求暂存、读回及关闭重建后的保留，没有派发业务动作。首次实际 fresh schema 测试发现选用迁移早于生成 source schemas，已在显式生成加选用组合补齐实际迁移；随后修正 UI-only activation 的实际 Host 服务接线和公开 creator 的 HTTP 只读 adapter。没有开户、拨款或伪造 schema/服务就绪。原文件持续校验在既有权限和请求检查处执行，未新增 COMMIT 后失败检查。
+
+当前实际组合及兼容回归 **107/107**、新实际 factory **12/12**、原 runtime/启动兼容 **56/56**、Contracts **402/402**、新旧 Electron bootstrap **56/56**、真实 Main **9/9**、原 Electron source/activation/IO **31/31**与 SQLite/自持 PostgreSQL 18 专项 **40/40**通过，均零跳过；各组重叠，不相加。Control、Contracts、Host 类型、boundary、license、格式与 diff 检查通过。统一证据为 `output/extensions/checks/native-project-execution-proof-20261004.json`，首次失败及修复后日志保留，未删改旧行为测试以通过检查。
+
+原用户栏→设置已在实际页面再次打开；原 UI、侧栏、公共样式、正式资产、SDK、生产映射和旧发行包保持，用户进程保留。本轮仅实际 owner 关闭重建，未验收 generation/query 在真实 Source Supervisor session/bootstrap epoch 轮换后的业务回执重放。项目生成 wrapper 与查询双 pin 的历史证明、Native Worker 实际执行、真实钱包/价格/结算、可用 ComfyUI 的同次完整 App S0、编译后 Electron 完整 App 和 E5 仍待完成，完整目标 ACTIVE。
+
 ## 2026-10-04：Native v4 Electron source 私有任务签发与冷重启重放
 
 Native v4 已接通 Electron source Supervisor、实际 release/Main/Worker 子进程和独立私有任务配置签发。任务权限来自显式配置的独立 authority，不借用模块激活权限，也不提供默认钱包或报价。协议见[Electron 私有任务签发](./native-installed-plugin-task-electron.md)。真实 source 进程专项 **3/3 通过、零跳过**；Worker 保持 metadata-only 边界，拒绝执行并显式取消，本轮不代表付费任务完成，也不代表 packaged App 或编译后 Electron 完整 App 验收。
