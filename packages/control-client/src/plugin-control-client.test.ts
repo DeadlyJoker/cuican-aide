@@ -120,6 +120,71 @@ function invalid(error: unknown) {
   );
 }
 
+test("explicit renewal uses bounded authenticated POST and checks the old-expiry response transition", async () => {
+  const next = { ...lease, expiresAt: "2030-01-01T00:02:30.000Z" };
+  const calls: { url: string; init: RequestInit }[] = [];
+  const controller = new AbortController();
+  const api = client(async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return Response.json(next);
+  });
+  assert.deepEqual(
+    await api.plugins.renewMount(
+      ref,
+      { expectedExpiresAt: lease.expiresAt },
+      { signal: controller.signal },
+    ),
+    next,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0]!.url,
+    `https://control.test/api/v1/plugins/ui/mounts/${ref}/renew`,
+  );
+  assert.equal(calls[0]!.init.method, "POST");
+  assert.equal(calls[0]!.init.signal, controller.signal);
+  assert.equal(calls[0]!.init.redirect, "manual");
+  assert.deepEqual(JSON.parse(String(calls[0]!.init.body)), {
+    expectedExpiresAt: lease.expiresAt,
+  });
+  const headers = new Headers(calls[0]!.init.headers);
+  assert.equal(headers.get("authorization"), "Bearer actor-token");
+  assert.equal(headers.get("x-csrf-token"), "csrf");
+  assert.equal(headers.get("idempotency-key"), null);
+  for (const reply of [
+    lease,
+    { ...next, mountRef: "x".repeat(40) },
+    { ...next, expiresAt: "2030-01-01T00:05:00.001Z" },
+    { ...next, secret: "private" },
+  ])
+    await assert.rejects(
+      client(async () => Response.json(reply)).plugins.renewMount(ref, {
+        expectedExpiresAt: lease.expiresAt,
+      }),
+      invalid,
+    );
+  await assert.rejects(
+    api.plugins.renewMount(ref, { expectedExpiresAt: "invalid" }),
+  );
+  await assert.rejects(
+    api.plugins.renewMount(ref, {
+      expectedExpiresAt: lease.expiresAt,
+      actorId: "foreign",
+    } as never),
+  );
+  await assert.rejects(
+    api.plugins.renewMount("../foreign", {
+      expectedExpiresAt: lease.expiresAt,
+    }),
+  );
+  assert.equal(calls.length, 1);
+  await assert.rejects(
+    client(async () => {
+      throw new Error("must_not_fetch");
+    }, null).plugins.renewMount(ref, { expectedExpiresAt: lease.expiresAt }),
+  );
+});
+
 test("eleven methods share the original authenticated transport, exact paths, CSRF and abort", async () => {
   const calls: { url: string; init: RequestInit }[] = [];
   const responses: unknown[] = [

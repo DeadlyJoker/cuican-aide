@@ -4,6 +4,7 @@ import {
   parsePluginUiRecoveryHintsResponse,
   parsePluginUiRecoveryHint,
   parseStagePluginUiRecoveryResponse,
+  parseRenewPluginUiMountResponse,
   PROJECT_GENERATION_UI_ACTIONS,
   PROJECT_GENERATION_QUERY_UI_ACTIONS,
   PROJECT_GENERATION_SELECTION_UI_ACTIONS,
@@ -43,7 +44,7 @@ export function createInstalledPluginUiRecovery(
   }>,
 ) {
   const { client, assertCurrent } = options;
-  const hydrated = new Map<string, string>();
+  const hydrated = new Map<string, { lease: PluginUiLease }>();
   return Object.freeze({
     async hydrate(lease: PluginUiLease, signal: AbortSignal): Promise<void> {
       if (!installedPluginUiDeclaresRecovery(lease)) return;
@@ -101,13 +102,17 @@ export function createInstalledPluginUiRecovery(
       // All three snapshots are complete before any listener can observe one lane.
       for (const plan of plans) plan.publish();
       assertPluginUiCurrent(assertCurrent, signal);
-      hydrated.set(lease.mountRef, checkedLeaseIdentity(lease));
+      hydrated.set(lease.mountRef, { lease });
     },
     stage(lease: PluginUiLease, request: PluginUiRecoveryRequest) {
       if (!installedPluginUiDeclaresRecovery(lease)) return undefined;
       return async (signal: AbortSignal) => {
         assertPluginUiCurrent(assertCurrent, signal);
-        if (hydrated.get(lease.mountRef) !== checkedLeaseIdentity(lease))
+        const owner = hydrated.get(lease.mountRef);
+        if (
+          !owner ||
+          checkedLeaseIdentity(owner.lease) !== checkedLeaseIdentity(lease)
+        )
           uiFailure("plugin_ui_recovery_not_ready");
         const ack = parseStagePluginUiRecoveryResponse(
           await client.plugins.stageRecovery(lease.mountRef, request, {
@@ -116,13 +121,27 @@ export function createInstalledPluginUiRecovery(
           request,
         );
         assertPluginUiCurrent(assertCurrent, signal);
-        if (hydrated.get(lease.mountRef) !== checkedLeaseIdentity(lease))
+        // A caller can stop waiting while the original physical stage still runs.
+        // Authenticated renewal keeps this owner; release or hydrate replaces it.
+        if (hydrated.get(lease.mountRef) !== owner)
           uiFailure("plugin_ui_recovery_not_ready");
         return ack.intent;
       };
     },
     release(lease: PluginUiLease): void {
       hydrated.delete(lease.mountRef);
+    },
+    /** Authenticated renewal retains the original journal snapshot and never replays an action. */
+    renewLease(previous: PluginUiLease, input: PluginUiLease): void {
+      const next = parseRenewPluginUiMountResponse(input, previous);
+      if (!installedPluginUiDeclaresRecovery(previous)) return;
+      const owner = hydrated.get(previous.mountRef);
+      if (
+        !owner ||
+        checkedLeaseIdentity(owner.lease) !== checkedLeaseIdentity(previous)
+      )
+        uiFailure("plugin_ui_recovery_not_ready");
+      owner.lease = next;
     },
   });
 }

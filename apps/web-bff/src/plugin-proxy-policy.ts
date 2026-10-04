@@ -121,7 +121,10 @@ export function pluginProxyPolicy(input: {
             : PLUGIN_JSON_RESPONSE_MAX_BYTES;
       } else if (parts.length === 4 && parts[3] === "actions")
         methods = ["POST"];
-      else if (parts.length === 4 && parts[3] === "recovery") {
+      else if (parts.length === 4 && parts[3] === "renew") {
+        methods = ["POST"];
+        responseMaxBytes = PLUGIN_LEASE_RESPONSE_MAX_BYTES;
+      } else if (parts.length === 4 && parts[3] === "recovery") {
         methods = ["GET", "POST"];
         responseMaxBytes = PLUGIN_RECOVERY_RESPONSE_MAX_BYTES;
       } else if (

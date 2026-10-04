@@ -11,6 +11,8 @@ import {
   parseInvokePluginUiActionResponse,
   parseOpenPluginUiMountRequest,
   parseOpenPluginUiMountResponse,
+  parseRenewPluginUiMountRequest,
+  parseRenewPluginUiMountResponse,
   parsePluginControlIdempotencyKey,
   parsePluginControlMountRef,
   parsePluginControlPackageDigest,
@@ -32,6 +34,7 @@ import {
   type InstallPluginPackageRequest,
   type InvokePluginUiActionRequest,
   type OpenPluginUiMountRequest,
+  type RenewPluginUiMountRequest,
   type PluginPackageListQuery,
   type PluginSelectionListQuery,
   type PluginSourceListQuery,
@@ -247,6 +250,24 @@ export class PluginControlClient {
     );
     return this.#output(() =>
       parseValidatePluginUiMountResponse(result, { mountRef: checked }),
+    );
+  }
+  async renewMount(
+    mountRef: string,
+    request: RenewPluginUiMountRequest,
+    options: PluginControlRequestOptions = {},
+  ) {
+    const ref = this.#input(() => parsePluginControlMountRef(mountRef));
+    const checked = this.#input(() => parseRenewPluginUiMountRequest(request));
+    const result = await this.#json(
+      "POST",
+      `${PREFIX}/ui/mounts/${ref}/renew`,
+      checked,
+      options,
+      { maximumResponseBytes: MAX_PLUGIN_UI_LEASE_RESPONSE_BYTES },
+    );
+    return this.#output(() =>
+      parseRenewPluginUiMountResponse(result, { mountRef: ref, ...checked }),
     );
   }
   async closeMount(

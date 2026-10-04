@@ -520,14 +520,14 @@ test("public HTTP API stays separate from SDK entrypoints and OpenAPI generation
   const paths = Object.entries(api.paths).filter(([path]) =>
     path.startsWith("/api/v1/plugins"),
   );
-  assert.equal(paths.length, 11);
+  assert.equal(paths.length, 12);
   assert.equal(
     paths.reduce(
       (count, [, operations]) =>
         count + Object.keys(operations as object).length,
       0,
     ),
-    13,
+    14,
   );
   assert.equal(
     api.paths["/api/v1/plugins/sources"].get.operationId,
@@ -588,6 +588,31 @@ test("public HTTP API stays separate from SDK entrypoints and OpenAPI generation
     MAX_PLUGIN_UI_CATALOG_RESPONSE_BYTES,
   );
   assert.equal(MAX_PLUGIN_UI_ASSET_BYTES, 33554432);
+  const renew = api.paths["/api/v1/plugins/ui/mounts/{mountRef}/renew"];
+  assert.deepEqual(Object.keys(renew), ["post"]);
+  assert.equal(renew.post.operationId, "renewPluginUiMount");
+  assert.ok(
+    renew.post.parameters.some(
+      (item: { $ref?: string }) =>
+        item.$ref === "#/components/parameters/CsrfToken",
+    ),
+  );
+  assert.equal(
+    renew.post.requestBody.content["application/json"].schema.$ref,
+    "#/components/schemas/RenewPluginUiMountRequest",
+  );
+  assert.deepEqual(api.components.schemas.RenewPluginUiMountRequest.required, [
+    "expectedExpiresAt",
+  ]);
+  assert.equal(
+    api.components.schemas.RenewPluginUiMountRequest.additionalProperties,
+    false,
+  );
+  assert.deepEqual(
+    api.components.schemas.RenewPluginUiMountRequest.properties
+      .expectedExpiresAt,
+    api.components.schemas.PluginUiLease.properties.expiresAt,
+  );
   const close = api.paths["/api/v1/plugins/ui/mounts/{mountRef}"].delete;
   assert.equal(close.requestBody.required, false);
   assert.deepEqual(close.requestBody.content["application/json"].schema.oneOf, [

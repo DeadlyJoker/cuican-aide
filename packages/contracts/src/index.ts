@@ -37,6 +37,7 @@ export * from "./project-generation-selection-host-context-contract.ts";
 export * from "./plugin-ui-recovery-contract.ts";
 export * from "./desktop-project-history-contract.ts";
 export * from "./plugin-control-contract.ts";
+export * from "./plugin-ui-renewal-contract.ts";
 export * from "./plugin-source-control-contract.ts";
 export * from "./extension-host-api.ts";
 export * from "./office-thread-contract.ts";

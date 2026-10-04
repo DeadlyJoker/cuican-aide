@@ -39,6 +39,7 @@ function uiService(
     catalog: unused,
     openMount: unused,
     validateMount: unused,
+    renewMount: unused,
     readAsset: unused,
     closeMount: unused,
     invoke,

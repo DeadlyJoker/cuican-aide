@@ -1,10 +1,26 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：ACTIVE（进行中），不能据此认为完整插件子系统已经交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：BLOCKED（受阻），当前 Native 生图链路等待用户选择真实 DNS 或现有系统代理接入；不能据此认为完整插件子系统已经交付。
 
 当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-05：插件页面连续使用与 0.1.14 桌面交付
+
+原插件页面持有五分钟绝对租约，GET 权限验证不会续期；此前实际页面显示暂时不可用，但没有捕获其错误码。现在补齐[有限租约续期](./plugin-ui-lease-renewal.md)：新增显式 POST renew，保留原 v1 lease 与只读 GET；同一 actor、profile、epoch、启用选择、包字节、入口和公开资源必须重新核对。只更新原 owner 的期限，每次最多五分钟；关闭、过期、撤权、换包或旧期限冲突不能复活。Native 使用原 Main 会话、frame/sender gate 和 binding，资源地址与权限保持；旧桥缺少可选 renew 时保持原行为。
+
+宿主在剩余一分钟时续期，先排空已经开始的真实操作，再同步更新资源代理、加载器和回执 owner；同一模块实例及 DOM 不重建，不重新导入或 hydrate，也不发送新的生成请求。审查修复了两处问题：撤回后业务入口必须拒绝缺失 owner；原 stage 已派发、等待者取消但 ACK 晚到时，原稳定 owner 仍可受理回执，续期本身不丢失该 ACK。五秒动作预算、原回执与生成幂等规则不变。
+
+最终 Renderer 十文件 **122/122、零跳过**，包含原挂载快照、五分钟后动作、原草稿与迟到 stage 回执；日志 `plugin-ui-renewal-renderer-final-20261005.log`。Contracts **440/440**、Client **192/192**，新 Application/实际 HTTP/BFF 续期组合 **13/13**均零跳过；旧验证保持只读、旧期限 CAS、真实安装字节篡改、外国 owner 与撤权拒绝已覆盖。Native 三文件 **40/40、零跳过**，其中真实隐藏 Electron 专项沿原 preload、IPC 和资源代理访问测试 Control，续期后保持原 root/实例/资源地址，拒绝外国 frame，资源预算归零；`native-plugin-ui-renewal-electron-proof-20261005.json` 明确限定为测试窗口及测试 Control，不代替实际用户完整 App 或在线生图。类型、boundary 与完整桌面 pack 通过；各验证范围不相加。
+
+实际 `/Applications/CrewON.app` 已安装 **0.1.14**。旧 Main/Control 正常退出并物理退场后，完整用户数据约 997M 与旧 0.1.13 App 均私有备份，原 profile 保留原位。`native-ui-renewal-install-20261005.json` 核验实际 asar、构建身份与七个 runtime bundle 与本轮构建一致，四个工作空间 registry 字节保持。独立旧/新 asar 比较确认 **全部四个 CSS 逐字节相同**；Renderer JS、Main/preload 因续期接线有意重建，不宣称整个 asar 相同。正常桌面入口已显示原 admin、四个工作空间及历史会话，进入同一「夜航 · 插件流程验收」后读取原需求 v1、概念输入 v1 与 accepted 回执；没有再次生成或点击供应商查询。
+
+实际完整 App 在同一次进入中连续打开 **330.286 秒**，没有重入或重载，原项目、需求 v1、概念输入 v1、精确提示词和 accepted 回执均保持，没有暂时不可用画面；证据 `native-ui-renewal-continuity-final-20261005.json`、同名 AX 文本和截图。该证据证明实际页面跨过原五分钟期限仍可见；没有读取服务端私有 expiry，也没有向实际页面输入未保存草稿。草稿、DOM 和续期身份的确切语义由上述行为测试及真实 Electron 专项覆盖，不扩写为实际 App 中手工草稿验收。
+
+独立最终实际只读核验 `native-upgrade-0.1.14-readonly-post-20261005-2026-10-04T20-03-25-819Z.json` 确认原 journal 仍 accepted、revision 11、attempt 9，原 ACK 与全部不可变身份保持；原 Run、operation、funding、committed receipt 和 generation link 各一，全局 Run 126，query 0。四个工作空间 registry、六个线程归属、五个 Web 服务及 primary Git 精确保持。原 WorkItem 的 Worker 重试计数自然继续演进，不宣称其可变状态静止。完成后实际 App 留在原任务页，截图 `native-0.1.14-reopened-task-final-20261005.png`。
+
+最后仅 DNS 与原出站策略核对仍得到 `198.18.12.7`、private、`network_egress_denied`，证据 `native-ui-renewal-comfy-dns-20261005.json`；没有 HTTP、模型、供应商请求、策略绕过或网络修改。独立审查确认同一 Fake-IP 阻碍已连续至少三个目标续跑，原 DNS/系统代理选择尚未回复。本轮已授权的续期修复、实际交付与数据保留收尾全部完成，完整目标转为 **BLOCKED**。原 operation 仍 submitting、providerOperationId 为 null，Run reconciling，不能将 accepted 回执解释为外部图片成功。等待明确网络路径后仅核验原 operation、确切图片选用与冷恢复，不再次生成或手改记录；个人积分继续按用户要求后置，E5 第二个实际企业 API 仍待选定。
 
 ## 2026-10-05：Native 插件安装与工作空间回退修复
 

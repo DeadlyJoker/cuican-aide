@@ -32,6 +32,8 @@ import {
 } from "../../lib/plugins/useInstalledPluginProjectSelectionContext";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
+// Keep the original short request budget well inside the remaining finite authority window.
+const LEASE_RENEW_BEFORE_MS = 60_000;
 type Monitor = {
   controller: AbortController;
   timer: ReturnType<typeof setTimeout> | null;
@@ -180,7 +182,7 @@ export function InstalledPluginModule({
   );
   const acquireMount = useCallback(
     async (signal: AbortSignal): Promise<PluginUiLease> => {
-      const lease = await context.host.acquireMount(
+      let lease = await context.host.acquireMount(
         context.module.plugin,
         context.module.contributionId,
         signal,
@@ -198,6 +200,17 @@ export function InstalledPluginModule({
           return;
         try {
           await context.host.validateLease(lease, owned.controller.signal);
+          if (
+            !owned.controller.signal.aborted &&
+            monitor.current === owned &&
+            current.current === context &&
+            context.host.renewLease &&
+            Date.parse(lease.expiresAt) - Date.now() <= LEASE_RENEW_BEFORE_MS
+          )
+            lease = await context.host.renewLease(
+              lease,
+              owned.controller.signal,
+            );
           if (
             !owned.controller.signal.aborted &&
             monitor.current === owned &&

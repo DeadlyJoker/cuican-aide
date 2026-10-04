@@ -11,6 +11,10 @@ export type OpenPluginUiMountCommand = Readonly<{
   expectedPackageDigest: string;
 }>;
 export type PluginUiMountQuery = Readonly<{ mountRef: string }>;
+export type RenewPluginUiMountCommand = Readonly<{
+  mountRef: string;
+  expectedExpiresAt: string;
+}>;
 export type ReadPluginUiAssetQuery = Readonly<{
   mountRef: string;
   path: string;

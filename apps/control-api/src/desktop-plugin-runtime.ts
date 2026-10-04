@@ -489,6 +489,7 @@ export async function createDesktopPluginRuntime(
       openMount: (...args) => call(() => application.openMount(...args)),
       validateMount: (...args) =>
         call(() => application.validateMount(...args)),
+      renewMount: (...args) => call(() => application.renewMount(...args)),
       readAsset: (...args) => call(() => application.readAsset(...args)),
       closeMount: (...args) => call(() => application.closeMount(...args)),
       ...(recovery === undefined

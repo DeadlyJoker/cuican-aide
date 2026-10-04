@@ -1,6 +1,8 @@
 # CrewON 增量扩展子系统实施方案
 
-状态：ACTIVE，已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
+状态：BLOCKED，增量能力已落地；当前 Native 生图链路等待明确 DNS/系统代理路径，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
+
+2026-10-05 当前范围：[有限租约续期](./plugin-ui-lease-renewal.md)已完成协议、HTTP/BFF、Web/Native 宿主、原模块及回执 owner 接线，完整构建并安装桌面 0.1.14；原样式与账号/工作空间保持。实际同页连续 330 秒保持原项目与受理回执；原 ComfyUI Fake-IP DNS 阻碍仍待用户选择，完整目标 BLOCKED。最终网络与验收状态以[实施进度](./incremental-extension-progress.md)首节为准；下列各章节保留历史范围。
 
 2026-10-04 最新范围：[独立财务 HTTPS 与原报告验收](./native-plugin-credit-https-verification.md)沿实际 Worker Main 和真正 `.app` 验证，不改产品界面或原许可。Main **10/10**、原 Worker 四文件 **78/78**、Native 环境/Source 三文件 **54/54**、实际打包报告 **1/1**均零跳过、实际退出码 0。原 UI 报告由原 Agent/Tool/供应商 adapter 实际执行，独立 HTTPS 明确结算具名 18 积分，账为 82/0/18；物理冷 Main 读同一业务回执和不可变决定，没有第二次金额决定或供应商请求。具名身份、模型、供应商、入账、价格与收费规则不代表生产个人钱包、真实 ComfyUI 或 E5。原用户栏/十类 Settings 已实际打开；正式前端、SDK、发行包、映射及用户服务保持。完整目标 ACTIVE，实际退出码、首次失败和剩余工作以[实施进度](./incremental-extension-progress.md)首节为准；以下保留各阶段历史范围。
 

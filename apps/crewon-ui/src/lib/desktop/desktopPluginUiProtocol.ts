@@ -1,3 +1,5 @@
+import type { PluginUiLease } from "@crewon/contracts/plugins";
+
 export const DESKTOP_PLUGIN_UI_VERSION = 1 as const;
 export const DESKTOP_PLUGIN_UI_ORIGIN = "crewon-plugin://ui";
 
@@ -14,6 +16,8 @@ export interface DesktopPluginUiAssets {
     input: Readonly<{ lease: unknown; expectedControlOrigin: string }>,
   ): Promise<DesktopPluginUiBinding>;
   release(bindingRef: string): Promise<void>;
+  /** Optional for older version-one preloads; only Main can extend the owned lease. */
+  renew?(bindingRef: string): Promise<PluginUiLease>;
   invalidate(): Promise<void>;
 }
 

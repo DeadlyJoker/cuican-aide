@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { TestContext } from "node:test";
 import { build } from "esbuild";
 import { expect, it } from "vitest";
+import { trackDesktopTestChildren } from "./desktopPluginTestChildren.test-support.ts";
 import {
   createPluginControlRouteFixture,
   pluginRouteHeaders,
@@ -19,6 +20,9 @@ it("real Electron 43 loads actual installed UI bytes through the production fram
   } as unknown as TestContext;
   const directory = await mkdtemp(join(tmpdir(), "crewon-native-plugin-ui-"));
   let child: ReturnType<typeof spawn> | null = null;
+  let tracked: ReturnType<typeof trackDesktopTestChildren> | null = null;
+  let mainClosed = false;
+  let primaryFailure: unknown;
   try {
     const f = await createPluginControlRouteFixture(context);
     f.app.get("/native-probe", (_req, reply) =>
@@ -67,11 +71,15 @@ it("real Electron 43 loads actual installed UI bytes through the production fram
     });
     expect(opened.statusCode, opened.body).toBe(200);
     const lease = opened.json();
+    // Advance only the issuing test Control clock. Electron still sees a live original lease.
+    f.advanceClock(60_000);
     await f.app.listen({ host: "127.0.0.1", port: 0 });
     const address = f.app.server.address();
     if (!address || typeof address === "string")
       throw new Error("native_fixture_server_missing");
     const baseUrl = `http://127.0.0.1:${address.port}/`;
+    const userData = join(directory, "user-data");
+    await mkdir(userData, { mode: 0o700 });
     const csp =
       /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/u.exec(
         await readFile(resolve("index.html"), "utf8"),
@@ -107,15 +115,28 @@ it("real Electron 43 loads actual installed UI bytes through the production fram
         lease,
         preload: join(directory, "preload.cjs"),
         document: join(directory, "index.html"),
+        userData,
       }),
     );
     const env = { ...process.env };
-    delete env.ELECTRON_RUN_AS_NODE;
+    for (const name of Object.keys(env))
+      if (
+        name.startsWith("CREWON_") ||
+        name.startsWith("ELECTRON_") ||
+        name === "NODE_OPTIONS" ||
+        name === "AICUICAN_API_KEY"
+      )
+        delete env[name];
     child = spawn(
       createRequire(import.meta.url)("electron"),
-      [join(directory, "main.cjs"), join(directory, "config.json")],
+      [
+        join(directory, "main.cjs"),
+        join(directory, "config.json"),
+        `--user-data-dir=${userData}`,
+      ],
       { env, stdio: ["ignore", "pipe", "pipe"] },
     );
+    tracked = trackDesktopTestChildren(child);
     let output = "";
     child.stdout!.on("data", (bytes) => {
       output += bytes;
@@ -132,7 +153,8 @@ it("real Electron 43 loads actual installed UI bytes through the production fram
         clearTimeout(timer);
         reject(error);
       });
-      child!.once("exit", (code) => {
+      child!.once("close", (code) => {
+        mainClosed = true;
         clearTimeout(timer);
         accept(code);
       });
@@ -151,13 +173,31 @@ it("real Electron 43 loads actual installed UI bytes through the production fram
     expect(proof.viewResult).toBe(false);
     expect(proof.foreignResult).toBe(false);
     expect(proof.foreignIpc).toBe(false);
+    expect(proof.foreignRenewIpc).toBe(false);
     expect(proof.childResult).toBe(false);
     expect(proof.reboundResult).toBe(false);
+    expect(proof.shown).toBe(false);
+    expect(proof.focused).toBe(false);
+    expect(proof.renewal.lease).toEqual({
+      ...lease,
+      expiresAt: new Date(Date.parse(lease.expiresAt) + 60_000).toISOString(),
+    });
+    expect(proof.renewal.sameBindingRef).toBe(true);
+    expect(proof.renewal.sameEntryUrl).toMatch(
+      /^crewon-plugin:\/\/ui\/[a-f0-9]{64}\/ui\/entry\.mjs$/u,
+    );
+    expect(proof.renewal.view).toEqual({
+      chunk: pkg.content["ui/chunk.mjs"],
+      status: 200,
+      sameInstance: true,
+      sameRoot: true,
+      text: "1.0.0",
+    });
     expect(
       proof.gates
         .filter((v: { cancel: boolean }) => !v.cancel)
         .map((v: { url: string }) => v.url.split("/").at(-1)),
-    ).toEqual(["entry.mjs", "chunk.mjs"]);
+    ).toEqual(["entry.mjs", "chunk.mjs", "chunk.mjs"]);
     expect(
       proof.gates.filter((v: { cancel: boolean }) => v.cancel),
     ).toHaveLength(4);
@@ -181,13 +221,34 @@ it("real Electron 43 loads actual installed UI bytes through the production fram
       await writeFile(
         process.env.CREWON_NATIVE_PLUGIN_UI_PROOF,
         JSON.stringify(proof, null, 2) + "\n",
+        { mode: 0o600 },
       );
+  } catch (error) {
+    primaryFailure = error;
   } finally {
-    if (child && child.exitCode === null && child.signalCode === null) {
+    const cleanup: unknown[] = [];
+    if (child && !mainClosed) {
       child.kill("SIGKILL");
-      await new Promise((resolve) => child!.once("exit", resolve));
+      await new Promise((resolve) => child!.once("close", resolve));
+      mainClosed = true;
     }
-    for (const cleanup of cleanups.reverse()) await cleanup();
-    await rm(directory, { recursive: true, force: true });
+    try {
+      expect(await tracked?.close()).toEqual([]);
+    } catch (error) {
+      cleanup.push(error);
+    }
+    for (const release of cleanups.reverse())
+      try {
+        await release();
+      } catch (error) {
+        cleanup.push(error);
+      }
+    if (cleanup.length === 0)
+      await rm(directory, { recursive: true, force: true });
+    if (primaryFailure !== undefined || cleanup.length)
+      throw new AggregateError(
+        [...(primaryFailure === undefined ? [] : [primaryFailure]), ...cleanup],
+        "native_plugin_ui_failed",
+      );
   }
 }, 40_000);

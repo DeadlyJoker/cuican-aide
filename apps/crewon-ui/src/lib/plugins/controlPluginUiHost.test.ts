@@ -72,6 +72,12 @@ function fixture(
     h,
     importer,
     host,
+    acquire: () =>
+      host.acquireMount(
+        controlUiItem(lease),
+        lease.contributionId,
+        new AbortController().signal,
+      ),
     onDiagnostic,
     revoke: () => {
       current = false;
@@ -326,7 +332,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     const f = fixture({ actionResponse: () => gate.promise });
     const handle = await f.host.loader.mount({
       root: f.h.root,
-      lease: f.lease,
+      lease: await f.acquire(),
       props: uiProps(),
     });
     handles.push(handle);
@@ -361,7 +367,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     });
     const handle = await f.host.loader.mount({
       root: f.h.root,
-      lease: f.lease,
+      lease: await f.acquire(),
       props: uiProps(),
     });
     handles.push(handle);
@@ -399,7 +405,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     });
     const handle = await f.host.loader.mount({
       root: f.h.root,
-      lease: f.lease,
+      lease: await f.acquire(),
       props: uiProps(),
     });
     handles.push(handle);
@@ -432,7 +438,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     });
     const handle = await f.host.loader.mount({
       root: f.h.root,
-      lease: f.lease,
+      lease: await f.acquire(),
       props: uiProps(),
     });
     handles.push(handle);
@@ -460,7 +466,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     });
     const handle = await f.host.loader.mount({
       root: f.h.root,
-      lease: f.lease,
+      lease: await f.acquire(),
       props: uiProps(),
     });
     handles.push(handle);

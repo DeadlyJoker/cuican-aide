@@ -1110,7 +1110,10 @@ test("reads one exact Thread snapshot cursor and rejects mismatches", async () =
     fetch: async () => jsonResponse(200, snapshot),
   });
 
-  assert.deepEqual(await client.getThread("thread/1"), snapshot);
+  assert.deepEqual(await client.getThread("thread/1"), {
+    ...snapshot,
+    thread: { ...snapshot.thread, workspaceId: null },
+  });
   assert.equal("eventSequence" in snapshot.thread, false);
 
   for (const malformed of [

@@ -5,7 +5,6 @@ import {
   type PluginUiCatalogItem,
 } from "@crewon/contracts";
 import {
-  parsePluginUiLease,
   PROJECT_GENERATION_UI_ACTIONS,
   PROJECT_GENERATION_QUERY_UI_ACTIONS,
   PROJECT_GENERATION_SELECTION_UI_ACTIONS,
@@ -29,6 +28,7 @@ import {
   type PluginUiModuleImporter,
 } from "./trustedPluginUiLoader";
 import { uiFailure, uiRecord, pluginUiAssetUrl } from "./pluginUiValidation";
+import { PluginUiLeaseLifecycle } from "./pluginUiLeaseLifecycle";
 import {
   assertPluginUiCurrent,
   checkedLeaseIdentity,
@@ -82,6 +82,7 @@ export function createDesktopPluginUiHost(
     selectionJournal,
   } = options;
   const recovery = createInstalledPluginUiRecovery(options);
+  const leases = new PluginUiLeaseLifecycle();
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -92,24 +93,28 @@ export function createDesktopPluginUiHost(
   const adopt = options.assets.adopt.bind(options.assets);
   const release = options.assets.release.bind(options.assets);
   const invalidate = options.assets.invalidate.bind(options.assets);
+  const renew =
+    typeof options.assets.renew === "function"
+      ? options.assets.renew.bind(options.assets)
+      : null;
   const importer = options.importer ?? importTrustedPluginUiModule;
   const bindings = new Map<
     string,
     Readonly<{ binding: DesktopPluginUiBinding; identity: string }>
   >();
   const entryUrls = new Map<string, string>();
-  const validateLease = async (input: PluginUiLease, signal: AbortSignal) => {
-    const lease = parsePluginUiLease(input);
-    assertPluginUiCurrent(assertCurrent, signal);
-    const checked = await pluginUiControlRequest(
-      (s) => client.plugins.validateMount(lease.mountRef, { signal: s }),
-      signal,
-    );
-    assertPluginUiCurrent(assertCurrent, signal);
-    if (checkedLeaseIdentity(checked) !== checkedLeaseIdentity(lease))
-      uiFailure("plugin_ui_lease_identity_mismatch");
-    return checked;
-  };
+  const validateLease = (input: PluginUiLease, signal: AbortSignal) =>
+    leases.validate(input, signal, async (lease) => {
+      assertPluginUiCurrent(assertCurrent, signal);
+      const checked = await pluginUiControlRequest(
+        (s) => client.plugins.validateMount(lease.mountRef, { signal: s }),
+        signal,
+      );
+      assertPluginUiCurrent(assertCurrent, signal);
+      if (checkedLeaseIdentity(checked) !== checkedLeaseIdentity(lease))
+        uiFailure("plugin_ui_lease_identity_mismatch");
+      return checked;
+    });
   const loader = new TrustedPluginUiLoader({
     assetBasePath: "/api/v1/plugins/ui/mounts",
     routeStyle: "control-mount-assets",
@@ -123,96 +128,101 @@ export function createDesktopPluginUiHost(
       async validateMount(lease, signal) {
         await validateLease(lease, signal);
       },
-      async invoke(lease, input) {
-        if (
-          PROJECT_GENERATION_SELECTION_UI_ACTIONS.some(
-            (action) => action === input.action,
-          )
-        ) {
-          const selection = parseProjectGenerationSelectionUiActionRequest({
-            action: input.action,
-            input: input.input,
-          });
-          if (selection.action === PROJECT_GENERATION_SELECTION_UI_ACTIONS[1]) {
-            if (!selectionJournal)
-              uiFailure("plugin_ui_project_selection_journal_unavailable");
-            const response = await selectionJournal.invoke({
+      async invoke(originalLease, input) {
+        return leases.run(originalLease, input.signal, async (lease) => {
+          if (
+            PROJECT_GENERATION_SELECTION_UI_ACTIONS.some(
+              (action) => action === input.action,
+            )
+          ) {
+            const selection = parseProjectGenerationSelectionUiActionRequest({
+              action: input.action,
+              input: input.input,
+            });
+            if (
+              selection.action === PROJECT_GENERATION_SELECTION_UI_ACTIONS[1]
+            ) {
+              if (!selectionJournal)
+                uiFailure("plugin_ui_project_selection_journal_unavailable");
+              const response = await selectionJournal.invoke({
+                lease,
+                input: selection.input,
+                stage: recovery.stage(lease, selection),
+                signal: input.signal,
+                assertCurrent,
+                request: (signal) =>
+                  client.plugins.invoke(lease.mountRef, selection, { signal }),
+              });
+              assertPluginUiCurrent(assertCurrent, input.signal);
+              return response.output;
+            }
+            // GET is an authenticated observation, separate from all mutation/task journals.
+            assertPluginUiCurrent(assertCurrent, input.signal);
+            const response = await pluginUiControlRequest(
+              (signal) =>
+                client.plugins.invoke(lease.mountRef, selection, { signal }),
+              input.signal,
+            );
+            assertPluginUiCurrent(assertCurrent, input.signal);
+            return parseProjectGenerationSelectionUiActionResponse(
+              selection,
+              response.output,
+            );
+          }
+          if (input.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0]) {
+            if (!projectQueryJournal)
+              uiFailure("plugin_ui_project_query_journal_unavailable");
+            const query = parseProjectGenerationQueryUiActionRequest({
+              action: input.action,
+              input: input.input,
+            });
+            const response = await projectQueryJournal.invoke({
               lease,
-              input: selection.input,
-              stage: recovery.stage(lease, selection),
+              input: query.input,
+              stage: recovery.stage(lease, query),
               signal: input.signal,
               assertCurrent,
               request: (signal) =>
-                client.plugins.invoke(lease.mountRef, selection, { signal }),
+                client.plugins.invoke(lease.mountRef, query, { signal }),
             });
             assertPluginUiCurrent(assertCurrent, input.signal);
             return response.output;
           }
-          // GET is an authenticated observation, separate from all mutation/task journals.
+          if (input.action === PROJECT_GENERATION_UI_ACTIONS[0]) {
+            if (!generationJournal)
+              uiFailure("plugin_ui_generation_journal_unavailable");
+            const generation = parseProjectGenerationUiActionRequest({
+              action: input.action,
+              input: input.input,
+            });
+            const response = await generationJournal.invoke({
+              lease,
+              input: generation.input,
+              stage: recovery.stage(lease, generation),
+              signal: input.signal,
+              assertCurrent,
+              request: (signal) =>
+                client.plugins.invoke(lease.mountRef, generation, { signal }),
+            });
+            assertPluginUiCurrent(assertCurrent, input.signal);
+            return response.output;
+          }
           assertPluginUiCurrent(assertCurrent, input.signal);
-          const response = await pluginUiControlRequest(
-            (signal) =>
-              client.plugins.invoke(lease.mountRef, selection, { signal }),
-            input.signal,
-          );
-          assertPluginUiCurrent(assertCurrent, input.signal);
-          return parseProjectGenerationSelectionUiActionResponse(
-            selection,
-            response.output,
-          );
-        }
-        if (input.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0]) {
-          if (!projectQueryJournal)
-            uiFailure("plugin_ui_project_query_journal_unavailable");
-          const query = parseProjectGenerationQueryUiActionRequest({
-            action: input.action,
-            input: input.input,
-          });
-          const response = await projectQueryJournal.invoke({
-            lease,
-            input: query.input,
-            stage: recovery.stage(lease, query),
-            signal: input.signal,
-            assertCurrent,
-            request: (signal) =>
-              client.plugins.invoke(lease.mountRef, query, { signal }),
-          });
-          assertPluginUiCurrent(assertCurrent, input.signal);
-          return response.output;
-        }
-        if (input.action === PROJECT_GENERATION_UI_ACTIONS[0]) {
-          if (!generationJournal)
-            uiFailure("plugin_ui_generation_journal_unavailable");
-          const generation = parseProjectGenerationUiActionRequest({
-            action: input.action,
-            input: input.input,
-          });
-          const response = await generationJournal.invoke({
-            lease,
-            input: generation.input,
-            stage: recovery.stage(lease, generation),
-            signal: input.signal,
-            assertCurrent,
-            request: (signal) =>
-              client.plugins.invoke(lease.mountRef, generation, { signal }),
-          });
+          const request = (signal: AbortSignal) =>
+            client.plugins.invoke(
+              lease.mountRef,
+              { action: input.action, input: input.input },
+              { signal },
+            );
+          const response = await (taskReceiptTransport
+            ? taskReceiptTransport(lease, input.signal, request)
+            : pluginUiControlRequest(request, input.signal));
           assertPluginUiCurrent(assertCurrent, input.signal);
           return response.output;
-        }
-        assertPluginUiCurrent(assertCurrent, input.signal);
-        const request = (signal: AbortSignal) =>
-          client.plugins.invoke(
-            lease.mountRef,
-            { action: input.action, input: input.input },
-            { signal },
-          );
-        const response = await (taskReceiptTransport
-          ? taskReceiptTransport(lease, input.signal, request)
-          : pluginUiControlRequest(request, input.signal));
-        assertPluginUiCurrent(assertCurrent, input.signal);
-        return response.output;
+        });
       },
       async closeMount(lease) {
+        leases.release(lease);
         recovery.release(lease);
         const owned = bindings.get(lease.mountRef);
         if (owned) {
@@ -239,6 +249,41 @@ export function createDesktopPluginUiHost(
   return Object.freeze({
     loader,
     validateLease,
+    ...(renew
+      ? {
+          renewLease(lease: PluginUiLease, signal: AbortSignal) {
+            return leases.renew(
+              lease,
+              signal,
+              async (previous, renewalSignal) => {
+                assertPluginUiCurrent(assertCurrent, renewalSignal);
+                const owned = bindings.get(previous.mountRef);
+                if (!owned || owned.identity !== checkedLeaseIdentity(previous))
+                  uiFailure("plugin_ui_native_binding_unavailable");
+                const next = await renew(owned.binding.bindingRef);
+                assertPluginUiCurrent(assertCurrent, renewalSignal);
+                if (bindings.get(previous.mountRef) !== owned)
+                  uiFailure("plugin_ui_native_binding_unavailable");
+                return next;
+              },
+              (previous, next) => {
+                const owned = bindings.get(previous.mountRef);
+                if (!owned || owned.identity !== checkedLeaseIdentity(previous))
+                  uiFailure("plugin_ui_native_binding_unavailable");
+                recovery.renewLease(previous, next);
+                loader.renewLease(previous, next);
+                bindings.set(
+                  next.mountRef,
+                  Object.freeze({
+                    binding: owned.binding,
+                    identity: checkedLeaseIdentity(next),
+                  }),
+                );
+              },
+            );
+          },
+        }
+      : {}),
     async acquireMount(
       input: PluginUiCatalogItem,
       contributionId: string,
@@ -305,6 +350,7 @@ export function createDesktopPluginUiHost(
           lease.mountRef,
           Object.freeze({ binding, identity: checkedLeaseIdentity(lease) }),
         );
+        leases.register(lease);
         entryUrls.set(
           pluginUiAssetUrl(
             "/api/v1/plugins/ui/mounts",

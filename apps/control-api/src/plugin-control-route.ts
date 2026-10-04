@@ -12,6 +12,8 @@ import {
   parseInvokePluginUiActionResponse,
   parseOpenPluginUiMountRequest,
   parseOpenPluginUiMountResponse,
+  parseRenewPluginUiMountRequest,
+  parseRenewPluginUiMountResponse,
   parsePluginControlAssetPath,
   parsePluginControlEmptyQuery,
   parsePluginControlIdempotencyKey,
@@ -72,6 +74,7 @@ export type PluginUiControlService = Pick<
   | "catalog"
   | "openMount"
   | "validateMount"
+  | "renewMount"
   | "readAsset"
   | "closeMount"
   | "invoke"
@@ -333,6 +336,25 @@ function registerUiRoutes(
       );
     },
   );
+  app.post<{
+    Params: { mountRef: string };
+    Body: unknown;
+    Querystring: unknown;
+  }>("/api/v1/plugins/ui/mounts/:mountRef/renew", async (request, reply) => {
+    pluginHeaders(reply);
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    parsePluginControlEmptyQuery(request.query);
+    const command = {
+      mountRef: parsePluginControlMountRef(request.params.mountRef),
+      ...parseRenewPluginUiMountRequest(request.body),
+    };
+    const lease = await dependencies.service.renewMount(actor, command);
+    return checkedResponse(() =>
+      parseRenewPluginUiMountResponse(lease, command),
+    );
+  });
   app.delete<{
     Params: { mountRef: string };
     Body: unknown;

@@ -6,12 +6,16 @@ import {
   WebContentsView,
   ipcMain,
 } from "electron";
-import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { DesktopPluginUiAssetBroker } from "./desktopPluginUiAssets.ts";
 import {
   bindDesktopPluginUiProtocol,
   bindDesktopPluginUiIpc,
 } from "./desktopPluginUiProtocol.ts";
+
+const config = JSON.parse(readFileSync(process.argv[2], "utf8"));
+app.setPath("userData", config.userData);
+if (process.platform === "darwin") app.setActivationPolicy("accessory");
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -27,9 +31,10 @@ protocol.registerSchemesAsPrivileged([
 void app
   .whenReady()
   .then(async () => {
-    const config = JSON.parse(await readFile(process.argv[2], "utf8"));
+    if (process.platform === "darwin") app.hide();
     const window = new BrowserWindow({
       show: false,
+      focusable: false,
       webPreferences: {
         preload: config.preload,
         sandbox: true,
@@ -37,6 +42,14 @@ void app
         nodeIntegration: false,
         webSecurity: true,
       },
+    });
+    let shown = false,
+      focused = false;
+    window.on("show", () => {
+      shown = true;
+    });
+    window.on("focus", () => {
+      focused = true;
     });
     let generation = 1;
     const broker = new DesktopPluginUiAssetBroker({
@@ -72,8 +85,21 @@ void app
       `window.crewonDesktop.pluginUiAssets.adopt(${JSON.stringify({ lease: config.lease, expectedControlOrigin: new URL(config.session.baseUrl).origin })})`,
     );
     const mounted = await window.webContents.executeJavaScript(
-      `import(${JSON.stringify(binding.entryUrl)}).then(m=>{const root=document.getElementById('plugin-root');const instance=m.default.mount(root);window.nativeTestDispose=()=>instance.dispose();return {pluginId:m.default.pluginId,text:root.textContent,node:typeof require,process:typeof process}})`,
+      `import(${JSON.stringify(binding.entryUrl)}).then(m=>{const root=document.getElementById('plugin-root');const instance=m.default.mount(root);window.nativeTestInstance=instance;window.nativeTestOriginalInstance=instance;window.nativeTestRoot=root;window.nativeTestDispose=()=>instance.dispose();return {pluginId:m.default.pluginId,text:root.textContent,node:typeof require,process:typeof process}})`,
     );
+    const renewed = await window.webContents.executeJavaScript(
+      `window.crewonDesktop.pluginUiAssets.renew(${JSON.stringify(binding.bindingRef)})`,
+    );
+    const chunkUrl = binding.entryUrl.replace(/entry\.mjs$/u, "chunk.mjs");
+    const renewalView = await window.webContents.executeJavaScript(
+      `fetch(${JSON.stringify(chunkUrl)}, {cache:'no-store'}).then(async response=>({chunk:await response.text(),status:response.status,sameInstance:window.nativeTestInstance===window.nativeTestOriginalInstance,sameRoot:window.nativeTestRoot===document.getElementById('plugin-root'),text:document.getElementById('plugin-root').textContent}))`,
+    );
+    const renewal = {
+      lease: renewed,
+      sameBindingRef: broker.allows(binding.entryUrl),
+      sameEntryUrl: binding.entryUrl,
+      view: renewalView,
+    };
     const view = new WebContentsView({
       webPreferences: {
         sandbox: true,
@@ -89,6 +115,7 @@ void app
     );
     const foreign = new BrowserWindow({
       show: false,
+      focusable: false,
       webPreferences: {
         preload: config.preload,
         sandbox: true,
@@ -103,6 +130,9 @@ void app
     );
     const foreignIpc = await foreign.webContents.executeJavaScript(
       `window.crewonDesktop.pluginUiAssets.adopt(${JSON.stringify({ lease: config.lease, expectedControlOrigin: new URL(config.session.baseUrl).origin })}).then(()=>true,()=>false)`,
+    );
+    const foreignRenewIpc = await foreign.webContents.executeJavaScript(
+      `window.crewonDesktop.pluginUiAssets.renew(${JSON.stringify(binding.bindingRef)}).then(()=>true,()=>false)`,
     );
     await window.webContents.executeJavaScript(
       `new Promise(r=>{let f=document.createElement('iframe');f.onload=()=>r();f.src=${JSON.stringify(config.session.baseUrl + "native-probe")};document.body.append(f)})`,
@@ -127,13 +157,19 @@ void app
         JSON.stringify({
           electron: process.versions.electron,
           mounted,
+          renewal,
           viewResult,
           foreignResult,
           foreignIpc,
+          foreignRenewIpc,
           childResult,
           reboundResult,
           gates,
           usage: broker.usage,
+          shown,
+          focused,
+          scope:
+            "hidden test-owned Electron window with original preload, IPC/frame gate/broker and actual test Control route; not formal Main or actual user task",
         }),
     );
     view.webContents.close();

@@ -30,11 +30,13 @@ export function bindDesktopPluginUiIpc(
     broker.adopt(input as Parameters<DesktopPluginUiAssetBroker["adopt"]>[0]),
   );
   handle("crewon:plugin-ui:release-v1", (ref) => broker.release(ref as string));
+  handle("crewon:plugin-ui:renew-v1", (ref) => broker.renew(ref as string));
   handle("crewon:plugin-ui:invalidate-v1", () => broker.invalidate());
   window.webContents.once("destroyed", () => {
     for (const channel of [
       "crewon:plugin-ui:adopt-v1",
       "crewon:plugin-ui:release-v1",
+      "crewon:plugin-ui:renew-v1",
       "crewon:plugin-ui:invalidate-v1",
     ])
       ipc.removeHandler(channel);

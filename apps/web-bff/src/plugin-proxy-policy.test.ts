@@ -56,6 +56,79 @@ function request(path: string, init: RequestInit = {}) {
   });
 }
 
+test("renewal proxy allows only bounded POST without queries and preserves original CSRF/session ownership", async () => {
+  const path = `${mount}/renew`;
+  assert.deepEqual(policy(path, "POST"), {
+    outcome: "allow",
+    responseKind: "json",
+    responseMaxBytes: PLUGIN_LEASE_RESPONSE_MAX_BYTES,
+  });
+  for (const method of ["GET", "PUT", "DELETE", "HEAD"])
+    assert.deepEqual(policy(path, method), {
+      outcome: "deny",
+      status: 405,
+      code: "method_not_allowed",
+    });
+  for (const suffix of ["?", "?tenantId=foreign", "?expectedExpiresAt=forged"])
+    assert.deepEqual(policy(path + suffix, "POST"), {
+      outcome: "deny",
+      status: 400,
+      code: "plugin_query_invalid",
+    });
+  for (const suffix of ["/", "/accepted", "/%2e%2e/actions"])
+    assert.equal(policy(path + suffix, "POST")?.outcome, "deny");
+  const calls: { url: string; init: RequestInit }[] = [];
+  const bff = app(async (url, init = {}) => {
+    calls.push({ url: String(url), init });
+    return Response.json({ mountRef: ref });
+  });
+  const bootstrap = await bff.handle(request("/control-api/session"));
+  const { csrfToken } = (await bootstrap.json()) as { csrfToken: string };
+  const body = JSON.stringify({
+    expectedExpiresAt: "2026-10-05T03:05:00.000Z",
+  });
+  assert.equal(
+    (
+      await bff.handle(
+        request(path, {
+          method: "POST",
+          body,
+          headers: { origin, "content-type": "application/json" },
+        }),
+      )
+    ).status,
+    403,
+  );
+  const result = await bff.handle(
+    request(path, {
+      method: "POST",
+      body,
+      headers: {
+        origin,
+        "content-type": "application/json",
+        "x-csrf-token": csrfToken,
+        "authorization": "Bearer forged",
+        "x-actor-id": "foreign",
+      },
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.url, `http://127.0.0.1:3210${path}`);
+  assert.equal(
+    new TextDecoder().decode(calls[0]!.init.body as Uint8Array),
+    body,
+  );
+  const headers = new Headers(calls[0]!.init.headers);
+  assert.equal(
+    headers.get("authorization"),
+    `Bearer ${session.controlAccessToken}`,
+  );
+  assert.equal(headers.get("x-csrf-token"), controlCsrf);
+  assert.equal(headers.get("x-actor-id"), null);
+  assert.equal(headers.get("idempotency-key"), null);
+});
+
 test("recovery permits only the exact mount GET/POST family, without caller scope queries", () => {
   for (const method of ["GET", "POST"]) {
     assert.deepEqual(policy(`${mount}/recovery`, method), {

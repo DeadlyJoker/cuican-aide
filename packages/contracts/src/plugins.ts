@@ -18,6 +18,7 @@ export {
   type PluginUiJsonValue,
 } from "./plugin-ui-json.ts";
 export { parsePluginUiLease, type PluginUiLease } from "./plugin-ui-lease.ts";
+export * from "./plugin-ui-renewal-contract.ts";
 export {
   INSTALLED_PLUGIN_PEER_PRIVATE_PATH,
   INSTALLED_PLUGIN_PEER_REQUEST_PROTOCOL,

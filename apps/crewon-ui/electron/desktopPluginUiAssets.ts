@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import {
   parsePluginUiLease,
+  parseRenewPluginUiMountResponse,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import {
@@ -20,8 +21,8 @@ type NativeSession = Readonly<{
 }>;
 type Entry = {
   readonly bindingRef: string;
-  readonly lease: PluginUiLease;
-  readonly identity: string;
+  lease: PluginUiLease;
+  identity: string;
   readonly session: NativeSession;
   readonly controlOwner: ChildProcess | null;
   readonly generation: number;
@@ -33,6 +34,10 @@ type Entry = {
   failure: unknown | null;
   closing: Promise<void> | null;
   expiry: ReturnType<typeof setTimeout> | null;
+  renewal: Readonly<{
+    operation: Promise<PluginUiLease>;
+    result: Promise<PluginUiLease>;
+  }> | null;
 };
 const MAX_ASSET_BYTES = 32 * 1024 * 1024;
 const MAX_RESERVED_BYTES = 128 * 1024 * 1024;
@@ -221,6 +226,7 @@ export class DesktopPluginUiAssetBroker {
       failure: null,
       closing: null,
       expiry: null,
+      renewal: null,
     };
     this.#entries.set(bindingRef, entry);
     try {
@@ -228,15 +234,7 @@ export class DesktopPluginUiAssetBroker {
         await this.#fresh(entry);
         this.#assertCurrent(entry);
         entry.state = "active";
-        entry.expiry = setTimeout(
-          () => {
-            void this.release(bindingRef).catch(() =>
-              this.#diagnostic("desktop_plugin_ui_cleanup_failed"),
-            );
-          },
-          Math.min(2_147_483_647, Date.parse(lease.expiresAt) - Date.now()),
-        );
-        entry.expiry.unref();
+        this.#armExpiry(entry);
         return Object.freeze({
           bindingRef,
           entryUrl: desktopPluginUiAssetUrl(bindingRef, ui.path),
@@ -254,6 +252,75 @@ export class DesktopPluginUiAssetBroker {
       }
       throw error;
     }
+  }
+
+  /** Extends only this live native owner; the renderer never supplies a lease, session or mount reference. */
+  renew(bindingRef: string): Promise<PluginUiLease> {
+    if (typeof bindingRef !== "string" || !/^[a-f0-9]{64}$/u.test(bindingRef))
+      failure("desktop_plugin_ui_binding_invalid");
+    const entry = this.#entries.get(bindingRef);
+    if (!entry || entry.state !== "active")
+      failure("desktop_plugin_ui_binding_unavailable");
+    this.#assertCurrent(entry);
+    if (entry.renewal) return entry.renewal.result;
+    // Take this snapshot before registering the renewal. New asset operations wait
+    // for its inner flight; disposal never depends on its own public cleanup result.
+    const previous = [...entry.operations];
+    const operation = this.#trackOperation(entry, async () => {
+      const settled = await Promise.allSettled(previous);
+      this.#assertCurrent(entry);
+      if (settled.some((result) => result.status === "rejected"))
+        failure("desktop_plugin_ui_prior_operation_failed");
+      await this.#fresh(entry);
+      const lease = entry.lease;
+      const response = await this.#request(
+        entry,
+        "POST",
+        "/renew",
+        JSON_BYTES,
+        undefined,
+        JSON.stringify({ expectedExpiresAt: lease.expiresAt }),
+      );
+      if (
+        response.contentType !== "application/json; charset=utf-8" &&
+        response.contentType !== "application/json"
+      )
+        failure("desktop_plugin_ui_lease_response_invalid");
+      const renewed = parseRenewPluginUiMountResponse(
+        JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(response.bytes),
+        ),
+        lease,
+      );
+      this.#assertCurrent(entry);
+      // The authenticated CAS response alone may update expiry. All other pinned
+      // fields, the Entry object, binding reference and asset URL remain unchanged.
+      entry.lease = renewed;
+      entry.identity = JSON.stringify(renewed);
+      this.#armExpiry(entry);
+      await this.#fresh(entry);
+      this.#assertCurrent(entry);
+      return renewed;
+    });
+    const result = operation.catch(async (error: unknown) => {
+      try {
+        await this.release(bindingRef);
+      } catch (cleanup) {
+        throw new AggregateError(
+          [error, cleanup],
+          "desktop_plugin_ui_renewal_cleanup_failed",
+        );
+      }
+      throw error;
+    });
+    const renewal = Object.freeze({ operation, result });
+    entry.renewal = renewal;
+    void result
+      .finally(() => {
+        if (entry.renewal === renewal) entry.renewal = null;
+      })
+      .catch(() => {});
+    return result;
   }
 
   /** Called by the genuine Electron Session request gate, before any asset egress. */
@@ -290,39 +357,38 @@ export class DesktopPluginUiAssetBroker {
     this.#assetBytes += reserved;
     try {
       return this.#operation(entry, async () => {
-        try {
-          await this.#fresh(entry, request.signal);
-          const result = await this.#request(
-            entry,
-            "GET",
-            `/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
-            file.byteLength,
-            request.signal,
-          );
-          if (
-            result.contentType !== mime(path) ||
-            result.bytes.byteLength !== file.byteLength ||
-            createHash("sha256").update(result.bytes).digest("hex") !==
-              file.sha256
-          )
-            failure("desktop_plugin_ui_asset_integrity_invalid");
-          await this.#fresh(entry, request.signal);
-          this.#assertCurrent(entry);
-          if (request.signal.aborted)
-            failure("desktop_plugin_ui_request_aborted");
-          return new Response(result.bytes, {
-            headers: {
-              "content-type": mime(path),
-              "content-length": String(result.bytes.byteLength),
-              "cache-control": "no-store",
-              "x-content-type-options": "nosniff",
-              "access-control-allow-origin": "null",
-              "referrer-policy": "no-referrer",
-            },
-          });
-        } finally {
-          this.#assetBytes -= reserved;
-        }
+        await this.#fresh(entry, request.signal);
+        const result = await this.#request(
+          entry,
+          "GET",
+          `/assets/${path.split("/").map(encodeURIComponent).join("/")}`,
+          file.byteLength,
+          request.signal,
+        );
+        if (
+          result.contentType !== mime(path) ||
+          result.bytes.byteLength !== file.byteLength ||
+          createHash("sha256").update(result.bytes).digest("hex") !==
+            file.sha256
+        )
+          failure("desktop_plugin_ui_asset_integrity_invalid");
+        await this.#fresh(entry, request.signal);
+        this.#assertCurrent(entry);
+        if (request.signal.aborted)
+          failure("desktop_plugin_ui_request_aborted");
+        return new Response(result.bytes, {
+          headers: {
+            "content-type": mime(path),
+            "content-length": String(result.bytes.byteLength),
+            "cache-control": "no-store",
+            "x-content-type-options": "nosniff",
+            "access-control-allow-origin": "null",
+            "referrer-policy": "no-referrer",
+          },
+        });
+      }).finally(() => {
+        // A queued read can be rejected by renewal before its body starts.
+        this.#assetBytes -= reserved;
       });
     } catch (error) {
       this.#assetBytes -= reserved;
@@ -428,6 +494,22 @@ export class DesktopPluginUiAssetBroker {
     );
   }
 
+  #armExpiry(entry: Entry): void {
+    if (entry.expiry) clearTimeout(entry.expiry);
+    const timer = setTimeout(
+      () => {
+        if (entry.expiry !== timer) return;
+        entry.expiry = null;
+        void this.release(entry.bindingRef).catch(() =>
+          this.#diagnostic("desktop_plugin_ui_cleanup_failed"),
+        );
+      },
+      Math.min(2_147_483_647, Date.parse(entry.lease.expiresAt) - Date.now()),
+    );
+    entry.expiry = timer;
+    timer.unref();
+  }
+
   async #fresh(entry: Entry, signal?: AbortSignal) {
     this.#assertCurrent(entry);
     const result = await this.#request(entry, "GET", "", JSON_BYTES, signal);
@@ -448,20 +530,21 @@ export class DesktopPluginUiAssetBroker {
 
   #request(
     entry: Entry,
-    method: "GET" | "DELETE",
+    method: "GET" | "POST" | "DELETE",
     suffix: string,
     maximumBytes: number,
     callerSignal?: AbortSignal,
+    body?: string,
   ) {
     // At most 32 lease owners exist. Cleanup has its own bounded 32 x 512KiB allowance, never competes with asset slots.
     if (
-      method === "GET" &&
+      method !== "DELETE" &&
       (this.#requests >= 16 ||
         this.#reservedBytes + this.#assetBytes + maximumBytes >
           MAX_RESERVED_BYTES)
     )
       failure("desktop_plugin_ui_request_limit");
-    if (method === "GET") {
+    if (method !== "DELETE") {
       this.#requests++;
       this.#reservedBytes += maximumBytes;
     } else this.#cleanupRequests++;
@@ -471,12 +554,13 @@ export class DesktopPluginUiAssetBroker {
       suffix,
       maximumBytes,
       callerSignal,
+      body,
     );
     entry.pending.add(task);
     void task
       .finally(() => {
         entry.pending.delete(task);
-        if (method === "GET") {
+        if (method !== "DELETE") {
           this.#requests--;
           this.#reservedBytes -= maximumBytes;
         } else this.#cleanupRequests--;
@@ -486,6 +570,20 @@ export class DesktopPluginUiAssetBroker {
   }
 
   #operation<T>(entry: Entry, run: () => Promise<T>): Promise<T> {
+    const renewal = entry.renewal;
+    return this.#trackOperation(
+      entry,
+      renewal
+        ? async () => {
+            await renewal.operation;
+            this.#assertCurrent(entry);
+            return run();
+          }
+        : run,
+    );
+  }
+
+  #trackOperation<T>(entry: Entry, run: () => Promise<T>): Promise<T> {
     if (this.#operations >= 16) failure("desktop_plugin_ui_operation_limit");
     this.#operations++;
     const task = run();
@@ -501,23 +599,24 @@ export class DesktopPluginUiAssetBroker {
 
   async #readFinite(
     entry: Entry,
-    method: "GET" | "DELETE",
+    method: "GET" | "POST" | "DELETE",
     suffix: string,
     maximumBytes: number,
     callerSignal?: AbortSignal,
+    body?: string,
   ) {
     const deadline = AbortSignal.timeout(DEADLINE_MS);
     const signal = AbortSignal.any([
       deadline,
-      ...(method === "GET" ? [entry.abort.signal] : []),
+      ...(method !== "DELETE" ? [entry.abort.signal] : []),
       ...(callerSignal ? [callerSignal] : []),
     ]);
     const headers = new Headers({
       authorization: `Bearer ${entry.session.sessionToken}`,
       origin: entry.session.origin,
     });
-    if (method === "DELETE")
-      headers.set("x-csrf-token", entry.session.csrfToken);
+    if (method !== "GET") headers.set("x-csrf-token", entry.session.csrfToken);
+    if (method === "POST") headers.set("content-type", "application/json");
     const url = new URL(
       `/api/v1/plugins/ui/mounts/${entry.lease.mountRef}${suffix}`,
       entry.session.baseUrl,
@@ -529,6 +628,7 @@ export class DesktopPluginUiAssetBroker {
       signal,
       redirect: "error",
       cache: "no-store",
+      ...(body === undefined ? {} : { body }),
     });
     const reader = response.body?.getReader();
     let cancellation: Promise<void> | null = null;

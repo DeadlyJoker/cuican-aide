@@ -230,6 +230,24 @@ test("actual client/BFF/Control HTTP installs immutable packages, serves authent
     (await client.plugins.validateMount(mount.mountRef)).mountRef,
     mount.mountRef,
   );
+  f.advanceClock(150_000);
+  assert.deepEqual(await client.plugins.validateMount(mount.mountRef), mount);
+  const renewed = await client.plugins.renewMount(mount.mountRef, {
+    expectedExpiresAt: mount.expiresAt,
+  });
+  assert.equal(renewed.expiresAt, "2026-10-03T00:07:30.000Z");
+  assert.deepEqual({ ...renewed, expiresAt: mount.expiresAt }, mount);
+  assert.deepEqual(await client.plugins.validateMount(mount.mountRef), renewed);
+  await assert.rejects(
+    client.plugins.renewMount(mount.mountRef, {
+      expectedExpiresAt: mount.expiresAt,
+    }),
+    (error: unknown) =>
+      error instanceof ControlApiClientError &&
+      error.status === 409 &&
+      error.code === "plugin_ui_mount_lease_changed",
+  );
+  assert.equal(f.current(v1.expectedPluginId)?.revision, 2);
   const assetPath = `/api/v1/plugins/ui/mounts/${mount.mountRef}/assets/ui/entry.mjs`;
   const beforeAsset = verifiedTokens.length;
   for (const path of ["ui/entry.mjs", "ui/chunk.mjs"]) {

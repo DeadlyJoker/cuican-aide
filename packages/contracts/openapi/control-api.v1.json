@@ -5687,6 +5687,71 @@
           }
         }
       }
+    },
+    "/api/v1/plugins/ui/mounts/{mountRef}/renew": {
+      "post": {
+        "operationId": "renewPluginUiMount",
+        "parameters": [
+          {
+            "name": "mountRef",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PluginMountRef"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewPluginUiMountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bounded authorized response; at most 524288 encoded bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginUiLease"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Explicit renewal of a still-live mount after old-expiry CAS and full current authorization/publication checks. No query. Keeps the same reference and all publication pins; validate GET never renews. Expired or closed references cannot revive."
+      }
     }
   },
   "components": {
@@ -13414,6 +13479,20 @@
           }
         },
         "description": "At most 24 KiB. Immutable command receipt; selectionRevision equals expectedSelectionRevision + 1. Replay does not overwrite or represent a newer current pointer. Read current pointer separately."
+      },
+      "RenewPluginUiMountRequest": {
+        "type": "object",
+        "required": ["expectedExpiresAt"],
+        "additionalProperties": false,
+        "properties": {
+          "expectedExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "minLength": 24,
+            "maxLength": 24,
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        }
       }
     }
   }

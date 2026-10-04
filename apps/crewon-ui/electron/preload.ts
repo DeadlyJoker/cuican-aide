@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { PluginUiLease } from "@crewon/contracts/plugins";
 
 import {
   type AgentPlatformCredentialCatalog,
@@ -71,6 +72,8 @@ const bridge: CrewonDesktopBridge = {
       invoke<DesktopPluginUiBinding>("crewon:plugin-ui:adopt-v1", input),
     release: (bindingRef) =>
       invoke<void>("crewon:plugin-ui:release-v1", bindingRef),
+    renew: (bindingRef) =>
+      invoke<PluginUiLease>("crewon:plugin-ui:renew-v1", bindingRef),
     invalidate: () => invoke<void>("crewon:plugin-ui:invalidate-v1"),
   }),
   agentPlatformCredentials: {

@@ -306,6 +306,7 @@ export function createProductionPluginUiRuntime(
     openMount: (...args) => call((current) => current.openMount(...args)),
     validateMount: (...args) =>
       call((current) => current.validateMount(...args)),
+    renewMount: (...args) => call((current) => current.renewMount(...args)),
     readAsset: (...args) => call((current) => current.readAsset(...args)),
     closeMount: (...args) => call((current) => current.closeMount(...args)),
     invoke: (...args) => {

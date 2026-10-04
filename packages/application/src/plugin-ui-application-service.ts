@@ -5,6 +5,11 @@ import {
 } from "@crewon/contracts/plugins";
 import type { PluginProfileScope } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import {
+  PluginUiMountBinding,
+  PluginUiMountRegistry,
+  renewPluginUiMount,
+} from "./plugin-ui-mount-lifecycle.ts";
 import { registerPluginUiInvocation } from "./plugin-ui-invocation-authority.ts";
 import type { ApplicationClock } from "./application-runtime-ports.ts";
 import type { ActorContext } from "./authorization-port.ts";
@@ -34,6 +39,7 @@ import type {
   PluginUiCatalogQuery,
   PluginUiMountQuery,
   ReadPluginUiAssetQuery,
+  RenewPluginUiMountCommand,
 } from "./plugin-ui-commands.ts";
 import type {
   PluginUiActionPort,
@@ -97,12 +103,6 @@ export type PluginUiApplicationDependencies = Readonly<{
   /** Only lower limits are accepted; there is no unbounded lease or byte configuration. */
   limits?: PluginUiApplicationLimits;
 }>;
-type MountBinding = Readonly<{
-  context: PluginUiPackageContext;
-  lease: PluginUiLease;
-  authorityEpoch: string;
-}>;
-
 /** Internal process-local UI admission; this is neither browser isolation nor production HTTP wiring. */
 export class PluginUiApplicationService {
   /** Internal composition evidence only; never projected as a user capability. */
@@ -112,7 +112,7 @@ export class PluginUiApplicationService {
   readonly #dependencies: PluginUiApplicationDependencies;
   readonly #limits: PluginUiApplicationLimits;
   readonly #recovery: PluginUiRecoveryPort | undefined;
-  readonly #mounts = new Map<string, MountBinding>();
+  readonly #mounts = new PluginUiMountRegistry(() => this.#now());
   #pending = 0;
   #referenceSequence = 0;
 
@@ -171,7 +171,7 @@ export class PluginUiApplicationService {
     return uiOperation(async () => {
       const actor = uiActor(actorInput);
       const command = uiOpenCommand(input);
-      this.#purge();
+      this.#mounts.purge();
       if (this.#mounts.size + this.#pending >= this.#limits.mounts)
         throw new ApplicationError("conflict", "plugin_ui_mount_limit");
       this.#pending++;
@@ -220,7 +220,7 @@ export class PluginUiApplicationService {
         });
         this.#mounts.set(
           mountRef,
-          Object.freeze({ context, lease, authorityEpoch: epoch }),
+          new PluginUiMountBinding(context, lease, epoch),
         );
         return lease;
       } finally {
@@ -236,17 +236,33 @@ export class PluginUiApplicationService {
     return uiOperation(async () => {
       const actor = uiActor(actorInput);
       const query = uiMountQuery(input);
-      const binding = this.#binding(actor, query.mountRef);
+      const binding = this.#mounts.binding(actor, query.mountRef);
       await this.#fence(actor, binding, "mount");
       return binding.lease;
     });
+  }
+
+  renewMount(
+    actor: ActorContext,
+    command: RenewPluginUiMountCommand,
+  ): Promise<PluginUiLease> {
+    return uiOperation(() =>
+      renewPluginUiMount(actor, command, {
+        mounts: this.#mounts,
+        packages: this.#dependencies.packages,
+        fence: (currentActor, binding) =>
+          this.#fence(currentActor, binding, "mount"),
+        now: () => this.#now(),
+        ttlMs: this.#limits.ttlMs,
+      }),
+    );
   }
 
   readAsset(actorInput: ActorContext, input: ReadPluginUiAssetQuery) {
     return uiOperation(async () => {
       const actor = uiActor(actorInput);
       const query = uiAssetQuery(input);
-      const binding = this.#binding(actor, query.mountRef);
+      const binding = this.#mounts.binding(actor, query.mountRef);
       if (!binding.lease.publicAssets.includes(query.path))
         throw new ApplicationError("notFound", "plugin_ui_asset_unavailable");
       const file = binding.lease.descriptor.files.find(
@@ -324,12 +340,12 @@ export class PluginUiApplicationService {
     input: PluginUiActionContext["input"],
   ) {
     const actor = uiActor(actorInput);
-    const binding = this.#binding(actor, mountRef);
+    const binding = this.#mounts.binding(actor, mountRef);
     return {
       context: pluginUiRecoveryActionContext(binding, action, input),
       port: this.#recovery,
       assertCurrent: () => this.#fence(actor, binding, "invoke"),
-      assertActive: () => this.#alive(binding),
+      assertActive: () => this.#mounts.alive(binding),
       assertTransactionCurrent: () => this.#transactionFence(actor, binding),
     };
   }
@@ -338,7 +354,7 @@ export class PluginUiApplicationService {
     return uiOperation(async () => {
       const actor = uiActor(actorInput);
       const command = uiInvokeCommand(input);
-      const binding = this.#binding(actor, command.mountRef);
+      const binding = this.#mounts.binding(actor, command.mountRef);
       await this.#fence(actor, binding, "invoke");
       const usesRecovery =
         pluginUiRecoveryMutation(command.action) &&
@@ -356,7 +372,7 @@ export class PluginUiApplicationService {
       const unregister = registerPluginUiInvocation(
         context,
         () => this.#fence(actor, binding, "invoke"),
-        () => this.#alive(binding),
+        () => this.#mounts.alive(binding),
         command.action.startsWith("crewon.creative-projects.") ||
           usesRecovery ||
           command.action ===
@@ -707,27 +723,12 @@ export class PluginUiApplicationService {
         "plugin_ui_authority_changed",
       );
   }
-  #binding(actor: ActorContext, mountRef: string): MountBinding {
-    const binding = this.#mounts.get(mountRef);
-    if (!binding || !uiSameActor(actor, binding.context.actor))
-      throw new ApplicationError("notFound", "plugin_ui_mount_unavailable");
-    this.#alive(binding);
-    return binding;
-  }
-  #alive(binding: MountBinding): void {
-    if (this.#mounts.get(binding.lease.mountRef) !== binding)
-      throw new ApplicationError("notFound", "plugin_ui_mount_unavailable");
-    if (this.#now() >= Date.parse(binding.lease.expiresAt)) {
-      this.#mounts.delete(binding.lease.mountRef);
-      throw new ApplicationError("conflict", "plugin_ui_mount_expired");
-    }
-  }
   async #fence(
     actor: ActorContext,
-    binding: MountBinding,
+    binding: PluginUiMountBinding,
     action: PluginUiAuthorizationAction,
   ): Promise<void> {
-    this.#alive(binding);
+    this.#mounts.alive(binding);
     if (!uiSameActor(actor, binding.context.actor))
       throw new ApplicationError("notFound", "plugin_ui_mount_unavailable");
     try {
@@ -750,14 +751,14 @@ export class PluginUiApplicationService {
         this.#mounts.delete(binding.lease.mountRef);
       throw error;
     }
-    this.#alive(binding);
+    this.#mounts.alive(binding);
   }
   /** Installation rows are locked and checked by the metadata Store's existing transaction connection. */
   async #transactionFence(
     actor: ActorContext,
-    binding: MountBinding,
+    binding: PluginUiMountBinding,
   ): Promise<void> {
-    this.#alive(binding);
+    this.#mounts.alive(binding);
     if (!uiSameActor(actor, binding.context.actor))
       throw new ApplicationError("notFound", "plugin_ui_mount_unavailable");
     try {
@@ -775,7 +776,7 @@ export class PluginUiApplicationService {
           "invoke",
           resource,
         );
-        this.#alive(binding);
+        this.#mounts.alive(binding);
         if (epoch !== binding.authorityEpoch)
           throw new ApplicationError(
             "authorization",
@@ -792,15 +793,7 @@ export class PluginUiApplicationService {
         this.#mounts.delete(binding.lease.mountRef);
       throw error;
     }
-    this.#alive(binding);
+    this.#mounts.alive(binding);
   }
-  #now(): number {
-    return uiOutput(() => uiNow(this.#dependencies.clock.now()));
-  }
-  #purge(): void {
-    const now = this.#now();
-    for (const [reference, binding] of this.#mounts)
-      if (Date.parse(binding.lease.expiresAt) <= now)
-        this.#mounts.delete(reference);
-  }
+  readonly #now = () => uiOutput(() => uiNow(this.#dependencies.clock.now()));
 }

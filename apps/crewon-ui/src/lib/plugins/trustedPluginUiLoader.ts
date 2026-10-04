@@ -1,5 +1,6 @@
 import {
   parsePluginUiLease,
+  parseRenewPluginUiMountResponse,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type {
@@ -96,6 +97,7 @@ export class TrustedPluginUiLoader {
   readonly #routeStyle: PluginUiAssetRouteStyle;
   readonly #importer: PluginUiModuleImporter;
   readonly #slots = new WeakMap<HTMLElement, Slot>();
+  readonly #mounts = new Map<string, Candidate>();
   readonly #cleanupPending = new Set<Candidate>();
   readonly #unusedCleanup = new Map<string, Promise<void>>();
   readonly #inflight = new Set<AbortController>();
@@ -140,6 +142,19 @@ export class TrustedPluginUiLoader {
     return this.#cleanupPending.size + this.#unusedCleanup.size;
   }
 
+  /** An authenticated expiry extension preserves the current instance, root, services and draft. */
+  renewLease(previousInput: PluginUiLease, nextInput: PluginUiLease): void {
+    const previous = parsePluginUiLease(previousInput);
+    const candidate = this.#mounts.get(previous.mountRef);
+    if (!candidate) uiFailure("plugin_ui_lease_not_mounted");
+    this.#current(candidate);
+    if (JSON.stringify(candidate.lease) !== JSON.stringify(previous))
+      uiFailure("plugin_ui_lease_identity_mismatch");
+    const next = parseRenewPluginUiMountResponse(nextInput, previous);
+    this.#current(candidate);
+    candidate.lease = next;
+  }
+
   /** An acquire result arriving after its caller cancelled has no DOM instance to stop. */
   async closeUnusedMount(input: PluginUiLease): Promise<void> {
     const lease = parsePluginUiLease(input);
@@ -163,6 +178,8 @@ export class TrustedPluginUiLoader {
 
   async mount(input: PluginUiMountInput): Promise<PluginUiMountHandle> {
     const lease = parsePluginUiLease(input.lease);
+    if (this.#mounts.has(lease.mountRef))
+      uiFailure("plugin_ui_mount_ref_already_mounted");
     let props: PluginUiProps;
     const entry = lease.descriptor.entrypoints.ui;
     const contribution = lease.descriptor.contributions.find(
@@ -228,6 +245,7 @@ export class TrustedPluginUiLoader {
       pendingUpdate: null,
     };
     slot.candidate = candidate;
+    this.#mounts.set(lease.mountRef, candidate);
     if (input.signal) {
       const abort = () => this.#discard(candidate);
       input.signal.addEventListener("abort", abort, { once: true });
@@ -440,6 +458,8 @@ export class TrustedPluginUiLoader {
       this.#cleanup(candidate),
     );
     candidate.state = "stopped";
+    if (this.#mounts.get(candidate.lease.mountRef) === candidate)
+      this.#mounts.delete(candidate.lease.mountRef);
     candidate.controller.abort();
     candidate.unlinkSignal();
     candidate.pendingUpdate?.reject(abortedPluginUiOperation());
