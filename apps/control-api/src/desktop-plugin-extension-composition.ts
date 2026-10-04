@@ -15,9 +15,15 @@ import {
   type ExternalOperationQueryStore,
   type PluginQueryHostPort,
 } from "@crewon/application";
+import { parseExtensionPluginId, parseExtensionRunId } from "@crewon/contracts";
 import type { DesktopPluginConfigurationRuntime } from "./desktop-plugin-configuration-runtime.ts";
 import { bindInstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
+import type { InstalledPluginTaskRuntimeCore } from "./installed-plugin-task-runtime-core.ts";
 import type { ExtensionHostRouter } from "./extension-host-router.ts";
+import {
+  pluginSecurityActor,
+  pluginSecurityRecord,
+} from "./plugin-security-validation.ts";
 
 type ConfigurationDependencies = ConstructorParameters<
   typeof ExtensionConfigurationApplicationService
@@ -39,6 +45,7 @@ export function composeStandaloneExtensionServices(
     }>;
     native?: Readonly<{
       installed: DesktopPluginConfigurationRuntime;
+      tasks?: InstalledPluginTaskRuntimeCore;
       approvedPluginIds: readonly string[];
       ownsNamespace: DesktopPluginNamespaceMembership;
     }>;
@@ -53,7 +60,14 @@ export function composeStandaloneExtensionServices(
   if (legacy === undefined) {
     return {
       extensions: native?.installed.extensions,
-      extensionReads: native?.installed.extensionReads,
+      extensionReads:
+        native === undefined
+          ? undefined
+          : composeDesktopTaskReadServices(
+              native.installed,
+              native.tasks,
+              native.ownsNamespace,
+            ),
       extensionTasks: undefined,
     };
   }
@@ -131,7 +145,17 @@ export function desktopLegacyTaskAuthorization(
           reasonCode: "desktop_plugin_execution_authority_unavailable",
         };
       }
-      return authorize(input);
+      const decision = await authorize(input);
+      if (
+        input.resource.kind === "extension" &&
+        (await ownsNamespace(input.actor, input.resource.pluginId))
+      ) {
+        return {
+          outcome: "deny" as const,
+          reasonCode: "desktop_plugin_execution_authority_unavailable",
+        };
+      }
+      return decision;
     },
   });
 }
@@ -140,12 +164,14 @@ export function desktopLegacyTaskAuthorization(
 export function composeDesktopPluginExtensionServices(
   input: Readonly<{
     installed: DesktopPluginConfigurationRuntime;
+    tasks?: InstalledPluginTaskRuntimeCore;
     approvedPluginIds: readonly string[];
     ownsNamespace: DesktopPluginNamespaceMembership;
     legacyConfiguration: ConfigurationDependencies;
     legacyReads: ReadDependencies;
   }>,
 ) {
+  assertDesktopTaskReadOwner(input.installed, input.tasks);
   const namespaces = new Set(input.approvedPluginIds);
   for (const entry of input.legacyReads.catalog.list()) {
     if (namespaces.has(entry.manifest.pluginId)) {
@@ -167,6 +193,7 @@ export function composeDesktopPluginExtensionServices(
         input.legacyReads,
         input.installed.extensionReads,
         input.ownsNamespace,
+        input.tasks?.extensionReads,
       ),
       input.installed.requests,
       { preparation: "configuration" },
@@ -226,14 +253,25 @@ class DesktopConfigurationServices extends ExtensionConfigurationApplicationServ
 
 class DesktopReadServices extends ExtensionReadApplicationService {
   readonly #installed: ExtensionReadApplicationService;
+  readonly #installedTasks: ExtensionReadApplicationService;
+  readonly #legacyTasks: ExtensionReadApplicationService;
   readonly #ownsNamespace: DesktopPluginNamespaceMembership;
   constructor(
     dependencies: ReadDependencies,
     installed: ExtensionReadApplicationService,
     ownsNamespace: DesktopPluginNamespaceMembership,
+    installedTasks?: ExtensionReadApplicationService,
   ) {
     super(dependencies);
     this.#installed = installed;
+    this.#installedTasks = installedTasks ?? installed;
+    this.#legacyTasks = new ExtensionReadApplicationService({
+      ...dependencies,
+      authorization: desktopLegacyTaskAuthorization(
+        dependencies.authorization,
+        ownsNamespace,
+      ),
+    });
     this.#ownsNamespace = ownsNamespace;
   }
   override async getCatalog(
@@ -257,8 +295,84 @@ class DesktopReadServices extends ExtensionReadApplicationService {
   override async getTask(
     ...args: Parameters<ExtensionReadApplicationService["getTask"]>
   ) {
-    return (await this.#ownsNamespace(args[0], args[1].pluginId))
-      ? this.#installed.getTask(...args)
-      : super.getTask(...args);
+    const { actor, input } = captureDesktopTaskRead(args[0], args[1]);
+    const installed = await this.#ownsNamespace(actor, input.pluginId);
+    const reader = installed ? this.#installedTasks : this.#legacyTasks;
+    const result = await reader.getTask(actor, input);
+    // Never switch readers after an asynchronous policy/storage call changed ownership.
+    if ((await this.#ownsNamespace(actor, input.pluginId)) !== installed)
+      taskReadDenied();
+    return result;
   }
+}
+
+/** Borrow both real readers; retain metadata methods and the original HTTP configuration scope. */
+function composeDesktopTaskReadServices(
+  installed: DesktopPluginConfigurationRuntime,
+  tasks: InstalledPluginTaskRuntimeCore | undefined,
+  ownsNamespace: DesktopPluginNamespaceMembership,
+): ExtensionReadApplicationService {
+  if (tasks === undefined) return installed.extensionReads;
+  assertDesktopTaskReadOwner(installed, tasks);
+  const metadata = installed.extensionReads;
+  const getCatalog = metadata.getCatalog.bind(metadata);
+  const getRuntime = metadata.getRuntime.bind(metadata);
+  const nativeTask = tasks.extensionReads.getTask.bind(tasks.extensionReads);
+  const metadataTask = metadata.getTask.bind(metadata);
+  const getTask: ExtensionReadApplicationService["getTask"] = async (
+    actorInput,
+    command,
+  ) => {
+    const { actor, input } = captureDesktopTaskRead(actorInput, command);
+    const native = await ownsNamespace(actor, input.pluginId);
+    const result = await (native ? nativeTask : metadataTask)(actor, input);
+    if ((await ownsNamespace(actor, input.pluginId)) !== native)
+      taskReadDenied();
+    return result;
+  };
+  const reader = new Proxy(metadata, {
+    get(target, name) {
+      if (name === "getCatalog") return getCatalog;
+      if (name === "getRuntime") return getRuntime;
+      if (name === "getTask") return getTask;
+      return Reflect.get(target, name, target);
+    },
+    set: () => false,
+    defineProperty: () => false,
+    deleteProperty: () => false,
+    setPrototypeOf: () => false,
+  });
+  return bindInstalledPluginRequestOwner(reader, installed.requests, {
+    preparation: "configuration",
+  });
+}
+
+function assertDesktopTaskReadOwner(
+  installed: DesktopPluginConfigurationRuntime,
+  tasks: InstalledPluginTaskRuntimeCore | undefined,
+): void {
+  if (tasks !== undefined && tasks.requests !== installed.requests)
+    taskReadDenied();
+}
+
+function captureDesktopTaskRead(
+  actorInput: ActorContext,
+  command: Parameters<ExtensionReadApplicationService["getTask"]>[1],
+) {
+  const actor = pluginSecurityActor(actorInput);
+  const fields = pluginSecurityRecord(command, ["pluginId", "runId"]);
+  return Object.freeze({
+    actor,
+    input: Object.freeze({
+      pluginId: parseExtensionPluginId(fields.pluginId),
+      runId: parseExtensionRunId(fields.runId),
+    }),
+  });
+}
+
+function taskReadDenied(): never {
+  throw new ApplicationError(
+    "authorization",
+    "desktop_plugin_execution_authority_unavailable",
+  );
 }

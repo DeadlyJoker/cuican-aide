@@ -6,6 +6,14 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native Main 文件签发接线与独立任务读取
+
+Standalone Main 已通过独立私有执行文件装配真实任务核心，公开 Standalone creator 在打开 SQLite 前要求实际 FileIssued/current；显式配置的身份、scope、root、epoch 和 activation publication 在 Artifact 分配前核验。原 HTTP task GET 的 Native 分支接独立任务 PDP，仍使用 configuration preparation；catalog/runtime 保留原 metadata 批准和拒绝，Native raw createTask 未开放。混合 reader 捕获原输入，在策略/存储 await 后重验 owner，不回退到其他 reader。协议见[Main 启动与读取](./native-installed-plugin-task-main.md)。
+
+真实 Main **8/8**、新 startup/read **12/12**、两类文件 loader **39/39**通过，均零跳过。原 Native/history/recovery/core/HTTP 路由组合 **183 项通过、零失败**，另有一项既有 PostgreSQL creator 用例因未配置外部数据库跳过，本轮不宣称它已验收。分组重叠、不相加。通过实际安装 Node/UI、HTTPS、HTTP/ControlClient 和同一文件 SQLite，验证普通任务、七类持久副作用、一次明确个人测试积分预留、正常物理关闭与重启、真实 session/CSRF 轮换和原键/旧 CAS 重放。独立读拒绝、迟到文件撤权、profile lock 替换、无 opt-in 和显式 PG 冲突均保留原拒绝行为。旧权限预期和夹具 Origin/profile writer 已修正为实际接口，未扩大批准。较大并行回归暴露初次 file loader 对无关祖先目录元数据变化的误拒绝；叶文件完整 pin 和目录身份/权限继续核验，增加实际 fd 读取的确定性竞态覆盖。类型、boundary、license 和格式检查通过。统一证据为 `output/extensions/checks/native-task-main-proof-20261004.json`。
+
+身份、五类 authority、peer readiness/deployment、100 个人测试积分和 30 积分报价为具名夹具，没有 Worker、模型、供应商或真实资金调用。原前端、用户栏、设置、两侧栏、正式资产、SDK/tarball、生产映射及短剧 8/9/10 包保持摘要；原用户进程保留，未更新用户配置、重建或再次请求原 ComfyUI。Electron 私有签发、Native 短剧生成/查询及三类恢复、真实钱包/价格/结算、可用 ComfyUI 的同次完整 App S0、打包全链路和 E5 仍待完成，完整目标继续进行。
+
 ## 2026-10-04：Native 独立任务执行配置与真实工厂
 
 已增加独立 `crewon.desktop-installed-plugin-tasks.v1`、实际私有文件 loader 和 Native 任务 authority，严格绑定同一真实 configuration/request/activation owner、安装源和 SQLite。原启用审批不授予任务、UI、执行包、报价或资金权限；可信程序可以通过原 Native factory 提交已安装 Node action，沿原 Application/Turn/Run/个人积分事务执行。原键重放不重复预留，关闭等待真实物理调用，COMMIT 后保留原 opaque 回执。必需 Host 服务的 deferred 接线只跟随实际 private brand，布尔端口不能伪装就绪。具体协议与边界见[Native 任务执行接线](./native-installed-plugin-task-execution.md)。

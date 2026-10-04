@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
+import fileSystemPromises from "node:fs/promises";
 import {
   chmod,
   link,
+  mkdir,
   mkdtemp,
   realpath,
   rename,
   rm,
   symlink,
   writeFile,
+  type FileHandle,
 } from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspect } from "node:util";
@@ -179,3 +183,115 @@ test("Native activation rejects a real ancestor symlink and invalid service toke
     /activation_configuration_invalid/u,
   );
 });
+
+test("Native activation accepts an unrelated same-parent sibling created after capture and before the actual bounded file read", async (t) => {
+  const f = await fixture(t);
+  const calls = await withOpenMutation(
+    t,
+    f.path,
+    () => mkdir(join(f.root, "unrelated-sibling"), { mode: 0o700 }),
+    async () => {
+      const loaded = await loadDesktopInstalledPluginActivationEnvironment(
+        f.environment,
+        f.input,
+      );
+      assert.ok(loaded);
+      assert.deepEqual(loaded.publication, f.value);
+      assertDesktopInstalledPluginActivationConfigCurrent(loaded);
+    },
+  );
+  assert.equal(calls.opens, 1);
+  assert.ok(calls.reads > 0);
+});
+
+test("Native activation still refuses leaf or parent replacement and permission changes between capture and actual open", async (t) => {
+  for (const change of [
+    "replace-leaf",
+    "replace-parent",
+    "leaf-mode",
+    "parent-mode",
+  ] as const) {
+    await t.test(change, async (child) => {
+      const f = await fixture(child);
+      const originalParent = f.root + "-original";
+      child.after(() => rm(originalParent, { recursive: true, force: true }));
+      const calls = await withOpenMutation(
+        child,
+        f.path,
+        async () => {
+          if (change === "replace-leaf") {
+            await rename(f.path, join(f.root, "original-activation.json"));
+            await writeFile(f.path, JSON.stringify(f.value), { mode: 0o600 });
+          } else if (change === "replace-parent") {
+            // The real open still reaches the untouched original leaf; only its parent changed.
+            await rename(f.root, originalParent);
+            await symlink(originalParent, f.root);
+          } else if (change === "leaf-mode") await chmod(f.path, 0o644);
+          else await chmod(f.root, 0o755);
+        },
+        () =>
+          assert.rejects(
+            loadDesktopInstalledPluginActivationEnvironment(
+              f.environment,
+              f.input,
+            ),
+            /activation_configuration_invalid/u,
+          ),
+      );
+      assert.equal(calls.opens, 1);
+      if (change === "replace-parent" || change === "parent-mode")
+        assert.ok(calls.reads > 0);
+      else assert.equal(calls.reads, 0);
+    });
+  }
+});
+
+/** Observes the original built-in open/read; no replacement descriptor or read result is supplied. */
+async function withOpenMutation(
+  t: TestContext,
+  path: string,
+  mutate: () => Promise<unknown>,
+  work: () => Promise<unknown>,
+) {
+  const originalOpen = fileSystemPromises.open;
+  const handles: FileHandle[] = [];
+  let reads = 0;
+  const observer = t.mock.method(
+    fileSystemPromises,
+    "open",
+    async (...args: Parameters<typeof originalOpen>) => {
+      if (args[0] === path) await mutate();
+      const handle = (await Reflect.apply(
+        originalOpen,
+        fileSystemPromises,
+        args,
+      )) as FileHandle;
+      if (args[0] === path) {
+        handles.push(handle);
+        const originalRead = handle.read;
+        t.mock.method(
+          handle,
+          "read",
+          async function (
+            this: FileHandle,
+            ...args: Parameters<typeof originalRead>
+          ) {
+            assert.equal(this, handle);
+            reads++;
+            return Reflect.apply(originalRead, this, args);
+          },
+        );
+      }
+      return handle;
+    },
+  );
+  syncBuiltinESMExports();
+  try {
+    await work();
+  } finally {
+    observer.mock.restore();
+    syncBuiltinESMExports();
+  }
+  for (const handle of handles) assert.equal(handle.fd, -1);
+  return { opens: handles.length, reads };
+}

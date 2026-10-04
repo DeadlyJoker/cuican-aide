@@ -1,6 +1,6 @@
 # Native 安装插件任务执行接线
 
-日期：2026-10-04。范围：独立私有执行配置、真实 Native factory 与共享任务核心；正式 Main/Electron 启动和完整短剧流程仍待接入。原 App、用户栏、设置、侧栏和共享样式保持原字节。
+日期：2026-10-04。范围：独立私有执行配置、真实 Native factory、共享任务核心及 Standalone Main 的文件 opt-in 和 HTTP 任务读取；Electron 签发与完整短剧流程仍待接入。原 App、用户栏、设置、侧栏和共享样式保持原字节。Main 的最新验收见[启动接线](./native-installed-plugin-task-main.md)。
 
 ## 1. 当前行为
 
@@ -8,7 +8,7 @@
 
 不传 `tasks` 时保留原 metadata/history 路径，不创建任务核心，不获得生成、查询、报价或资金权限。原 activation 审批只负责启用和执行连接，不替代任务执行批准。工厂不创建钱包、发放积分、选择付款账户或设置默认价格。
 
-当前 `tasks` 由可信程序装配。新的文件 loader 已实现并测试，但尚未在 Main 使用；设置环境变量本身不能证明正式入口已经接通。原 Standalone Main 的历史读取、图片选用和冷重启恢复继续有效。
+工厂可接受可信程序装配的 `tasks`；实际 Standalone Main 和公开 Standalone creator 只接受真实私有文件签发的配置。Main 已通过实际进程、安装 Node/UI、HTTP、SQLite 和原键冷重放验证普通任务。它不代表 Electron challenge/bootstrap 或 Native 短剧联合验收。原 Standalone Main 的历史读取、图片选用和冷重启恢复继续有效。
 
 ## 2. 独立私有配置
 
@@ -31,7 +31,7 @@
 
 文件 loader 使用 `CREWON_DESKTOP_INSTALLED_PLUGIN_TASK_CONFIG_PATH`，仅接受 Standalone，并要求明确 bootstrap 和 activation companion paths；没有 opt-in 时不读取其他路径或凭据。实际文件采用有界 fd 读取、`O_NOFOLLOW`、文件与祖先 pin 核验及私有叶文件/父目录权限，文件变化后失效。当前不支持 Windows。
 
-程序解析结果与文件签发结果由不同私有 provenance 记录区分。后续 Main 必须调用 `assertDesktopInstalledPluginTaskConfigFileIssued`，不能把程序对象或浅复制当成可信文件。`activationDigest` 绑定解析后的 publication，排除运行时秘密；它不等于原文件字节摘要，也不替代独立的文件 pin 证据。loader 只验证 companion path，实际执行 owner 还要绑定已经加载的 Native 与 activation 实例。
+程序解析结果与文件签发结果由不同私有 provenance 记录区分。Main 和 Standalone creator 调用 `assertDesktopInstalledPluginTaskConfigFileIssued`，不能把程序对象或浅复制当成可信文件。`activationDigest` 绑定解析后的 publication，排除运行时秘密；它不等于原文件字节摘要，也不替代独立的文件 pin 证据。loader 只验证 companion path，实际执行 owner 还要绑定已经加载的 Native 与 activation 实例。
 
 ## 3. 实际 owner 和权限
 
@@ -56,7 +56,7 @@
 
 当前 factory 可以装配共享 core 的 generation/query 分支，但本阶段未用实际 Native 短剧包联合验收。Native recovery 仍只支持选用；不能把这套 seam 或普通任务通过视为短剧 8/9/10 的生成、查询和三类恢复已经 ready。
 
-## 5. 验证范围
+## 5. 上一阶段工厂验证范围
 
 分组存在重叠，不求和。所有最终分组均零失败、零跳过：
 
@@ -79,7 +79,7 @@ Control、Host 和 Contracts 类型检查、boundary、license、格式和 diff 
 
 ## 6. 下一步与剩余验收
 
-1. 将实际 FileIssued 配置接入 Standalone Main，审查 Electron 私有 challenge/bootstrap；HTTP Task result/read 路由接实际核心与独立 PDP。
+1. Standalone Main 的 FileIssued 配置和 HTTP Task result/read 已接入；继续审查和接入 Electron 私有 challenge/bootstrap。
 2. 用实际 Native 短剧 source→Krea2 target 接通生成/查询和原三类 durable recovery，验证关闭、重启、原 key/CAS、撤权和迟到回执。
 3. 接入用户真实个人插件钱包、资金与价格权威及结算；不能用测试 grant/quote 替代。
 4. 在可用的真实 ComfyUI 上完成同一次完整 App 保存→生成→原任务查询→选用→重启，以及 packaged Electron/Main/preload/App 验收。

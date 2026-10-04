@@ -48,6 +48,8 @@ import {
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
+import type { DesktopInstalledPluginTaskConfig } from "./desktop-installed-plugin-task-environment.ts";
+import { captureDesktopInstalledPluginTaskStartup } from "./desktop-installed-plugin-task-startup.ts";
 import {
   captureStandaloneCreativeProjectCompositionConfig,
   composeStandaloneCreativeProjects,
@@ -222,11 +224,16 @@ export async function createStandaloneControlApiWithPlugins(
     Readonly<{
       desktopPlugins: DesktopPluginConfiguration;
       desktopPluginActivation?: DesktopInstalledPluginActivationConfig;
+      desktopPluginTasks?: DesktopInstalledPluginTaskConfig;
       uiRecovery?: PluginUiRecoveryConfiguration;
       extensionWorker?: ExtensionWorkerConfig;
     }>,
 ): Promise<StandaloneControlApiRuntime> {
   const configuration = parseDesktopPluginConfiguration(config.desktopPlugins);
+  const taskStartup = captureDesktopInstalledPluginTaskStartup(
+    config,
+    configuration,
+  );
   if (
     JSON.stringify(configuration.actor) !==
     JSON.stringify({
@@ -264,9 +271,12 @@ export async function createStandaloneControlApiWithPlugins(
       {
         configuration,
         ...(uiRecovery === undefined ? {} : { uiRecovery }),
-        ...(config.desktopPluginActivation === undefined
+        ...(taskStartup.activation === undefined
           ? {}
-          : { activation: config.desktopPluginActivation }),
+          : { activation: taskStartup.activation }),
+        ...(taskStartup.tasks === undefined
+          ? {}
+          : { tasks: taskStartup.tasks }),
       },
       {
         store,
@@ -543,6 +553,9 @@ function composeControlApi(
             ? undefined
             : {
                 installed: preparedPlugins.runtime.configuration,
+                ...(preparedPlugins.runtime.tasks === undefined
+                  ? {}
+                  : { tasks: preparedPlugins.runtime.tasks }),
                 approvedPluginIds: preparedPlugins.approvedPluginIds,
                 ownsNamespace: preparedPlugins.ownsNamespace,
               },

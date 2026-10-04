@@ -62,12 +62,7 @@ export function assertDesktopInstalledPluginTaskConfigCurrent(
       if (
         index === 0
           ? !same(pin.stat, current)
-          : !current.isDirectory() ||
-            current.isSymbolicLink() ||
-            current.dev !== pin.stat.dev ||
-            current.ino !== pin.stat.ino ||
-            current.mode !== pin.stat.mode ||
-            current.uid !== pin.stat.uid
+          : !sameDirectory(pin.stat, current)
       )
         invalid();
     }
@@ -189,8 +184,15 @@ export async function loadDesktopInstalledPluginTaskEnvironment(
         !same(before, await handle.stat({ bigint: true }))
       )
         invalid();
-      for (const pin of pins)
-        if (!same(pin.stat, await lstat(pin.path, { bigint: true }))) invalid();
+      for (const [index, pin] of pins.entries()) {
+        const current = await lstat(pin.path, { bigint: true });
+        if (
+          index === 0
+            ? !same(pin.stat, current)
+            : !sameDirectory(pin.stat, current)
+        )
+          invalid();
+      }
       const configuration = parseDesktopInstalledPluginTaskConfig(
         JSON.parse(
           new TextDecoder("utf-8", { fatal: true }).decode(
@@ -246,6 +248,18 @@ function same(a: BigIntStats, b: BigIntStats): boolean {
     a.size === b.size &&
     a.mtimeNs === b.mtimeNs &&
     a.ctimeNs === b.ctimeNs
+  );
+}
+
+/** Directory children do not carry authority; identity, type, owner and permissions do. */
+function sameDirectory(a: BigIntStats, b: BigIntStats): boolean {
+  return (
+    b.isDirectory() &&
+    !b.isSymbolicLink() &&
+    a.dev === b.dev &&
+    a.ino === b.ino &&
+    a.mode === b.mode &&
+    a.uid === b.uid
   );
 }
 

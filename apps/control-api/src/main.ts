@@ -35,6 +35,11 @@ import {
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { loadDesktopInstalledPluginActivationEnvironment } from "./desktop-installed-plugin-activation-environment.ts";
+import { loadDesktopInstalledPluginTaskEnvironment } from "./desktop-installed-plugin-task-environment.ts";
+import {
+  captureDesktopInstalledPluginTaskStartup,
+  snapshotDesktopInstalledPluginTaskEnvironment,
+} from "./desktop-installed-plugin-task-startup.ts";
 import { resolveControlExtensionWorkerEnvironment } from "./extension-worker-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 import {
@@ -47,6 +52,9 @@ import { PimThreadSandbox } from "./pim-sandbox-client.ts";
 
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+);
+const desktopTaskEnvironment = snapshotDesktopInstalledPluginTaskEnvironment(
+  process.env,
 );
 const pluginUiConfiguration = resolveProductionPluginUiEnvironment(
   process.env,
@@ -84,17 +92,27 @@ if (
 const activationGate = resolvePausedAdmission(process.env, securityMode);
 const standaloneTenantId =
   extensionEnvironment?.actor.tenantId ??
-  environmentOr("CREWON_TENANT_ID", "standalone-tenant");
+  environmentOr(
+    "CREWON_TENANT_ID",
+    "standalone-tenant",
+    desktopTaskEnvironment ?? process.env,
+  );
 const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
   process.env,
   securityMode,
   standaloneTenantId,
 );
-const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
+const desktopEnvironment = desktopTaskEnvironment ?? process.env;
+const connectionString = desktopEnvironment.CREWON_CONTROL_DATABASE_URL?.trim();
 const desktopPluginBootstrapPath =
-  process.env.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH;
+  desktopEnvironment.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH;
+if (
+  desktopTaskEnvironment !== undefined &&
+  (securityMode !== "standalone" || connectionString)
+)
+  throw new Error("desktop_plugin_standalone_sqlite_required");
 const desktopPluginActivation =
-  await loadDesktopInstalledPluginActivationEnvironment(process.env, {
+  await loadDesktopInstalledPluginActivationEnvironment(desktopEnvironment, {
     securityMode,
     ...(desktopPluginBootstrapPath === undefined
       ? {}
@@ -105,6 +123,55 @@ if (
   (securityMode !== "standalone" || connectionString)
 )
   throw new Error("desktop_plugin_standalone_sqlite_required");
+const desktopPluginTasks =
+  desktopTaskEnvironment === undefined
+    ? undefined
+    : await loadDesktopInstalledPluginTaskEnvironment(desktopTaskEnvironment, {
+        securityMode,
+        ...(desktopPluginBootstrapPath === undefined
+          ? {}
+          : { desktopBootstrapPath: desktopPluginBootstrapPath }),
+        ...(desktopTaskEnvironment.CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH ===
+        undefined
+          ? {}
+          : {
+              activationConfigPath:
+                desktopTaskEnvironment.CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH,
+            }),
+      });
+// Only the explicit task path moves bootstrap validation before resource allocation.
+const desktopTaskActor =
+  desktopPluginTasks === undefined
+    ? undefined
+    : (extensionEnvironment?.actor ?? {
+        principalId: environmentOr(
+          "CREWON_PRINCIPAL_ID",
+          "standalone-principal",
+          desktopEnvironment,
+        ),
+        actorId: environmentOr(
+          "CREWON_ACTOR_ID",
+          "standalone-actor",
+          desktopEnvironment,
+        ),
+        tenantId: standaloneTenantId,
+        spaceId: environmentOr(
+          "CREWON_SPACE_ID",
+          "standalone-space",
+          desktopEnvironment,
+        ),
+      });
+const desktopTaskBootstrap =
+  desktopTaskActor === undefined
+    ? undefined
+    : await loadDesktopPluginConfiguration(desktopPluginBootstrapPath!, {
+        actor: desktopTaskActor,
+      });
+if (desktopTaskBootstrap !== undefined)
+  captureDesktopInstalledPluginTaskStartup(
+    { desktopPluginTasks, desktopPluginActivation },
+    desktopTaskBootstrap,
+  );
 const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
   process.env,
   securityMode,
@@ -239,12 +306,16 @@ try {
         : {}),
     });
   } else {
-    const actor = extensionEnvironment?.actor ?? {
-      principalId: environmentOr("CREWON_PRINCIPAL_ID", "standalone-principal"),
-      actorId: environmentOr("CREWON_ACTOR_ID", "standalone-actor"),
-      tenantId: standaloneTenantId,
-      spaceId: environmentOr("CREWON_SPACE_ID", "standalone-space"),
-    };
+    const actor = desktopTaskActor ??
+      extensionEnvironment?.actor ?? {
+        principalId: environmentOr(
+          "CREWON_PRINCIPAL_ID",
+          "standalone-principal",
+        ),
+        actorId: environmentOr("CREWON_ACTOR_ID", "standalone-actor"),
+        tenantId: standaloneTenantId,
+        spaceId: environmentOr("CREWON_SPACE_ID", "standalone-space"),
+      };
     const standaloneConfig = {
       ...sharedConfig,
       actor,
@@ -275,11 +346,12 @@ try {
     } else {
       const databasePath = requiredEnvironment("CREWON_CONTROL_DB_PATH");
       const desktopPlugins =
-        desktopPluginBootstrapPath === undefined
+        desktopTaskBootstrap ??
+        (desktopPluginBootstrapPath === undefined
           ? undefined
           : await loadDesktopPluginConfiguration(desktopPluginBootstrapPath, {
               actor,
-            });
+            }));
       runtime =
         desktopPlugins !== undefined
           ? await createStandaloneControlApiWithPlugins({
@@ -293,6 +365,9 @@ try {
               ...(desktopPluginActivation === undefined
                 ? {}
                 : { desktopPluginActivation }),
+              ...(desktopPluginTasks === undefined
+                ? {}
+                : { desktopPluginTasks }),
               ...(extensionEnvironment === undefined
                 ? {}
                 : { extensionWorker: extensionEnvironment.extensionWorker }),
@@ -357,8 +432,12 @@ function requiredEnvironment(name: string): string {
   return value;
 }
 
-function environmentOr(name: string, fallback: string): string {
-  return process.env[name]?.trim() || fallback;
+function environmentOr(
+  name: string,
+  fallback: string,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  return environment[name]?.trim() || fallback;
 }
 
 function splitRequiredEnvironment(name: string): string[] {
