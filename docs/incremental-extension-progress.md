@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Worker 有界恢复与独立财务部署
+
+在 `bde673948f6d07dfd6428ec8405294a0c15a6ec2` 基线上接通[Worker 插件积分结算](./installed-plugin-credit-worker.md)：明确 tenant/space/profile 的原安装 admission 索引分页、独立 0600 文件配置与 HTTPS 财务权威、后台单轮调度，以及父 Store 与财务 owner 的共同事务 fence。未配置时原 Worker 不访问结算 Store、不迁移、不新增财务请求；原用户栏、Settings、侧栏和样式保持。
+
+每页最多 16 项，原 hold、未完成和已结算的槽均推进游标，不用终态/钱包/NOT EXISTS 过滤掩盖无界扫描。严格核验原 schema 和新增独立 marker/index，PG 校验四项内建 text_ops、C collation 及实际有效索引。预算与 HTTP 超时只撤权/abort，物理请求或 Store promise 未结束前不再扫描；所有 stop 先撤权，再 join 后关闭父存储。授权刷新保留旧到期约束，跨旧期限的同 epoch 响应不能恢复权限。
+
+新协议、coordinator、真实 SQLite/独占 PostgreSQL 和 Worker 装配组合 **119/119、零跳过、退出码 0**（包含恢复专项 **41/41**、Worker 双库装配 **10/10**）。Application 完整回归 **568/568**。原原子结算与普通 Worker 的生命周期、Tool continuation、恢复和实际启动组合 **138/138、零跳过、退出码 0**，包含新增实际 Main **6/6**：无 opt-in 的真实 MCP 退场及无效文件/tenant mismatch 在资源和财务 HTTP 前拒绝。各组按实际范围记录，不求和；实际主进程的财务授权 deny-after-MCP 尚未专项验收。
+
+具名原资金/价格经真实原准入与 Store，Worker 明确结算 18，并从同一持久 DB 的新 composition/新连接读回不可变决定，余额和事件不再改变。这是重新打开的 owner，不是 OS 崩溃重启。普通流式/Tool continuation 与真实 coordinator 的具名 Store scan 同时运行，关闭等待该 scan 真结束；PG 查询仍共享原池和锁，单连接池可使普通 Store 操作排队，不承诺所有配置下无数据库争用。
+
+原账本/准入/派发兼容、类型、boundary、格式和保留结果以统一证据 `output/extensions/checks/credit-settlement-worker-proof-20261004.json` 为准。初次测试类型问题及 PG 启动失败保留；缩短 socket 路径后启动成功。首次未执行测试，不计入通过数。自有 PG 在消费者退场、后端归零后物理停止并清理；原递归 packages 类型脚本隐式重建 SDK 生成文件，SDK 源码/冻结包、正式 Renderer、旧独立发行包、生产映射和用户五个进程保留，primary 人类工作不改。
+
+HTTP、身份、资金、金额和规则仍为具名测试边界，没有生产拨款、扣费或请求用户 ComfyUI。真实个人身份/入账/价格/失败结算、Native Krea2 实际公网生成查询、同次完整 App 在线 S0、全部插件打包恢复/执行链路及用户选定实际企业 API 的 E5 尚未完成，完整目标 ACTIVE。
+
 ## 2026-10-04：插件积分与原执行证据的原子结算
 
 在 `db614763721c3a3839836b014b12ba6563de38e9` 基线上，新增[积分结算决定层](./installed-plugin-credit-finalization.md)：Application 显式权威服务、共享证据校验和 SQLite/PostgreSQL 原子适配器。原付款主体、报价、个人预占、任务回执、安装完整 pin、Run、Step、Attempt、WorkItem/lease、Tool 和供应商 operation 共同复核；每个集合最多 64 项，超限拒绝。终结 Run 或过期租约不能单独解冻。旧 v0 保持可读，这条新增自动路径不会结算缺少 v1 安装证明的记录。

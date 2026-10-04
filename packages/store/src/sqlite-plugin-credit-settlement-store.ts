@@ -4,6 +4,8 @@ import type {
   PluginCreditSettlementFinalization,
   PluginCreditSettlementLocator,
   PluginCreditSettlementStore,
+  PluginCreditSettlementRecoveryStore,
+  PluginCreditSettlementRecoveryScan,
 } from "@crewon/application";
 import {
   releaseCreditReservation,
@@ -30,6 +32,8 @@ import {
   parseSettlementLocator,
   type SettlementEvidenceRows,
 } from "./plugin-credit-settlement-records.ts";
+import { SqlitePluginCreditSettlementRecovery } from "./sqlite-plugin-credit-settlement-recovery.ts";
+import { parseSettlementRecoveryScan } from "./plugin-credit-settlement-recovery-records.ts";
 
 type Row = Record<string, unknown>;
 const settlementTables = [
@@ -53,14 +57,26 @@ const installedAdmissionTables = [
 
 /** Borrows the original host connection. Construction grants no money or authority. */
 export class SqlitePluginCreditSettlementStore
-  implements PluginCreditSettlementStore
+  implements PluginCreditSettlementRecoveryStore
 {
   readonly #database: DatabaseSync;
   readonly #assertOpen: () => void;
+  readonly #recovery: SqlitePluginCreditSettlementRecovery;
 
   constructor(input: Readonly<{ database: DatabaseSync; assertOpen(): void }>) {
     this.#database = input.database;
-    this.#assertOpen = input.assertOpen;
+    const checker = Object.getOwnPropertyDescriptor(input, "assertOpen");
+    if (
+      checker === undefined ||
+      !Object.hasOwn(checker, "value") ||
+      typeof checker.value !== "function"
+    )
+      throw new Error("plugin_credit_settlement_owner_invalid");
+    this.#assertOpen = (checker.value as () => void).bind(input);
+    this.#recovery = new SqlitePluginCreditSettlementRecovery({
+      database: this.#database,
+      assertCurrent: this.#assertOpen,
+    });
   }
 
   async migrate(): Promise<void> {
@@ -71,6 +87,15 @@ export class SqlitePluginCreditSettlementStore
       );
       this.#settlementSchema();
     });
+  }
+
+  async migrateRecovery(): Promise<void> {
+    this.#transaction(() => this.#recovery.migrate());
+  }
+
+  async scanRecovery(input: PluginCreditSettlementRecoveryScan) {
+    const scan = parseSettlementRecoveryScan(input);
+    return this.#transaction(() => this.#recovery.scan(scan));
   }
 
   async loadEvidence(input: PluginCreditSettlementLocator) {

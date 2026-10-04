@@ -7,6 +7,7 @@ import { createSqlitePluginTaskAdmissionProbe } from "./plugin-task-admission-pr
 import type { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
 import { SqlitePluginCreditSettlementStore } from "./sqlite-plugin-credit-settlement-store.ts";
+import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
 import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
 import { captureSqliteInstallationDatabase } from "./sqlite-plugin-installation-profile-lock.ts";
@@ -716,11 +717,17 @@ export class SqliteRunStore implements DomainStore {
   }
 
   /** Original Run/credit connection; settlement migration and authority remain explicit. */
-  pluginCreditSettlementStore(): SqlitePluginCreditSettlementStore {
+  pluginCreditSettlementStore(
+    owner?: Readonly<{ assertCurrent(): void }>,
+  ): SqlitePluginCreditSettlementStore {
     this.#assertOpen();
+    const assertCurrent = capturePluginCreditSettlementOwnerFence(owner);
     return new SqlitePluginCreditSettlementStore({
       database: this.#database,
-      assertOpen: () => this.#assertOpen(),
+      assertOpen: () => {
+        this.#assertOpen();
+        assertCurrent?.();
+      },
     });
   }
 

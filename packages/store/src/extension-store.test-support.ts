@@ -290,6 +290,7 @@ export async function extensionFixture(
   return {
     first,
     second,
+    databasePath: path,
     open,
     seed,
     seedDeployment,

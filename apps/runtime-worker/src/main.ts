@@ -50,6 +50,9 @@ import {
   type InstalledPluginWorkerAuthority,
 } from "./plugins/installed-plugin-worker-authority.ts";
 import { resolveInstalledPluginPeerEnvironment } from "./plugins/installed-plugin-peer-environment.ts";
+import { loadPluginCreditSettlementWorkerConfigFromEnvironment } from "./plugins/plugin-credit-settlement-worker-config.ts";
+import { createPluginCreditSettlementWorkerAuthority } from "./plugins/plugin-credit-settlement-worker-authority.ts";
+import type { PluginCreditSettlementDeploymentAuthority } from "./plugins/plugin-credit-settlement-runtime-types.ts";
 import { readInstalledPluginReleaseDocument } from "./plugins/installed-plugin-release-document.ts";
 import {
   loadInstalledPluginRelease,
@@ -73,10 +76,15 @@ const initialized = await (async () => {
   let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
   let installedPluginAuthority: InstalledPluginWorkerAuthority | undefined;
   let installedPluginRelease: LoadedInstalledPluginRelease | undefined;
+  let pluginCreditSettlementAuthority:
+    | PluginCreditSettlementDeploymentAuthority
+    | undefined;
   try {
     const securityMode = parseRuntimeWorkerSecurityMode(
       environment.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
     );
+    const pluginCreditSettlementConfiguration =
+      loadPluginCreditSettlementWorkerConfigFromEnvironment(environment);
     const installedPluginConfigPath =
       environment[INSTALLED_PLUGIN_WORKER_CONFIG_ENV];
     const installedPluginPeer =
@@ -252,6 +260,25 @@ const initialized = await (async () => {
                   },
                 }),
           });
+    if (
+      pluginCreditSettlementConfiguration !== undefined &&
+      pluginCreditSettlementConfiguration.scope.tenantId !== runtimeTenantId
+    )
+      throw new Error("plugin_credit_settlement_tenant_mismatch");
+    const pluginCreditSettlement =
+      pluginCreditSettlementConfiguration === undefined
+        ? undefined
+        : {
+            scope: pluginCreditSettlementConfiguration.scope,
+            authority: (pluginCreditSettlementAuthority =
+              createPluginCreditSettlementWorkerAuthority(
+                pluginCreditSettlementConfiguration,
+              )),
+            batchSize: pluginCreditSettlementConfiguration.batchSize,
+            intervalMs: pluginCreditSettlementConfiguration.intervalMs,
+            maxRoundMs: pluginCreditSettlementConfiguration.maxRoundMs,
+            migrate: pluginCreditSettlementConfiguration.migrate,
+          };
     transport = createModelTransport(
       environmentOr("CREWON_MODEL_ADAPTER", "responses", environment),
       {
@@ -270,6 +297,7 @@ const initialized = await (async () => {
       installedPluginAuthority,
       installedPluginRelease,
       installedPluginPeer,
+      pluginCreditSettlement,
       ambientProviderProbe,
       artifactAuthority,
       nativeWorkspaceReadCatalog,
@@ -285,6 +313,7 @@ const initialized = await (async () => {
       [
         () => installedPluginRelease?.close(),
         () => installedPluginAuthority?.close(),
+        () => pluginCreditSettlementAuthority?.close(),
         () => artifactAuthority?.store.close(),
         () => toolRuntime?.close?.(),
         () => transport?.close?.(),
@@ -305,6 +334,7 @@ const {
   installedPluginAuthority,
   installedPluginRelease,
   installedPluginPeer,
+  pluginCreditSettlement,
   nativeWorkspaceReadCatalog,
   remoteMcpOwner,
   route,
@@ -392,6 +422,7 @@ try {
           additionalAgentVersions: extensionRelease.versions,
           extensionRuntime,
         }),
+    ...(pluginCreditSettlement === undefined ? {} : { pluginCreditSettlement }),
     ...(installedPluginRelease === undefined
       ? {}
       : {
@@ -474,6 +505,7 @@ try {
       [
         () => installedPluginRelease?.close(),
         () => installedPluginAuthority?.close(),
+        () => pluginCreditSettlement?.authority.close(),
         () => nativeWorkspaceResources?.gateway.close(),
         () => nativeWorkspaceResources?.readGateway.close(),
         () => artifactAuthority?.store.close(),

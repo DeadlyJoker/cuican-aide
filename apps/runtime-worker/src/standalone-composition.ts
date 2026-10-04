@@ -36,6 +36,12 @@ import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
 import { preparePluginTaskAdmissionProbe } from "./plugins/plugin-task-admission-probe.ts";
+import { createPluginCreditSettlementMaintenance } from "./plugins/plugin-credit-settlement-maintenance.ts";
+import {
+  capturePluginCreditSettlementCompositionInput,
+  ownPluginCreditSettlementCompositionAuthority,
+} from "./plugins/plugin-credit-settlement-composition-input.ts";
+import type { PluginCreditSettlementRuntimeConfig } from "./plugins/plugin-credit-settlement-runtime-types.ts";
 import type { InstalledPluginRunRuntimeResolverPort } from "./plugins/installed-plugin-run-runtime.ts";
 import {
   captureInstalledPluginExecutionConfig,
@@ -160,6 +166,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   installedPluginPeer?: InstalledPluginPeerCompositionConfig;
   /** Trusted authority lifetime only; this closer never grants execution or payment permission. */
   installedPluginAuthorityOwner?: Readonly<{ close(): Promise<void> }>;
+  /** Independent explicit financial deployment; absent means no credit Store access or migration. */
+  pluginCreditSettlement?: PluginCreditSettlementRuntimeConfig;
   additionalAgentVersionRuntimes?: readonly Readonly<{
     tenantId: string | null;
     runtime: AgentVersionRuntime;
@@ -297,6 +305,7 @@ function prepareComposition(
   input: RuntimeWorkerCompositionConfig,
 ): PreparedRuntimeWorkerConfig {
   prepareInstalledPluginReleaseComposition(input);
+  const financial = capturePluginCreditSettlementCompositionInput(input);
   if (
     input.installedPluginExecution !== undefined &&
     input.installedPluginRuntimeResolver !== undefined
@@ -306,6 +315,11 @@ function prepareComposition(
   const config = Object.freeze({
     ...input,
     route: Object.freeze({ ...input.route }),
+    ...(financial === undefined
+      ? {}
+      : {
+          pluginCreditSettlement: financial,
+        }),
     ...(input.installedPluginExecution === undefined
       ? {}
       : {
@@ -344,6 +358,11 @@ function prepareComposition(
         }),
   });
   const mode = parseExtensionExecutionMode(config.extensionExecutionMode);
+  if (
+    config.pluginCreditSettlement !== undefined &&
+    config.pluginCreditSettlement.scope.tenantId !== config.runtimeTenantId
+  )
+    throw new Error("plugin_credit_settlement_tenant_mismatch");
   if (
     config.installedPluginExecution?.historicalQuery !== undefined &&
     config.installedPluginExecution.historicalQuery.scope.tenantId !==
@@ -388,6 +407,7 @@ function prepareComposition(
 
 function ownCompositionInputs(config: RuntimeWorkerCompositionConfig) {
   const lifetime = new RuntimeCompositionLifetime();
+  ownPluginCreditSettlementCompositionAuthority(config, lifetime);
   if (config.installedPluginRelease !== undefined)
     lifetime.own(config.installedPluginRelease, { phase: "resources" });
   const transport = lifetime.own(config.transport, { phase: "resources" });
@@ -644,6 +664,15 @@ async function composeRuntimeWorker(
     ids,
     digester,
   });
+  const pluginCreditSettlement =
+    config.pluginCreditSettlement === undefined
+      ? undefined
+      : await createPluginCreditSettlementMaintenance({
+          config: config.pluginCreditSettlement,
+          storeFactory: (owner) => store.pluginCreditSettlementStore(owner),
+        });
+  if (pluginCreditSettlement !== undefined)
+    lifetime.own(pluginCreditSettlement, { phase: "stop" });
   const worker = new RuntimeWorker(
     {
       store,
@@ -659,6 +688,7 @@ async function composeRuntimeWorker(
       agentVersionRuntimeResolver: runtimeResolver,
       pluginTaskAdmissions,
       installedPluginRuntimeResolver,
+      pluginCreditSettlement,
       policy,
     },
     {

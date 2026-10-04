@@ -6,6 +6,7 @@ import { PostgresExtensionStore } from "./postgres-extension-store.ts";
 import { createPostgresPluginTaskAdmissionProbe } from "./plugin-task-admission-probe.ts";
 import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
 import { PostgresPluginCreditSettlementStore } from "./postgres-plugin-credit-settlement-store.ts";
+import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
@@ -208,12 +209,18 @@ export class PostgresDomainStore
   }
 
   /** Original Run/credit pool and lifetime; no migration, funding or policy during construction. */
-  pluginCreditSettlementStore(): PostgresPluginCreditSettlementStore {
+  pluginCreditSettlementStore(
+    owner?: Readonly<{ assertCurrent(): void }>,
+  ): PostgresPluginCreditSettlementStore {
     this.assertOpen();
+    const assertCurrent = capturePluginCreditSettlementOwnerFence(owner);
     return new PostgresPluginCreditSettlementStore({
       pool: this.pool,
       schema: this.schema,
-      assertOpen: () => this.assertOpen(),
+      assertOpen: () => {
+        this.assertOpen();
+        assertCurrent?.();
+      },
     });
   }
 

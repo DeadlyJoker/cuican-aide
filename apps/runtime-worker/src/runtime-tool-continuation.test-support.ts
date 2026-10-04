@@ -38,6 +38,7 @@ export async function createFixture(
   context: TestContext,
   options: {
     backend: "sqlite" | "postgres";
+    pluginCreditSettlement?: import("./plugins/plugin-credit-settlement-runtime-types.ts").PluginCreditSettlementMaintenancePort;
     runIdPrefix?: string;
     beforeInitialRun?: (input: { threadId: string; actor: import("@crewon/application").ActorContext; goals: ThreadGoalApplicationService }) => Promise<void>;
     initialPlan?: boolean;
@@ -612,6 +613,7 @@ export async function createFixture(
     worker = new RuntimeWorker(
       {
         store: intercepted,
+        pluginCreditSettlement: options.pluginCreditSettlement,
         storeAccessTime: options.storeAccessTime,
         preflightTime: options.preflightTime,
         execution: new RunExecutionService({

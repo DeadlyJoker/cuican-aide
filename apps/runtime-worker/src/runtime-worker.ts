@@ -28,6 +28,7 @@ import {
   type AuthorityTime,
 } from "./runtime-authority-query.ts";
 import { ToolResultMaintenance } from "./tool-result-maintenance.ts";
+import type { PluginCreditSettlementMaintenancePort } from "./plugins/plugin-credit-settlement-runtime-types.ts";
 import { toolResultMaintenanceSources } from "./tool-result-maintenance-sources.ts";
 import { durableModelCallSink } from "./durable-model-call-sink.ts";
 import { StorageAdmissionError } from "@crewon/application";
@@ -240,6 +241,10 @@ type WorkerAgentRuntime = Readonly<{
 export class RuntimeWorker {
   readonly #executionBudget: RuntimeExecutionBudget;
   readonly #toolResultMaintenance: ToolResultMaintenance;
+  readonly #pluginCreditSettlement:
+    | PluginCreditSettlementMaintenancePort
+    | undefined;
+  #pluginCreditSettlementClose: Promise<void> | undefined;
   readonly #store: DomainStore;
   readonly #storeAccess: RuntimeStoreAccess;
   readonly #preflight: RuntimePreflight;
@@ -327,6 +332,7 @@ export class RuntimeWorker {
       agentVersionRuntimeResolver?: AgentVersionRuntimeResolverPort;
       pluginTaskAdmissions?: PluginTaskAdmissionProbe;
       installedPluginRuntimeResolver?: InstalledPluginRunRuntimeResolverPort;
+      pluginCreditSettlement?: PluginCreditSettlementMaintenancePort;
     },
     config: RuntimeWorkerConfig,
   ) {
@@ -375,6 +381,7 @@ export class RuntimeWorker {
     this.#pluginTaskAdmissions = dependencies.pluginTaskAdmissions;
     this.#installedPluginRuntimeResolver =
       dependencies.installedPluginRuntimeResolver;
+    this.#pluginCreditSettlement = dependencies.pluginCreditSettlement;
     let visitRegistry = false;
     this.#toolResultMaintenance = new ToolResultMaintenance({
       store: dependencies.store,
@@ -599,6 +606,13 @@ export class RuntimeWorker {
   close(): Promise<void> {
     if (this.#closeTask !== null) return this.#closeTask;
     this.#closed = true;
+    // Financial withdrawal is synchronous and its original physical work must join.
+    try {
+      this.#pluginCreditSettlementClose = this.#pluginCreditSettlement?.close();
+    } catch (error) {
+      this.#pluginCreditSettlementClose = Promise.reject(error);
+    }
+    void this.#pluginCreditSettlementClose?.catch(() => {});
     this.#storeAccess.beginClose();
     this.#preflight.close();
     this.#toolResultMaintenance.close();
@@ -616,7 +630,15 @@ export class RuntimeWorker {
   async #finishClose(): Promise<void> {
     try {
       // One join per Worker; late work keeps its owner but loses all Store access.
-      await Promise.race([this.#drain, this.#storeAccess.whenClosed()]);
+      const results = await Promise.allSettled([
+        Promise.race([this.#drain, this.#storeAccess.whenClosed()]),
+        this.#pluginCreditSettlementClose,
+      ]);
+      const failures = results.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (failures.length > 0)
+        throw new AggregateError(failures, "runtime_worker_close_failed");
     } finally {
       this.#storeAccess.close();
       this.#queries.close();
@@ -657,6 +679,8 @@ export class RuntimeWorker {
     runId: string | null;
   }): Promise<RuntimeWorkerOutcome> {
     await this.#toolResultMaintenance.poll();
+    if (this.#closed) return { kind: "idle" };
+    await this.#pluginCreditSettlement?.poll();
     if (this.#closed) return { kind: "idle" };
     const claim = await this.#workItemClaims.claim({
       ownerId: this.#ownerId,

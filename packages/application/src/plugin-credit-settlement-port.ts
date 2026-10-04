@@ -9,6 +9,23 @@ export type PluginCreditSettlementLocator = Readonly<{
   tenantId: string;
   runId: string;
 }>;
+
+/** Explicit deployment recovery scope. It never selects or changes the original payer. */
+export type PluginCreditSettlementRecoveryScope = Readonly<{
+  tenantId: string;
+  spaceId: string;
+  profileId: string;
+}>;
+export type PluginCreditSettlementRecoveryScan = Readonly<{
+  scope: PluginCreditSettlementRecoveryScope;
+  afterRunId: string | null;
+  limit: number;
+}>;
+export type PluginCreditSettlementRecoveryPage = Readonly<{
+  items: readonly PluginCreditSettlementLocator[];
+  /** Last checked original metadata slot; null denotes the end of this pass. */
+  nextRunId: string | null;
+}>;
 export type PluginCreditSettlementEvidence = Readonly<{
   schemaVersion: "crewon.plugin-credit-settlement-evidence.v1";
   locator: PluginCreditSettlementLocator;
@@ -106,6 +123,15 @@ export interface PluginCreditSettlementStore {
       decision: PluginCreditSettlementDecision;
     }>,
   ): Promise<PluginCreditSettlementCommitResult>;
+}
+
+/** Indexed metadata paging only; execution and finance are still proven by the atomic adapter. */
+export interface PluginCreditSettlementRecoveryStore
+  extends PluginCreditSettlementStore {
+  migrateRecovery(): Promise<void>;
+  scanRecovery(
+    input: PluginCreditSettlementRecoveryScan,
+  ): Promise<PluginCreditSettlementRecoveryPage>;
 }
 
 /** Explicit server authority; neither the model nor UI can supply a financial decision. */

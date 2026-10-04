@@ -24,8 +24,8 @@ SQLite 使用同父连接的 `BEGIN IMMEDIATE`。PostgreSQL 使用同一个借�
 
 ## 当前交付边界
 
-本阶段提供 Application 服务、共享证据校验与双库原子适配器。验证结果以[实施进度](./incremental-extension-progress.md)首节及实际日志为准；测试金额和权威均为具名夹具，不能作为生产扣费或退款。
+当前提供 Application 服务、共享证据校验与双库原子适配器，以及[Worker 有界恢复与独立财务部署](./installed-plugin-credit-worker.md)。验证结果以[实施进度](./incremental-extension-progress.md)首节及实际日志为准；测试金额和权威均为具名夹具，不能作为生产扣费或退款。
 
-原 Worker 的有界恢复扫描、独立财务部署授权与生命周期装配仍需后续接通；不会借用或领取原 SSE outbox。当前服务关闭会撤回尚未交给 Store 的新工作并等待已开始 Store promise；适配器的事务内 fence 来自父 Store 生命周期。下一阶段还需组合独立结算 owner 的同步撤回检查，不能把普通执行权限当作财务授权，也不能把逻辑超时当作 HTTP 或 Store 已物理结束。
+原 Worker 可显式装配有界扫描，独立 owner 的同步撤权与父 Store 生命周期共同在事务内核验；原 SSE outbox 保持原行为。关闭等待已开始的 HTTP、扫描和 Store promise 物理结束。普通执行权限不授予财务权限，缺少财务 opt-in 时不访问新增结算 Store。
 
 真实个人身份、资金入账、价格和失败结算规则需要实际服务协议。Native Krea2 公网执行、同次完整 App 的保存→生成→显式查询→选用→重启、完整插件打包链路与实际企业 API 的 E5 门槛继续保留。

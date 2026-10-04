@@ -2,7 +2,7 @@
 
 状态：ACTIVE，已开始增量实施，完整目标尚未交付。日期：2026-09-30。设计基线：分支 HEAD 为 `776484c57`。实际代码和验证范围见 [实施进度](./incremental-extension-progress.md)。
 
-2026-10-04 最新范围：新增[原子积分结算决定](./installed-plugin-credit-finalization.md)，由显式服务端权威绑定原执行证据，双库事务内复核并共同提交账务与不可变决定。Application **568/568**、共享证据/SQLite **35/35**、真实独立 PG **14/14**、原账本/准入/派发兼容 **222/222**，均零跳过、退出码 0，分组不求和。原 UI/用户栏/Settings/两侧栏、样式、正式资产、SDK 源码/冻结包、旧发行和用户服务保持；原递归类型脚本隐式重建 SDK 生成文件。Worker 有界恢复扫描、独立财务部署授权与事务内 owner 撤回尚未接通，真实资金/价格/结算及在线 S0/E5 继续待验；完整目标 ACTIVE。统一证据及准确边界以[实施进度](./incremental-extension-progress.md)首节为准；下文为各自历史阶段。
+2026-10-04 最新范围：[原子积分结算决定](./installed-plugin-credit-finalization.md)已接通[Worker 有界恢复与独立财务部署](./installed-plugin-credit-worker.md)，仅在明确财务 opt-in 下分页原安装准入，并共同核验父 Store 与财务 owner 的事务权限。新双库/协议/Worker组合 **119/119**、Application **568/568**、原结算/Worker生命周期/实际Main组合 **138/138**，均零跳过、退出码 0，分组不求和。已验证新 composition 读取原决定不再扣费；不扩大为 OS 崩溃重启或生产财务服务。原 UI/用户栏/Settings/两侧栏、样式、正式资产、SDK 源码/冻结包、旧发行和用户服务保持；原递归类型脚本隐式重建 SDK 生成文件。实际身份/资金/价格/失败结算、Native 公网执行、在线 S0、全部插件打包链路和实际 E5 继续待验，完整目标 ACTIVE。统一证据及准确边界以[实施进度](./incremental-extension-progress.md)首节为准；下文为各自历史阶段。
 
 2026-10-04 当前范围：原 `.app` 的[短剧9安装与项目输入](./native-packaged-projects-window.md)专项首次 **1/1、零跳过、退出码 0**，从原账号/Settings 实际安装、启用并加载原独立包，保存项目和概念；物理冷 Main 读取后停用、卸载、重新安装启用，原业务身份、修订和元数据回执保持。仅使用原项目 owner 与具名初始100积分夹具，没有任务、报价、预留、供应商或模型执行增量。原 Source/报告/编译/打包最终组合 **九文件、36/36、零跳过、退出码 0**，Host 类型、boundary、格式及保留检查通过。该范围以 `70296ae86dbd452d0942f26d9829586b2e5d5eea` 保留原前端/SDK/正式资产/旧发行/用户服务，不扩为打包版三条未知请求恢复、在线 S0 或真实结算；完整目标继续 ACTIVE。最新证据以[实施进度](./incremental-extension-progress.md)首节为准，下段报告为前一阶段。
 
