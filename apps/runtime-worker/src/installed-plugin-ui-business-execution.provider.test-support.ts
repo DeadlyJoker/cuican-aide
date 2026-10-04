@@ -4,7 +4,6 @@ import { createServer, type IncomingMessage, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type { TestContext } from "node:test";
 
 type Report = {
   status: "succeeded";
@@ -14,7 +13,9 @@ type Report = {
 };
 
 /** Real HTTP supplier fixture. Receipts and effects survive closing both server and database. */
-export async function professionalProviderFixture(t: TestContext) {
+export async function professionalProviderFixture(
+  t: Readonly<{ after(cleanup: () => Promise<void>): void }>,
+) {
   const directory = await mkdtemp(join(tmpdir(), "crewon-report-provider-"));
   await mkdir(join(directory, "receipts"));
   const databasePath = join(directory, "receipts", "provider.sqlite");

@@ -204,9 +204,28 @@ export async function nativeActivationAuthority(f: IsolationFixture) {
             body.schemaVersion,
             "crewon.plugin-execution-package.v1",
           );
+          const namedReportObservation =
+            body.purpose === "observe" &&
+            f.namedReportExecution !== undefined &&
+            same(body.scope, await f.currentProfile()) &&
+            f.sources.some(
+              ({ sourceId: _source, directory: _directory, ...identity }) =>
+                identity.pluginId === "example.professional" &&
+                same(identity, body.identity),
+            ) &&
+            (await f.namedReportExecution.authorizePolicy({
+              action: "extension:query",
+              resource: {
+                kind: "extension",
+                tenantId: actor.tenantId,
+                spaceId: actor.spaceId,
+                pluginId: "example.professional",
+              },
+            }));
           assert.ok(
             body.purpose === "read" ||
               body.purpose === "submit" ||
+              namedReportObservation ||
               (body.purpose === "observe" &&
                 same(body.identity, historicalObservation)),
           );

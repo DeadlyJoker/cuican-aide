@@ -101,6 +101,12 @@ export async function nativeTaskProcessFixture(
     Readonly<{ scenario?: "ordinary-task" | "project-recovery" }> = {},
 ) {
   const { scenario = "ordinary-task", ...nativeOptions } = options;
+  if (options.installedReportExecution !== undefined)
+    assert.equal(
+      scenario,
+      "ordinary-task",
+      "named_report_execution_requires_ordinary_task",
+    );
   const f = await nativeActivationProcessFixture(
     { ...input, network: "public" },
     { authorityRequestAuditLimit: 2048, ...nativeOptions },
@@ -287,6 +293,10 @@ export async function nativeTaskProcessFixture(
       maximumPackages: 8,
     };
     const v3 = JSON.parse(await readFile(f.fixedPath, "utf8"));
+    // This retained report bundle owns its original HTTP adapter; it declares no
+    // JSON HTTP Host service. Keep the old Krea metadata authority out of its Run.
+    if (options.installedReportExecution !== undefined)
+      v3.workerAuthorities.networkAuthority = null;
     const v4 = {
       ...v3,
       schemaVersion: "crewon.desktop-installed-plugin-runtime.v4",

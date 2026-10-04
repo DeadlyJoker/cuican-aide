@@ -82,7 +82,9 @@ export async function nativeActivationProcessFixture(
                 }
               : {
                   organization: "Actual Native activation comparison",
-                  providerBaseUrl: "https://8.8.8.8/",
+                  providerBaseUrl:
+                    options.installedReportExecution?.providerBaseUrl ??
+                    "https://8.8.8.8/",
                 },
           credentialBindings: [],
         },

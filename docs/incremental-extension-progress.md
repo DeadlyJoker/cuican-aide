@@ -6,6 +6,20 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-04：Native 独立报告的实际 Worker 执行与冷重放
+
+在前一阶段 `77b3e2c693` 基线上，新增实际 Native Source 报告专项。保留的仓外 `example.professional` 1.0.0 实包经原安装/配置/启用、Source Supervisor、release CLI、FileIssued 私有任务配置、实际 Worker/Main、HTTP/ControlClient 和同一文件 SQLite 执行。Control 加载原 Node action，经原 Task Application 提交；Worker 加载原 execution factory，通过原 HTTPS Responses、Agent/Tool Broker 和报告包自身 HTTP adapter 完成一次具名供应商调用。原 metadata 默认和拒绝测试保持，没有产品执行开关、第二运行时、传输替换或人工 Run/admission/tool/supplier 结果记录。详细边界见[Native 报告执行](./native-installed-plugin-report-execution.md)。
+
+新增显式具名存量请求 PDP，从原精确 receipt 主键核验已提交的 Turn/Run、完整 pin/命令摘要、binding、个人积分准入/预留、当前 profile/选择/activation、原配置和完整 Agent deployment；不同请求不能借用许可。身份、PDP、初始 100 个人积分、每次 30 积分报价、模型与供应商均为具名测试边界。第一项实际完成只产生一次供应商 POST、两次模型请求和一项 completed `ToolExecutionReceipt`，assistant 保存原报告；钱包余额 70、预留 30、spent 0，执行不代表结算。该报告不使用 ComfyUI external operation store，原 Run 的 operation 数量为 0。
+
+第二项由客户端明确用不同 key 与 Thread 提交，形成独立准入及第二次报价，但 Worker 执行拒绝；原客户端显式取消，没有新增模型或供应商调用。物理停止后冷启动签发新 session/bootstrap epoch/activation digest；旧 session/mount 拒绝，当前 Main PDP 拒绝时原请求不能重放。重新允许后，同一原 key/input/旧 Thread CAS 返回同一原回执，Run、binding、admission、工具回执、消息和实际钱包保持，没有进一步供应商 POST、模型请求或报价。冷重放不把预留变为消费或退款。
+
+SSE 验收仅在完成后读取实际持久事件、用 `afterSequence` 续读及冷重启后核对原事件；没有执行中断线、自动重连、DOM 或完整 App 验收。当前 Control/Worker PID 均实际导入安装包 Node；其他导入只允许属于已观测的本夹具 Main/Worker 子进程，包括前期消费者。不同 Thread 的拒绝任务保持原完成任务的消息事实不变；这些观测修正及修复前部分失败日志保留。
+
+最终原 Source/activation/IO 与新增报告组合 **6 个文件、33/33、零跳过**通过，新增报告专项 **1/1**包含在组合内；原 Worker 旧/当前包执行及三类拒绝进程组合 **4/4、零跳过**通过。Host、Worker 类型、boundary 及保留检查通过，各组范围不同、不求和。统一证据为 `output/extensions/checks/native-report-execution-proof-20261004.json`。
+
+原前端、用户栏/Settings、两侧栏、正式资产、SDK、生产映射及既有独立发行包保持；本阶段未重建前端或更新用户配置，保留检查不能替代账户/设置页面的实际可见性检查。没有请求用户原 ComfyUI。下文前一阶段的短剧三 epoch 用例仍是 Worker 拒绝、具名 operation 历史与选用 prepared 的原范围。完整目标继续 ACTIVE：Native Krea2 Worker 实际生成/查询、真实个人钱包/资金/价格/结算、可用 ComfyUI 的同次原完整 App 保存→生成→显式查询→选用→重启恢复 S0、编译后 Electron/打包 renderer 完整链路和用户选定的第二个实际企业 API 的 E5 仍待完成。`createThread` 仍不在三类 durable recovery 内。
+
 ## 2026-10-04：Native 生成、查询原回执跨真实 epoch 恢复
 
 基于已提交的 `ee2fc065e`，生成和查询已接通独立历史 receipt 证明。生成查精确存量 admission，仅恢复已保存 execution epoch，原 task v1 摘要及项目 reference wrapper 保持且只包装一层；查询的可选精确 receipt reader 核验实际 query Turn/admission/binding、原付费来源 Turn/admission/积分准入/预留及 operation，再通过实际不可变 query link 恢复 source/execution 两个历史 epoch。其余完整 pin、selection revision、publication、原 reference/input、旧 CAS 和当前 PDP 保持精确；旧 adapter 没有历史 reader 时仍严格匹配 epoch。原回执、报价、预留和历史链接不改写。协议见[Native 项目执行](./native-project-execution-integration.md)与[持久恢复](./plugin-ui-durable-recovery-protocol.md)。

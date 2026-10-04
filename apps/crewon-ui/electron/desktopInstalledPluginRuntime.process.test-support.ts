@@ -41,6 +41,10 @@ import {
   RuntimeSupervisor,
   type ControlRuntimeSession,
 } from "./runtimeSupervisor.ts";
+import {
+  createNativeNamedReportExecutionAuthority,
+  type NativeNamedReportExecutionConfiguration,
+} from "./desktopInstalledPluginRuntime.report-authority.test-support.ts";
 
 const repository = new URL("../../../", import.meta.url).pathname;
 const tokenName = "NATIVE_INSTALLED_AUTHORITY_TOKEN";
@@ -67,6 +71,7 @@ type ChildObservation = Readonly<{
 }>;
 export type NativeInstalledProcessFixtureOptions = Readonly<{
   authorityRequestAuditLimit?: number;
+  installedReportExecution?: NativeNamedReportExecutionConfiguration;
 }>;
 
 /** Actual source Supervisor children; HTTPS decisions require current private Native
@@ -155,6 +160,15 @@ export async function nativeInstalledProcessFixture(
     string,
     Readonly<{ admission: PluginTaskAdmission; threadId: string }>
   >();
+  const namedReportExecution =
+    options.installedReportExecution === undefined
+      ? undefined
+      : createNativeNamedReportExecutionAuthority({
+          databasePath,
+          actor,
+          resolveProfile: currentProfile,
+          configuration: options.installedReportExecution,
+        });
   const server = createServer(
     { key: TEST_SERVER_KEY, cert: TEST_SERVER_CERT, minVersion: "TLSv1.3" },
     (request, response) => {
@@ -233,6 +247,20 @@ export async function nativeInstalledProcessFixture(
                 allowed &&= sources.some(
                   (source) => source.pluginId === resource.pluginId,
                 );
+              else if (
+                namedReportExecution !== undefined &&
+                typeof body.action === "string" &&
+                [
+                  "run:execute",
+                  "run:read",
+                  "extension:run",
+                  "extension:query",
+                ].includes(body.action)
+              )
+                allowed &&= await namedReportExecution.authorizePolicy({
+                  action: body.action,
+                  resource,
+                });
               else if (body.action === "extension:query")
                 allowed &&= [...namedHistoricalReads.values()].some(
                   ({ admission }) =>
@@ -414,6 +442,7 @@ export async function nativeInstalledProcessFixture(
     logs,
     currentProfile,
     observations,
+    namedReportExecution,
     authorityFailures: () =>
       failures.map((error) =>
         error instanceof Error ? error.stack : String(error),

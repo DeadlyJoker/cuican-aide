@@ -37,6 +37,7 @@ import {
   nativeIsolationModel,
   ordinaryNativeResponse,
 } from "./desktopInstalledPluginRuntime.fault-isolation-model.test-support.ts";
+import { nativeInstalledReportModel } from "./desktopInstalledPluginRuntime.report-model.test-support.ts";
 import type { ControlRuntimeSession } from "./runtimeSupervisor.ts";
 
 type NativeFixture = Awaited<ReturnType<typeof nativeInstalledProcessFixture>>;
@@ -97,7 +98,12 @@ export async function nativeIsolationProcessFixture(
       });
       await writeFile(approvalPath, JSON.stringify(approval));
     }
-    model = await nativeIsolationModel(f.provider.apiKey);
+    model =
+      options.installedReportExecution === undefined
+        ? await nativeIsolationModel(f.provider.apiKey)
+        : await nativeInstalledReportModel(f.provider.apiKey, {
+            subject: options.installedReportExecution.subject,
+          });
     f.provider.endpoint = model.endpoint;
     const ownedModel = model;
     let closing: Promise<void> | null = null;
