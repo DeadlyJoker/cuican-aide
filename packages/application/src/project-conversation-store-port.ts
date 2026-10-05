@@ -70,6 +70,8 @@ export interface ProjectConversationStore {
       expectedRevision: number;
       receipt: ProjectConversationReceipt;
       thread?: CommitThreadInput;
+      /** Creation against an existing idle Thread; the writer checks this inside its transaction. */
+      existingThread?: Readonly<{ expectedRevision: number }>;
     }>,
     options: Readonly<{ authority: ProjectConversationCommitAuthority }>,
   ): Promise<ProjectConversationMutation>;

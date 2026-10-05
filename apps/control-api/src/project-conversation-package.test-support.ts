@@ -7,7 +7,10 @@ import { extensionManifestFixture } from "../../../packages/domain/src/extension
 import { productionSourceFixture } from "./production-plugin-source.test-support.ts";
 export async function conversationPackage(
   t: test.TestContext,
-  options: { beforeCleanup?: () => Promise<void> } = {},
+  options: {
+    beforeCleanup?: () => Promise<void>;
+    associationProtocol?: "1";
+  } = {},
 ) {
   const source = await productionSourceFixture(t, options);
   const raw = await source.source("conversation", {
@@ -16,6 +19,9 @@ export async function conversationPackage(
     requires: [
       "crewon.creative-projects",
       "crewon.project-conversations",
+      ...(options.associationProtocol === "1"
+        ? ["crewon.project-conversation-association"]
+        : []),
       "crewon.execution",
     ].map((service) => ({ service, apiVersion: "1", optional: true })),
   });
@@ -26,7 +32,7 @@ export async function conversationPackage(
     }),
   );
   const node = Buffer.from(
-    `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(source.marker)},'unexpected-node');export default {apiVersion:'crewon.plugin-host.v1',pluginId:'test.conversation',setup(){return {dispose(){}};}};`,
+    `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(source.marker)},'node-import\\n');export default {apiVersion:'crewon.plugin-host.v1',pluginId:'test.conversation',setup(){return {dispose(){}};}};`,
   );
   const descriptor = {
     ...raw.descriptor,

@@ -38,6 +38,9 @@ import { projectTextPlansCodec } from "./project-text-plans-codec.mjs";
 import { ProjectTextPlanController } from "./workbench/ProjectTextPlanController";
 import { parseProjectPlanningProposal } from "./project-planning-codec.mjs";
 import type { ProjectPlanningProposal } from "./project-planning-service";
+import { createAssociationClient } from "./project-conversation-association-service";
+import * as associationCodec from "./project-conversation-association-codec.mjs";
+import { ProjectConversationAssociationController } from "./workbench/ProjectConversationAssociationController";
 
 import { createPluginProjectHistoricalQueryClient } from "./project-historical-query-ui-client";
 import {
@@ -204,12 +207,14 @@ export default defineUiPlugin({
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
     let conversations: ProjectConversationController | null = null;
+    let association: ProjectConversationAssociationController | null = null;
     let plans: ProjectTextPlanController | null = null;
     let assets: ProjectAssetController | null = null;
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
       conversations?.refreshWriteActivity();
+      association?.refreshWriteActivity();
       plans?.refreshWriteActivity();
       assets?.refreshWriteActivity();
     });
@@ -259,6 +264,17 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    association = preview
+      ? null
+      : new ProjectConversationAssociationController({
+          client: createAssociationClient(clients, associationCodec),
+          getBinding: createPluginProjectConversationsClient(
+            clients,
+            projectConversationsCodec,
+          ).getBinding,
+          physicalWritesPending: () => writes.pending,
+        });
+    /* Existing plan and asset controllers retain their own execution authority. */
     assets = preview
       ? null
       : new ProjectAssetController({
@@ -296,6 +312,13 @@ export default defineUiPlugin({
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
       const ready = dataFlag(next.data, "pluginUiReady");
+      const associationThread =
+        next.data && typeof next.data === "object" && !Array.isArray(next.data)
+          ? Object.getOwnPropertyDescriptor(
+              next.data,
+              "projectConversationAssociationThreadId",
+            )?.value
+          : null;
       conversations?.setWorkspace(creationWorkspace(next.data));
       conversations?.setReady(ready);
       texts?.setReady(ready);
@@ -319,6 +342,14 @@ export default defineUiPlugin({
               plans={plans}
               assets={assets ?? undefined}
               planningDraft={planningDraft(next.data)}
+              association={association ?? undefined}
+              associationReady={ready}
+              associationThreadId={
+                typeof associationThread === "string" &&
+                associationThread.length <= 256
+                  ? associationThread
+                  : null
+              }
             />
           ) : (
             <ShortDramaWorkbenchPreview
@@ -335,6 +366,7 @@ export default defineUiPlugin({
       controller?.dispose();
       texts?.dispose();
       conversations?.dispose();
+      association?.dispose();
       plans?.dispose();
       assets?.dispose();
       try {
@@ -353,6 +385,7 @@ export default defineUiPlugin({
         controller?.dispose();
         texts?.dispose();
         conversations?.dispose();
+        association?.dispose();
         plans?.dispose();
         assets?.dispose();
         try {

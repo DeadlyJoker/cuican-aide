@@ -7,11 +7,11 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.1";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
-  BigInt(version.split(".")[0]) <= 18n
+  BigInt(version.split(".")[0]) <= 19n
 )
   throw new Error("example_version_invalid");
 // Pinned portable public capability protocol; no private host source import.
@@ -25,6 +25,14 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-conversation-association-service.ts",
+    "931bfd98c53c0ad0c3a39e16ef679aef889e647797c1cc495df48e65d2f1b1b9",
+  ],
+  [
+    "project-conversation-association-codec.mjs",
+    "6dcba744ba2162c8d53ae989dad1383853d8e296091cf9851eaf564d660dac48",
+  ],
   [
     "project-assets-service.ts",
     "35afa93a1ec8c1bdb9aa3fe68777f54c2a74e05877d6e6dd620799b02fd7f8c0",
@@ -265,6 +273,11 @@ const descriptor = parsePluginPackageDescriptor({
       optional: true,
     },
     { service: "crewon.project-text-plans", apiVersion: "1", optional: true },
+    {
+      service: "crewon.project-conversation-association",
+      apiVersion: "1",
+      optional: true,
+    },
     {
       service: "crewon.project-conversations",
       apiVersion: "1",

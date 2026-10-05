@@ -1,3 +1,4 @@
+import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { isProjectAssetStagesNamespaceAction } from "@crewon/contracts/project-asset-stages";
 import { isProjectAssetRecoveryNamespaceAction } from "@crewon/contracts/project-asset-recovery";
@@ -66,10 +67,7 @@ export function composeDesktopProjectPluginUiDispatch(
           );
         return owner.actions.invoke(context);
       }
-      if (
-        context.action === "crewon.project-conversations" ||
-        context.action.startsWith("crewon.project-conversations.")
-      ) {
+      if (isProjectConversationUiNamespaceAction(context.action)) {
         const owner = input.conversations?.();
         if (owner === undefined || !owner.supportsAction(context.action))
           throw new ApplicationError(

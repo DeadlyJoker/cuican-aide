@@ -26,6 +26,8 @@ import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
 import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
+import { ProjectConversationAssociationActions } from "./ProjectConversationAssociationActions";
+import type { ProjectConversationAssociationController } from "./ProjectConversationAssociationController";
 import { ProjectTextPlanController } from "./ProjectTextPlanController";
 import { ProjectTextPlanActions } from "./ProjectTextPlanActions";
 import { ProjectPlanningDraftReview } from "./ProjectPlanningDraftReview";
@@ -101,6 +103,9 @@ export function ShortDramaPersistentWorkbench({
   plans,
   assets,
   planningDraft = null,
+  association,
+  associationReady = false,
+  associationThreadId = null,
 }: {
   controller: CreativeProjectController;
   texts: ProjectTextController;
@@ -108,6 +113,9 @@ export function ShortDramaPersistentWorkbench({
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
   planningDraft?: ProjectPlanningProposal | null;
+  association?: ProjectConversationAssociationController;
+  associationReady?: boolean;
+  associationThreadId?: string | null;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -125,6 +133,11 @@ export function ShortDramaPersistentWorkbench({
     conversations.getSnapshot,
   );
   useSyncExternalStore(plans.subscribe, plans.getSnapshot, plans.getSnapshot);
+  useSyncExternalStore(
+    association?.subscribe ?? emptySubscribe,
+    association?.getSnapshot ?? noAssetSnapshot,
+    association?.getSnapshot ?? noAssetSnapshot,
+  );
   useSyncExternalStore(
     assets?.subscribe ?? emptySubscribe,
     assets?.getSnapshot ?? noAssetSnapshot,
@@ -144,18 +157,26 @@ export function ShortDramaPersistentWorkbench({
   }> | null>(null);
   const { details } = snapshot;
   const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
-  const locked =
+  const otherLocked =
     projectLocked ||
     snapshot.conceptLocked ||
     texts.locked ||
     conversations.locked ||
     plans.locked ||
     assets?.locked === true;
+  const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
     (project) =>
       project.state === snapshot.state && project.title.includes(search),
   );
+  useEffect(() => {
+    association?.setContext({
+      ready: associationReady,
+      threadId: associationThreadId,
+      details,
+    });
+  }, [association, associationReady, associationThreadId, details]);
   useEffect(() => {
     texts.setProject(details);
     conversations.setProject(details);
@@ -433,7 +454,18 @@ export function ShortDramaPersistentWorkbench({
                 </div>
               </div>
               {stage === 0 && (
-                <ProjectConversationActions controller={conversations} />
+                <>
+                  <ProjectConversationActions controller={conversations} />
+                  {association && (
+                    <ProjectConversationAssociationActions
+                      controller={association}
+                      blocked={otherLocked}
+                      onAttached={() => {
+                        void conversations.refresh();
+                      }}
+                    />
+                  )}
+                </>
               )}
               {stage === 0 && (
                 <ProjectTextPlanActions

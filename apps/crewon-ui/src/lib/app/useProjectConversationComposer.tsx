@@ -10,6 +10,7 @@ import type {
   ProjectConversationStage,
 } from "@crewon/contracts/project-conversations";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
+import { subscribeProjectConversationBindingChanges } from "../plugins/projectConversationBindingChanges";
 
 type Snapshot = Readonly<{
   binding: PublicProjectConversationBinding;
@@ -49,6 +50,18 @@ export function useProjectConversationComposer(
   const current = useRef(owner);
   current.current = owner;
   const [snapshotOwner, setSnapshotOwner] = useState(owner);
+  useEffect(() => {
+    if (owner.client === null || owner.threadId === null) return;
+    return subscribeProjectConversationBindingChanges(
+      owner.client,
+      owner.threadId,
+      () => {
+        if (current.current !== owner) return;
+        setLoading(true);
+        setRefresh((value) => value + 1);
+      },
+    );
+  }, [owner]);
   useEffect(() => {
     setSnapshot(null);
     setFailure(false);

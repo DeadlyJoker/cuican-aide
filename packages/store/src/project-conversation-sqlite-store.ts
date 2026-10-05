@@ -221,7 +221,7 @@ export class SqliteProjectConversationStore
           const created = this.#thread(p.thread);
           if (created.state.threadId !== p.binding.threadId) conversationFail();
         }
-        this.#assertThread(p.binding);
+        this.#assertThread(p.binding, p.existingThread?.expectedRevision);
         if (p.kind === "create")
           this.#db
             .prepare(
@@ -315,16 +315,33 @@ export class SqliteProjectConversationStore
     if (project.state !== "active")
       conversationFail("creative_project_archived");
   }
-  #assertThread(b: Parameters<typeof bindingOwner>[0]): void {
+  #assertThread(
+    b: Parameters<typeof bindingOwner>[0],
+    expectedRevision?: number,
+  ): void {
     const thread = this.#loadThread(b.owner.tenantId, b.threadId);
     if (
       thread === null ||
       thread.spaceId !== b.owner.spaceId ||
       thread.createdByActorId !== b.owner.actorId ||
       thread.status !== "active" ||
-      (thread.workspaceId ?? null) !== b.workspaceId
+      (thread.workspaceId ?? null) !== b.workspaceId ||
+      (expectedRevision !== undefined && thread.revision !== expectedRevision)
     )
       conversationFail("project_conversation_thread_conflict");
+    if (expectedRevision !== undefined) {
+      const params = [b.owner.tenantId, b.threadId];
+      const active = this.#get(
+        "SELECT s.run_id FROM run_snapshots s JOIN run_thread_bindings r ON r.tenant_id=s.tenant_id AND r.run_id=s.run_id WHERE s.tenant_id=? AND r.thread_id=? AND COALESCE(json_extract(s.state_json,'$.status'),'invalid') NOT IN ('completed','failed','canceled') LIMIT 1",
+        params,
+      );
+      const unsettled = this.#get(
+        "SELECT w.work_item_id FROM work_items w JOIN run_thread_bindings r ON r.tenant_id=w.tenant_id AND r.run_id=w.run_id WHERE w.tenant_id=? AND r.thread_id=? AND w.status!='completed' LIMIT 1",
+        params,
+      );
+      if (active !== undefined || unsettled !== undefined)
+        conversationFail("project_conversation_thread_busy_conflict");
+    }
   }
   #get(sql: string, values: readonly SQLInputValue[]) {
     return this.#db.prepare(sql).get(...values);

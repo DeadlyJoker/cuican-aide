@@ -273,7 +273,11 @@ export class PostgresProjectConversationStore
           const created = await this.#thread(c, p.thread);
           if (created.state.threadId !== p.binding.threadId) conversationFail();
         }
-        await this.#assertThread(c, p.binding);
+        await this.#assertThread(
+          c,
+          p.binding,
+          p.existingThread?.expectedRevision,
+        );
         if (p.kind === "create")
           await this.#query(
             c,
@@ -391,6 +395,7 @@ export class PostgresProjectConversationStore
   async #assertThread(
     c: PoolClient,
     b: Parameters<typeof bindingOwner>[0],
+    expectedRevision?: number,
   ): Promise<void> {
     const thread = await this.#loadThread(c, b.owner.tenantId, b.threadId);
     if (
@@ -398,9 +403,24 @@ export class PostgresProjectConversationStore
       thread.spaceId !== b.owner.spaceId ||
       thread.createdByActorId !== b.owner.actorId ||
       thread.status !== "active" ||
-      (thread.workspaceId ?? null) !== b.workspaceId
+      (thread.workspaceId ?? null) !== b.workspaceId ||
+      (expectedRevision !== undefined && thread.revision !== expectedRevision)
     )
       conversationFail("project_conversation_thread_conflict");
+    if (expectedRevision !== undefined) {
+      const p = `${creativeProjectSchemaName(this.#schema)}.`;
+      const params = [b.owner.tenantId, b.threadId];
+      const active = await c.query(
+        `SELECT s.run_id FROM ${p}run_snapshots s JOIN ${p}run_thread_bindings r ON r.tenant_id=s.tenant_id AND r.run_id=s.run_id WHERE s.tenant_id=$1 AND r.thread_id=$2 AND COALESCE(s.state_json->>'status','invalid') NOT IN ('completed','failed','canceled') LIMIT 1`,
+        params,
+      );
+      const unsettled = await c.query(
+        `SELECT w.work_item_id FROM ${p}work_items w JOIN ${p}run_thread_bindings r ON r.tenant_id=w.tenant_id AND r.run_id=w.run_id WHERE w.tenant_id=$1 AND r.thread_id=$2 AND w.status!='completed' LIMIT 1`,
+        params,
+      );
+      if (active.rows.length > 0 || unsettled.rows.length > 0)
+        conversationFail("project_conversation_thread_busy_conflict");
+    }
   }
   #query(c: PoolClient, sql: string, values: readonly unknown[] = []) {
     let n = 0;

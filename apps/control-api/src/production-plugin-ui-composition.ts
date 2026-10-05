@@ -1,3 +1,4 @@
+import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import {
   isProjectAssetStageControlOwner,
   type ProjectAssetStageControlOwner,
@@ -370,10 +371,7 @@ export function createProductionPluginUiRuntime(
               );
             return planOwner.actions.invoke(request);
           }
-          if (
-            request.action === "crewon.project-conversations" ||
-            request.action.startsWith("crewon.project-conversations.")
-          ) {
+          if (isProjectConversationUiNamespaceAction(request.action)) {
             if (
               conversationOwner === undefined ||
               !conversationOwner.supportsAction(request.action)

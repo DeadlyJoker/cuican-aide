@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { ControlApiClient } from "@crewon/control-client";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
 import { useProjectConversationComposer } from "./useProjectConversationComposer";
+import { notifyProjectConversationBindingChanged } from "../plugins/projectConversationBindingChanges";
 const at = "2026-10-06T00:00:00.000Z",
   projectId = "project/中文 %2F";
 const digest = `sha256:${"a".repeat(64)}`;
@@ -144,8 +145,61 @@ async function fixture(fetch: typeof globalThis.fetch) {
     container.remove();
   });
   await render();
-  return { container, render, current: () => latest };
+  return { client, container, render, current: () => latest };
 }
+it("rereads an association made by the installed module on the same original Thread and ignores other client/Thread notifications", async () => {
+  let attached = false,
+    reads = 0;
+  const gate = deferred<Response>();
+  const f = await fixture(async (url) => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith("project-conversation")) {
+      ++reads;
+      return attached && path.includes(binding.threadId)
+        ? gate.promise
+        : Response.json({ binding: null });
+    }
+    return Response.json(
+      path.endsWith("outline") ? { view: publicTextView } : { project },
+    );
+  });
+  expect(f.current().selection).toBe(null);
+  expect(f.current().blocked).toBe(false);
+  const foreign = new ControlApiClient({
+    baseUrl: "https://control.test",
+    accessToken: "another-user",
+    fetch: async () => {
+      throw new Error("unexpected_request");
+    },
+  });
+  await act(async () => {
+    notifyProjectConversationBindingChanged(foreign, binding.threadId);
+    notifyProjectConversationBindingChanged(f.client, "another-thread");
+  });
+  expect(reads).toBe(1);
+  attached = true;
+  await act(async () =>
+    notifyProjectConversationBindingChanged(f.client, binding.threadId),
+  );
+  expect(reads).toBe(2);
+  expect(f.current().blocked).toBe(true);
+  await act(async () => {
+    gate.resolve(Response.json({ binding }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(f.current().selection).toEqual({
+    binding,
+    stage: { kind: "discussion" },
+  });
+  expect(f.current().blocked).toBe(false);
+  await f.render("ordinary-thread", 1);
+  const before = reads;
+  await act(async () =>
+    notifyProjectConversationBindingChanged(f.client, binding.threadId),
+  );
+  expect(reads).toBe(before);
+  expect(f.current().selection).toBe(null);
+});
 it("initial binding read blocks send, shows the real project stages and retains phase on same Thread update", async () => {
   const gate = deferred<Response>();
   let bindingReads = 0;

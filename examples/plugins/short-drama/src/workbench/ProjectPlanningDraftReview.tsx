@@ -33,7 +33,7 @@ export function ProjectPlanningDraftReview({
       </p>
       <p className="detail-note">{proposal.input.instruction}</p>
       <p className="detail-note">
-        确认项目需求后可新建项目对话，并确认执行计划。尚未调用生成服务。
+        确认项目需求后可关联当前对话或新建项目对话，并确认执行计划。尚未调用生成服务。
       </p>
     </section>
   );

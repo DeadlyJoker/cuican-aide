@@ -22,6 +22,7 @@ const writes = new Set([
   "crewon.project-asset-recovery.v1.acknowledge",
   "crewon.project-text-recovery.v1.acknowledge",
   "crewon.project-conversations.v1.createConversation",
+  "crewon.project-conversation-association.v1.attach",
   "crewon.project-conversations.v1.refreshSource",
   "crewon.project-conversations.v1.setState",
   "crewon.project-conversations.v1.startStage",

@@ -32,6 +32,7 @@ const KNOWN_SERVICES = new Set<string>([
   "crewon.project-historical-queries",
   "crewon.project-text-plans",
   "crewon.project-planning-drafts",
+  "crewon.project-conversation-association",
 ]);
 
 /** The local Comfy execution profile negotiates known protocols, never release numbers.

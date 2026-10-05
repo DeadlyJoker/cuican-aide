@@ -291,6 +291,13 @@ export function InstalledPluginModule({
       data: Object.freeze({
         locale,
         pluginUiReady: ready === context,
+        ...(module.plugin.descriptor.requires.some(
+          (requirement) =>
+            requirement.service === "crewon.project-conversation-association" &&
+            requirement.apiVersion === "1",
+        )
+          ? { projectConversationAssociationThreadId: selectedThreadId }
+          : {}),
         ...(projectConversationContext === undefined
           ? {}
           : { projectConversationContext }),
@@ -335,6 +342,7 @@ export function InstalledPluginModule({
       context,
       projectConversationContext,
       projectPlanningDraft,
+      selectedThreadId,
     ],
   );
   const onMounted = useCallback(() => {

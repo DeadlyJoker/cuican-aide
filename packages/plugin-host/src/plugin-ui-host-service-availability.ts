@@ -1,5 +1,11 @@
-import {hasProjectHistoricalQueryHostAvailability,preserveProjectHistoricalQueryHostAvailability} from "./plugin-project-historical-query-host-availability.ts";
-import {CREWON_PROJECT_HISTORICAL_QUERIES_SERVICE,CREWON_PROJECT_HISTORICAL_QUERIES_API_VERSION} from "@crewon/contracts/plugins";
+import {
+  hasProjectHistoricalQueryHostAvailability,
+  preserveProjectHistoricalQueryHostAvailability,
+} from "./plugin-project-historical-query-host-availability.ts";
+import {
+  CREWON_PROJECT_HISTORICAL_QUERIES_SERVICE,
+  CREWON_PROJECT_HISTORICAL_QUERIES_API_VERSION,
+} from "@crewon/contracts/plugins";
 import { ApplicationError } from "@crewon/application";
 import {
   parsePluginProfileScope,
@@ -95,7 +101,10 @@ export function capturePluginUiHostServiceAvailability(
     port,
     preserveProjectGenerationQueryHostAvailability(
       port,
-      preserveProjectHistoricalQueryHostAvailability(port,preserveProjectGenerationContextHostAvailability(port, result)),
+      preserveProjectHistoricalQueryHostAvailability(
+        port,
+        preserveProjectGenerationContextHostAvailability(port, result),
+      ),
     ),
   );
 }
@@ -120,7 +129,7 @@ export function appendProjectGenerationSelectionUiServiceAvailability(
     port = preserveProjectGenerationHostAvailability(fallback, port);
     port = preserveProjectGenerationContextHostAvailability(fallback, port);
     port = preserveProjectGenerationQueryHostAvailability(fallback, port);
-    port = preserveProjectHistoricalQueryHostAvailability(fallback,port);
+    port = preserveProjectHistoricalQueryHostAvailability(fallback, port);
   }
   return port;
 }
@@ -146,7 +155,7 @@ export function appendPluginUiRecoveryServiceAvailability(
     port = preserveProjectGenerationHostAvailability(fallback, port);
     port = preserveProjectGenerationContextHostAvailability(fallback, port);
     port = preserveProjectGenerationQueryHostAvailability(fallback, port);
-    port = preserveProjectHistoricalQueryHostAvailability(fallback,port);
+    port = preserveProjectHistoricalQueryHostAvailability(fallback, port);
   }
   return port;
 }
@@ -171,7 +180,7 @@ export function appendProjectTextUiServiceAvailability(
     port = preserveProjectGenerationHostAvailability(fallback, port);
     port = preserveProjectGenerationContextHostAvailability(fallback, port);
     port = preserveProjectGenerationQueryHostAvailability(fallback, port);
-    port = preserveProjectHistoricalQueryHostAvailability(fallback,port);
+    port = preserveProjectHistoricalQueryHostAvailability(fallback, port);
   }
   return port;
 }
@@ -196,7 +205,7 @@ export function appendProjectTextRecoveryUiServiceAvailability(
     port = preserveProjectGenerationHostAvailability(fallback, port);
     port = preserveProjectGenerationContextHostAvailability(fallback, port);
     port = preserveProjectGenerationQueryHostAvailability(fallback, port);
-    port = preserveProjectHistoricalQueryHostAvailability(fallback,port);
+    port = preserveProjectHistoricalQueryHostAvailability(fallback, port);
   }
   return port;
 }
@@ -214,7 +223,8 @@ export function appendProjectConversationUiServiceAvailability(
   const fallback = capturePluginUiHostServiceAvailability(input.fallback);
   let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) =>
-      request.requirement.service === "crewon.project-conversations"
+      request.requirement.service === "crewon.project-conversations" ||
+      request.requirement.service === "crewon.project-conversation-association"
         ? request.requirement.apiVersion === "1" &&
           conversations.isAvailable(request)
         : fallback?.isAvailable(request) === true,
@@ -223,7 +233,7 @@ export function appendProjectConversationUiServiceAvailability(
     port = preserveProjectGenerationHostAvailability(fallback, port);
     port = preserveProjectGenerationContextHostAvailability(fallback, port);
     port = preserveProjectGenerationQueryHostAvailability(fallback, port);
-    port = preserveProjectHistoricalQueryHostAvailability(fallback,port);
+    port = preserveProjectHistoricalQueryHostAvailability(fallback, port);
   }
   return port;
 }
@@ -256,9 +266,13 @@ export function assertUiOnlyServiceDeclarations(
           (requirement.service === "crewon.project-text-recovery" &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
-          ((requirement.service === "crewon.project-assets" || requirement.service === "crewon.project-asset-recovery") &&
-            requirement.apiVersion === "1" && (requirement.optional || hostUiServices !== undefined)) ||
-          (requirement.service === "crewon.project-conversations" &&
+          ((requirement.service === "crewon.project-assets" ||
+            requirement.service === "crewon.project-asset-recovery") &&
+            requirement.apiVersion === "1" &&
+            (requirement.optional || hostUiServices !== undefined)) ||
+          ((requirement.service === "crewon.project-conversations" ||
+            requirement.service ===
+              "crewon.project-conversation-association") &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === "crewon.project-text-plans" &&
@@ -277,7 +291,12 @@ export function assertUiOnlyServiceDeclarations(
                 hasProjectGenerationContextHostAvailability(
                   hostUiServices,
                 )))) ||
-          (requirement.service === CREWON_PROJECT_HISTORICAL_QUERIES_SERVICE && requirement.apiVersion === CREWON_PROJECT_HISTORICAL_QUERIES_API_VERSION && (requirement.optional || (hostUiServices!==undefined && hasProjectHistoricalQueryHostAvailability(hostUiServices)))) ||
+          (requirement.service === CREWON_PROJECT_HISTORICAL_QUERIES_SERVICE &&
+            requirement.apiVersion ===
+              CREWON_PROJECT_HISTORICAL_QUERIES_API_VERSION &&
+            (requirement.optional ||
+              (hostUiServices !== undefined &&
+                hasProjectHistoricalQueryHostAvailability(hostUiServices)))) ||
           (requirement.service === CREWON_PROJECT_GENERATION_QUERIES_SERVICE &&
             requirement.apiVersion ===
               CREWON_PROJECT_GENERATION_QUERIES_API_VERSION &&

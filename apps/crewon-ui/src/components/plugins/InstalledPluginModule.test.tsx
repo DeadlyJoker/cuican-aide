@@ -54,9 +54,28 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-function fixture(selectionEnabled = false) {
+function fixture(
+  selectionEnabled = false,
+  options = { associationEnabled: false },
+) {
   const h = uiHarness();
-  const lease = selectionEnabled ? selectionJournalLease() : uiLease();
+  const originalLease = selectionEnabled ? selectionJournalLease() : uiLease();
+  const lease = options.associationEnabled
+    ? {
+        ...originalLease,
+        descriptor: {
+          ...originalLease.descriptor,
+          requires: [
+            ...originalLease.descriptor.requires,
+            {
+              service: "crewon.project-conversation-association",
+              apiVersion: "1",
+              optional: true,
+            },
+          ],
+        },
+      }
+    : originalLease;
   const leases = new Map<string, PluginUiLease>();
   let serial = 0;
   let revoked = false;
@@ -137,6 +156,7 @@ function fixture(selectionEnabled = false) {
     locale: "zh" | "en" = "zh",
     onDiagnostic: (error: unknown) => void = diagnostic,
     currentModule = module,
+    selectedThreadId: string | null = null,
   ) => {
     await act(async () => {
       root.render(
@@ -147,6 +167,7 @@ function fixture(selectionEnabled = false) {
           theme={theme}
           locale={locale}
           onDiagnostic={onDiagnostic}
+          selectedThreadId={selectedThreadId}
           {...(selectionEnabled ? { selectionPorts } : {})}
         />,
       );
@@ -189,6 +210,60 @@ function fixture(selectionEnabled = false) {
 }
 
 describe("installed module composition (real authenticated host, explicit importer fixture)", () => {
+  it("updates the current ordinary Thread pointer in the existing mount without creating an association", async () => {
+    const f = fixture(false, { associationEnabled: true });
+    await f.render(
+      true,
+      light,
+      "zh",
+      f.diagnostic,
+      f.module,
+      "ordinary-thread-1",
+    );
+    expect(f.h.instances).toHaveLength(1);
+    expect(f.container.textContent).toContain(
+      '"projectConversationAssociationThreadId":"ordinary-thread-1"',
+    );
+    await f.render(
+      true,
+      light,
+      "zh",
+      f.diagnostic,
+      f.module,
+      "ordinary-thread-2",
+    );
+    expect(f.h.instances).toHaveLength(1);
+    expect(f.container.textContent).toContain(
+      '"projectConversationAssociationThreadId":"ordinary-thread-2"',
+    );
+    await f.render(true, light, "zh", f.diagnostic, f.module, null);
+    expect(f.container.textContent).toContain(
+      '"projectConversationAssociationThreadId":null',
+    );
+    expect(
+      f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+    ).toHaveLength(0);
+    expect(f.h.instances[0]!.dispose).not.toHaveBeenCalled();
+  });
+
+  it("keeps the new conversation pointer absent for an older plugin declaration", async () => {
+    const f = fixture();
+    await f.render(
+      true,
+      light,
+      "zh",
+      f.diagnostic,
+      f.module,
+      "ordinary-thread-1",
+    );
+    expect(f.container.textContent).not.toContain(
+      "projectConversationAssociationThreadId",
+    );
+    expect(
+      f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+    ).toHaveLength(0);
+  });
+
   it("publishes a false-to-true ready update and permits the first invocation only after real activation", async () => {
     const f = fixture();
     const seen: boolean[] = [];

@@ -172,9 +172,11 @@ export function captureConversationMutation(
 ) {
   const value = projectTextRecord(
     input,
-    Object.hasOwn(input, "thread")
-      ? ["kind", "binding", "expectedRevision", "receipt", "thread"]
-      : ["kind", "binding", "expectedRevision", "receipt"],
+    Object.hasOwn(input, "existingThread")
+      ? ["kind", "binding", "expectedRevision", "receipt", "existingThread"]
+      : Object.hasOwn(input, "thread")
+        ? ["kind", "binding", "expectedRevision", "receipt", "thread"]
+        : ["kind", "binding", "expectedRevision", "receipt"],
   );
   const opts = Object.getOwnPropertyDescriptors(options ?? {});
   if (
@@ -210,6 +212,26 @@ export function captureConversationMutation(
   )
     conversationFail();
   const thread = value.thread as CommitThreadInput | undefined;
+  const existingThread =
+    value.existingThread === undefined
+      ? undefined
+      : Object.freeze({
+          expectedRevision: creativeProjectRevision(
+            projectTextRecord(value.existingThread, ["expectedRevision"])
+              .expectedRevision,
+          ),
+        });
+  if (
+    existingThread !== undefined &&
+    (value.kind !== "create" || thread !== undefined)
+  )
+    conversationFail();
+  if (
+    value.kind === "create" &&
+    thread === undefined &&
+    existingThread === undefined
+  )
+    conversationFail("project_conversation_thread_fence_required");
   if (
     thread !== undefined &&
     (value.kind !== "create" ||
@@ -234,6 +256,7 @@ export function captureConversationMutation(
     receipt,
     expectedRevision,
     thread,
+    existingThread,
     q,
   });
 }

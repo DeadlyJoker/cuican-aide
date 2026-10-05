@@ -3,6 +3,7 @@ import { SqliteProjectAssetStore } from "./project-asset-sqlite-store.ts";
 import { SqliteProjectAssetStageStore } from "./project-asset-stage-store.ts";
 import { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
+import { assertSqliteOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
 import { SqlitePluginUiIntentJournalStore } from "./sqlite-plugin-ui-intent-journal-store.ts";
 import type { PluginUiIntentPayloadVerifier } from "@crewon/application";
@@ -2714,6 +2715,8 @@ export class SqliteRunStore implements DomainStore {
       if (currentThread.status !== "active") {
         throw new RunStoreError("thread_not_active");
       }
+      if (!options.withinTransaction)
+        assertSqliteOrdinaryTurnProjectScope(this.#database, currentThread);
       const activeRun = this.#database
         .prepare(
           `SELECT 1

@@ -1,5 +1,10 @@
 import type { ControlApiClient } from "@crewon/control-client";
 import {
+  PROJECT_CONVERSATION_ASSOCIATION_ACTIONS,
+  parseProjectConversationAssociationRequest,
+  parseProjectConversationAssociationResponse,
+} from "@crewon/contracts/project-conversation-association";
+import {
   PROJECT_CONVERSATIONS_METHOD_ACTIONS,
   parseProjectConversationsActionRequest,
   parseProjectConversationsActionResponse,
@@ -16,6 +21,7 @@ import {
   type PluginUiCurrentScope,
 } from "./controlPluginUiSupport";
 import { uiFailure } from "./pluginUiValidation";
+import { notifyProjectConversationBindingChanged } from "./projectConversationBindingChanges";
 
 export type InstalledPluginConversationOpenEvent = Readonly<{
   lease: PluginUiLease;
@@ -25,7 +31,9 @@ export type InstalledPluginConversationOpenEvent = Readonly<{
 export function isInstalledPluginConversationAction(action: string): boolean {
   return (
     action === "crewon.project-conversations" ||
-    action.startsWith("crewon.project-conversations.")
+    action.startsWith("crewon.project-conversations.") ||
+    action === "crewon.project-conversation-association" ||
+    action.startsWith("crewon.project-conversation-association.")
   );
 }
 
@@ -44,6 +52,41 @@ export async function invokeInstalledPluginConversation(
   }>,
 ): Promise<PluginJsonValue> {
   assertPluginUiCurrent(options.assertCurrent, input.signal);
+  if (input.action.startsWith("crewon.project-conversation-association.")) {
+    const request = parseProjectConversationAssociationRequest({
+      action: input.action,
+      input: input.input,
+    });
+    const response = await pluginUiControlRequest(
+      (signal) =>
+        options.client.plugins.invoke(lease.mountRef, request, { signal }),
+      input.signal,
+    );
+    assertPluginUiCurrent(options.assertCurrent, input.signal);
+    const output = parseProjectConversationAssociationResponse(
+      request,
+      response.output,
+    );
+    if (
+      request.action === PROJECT_CONVERSATION_ASSOCIATION_ACTIONS.attach &&
+      "binding" in output
+    ) {
+      const source = output.binding.source;
+      if (
+        source.pluginId !== lease.descriptor.pluginId ||
+        source.publisherId !== lease.descriptor.publisherId ||
+        source.version !== lease.descriptor.version ||
+        source.packageDigest !== lease.packageDigest ||
+        source.selectionRevision !== lease.selectionRevision
+      )
+        uiFailure("plugin_ui_project_conversation_source_changed");
+      notifyProjectConversationBindingChanged(
+        options.client,
+        output.binding.threadId,
+      );
+    }
+    return parsePluginUiJsonValue(output) as PluginJsonValue;
+  }
   const request = parseProjectConversationsActionRequest({
     action: input.action,
     input: input.input,
@@ -63,6 +106,20 @@ export async function invokeInstalledPluginConversation(
     request,
     response.output,
   );
+  if (
+    request.action === PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding &&
+    "binding" in output &&
+    output.binding !== null &&
+    lease.descriptor.requires.some(
+      (requirement) =>
+        requirement.service === "crewon.project-conversation-association" &&
+        requirement.apiVersion === "1",
+    )
+  )
+    notifyProjectConversationBindingChanged(
+      options.client,
+      output.binding.threadId,
+    );
   if (
     request.action === PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation
   ) {

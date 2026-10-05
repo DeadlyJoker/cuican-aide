@@ -382,7 +382,7 @@ export class PostgresDomainStore
       commitRunWithinTransaction: (client, input) =>
         this.commitRunWithin(client, input),
       commitTurnWithinTransaction: (client, input) =>
-        this.commitTurnStartWithin(client, input),
+        this.commitTurnStartWithin(client, input, "installed-extension"),
     });
   }
 

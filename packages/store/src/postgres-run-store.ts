@@ -1,4 +1,5 @@
 import { readPostgresActiveRun } from "./postgres-active-run-read.ts";
+import { assertPostgresOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
 import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 import {
   RunStoreError,
@@ -905,7 +906,11 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const result = await this.commitTurnStartWithin(client, input);
+      const result = await this.commitTurnStartWithin(
+        client,
+        input,
+        "ordinary",
+      );
       await client.query("COMMIT");
       return result;
     } catch (error) {
@@ -919,6 +924,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
   protected async commitTurnStartWithin(
     client: PoolClient,
     input: CommitTurnStartInput,
+    admission: "ordinary" | "installed-extension",
   ): Promise<CommitTurnStartResult> {
     this.assertOpen();
     const { runId, threadId } = validateTurnStartInput(input);
@@ -956,6 +962,12 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     if (currentThread.status !== "active") {
       throw new RunStoreError("thread_not_active");
     }
+    if (admission === "ordinary")
+      await assertPostgresOrdinaryTurnProjectScope(
+        client,
+        this.schema,
+        currentThread,
+      );
     const activeRun = await client.query(
       `SELECT 1
        FROM ${this.schemaSql()}.run_snapshots AS snapshots
@@ -1110,11 +1122,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
       input.tenantId,
     );
     await writePostgresOutbox(client, this.schemaSql(), input.run.outbox);
-    await writePostgresWorkItems(
-      client,
-      this.schemaSql(),
-      input.run.workItems,
-    );
+    await writePostgresWorkItems(client, this.schemaSql(), input.run.workItems);
     const result: CommitTurnStartResult = {
       disposition: "committed",
       threadState: nextThread,

@@ -1,3 +1,4 @@
+import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import type { ProductionProjectAssetPluginRuntime } from "./production-project-asset-plugin-runtime.ts";
 import { parseProjectHistoricalQueryUiActionRequest } from "@crewon/contracts/plugins";
@@ -163,10 +164,7 @@ export function createProductionPluginUiRequestService({
           invoke,
         );
       }
-      if (
-        command.action === "crewon.project-conversations" ||
-        command.action.startsWith("crewon.project-conversations.")
-      ) {
+      if (isProjectConversationUiNamespaceAction(command.action)) {
         if (
           conversations === undefined ||
           !conversations.supportsAction(command.action)

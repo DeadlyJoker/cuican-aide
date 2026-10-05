@@ -1,5 +1,11 @@
 import { captureProjectConversationDependencies } from "./project-conversation-dependencies.ts";
 import {
+  PROJECT_CONVERSATION_ASSOCIATION_ACTIONS as associationActions,
+  parseProjectConversationAssociationRequest,
+  parseProjectConversationAssociationResponse,
+  type ProjectConversationAssociationRequest,
+} from "@crewon/contracts/project-conversation-association";
+import {
   PROJECT_CONVERSATIONS_METHOD_ACTIONS,
   parseProjectConversationsActionRequest,
   parseProjectConversationsActionResponse,
@@ -67,6 +73,109 @@ export class ProjectConversationApplicationService {
   readonly #d: ProjectConversationApplicationDependencies;
   constructor(d: ProjectConversationApplicationDependencies) {
     this.#d = captureProjectConversationDependencies(d);
+  }
+  /** Association adds project metadata only; it never rewrites a Thread or starts a Run. */
+  async associateConversation(
+    actor: ActorContext,
+    input: ProjectConversationAssociationRequest,
+    authority: ProjectConversationCommitAuthority,
+  ) {
+    return this.#call(async () => {
+      const request = parseProjectConversationAssociationRequest(input),
+        q = await this.#authority(actor, authority);
+      await this.#project(q, request.input.projectId, "creativeProject:write");
+      const output = (value: unknown) =>
+        parseProjectConversationAssociationResponse(request, value);
+      if (request.action === associationActions.attach) {
+        const receipt = this.#receipt("attach", request.input, q);
+        const previous = await this.#d.conversations.loadMutationReceipt({
+          actor: q.actor,
+          profileId: q.installation.profileId,
+          receipt,
+        });
+        if (previous !== null) {
+          await this.#thread(q, previous.binding);
+          await q.assertCurrent();
+          q.assertActive();
+          return output({
+            disposition: previous.disposition,
+            binding: this.#public(previous.binding),
+          });
+        }
+      }
+      const thread = await this.#d.threadStore.loadThreadInSpace({
+        ...q.actor,
+        threadId: request.input.threadId,
+      });
+      if (
+        thread === null ||
+        thread.status !== "active" ||
+        thread.createdByActorId !== q.actor.actorId
+      )
+        throw new ApplicationError(
+          "notFound",
+          "project_conversation_thread_not_found",
+        );
+      if (request.action === associationActions.inspect) {
+        const alreadyBound = await this.#d.conversations.hasThreadBinding({
+          tenantId: q.actor.tenantId,
+          spaceId: q.actor.spaceId,
+          threadId: thread.threadId,
+        });
+        await q.assertCurrent();
+        q.assertActive();
+        return output({
+          candidate: alreadyBound
+            ? null
+            : {
+                threadId: thread.threadId,
+                threadRevision: thread.revision,
+                workspaceId: thread.workspaceId ?? null,
+              },
+        });
+      }
+      if (
+        thread.revision !== request.input.expectedThreadRevision ||
+        (thread.workspaceId ?? null) !== request.input.workspaceId
+      )
+        throw new ApplicationError(
+          "conflict",
+          "project_conversation_thread_conflict",
+        );
+      const now = this.#d.clock.now();
+      const binding = createProjectConversationBinding(
+        {
+          bindingId: this.#d.ids.nextId("artifact"),
+          owner: q.actor,
+          profileId: q.installation.profileId,
+          projectId: request.input.projectId,
+          threadId: thread.threadId,
+          workspaceId: thread.workspaceId ?? null,
+          revision: 1,
+          state: "active",
+          currentInstallation: q.installation,
+          createdAt: now,
+          updatedAt: now,
+        },
+        this.#d.digester,
+      );
+      const result = await this.#d.conversations.commitBinding(
+        {
+          kind: "create",
+          binding,
+          expectedRevision: 0,
+          receipt: this.#receipt("attach", request.input, q),
+          existingThread: {
+            expectedRevision: request.input.expectedThreadRevision,
+          },
+        },
+        { authority: q },
+      );
+      return output({
+        disposition: result.disposition,
+        binding: this.#public(result.binding),
+      });
+    });
   }
   async getBinding(
     actor: ActorContext,
