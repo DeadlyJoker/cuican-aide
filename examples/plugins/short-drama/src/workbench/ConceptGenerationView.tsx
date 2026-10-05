@@ -33,6 +33,7 @@ const operationLabels: Record<ConceptGenerationOperation["status"], string> = {
 export function ConceptGenerationView({
   controller,
   queries,
+  historicalQueries,
   images,
   name,
   blocked,
@@ -40,6 +41,7 @@ export function ConceptGenerationView({
 }: {
   controller: ConceptGenerationController;
   queries: ConceptQueryController;
+  historicalQueries: ConceptQueryController;
   images: ConceptImageSelectionController;
   name: string;
   blocked: boolean;
@@ -127,7 +129,9 @@ export function ConceptGenerationView({
             >
               <strong>执行记录：{operationLabels[operation.status]}</strong>
               <ConceptQueryOperationButton
-                controller={queries}
+                controller={
+                  queries.supportsRecord ? queries : historicalQueries
+                }
                 operationId={operation.operationId}
               />
               <p className="detail-note">

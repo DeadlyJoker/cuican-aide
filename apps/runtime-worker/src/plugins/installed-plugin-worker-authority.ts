@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ActorContext, AuthorizationPort } from "@crewon/application";
+import type { ActorContext, AuthorizationPort, ProjectPlanningRuntimePort } from "@crewon/application";
 import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   extensionDigest,
@@ -43,6 +43,8 @@ export type InstalledPluginWorkerAuthority = Readonly<{
   /** Fresh profile authority also serves generation peers when historical observation is disabled. */
   resolveProfile: InstalledPluginExtensionHostDependencies["resolveProfile"];
   installedPluginExecution: InstalledPluginExecutionConfig;
+  /** Explicit Native metadata/proposal approval; remote configurations expose none by default. */
+  projectPlanning?: ProjectPlanningRuntimePort;
   close(): Promise<void>;
 }>;
 const MAX_RESPONSE_BYTES = 16 * 1024;

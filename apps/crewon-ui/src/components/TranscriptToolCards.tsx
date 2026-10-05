@@ -1,3 +1,4 @@
+import { TranscriptProjectPlanningCard } from "./project-planning/TranscriptProjectPlanningCard";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
 import type { JsonValue } from "@crewon/app-server-protocol/serde_json/JsonValue";
 import { Copy } from "lucide-react";
@@ -929,6 +930,7 @@ export function TranscriptDynamicToolCard({
         {duration ? <em>{duration}</em> : null}
       </summary>
       <div className="tool-call-body">
+        <TranscriptProjectPlanningCard item={item} locale={locale} />
         {toolSectionLabel(
           locale === "zh" ? "参数" : "Arguments",
           jsonPreview(item.arguments, "{}"),

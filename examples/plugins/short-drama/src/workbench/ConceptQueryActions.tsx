@@ -12,14 +12,14 @@ export function ConceptQueryOperationButton({
     controller.getSnapshot,
     controller.getSnapshot,
   );
-  if (!controller.hasHostContext) return null;
+  if (!controller.hasHostContext || !controller.supportsRecord) return null;
   return (
     <button
       className="button secondary"
       disabled={!controller.canQuery(operationId)}
       onClick={() => void controller.query(operationId)}
     >
-      查询原任务
+      {controller.lane === "historical" ? "查询历史任务" : "查询原任务"}
     </button>
   );
 }
@@ -37,10 +37,14 @@ export function ConceptQueryActions({
   return (
     <section
       className="detail-panel"
-      aria-label="原任务查询"
+      aria-label={
+        controller.lane === "historical" ? "历史任务查询" : "原任务查询"
+      }
       data-query-run-id={state.receipt?.runId}
     >
-      <h2>原任务查询</h2>
+      <h2>
+        {controller.lane === "historical" ? "历史任务查询" : "原任务查询"}
+      </h2>
       {state.intentPhase === "pending" && (
         <p className="detail-note" role="status">
           正在提交查询，请稍候…
@@ -56,7 +60,7 @@ export function ConceptQueryActions({
             disabled={!controller.canRetry}
             onClick={() => void controller.retry()}
           >
-            重试原查询
+            {controller.lane === "historical" ? "重试原历史查询" : "重试原查询"}
           </button>
         </>
       )}
@@ -75,7 +79,9 @@ export function ConceptQueryActions({
             disabled={state.recovery === "loading"}
             onClick={() => void controller.refreshRefused()}
           >
-            重新确认查询准备状态
+            {controller.lane === "historical"
+              ? "重新确认历史查询准备状态"
+              : "重新确认查询准备状态"}
           </button>
         </>
       )}
@@ -93,9 +99,16 @@ export function ConceptQueryActions({
             className="button secondary"
             onClick={() => void controller.restoreSource()}
           >
-            重新读取原查询输入
+            {controller.lane === "historical"
+              ? "重新读取原历史查询输入"
+              : "重新读取原查询输入"}
           </button>
         </>
+      )}
+      {controller.lane === "historical" && (
+        <p className="detail-note">
+          历史查询原请求仅在当前会话保留；重新启动后请先读取已保存的任务记录。
+        </p>
       )}
       {state.reason && (
         <p className="detail-note" role="status">

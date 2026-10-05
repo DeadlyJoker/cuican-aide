@@ -1,3 +1,7 @@
+import { assertInstalledPluginQueryLaneAvailable } from "./installedPluginQueryLaneAvailability";
+import { PROJECT_HISTORICAL_QUERY_UI_ACTIONS } from "@crewon/contracts/project-historical-queries";
+import { invokeInstalledPluginHistoricalProjectQuery } from "./installedPluginHistoricalProjectQueryTransport";
+import type { InstalledPluginProjectHistoricalQueryJournal } from "./installedPluginProjectHistoricalQueryJournal";
 import { createInstalledPluginUiRecovery } from "./installedPluginUiRecovery";
 import type { InstalledPluginProjectSelectionJournal } from "./installedPluginProjectSelectionJournal";
 import {
@@ -72,6 +76,7 @@ export function createDesktopPluginUiHost(
     ): void;
     generationJournal?: InstalledPluginGenerationJournal;
     projectQueryJournal?: InstalledPluginProjectQueryJournal;
+    historicalQueryJournal?: InstalledPluginProjectHistoricalQueryJournal;
     selectionJournal?: InstalledPluginProjectSelectionJournal;
     importer?: PluginUiModuleImporter;
   }>,
@@ -189,7 +194,22 @@ export function createDesktopPluginUiHost(
               response.output,
             );
           }
+          if (input.action === PROJECT_HISTORICAL_QUERY_UI_ACTIONS[0])
+            return invokeInstalledPluginHistoricalProjectQuery(
+              {
+                client,
+                assertCurrent,
+                journal: options.historicalQueryJournal,
+                otherJournal: projectQueryJournal,
+              },
+              lease,
+              input,
+            );
           if (input.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0]) {
+            assertInstalledPluginQueryLaneAvailable(
+              lease,
+              options.historicalQueryJournal,
+            );
             if (!projectQueryJournal)
               uiFailure("plugin_ui_project_query_journal_unavailable");
             const query = parseProjectGenerationQueryUiActionRequest({

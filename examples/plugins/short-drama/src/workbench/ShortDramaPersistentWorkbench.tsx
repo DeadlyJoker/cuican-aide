@@ -28,6 +28,8 @@ import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
 import { ProjectTextPlanController } from "./ProjectTextPlanController";
 import { ProjectTextPlanActions } from "./ProjectTextPlanActions";
+import { ProjectPlanningDraftReview } from "./ProjectPlanningDraftReview";
+import type { ProjectPlanningProposal } from "../project-planning-service";
 
 function SaveFeedback({
   controller,
@@ -92,11 +94,13 @@ export function ShortDramaPersistentWorkbench({
   texts,
   conversations,
   plans,
+  planningDraft = null,
 }: {
   controller: CreativeProjectController;
   texts: ProjectTextController;
   conversations: ProjectConversationController;
   plans: ProjectTextPlanController;
+  planningDraft?: ProjectPlanningProposal | null;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -120,6 +124,12 @@ export function ShortDramaPersistentWorkbench({
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const submittedDraft = useRef<ProjectPlanningProposal | null>(null);
+  const reviewedDraft = useRef<ProjectPlanningProposal | null>(null);
+  const [projectDraft, setProjectDraft] = useState<Readonly<{
+    projectId: string;
+    proposal: ProjectPlanningProposal;
+  }> | null>(null);
   const { details } = snapshot;
   const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
   const locked =
@@ -157,15 +167,33 @@ export function ShortDramaPersistentWorkbench({
   }, []);
   useEffect(() => {
     if (snapshot.notice === "项目已保存") {
+      if (submittedDraft.current && snapshot.details)
+        setProjectDraft({
+          projectId: snapshot.details.project.projectId,
+          proposal: submittedDraft.current,
+        });
+      submittedDraft.current = null;
       setDialog(null);
       setTitle("");
       setBrief("");
     }
-  }, [snapshot.notice]);
+  }, [snapshot.notice, snapshot.details]);
 
   return (
     <section className="drama-workbench" aria-label="AI 短剧工作台">
       <div className="drama-main">
+        {planningDraft && (
+          <ProjectPlanningDraftReview
+            proposal={planningDraft}
+            disabled={locked || dialog !== null}
+            onReview={() => {
+              reviewedDraft.current = planningDraft;
+              setTitle(planningDraft.input.title);
+              setBrief(planningDraft.input.briefText);
+              setDialog("new");
+            }}
+          />
+        )}
         <header className="drama-topbar">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
             <button disabled={locked} onClick={() => controller.closeProject()}>
@@ -209,6 +237,12 @@ export function ShortDramaPersistentWorkbench({
           {!details && controller.concepts.queries.getSnapshot().request && (
             <ConceptQueryActions controller={controller.concepts.queries} />
           )}
+          {!details &&
+            controller.concepts.historicalQueries.getSnapshot().request && (
+              <ConceptQueryActions
+                controller={controller.concepts.historicalQueries}
+              />
+            )}
           {!details && controller.concepts.images.getSnapshot().request && (
             <ConceptImageSelectionActions
               controller={controller.concepts.images}
@@ -244,7 +278,12 @@ export function ShortDramaPersistentWorkbench({
                 <button
                   className="button primary"
                   disabled={locked || snapshot.phase !== "ready"}
-                  onClick={() => setDialog("new")}
+                  onClick={() => {
+                    reviewedDraft.current = null;
+                    setTitle("");
+                    setBrief("");
+                    setDialog("new");
+                  }}
                 >
                   <Plus size={16} />
                   新建项目
@@ -377,6 +416,11 @@ export function ShortDramaPersistentWorkbench({
               )}
               {stage === 0 && (
                 <ProjectTextPlanActions
+                  initialDraft={
+                    projectDraft?.projectId === details.project.projectId
+                      ? projectDraft.proposal
+                      : null
+                  }
                   controller={plans}
                   conversations={conversations}
                   texts={texts}
@@ -541,6 +585,7 @@ export function ShortDramaPersistentWorkbench({
             className="modal-form"
             onSubmit={(event) => {
               event.preventDefault();
+              submittedDraft.current = reviewedDraft.current;
               void controller.createProject(title, brief);
             }}
           >

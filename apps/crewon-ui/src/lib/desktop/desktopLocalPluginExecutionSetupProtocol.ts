@@ -17,6 +17,30 @@ export type DesktopLocalPluginExecutionNetworkPath =
   | Readonly<{ method: "GET" | "POST"; path: string }>
   | Readonly<{ method: "GET"; operationPathPrefix: string }>;
 
+/** Explicit read-only delegation to one already approved installed historical target. */
+export type DesktopLocalPluginHistoricalQueryPreview = Readonly<{
+  source: Readonly<{
+    pluginId: string;
+    packageDigest: string;
+    contributionId: string;
+  }>;
+  target: Readonly<{
+    pluginId: string;
+    publisherId: string;
+    version: string;
+    packageDigest: string;
+    manifestDigest: string;
+    implementationDigest: string;
+    contributionId: string;
+    action: "image.query";
+  }>;
+  selectionRevision: number;
+  configurationRevision: number;
+  configurationDigest: string;
+  scope: "query-existing-generations";
+  methods: readonly ["GET"];
+}>;
+
 export type DesktopLocalPluginExecutionPreview =
   DesktopLocalPluginExecutionIdentity &
     Readonly<{
@@ -26,12 +50,15 @@ export type DesktopLocalPluginExecutionPreview =
       preset: "krea2-portrait" | "krea2-character-three-view";
       networkPaths: readonly DesktopLocalPluginExecutionNetworkPath[];
       approvalRequirement: "none";
+      historyQueryAvailability?: "available" | "unavailable";
+      historyQuery?: DesktopLocalPluginHistoricalQueryPreview;
     }>;
 
 /** Consent refers to one Main-owned preview, never renderer-supplied permissions. */
 export type DesktopLocalPluginExecutionConfirmation = Readonly<{
   previewId: string;
   approveExecution: true;
+  approveHistoricalQueries?: true;
 }>;
 
 export type DesktopLocalPluginExecutionResult =

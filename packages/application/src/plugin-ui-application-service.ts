@@ -1,3 +1,4 @@
+import { registerPluginHistoricalQueryInvocation } from "./plugin-project-historical-query-invocation.ts";
 import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
@@ -400,7 +401,18 @@ export class PluginUiApplicationService {
             })
           : undefined,
       );
+      let unregisterHistorical: (() => void) | undefined;
       try {
+        unregisterHistorical =
+          command.action ===
+          "crewon.project-historical-queries.v1.queryConceptGeneration"
+            ? registerPluginHistoricalQueryInvocation(
+                context,
+                () => this.#fence(actor, binding, "invoke"),
+                () => this.#transactionFence(actor, binding),
+                () => this.#mounts.alive(binding),
+              )
+            : undefined;
         const dispatch =
           recovery === undefined
             ? undefined
@@ -437,6 +449,7 @@ export class PluginUiApplicationService {
         await this.#fence(actor, binding, "invoke");
         return result;
       } finally {
+        unregisterHistorical?.();
         unregister();
       }
     });

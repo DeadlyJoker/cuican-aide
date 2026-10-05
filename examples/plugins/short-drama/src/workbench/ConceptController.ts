@@ -62,6 +62,7 @@ export class ConceptController {
   readonly generations: ConceptGenerationController;
   readonly submissions: ConceptGenerationIntentController;
   readonly queries: ConceptQueryController;
+  readonly historicalQueries: ConceptQueryController;
   readonly images: ConceptImageSelectionController;
   #ports: ConceptPorts;
   #details: ProjectDetails | null = null;
@@ -96,6 +97,7 @@ export class ConceptController {
     });
     this.queries = new ConceptQueryController({
       client: ports.queryClient,
+      sourcePluginId: ports.sourcePluginId,
       lockChanged: () => {
         this.#ports.lockChanged(this.locked);
         for (const listener of this.#listeners) listener();
@@ -105,6 +107,21 @@ export class ConceptController {
       restore: (request) => ports.restoreQuerySource(request),
       restored: () => {
         if (!this.queries.locked) void this.loadAssets();
+      },
+    });
+    this.historicalQueries = new ConceptQueryController({
+      client: ports.historicalQueryClient,
+      lane: "historical",
+      sourcePluginId: ports.sourcePluginId,
+      lockChanged: () => {
+        this.#ports.lockChanged(this.locked);
+        for (const listener of this.#listeners) listener();
+      },
+      accepted: (request, receipt) =>
+        this.generations.expectQueryReceipt(request.reference, receipt),
+      restore: (request) => ports.restoreHistoricalQuerySource(request),
+      restored: () => {
+        if (!this.historicalQueries.locked) void this.loadAssets();
       },
     });
     this.images = new ConceptImageSelectionController({
@@ -122,6 +139,7 @@ export class ConceptController {
       try {
         this.submissions.refreshOriginalRetryGate();
         this.queries.refreshOriginalRetryGate();
+        this.historicalQueries.refreshOriginalRetryGate();
         this.images.refreshOriginalRetryGate();
       } finally {
         refreshingRetryGates = false;
@@ -129,10 +147,12 @@ export class ConceptController {
     };
     this.submissions.subscribe(refreshRetryGates);
     this.queries.subscribe(refreshRetryGates);
+    this.historicalQueries.subscribe(refreshRetryGates);
     this.images.subscribe(refreshRetryGates);
     this.generations.subscribe(() => {
       this.submissions.setRecord(this.generations.getSnapshot());
       this.queries.setRecord(this.generations.getSnapshot());
+      this.historicalQueries.setRecord(this.generations.getSnapshot());
       this.images.setRecord(this.generations.getSnapshot());
     });
   }
@@ -149,6 +169,7 @@ export class ConceptController {
       this.#snapshot.pendingKind !== null ||
       this.submissions.locked ||
       this.queries.locked ||
+      this.historicalQueries.locked ||
       this.images.locked ||
       this.#ports.recovery.conflict
     );
@@ -163,6 +184,7 @@ export class ConceptController {
       this.#snapshot.pendingKind !== null ||
       this.submissions.originalRequestBusy ||
       this.queries.originalRequestBusy ||
+      this.historicalQueries.originalRequestBusy ||
       this.images.originalRequestBusy
     );
   }
@@ -221,6 +243,7 @@ export class ConceptController {
         this.#snapshot.saving || this.#snapshot.pendingKind !== null,
       submissions: this.submissions,
       queries: this.queries,
+      historicalQueries: this.historicalQueries,
       images: this.images,
       recovery: this.#ports.recovery,
     });
@@ -265,6 +288,7 @@ export class ConceptController {
     this.generations.dispose();
     this.submissions.dispose();
     this.queries.dispose();
+    this.historicalQueries.dispose();
     this.images.dispose();
   }
   #reading(kind: "assets" | "selection" | "history" | "refresh") {
@@ -498,6 +522,8 @@ export class ConceptController {
       !this.#available() ||
       this.#snapshot.saving ||
       this.submissions.locked ||
+      this.queries.locked ||
+      this.historicalQueries.locked ||
       this.images.locked ||
       !this.#snapshot.draft ||
       this.#details!.project.state === "archived"
@@ -510,6 +536,8 @@ export class ConceptController {
     return (
       this.#available() &&
       !this.submissions.locked &&
+      !this.queries.locked &&
+      !this.historicalQueries.locked &&
       !this.images.locked &&
       !this.#snapshot.saving &&
       Boolean(draft) &&
@@ -669,6 +697,8 @@ export class ConceptController {
       !this.#available() ||
       this.#write ||
       this.submissions.locked ||
+      this.queries.locked ||
+      this.historicalQueries.locked ||
       this.images.locked
     )
       return;

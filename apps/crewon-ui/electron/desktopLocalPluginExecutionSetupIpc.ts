@@ -38,7 +38,8 @@ export function bindDesktopLocalPluginExecutionSetupIpc(
       | "preparePluginExecutionSetup"
       | "onSessionInvalidated"
       | "onLocalManagementAccessChanged"
-    >;
+    > &
+      Partial<Pick<RuntimeSupervisor, "currentPreparedPluginRuntime">>;
     diagnostic(code: string): void;
     createOwner?: typeof createDesktopLocalPluginExecutionSetupOwner;
   }>,
@@ -136,7 +137,14 @@ export function bindDesktopLocalPluginExecutionSetupIpc(
           dataDirectory: input.dataDirectory,
           assertCurrent,
         });
-      const value = await owner.preview({ bootstrap, pluginId });
+      const preparedRuntime = runtime.currentPreparedPluginRuntime;
+      const value = await owner.preview({
+        bootstrap,
+        pluginId,
+        ...(preparedRuntime === undefined
+          ? {}
+          : { runtime: preparedRuntime.call(runtime) }),
+      });
       assertCurrent();
       preview = value;
       return value;

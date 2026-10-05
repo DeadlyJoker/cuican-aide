@@ -85,12 +85,21 @@ function lifecycle(
 }
 
 describe("explicit Main local execution preparation", () => {
-  it.each(["12.0.0", "13.0.0", "14.0.0", "15.0.0", "16.0.0"])(
+  it.each([
+    "12.0.0",
+    "13.0.0",
+    "14.0.0",
+    "15.0.0",
+    "16.0.0",
+    "17.0.0",
+    "18.0.0",
+  ])(
     "previews explicitly supported exact installed version %s without execution or selection mutation",
     async (version) => {
       const f = await fixture({
         version,
-        projectContext: version === "16.0.0",
+        projectContext: ["16.0.0", "17.0.0", "18.0.0"].includes(version),
+        historicalQueries: version === "18.0.0",
       });
       const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
       const owner = f.create();
@@ -108,7 +117,7 @@ describe("explicit Main local execution preparation", () => {
   );
 
   it("does not turn an unsupported version declaration into execution approval", async () => {
-    const f = await fixture({ version: "17.0.0", projectContext: true });
+    const f = await fixture({ version: "19.0.0", projectContext: true });
     const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
     await expect(
       f

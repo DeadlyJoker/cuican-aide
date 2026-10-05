@@ -49,6 +49,7 @@ import {
   type InstalledPluginReleaseIdentity,
 } from "./installed-plugin-release-document.ts";
 import type { InstalledPluginExecutionReadinessMetadata } from "./installed-plugin-execution-readiness-types.ts";
+import { createNativeProjectPlanningRuntime } from "./native-project-planning-runtime.ts";
 import type {
   InstalledPluginWorkerAuthority,
   InstalledPluginReadAuthorityInput,
@@ -641,6 +642,21 @@ export function createInstalledPluginNativeWorkerAuthority(
     releaseDocumentPath: config.releaseDocumentPath,
     authorizeRead,
     resolveProfile,
+    ...(owner.projects?.planningDrafts === undefined
+      ? {}
+      : {
+          projectPlanning: createNativeProjectPlanningRuntime({
+            actor: owner.files.authority.actor,
+            scope: owner.files.authority.scope,
+            projects: owner.projects,
+            installRoot: config.installRoot,
+            store: owner.store,
+            current: owner.current.bind(owner),
+            operate: owner.operate.bind(owner),
+            release: owner.release.bind(owner),
+            target: owner.target.bind(owner),
+          }),
+        }),
     installedPluginExecution: Object.freeze({
       installRoot: config.installRoot,
       ...(owner.projects?.conversations === undefined

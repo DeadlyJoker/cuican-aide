@@ -252,7 +252,7 @@ export async function captureSetupSnapshot(input: {
     verified.packageDigest !== records.pkg.packageDigest ||
     descriptor.pluginId !== SHORT_PLUGIN_ID ||
     descriptor.publisherId !== "example.publisher" ||
-    !["12.0.0", "13.0.0", "14.0.0", "15.0.0", "16.0.0"].includes(
+    !["12.0.0", "13.0.0", "14.0.0", "15.0.0", "16.0.0", "17.0.0", "18.0.0"].includes(
       descriptor.version,
     ) ||
     descriptor.publisherId !== records.pkg.publisherId ||
@@ -294,7 +294,7 @@ export async function captureSetupSnapshot(input: {
     },
   });
   if (
-    descriptor.version === "16.0.0" &&
+    ["16.0.0", "17.0.0", "18.0.0"].includes(descriptor.version) &&
     (![
       "crewon.project-conversations",
       "crewon.project-context",

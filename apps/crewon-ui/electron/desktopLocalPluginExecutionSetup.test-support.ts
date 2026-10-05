@@ -26,7 +26,11 @@ export const fixtureHash = (value: string | Buffer) =>
 
 /** Actual immutable installation + original SQLite mutations. The declared Node entry throws if imported. */
 export async function executionSetupFixture(
-  options: Readonly<{ version?: string; projectContext?: boolean }> = {},
+  options: Readonly<{
+    version?: string;
+    projectContext?: boolean;
+    historicalQueries?: boolean;
+  }> = {},
 ) {
   const version = options.version ?? "12.0.0";
   const directory = realpathSync(
@@ -90,6 +94,19 @@ export async function executionSetupFixture(
         "crewon.project-generation-queries",
         "crewon.project-generation-selections",
         "crewon.project-generation-contexts",
+        ...(["14.0.0", "15.0.0", "16.0.0", "17.0.0", "18.0.0"].includes(version)
+          ? ["crewon.project-texts"]
+          : []),
+        ...(["15.0.0", "16.0.0", "17.0.0", "18.0.0"].includes(version)
+          ? ["crewon.project-text-recovery"]
+          : []),
+        ...(options.historicalQueries === true || version === "18.0.0"
+          ? ["crewon.project-historical-queries"]
+          : []),
+        ...(["17.0.0", "18.0.0"].includes(version)
+          ? ["crewon.project-text-plans"]
+          : []),
+        ...(version === "18.0.0" ? ["crewon.project-planning-drafts"] : []),
         ...(options.projectContext === true
           ? [
               "crewon.project-conversations",

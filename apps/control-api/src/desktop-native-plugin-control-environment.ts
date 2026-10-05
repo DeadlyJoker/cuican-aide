@@ -25,6 +25,7 @@ import {
   type DesktopPluginConfiguration,
 } from "./desktop-plugin-configuration.ts";
 import { pluginSecurityRecord } from "./plugin-security-validation.ts";
+import { assertDesktopNativeProjectHistoricalQueryDeclaredApproval } from "./desktop-native-project-historical-query-composition.ts";
 
 export const DESKTOP_NATIVE_PLUGIN_CONTROL_CONFIG_ENV =
   "CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH";
@@ -297,6 +298,10 @@ export function assertDesktopNativePluginControlComposition(
     )
   )
     invalid();
+  assertDesktopNativeProjectHistoricalQueryDeclaredApproval({
+    configuration,
+    nativeControl: input.nativeControl,
+  });
 }
 function invalid(): never {
   throw new Error("desktop_native_plugin_control_configuration_invalid");

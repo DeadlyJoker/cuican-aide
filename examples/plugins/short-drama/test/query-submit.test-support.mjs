@@ -10,7 +10,7 @@ export const operations = [
   "00000000-0000-0000-0000-000000000001",
   "00000000-0000-0000-0000-000000000002",
 ];
-/** Public dispatcher and Host recovery data only; real admission/SQL is verified by CrewON integration tests. */
+/** Current Short18 self-query DTO dispatcher and Host recovery data only; real admission/SQL is verified by CrewON integration tests. */
 export function queryService() {
   const base = generationService();
   let intent = null,
@@ -53,8 +53,8 @@ export function queryService() {
       task: {
         runId,
         threadId: "original-thread",
-        pluginId: "crewon.comfyui-krea2",
-        pluginVersion: "1.0.0",
+        pluginId: "crewon.short-drama",
+        pluginVersion: "18.0.0",
         configurationRevision: 3,
         runStatus: "running",
         sourceRunId: null,

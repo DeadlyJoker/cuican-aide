@@ -18,10 +18,18 @@ export function bindConceptCapabilities(input: {
   metadataPending: boolean;
   submissions: ConceptGenerationIntentController;
   queries: ConceptQueryController;
+  historicalQueries: ConceptQueryController;
   images: ConceptImageSelectionController;
   recovery: ConceptRecoveryCoordinator;
 }) {
-  const { selection, project, submissions, queries, images } = input;
+  const {
+    selection,
+    project,
+    submissions,
+    queries,
+    historicalQueries,
+    images,
+  } = input;
   const blocked =
     input.blocked || input.recovery.conflict || input.recovery.manualHandling;
   const source =
@@ -43,6 +51,7 @@ export function bindConceptCapabilities(input: {
   const controllers = {
     generation: submissions,
     query: queries,
+    historicalQuery: historicalQueries,
     selection: images,
   };
   const retryPolicy = (lane: ConceptRecoveryLane) => ({
@@ -54,6 +63,7 @@ export function bindConceptCapabilities(input: {
         !input.ready ||
         submissions.originalRequestBusy ||
         queries.originalRequestBusy ||
+        historicalQueries.originalRequestBusy ||
         images.originalRequestBusy
       )
         return true;
@@ -66,6 +76,7 @@ export function bindConceptCapabilities(input: {
         input.recovery.conflict ||
         submissions.blocksOriginalRetry(source) ||
         queries.blocksOriginalRetry(source) ||
+        historicalQueries.blocksOriginalRetry(source) ||
         images.blocksOriginalRetry(source)
       );
     },
@@ -76,12 +87,22 @@ export function bindConceptCapabilities(input: {
   queries.bindSource(
     preserveLane("query") ? null : source,
     input.ready,
-    blocked || submissions.locked || images.locked,
+    blocked || submissions.locked || historicalQueries.locked || images.locked,
     retryPolicy("query"),
+  );
+  historicalQueries.bindSource(
+    preserveLane("historicalQuery") ? null : source,
+    input.ready,
+    blocked || submissions.locked || queries.locked || images.locked,
+    retryPolicy("historicalQuery"),
   );
   submissions.bindSource(
     preserveLane("generation") ? null : reference,
-    project?.state === "active" && !blocked && !images.locked,
+    project?.state === "active" &&
+      !blocked &&
+      !queries.locked &&
+      !historicalQueries.locked &&
+      !images.locked,
     input.ready,
     retryPolicy("generation"),
   );
@@ -89,7 +110,11 @@ export function bindConceptCapabilities(input: {
     preserveLane("selection") ? null : reference,
     project?.state === "active",
     input.ready,
-    blocked || input.metadataPending || submissions.locked || queries.locked,
+    blocked ||
+      input.metadataPending ||
+      submissions.locked ||
+      queries.locked ||
+      historicalQueries.locked,
     retryPolicy("selection"),
   );
 }

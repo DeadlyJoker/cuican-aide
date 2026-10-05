@@ -5,6 +5,7 @@ import type { ConceptRecoveryLane } from "./ConceptRecoveryCoordinator";
 const labels: Record<ConceptRecoveryLane, string> = {
   generation: "原生成请求",
   query: "原查询请求",
+  historicalQuery: "原历史查询请求",
   selection: "原选用请求",
 };
 
@@ -19,7 +20,8 @@ export function ConceptRecoveryActions({
     controller.getSnapshot,
     controller.getSnapshot,
   );
-  const { submissions, queries, images } = controller.concepts;
+  const { submissions, queries, historicalQueries, images } =
+    controller.concepts;
   useSyncExternalStore(
     submissions.subscribe,
     submissions.getSnapshot,
@@ -35,8 +37,18 @@ export function ConceptRecoveryActions({
     images.getSnapshot,
     images.getSnapshot,
   );
+  useSyncExternalStore(
+    historicalQueries.subscribe,
+    historicalQueries.getSnapshot,
+    historicalQueries.getSnapshot,
+  );
   if (!project.recoveryConflict) return null;
-  const lanes = { generation: submissions, query: queries, selection: images };
+  const lanes = {
+    generation: submissions,
+    query: queries,
+    historicalQuery: historicalQueries,
+    selection: images,
+  };
   return (
     <section className="detail-panel" aria-label="未确认原请求">
       <p className="detail-note" role="alert">

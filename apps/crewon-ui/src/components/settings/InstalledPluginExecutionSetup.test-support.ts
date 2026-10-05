@@ -23,6 +23,32 @@ export const executionTestParameters = Object.freeze({
   baseUrl: "https://named-comfy-generation.test/",
   preset: "krea2-portrait" as const,
 });
+export function historicalQueryPreview(
+  identity = executionTestIdentity,
+): NonNullable<DesktopLocalPluginExecutionPreview["historyQuery"]> {
+  return Object.freeze({
+    source: {
+      pluginId: identity.pluginId,
+      packageDigest: identity.packageDigest,
+      contributionId: "workbench",
+    },
+    target: {
+      pluginId: "crewon.comfyui-krea2",
+      publisherId: "example.publisher",
+      version: "1.0.0",
+      packageDigest: `sha256:${"e".repeat(64)}`,
+      manifestDigest: `sha256:${"f".repeat(64)}`,
+      implementationDigest: `sha256:${"1".repeat(64)}`,
+      contributionId: "studio",
+      action: "image.query" as const,
+    },
+    selectionRevision: 2,
+    configurationRevision: 1,
+    configurationDigest: `sha256:${"2".repeat(64)}`,
+    scope: "query-existing-generations" as const,
+    methods: Object.freeze(["GET"] as const),
+  });
+}
 
 /** A named Native DTO fixture only; no filesystem, authority, runtime, network or supplier is created. */
 export class ExecutionSetupFixture {

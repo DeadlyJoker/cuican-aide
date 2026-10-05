@@ -90,11 +90,34 @@ import {
   projectQueryValues,
 } from "./project-query-store-support.ts";
 
+import {
+  captureProjectHistoricalQuery,
+  stripProjectHistoricalQueryOptions,
+  admitSqliteProjectHistoricalQueryPublication,
+  admitPostgresProjectHistoricalQueryPublication,
+  prepareSqliteProjectHistoricalQuery,
+  preparePostgresProjectHistoricalQuery,
+  assertProjectHistoricalQueryReceipt,
+  loadSqliteProjectHistoricalQueryLink,
+  loadPostgresProjectHistoricalQueryLink,
+  projectHistoricalQueryInsertSql,
+  projectHistoricalQueryValues,
+} from "./project-historical-query-store-support.ts";
+import {
+  assertSqliteProjectHistoricalQuerySchema,
+  assertPostgresProjectHistoricalQuerySchema,
+} from "./project-historical-query-schema.ts";
+import {
+  assertSqliteHistoricalQueryMarker,
+  assertPostgresHistoricalQueryMarker,
+} from "./project-historical-query-marker.ts";
+
 type SqliteExtensionTurnHost = Readonly<{
   database: DatabaseSync;
   unmeteredEnabled: boolean;
   projectGenerationsEnabled: boolean;
   projectQueriesEnabled: boolean;
+  projectHistoricalQueriesEnabled: boolean;
   assertOpen(): void;
   transaction(
     body: () => CommitExtensionTurnResult,
@@ -125,6 +148,21 @@ export async function commitSqliteExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const historicalQuery = captureProjectHistoricalQuery(
+    input,
+    checkedPluginQueryTurn(input),
+    host.projectHistoricalQueriesEnabled,
+    options,
+  );
+  options = stripProjectHistoricalQueryOptions(options);
+  if (historicalQuery !== null)
+    input = {
+      ...input,
+      projectHistoricalQuery: {
+        reference: historicalQuery.reference,
+        generationLinkDigest: historicalQuery.generationLinkDigest,
+      },
+    };
   const capturedPlan = captureProjectTextPlanTurn(input, options);
   const plan = capturedPlan.plan;
   options = capturedPlan.options;
@@ -190,6 +228,9 @@ export async function commitSqliteExtensionTurn(
     await assertCreativeProjectCommitCurrent(projectQuery.authority);
     assertCreativeProjectCommitActive(projectQuery.authority);
   }
+  if (historicalQuery !== null)
+    await assertCreativeProjectCommitCurrent(historicalQuery.authority);
+  assertCreativeProjectCommitActive(historicalQuery?.authority);
   return host.transaction(
     () => {
       if (host.projectGenerationsEnabled)
@@ -198,6 +239,13 @@ export async function commitSqliteExtensionTurn(
         assertSqliteProjectQuerySchema(host.database);
       if (projectQuery !== null)
         admitSqliteProjectQueryPublication(host.database, projectQuery);
+      if (historicalQuery !== null) {
+        assertSqliteProjectHistoricalQuerySchema(host.database);
+        admitSqliteProjectHistoricalQueryPublication(
+          host.database,
+          historicalQuery,
+        );
+      }
       const replay = host.receipt(binding, "task", input.receipt);
       assertSqliteProjectStage(host.database, stage, input, replay === null);
       const planCheckpoint = beginSqlitePlanTurn(
@@ -249,6 +297,18 @@ export async function commitSqliteExtensionTurn(
             saved.binding,
             input.receipt,
           );
+        assertSqliteHistoricalQueryMarker(
+          host.database,
+          saved.binding,
+          historicalQuery,
+        );
+        if (historicalQuery !== null)
+          assertProjectHistoricalQueryReceipt(
+            historicalQuery,
+            loadSqliteProjectHistoricalQueryLink(host.database, saved.binding),
+            saved.binding,
+            input.receipt,
+          );
         assertStageReplay(
           stage,
           loadSqliteStageIfAvailable(host.database, saved.binding),
@@ -278,6 +338,15 @@ export async function commitSqliteExtensionTurn(
           : prepareSqliteProjectQuery(
               host.database,
               projectQuery,
+              input,
+              pluginQuery!,
+            );
+      const historicalLink =
+        historicalQuery === null
+          ? undefined
+          : prepareSqliteProjectHistoricalQuery(
+              host.database,
+              historicalQuery,
               input,
               pluginQuery!,
             );
@@ -348,7 +417,11 @@ export async function commitSqliteExtensionTurn(
           unmetered.admission,
         );
       if (pluginQuery !== undefined)
-        saveSqlitePluginQuery(host.database, pluginQuery);
+        saveSqlitePluginQuery(
+          host.database,
+          pluginQuery,
+          historicalLink?.contentDigest,
+        );
       const result = extensionTurnResult(
         turn,
         binding,
@@ -370,6 +443,10 @@ export async function commitSqliteExtensionTurn(
             "INSERT INTO project_stage_run_admissions VALUES(?,?,?,?,?,?,?)",
           )
           .run(...stageValues(stage.admission));
+      if (historicalLink !== undefined)
+        host.database
+          .prepare(projectHistoricalQueryInsertSql())
+          .run(...projectHistoricalQueryValues(historicalLink));
       finishSqlitePlanTurn(host.database, plan, planCheckpoint);
       return plan === null
         ? result
@@ -386,6 +463,7 @@ export async function commitSqliteExtensionTurn(
         if (prepared !== null) host.assertOpen();
         assertCreativeProjectCommitActive(prepared?.authority);
         assertCreativeProjectCommitActive(projectQuery?.authority);
+        assertCreativeProjectCommitActive(historicalQuery?.authority);
       },
     },
   );

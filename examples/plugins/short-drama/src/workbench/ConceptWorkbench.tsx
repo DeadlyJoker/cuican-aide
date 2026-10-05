@@ -107,6 +107,7 @@ export function ConceptWorkbench({
           <ConceptGenerationActions controller={controller.submissions} />
           <ConceptGenerationView
             queries={controller.queries}
+            historicalQueries={controller.historicalQueries}
             images={controller.images}
             controller={controller.generations}
             name={snapshot.selection.asset.name}
@@ -117,6 +118,7 @@ export function ConceptWorkbench({
             }
           />
           <ConceptQueryActions controller={controller.queries} />
+          <ConceptQueryActions controller={controller.historicalQueries} />
         </>
       )}
       {!snapshot.selection && controller.submissions.getSnapshot().request && (
@@ -125,6 +127,10 @@ export function ConceptWorkbench({
       {!snapshot.selection && controller.queries.getSnapshot().request && (
         <ConceptQueryActions controller={controller.queries} />
       )}
+      {!snapshot.selection &&
+        controller.historicalQueries.getSnapshot().request && (
+          <ConceptQueryActions controller={controller.historicalQueries} />
+        )}
       <ConceptImageSelectionActions controller={controller.images} />
       {snapshot.error && (
         <p className="detail-note" role="alert">

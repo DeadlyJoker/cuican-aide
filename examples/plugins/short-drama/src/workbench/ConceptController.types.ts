@@ -16,6 +16,7 @@ import type {
   ProjectGenerationQueryUiInput,
   ProjectGenerationSelectionUiInput,
 } from "@crewon/plugin-sdk/contracts";
+import type { PluginProjectHistoricalQueryClient } from "../plugin-project-historical-queries-service";
 import type { ProjectDetails } from "./creative-project-controller";
 import type { ConceptRecoveryCoordinator } from "./ConceptRecoveryCoordinator";
 
@@ -64,9 +65,14 @@ export type ConceptPorts = Readonly<{
   submissionClient: PluginProjectGenerationClient;
   contextClient: PluginProjectGenerationContextClient;
   queryClient: PluginProjectGenerationQueryClient;
+  historicalQueryClient: PluginProjectHistoricalQueryClient;
+  sourcePluginId?: string;
   selectionClient: PluginProjectGenerationSelectionClient;
   restoreSelectionSource(
     request: ProjectGenerationSelectionUiInput,
+  ): Promise<boolean>;
+  restoreHistoricalQuerySource(
+    request: ProjectGenerationQueryUiInput,
   ): Promise<boolean>;
   restoreQuerySource(request: ProjectGenerationQueryUiInput): Promise<boolean>;
   restoreGenerationSource(request: ProjectGenerationUiInput): Promise<boolean>;

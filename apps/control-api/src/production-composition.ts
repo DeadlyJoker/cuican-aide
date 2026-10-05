@@ -78,6 +78,7 @@ import { validateProductionConfig } from "./production-configuration-validation.
 import {
   captureProductionPluginUiOwnerConfiguration,
   closeProductionProjectQueryOwner,
+  closeProductionProjectHistoricalQueryOwner,
 } from "./project-query-plugin-composition.ts";
 import {
   parseProductionPluginInstallationConfiguration,
@@ -250,6 +251,9 @@ export async function createProductionPostgresControlApi(
       failures.push(failure);
     }
     try {
+      await closeProductionProjectHistoricalQueryOwner(
+        config.pluginUi?.ownedProjectHistoricalQueryActions,
+      );
       await closeProductionProjectQueryOwner(
         config.pluginUi?.ownedProjectQueryActions,
       );
@@ -431,13 +435,16 @@ async function composeProductionControlApi(
           tasks: () => pluginTaskRuntime,
           clock,
           digester,
-          ...((pluginTaskRuntime?.projectQueries?.hostUiServices ??
+          ...((pluginTaskRuntime?.historicalQueries?.hostUiServices ??
+            pluginTaskRuntime?.projectQueries?.hostUiServices ??
             pluginTaskRuntime?.projectGenerations?.hostUiServices ??
             projectTextPluginRuntime?.hostUiServices ??
             projectPluginRuntime?.hostUiServices) === undefined
             ? {}
             : {
-                fallback: (pluginTaskRuntime?.projectQueries?.hostUiServices ??
+                fallback: (pluginTaskRuntime?.historicalQueries
+                  ?.hostUiServices ??
+                  pluginTaskRuntime?.projectQueries?.hostUiServices ??
                   pluginTaskRuntime?.projectGenerations?.hostUiServices ??
                   projectTextPluginRuntime?.hostUiServices ??
                   projectPluginRuntime?.hostUiServices)!,
@@ -445,6 +452,7 @@ async function composeProductionControlApi(
         });
       const existingHostUiServices =
         conversations?.hostUiServices ??
+        pluginTaskRuntime?.historicalQueries?.hostUiServices ??
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
         projectTextPluginRuntime?.hostUiServices ??
@@ -668,6 +676,7 @@ async function composeProductionControlApi(
             plans: conversations?.textPlans(),
             projectGenerations: pluginTaskRuntime?.projectGenerations,
             projectQueries: pluginTaskRuntime?.projectQueries,
+            historicalQueries: pluginTaskRuntime?.historicalQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
             projectSelections: projectSelectionPluginRuntime,
             recovery: pluginUiRecovery,

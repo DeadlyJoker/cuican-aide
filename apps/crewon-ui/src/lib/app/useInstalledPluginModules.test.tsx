@@ -1,3 +1,8 @@
+import type { InstalledPluginProjectHistoricalQueryPorts } from "../plugins/useInstalledPluginProjectHistoricalQueryContext";
+import {
+  historicalQueryLease,
+  historicalQueryInput,
+} from "../plugins/installedPluginProjectHistoricalQuery.test-support";
 // @vitest-environment happy-dom
 import { act, isValidElement, StrictMode, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -990,6 +995,77 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect(ports().selectionPorts.journal.snapshot()).toEqual([]);
     expect(
       wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+  });
+  it("assembles an independent session-only history query owner, retains exact hot intent across remount, then purges it before a cold account replacement", async () => {
+    const lease = historicalQueryLease();
+    let catalog = controlUiItem(lease);
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [catalog], next: null }),
+    );
+    const taskContext = {
+      runtime: { adoptExtensionTask: vi.fn(async () => {}) },
+      selectedThreadId: null,
+      runIds: [],
+      onOpenTask: vi.fn(),
+    };
+    await render(wire.client, { taskContext }, true);
+    const ports = () =>
+      presentation() as ReturnType<typeof presentation> & {
+        historicalQueryPorts: InstalledPluginProjectHistoricalQueryPorts;
+        projectQueryPorts: InstalledPluginProjectQueryPorts;
+      };
+    const journal = ports().historicalQueryPorts.journal;
+    const input = historicalQueryInput();
+    await expect(
+      journal.invoke({
+        lease,
+        input,
+        signal: new AbortController().signal,
+        request: async () => {
+          throw new Error("history query sent unknown");
+        },
+      }),
+    ).rejects.toThrow("history query sent unknown");
+    expect(ports().projectQueryPorts.journal.snapshot()).toEqual([]);
+    await render(wire.client, { taskContext, theme: "dark" }, true);
+    expect(ports().historicalQueryPorts.journal).toBe(journal);
+    expect(journal.snapshot()[0].input).toEqual(input);
+    catalog = controlUiItem({
+      ...lease,
+      selectionRevision: 2,
+      packageDigest: `sha256:${"2".repeat(64)}`,
+    });
+    await refresh();
+    expect(ports().historicalQueryPorts.journal).toBe(journal);
+    expect(
+      journal.current({
+        lease: {
+          ...lease,
+          selectionRevision: 2,
+          packageDigest: catalog.packageDigest,
+        },
+      })?.retryable,
+    ).toBe(false);
+    await act(async () =>
+      window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT)),
+    );
+    expect(journal.snapshot()).toEqual([]);
+    const replacement = controlUiClient(() =>
+      controlUiResponse({ plugins: [controlUiItem(lease)], next: null }),
+    );
+    await render(replacement.client, {
+      taskContext,
+      sessionKey: "cold-history-account",
+    });
+    expect(ports().historicalQueryPorts.journal).not.toBe(journal);
+    expect(ports().historicalQueryPorts.journal.snapshot()).toEqual([]);
+    expect("restore" in ports().historicalQueryPorts.journal).toBe(false);
+    expect(
+      wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+    expect(
+      replacement.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
     ).toBe(true);
   });
 });

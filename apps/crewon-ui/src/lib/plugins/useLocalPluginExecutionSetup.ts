@@ -34,6 +34,7 @@ type State = Readonly<{
   phase: Phase;
   preview: DesktopLocalPluginExecutionPreview | null;
   consent: boolean;
+  historicalQueryConsent: boolean;
   result: DesktopLocalPluginExecutionResult | null;
   policyCommitted: boolean;
   error: string | null;
@@ -54,6 +55,7 @@ const EMPTY: State = Object.freeze({
   phase: "idle",
   preview: null,
   consent: false,
+  historicalQueryConsent: false,
   result: null,
   policyCommitted: false,
   error: null,
@@ -342,6 +344,18 @@ export function useLocalPluginExecutionSetup(
       return;
     setState((previous) => ({ ...previous, consent }));
   };
+  const setHistoricalQueryConsent = (historicalQueryConsent: boolean) => {
+    const current = owner.current;
+    if (
+      !current ||
+      !alive(current) ||
+      !current.preview?.historyQuery ||
+      current.operation ||
+      disabledRef.current
+    )
+      return;
+    setState((previous) => ({ ...previous, historicalQueryConsent }));
+  };
   const confirm = async () => {
     const current = owner.current;
     const before = stateRef.current;
@@ -352,7 +366,9 @@ export function useLocalPluginExecutionSetup(
       current.operation ||
       !before.preview ||
       before.preview !== current.preview ||
-      !before.consent
+      !before.consent ||
+      (before.preview.historyQuery !== undefined &&
+        !before.historicalQueryConsent)
     )
       return;
     if (before.preview.expiresAt <= Date.now()) {
@@ -380,6 +396,9 @@ export function useLocalPluginExecutionSetup(
         Object.freeze({
           previewId: before.preview.previewId,
           approveExecution: true,
+          ...(before.preview.historyQuery === undefined
+            ? {}
+            : { approveHistoricalQueries: true as const }),
         }),
       );
       if (
@@ -433,6 +452,7 @@ export function useLocalPluginExecutionSetup(
     confirm,
     closePreview,
     setConsent,
+    setHistoricalQueryConsent,
     dismiss,
     refreshStatus: () =>
       current && alive(current) ? readStatus(current) : Promise.resolve(false),
@@ -443,6 +463,8 @@ export function useLocalPluginExecutionSetup(
       visible.phase === "preview" &&
       visible.consent &&
       visible.preview !== null &&
+      (visible.preview.historyQuery === undefined ||
+        visible.historicalQueryConsent) &&
       visible.preview.expiresAt > Date.now(),
   };
 }

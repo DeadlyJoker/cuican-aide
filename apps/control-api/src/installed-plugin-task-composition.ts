@@ -1,3 +1,4 @@
+import { assertProjectHistoricalQueryPluginPublications } from "./project-historical-query-plugin-configuration.ts";
 import {
   ApplicationError,
   type ApplicationClock,
@@ -75,6 +76,10 @@ export async function createInstalledPluginTaskRuntime(
   const generations = dependencies.creativeProjects?.pluginGenerations;
   const queries = dependencies.creativeProjects?.pluginQueries;
   assertProjectQueryPluginPublications(queries, ui.publications);
+  assertProjectHistoricalQueryPluginPublications(
+    dependencies.creativeProjects?.historicalQueries,
+    ui.publications,
+  );
   assertProjectGenerationPluginPublications(generations, ui.publications);
   if (
     !(dependencies.store instanceof PostgresDomainStore) ||

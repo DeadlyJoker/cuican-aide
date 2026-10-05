@@ -121,7 +121,8 @@ export async function createDesktopPluginRuntime(
   const configuration = parseDesktopPluginConfiguration(input.configuration);
   const projectExecution =
     dependencies.creativeProjects?.pluginGenerations !== undefined ||
-    dependencies.creativeProjects?.pluginQueries !== undefined;
+    dependencies.creativeProjects?.pluginQueries !== undefined ||
+    dependencies.creativeProjects?.historicalQueries !== undefined;
   if (projectExecution) {
     assertDesktopPluginConfigurationFileCurrent(input.configuration);
     if (configuration.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
@@ -130,6 +131,7 @@ export async function createDesktopPluginRuntime(
       "pluginUi",
       "pluginGenerations",
       "pluginQueries",
+      "historicalQueries",
       "generationReads",
       "generationReadUi",
       "selectionUi",
@@ -247,6 +249,7 @@ export async function createDesktopPluginRuntime(
         conversations?.hostUiServices ??
         recovery?.hostUiServices ??
         (projectExecution ? history?.hostUiServices : undefined) ??
+        taskRuntime?.core.historicalQueries?.hostUiServices ??
         taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
         history?.hostUiServices ??
@@ -332,13 +335,15 @@ export async function createDesktopPluginRuntime(
       ...(projectExecution && taskRuntime !== undefined
         ? { tasks: taskRuntime.core }
         : {}),
-      ...((taskRuntime?.core.projectQueries?.hostUiServices ??
+      ...((taskRuntime?.core.historicalQueries?.hostUiServices ??
+        taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
         textUi?.hostUiServices ??
         projectUi?.hostUiServices) === undefined
         ? {}
         : {
             fallback:
+              taskRuntime?.core.historicalQueries?.hostUiServices ??
               taskRuntime?.core.projectQueries?.hostUiServices ??
               taskRuntime?.core.projectGenerations?.hostUiServices ??
               textUi?.hostUiServices ??
@@ -353,6 +358,7 @@ export async function createDesktopPluginRuntime(
       );
     const businessHostUiServices =
       (projectExecution ? history?.hostUiServices : undefined) ??
+      taskRuntime?.core.historicalQueries?.hostUiServices ??
       taskRuntime?.core.projectQueries?.hostUiServices ??
       taskRuntime?.core.projectGenerations?.hostUiServices ??
       history?.hostUiServices ??

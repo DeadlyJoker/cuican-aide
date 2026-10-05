@@ -117,3 +117,6 @@ export {
   type PluginProjectGenerationQueryExecutionResult,
   type PluginProjectGenerationQueryExecutionBridgeDependencies,
 } from "./plugin-project-generation-query-execution-bridge.ts";
+export * from "./plugin-project-historical-query-action-bridge.ts";
+export * from "./plugin-project-historical-query-execution-bridge.ts";
+export * from "./plugin-project-historical-query-host-availability.ts";

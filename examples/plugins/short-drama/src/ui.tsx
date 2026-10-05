@@ -36,8 +36,47 @@ import {
 import { createPluginProjectTextPlansClient } from "./project-text-plans-service";
 import { projectTextPlansCodec } from "./project-text-plans-codec.mjs";
 import { ProjectTextPlanController } from "./workbench/ProjectTextPlanController";
+import { parseProjectPlanningProposal } from "./project-planning-codec.mjs";
+import type { ProjectPlanningProposal } from "./project-planning-service";
+
+import { createPluginProjectHistoricalQueryClient } from "./project-historical-query-ui-client";
+import {
+  projectHistoricalQueryCodec,
+  parseProjectHistoricalQueryHostContext,
+} from "./project-historical-query-codec.mjs";
+import type { ProjectHistoricalQueryHostContext } from "./plugin-project-historical-queries-service";
 
 const contributionId = "workbench";
+function historicalQueryContext(
+  data: PluginUiProps["data"],
+): ProjectHistoricalQueryHostContext | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const context = Object.getOwnPropertyDescriptor(
+    data,
+    "projectHistoricalQueryHostContext",
+  )?.value;
+  if (context === undefined) return null;
+  try {
+    return parseProjectHistoricalQueryHostContext(context);
+  } catch {
+    return null;
+  }
+}
+function planningDraft(
+  data: PluginUiProps["data"],
+): ProjectPlanningProposal | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const value = Object.getOwnPropertyDescriptor(
+    data,
+    "projectPlanningDraft",
+  )?.value;
+  if (value === undefined) return null;
+  try {
+    return parseProjectPlanningProposal(value);
+  } catch {
+    return null;
+  }
+}
 
 function creationWorkspace(
   data: PluginUiProps["data"],
@@ -176,6 +215,11 @@ export default defineUiPlugin({
           submissions: createPluginProjectGenerationClient(clients),
           contexts: createPluginProjectGenerationContextClient(clients),
           queries: createPluginProjectGenerationQueryClient(clients),
+          historicalQueries: createPluginProjectHistoricalQueryClient(
+            clients,
+            projectHistoricalQueryCodec,
+          ),
+          sourcePluginId: "crewon.short-drama",
           selections: createPluginProjectGenerationSelectionClient(clients),
           physicalWritesPending: () => writes.pending,
         });
@@ -240,6 +284,7 @@ export default defineUiPlugin({
         selection: selectionContext(next.data),
         generation: generationContext(next.data),
         query: queryContext(next.data),
+        historicalQuery: historicalQueryContext(next.data),
       });
       if (ready) controller?.setReady(true);
       flushSync(() =>
@@ -250,6 +295,7 @@ export default defineUiPlugin({
               texts={texts}
               conversations={conversations}
               plans={plans}
+              planningDraft={planningDraft(next.data)}
             />
           ) : (
             <ShortDramaWorkbenchPreview

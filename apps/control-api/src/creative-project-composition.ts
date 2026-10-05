@@ -1,4 +1,8 @@
 import {
+  captureProjectHistoricalQueryPluginConfiguration,
+  type ProjectHistoricalQueryPluginConfiguration,
+} from "./project-historical-query-plugin-configuration.ts";
+import {
   CreativeProjectApplicationService,
   ProjectTextApplicationService,
   type PluginProjectTextRecoveryApplicationService,
@@ -77,6 +81,7 @@ export type CreativeProjectCompositionConfig = Readonly<{
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
+  historicalQueries?: ProjectHistoricalQueryPluginConfiguration;
   generationReads?: ProjectGenerationReadConfiguration;
   generationReadUi?: ProjectGenerationReadPluginUiConfig;
   resultSelections?: ProjectGenerationSelectionConfiguration;
@@ -112,6 +117,11 @@ export type PreparedCreativeProjects = {
       authorization: CreativeProjectAuthorizationPort;
     }>;
   readonly pluginQueries?: ProjectQueryPluginConfiguration &
+    Readonly<{
+      store: CreativeProjectStore;
+      authorization: CreativeProjectAuthorizationPort;
+    }>;
+  readonly historicalQueries?: ProjectHistoricalQueryPluginConfiguration &
     Readonly<{
       store: CreativeProjectStore;
       authorization: CreativeProjectAuthorizationPort;
@@ -155,6 +165,8 @@ export function captureCreativeProjectCompositionConfig(
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
+        key !== "historicalQueries" &&
+        key !== "planningDrafts" &&
         key !== "generationReads" &&
         key !== "generationReadUi" &&
         key !== "resultSelections" &&
@@ -267,6 +279,23 @@ export function captureCreativeProjectCompositionConfig(
   const pluginQueries = captureProjectQueryPluginConfiguration(
     queriesField?.value,
   );
+  const historicalField = fields.historicalQueries;
+  if (
+    historicalField !== undefined &&
+    (!Object.hasOwn(historicalField, "value") || !historicalField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const historicalQueries = captureProjectHistoricalQueryPluginConfiguration(
+    historicalField?.value,
+  );
+  const planningField = fields.planningDrafts;
+  if (
+    planningField !== undefined &&
+    (!Object.hasOwn(planningField, "value") || !planningField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  captureCreativeProjectPluginUiConfig(planningField?.value);
+  // Read-only planning proposals are a bootstrap declaration, not an invocation grant.
   const readsField = fields.generationReads;
   if (
     readsField !== undefined &&
@@ -276,7 +305,10 @@ export function captureCreativeProjectCompositionConfig(
   const generationReads = captureProjectGenerationReadConfiguration(
     readsField?.value,
   );
-  if (pluginQueries !== undefined && generationReads === undefined)
+  if (
+    (pluginQueries !== undefined || historicalQueries !== undefined) &&
+    generationReads === undefined
+  )
     throw new Error("project_query_generation_reader_required");
   const readUiField = fields.generationReadUi;
   if (
@@ -334,6 +366,7 @@ export function captureCreativeProjectCompositionConfig(
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
+        ...(historicalQueries === undefined ? {} : { historicalQueries }),
         ...(generationReads === undefined ? {} : { generationReads }),
         ...(generationReadUi === undefined ? {} : { generationReadUi }),
         ...(resultSelections === undefined ? {} : { resultSelections }),
@@ -356,6 +389,10 @@ export function captureStandaloneCreativeProjectCompositionConfig(
     );
   if (configuration?.pluginQueries !== undefined)
     throw new Error("standalone_project_query_execution_authority_required");
+  if (configuration?.historicalQueries !== undefined)
+    throw new Error(
+      "standalone_project_historical_query_execution_authority_required",
+    );
   return configuration;
 }
 
@@ -481,6 +518,15 @@ export async function prepareCreativeProjects(
               store,
               authorization: configuration.authorization,
             }),
+          }),
+        }),
+    ...(configuration.historicalQueries === undefined
+      ? {}
+      : {
+          historicalQueries: Object.freeze({
+            ...configuration.historicalQueries,
+            store,
+            authorization: configuration.authorization,
           }),
         }),
     ...(configuration.pluginQueries === undefined

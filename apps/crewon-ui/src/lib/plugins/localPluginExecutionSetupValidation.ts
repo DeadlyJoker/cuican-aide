@@ -4,6 +4,7 @@ import type {
   DesktopLocalPluginExecutionResult,
   DesktopLocalPluginExecutionStatus,
 } from "../desktop/desktopLocalPluginExecutionSetupProtocol";
+import { parseDesktopProjectHistoricalQueriesConfiguration } from "@crewon/contracts/plugins";
 
 export const executionIdentityKeys = [
   "pluginId",
@@ -81,6 +82,14 @@ export function captureExecutionSetupPreview(
   parameters: ExecutionSetupParameters,
   now = Date.now(),
 ): DesktopLocalPluginExecutionPreview {
+  const withHistory =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "historyQuery");
+  const withAvailability =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "historyQueryAvailability");
   const fields = record(input, [
     ...executionIdentityKeys,
     "previewId",
@@ -89,6 +98,8 @@ export function captureExecutionSetupPreview(
     "preset",
     "networkPaths",
     "approvalRequirement",
+    ...(withHistory ? ["historyQuery"] : []),
+    ...(withAvailability ? ["historyQueryAvailability"] : []),
   ]);
   identity(fields, expected);
   opaque(fields.previewId);
@@ -156,6 +167,17 @@ export function captureExecutionSetupPreview(
       ),
     );
   }
+  if (
+    (withHistory && fields.historyQueryAvailability !== "available") ||
+    (withAvailability &&
+      fields.historyQueryAvailability !== "available" &&
+      fields.historyQueryAvailability !== "unavailable") ||
+    (fields.historyQueryAvailability === "available" && !withHistory)
+  )
+    invalid();
+  const historyQuery = withHistory
+    ? captureHistoricalQueryPreview(fields.historyQuery, expected)
+    : undefined;
   return Object.freeze({
     ...expected,
     previewId: fields.previewId as string,
@@ -164,6 +186,69 @@ export function captureExecutionSetupPreview(
     preset: parameters.preset,
     approvalRequirement: "none",
     networkPaths: Object.freeze(paths),
+    ...(historyQuery === undefined ? {} : { historyQuery }),
+    ...(withAvailability
+      ? {
+          historyQueryAvailability: fields.historyQueryAvailability as
+            | "available"
+            | "unavailable",
+        }
+      : {}),
+  });
+}
+
+function captureHistoricalQueryPreview(
+  input: unknown,
+  expected: DesktopLocalPluginExecutionIdentity,
+): NonNullable<DesktopLocalPluginExecutionPreview["historyQuery"]> {
+  const value = record(input, [
+    "source",
+    "target",
+    "selectionRevision",
+    "configurationRevision",
+    "configurationDigest",
+    "scope",
+    "methods",
+  ]);
+  const parsed = parseDesktopProjectHistoricalQueriesConfiguration(
+    {
+      version: "crewon.desktop-project-historical-query.v1",
+      publications: [{ source: value.source, target: value.target }],
+    },
+    {
+      publications: [
+        { pluginId: expected.pluginId, packageDigest: expected.packageDigest },
+      ],
+    },
+  ).publications[0]!;
+  if (
+    parsed.source.pluginId !== expected.pluginId ||
+    parsed.source.packageDigest !== expected.packageDigest ||
+    parsed.source.contributionId !== "workbench" ||
+    parsed.target.pluginId !== "crewon.comfyui-krea2" ||
+    !Number.isSafeInteger(value.selectionRevision) ||
+    (value.selectionRevision as number) < 1 ||
+    !Number.isSafeInteger(value.configurationRevision) ||
+    (value.configurationRevision as number) < 1 ||
+    typeof value.configurationDigest !== "string" ||
+    !/^sha256:[0-9a-f]{64}$/u.test(value.configurationDigest) ||
+    value.scope !== "query-existing-generations" ||
+    !Array.isArray(value.methods) ||
+    Object.getPrototypeOf(value.methods) !== Array.prototype ||
+    value.methods.length !== 1 ||
+    Reflect.ownKeys(value.methods).length !== 2
+  )
+    invalid();
+  const method = Object.getOwnPropertyDescriptor(value.methods, "0");
+  if (!method?.enumerable || !("value" in method) || method.value !== "GET")
+    invalid();
+  return Object.freeze({
+    ...parsed,
+    selectionRevision: value.selectionRevision as number,
+    configurationRevision: value.configurationRevision as number,
+    configurationDigest: value.configurationDigest,
+    scope: "query-existing-generations",
+    methods: Object.freeze(["GET"] as const),
   });
 }
 

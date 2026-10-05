@@ -123,6 +123,47 @@ export function InstalledPluginExecutionSetup(
               onCheckedChange={state.setConsent}
             />
           </div>
+          {preview.historyQueryAvailability === "unavailable" && (
+            <p className="installed-plugin-configuration-hint">
+              {zh
+                ? "历史图片查询不可用：尚无已批准且已准备的旧查询目标。本次仅准备工作台自身能力，不增加历史查询批准。"
+                : "Historical image queries are unavailable: no approved, prepared historical target exists. This prepares the workbench's own capabilities without adding historical query approval."}
+            </p>
+          )}
+          {preview.historyQuery && (
+            <>
+              <p>
+                {zh ? "历史图片查询目标：" : "Historical image query target: "}
+                {preview.historyQuery.target.pluginId} ·{" "}
+                {preview.historyQuery.target.version}
+              </p>
+              <p>
+                {zh ? "目标包：" : "Target package: "}
+                {preview.historyQuery.target.packageDigest}
+              </p>
+              <p>
+                {zh
+                  ? "目标当前选择 / 保存配置版本："
+                  : "Target selection / saved configuration revision: "}
+                {preview.historyQuery.selectionRevision} /{" "}
+                {preview.historyQuery.configurationRevision}
+              </p>
+              <div className="installed-plugin-configuration-field-header">
+                <label htmlFor={`${consentId}-history`}>
+                  {zh
+                    ? "我允许本工作台通过这个已批准的插件查询原有生成结果，仅 GET，不授予新的生成权限。"
+                    : "I allow this workbench to query existing generation results through this approved plugin, using GET only, without granting new generation permission."}
+                </label>
+                <Switch
+                  id={`${consentId}-history`}
+                  size="sm"
+                  checked={state.historicalQueryConsent}
+                  disabled={props.disabled}
+                  onCheckedChange={state.setHistoricalQueryConsent}
+                />
+              </div>
+            </>
+          )}
           <p className="installed-plugin-configuration-hint">
             {zh
               ? "准备会重启本机运行环境，正在运行的任务可能中断。"

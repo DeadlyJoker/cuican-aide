@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`original transcript planning suggestion > renders a reviewable draft without any automatic navigation or execution 1`] = `"<section class="tool-call-section" aria-label="短剧项目建议"><strong>雨夜来信</strong><p>分集大纲 → 分集剧本 · 3 集</p><p>两位老友在雨夜重逢</p><p>确认后在短剧工作台创建项目；这条建议尚未开始执行。</p><button type="button" class="button secondary">在 AI 短剧中使用此想法</button></section>"`;

@@ -24,6 +24,7 @@ import {
 } from "./desktop-native-plugin-control-environment.ts";
 import { DesktopNativePluginActivationAuthority } from "./desktop-native-plugin-activation-authority.ts";
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
+import { assertDesktopNativeProjectHistoricalQueryPreparedTarget } from "./desktop-native-project-historical-query-composition.ts";
 
 const actor = {
   principalId: "standalone-principal",
@@ -36,7 +37,14 @@ const digest = (value: string | Buffer) =>
 const sha = { sha256: (value: string) => digest(value) };
 const nativeOnly = { skip: process.platform === "win32" };
 /** Private-file issue boundary only; the named entry is not a Worker or supplier execution proof. */
-async function fixture(t: TestContext) {
+async function fixture(
+  t: TestContext,
+  options: Readonly<{
+    historical?: boolean;
+    historicalTarget?: Record<string, unknown>;
+    preparedHistoricalTarget?: false;
+  }> = {},
+) {
   const directory = mkdtempSync(
     join(realpathSync(tmpdir()), "crewon-native-control-"),
   );
@@ -60,10 +68,74 @@ async function fixture(t: TestContext) {
     },
     installRoot = join(directory, "plugins");
   mkdirSync(installRoot, { mode: 0o700 });
+  const preparedIdentity =
+    options.preparedHistoricalTarget === false
+      ? {
+          ...identity,
+          pluginId: "example.other",
+          packageDigest: digest("other-prepared-package"),
+        }
+      : identity;
+  const identities =
+    options.preparedHistoricalTarget === false
+      ? [identity, preparedIdentity]
+      : [identity];
+  const sources = identities.map((value, index) => ({
+    ...source,
+    ...value,
+    sourceId: index === 0 ? source.sourceId : `image-${index}`,
+    directory:
+      index === 0 ? source.directory : join(directory, `source-${index}`),
+  }));
+  const publications =
+    options.historical === true
+      ? [
+          {
+            pluginId: identity.pluginId,
+            publisherId: identity.publisherId,
+            packageDigest: identity.packageDigest,
+            publicAssets: ["ui.mjs"],
+          },
+        ]
+      : [];
+  const projectSource = {
+    pluginId: identity.pluginId,
+    packageDigest: identity.packageDigest,
+    contributionId: "studio",
+  };
+  const projects =
+    options.historical === true
+      ? {
+          version: "crewon.desktop-project-execution.v1",
+          pluginUi: { publications: [projectSource] },
+          generationReads: { version: "crewon.project-generation-read.v1" },
+          generationReadUi: { publications: [projectSource] },
+          historicalQueries: {
+            version: "crewon.desktop-project-historical-query.v1",
+            publications: [
+              {
+                source: projectSource,
+                target: {
+                  ...identity,
+                  manifestDigest: digest("named-manifest"),
+                  implementationDigest: digest("named-implementation"),
+                  contributionId: "studio",
+                  action: "image.query",
+                  ...options.historicalTarget,
+                },
+              },
+            ],
+          },
+        }
+      : undefined;
   const approval = {
-    schemaVersion: "crewon.desktop-plugin-approval.v1",
-    sources: [source],
-    publications: [],
+    schemaVersion:
+      options.historical === true
+        ? "crewon.desktop-plugin-approval.v3"
+        : "crewon.desktop-plugin-approval.v1",
+    sources,
+    publications,
+    ...(projects === undefined ? {} : { projects }),
   };
   const approvalPath = join(directory, "plugin-approvals.json"),
     profilePath = join(directory, "plugin-profile.json"),
@@ -82,19 +154,26 @@ async function fixture(t: TestContext) {
     policyPath,
     JSON.stringify({
       schemaVersion: "crewon.desktop-native-plugin-policy.v1",
-      packages: [{ ...identity, approvalRequirement: "none" }],
+      packages: identities.map((value) => ({
+        ...value,
+        approvalRequirement: "none",
+      })),
       networkGrants: [],
     }),
     { mode: 0o600 },
   );
   const bootstrap = {
-      schemaVersion: "crewon.desktop-plugin-bootstrap.v1",
+      schemaVersion:
+        options.historical === true
+          ? "crewon.desktop-plugin-bootstrap.v3"
+          : "crewon.desktop-plugin-bootstrap.v1",
       actor,
       scope,
       authorityEpoch: "native-control-original-epoch-00000001",
       installRoot,
-      sources: [source],
-      publications: [],
+      sources,
+      publications,
+      ...(projects === undefined ? {} : { projects }),
     },
     bytes = Buffer.from(JSON.stringify(bootstrap)),
     bootstrapPath = join(
@@ -130,7 +209,7 @@ async function fixture(t: TestContext) {
     profileDigest: digest(readFileSync(profilePath)),
     policyPath,
     policyDigest: digest(readFileSync(policyPath)),
-    packages: [identity],
+    packages: identities,
     networkGrants: [],
   };
   writeFileSync(authorityPath, JSON.stringify(authority), { mode: 0o600 });
@@ -139,8 +218,8 @@ async function fixture(t: TestContext) {
       schemaVersion: "crewon.extension-configuration.v0",
       tenantId: actor.tenantId,
       spaceId: actor.spaceId,
-      pluginId: identity.pluginId,
-      pluginVersion: identity.version,
+      pluginId: preparedIdentity.pluginId,
+      pluginVersion: preparedIdentity.version,
       revision: 1,
       manifestDigest: digest("named-manifest"),
       implementationDigest: digest("named-implementation"),
@@ -171,7 +250,7 @@ async function fixture(t: TestContext) {
     entries: [
       {
         identity: {
-          ...identity,
+          ...preparedIdentity,
           manifestDigest: configuration.manifestDigest,
           implementationDigest: configuration.implementationDigest,
         },
@@ -213,6 +292,121 @@ async function fixture(t: TestContext) {
     bootstrap: await loadDesktopPluginConfiguration(bootstrapPath, { actor }),
   };
 }
+test(
+  "signed Native historical declarations require their actual approved and prepared full target",
+  nativeOnly,
+  async (t) => {
+    const f = await fixture(t, { historical: true });
+    const config = f.load();
+    assertDesktopNativePluginControlComposition({
+      configuration: f.bootstrap,
+      nativeControl: config,
+    });
+    assert.equal(
+      f.bootstrap.schemaVersion,
+      "crewon.desktop-plugin-bootstrap.v3",
+    );
+    if (f.bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+      throw new Error("expected-v3");
+    const publication =
+      f.bootstrap.projects.historicalQueries!.publications[0]!;
+    assert.equal(
+      assertDesktopNativeProjectHistoricalQueryPreparedTarget({
+        configuration: f.bootstrap,
+        nativeControl: config,
+        ...publication,
+      }),
+      config.publication.entries[0],
+    );
+    for (const changed of [
+      {
+        ...publication,
+        source: { ...publication.source, contributionId: "foreign" },
+      },
+      {
+        ...publication,
+        target: {
+          ...publication.target,
+          action: "image.generate" as "image.query",
+        },
+      },
+    ]) {
+      assert.throws(() =>
+        assertDesktopNativeProjectHistoricalQueryPreparedTarget({
+          configuration: f.bootstrap,
+          nativeControl: config,
+          ...changed,
+        }),
+      );
+    }
+    assert.throws(() =>
+      assertDesktopNativePluginControlComposition({
+        configuration: f.bootstrap,
+        nativeControl: { ...config },
+      }),
+    );
+    // Main's existing withdrawal marker revokes the private owner immediately.
+    writeFileSync(join(dirname(f.authorityPath), "withdrawn.json"), "{}", {
+      mode: 0o600,
+    });
+    assert.throws(() =>
+      assertDesktopNativePluginControlComposition({
+        configuration: f.bootstrap,
+        nativeControl: config,
+      }),
+    );
+  },
+);
+test(
+  "a signed query-only declaration without a prepared target preserves base Control but per-query validation refuses",
+  nativeOnly,
+  async (t) => {
+    const f = await fixture(t, {
+        historical: true,
+        preparedHistoricalTarget: false,
+      }),
+      config = f.load();
+    assertDesktopNativePluginControlComposition({
+      configuration: f.bootstrap,
+      nativeControl: config,
+    });
+    if (f.bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+      throw new Error("expected-v3");
+    const publication =
+      f.bootstrap.projects.historicalQueries!.publications[0]!;
+    assert.throws(
+      () =>
+        assertDesktopNativeProjectHistoricalQueryPreparedTarget({
+          configuration: f.bootstrap,
+          nativeControl: config,
+          ...publication,
+        }),
+      /target_unavailable/,
+    );
+  },
+);
+test(
+  "syntactically valid historical targets cannot lend absent Node approval or a different implementation",
+  nativeOnly,
+  async (t) => {
+    for (const historicalTarget of [
+      { pluginId: "example.foreign" },
+      { manifestDigest: digest("foreign-manifest") },
+      { packageDigest: digest("foreign-package") },
+    ]) {
+      const f = await fixture(t, { historical: true, historicalTarget });
+      const config = f.load();
+      assert.throws(
+        () =>
+          assertDesktopNativePluginControlComposition({
+            configuration: f.bootstrap,
+            nativeControl: config,
+          }),
+        /desktop_native_project_historical_query_configuration_invalid/,
+      );
+    }
+  },
+);
 test(
   "explicit Native Control source pins the original owner, database, configuration, peer and policy, without remote credentials",
   nativeOnly,

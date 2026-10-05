@@ -8,6 +8,7 @@ const writes = new Set([
   "crewon.creative-projects.v1.appendConceptRevision",
   "crewon.project-generations.v1.generateConcept",
   "crewon.project-generation-queries.v1.queryConceptGeneration",
+  "crewon.project-historical-queries.v1.queryConceptGeneration",
   "crewon.project-generation-selections.v1.selectConceptImage",
   "crewon.project-texts.v1.saveOutlineCandidate",
   "crewon.project-texts.v1.saveScriptCandidate",

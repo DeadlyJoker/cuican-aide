@@ -1,3 +1,7 @@
+import {
+  isInstalledPluginProjectHistoricalQueryOwner,
+  type InstalledPluginProjectHistoricalQueryOwner,
+} from "./installed-plugin-project-historical-query-owner.ts";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { randomBytes } from "node:crypto";
 import {
@@ -74,6 +78,7 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
   ownedProjectGenerationReadActions?: PluginProjectGenerationReadActionBridge;
   ownedProjectQueryActions?: InstalledPluginProjectQueryOwner;
+  ownedProjectHistoricalQueryActions?: InstalledPluginProjectHistoricalQueryOwner;
   ownedProjectSelectionActions?: ProjectGenerationSelectionPluginUiOwner;
   recovery?: PluginUiRecoveryApplicationService;
 }>;
@@ -102,6 +107,13 @@ export function createProductionPluginUiRuntime(
   const generationOwner = input.ownedProjectGenerationActions;
   const generationReadOwner = input.ownedProjectGenerationReadActions;
   const queryOwner = input.ownedProjectQueryActions;
+  const historicalOwner = input.ownedProjectHistoricalQueryActions;
+  if (
+    historicalOwner !== undefined &&
+    (!isInstalledPluginProjectHistoricalQueryOwner(historicalOwner) ||
+      historicalOwner.taskOwner !== owner)
+  )
+    throw new Error("production_plugin_ui_historical_query_owner_invalid");
   const selectionOwner = input.ownedProjectSelectionActions;
   const recovery = input.recovery;
   if (recovery !== undefined && !isPluginUiRecoveryApplicationService(recovery))
@@ -335,6 +347,17 @@ export function createProductionPluginUiRuntime(
             return selectionOwner.actions.invoke(request);
           }
           if (
+            request.action === "crewon.project-historical-queries" ||
+            request.action.startsWith("crewon.project-historical-queries.")
+          ) {
+            if (historicalOwner === undefined)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return historicalOwner.actions.invoke(request);
+          }
+          if (
             request.action === "crewon.project-generation-queries" ||
             request.action.startsWith("crewon.project-generation-queries.")
           ) {
@@ -447,6 +470,7 @@ export function createProductionPluginUiRuntime(
       application = null;
       return (closing ??= Promise.allSettled([
         generationOwner?.close(),
+        historicalOwner?.close(),
         queryOwner?.close(),
         generationReadOwner?.close(),
         owner?.close(),
@@ -509,6 +533,14 @@ export function captureProductionPluginUiActions(
   )
     throw new Error("production_plugin_ui_metadata_owner_invalid");
   const owner = input.ownedTaskActions;
+  if (
+    input.ownedProjectHistoricalQueryActions !== undefined &&
+    (!isInstalledPluginProjectHistoricalQueryOwner(
+      input.ownedProjectHistoricalQueryActions,
+    ) ||
+      input.ownedProjectHistoricalQueryActions.taskOwner !== owner)
+  )
+    throw new Error("production_plugin_ui_historical_query_owner_invalid");
   if (
     input.ownedProjectQueryActions !== undefined &&
     (!isInstalledPluginProjectQueryOwner(input.ownedProjectQueryActions) ||

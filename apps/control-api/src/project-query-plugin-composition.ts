@@ -1,3 +1,4 @@
+import { isInstalledPluginProjectHistoricalQueryOwner } from "./installed-plugin-project-historical-query-owner.ts";
 import {
   captureProductionPluginUiActions,
   type ProductionPluginUiConfig,
@@ -53,6 +54,12 @@ export function captureProductionPluginUiOwnerConfiguration(
     ...(input.ownedCreativeProjectActions === undefined
       ? {}
       : { ownedCreativeProjectActions: input.ownedCreativeProjectActions }),
+    ...(input.ownedProjectHistoricalQueryActions === undefined
+      ? {}
+      : {
+          ownedProjectHistoricalQueryActions:
+            input.ownedProjectHistoricalQueryActions,
+        }),
     ...(input.ownedProjectQueryActions === undefined
       ? {}
       : { ownedProjectQueryActions: input.ownedProjectQueryActions }),
@@ -64,4 +71,10 @@ export async function closeProductionProjectQueryOwner(
   input: unknown,
 ): Promise<void> {
   if (isInstalledPluginProjectQueryOwner(input)) await input.close();
+}
+
+export async function closeProductionProjectHistoricalQueryOwner(
+  input: unknown,
+): Promise<void> {
+  if (isInstalledPluginProjectHistoricalQueryOwner(input)) await input.close();
 }

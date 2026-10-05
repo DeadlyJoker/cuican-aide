@@ -14,6 +14,7 @@ export function productionPluginUiOwnerConfiguration(
       | Readonly<{
           owner: NonNullable<ProductionPluginUiConfig["ownedTaskActions"]>;
           projectQueries?: ProductionPluginUiConfig["ownedProjectQueryActions"];
+          historicalQueries?: ProductionPluginUiConfig["ownedProjectHistoricalQueryActions"];
           projectGenerations?: ProductionPluginUiConfig["ownedProjectGenerationActions"];
         }>
       | undefined;
@@ -37,6 +38,9 @@ export function productionPluginUiOwnerConfiguration(
     ...(input.tasks === undefined
       ? {}
       : { ownedTaskActions: input.tasks.owner }),
+    ...(input.tasks?.historicalQueries === undefined
+      ? {}
+      : { ownedProjectHistoricalQueryActions: input.tasks.historicalQueries }),
     ...(input.tasks?.projectQueries === undefined
       ? {}
       : { ownedProjectQueryActions: input.tasks.projectQueries }),

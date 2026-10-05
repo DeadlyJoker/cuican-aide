@@ -137,6 +137,17 @@ export class PostgresExtensionStore implements ExtensionStore {
       ? ("crewon.project-generation-publication.v1" as const)
       : undefined;
   }
+  get projectHistoricalQueryVersion() {
+    return this.#projects.historicalQueriesEnabled
+      ? ("crewon.project-historical-query-link.v1" as const)
+      : undefined;
+  }
+  async migrateProjectHistoricalQueries() {
+    await this.#projects.migrateProjectHistoricalQueries();
+  }
+  async loadProjectHistoricalQueryLink(input: ExtensionRunLocator) {
+    return this.#projects.loadProjectHistoricalQueryLink(input);
+  }
   get projectQueryVersion() {
     return this.#projects.queriesEnabled
       ? ("crewon.project-query-link.v1" as const)
@@ -585,6 +596,8 @@ export class PostgresExtensionStore implements ExtensionStore {
         unmeteredEnabled: this.#unmeteredEnabled,
         projectGenerationsEnabled: this.#projects.generationsEnabled,
         projectQueriesEnabled: this.#projects.queriesEnabled,
+        projectHistoricalQueriesEnabled:
+          this.#projects.historicalQueriesEnabled,
         assertOpen: () => this.#host.assertOpen(),
         transaction: (scope, body, options) =>
           this.#transaction(scope, body, options),

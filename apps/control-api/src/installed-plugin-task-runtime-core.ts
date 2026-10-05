@@ -1,3 +1,7 @@
+import { prepareProjectHistoricalQueryResolver } from "@crewon/application";
+import type { ProjectHistoricalQueryPublication } from "@crewon/domain";
+import { InstalledPluginProjectHistoricalQueryOwner } from "./installed-plugin-project-historical-query-owner.ts";
+import { assertProjectHistoricalQueryPluginPublications } from "./project-historical-query-plugin-configuration.ts";
 import { randomBytes } from "node:crypto";
 import { isAbsolute, resolve } from "node:path";
 import {
@@ -39,6 +43,7 @@ export type InstalledPluginTaskRuntimeCore = Readonly<{
   owner: InstalledPluginTaskActionOwner;
   projectGenerations?: InstalledPluginProjectGenerationOwner;
   projectQueries?: InstalledPluginProjectQueryOwner;
+  historicalQueries?: InstalledPluginProjectHistoricalQueryOwner;
   projectGenerationReads?: ProjectGenerationReadApplicationService;
   requests: InstalledPluginRequestOwner;
   extensions: ExtensionConfigurationApplicationService;
@@ -67,6 +72,7 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   digester: ContentDigester;
   creativeProjects?: PreparedCreativeProjects;
   metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
+  assertHistoricalTarget?(publication: ProjectHistoricalQueryPublication): void;
 }>;
 
 const coreBindings = new WeakMap<
@@ -157,6 +163,9 @@ export async function createInstalledPluginTaskRuntimeCore(
     "clock",
     "ids",
     "digester",
+    ...(Object.hasOwn(provided, "assertHistoricalTarget")
+      ? ["assertHistoricalTarget"]
+      : []),
     ...(Object.hasOwn(provided, "creativeProjects")
       ? ["creativeProjects"]
       : []),
@@ -181,6 +190,11 @@ export async function createInstalledPluginTaskRuntimeCore(
     invalid();
   const generations = input.creativeProjects?.pluginGenerations;
   const queries = input.creativeProjects?.pluginQueries;
+  const historical = input.creativeProjects?.historicalQueries;
+  assertProjectHistoricalQueryPluginPublications(
+    historical,
+    input.publications,
+  );
   assertProjectQueryPluginPublications(queries, input.publications);
   assertProjectGenerationPluginPublications(generations, input.publications);
   const resolveProfile = method(input.profiles, "resolve");
@@ -352,6 +366,7 @@ export async function createInstalledPluginTaskRuntimeCore(
   let owner: InstalledPluginTaskActionOwner | undefined;
   let projectGenerations: InstalledPluginProjectGenerationOwner | undefined;
   let projectQueries: InstalledPluginProjectQueryOwner | undefined;
+  let historicalQueries: InstalledPluginProjectHistoricalQueryOwner | undefined;
   try {
     // Migrate this actual adapter: project readiness flags belong to its instance, not another borrowed adapter.
     const ledger = input.store.pluginInstallationStore();
@@ -367,6 +382,10 @@ export async function createInstalledPluginTaskRuntimeCore(
     if (generations !== undefined) await extensions.migrateProjectGenerations();
     if (queries !== undefined) {
       await extensions.migrateProjectQueries();
+      await extensions.enableProjectGenerationReads();
+    }
+    if (historical !== undefined) {
+      await extensions.migrateProjectHistoricalQueries();
       await extensions.enableProjectGenerationReads();
     }
     const operations = input.store.externalOperationStore();
@@ -388,7 +407,7 @@ export async function createInstalledPluginTaskRuntimeCore(
       { preparation: "configuration" },
     );
     const projectGenerationReads =
-      queries === undefined
+      queries === undefined && historical === undefined
         ? undefined
         : ownMethods(
             new ProjectGenerationReadApplicationService({
@@ -399,32 +418,36 @@ export async function createInstalledPluginTaskRuntimeCore(
             }),
             { getConceptGeneration: "read" },
           );
+    const taskDependencies = {
+      store: input.store,
+      extensions,
+      operations,
+      catalog: requests.catalog,
+      host: requests.host,
+      pluginQueryHost: requests.pluginQueryHost,
+      authorization: businessAuthorization,
+      clock,
+      ids,
+      digester,
+      ...(creditQuotes === undefined ? {} : { creditQuotes }),
+      ...(unmeteredTasks === undefined ? {} : { unmeteredTasks }),
+      ...(projectGenerationReads === undefined
+        ? {}
+        : { projectGenerationReads }),
+      ...(generations === undefined &&
+      queries === undefined &&
+      historical === undefined
+        ? {}
+        : {
+            creativeProjects: {
+              store: (generations ?? queries ?? historical)!.store,
+              authorization: (generations ?? queries ?? historical)!
+                .authorization,
+            },
+          }),
+    };
     const tasks = ownMethods(
-      new ExtensionTaskApplicationService({
-        store: input.store,
-        extensions,
-        operations,
-        catalog: requests.catalog,
-        host: requests.host,
-        pluginQueryHost: requests.pluginQueryHost,
-        authorization: businessAuthorization,
-        clock,
-        ids,
-        digester,
-        ...(creditQuotes === undefined ? {} : { creditQuotes }),
-        ...(unmeteredTasks === undefined ? {} : { unmeteredTasks }),
-        ...(projectGenerationReads === undefined
-          ? {}
-          : { projectGenerationReads }),
-        ...(generations === undefined && queries === undefined
-          ? {}
-          : {
-              creativeProjects: {
-                store: (generations ?? queries)!.store,
-                authorization: (generations ?? queries)!.authorization,
-              },
-            }),
-      }),
+      new ExtensionTaskApplicationService(taskDependencies),
       {
         createProjectConversationTurnFromHost: "mutation",
         createProjectTextPlanTurnFromHost: "mutation",
@@ -432,6 +455,7 @@ export async function createInstalledPluginTaskRuntimeCore(
         createTaskFromPlugin: "mutation",
         createQueryTaskFromPlugin: "mutation",
         createPublishedProjectQueryTaskFromPlugin: "mutation",
+        createHistoricalPublishedProjectQueryTaskFromPlugin: "mutation",
         createProjectTaskFromPlugin: "mutation",
         createPublishedProjectTaskFromPlugin: "mutation",
         getPublishedProjectGenerationReadiness: "read",
@@ -462,6 +486,15 @@ export async function createInstalledPluginTaskRuntimeCore(
       extensions,
       runs: input.store,
       digester,
+      ...(historical === undefined
+        ? {}
+        : {
+            projectHistoricalQueries: {
+              publications: historical.publications,
+              projects: historical.store,
+              operations,
+            },
+          }),
       ...(queries === undefined
         ? {}
         : {
@@ -533,12 +566,40 @@ export async function createInstalledPluginTaskRuntimeCore(
         },
         projectGenerations?.hostUiServices ?? input.metadataHostUiServices,
       );
+    if (historical !== undefined)
+      historicalQueries = new InstalledPluginProjectHistoricalQueryOwner(
+        {
+          ...common,
+          publications: historical.publications,
+          resolver: prepareProjectHistoricalQueryResolver(
+            taskDependencies,
+            historical.publications,
+          ),
+          taskOwner: owner,
+          requestSignal: () =>
+            AbortSignal.any([requests.currentSignal(), lifetime.signal]),
+          digester,
+          maximumInvocations: input.maximumPackages,
+          ...(input.assertHistoricalTarget === undefined
+            ? {}
+            : {
+                assertPreparedTarget: method(input, "assertHistoricalTarget"),
+              }),
+        },
+        projectQueries?.hostUiServices ??
+          projectGenerations?.hostUiServices ??
+          input.metadataHostUiServices,
+      );
+    const actualHistorical = historicalQueries;
     const actualOwner = owner;
     const actualGenerations = projectGenerations;
     const actualQueries = projectQueries;
     let closing: Promise<void> | null = null;
     const core: InstalledPluginTaskRuntimeCore = Object.freeze({
       owner: actualOwner,
+      ...(actualHistorical === undefined
+        ? {}
+        : { historicalQueries: actualHistorical }),
       ...(actualGenerations === undefined
         ? {}
         : { projectGenerations: actualGenerations }),
@@ -553,6 +614,7 @@ export async function createInstalledPluginTaskRuntimeCore(
       close: () => {
         lifetime.abort();
         return (closing ??= closeAll([
+          () => actualHistorical?.close(),
           () => actualQueries?.close(),
           () => actualGenerations?.close(),
           () => actualOwner.close(),
@@ -575,6 +637,7 @@ export async function createInstalledPluginTaskRuntimeCore(
     lifetime.abort();
     try {
       await closeAll([
+        () => historicalQueries?.close(),
         () => projectQueries?.close(),
         () => projectGenerations?.close(),
         () => owner?.close(),

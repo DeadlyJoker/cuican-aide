@@ -9,6 +9,7 @@ import type {
   ProjectGenerationQueryHostContext,
   ProjectGenerationHostContext,
 } from "@crewon/plugin-sdk/ui";
+import type { PluginProjectHistoricalQueryClient } from "../plugin-project-historical-queries-service";
 import { ConceptController } from "./ConceptController";
 import {
   ConceptRecoveryCoordinator,
@@ -113,6 +114,7 @@ function mergeProjects(
 export class CreativeProjectController {
   readonly concepts: ConceptController;
   readonly #generationRecovery: GenerationSourceRecovery;
+  readonly #historicalQueryRecovery: GenerationSourceRecovery;
   readonly #queryRecovery: GenerationSourceRecovery;
   readonly #selectionRecovery: GenerationSourceRecovery;
   readonly #recovery = new ConceptRecoveryCoordinator();
@@ -153,6 +155,8 @@ export class CreativeProjectController {
     submissions: PluginProjectGenerationClient;
     contexts: PluginProjectGenerationContextClient;
     queries: PluginProjectGenerationQueryClient;
+    historicalQueries?: PluginProjectHistoricalQueryClient;
+    sourcePluginId?: string;
     selections: PluginProjectGenerationSelectionClient;
     physicalWritesPending?: () => boolean;
   }) {
@@ -166,10 +170,20 @@ export class CreativeProjectController {
       submissionClient: ports.submissions,
       contextClient: ports.contexts,
       queryClient: ports.queries,
+      sourcePluginId: ports.sourcePluginId,
+      historicalQueryClient: ports.historicalQueries ?? {
+        queryConceptGeneration: async () => {
+          throw new Error("historical_query_unavailable");
+        },
+      },
       selectionClient: ports.selections,
       restoreSelectionSource: (request) =>
         this.#recovery.restore("selection", request, () =>
           this.#selectionRecovery.restore(request),
+        ),
+      restoreHistoricalQuerySource: (request) =>
+        this.#recovery.restore("historicalQuery", request, () =>
+          this.#historicalQueryRecovery.restore(request),
         ),
       restoreQuerySource: (request) =>
         this.#recovery.restore("query", request, () =>
@@ -233,6 +247,11 @@ export class CreativeProjectController {
       client,
       (details, selection) => applyRecovery("generation", details, selection),
     );
+    this.#historicalQueryRecovery = new GenerationSourceRecovery(
+      client,
+      (details, selection) =>
+        applyRecovery("historicalQuery", details, selection),
+    );
     this.#queryRecovery = new GenerationSourceRecovery(
       client,
       (details, selection) => applyRecovery("query", details, selection),
@@ -283,6 +302,7 @@ export class CreativeProjectController {
       void this.loadProjects(this.#snapshot.state);
       this.concepts.submissions.resume();
       this.concepts.queries.resume();
+      this.concepts.historicalQueries.resume();
       this.concepts.images.resume();
     } else {
       this.#recovery.invalidateSelection();
@@ -316,11 +336,15 @@ export class CreativeProjectController {
     if (changed) {
       this.#generationRecovery.abort();
       this.#queryRecovery.abort();
+      this.#historicalQueryRecovery.abort();
       this.#selectionRecovery.abort();
     } else if (!contexts.selection) this.#selectionRecovery.abort();
     this.concepts.images.setHostContext(contexts.selection);
     this.concepts.submissions.setHostContext(contexts.generation);
     this.concepts.queries.setHostContext(contexts.query);
+    this.concepts.historicalQueries.setHostContext(
+      contexts.historicalQuery ?? null,
+    );
     this.#update({
       recoveryConflict: this.#recovery.manualHandling,
       conceptLocked: this.concepts.locked,
@@ -332,6 +356,7 @@ export class CreativeProjectController {
     ) {
       this.concepts.submissions.resume();
       this.concepts.queries.resume();
+      this.concepts.historicalQueries.resume();
       this.concepts.images.resume();
     }
   }
@@ -345,6 +370,8 @@ export class CreativeProjectController {
     switch (lane) {
       case "generation":
         return this.concepts.submissions;
+      case "historicalQuery":
+        return this.concepts.historicalQueries;
       case "query":
         return this.concepts.queries;
       case "selection":
@@ -384,6 +411,7 @@ export class CreativeProjectController {
   #abort() {
     this.#generationRecovery.abort();
     this.#queryRecovery.abort();
+    this.#historicalQueryRecovery.abort();
     this.#selectionRecovery.abort();
     for (const controller of [
       this.#list,
@@ -401,6 +429,7 @@ export class CreativeProjectController {
     this.concepts.dispose();
     this.#generationRecovery.dispose();
     this.#queryRecovery.dispose();
+    this.#historicalQueryRecovery.dispose();
     this.#selectionRecovery.dispose();
     this.#listeners.clear();
   }

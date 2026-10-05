@@ -243,6 +243,14 @@ export class ExtensionTaskApplicationService {
     });
   }
 
+  createHistoricalPublishedProjectQueryTaskFromPlugin(
+    input: import("./project-historical-query-execution-authority.ts").CreateHistoricalPublishedProjectQueryTaskInput,
+  ) {
+    return new PluginQueryTaskApplicationService(
+      this.#dependencies,
+    ).createHistoricalPublished(input);
+  }
+
   createPublishedProjectQueryTaskFromPlugin(
     input: CreatePublishedProjectQueryTaskInput,
   ) {

@@ -428,6 +428,9 @@ try {
           installedPluginExecution:
             installedPluginAuthority!.installedPluginExecution,
           installedPluginAuthorityOwner: installedPluginAuthority!,
+          ...(installedPluginAuthority!.projectPlanning === undefined ? {} : {
+            projectPlanning: installedPluginAuthority!.projectPlanning,
+          }),
           ...(installedPluginPeer === undefined
             ? {}
             : {

@@ -46,6 +46,13 @@ import {
 } from "./project-query-application-support.ts";
 import type { CreatePublishedProjectQueryTaskInput } from "./project-query-execution-authority.ts";
 
+import {
+  commitProjectHistoricalQueryTask,
+  captureHistoricalPublishedProjectQueryTask,
+  prepareProjectHistoricalQueryTask,
+  type CapturedProjectHistoricalQueryTask,
+} from "./project-historical-query-application-support.ts";
+import type { CreateHistoricalPublishedProjectQueryTaskInput } from "./project-historical-query-execution-authority.ts";
 export class PluginQueryTaskApplicationService {
   readonly #dependencies: ExtensionTaskApplicationDependencies;
   readonly #turns: TurnApplicationService;
@@ -71,12 +78,26 @@ export class PluginQueryTaskApplicationService {
       captured.captured,
     );
   }
+  async createHistoricalPublished(
+    input: CreateHistoricalPublishedProjectQueryTaskInput,
+  ) {
+    const captured = captureHistoricalPublishedProjectQueryTask(input);
+    return this.#create(
+      captured.actor,
+      captured.command,
+      captured.executionPin,
+      undefined,
+      captured.captured,
+    );
+  }
   async #create(
     actorInput: ActorContext,
     input: CreateExtensionTaskCommand,
     pinInput: PluginTaskAdmissionPin,
     authorityInput?: PluginTaskCommitAuthorityPort,
-    projectInput?: CapturedProjectQueryTask,
+    projectInput?:
+      | CapturedProjectQueryTask
+      | CapturedProjectHistoricalQueryTask,
   ) {
     return extensionUseCase(async () => {
       const pin = checkedPluginTaskPin(pinInput),
@@ -138,12 +159,19 @@ export class PluginQueryTaskApplicationService {
       const project =
         projectInput === undefined
           ? null
-          : await prepareProjectQueryTask({
-              captured: projectInput,
-              dependencies: d,
-              actor,
-              command,
-            });
+          : "historical" in projectInput
+            ? await prepareProjectHistoricalQueryTask({
+                captured: projectInput,
+                dependencies: d,
+                actor,
+                command,
+              })
+            : await prepareProjectQueryTask({
+                captured: projectInput,
+                dependencies: d,
+                actor,
+                command,
+              });
       const sourceInput = {
         actor,
         pluginId: pin.pluginId,
@@ -334,14 +362,20 @@ export class PluginQueryTaskApplicationService {
             receipt,
             expectedActivationRevision: activation.revision,
             pluginQueryAdmission: admission,
-            ...(project === null ? {} : { projectQuery: project.sidecar }),
+            ...(project === null
+              ? {}
+              : "historical" in project
+                ? { projectHistoricalQuery: project.sidecar }
+                : { projectQuery: project.sidecar }),
           },
           project?.commitOptions,
         );
       const result =
         project === null
           ? await commit()
-          : await commitProjectQueryTask(commit);
+          : await ("historical" in project
+              ? commitProjectHistoricalQueryTask(commit)
+              : commitProjectQueryTask(commit));
       if (result.creditAdmission !== undefined)
         throw new ApplicationError(
           "internal",

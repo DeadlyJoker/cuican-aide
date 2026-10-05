@@ -3,6 +3,7 @@ import type { ProjectDetails } from "./creative-project-controller";
 import { ProjectTextPlanController } from "./ProjectTextPlanController";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectTextController } from "./ProjectTextController";
+import type { ProjectPlanningProposal } from "../project-planning-service";
 import type {
   ProjectTextPlanDefinitionInput,
   PublicProjectTextPlanPauseReason,
@@ -50,12 +51,14 @@ export function ProjectTextPlanActions({
   texts,
   details,
   openText,
+  initialDraft = null,
 }: {
   controller: ProjectTextPlanController;
   conversations: ProjectConversationController;
   texts: ProjectTextController;
   details: ProjectDetails;
   openText(step: PublicProjectTextPlanStep): void;
+  initialDraft?: ProjectPlanningProposal | null;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -102,6 +105,15 @@ export function ProjectTextPlanActions({
     setSelectedEpisodes([]);
     setAutomatic(false);
   }, [details.project.projectId]);
+  useEffect(() => {
+    if (!initialDraft || snapshot.view !== null || dirty.current.size > 0)
+      return;
+    setInstruction(initialDraft.input.instruction);
+    setStart(initialDraft.input.start);
+    setTarget(initialDraft.input.target);
+    setEpisodeCount(initialDraft.input.episodeCount ?? 1);
+    setAutomatic(initialDraft.input.adoption === "whenUnchanged");
+  }, [initialDraft, details.project.projectId, snapshot.view]);
   useEffect(() => {
     const view = snapshot.view;
     if (view === null || view.plan.projectId !== details.project.projectId)

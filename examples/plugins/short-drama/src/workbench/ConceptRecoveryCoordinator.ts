@@ -3,12 +3,18 @@ import type {
   ProjectGenerationQueryHostContext,
   ProjectGenerationSelectionHostContext,
 } from "@crewon/plugin-sdk/ui";
+import type { ProjectHistoricalQueryHostContext } from "../plugin-project-historical-queries-service";
 import type { ConceptGenerationLocator } from "@crewon/plugin-sdk/contracts";
 
-export type ConceptRecoveryLane = "generation" | "query" | "selection";
+export type ConceptRecoveryLane =
+  | "generation"
+  | "query"
+  | "historicalQuery"
+  | "selection";
 export type ConceptRecoveryContexts = Readonly<{
   generation: ProjectGenerationHostContext | null;
   query: ProjectGenerationQueryHostContext | null;
+  historicalQuery?: ProjectHistoricalQueryHostContext | null;
   selection: ProjectGenerationSelectionHostContext | null;
 }>;
 export type ConceptRecoveryChoice = Readonly<{
@@ -20,7 +26,7 @@ export type ConceptRecoveryChoice = Readonly<{
 }>;
 const sourceKey = (source: ConceptGenerationLocator) =>
   JSON.stringify([source.projectId, source.assetId, source.assetRevision]);
-const lanes = ["selection", "query", "generation"] as const;
+const lanes = ["selection", "query", "historicalQuery", "generation"] as const;
 function requestKey(request: unknown): string {
   const serialized = JSON.stringify(request);
   if (serialized === undefined)
@@ -43,6 +49,7 @@ export class ConceptRecoveryCoordinator {
   #contexts: ConceptRecoveryContexts = {
     generation: null,
     query: null,
+    historicalQuery: null,
     selection: null,
   };
   #source: string | null = null;
@@ -127,6 +134,7 @@ export class ConceptRecoveryCoordinator {
   capture(input: ConceptRecoveryContexts): boolean {
     const contexts = Object.freeze({
       ...input,
+      historicalQuery: input.historicalQuery ?? null,
     });
     const unresolved = lanes
       .map((lane) => contexts[lane]?.intent)

@@ -29,8 +29,10 @@ import { createInstalledPluginTaskReceipts } from "../plugins/installedPluginTas
 import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
 import { createInstalledPluginGenerationJournal } from "../plugins/installedPluginGenerationJournal";
 
+import { createInstalledPluginProjectHistoricalQueryJournal } from "../plugins/installedPluginProjectHistoricalQueryJournal";
 import { createInstalledPluginProjectQueryJournal } from "../plugins/installedPluginProjectQueryJournal";
 import { createInstalledPluginProjectSelectionJournal } from "../plugins/installedPluginProjectSelectionJournal";
+import { useInstalledPluginPlanningNavigation } from "./useInstalledPluginPlanningNavigation";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -131,6 +133,22 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskContextEnabled, onDiagnostic],
   );
+  const mountedHistoricalQueryJournal = useRef<ReturnType<
+    typeof createInstalledPluginProjectHistoricalQueryJournal
+  > | null>(null);
+  const historicalQueryJournal = useMemo(
+    () =>
+      scope && taskContextEnabled
+        ? createInstalledPluginProjectHistoricalQueryJournal({
+            assertCurrent: () => {
+              if (current.current !== scope || mountedScope.current !== scope)
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onDiagnostic,
+          })
+        : null,
+    [scope, taskContextEnabled, onDiagnostic],
+  );
   const mountedSelectionJournal = useRef<ReturnType<
     typeof createInstalledPluginProjectSelectionJournal
   > | null>(null);
@@ -165,6 +183,7 @@ export function useInstalledPluginModules({
     mountedReceipts.current = receipts;
     mountedGenerationJournal.current = generationJournal;
     mountedQueryJournal.current = projectQueryJournal;
+    mountedHistoricalQueryJournal.current = historicalQueryJournal;
     mountedSelectionJournal.current = selectionJournal;
     return () => {
       if (
@@ -175,6 +194,7 @@ export function useInstalledPluginModules({
         mountedReceipts.current = null;
         mountedGenerationJournal.current = null;
         mountedQueryJournal.current = null;
+        mountedHistoricalQueryJournal.current = null;
         mountedSelectionJournal.current = null;
       }
       // StrictMode immediately reattaches this same owner. Real withdrawal
@@ -197,6 +217,11 @@ export function useInstalledPluginModules({
           projectQueryJournal?.invalidate();
         if (
           mountedScope.current !== scope ||
+          mountedHistoricalQueryJournal.current !== historicalQueryJournal
+        )
+          void historicalQueryJournal?.close();
+        if (
+          mountedScope.current !== scope ||
           mountedSelectionJournal.current !== selectionJournal
         )
           selectionJournal?.invalidate();
@@ -207,6 +232,7 @@ export function useInstalledPluginModules({
     receipts,
     generationJournal,
     projectQueryJournal,
+    historicalQueryJournal,
     selectionJournal,
   ]);
   const host = useMemo(
@@ -229,6 +255,7 @@ export function useInstalledPluginModules({
             ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
             ...(generationJournal ? { generationJournal } : {}),
             ...(projectQueryJournal ? { projectQueryJournal } : {}),
+            ...(historicalQueryJournal ? { historicalQueryJournal } : {}),
             ...(selectionJournal ? { selectionJournal } : {}),
             onProjectConversationOpen: (event) => {
               if (
@@ -247,6 +274,7 @@ export function useInstalledPluginModules({
       receipts,
       generationJournal,
       projectQueryJournal,
+      historicalQueryJournal,
       selectionJournal,
     ],
   );
@@ -296,10 +324,12 @@ export function useInstalledPluginModules({
       mountedReceipts.current = null;
       mountedGenerationJournal.current = null;
       mountedQueryJournal.current = null;
+      mountedHistoricalQueryJournal.current = null;
       mountedSelectionJournal.current = null;
       receipts?.invalidate();
       generationJournal?.invalidate();
       projectQueryJournal?.invalidate();
+      void historicalQueryJournal?.close();
       selectionJournal?.invalidate();
       setSuspendedClient(client);
       setSnapshot(null);
@@ -315,6 +345,7 @@ export function useInstalledPluginModules({
     receipts,
     generationJournal,
     projectQueryJournal,
+    historicalQueryJournal,
     selectionJournal,
   ]);
   useEffect(() => {
@@ -392,6 +423,11 @@ export function useInstalledPluginModules({
     [scope, taskRuntime, receipts],
   );
   const selectedTaskThreadId = taskContext?.selectedThreadId ?? null;
+  const planning = useInstalledPluginPlanningNavigation({
+    scope,
+    catalog,
+    threadId: selectedTaskThreadId,
+  });
   const generationPorts = useMemo(
     () =>
       scope && taskRuntime && generationJournal
@@ -451,6 +487,38 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskRuntime, projectQueryJournal],
   );
+  const historicalQueryPorts = useMemo(
+    () =>
+      scope && taskRuntime && historicalQueryJournal
+        ? {
+            client: scope.client,
+            runtime: taskRuntime,
+            journal: historicalQueryJournal,
+            assertSessionCurrent: () => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedHistoricalQueryJournal.current !==
+                  historicalQueryJournal ||
+                taskContextRef.current?.runtime !== taskRuntime
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+            onOpenTask: (threadId: string) => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                mountedHistoricalQueryJournal.current !==
+                  historicalQueryJournal ||
+                taskContextRef.current?.runtime !== taskRuntime
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+              taskContextRef.current.onOpenTask(threadId);
+            },
+          }
+        : null,
+    [scope, taskRuntime, historicalQueryJournal],
+  );
   const selectionPorts = useMemo(
     () =>
       scope && selectionJournal
@@ -492,10 +560,12 @@ export function useInstalledPluginModules({
               taskPorts={taskPorts}
               generationPorts={generationPorts}
               projectQueryPorts={projectQueryPorts}
+              historicalQueryPorts={historicalQueryPorts}
               selectionPorts={selectionPorts}
               selectedThreadId={selectedTaskThreadId}
               runIds={taskRunIds}
               projectConversationContext={projectConversationContext}
+              projectPlanningDraft={planning.draftFor(module)}
               onOpenTask={(threadId) => {
                 taskPorts?.assertSessionCurrent();
                 if (taskPorts) taskContextRef.current?.onOpenTask(threadId);
@@ -514,10 +584,17 @@ export function useInstalledPluginModules({
     taskPorts,
     generationPorts,
     projectQueryPorts,
+    historicalQueryPorts,
     selectionPorts,
     selectedTaskThreadId,
     taskRunIds,
     projectConversationContext,
+    planning.revision,
   ]);
-  return { hostModules, getDiagnostics: () => diagnostics.current };
+  return {
+    hostModules,
+    planningNavigation: planning.navigation,
+    planningRequest: planning.request,
+    getDiagnostics: () => diagnostics.current,
+  };
 }

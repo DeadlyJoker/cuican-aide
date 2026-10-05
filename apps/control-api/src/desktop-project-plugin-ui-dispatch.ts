@@ -76,6 +76,20 @@ export function composeDesktopProjectPluginUiDispatch(
         return history.selectionRuntime.owner.actions.invoke(context);
       if (tasks?.projectGenerations?.supportsAction(context.action))
         return tasks.projectGenerations.actions.invoke(context);
+      if (
+        context.action === "crewon.project-historical-queries" ||
+        context.action.startsWith("crewon.project-historical-queries.")
+      ) {
+        if (
+          tasks?.historicalQueries === undefined ||
+          !tasks.historicalQueries.supportsAction(context.action)
+        )
+          throw new ApplicationError(
+            "conflict",
+            "project_historical_query_unavailable",
+          );
+        return tasks.historicalQueries.actions.invoke(context);
+      }
       if (tasks?.projectQueries?.supportsAction(context.action))
         return tasks.projectQueries.actions.invoke(context);
       if (tasks !== undefined) return tasks.owner.actions.invoke(context);

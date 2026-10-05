@@ -51,6 +51,14 @@ import {
   type CommittedProjectQueryConfiguration,
 } from "./plugin-ui-committed-project-query.ts";
 
+import {
+  prepareCommittedProjectHistoricalQueries,
+  type CommittedProjectHistoricalQueryConfiguration,
+} from "./plugin-ui-committed-project-historical-query.ts";
+import {
+  captureProjectHistoricalQueryPublications,
+  type ProjectHistoricalQueryPublication,
+} from "@crewon/domain";
 export type PluginUiCommittedTaskAuthorityDependencies = Readonly<{
   extensions: ExtensionStore;
   runs: Pick<RunStore, "loadRunInSpace">;
@@ -58,6 +66,7 @@ export type PluginUiCommittedTaskAuthorityDependencies = Readonly<{
   /** Explicit approved business-to-execution mapping; absent for all ordinary task paths. */
   projectGenerations?: CommittedProjectGenerationConfiguration;
   projectQueries?: CommittedProjectQueryConfiguration;
+  projectHistoricalQueries?: CommittedProjectHistoricalQueryConfiguration;
 }>;
 type VerifiedOutcome = Readonly<{
   context: PluginUiActionContext;
@@ -75,6 +84,28 @@ const queryAuthorities = new WeakMap<
   readonly ProjectQueryPublication[]
 >();
 
+const historicalQueryAuthorities = new WeakMap<
+  object,
+  readonly ProjectHistoricalQueryPublication[]
+>();
+export function isPluginUiCommittedProjectHistoricalQueryAuthority(
+  input: Readonly<{
+    authority: unknown;
+    publications: readonly ProjectHistoricalQueryPublication[];
+  }>,
+): boolean {
+  if (input.authority === null || typeof input.authority !== "object")
+    return false;
+  const configured = historicalQueryAuthorities.get(input.authority);
+  return (
+    configured !== undefined &&
+    captureProjectHistoricalQueryPublications(input.publications).every((p) =>
+      configured.some(
+        (c) => extensionCanonicalJson(p) === extensionCanonicalJson(c),
+      ),
+    )
+  );
+}
 export function isPluginUiCommittedProjectQueryAuthority(
   input: Readonly<{
     authority: unknown;
@@ -129,6 +160,9 @@ export class PluginUiCommittedTaskAuthority
     typeof prepareCommittedProjectGenerations
   >;
   readonly #projectQueries: ReturnType<typeof prepareCommittedProjectQueries>;
+  readonly #projectHistoricalQueries: ReturnType<
+    typeof prepareCommittedProjectHistoricalQueries
+  >;
 
   constructor(dependencies: PluginUiCommittedTaskAuthorityDependencies) {
     requirePluginTaskStore(dependencies.extensions);
@@ -156,6 +190,15 @@ export class PluginUiCommittedTaskAuthority
         { cause },
       );
     }
+    this.#projectHistoricalQueries = prepareCommittedProjectHistoricalQueries(
+      dependencies.projectHistoricalQueries,
+      this.#dependencies,
+    );
+    if (this.#projectHistoricalQueries !== undefined)
+      historicalQueryAuthorities.set(
+        this,
+        this.#projectHistoricalQueries.publications,
+      );
     try {
       this.#projectQueries = prepareCommittedProjectQueries(
         dependencies.projectQueries,
@@ -173,6 +216,46 @@ export class PluginUiCommittedTaskAuthority
   }
 
   /** A saved query sidecar acknowledges the query Run while retaining its original business context. */
+  async issueProjectHistoricalQuery(
+    input: Readonly<{
+      context: PluginUiActionContext;
+      command: CreateExtensionTaskCommand;
+      executionPin: PluginTaskAdmissionPin;
+      result: CommitExtensionTurnResult;
+    }>,
+  ): Promise<PluginUiCommittedTaskOutcome> {
+    try {
+      if (this.#projectHistoricalQueries === undefined)
+        throw new Error("plugin_ui_project_historical_query_unavailable");
+      const value = uiRecord(input, [
+        "context",
+        "command",
+        "executionPin",
+        "result",
+      ]);
+      const invocation = value.context as PluginUiActionContext;
+      const verified = await this.#projectHistoricalQueries.verify(input);
+      const outcome = Object.freeze(
+        Object.create(outcomePrototype),
+      ) as PluginUiCommittedTaskOutcome;
+      this.#outcomes.set(
+        outcome,
+        Object.freeze({
+          context: invocation,
+          contextFingerprint: verified.fingerprint,
+          output: parsePluginUiJsonValue(verified.output),
+        }),
+      );
+      return outcome;
+    } catch (cause) {
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_committed_project_historical_query_invalid",
+        { cause },
+      );
+    }
+  }
+
   async issueProjectGenerationQuery(
     input: Readonly<{
       context: PluginUiActionContext;

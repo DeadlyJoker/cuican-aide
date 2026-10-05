@@ -14,6 +14,10 @@ import {
 } from "./desktop-project-history-contract.ts";
 import { parsePluginUiJsonValue } from "./plugin-ui-json.ts";
 import { PLUGIN_UI_RECOVERY_VERSION } from "./plugin-ui-recovery-contract.ts";
+import {
+  parseDesktopProjectHistoricalQueriesConfiguration,
+  type DesktopProjectHistoricalQueriesConfiguration,
+} from "./desktop-project-historical-query-contract.ts";
 
 export const DESKTOP_PROJECT_EXECUTION_VERSION =
   "crewon.desktop-project-execution.v1";
@@ -39,6 +43,7 @@ export type DesktopProjectExecutionConfiguration = Omit<
     version: typeof DESKTOP_PROJECT_EXECUTION_VERSION;
     pluginGenerations?: Mappings;
     pluginQueries?: Mappings;
+    historicalQueries?: DesktopProjectHistoricalQueriesConfiguration;
     uiRecovery?: Readonly<{
       version: typeof PLUGIN_UI_RECOVERY_VERSION;
       publications: readonly (DesktopProjectHistoryPublication &
@@ -66,6 +71,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "textRecovery",
       "conversations",
       "textPlans",
+      "planningDrafts",
       "generationReads",
       "generationReadUi",
       "resultSelections",
@@ -75,6 +81,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...metadataFields,
       "pluginGenerations",
       "pluginQueries",
+      "historicalQueries",
       "uiRecovery",
     ];
     const value = pluginControlRecord(
@@ -107,6 +114,29 @@ export function parseDesktopProjectExecutionConfiguration(
     const pluginQueries = mappings(value.pluginQueries, approved);
     if (pluginQueries !== undefined && data.generationReads === undefined)
       invalid();
+    const historicalQueries =
+      value.historicalQueries === undefined
+        ? undefined
+        : parseDesktopProjectHistoricalQueriesConfiguration(
+            value.historicalQueries,
+            { publications: approved },
+          );
+    if (
+      historicalQueries !== undefined &&
+      (data.generationReads === undefined ||
+        historicalQueries.publications.some((publication) =>
+          [data.pluginUi, data.generationReadUi].some(
+            (available) =>
+              !available?.publications.some(
+                (entry) =>
+                  entry.pluginId === publication.source.pluginId &&
+                  entry.packageDigest === publication.source.packageDigest &&
+                  entry.contributionId === publication.source.contributionId,
+              ),
+          ),
+        ))
+    )
+      invalid();
     const uiRecovery = recovery(value.uiRecovery, {
       metadata: data.pluginUi?.publications,
       generation: pluginGenerations?.publications.map((item) => item.source),
@@ -118,6 +148,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...data,
       ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
       ...(pluginQueries === undefined ? {} : { pluginQueries }),
+      ...(historicalQueries === undefined ? {} : { historicalQueries }),
       ...(uiRecovery === undefined ? {} : { uiRecovery }),
     });
   } catch {

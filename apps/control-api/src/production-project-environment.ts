@@ -1,3 +1,7 @@
+import {
+  captureProjectHistoricalQueryPluginConfiguration,
+  type ProjectHistoricalQueryPluginConfiguration,
+} from "./project-historical-query-plugin-configuration.ts";
 import type { CreativeProjectAuthorizationPort } from "@crewon/application";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
@@ -52,6 +56,7 @@ export type ProductionProjectStartupConfiguration = Readonly<{
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
+  historicalQueries?: ProjectHistoricalQueryPluginConfiguration;
   generationReads?: ProjectGenerationReadConfiguration;
   generationReadUi?: ProjectGenerationReadPluginUiConfig;
   resultSelections?: ProductionProjectResultSelectionConfiguration;
@@ -64,6 +69,7 @@ const allowedFields = [
   "pluginUi",
   "pluginGenerations",
   "pluginQueries",
+  "historicalQueries",
   "generationReads",
   "generationReadUi",
   "resultSelections",
@@ -97,6 +103,9 @@ export function parseProductionProjectStartupConfiguration(
     const pluginQueries = captureProjectQueryPluginConfiguration(
       value.pluginQueries,
     );
+    const historicalQueries = captureProjectHistoricalQueryPluginConfiguration(
+      value.historicalQueries,
+    );
     const generationReads = captureProjectGenerationReadConfiguration(
       value.generationReads,
     );
@@ -107,7 +116,8 @@ export function parseProductionProjectStartupConfiguration(
     const selectionUi = captureCreativeProjectPluginUiConfig(value.selectionUi);
     const uiRecovery = capturePluginUiRecoveryConfiguration(value.uiRecovery);
     if (
-      (pluginQueries !== undefined && generationReads === undefined) ||
+      ((pluginQueries !== undefined || historicalQueries !== undefined) &&
+        generationReads === undefined) ||
       (generationReadUi !== undefined && generationReads === undefined) ||
       (resultSelections !== undefined && generationReads === undefined) ||
       (selectionUi !== undefined && resultSelections === undefined)
@@ -118,6 +128,7 @@ export function parseProductionProjectStartupConfiguration(
       ...(pluginUi === undefined ? {} : { pluginUi }),
       ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
       ...(pluginQueries === undefined ? {} : { pluginQueries }),
+      ...(historicalQueries === undefined ? {} : { historicalQueries }),
       ...(generationReads === undefined ? {} : { generationReads }),
       ...(generationReadUi === undefined ? {} : { generationReadUi }),
       ...(resultSelections === undefined ? {} : { resultSelections }),

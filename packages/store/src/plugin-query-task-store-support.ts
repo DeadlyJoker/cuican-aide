@@ -221,23 +221,35 @@ async function validatePostgresSource(
 export function saveSqlitePluginQuery(
   db: DatabaseSync,
   query: PluginQueryTaskAdmission,
+  historicalDigest?: string,
 ): void {
-  db.prepare("INSERT INTO plugin_query_task_admissions VALUES(?,?,?,?,?)").run(
+  db.prepare(
+    `INSERT INTO plugin_query_task_admissions(tenant_id,space_id,run_id,source_run_id,admission_json${historicalDigest === undefined ? "" : ",project_historical_query_digest"}) VALUES(?,?,?,?,?${historicalDigest === undefined ? "" : ",?"})`,
+  ).run(
     query.tenantId,
     query.spaceId,
     query.runId,
     query.source.runId,
     JSON.stringify(query),
+    ...(historicalDigest === undefined ? [] : [historicalDigest]),
   );
 }
 export async function savePostgresPluginQuery(
   client: PoolClient,
   schema: string,
   query: PluginQueryTaskAdmission,
+  historicalDigest?: string,
 ): Promise<void> {
   await client.query(
-    `INSERT INTO ${pluginInstallationSchemaName(schema)}.plugin_query_task_admissions VALUES($1,$2,$3,$4,$5)`,
-    [query.tenantId, query.spaceId, query.runId, query.source.runId, query],
+    `INSERT INTO ${pluginInstallationSchemaName(schema)}.plugin_query_task_admissions(tenant_id,space_id,run_id,source_run_id,admission_json${historicalDigest === undefined ? "" : ",project_historical_query_digest"}) VALUES($1,$2,$3,$4,$5${historicalDigest === undefined ? "" : ",$6"})`,
+    [
+      query.tenantId,
+      query.spaceId,
+      query.runId,
+      query.source.runId,
+      query,
+      ...(historicalDigest === undefined ? [] : [historicalDigest]),
+    ],
   );
 }
 function decode(

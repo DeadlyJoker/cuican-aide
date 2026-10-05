@@ -72,6 +72,7 @@ import {
   type WorkItemClaim,
   type WorkItemExecutionScope,
   type GoalToolExecutionResult,
+  type ProjectPlanningRuntimePort,
 } from "@crewon/application";
 import type {
   CanonicalAgentEvent,
@@ -125,6 +126,11 @@ import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
 import { batchModelOutputEvents } from "./model-output-batches.ts";
 import { isRunPlanToolCall, runPlanToolsForRun } from "./run-plan-tools.ts";
+import {
+  ProjectPlanningRuntimeToolsOwner,
+  isProjectPlanningToolCall,
+  projectPlanningRuntimeToolsForRun,
+} from "./project-planning-runtime-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
 import {
   RuntimeResourceScope,
@@ -226,6 +232,7 @@ export type { RuntimeWorkerOutcome } from "./runtime-worker-outcome.ts";
 
 type WorkerAgentRuntime = Readonly<{
   executionAuthority: AgentExecutionAuthority;
+  installedPluginAdmission: "none" | "present";
   kernel: AgentKernelPort;
   policy: RunExecutionPolicyPort;
   toolRuntime: ToolRuntimePort;
@@ -251,6 +258,7 @@ export class RuntimeWorker {
   #runtimeResourceScope: RuntimeResourceScope | null = null;
   readonly #workflowScheduler: ExperimentalWorkflowScheduler | undefined;
   readonly #execution: RunExecutionService;
+  readonly #projectPlanning: ProjectPlanningRuntimeToolsOwner | undefined;
   readonly #kernel: AgentKernelPort;
   readonly #policy: RunExecutionPolicyPort;
   readonly #toolRuntime: ToolRuntimePort;
@@ -321,6 +329,7 @@ export class RuntimeWorker {
       preflightTime?: AuthorityTime;
       experimentalWorkflowScheduler?: ExperimentalWorkflowScheduler;
       execution: RunExecutionService;
+      projectPlanning?: ProjectPlanningRuntimePort;
       kernel: AgentKernelPort;
       policy: RunExecutionPolicyPort;
       toolRuntime?: ToolRuntimePort;
@@ -365,6 +374,10 @@ export class RuntimeWorker {
     this.#execution = dependencies.execution.withStoreAccess((store) =>
       this.#storeAccess.store(store),
     );
+    this.#projectPlanning =
+      dependencies.projectPlanning === undefined
+        ? undefined
+        : new ProjectPlanningRuntimeToolsOwner(dependencies.projectPlanning);
     this.#kernel = dependencies.kernel;
     this.#policy = dependencies.policy;
     this.#toolRuntime = dependencies.toolRuntime ?? new InMemoryToolBroker();
@@ -606,6 +619,7 @@ export class RuntimeWorker {
   close(): Promise<void> {
     if (this.#closeTask !== null) return this.#closeTask;
     this.#closed = true;
+    void this.#projectPlanning?.close();
     // Financial withdrawal is synchronous and its original physical work must join.
     try {
       this.#pluginCreditSettlementClose = this.#pluginCreditSettlement?.close();
@@ -633,6 +647,7 @@ export class RuntimeWorker {
       const results = await Promise.allSettled([
         Promise.race([this.#drain, this.#storeAccess.whenClosed()]),
         this.#pluginCreditSettlementClose,
+        this.#projectPlanning?.close(),
       ]);
       const failures = results.flatMap((result) =>
         result.status === "rejected" ? [result.reason] : [],
@@ -843,6 +858,7 @@ export class RuntimeWorker {
         );
       return {
         executionAuthority: "crewonKernel",
+        installedPluginAdmission: "none",
         kernel: this.#kernel,
         policy: this.#policy,
         toolRuntime: this.#toolRuntime,
@@ -900,7 +916,7 @@ export class RuntimeWorker {
           }
         }),
     });
-    return { ...runtime, toolRuntime };
+    return { ...runtime, toolRuntime, installedPluginAdmission: "present" };
   }
 
   #projectAgentVersionRuntime(
@@ -933,6 +949,7 @@ export class RuntimeWorker {
     }
     return {
       executionAuthority: runtime.executionAuthority,
+      installedPluginAdmission: "none",
       kernel: runtime.kernel,
       policy: runtime.policy,
       toolRuntime: runtime.toolRuntime,
@@ -1452,7 +1469,7 @@ export class RuntimeWorker {
             runtimeTools:
               runtime.executionAuthority === "providerAgent"
                 ? []
-                : [...goalToolsForRun(run), ...runPlanToolsForRun(run)],
+                : this.#serverOwnedToolDefinitions(run, runtime),
             history: [...runtime.governedContextItems, ...context.items],
             continuation:
               continuation.kind === "providerCheckpoint"
@@ -2390,10 +2407,10 @@ export class RuntimeWorker {
     runtime: WorkerAgentRuntime,
   ): Promise<RuntimeWorkerOutcome | null> {
     this.#queries.confirmedClaim(claim);
-    const serverOwnedDefinitions = [
-      ...goalToolsForRun(run),
-      ...runPlanToolsForRun(run),
-    ];
+    const serverOwnedDefinitions = this.#serverOwnedToolDefinitions(
+      run,
+      runtime,
+    );
     const serverOwnedCalls = calls.filter((event) =>
       serverOwnedDefinitions.some(
         (definition) =>
@@ -2422,6 +2439,7 @@ export class RuntimeWorker {
         claim,
         serverOwnedCalls,
         startingSequence,
+        signal,
       );
     }
     let sequence = startingSequence;
@@ -2726,16 +2744,45 @@ export class RuntimeWorker {
     return null;
   }
 
+  #serverOwnedToolDefinitions(run: RunState, runtime: WorkerAgentRuntime) {
+    return [
+      ...goalToolsForRun(run),
+      ...runPlanToolsForRun(run),
+      ...projectPlanningRuntimeToolsForRun(run, {
+        configured: this.#projectPlanning?.canPublish(run) ?? false,
+        executionAuthority: runtime.executionAuthority,
+        installedPluginAdmission: runtime.installedPluginAdmission,
+      }),
+    ];
+  }
+
   async #executeServerOwnedToolCalls(
     claim: WorkItemClaim,
     calls: readonly Extract<KernelAgentEvent, { type: "tool.requested" }>[],
     startingSequence: number,
+    signal: AbortSignal,
   ): Promise<RuntimeWorkerOutcome | null> {
     let sequence = startingSequence;
     for (const event of calls) {
       this.#queries.confirmedClaim(claim);
       let result: Readonly<{ output: string; isError: boolean }>;
-      if (isRunPlanToolCall(event.data)) {
+      let assertProjectPlanningActive: (() => void) | undefined;
+      if (isProjectPlanningToolCall(event.data)) {
+        if (this.#projectPlanning === undefined)
+          throw new PermanentWorkerError(
+            "project_planning_runtime_unavailable",
+          );
+        const planning = await this.#projectPlanning.execute({
+          execution: this.#execution,
+          claim,
+          requested: { ...event, data: event.data },
+          signal,
+          assertClaimCurrent: () => this.#queries.confirmedClaim(claim),
+        });
+        planning.assertActive();
+        assertProjectPlanningActive = planning.assertActive;
+        result = planning;
+      } else if (isRunPlanToolCall(event.data)) {
         result = await this.#execution.executeRunPlanTool(claim, {
           ...event,
           data: event.data,
@@ -2752,6 +2799,7 @@ export class RuntimeWorker {
       if (run.cancelRequested) {
         return this.#cancel(claim);
       }
+      assertProjectPlanningActive?.();
       sequence += 1;
       await this.#execution.recordAgentEvent(claim, {
         schemaVersion: "crewon.agent-event.v0",

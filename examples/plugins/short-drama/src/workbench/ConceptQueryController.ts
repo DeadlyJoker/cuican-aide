@@ -7,6 +7,10 @@ import type {
   ProjectGenerationQueryUiInput,
   ProjectGenerationQueryUiReceipt,
 } from "@crewon/plugin-sdk/contracts";
+import type {
+  PluginProjectHistoricalQueryClient,
+  ProjectHistoricalQueryHostContext,
+} from "../plugin-project-historical-queries-service";
 import type { ConceptGenerationSnapshot } from "./ConceptGenerationController";
 import type { ConceptOriginalRetryPolicy } from "./ConceptImageSelectionController.types";
 export type ConceptQuerySnapshot = Readonly<{
@@ -31,6 +35,8 @@ const sourceKey = (value: ConceptGenerationLocator | null | undefined) =>
 
 /** Owns one exact query intent, independently from paid generation and its original receipt. */
 export class ConceptQueryController {
+  readonly lane: "self" | "historical";
+  readonly #sourcePluginId: string | null;
   readonly #query: PluginProjectGenerationQueryClient["queryConceptGeneration"];
   readonly #ports: Readonly<{
     lockChanged(): void;
@@ -43,7 +49,10 @@ export class ConceptQueryController {
   }>;
   readonly #listeners = new Set<() => void>();
   #snapshot = initial();
-  #host: ProjectGenerationQueryHostContext | null = null;
+  #host:
+    | ProjectGenerationQueryHostContext
+    | ProjectHistoricalQueryHostContext
+    | null = null;
   #seenIntent: string | null = null;
   #source: ConceptGenerationLocator | null = null;
   #record: ConceptGenerationSnapshot | null = null;
@@ -54,7 +63,11 @@ export class ConceptQueryController {
   #write: AbortController | null = null;
   #recoveryEpoch = 0;
   constructor(ports: {
-    client: PluginProjectGenerationQueryClient;
+    client:
+      | PluginProjectGenerationQueryClient
+      | PluginProjectHistoricalQueryClient;
+    lane?: "self" | "historical";
+    sourcePluginId?: string;
     lockChanged(): void;
     accepted(
       request: ProjectGenerationQueryUiInput,
@@ -63,6 +76,8 @@ export class ConceptQueryController {
     restore(request: ProjectGenerationQueryUiInput): Promise<boolean>;
     restored(): void;
   }) {
+    this.lane = ports.lane ?? "self";
+    this.#sourcePluginId = ports.sourcePluginId ?? null;
     this.#query = ports.client.queryConceptGeneration.bind(ports.client);
     this.#ports = Object.freeze({
       lockChanged: ports.lockChanged.bind(ports),
@@ -86,6 +101,14 @@ export class ConceptQueryController {
   }
   get hasHostContext() {
     return this.#host !== null;
+  }
+  get supportsRecord(): boolean {
+    const pluginId = this.#record?.generation?.task.pluginId;
+    if (!pluginId) return false;
+    if (this.#sourcePluginId === null) return this.lane === "self";
+    return this.lane === "self"
+      ? pluginId === this.#sourcePluginId
+      : pluginId !== this.#sourcePluginId;
   }
   get originalRequestBusy() {
     return (
@@ -159,10 +182,24 @@ export class ConceptQueryController {
     this.#record = record;
     this.#update();
   }
-  setHostContext(context: ProjectGenerationQueryHostContext | null) {
+  setHostContext(
+    context:
+      | ProjectGenerationQueryHostContext
+      | ProjectHistoricalQueryHostContext
+      | null,
+  ) {
     if (this.#disposed) return;
-    this.#host = context;
-    const intent = context?.intent;
+    const matching =
+      context &&
+      (this.lane === "historical"
+        ? context.version ===
+            "crewon.project-historical-query-host-context.v1" &&
+          "recovery" in context &&
+          context.recovery === "session-only"
+        : context.version ===
+          "crewon.project-generation-query-host-context.v1");
+    this.#host = matching ? context : null;
+    const intent = this.#host?.intent;
     if (!intent) {
       if (this.locked) this.#update({ retryable: false });
       else this.#update();
@@ -213,6 +250,7 @@ export class ConceptQueryController {
       receipt = this.#snapshot.receipt;
     return (
       this.#ready &&
+      this.supportsRecord &&
       !this.#blocked &&
       !this.#disposed &&
       !this.locked &&

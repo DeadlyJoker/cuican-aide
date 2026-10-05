@@ -1,3 +1,7 @@
+import {
+  assertDesktopNativeProjectHistoricalQueryPreparedTarget,
+  assertDesktopNativeProjectHistoricalQueryDeclaredApproval,
+} from "./desktop-native-project-historical-query-composition.ts";
 import type { ApplicationClock, ContentDigester } from "@crewon/application";
 import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import type {
@@ -30,11 +34,15 @@ export function assertDesktopNativePluginTaskComposition(
     nativeControl: DesktopNativePluginControlConfig;
     creativeProjects?: Pick<
       CreativeProjectCompositionConfig,
-      "pluginGenerations" | "pluginQueries"
+      "pluginGenerations" | "pluginQueries" | "historicalQueries"
     >;
   }>,
 ): void {
   assertDesktopNativePluginControlComposition(input);
+  assertDesktopNativeProjectHistoricalQueryDeclaredApproval({
+    ...input,
+    historicalQueries: input.creativeProjects?.historicalQueries,
+  });
   for (const mapping of [
     ...(input.creativeProjects?.pluginGenerations?.publications ?? []),
     ...(input.creativeProjects?.pluginQueries?.publications ?? []),
@@ -71,6 +79,12 @@ export async function createDesktopNativePluginTaskRuntime(
   let core: InstalledPluginTaskRuntimeCore | undefined;
   try {
     core = await createInstalledPluginTaskRuntimeCore({
+      assertHistoricalTarget: (publication) => {
+        assertDesktopNativeProjectHistoricalQueryPreparedTarget({
+          ...input,
+          ...publication,
+        });
+      },
       store: input.store,
       requests: authority.requests,
       installRoot: input.configuration.installRoot,

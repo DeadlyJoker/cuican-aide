@@ -106,6 +106,10 @@ export type CommitExtensionTurnInput = Readonly<{
   projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   projectGeneration?: ProjectGenerationReference;
   /** Historical source selected by the actual project owner; no metadata CAS or new generation slot. */
+  projectHistoricalQuery?: Readonly<{
+    reference: ProjectQueryReference;
+    generationLinkDigest: string;
+  }>;
   projectQuery?: Readonly<{
     reference: ProjectQueryReference;
     generationLinkDigest: string;
@@ -120,6 +124,8 @@ export type CommitExtensionTurnOptions = Readonly<{
   /** Detached source and execution installation pins; the Store locks both using its existing connection. */
   projectGenerationPublication?: ProjectGenerationExecutionPublication;
   /** Transaction-safe identity/policy fences; must never borrow a second connection. */
+  projectHistoricalQueryAuthority?: CreativeProjectCommitAuthority;
+  projectHistoricalQueryPublication?: import("./project-historical-query-execution-authority.ts").ProjectHistoricalQueryExecutionPublication;
   projectQueryAuthority?: CreativeProjectCommitAuthority;
   /** Current business UI and query execution pins, separately from original generation provenance. */
   projectQueryPublication?: ProjectQueryExecutionPublication;
@@ -154,6 +160,10 @@ export interface ExtensionStore {
   readonly projectGenerationPublicationVersion?: "crewon.project-generation-publication.v1";
   /** Separate read-only opt-in; it does not grant generation writes or create any schema. */
   readonly projectGenerationReadVersion?: "crewon.project-generation-read.v1";
+  readonly projectHistoricalQueryVersion?: "crewon.project-historical-query-link.v1";
+  loadProjectHistoricalQueryLink?(
+    input: ExtensionRunLocator,
+  ): Promise<import("@crewon/domain").ProjectHistoricalQueryLink | null>;
   readonly projectQueryVersion?: "crewon.project-query-link.v1";
   readonly projectQueryPublicationVersion?: "crewon.project-query-publication.v1";
   loadProjectQueryLink?(

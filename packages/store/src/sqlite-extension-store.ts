@@ -98,6 +98,12 @@ import {
   decodeCreditReservation,
 } from "./plugin-credit-support.ts";
 
+import {
+  migrateSqliteProjectHistoricalQueries,
+  assertSqliteProjectHistoricalQuerySchema,
+} from "./project-historical-query-schema.ts";
+import { loadSqliteProjectHistoricalQueryLink } from "./project-historical-query-store-support.ts";
+import { migrateSqliteHistoricalQueryMarker } from "./project-historical-query-marker.ts";
 type SqliteExtensionStoreHost = Readonly<{
   assertOpen(): void;
   commitRunWithinTransaction(input: CommitRunInput): CommitRunResult;
@@ -134,6 +140,12 @@ export class SqliteExtensionStore implements ExtensionStore {
   }
   #projectGenerationsEnabled = false;
   #projectQueriesEnabled = false;
+  #projectHistoricalQueriesEnabled = false;
+  get projectHistoricalQueryVersion() {
+    return this.#projectHistoricalQueriesEnabled
+      ? ("crewon.project-historical-query-link.v1" as const)
+      : undefined;
+  }
   get projectQueryVersion() {
     return this.#projectQueriesEnabled
       ? ("crewon.project-query-link.v1" as const)
@@ -259,6 +271,25 @@ export class SqliteExtensionStore implements ExtensionStore {
   }
 
   /** Query opt-in verifies existing generation history and never grants generation writes. */
+  async migrateProjectHistoricalQueries(): Promise<void> {
+    this.#transaction(
+      () => {
+        migrateSqliteHistoricalQueryMarker(this.#db);
+        migrateSqliteProjectHistoricalQueries(this.#db);
+      },
+      { beforeCommit: () => this.#host.assertOpen() },
+    );
+    this.#projectHistoricalQueriesEnabled = true;
+  }
+  async loadProjectHistoricalQueryLink(input: ExtensionRunLocator) {
+    if (!this.#projectHistoricalQueriesEnabled)
+      throw new Error("project_historical_query_unavailable");
+    this.#host.assertOpen();
+    assertSqliteProjectHistoricalQuerySchema(this.#db);
+    const link = loadSqliteProjectHistoricalQueryLink(this.#db, input);
+    this.#host.assertOpen();
+    return link;
+  }
   async migrateProjectQueries(): Promise<void> {
     this.#transaction(() => migrateSqliteProjectQueries(this.#db), {
       beforeCommit: () => this.#host.assertOpen(),
@@ -515,6 +546,7 @@ export class SqliteExtensionStore implements ExtensionStore {
         unmeteredEnabled: this.#unmeteredEnabled,
         projectGenerationsEnabled: this.#projectGenerationsEnabled,
         projectQueriesEnabled: this.#projectQueriesEnabled,
+        projectHistoricalQueriesEnabled: this.#projectHistoricalQueriesEnabled,
         assertOpen: () => this.#host.assertOpen(),
         transaction: (body, hooks) => this.#transaction(body, hooks),
         receipt: (scope, kind, receipt) => this.#receipt(scope, kind, receipt),

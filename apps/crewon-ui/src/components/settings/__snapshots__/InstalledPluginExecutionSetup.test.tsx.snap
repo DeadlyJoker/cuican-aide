@@ -17,3 +17,10 @@ exports[`explicit Native execution setup in original settings > previews real pu
   "switchChecked": "false",
 }
 `;
+
+exports[`explicit Native execution setup in original settings > requires separate explicit GET-only historical target consent and sends the exact opt-in confirmation 1`] = `
+[
+  "我允许此包在本机执行 Node 代码，并按上列范围访问生成服务。",
+  "我允许本工作台通过这个已批准的插件查询原有生成结果，仅 GET，不授予新的生成权限。",
+]
+`;

@@ -7,11 +7,11 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "17.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "18.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
-  BigInt(version.split(".")[0]) <= 16n
+  BigInt(version.split(".")[0]) <= 17n
 )
   throw new Error("example_version_invalid");
 // Pinned portable public capability protocol; no private host source import.
@@ -25,6 +25,26 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "plugin-project-historical-queries-service.ts",
+    "51d464c490241da162c7806682f994c2e60c5982753cb1cadfebc6298e8324c6",
+  ],
+  [
+    "project-historical-query-ui-client.ts",
+    "1fe5b8686127380d2410806374fee0887b4b908b0eb3642daf94887818cb8860",
+  ],
+  [
+    "project-historical-query-codec.mjs",
+    "4ebd4625638255f59a2039314ebe3f6e50ca8edc906f7d4b996cafd87beb344e",
+  ],
+  [
+    "project-planning-service.ts",
+    "e276311252a3eff4aef042fed519c81e83a7f90f112eaab6df383c9664a15321",
+  ],
+  [
+    "project-planning-codec.mjs",
+    "5f8d5418bfeb6d2e82f4aa1a7bfac66415cc621a04806b5a949335f16ba5bf07",
+  ],
   [
     "project-text-plans-service.ts",
     "54c3ce5c9b3a75e20de0e935754a50e1c65b820b17b6a7d50acc6814407a7d0e",
@@ -203,6 +223,16 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
+    {
+      service: "crewon.project-planning-drafts",
+      apiVersion: "1",
+      optional: true,
+    },
+    {
+      service: "crewon.project-historical-queries",
+      apiVersion: "1",
+      optional: true,
+    },
     { service: "crewon.project-text-plans", apiVersion: "1", optional: true },
     {
       service: "crewon.project-conversations",

@@ -1,4 +1,9 @@
 import {
+  useInstalledPluginProjectHistoricalQueryContext,
+  type InstalledPluginProjectHistoricalQueryPorts,
+} from "../../lib/plugins/useInstalledPluginProjectHistoricalQueryContext";
+import { InstalledPluginProjectHistoricalQueryControls } from "./InstalledPluginProjectHistoricalQueryControls";
+import {
   useEffect,
   useCallback,
   useLayoutEffect,
@@ -7,6 +12,7 @@ import {
   useState,
 } from "react";
 import type { PluginUiLease } from "@crewon/contracts/plugins";
+import type { ProjectPlanningProposal } from "@crewon/contracts/project-planning";
 import type { PluginUiProps, PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
 import type { ControlPluginUiHost } from "../../lib/plugins/controlPluginUiHost";
@@ -50,10 +56,12 @@ export function InstalledPluginModule({
   taskPorts = null,
   generationPorts = null,
   projectQueryPorts = null,
+  historicalQueryPorts = null,
   selectionPorts = null,
   selectedThreadId = null,
   runIds = [],
   projectConversationContext,
+  projectPlanningDraft,
   onOpenTask,
 }: Readonly<{
   host: ControlPluginUiHost;
@@ -65,6 +73,7 @@ export function InstalledPluginModule({
   taskPorts?: InstalledPluginTaskPorts | null;
   generationPorts?: InstalledPluginGenerationPorts | null;
   projectQueryPorts?: InstalledPluginProjectQueryPorts | null;
+  historicalQueryPorts?: InstalledPluginProjectHistoricalQueryPorts | null;
   selectionPorts?: InstalledPluginProjectSelectionPorts | null;
   selectedThreadId?: string | null;
   runIds?: readonly string[];
@@ -72,6 +81,7 @@ export function InstalledPluginModule({
     creationWorkspaceId: string | null;
     creationWorkspaceName?: string | null;
   }>;
+  projectPlanningDraft?: ProjectPlanningProposal;
   onOpenTask?(threadId: string): void;
 }>) {
   const taskEnabled = module.plugin.descriptor.requires.some(
@@ -120,6 +130,40 @@ export function InstalledPluginModule({
     active,
     queryEnabled,
     projectQueryPorts,
+    generationEnabled,
+    module.key,
+    generation.refresh,
+  ]);
+  const historicalQueryEnabled = module.plugin.descriptor.requires.some(
+    (item) =>
+      item.service === "crewon.project-historical-queries" &&
+      item.apiVersion === "1",
+  );
+  const historicalQuery = useInstalledPluginProjectHistoricalQueryContext({
+    ports: historicalQueryEnabled ? historicalQueryPorts : null,
+    module,
+    active,
+    selectedThreadId,
+    preparedThreadId: generationEnabled
+      ? (generation.context.thread?.threadId ?? null)
+      : null,
+  });
+  useEffect(() => {
+    if (
+      !active ||
+      !historicalQueryEnabled ||
+      !historicalQueryPorts ||
+      !generationEnabled
+    )
+      return;
+    return historicalQueryPorts.journal.subscribe((intent) => {
+      if (intent.familyKey === module.key && intent.phase === "accepted")
+        generation.refresh();
+    });
+  }, [
+    active,
+    historicalQueryEnabled,
+    historicalQueryPorts,
     generationEnabled,
     module.key,
     generation.refresh,
@@ -250,6 +294,7 @@ export function InstalledPluginModule({
         ...(projectConversationContext === undefined
           ? {}
           : { projectConversationContext }),
+        ...(projectPlanningDraft === undefined ? {} : { projectPlanningDraft }),
         ...(taskEnabled && taskPorts
           ? (tasks.data as Readonly<Record<string, PluginJsonValue>>)
           : {}),
@@ -258,6 +303,9 @@ export function InstalledPluginModule({
           : {}),
         ...(queryEnabled && projectQueryPorts
           ? { projectGenerationQueryContext: projectQuery.context }
+          : {}),
+        ...(historicalQueryEnabled && historicalQueryPorts
+          ? { projectHistoricalQueryHostContext: historicalQuery.context }
           : {}),
         ...(selectionEnabled && selectionPorts
           ? { projectGenerationSelectionContext: selection.context }
@@ -277,12 +325,16 @@ export function InstalledPluginModule({
       queryEnabled,
       projectQueryPorts,
       projectQuery.context,
+      historicalQueryEnabled,
+      historicalQueryPorts,
+      historicalQuery.context,
       selectionEnabled,
       selectionPorts,
       selection.context,
       ready,
       context,
       projectConversationContext,
+      projectPlanningDraft,
     ],
   );
   const onMounted = useCallback(() => {
@@ -305,6 +357,14 @@ export function InstalledPluginModule({
       {queryEnabled && projectQueryPorts && projectQuery.context.intent ? (
         <InstalledPluginProjectQueryControls
           state={projectQuery}
+          locale={locale}
+        />
+      ) : null}
+      {historicalQueryEnabled &&
+      historicalQueryPorts &&
+      historicalQuery.context.intent ? (
+        <InstalledPluginProjectHistoricalQueryControls
+          state={historicalQuery}
           locale={locale}
         />
       ) : null}

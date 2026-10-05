@@ -28,6 +28,7 @@ import {
   ExecutionSetupFixture,
   executionTestIdentity,
   executionTestParameters,
+  historicalQueryPreview,
 } from "./InstalledPluginExecutionSetup.test-support";
 
 (
@@ -157,6 +158,64 @@ function configurationFixture() {
 }
 
 describe("explicit Native execution setup in original settings", () => {
+  it("an unavailable optional historical target leaves self preparation available without a historical approval flag", async () => {
+    const f = fixture();
+    f.onPreview = async () => ({
+      ...f.preview(),
+      historyQueryAvailability: "unavailable",
+    });
+    await choose(f);
+    expect(container.textContent).toContain("历史图片查询不可用");
+    expect(container.querySelectorAll('[role="switch"]')).toHaveLength(1);
+    expect(button("允许并准备").disabled).toBe(false);
+    await click("允许并准备");
+    expect(f.client.confirm).toHaveBeenCalledExactlyOnceWith({
+      previewId: "named-execution-preview",
+      approveExecution: true,
+    });
+  });
+  it("requires separate explicit GET-only historical target consent and sends the exact opt-in confirmation", async () => {
+    const f = fixture();
+    f.onPreview = async () => ({
+      ...f.preview(),
+      historyQueryAvailability: "available",
+      historyQuery: historicalQueryPreview(f.identity),
+    });
+    await choose(f);
+    expect(container.textContent).toContain("crewon.comfyui-krea2 · 1.0.0");
+    expect(button("允许并准备").disabled).toBe(true);
+    expect(f.client.confirm).not.toHaveBeenCalled();
+    expect(
+      [...container.querySelectorAll("label")].map((item) => item.textContent),
+    ).toMatchSnapshot();
+    await act(async () => {
+      container
+        .querySelectorAll<HTMLButtonElement>('[role="switch"]')[1]!
+        .click();
+      await settleSettings();
+    });
+    expect(button("允许并准备").disabled).toBe(false);
+    await click("允许并准备");
+    expect(f.client.confirm).toHaveBeenCalledExactlyOnceWith({
+      previewId: "named-execution-preview",
+      approveExecution: true,
+      approveHistoricalQueries: true,
+    });
+  });
+  it("a malformed historical preview cannot expose a consent control or confirm authority", async () => {
+    const f = fixture();
+    f.onPreview = async () =>
+      ({
+        ...f.preview(),
+        historyQueryAvailability: "available",
+        historyQuery: { ...historicalQueryPreview(), methods: ["POST"] },
+      }) as unknown as DesktopLocalPluginExecutionPreview;
+    await mount(f);
+    await click("预览执行准备");
+    expect(container.querySelectorAll('[role="switch"]')).toHaveLength(0);
+    expect(f.client.confirm).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+  });
   it("previews real public pins with an original inline Switch and only confirms after explicit consent", async () => {
     const f = fixture();
     await mount(f);

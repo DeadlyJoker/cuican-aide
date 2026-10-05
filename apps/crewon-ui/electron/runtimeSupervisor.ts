@@ -824,6 +824,13 @@ export class RuntimeSupervisor {
     return bootstrap;
   }
 
+  /** Main-only live prepared entries for an explicit historical-query preview. */
+  currentPreparedPluginRuntime(): DesktopInstalledPluginRuntime | null {
+    this.session();
+    this.#nativeInstalledRuntimeOwner?.assertCurrent();
+    return this.#nativeInstalledRuntimeOwner;
+  }
+
   /** Updates cloud Agent profiles and restarts the runtime so they take effect. */
   async updateCloudAgentProfiles(
     profiles: readonly CloudAgentProfile[],

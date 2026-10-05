@@ -1,3 +1,4 @@
+import { assertProjectHistoricalQueryPluginPublications } from "./project-historical-query-plugin-configuration.ts";
 import type { ProductionPostgresControlApiConfig } from "./production-composition.ts";
 import type { CreativeProjectCompositionConfig } from "./creative-project-composition.ts";
 import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
@@ -56,6 +57,17 @@ export function assertProductionProjectPluginUiComposition(
   )
     throw new Error("project_generation_read_composition_required");
   assertProductionProjectSelectionComposition(config, creativeProjects);
+  assertProjectHistoricalQueryPluginPublications(
+    creativeProjects?.historicalQueries,
+    config.pluginUi?.configuration.publications,
+  );
+  if (
+    creativeProjects?.historicalQueries !== undefined &&
+    (config.pluginTasks === undefined ||
+      config.pluginUi === undefined ||
+      config.pluginUi.ownedProjectHistoricalQueryActions !== undefined)
+  )
+    throw new Error("project_historical_query_execution_composition_required");
   assertProjectQueryExecutionComposition({
     queries: creativeProjects?.pluginQueries,
     publications: config.pluginUi?.configuration.publications,

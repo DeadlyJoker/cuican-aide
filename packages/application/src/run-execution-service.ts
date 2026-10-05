@@ -53,6 +53,12 @@ import {
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
+import {
+  executeProjectPlanningRuntimeTool,
+  type ProjectPlanningRequestedTool,
+  type ProjectPlanningToolResult,
+} from "./project-planning-runtime-tool.ts";
+import type { ProjectPlanningRuntimePort } from "./project-planning-runtime-port.ts";
 import { validateAssistantContinuationContent } from "./assistant-continuation-content.ts";
 import { prepareRunOutputAppendInput } from "./run-output-append.ts";
 import {
@@ -112,7 +118,9 @@ import {
   validateModelIdentity,
 } from "./run-execution-support.ts";
 
-export type RunCancellationResult = Readonly<{ kind: "canceled"; committed: CommitRunResult }> | Readonly<{ kind: "deferred"; throughSequence: number }>;
+export type RunCancellationResult =
+  | Readonly<{ kind: "canceled"; committed: CommitRunResult }>
+  | Readonly<{ kind: "deferred"; throughSequence: number }>;
 
 export type RunExecutionPolicyDecision =
   | Readonly<{ outcome: "allow" }>
@@ -171,8 +179,6 @@ export type ToolCompletedAgentEvent = Readonly<
     }>;
   }
 >;
-
-
 
 export class RunExecutionService {
   readonly #store: DomainStore;
@@ -2139,7 +2145,12 @@ export class RunExecutionService {
         sampleIndex: input.sampleIndex,
         throughHistorySequence,
         ...(continuationKind === "empty"
-          ? { emptyContinuation: { ...attempt, contextRevision: input.contextRevision } }
+          ? {
+              emptyContinuation: {
+                ...attempt,
+                contextRevision: input.contextRevision,
+              },
+            }
           : {}),
       },
     });
@@ -2404,6 +2415,23 @@ export class RunExecutionService {
       ...evaluation,
       plan: committed.state.plan ?? evaluation.plan,
     };
+  }
+
+  executeProjectPlanningTool(
+    claim: WorkItemClaim,
+    requested: ProjectPlanningRequestedTool,
+    options: Readonly<{
+      port: ProjectPlanningRuntimePort;
+      signal: AbortSignal;
+      assertClaimCurrent(): void;
+    }>,
+  ): Promise<ProjectPlanningToolResult> {
+    return executeProjectPlanningRuntimeTool({
+      ...options,
+      claim,
+      requested,
+      loadRun: () => this.loadRun(claim),
+    });
   }
 
   async completeTextRun(
@@ -2775,8 +2803,13 @@ export class RunExecutionService {
     }
     const occurredAt = this.#now();
     const prepared = await prepareRunCancellationHistory({
-      store: this.#store, claim, state, attempt, occurredAt,
-      nextItemId: () => this.#nextId("modelHistoryItem"), digest: content => this.#digest(content),
+      store: this.#store,
+      claim,
+      state,
+      attempt,
+      occurredAt,
+      nextItemId: () => this.#nextId("modelHistoryItem"),
+      digest: (content) => this.#digest(content),
       ...(control === undefined ? {} : { control }),
     });
     if (prepared.kind === "deferred") return prepared;

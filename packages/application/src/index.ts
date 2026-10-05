@@ -205,3 +205,14 @@ export * from "./project-text-plan-coordinator.ts";
 export * from "./plugin-project-text-plan-action-owner.ts";
 export type { PluginProjectTextPlanInvocationAuthority } from "./plugin-project-text-plan-action-context.ts";
 export { capturePluginProjectTextPlanInvocationCommitAuthority } from "./plugin-ui-invocation-authority.ts";
+export * from "./project-historical-query-execution-authority.ts";
+export * from "./project-historical-query-task-receipt.ts";
+export * from "./project-planning-runtime-port.ts";
+export * from "./project-planning-runtime-tool.ts";
+export {
+  fencePluginHistoricalQueryInvocationAuthority,
+  capturePluginHistoricalQueryInvocationCommitAuthority,
+  assertPluginHistoricalQueryInvocationAuthority,
+  type PluginHistoricalQueryInvocationAuthority,
+} from "./plugin-project-historical-query-invocation.ts";
+export * from "./project-historical-query-resolver.ts";

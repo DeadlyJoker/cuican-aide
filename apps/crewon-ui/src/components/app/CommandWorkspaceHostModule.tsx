@@ -3,6 +3,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ReactNode,
 } from "react";
 import { classNames } from "./commandWorkspaceUtils";
@@ -37,7 +38,11 @@ export function useCommandWorkspaceHostModules(
   modules: readonly CommandWorkspaceHostModule[],
   {
     navigationScope = null,
-  }: Readonly<{ navigationScope?: string | null }> = {},
+    request = null,
+  }: Readonly<{
+    navigationScope?: string | null;
+    request?: Readonly<{ id: string; requestKey: string }> | null;
+  }> = {},
 ) {
   const idsKey = JSON.stringify(modules.map(({ id }) => id));
   const ids = useMemo(() => new Set<string>(JSON.parse(idsKey)), [idsKey]);
@@ -63,6 +68,17 @@ export function useCommandWorkspaceHostModules(
     );
   }, [ids, navigationScope]);
   const close = useCallback(() => setSelection(null), []);
+  const lastRequestKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      request &&
+      lastRequestKey.current !== request.requestKey &&
+      ids.has(request.id)
+    ) {
+      lastRequestKey.current = request.requestKey;
+      setSelection({ id: request.id, navigationScope });
+    }
+  }, [request, ids, navigationScope]);
   const open = useCallback(
     (id: string) => {
       if (!ids.has(id))

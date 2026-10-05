@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useProjectConversationComposer } from "./lib/app/useProjectConversationComposer";
 import { BusinessExtensionController } from "./components/extensions/BusinessExtensionController";
 import { StreamingTextScope } from "./components/StreamingTextScope";
+import { ProjectPlanningScope } from "./components/project-planning/ProjectPlanningScope";
 import { useControlThreadCatalog } from "./lib/control-runtime/useControlThreadCatalog";
 import { useThreadSelectionRead } from "./lib/thread/useThreadSelectionRead";
 import {
@@ -1371,10 +1372,12 @@ export function App({
   if (renderCommandShell)
     return (
       <StreamingTextScope presentation={threadState.streamingTextPresentation}>
+        <ProjectPlanningScope value={installedPlugins.planningNavigation}>
         <TranscriptNavigationScope runtime={controlThreadRuntime}>
           <AppCommandShellRoute
             showSignedOutAccount={localManagementAccess !== null}
             hostModules={installedPlugins.hostModules}
+            hostModuleRequest={installedPlugins.planningRequest}
             teamProgress={
               commandShellRuntime.selectedThreadId
                 ? (teamProgressByThread[commandShellRuntime.selectedThreadId] ??
@@ -1740,6 +1743,7 @@ export function App({
             onSetThreadGoalStatus={goalComposerHandlers.setThreadGoalStatus}
           />
         </TranscriptNavigationScope>
+        </ProjectPlanningScope>
       </StreamingTextScope>
     );
   return (

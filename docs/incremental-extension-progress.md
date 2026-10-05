@@ -1,10 +1,22 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。已完成统一短剧包、原 Settings 执行准备、共享大纲/剧本、真实 Agent 工具、手动编辑/采用/锁定、文字请求冷恢复、项目对话/单阶段执行，以及 Short17 有界持久文字计划。普通未关联聊天的想法入口、角色/参考资产、分镜、视频、声音和成片继续实施。积分后置；完整短剧流程尚未交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。已完成统一短剧包、原 Settings 执行准备、共享大纲/剧本、真实 Agent 工具、手动编辑/采用/锁定、文字请求冷恢复、项目对话/单阶段执行，以及 Short17 有界持久文字计划。Short18 原聊天项目建议与历史生图查询已实现，正式桌面联合验收继续进行；角色/参考资产、分镜、视频、声音和成片随后实施。积分后置；完整短剧流程尚未交付。
 
-[协同设计](./short-drama-agent-workflow-design.md)明确各环节由 AI 创作、确定性检查与适配工作流配合，不以生图代替整个流程。正式桌面0.1.15已正常升级，原账户、四个工作空间和数据完整保留；Short16已安装但暂未激活。原 Short11 UI 仍负责一条独立 Krea1 的未知结果查询，新同包默认映射不能接管它，需先补合法历史查询兼容，不能换安装选择或重新生成来绕过。
+[协同设计](./short-drama-agent-workflow-design.md)明确各环节由 AI 创作、确定性检查与适配工作流配合，不以生图代替整个流程。正式桌面0.1.15已正常升级，原账户、四个工作空间和数据完整保留；Short16已安装但暂未激活。原 Short11 UI 仍负责一条独立 Krea1 的未知结果查询；Short18 的独立历史查询协议已补齐源代码与真实双库验证，待正式桌面联合验收后再切换。原生成不改输入或重新提交。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：Short18 原聊天项目建议与历史生图查询
+
+原普通 Agent 聊天增加服务器提供的能力发现及项目建议工具，不创建另一套聊天或模型运行时。实际 Main 批准的当前插件来源、普通 Run/Thread/claim 及安装状态决定工具是否可用。建议保存在原工具完成事件中，经原 GET、SSE 和 Last-Event-ID 重连读取；完整输出有独立 8 KiB 上限。卡片核对真实 Run、Thread 和 call，仅由用户点击打开确切安装模块。查看建议只预填需求；明确保存后仅为该项目预填文字计划，仍需选择真实项目对话并确认开始。取消后手动新项目不继承旧建议。
+
+独立 `crewon.project-planning-drafts@1` 与 `crewon.project-historical-queries@1` 都是显式可选服务；冻结 SDK0.1.0、原导航、账户、全局 CSS 和旧恢复协议不变。历史查询由服务器从原 generation/Run/admission/operation/配置解析完整旧目标，Main 另批准 GET-only 历史查询。新 namespace 不借旧六类动作资格；新旧查询未知时互斥，同键重试保留原正文，新的 UI intent 明确限当前会话。缺少历史目标不阻断基础聊天或同包文字服务。协议见[原聊天项目建议](./plugin-project-planning-protocol.md)。
+
+原普通 Kernel、SQLite、真实 Control HTTP/SSE 与冷读取及实际 Main bootstrap/Native metadata 专项，新旧 **33/33**；独立最终候选包 **229/229**，Contracts **510/510**，原 command 布局与新建议 UI **145/145**，均零跳过。UI build/lint、边界、格式通过；编译的四份 CSS 与实际桌面0.1.15逐字节一致。全 UI 没有声明通过；一次误执行的无筛选 UI 检查已中断，其已有架构基线失败另记在私有证据中。
+
+独立历史查询 Domain **3/3**、Application新旧 **35/35**、Host **26/26**、Store新旧 **84/84**、Control顺序 **96/96**，以及真实冻结 Krea1→实际 HTTP→原 Worker queryHost/Node/Kernel 双库 **2/2**，均零跳过。组间有重复，不相加。真实双库检查损坏/缺失历史 marker、原键重放、旧协议兼容及单连接事务，实际查询不增加生成 POST、资金预留或工作流提交。身份、模型和供应商是具名夹具，物理 peer HTTP 的 handler 属测试所有者；未以此声称正式 LoadedRelease/Main/公网 S0 完成。原自有 PG52349 已正常退出并清理。
+
+真实 Main/Settings 新旧 **97/97**、Native parser **8/8**、独立历史 UI 与原 query/recovery/mount/account兼容 **186/186**，均零跳过。普通插件未声明或历史目标缺失时保持原基础行为。正式0.1.16完整包及原 Settings、工作空间、聊天导航、冷重开正在准备 CUA 隔离验收；真实用户App/Profile和原未知 Krea operation 本阶段保持原样。完整目标继续 ACTIVE。
 
 ## 2026-10-06：Short17 有界持久文字计划
 

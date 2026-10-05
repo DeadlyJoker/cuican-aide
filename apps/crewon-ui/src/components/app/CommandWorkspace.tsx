@@ -299,6 +299,7 @@ type CommandWorkspaceProps = {
   businessExtensionEntry?: ReactNode;
   hostModule?: CommandWorkspaceHostModule;
   hostModules?: readonly CommandWorkspaceHostModule[];
+  hostModuleRequest?: Readonly<{ id: string; requestKey: string }> | null;
   platformSnapshotLoader?: CommandWorkspacePlatformSnapshotLoader;
   backgroundRunActive?: boolean;
   threadCatalogNavigation?: ThreadCatalogNavigation;
@@ -817,6 +818,7 @@ export function CommandWorkspace({
   businessExtensionEntry = null,
   hostModule,
   hostModules,
+  hostModuleRequest,
   platformSnapshotLoader = readAgentPlatformSnapshot,
   teamProgress = null,
   activeTurnId = null,
@@ -942,6 +944,7 @@ export function CommandWorkspace({
   );
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const hostModuleView = useCommandWorkspaceHostModules(modules, {
+    request: hostModuleRequest,
     navigationScope: JSON.stringify([
       selectedThreadId ?? selectedThread?.id ?? null,
       scene,

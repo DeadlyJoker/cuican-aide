@@ -16,6 +16,14 @@ import type {
 } from "./desktopInstalledPluginRuntime.ts";
 import { composeDesktopLocalComfyProjectExecutionApproval } from "./desktopLocalComfyProjectExecutionApproval.ts";
 import {
+  captureDesktopLocalHistoricalProjectQueryTarget,
+  isDesktopLocalHistoricalProjectQueryTargetUnavailable,
+  assertDesktopLocalHistoricalProjectQueryTargetCurrent,
+  assertDesktopLocalHistoricalProjectQueryTargetSynchronous,
+  composeDesktopLocalHistoricalProjectQueryApproval,
+  type DesktopLocalHistoricalProjectQueryTarget,
+} from "./desktopLocalHistoricalProjectQueryApproval.ts";
+import {
   absolutePath,
   assertApproval,
   assertParents,
@@ -60,10 +68,15 @@ type Ticket = {
   mappingCommitted: boolean;
   verified: boolean;
   entry: DesktopInstalledPluginExpectedCatalogEntry | null;
+  historyQuery: DesktopLocalHistoricalProjectQueryTarget | null;
 };
 export type DesktopLocalPluginExecutionSetupOwner = Readonly<{
   preview(
-    input: Readonly<{ bootstrap: DesktopPluginBootstrap; pluginId: string }>,
+    input: Readonly<{
+      bootstrap: DesktopPluginBootstrap;
+      pluginId: string;
+      runtime?: DesktopInstalledPluginRuntime | null;
+    }>,
   ): Promise<DesktopLocalPluginExecutionPreview>;
   claimPreview(input: unknown): DesktopLocalPluginExecutionSetupClaim;
   cancelPreview(input: Readonly<{ previewId: string }>): void;
@@ -168,6 +181,14 @@ export function createDesktopLocalPluginExecutionSetupOwner(
       !isDeepStrictEqual(current.configuration, value.snapshot.configuration)
     )
       setupInvalid("records_changed");
+    if (value.historyQuery !== null)
+      assertDesktopLocalHistoricalProjectQueryTargetSynchronous(
+        value.historyQuery,
+        {
+          approval: value.snapshot.approval,
+          policy: value.snapshot.policy,
+        },
+      );
   };
   const write = (
     value: Ticket,
@@ -269,7 +290,11 @@ export function createDesktopLocalPluginExecutionSetupOwner(
   return Object.freeze({
     preview(request) {
       if (claimed !== null) setupInvalid("busy");
-      const requestFields = fields(request, ["bootstrap", "pluginId"]);
+      const requestFields = fields(request, [
+        "bootstrap",
+        "pluginId",
+        ...(Object.hasOwn(request, "runtime") ? ["runtime"] : []),
+      ]);
       parseDesktopLocalPluginExecutionSetupPluginId({
         pluginId: requestFields.pluginId,
       });
@@ -283,6 +308,34 @@ export function createDesktopLocalPluginExecutionSetupOwner(
         });
         active();
         if (epoch !== generation) setupInvalid("preview_unavailable");
+        const historyRequirement = snapshot.descriptor.requires.find(
+          (requirement) =>
+            requirement.service === "crewon.project-historical-queries" &&
+            requirement.apiVersion === "1",
+        );
+        let history: Awaited<
+          ReturnType<typeof captureDesktopLocalHistoricalProjectQueryTarget>
+        > | null = null;
+        if (historyRequirement !== undefined) {
+          try {
+            history = await captureDesktopLocalHistoricalProjectQueryTarget({
+              dataDirectory,
+              bootstrap: request.bootstrap,
+              runtime: request.runtime ?? null,
+              snapshot,
+              signal,
+              assertCurrent: active,
+            });
+          } catch (error) {
+            if (
+              !historyRequirement.optional ||
+              !isDesktopLocalHistoricalProjectQueryTargetUnavailable(error)
+            )
+              throw error;
+          }
+        }
+        active();
+        if (epoch !== generation) setupInvalid("preview_unavailable");
         const publicPreview = Object.freeze({
           ...identityPins(snapshot),
           previewId: randomBytes(32).toString("base64url"),
@@ -291,6 +344,15 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           preset: snapshot.preset,
           networkPaths: SHORT_NETWORK_PATHS,
           approvalRequirement: "none" as const,
+          ...(historyRequirement === undefined
+            ? {}
+            : {
+                historyQueryAvailability:
+                  history === null
+                    ? ("unavailable" as const)
+                    : ("available" as const),
+              }),
+          ...(history === null ? {} : { historyQuery: history.preview }),
         });
         preview = {
           preview: publicPreview,
@@ -301,16 +363,23 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           mappingCommitted: false,
           verified: false,
           entry: null,
+          historyQuery: history?.claim ?? null,
         };
         return publicPreview;
       });
     },
     claimPreview(request) {
       active();
-      const value = fields(request, ["previewId", "approveExecution"]);
+      const withHistory = preview !== null && preview.historyQuery !== null;
+      const value = fields(request, [
+        "previewId",
+        "approveExecution",
+        ...(withHistory ? ["approveHistoricalQueries"] : []),
+      ]);
       if (
         value.approveExecution !== true ||
-        typeof value.previewId !== "string"
+        typeof value.previewId !== "string" ||
+        (withHistory && value.approveHistoricalQueries !== true)
       )
         setupInvalid("consent_required");
       if (
@@ -374,6 +443,15 @@ export function createDesktopLocalPluginExecutionSetupOwner(
         )
           setupInvalid("mapping_unavailable");
         value.entry = await captureEntry(value, runtime);
+        if (value.historyQuery !== null)
+          await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
+            value.historyQuery,
+            {
+              approval: value.snapshot.approval,
+              policy: value.snapshot.policy,
+              runtime,
+            },
+          );
         ticket(claim);
         const mapping = Object.freeze(
           {},
@@ -400,7 +478,7 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           packageDigest: value.snapshot.pkg.packageDigest,
           contributionId: "workbench",
         };
-        const next = composeDesktopLocalComfyProjectExecutionApproval({
+        const selfApproval = composeDesktopLocalComfyProjectExecutionApproval({
           approval: value.snapshot.approval,
           source,
           target: {
@@ -409,6 +487,22 @@ export function createDesktopLocalPluginExecutionSetupOwner(
             entry: value.entry,
           },
         });
+        if (value.historyQuery !== null)
+          await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
+            value.historyQuery,
+            {
+              approval: value.snapshot.approval,
+              policy: value.snapshot.policy,
+            },
+          );
+        const next =
+          value.historyQuery === null
+            ? selfApproval
+            : composeDesktopLocalHistoricalProjectQueryApproval({
+                claim: value.historyQuery,
+                approval: selfApproval,
+                policy: value.snapshot.policy,
+              });
         // The saved entry is an opaque Main claim captured before stop. Its old runtime is now withdrawn.
         write(value, "approval", next, () => {
           value.mappingCommitted = true;
@@ -425,6 +519,15 @@ export function createDesktopLocalPluginExecutionSetupOwner(
         ticket(claim);
         if (!isDeepStrictEqual(current, value.entry))
           setupInvalid("runtime_changed");
+        if (value.historyQuery !== null)
+          await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
+            value.historyQuery,
+            {
+              approval: value.snapshot.approval,
+              policy: value.snapshot.policy,
+              runtime,
+            },
+          );
         value.verified = true;
       });
     },

@@ -26,11 +26,21 @@ import {
 } from "./project-query-schema.ts";
 import { loadPostgresProjectQueryLink } from "./project-query-store-support.ts";
 
+import {
+  migratePostgresProjectHistoricalQueries,
+  assertPostgresProjectHistoricalQuerySchema,
+} from "./project-historical-query-schema.ts";
+import { loadPostgresProjectHistoricalQueryLink } from "./project-historical-query-store-support.ts";
+import { migratePostgresHistoricalQueryMarker } from "./project-historical-query-marker.ts";
 /** Optional project storage capabilities reuse the host's pool; they never own a second runtime. */
 export class PostgresProjectAssociations {
   #projectGenerationsEnabled = false;
   #projectGenerationReadsEnabled = false;
   #projectQueriesEnabled = false;
+  #projectHistoricalQueriesEnabled = false;
+  get historicalQueriesEnabled() {
+    return this.#projectHistoricalQueriesEnabled;
+  }
   readonly #pool: Pool;
   readonly #schemaName: string;
   readonly #schema: string;
@@ -143,6 +153,47 @@ export class PostgresProjectAssociations {
   }
 
   /** Query opt-in verifies existing generation history and never grants generation writes. */
+  async migrateProjectHistoricalQueries(): Promise<void> {
+    this.#assertOpen();
+    const c = await this.#pool.connect();
+    try {
+      await c.query("BEGIN");
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+        JSON.stringify([
+          "project-historical-query-migration",
+          this.#schemaName,
+        ]),
+      ]);
+      await migratePostgresHistoricalQueryMarker(c, this.#schemaName);
+      await migratePostgresProjectHistoricalQueries(c, this.#schemaName);
+      this.#assertOpen();
+      await c.query("COMMIT");
+      this.#projectHistoricalQueriesEnabled = true;
+    } catch (e) {
+      await c.query("ROLLBACK").catch(() => {});
+      throw e;
+    } finally {
+      c.release();
+    }
+  }
+  async loadProjectHistoricalQueryLink(input: ExtensionRunLocator) {
+    if (!this.#projectHistoricalQueriesEnabled)
+      throw new Error("project_historical_query_unavailable");
+    this.#assertOpen();
+    const c = await this.#pool.connect();
+    try {
+      await assertPostgresProjectHistoricalQuerySchema(c, this.#schemaName);
+      const link = await loadPostgresProjectHistoricalQueryLink(
+        c,
+        this.#schemaName,
+        input,
+      );
+      this.#assertOpen();
+      return link;
+    } finally {
+      c.release();
+    }
+  }
   async migrateProjectQueries(): Promise<void> {
     this.#assertOpen();
     const client = await this.#pool.connect();

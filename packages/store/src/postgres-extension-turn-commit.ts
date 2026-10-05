@@ -94,11 +94,34 @@ import {
   projectQueryValues,
 } from "./project-query-store-support.ts";
 
+import {
+  captureProjectHistoricalQuery,
+  stripProjectHistoricalQueryOptions,
+  admitSqliteProjectHistoricalQueryPublication,
+  admitPostgresProjectHistoricalQueryPublication,
+  prepareSqliteProjectHistoricalQuery,
+  preparePostgresProjectHistoricalQuery,
+  assertProjectHistoricalQueryReceipt,
+  loadSqliteProjectHistoricalQueryLink,
+  loadPostgresProjectHistoricalQueryLink,
+  projectHistoricalQueryInsertSql,
+  projectHistoricalQueryValues,
+} from "./project-historical-query-store-support.ts";
+import {
+  assertSqliteProjectHistoricalQuerySchema,
+  assertPostgresProjectHistoricalQuerySchema,
+} from "./project-historical-query-schema.ts";
+import {
+  assertSqliteHistoricalQueryMarker,
+  assertPostgresHistoricalQueryMarker,
+} from "./project-historical-query-marker.ts";
+
 type PostgresExtensionTurnHost = Readonly<{
   schema: string;
   unmeteredEnabled: boolean;
   projectGenerationsEnabled: boolean;
   projectQueriesEnabled: boolean;
+  projectHistoricalQueriesEnabled: boolean;
   assertOpen(): void;
   transaction(
     scope: ExtensionScope,
@@ -139,6 +162,21 @@ export async function commitPostgresExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ) {
+  const historicalQuery = captureProjectHistoricalQuery(
+    input,
+    checkedPluginQueryTurn(input),
+    host.projectHistoricalQueriesEnabled,
+    options,
+  );
+  options = stripProjectHistoricalQueryOptions(options);
+  if (historicalQuery !== null)
+    input = {
+      ...input,
+      projectHistoricalQuery: {
+        reference: historicalQuery.reference,
+        generationLinkDigest: historicalQuery.generationLinkDigest,
+      },
+    };
   const capturedPlan = captureProjectTextPlanTurn(input, options);
   const plan = capturedPlan.plan;
   options = capturedPlan.options;
@@ -197,6 +235,9 @@ export async function commitPostgresExtensionTurn(
   if (projectQuery !== null)
     await assertCreativeProjectCommitCurrent(projectQuery.authority);
   assertCreativeProjectCommitActive(projectQuery?.authority);
+  if (historicalQuery !== null)
+    await assertCreativeProjectCommitCurrent(historicalQuery.authority);
+  assertCreativeProjectCommitActive(historicalQuery?.authority);
   let creditPath = false;
   return host.transaction(
     binding,
@@ -211,6 +252,14 @@ export async function commitPostgresExtensionTurn(
           host.schema,
           projectQuery,
         );
+      if (historicalQuery !== null) {
+        await assertPostgresProjectHistoricalQuerySchema(client, host.schema);
+        await admitPostgresProjectHistoricalQueryPublication(
+          client,
+          host.schema,
+          historicalQuery,
+        );
+      }
       const replay = await host.receipt(
         client,
         binding,
@@ -291,6 +340,25 @@ export async function commitPostgresExtensionTurn(
           );
         if (projectQuery !== null)
           await assertCreativeProjectCommitCurrent(projectQuery.authority);
+        await assertPostgresHistoricalQueryMarker(
+          client,
+          host.schema,
+          result.binding,
+          historicalQuery,
+        );
+        if (historicalQuery !== null)
+          assertProjectHistoricalQueryReceipt(
+            historicalQuery,
+            await loadPostgresProjectHistoricalQueryLink(
+              client,
+              host.schema,
+              result.binding,
+            ),
+            result.binding,
+            frozenInput.receipt,
+          );
+        if (historicalQuery !== null)
+          await assertCreativeProjectCommitCurrent(historicalQuery.authority);
         assertStageReplay(
           stage,
           await loadPostgresStageIfAvailable(
@@ -343,6 +411,16 @@ export async function commitPostgresExtensionTurn(
               client,
               host.schema,
               projectQuery,
+              frozenInput,
+              pluginQuery!,
+            );
+      const historicalLink =
+        historicalQuery === null
+          ? undefined
+          : await preparePostgresProjectHistoricalQuery(
+              client,
+              host.schema,
+              historicalQuery,
               frozenInput,
               pluginQuery!,
             );
@@ -448,7 +526,12 @@ export async function commitPostgresExtensionTurn(
           unmetered.admission,
         );
       if (pluginQuery !== undefined)
-        await savePostgresPluginQuery(client, host.schema, pluginQuery);
+        await savePostgresPluginQuery(
+          client,
+          host.schema,
+          pluginQuery,
+          historicalLink?.contentDigest,
+        );
       const result = extensionTurnResult(
         turn,
         binding,
@@ -472,6 +555,13 @@ export async function commitPostgresExtensionTurn(
           projectQueryInsertSql(`${prefix}.`, true),
           projectQueryValues(queryLink),
         );
+      if (historicalLink !== undefined)
+        await client.query(
+          projectHistoricalQueryInsertSql(`${prefix}.`, true),
+          projectHistoricalQueryValues(historicalLink),
+        );
+      if (historicalQuery !== null)
+        await assertCreativeProjectCommitCurrent(historicalQuery.authority);
       if (stage !== null) {
         await client.query(
           `INSERT INTO ${prefix}.project_stage_run_admissions VALUES($1,$2,$3,$4,$5,$6,$7)`,
@@ -502,6 +592,7 @@ export async function commitPostgresExtensionTurn(
         if (creditPath) host.assertOpen();
         assertCreativeProjectCommitActive(prepared?.authority);
         assertCreativeProjectCommitActive(projectQuery?.authority);
+        assertCreativeProjectCommitActive(historicalQuery?.authority);
       },
     },
   );

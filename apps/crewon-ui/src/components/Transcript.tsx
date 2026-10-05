@@ -1,4 +1,5 @@
 import { useStreamingTextPreview } from "./StreamingTextScope";
+import { ProjectPlanningRunScope } from "./project-planning/ProjectPlanningScope";
 import { useHasTaskWorkbench } from "./workbench/TaskWorkbenchContext";
 import { useMessageReplay } from "./messages/MessageReplayScope";
 import { MessageActions } from "./messages/MessageActions";
@@ -9,7 +10,6 @@ import {
 } from "../lib/control-runtime/controlTranscriptWindow";
 import {
   useEffect,
-  Fragment,
   useMemo,
   useRef,
   useState,
@@ -541,7 +541,7 @@ export function Transcript({
           )
             return null;
           return (
-            <Fragment key={`${turn.id}:${row.itemIds[0] ?? "active"}`}>
+            <ProjectPlanningRunScope runId={turn.id} key={`${turn.id}:${row.itemIds[0] ?? "active"}`}>
               <TranscriptTurn
                 turn={turn}
                 turnIndex={turnIndex}
@@ -560,7 +560,7 @@ export function Transcript({
                 }
                 isLatestResponse={turn.id === latestResponseTurnId}
               />
-            </Fragment>
+            </ProjectPlanningRunScope>
           );
         })}
         {pendingTeam ? (

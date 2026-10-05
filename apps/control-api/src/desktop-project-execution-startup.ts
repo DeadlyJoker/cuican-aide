@@ -70,6 +70,7 @@ export function issueDesktopProjectExecutionConfiguration(
     "textPlans",
     "pluginGenerations",
     "pluginQueries",
+    "historicalQueries",
     "generationReads",
     "generationReadUi",
     "selectionUi",
@@ -133,7 +134,8 @@ export function captureDesktopProjectCompositionConfig(
 function hasExecution(projects: CreativeProjectCompositionConfig | undefined) {
   return (
     projects?.pluginGenerations !== undefined ||
-    projects?.pluginQueries !== undefined
+    projects?.pluginQueries !== undefined ||
+    projects?.historicalQueries !== undefined
   );
 }
 function digest(

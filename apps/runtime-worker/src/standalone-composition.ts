@@ -20,6 +20,8 @@ import {
   type AgentVersionDeploymentCandidate,
   type ArtifactStorePort,
   type RunRoute,
+  captureProjectPlanningRuntimePort,
+  type ProjectPlanningRuntimePort,
 } from "@crewon/application";
 import {
   PostgresDomainStore,
@@ -167,6 +169,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   installedPluginPeer?: InstalledPluginPeerCompositionConfig;
   /** Trusted authority lifetime only; this closer never grants execution or payment permission. */
   installedPluginAuthorityOwner?: Readonly<{ close(): Promise<void> }>;
+  projectPlanning?: ProjectPlanningRuntimePort;
   /** Independent explicit financial deployment; absent means no credit Store access or migration. */
   pluginCreditSettlement?: PluginCreditSettlementRuntimeConfig;
   additionalAgentVersionRuntimes?: readonly Readonly<{
@@ -316,6 +319,9 @@ function prepareComposition(
   const config = Object.freeze({
     ...input,
     route: Object.freeze({ ...input.route }),
+    ...(input.projectPlanning === undefined ? {} : {
+      projectPlanning: captureProjectPlanningRuntimePort(input.projectPlanning),
+    }),
     ...(financial === undefined
       ? {}
       : {
@@ -695,6 +701,7 @@ async function composeRuntimeWorker(
       pluginTaskAdmissions,
       installedPluginRuntimeResolver,
       pluginCreditSettlement,
+      projectPlanning: config.projectPlanning,
       policy,
     },
     {

@@ -1,3 +1,8 @@
+import { parseProjectHistoricalQueryUiActionRequest } from "@crewon/contracts/plugins";
+import {
+  isInstalledPluginProjectHistoricalQueryOwner,
+  type InstalledPluginProjectHistoricalQueryOwner,
+} from "./installed-plugin-project-historical-query-owner.ts";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import type { ProjectTextPlanPluginUiRuntime } from "./project-text-plan-plugin-ui-composition.ts";
 import { ApplicationError } from "@crewon/application";
@@ -29,6 +34,7 @@ export function createProductionPluginUiRequestService({
   projectGenerations,
   projectGenerationReads,
   projectQueries,
+  historicalQueries,
   projectSelections,
   recovery,
   conversations,
@@ -41,11 +47,20 @@ export function createProductionPluginUiRequestService({
   projectGenerations?: InstalledPluginProjectGenerationOwner;
   projectGenerationReads?: ProductionProjectGenerationReadPluginRuntime;
   projectQueries?: InstalledPluginProjectQueryOwner;
+  historicalQueries?: InstalledPluginProjectHistoricalQueryOwner;
   projectSelections?: ProductionProjectGenerationSelectionPluginRuntime;
   recovery?: ProductionPluginUiRecoveryRuntime;
   conversations?: ProjectConversationControlOwner;
   plans?: ProjectTextPlanPluginUiRuntime;
 }>): PluginUiControlService {
+  if (
+    historicalQueries !== undefined &&
+    (!isInstalledPluginProjectHistoricalQueryOwner(historicalQueries) ||
+      taskRequests === undefined)
+  )
+    throw new Error(
+      "production_plugin_ui_historical_query_request_owner_invalid",
+    );
   if (
     projectQueries !== undefined &&
     (!isInstalledPluginProjectQueryOwner(projectQueries) ||
@@ -64,6 +79,7 @@ export function createProductionPluginUiRequestService({
     texts === undefined &&
     projectGenerations === undefined &&
     projectQueries === undefined &&
+    historicalQueries === undefined &&
     projectGenerationReads === undefined &&
     projectSelections === undefined &&
     recovery === undefined &&
@@ -155,6 +171,21 @@ export function createProductionPluginUiRequestService({
           signal,
           invoke,
         );
+      }
+      if (
+        command.action === "crewon.project-historical-queries" ||
+        command.action.startsWith("crewon.project-historical-queries.")
+      ) {
+        if (historicalQueries === undefined || taskRequests === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        parseProjectHistoricalQueryUiActionRequest({
+          action: command.action,
+          input: command.input,
+        });
+        return taskRequests.run({ request, actor, signal }, invoke);
       }
       if (
         command.action === "crewon.project-generation-queries" ||

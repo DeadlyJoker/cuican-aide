@@ -41,6 +41,71 @@ afterEach(async () => {
 });
 const publish = { publicAssets: ["ui/entry.mjs"], trustUiModule: true };
 
+it("explicit optional planning declaration publishes only same-source metadata and survives original cold Main bootstrap", async () => {
+  const f = fixture();
+  f.writeDescriptor({
+    ...f.descriptor,
+    entrypoints: { node: "node/entry.mjs", ui: f.descriptor.entrypoints.ui },
+    businessManifestPath: "business/manifest.json",
+    requires: [
+      "crewon.creative-projects",
+      "crewon.project-texts",
+      "crewon.project-conversations",
+      "crewon.project-text-plans",
+      "crewon.project-planning-drafts",
+    ].map((service) => ({ service, apiVersion: "1", optional: true })),
+  });
+  const owner = f.create(),
+    preview = await owner.previewDirectory(f.source);
+  await owner.confirmPreview(sourceConfirmation(preview, publish));
+  const saved = parseDesktopPluginApproval(f.approval());
+  if (saved.schemaVersion === "crewon.desktop-plugin-approval.v1")
+    throw new Error("planning metadata missing");
+  const source = {
+    pluginId: preview.pluginId,
+    packageDigest: preview.packageDigest,
+    contributionId: "studio",
+  };
+  expect(saved.projects.planningDrafts).toEqual({ publications: [source] });
+  for (const key of [
+    "pluginUi",
+    "textUi",
+    "conversations",
+    "textPlans",
+  ] as const)
+    expect(saved.projects[key]?.publications).toEqual([source]);
+  expect(Object.hasOwn(saved.projects, "pluginGenerations")).toBe(false);
+  expect(Object.hasOwn(saved.projects, "historicalQueries")).toBe(false);
+  const bootstrap = await prepareDesktopPluginBootstrap({
+    dataDirectory: f.dataDirectory,
+    actor: DESKTOP_RUNTIME_OWNER,
+    sessionEntropy: "actual-planning-metadata-bootstrap-000001",
+  });
+  expect(bootstrap).not.toBeNull();
+  await bootstrap?.cleanup();
+});
+it("planning metadata cannot be appended without the actual same-source prerequisite declarations", async () => {
+  const f = fixture();
+  f.writeApproval(f.originalApproval);
+  f.writeDescriptor({
+    ...f.descriptor,
+    entrypoints: { node: "node/entry.mjs", ui: f.descriptor.entrypoints.ui },
+    businessManifestPath: "business/manifest.json",
+    requires: [
+      "crewon.creative-projects",
+      "crewon.project-texts",
+      "crewon.project-conversations",
+      "crewon.project-planning-drafts",
+    ].map((service) => ({ service, apiVersion: "1", optional: true })),
+  });
+  const owner = f.create(),
+    preview = await owner.previewDirectory(f.source);
+  await expect(
+    owner.confirmPreview(sourceConfirmation(preview, publish)),
+  ).rejects.toThrow();
+  expect(f.approval()).toEqual(f.originalApproval);
+});
+
 it("explicit dual-entry plan declaration adds only exact plan metadata membership and survives a real cold bootstrap", async () => {
   const f = fixture();
   f.writeDescriptor({
@@ -66,6 +131,7 @@ it("explicit dual-entry plan declaration adds only exact plan metadata membershi
     contributionId: "studio",
   };
   expect(saved.projects.textPlans).toEqual({ publications: [pin] });
+  expect(Object.hasOwn(saved.projects, "planningDrafts")).toBe(false);
   expect(saved.projects.pluginUi).toEqual({ publications: [pin] });
   expect("pluginGenerations" in saved.projects).toBe(false);
   expect(Object.hasOwn(saved.projects, "delegation")).toBe(false);
