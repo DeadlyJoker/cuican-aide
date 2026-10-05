@@ -41,6 +41,30 @@ export async function executionSetupFixture(
     source = join(directory, "source");
   mkdirSync(dataDirectory, { mode: 0o700 });
   mkdirSync(source, { mode: 0o700 });
+  const currentBusiness = JSON.parse(
+    readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../../examples/plugins/short-drama/business.json",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    ),
+  );
+  // Named old-version fixtures retain v0's original tool family; asset declarations belong only to v19.
+  const business =
+    version === "19.0.0"
+      ? currentBusiness
+      : {
+          ...currentBusiness,
+          schemaVersion: "crewon.extension-manifest.v0",
+          hostApi: "crewon.extensions.v0",
+          tools: currentBusiness.tools.filter(
+            (tool: { operationId: string }) =>
+              !tool.operationId.startsWith("asset_"),
+          ),
+        };
   const files = new Map([
     [
       "node.mjs",
@@ -54,16 +78,7 @@ export async function executionSetupFixture(
       "business.json",
       Buffer.from(
         JSON.stringify({
-          ...JSON.parse(
-            readFileSync(
-              fileURLToPath(
-                new URL(
-                  "../../../examples/plugins/short-drama/business.json",
-                  import.meta.url,
-                ),
-              ),
-            ).toString("utf8"),
-          ),
+          ...business,
           version,
         }),
       ),
@@ -94,19 +109,37 @@ export async function executionSetupFixture(
         "crewon.project-generation-queries",
         "crewon.project-generation-selections",
         "crewon.project-generation-contexts",
-        ...(["14.0.0", "15.0.0", "16.0.0", "17.0.0", "18.0.0"].includes(version)
+        ...([
+          "14.0.0",
+          "15.0.0",
+          "16.0.0",
+          "17.0.0",
+          "18.0.0",
+          "19.0.0",
+        ].includes(version)
           ? ["crewon.project-texts"]
           : []),
-        ...(["15.0.0", "16.0.0", "17.0.0", "18.0.0"].includes(version)
+        ...(["15.0.0", "16.0.0", "17.0.0", "18.0.0", "19.0.0"].includes(version)
           ? ["crewon.project-text-recovery"]
           : []),
         ...(options.historicalQueries === true || version === "18.0.0"
           ? ["crewon.project-historical-queries"]
           : []),
-        ...(["17.0.0", "18.0.0"].includes(version)
+        ...(["17.0.0", "18.0.0", "19.0.0"].includes(version)
           ? ["crewon.project-text-plans"]
           : []),
-        ...(version === "18.0.0" ? ["crewon.project-planning-drafts"] : []),
+        ...(["18.0.0", "19.0.0"].includes(version)
+          ? ["crewon.project-planning-drafts"]
+          : []),
+        ...(version === "19.0.0"
+          ? [
+              "crewon.project-assets",
+              "crewon.project-asset-recovery",
+              "crewon.project-asset-stages",
+              "crewon.project-asset-tools",
+              "crewon.project-asset-context",
+            ]
+          : []),
         ...(options.projectContext === true
           ? [
               "crewon.project-conversations",

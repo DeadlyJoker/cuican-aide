@@ -63,3 +63,9 @@ export { PostgresProjectConversationStore } from "./project-conversation-postgre
 
 export { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 export { PostgresProjectTextPlanStore } from "./project-text-plan-postgres-store.ts";
+
+export * from "./project-asset-sqlite-store.ts";
+export * from "./project-asset-postgres-store.ts";
+export * from "./project-asset-stage-store.ts";
+export * from "./project-asset-ui-intent-sqlite-store.ts";
+export * from "./project-asset-ui-intent-postgres-store.ts";

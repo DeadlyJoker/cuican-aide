@@ -1,3 +1,6 @@
+import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
+import { isProjectAssetStagesNamespaceAction } from "@crewon/contracts/project-asset-stages";
+import { isProjectAssetRecoveryNamespaceAction } from "@crewon/contracts/project-asset-recovery";
 import { ApplicationError, type PluginUiActionPort } from "@crewon/application";
 import type { CreativeProjectPluginUiRuntime } from "./creative-project-plugin-ui-composition.ts";
 import type { ProjectTextPluginUiRuntime } from "./project-text-plugin-ui-composition.ts";
@@ -6,12 +9,16 @@ import type { InstalledPluginTaskRuntimeCore } from "./installed-plugin-task-run
 import { combineSelectionCommittedMetadata } from "./project-generation-selection-plugin-ui-owner.ts";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import type { ProjectTextPlanPluginUiRuntime } from "./project-text-plan-plugin-ui-composition.ts";
+import type { ProjectAssetPluginUiRuntime } from "./project-asset-plugin-ui-composition.ts";
+import { isProjectAssetUiNamespaceAction } from "@crewon/contracts/project-assets";
 
 /** Metadata namespaces are dispatched before the independent execution owner. */
 export function composeDesktopProjectPluginUiDispatch(
   input: Readonly<{
     projects: CreativeProjectPluginUiRuntime | undefined;
     texts: ProjectTextPluginUiRuntime | undefined;
+    assets?: ProjectAssetPluginUiRuntime;
+    assetStages?: () => ProjectAssetStageControlOwner | undefined;
     history: DesktopProjectHistoryPluginRuntime | undefined;
     tasks: InstalledPluginTaskRuntimeCore | undefined;
     conversations?: () => ProjectConversationControlOwner | undefined;
@@ -21,6 +28,32 @@ export function composeDesktopProjectPluginUiDispatch(
   const { projects, texts, history, tasks } = input;
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
+      if (isProjectAssetStagesNamespaceAction(context.action)) {
+        const owner = input.assetStages?.();
+        if (owner === undefined || !owner.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_asset_stage_unavailable",
+          );
+        return owner.actions.invoke(context);
+      }
+      if (isProjectAssetRecoveryNamespaceAction(context.action)) {
+        const owner = input.assets?.recoveryOwner;
+        if (owner === undefined || !owner.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_asset_recovery_unavailable",
+          );
+        return owner.actions.invoke(context);
+      }
+      if (isProjectAssetUiNamespaceAction(context.action)) {
+        if (
+          input.assets === undefined ||
+          !input.assets.owner.supportsAction(context.action)
+        )
+          throw new ApplicationError("conflict", "project_asset_unavailable");
+        return input.assets.owner.actions.invoke(context);
+      }
       if (
         context.action === "crewon.project-text-plans" ||
         context.action.startsWith("crewon.project-text-plans.")
@@ -102,10 +135,48 @@ export function composeDesktopProjectPluginUiDispatch(
     texts,
     input.conversations,
   );
+  const assetMetadata =
+    input.assets === undefined
+      ? metadata
+      : {
+          committedMetadata: combineSelectionCommittedMetadata(
+            input.assets.recoveryOwner === undefined
+              ? input.assets.owner.committedMetadata
+              : combineSelectionCommittedMetadata(
+                  input.assets.recoveryOwner.committedMetadata,
+                  input.assets.owner.committedMetadata,
+                ),
+            metadata.committedMetadata,
+          ),
+        };
+  const stageMetadata =
+    input.assetStages === undefined
+      ? assetMetadata
+      : {
+          committedMetadata: combineSelectionCommittedMetadata(
+            {
+              isOutcome: (
+                value,
+              ): value is import("@crewon/application").PluginUiCommittedMetadataOutcome =>
+                input.assetStages?.()?.committedMetadata.isOutcome(value) ===
+                true,
+              verify: (context, value) => {
+                const owner = input.assetStages?.();
+                if (owner === undefined)
+                  throw new ApplicationError(
+                    "authorization",
+                    "project_asset_stage_unavailable",
+                  );
+                return owner.committedMetadata.verify(context, value);
+              },
+            },
+            assetMetadata.committedMetadata,
+          ),
+        };
   return {
     actions,
     ...(input.plans === undefined
-      ? metadata
+      ? stageMetadata
       : {
           committedMetadata: combineSelectionCommittedMetadata(
             {
@@ -124,7 +195,7 @@ export function composeDesktopProjectPluginUiDispatch(
                 return owner.committedMetadata.verify(context, value);
               },
             },
-            metadata.committedMetadata,
+            stageMetadata.committedMetadata,
           ),
         }),
   };

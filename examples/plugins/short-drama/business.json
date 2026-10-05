@@ -1,10 +1,10 @@
 {
-  "schemaVersion": "crewon.extension-manifest.v0",
-  "hostApi": "crewon.extensions.v0",
+  "schemaVersion": "crewon.extension-manifest.v1",
+  "hostApi": "crewon.extensions.v1",
   "pluginId": "crewon.short-drama",
-  "version": "17.0.0",
+  "version": "19.0.0",
   "title": "AI 短剧工作台",
-  "description": "一个短剧插件内包含项目、需求、大纲、分集剧本的Agent工具与Krea2预设，手动入口共享同一项目版本。",
+  "description": "短剧插件内的项目、文字成果、角色场景道具和Krea2能力共用同一版本；Agent按当前阶段执行，用户可以手动探索、编辑、采用和锁定。",
   "task": {
     "inputSchema": {
       "type": "object",
@@ -18,7 +18,7 @@
       "required": ["prompt"],
       "additionalProperties": false
     },
-    "instructions": "先调用 project_context_read 读取实际执行范围。scope 非空时，只处理其 projectId、阶段与确切来源；讨论阶段只读取和提出建议，需求阶段追加需求修订，大纲、剧本阶段分别使用允许的写工具保存候选，不能创建另一项目、跨集写入、自动采用/锁定或执行媒体工具。若所需阶段或来源未获准，说明缺口并请用户在对话中切换阶段。scope 为 null 的原独立任务沿原行为：先读取或创建项目，读取当前需求和阶段元数据。文字创作由当前 Agent 模型完成，业务工具校验需求修订和成果候选；大纲/剧本保存不自动采用。每个工具 resultJson 为实际宿主结果，ID、版本和摘要从真实结果取得。content_read 沿 nextOffset 读取至 null，不把部分 JSON 当全文，不一次注入全项目和历史。版本冲突先读取并说明差异，不能盲目覆盖。原媒体任务仅在用户授权且 Krea2 已配置时 submit 一次，再 observe 原 operation；unknownOutcome 不能重新提交。视频、声音和合成尚未接通，不能假称完成。"
+    "instructions": "每轮先调用 asset_context_read，读取真实资产阶段范围。其scope非空时，只处理该项目、assetKind和冻结的需求/剧本来源；只调用allowedOperations中的工具。asset_save仅保存候选，不能自动采用、锁定、选参考图或执行媒体。使用原实际来源，不猜测最新版本；asset_content_read逐段读取至nextOffset=null，并核对同一contentDigest。资产scope为null时，调用project_context_read读取原项目执行范围：讨论只读和建议，需求追加需求修订，大纲/剧本仅保存当前获准阶段及分集的候选，不能跨项目、跨集、自动采用/锁定或执行媒体。两种scope均为null的原独立任务沿原行为：先读取或创建项目，再读取需求和阶段元数据。每个resultJson是实际宿主结果，ID、版本和摘要从真实结果取得。旧content_read沿nextOffset读至null，不把片段当全文，不一次注入全项目与历史。文字创作由当前Agent模型完成；保存候选不代表选用。版本冲突先读取并说明差异，不能盲目覆盖。原媒体任务仅在用户授权且Krea2配置完整时提交一次，再观察原operation；unknownOutcome只查询，不能重新提交。缺少服务、权限或来源时说明缺口，不绕过宿主协议。视频、声音和合成尚未接通，不能假称完成。"
   },
   "configurationSchema": {
     "type": "object",
@@ -884,6 +884,313 @@
       "effect": "readOnly",
       "recovery": "replaySafe",
       "capability": "project.read"
+    },
+    {
+      "operationId": "asset_context_read",
+      "adapterId": "crewon.project-asset-context",
+      "description": "Read the actual frozen asset stage admitted for this Run before other tools. Null means no asset stage, not permission to bypass another stage.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.asset.read"
+    },
+    {
+      "operationId": "asset_list",
+      "adapterId": "crewon.project-asset-tools",
+      "description": "Read up to four shared assets of the selected kind; continue using nextAssetId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 16,
+            "enum": ["character", "scene", "prop"]
+          },
+          "afterAssetId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": ["projectId", "kind", "limit"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.asset.read"
+    },
+    {
+      "operationId": "asset_read",
+      "adapterId": "crewon.project-asset-tools",
+      "description": "Read actual selected asset revision metadata and source freshness. Does not select or lock an asset.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "assetId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          }
+        },
+        "required": ["projectId", "assetId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.asset.read"
+    },
+    {
+      "operationId": "asset_history",
+      "adapterId": "crewon.project-asset-tools",
+      "description": "Read up to four immutable asset content revision metadata entries; continue using nextContentRevision. No selection or lock.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "assetId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "afterContentRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": ["projectId", "assetId", "afterContentRevision", "limit"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.asset.read"
+    },
+    {
+      "operationId": "asset_content_read",
+      "adapterId": "crewon.project-asset-tools",
+      "description": "Read one bounded canonical JSON chunk of an immutable asset revision. Keep the same contentDigest and concatenate until nextOffset is null.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "assetId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "contentRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          }
+        },
+        "required": ["projectId", "assetId", "contentRevision", "offset"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.asset.read"
+    },
+    {
+      "operationId": "asset_save",
+      "adapterId": "crewon.project-asset-tools",
+      "description": "Append one role, scene or prop candidate using frozen brief and optional script sources. Omit assetId only for a new asset with expectedAssetRevision=0. Saving never adopts, locks or assigns a reference image.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "assetId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 16,
+            "enum": ["character", "scene", "prop"]
+          },
+          "expectedAssetRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "script": {
+            "type": "object",
+            "properties": {
+              "artifactId": {
+                "type": "string",
+                "maxLength": 128,
+                "enum": null
+              },
+              "contentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": null
+              }
+            },
+            "required": ["artifactId", "contentRevision"],
+            "additionalProperties": false
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 320,
+                "enum": null
+              },
+              "setting": {
+                "type": "string",
+                "maxLength": 6144,
+                "enum": null
+              },
+              "visualPrompt": {
+                "type": "string",
+                "maxLength": 2000,
+                "enum": null
+              }
+            },
+            "required": ["name", "setting", "visualPrompt"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "projectId",
+          "kind",
+          "expectedAssetRevision",
+          "briefRevision",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.asset.write"
     }
   ],
   "resultViews": ["text", "externalOperation", "externalResult"]

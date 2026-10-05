@@ -1,3 +1,11 @@
+import {
+  ProjectAssetToolsServiceOwner,
+  type ProjectAssetToolsServiceOwnerDependencies,
+} from "./project-asset-tools-service-owner.ts";
+import {
+  assertProjectAssetStageToolRequest,
+  type ProjectAssetStageRunAdmission,
+} from "@crewon/domain";
 import { readProjectContextScope } from "./project-context-service-read.ts";
 import { createHash } from "node:crypto";
 import {
@@ -77,6 +85,11 @@ export type ProjectToolsAuthorizationInvocation =
 export type ProjectToolsServiceOwnerDependencies = Readonly<{
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
+  assetStageAdmission?: ProjectAssetStageRunAdmission | null;
+  assets?: Readonly<{
+    service: import("@crewon/application").ProjectAssetApplicationService;
+    authorizeService(signal: AbortSignal): Promise<void>;
+  }>;
   stageAdmission?: ProjectStageRunAdmission | null;
   planAdmission?: ProjectTextPlanRunAdmission | null;
   tools: ExtensionManifest["tools"];
@@ -120,6 +133,8 @@ const digester = Object.freeze({
 export class ProjectToolsServiceOwner {
   readonly #dependencies: ProjectToolsServiceOwnerDependencies;
   readonly #admission: PluginTaskAdmission;
+  readonly #assetOwner: ProjectAssetToolsServiceOwner | null;
+  readonly #assetStage: ProjectAssetStageRunAdmission | null;
   readonly #stage: ProjectStageRunAdmission | null;
   readonly #plan: ProjectTextPlanRunAdmission | null;
   readonly #abort = new AbortController();
@@ -131,6 +146,18 @@ export class ProjectToolsServiceOwner {
   #closing: Promise<void> | undefined;
   constructor(dependencies: ProjectToolsServiceOwnerDependencies) {
     this.#dependencies = dependencies;
+    this.#assetStage = dependencies.assetStageAdmission ?? null;
+    if (this.#assetStage !== null && dependencies.assets === undefined)
+      denied();
+    this.#assetOwner =
+      dependencies.assets === undefined
+        ? null
+        : new ProjectAssetToolsServiceOwner({
+            ...dependencies,
+            assets: dependencies.assets.service,
+            assetStageAdmission: this.#assetStage,
+            authorizeAssetService: dependencies.assets.authorizeService,
+          });
     this.#admission = parsePluginTaskAdmission(dependencies.admission);
     this.#plan =
       dependencies.planAdmission == null
@@ -229,6 +256,9 @@ export class ProjectToolsServiceOwner {
       ),
     ) as unknown as PluginProjectToolsService;
   }
+  assetHostServices(): readonly PluginHostService[] {
+    return this.#assetOwner?.hostServices() ?? [];
+  }
   hostService(): PluginHostService {
     return Object.freeze({
       service: CREWON_PROJECT_TOOLS_SERVICE,
@@ -311,7 +341,9 @@ export class ProjectToolsServiceOwner {
           request as Readonly<Record<string, unknown>>,
         );
       }
-      return delegate();
+      return this.#assetOwner === null
+        ? delegate()
+        : this.#assetOwner.withInvocation(input, delegate);
     });
     this.#pending.add(task);
     try {
@@ -326,12 +358,17 @@ export class ProjectToolsServiceOwner {
     }
   }
   canRetire(): boolean {
-    return this.#active.size === 0 && this.#pending.size === 0;
+    return (
+      this.#active.size === 0 &&
+      this.#pending.size === 0 &&
+      (this.#assetOwner?.canRetire() ?? true)
+    );
   }
   close(): Promise<void> {
     if (this.#closing !== undefined) return this.#closing;
     this.#closed = true;
     this.#abort.abort(new Error("plugin_project_tools_owner_closed"));
+    const assetClose = this.#assetOwner?.close();
     this.#closing = (async () => {
       while (this.#pending.size > 0 || this.#active.size > 0) {
         await Promise.allSettled([...this.#pending]);
@@ -339,6 +376,7 @@ export class ProjectToolsServiceOwner {
           [...this.#active].flatMap((value) => [...value.pending]),
         );
       }
+      await assetClose;
     })();
     return this.#closing;
   }
@@ -426,6 +464,12 @@ export class ProjectToolsServiceOwner {
       )
         denied();
       const request = parseProjectToolsRequest(method, fields.request.value);
+      if (this.#assetStage !== null)
+        assertProjectAssetStageToolRequest(
+          this.#assetStage,
+          operationId,
+          request as Readonly<Record<string, unknown>>,
+        );
       const original = parseProjectToolsRequest(
         method,
         JSON.parse(invocation.command.input),

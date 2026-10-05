@@ -1,4 +1,8 @@
 import {
+  prepareProjectAssetStages,
+  type PreparedProjectAssetStages,
+} from "./project-asset-stage-composition.ts";
+import {
   captureProjectHistoricalQueryPluginConfiguration,
   type ProjectHistoricalQueryPluginConfiguration,
 } from "./project-historical-query-plugin-configuration.ts";
@@ -7,6 +11,7 @@ import {
   ProjectTextApplicationService,
   type PluginProjectTextRecoveryApplicationService,
   type ProjectTextStore,
+  type ProjectAssetStageStore,
   type ProjectConversationStore,
   type CreativeProjectAuthorizationPort,
   type CreativeProjectStore,
@@ -69,73 +74,85 @@ import {
   type PreparedProjectTextPlans,
 } from "./project-text-plan-composition.ts";
 import type { ProjectTextPlanStore, ExtensionStore } from "@crewon/application";
+import {
+  captureProjectAssetCompositionConfig,
+  prepareProjectAssets,
+  type ProjectAssetCompositionConfig,
+  type ProjectAssetStoreOwner,
+  type PreparedProjectAssets,
+} from "./project-asset-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
-export type CreativeProjectCompositionConfig = Readonly<{
-  authorization: CreativeProjectAuthorizationPort;
-  textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
-  textUi?: ProjectTextPluginUiConfig;
-  textRecovery?: ProjectTextPluginUiConfig;
-  conversations?: ProjectConversationConfiguration;
-  textPlans?: CreativeProjectPluginUiConfig;
-  pluginUi?: CreativeProjectPluginUiConfig;
-  pluginGenerations?: ProjectGenerationPluginConfiguration;
-  pluginQueries?: ProjectQueryPluginConfiguration;
-  historicalQueries?: ProjectHistoricalQueryPluginConfiguration;
-  generationReads?: ProjectGenerationReadConfiguration;
-  generationReadUi?: ProjectGenerationReadPluginUiConfig;
-  resultSelections?: ProjectGenerationSelectionConfiguration;
-  selectionUi?: CreativeProjectPluginUiConfig;
-}>;
+export type CreativeProjectCompositionConfig = ProjectAssetCompositionConfig &
+  Readonly<{
+    authorization: CreativeProjectAuthorizationPort;
+    textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
+    textUi?: ProjectTextPluginUiConfig;
+    textRecovery?: ProjectTextPluginUiConfig;
+    conversations?: ProjectConversationConfiguration;
+    textPlans?: CreativeProjectPluginUiConfig;
+    pluginUi?: CreativeProjectPluginUiConfig;
+    pluginGenerations?: ProjectGenerationPluginConfiguration;
+    pluginQueries?: ProjectQueryPluginConfiguration;
+    historicalQueries?: ProjectHistoricalQueryPluginConfiguration;
+    generationReads?: ProjectGenerationReadConfiguration;
+    generationReadUi?: ProjectGenerationReadPluginUiConfig;
+    resultSelections?: ProjectGenerationSelectionConfiguration;
+    selectionUi?: CreativeProjectPluginUiConfig;
+  }>;
 
-export type PreparedCreativeProjects = {
-  readonly service: CreativeProjectApplicationService;
-  readonly textService?: ProjectTextApplicationService;
-  readonly textUi?: ProjectTextPluginUiConfig;
-  readonly textRecovery?: ProjectTextPluginUiConfig;
-  readonly textRecoveryService?: PluginProjectTextRecoveryApplicationService;
-  readonly conversations?: ProjectConversationConfiguration;
-  readonly conversationFoundation?: PreparedProjectConversations;
-  readonly textPlans?: CreativeProjectPluginUiConfig;
-  readonly planFoundation?: PreparedProjectTextPlans;
-  readonly pluginUi?: CreativeProjectPluginUiConfig;
-  readonly generationReads?: ProjectGenerationReadConfiguration;
-  readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
-  readonly generationReadStore?: ProjectGenerationReadStore;
-  readonly selectionUi?: CreativeProjectPluginUiConfig;
-  readonly resultSelections?: ProjectGenerationSelectionConfiguration &
-    Readonly<{
-      store: ProjectGenerationSelectionStore;
-      projects: Readonly<{
+export type PreparedCreativeProjects = ProjectAssetCompositionConfig &
+  Partial<PreparedProjectAssets> & {
+    readonly service: CreativeProjectApplicationService;
+    readonly textService?: ProjectTextApplicationService;
+    readonly textUi?: ProjectTextPluginUiConfig;
+    readonly textRecovery?: ProjectTextPluginUiConfig;
+    readonly textRecoveryService?: PluginProjectTextRecoveryApplicationService;
+    readonly conversations?: ProjectConversationConfiguration;
+    readonly conversationFoundation?: PreparedProjectConversations;
+    readonly textPlans?: CreativeProjectPluginUiConfig;
+    readonly planFoundation?: PreparedProjectTextPlans;
+    readonly assetStageFoundation?: PreparedProjectAssetStages;
+    readonly pluginUi?: CreativeProjectPluginUiConfig;
+    readonly generationReads?: ProjectGenerationReadConfiguration;
+    readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
+    readonly generationReadStore?: ProjectGenerationReadStore;
+    readonly selectionUi?: CreativeProjectPluginUiConfig;
+    readonly resultSelections?: ProjectGenerationSelectionConfiguration &
+      Readonly<{
+        store: ProjectGenerationSelectionStore;
+        projects: Readonly<{
+          store: CreativeProjectStore;
+          authorization: CreativeProjectAuthorizationPort;
+        }>;
+      }>;
+    readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
+      Readonly<{
         store: CreativeProjectStore;
         authorization: CreativeProjectAuthorizationPort;
       }>;
-    }>;
-  readonly pluginGenerations?: ProjectGenerationPluginConfiguration &
-    Readonly<{
-      store: CreativeProjectStore;
-      authorization: CreativeProjectAuthorizationPort;
-    }>;
-  readonly pluginQueries?: ProjectQueryPluginConfiguration &
-    Readonly<{
-      store: CreativeProjectStore;
-      authorization: CreativeProjectAuthorizationPort;
-    }>;
-  readonly historicalQueries?: ProjectHistoricalQueryPluginConfiguration &
-    Readonly<{
-      store: CreativeProjectStore;
-      authorization: CreativeProjectAuthorizationPort;
-    }>;
-  /** Composition owns auxiliary resources; the creator still owns the parent Store. */
-  failureCleanup?: Promise<void>;
-};
+    readonly pluginQueries?: ProjectQueryPluginConfiguration &
+      Readonly<{
+        store: CreativeProjectStore;
+        authorization: CreativeProjectAuthorizationPort;
+      }>;
+    readonly historicalQueries?: ProjectHistoricalQueryPluginConfiguration &
+      Readonly<{
+        store: CreativeProjectStore;
+        authorization: CreativeProjectAuthorizationPort;
+      }>;
+    /** Composition owns auxiliary resources; the creator still owns the parent Store. */
+    failureCleanup?: Promise<void>;
+  };
 
 type CreativeProjectStoreOwner = ProjectTextRecoveryStoreOwner &
+  ProjectAssetStoreOwner &
   Readonly<{
     creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
     projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
     projectConversationStore?(): ProjectConversationStore;
     projectTextPlanStore?(): ProjectTextPlanStore;
+    projectAssetStageStore?(): ProjectAssetStageStore;
     pluginInstallationStore?(): { migrate(): Promise<void> };
     extensionStore?(): ProjectGenerationReadStore &
       ExtensionStore & {
@@ -158,6 +175,11 @@ export function captureCreativeProjectCompositionConfig(
       (key) =>
         key !== "authorization" &&
         key !== "textArtifacts" &&
+        key !== "assetArtifacts" &&
+        key !== "assetUi" &&
+        key !== "assetRecovery" &&
+        key !== "assetReferences" &&
+        key !== "assetStages" &&
         key !== "textUi" &&
         key !== "textRecovery" &&
         key !== "conversations" &&
@@ -202,6 +224,7 @@ export function captureCreativeProjectCompositionConfig(
     textArtifacts = Object.freeze({ version: "crewon.project-text.v1" });
   }
   const textUiField = fields.textUi;
+  const assets = captureProjectAssetCompositionConfig(input, textArtifacts);
   if (
     textUiField !== undefined &&
     (!Object.hasOwn(textUiField, "value") || !textUiField.enumerable)
@@ -355,6 +378,7 @@ export function captureCreativeProjectCompositionConfig(
       )
         throw new Error("creative_project_authorization_required");
       return Object.freeze({
+        ...assets,
         authorization: Object.freeze({
           authorize: descriptor.value.bind(port),
         }),
@@ -436,8 +460,21 @@ export async function prepareCreativeProjects(
     projects: store,
     authorization: configuration.authorization,
   });
+  const assets = await prepareProjectAssets(owner, {
+    configuration,
+    projects: store,
+    texts: textStore,
+    authorization: configuration.authorization,
+  });
   const conversationFoundation = await prepareProjectConversations(owner, {
     configuration: configuration.conversations,
+    projects: store,
+    texts: textStore,
+    authorization: configuration.authorization,
+  });
+  const assetStageFoundation = await prepareProjectAssetStages(owner, {
+    configuration: configuration.assetStages,
+    conversations: conversationFoundation?.store,
     projects: store,
     texts: textStore,
     authorization: configuration.authorization,
@@ -484,6 +521,22 @@ export async function prepareCreativeProjects(
           configuration.resultSelections,
         );
   return {
+    ...assets,
+    ...(assetStageFoundation === undefined
+      ? {}
+      : {
+          assetStageFoundation,
+          assetStages: assetStageFoundation.configuration,
+        }),
+    ...(configuration.assetUi === undefined
+      ? {}
+      : { assetUi: configuration.assetUi }),
+    ...(configuration.assetRecovery === undefined
+      ? {}
+      : { assetRecovery: configuration.assetRecovery }),
+    ...(configuration.assetReferences === undefined
+      ? {}
+      : { assetReferences: configuration.assetReferences }),
     ...(planFoundation === undefined
       ? {}
       : {

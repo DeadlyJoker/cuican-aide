@@ -24,6 +24,11 @@ import { extensionStoreDigester } from "./extension-store-records.ts";
 
 export type ProjectRunQualification =
   CreativeProjectRunCommitTransactionAuthority;
+/** Execution facts shared by distinct qualified project protocols; not a mutation grant. */
+export type ProjectRunExecutionEvidence = Pick<
+  ProjectRunQualification,
+  "actor" | "run" | "receipt" | "claim" | "installation" | "admission"
+>;
 export function projectRunCommitQualification(
   authority: CreativeProjectCommitAuthority | undefined,
   actor: ActorContext,
@@ -84,7 +89,7 @@ const fixedReceipt = [
 
 /** All records below have been decoded from the caller's actual transaction connection. */
 export function assertProjectRunExecution(
-  q: ProjectRunQualification,
+  q: ProjectRunExecutionEvidence,
   facts: Readonly<{
     run: RunState | null;
     receipt: ToolExecutionReceiptState | null;
@@ -168,7 +173,7 @@ export function assertProjectRunExecution(
 
 /** A scheduling lease is necessary but never replaces the actor, Tool or installation checks. */
 export function assertProjectRunQueue(
-  q: ProjectRunQualification,
+  q: ProjectRunExecutionEvidence,
   row: Record<string, unknown> | undefined,
   now: number,
 ): void {
@@ -208,7 +213,7 @@ export function assertProjectRunQueue(
     denied();
 }
 
-export function projectRunReceiptLocator(q: ProjectRunQualification) {
+export function projectRunReceiptLocator(q: ProjectRunExecutionEvidence) {
   const {
     tenantId,
     spaceId,

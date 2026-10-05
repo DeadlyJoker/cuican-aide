@@ -30,6 +30,11 @@ import { ProjectTextPlanController } from "./ProjectTextPlanController";
 import { ProjectTextPlanActions } from "./ProjectTextPlanActions";
 import { ProjectPlanningDraftReview } from "./ProjectPlanningDraftReview";
 import type { ProjectPlanningProposal } from "../project-planning-service";
+import { ProjectAssetController } from "./ProjectAssetController";
+import { ProjectAssetWorkbench } from "./ProjectAssetWorkbench";
+import { ProjectAssetRecoveryActions } from "./ProjectAssetRecoveryActions";
+const emptySubscribe = () => () => undefined;
+const noAssetSnapshot = () => null;
 
 function SaveFeedback({
   controller,
@@ -94,12 +99,14 @@ export function ShortDramaPersistentWorkbench({
   texts,
   conversations,
   plans,
+  assets,
   planningDraft = null,
 }: {
   controller: CreativeProjectController;
   texts: ProjectTextController;
   conversations: ProjectConversationController;
   plans: ProjectTextPlanController;
+  assets?: ProjectAssetController;
   planningDraft?: ProjectPlanningProposal | null;
 }) {
   const snapshot = useSyncExternalStore(
@@ -118,7 +125,12 @@ export function ShortDramaPersistentWorkbench({
     conversations.getSnapshot,
   );
   useSyncExternalStore(plans.subscribe, plans.getSnapshot, plans.getSnapshot);
-  const [stage, setStage] = useState<0 | 1>(0);
+  useSyncExternalStore(
+    assets?.subscribe ?? emptySubscribe,
+    assets?.getSnapshot ?? noAssetSnapshot,
+    assets?.getSnapshot ?? noAssetSnapshot,
+  );
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
   const [title, setTitle] = useState("");
@@ -137,7 +149,8 @@ export function ShortDramaPersistentWorkbench({
     snapshot.conceptLocked ||
     texts.locked ||
     conversations.locked ||
-    plans.locked;
+    plans.locked ||
+    assets?.locked === true;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
     (project) =>
@@ -147,7 +160,8 @@ export function ShortDramaPersistentWorkbench({
     texts.setProject(details);
     conversations.setProject(details);
     plans.setProject(details);
-  }, [texts, conversations, plans, details]);
+    assets?.setProject(details);
+  }, [texts, conversations, plans, assets, details]);
   useEffect(() => {
     setStage(0);
   }, [details?.project.projectId]);
@@ -182,6 +196,13 @@ export function ShortDramaPersistentWorkbench({
   return (
     <section className="drama-workbench" aria-label="AI 短剧工作台">
       <div className="drama-main">
+        {assets && (
+          <ProjectAssetRecoveryActions
+            assets={assets}
+            projects={controller}
+            onRestore={() => setStage(2)}
+          />
+        )}
         {planningDraft && (
           <ProjectPlanningDraftReview
             proposal={planningDraft}
@@ -456,11 +477,14 @@ export function ShortDramaPersistentWorkbench({
                   <button
                     type="button"
                     key={stageName}
-                    className={`stage-item ${index === stage ? "active" : index < 2 ? "" : "later"}`}
-                    disabled={index > 1 || locked}
+                    className={`stage-item ${index === stage ? "active" : index < (assets ? 3 : 2) ? "" : "later"}`}
+                    disabled={index >= (assets ? 3 : 2) || locked}
                     aria-current={index === stage ? "step" : undefined}
                     onClick={() => {
-                      if (index < 2) setStage(index as 0 | 1);
+                      if (index < (assets ? 3 : 2)) {
+                        if (index === 2) assets?.activate();
+                        setStage(index as 0 | 1 | 2);
+                      }
                     }}
                   >
                     <span className="stage-number">
@@ -471,7 +495,7 @@ export function ShortDramaPersistentWorkbench({
                       <small>
                         {index === stage
                           ? "当前阶段"
-                          : index < 2
+                          : index < (assets ? 3 : 2)
                             ? "可进入"
                             : "后续开放"}
                       </small>
@@ -480,7 +504,20 @@ export function ShortDramaPersistentWorkbench({
                   </button>
                 ))}
               </div>
-              {stage === 1 ? (
+              {stage === 2 && assets ? (
+                <ProjectAssetWorkbench
+                  controller={assets}
+                  images={controller.concepts.images}
+                  details={details}
+                  blocked={
+                    projectLocked ||
+                    snapshot.conceptLocked ||
+                    texts.locked ||
+                    conversations.locked ||
+                    plans.locked
+                  }
+                />
+              ) : stage === 1 ? (
                 <StoryScriptWorkbench
                   controller={texts}
                   details={details}

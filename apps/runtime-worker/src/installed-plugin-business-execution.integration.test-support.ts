@@ -31,6 +31,7 @@ import {
   extensionToolName,
   parsePluginTaskAdmissionPin,
   parseProjectStageRunAdmission,
+  parseProjectAssetStageRunAdmission,
   type PluginSelection,
   type PluginProfileScope,
   type PluginTaskAdmissionPin,
@@ -145,6 +146,11 @@ export async function businessExecutionFixture(
       RuntimeWorkerCompositionConfig["installedPluginExecution"]
     >["projectTools"];
     projectConversationQuotes?: boolean;
+    projectAssetStageQuotes?: boolean;
+    beforeProjectAssetStageQuote?(): Promise<void>;
+    projectAssetTools?: NonNullable<
+      RuntimeWorkerCompositionConfig["installedPluginExecution"]
+    >["projectAssetTools"];
     maxToolRounds?: number;
     taskClock?: ApplicationClock;
     approvalRequirement?: "none" | "perAction";
@@ -438,6 +444,9 @@ export async function businessExecutionFixture(
       ...(options.projectTools === undefined
         ? {}
         : { projectTools: options.projectTools }),
+      ...(options.projectAssetTools === undefined
+        ? {}
+        : { projectAssetTools: options.projectAssetTools }),
       ...(options.executionIo === undefined
         ? {}
         : { executionIo: options.executionIo }),
@@ -612,6 +621,62 @@ export async function businessExecutionFixture(
                 stage.installation.pluginId,
                 registration.identity.pluginId,
               );
+              controls.quotes++;
+              return {
+                poolId: creditScope.poolId,
+                priceRevision: 1,
+                quotedCredits: "30",
+              };
+            },
+          }
+        : {}),
+      ...(options.projectAssetStageQuotes === true
+        ? {
+            async quoteProjectAssetStageGeneration(
+              input: Parameters<
+                NonNullable<
+                  ExtensionCreditQuotePort["quoteProjectAssetStageGeneration"]
+                >
+              >[0],
+            ) {
+              const stage = parseProjectAssetStageRunAdmission(
+                input.projectAssetStageAdmission,
+                digester,
+              );
+              assert.deepEqual(input.actor, actor);
+              assert.deepEqual(stage.actor, actor);
+              assert.ok(
+                input.input !== null &&
+                  typeof input.input === "object" &&
+                  !Array.isArray(input.input),
+              );
+              assert.deepEqual(Object.keys(input.input).sort(), ["prompt"]);
+              const prompt = (
+                input.input as Record<string, WorkflowSchemaValue>
+              ).prompt;
+              assert.ok(typeof prompt === "string");
+              assert.equal(stage.runId, input.binding.runId);
+              assert.equal(stage.threadId, input.binding.threadId);
+              assert.equal(
+                stage.extensionBindingDigest,
+                input.binding.bindingDigest,
+              );
+              assert.equal(stage.requestDigest, input.commandRequestDigest);
+              assert.equal(stage.userContentDigest, digester.sha256(prompt));
+              assert.equal(input.binding.inputDigest, stage.userContentDigest);
+              assert.equal(
+                stage.installation.pluginId,
+                registration.identity.pluginId,
+              );
+              assert.equal(
+                stage.installation.version,
+                registration.identity.version,
+              );
+              assert.equal(
+                stage.installation.packageDigest,
+                registration.identity.packageDigest,
+              );
+              await options.beforeProjectAssetStageQuote?.();
               controls.quotes++;
               return {
                 poolId: creditScope.poolId,

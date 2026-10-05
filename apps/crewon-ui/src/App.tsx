@@ -943,6 +943,7 @@ export function App({
     client: controlRuntimeConnected ? controlClient : null,
     threadId: commandShellRuntime.selectedThreadId,
     threadRevision: commandShellRuntime.selectedThread?.updatedAt ?? null,
+    retainedAssetSelection:commandShellRuntime.selectedThreadId===null?null:controlThreadRuntime?.retainedProjectAssetStageSelection(commandShellRuntime.selectedThreadId)??null,
     retainedSelection:
       commandShellRuntime.selectedThreadId === null
         ? null
@@ -1695,7 +1696,7 @@ export function App({
                 return;
               }
               if (
-                projectConversationComposer.selection !== null &&
+                (projectConversationComposer.selection !== null||projectConversationComposer.assetSelection!==null) &&
                 settings?.executionIntent !== undefined &&
                 settings.executionIntent !== "none"
               ) {
@@ -1711,7 +1712,7 @@ export function App({
               }
               void sendMessage(
                 text,
-                projectConversationComposer.selection === null
+                projectConversationComposer.assetSelection!==null?{...settings,projectAssetStage:projectConversationComposer.assetSelection}:projectConversationComposer.selection === null
                   ? settings
                   : {
                       ...settings,

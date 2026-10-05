@@ -1,3 +1,4 @@
+import { assertProjectAssetPluginPublications } from "./project-asset-plugin-ui-composition.ts";
 import { assertProjectHistoricalQueryPluginPublications } from "./project-historical-query-plugin-configuration.ts";
 import type { ProductionPostgresControlApiConfig } from "./production-composition.ts";
 import type { CreativeProjectCompositionConfig } from "./creative-project-composition.ts";
@@ -13,6 +14,24 @@ export function assertProductionProjectPluginUiComposition(
   config: ProductionPostgresControlApiConfig,
   creativeProjects: CreativeProjectCompositionConfig | undefined,
 ): void {
+  assertProjectAssetPluginPublications(
+    creativeProjects?.assetUi,
+    config.pluginUi?.configuration.publications,
+  );
+  assertProjectAssetPluginPublications(
+    creativeProjects?.assetRecovery,
+    config.pluginUi?.configuration.publications,
+  );
+  if (
+    creativeProjects?.assetUi !== undefined &&
+    config.pluginUi?.ownedProjectAssetActions !== undefined
+  )
+    throw new Error("project_asset_plugin_actions_conflict");
+  if (
+    creativeProjects?.assetRecovery !== undefined &&
+    config.pluginUi?.ownedProjectAssetRecoveryActions !== undefined
+  )
+    throw new Error("project_asset_recovery_actions_conflict");
   assertProjectTextPluginPublications(
     creativeProjects?.textUi,
     config.pluginUi?.configuration.publications,

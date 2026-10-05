@@ -1,7 +1,9 @@
 import type {
   ProjectStageRunAdmission,
+  ProjectAssetStageRunAdmission,
   ProjectTextPlanRunAdmission,
 } from "@crewon/domain";
+import type { ProjectAssetStageCommitAuthority } from "./project-asset-stage-authority.ts";
 import type { ProjectTextPlanTurnCommitAuthority } from "./project-text-plan-store-port.ts";
 import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
 import type {
@@ -103,6 +105,7 @@ export type CommitExtensionTurnInput = Readonly<{
   pluginQueryAdmission?: PluginQueryTaskAdmission;
   /** Internal confirmed project source; committed atomically with the original Turn and credits. */
   projectStageAdmission?: ProjectStageRunAdmission;
+  projectAssetStageAdmission?: ProjectAssetStageRunAdmission;
   projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   projectGeneration?: ProjectGenerationReference;
   /** Historical source selected by the actual project owner; no metadata CAS or new generation slot. */
@@ -118,6 +121,7 @@ export type CommitExtensionTurnInput = Readonly<{
 export type CommitExtensionTurnOptions = Readonly<{
   unmeteredAuthority?: PluginTaskUnmeteredPreparedAuthority;
   projectStageAuthority?: ProjectConversationCommitAuthority;
+  projectAssetStageAuthority?: ProjectAssetStageCommitAuthority;
   projectTextPlanAuthority?: ProjectTextPlanTurnCommitAuthority;
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
@@ -137,6 +141,7 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
     turn: CommitTurnStartResult;
     /** Returned from the same original COMMIT/replay, never reconstructed after confirmation. */
     projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
+    projectAssetStageAdmission?: ProjectAssetStageRunAdmission;
   }>;
 
 /**
@@ -145,6 +150,7 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
  * Ordinary RunStore writes cannot attach a plugin after dispatch.
  */
 export interface ExtensionStore {
+  readonly projectAssetStageAdmissionVersion?: "crewon.project-asset-stage-run-admission.v1";
   readonly projectStageAdmissionVersion?: "crewon.project-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion?: "crewon.project-text-plan-run-admission.v1";
   /** Older adapters cannot silently accept a paid task without reserving its credits. */

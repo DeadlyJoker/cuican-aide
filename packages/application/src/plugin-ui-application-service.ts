@@ -1,4 +1,8 @@
+import { isProjectAssetRecoveryAction } from "@crewon/contracts/project-asset-recovery";
+import { registerPluginProjectAssetRecoveryInvocation } from "./plugin-project-asset-recovery-invocation.ts";
 import { registerPluginHistoricalQueryInvocation } from "./plugin-project-historical-query-invocation.ts";
+import { registerPluginProjectAssetInvocation } from "./plugin-project-asset-invocation.ts";
+import { isProjectAssetUiAction } from "@crewon/contracts/project-assets";
 import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
@@ -402,7 +406,25 @@ export class PluginUiApplicationService {
           : undefined,
       );
       let unregisterHistorical: (() => void) | undefined;
+      let unregisterAsset: (() => void) | undefined;
+      let unregisterAssetRecovery: (() => void) | undefined;
       try {
+        unregisterAssetRecovery = isProjectAssetRecoveryAction(command.action)
+          ? registerPluginProjectAssetRecoveryInvocation(
+              context,
+              () => this.#fence(actor, binding, "invoke"),
+              () => this.#transactionFence(actor, binding),
+              () => this.#mounts.alive(binding),
+            )
+          : undefined;
+        unregisterAsset = isProjectAssetUiAction(command.action)
+          ? registerPluginProjectAssetInvocation(
+              context,
+              () => this.#fence(actor, binding, "invoke"),
+              () => this.#transactionFence(actor, binding),
+              () => this.#mounts.alive(binding),
+            )
+          : undefined;
         unregisterHistorical =
           command.action ===
           "crewon.project-historical-queries.v1.queryConceptGeneration"
@@ -450,6 +472,8 @@ export class PluginUiApplicationService {
         return result;
       } finally {
         unregisterHistorical?.();
+        unregisterAsset?.();
+        unregisterAssetRecovery?.();
         unregister();
       }
     });

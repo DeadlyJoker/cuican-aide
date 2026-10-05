@@ -1,3 +1,6 @@
+import { PostgresProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-postgres-store.ts";
+import { PostgresProjectAssetStore } from "./project-asset-postgres-store.ts";
+import { PostgresProjectAssetStageStore } from "./project-asset-stage-store.ts";
 import { PostgresProjectTextPlanStore } from "./project-text-plan-postgres-store.ts";
 import { PostgresProjectConversationStore } from "./project-conversation-postgres-store.ts";
 import { PostgresProjectConceptSelectionStore } from "./postgres-project-concept-selection-store.ts";
@@ -238,6 +241,34 @@ export class PostgresDomainStore
   }
 
   /** Shares the parent pool and lifetime; text migration remains explicit. */
+  projectAssetStore(
+    input: { verifier?: ProjectGenerationImageResultVerifier } = {},
+  ): PostgresProjectAssetStore {
+    return new PostgresProjectAssetStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+      ...(input.verifier === undefined ? {} : { verifier: input.verifier }),
+    });
+  }
+  projectAssetUiIntentJournalStore(
+    input: { verifier?: ProjectGenerationImageResultVerifier } = {},
+  ): PostgresProjectAssetUiIntentJournalStore {
+    return new PostgresProjectAssetUiIntentJournalStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+      ...(input.verifier === undefined ? {} : { verifier: input.verifier }),
+    });
+  }
+  projectAssetStageStore(): PostgresProjectAssetStageStore {
+    return new PostgresProjectAssetStageStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
   projectTextStore(): PostgresProjectTextStore {
     this.assertOpen();
     return new PostgresProjectTextStore({

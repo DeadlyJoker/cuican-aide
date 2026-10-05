@@ -1,3 +1,4 @@
+import { loadPostgresAssetStage } from "./project-asset-stage-markers.ts";
 import { loadPostgresPlanAdmission } from "./project-text-plan-markers.ts";
 import {
   migratePostgresUnmeteredWithPool,
@@ -88,6 +89,8 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  readonly projectAssetStageAdmissionVersion =
+    "crewon.project-asset-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion =
     "crewon.project-text-plan-run-admission.v1" as const;
   readonly projectStageAdmissionVersion =
@@ -503,9 +506,20 @@ export class PostgresExtensionStore implements ExtensionStore {
         { tenantId: result.binding.tenantId, runId: result.binding.runId },
       );
       this.#host.assertOpen();
-      return projectTextPlanAdmission === null
-        ? result
-        : { ...result, projectTextPlanAdmission };
+      const projectAssetStageAdmission = await loadPostgresAssetStage(
+        client,
+        this.#schemaName,
+        result.binding,
+      );
+      return {
+        ...result,
+        ...(projectTextPlanAdmission === null
+          ? {}
+          : { projectTextPlanAdmission }),
+        ...(projectAssetStageAdmission === null
+          ? {}
+          : { projectAssetStageAdmission }),
+      };
     } finally {
       client.release();
     }
@@ -571,9 +585,20 @@ export class PostgresExtensionStore implements ExtensionStore {
         { tenantId: result.binding.tenantId, runId: result.binding.runId },
       );
       this.#host.assertOpen();
-      return projectTextPlanAdmission === null
-        ? result
-        : { ...result, projectTextPlanAdmission };
+      const projectAssetStageAdmission = await loadPostgresAssetStage(
+        client,
+        this.#schemaName,
+        result.binding,
+      );
+      return {
+        ...result,
+        ...(projectTextPlanAdmission === null
+          ? {}
+          : { projectTextPlanAdmission }),
+        ...(projectAssetStageAdmission === null
+          ? {}
+          : { projectAssetStageAdmission }),
+      };
     } finally {
       client.release();
     }

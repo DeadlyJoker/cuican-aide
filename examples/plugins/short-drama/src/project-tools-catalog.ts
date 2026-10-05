@@ -11,6 +11,20 @@ import {
   PROJECT_TOOL_OPERATIONS,
   type ProjectToolsMethod,
 } from "./project-tools-service.js";
+import {
+  PROJECT_ASSET_TOOL_OPERATIONS,
+  type ProjectAssetToolMethod,
+} from "./project-asset-tools-service.js";
+export const PROJECT_ASSET_CONTEXT_TOOL =
+  "crewon_short_drama__asset_context_read";
+export function assetMethod(name: string): ProjectAssetToolMethod | null {
+  for (const [method, operation] of Object.entries(
+    PROJECT_ASSET_TOOL_OPERATIONS,
+  ))
+    if (name === "crewon_short_drama__" + operation)
+      return method as ProjectAssetToolMethod;
+  return null;
+}
 export function projectMethod(name: string): ProjectToolsMethod | null {
   for (const [method, operation] of Object.entries(PROJECT_TOOL_OPERATIONS))
     if (name === "crewon_short_drama__" + operation)
@@ -20,9 +34,12 @@ export function projectMethod(name: string): ProjectToolsMethod | null {
 export const projectDefinitions: readonly PluginToolDefinition[] =
   business.tools
     .filter((tool) =>
-      ["crewon.project-tools", "crewon.project-context"].includes(
-        tool.adapterId,
-      ),
+      [
+        "crewon.project-tools",
+        "crewon.project-context",
+        "crewon.project-asset-tools",
+        "crewon.project-asset-context",
+      ].includes(tool.adapterId),
     )
     .map((tool) => ({
       schemaVersion: "crewon.tool-definition.v0",
@@ -41,6 +58,8 @@ export function projectPolicy(
   if (
     kind !== "function" ||
     (!projectMethod(name) &&
+      !assetMethod(name) &&
+      name !== PROJECT_ASSET_CONTEXT_TOOL &&
       name !== "crewon_short_drama__project_context_read")
   )
     return null;

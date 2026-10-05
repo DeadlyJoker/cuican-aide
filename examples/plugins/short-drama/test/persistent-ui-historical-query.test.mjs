@@ -12,7 +12,10 @@ import {
 } from "./historical-query-submit.test-support.mjs";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
-  new URL("../dist/18.0.0/", import.meta.url).pathname;
+  new URL(
+    "../dist/" + (process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.0") + "/",
+    import.meta.url,
+  ).pathname;
 const { default: definition } = await import(
   pathToFileURL(join(directory, "ui.mjs")).href
 );

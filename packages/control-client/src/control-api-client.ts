@@ -125,6 +125,7 @@ import { PluginControlClient } from "./plugin-control-client.ts";
 import { PluginCreditControlClient } from "./plugin-credit-control-client.ts";
 import { ProjectTextControlClient } from "./project-text-control-client.ts";
 import { ProjectConversationControlClient } from "./project-conversation-control-client.ts";
+import { ProjectAssetStageControlClient } from "./project-asset-stage-control-client.ts";
 import { CreativeProjectControlClient } from "./creative-project-control-client.ts";
 import type {
   CreateExtensionTaskRequest,
@@ -229,6 +230,7 @@ export class ControlApiClient {
   #creativeProjectClient: CreativeProjectControlClient | null = null;
   #projectTextClient: ProjectTextControlClient | null = null;
   #projectConversationClient: ProjectConversationControlClient | null = null;
+  #projectAssetStageClient: ProjectAssetStageControlClient | null = null;
 
   constructor(config: ControlApiClientConfig) {
     this.#baseUrl = parseBaseUrl(config.baseUrl);
@@ -1647,6 +1649,15 @@ export class ControlApiClient {
   get projectConversations(): ProjectConversationControlClient {
     return (this.#projectConversationClient ??=
       new ProjectConversationControlClient({
+        json: (method, path, body, options) =>
+          this.#json(method, path, body, options),
+        protocolError: (code) => new ControlApiProtocolError(code),
+      }));
+  }
+
+  get projectAssetStages(): ProjectAssetStageControlClient {
+    return (this.#projectAssetStageClient ??=
+      new ProjectAssetStageControlClient({
         json: (method, path, body, options) =>
           this.#json(method, path, body, options),
         protocolError: (code) => new ControlApiProtocolError(code),

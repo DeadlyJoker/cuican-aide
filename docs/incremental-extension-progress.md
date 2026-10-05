@@ -1,10 +1,22 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。已完成统一短剧包、原 Settings 执行准备、共享大纲/剧本、真实 Agent 工具、手动编辑/采用/锁定、文字请求冷恢复、项目对话/单阶段执行，以及 Short17 有界持久文字计划。Short18 原聊天项目建议与历史生图查询已实现，正式桌面联合验收继续进行；角色/参考资产、分镜、视频、声音和成片随后实施。积分后置；完整短剧流程尚未交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。已完成统一短剧包、原 Settings 执行准备、共享大纲/剧本、真实 Agent 工具、手动编辑/采用/锁定、文字请求冷恢复、项目对话/单阶段执行，以及 Short17 有界持久文字计划。Short18 已完成隔离正式桌面联合验收；Short19 共享角色/场景/道具与原 Agent 资产阶段的源代码及独立包已验收，正式桌面联合验收继续进行。参考图工作流、分镜、视频、声音和成片随后实施。积分后置；完整短剧流程尚未交付。
 
 [协同设计](./short-drama-agent-workflow-design.md)明确各环节由 AI 创作、确定性检查与适配工作流配合，不以生图代替整个流程。正式桌面0.1.15已正常升级，原账户、四个工作空间和数据完整保留；Short16已安装但暂未激活。原 Short11 UI 仍负责一条独立 Krea1 的未知结果查询；Short18 的独立历史查询协议已补齐源代码与真实双库验证，待正式桌面联合验收后再切换。原生成不改输入或重新提交。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：Short19 共享资产与原 Agent 资产阶段
+
+一个短剧包新增角色、场景、道具设定与参考候选，手动页和原 Agent 对话共用真实资产记录。候选不自动选用；锁定保留当前选用但允许继续探索。来源冻结需求及可选剧本修订，服务器检查剧本对大纲的实际依赖。概念参考只提交真实当前选择的 locator，由服务器解析并验证原图像结果；没有真正验证器时拒绝参考写入。
+
+原 Composer 在真正具备新能力的项目会话增加资产阶段，沿原 Turn/Run/Worker/Node 保存候选，支持原流式展示和受理后的只读恢复。独立 stage marker 与五项可选服务不扩张旧四阶段、SDK0.1.0或文字计划权限。真实项目写PDP在报价前、报价后和最终事务内检查。新业务清单 v1最多24工具，保留原15工具并新增6个；v0仍最多16个，混合版本拒绝。详见[资产协议](./plugin-project-assets-protocol.md)。
+
+独立冻结SDK包构建/UI与Node严格类型及完整portable **241/241**，含新页面DOM快照、手动候选、锁定、原请求冷恢复和原界面兼容。真实 Store新 **26/26**、旧 **97/97**；公开/兼容 **95/95**；Production **28/28**及真正HTTPS/PG单连接冷journal **1/1**；Worker/Application **41/41**、Main **46/46**；原host Composer/恢复 **27/27**；真实Control HTTP两库 **8/8**，均零skip，各组有重叠，不求和。
+
+最终独立19包经真实安装→原TaskCore→Kernel/Worker→实际Node→Store双库 **2/2**，包含真实报价等待期撤项目写权限拒Run/资金预留、恢复同原请求、真实候选COMMIT后丢Tool回执、Worker/Node关闭后需求变更和原键冷恢复、保持唯一候选及原Run/源摘要、流式delta与持久事件游标重连。这是具名模型/服务夹具，不是用户模型推理或公网供应商调用；事件游标验证不冒充实际HTTP SSE全链路。
+
+独立包在 `output/extensions/installable-plugins/short-drama-assets-20261006/short-drama/19.0.0`，真实摘要 `sha256:df11183ff0f7606bdb8ea692a80b6ec76f422d9b38c10fb924fe9ec53bd2792b`。证据在 `output/extensions/checks/project-assets-20261006/`。UI/Electron lint、六层package类型、Control/Worker类型、UI build、boundary、format通过；宿主未改全局CSS。一次误用 `pnpm test --` 执行全UI，结果41失败、4517通过、51跳过，保留为未通过检查，不声明全UI绿。正式桌面19包联合验收尚待实施，用户现有App/Profile和未知Krea operation未改；T10/D18素材输入、分镜、视频、声音和成片仍在后续范围。目标保持ACTIVE。
 
 ## 2026-10-06：Short18 原聊天项目建议与历史生图查询
 

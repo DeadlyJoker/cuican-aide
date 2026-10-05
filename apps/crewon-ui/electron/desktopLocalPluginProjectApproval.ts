@@ -1,3 +1,4 @@
+import { composeDesktopLocalProjectAssetApproval } from "./desktopLocalProjectAssetApproval.ts";
 import {
   parsePluginPackageDescriptor,
   type PluginPackageDescriptor,
@@ -196,6 +197,11 @@ export function composeDesktopLocalPluginProjectApproval(
         : approval.schemaVersion,
     projects: {
       ...previous,
+      ...composeDesktopLocalProjectAssetApproval({
+        descriptor,
+        previous,
+        modules,
+      }),
       ...(metadata.length === 0
         ? {}
         : { pluginUi: { publications: metadata } }),

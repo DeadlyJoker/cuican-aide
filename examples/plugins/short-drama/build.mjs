@@ -7,11 +7,11 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "18.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
-  BigInt(version.split(".")[0]) <= 17n
+  BigInt(version.split(".")[0]) <= 18n
 )
   throw new Error("example_version_invalid");
 // Pinned portable public capability protocol; no private host source import.
@@ -25,6 +25,30 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-assets-service.ts",
+    "35afa93a1ec8c1bdb9aa3fe68777f54c2a74e05877d6e6dd620799b02fd7f8c0",
+  ],
+  [
+    "project-assets-codec.mjs",
+    "6758510fa295707d81582c23a0049a8fb515b44d31a64188858f6cccb7d97854",
+  ],
+  [
+    "project-asset-recovery-service.ts",
+    "411373fdd6c6cfedcf88c4d5134ac36ba2b5024af9c9892915133ff5e61caf82",
+  ],
+  [
+    "project-asset-recovery-codec.mjs",
+    "2c5f5822c42a02cf2f000d637d236a3f3934d7ae4ea463a1c702fa4cf1769364",
+  ],
+  [
+    "project-asset-tools-service.ts",
+    "c3299c78c664797c3fda2d3ec74d21df79f755a707c98abb77dfb3d9242b029e",
+  ],
+  [
+    "project-asset-tools-codec.mjs",
+    "9bde49d862666c24d228d45e95365988dde9959f1c2ef5d769b5b6a3046efcbd",
+  ],
   [
     "plugin-project-historical-queries-service.ts",
     "51d464c490241da162c7806682f994c2e60c5982753cb1cadfebc6298e8324c6",
@@ -216,13 +240,20 @@ const descriptor = parsePluginPackageDescriptor({
   version,
   title: "AI 短剧工作台",
   description:
-    "短剧工作台：原 Agent 项目对话、可暂停恢复的文字计划与手动创作共用成果；集成概念生图、原任务查询和图片选用。",
+    "短剧工作台：Agent 对话与手动创作共用大纲、剧本及角色/场景/道具资产；集成文字计划、概念生图、原任务查询和图片选用。",
   entrypoints: {
     node: "node.mjs",
     ui: { path: "ui.mjs", mode: "trustedModule" },
   },
   businessManifestPath: "business.json",
   requires: [
+    ...[
+      "crewon.project-assets",
+      "crewon.project-asset-recovery",
+      "crewon.project-asset-tools",
+      "crewon.project-asset-context",
+      "crewon.project-asset-stages",
+    ].map((service) => ({ service, apiVersion: "1", optional: true })),
     {
       service: "crewon.project-planning-drafts",
       apiVersion: "1",

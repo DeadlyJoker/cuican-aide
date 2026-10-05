@@ -57,6 +57,13 @@ export * from "./extension-run-binding.ts";
 export * from "./creative-project.ts";
 export * from "./creative-project-revisions.ts";
 export * from "./project-text-types.ts";
+export * from "./project-asset-types.ts";
+export * from "./project-asset-validation.ts";
+export * from "./project-asset-records.ts";
+export * from "./project-asset-mutations.ts";
+export * from "./project-asset-reference.ts";
+export * from "./project-asset-ui-intent.ts";
+export * from "./project-asset-ui-intent-transitions.ts";
 export * from "./project-text-content.ts";
 export * from "./project-text-artifact.ts";
 export * from "./project-text-revision.ts";
@@ -101,3 +108,4 @@ export {
 export { projectTextPlanEnvelopeRecord } from "./project-text-plan-validation.ts";
 export * from "./project-historical-query-publication.ts";
 export * from "./project-historical-query-link.ts";
+export * from "./project-asset-stage-run-admission.ts";

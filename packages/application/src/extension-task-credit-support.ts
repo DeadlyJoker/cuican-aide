@@ -6,6 +6,7 @@ import {
   type ExtensionRunBinding,
   type WorkflowSchemaValue,
   type ProjectStageRunAdmission,
+  type ProjectAssetStageRunAdmission,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
@@ -22,7 +23,9 @@ export async function quoteExtensionTaskGeneration(
   binding: ExtensionRunBinding,
   receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
   input: WorkflowSchemaValue,
-  qualification?: Readonly<{ projectStageAdmission: ProjectStageRunAdmission }>,
+  qualification?:
+    | Readonly<{ projectStageAdmission: ProjectStageRunAdmission }>
+    | Readonly<{ projectAssetStageAdmission: ProjectAssetStageRunAdmission }>,
 ): Promise<ExtensionCreditAdmission> {
   if (
     dependencies.extensions.creditAdmissionVersion !==
@@ -42,7 +45,21 @@ export async function quoteExtensionTaskGeneration(
     });
     if (qualification === undefined)
       raw = await dependencies.creditQuotes!.quoteGeneration(request);
-    else {
+    else if ("projectAssetStageAdmission" in qualification) {
+      const quote = dependencies.creditQuotes?.quoteProjectAssetStageGeneration;
+      if (typeof quote !== "function")
+        throw new ApplicationError(
+          "conflict",
+          "extension_project_asset_stage_credit_quote_unavailable",
+        );
+      raw = await quote.call(
+        dependencies.creditQuotes,
+        Object.freeze({
+          ...request,
+          projectAssetStageAdmission: qualification.projectAssetStageAdmission,
+        }),
+      );
+    } else {
       const quote =
         dependencies.creditQuotes?.quoteProjectConversationGeneration;
       if (typeof quote !== "function")

@@ -401,6 +401,10 @@ export class InstalledPluginRuntimeResolver
       projectTools = createInstalledPluginProjectToolsOwner({
         dependencies: this.#dependencies.projectTools,
         context: prepared.snapshot.context,
+        assetStageAdmission:
+          this.#dependencies.contexts.verifiedProjectAssetStage(
+            prepared.snapshot,
+          ),
         stageAdmission: this.#dependencies.contexts.verifiedProjectStage(
           prepared.snapshot,
         ),
@@ -428,8 +432,11 @@ export class InstalledPluginRuntimeResolver
         },
       });
       if (
-        this.#dependencies.contexts.verifiedProjectStage(prepared.snapshot) !==
-          null &&
+        (this.#dependencies.contexts.verifiedProjectStage(prepared.snapshot) !==
+          null ||
+          this.#dependencies.contexts.verifiedProjectAssetStage(
+            prepared.snapshot,
+          ) !== null) &&
         projectTools === null
       )
         fail("installed_plugin_project_stage_services_unavailable");
@@ -442,6 +449,7 @@ export class InstalledPluginRuntimeResolver
               hostServices: [
                 projectTools.hostService(),
                 projectTools.contextHostService(),
+                ...projectTools.assetHostServices(),
               ],
             }),
         activation: {

@@ -216,3 +216,23 @@ export {
   type PluginHistoricalQueryInvocationAuthority,
 } from "./plugin-project-historical-query-invocation.ts";
 export * from "./project-historical-query-resolver.ts";
+export * from "./project-asset-commands.ts";
+export * from "./project-asset-store-port.ts";
+export * from "./project-asset-ui-intent-journal-store-port.ts";
+export * from "./project-asset-commit-authority.ts";
+export * from "./project-asset-application-service.ts";
+export { projectAssetMutationReceipt, checkedProjectAssetMutationResult } from "./project-asset-application-support.ts";
+export * from "./project-asset-ui-commit-authority.ts";
+export * from "./project-asset-run-commit-authority.ts";
+export * from "./project-asset-stage-authority.ts";
+export * from "./plugin-project-asset-action-owner.ts";
+export * from "./plugin-project-asset-action-projection.ts";
+export * from "./project-asset-stage-store-port.ts";
+export * from "./project-asset-conversation-task-support.ts";
+
+export * from "./project-asset-recovery-commit-authority.ts";
+
+export * from "./plugin-project-asset-recovery-application-service.ts";
+export * from "./plugin-project-asset-recovery-action-owner.ts";
+
+export { ProjectAssetStageApplicationService, type ProjectAssetStageApplicationDependencies } from "./project-asset-stage-application-service.ts";

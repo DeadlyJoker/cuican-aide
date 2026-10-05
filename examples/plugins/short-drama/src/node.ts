@@ -22,6 +22,14 @@ import {
   type PluginProjectContextService,
 } from "./project-context-service.js";
 
+import {
+  CREWON_PROJECT_ASSET_TOOLS_SERVICE,
+  CREWON_PROJECT_ASSET_CONTEXT_SERVICE,
+  CREWON_PROJECT_ASSET_TOOLS_API_VERSION,
+  type PluginProjectAssetToolsService,
+  type PluginProjectAssetContextService,
+} from "./project-asset-tools-service.js";
+
 export default definePlugin({
   apiVersion: "crewon.plugin-host.v1",
   pluginId: "crewon.short-drama",
@@ -45,11 +53,22 @@ export default definePlugin({
         CREWON_PROJECT_CONTEXT_SERVICE,
         CREWON_PROJECT_CONTEXT_API_VERSION,
       );
+    const assets = context.services.getOptional<PluginProjectAssetToolsService>(
+      CREWON_PROJECT_ASSET_TOOLS_SERVICE,
+      CREWON_PROJECT_ASSET_TOOLS_API_VERSION,
+    );
+    const assetContext =
+      context.services.getOptional<PluginProjectAssetContextService>(
+        CREWON_PROJECT_ASSET_CONTEXT_SERVICE,
+        CREWON_PROJECT_ASSET_TOOLS_API_VERSION,
+      );
     if (execution) {
       const registration = execution.register({
         create: (runtimeContext, services) =>
           createShortDramaRuntime(runtimeContext, projects ?? null, services, {
             projectContext: projectContext ?? null,
+            assets: assets ?? null,
+            assetContext: assetContext ?? null,
           }),
       });
       context.onDispose(() => registration.dispose());

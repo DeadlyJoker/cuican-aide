@@ -1,6 +1,6 @@
 # AI 短剧：Agent 与工作流协同方案
 
-日期：2026-10-06。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；[手动文字页](./plugin-project-texts-ui-protocol.md)、[文字请求冷恢复](./plugin-project-text-recovery-protocol.md)、[项目对话与阶段范围](./plugin-project-conversations-protocol.md)和[有界持久文字计划](./plugin-project-text-plans-protocol.md)已实现。Short18 增加[原聊天项目建议与历史查询协议](./plugin-project-planning-protocol.md)，正在完成独立包和正式桌面的联合验收。后续资产、分镜、视频、声音和成片继续实施。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
+日期：2026-10-06。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；[手动文字页](./plugin-project-texts-ui-protocol.md)、[文字请求冷恢复](./plugin-project-text-recovery-protocol.md)、[项目对话与阶段范围](./plugin-project-conversations-protocol.md)和[有界持久文字计划](./plugin-project-text-plans-protocol.md)已实现。Short18 的原聊天项目建议与历史查询已完成隔离正式桌面验收；Short19 增加[共享角色/场景/道具与独立资产阶段](./plugin-project-assets-protocol.md)，源代码及独立包已验收，正式桌面联合验收继续进行。分镜、视频、声音和成片继续实施。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
 
 ## 产品决定
 

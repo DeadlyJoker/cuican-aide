@@ -1,4 +1,8 @@
 import {
+  isProjectAssetStageControlOwner,
+  type ProjectAssetStageControlOwner,
+} from "./project-asset-stage-control-owner.ts";
+import {
   isInstalledPluginProjectHistoricalQueryOwner,
   type InstalledPluginProjectHistoricalQueryOwner,
 } from "./installed-plugin-project-historical-query-owner.ts";
@@ -9,6 +13,10 @@ import {
   PluginUiApplicationService,
   isPluginUiRecoveryApplicationService,
   type PluginUiRecoveryApplicationService,
+  isPluginProjectAssetActionOwner,
+  type PluginProjectAssetActionOwner,
+  isPluginProjectAssetRecoveryActionOwner,
+  type PluginProjectAssetRecoveryActionOwner,
   isPluginProjectTextActionOwner,
   type PluginProjectTextActionOwner,
   isPluginProjectTextRecoveryActionOwner,
@@ -73,6 +81,9 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
   ownedProjectConversationActions?: ProjectConversationControlOwner;
   ownedProjectTextPlanActions?: PluginProjectTextPlanActionOwner;
+  ownedProjectAssetStageActions?: ProjectAssetStageControlOwner;
+  ownedProjectAssetActions?: PluginProjectAssetActionOwner;
+  ownedProjectAssetRecoveryActions?: PluginProjectAssetRecoveryActionOwner;
   ownedProjectTextActions?: PluginProjectTextActionOwner;
   ownedProjectTextRecoveryActions?: PluginProjectTextRecoveryActionOwner;
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
@@ -102,6 +113,9 @@ export function createProductionPluginUiRuntime(
   const { actions, committedTasks, owner } =
     captureProductionPluginUiActions(input);
   const metadataOwner = input.ownedCreativeProjectActions;
+  const assetStageOwner = input.ownedProjectAssetStageActions;
+  const assetOwner = input.ownedProjectAssetActions;
+  const assetRecoveryOwner = input.ownedProjectAssetRecoveryActions;
   const textOwner = input.ownedProjectTextActions;
   const textRecoveryOwner = input.ownedProjectTextRecoveryActions;
   const generationOwner = input.ownedProjectGenerationActions;
@@ -151,14 +165,35 @@ export function createProductionPluginUiRuntime(
           textRecoveryOwner.committedMetadata,
           textMetadata,
         );
+  const assetMetadata =
+    assetOwner === undefined
+      ? recoveryMetadata
+      : combineSelectionCommittedMetadata(
+          assetOwner.committedMetadata,
+          recoveryMetadata,
+        );
+  const assetRecoveryMetadata =
+    assetRecoveryOwner === undefined
+      ? assetMetadata
+      : combineSelectionCommittedMetadata(
+          assetRecoveryOwner.committedMetadata,
+          assetMetadata,
+        );
+  const assetStageMetadata =
+    assetStageOwner === undefined
+      ? assetRecoveryMetadata
+      : combineSelectionCommittedMetadata(
+          assetStageOwner.committedMetadata,
+          assetRecoveryMetadata,
+        );
   const conversationOwner = input.ownedProjectConversationActions;
   if (conversationOwner !== undefined) conversationOwner.assertAvailable();
   const conversationMetadata =
     conversationOwner === undefined
-      ? recoveryMetadata
+      ? assetStageMetadata
       : combineSelectionCommittedMetadata(
           conversationOwner.committedMetadata,
-          recoveryMetadata,
+          assetStageMetadata,
         );
   const planOwner = input.ownedProjectTextPlanActions;
   if (planOwner !== undefined && !isPluginProjectTextPlanActionOwner(planOwner))
@@ -279,6 +314,48 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (
+            request.action === "crewon.project-asset-stages" ||
+            request.action.startsWith("crewon.project-asset-stages.")
+          ) {
+            if (
+              assetStageOwner === undefined ||
+              !assetStageOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "project_asset_stage_unavailable",
+              );
+            return assetStageOwner.actions.invoke(request);
+          }
+          if (
+            request.action === "crewon.project-assets" ||
+            request.action.startsWith("crewon.project-assets.")
+          ) {
+            if (
+              assetOwner === undefined ||
+              !assetOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return assetOwner.actions.invoke(request);
+          }
+          if (
+            request.action === "crewon.project-asset-recovery" ||
+            request.action.startsWith("crewon.project-asset-recovery.")
+          ) {
+            if (
+              assetRecoveryOwner === undefined ||
+              !assetRecoveryOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return assetRecoveryOwner.actions.invoke(request);
+          }
           if (
             request.action === "crewon.project-text-plans" ||
             request.action.startsWith("crewon.project-text-plans.")
@@ -475,6 +552,9 @@ export function createProductionPluginUiRuntime(
         generationReadOwner?.close(),
         owner?.close(),
         metadataOwner?.close(),
+        assetStageOwner?.close(),
+        assetOwner?.close(),
+        assetRecoveryOwner?.close(),
         textOwner?.close(),
         textRecoveryOwner?.close(),
         selectionOwner?.close(),
@@ -501,6 +581,36 @@ export function captureProductionPluginUiActions(
   committedTasks: PluginUiCommittedTaskPort | undefined;
   owner: InstalledPluginTaskActionOwner | undefined;
 }> {
+  for (const field of [
+    "ownedProjectAssetActions",
+    "ownedProjectAssetRecoveryActions",
+    "ownedProjectAssetStageActions",
+  ] as const) {
+    const value = Object.getOwnPropertyDescriptor(input, field);
+    if (
+      (value !== undefined &&
+        (!value.enumerable || !Object.hasOwn(value, "value"))) ||
+      (value === undefined && field in input)
+    )
+      throw new Error("production_plugin_ui_asset_owner_invalid");
+  }
+  if (
+    input.ownedProjectAssetStageActions !== undefined &&
+    !isProjectAssetStageControlOwner(input.ownedProjectAssetStageActions)
+  )
+    throw new Error("production_plugin_ui_asset_stage_owner_invalid");
+  if (
+    input.ownedProjectAssetActions !== undefined &&
+    !isPluginProjectAssetActionOwner(input.ownedProjectAssetActions)
+  )
+    throw new Error("production_plugin_ui_asset_owner_invalid");
+  if (
+    input.ownedProjectAssetRecoveryActions !== undefined &&
+    !isPluginProjectAssetRecoveryActionOwner(
+      input.ownedProjectAssetRecoveryActions,
+    )
+  )
+    throw new Error("production_plugin_ui_asset_recovery_owner_invalid");
   if (
     input.ownedProjectTextRecoveryActions !== undefined &&
     !isPluginProjectTextRecoveryActionOwner(

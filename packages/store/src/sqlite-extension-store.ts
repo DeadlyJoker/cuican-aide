@@ -1,3 +1,4 @@
+import { loadSqliteAssetStage } from "./project-asset-stage-markers.ts";
 import { loadSqlitePlanAdmission } from "./project-text-plan-markers.ts";
 import {
   migrateSqliteUnmeteredPluginAdmissions,
@@ -113,6 +114,8 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
+  readonly projectAssetStageAdmissionVersion =
+    "crewon.project-asset-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion =
     "crewon.project-text-plan-run-admission.v1" as const;
   readonly projectStageAdmissionVersion =
@@ -531,9 +534,19 @@ export class SqliteExtensionStore implements ExtensionStore {
       tenantId: result.binding.tenantId,
       runId: result.binding.runId,
     });
-    return projectTextPlanAdmission === null
-      ? result
-      : { ...result, projectTextPlanAdmission };
+    const projectAssetStageAdmission = loadSqliteAssetStage(
+      this.#db,
+      result.binding,
+    );
+    return {
+      ...result,
+      ...(projectTextPlanAdmission === null
+        ? {}
+        : { projectTextPlanAdmission }),
+      ...(projectAssetStageAdmission === null
+        ? {}
+        : { projectAssetStageAdmission }),
+    };
   }
 
   async commitExtensionTurn(

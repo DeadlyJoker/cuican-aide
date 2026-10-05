@@ -1,4 +1,11 @@
 import {
+  captureProjectAssetStageTurn,
+  assertSqliteAssetStageTurn,
+  assertAssetStageReplay,
+  assetStageValues,
+} from "./project-asset-stage-turn.ts";
+import { loadSqliteAssetStage } from "./project-asset-stage-markers.ts";
+import {
   captureProjectTextPlanTurn,
   beginSqlitePlanTurn,
   finishSqlitePlanTurn,
@@ -163,6 +170,9 @@ export async function commitSqliteExtensionTurn(
         generationLinkDigest: historicalQuery.generationLinkDigest,
       },
     };
+  const capturedAsset = captureProjectAssetStageTurn(input, options);
+  const assetStage = capturedAsset.stage;
+  options = capturedAsset.options;
   const capturedPlan = captureProjectTextPlanTurn(input, options);
   const plan = capturedPlan.plan;
   options = capturedPlan.options;
@@ -205,6 +215,11 @@ export async function commitSqliteExtensionTurn(
     });
   if (pluginAdmission !== undefined)
     input = capturePluginTaskTurnInput(input, pluginAdmission);
+  if (assetStage !== null) {
+    await assetStage.authority.assertCurrent();
+    await assetStage.authority.assertTransactionCurrent();
+    assetStage.authority.assertActive();
+  }
   if (stage !== null) {
     await stage.authority.assertCurrent();
     await stage.authority.assertTransactionCurrent();
@@ -247,7 +262,9 @@ export async function commitSqliteExtensionTurn(
         );
       }
       const replay = host.receipt(binding, "task", input.receipt);
-      assertSqliteProjectStage(host.database, stage, input, replay === null);
+      if (assetStage === null)
+        assertSqliteProjectStage(host.database, stage, input, replay === null);
+      assertSqliteAssetStageTurn(host.database, assetStage, replay === null);
       const planCheckpoint = beginSqlitePlanTurn(
         host.database,
         plan,
@@ -313,15 +330,23 @@ export async function commitSqliteExtensionTurn(
           stage,
           loadSqliteStageIfAvailable(host.database, saved.binding),
         );
+        const savedAsset = loadSqliteAssetStage(host.database, saved.binding);
+        assertAssetStageReplay(assetStage, savedAsset);
         const savedPlan = loadSqlitePlanAdmission(host.database, saved.binding);
         planEqual(
           plan?.admission ?? null,
           savedPlan,
           "project_text_plan_admission_conflict",
         );
-        return savedPlan === null
-          ? saved
-          : { ...saved, projectTextPlanAdmission: savedPlan };
+        return {
+          ...saved,
+          ...(savedPlan === null
+            ? {}
+            : { projectTextPlanAdmission: savedPlan }),
+          ...(savedAsset === null
+            ? {}
+            : { projectAssetStageAdmission: savedAsset }),
+        };
       }
       if (prepared?.publication !== undefined)
         admitSqliteProjectGenerationPublication(
@@ -410,6 +435,7 @@ export async function commitSqliteExtensionTurn(
           pluginAdmission,
           stage?.admission.contentDigest,
           plan?.admission.contentDigest,
+          assetStage?.admission.contentDigest,
         );
       if (unmetered.admission !== undefined)
         saveSqlitePluginTaskUnmeteredAdmission(
@@ -447,14 +473,25 @@ export async function commitSqliteExtensionTurn(
         host.database
           .prepare(projectHistoricalQueryInsertSql())
           .run(...projectHistoricalQueryValues(historicalLink));
+      if (assetStage !== null)
+        host.database
+          .prepare(
+            "INSERT INTO project_asset_stage_run_admissions VALUES(?,?,?,?,?,?,?,?)",
+          )
+          .run(...assetStageValues(assetStage.admission));
       finishSqlitePlanTurn(host.database, plan, planCheckpoint);
-      return plan === null
-        ? result
-        : { ...result, projectTextPlanAdmission: plan.admission };
+      return {
+        ...result,
+        ...(plan === null ? {} : { projectTextPlanAdmission: plan.admission }),
+        ...(assetStage === null
+          ? {}
+          : { projectAssetStageAdmission: assetStage.admission }),
+      };
     },
     {
       beforeCommit: () => {
         stage?.authority.assertActive();
+        assetStage?.authority.assertActive();
         plan?.q.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();

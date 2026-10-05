@@ -83,6 +83,12 @@ const ownerFor = (actor: ActorContext): CreativeProjectOwnerScope =>
     spaceId: actor.spaceId,
     principalId: actor.principalId,
   });
+// Shared proof readers stay on the caller's real connection; no new selection is written.
+export {
+  source as verifyConceptSelectionSourcePlan,
+  pointer as loadConceptSelectionPointerPlan,
+  linkedResult as loadConceptSelectionResultPlan,
+};
 const ownerValues = (owner: CreativeProjectOwnerScope) => [
   owner.tenantId,
   owner.spaceId,

@@ -1,3 +1,6 @@
+import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
+import { isProjectAssetStagesNamespaceAction } from "@crewon/contracts/project-asset-stages";
+import { isProjectAssetRecoveryNamespaceAction } from "@crewon/contracts/project-asset-recovery";
 import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
@@ -49,6 +52,9 @@ import {
 } from "./desktop-project-history-plugin-runtime.ts";
 import { type ProjectTextPluginUiRuntime } from "./project-text-plugin-ui-composition.ts";
 import { createDesktopProjectTextPluginRuntime } from "./desktop-project-text-plugin-runtime.ts";
+import { createDesktopProjectAssetPluginRuntime } from "./desktop-project-asset-plugin-runtime.ts";
+import type { ProjectAssetPluginUiRuntime } from "./project-asset-plugin-ui-composition.ts";
+import { isProjectAssetUiNamespaceAction } from "@crewon/contracts/project-assets";
 import { composeDesktopProjectPluginUiDispatch } from "./desktop-project-plugin-ui-dispatch.ts";
 import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 import {
@@ -78,6 +84,7 @@ export type DesktopPluginRuntime = Readonly<{
   bindProjectConversations?(
     threads: ThreadApplicationService,
   ): ProjectConversationControlOwner | undefined;
+  projectAssetStages?(): ProjectAssetStageControlOwner | undefined;
   startProjectTextPlans?(): void;
   consumeProjectTextPlanRunEvents?(
     events: readonly RunLifecycleEvent[],
@@ -232,6 +239,7 @@ export async function createDesktopPluginRuntime(
   let activation: DesktopInstalledPluginActivationOwner | null = null;
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
   let textUi: ProjectTextPluginUiRuntime | undefined;
+  let assetUi: ProjectAssetPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
   let conversations: ReturnType<typeof createDesktopProjectConversationRuntime>;
@@ -253,6 +261,7 @@ export async function createDesktopPluginRuntime(
         taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
         history?.hostUiServices ??
+        assetUi?.hostUiServices ??
         textUi?.hostUiServices ??
         projectUi?.hostUiServices
       )?.isAvailable(input) ?? false,
@@ -283,6 +292,12 @@ export async function createDesktopPluginRuntime(
       ...(projectUi === undefined
         ? {}
         : { hostUiServices: projectUi.hostUiServices }),
+    });
+    assetUi = createDesktopProjectAssetPluginRuntime({
+      projects: dependencies.creativeProjects,
+      authority,
+      installation: () => installation,
+      hostUiServices: textUi?.hostUiServices ?? projectUi?.hostUiServices,
     });
     installation = await createDesktopPluginInstallationRuntime(
       { configuration, registry, authority },
@@ -324,7 +339,11 @@ export async function createDesktopPluginRuntime(
       dependencies,
     );
     if (projectExecution)
-      await prepareTasks(textUi?.hostUiServices ?? projectUi?.hostUiServices);
+      await prepareTasks(
+        assetUi?.hostUiServices ??
+          textUi?.hostUiServices ??
+          projectUi?.hostUiServices,
+      );
     history = await createDesktopProjectHistoryPluginRuntime({
       projects: dependencies.creativeProjects,
       configuration,
@@ -338,6 +357,7 @@ export async function createDesktopPluginRuntime(
       ...((taskRuntime?.core.historicalQueries?.hostUiServices ??
         taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
+        assetUi?.hostUiServices ??
         textUi?.hostUiServices ??
         projectUi?.hostUiServices) === undefined
         ? {}
@@ -346,6 +366,7 @@ export async function createDesktopPluginRuntime(
               taskRuntime?.core.historicalQueries?.hostUiServices ??
               taskRuntime?.core.projectQueries?.hostUiServices ??
               taskRuntime?.core.projectGenerations?.hostUiServices ??
+              assetUi?.hostUiServices ??
               textUi?.hostUiServices ??
               projectUi!.hostUiServices,
           }),
@@ -353,6 +374,7 @@ export async function createDesktopPluginRuntime(
     if (!projectExecution)
       await prepareTasks(
         history?.hostUiServices ??
+          assetUi?.hostUiServices ??
           textUi?.hostUiServices ??
           projectUi?.hostUiServices,
       );
@@ -362,6 +384,7 @@ export async function createDesktopPluginRuntime(
       taskRuntime?.core.projectQueries?.hostUiServices ??
       taskRuntime?.core.projectGenerations?.hostUiServices ??
       history?.hostUiServices ??
+      assetUi?.hostUiServices ??
       textUi?.hostUiServices ??
       projectUi?.hostUiServices;
     recovery = await prepareDesktopPluginUiRecovery({
@@ -471,9 +494,11 @@ export async function createDesktopPluginRuntime(
     };
     const dispatch = composeDesktopProjectPluginUiDispatch({
       conversations: () => conversations?.owner(),
+      assetStages: () => conversations?.assetStages(),
       plans: () => conversations?.textPlans(),
       projects: projectUi,
       texts: textUi,
+      assets: assetUi,
       history,
       tasks: taskRuntime?.core,
     });
@@ -550,6 +575,7 @@ export async function createDesktopPluginRuntime(
           projectUi === undefined &&
           conversations === undefined &&
           textUi === undefined &&
+          assetUi === undefined &&
           history?.selectionRuntime === undefined &&
           taskRuntime === undefined
         )
@@ -562,6 +588,7 @@ export async function createDesktopPluginRuntime(
         return result;
       },
       ...(textUi === undefined &&
+      assetUi === undefined &&
       conversations === undefined &&
       history?.readRuntime === undefined &&
       history?.selectionRuntime === undefined &&
@@ -573,6 +600,26 @@ export async function createDesktopPluginRuntime(
               available();
               const invoke = () => ui.invoke(actor, command);
               const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (
+                  isProjectAssetUiNamespaceAction(command.action) ||
+                  isProjectAssetRecoveryNamespaceAction(command.action)
+                )
+                  return invoke();
+                if (isProjectAssetStagesNamespaceAction(command.action)) {
+                  const owner = conversations?.assetStages();
+                  if (owner === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "project_asset_stage_unavailable",
+                    );
+                  return owner.runAuthenticatedRequest(
+                    request,
+                    actor,
+                    command.action,
+                    requestSignal,
+                    invoke,
+                  );
+                }
                 if (
                   command.action === "crewon.project-text-plans" ||
                   command.action.startsWith("crewon.project-text-plans.")
@@ -706,6 +753,7 @@ export async function createDesktopPluginRuntime(
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),
       bindProjectConversations: (threads) =>
         conversations?.bindThreads(threads),
+      projectAssetStages: () => conversations?.assetStages(),
       startProjectTextPlans: () => conversations?.textPlans()?.start(),
       consumeProjectTextPlanRunEvents: (events) =>
         conversations?.textPlans()?.consumeRunEvents(events) ??
@@ -722,6 +770,7 @@ export async function createDesktopPluginRuntime(
           () => recovery?.close(),
           () => projectUi?.close(),
           () => textUi?.close(),
+          () => assetUi?.close(),
           () => history?.close(),
           () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
@@ -739,6 +788,7 @@ export async function createDesktopPluginRuntime(
         () => recovery?.close(),
         () => projectUi?.close(),
         () => textUi?.close(),
+        () => assetUi?.close(),
         () => history?.close(),
         () => configurationRuntime?.close(),
         () => activation?.close(),

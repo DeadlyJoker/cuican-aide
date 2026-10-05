@@ -1,4 +1,11 @@
 import {
+  captureProjectAssetStageTurn,
+  assertPostgresAssetStageTurn,
+  assertAssetStageReplay,
+  assetStageValues,
+} from "./project-asset-stage-turn.ts";
+import { loadPostgresAssetStage } from "./project-asset-stage-markers.ts";
+import {
   captureProjectTextPlanTurn,
   beginPostgresPlanTurn,
   finishPostgresPlanTurn,
@@ -177,6 +184,9 @@ export async function commitPostgresExtensionTurn(
         generationLinkDigest: historicalQuery.generationLinkDigest,
       },
     };
+  const capturedAsset = captureProjectAssetStageTurn(input, options);
+  const assetStage = capturedAsset.stage;
+  options = capturedAsset.options;
   const capturedPlan = captureProjectTextPlanTurn(input, options);
   const plan = capturedPlan.plan;
   options = capturedPlan.options;
@@ -220,6 +230,10 @@ export async function commitPostgresExtensionTurn(
     pluginAdmission === undefined
       ? structuredClone(input)
       : capturePluginTaskTurnInput(input, pluginAdmission);
+  if (assetStage !== null) {
+    await assetStage.authority.assertCurrent();
+    assetStage.authority.assertActive();
+  }
   if (stage !== null) {
     await stage.authority.assertCurrent();
     stage.authority.assertActive();
@@ -266,11 +280,18 @@ export async function commitPostgresExtensionTurn(
         "task",
         frozenInput.receipt,
       );
-      await assertPostgresProjectStage(
+      if (assetStage === null)
+        await assertPostgresProjectStage(
+          client,
+          host.schema,
+          stage,
+          frozenInput,
+          replay === null,
+        );
+      await assertPostgresAssetStageTurn(
         client,
         host.schema,
-        stage,
-        frozenInput,
+        assetStage,
         replay === null,
       );
       const planCheckpoint = await beginPostgresPlanTurn(
@@ -368,7 +389,14 @@ export async function commitPostgresExtensionTurn(
           ),
         );
         await stage?.authority.assertTransactionCurrent();
+        await assetStage?.authority.assertTransactionCurrent();
         await plan?.q.authority.assertTransactionCurrent();
+        const savedAsset = await loadPostgresAssetStage(
+          client,
+          host.schema,
+          result.binding,
+        );
+        assertAssetStageReplay(assetStage, savedAsset);
         const savedPlan = await loadPostgresPlanAdmission(
           client,
           host.schema,
@@ -379,9 +407,15 @@ export async function commitPostgresExtensionTurn(
           savedPlan,
           "project_text_plan_admission_conflict",
         );
-        return savedPlan === null
-          ? result
-          : { ...result, projectTextPlanAdmission: savedPlan };
+        return {
+          ...result,
+          ...(savedPlan === null
+            ? {}
+            : { projectTextPlanAdmission: savedPlan }),
+          ...(savedAsset === null
+            ? {}
+            : { projectAssetStageAdmission: savedAsset }),
+        };
       }
       const creditAdmission = checkedExtensionCreditAdmission({
         admission: frozenInput.creditAdmission,
@@ -518,6 +552,7 @@ export async function commitPostgresExtensionTurn(
           pluginAdmission,
           stage?.admission.contentDigest,
           plan?.admission.contentDigest,
+          assetStage?.admission.contentDigest,
         );
       if (unmetered.admission !== undefined)
         await savePostgresPluginTaskUnmeteredAdmission(
@@ -562,6 +597,11 @@ export async function commitPostgresExtensionTurn(
         );
       if (historicalQuery !== null)
         await assertCreativeProjectCommitCurrent(historicalQuery.authority);
+      if (assetStage !== null)
+        await client.query(
+          `INSERT INTO ${prefix}.project_asset_stage_run_admissions VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [...assetStageValues(assetStage.admission)],
+        );
       if (stage !== null) {
         await client.query(
           `INSERT INTO ${prefix}.project_stage_run_admissions VALUES($1,$2,$3,$4,$5,$6,$7)`,
@@ -577,13 +617,19 @@ export async function commitPostgresExtensionTurn(
       if (unmetered.authority !== undefined)
         await unmetered.authority.assertCurrent();
       await finishPostgresPlanTurn(client, host.schema, plan, planCheckpoint);
-      return plan === null
-        ? result
-        : { ...result, projectTextPlanAdmission: plan.admission };
+      await assetStage?.authority.assertTransactionCurrent();
+      return {
+        ...result,
+        ...(plan === null ? {} : { projectTextPlanAdmission: plan.admission }),
+        ...(assetStage === null
+          ? {}
+          : { projectAssetStageAdmission: assetStage.admission }),
+      };
     },
     {
       beforeCommit: () => {
         stage?.authority.assertActive();
+        assetStage?.authority.assertActive();
         plan?.q.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();

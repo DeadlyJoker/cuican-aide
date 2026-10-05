@@ -1,3 +1,5 @@
+import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
+import type { ProductionProjectAssetPluginRuntime } from "./production-project-asset-plugin-runtime.ts";
 import { parseProjectHistoricalQueryUiActionRequest } from "@crewon/contracts/plugins";
 import {
   isInstalledPluginProjectHistoricalQueryOwner,
@@ -31,6 +33,8 @@ export function createProductionPluginUiRequestService({
   taskRequests,
   projects,
   texts,
+  assets,
+  assetStages,
   projectGenerations,
   projectGenerationReads,
   projectQueries,
@@ -44,6 +48,8 @@ export function createProductionPluginUiRequestService({
   taskRequests?: InstalledPluginRequestOwner;
   projects?: ProductionCreativeProjectPluginRuntime;
   texts?: ProductionProjectTextPluginRuntime;
+  assets?: ProductionProjectAssetPluginRuntime;
+  assetStages?: ProjectAssetStageControlOwner;
   projectGenerations?: InstalledPluginProjectGenerationOwner;
   projectGenerationReads?: ProductionProjectGenerationReadPluginRuntime;
   projectQueries?: InstalledPluginProjectQueryOwner;
@@ -77,6 +83,8 @@ export function createProductionPluginUiRequestService({
     taskRequests === undefined &&
     projects === undefined &&
     texts === undefined &&
+    assets === undefined &&
+    assetStages === undefined &&
     projectGenerations === undefined &&
     projectQueries === undefined &&
     historicalQueries === undefined &&
@@ -99,6 +107,45 @@ export function createProductionPluginUiRequestService({
           : recovery.run(request, actor, signal, () =>
               ui.invoke(actor, command),
             );
+      if (
+        command.action === "crewon.project-asset-stages" ||
+        command.action.startsWith("crewon.project-asset-stages.")
+      ) {
+        if (
+          assetStages === undefined ||
+          !assetStages.supportsAction(command.action)
+        )
+          throw new ApplicationError(
+            "conflict",
+            "project_asset_stage_unavailable",
+          );
+        return assetStages.runAuthenticatedRequest(
+          request,
+          actor,
+          command.action,
+          signal,
+          invoke,
+        );
+      }
+      if (
+        command.action === "crewon.project-assets" ||
+        command.action.startsWith("crewon.project-assets.") ||
+        command.action === "crewon.project-asset-recovery" ||
+        command.action.startsWith("crewon.project-asset-recovery.")
+      ) {
+        if (assets === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        return assets.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
       if (
         command.action === "crewon.project-text-plans" ||
         command.action.startsWith("crewon.project-text-plans.")

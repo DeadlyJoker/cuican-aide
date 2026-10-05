@@ -769,6 +769,7 @@ function composeControlApi(
       ),
       creativeProjects: preparedProjects?.service,
       projectTexts: preparedProjects?.textService,
+      projectAssets: preparedProjects?.assetService,
       projectGenerationReads,
       projectConceptSelections: composeOwnedProjectGenerationSelectionService({
         projects: preparedProjects,
@@ -793,6 +794,7 @@ function composeControlApi(
       pluginUi: preparedPlugins?.runtime.ui,
       projectConversations:
         preparedPlugins?.runtime.bindProjectConversations?.(threads),
+      projectAssetStages:preparedPlugins?.runtime.projectAssetStages?.(),
       projectConversationRouting: store.projectConversationStore(),
       compactions,
       rollbacks,

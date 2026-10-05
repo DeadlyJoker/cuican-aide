@@ -72,7 +72,7 @@ test("client rejects accessors, caller-selected targets and cancellation before 
   });
   await assert.rejects(client.queryConceptGeneration(input, options));
   await assert.rejects(
-    client.queryConceptGeneration({ ...input, target: "other" }),
+    client.queryConceptGeneration({ ...input, target: "other" } as never),
   );
   const cancellation = new AbortController();
   cancellation.abort();

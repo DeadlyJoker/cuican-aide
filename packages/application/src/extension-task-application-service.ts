@@ -1,5 +1,13 @@
 import { loadExtensionTaskConfiguration } from "./extension-task-configuration.ts";
 import {
+  createProjectAssetStageTurnFromHost,
+  projectAssetConversationTaskReceipt,
+  projectAssetConversationTaskAdmission,
+  assertSavedProjectAssetConversationTask,
+  type ProjectAssetConversationTask,
+  type ProjectAssetConversationTaskPreparation,
+} from "./project-asset-conversation-task-support.ts";
+import {
   commitProjectTextPlanTurnFromHost,
   projectTextPlanTaskAdmission,
   assertSavedProjectTextPlanTask,
@@ -201,6 +209,35 @@ export class ExtensionTaskApplicationService {
     });
   }
 
+  /** Independently approved asset candidate stage; never reinterprets a text-stage grant. */
+  createProjectAssetStageTurnFromHost(
+    actor: ActorContext,
+    command: CreateExtensionTaskCommand,
+    task:
+      | ProjectAssetConversationTask
+      | ProjectAssetConversationTaskPreparation,
+  ) {
+    return createProjectAssetStageTurnFromHost({
+      actor,
+      command,
+      task,
+      extensions: this.#dependencies.extensions,
+      digester: this.#dependencies.digester,
+      create: (captured, onStage) =>
+        this.#createTask(
+          actor,
+          command,
+          captured.authority.pin,
+          null,
+          null,
+          null,
+          undefined,
+          null,
+          { task: captured, onStage },
+        ),
+    });
+  }
+
   async createQueryTaskFromPlugin(
     actor: ActorContext,
     input: CreateExtensionTaskCommand,
@@ -311,8 +348,28 @@ export class ExtensionTaskApplicationService {
       stage: import("@crewon/domain").ProjectStageRunAdmission,
     ) => void,
     projectTextPlan: ProjectTextPlanTurnCommitAuthority | null = null,
+    assetStage: Readonly<{
+      task: ProjectAssetConversationTask;
+      onStage(
+        stage: import("@crewon/domain").ProjectAssetStageRunAdmission,
+      ): void;
+    }> | null = null,
   ) {
     return extensionUseCase(async () => {
+      if (assetStage !== null) {
+        if (
+          conversation !== null ||
+          projectTextPlan !== null ||
+          projectTask !== null ||
+          pin === null
+        )
+          throw new ApplicationError(
+            "authorization",
+            "project_asset_stage_admission_invalid",
+          );
+        await assetStage.task.authority.assertCurrent();
+        assetStage.task.authority.assertActive();
+      }
       if (projectTextPlan !== null) {
         await projectTextPlan.authority.assertCurrent();
         projectTextPlan.authority.assertActive();
@@ -422,15 +479,21 @@ export class ExtensionTaskApplicationService {
               ...(generation === null
                 ? {}
                 : { projectGeneration: generation.reference }),
-              ...(conversation === null
+              ...(conversation === null && assetStage === null
                 ? {}
                 : {
                     projectConversationReceipt: (base) =>
-                      projectConversationTaskReceipt(
-                        base,
-                        conversation,
-                        this.#dependencies.digester,
-                      ),
+                      assetStage !== null
+                        ? projectAssetConversationTaskReceipt(
+                            base,
+                            assetStage.task,
+                            this.#dependencies.digester,
+                          )
+                        : projectConversationTaskReceipt(
+                            base,
+                            conversation!,
+                            this.#dependencies.digester,
+                          ),
                   }),
             })
           : null;
@@ -520,6 +583,27 @@ export class ExtensionTaskApplicationService {
             previous,
             this.#dependencies.digester,
           );
+        if (assetStage !== null) {
+          const saved = await this.#dependencies.extensions
+            .loadPluginTaskAdmission!({
+            tenantId: scope.tenantId,
+            spaceId: scope.spaceId,
+            runId: previous.binding.runId,
+          });
+          if (saved === null)
+            throw new ApplicationError(
+              "internal",
+              "plugin_task_admission_invalid",
+            );
+          assetStage.onStage(
+            await assertSavedProjectAssetConversationTask(
+              assetStage.task,
+              saved,
+              previous.binding,
+              this.#dependencies.digester,
+            ),
+          );
+        }
         return previous;
       }
       if (pin !== null)
@@ -661,7 +745,9 @@ export class ExtensionTaskApplicationService {
           "extension_execution_target_mismatch",
         );
       const content =
-        conversation?.content ?? extensionCanonicalJson(taskInput);
+        assetStage?.task.content ??
+        conversation?.content ??
+        extensionCanonicalJson(taskInput);
       if (new TextEncoder().encode(content).length > 16 * 1024)
         throw new ApplicationError(
           "validation",
@@ -735,6 +821,16 @@ export class ExtensionTaskApplicationService {
               event.occurredAt,
               this.#dependencies.digester,
             );
+      const assetStageAdmission =
+        assetStage === null
+          ? undefined
+          : projectAssetConversationTaskAdmission(
+              assetStage.task,
+              taskAdmission!,
+              binding,
+              event.occurredAt,
+              this.#dependencies.digester,
+            );
       const creditAdmission =
         intent.kind === "generate" &&
         unmeteredAuthority === null &&
@@ -745,9 +841,11 @@ export class ExtensionTaskApplicationService {
               binding,
               receipt,
               taskInput as WorkflowSchemaValue,
-              stageAdmission === undefined
-                ? undefined
-                : { projectStageAdmission: stageAdmission },
+              assetStageAdmission !== undefined
+                ? { projectAssetStageAdmission: assetStageAdmission }
+                : stageAdmission === undefined
+                  ? undefined
+                  : { projectStageAdmission: stageAdmission },
             )
           : undefined;
       const planAdmission =
@@ -785,15 +883,20 @@ export class ExtensionTaskApplicationService {
         generation?.commitOptions,
       );
       const commitOptions =
-        conversation === null
-          ? financialOptions
-          : {
+        assetStage !== null
+          ? {
               ...financialOptions,
-              projectStageAuthority: conversation.authority,
-              ...(projectTextPlan === null
-                ? {}
-                : { projectTextPlanAuthority: projectTextPlan }),
-            };
+              projectAssetStageAuthority: assetStage.task.authority,
+            }
+          : conversation === null
+            ? financialOptions
+            : {
+                ...financialOptions,
+                projectStageAuthority: conversation.authority,
+                ...(projectTextPlan === null
+                  ? {}
+                  : { projectTextPlanAuthority: projectTextPlan }),
+              };
       const commitInput = {
         turn,
         binding,
@@ -802,6 +905,9 @@ export class ExtensionTaskApplicationService {
         ...(stageAdmission === undefined
           ? {}
           : { projectStageAdmission: stageAdmission }),
+        ...(assetStageAdmission === undefined
+          ? {}
+          : { projectAssetStageAdmission: assetStageAdmission }),
         ...(planAdmission === undefined
           ? {}
           : { projectTextPlanAdmission: planAdmission }),
@@ -828,6 +934,10 @@ export class ExtensionTaskApplicationService {
       if (conversation !== null) {
         await conversation.authority.assertCurrent();
         conversation.authority.assertActive();
+      }
+      if (assetStage !== null) {
+        await assetStage.task.authority.assertCurrent();
+        assetStage.task.authority.assertActive();
       }
       const result = await (pin === null
         ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
@@ -900,6 +1010,32 @@ export class ExtensionTaskApplicationService {
             await assertSavedProjectConversationTask(
               conversation,
               savedAdmission,
+              result.binding,
+              this.#dependencies.digester,
+              false,
+            ),
+          );
+        }
+      }
+      if (assetStage !== null) {
+        if (result.run.disposition === "committed")
+          assetStage.onStage(assetStageAdmission!);
+        else {
+          const saved = await this.#dependencies.extensions
+            .loadPluginTaskAdmission!({
+            tenantId: scope.tenantId,
+            spaceId: scope.spaceId,
+            runId: result.binding.runId,
+          });
+          if (saved === null)
+            throw new ApplicationError(
+              "internal",
+              "plugin_task_admission_invalid",
+            );
+          assetStage.onStage(
+            await assertSavedProjectAssetConversationTask(
+              assetStage.task,
+              saved,
               result.binding,
               this.#dependencies.digester,
               false,

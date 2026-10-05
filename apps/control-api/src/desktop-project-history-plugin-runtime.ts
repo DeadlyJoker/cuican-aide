@@ -42,6 +42,7 @@ export function desktopProjectUiPublications(
         PreparedCreativeProjects,
         | "pluginUi"
         | "textUi"
+        | "assetUi" | "assetRecovery"
         | "textRecovery"
         | "conversations"
         | "textPlans"
@@ -54,6 +55,7 @@ export function desktopProjectUiPublications(
   const grants = [
     projects?.pluginUi,
     projects?.textUi,
+    projects?.assetUi, projects?.assetRecovery,
     projects?.textRecovery,
     projects?.conversations,
     projects?.textPlans,

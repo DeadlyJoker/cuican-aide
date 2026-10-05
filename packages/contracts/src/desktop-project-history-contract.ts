@@ -28,6 +28,11 @@ export type DesktopProjectHistoryConfiguration = Readonly<{
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
   textUi?: Publications;
   textRecovery?: Publications;
+  assetArtifacts?: Readonly<{ version: "crewon.project-asset.v1" }>;
+  assetUi?: Publications;
+  assetRecovery?: Publications;
+  assetStages?: Publications &
+    Readonly<{ version: "crewon.project-asset-stages.v1" }>;
   conversations?: Publications;
   textPlans?: Publications;
   planningDrafts?: Publications;
@@ -69,6 +74,10 @@ export function parseDesktopProjectHistoryConfiguration(
       "textArtifacts",
       "textUi",
       "textRecovery",
+      "assetArtifacts",
+      "assetUi",
+      "assetRecovery",
+      "assetStages",
       "conversations",
       "textPlans",
       "planningDrafts",
@@ -117,9 +126,17 @@ export function parseDesktopProjectHistoryConfiguration(
     const conversations = publications(value.conversations, approved);
     const textPlans = publications(value.textPlans, approved);
     const planningDrafts = publications(value.planningDrafts, approved);
-    if (planningDrafts?.publications.some((publication) =>
-      [pluginUi, textUi, conversations, textPlans].some((service) =>
-        !service?.publications.some((p) => JSON.stringify(p) === JSON.stringify(publication))))) invalid();
+    if (
+      planningDrafts?.publications.some((publication) =>
+        [pluginUi, textUi, conversations, textPlans].some(
+          (service) =>
+            !service?.publications.some(
+              (p) => JSON.stringify(p) === JSON.stringify(publication),
+            ),
+        ),
+      )
+    )
+      invalid();
     if (
       textPlans !== undefined &&
       textPlans.publications.some((publication) =>
@@ -160,6 +177,47 @@ export function parseDesktopProjectHistoryConfiguration(
         ))
     )
       invalid();
+    const assetArtifacts =
+      value.assetArtifacts === undefined
+        ? undefined
+        : pluginControlRecord(value.assetArtifacts, ["version"]);
+    const assetUi = publications(value.assetUi, approved);
+    const assetRecovery = publications(value.assetRecovery, approved);
+    if (
+      (assetArtifacts !== undefined &&
+        (assetArtifacts.version !== "crewon.project-asset.v1" ||
+          textArtifacts === undefined)) ||
+      (assetUi !== undefined && assetArtifacts === undefined) ||
+      (assetRecovery !== undefined &&
+        !publicationSubset(assetRecovery, assetUi))
+    )
+      invalid();
+    const assetStageValue =
+      value.assetStages === undefined
+        ? undefined
+        : pluginControlRecord(value.assetStages, ["version", "publications"]);
+    const assetStagePublications =
+      assetStageValue === undefined
+        ? undefined
+        : publications(
+            { publications: assetStageValue.publications },
+            approved,
+          );
+    if (
+      assetStageValue !== undefined &&
+      (assetStageValue.version !== "crewon.project-asset-stages.v1" ||
+        assetStagePublications === undefined ||
+        !publicationSubset(assetStagePublications, assetUi) ||
+        !publicationSubset(assetStagePublications, conversations))
+    )
+      invalid();
+    const assetStages =
+      assetStagePublications === undefined
+        ? undefined
+        : Object.freeze({
+            version: "crewon.project-asset-stages.v1" as const,
+            publications: assetStagePublications.publications,
+          });
     const generationReadUi = publications(value.generationReadUi, approved);
     const selectionUi = publications(value.selectionUi, approved);
     const generationReads =
@@ -191,6 +249,16 @@ export function parseDesktopProjectHistoryConfiguration(
           }),
       ...(textUi === undefined ? {} : { textUi }),
       ...(textRecovery === undefined ? {} : { textRecovery }),
+      ...(assetArtifacts === undefined
+        ? {}
+        : {
+            assetArtifacts: Object.freeze({
+              version: "crewon.project-asset.v1" as const,
+            }),
+          }),
+      ...(assetUi === undefined ? {} : { assetUi }),
+      ...(assetRecovery === undefined ? {} : { assetRecovery }),
+      ...(assetStages === undefined ? {} : { assetStages }),
       ...(conversations === undefined ? {} : { conversations }),
       ...(textPlans === undefined ? {} : { textPlans }),
       ...(planningDrafts === undefined ? {} : { planningDrafts }),
@@ -379,4 +447,21 @@ function dense(
 }
 function invalid(): never {
   return pluginControlFail("desktop_project_history_configuration_invalid");
+}
+
+function publicationSubset(
+  child: Publications,
+  parent: Publications | undefined,
+): boolean {
+  return (
+    parent !== undefined &&
+    child.publications.every((item) =>
+      parent.publications.some(
+        (entry) =>
+          entry.pluginId === item.pluginId &&
+          entry.packageDigest === item.packageDigest &&
+          entry.contributionId === item.contributionId,
+      ),
+    )
+  );
 }

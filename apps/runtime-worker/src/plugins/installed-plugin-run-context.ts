@@ -1,3 +1,6 @@
+import { readProjectAssetStageRuntimeScope } from "./project-asset-stage-runtime-scope.ts";
+import type { ProjectAssetStageStore } from "@crewon/application";
+import type { ProjectAssetStageRunAdmission } from "@crewon/domain";
 import { createHash } from "node:crypto";
 import type {
   ActorContext,
@@ -57,6 +60,10 @@ export type InstalledPluginRunContextDependencies = Readonly<{
     ProjectConversationStore,
     "loadStageAdmission" | "readRequiredStageDigest"
   >;
+  assetStages?: Pick<
+    ProjectAssetStageStore,
+    "loadAssetStageAdmission" | "readRequiredAssetStageDigest"
+  >;
   plans?: Pick<
     ProjectTextPlanStore,
     "readRequiredPlanDigest" | "loadRunAdmission"
@@ -74,6 +81,7 @@ type SavedContext = Readonly<{
   query: PluginQueryTaskAdmission | null;
   projectStage: ProjectStageRunAdmission | null;
   projectTextPlan: ProjectTextPlanRunAdmission | null;
+  projectAssetStage: ProjectAssetStageRunAdmission | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -187,6 +195,14 @@ export class InstalledPluginRunContext {
     return saved.projectStage;
   }
 
+  verifiedProjectAssetStage(
+    snapshot: InstalledPluginRunSnapshot,
+  ): ProjectAssetStageRunAdmission | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.projectAssetStage;
+  }
+
   verifiedProjectTextPlan(
     snapshot: InstalledPluginRunSnapshot,
   ): ProjectTextPlanRunAdmission | null {
@@ -288,6 +304,22 @@ export class InstalledPluginRunContext {
     signal.throwIfAborted();
     if (run === null) fail("installed_plugin_run_missing");
     assertRun(run, binding, original);
+    const projectAssetStage =
+      this.#dependencies.assetStages === undefined
+        ? null
+        : await readProjectAssetStageRuntimeScope({
+            stages: this.#dependencies.assetStages,
+            admission,
+            binding,
+            signal,
+          });
+    if (
+      projectAssetStage !== null &&
+      (query !== null ||
+        (rawReceipt.turn.threadState.workspaceId ?? null) !==
+          projectAssetStage.workspaceId)
+    )
+      fail("installed_plugin_asset_stage_mismatch");
     const projectStage =
       this.#dependencies.conversations === undefined
         ? null
@@ -304,6 +336,8 @@ export class InstalledPluginRunContext {
           projectStage.workspaceId)
     )
       fail("installed_plugin_project_stage_mismatch");
+    if (projectStage !== null && projectAssetStage !== null)
+      fail("installed_plugin_asset_stage_conflict");
     const projectTextPlan =
       this.#dependencies.plans === undefined
         ? null
@@ -387,6 +421,7 @@ export class InstalledPluginRunContext {
       query,
       projectStage,
       projectTextPlan,
+      projectAssetStage,
     });
   }
 

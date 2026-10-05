@@ -90,6 +90,8 @@ export {
   assertPluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
+export { appendProjectAssetUiServiceAvailability, appendProjectAssetRecoveryUiServiceAvailability, appendProjectAssetStageUiServiceAvailability }
+  from "./plugin-project-asset-host-service-availability.ts";
 export {
   createDeferredPluginUiHostServiceAvailability,
   type DeferredPluginUiHostServiceAvailability,

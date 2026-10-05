@@ -170,3 +170,44 @@ function hasCode(code: string) {
   return (error: unknown) =>
     error instanceof ExtensionManifestError && error.code === code;
 }
+
+test("independent business v1 admits bounded multi-stage tools while v0 still refuses a seventeenth", () => {
+  const original = extensionManifestFixture();
+  const tools = Array.from({ length: 24 }, (_, i) => ({
+    ...original.tools[0]!,
+    operationId: `operation_${i}`,
+  }));
+  const versioned = {
+    ...original,
+    schemaVersion: "crewon.extension-manifest.v1",
+    hostApi: "crewon.extensions.v1",
+    tools,
+  };
+  const parsed = parseExtensionManifest(versioned);
+  assert.equal(parsed.schemaVersion, "crewon.extension-manifest.v1");
+  assert.equal(parsed.hostApi, "crewon.extensions.v1");
+  assert.equal(parsed.tools.length, 24);
+  assert.throws(
+    () =>
+      parseExtensionManifest({
+        ...versioned,
+        tools: [...tools, { ...tools[0], operationId: "operation_extra" }],
+      }),
+    hasCode("extension_collection_invalid"),
+  );
+  assert.throws(
+    () => parseExtensionManifest({ ...original, tools: tools.slice(0, 17) }),
+    hasCode("extension_collection_invalid"),
+  );
+  assert.throws(
+    () =>
+      parseExtensionManifest({ ...versioned, hostApi: "crewon.extensions.v0" }),
+    hasCode("extension_host_incompatible"),
+  );
+  assert.throws(
+    () =>
+      parseExtensionManifest({ ...original, hostApi: "crewon.extensions.v1" }),
+    hasCode("extension_host_incompatible"),
+  );
+  assert.deepEqual(parseExtensionManifest(original), original);
+});

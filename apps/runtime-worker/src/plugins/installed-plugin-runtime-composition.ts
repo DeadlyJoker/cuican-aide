@@ -1,3 +1,8 @@
+import {
+  captureInstalledPluginProjectAssetToolsConfig,
+  composeInstalledPluginProjectAssetTools,
+  type InstalledPluginProjectAssetToolsConfig,
+} from "./installed-plugin-project-asset-tools.ts";
 import { isAbsolute } from "node:path";
 import type { AuthorizationPort, ExtensionStore } from "@crewon/application";
 import type { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
@@ -43,6 +48,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoConfig;
   projectTools?: InstalledPluginProjectToolsConfig;
+  projectAssetTools?: InstalledPluginProjectAssetToolsConfig;
   /** Historical observation is an explicit profile-scoped deployment, never today's catalog. */
   historicalQuery?: InstalledPluginHistoricalQueryConfig;
 }>;
@@ -69,7 +75,19 @@ export function captureInstalledPluginExecutionConfig(
         config.maximumRuntimes > 32))
   )
     throw new Error("installed_plugin_execution_configuration_invalid");
+  if (
+    config.projectAssetTools !== undefined &&
+    config.projectTools === undefined
+  )
+    throw new Error("installed_plugin_asset_read_dependencies_unavailable");
   return Object.freeze({
+    ...(config.projectAssetTools === undefined
+      ? {}
+      : {
+          projectAssetTools: captureInstalledPluginProjectAssetToolsConfig(
+            config.projectAssetTools,
+          ),
+        }),
     installRoot: config.installRoot,
     authorization: Object.freeze({
       authorize: config.authorization.authorize.bind(config.authorization),
@@ -195,6 +213,7 @@ export function composeInstalledPluginRuntimeResolver(input: {
     operations: store.externalOperationStore(),
     conversations: store.projectConversationStore(),
     plans: store.projectTextPlanStore(),
+    assetStages: store.projectAssetStageStore(),
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({
@@ -217,10 +236,24 @@ export function composeInstalledPluginRuntimeResolver(input: {
     ...(config.projectTools === undefined
       ? {}
       : {
-          projectTools: composeInstalledPluginProjectToolsDependencies({
-            store,
-            config: config.projectTools,
-            resolveActor: config.resolveActor,
+          projectTools: Object.freeze({
+            ...composeInstalledPluginProjectToolsDependencies({
+              store,
+              config: config.projectTools,
+              resolveActor: config.resolveActor,
+            }),
+            ...(config.projectAssetTools === undefined
+              ? {}
+              : {
+                  assetTools: (
+                    admission: import("@crewon/domain").PluginTaskAdmission,
+                  ) =>
+                    composeInstalledPluginProjectAssetTools({
+                      store,
+                      config: config.projectAssetTools!,
+                      admission,
+                    }),
+                }),
           }),
         }),
     ...(config.executionIo === undefined

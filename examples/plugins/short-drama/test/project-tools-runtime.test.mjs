@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "18.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.0";
 const plugin = (
   await import(
     process.env.CREWON_SHORT_DRAMA_PLUGIN_DIR
@@ -25,7 +25,12 @@ const sha = (value) =>
   "sha256:" + createHash("sha256").update(value).digest("hex");
 const tool = (op) => "crewon_short_drama__" + op;
 /** Explicit unit business/I/O ports; authorization and durable commits are verified by the real Worker integration. */
-function fixture({ contextService = null, projectMethods = {} } = {}) {
+function fixture({
+  contextService = null,
+  projectMethods = {},
+  assetContextService = null,
+  assetMethods = null,
+} = {}) {
   let factory;
   let writes = 0;
   const projects = {
@@ -46,18 +51,22 @@ function fixture({ contextService = null, projectMethods = {} } = {}) {
     },
     services: {
       getOptional(service) {
-        return service === "crewon.project-context"
-          ? contextService
-          : service === "crewon.project-tools"
-            ? projects
-            : service === "crewon.execution"
-              ? {
-                  register(value) {
-                    factory = value;
-                    return { dispose() {} };
-                  },
-                }
-              : undefined;
+        return service === "crewon.project-asset-context"
+          ? assetContextService
+          : service === "crewon.project-asset-tools"
+            ? assetMethods
+            : service === "crewon.project-context"
+              ? contextService
+              : service === "crewon.project-tools"
+                ? projects
+                : service === "crewon.execution"
+                  ? {
+                      register(value) {
+                        factory = value;
+                        return { dispose() {} };
+                      },
+                    }
+                  : undefined;
       },
       provide() {
         return { dispose() {} };
@@ -202,7 +211,11 @@ test("Short13 catalog includes stage and original media tools with model schemas
   const f = fixture();
   assert.equal(
     f.runtime.definitions().length,
-    Number(version.split(".")[0]) >= 16 ? 15 : 14,
+    Number(version.split(".")[0]) >= 19
+      ? 21
+      : Number(version.split(".")[0]) >= 16
+        ? 15
+        : 14,
   );
   const list = f.runtime
     .definitions()
@@ -539,4 +552,240 @@ test("runtime close joins a pending scope read and prevents subsequent business 
   await Promise.all([executing, closing]);
   assert.equal(closed, true);
   assert.equal(f.writes(), 0);
+});
+
+const assetScope = {
+  version: "crewon.project-asset-runtime-scope.v1",
+  runId: "unit-run",
+  threadId: "unit-thread",
+  projectId: "unit-project",
+  bindingId: "asset-binding",
+  bindingRevision: 1,
+  workspaceId: null,
+  stage: {
+    kind: "assets",
+    assetKind: "character",
+    briefRevision: 1,
+    script: null,
+  },
+  sources: {
+    brief: { briefRevision: 1, contentDigest: sha("brief") },
+    script: null,
+  },
+  allowedOperations: [
+    "asset_context_read",
+    "asset_list",
+    "asset_read",
+    "asset_history",
+    "asset_content_read",
+    "project_read",
+    "outline_read",
+    "script_read",
+    "content_read",
+    "text_history",
+    "asset_save",
+  ],
+  admissionDigest: sha("asset-admission"),
+};
+const assetCandidate = {
+  projectId: "unit-project",
+  kind: "character",
+  expectedAssetRevision: 0,
+  briefRevision: 1,
+  content: {
+    name: "陈遥",
+    setting: "信件修复师",
+    visualPrompt: "写实人物，灰色大衣",
+  },
+};
+const assetHead = {
+  projectId: "unit-project",
+  assetId: "unit-asset",
+  kind: "character",
+  revision: 1,
+  latestContentRevision: 1,
+  selectedContentRevision: null,
+  latestReferenceRevision: 0,
+  selectedReferenceRevision: null,
+  locked: false,
+  createdAt: "2026-10-06T00:00:00.000Z",
+  updatedAt: "2026-10-06T00:00:00.000Z",
+};
+const assetRevision = {
+  projectId: "unit-project",
+  assetId: "unit-asset",
+  kind: "character",
+  contentRevision: 1,
+  brief: { briefRevision: 1, contentDigest: sha("brief") },
+  script: null,
+  createdAt: assetHead.createdAt,
+  contentDigest: sha("content"),
+};
+test("asset Run reads its own actual scope and denies old writes/media or foreign kind/sources before effects", async () => {
+  let writes = 0,
+    scopeCalls = 0;
+  const f = fixture({
+    assetContextService: {
+      async readScope() {
+        ++scopeCalls;
+        return { scope: assetScope };
+      },
+    },
+    assetMethods: {
+      async saveCandidate() {
+        ++writes;
+        return {
+          kind: "save-content",
+          disposition: "committed",
+          asset: assetHead,
+          contentRevision: assetRevision,
+        };
+      },
+    },
+  });
+  try {
+    const result = await f.runtime.execute(
+      f.command("asset_context_read", {}, 1),
+      new AbortController().signal,
+    );
+    assert.deepEqual(JSON.parse(JSON.parse(result.result.output).resultJson), {
+      scope: assetScope,
+    });
+    for (const [i, op, body, pattern] of [
+      [
+        2,
+        "project_create",
+        { title: "new", briefText: "x" },
+        /asset_stage_operation_denied/,
+      ],
+      [3, "submit", { prompt: "x" }, /asset_stage_operation_denied/],
+      [
+        4,
+        "asset_save",
+        { ...assetCandidate, kind: "scene" },
+        /asset_stage_kind_mismatch/,
+      ],
+      [
+        5,
+        "asset_save",
+        { ...assetCandidate, briefRevision: 2 },
+        /asset_stage_source_mismatch/,
+      ],
+      [
+        6,
+        "asset_save",
+        { ...assetCandidate, projectId: "other" },
+        /asset_stage_project_mismatch/,
+      ],
+    ])
+      await assert.rejects(
+        f.runtime.execute(f.command(op, body, i), new AbortController().signal),
+        pattern,
+      );
+    assert.equal(writes, 0);
+    assert.equal(f.writes(), 0);
+    assert.equal(scopeCalls, 6);
+    const command = f.command("asset_save", assetCandidate, 7);
+    const raw = command.input;
+    const saved = await f.runtime.execute(
+      command,
+      new AbortController().signal,
+    );
+    assert.equal(writes, 1);
+    assert.equal(command.input, raw);
+    assert.equal(JSON.parse(raw).assetId, undefined);
+    assert.equal(
+      JSON.parse(JSON.parse(saved.result.output).resultJson).asset
+        .selectedContentRevision,
+      null,
+    );
+    assert.ok(Buffer.byteLength(saved.result.output) <= 8192);
+  } finally {
+    await f.runtime.close();
+  }
+});
+test("corrupt asset scope never falls through to ordinary project creation; context absence only keeps legacy commands", async () => {
+  const f = fixture({
+    assetContextService: {
+      async readScope() {
+        return { scope: { ...assetScope, admissionDigest: "invented" } };
+      },
+    },
+  });
+  try {
+    await assert.rejects(
+      f.runtime.execute(
+        f.command("project_create", { title: "x", briefText: "x" }, 1),
+        new AbortController().signal,
+      ),
+      /protocol_invalid/,
+    );
+    assert.equal(f.writes(), 0);
+  } finally {
+    await f.runtime.close();
+  }
+  const legacy = fixture();
+  try {
+    await assert.rejects(
+      legacy.runtime.execute(
+        legacy.command("asset_save", assetCandidate, 1),
+        new AbortController().signal,
+      ),
+      /asset_context_unavailable/,
+    );
+    assert.equal(legacy.writes(), 0);
+  } finally {
+    await legacy.runtime.close();
+  }
+});
+test("asset cancellation on a cold owner stays unknown; bounded content rejects a mismatched offset", async () => {
+  let writes = 0;
+  const f = fixture({
+    assetContextService: {
+      async readScope() {
+        return { scope: assetScope };
+      },
+    },
+    assetMethods: {
+      async saveCandidate() {
+        ++writes;
+      },
+      async readContent() {
+        return {
+          contentDigest: sha("content"),
+          format: "canonical-json",
+          offset: 1,
+          nextOffset: null,
+          totalCodePoints: 2,
+          text: "字",
+        };
+      },
+    },
+  });
+  try {
+    const canceled = await f.runtime.cancel(
+      f.command("asset_save", assetCandidate, 1),
+      new AbortController().signal,
+    );
+    assert.equal(canceled.status, "unknownOutcome");
+    assert.equal(writes, 0);
+    await assert.rejects(
+      f.runtime.execute(
+        f.command(
+          "asset_content_read",
+          {
+            projectId: "unit-project",
+            assetId: "unit-asset",
+            contentRevision: 1,
+            offset: 0,
+          },
+          2,
+        ),
+        new AbortController().signal,
+      ),
+      /protocol_invalid/,
+    );
+  } finally {
+    await f.runtime.close();
+  }
 });

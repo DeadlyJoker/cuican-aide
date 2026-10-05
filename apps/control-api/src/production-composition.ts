@@ -1,3 +1,8 @@
+import {
+  createProductionProjectAssetPluginRuntime,
+  captureProductionProjectAssetOwnerCleanup,
+  type ProductionProjectAssetPluginRuntime,
+} from "./production-project-asset-plugin-runtime.ts";
 import { productionPluginUiOwnerConfiguration } from "./production-plugin-ui-owner-configuration.ts";
 import { createProductionProjectConversationRuntime } from "./production-project-conversation-runtime.ts";
 import { closeResources } from "./production-control-resource-cleanup.ts";
@@ -172,6 +177,9 @@ export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
   const ownedTaskActions = config.pluginUi?.ownedTaskActions;
+  const closeOwnedProjectAssets = captureProductionProjectAssetOwnerCleanup(
+    config.pluginUi,
+  );
   const closeOwnedProjectTexts = captureProductionProjectTextOwnerCleanup(
     config.pluginUi,
   );
@@ -289,6 +297,11 @@ export async function createProductionPostgresControlApi(
         failures.push(failure);
       }
     try {
+      await closeOwnedProjectAssets();
+    } catch (failure) {
+      failures.push(failure);
+    }
+    try {
       await closeOwnedProjectTexts();
     } catch (failure) {
       failures.push(failure);
@@ -348,6 +361,9 @@ async function composeProductionControlApi(
     | ProductionPluginInstallationRuntime
     | undefined;
   let projectPluginRuntime: ProductionCreativeProjectPluginRuntime | undefined;
+  let projectAssetPluginRuntime:
+    | ProductionProjectAssetPluginRuntime
+    | undefined;
   let projectTextPluginRuntime: ProductionProjectTextPluginRuntime | undefined;
   let projectGenerationReadPluginRuntime:
     | ProductionProjectGenerationReadPluginRuntime
@@ -390,6 +406,22 @@ async function composeProductionControlApi(
           : { hostUiServices: projectPluginRuntime.hostUiServices }),
       });
     if (
+      creativeProjects?.assetUi !== undefined &&
+      config.pluginUi !== undefined
+    )
+      projectAssetPluginRuntime = createProductionProjectAssetPluginRuntime({
+        projects: creativeProjects,
+        ui: config.pluginUi.configuration,
+        identity: config.identity as ProductionControlApiIdentity,
+        ...((projectTextPluginRuntime?.hostUiServices ??
+          projectPluginRuntime?.hostUiServices) === undefined
+          ? {}
+          : {
+              hostUiServices: (projectTextPluginRuntime?.hostUiServices ??
+                projectPluginRuntime?.hostUiServices)!,
+            }),
+      });
+    if (
       config.pluginUi !== undefined ||
       config.pluginInstallation !== undefined
     ) {
@@ -411,12 +443,14 @@ async function composeProductionControlApi(
             ids,
             digester,
             ...(creativeProjects === undefined ? {} : { creativeProjects }),
-            ...((projectTextPluginRuntime?.hostUiServices ??
+            ...((projectAssetPluginRuntime?.hostUiServices ??
+              projectTextPluginRuntime?.hostUiServices ??
               projectPluginRuntime?.hostUiServices) === undefined
               ? {}
               : {
                   metadataHostUiServices:
-                    (projectTextPluginRuntime?.hostUiServices ??
+                    (projectAssetPluginRuntime?.hostUiServices ??
+                      projectTextPluginRuntime?.hostUiServices ??
                       projectPluginRuntime?.hostUiServices)!,
                 }),
           },
@@ -438,6 +472,7 @@ async function composeProductionControlApi(
           ...((pluginTaskRuntime?.historicalQueries?.hostUiServices ??
             pluginTaskRuntime?.projectQueries?.hostUiServices ??
             pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+            projectAssetPluginRuntime?.hostUiServices ??
             projectTextPluginRuntime?.hostUiServices ??
             projectPluginRuntime?.hostUiServices) === undefined
             ? {}
@@ -446,6 +481,7 @@ async function composeProductionControlApi(
                   ?.hostUiServices ??
                   pluginTaskRuntime?.projectQueries?.hostUiServices ??
                   pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+                  projectAssetPluginRuntime?.hostUiServices ??
                   projectTextPluginRuntime?.hostUiServices ??
                   projectPluginRuntime?.hostUiServices)!,
               }),
@@ -455,6 +491,7 @@ async function composeProductionControlApi(
         pluginTaskRuntime?.historicalQueries?.hostUiServices ??
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+        projectAssetPluginRuntime?.hostUiServices ??
         projectTextPluginRuntime?.hostUiServices ??
         projectPluginRuntime?.hostUiServices;
       const history = await composeProductionPluginUiRecoveryHistory({
@@ -502,6 +539,8 @@ async function composeProductionControlApi(
               conversations: conversations?.owner(),
               plans: conversations?.textPlans()?.owner,
               texts: projectTextPluginRuntime,
+              assets: projectAssetPluginRuntime,
+              assetStages: conversations?.assetStages(),
               recovery: pluginUiRecovery?.service,
               selection: projectSelectionPluginRuntime?.owner,
               tasks: pluginTaskRuntime,
@@ -672,6 +711,8 @@ async function composeProductionControlApi(
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
             texts: projectTextPluginRuntime,
+            assets: projectAssetPluginRuntime,
+            assetStages: conversations?.assetStages(),
             conversations: conversations?.owner(),
             plans: conversations?.textPlans(),
             projectGenerations: pluginTaskRuntime?.projectGenerations,
@@ -714,6 +755,8 @@ async function composeProductionControlApi(
       projectConceptSelections: projectSelections,
       creativeProjects: creativeProjects?.service,
       projectTexts: creativeProjects?.textService,
+      projectAssets: creativeProjects?.assetService,
+      projectAssetStages: conversations?.assetStages(),
       projectConversations: conversations?.owner(),
       projectConversationRouting: store.projectConversationStore(),
       projectGenerationReads,
@@ -773,6 +816,7 @@ async function composeProductionControlApi(
       await closeResources([
         () => conversations?.close(),
         () => projectPluginRuntime?.close(),
+        () => projectAssetPluginRuntime?.close(),
         () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),
         () => projectGenerationReadPluginRuntime?.close(),
@@ -805,6 +849,7 @@ async function composeProductionControlApi(
       await closeResources([
         () => conversations?.close(),
         () => projectPluginRuntime?.close(),
+        () => projectAssetPluginRuntime?.close(),
         () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),
         () => projectGenerationReadPluginRuntime?.close(),

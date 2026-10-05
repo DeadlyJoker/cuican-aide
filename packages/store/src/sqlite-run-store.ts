@@ -1,3 +1,6 @@
+import { SqliteProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-sqlite-store.ts";
+import { SqliteProjectAssetStore } from "./project-asset-sqlite-store.ts";
+import { SqliteProjectAssetStageStore } from "./project-asset-stage-store.ts";
 import { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
@@ -744,6 +747,31 @@ export class SqliteRunStore implements DomainStore {
   }
 
   /** Shares the parent connection and lifetime; text migration remains explicit. */
+  projectAssetStore(
+    input: { verifier?: ProjectGenerationImageResultVerifier } = {},
+  ): SqliteProjectAssetStore {
+    return new SqliteProjectAssetStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      ...(input.verifier === undefined ? {} : { verifier: input.verifier }),
+    });
+  }
+  projectAssetUiIntentJournalStore(
+    input: { verifier?: ProjectGenerationImageResultVerifier } = {},
+  ): SqliteProjectAssetUiIntentJournalStore {
+    return new SqliteProjectAssetUiIntentJournalStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      ...(input.verifier === undefined ? {} : { verifier: input.verifier }),
+    });
+  }
+  projectAssetStageStore(): SqliteProjectAssetStageStore {
+    return new SqliteProjectAssetStageStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
   projectTextStore(): SqliteProjectTextStore {
     this.#assertOpen();
     return new SqliteProjectTextStore({

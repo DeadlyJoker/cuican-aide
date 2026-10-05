@@ -1,3 +1,5 @@
+import { ControlProjectAssetStageTurn } from "./controlProjectAssetStageTurn";
+import { startPresentedProjectAssetStageTurn } from "./controlProjectAssetStagePresentation";
 import { ControlProjectConversationTurn } from "./controlProjectConversationTurn";
 import { cancelControlActiveRun } from "./controlSteerActiveRun";
 import { parseThreadWorkspaceId } from "@crewon/contracts";
@@ -270,6 +272,7 @@ export class ControlThreadRuntime {
   #threadEventStreamFocus: string | null | undefined;
   #nextThreadStreamGeneration = 0;
   readonly #projectTurns: ControlProjectConversationTurn;
+  readonly #assetTurns:ControlProjectAssetStageTurn;
   #closed = false;
 
   constructor(
@@ -284,6 +287,7 @@ export class ControlThreadRuntime {
     this.#idempotencyKey =
       config.idempotencyKey ??
       ((operation) => `${operation}:${globalThis.crypto.randomUUID()}`);
+    this.#assetTurns=new ControlProjectAssetStageTurn(this.#client,this.#idempotencyKey);
     this.#projectTurns = new ControlProjectConversationTurn(
       this.#client,
       this.#idempotencyKey,
@@ -358,6 +362,7 @@ export class ControlThreadRuntime {
   }
 
   close(): void {
+    void this.#assetTurns.close();
     void this.#projectTurns.close();
     this.catalog.close();
     this.#transcriptReads.close();
@@ -1308,6 +1313,7 @@ export class ControlThreadRuntime {
     return response;
   }
 
+  retainedProjectAssetStageSelection(threadId:string){return this.#assetTurns.retainedSelection(threadId);}
   retainedProjectConversationSelection(threadId: string) {
     return this.#projectTurns.retainedSelection(threadId);
   }
@@ -1320,6 +1326,7 @@ export class ControlThreadRuntime {
     images: ComposerImageInput[] = [],
   ): Promise<TurnStartResponse> {
     validateSupportedTurnInput(mentions, settings, images);
+    if(settings?.projectAssetStage!==undefined)return startPresentedProjectAssetStageTurn({threadId,text,settings,hasAttachments:images.length>0||mentions.length>0,closed:()=>this.#closed,turns:this.#assetTurns,getSnapshot:id=>this.#getThreadSnapshot(id),adopt:receipt=>this.adoptExtensionTask(receipt),readThread:id=>this.readThread(id),changed:id=>this.#callbacks.onProjectConversationRequestChanged?.(id)});
     if (settings?.projectConversation !== undefined) {
       if (this.#closed) throw new Error("control_thread_runtime_closed");
       if (

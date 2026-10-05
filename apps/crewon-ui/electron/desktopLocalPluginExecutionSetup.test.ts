@@ -93,12 +93,15 @@ describe("explicit Main local execution preparation", () => {
     "16.0.0",
     "17.0.0",
     "18.0.0",
+    "19.0.0",
   ])(
     "previews explicitly supported exact installed version %s without execution or selection mutation",
     async (version) => {
       const f = await fixture({
         version,
-        projectContext: ["16.0.0", "17.0.0", "18.0.0"].includes(version),
+        projectContext: ["16.0.0", "17.0.0", "18.0.0", "19.0.0"].includes(
+          version,
+        ),
         historicalQueries: version === "18.0.0",
       });
       const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
@@ -117,7 +120,7 @@ describe("explicit Main local execution preparation", () => {
   );
 
   it("does not turn an unsupported version declaration into execution approval", async () => {
-    const f = await fixture({ version: "19.0.0", projectContext: true });
+    const f = await fixture({ version: "20.0.0", projectContext: true });
     const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
     await expect(
       f

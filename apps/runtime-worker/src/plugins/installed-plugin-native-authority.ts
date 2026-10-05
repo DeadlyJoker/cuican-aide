@@ -695,6 +695,42 @@ export function createInstalledPluginNativeWorkerAuthority(
                 }, signal),
             }),
           }),
+      ...(owner.projects?.assetStages === undefined
+        ? {}
+        : {
+            projectAssetTools: Object.freeze({
+              version: "crewon.project-asset-tools.v1" as const,
+              authorization: Object.freeze({
+                authorize: (
+                  input: Parameters<
+                    CreativeProjectAuthorizationPort["authorize"]
+                  >[0],
+                ) => owner.operate(() => owner.projectPolicy(input)),
+              }),
+              authorizeService: (
+                admission: import("@crewon/domain").PluginTaskAdmission,
+                signal: AbortSignal,
+              ) =>
+                owner.operate(async () => {
+                  owner.current(signal);
+                  owner.actor({
+                    tenantId: admission.tenantId,
+                    spaceId: admission.spaceId,
+                    principalId: admission.principalId,
+                    actorId: admission.actorId,
+                  });
+                  if (
+                    !owner.projects?.assetStages?.publications.some(
+                      (p) =>
+                        p.pluginId === admission.pluginId &&
+                        p.packageDigest === admission.packageDigest &&
+                        p.contributionId === admission.contributionId,
+                    )
+                  )
+                    fail("asset_service_unapproved");
+                }, signal),
+            }),
+          }),
       authorization: Object.freeze({
         authorize: (input: Parameters<AuthorizationPort["authorize"]>[0]) =>
           owner.operate(() => owner.policy(input)),

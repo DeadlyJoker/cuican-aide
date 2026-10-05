@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "18.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.0";
 const plugin = (
   await import(
     process.env.CREWON_SHORT_DRAMA_PLUGIN_DIR
@@ -376,7 +376,11 @@ test("requires explicit host IO and applies perAction only to submit", async () 
     const noIo = factory().factory.create(context());
     assert.equal(
       noIo.definitions().length,
-      Number(version.split(".")[0]) >= 16 ? 15 : 14,
+      Number(version.split(".")[0]) >= 19
+        ? 21
+        : Number(version.split(".")[0]) >= 16
+          ? 15
+          : 14,
     );
     await assert.rejects(
       noIo.execute(fixture().command(), signal()),

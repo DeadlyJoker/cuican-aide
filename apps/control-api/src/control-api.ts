@@ -1,3 +1,5 @@
+import { registerProjectAssetStageRoutes } from "./project-asset-stage-route.ts";
+import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { ApplicationError } from "@crewon/application";
 import {
   registerProjectConversationRoutes,
@@ -13,6 +15,8 @@ import { registerExtensionConfigurationRoutes } from "./extension-configuration-
 import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
 import { registerProjectTextRoutes } from "./project-text-route.ts";
+import { registerProjectAssetRoutes } from "./project-asset-route.ts";
+import type { ProjectAssetApplicationService } from "@crewon/application";
 import type { ProjectTextApplicationService } from "@crewon/application";
 import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
 import { registerProjectGenerationReadRoutes } from "./project-generation-read-route.ts";
@@ -255,7 +259,9 @@ export type ControlApiDependencies = Readonly<{
   extensionReads?: ExtensionReadApplicationService | null;
   creativeProjects?: CreativeProjectApplicationService | null;
   projectTexts?: ProjectTextApplicationService | null;
+  projectAssets?: ProjectAssetApplicationService | null;
   projectConversations?: ProjectConversationControlOwner | null;
+  projectAssetStages?:ProjectAssetStageControlOwner|null;
   projectConversationRouting?: ProjectConversationRouting | null;
   projectGenerationReads?: ProjectGenerationReadApplicationService | null;
   projectConceptSelections?: ProjectConceptSelectionApplicationService | null;
@@ -380,6 +386,7 @@ export function buildControlApi(
     return response;
   });
 
+  registerProjectAssetStageRoutes(app,{identity:dependencies.identity,owner:dependencies.projectAssetStages,outboxWakeup:dependencies.outboxWakeup,threads:dependencies.threads});
   registerProjectConversationRoutes(app, {
     identity: dependencies.identity,
     threads: dependencies.threads,
@@ -401,6 +408,7 @@ export function buildControlApi(
       projectTexts: dependencies.projectTexts,
     });
   }
+  if (dependencies.projectAssets != null) registerProjectAssetRoutes(app, { identity: dependencies.identity, assets: dependencies.projectAssets });
   if (dependencies.creativeProjects != null) {
     registerCreativeProjectRoutes(app, {
       identity: dependencies.identity,

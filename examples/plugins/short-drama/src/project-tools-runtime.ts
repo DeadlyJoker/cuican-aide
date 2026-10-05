@@ -13,6 +13,8 @@ import {
   projectPolicy,
   projectRequest,
   projectCommandInput,
+  assetMethod,
+  PROJECT_ASSET_CONTEXT_TOOL,
 } from "./project-tools-catalog.js";
 import {
   MAX_PROJECT_TOOLS_RESPONSE_BYTES,
@@ -26,12 +28,31 @@ import {
   readProjectRunScope,
   assertProjectRunOperation,
 } from "./project-run-scope.js";
+import type {
+  PluginProjectAssetToolsService,
+  PluginProjectAssetContextService,
+  ProjectAssetToolMethod,
+  ProjectAssetToolsRequests,
+  ProjectAssetToolsResponses,
+} from "./project-asset-tools-service.js";
+import {
+  projectAssetToolsCodec,
+  parseProjectAssetToolCommand,
+} from "./project-asset-tools-codec.mjs";
+import {
+  readProjectAssetRunScope,
+  assertProjectAssetRunOperation,
+} from "./project-asset-run-scope.js";
 /** One installed package, one actual host Agent runtime, with stage text and media tools. */
 export function createShortDramaRuntime(
   context: PluginToolRuntimeContext,
   projects: PluginProjectToolsService | null,
   services?: PluginExecutionServices,
-  options: { projectContext: PluginProjectContextService | null } = {
+  options: {
+    projectContext: PluginProjectContextService | null;
+    assets?: PluginProjectAssetToolsService | null;
+    assetContext?: PluginProjectAssetContextService | null;
+  } = {
     projectContext: null,
   },
 ): PluginToolRuntime {
@@ -57,22 +78,47 @@ export function createShortDramaRuntime(
     signal.throwIfAborted();
     if (Date.parse(command.executionLease.expiresAt) <= Date.now())
       throw new Error("short_drama_execution_lease_expired");
+    const asset = assetMethod(command.name);
+    const assetRequest = asset
+      ? parseProjectAssetToolCommand(
+          asset,
+          projectCommandInput(context, approval, command),
+        )
+      : null;
     const project = projectMethod(command.name)
       ? projectRequest(context, approval, command)
       : null;
     if (
-      command.name === PROJECT_CONTEXT_TOOL &&
+      (command.name === PROJECT_CONTEXT_TOOL ||
+        command.name === PROJECT_ASSET_CONTEXT_TOOL) &&
       Object.keys(projectCommandInput(context, approval, command)).length
     )
       throw new Error("short_drama_project_context_input_invalid");
-    const scope = await readProjectRunScope(
+    const assetScope = await readProjectAssetRunScope(
       context,
       command,
-      options.projectContext,
+      options.assetContext ?? null,
     );
+    const operation = command.name.replace(/^crewon_short_drama__/u, "");
+    assertProjectAssetRunOperation(
+      assetScope,
+      operation,
+      asset,
+      (assetRequest as unknown as Record<string, unknown> | null) ??
+        project?.request ??
+        null,
+    );
+    if (assetScope && command.name === PROJECT_CONTEXT_TOOL)
+      throw new Error("short_drama_asset_stage_operation_denied");
+    const scope = assetScope
+      ? null
+      : await readProjectRunScope(context, command, options.projectContext);
     if (closed) throw new Error("short_drama_runtime_closed");
     signal.throwIfAborted();
-    if (command.name === PROJECT_CONTEXT_TOOL) {
+    if (
+      command.name === PROJECT_CONTEXT_TOOL ||
+      command.name === PROJECT_ASSET_CONTEXT_TOOL
+    ) {
       const previous = retained.prepare(command);
       if (previous?.status === "completed" || previous?.status === "canceled")
         return previous;
@@ -82,7 +128,28 @@ export function createShortDramaRuntime(
           executionId: command.executionId,
           providerReceiptId: null,
         };
-      return retain(command, { scope });
+      return retain(command, {
+        scope: command.name === PROJECT_ASSET_CONTEXT_TOOL ? assetScope : scope,
+      });
+    }
+    if (asset && assetRequest) {
+      assertProjectRunOperation(scope, null, null);
+      const previous = retained.prepare(command);
+      if (previous?.status === "completed" || previous?.status === "canceled")
+        return previous;
+      if (!options.assets)
+        throw new Error("short_drama_asset_tools_unavailable");
+      if (method === "cancel")
+        return {
+          status:
+            command.actionIntent.effect === "mutation"
+              ? ("unknownOutcome" as const)
+              : ("canceled" as const),
+          executionId: command.executionId,
+          providerReceiptId: null,
+        };
+      const result = await callAsset(asset, assetRequest, command);
+      return retain(command, result);
     }
     if (!project) {
       assertProjectRunOperation(scope, null, null);
@@ -114,6 +181,14 @@ export function createShortDramaRuntime(
     return call
       .call(projects, { command, request: project.request })
       .then((result) => retain(command, result));
+  }
+  async function callAsset<M extends ProjectAssetToolMethod>(
+    method: M,
+    request: ProjectAssetToolsRequests[M],
+    command: PluginToolExecutionCommand,
+  ): Promise<ProjectAssetToolsResponses[M]> {
+    const result = await options.assets![method]({ command, request });
+    return projectAssetToolsCodec.parseResponse(method, request, result);
   }
   function retain(command: PluginToolExecutionCommand, result: unknown) {
     const resultJson = JSON.stringify(result),

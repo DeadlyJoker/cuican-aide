@@ -18,6 +18,18 @@ export function captureProductionPluginUiOwnerConfiguration(
       ? {}
       : { ownedProjectSelectionActions: input.ownedProjectSelectionActions }),
     configuration: parseProductionPluginUiConfiguration(input.configuration),
+    ...(input.ownedProjectAssetStageActions === undefined
+      ? {}
+      : { ownedProjectAssetStageActions: input.ownedProjectAssetStageActions }),
+    ...(input.ownedProjectAssetActions === undefined
+      ? {}
+      : { ownedProjectAssetActions: input.ownedProjectAssetActions }),
+    ...(input.ownedProjectAssetRecoveryActions === undefined
+      ? {}
+      : {
+          ownedProjectAssetRecoveryActions:
+            input.ownedProjectAssetRecoveryActions,
+        }),
     ...(input.ownedProjectTextActions === undefined
       ? {}
       : { ownedProjectTextActions: input.ownedProjectTextActions }),

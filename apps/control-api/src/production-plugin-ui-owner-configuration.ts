@@ -1,3 +1,4 @@
+import { productionProjectAssetOwnerConfiguration } from "./production-project-asset-plugin-runtime.ts";
 import type { ProductionPluginUiConfig } from "./production-plugin-ui-composition.ts";
 import { productionProjectTextOwnerConfiguration } from "./production-project-text-plugin-runtime.ts";
 
@@ -7,6 +8,8 @@ export function productionPluginUiOwnerConfiguration(
     configuration: ProductionPluginUiConfig;
     conversations: ProductionPluginUiConfig["ownedProjectConversationActions"];
     plans?: ProductionPluginUiConfig["ownedProjectTextPlanActions"];
+    assetStages?: ProductionPluginUiConfig["ownedProjectAssetStageActions"];
+    assets?: Parameters<typeof productionProjectAssetOwnerConfiguration>[0];
     texts: Parameters<typeof productionProjectTextOwnerConfiguration>[0];
     recovery: ProductionPluginUiConfig["recovery"];
     selection: ProductionPluginUiConfig["ownedProjectSelectionActions"];
@@ -25,6 +28,10 @@ export function productionPluginUiOwnerConfiguration(
   return {
     ...input.configuration,
     ...productionProjectTextOwnerConfiguration(input.texts),
+    ...productionProjectAssetOwnerConfiguration(input.assets),
+    ...(input.assetStages === undefined
+      ? {}
+      : { ownedProjectAssetStageActions: input.assetStages }),
     ...(input.conversations === undefined
       ? {}
       : { ownedProjectConversationActions: input.conversations }),

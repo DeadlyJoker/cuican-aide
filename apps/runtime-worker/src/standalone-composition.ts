@@ -1,3 +1,4 @@
+import { prepareInstalledPluginProjectAssetToolsStores } from "./plugins/installed-plugin-project-asset-tools.ts";
 import { isDeepStrictEqual } from "node:util";
 import {
   RuntimeCompositionLifetime,
@@ -319,9 +320,13 @@ function prepareComposition(
   const config = Object.freeze({
     ...input,
     route: Object.freeze({ ...input.route }),
-    ...(input.projectPlanning === undefined ? {} : {
-      projectPlanning: captureProjectPlanningRuntimePort(input.projectPlanning),
-    }),
+    ...(input.projectPlanning === undefined
+      ? {}
+      : {
+          projectPlanning: captureProjectPlanningRuntimePort(
+            input.projectPlanning,
+          ),
+        }),
     ...(financial === undefined
       ? {}
       : {
@@ -497,6 +502,10 @@ async function composeRuntimeWorker(
         });
   if (executionReadiness !== null)
     lifetime.own(executionReadiness, { phase: "resources" });
+  await prepareInstalledPluginProjectAssetToolsStores({
+    store,
+    config: config.installedPluginExecution?.projectAssetTools,
+  });
   if (config.installedPluginExecution?.projectTools !== undefined)
     await prepareInstalledPluginProjectToolsStores({
       store,

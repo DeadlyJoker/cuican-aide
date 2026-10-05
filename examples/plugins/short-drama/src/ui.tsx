@@ -45,6 +45,11 @@ import {
   parseProjectHistoricalQueryHostContext,
 } from "./project-historical-query-codec.mjs";
 import type { ProjectHistoricalQueryHostContext } from "./plugin-project-historical-queries-service";
+import { createPluginProjectAssetUiClient } from "./project-assets-service";
+import { projectAssetsUiCodec } from "./project-assets-codec.mjs";
+import { ProjectAssetController } from "./workbench/ProjectAssetController";
+import { createPluginProjectAssetRecoveryClient } from "./project-asset-recovery-service";
+import { projectAssetRecoveryCodec } from "./project-asset-recovery-codec.mjs";
 
 const contributionId = "workbench";
 function historicalQueryContext(
@@ -200,11 +205,13 @@ export default defineUiPlugin({
     let texts: ProjectTextController | null = null;
     let conversations: ProjectConversationController | null = null;
     let plans: ProjectTextPlanController | null = null;
+    let assets: ProjectAssetController | null = null;
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
       conversations?.refreshWriteActivity();
       plans?.refreshWriteActivity();
+      assets?.refreshWriteActivity();
     });
     const clients = writes.services;
     controller = preview
@@ -252,6 +259,20 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    assets = preview
+      ? null
+      : new ProjectAssetController({
+          client: createPluginProjectAssetUiClient(
+            clients,
+            projectAssetsUiCodec,
+          ),
+          texts: createPluginProjectTextUiClient(clients, projectTextsUiCodec),
+          recovery: createPluginProjectAssetRecoveryClient(
+            clients,
+            projectAssetRecoveryCodec,
+          ),
+          physicalWritesPending: () => writes.pending,
+        });
     let disposed = false;
     let appliedTokens: string[] = [];
     function update(next: PluginUiProps) {
@@ -279,6 +300,7 @@ export default defineUiPlugin({
       conversations?.setReady(ready);
       texts?.setReady(ready);
       plans?.setReady(ready);
+      assets?.setReady(ready);
       if (!ready) controller?.setReady(false);
       controller?.setRecoveryContexts({
         selection: selectionContext(next.data),
@@ -295,6 +317,7 @@ export default defineUiPlugin({
               texts={texts}
               conversations={conversations}
               plans={plans}
+              assets={assets ?? undefined}
               planningDraft={planningDraft(next.data)}
             />
           ) : (
@@ -313,6 +336,7 @@ export default defineUiPlugin({
       texts?.dispose();
       conversations?.dispose();
       plans?.dispose();
+      assets?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -330,6 +354,7 @@ export default defineUiPlugin({
         texts?.dispose();
         conversations?.dispose();
         plans?.dispose();
+        assets?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

@@ -40,6 +40,9 @@ export function createInstalledPluginProjectToolsOwner(
     stageAdmission?: ProjectStageRunAdmission | null;
     planAdmission?: ProjectTextPlanRunAdmission | null;
     admission: PluginTaskAdmission;
+    assetStageAdmission?:
+      | import("@crewon/domain").ProjectAssetStageRunAdmission
+      | null;
     scope: PluginProfileScope;
     tools: ExtensionManifest["tools"];
     candidate(): PluginActivationCandidate | null;
@@ -56,7 +59,11 @@ export function createInstalledPluginProjectToolsOwner(
   return new ProjectToolsServiceOwner({
     ...dependencies,
     context: input.context,
+    ...(dependencies.assetTools === undefined
+      ? {}
+      : { assets: dependencies.assetTools(input.admission) }),
     stageAdmission: input.stageAdmission,
+    assetStageAdmission: input.assetStageAdmission,
     planAdmission: input.planAdmission,
     admission: input.admission,
     tools: input.tools,
@@ -128,6 +135,9 @@ export async function closeInstalledPluginProjectToolsStartup(
 export async function assertInstalledPluginProjectToolsExternalCurrent(
   input: Readonly<{
     admission: PluginTaskAdmission;
+    assetStageAdmission?:
+      | import("@crewon/domain").ProjectAssetStageRunAdmission
+      | null;
     candidate: PluginActivationCandidate;
     scope: PluginProfileScope;
     purpose: "submit" | "observe";
@@ -186,6 +196,11 @@ export type InstalledPluginProjectToolsConfig = Readonly<{
   ): Promise<void>;
 }>;
 export type InstalledPluginProjectToolsDependencies = Readonly<{
+  assetTools?(
+    admission: PluginTaskAdmission,
+  ): NonNullable<
+    import("./project-tools-service-owner.ts").ProjectToolsServiceOwnerDependencies["assets"]
+  >;
   projects: CreativeProjectApplicationService;
   texts: ProjectTextApplicationService;
   runs: Pick<RunStore, "loadRunInSpace">;

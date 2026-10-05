@@ -1,3 +1,5 @@
+import { createProjectAssetStagePluginOwner } from "./project-asset-stage-plugin-runtime.ts";
+import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import {
   ApplicationError,
   ProjectConversationApplicationService,
@@ -6,6 +8,7 @@ import {
   type ContentDigester,
 } from "@crewon/application";
 import {
+  appendProjectAssetStageUiServiceAvailability,
   appendProjectConversationUiServiceAvailability,
   appendProjectTextPlanUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
@@ -76,6 +79,8 @@ export function createProductionProjectConversationRuntime(
   let owner: ProjectConversationControlOwner | undefined,
     closed = false;
   let plans: ProjectTextPlanPluginUiRuntime | undefined;
+  let assets: ProjectAssetStageControlOwner | undefined;
+  let closing: Promise<void> | undefined;
   const conversationServices = appendProjectConversationUiServiceAvailability({
     conversations: {
       isAvailable: (request) =>
@@ -100,7 +105,7 @@ export function createProductionProjectConversationRuntime(
       planFoundation.configuration,
       input.ui.publications,
     );
-  const hostUiServices =
+  const predecessorServices =
     planFoundation === undefined
       ? conversationServices
       : appendProjectTextPlanUiServiceAvailability({
@@ -121,10 +126,39 @@ export function createProductionProjectConversationRuntime(
               ),
           },
         });
+  const assetFoundation = input.projects?.assetStageFoundation;
+  if (assetFoundation !== undefined)
+    assertCreativeProjectPluginPublications(
+      assetFoundation.configuration,
+      input.ui.publications,
+    );
+  const hostUiServices =
+    assetFoundation === undefined
+      ? predecessorServices
+      : appendProjectAssetStageUiServiceAvailability({
+          fallback: predecessorServices,
+          assets: {
+            isAvailable: (request) =>
+              !closed &&
+              request.requirement.apiVersion === "1" &&
+              assetFoundation.configuration.publications.some(
+                (p) =>
+                  p.pluginId === request.candidate.descriptor.pluginId &&
+                  p.packageDigest === request.candidate.packageDigest &&
+                  request.candidate.descriptor.contributions.some(
+                    (c) =>
+                      c.id === p.contributionId &&
+                      c.kind === "module" &&
+                      c.slot === "main.content",
+                  ),
+              ),
+          },
+        });
   return Object.freeze({
     hostUiServices,
     owner: () => owner,
     textPlans: () => plans,
+    assetStages: () => assets,
     bindThreads(threads: ThreadApplicationService) {
       if (closed) throw new Error("project_conversation_unavailable");
       if (owner !== undefined) return owner;
@@ -186,6 +220,51 @@ export function createProductionProjectConversationRuntime(
           requests.currentSignal().throwIfAborted();
         },
       });
+      if (assetFoundation !== undefined) {
+        assets = createProjectAssetStagePluginOwner({
+          foundation: assetFoundation,
+          threadStore: input.store,
+          digester: input.digester,
+          tasks: {
+            createProjectAssetStageTurnFromHost: (...args) => {
+              const actual = input.tasks();
+              if (actual === undefined)
+                throw new ApplicationError(
+                  "conflict",
+                  "project_asset_stage_execution_unavailable",
+                );
+              return actual.extensionTasks.createProjectAssetStageTurnFromHost(
+                ...args,
+              );
+            },
+          },
+          authority: {
+            installations: input.store.pluginInstallationStore(),
+            requests,
+            installRoot: input.ui.installRoot,
+            authorization:
+              taskAuthority?.authorization ?? metadataAuthorization,
+            authorizePackage: async (candidate, signal) => {
+              if (taskAuthority !== undefined)
+                return taskAuthority.authorizePackage(candidate, signal);
+              await requests.assertCurrent();
+              return candidate.purpose === "read" &&
+                input.registry !== undefined
+                ? input.registry.authorizeCandidate(candidate.candidate)
+                : "deny";
+            },
+            assertExternal: () => {
+              if (closed)
+                throw new ApplicationError(
+                  "authorization",
+                  "project_asset_stage_authority_changed",
+                );
+              taskAuthority?.assertActive();
+              requests.currentSignal().throwIfAborted();
+            },
+          },
+        });
+      }
       if (planFoundation !== undefined) {
         if (input.projects?.textService === undefined)
           throw new Error("project_text_plan_text_commands_required");
@@ -202,10 +281,23 @@ export function createProductionProjectConversationRuntime(
       }
       return owner;
     },
-    close: async () => {
+    close: () => {
       closed = true;
-      await plans?.close();
-      await Promise.allSettled([owner?.close(), metadataRequests.close()]);
+      return (closing ??= Promise.allSettled([
+        plans?.close(),
+        assets?.close(),
+        owner?.close(),
+        metadataRequests.close(),
+      ]).then((results) => {
+        const failures = results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
+        );
+        if (failures.length)
+          throw new AggregateError(
+            failures,
+            "production_project_conversation_cleanup_failed",
+          );
+      }));
     },
   });
 }

@@ -256,6 +256,8 @@ export function assertUiOnlyServiceDeclarations(
           (requirement.service === "crewon.project-text-recovery" &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
+          ((requirement.service === "crewon.project-assets" || requirement.service === "crewon.project-asset-recovery") &&
+            requirement.apiVersion === "1" && (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === "crewon.project-conversations" &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||

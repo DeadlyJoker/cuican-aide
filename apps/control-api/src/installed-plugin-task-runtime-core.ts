@@ -450,6 +450,7 @@ export async function createInstalledPluginTaskRuntimeCore(
       new ExtensionTaskApplicationService(taskDependencies),
       {
         createProjectConversationTurnFromHost: "mutation",
+        createProjectAssetStageTurnFromHost: "mutation",
         createProjectTextPlanTurnFromHost: "mutation",
         createTask: "mutation",
         createTaskFromPlugin: "mutation",
