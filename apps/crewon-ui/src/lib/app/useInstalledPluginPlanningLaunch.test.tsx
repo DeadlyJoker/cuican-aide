@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  subscribeDesktopLocalManagementAccess,
+  type DesktopLocalManagementAccess,
+} from "../desktop/desktopLocalManagementAccess";
 import { useInstalledPluginPlanningLaunch } from "./useInstalledPluginPlanningLaunch";
 import { planningLaunchFixture } from "../plugins/projectPlanningLaunch.test-support";
 import {
@@ -11,16 +15,52 @@ import {
 import { createControlPluginUiHost } from "../plugins/controlPluginUiHost";
 import { deferred } from "../plugins/pluginUiLoader.test-support";
 const time = "2026-10-06T00:00:00.000Z";
+const initialLocation = location.href;
+afterEach(() => {
+  vi.unstubAllGlobals();
+  location.href = initialLocation;
+});
 describe("original App planning launch composition", () => {
   for (const scenario of [
     "execute",
     "active",
     "legacy",
     "changedWhileValidating",
+    "native",
+    "nativeWithdrawn",
+    "untrustedNative",
+    "nativeWeb",
+    "signedOutWeb",
   ])
     it(`uses the real authenticated Control client and installed mount owner: ${scenario}`, async () => {
       Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
       localStorage.clear();
+      const nativeScenario =
+        scenario.startsWith("native") || scenario === "untrustedNative";
+      const originalUrl = location.href;
+      let localManagementAccess: DesktopLocalManagementAccess | null = null;
+      let stopNative = () => {};
+      if (nativeScenario) {
+        vi.stubGlobal("window", {
+          crewonDesktop: {
+            version: 1,
+            runtime: {
+              localManagementAccess: async () => ({
+                schemaVersion: "crewon.desktop-local-management-access.v1",
+                generation: 4,
+              }),
+              onLocalManagementAccessChanged: () => () => {},
+            },
+          },
+        });
+        stopNative = subscribeDesktopLocalManagementAccess((value) => {
+          localManagementAccess = value;
+        });
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+        expect(localManagementAccess).not.toBeNull();
+        if (scenario === "untrustedNative")
+          localManagementAccess = { ...localManagementAccess! };
+      }
       const f = planningLaunchFixture(),
         gate = deferred<Response>(),
         seen: { path: string; method: string; body: unknown }[] = [];
@@ -93,12 +133,20 @@ describe("original App planning launch composition", () => {
             : controlUiResponse(f.lease);
         throw new Error(`unexpected_transport:${method}:${path}`);
       });
-      const scope = { client: clientFixture.client, sessionKey: "actual-user" },
+      const scope = {
+          client: clientFixture.client,
+          sessionKey:
+            nativeScenario || scenario === "signedOutWeb"
+              ? null
+              : "actual-user",
+        },
         host = createControlPluginUiHost({
           client: scope.client,
           assertCurrent: () => undefined,
           onDiagnostic: () => undefined,
         });
+      if (nativeScenario && scenario !== "nativeWeb")
+        location.href = "file:///isolated/CrewON.app/dist/index.html";
       let currentScope: typeof scope | null = scope,
         currentThread = "original-thread";
       const module =
@@ -124,7 +172,7 @@ describe("original App planning launch composition", () => {
       };
       let launch: ReturnType<
         typeof useInstalledPluginPlanningLaunch<typeof scope>
-      >;
+      > = null;
       const root = createRoot(document.createElement("div"));
       function Probe() {
         launch = useInstalledPluginPlanningLaunch({
@@ -132,6 +180,7 @@ describe("original App planning launch composition", () => {
           host,
           catalog,
           threadId: currentThread,
+          localManagementAccess,
           assertScopeCurrent: (candidate) => {
             if (candidate !== currentScope) throw new Error("scope_changed");
           },
@@ -141,11 +190,20 @@ describe("original App planning launch composition", () => {
       try {
         await act(async () => root.render(<Probe />));
         expect(seen).toHaveLength(0);
+        if (
+          scenario === "untrustedNative" ||
+          scenario === "signedOutWeb" ||
+          scenario === "nativeWeb"
+        ) {
+          expect(launch).toBeNull();
+          return;
+        }
         if (scenario === "legacy") {
           expect(launch!.supports(f.proposal)).toBe(false);
           expect(seen).toHaveLength(0);
           return;
         }
+        if (scenario === "nativeWithdrawn") stopNative();
         const started = launch!.confirm(f.proposal, {
           mode: "execute",
           adoption: "manual",
@@ -165,7 +223,9 @@ describe("original App planning launch composition", () => {
           await act(async () => root.render(<Probe />));
           gate.resolve(controlUiResponse(f.lease));
           await expect(started).rejects.toThrow("context_changed");
-        } else if (scenario === "active")
+        } else if (scenario === "nativeWithdrawn")
+          await expect(started).rejects.toThrow("context_changed");
+        else if (scenario === "active")
           await expect(started).rejects.toThrow("wait_for_turn");
         else await started;
         const mutations = seen.filter(
@@ -175,8 +235,16 @@ describe("original App planning launch composition", () => {
               (r.body as { action: string }).action,
             ),
         );
-        expect(mutations).toHaveLength(scenario === "execute" ? 3 : 0);
-        if (scenario === "execute") {
+        expect(mutations).toHaveLength(
+          scenario === "execute" || scenario === "native" ? 3 : 0,
+        );
+        if (scenario === "execute" || scenario === "native") {
+          const storageKey = localStorage.key(0)!;
+          expect(storageKey).toContain(
+            scenario === "native" ? "desktop-local-management" : "actual-user",
+          );
+          if (scenario === "native")
+            expect(storageKey).not.toContain(scope.client.requestOrigin);
           expect(
             seen.find((r) => r.path === "/api/v1/plugins/ui/mounts")?.body,
           ).toEqual({
@@ -202,6 +270,9 @@ describe("original App planning launch composition", () => {
         ).toHaveLength(0);
       } finally {
         await act(async () => root.unmount());
+        stopNative();
+        vi.unstubAllGlobals();
+        location.href = originalUrl;
         localStorage.clear();
       }
     });

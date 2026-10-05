@@ -34,6 +34,7 @@ import { createInstalledPluginProjectQueryJournal } from "../plugins/installedPl
 import { createInstalledPluginProjectSelectionJournal } from "../plugins/installedPluginProjectSelectionJournal";
 import { useInstalledPluginPlanningNavigation } from "./useInstalledPluginPlanningNavigation";
 import { useInstalledPluginPlanningLaunch } from "./useInstalledPluginPlanningLaunch";
+import type { DesktopLocalManagementAccess } from "../desktop/desktopLocalManagementAccess";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -43,6 +44,7 @@ const EMPTY_MODULES: readonly CommandWorkspaceHostModule[] = Object.freeze([]);
 export function useInstalledPluginModules({
   client,
   sessionKey,
+  localManagementAccess = null,
   theme,
   locale,
   taskContext,
@@ -51,6 +53,7 @@ export function useInstalledPluginModules({
   client: ControlApiClient | null;
   /** A host account lifecycle key only; HTTP authority continues to come from its authenticated session. */
   sessionKey: string | null;
+  localManagementAccess?: DesktopLocalManagementAccess | null;
   theme: Theme;
   locale: Locale;
   /** A creation hint from the current workspace owner, never a conversation or Run authority. */
@@ -447,6 +450,7 @@ export function useInstalledPluginModules({
     scope,
     catalog,
     host,
+    localManagementAccess,
     threadId: selectedTaskThreadId,
     assertScopeCurrent: (candidate) => {
       if (

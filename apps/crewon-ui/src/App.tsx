@@ -475,6 +475,7 @@ export function App({
   const installedPlugins = useInstalledPluginModules({
     client: controlClient,
     sessionKey: platformAccount ? String(platformAccount.user.id) : null,
+    localManagementAccess,
     theme,
     locale,
     ...(creationWorkspaceId === undefined

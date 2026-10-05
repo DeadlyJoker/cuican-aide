@@ -15,6 +15,10 @@ import {
 import { createProjectPlanningLaunch } from "../plugins/projectPlanningLaunch";
 import { createProjectPlanningLaunchIntentStore } from "../plugins/projectPlanningLaunchIntent";
 import { matchesProjectPlanningModule } from "./useInstalledPluginPlanningNavigation";
+import {
+  isDesktopLocalManagementAccess,
+  type DesktopLocalManagementAccess,
+} from "../desktop/desktopLocalManagementAccess";
 
 /** Account and installed source are borrowed from the original App composition, never from a proposal. */
 export function useInstalledPluginPlanningLaunch<
@@ -24,12 +28,14 @@ export function useInstalledPluginPlanningLaunch<
   catalog,
   host,
   threadId,
+  localManagementAccess = null,
   assertScopeCurrent,
 }: {
   scope: Scope | null;
   catalog: ControlPluginUiCatalog | null;
   host: ControlPluginUiHost | null;
   threadId: string | null;
+  localManagementAccess?: DesktopLocalManagementAccess | null;
   assertScopeCurrent(scope: Scope): void;
 }) {
   const current = useRef({
@@ -37,11 +43,24 @@ export function useInstalledPluginPlanningLaunch<
     catalog,
     threadId,
     host,
+    localManagementAccess,
     assertScopeCurrent,
   });
-  current.current = { scope, catalog, threadId, host, assertScopeCurrent };
+  current.current = {
+    scope,
+    catalog,
+    threadId,
+    host,
+    localManagementAccess,
+    assertScopeCurrent,
+  };
   return useMemo(() => {
-    if (!scope || !scope.sessionKey || !host) return null;
+    if (!scope || !host) return null;
+    const nativeOwner =
+      !scope.sessionKey &&
+      location.protocol === "file:" &&
+      isDesktopLocalManagementAccess(localManagementAccess);
+    if (!scope.sessionKey && !nativeOwner) return null;
     const assertCurrent = (
       proposal: ProjectPlanningProposal,
       module: ControlPluginUiModule,
@@ -51,6 +70,9 @@ export function useInstalledPluginPlanningLaunch<
       if (
         now.scope !== scope ||
         now.host !== host ||
+        (nativeOwner &&
+          (now.localManagementAccess !== localManagementAccess ||
+            !isDesktopLocalManagementAccess(localManagementAccess))) ||
         now.threadId !== proposal.origin.threadId ||
         !now.catalog?.modules.some(
           (m) =>
@@ -88,7 +110,11 @@ export function useInstalledPluginPlanningLaunch<
       >();
       const store = createProjectPlanningLaunchIntentStore(
         localStorage,
-        JSON.stringify([scope.client.requestOrigin, scope.sessionKey]),
+        // Native Control ports rotate on restart. The original Electron profile owns
+        // this file-scoped cache; the Native brand and live HTTP session still gate writes.
+        nativeOwner
+          ? JSON.stringify(["desktop-local-management", location.pathname])
+          : JSON.stringify([scope.client.requestOrigin, scope.sessionKey]),
       );
       return createProjectPlanningLaunch(store, {
         module: moduleFor,
@@ -198,5 +224,5 @@ export function useInstalledPluginPlanningLaunch<
       // Unreadable/corrupt recovery data withdraws launch; original workbench navigation stays available.
       return null;
     }
-  }, [scope, host]);
+  }, [scope, host, localManagementAccess]);
 }
