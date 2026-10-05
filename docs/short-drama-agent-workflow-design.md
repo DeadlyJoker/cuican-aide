@@ -1,6 +1,6 @@
 # AI 短剧：Agent 与工作流协同方案
 
-日期：2026-10-06。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；[手动文字页](./plugin-project-texts-ui-protocol.md)、[文字请求冷恢复](./plugin-project-text-recovery-protocol.md)、[项目对话与阶段范围](./plugin-project-conversations-protocol.md)和[有界持久文字计划](./plugin-project-text-plans-protocol.md)已实现。Short18 的原聊天项目建议与历史查询已完成隔离正式桌面验收；Short19 增加[共享角色/场景/道具与独立资产阶段](./plugin-project-assets-protocol.md)，源代码及独立包已验收，正式桌面联合验收继续进行。分镜、视频、声音和成片继续实施。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
+日期：2026-10-06。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；[手动文字页](./plugin-project-texts-ui-protocol.md)、[文字请求冷恢复](./plugin-project-text-recovery-protocol.md)、[项目对话与阶段范围](./plugin-project-conversations-protocol.md)和[有界持久文字计划](./plugin-project-text-plans-protocol.md)已实现。Short18 的原聊天项目建议与历史查询已完成隔离正式桌面验收；Short19 增加[共享角色/场景/道具与独立资产阶段](./plugin-project-assets-protocol.md)，源代码及独立包已验收，19.0.1与正式桌面0.1.18的隔离安装、执行准备、连续操作及冷读取已验收。分镜、视频、声音和成片继续实施。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
 
 ## 产品决定
 
@@ -27,7 +27,7 @@ Agent 在原对话里整理出制作范围：三集大纲、第一集剧本、�
 
 原对话关联不改变 Thread 的工作空间。已有项目关联时先复用；需要切换项目时明确切换。新项目、关联及计划各有原回执，恢复时继续未完成的衔接，不能把一次按钮包装成实际上不存在的跨事务原子创建。主对话保留用户的创作讨论，阶段任务的独立 Thread/Run 只在实际需要时建立并标明归属。
 
-**这是目标交互，不是当前全链路的交付声明。** 当前普通聊天建议只预填，仍需在模块中创建项目、选择实际关联对话并执行文字计划；资产是独立单阶段，设定到概念图尚无直接关联动作。下一轮产品衔接按“已保存操作顺畅化 → 原对话建立/关联项目与执行范围 → 设定/参考到实际工作流 → 分镜及后续阶段”推进，已有文字计划和原工作空间绑定继续复用。
+**这是目标交互，不是当前全链路的交付声明。** 当前普通聊天建议只预填，仍需在模块中创建项目、选择实际关联对话并执行文字计划；资产是独立单阶段，设定到概念图尚无直接关联动作。已保存操作顺畅化已通过19.0.1正式桌面验收；接下来按“原对话建立/关联项目与执行范围 → 设定/参考到实际工作流 → 分镜及后续阶段”推进，已有文字计划和原工作空间绑定继续复用。
 
 ## 完整生产流程
 
