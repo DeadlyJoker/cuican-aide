@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
-    "./plugins": "./src/plugins.ts"
+    "./plugins": "./src/plugins.ts",
+    "./project-tools": "./src/plugin-project-tools-service.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

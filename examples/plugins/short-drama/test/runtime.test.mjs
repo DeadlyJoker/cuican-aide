@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "12.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "13.0.0";
 const plugin = (
   await import(
     process.env.CREWON_SHORT_DRAMA_PLUGIN_DIR
@@ -101,10 +101,12 @@ function factory(tasks) {
     },
   });
   assert.equal(typeof factory?.create, "function");
-  assert.deepEqual(factory.requiredServices, [
-    "externalOperations",
-    "jsonHttp",
-  ]);
+  assert.deepEqual(
+    factory.requiredServices,
+    Number(version.split(".")[0]) < 13
+      ? ["externalOperations", "jsonHttp"]
+      : undefined,
+  );
   return { factory, actions };
 }
 /** Explicit unit IO ports; these do not simulate host permissions, paid admission or production network governance. */
@@ -365,10 +367,20 @@ test("unknown or absent preset refuses the factory before IO", () => {
 });
 
 test("requires explicit host IO and applies perAction only to submit", async () => {
-  assert.throws(
-    () => factory().factory.create(context()),
-    /execution_io_unavailable/,
-  );
+  if (Number(version.split(".")[0]) < 13) {
+    assert.throws(
+      () => factory().factory.create(context()),
+      /execution_io_unavailable/,
+    );
+  } else {
+    const noIo = factory().factory.create(context());
+    assert.equal(noIo.definitions().length, 14);
+    await assert.rejects(
+      noIo.execute(fixture().command(), signal()),
+      /execution_io_unavailable/,
+    );
+    await noIo.close();
+  }
   const f = fixture({ approvalRequirement: "perAction" });
   assert.equal(
     f.runtime.executionPolicy("function", SUBMIT).approvalRequirement,
@@ -402,6 +414,15 @@ test("Node actions use tasks@2 and actual invocation reference; query only passe
     },
   });
   assert.deepEqual(actions.actions, [
+    ...(Number(version.split(".")[0]) >= 13
+      ? [
+          {
+            contributionId: "workbench",
+            action: "project.execute",
+            kind: "generateTask",
+          },
+        ]
+      : []),
     {
       contributionId: "workbench",
       action: "image.generate",
@@ -449,6 +470,38 @@ test("Node actions use tasks@2 and actual invocation reference; query only passe
     /action_input_invalid/,
   );
   assert.equal(calls.length, 2);
+  if (Number(version.split(".")[0]) >= 13) {
+    await actions.invoke({
+      invocationRef: "actual-project",
+      contributionId: "workbench",
+      action: "project.execute",
+      input: {
+        ...common,
+        idempotencyKey: "project-request",
+        input: { prompt: "整理想法并生成大纲。" },
+      },
+    });
+    assert.deepEqual(calls[2], {
+      kind: "create",
+      input: {
+        ...common,
+        idempotencyKey: "project-request",
+        input: { prompt: "整理想法并生成大纲。" },
+        invocationRef: "actual-project",
+      },
+    });
+    await assert.rejects(
+      () =>
+        actions.invoke({
+          invocationRef: "forged-project",
+          contributionId: "workbench",
+          action: "project.execute",
+          input: { ...common, input: { prompt: "idea" }, actor: "forged" },
+        }),
+      /action_input_invalid/,
+    );
+    assert.equal(calls.length, 3);
+  }
   await assert.rejects(
     () =>
       factory().actions.invoke({

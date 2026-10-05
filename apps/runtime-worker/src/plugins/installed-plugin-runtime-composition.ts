@@ -27,6 +27,11 @@ import {
   InstalledPluginExecutionReadinessOwner,
   type InstalledPluginExecutionReadinessPort,
 } from "./installed-plugin-execution-readiness.ts";
+import {
+  captureInstalledPluginProjectToolsConfig,
+  composeInstalledPluginProjectToolsDependencies,
+  type InstalledPluginProjectToolsConfig,
+} from "./installed-plugin-project-tools.ts";
 
 /** Host deployment authority, never supplied by a plugin or inferred from an installation receipt. */
 export type InstalledPluginExecutionConfig = Readonly<{
@@ -37,6 +42,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   authorizeCandidatePackage?: InstalledPluginExtensionHostDependencies["authorizeCandidatePackage"];
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoConfig;
+  projectTools?: InstalledPluginProjectToolsConfig;
   /** Historical observation is an explicit profile-scoped deployment, never today's catalog. */
   historicalQuery?: InstalledPluginHistoricalQueryConfig;
 }>;
@@ -81,6 +87,13 @@ export function captureInstalledPluginExecutionConfig(
       : {
           executionIo: captureInstalledPluginExecutionIoConfig(
             config.executionIo,
+          ),
+        }),
+    ...(config.projectTools === undefined
+      ? {}
+      : {
+          projectTools: captureInstalledPluginProjectToolsConfig(
+            config.projectTools,
           ),
         }),
     ...(config.historicalQuery === undefined
@@ -199,6 +212,15 @@ export function composeInstalledPluginRuntimeResolver(input: {
     installations,
     installRoot: config.installRoot,
     authorizePackage: config.authorizePackage,
+    ...(config.projectTools === undefined
+      ? {}
+      : {
+          projectTools: composeInstalledPluginProjectToolsDependencies({
+            store,
+            config: config.projectTools,
+            resolveActor: config.resolveActor,
+          }),
+        }),
     ...(config.executionIo === undefined
       ? {}
       : {

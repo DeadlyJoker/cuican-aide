@@ -7,6 +7,7 @@ import {
   type PluginNodeActivation,
   type PluginNodeBorrow,
   type PluginNodePreparedCommit,
+  type PluginHostService,
 } from "./plugin-node-host.ts";
 import { PluginExecutionRegistry } from "./plugin-execution-registry.ts";
 
@@ -36,7 +37,8 @@ export function pluginExecutionPackageFailureOwner(
 /**
  * A private Node host for one exact installed package, including cold historical loads.
  * It never changes another host's current selection or exposes its service discovery.
- * Only the execution host service is available; dependency graphs require a separate
+ * Explicit host services are available only through the package's declared requirements;
+ * dependency graphs require a separate
  * persisted lock and are deliberately not resolved from today's selection here.
  */
 export class PluginExecutionPackage {
@@ -58,6 +60,8 @@ export class PluginExecutionPackage {
   static async open(
     input: Readonly<{
       activation: PluginNodeActivation;
+      /** Trusted per-owner services; omission retains the original execution-only host. */
+      hostServices?: readonly PluginHostService[];
       /** Re-read asynchronous current authority after setup and before the synchronous commit gate. */
       beforeCommit?(): Promise<void>;
       /** Current host authority, checked after verified ESM setup, before publication. */
@@ -67,8 +71,16 @@ export class PluginExecutionPackage {
     const beforeCommit = input.beforeCommit;
     if (beforeCommit !== undefined && typeof beforeCommit !== "function")
       throw new Error("plugin_execution_before_commit_invalid");
+    const hostServices = input.hostServices;
+    if (
+      hostServices !== undefined &&
+      (!Array.isArray(hostServices) || hostServices.length > 1023)
+    )
+      throw new Error("plugin_execution_host_services_invalid");
     const registry = new PluginExecutionRegistry({ maximumFactories: 1 });
-    const host = new PluginNodeHost({ services: [registry.hostService()] });
+    const host = new PluginNodeHost({
+      services: [registry.hostService(), ...(hostServices ?? [])],
+    });
     let prepared: Awaited<ReturnType<PluginNodeHost["prepare"]>> | null = null;
     try {
       prepared = await host.prepare(input.activation);

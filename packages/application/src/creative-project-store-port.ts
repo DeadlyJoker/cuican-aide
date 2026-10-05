@@ -8,6 +8,7 @@ import type {
   InstalledPluginPackage,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
+import type { CreativeProjectRunCommitTransactionAuthority } from "./creative-project-run-commit-authority.ts";
 
 /** Every read is scoped to the actual principal, including receipt and historical reads. */
 export type CreativeProjectOwnerScope = Readonly<{
@@ -78,6 +79,8 @@ export type CreativeProjectCommitAuthority = Readonly<{
   /** Synchronous local withdrawal check; returning a Promise does not establish commit authority. */
   assertActive(): void;
   transaction?: CreativeProjectPluginCommitTransactionAuthority;
+  /** Distinct actual Run/Tool qualification; mutually exclusive with the legacy UI transaction. */
+  runTransaction?: CreativeProjectRunCommitTransactionAuthority;
 }>;
 
 export type CreativeProjectCommitOptions = Readonly<{
@@ -149,6 +152,7 @@ export interface CreativeProjectStore {
   }): Promise<readonly ConceptAssetRevision[]>; // Ascending assetRevision, strictly after the cursor.
   loadMutationReceipt(
     input: MutationIdentity & Readonly<{ kind: CreativeProjectMutationKind }>,
+    options?: CreativeProjectCommitOptions,
   ): Promise<CreativeProjectMutationResult | null>;
   commitProjectCreation(
     input: MutationIdentity &

@@ -1,3 +1,4 @@
+import { executeCreativeProjectMutation } from "./creative-project-mutation-application.ts";
 import {
   appendConceptAssetRevision,
   appendProjectBriefRevision,
@@ -45,27 +46,20 @@ import type {
   CreativeProjectCommitAuthority,
   CreativeProjectStore,
 } from "./creative-project-store-port.ts";
+import { assertCreativeProjectCommitCurrent } from "./creative-project-commit-authority.ts";
 import {
-  captureCreativeProjectCommitAuthority,
-  assertCreativeProjectCommitCurrent,
-} from "./creative-project-commit-authority.ts";
-import {
-  assertCreativeCommittedRecords,
   checkedCreativeAsset,
   checkedCreativeAssetRevision,
   checkedCreativeBrief,
-  checkedCreativeMutationResult,
   checkedCreativeProject,
   compareCreativeIds,
   creativeActor,
   creativeInput,
   creativeLimit,
   creativeListQuery,
-  creativeMutationCommand,
   creativeOwner,
   creativePage,
   creativeProjectUseCase,
-  creativeReceipt,
   creativeRecord,
   creativeStored,
   creativeStoredRecord,
@@ -423,67 +417,26 @@ export class CreativeProjectApplicationService {
     input: CreativeProjectMutationCommand,
     options?: CreativeProjectCommitOptions,
   ): Promise<CreativeProjectMutationResult> {
-    return creativeProjectUseCase(async () => {
-      const authority = captureCreativeProjectCommitAuthority(options);
-      const commitOptions =
-        authority === undefined ? undefined : Object.freeze({ authority });
-      const actor = creativeActor(actorInput);
-      const command = creativeMutationCommand(kind, input);
-      const projectId = "projectId" in command ? command.projectId : null;
-      const action =
-        kind === "create-project"
-          ? "creativeProject:create"
-          : "creativeProject:write";
-      const receipt = creativeReceipt(
-        actor,
-        kind,
-        command,
-        this.#dependencies.digester,
-      );
-      await this.#authorize(actor, action, projectId);
-      if (authority !== undefined)
-        await assertCreativeProjectCommitCurrent(authority);
-      const previous = await this.#dependencies.store.loadMutationReceipt({
-        actor,
-        kind,
-        receipt,
-      });
-      if (authority !== undefined)
-        await assertCreativeProjectCommitCurrent(authority);
-      if (previous !== null) {
-        const result = checkedCreativeMutationResult(
-          previous,
-          actor,
-          kind,
-          command,
-          this.#dependencies.digester,
-        );
-        await this.#authorize(actor, action, projectId);
-        if (authority !== undefined)
-          await assertCreativeProjectCommitCurrent(authority);
-        return Object.freeze({ ...result, disposition: "replayed" as const });
-      }
-      const prepared = await this.#prepareMutation(
-        actor,
-        kind,
-        command,
-        receipt,
-        commitOptions,
-      );
-      await this.#authorize(actor, action, projectId);
-      if (authority !== undefined)
-        await assertCreativeProjectCommitCurrent(authority);
-      const raw = await prepared.commit();
-      const result = checkedCreativeMutationResult(
-        raw,
-        actor,
-        kind,
-        command,
-        this.#dependencies.digester,
-      );
-      assertCreativeCommittedRecords(result, prepared.records);
-      return result;
-    });
+    return executeCreativeProjectMutation(
+      {
+        store: this.#dependencies.store,
+        digester: this.#dependencies.digester,
+        authorize: (actor, action, projectId) =>
+          this.#authorize(actor, action, projectId),
+        prepare: (actor, mutationKind, command, receipt, commitOptions) =>
+          this.#prepareMutation(
+            actor,
+            mutationKind,
+            command,
+            receipt,
+            commitOptions,
+          ),
+      },
+      actorInput,
+      kind,
+      input,
+      options,
+    );
   }
 
   async #prepareMutation(

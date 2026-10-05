@@ -12,6 +12,7 @@ import {
   type InstalledPluginPackage,
 } from "@crewon/domain";
 import type { ProjectGenerationExecutionAuthority } from "./project-generation-execution-authority.ts";
+import { captureCreativeProjectRunCommitTransaction } from "./creative-project-run-commit-authority.ts";
 
 /** Capture distinct complete and transaction-safe fences before any await or lock acquisition. */
 export function captureCreativeProjectTransactionAuthority(
@@ -56,11 +57,14 @@ export function captureCreativeProjectCommitAuthority(
     "assertCurrent",
     "assertActive",
     "transaction",
+    "runTransaction",
   ]);
   if (
     typeof methods.assertCurrent !== "function" ||
     typeof methods.assertActive !== "function"
   )
+    invalid();
+  if (methods.transaction !== undefined && methods.runTransaction !== undefined)
     invalid();
   return Object.freeze({
     assertCurrent: methods.assertCurrent.bind(authority),
@@ -68,6 +72,13 @@ export function captureCreativeProjectCommitAuthority(
     ...(methods.transaction === undefined
       ? {}
       : { transaction: capturePluginTransaction(methods.transaction) }),
+    ...(methods.runTransaction === undefined
+      ? {}
+      : {
+          runTransaction: captureCreativeProjectRunCommitTransaction(
+            methods.runTransaction,
+          ),
+        }),
   });
 }
 
@@ -161,6 +172,12 @@ export async function assertCreativeProjectCommitCurrent(
 export async function assertCreativeProjectCommitTransactionCurrent(
   authority: CreativeProjectCommitAuthority | undefined,
 ): Promise<void> {
+  if (authority?.runTransaction !== undefined) {
+    const result: unknown = await authority.runTransaction.assertCurrent();
+    if (result !== undefined)
+      throw new Error("creative_project_commit_authority_async_result_invalid");
+    return;
+  }
   if (authority?.transaction === undefined)
     return assertCreativeProjectCommitCurrent(authority);
   const result: unknown = await authority.transaction.assertCurrent();

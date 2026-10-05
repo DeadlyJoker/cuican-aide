@@ -9,27 +9,21 @@ import {
   parsePluginQueryTaskAdmission,
   effectivePluginQueryTaskAdmission,
   type PluginProfileScope,
-  type PluginTaskAdmission,
 } from "@crewon/domain";
 import {
   PluginExecutionPackage,
   pluginExecutionPackageFailureOwner,
   type PluginExecutionPackageFailureOwner,
   type PluginActivationCandidate,
-  type PluginExecutionPackageBorrow,
   type PluginNodeCommitCandidate,
 } from "@crewon/plugin-host";
 import type {
   PluginToolRuntime,
   PluginExecutionServices,
 } from "@crewon/plugin-sdk/node";
-import type { ToolDefinition, ToolRuntimePort } from "@crewon/tool-broker";
+import type { ToolRuntimePort } from "@crewon/tool-broker";
 import type { RuntimeResourceLease } from "../runtime-resource-lease.ts";
-import type { RuntimeExtensionMaterialization } from "../extensions/extension-runtime-proof.ts";
-import {
-  InstalledPluginRunContext,
-  type InstalledPluginRunSnapshot,
-} from "./installed-plugin-run-context.ts";
+import { InstalledPluginRunContext } from "./installed-plugin-run-context.ts";
 import {
   installedPluginRunMaterialization,
   installedPluginToolOperationPurpose,
@@ -55,6 +49,18 @@ import {
   installedPluginHasExternalOperation,
   type InstalledPluginExecutionIoDependencies,
 } from "./installed-plugin-execution-io-config.ts";
+import {
+  closeInstalledPluginProjectToolsStartup,
+  createInstalledPluginProjectToolsOwner,
+  type InstalledPluginProjectToolsDependencies,
+} from "./installed-plugin-project-tools.ts";
+import { ProjectToolsServiceOwner } from "./project-tools-service-owner.ts";
+import {
+  canRetireInstalledPluginRuntimeResident,
+  closeInstalledPluginRuntimeResident,
+  type InstalledPluginRuntimePrepared as Prepared,
+  type InstalledPluginRuntimeResidentLifetime,
+} from "./installed-plugin-runtime-resident.ts";
 
 export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   contexts: InstalledPluginRunContext;
@@ -80,29 +86,13 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   ): Promise<"allow" | "deny">;
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoDependencies;
+  projectTools?: InstalledPluginProjectToolsDependencies;
 }>;
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
-type Prepared = Readonly<{
-  admission: PluginTaskAdmission;
-  proof: RuntimeExtensionMaterialization;
-  snapshot: InstalledPluginRunSnapshot;
-  scope: PluginProfileScope;
-  names: readonly string[];
-  definitions: readonly ToolDefinition[];
-  policyContext: Readonly<{
-    sandboxMode: "workspace-write" | "danger-full-access";
-  }>;
-  key: string;
-}>;
-type Resident = {
-  package: PluginExecutionPackage;
-  borrow: PluginExecutionPackageBorrow | null;
+type Resident = InstalledPluginRuntimeResidentLifetime & {
   candidate: PluginActivationCandidate;
-  hasRuntime: boolean;
-  cleanup: ReturnType<typeof cleanupMethods>;
-  adapter: ToolRuntimePort | null;
   prepared: Prepared;
-  runtimeClosed: boolean;
+  projectTools: ProjectToolsServiceOwner | null;
   io: PluginExecutionIoOwner | null;
 };
 type Entry = {
@@ -406,10 +396,37 @@ export class InstalledPluginRuntimeResolver
   ): Promise<Resident> {
     let candidate: PluginActivationCandidate | null = null;
     let committedAuthority = false;
+    let projectTools: ProjectToolsServiceOwner | null = null;
     try {
+      projectTools = createInstalledPluginProjectToolsOwner({
+        dependencies: this.#dependencies.projectTools,
+        context: prepared.snapshot.context,
+        admission: prepared.admission,
+        tools: prepared.proof.registration.manifest.tools,
+        authorizeCurrent: async (operation) => {
+          if (candidate === null)
+            fail("installed_plugin_runtime_candidate_missing");
+          await this.#authorizeCandidate(
+            prepared,
+            candidate,
+            installedPluginToolOperationPurpose(operation),
+            operation.signal,
+          );
+        },
+        candidate: () => candidate,
+        scope: prepared.scope,
+        authorizePackage: this.#dependencies.authorizePackage,
+        assertActive: () => {
+          if (this.#closing || entry.closing)
+            fail("installed_plugin_runtime_resolver_closed");
+        },
+      });
       // Old hosts that do not support this hook deny the synchronous commit below. The async
       // post-setup current-authority check can never silently degrade to an initial grant.
       const openInput = {
+        ...(projectTools === null
+          ? {}
+          : { hostServices: [projectTools.hostService()] }),
         activation: {
           installRoot: this.#dependencies.installRoot,
           expectedPluginId: prepared.admission.pluginId,
@@ -499,6 +516,7 @@ export class InstalledPluginRuntimeResolver
         prepared,
         runtimeClosed: false,
         io: null,
+        projectTools,
       };
       // Adoption precedes every next await, including a factory that outlives abort or shutdown.
       entry.resident = resident;
@@ -609,11 +627,18 @@ export class InstalledPluginRuntimeResolver
             purpose = "observe";
           await this.#authorize(resident, purpose, operation.signal);
         },
-        ...(resident.io === null
+        ...(resident.io === null && resident.projectTools === null
           ? {}
           : {
-              dispatchAuthority: (operation, delegate) =>
-                resident.io!.withInvocation(operation, delegate),
+              dispatchAuthority: (operation, delegate) => {
+                const project = () =>
+                  resident.projectTools === null
+                    ? delegate()
+                    : resident.projectTools.withInvocation(operation, delegate);
+                return resident.io === null
+                  ? project()
+                  : resident.io.withInvocation(operation, project);
+              },
             }),
       });
       if (
@@ -629,6 +654,18 @@ export class InstalledPluginRuntimeResolver
     } catch (error) {
       if (entry.resident === null) {
         const failureOwner = pluginExecutionPackageFailureOwner(error);
+        const cleanup = await closeInstalledPluginProjectToolsStartup({
+          owner: projectTools,
+          failureOwner,
+        });
+        if (cleanup.error !== null) {
+          entry.failureOwner = cleanup.failureOwner;
+          entry.closing = true;
+          throw new AggregateError(
+            [error, cleanup.error],
+            "installed_plugin_runtime_start_failed",
+          );
+        }
         if (failureOwner === null) this.#entries.delete(entry.key);
         else {
           // The actual failed Host remains owned even when open never returned a package.
@@ -699,11 +736,7 @@ export class InstalledPluginRuntimeResolver
     if (entry.closing || entry.resident === null || entry.users !== 0) return;
     if (mode === "idle") {
       try {
-        if (
-          entry.resident.adapter?.canRetire?.() !== true ||
-          (entry.resident.io !== null && !entry.resident.io.canRetire())
-        )
-          return;
+        if (!canRetireInstalledPluginRuntimeResident(entry.resident)) return;
       } catch {
         return;
       }
@@ -730,36 +763,7 @@ export class InstalledPluginRuntimeResolver
       }
       const resident = entry.resident;
       if (resident === null) return;
-      const cleanup = resident.adapter ?? resident.cleanup;
-      if (!resident.runtimeClosed) {
-        if (
-          mode === "idle" &&
-          (cleanup.canRetire?.() !== true ||
-            (resident.io !== null && !resident.io.canRetire()))
-        )
-          fail("installed_plugin_runtime_retirement_unproven");
-        const ioClose = resident.io?.close();
-        const runtimeClose = resident.hasRuntime
-          ? (async () => {
-              if (cleanup.close !== undefined) await cleanup.close();
-              else if (cleanup.canRetire?.() !== true)
-                fail("installed_plugin_runtime_cleanup_unavailable");
-            })()
-          : undefined;
-        const closed = await Promise.allSettled([ioClose, runtimeClose]);
-        const failures = closed
-          .filter((result) => result.status === "rejected")
-          .map((result) => result.reason);
-        if (failures.length)
-          throw new AggregateError(
-            failures,
-            "installed_plugin_runtime_cleanup_failed",
-          );
-        resident.runtimeClosed = true;
-      }
-      resident.borrow?.release();
-      resident.borrow = null;
-      await resident.package.close();
+      await closeInstalledPluginRuntimeResident(resident, mode);
       if (this.#entries.get(entry.key) === entry)
         this.#entries.delete(entry.key);
     })();

@@ -50,6 +50,7 @@ import {
   composeInstalledPluginExecutionReadiness,
   type InstalledPluginExecutionConfig,
 } from "./plugins/installed-plugin-runtime-composition.ts";
+import { prepareInstalledPluginProjectToolsStores } from "./plugins/installed-plugin-project-tools.ts";
 import type { InstalledPluginQueryHost } from "./plugins/installed-plugin-query-host.ts";
 import {
   captureInstalledPluginPeerOptions,
@@ -490,6 +491,11 @@ async function composeRuntimeWorker(
         });
   if (executionReadiness !== null)
     lifetime.own(executionReadiness, { phase: "resources" });
+  if (config.installedPluginExecution?.projectTools !== undefined)
+    await prepareInstalledPluginProjectToolsStores({
+      store,
+      config: config.installedPluginExecution.projectTools,
+    });
   const installedPluginRuntimeResolver =
     config.installedPluginExecution === undefined
       ? config.installedPluginRuntimeResolver

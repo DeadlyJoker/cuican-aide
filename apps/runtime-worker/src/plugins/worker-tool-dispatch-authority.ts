@@ -31,6 +31,7 @@ type Grant = {
   expiresAt: number;
   identity: WorkerToolDispatchIdentity;
   ownerId: string;
+  receipt: ToolExecutionReceiptState;
   assertCurrent(): WorkItemClaim;
 };
 const grants = new WeakMap<ToolExecutionCommand, Grant>();
@@ -76,6 +77,7 @@ export async function withWorkerToolDispatch<T>(
     recovery: command.actionIntent.recovery,
     expiresAt: Date.parse(command.executionLease.expiresAt),
     ownerId: claim.lease.ownerId,
+    receipt,
     identity: Object.freeze({
       tenantId: receipt.tenantId,
       runId: receipt.runId,
@@ -129,6 +131,20 @@ export function assertWorkerToolDispatch(
   input.signal.throwIfAborted();
   checkClaim(grant, grant.assertCurrent());
   return identity;
+}
+
+/** Host-only evidence: the live issuer's receipt and fresh claim, never plugin-supplied JSON. */
+export function assertWorkerToolDispatchEvidence(input: Invocation): Readonly<{
+  identity: WorkerToolDispatchIdentity;
+  receipt: ToolExecutionReceiptState;
+  claim: WorkItemClaim;
+}> {
+  const identity = assertWorkerToolDispatchIdentity(input);
+  const grant = grants.get(input.command)!;
+  input.signal.throwIfAborted();
+  const claim = grant.assertCurrent();
+  checkClaim(grant, claim);
+  return Object.freeze({ identity, receipt: grant.receipt, claim });
 }
 
 /** Local accepted-evidence CAS only; this deliberately does not authorize new external I/O. */

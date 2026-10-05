@@ -1,3 +1,11 @@
+import {
+  assertPostgresProjectRunCommit,
+  assertPostgresProjectRunLease,
+} from "./creative-project-run-commit-postgres.ts";
+import {
+  projectRunCommitQualification,
+  type ProjectRunQualification,
+} from "./creative-project-run-commit-support.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertCreativeProjectCommitActive,
@@ -229,8 +237,27 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     );
   }
 
-  async loadMutationReceipt(input: ReadInput<"loadMutationReceipt">) {
-    return this.#receipt(this.#pool, creativeMutationIdentity(input));
+  async loadMutationReceipt(
+    input: ReadInput<"loadMutationReceipt">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    const identity = creativeMutationIdentity(input);
+    const authority = captureCreativeProjectCommitAuthority(options);
+    const q = projectRunCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
+    if (q === undefined) return this.#receipt(this.#pool, identity);
+    return this.#transaction(
+      async (client) => {
+        await assertPostgresProjectRunCommit(client, this.#schema, q);
+        return this.#receipt(client, identity);
+      },
+      authority,
+      q,
+    );
   }
 
   async commitProjectCreation(
@@ -311,93 +338,111 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       identity.actor,
       identity.kind,
     );
-    return this.#transaction(async (client) => {
-      if (qualification !== undefined) {
-        await assertPostgresPluginInstallationPinSchema(client, this.#schema);
-        const installation = await admitPostgresPluginInstallationPin(
+    const runQualification = projectRunCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
+    return this.#transaction(
+      async (client) => {
+        await assertPostgresProjectRunCommit(
           client,
           this.#schema,
-          qualification.pin,
+          runQualification,
         );
-        assertCreativeProjectPluginCommitSelection(qualification, installation);
-        await assertCreativeProjectCommitTransactionCurrent(authority);
-        assertCreativeProjectCommitActive(authority);
-        this.#assertOpen();
-      }
-      // Receipt first: retries may prepare a different server-generated project ID.
-      await this.#lock(client, [
-        "creative-project-receipt",
-        this.#schema,
-        ...creativeOwnerValues(identity.owner),
-        identity.actor.actorId,
-        identity.kind,
-        identity.receipt.idempotencyKey,
-      ]);
-      const previous = await this.#receipt(client, identity);
-      if (previous !== null) return previous;
-      await this.#lock(client, [
-        "creative-project-project",
-        this.#schema,
-        prepared.project.tenantId,
-        prepared.project.spaceId,
-        prepared.project.projectId,
-      ]);
-      const project = await this.#project(
-        client,
-        identity.owner,
-        prepared.project.projectId,
-      );
-      const concept =
-        prepared.kind === "create-concept" ||
-        prepared.kind === "append-concept";
-      const brief = concept
-        ? await this.#brief(
+        if (qualification !== undefined) {
+          await assertPostgresPluginInstallationPinSchema(client, this.#schema);
+          const installation = await admitPostgresPluginInstallationPin(
             client,
-            identity.owner,
-            prepared.project.projectId,
-            prepared.assetRevision.briefRevision,
-          )
-        : null;
-      const asset = concept
-        ? await this.#asset(
-            client,
-            identity.owner,
-            prepared.project.projectId,
-            prepared.asset.assetId,
-          )
-        : null;
-      const result = verifyCreativeMutation(prepared, {
-        project,
-        brief,
-        asset,
-      });
-      await this.#writeProject(client, result.project, prepared);
-      if (result.kind === "create-project" || result.kind === "append-brief")
-        await this.#insertBrief(client, result.brief);
-      if (
-        result.kind === "create-concept" ||
-        result.kind === "append-concept"
-      ) {
-        await this.#writeAsset(client, result.asset, prepared);
-        await this.#insertRevision(client, result.assetRevision);
-      }
-      await this.#query(
-        client,
-        `INSERT INTO ${this.#prefix}creative_project_mutation_receipts
-         (tenant_id,space_id,principal_id,actor_id,kind,idempotency_key,request_digest,project_id,result_json)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [
+            this.#schema,
+            qualification.pin,
+          );
+          assertCreativeProjectPluginCommitSelection(
+            qualification,
+            installation,
+          );
+          await assertCreativeProjectCommitTransactionCurrent(authority);
+          assertCreativeProjectCommitActive(authority);
+          this.#assertOpen();
+        }
+        // Receipt first: retries may prepare a different server-generated project ID.
+        await this.#lock(client, [
+          "creative-project-receipt",
+          this.#schema,
           ...creativeOwnerValues(identity.owner),
           identity.actor.actorId,
           identity.kind,
           identity.receipt.idempotencyKey,
-          identity.receipt.requestDigest,
-          result.project.projectId,
-          creativeRecordJson(result),
-        ],
-      );
-      return result;
-    }, authority);
+        ]);
+        const previous = await this.#receipt(client, identity);
+        if (previous !== null) return previous;
+        await this.#lock(client, [
+          "creative-project-project",
+          this.#schema,
+          prepared.project.tenantId,
+          prepared.project.spaceId,
+          prepared.project.projectId,
+        ]);
+        const project = await this.#project(
+          client,
+          identity.owner,
+          prepared.project.projectId,
+        );
+        const concept =
+          prepared.kind === "create-concept" ||
+          prepared.kind === "append-concept";
+        const brief = concept
+          ? await this.#brief(
+              client,
+              identity.owner,
+              prepared.project.projectId,
+              prepared.assetRevision.briefRevision,
+            )
+          : null;
+        const asset = concept
+          ? await this.#asset(
+              client,
+              identity.owner,
+              prepared.project.projectId,
+              prepared.asset.assetId,
+            )
+          : null;
+        const result = verifyCreativeMutation(prepared, {
+          project,
+          brief,
+          asset,
+        });
+        await this.#writeProject(client, result.project, prepared);
+        if (result.kind === "create-project" || result.kind === "append-brief")
+          await this.#insertBrief(client, result.brief);
+        if (
+          result.kind === "create-concept" ||
+          result.kind === "append-concept"
+        ) {
+          await this.#writeAsset(client, result.asset, prepared);
+          await this.#insertRevision(client, result.assetRevision);
+        }
+        await this.#query(
+          client,
+          `INSERT INTO ${this.#prefix}creative_project_mutation_receipts
+         (tenant_id,space_id,principal_id,actor_id,kind,idempotency_key,request_digest,project_id,result_json)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [
+            ...creativeOwnerValues(identity.owner),
+            identity.actor.actorId,
+            identity.kind,
+            identity.receipt.idempotencyKey,
+            identity.receipt.requestDigest,
+            result.project.projectId,
+            creativeRecordJson(result),
+          ],
+        );
+        return result;
+      },
+      authority,
+      runQualification,
+    );
   }
 
   async #project(
@@ -608,6 +653,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
   async #transaction<T>(
     body: (client: PoolClient) => Promise<T>,
     authority?: CreativeProjectCommitAuthority,
+    runQualification?: ProjectRunQualification,
   ): Promise<T> {
     this.#assertOpen();
     if (authority !== undefined) {
@@ -622,6 +668,11 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       // Revalidate after all SQL awaits, including lock waits and the final receipt INSERT.
       if (authority !== undefined)
         await assertCreativeProjectCommitTransactionCurrent(authority);
+      await assertPostgresProjectRunLease(
+        client,
+        this.#schema,
+        runQualification,
+      );
       assertCreativeProjectCommitActive(authority);
       // A confirmed COMMIT remains successful even if the host closes while awaiting it.
       this.#assertOpen();

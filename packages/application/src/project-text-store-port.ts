@@ -81,6 +81,7 @@ export interface ProjectTextStore {
   >;
   loadMutationReceipt(
     input: ProjectTextMutationIdentity,
+    options?: CreativeProjectCommitOptions,
   ): Promise<ProjectTextMutationResult | null>;
   /** Re-read actual project/owner/active, logical head, brief and outline in the same transaction. */
   commitCandidate(

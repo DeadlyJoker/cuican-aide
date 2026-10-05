@@ -133,6 +133,10 @@ export async function businessExecutionFixture(
     taskInput?: WorkflowSchemaValue;
     taskAction?: Readonly<{ contributionId: string; action: string }>;
     executionIo?: InstalledPluginExecutionIoConfig;
+    projectTools?: NonNullable<
+      RuntimeWorkerCompositionConfig["installedPluginExecution"]
+    >["projectTools"];
+    maxToolRounds?: number;
     approvalRequirement?: "none" | "perAction";
     installedQueryHost?: boolean;
   }> = {},
@@ -344,7 +348,7 @@ export async function businessExecutionFixture(
     transport: transport(),
     agentInstructions: "Original host instructions.",
     streamMaxRetries: 0,
-    maxToolRounds: 8,
+    maxToolRounds: options.maxToolRounds ?? 8,
     modelContextWindowTokens: 4096,
     autoCompactAtTokens: null,
   };
@@ -409,6 +413,9 @@ export async function businessExecutionFixture(
       installRoot: pkg.input.installRoot,
       authorization,
       resolveActor: async () => actor,
+      ...(options.projectTools === undefined
+        ? {}
+        : { projectTools: options.projectTools }),
       ...(options.executionIo === undefined
         ? {}
         : { executionIo: options.executionIo }),
@@ -558,7 +565,7 @@ export async function businessExecutionFixture(
       assert.equal(current?.selectedPackageDigest, pin.packageDigest);
     },
   };
-  async function prepareTask(key: string) {
+  async function prepareTask(key: string, taskInput?: WorkflowSchemaValue) {
     const thread = await threads.createThread(actor, {
       kind: "thread.create",
       idempotencyKey: `professional-thread-${key}`,
@@ -586,9 +593,10 @@ export async function businessExecutionFixture(
       idempotencyKey: `professional-task-${key}`,
       intent: {
         kind: "generate",
-        input: options.taskInput ?? {
-          subject: "Fixture company annual report",
-        },
+        input: taskInput ??
+          options.taskInput ?? {
+            subject: "Fixture company annual report",
+          },
       },
     };
     return {

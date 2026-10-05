@@ -10,7 +10,12 @@ import {
   type PluginTaskRequest,
   type PluginTaskServiceV2,
 } from "@crewon/plugin-sdk/node";
-import { createKreaRuntime } from "./runtime.js";
+import { createShortDramaRuntime } from "./project-tools-runtime.js";
+import {
+  CREWON_PROJECT_TOOLS_SERVICE,
+  CREWON_PROJECT_TOOLS_API_VERSION,
+  type PluginProjectToolsService,
+} from "./project-tools-service.js";
 
 export default definePlugin({
   apiVersion: "crewon.plugin-host.v1",
@@ -26,15 +31,24 @@ export default definePlugin({
       CREWON_EXECUTION_SERVICE,
       CREWON_EXECUTION_API_VERSION,
     );
+    const projects = context.services.getOptional<PluginProjectToolsService>(
+      CREWON_PROJECT_TOOLS_SERVICE,
+      CREWON_PROJECT_TOOLS_API_VERSION,
+    );
     if (execution) {
       const registration = execution.register({
-        requiredServices: ["externalOperations", "jsonHttp"],
-        create: createKreaRuntime,
+        create: (runtimeContext, services) =>
+          createShortDramaRuntime(runtimeContext, projects ?? null, services),
       });
       context.onDispose(() => registration.dispose());
     }
     const actions: PluginActionsService = {
       actions: [
+        {
+          contributionId: "workbench",
+          action: "project.execute",
+          kind: "generateTask",
+        },
         {
           contributionId: "workbench",
           action: "image.generate",
@@ -53,7 +67,10 @@ export default definePlugin({
         const input = invocation.input;
         if (!input || typeof input !== "object" || Array.isArray(input))
           throw new Error("krea_plugin_action_input_invalid");
-        if (invocation.action === "image.generate") {
+        if (
+          invocation.action === "image.generate" ||
+          invocation.action === "project.execute"
+        ) {
           exact(input, [
             "threadId",
             "expectedThreadRevision",

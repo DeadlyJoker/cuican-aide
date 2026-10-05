@@ -1,3 +1,8 @@
+import { assertSqliteProjectRunCommit } from "./creative-project-run-commit-sqlite.ts";
+import {
+  projectRunCommitQualification,
+  type ProjectRunQualification,
+} from "./creative-project-run-commit-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   assertCreativeProjectCommitActive,
@@ -224,9 +229,30 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     );
   }
 
-  async loadMutationReceipt(input: Input<"loadMutationReceipt">) {
+  async loadMutationReceipt(
+    input: Input<"loadMutationReceipt">,
+    options?: CreativeProjectCommitOptions,
+  ) {
     this.#assertOpen();
-    return this.#receipt(creativeMutationIdentity(input));
+    const identity = creativeMutationIdentity(input);
+    const authority = captureCreativeProjectCommitAuthority(options);
+    const q = projectRunCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
+    if (q === undefined) return this.#receipt(identity);
+    await assertCreativeProjectCommitCurrent(authority);
+    await assertCreativeProjectCommitTransactionCurrent(authority);
+    return this.#transaction(
+      () => {
+        assertSqliteProjectRunCommit(this.#database, q);
+        return this.#receipt(identity);
+      },
+      authority,
+      q,
+    );
   }
 
   async commitProjectCreation(
@@ -300,78 +326,99 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       prepared.actor,
       prepared.kind,
     );
+    const runQualification = projectRunCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
     // SQLite's transaction stays synchronous; external authority work happens before BEGIN.
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);
-    if (qualification !== undefined)
+    if (qualification !== undefined || runQualification !== undefined)
       await assertCreativeProjectCommitTransactionCurrent(authority);
-    return this.#transaction(() => {
-      if (qualification !== undefined) {
-        assertSqlitePluginInstallationPinSchema(this.#database);
-        const installation = admitSqlitePluginInstallationPin(
-          this.#database,
-          qualification.pin,
-        );
-        assertCreativeProjectPluginCommitSelection(qualification, installation);
-        this.#assertCommitActive(authority);
-      }
-      const identity = creativeMutationIdentity({
-        actor: prepared.actor,
-        receipt: prepared.receipt,
-        kind: prepared.kind,
-      });
-      const replay = this.#receipt(identity);
-      if (replay !== null) return replay;
-      const current = this.#project(identity.owner, prepared.project.projectId);
-      const isConcept =
-        prepared.kind === "create-concept" ||
-        prepared.kind === "append-concept";
-      const brief = isConcept
-        ? this.#brief(
-            identity.owner,
-            prepared.project.projectId,
-            prepared.assetRevision.briefRevision,
-          )
-        : null;
-      const asset = isConcept
-        ? this.#asset(
-            identity.owner,
-            prepared.project.projectId,
-            prepared.asset.assetId,
-          )
-        : null;
-      const result = verifyCreativeMutation(prepared, {
-        project: current,
-        brief,
-        asset,
-      });
-      this.#assertCommitActive(authority);
-      if (prepared.kind === "create-project")
-        this.#insertProject(result.project);
-      else
-        this.#updateProject(result.project, prepared.expectedProjectRevision);
-      if (result.kind === "create-project" || result.kind === "append-brief") {
-        this.#assertCommitActive(authority);
-        this.#insertBrief(result.brief);
-      }
-      if (
-        result.kind === "create-concept" ||
-        result.kind === "append-concept"
-      ) {
-        this.#assertCommitActive(authority);
-        if (prepared.kind === "create-concept") this.#insertAsset(result.asset);
-        else if (prepared.kind === "append-concept")
-          this.#updateAsset(
-            result.asset,
-            prepared.expectedAssetMetadataRevision,
+    return this.#transaction(
+      () => {
+        assertSqliteProjectRunCommit(this.#database, runQualification);
+        if (qualification !== undefined) {
+          assertSqlitePluginInstallationPinSchema(this.#database);
+          const installation = admitSqlitePluginInstallationPin(
+            this.#database,
+            qualification.pin,
           );
+          assertCreativeProjectPluginCommitSelection(
+            qualification,
+            installation,
+          );
+          this.#assertCommitActive(authority);
+        }
+        const identity = creativeMutationIdentity({
+          actor: prepared.actor,
+          receipt: prepared.receipt,
+          kind: prepared.kind,
+        });
+        const replay = this.#receipt(identity);
+        if (replay !== null) return replay;
+        const current = this.#project(
+          identity.owner,
+          prepared.project.projectId,
+        );
+        const isConcept =
+          prepared.kind === "create-concept" ||
+          prepared.kind === "append-concept";
+        const brief = isConcept
+          ? this.#brief(
+              identity.owner,
+              prepared.project.projectId,
+              prepared.assetRevision.briefRevision,
+            )
+          : null;
+        const asset = isConcept
+          ? this.#asset(
+              identity.owner,
+              prepared.project.projectId,
+              prepared.asset.assetId,
+            )
+          : null;
+        const result = verifyCreativeMutation(prepared, {
+          project: current,
+          brief,
+          asset,
+        });
         this.#assertCommitActive(authority);
-        this.#insertRevision(result.assetRevision);
-      }
-      this.#assertCommitActive(authority);
-      this.#saveReceipt(identity, result);
-      return result;
-    }, authority);
+        if (prepared.kind === "create-project")
+          this.#insertProject(result.project);
+        else
+          this.#updateProject(result.project, prepared.expectedProjectRevision);
+        if (
+          result.kind === "create-project" ||
+          result.kind === "append-brief"
+        ) {
+          this.#assertCommitActive(authority);
+          this.#insertBrief(result.brief);
+        }
+        if (
+          result.kind === "create-concept" ||
+          result.kind === "append-concept"
+        ) {
+          this.#assertCommitActive(authority);
+          if (prepared.kind === "create-concept")
+            this.#insertAsset(result.asset);
+          else if (prepared.kind === "append-concept")
+            this.#updateAsset(
+              result.asset,
+              prepared.expectedAssetMetadataRevision,
+            );
+          this.#assertCommitActive(authority);
+          this.#insertRevision(result.assetRevision);
+        }
+        this.#assertCommitActive(authority);
+        this.#saveReceipt(identity, result);
+        return result;
+      },
+      authority,
+      runQualification,
+    );
   }
 
   #project(owner: CreativeProjectOwnerScope, projectId: string) {
@@ -557,12 +604,14 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
   #transaction<T>(
     body: () => T,
     authority?: CreativeProjectCommitAuthority,
+    runQualification?: ProjectRunQualification,
   ): T {
     this.#assertCommitActive(authority);
     this.#assertOpen();
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const result = body();
+      assertSqliteProjectRunCommit(this.#database, runQualification);
       this.#assertCommitActive(authority);
       this.#assertOpen();
       this.#database.exec("COMMIT");

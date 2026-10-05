@@ -164,6 +164,8 @@ export * from "./extension-read-application-service.ts";
 export * from "./creative-project-commands.ts";
 export type { ThreadWorkspaceAdmissionPort } from "./thread-workspace-admission-port.ts";
 export * from "./creative-project-store-port.ts";
+export * from "./creative-project-run-commit-authority.ts";
+export * from "./creative-project-run-command.ts";
 export * from "./creative-project-commit-authority.ts";
 export * from "./creative-project-authorization-port.ts";
 export * from "./creative-project-application-service.ts";

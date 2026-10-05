@@ -1,10 +1,24 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：进行中。统一短剧包、原 Settings 执行准备和共享大纲/剧本底座已实现；Agent 文本工具与插件编辑页面尚待接线。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：进行中。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座和真实 Agent 文本工具已实现；项目对话启动/发现与插件文字编辑页面尚待接线。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
 
-最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐，共享阶段命令先落大纲/剧本；下一步继续真实 Agent 项目工具和文本阶段入口。实际生图验证并行推进，不阻塞文本阶段。
+最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐，共享阶段命令先落大纲/剧本；真实 Agent 项目工具已接到原 Worker，下一步继续项目对话启动/发现和工作台文本阶段入口。实际生图验证并行推进，不阻塞文本阶段。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-05：真实 Agent 项目工具与 Short13 同包执行
+
+新增独立 `crewon.project-tools@1` 服务，Short13 同包提供项目/需求、大纲、剧本、历史、分段正文、采用和锁定12个工具，保留原 Krea2 两预设。公开协议是无宿主实现依赖的单文件，示例在仓外用原 SDK0.1.0 tarball独立严格编译和打包；SDK v1、原 Short12 和宿主/短剧 UI源码保持不变。协议见[项目工具说明](./plugin-project-tools-protocol.md)。
+
+Node setup只获得服务对象，业务调用必须是当前Worker真实派发的命令对象、signal和租约；模型不能提供actor或幂等键。主体现查实际Run创建者；每次检查当前项目权限、原准入和确切包/工具，写事务在实际SQLite/PG提交连接核真实Run、Tool receipt/inputDigest/actionDigest、step/attempt/currentclaim、配置/目标与完整安装选择。旧UI六动作资格不扩权。撤回后拒绝新调用，关闭等待在途业务实际退出。
+
+保存只回显头与修订元数据；正文按确切不可变修订和摘要，每页1024 Unicode码点读取。结果包括resultJson包装最多8192 UTF-8字节。冷取消不把无法证明未写入的操作报成取消成功；项目与媒体结果轮转扫描，limit1也不饿死旧媒体回执。
+
+真实已安装 Short13 + 原Kernel + Worker + SQLite/隔离PG集成 **4/4、零跳过**：用户想法→项目需求→大纲候选/采用→剧本候选/采用→读取正文；手动业务命令改台词并采用后，重开Worker的新Run读到同一新版本；流式delta实际持久化，按事件游标重读；真实COMMIT后丢Tool回执并关闭Worker，冷重开沿同一原receipt/newclaim恢复，只有一个项目/需求版本。模型为明确无网络测试夹具，Run/Node包/资格/派发/数据库与恢复均是真实实现，不代表供应商或实际用户对话已经验收。
+
+最终检查：独立 Short13 **155/155**；新旧 Application 组合 **58/58**、真实双库 Store **74/74**、Worker owner **20/20**、原派发/I/O兼容 **31/31**、Worker组合与旧执行链 **82/82**、PluginHost **56/56**；Control公开路由 **24/24**；Contracts全量 **454/454**。这些组含重复覆盖，不叠加成独立测试总数。所有列出测试零跳过；Application、Store、Contracts、Worker、Control与PluginHost类型检查、边界、生成契约和格式通过。证据位于 `output/extensions/checks/project-tools-agent-20261005/`；仅为本次测试新建的PG实例已物理停止并删除自有数据。1,344个原SDK/宿主UI/短剧UI源文件相对前一已验收提交保持字节一致；原Short12浏览器包与Short13除三条SDK安装路径注释外全部字节相同。
+
+本轮首期服务只为真实已获准的插件任务Run启用；普通聊天admission=null分支维持原行为。Node已声明`project.execute`任务动作，但原对话能力发现、项目绑定/启动入口和工作台大纲/剧本编辑页仍需下一阶段接入。阶段计划/委托、角色设定、分镜、视频、声音、合成也仍在方案范围内，不能用一次生图或工具集成冒称全链路交付。实际App/profile没有替换，也没有触发媒体或模型网络请求。目标继续进行。
 
 ## 2026-10-05：共享大纲与分集剧本底座
 

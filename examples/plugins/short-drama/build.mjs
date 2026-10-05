@@ -7,13 +7,22 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "12.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "13.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
   BigInt(version.split(".")[0]) <= 11n
 )
   throw new Error("example_version_invalid");
+// Pinned portable public capability protocol; no private host source import.
+const projectProtocol = await readFile(
+  join(root, "src/project-tools-service.ts"),
+);
+if (
+  createHash("sha256").update(projectProtocol).digest("hex") !==
+  "7ac394c7ee01a4eb93278b1c23e5b57da36e36c0e043a66a21abd7b02be6f73a"
+)
+  throw new Error("example_project_tools_protocol_drift");
 const reviewedWorkflows = [
   {
     file: "krea2-portrait.api.json",
@@ -172,6 +181,7 @@ const descriptor = parsePluginPackageDescriptor({
     },
     { service: "crewon.tasks", apiVersion: "2", optional: true },
     { service: "crewon.execution", apiVersion: "1", optional: true },
+    { service: "crewon.project-tools", apiVersion: "1", optional: true },
   ],
   provides: [{ service: "crewon.short-drama", apiVersion: "1" }],
   contributions: [

@@ -1,3 +1,11 @@
+import {
+  assertPostgresProjectRunCommit,
+  assertPostgresProjectRunLease,
+} from "./creative-project-run-commit-postgres.ts";
+import {
+  projectRunCommitQualification,
+  type ProjectRunQualification,
+} from "./creative-project-run-commit-support.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertCreativeProjectCommitActive,
@@ -141,8 +149,27 @@ export class PostgresProjectTextStore implements ProjectTextStore {
         items.length > q.limit ? revisions.at(-1)!.contentRevision : null,
     });
   }
-  async loadMutationReceipt(input: TextInput<"loadMutationReceipt">) {
-    return this.#receipt(this.#pool, textIdentity(input));
+  async loadMutationReceipt(
+    input: TextInput<"loadMutationReceipt">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    const identity = textIdentity(input);
+    const authority = textAuthority(options);
+    const q = projectRunCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
+    if (q === undefined) return this.#receipt(this.#pool, identity);
+    return this.#transaction(
+      async (client) => {
+        await assertPostgresProjectRunCommit(client, this.#schema, q);
+        return this.#receipt(client, identity);
+      },
+      authority,
+      q,
+    );
   }
   async commitCandidate(
     input: TextInput<"commitCandidate">,
@@ -169,157 +196,172 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     prepared: TextPrepared,
     authority: CreativeProjectCommitAuthority | undefined,
   ): Promise<ProjectTextMutationResult> {
-    return this.#transaction(async (client) => {
-      const identity = textIdentity({
-        actor: prepared.actor,
-        kind: prepared.kind,
-        receipt: prepared.receipt,
-      });
-      const owner = identity.owner,
-        id = prepared.project.projectId;
-      await this.#lock(client, [
-        "project-text-receipt",
-        this.#schema,
-        ...creativeOwnerValues(owner),
-        identity.actor.actorId,
-        identity.kind,
-        identity.receipt.idempotencyKey,
-      ]);
-      const replay = await this.#receipt(client, identity);
-      if (replay !== null) return replay;
-      // Exactly the same lock namespace as project archival and brief mutations.
-      await this.#lock(client, [
-        "creative-project-project",
-        this.#schema,
-        prepared.project.tenantId,
-        prepared.project.spaceId,
-        id,
-      ]);
-      const project = await this.#project(client, owner, id);
-      const candidate =
-        prepared.kind === "save-outline" || prepared.kind === "save-script";
-      const artifact = candidate
-        ? await this.#artifact(
-            client,
-            owner,
-            id,
-            "c.kind=? AND c.episode_id=?",
-            [prepared.artifact.kind, prepared.artifact.episodeId ?? ""],
-          )
-        : await this.#artifact(client, owner, id, "c.artifact_id=?", [
-            prepared.artifact.artifactId,
-          ]);
-      const saved =
-        "contentRevision" in prepared ? prepared.contentRevision : null;
-      const brief =
-        candidate && saved !== null
-          ? await this.#brief(client, owner, id, saved.brief.briefRevision)
-          : null;
-      const outline =
-        candidate && saved?.outline
-          ? await this.#revision(
-              client,
-              owner,
-              id,
-              saved.outline.artifactId,
-              saved.outline.contentRevision,
-            )
-          : null;
-      const revision =
-        prepared.kind === "select-revision"
-          ? await this.#revision(
-              client,
-              owner,
-              id,
-              prepared.artifact.artifactId,
-              prepared.contentRevision.contentRevision,
-            )
-          : null;
-      const latestBrief =
-        prepared.kind === "select-revision" && project !== null
-          ? await this.#brief(client, owner, id, project.latestBriefRevision)
-          : null;
-      const outlineHead =
-        prepared.kind === "select-revision"
-          ? await this.#artifact(
-              client,
-              owner,
-              id,
-              "c.kind='outline' AND c.episode_id=''",
-              [],
-            )
-          : null;
-      const selectedOutline = outlineHead?.selectedContentRevision
-        ? await this.#revision(
-            client,
-            owner,
-            id,
-            outlineHead.artifactId,
-            outlineHead.selectedContentRevision,
-          )
-        : null;
-      const result = verifyText(prepared, {
-        project,
-        artifact,
-        brief,
-        outline,
-        revision,
-        latestBrief,
-        selectedOutline,
-      });
-      this.#active(authority);
-      const a = result.artifact;
-      if (prepared.expectedArtifactRevision === 0)
-        await this.#query(
+    const runQualification = projectRunCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
+    return this.#transaction(
+      async (client) => {
+        await assertPostgresProjectRunCommit(
           client,
-          `INSERT INTO project_text_artifacts(${artifactColumns}) VALUES(${Array(12).fill("?").join(",")})`,
-          artifactValues(a),
+          this.#schema,
+          runQualification,
         );
-      else {
-        const changed = await this.#query(
-          client,
-          "UPDATE project_text_artifacts SET revision=?,latest_content_revision=?,selected_content_revision=?,locked=?,record_json=? WHERE tenant_id=? AND space_id=? AND project_id=? AND artifact_id=? AND owner_principal_id=? AND revision=?",
-          [
-            a.revision,
-            a.latestContentRevision,
-            a.selectedContentRevision,
-            a.locked ? 1 : 0,
-            textJson(a),
-            a.tenantId,
-            a.spaceId,
-            a.projectId,
-            a.artifactId,
-            a.ownerPrincipalId,
-            prepared.expectedArtifactRevision,
-          ],
-        );
-        if (changed.rowCount !== 1)
-          projectTextFailure("project_text_revision_conflict");
-      }
-      if (candidate) {
-        this.#active(authority);
-        await this.#query(
-          client,
-          `INSERT INTO project_text_revisions(${revisionColumns}) VALUES(${Array(14).fill("?").join(",")})`,
-          revisionValues(textRequired(result.contentRevision)),
-        );
-      }
-      this.#active(authority);
-      await this.#query(
-        client,
-        "INSERT INTO project_text_mutation_receipts(tenant_id,space_id,principal_id,actor_id,kind,idempotency_key,request_digest,project_id,result_json) VALUES(?,?,?,?,?,?,?,?,?)",
-        [
+        const identity = textIdentity({
+          actor: prepared.actor,
+          kind: prepared.kind,
+          receipt: prepared.receipt,
+        });
+        const owner = identity.owner,
+          id = prepared.project.projectId;
+        await this.#lock(client, [
+          "project-text-receipt",
+          this.#schema,
           ...creativeOwnerValues(owner),
           identity.actor.actorId,
           identity.kind,
           identity.receipt.idempotencyKey,
-          identity.receipt.requestDigest,
+        ]);
+        const replay = await this.#receipt(client, identity);
+        if (replay !== null) return replay;
+        // Exactly the same lock namespace as project archival and brief mutations.
+        await this.#lock(client, [
+          "creative-project-project",
+          this.#schema,
+          prepared.project.tenantId,
+          prepared.project.spaceId,
           id,
-          textJson(result),
-        ],
-      );
-      return result;
-    }, authority);
+        ]);
+        const project = await this.#project(client, owner, id);
+        const candidate =
+          prepared.kind === "save-outline" || prepared.kind === "save-script";
+        const artifact = candidate
+          ? await this.#artifact(
+              client,
+              owner,
+              id,
+              "c.kind=? AND c.episode_id=?",
+              [prepared.artifact.kind, prepared.artifact.episodeId ?? ""],
+            )
+          : await this.#artifact(client, owner, id, "c.artifact_id=?", [
+              prepared.artifact.artifactId,
+            ]);
+        const saved =
+          "contentRevision" in prepared ? prepared.contentRevision : null;
+        const brief =
+          candidate && saved !== null
+            ? await this.#brief(client, owner, id, saved.brief.briefRevision)
+            : null;
+        const outline =
+          candidate && saved?.outline
+            ? await this.#revision(
+                client,
+                owner,
+                id,
+                saved.outline.artifactId,
+                saved.outline.contentRevision,
+              )
+            : null;
+        const revision =
+          prepared.kind === "select-revision"
+            ? await this.#revision(
+                client,
+                owner,
+                id,
+                prepared.artifact.artifactId,
+                prepared.contentRevision.contentRevision,
+              )
+            : null;
+        const latestBrief =
+          prepared.kind === "select-revision" && project !== null
+            ? await this.#brief(client, owner, id, project.latestBriefRevision)
+            : null;
+        const outlineHead =
+          prepared.kind === "select-revision"
+            ? await this.#artifact(
+                client,
+                owner,
+                id,
+                "c.kind='outline' AND c.episode_id=''",
+                [],
+              )
+            : null;
+        const selectedOutline = outlineHead?.selectedContentRevision
+          ? await this.#revision(
+              client,
+              owner,
+              id,
+              outlineHead.artifactId,
+              outlineHead.selectedContentRevision,
+            )
+          : null;
+        const result = verifyText(prepared, {
+          project,
+          artifact,
+          brief,
+          outline,
+          revision,
+          latestBrief,
+          selectedOutline,
+        });
+        this.#active(authority);
+        const a = result.artifact;
+        if (prepared.expectedArtifactRevision === 0)
+          await this.#query(
+            client,
+            `INSERT INTO project_text_artifacts(${artifactColumns}) VALUES(${Array(12).fill("?").join(",")})`,
+            artifactValues(a),
+          );
+        else {
+          const changed = await this.#query(
+            client,
+            "UPDATE project_text_artifacts SET revision=?,latest_content_revision=?,selected_content_revision=?,locked=?,record_json=? WHERE tenant_id=? AND space_id=? AND project_id=? AND artifact_id=? AND owner_principal_id=? AND revision=?",
+            [
+              a.revision,
+              a.latestContentRevision,
+              a.selectedContentRevision,
+              a.locked ? 1 : 0,
+              textJson(a),
+              a.tenantId,
+              a.spaceId,
+              a.projectId,
+              a.artifactId,
+              a.ownerPrincipalId,
+              prepared.expectedArtifactRevision,
+            ],
+          );
+          if (changed.rowCount !== 1)
+            projectTextFailure("project_text_revision_conflict");
+        }
+        if (candidate) {
+          this.#active(authority);
+          await this.#query(
+            client,
+            `INSERT INTO project_text_revisions(${revisionColumns}) VALUES(${Array(14).fill("?").join(",")})`,
+            revisionValues(textRequired(result.contentRevision)),
+          );
+        }
+        this.#active(authority);
+        await this.#query(
+          client,
+          "INSERT INTO project_text_mutation_receipts(tenant_id,space_id,principal_id,actor_id,kind,idempotency_key,request_digest,project_id,result_json) VALUES(?,?,?,?,?,?,?,?,?)",
+          [
+            ...creativeOwnerValues(owner),
+            identity.actor.actorId,
+            identity.kind,
+            identity.receipt.idempotencyKey,
+            identity.receipt.requestDigest,
+            id,
+            textJson(result),
+          ],
+        );
+        return result;
+      },
+      authority,
+      runQualification,
+    );
   }
   async #project(
     client: QueryClient,
@@ -438,6 +480,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
   async #transaction<T>(
     body: (client: PoolClient) => Promise<T>,
     authority?: CreativeProjectCommitAuthority,
+    runQualification?: ProjectRunQualification,
   ): Promise<T> {
     this.#assertOpen();
     if (authority !== undefined)
@@ -447,8 +490,15 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     try {
       await client.query("BEGIN");
       const result = await body(client);
-      if (authority !== undefined)
+      if (authority?.runTransaction !== undefined)
+        await authority.runTransaction.assertCurrent();
+      else if (authority !== undefined)
         await assertCreativeProjectCommitCurrent(authority);
+      await assertPostgresProjectRunLease(
+        client,
+        this.#schema,
+        runQualification,
+      );
       this.#active(authority);
       await client.query("COMMIT");
       return result;

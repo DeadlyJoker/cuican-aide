@@ -17,6 +17,9 @@
     "src/catalog.ts",
     "src/retained-results.ts",
     "src/workflow.ts",
-    "src/templates/**/*.d.ts"
+    "src/templates/**/*.d.ts",
+    "src/project-tools-service.ts",
+    "src/project-tools-catalog.ts",
+    "src/project-tools-runtime.ts"
   ]
 }

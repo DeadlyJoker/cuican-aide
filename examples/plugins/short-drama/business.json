@@ -2,9 +2,9 @@
   "schemaVersion": "crewon.extension-manifest.v0",
   "hostApi": "crewon.extensions.v0",
   "pluginId": "crewon.short-drama",
-  "version": "12.0.0",
+  "version": "13.0.0",
   "title": "AI 短剧工作台",
-  "description": "短剧工作台同包执行：使用已保存的写实人像或角色三视图预设生成图片，并只读查询原任务结果。",
+  "description": "一个短剧插件内包含项目、需求、大纲、分集剧本的Agent工具与Krea2预设，手动入口共享同一项目版本。",
   "task": {
     "inputSchema": {
       "type": "object",
@@ -18,7 +18,7 @@
       "required": ["prompt"],
       "additionalProperties": false
     },
-    "instructions": "根据用户描述准备生图提示词，调用 submit 一次并保存 operationId。已提交不表示图片已生成；调用 observe 查询真实结果。不要重发不确定的生成请求，不要编造图片链接。查询任务只能查询宿主明确关联的 operationId，不能重新提交生成。"
+    "instructions": "使用真实业务工具处理用户目标。先读取或创建项目，读取当前需求和阶段元数据，再按确切修订分段读取相关内容。文字创作由当前Agent模型完成，工具校验并追加候选，大纲和每集剧本分别保存；保存不自动采用。用户授权采用后调用text_select，锁定项不能覆盖。发生版本冲突时重读并说明差异，不能盲目重试覆盖。每个工具的resultJson是宿主返回的JSON业务结果，所有ID和版本从实际结果取得，不能编造。content_read必须沿nextOffset读取到null，避免把部分JSON当完整内容。不把全项目和历史一次注入。仅在用户授权媒体生成且Krea2已配置时，调用submit一次并保存operationId，再observe查询实际状态；unknownOutcome不能重新提交。视频、声音、合成尚未接通，不能假称完成。不同阶段按用户授权的终点推进，不擅自扩大执行范围。"
   },
   "configurationSchema": {
     "type": "object",
@@ -158,7 +158,706 @@
       "effect": "readOnly",
       "recovery": "replaySafe",
       "capability": "extension.image.read"
+    },
+    {
+      "operationId": "project_list",
+      "adapterId": "crewon.project-tools",
+      "description": "List accessible short-drama projects, at most four. Continue only using the returned cursor.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "maxLength": 16,
+            "enum": ["active", "archived", "all"]
+          },
+          "after": {
+            "type": "object",
+            "properties": {
+              "updatedAt": {
+                "type": "string",
+                "maxLength": 32,
+                "enum": null
+              },
+              "projectId": {
+                "type": "string",
+                "maxLength": 128,
+                "enum": null
+              }
+            },
+            "required": ["updatedAt", "projectId"],
+            "additionalProperties": false
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": ["state", "limit"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "project_read",
+      "adapterId": "crewon.project-tools",
+      "description": "Read actual project and current brief metadata; use content_read for the exact brief text.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          }
+        },
+        "required": ["projectId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "project_create",
+      "adapterId": "crewon.project-tools",
+      "description": "Save a user idea as a new project and brief. Does not submit media. Record the returned actual projectId.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 160,
+            "enum": null
+          },
+          "briefText": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["title", "briefText"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
+    },
+    {
+      "operationId": "brief_append",
+      "adapterId": "crewon.project-tools",
+      "description": "Append a new brief based on the actual project revision. Preserve user wording; never overwrite history.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedProjectRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["projectId", "expectedProjectRevision", "text"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
+    },
+    {
+      "operationId": "outline_read",
+      "adapterId": "crewon.project-tools",
+      "description": "Read current outline head, selection and dependency state. Content is read separately by immutable revision.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          }
+        },
+        "required": ["projectId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "script_read",
+      "adapterId": "crewon.project-tools",
+      "description": "Read one episode script head, selection and dependency state. Missing script is a real empty stage.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "episodeId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          }
+        },
+        "required": ["projectId", "episodeId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "content_read",
+      "adapterId": "crewon.project-tools",
+      "description": "Read up to 1024 Unicode code points of one exact immutable brief or text revision. Start offset 0 and concatenate until nextOffset is null; do not use incomplete JSON as complete content.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "maxLength": 8,
+                "enum": ["brief", "text"]
+              },
+              "briefRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "artifactId": {
+                "type": "string",
+                "maxLength": 128,
+                "enum": null
+              },
+              "contentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": ["projectId", "source", "offset"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "text_history",
+      "adapterId": "crewon.project-tools",
+      "description": "Read at most four revision metadata records; use content_read for a chosen exact revision.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "artifactId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "afterContentRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": [
+          "projectId",
+          "artifactId",
+          "afterContentRevision",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "outline_save",
+      "adapterId": "crewon.project-tools",
+      "description": "Validate and append an outline candidate against the actual brief revision and artifact head. Zero head means absent outline. Does not select or replace current content.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 160,
+                "enum": null
+              },
+              "logline": {
+                "type": "string",
+                "maxLength": 2048,
+                "enum": null
+              },
+              "synopsis": {
+                "type": "string",
+                "maxLength": 8192,
+                "enum": null
+              },
+              "episodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "episodeId": {
+                      "type": "string",
+                      "maxLength": 128,
+                      "enum": null
+                    },
+                    "title": {
+                      "type": "string",
+                      "maxLength": 160,
+                      "enum": null
+                    },
+                    "summary": {
+                      "type": "string",
+                      "maxLength": 8192,
+                      "enum": null
+                    }
+                  },
+                  "required": ["episodeId", "title", "summary"],
+                  "additionalProperties": false
+                },
+                "maxItems": 16
+              }
+            },
+            "required": ["title", "logline", "synopsis", "episodes"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedArtifactRevision",
+          "briefRevision",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
+    },
+    {
+      "operationId": "script_save",
+      "adapterId": "crewon.project-tools",
+      "description": "Append one episode script candidate citing an exact outline revision. Omit outline only for importing a preexisting script without claimed outline provenance. Never silently replace selected content.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "episodeId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "outline": {
+            "type": "object",
+            "properties": {
+              "artifactId": {
+                "type": "string",
+                "maxLength": 128,
+                "enum": null
+              },
+              "contentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": ["artifactId", "contentRevision"],
+            "additionalProperties": false
+          },
+          "content": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "maxLength": 160,
+                "enum": null
+              },
+              "scenes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sceneId": {
+                      "type": "string",
+                      "maxLength": 128,
+                      "enum": null
+                    },
+                    "location": {
+                      "type": "string",
+                      "maxLength": 640,
+                      "enum": null
+                    },
+                    "timeOfDay": {
+                      "type": "string",
+                      "maxLength": 320,
+                      "enum": null
+                    },
+                    "action": {
+                      "type": "string",
+                      "maxLength": 8192,
+                      "enum": null
+                    },
+                    "dialogue": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "speaker": {
+                            "type": "string",
+                            "maxLength": 640,
+                            "enum": null
+                          },
+                          "text": {
+                            "type": "string",
+                            "maxLength": 8192,
+                            "enum": null
+                          }
+                        },
+                        "required": ["speaker", "text"],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 64
+                    }
+                  },
+                  "required": [
+                    "sceneId",
+                    "location",
+                    "timeOfDay",
+                    "action",
+                    "dialogue"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 32
+              }
+            },
+            "required": ["title", "scenes"],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "projectId",
+          "episodeId",
+          "expectedArtifactRevision",
+          "briefRevision",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
+    },
+    {
+      "operationId": "text_select",
+      "adapterId": "crewon.project-tools",
+      "description": "Select an exact candidate using the actual head revision and current dependencies. Only select when the user or an actual plan has authorized adoption.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "artifactId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contentRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "projectId",
+          "artifactId",
+          "expectedArtifactRevision",
+          "contentRevision"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
+    },
+    {
+      "operationId": "text_lock",
+      "adapterId": "crewon.project-tools",
+      "description": "Lock or unlock an actual selected artifact on user instruction. Lock protects selected content while retaining candidate history.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "artifactId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "projectId",
+          "artifactId",
+          "expectedArtifactRevision",
+          "locked"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
     }
   ],
-  "resultViews": ["externalOperation", "externalResult"]
+  "resultViews": ["text", "externalOperation", "externalResult"]
 }

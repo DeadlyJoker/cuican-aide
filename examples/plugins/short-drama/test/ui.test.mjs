@@ -12,7 +12,7 @@ import {
   settle,
 } from "./ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "12.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "13.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -55,6 +55,9 @@ test("ships a unified self-contained UI and execution package with the original 
     },
     { service: "crewon.tasks", apiVersion: "2", optional: true },
     { service: "crewon.execution", apiVersion: "1", optional: true },
+    ...(Number(version.split(".")[0]) >= 13
+      ? [{ service: "crewon.project-tools", apiVersion: "1", optional: true }]
+      : []),
   ]);
   assert.deepEqual(descriptor.provides, [
     { service: "crewon.short-drama", apiVersion: "1" },

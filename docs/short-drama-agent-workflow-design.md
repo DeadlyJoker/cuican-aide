@@ -1,6 +1,6 @@
 # AI 短剧：Agent 与工作流协同方案
 
-日期：2026-10-05。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，真实 Agent 工具及阶段页面仍待接线。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
+日期：2026-10-05。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；项目对话启动/发现及阶段页面仍待接线。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
 
 ## 产品决定
 
@@ -94,7 +94,7 @@ Agent 使用具名业务工具读取项目、提出/保存成果、建立计划�
 
 模型上下文按阶段有界读取：当前需求摘要、相关场次、确切引用资产和待执行步骤。整部小说、所有历史版本与全部工作流不能常驻注入。单个注入片段不超过 10K tokens；大纲、剧本和分镜按业务项分页读取。
 
-聊天路径必须补齐真实的 Node/Agent 项目服务。目前 Short12 的 Node 只有 `image.generate / image.query`；项目操作主要在 UI 动作桥中，不是 Agent 工具。不能只加一段提示词，也不能让 Agent 借用 UI invocationRef 或点击工作台来冒充已授权命令。
+聊天路径必须补齐项目对话启动与能力发现。原 Short12 的 Node 只有 `image.generate / image.query`；Short13 已新增12个真实项目工具，通过独立 `crewon.project-tools@1` 服务处理需求、大纲和剧本，并保留原工具。首期只绑定真实已获准的插件任务Run，原普通聊天尚未自动发现这些工具。不能只加一段提示词，也不能让 Agent 借用 UI invocationRef 或点击工作台来冒充已授权命令。
 
 新服务由宿主为当前调用者派生项目访问范围，插件工具只能调用其公开业务端口。参数中的 projectId 不构成权限；新建、读取、修订、执行与选用都逐次检查项目权限、当前包和修订。阶段 Run 的输入冻结 project/stage/item 与依赖版本。主对话负责讨论、计划和简短进度；需要并行时用明确关联的阶段 Thread/Run，避免多个步骤竞争同一个 Thread 的 active Run，继续保留原工作空间绑定。
 

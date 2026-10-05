@@ -14,6 +14,17 @@ import {
 } from "./plugin-installation-schema.ts";
 
 type Row = Record<string, unknown>;
+type InstallationPin = Pick<
+  PluginTaskAdmissionPin,
+  | "tenantId"
+  | "spaceId"
+  | "profileId"
+  | "pluginId"
+  | "publisherId"
+  | "version"
+  | "packageDigest"
+  | "selectionRevision"
+>;
 export type QualifiedPluginInstallation = Readonly<{
   selection: PluginSelection;
   package: InstalledPluginPackage;
@@ -63,6 +74,14 @@ export function admitSqlitePluginInstallationPin(
   input: PluginTaskAdmissionPin,
 ): QualifiedPluginInstallation {
   const pin = parsePluginTaskAdmissionPin(input);
+  return admitSqliteProjectToolInstallationPin(database, pin);
+}
+
+/** Caller captured the distinct Run-tool installation tuple; no UI provenance is synthesized. */
+export function admitSqliteProjectToolInstallationPin(
+  database: DatabaseSync,
+  pin: InstallationPin,
+): QualifiedPluginInstallation {
   const rows = database
     .prepare(selectionQuery("").replaceAll(/\$[1-4]/gu, "?"))
     .all(...values(pin));
@@ -76,6 +95,14 @@ export async function admitPostgresPluginInstallationPin(
   input: PluginTaskAdmissionPin,
 ): Promise<QualifiedPluginInstallation> {
   const pin = parsePluginTaskAdmissionPin(input);
+  return admitPostgresProjectToolInstallationPin(client, schema, pin);
+}
+
+export async function admitPostgresProjectToolInstallationPin(
+  client: PoolClient,
+  schema: string,
+  pin: InstallationPin,
+): Promise<QualifiedPluginInstallation> {
   const rows = await client.query<Row>(
     `${selectionQuery(prefix(schema))} FOR SHARE OF s,p`,
     values(pin),
@@ -84,7 +111,7 @@ export async function admitPostgresPluginInstallationPin(
 }
 
 function assertSelection(
-  pin: PluginTaskAdmissionPin,
+  pin: InstallationPin,
   rows: readonly Row[],
 ): QualifiedPluginInstallation {
   if (rows.length !== 1) conflict();
@@ -136,6 +163,6 @@ function json(value: unknown): unknown {
 function prefix(schema: string): string {
   return `${pluginInstallationSchemaName(schema)}.`;
 }
-function values(pin: PluginTaskAdmissionPin): [string, string, string, string] {
+function values(pin: InstallationPin): [string, string, string, string] {
   return [pin.tenantId, pin.spaceId, pin.profileId, pin.pluginId];
 }

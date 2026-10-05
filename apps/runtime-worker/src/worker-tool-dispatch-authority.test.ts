@@ -9,6 +9,7 @@ import {
 import type { ToolExecutionCommand } from "@crewon/tool-broker";
 import {
   assertWorkerToolDispatch,
+  assertWorkerToolDispatchEvidence,
   assertWorkerToolDispatchIdentity,
   withWorkerToolDispatch,
 } from "./plugins/worker-tool-dispatch-authority.ts";
@@ -367,4 +368,34 @@ test("an async host callback cannot start the plugin after authority or adapter 
     await closing;
     assert.equal(calls, 0);
   }
+});
+
+test("host evidence comes only from exact live issuer and refreshes the actual lease", async () => {
+  const f = fixture();
+  assert.throws(
+    () => assertWorkerToolDispatchEvidence(f.invocation),
+    /dispatch_authority_denied/,
+  );
+  await f.grant(async () => {
+    const evidence = assertWorkerToolDispatchEvidence(f.invocation);
+    assert.equal(evidence.receipt, f.receipt);
+    assert.equal(evidence.claim, f.current());
+    assert.throws(
+      () =>
+        assertWorkerToolDispatchEvidence({
+          ...f.invocation,
+          command: structuredClone(f.invocation.command),
+        }),
+      /dispatch_authority_denied/,
+    );
+    f.setCurrent({ ...f.current(), lease: { ...f.current().lease, epoch: 2 } });
+    assert.throws(
+      () => assertWorkerToolDispatchEvidence(f.invocation),
+      /dispatch_authority_denied/,
+    );
+  });
+  assert.throws(
+    () => assertWorkerToolDispatchEvidence(f.invocation),
+    /dispatch_authority_denied/,
+  );
 });
