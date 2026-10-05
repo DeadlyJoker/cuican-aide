@@ -28,12 +28,22 @@ export const nativeActor = {
 };
 export const nativeDigest = (value: string | Buffer) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
-export async function nativeAuthorityFixture(t: TestContext) {
+export async function nativeAuthorityFixture(
+  t: TestContext,
+  options: Readonly<{
+    identity?: Readonly<{
+      pluginId: string;
+      publisherId: string;
+      version: string;
+      packageDigest: string;
+    }>;
+  }> = {},
+) {
   const directory = mkdtempSync(
     join(realpathSync(tmpdir()), "crewon-native-authority-"),
   );
   chmodSync(directory, 0o700);
-  const identity = {
+  const identity = options.identity ?? {
     pluginId: "example.image",
     publisherId: "example.publisher",
     version: "1.0.0",

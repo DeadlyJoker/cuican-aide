@@ -5,6 +5,10 @@ import type {
   CreativeProjectAuthorizationPort,
 } from "@crewon/application";
 import {
+  parseDesktopProjectHistoryConfiguration,
+  type DesktopProjectHistoryConfiguration,
+} from "@crewon/contracts";
+import {
   parseDesktopProjectExecutionConfiguration,
   type DesktopProjectExecutionConfiguration,
 } from "@crewon/contracts/plugins";
@@ -72,7 +76,10 @@ class NativeAuthorityOwner {
   readonly config: InstalledPluginNativeWorkerConfig;
   readonly files: ReturnType<typeof captureNativePluginAuthority>;
   readonly store: SqliteRunStore;
-  readonly projects: DesktopProjectExecutionConfiguration | undefined;
+  readonly projects:
+    | DesktopProjectHistoryConfiguration
+    | DesktopProjectExecutionConfiguration
+    | undefined;
   readonly #physical = new Set<Promise<unknown>>();
   #release: Readonly<{
     document: InstalledPluginReleaseDocument;
@@ -88,12 +95,35 @@ class NativeAuthorityOwner {
       this.files.authority.bootstrapPath,
       1024 * 1024,
     ).value as Record<string, unknown>;
-    this.projects =
-      bootstrap.projects === undefined
-        ? undefined
-        : parseDesktopProjectExecutionConfiguration(bootstrap.projects, {
-            publications: this.files.authority.packages,
-          });
+    // UI publication approval and Node execution approval are separate. The
+    // pinned Main bootstrap supplies the former, including UI-only packages.
+    const projectOptions = {
+      publications: bootstrap.publications as readonly Readonly<{
+        pluginId: string;
+        packageDigest: string;
+      }>[],
+    };
+    switch (bootstrap.schemaVersion) {
+      case "crewon.desktop-plugin-bootstrap.v1":
+        if (bootstrap.projects !== undefined)
+          fail("project_configuration_binding_invalid");
+        this.projects = undefined;
+        break;
+      case "crewon.desktop-plugin-bootstrap.v2":
+        this.projects = parseDesktopProjectHistoryConfiguration(
+          bootstrap.projects,
+          projectOptions,
+        );
+        break;
+      case "crewon.desktop-plugin-bootstrap.v3":
+        this.projects = parseDesktopProjectExecutionConfiguration(
+          bootstrap.projects,
+          projectOptions,
+        );
+        break;
+      default:
+        fail("project_configuration_binding_invalid");
+    }
     if (
       config.installRoot !== this.files.authority.installRoot ||
       (config.historicalScope !== null &&
