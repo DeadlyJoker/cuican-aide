@@ -6,6 +6,16 @@
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-05：SSH 服务核验与既有代理的原任务读取
+
+用户提供 SSH 连接信息及双 `u` 地址后，已实际登录其 ComfyUI 实例，只读确认原服务在 `127.0.0.1:6006` 运行，版本为 0.38.0。原单 `u` 地址 `https://u564342-7908818e1ac4.westd.seetacloud.com:8443/` 的 `/system_stats` 返回真实 ComfyUI JSON；新双 `u` 地址虽返回 200，但内容是 HTML，不能作为 ComfyUI JSON API。保留原 config1 的单 `u` canonical URL，没有改旧 Run 的不可变配置或 prepared target。证据 `comfy-ssh-readonly-verification-20261005.json`；SSH 已正常退出，任务未保存用户密码。
+
+本机现有 `127.0.0.1:7890` 代理下，原单 `u` 地址的 health、确切 `/history/4263a1da-d6fe-eac4-aaec-f05a1e4f7485` 及 `/queue` 均可读取 JSON，HTTPS 证书及主机名验证保持，没有跟随重定向。原任务在当前历史中未找到，运行与待执行队列均为空；SSH 服务本地查询和本机代理查询一致。这不是“历史上从未提交”的证明，不据此再次生图、补写 provider ID 或变更原 operation。代理读取证据 `comfy-existing-proxy-original-read-20261005.json`。
+
+实际用户库随后只读核对 `native-original-readonly-after-ssh-20261005-2026-10-05T08-43-56-799Z.json`：原 Run 仍 reconciling，唯一 operation 仍 submitting、providerOperationId 为 null、结果为空，query/selection/result link 均为零；config1 地址仍与原绑定精确一致。现有 Krea 包在已保留 operation 下只会按原 correlation UUID GET 历史与队列，匹配后经原 CAS 恢复，不再次获得 POST capability。更改最新配置只创建新 revision，不能重定向原 Run；不以改地址绕过原配置/target 绑定。
+
+上述新证据证明服务可用及既有代理的只读接口连通，没有把代理接入生产插件 transport，也没有修改本机 DNS、系统代理、TLS 或私有地址策略。此前连接方式选择已结合这些实测结果明确为「使用本机现有系统代理」或「为该域名恢复真实 DNS」，仍待用户回答；不把预选项、经过时间或 SSH 凭据视为这项连接方式选择。桌面保持 0.1.14。完整 Native 在线 S0 和第二个实际企业 API 仍未完成，积分继续后置。
+
 ## 2026-10-05：插件页面连续使用与 0.1.14 桌面交付
 
 原插件页面持有五分钟绝对租约，GET 权限验证不会续期；此前实际页面显示暂时不可用，但没有捕获其错误码。现在补齐[有限租约续期](./plugin-ui-lease-renewal.md)：新增显式 POST renew，保留原 v1 lease 与只读 GET；同一 actor、profile、epoch、启用选择、包字节、入口和公开资源必须重新核对。只更新原 owner 的期限，每次最多五分钟；关闭、过期、撤权、换包或旧期限冲突不能复活。Native 使用原 Main 会话、frame/sender gate 和 binding，资源地址与权限保持；旧桥缺少可选 renew 时保持原行为。
