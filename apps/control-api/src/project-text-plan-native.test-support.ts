@@ -29,7 +29,10 @@ import {
 export async function nativeTextPlanFixture(
   t: TestContext,
   directory: string,
-  options: Readonly<{ createTransport?(): ModelTransportPort }> = {},
+  options: Readonly<{
+    createTransport?(): ModelTransportPort;
+    expectedVersion?: "17.0.0" | "20.0.0";
+  }> = {},
 ) {
   const runtimes = new Set<
     Awaited<ReturnType<typeof createStandaloneControlApiWithPlugins>>
@@ -69,7 +72,7 @@ export async function nativeTextPlanFixture(
   });
   const identity = f.entry.registration.identity,
     scope = f.scope;
-  assert.equal(identity.version, "17.0.0");
+  assert.equal(identity.version, options.expectedVersion ?? "17.0.0");
   const descriptor = f.pkg.installed.descriptor;
   assert.ok(
     descriptor.requires.some(

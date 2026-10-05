@@ -1,0 +1,27 @@
+.project-planning-launch {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.project-planning-proposal {
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-md);
+}
+.project-planning-launch .form-field select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.project-planning-launch .form-field span {
+  color: var(--n-700);
+}
+.project-planning-launch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.project-planning-launch-actions .button {
+  max-width: 100%;
+  white-space: normal;
+}

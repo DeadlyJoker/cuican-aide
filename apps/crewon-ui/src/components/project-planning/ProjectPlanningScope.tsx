@@ -1,9 +1,12 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { ProjectPlanningProposal } from "@crewon/contracts/project-planning";
+import type { ProjectPlanningLaunchPort } from "../../lib/plugins/projectPlanningLaunch";
 export type ProjectPlanningNavigation = Readonly<{
   threadId: string | null;
   canOpen(proposal: ProjectPlanningProposal): boolean;
   open(proposal: ProjectPlanningProposal): void;
+  launch?: ProjectPlanningLaunchPort;
+  openWorkbench?(proposal: ProjectPlanningProposal): void;
 }>;
 const Navigation = createContext<ProjectPlanningNavigation | null>(null);
 const Run = createContext<string | null>(null);

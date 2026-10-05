@@ -87,6 +87,9 @@ it("accepts a proposal only for the current session, Thread and complete install
     await act(async () => state.navigation.open(proposal));
     expect(state.request?.id).toBe("module");
     expect(state.draftFor(module)).toEqual(proposal);
+    await act(async () => state.navigation.openWorkbench(proposal));
+    expect(state.request?.id).toBe("module");
+    expect(state.draftFor(module)).toBeUndefined();
     await render({ scope, catalog, threadId: "another-thread" });
     expect(state.request).toBeNull();
     expect(() => state.navigation.open(proposal)).toThrow();

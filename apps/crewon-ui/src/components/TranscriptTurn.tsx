@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { TranscriptProjectPlanningSuggestions } from "./project-planning/TranscriptProjectPlanningSuggestions";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
 import type { Turn } from "@crewon/app-server-protocol/v2/Turn";
 import type { Locale } from "../lib/i18n";
@@ -370,6 +371,10 @@ export const TranscriptTurn = memo(function TranscriptTurn({
           locale={locale}
         />
       ) : null}
+      <TranscriptProjectPlanningSuggestions
+        items={turn.items}
+        locale={locale}
+      />
     </section>
   );
 });

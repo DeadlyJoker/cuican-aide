@@ -3,13 +3,16 @@ import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
 import type { Locale } from "../../lib/i18n";
 import { useProjectPlanningOrigin } from "./ProjectPlanningScope";
 import { transcriptProjectPlanningProposal } from "./projectPlanningProposal";
+import { ProjectPlanningLaunchActions } from "./ProjectPlanningLaunchActions";
 const zhStages = { brief: "创作需求", outline: "分集大纲", script: "分集剧本" };
 export function TranscriptProjectPlanningCard({
   item,
   locale,
+  presentation = "toolDetails",
 }: {
   item: Extract<ThreadItem, { type: "dynamicToolCall" }>;
   locale: Locale;
+  presentation?: "toolDetails" | "conversation";
 }) {
   const { navigation, runId } = useProjectPlanningOrigin();
   const [error, setError] = useState(false);
@@ -20,6 +23,10 @@ export function TranscriptProjectPlanningCard({
   if (!proposal || !navigation) return null;
   const available = navigation.canOpen(proposal);
   const input = proposal.input;
+  const launch = navigation.launch?.supports(proposal)
+    ? navigation.launch
+    : undefined;
+  if (launch && presentation === "toolDetails") return null;
   return (
     <section
       className="tool-call-section"
@@ -32,28 +39,54 @@ export function TranscriptProjectPlanningCard({
           : `${input.start} → ${input.target}${input.episodeCount === null ? "" : ` · ${input.episodeCount} episodes`}`}
       </p>
       <p>{input.briefText}</p>
-      <p>
-        {locale === "zh"
-          ? "确认后在短剧工作台创建项目；这条建议尚未开始执行。"
-          : "Review this draft in the workbench before creating or executing a project."}
-      </p>
-      <button
-        type="button"
-        className="button secondary"
-        disabled={!available}
-        onClick={() => {
-          try {
-            navigation.open(proposal);
-            setError(false);
-          } catch {
-            setError(true);
-          }
-        }}
-      >
-        {locale === "zh"
-          ? "在 AI 短剧中使用此想法"
-          : "Use this idea in AI Short Drama"}
-      </button>
+      {launch ? (
+        <ProjectPlanningLaunchActions
+          proposal={proposal}
+          launch={launch}
+          locale={locale}
+          onReview={() => {
+            try {
+              navigation.open(proposal);
+              setError(false);
+            } catch {
+              setError(true);
+            }
+          }}
+          onWorkbench={() => {
+            try {
+              navigation.openWorkbench?.(proposal);
+              setError(false);
+            } catch {
+              setError(true);
+            }
+          }}
+        />
+      ) : (
+        <>
+          <p>
+            {locale === "zh"
+              ? "确认后在短剧工作台创建项目；这条建议尚未开始执行。"
+              : "Review this draft in the workbench before creating or executing a project."}
+          </p>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={!available}
+            onClick={() => {
+              try {
+                navigation.open(proposal);
+                setError(false);
+              } catch {
+                setError(true);
+              }
+            }}
+          >
+            {locale === "zh"
+              ? "在 AI 短剧中使用此想法"
+              : "Use this idea in AI Short Drama"}
+          </button>
+        </>
+      )}
       {(!available || error) && (
         <p role="status">
           {locale === "zh"

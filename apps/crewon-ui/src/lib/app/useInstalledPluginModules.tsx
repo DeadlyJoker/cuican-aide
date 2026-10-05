@@ -33,6 +33,7 @@ import { createInstalledPluginProjectHistoricalQueryJournal } from "../plugins/i
 import { createInstalledPluginProjectQueryJournal } from "../plugins/installedPluginProjectQueryJournal";
 import { createInstalledPluginProjectSelectionJournal } from "../plugins/installedPluginProjectSelectionJournal";
 import { useInstalledPluginPlanningNavigation } from "./useInstalledPluginPlanningNavigation";
+import { useInstalledPluginPlanningLaunch } from "./useInstalledPluginPlanningLaunch";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -442,10 +443,25 @@ export function useInstalledPluginModules({
     [scope, taskRuntime, receipts],
   );
   const selectedTaskThreadId = taskContext?.selectedThreadId ?? null;
+  const planningLaunch = useInstalledPluginPlanningLaunch({
+    scope,
+    catalog,
+    host,
+    threadId: selectedTaskThreadId,
+    assertScopeCurrent: (candidate) => {
+      if (
+        current.current !== candidate ||
+        mountedScope.current !== candidate ||
+        taskContextRef.current?.selectedThreadId !== selectedTaskThreadId
+      )
+        throw new PluginUiLoaderError("plugin_ui_session_changed");
+    },
+  });
   const planning = useInstalledPluginPlanningNavigation({
     scope,
     catalog,
     threadId: selectedTaskThreadId,
+    launch: planningLaunch,
   });
   const generationPorts = useMemo(
     () =>

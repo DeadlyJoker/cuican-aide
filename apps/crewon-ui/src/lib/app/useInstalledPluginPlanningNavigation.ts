@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { ProjectPlanningProposal } from "@crewon/contracts/project-planning";
 import { parseProjectPlanningProposal } from "@crewon/contracts/project-planning";
+import type { ProjectPlanningLaunchPort } from "../plugins/projectPlanningLaunch";
 import type {
   ControlPluginUiCatalog,
   ControlPluginUiModule,
@@ -29,10 +30,12 @@ export function useInstalledPluginPlanningNavigation<Scope>({
   scope,
   catalog,
   threadId,
+  launch,
 }: {
   scope: Scope | null;
   catalog: ControlPluginUiCatalog | null;
   threadId: string | null;
+  launch?: ProjectPlanningLaunchPort | null;
 }) {
   const current = useRef({ scope, catalog, threadId });
   current.current = { scope, catalog, threadId };
@@ -41,6 +44,7 @@ export function useInstalledPluginPlanningNavigation<Scope>({
     moduleId: string;
     requestKey: string;
     proposal: ProjectPlanningProposal;
+    review: boolean;
   }> | null>(null);
   const canOpen = useCallback((proposal: ProjectPlanningProposal) => {
     const now = current.current;
@@ -67,6 +71,26 @@ export function useInstalledPluginPlanningNavigation<Scope>({
         moduleId: module.key,
         proposal,
         requestKey: crypto.randomUUID(),
+        review: true,
+      });
+    },
+    [canOpen],
+  );
+  const openWorkbench = useCallback(
+    (value: ProjectPlanningProposal) => {
+      const proposal = parseProjectPlanningProposal(value),
+        now = current.current;
+      if (!canOpen(proposal) || now.scope === null)
+        throw new Error("project_planning_module_unavailable");
+      const module = now.catalog!.modules.find((m) =>
+        matchesProjectPlanningModule(m, proposal),
+      )!;
+      setPending({
+        scope: now.scope,
+        moduleId: module.key,
+        proposal,
+        requestKey: crypto.randomUUID(),
+        review: false,
       });
     },
     [canOpen],
@@ -84,8 +108,14 @@ export function useInstalledPluginPlanningNavigation<Scope>({
       : null;
   return {
     navigation: useMemo(
-      () => ({ threadId, canOpen, open }),
-      [threadId, canOpen, open],
+      () => ({
+        threadId,
+        canOpen,
+        open,
+        openWorkbench,
+        ...(launch ? { launch } : {}),
+      }),
+      [threadId, canOpen, open, openWorkbench, launch],
     ),
     request: useMemo(
       () =>
@@ -95,7 +125,7 @@ export function useInstalledPluginPlanningNavigation<Scope>({
       [active],
     ),
     draftFor(module: ControlPluginUiModule) {
-      return active !== null && module.key === active.moduleId
+      return active !== null && active.review && module.key === active.moduleId
         ? active.proposal
         : undefined;
     },
