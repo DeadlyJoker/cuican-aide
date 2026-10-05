@@ -17,7 +17,8 @@ export function verifiedExtensionTaskImages(
 ): readonly VerifiedExtensionTaskImage[] {
   if (
     operation.status !== "succeeded" ||
-    value.binding.pluginId !== "crewon.comfyui-krea2"
+    (value.binding.pluginId !== "crewon.comfyui-krea2" &&
+      value.binding.pluginId !== "crewon.short-drama")
   )
     return [];
   return decodeComfyUiImages({

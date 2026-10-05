@@ -16,6 +16,8 @@ export type VerifiedComfyUiImage = Readonly<{
   resultIndex: number;
 }>;
 export type ComfyUiResultIdentity = Readonly<{
+  /** Omitted legacy identities authorize only the original Krea plugin. */
+  pluginId?: "crewon.comfyui-krea2" | "crewon.short-drama";
   pluginVersion: string;
   manifestDigest: string;
   implementationDigest: string;
@@ -82,12 +84,20 @@ export function createComfyUiProjectGenerationImageResultVerifier(
     const entry = Object.getOwnPropertyDescriptor(list, String(index));
     if (!entry?.enumerable || !Object.hasOwn(entry, "value"))
       invalidConfiguration();
+    const hasPluginId =
+      entry.value !== null &&
+      typeof entry.value === "object" &&
+      Object.hasOwn(entry.value, "pluginId");
     const fields = pluginSecurityRecord(entry.value, [
+      ...(hasPluginId ? ["pluginId"] : []),
       "pluginVersion",
       "manifestDigest",
       "implementationDigest",
     ]);
     if (
+      (hasPluginId &&
+        fields.pluginId !== "crewon.comfyui-krea2" &&
+        fields.pluginId !== "crewon.short-drama") ||
       typeof fields.pluginVersion !== "string" ||
       !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(
         fields.pluginVersion,
@@ -96,6 +106,9 @@ export function createComfyUiProjectGenerationImageResultVerifier(
     )
       invalidConfiguration();
     return Object.freeze({
+      pluginId: hasPluginId
+        ? (fields.pluginId as "crewon.comfyui-krea2" | "crewon.short-drama")
+        : "crewon.comfyui-krea2",
       pluginVersion: fields.pluginVersion as string,
       manifestDigest: pluginInstallationDigest(fields.manifestDigest),
       implementationDigest: pluginInstallationDigest(
@@ -117,7 +130,8 @@ export function createComfyUiProjectGenerationImageResultVerifier(
     }: Parameters<ProjectGenerationImageResultVerifier["verifyImage"]>[0]) {
       const binding = generationLink.binding;
       if (
-        binding.pluginId !== "crewon.comfyui-krea2" ||
+        (binding.pluginId !== "crewon.comfyui-krea2" &&
+          binding.pluginId !== "crewon.short-drama") ||
         binding.source !== null ||
         configuration.pluginId !== binding.pluginId ||
         configuration.tenantId !== binding.tenantId ||
@@ -126,6 +140,7 @@ export function createComfyUiProjectGenerationImageResultVerifier(
         configuration.contentDigest !== binding.configurationDigest ||
         !identities.some(
           (identity) =>
+            identity.pluginId === binding.pluginId &&
             identity.pluginVersion === configuration.pluginVersion &&
             identity.manifestDigest === configuration.manifestDigest &&
             identity.implementationDigest ===

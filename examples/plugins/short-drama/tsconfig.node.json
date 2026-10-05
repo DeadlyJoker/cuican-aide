@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/node.ts",
+    "src/runtime.ts",
+    "src/protocol.ts",
+    "src/catalog.ts",
+    "src/retained-results.ts",
+    "src/workflow.ts",
+    "src/templates/**/*.d.ts"
+  ]
+}

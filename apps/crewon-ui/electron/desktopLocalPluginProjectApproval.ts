@@ -46,13 +46,20 @@ export function composeDesktopLocalPluginProjectApproval(
     )
   )
     return approval;
-  const required = (service: string) =>
+  // A dual-entry package must not require UI services in its Node host. Its
+  // explicitly trusted UI may still receive the declared metadata services.
+  const dualEntry =
+    descriptor.entrypoints.node !== null &&
+    descriptor.businessManifestPath !== null;
+  const requested = (service: string) =>
     descriptor.requires.some(
       (item) =>
-        item.service === service && item.apiVersion === "1" && !item.optional,
+        item.service === service &&
+        item.apiVersion === "1" &&
+        (!item.optional || dualEntry),
     );
-  const projectsRequired = required("crewon.creative-projects");
-  const recoveryRequired = required("crewon.plugin-ui-recovery");
+  const projectsRequired = requested("crewon.creative-projects");
+  const recoveryRequired = requested("crewon.plugin-ui-recovery");
   if (!projectsRequired && !recoveryRequired) return approval;
   const modules = descriptor.contributions
     .filter(

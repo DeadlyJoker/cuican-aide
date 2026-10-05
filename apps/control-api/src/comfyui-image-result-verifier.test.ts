@@ -215,3 +215,148 @@ test("reviewed provider registry rejects getters, sparse arrays, duplicate ident
       >[0]),
     );
 });
+
+function pluginFixture(pluginId: string): VerifyProjectGenerationImageInput {
+  const original = fixture();
+  return {
+    ...original,
+    generationLink: {
+      ...original.generationLink,
+      binding: {
+        ...original.generationLink.binding,
+        pluginId,
+      },
+    },
+    configuration: { ...original.configuration, pluginId },
+  };
+}
+
+test("an explicit Short identity verifies its own result without authorizing another plugin", () => {
+  const verifier = createComfyUiProjectGenerationImageResultVerifier({
+    identities: [{ ...identity, pluginId: "crewon.short-drama" }],
+  });
+  assert.equal(
+    verifier.verifyImage(pluginFixture("crewon.short-drama")).filename,
+    "chosen.png",
+  );
+  for (const pluginId of ["crewon.comfyui-krea2", "other.provider"])
+    assert.throws(() => verifier.verifyImage(pluginFixture(pluginId)), {
+      code: "project_generation_selection_result_unavailable",
+    });
+  const short = pluginFixture("crewon.short-drama");
+  for (const change of [
+    { pluginId: "crewon.comfyui-krea2" },
+    { pluginVersion: "2.0.0" },
+    { manifestDigest: `sha256:${"e".repeat(64)}` },
+    { implementationDigest: `sha256:${"e".repeat(64)}` },
+    { revision: 2 },
+    { contentDigest: `sha256:${"e".repeat(64)}` },
+  ])
+    assert.throws(
+      () =>
+        verifier.verifyImage({
+          ...short,
+          configuration: { ...short.configuration, ...change },
+        }),
+      { code: "project_generation_selection_result_unavailable" },
+    );
+});
+
+test("omitted result plugin identity remains Krea-only and explicit Krea keeps compatibility", () => {
+  for (const configured of [
+    identity,
+    { ...identity, pluginId: "crewon.comfyui-krea2" as const },
+  ]) {
+    const verifier = createComfyUiProjectGenerationImageResultVerifier({
+      identities: [configured],
+    });
+    assert.equal(verifier.verifyImage(fixture()).filename, "chosen.png");
+    assert.throws(
+      () => verifier.verifyImage(pluginFixture("crewon.short-drama")),
+      {
+        code: "project_generation_selection_result_unavailable",
+      },
+    );
+  }
+  const both = createComfyUiProjectGenerationImageResultVerifier({
+    identities: [identity, { ...identity, pluginId: "crewon.short-drama" }],
+  });
+  assert.equal(both.verifyImage(fixture()).filename, "chosen.png");
+  assert.equal(
+    both.verifyImage(pluginFixture("crewon.short-drama")).filename,
+    "chosen.png",
+  );
+});
+
+test("result registry normalizes only omitted Krea and rejects duplicate or arbitrary plugin grants", () => {
+  for (const identities of [
+    [identity, { ...identity, pluginId: "crewon.comfyui-krea2" }],
+    [{ pluginId: "crewon.comfyui-krea2", ...identity }, identity],
+    [
+      { pluginId: "crewon.short-drama", ...identity },
+      { ...identity, pluginId: "crewon.short-drama" },
+    ],
+    ...["other.provider", "", null, undefined, 1].map((pluginId) => [
+      { ...identity, pluginId },
+    ]),
+  ])
+    assert.throws(() =>
+      createComfyUiProjectGenerationImageResultVerifier({
+        identities,
+      } as Parameters<
+        typeof createComfyUiProjectGenerationImageResultVerifier
+      >[0]),
+    );
+  let reads = 0;
+  const untrusted = { ...identity };
+  Object.defineProperty(untrusted, "pluginId", {
+    enumerable: true,
+    get() {
+      reads++;
+      return "crewon.short-drama";
+    },
+  });
+  assert.throws(() =>
+    createComfyUiProjectGenerationImageResultVerifier({
+      identities: [untrusted],
+    }),
+  );
+  assert.equal(reads, 0);
+});
+
+test("Short image verification keeps HTTPS, original base URL and original operation ownership strict", () => {
+  const verifier = createComfyUiProjectGenerationImageResultVerifier({
+    identities: [{ ...identity, pluginId: "crewon.short-drama" }],
+  });
+  const short = pluginFixture("crewon.short-drama");
+  for (const baseUrl of [
+    "http://comfy.example.test:8443/",
+    "https://foreign.example.test/",
+    "https://secret@comfy.example.test:8443/",
+  ])
+    assert.throws(
+      () =>
+        verifier.verifyImage({
+          ...short,
+          configuration: {
+            ...short.configuration,
+            parameters: { ...short.configuration.parameters, baseUrl },
+          },
+        }),
+      { code: "extension_result_invalid" },
+    );
+  for (const change of [
+    { runId: "other-run" },
+    { bindingDigest: `sha256:${"e".repeat(64)}` },
+    { tenantId: "other-tenant" },
+    { status: "submitting" as const },
+  ])
+    assert.throws(
+      () =>
+        verifier.verifyImage({
+          ...short,
+          operation: { ...short.operation, ...change },
+        }),
+      { code: "project_generation_selection_result_unavailable" },
+    );
+});

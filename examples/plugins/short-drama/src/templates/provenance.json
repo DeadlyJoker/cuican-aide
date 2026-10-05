@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "crewon.short-drama-comfy-workflows.v1",
+  "pluginId": "crewon.short-drama",
+  "publisherId": "example.publisher",
+  "minimumPackageMajorVersion": 12,
+  "sdkVersion": "0.1.0",
+  "configuration": {
+    "exactKeys": ["baseUrl", "preset"],
+    "defaultPreset": null
+  },
+  "presets": [
+    {
+      "preset": "krea2-portrait",
+      "file": "krea2-portrait.api.json",
+      "sourceSha256": "fee684ddcda82366507eb4a10f2aec4b682fa2cfa772866b59a057a9a07790bb",
+      "sourceByteLength": 2136,
+      "nodeCount": 11,
+      "source": "Original reviewed Krea2 1MP graph",
+      "originalSourceSha256": "cdc2b10d67b3ecd9df1572251d8fea9845fbb5989bf95f6efc3e47150d61faec",
+      "outputNodeId": "29",
+      "prompt": {
+        "nodeId": "51",
+        "input": "text"
+      },
+      "outputPrefix": {
+        "nodeId": "29",
+        "input": "filename_prefix"
+      },
+      "fixedMegapixels": 1,
+      "fixedSeed": 769068639772876,
+      "unconnectedNodesPreserved": ["87"]
+    },
+    {
+      "preset": "krea2-character-three-view",
+      "file": "krea2-character-three-view.api.json",
+      "sourceSha256": "46d489340f58c69ea86afe17db0f0e21c789d321050c929426211fa88b9fddbb",
+      "sourceByteLength": 13299,
+      "nodeCount": 16,
+      "source": "Original ComfyUI frontend API export: T04-Krea2-int8-角色设定三视图",
+      "outputNodeId": "29",
+      "prompt": {
+        "nodeId": "121",
+        "input": "prompt"
+      },
+      "outputPrefix": {
+        "nodeId": "29",
+        "input": "filename_prefix"
+      },
+      "seed": {
+        "nodeId": "115",
+        "value": -1,
+        "meaning": "Original random-seed sentinel; new submissions are not guaranteed deterministic."
+      },
+      "localLlmSeed": 684631440196102
+    }
+  ],
+  "policy": "Every original graph node, input, model selector, system prompt, cached frontend metadata, seed and link remains fixed. Only the declared prompt and output-prefix slots vary. Full graph request digest protects same-operation replay. Unknown submissions recover by read only.",
+  "verificationScope": "Static source and graph validation; not current provider/model availability, successful generation, prices or supplier billing."
+}

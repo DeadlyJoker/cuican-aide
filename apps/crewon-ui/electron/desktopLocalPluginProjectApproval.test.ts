@@ -99,6 +99,40 @@ it("source-only confirmation and optional requirements keep the original v1 beha
   expect(second.approval().projects).toBeUndefined();
 });
 
+it("an explicitly trusted dual-entry UI receives declared optional metadata without approving generation", async () => {
+  const f = fixture();
+  f.writeDescriptor({
+    ...f.descriptor,
+    entrypoints: { node: "node/entry.mjs", ui: f.descriptor.entrypoints.ui },
+    businessManifestPath: "business/manifest.json",
+    requires: f.descriptor.requires.map((item) => ({
+      ...item,
+      optional: true,
+    })),
+  });
+  const owner = f.create();
+  const preview = await owner.previewDirectory(f.source);
+  await owner.confirmPreview(sourceConfirmation(preview, publish));
+  const saved = parseDesktopPluginApproval(f.approval());
+  expect(saved.schemaVersion).toBe("crewon.desktop-plugin-approval.v2");
+  if (saved.schemaVersion === "crewon.desktop-plugin-approval.v1")
+    throw new Error("metadata approval missing");
+  const pin = {
+    pluginId: preview.pluginId,
+    packageDigest: preview.packageDigest,
+    contributionId: "studio",
+  };
+  expect(saved.projects).toEqual({
+    version: "crewon.desktop-project-history.v1",
+    pluginUi: { publications: [pin] },
+    uiRecovery: {
+      version: "crewon.plugin-ui-recovery.v1",
+      publications: [{ ...pin, actions: [] }],
+    },
+  });
+  expect(existsSync(f.marker)).toBe(false);
+});
+
 it.each([
   "crewon.desktop-plugin-approval.v2",
   "crewon.desktop-plugin-approval.v3",

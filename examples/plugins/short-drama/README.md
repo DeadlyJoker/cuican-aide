@@ -1,10 +1,16 @@
-# 独立短剧工作台页面插件
+# AI 短剧插件：工作台与生成执行
 
-将整个目录复制到 CrewON 仓库外开发。公开依赖为 `@crewon/plugin-sdk/ui`、`@crewon/plugin-sdk/contracts`、React、ReactDOM 和 lucide-react；浏览器产物包含插件自己的 React 和全部依赖，不借用宿主源码、组件、React 实例或工作区样式表。
+将整个目录复制到 CrewON 仓库外开发。公开依赖为 `@crewon/plugin-sdk/ui`、`@crewon/plugin-sdk/node`、`@crewon/plugin-sdk/contracts`、React、ReactDOM 和 lucide-react；浏览器产物包含插件自己的 React 和全部依赖，不借用宿主源码、组件、React 实例或工作区样式表。
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 11.0.0。它声明一个 `trustedModule/main.content` 页面、必须可用的 `crewon.creative-projects@1`、`crewon.plugin-ui-recovery@1` 与可选的 `crewon.project-generation-reads@1`、`crewon.project-generation-contexts@1`、`crewon.project-generations@1`、`crewon.project-generation-queries@1`、`crewon.project-generation-selections@1` 服务；没有 Node 入口、业务能力清单或执行工厂。安装和启用须通过原可信发布者/包策略及宿主明确的服务批准；共享 DOM 模式不是安全沙箱。必须服务不可用时，宿主拒绝启用。启用后，读取服务默认关闭或权限不可用时，页面明确提示读取失败，仍可使用原项目和输入保存功能。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 12.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+
+UI 声明原项目、恢复、生成、查询、选用服务；Node 声明 `crewon.tasks@2` 和 `crewon.execution@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
+
+执行配置只有 `baseUrl` 和 `preset`：地址为 HTTPS 根地址，预设为 `krea2-portrait` 或 `krea2-character-three-view`，没有隐式默认。T01 沿用已确认的 1MP 图；T04 保留原 16 节点及随机种子哨兵 `-1`，不能据此承诺人物跨图一致性或确定性重生成。只有提示词及输出文件前缀可变，构建检查模板 hash、完整节点和连接；任务的配置修订与整图请求摘要保护原任务恢复。已有提交或未知受理只查询原 history/queue，不能重新 POST；不使用供应商全局取消。
+
+旧 Short 11.0.0 与 Krea 1.0.0 的安装、回执和任务绑定保持原版本。新工作台生成映射到自身 `workbench`；旧 Krea 历史按旧身份读取，主动查询仍需原 Krea 目标批准，不会改用 Short12 的配置。原未知请求需要原包恢复。
 
 8.0.0 通过宿主的恢复协议保留生成、查询和选用三类原请求：宿主在模块 ready 前读取恢复提示，写入前先持久 stage 并收到 ACK，再调用原业务动作。重新挂载仅恢复原输入与回执提示，不自动重发；结果未知时须明确重试原请求和原键。恢复仍要求同一 Control 数据库与 realm、实际账号及原包命名空间，并重新核验当前挂载与权限。声明本身不授予能力；当前需要显式组装恢复服务的 Production Host，尚未接入该服务的 Standalone/Native Host 不能启用此版本。旧 5.0.0、6.0.0、7.0.0 不声明该协议，其同进程恢复行为保留。创建会话的准备请求不属于这三类恢复动作。
 
@@ -22,7 +28,7 @@ pnpm build
 pnpm test
 ```
 
-默认构建生成完整预构建安装目录 `dist/11.0.0/`。`crewon.plugin.json` 清单包含 UI ESM、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=12.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0、2.0.0、3.0.0、4.0.0、5.0.0、6.0.0、7.0.0、8.0.0、9.0.0、10.0.0 安装包保持独立。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。
+默认构建生成完整预构建安装目录 `dist/12.0.0/`，并拒绝构建 11 及更早主版本，避免覆盖已冻结的 UI 包。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=12.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0 至 11.0.0 安装包保持冻结。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。
 
 ## 页面与生命周期
 
@@ -51,3 +57,9 @@ SDK 取消界面等待后，插件仍在本次挂载内跟踪原 Host 写调用�
 离开页面或停用时撤回迟到响应、卸载 React、关闭仍打开的原生 dialog，并删除本次挂载拥有的节点。重复卸载不会删除后续挂载或宿主其他内容。默认模式重新挂载会从项目服务读取已保存数据，未保存草稿不写入浏览器存储。显式演示模式重开会重置示例数据。插件不读取账号凭据或用户积分，不从页面传入 owner、付款方或执行身份。
 
 `pnpm test` 对实际构建 ESM 运行持久模式和显式演示模式的行为与生命周期检查；新增观察器专项另对当前源码及实际 SDK 运行计时、取消、冷恢复和后台图片更新检查。包内使用公开 happy-dom 与严格 metadata fixture，不能据此宣称生产保存或浏览器原生 dialog 已验证。宿主另有真实安装字节、Host HTTP 与 SQLite 冷恢复集成，验证需求与概念来源冻结、不可变输入历史及稳定资产 ID；该集成的分页通过真实 SDK/HTTP 发送有界游标，发行包 DOM 另测分页控件。元数据公共服务的 PostgreSQL 验证保持独立。正式 Main/full App/packaged 生图与积分验收仍待完成。原工作区、左右栏和账号设置入口属于宿主，插件只修改自己的模块节点。
+
+## 构建思路
+
+参考 [shuohao-skills](https://github.com/eternityspring/shuohao-skills) 与关联的 [Reelbench](https://reelbench.79px.com/)，按大纲、剧本、角色/美术、分镜逐步组织项目成果；Agent 负责阶段编排，ComfyUI 负责明确的媒体任务。当前 12.0.0 只集成文本生图与文本角色三视图，参考图派生、分镜、视频、配音及成片导出仍按实际 API 逐阶段接入。详见[参考与接入顺序](../../../docs/short-drama-workbench-reference.md)。
+
+2026-10-05 验证：实际 SDK tarball 在仓外离线安装、UI/Node 严格类型编译及自持构建成功；152 项插件检查与 52 项宿主审批/身份检查通过。真实文件安装器将最终包写入隔离不可变目录，删除开发副本后以 execution-only 和 tasks2-only Host 分别加载，验证两预设的完整图和未知提交冷恢复只读、不重复 POST。这些端口是明确的内存 I/O 夹具，不代表供应商已生图或用户桌面已升级。产物位于 `output/extensions/installable-plugins/short-drama-unified-20261005/short-drama/12.0.0`。

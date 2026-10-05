@@ -1,6 +1,6 @@
 # AI 短剧工作台：产品方案与第一条项目闭环
 
-日期：2026-10-04。状态：已实现 S0 领域、应用及 SQLite/PostgreSQL 项目与输入修订存储、[项目公共 HTTP/BFF/Client 服务](./creative-project-public-service.md)和[生成事务关联](./project-generation-link.md)。独立短剧 5.0.0 已接入项目/需求/概念输入保存、只读生成历史、[就绪检查、原会话准备和生成控件](./installed-plugin-generation-context-actions.md)，6.0.0 已接入[原 operation 显式查询](./project-generation-query-ui-protocol.md)，7.0.0 已接入[确切图片选用](./project-generation-selection-protocol.md)、独立当前指针及同进程重挂恢复，并通过分层验证。实际安装的 9.0.0 已在原完整 Web App/Main/BFF 中联合验证三类原请求的冷恢复、实际选用提交及进程重启后的原键重放；生成和查询仅验证 stage 与 hydrate，完整在线 S0、Native/打包版及真实个人钱包/定价仍未验收。依据[参考结论](./short-drama-workbench-reference.md)及[已验证的插件调用链](./incremental-extension-progress.md)。正式界面仍沿用 CrewON 的[设计约定](../.codex/skills/crewon-design-reference/SKILL.md)。
+日期：2026-10-05。状态：已实现 S0 领域、应用及 SQLite/PostgreSQL 项目与输入修订存储、[项目公共 HTTP/BFF/Client 服务](./creative-project-public-service.md)和[生成事务关联](./project-generation-link.md)。独立短剧 5.0.0 已接入项目/需求/概念输入保存、只读生成历史、[就绪检查、原会话准备和生成控件](./installed-plugin-generation-context-actions.md)，6.0.0 已接入[原 operation 显式查询](./project-generation-query-ui-protocol.md)，7.0.0 已接入[确切图片选用](./project-generation-selection-protocol.md)、独立当前指针及同进程重挂恢复，并通过分层验证。实际安装的 9.0.0 已在原完整 Web App/Main/BFF 中联合验证三类原请求的冷恢复、实际选用提交及进程重启后的原键重放；生成和查询仅验证 stage 与 hydrate，完整在线 S0、Native/打包版及真实个人钱包/定价仍未验收。依据[参考结论](./short-drama-workbench-reference.md)及[已验证的插件调用链](./incremental-extension-progress.md)。正式界面仍沿用 CrewON 的[设计约定](../.codex/skills/crewon-design-reference/SKILL.md)。
 
 页面预览包含项目列表、项目概览和概念图详情，可体验需求修订、概念图新版本、模拟提交/查询/选用及记录弹窗。数据仅保存在当前页面内存，明确标注演示，不调用外部服务，不替代下文的实际项目闭环。现有首页、聊天与团队入口保持原行为。
 
@@ -115,16 +115,20 @@ S0 的需求上限建议为 8KiB，标题 160 字符，生成描述沿现有 2,0
 
 ## 插件与宿主边界
 
-短剧工作台的业务标识拟为 `crewon.short-drama`，承载项目、阶段成果、资产关系及可信视图。Krea2 的执行标识仍为 `crewon.comfyui-krea2`，承载现有生成配置、工具和 operation。首期按静态宿主装配建立这个明确映射，不增加运行时插件依赖解析器；业务入口与实际调用插件分别授权，不能以打开项目代替生成权限。
+用户已明确不为各工作流另建独立插件包。`crewon.short-drama` 统一承载工作台 UI、阶段指导、工作流模板和 Node 执行入口。新 12.0.0 包先集成 T01 Krea2 生图和 T04 角色三视图，以冻结的配置预设选择工作流；原项目 UI 与 CSS 保持不变。角色、视频、配音等后续适配器继续在这个短剧插件内按阶段增加。
 
-| 层                     | 新增职责                               | 继续复用                                                    |
-| ---------------------- | -------------------------------------- | ----------------------------------------------------------- |
-| Domain                 | 项目、需求/概念图修订、依赖与选用规则  | 原不可变插件和运行身份                                      |
-| Application            | 当前身份的项目读写、生成准入、结果关联 | 原插件 readiness、任务授权、原 operation 与 Run 读取        |
-| Store                  | 项目修订、业务关联及事务约束           | 原 Run/消息/history/插件绑定的事务配方与两数据库后端        |
-| Control / BFF / Client | 有界项目命令及读取投影                 | 原 session、Origin、CSRF、幂等与错误分类                    |
-| Worker                 | 明确阶段的有界指导和输出检查           | 原 AgentVersion / ToolBroker / Krea2 适配器，不重编核心循环 |
-| UI                     | 已安装模块入口、项目/概念图视图        | 原会话导航、审批、任务状态与 SSE 恢复                       |
+同包并不合并权限：宿主按完整包摘要批准 UI 来源和 Node 执行目标，生成、查询、读取、选用继续分别授权。Node 加载不要求 UI 专用服务，UI 的可选服务声明仍需经过明确装配才可使用。预设和 baseUrl 在配置修订中保存，原 Run 恢复使用原配置和原实现。
+
+既有 `crewon.comfyui-krea2` 1.0.0 和 Short 11.0.0 作为历史安装保留；原未知任务、回执和恢复记录不换身份、不重新提交。旧 Krea 结果仍按原绑定显示；新 Short 自映射不会取得主动查询旧 Krea 的权限，历史查询需保留原目标批准。图片适配器通过显式插件 ID、版本和两个实现摘要区分旧 Krea 与新 Short，旧三字段批准始终只指旧 Krea。
+
+| 层                     | 新增职责                               | 继续复用                                                        |
+| ---------------------- | -------------------------------------- | --------------------------------------------------------------- |
+| Domain                 | 项目、需求/概念图修订、依赖与选用规则  | 原不可变插件和运行身份                                          |
+| Application            | 当前身份的项目读写、生成准入、结果关联 | 原插件 readiness、任务授权、原 operation 与 Run 读取            |
+| Store                  | 项目修订、业务关联及事务约束           | 原 Run/消息/history/插件绑定的事务配方与两数据库后端            |
+| Control / BFF / Client | 有界项目命令及读取投影                 | 原 session、Origin、CSRF、幂等与错误分类                        |
+| Worker                 | 明确阶段的有界指导和输出检查           | 原 AgentVersion / ToolBroker / 外部 I/O，工作流留在短剧插件内部 |
+| UI                     | 已安装模块入口、项目/概念图视图        | 原会话导航、审批、任务状态与 SSE 恢复                           |
 
 项目生成命令由 Control 解析业务归属，再使用同一插件任务准入用例；存储层使用受控业务关联的原子提交配方。不能采用“先调用任务 API、再补项目 ID”的两个独立写入。一般插件任务请求的未知字段校验保持不变，不给现有 DTO 偷加未定义的 projectId。该[内部扩展](./project-generation-link.md)、公开 Control/Host 生成动作及业务到执行插件的明确映射已接通，仍需逐项完成完整 S0 验收。
 

@@ -216,3 +216,101 @@ test("approval capture refuses accessors without invoking them and bounded overs
     ),
   );
 });
+
+test("legacy result identity retains its exact three-field serialized approval", () => {
+  const parsed = parseDesktopProjectHistoryConfiguration(valid, options);
+  assert.equal(
+    JSON.stringify(parsed.resultSelections!.identities),
+    JSON.stringify(valid.resultSelections.identities),
+  );
+  assert.equal(
+    Object.hasOwn(parsed.resultSelections!.identities[0]!, "pluginId"),
+    false,
+  );
+});
+
+test("explicit Short and Krea identities with the same version and digests remain separate", () => {
+  const identity = valid.resultSelections.identities[0]!;
+  const identities = [
+    { pluginId: "crewon.short-drama", ...identity },
+    { pluginId: "crewon.comfyui-krea2", ...identity },
+  ];
+  const parsed = parseDesktopProjectHistoryConfiguration(
+    {
+      ...valid,
+      resultSelections: { ...valid.resultSelections, identities },
+    },
+    options,
+  );
+  assert.deepEqual(parsed.resultSelections!.identities, identities);
+  assert.ok(Object.isFrozen(parsed.resultSelections!.identities[0]));
+});
+
+test("legacy and explicit Krea duplicate approval is rejected after normalization", () => {
+  const identity = valid.resultSelections.identities[0]!;
+  for (const identities of [
+    [identity, { ...identity, pluginId: "crewon.comfyui-krea2" }],
+    [{ pluginId: "crewon.comfyui-krea2", ...identity }, identity],
+    [
+      { pluginId: "crewon.short-drama", ...identity },
+      { ...identity, pluginId: "crewon.short-drama" },
+    ],
+  ])
+    assert.throws(
+      () =>
+        parseDesktopProjectHistoryConfiguration(
+          {
+            ...valid,
+            resultSelections: { ...valid.resultSelections, identities },
+          },
+          options,
+        ),
+      { code: "desktop_project_history_configuration_invalid" },
+    );
+});
+
+test("result identities cannot name arbitrary plugins or explicitly undefined identities", () => {
+  for (const pluginId of [
+    "other.provider",
+    "",
+    "CREWON.SHORT-DRAMA",
+    null,
+    undefined,
+    1,
+  ])
+    assert.throws(
+      () =>
+        parseDesktopProjectHistoryConfiguration(
+          {
+            ...valid,
+            resultSelections: {
+              ...valid.resultSelections,
+              identities: [
+                { ...valid.resultSelections.identities[0], pluginId },
+              ],
+            },
+          },
+          options,
+        ),
+      { code: "desktop_project_history_configuration_invalid" },
+    );
+  let reads = 0;
+  const identity = { ...valid.resultSelections.identities[0] };
+  Object.defineProperty(identity, "pluginId", {
+    enumerable: true,
+    get() {
+      reads++;
+      return "crewon.short-drama";
+    },
+  });
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        ...valid,
+        resultSelections: { ...valid.resultSelections, identities: [identity] },
+      },
+      options,
+    ),
+  );
+  assert.equal(reads, 0);
+});

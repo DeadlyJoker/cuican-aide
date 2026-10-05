@@ -4,11 +4,46 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
+import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "11.0.0";
-if (version.length > 64 || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(version))
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "12.0.0";
+if (
+  version.length > 64 ||
+  !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
+  BigInt(version.split(".")[0]) <= 11n
+)
   throw new Error("example_version_invalid");
+const reviewedWorkflows = [
+  {
+    file: "krea2-portrait.api.json",
+    sha256: "fee684ddcda82366507eb4a10f2aec4b682fa2cfa772866b59a057a9a07790bb",
+    nodeCount: 11,
+    options: {
+      outputNodeId: "29",
+      prompt: { nodeId: "51", input: "text" },
+      outputPrefix: { nodeId: "29", input: "filename_prefix" },
+    },
+  },
+  {
+    file: "krea2-character-three-view.api.json",
+    sha256: "46d489340f58c69ea86afe17db0f0e21c789d321050c929426211fa88b9fddbb",
+    nodeCount: 16,
+    options: {
+      outputNodeId: "29",
+      prompt: { nodeId: "121", input: "prompt" },
+      outputPrefix: { nodeId: "29", input: "filename_prefix" },
+    },
+  },
+];
+for (const workflow of reviewedWorkflows) {
+  const bytes = await readFile(join(root, "src/templates", workflow.file));
+  if (createHash("sha256").update(bytes).digest("hex") !== workflow.sha256)
+    throw new Error("example_workflow_source_changed");
+  const graph = validateComfyApiGraph(JSON.parse(bytes), workflow.options);
+  if (Object.keys(graph).length !== workflow.nodeCount)
+    throw new Error("example_workflow_nodes_changed");
+}
 const output = join(root, "dist", version);
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -34,6 +69,36 @@ for (const input of Object.keys(result.metafile.inputs)) {
 for (const file of Object.values(result.metafile.outputs))
   if (file.imports.some((item) => item.external))
     throw new Error("example_unbundled_dependency");
+
+const nodeResult = await build({
+  absWorkingDir: root,
+  entryPoints: [join(root, "src/node.ts")],
+  outfile: join(output, "node.mjs"),
+  bundle: true,
+  format: "esm",
+  platform: "node",
+  target: "node24",
+  metafile: true,
+});
+for (const input of Object.keys(nodeResult.metafile.inputs)) {
+  const path = relative(root, resolve(root, input));
+  if (path === ".." || path.startsWith("../"))
+    throw new Error("example_host_source_dependency");
+}
+for (const file of Object.values(nodeResult.metafile.outputs))
+  if (
+    file.imports.some((item) => item.external && !item.path.startsWith("node:"))
+  )
+    throw new Error("example_unbundled_dependency");
+const business = JSON.parse(
+  await readFile(join(root, "business.json"), "utf8"),
+);
+business.version = version;
+await writeFile(join(output, "business.json"), JSON.stringify(business));
+await cp(
+  join(root, "src/templates/provenance.json"),
+  join(output, "workflow-provenance.json"),
+);
 
 const sdkDirectory = dirname(
   fileURLToPath(import.meta.resolve("@crewon/plugin-sdk/ui")),
@@ -77,13 +142,13 @@ const descriptor = parsePluginPackageDescriptor({
   description:
     "独立短剧工作台：保存项目与概念输入，通过宿主生成、查询原任务并选用确切图片，保留原请求恢复记录。",
   entrypoints: {
-    node: null,
+    node: "node.mjs",
     ui: { path: "ui.mjs", mode: "trustedModule" },
   },
-  businessManifestPath: null,
+  businessManifestPath: "business.json",
   requires: [
-    { service: "crewon.creative-projects", apiVersion: "1", optional: false },
-    { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: false },
+    { service: "crewon.creative-projects", apiVersion: "1", optional: true },
+    { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },
     {
       service: "crewon.project-generation-reads",
       apiVersion: "1",
@@ -105,8 +170,10 @@ const descriptor = parsePluginPackageDescriptor({
       apiVersion: "1",
       optional: true,
     },
+    { service: "crewon.tasks", apiVersion: "2", optional: true },
+    { service: "crewon.execution", apiVersion: "1", optional: true },
   ],
-  provides: [],
+  provides: [{ service: "crewon.short-drama", apiVersion: "1" }],
   contributions: [
     { id: "workbench", kind: "module", slot: "main.content", title: "AI 短剧" },
   ],

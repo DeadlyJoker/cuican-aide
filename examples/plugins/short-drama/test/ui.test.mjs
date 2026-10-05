@@ -12,7 +12,7 @@ import {
   settle,
 } from "./ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "11.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "12.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -21,17 +21,17 @@ const { default: definition } = await import(
 );
 after(async () => browser.happyDOM.close());
 
-test("ships a UI-only, self-contained package and the original locally scoped stylesheet", async () => {
+test("ships a unified self-contained UI and execution package with the original locally scoped stylesheet", async () => {
   const descriptor = JSON.parse(
     await readFile(join(packageDirectory, "crewon.plugin.json"), "utf8"),
   );
   assert.equal(descriptor.pluginId, "crewon.short-drama");
   assert.equal(definition.pluginId, descriptor.pluginId);
-  assert.equal(descriptor.entrypoints.node, null);
-  assert.equal(descriptor.businessManifestPath, null);
+  assert.equal(descriptor.entrypoints.node, "node.mjs");
+  assert.equal(descriptor.businessManifestPath, "business.json");
   assert.deepEqual(descriptor.requires, [
-    { service: "crewon.creative-projects", apiVersion: "1", optional: false },
-    { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: false },
+    { service: "crewon.creative-projects", apiVersion: "1", optional: true },
+    { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },
     {
       service: "crewon.project-generation-reads",
       apiVersion: "1",
@@ -53,8 +53,12 @@ test("ships a UI-only, self-contained package and the original locally scoped st
       apiVersion: "1",
       optional: true,
     },
+    { service: "crewon.tasks", apiVersion: "2", optional: true },
+    { service: "crewon.execution", apiVersion: "1", optional: true },
   ]);
-  assert.deepEqual(descriptor.provides, []);
+  assert.deepEqual(descriptor.provides, [
+    { service: "crewon.short-drama", apiVersion: "1" },
+  ]);
   assert.deepEqual(descriptor.contributions, [
     { id: "workbench", kind: "module", slot: "main.content", title: "AI 短剧" },
   ]);

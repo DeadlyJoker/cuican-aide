@@ -58,8 +58,15 @@ export function composeDesktopLocalComfyProjectExecutionApproval(
       `sha256:${createHash("sha256").update(value).digest("hex")}`,
   });
   parseExtensionExecutionTarget(input.target.entry.configuredTarget);
+  const unifiedShortDrama =
+    target.pluginId === "crewon.short-drama" &&
+    source.pluginId === target.pluginId &&
+    source.publisherId === target.publisherId &&
+    source.version === target.version &&
+    input.source.packageDigest === identity.packageDigest &&
+    input.source.contributionId === input.target.contributionId;
   if (
-    target.pluginId !== "crewon.comfyui-krea2" ||
+    (target.pluginId !== "crewon.comfyui-krea2" && !unifiedShortDrama) ||
     target.entrypoints.node === null ||
     target.businessManifestPath === null ||
     identity.pluginId !== target.pluginId ||
@@ -167,6 +174,7 @@ export function composeDesktopLocalComfyProjectExecutionApproval(
     ],
   });
   const identitySelection = {
+    ...(unifiedShortDrama ? { pluginId: "crewon.short-drama" as const } : {}),
     pluginVersion: identity.version,
     manifestDigest: identity.manifestDigest,
     implementationDigest: identity.implementationDigest,
@@ -217,7 +225,11 @@ export function composeDesktopLocalComfyProjectExecutionApproval(
             : []
           ).filter(
             (entry) =>
-              JSON.stringify(entry) !== JSON.stringify(identitySelection),
+              (entry.pluginId ?? "crewon.comfyui-krea2") !==
+                identity.pluginId ||
+              entry.pluginVersion !== identity.version ||
+              entry.manifestDigest !== identity.manifestDigest ||
+              entry.implementationDigest !== identity.implementationDigest,
           ),
           identitySelection,
         ],

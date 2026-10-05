@@ -31,6 +31,8 @@ export type DesktopProjectHistoryConfiguration = Readonly<{
     version: "crewon.project-concept-selection.v1";
     adapter: "comfyui-krea2";
     identities: readonly Readonly<{
+      /** Omitted on existing approvals, which remain scoped to Krea. */
+      pluginId?: "crewon.comfyui-krea2" | "crewon.short-drama";
       pluginVersion: string;
       manifestDigest: string;
       implementationDigest: string;
@@ -188,12 +190,15 @@ function selections(
     invalid();
   const identities = dense(value.identities, { minimum: 1, maximum: 32 }).map(
     (input) => {
-      const identity = pluginControlRecord(input, [
-        "pluginVersion",
-        "manifestDigest",
-        "implementationDigest",
-      ]);
+      const identity = pluginControlRecord(
+        input,
+        ["pluginId", "pluginVersion", "manifestDigest", "implementationDigest"],
+        { optional: ["pluginId"] },
+      );
       if (
+        (Object.hasOwn(identity, "pluginId") &&
+          identity.pluginId !== "crewon.comfyui-krea2" &&
+          identity.pluginId !== "crewon.short-drama") ||
         typeof identity.pluginVersion !== "string" ||
         identity.pluginVersion.length > 32 ||
         !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(
@@ -202,6 +207,13 @@ function selections(
       )
         invalid();
       return Object.freeze({
+        ...(Object.hasOwn(identity, "pluginId")
+          ? {
+              pluginId: identity.pluginId as
+                | "crewon.comfyui-krea2"
+                | "crewon.short-drama",
+            }
+          : {}),
         pluginVersion: pluginControlVersion(identity.pluginVersion),
         manifestDigest: parsePluginControlPackageDigest(
           identity.manifestDigest,
@@ -213,8 +225,16 @@ function selections(
     },
   );
   if (
-    new Set(identities.map((identity) => JSON.stringify(identity))).size !==
-    identities.length
+    new Set(
+      identities.map((identity) =>
+        JSON.stringify({
+          pluginId: identity.pluginId ?? "crewon.comfyui-krea2",
+          pluginVersion: identity.pluginVersion,
+          manifestDigest: identity.manifestDigest,
+          implementationDigest: identity.implementationDigest,
+        }),
+      ),
+    ).size !== identities.length
   )
     invalid();
   return Object.freeze({
