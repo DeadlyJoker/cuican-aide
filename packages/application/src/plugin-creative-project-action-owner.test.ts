@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -774,3 +776,91 @@ test("independent task and metadata owners coexist; neither recognizes the other
   assert.equal(metadata.projects.store.commits.length, 1);
   assert.equal(tasks.tasks.state.commits.length, 1);
 });
+
+test("explicitly published dual-entry packages can declare the UI project service optional; pure UI packages still cannot", async (t) => {
+  const requires = [
+    { service: "crewon.creative-projects", apiVersion: "1", optional: true },
+  ];
+  const dual = creativeActionDescriptor({
+    businessManifestPath: "business.json",
+    files: [
+      ...creativeActionDescriptor().files,
+      { path: "business.json", byteLength: 1, sha256: "a".repeat(64) },
+    ],
+    requires,
+  });
+  const f = creativeActionFixture({ descriptor: dual });
+  t.after(() => f.owner.close());
+  assert.deepEqual(
+    await f.invoke("listProjects", { query: { state: "active", limit: 20 } }),
+    { projects: [], nextCursor: null },
+  );
+  const created = await f.invoke(
+    "createProject",
+    creativeCreateInput("optional-dual-once"),
+  );
+  assert.equal(
+    (created as unknown as CreativeProjectBriefMutationResponse).disposition,
+    "committed",
+  );
+  assert.throws(
+    () => capturePluginUiInvocationCommitAuthority({ ...f.state.context! }),
+    code("plugin_ui_invocation_unavailable"),
+  );
+  for (const descriptor of [
+    creativeActionDescriptor({
+      entrypoints: { node: null, ui: dual.entrypoints.ui },
+      requires,
+    }),
+    creativeActionDescriptor({ requires }),
+  ]) {
+    const denied = creativeActionFixture({ descriptor });
+    t.after(() => denied.owner.close());
+    await assert.rejects(
+      denied.invoke("listProjects", { query: { state: "active", limit: 20 } }),
+      code("plugin_creative_project_publication_unavailable"),
+    );
+    assert.equal(denied.projects.store.commits.length, 0);
+  }
+});
+test(
+  "the frozen final Short16 descriptor reaches original project metadata through an actual registered invocation",
+  { skip: process.env.CREWON_TEST_SHORT16_PACKAGE === undefined },
+  async (t) => {
+    const path = process.env.CREWON_TEST_SHORT16_PACKAGE!;
+    const descriptor = parsePluginPackageDescriptor(
+      JSON.parse(await readFile(path + "/crewon.plugin.json", "utf8")),
+    );
+    assert.equal(descriptor.pluginId, "crewon.short-drama");
+    assert.equal(descriptor.version, "16.0.0");
+    assert.equal(
+      descriptor.requires.find((r) => r.service === "crewon.creative-projects")
+        ?.optional,
+      true,
+    );
+    assert.notEqual(descriptor.entrypoints.node, null);
+    assert.notEqual(descriptor.businessManifestPath, null);
+    const f = creativeActionFixture({
+      descriptor,
+      packageDigest:
+        "sha256:536aed576dd9ac7080ce030e819a8de8d0ca773139ca0e180f05591161608b8c",
+    });
+    t.after(() => f.owner.close());
+    assert.deepEqual(
+      await f.invoke("listProjects", { query: { state: "active", limit: 20 } }),
+      { projects: [], nextCursor: null },
+    );
+    const created = await f.invoke(
+      "createProject",
+      creativeCreateInput("actual-short16-ui-project"),
+    );
+    assert.equal(
+      (created as unknown as CreativeProjectBriefMutationResponse).disposition,
+      "committed",
+    );
+    assert.equal(
+      f.state.context?.package.packageDigest,
+      "sha256:536aed576dd9ac7080ce030e819a8de8d0ca773139ca0e180f05591161608b8c",
+    );
+  },
+);

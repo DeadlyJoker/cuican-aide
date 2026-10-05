@@ -304,6 +304,9 @@ export class PluginCreativeProjectActionOwner {
     const contribution = descriptor.contributions.find(
       (item) => item.id === context.lease.contributionId,
     );
+    const dualEntry =
+      descriptor.entrypoints.node !== null &&
+      descriptor.businessManifestPath !== null;
     if (
       !this.#publications.some(
         (item) =>
@@ -317,7 +320,7 @@ export class PluginCreativeProjectActionOwner {
         (item) =>
           item.service === CREWON_CREATIVE_PROJECTS_SERVICE &&
           item.apiVersion === CREWON_CREATIVE_PROJECTS_API_VERSION &&
-          item.optional === false,
+          (!item.optional || dualEntry),
       )
     )
       throw new ApplicationError(

@@ -10,6 +10,10 @@ import type {
   PluginUiActionContext,
   PluginUiActionPort,
 } from "./plugin-ui-ports.ts";
+import {
+  parseInstalledPluginPackage,
+  parsePluginSelection,
+} from "@crewon/domain";
 import { createFixture } from "./creative-project.test-support.ts";
 import {
   uiFixture,
@@ -21,10 +25,30 @@ import {
 } from "./plugin-ui.test-support.ts";
 
 /** Real Application/PluginUI services over explicit memory fixtures; not a SQL or producer proof. */
-export function creativeActionFixture() {
+export function creativeActionFixture(
+  options: Readonly<{
+    descriptor?: PluginPackageDescriptor;
+    packageDigest?: string;
+  }> = {},
+) {
   const projects = createFixture();
   const ui = uiFixture();
-  ui.state.descriptor = creativeActionDescriptor();
+  ui.state.descriptor = options.descriptor ?? creativeActionDescriptor();
+  const descriptor = ui.state.descriptor;
+  const packageDigest = options.packageDigest ?? uiTestDigest;
+  ui.state.package = parseInstalledPluginPackage({
+    ...ui.state.package,
+    pluginId: descriptor.pluginId,
+    publisherId: descriptor.publisherId,
+    version: descriptor.version,
+    packageDigest,
+  });
+  ui.state.selection = parsePluginSelection({
+    ...ui.state.selection,
+    pluginId: descriptor.pluginId,
+    publisherId: descriptor.publisherId,
+    selectedPackageDigest: packageDigest,
+  });
   const state = {
     hostAllowed: true,
     hostCalls: 0,
@@ -46,8 +70,8 @@ export function creativeActionFixture() {
   };
   const publications = [
     {
-      pluginId: uiTestDescriptor.pluginId,
-      packageDigest: uiTestDigest,
+      pluginId: descriptor.pluginId,
+      packageDigest,
       contributionId: "workbench",
     },
   ];
@@ -105,7 +129,12 @@ export function creativeActionFixture() {
       },
     },
   });
-  const open = () => service.openMount(uiTestActor, uiTestMountCommand);
+  const open = () =>
+    service.openMount(uiTestActor, {
+      ...uiTestMountCommand,
+      pluginId: descriptor.pluginId,
+      expectedPackageDigest: packageDigest,
+    });
   const invoke = async (method: string, input: unknown) => {
     const lease = await open();
     return service.invoke(uiTestActor, {
