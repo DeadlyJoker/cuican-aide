@@ -7,7 +7,7 @@ import {
   metadataService,
   persistentProps,
 } from "./persistent-ui.test-support.mjs";
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.1";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(`../dist/${version}/`, import.meta.url).pathname;

@@ -43,7 +43,9 @@ const settle = async () => {
 export function assetControllerFixture() {
   const calls = [],
     receipts = new Map(),
-    revisions = new Map();
+    revisions = new Map(),
+    references = new Map(),
+    acknowledged = new Map();
   let record = null,
     asset = null,
     nextLoss = null,
@@ -51,13 +53,15 @@ export function assetControllerFixture() {
     physical = false;
   let failCurrent = false,
     failRecovery = false,
-    acknowledges = 0;
+    acknowledges = 0,
+    intentCounter = 0;
   const view = () =>
     asset && {
       asset: copy(asset),
       selectedContentRevision:
         revisions.get(asset.selectedContentRevision) ?? null,
-      selectedReferenceRevision: null,
+      selectedReferenceRevision:
+        references.get(asset.selectedReferenceRevision) ?? null,
       dependencyState: asset.selectedContentRevision ? "current" : "unselected",
       staleReasons: [],
       referenceState: "unselected",
@@ -76,6 +80,12 @@ export function assetControllerFixture() {
       calls.push(["getRevision", copy(input)]);
       return { contentRevision: copy(revisions.get(input.contentRevision)) };
     },
+    async getReferenceRevision(input) {
+      calls.push(["getReferenceRevision", copy(input)]);
+      return {
+        referenceRevision: copy(references.get(input.referenceRevision)),
+      };
+    },
     async listRevisions(input) {
       calls.push(["listRevisions", copy(input)]);
       return {
@@ -85,7 +95,10 @@ export function assetControllerFixture() {
     },
     async listReferences(input) {
       calls.push(["listReferences", copy(input)]);
-      return { references: [], nextReferenceRevision: null };
+      return {
+        references: [...references.values()].map(copy),
+        nextReferenceRevision: null,
+      };
     },
   };
   for (const method of [
@@ -102,7 +115,7 @@ export function assetControllerFixture() {
         input: copy(input),
       };
       record ??= {
-        intentId: "asset-intent-1",
+        intentId: `asset-intent-${++intentCounter}`,
         revision: 1,
         phase: "pending",
         request: original,
@@ -129,7 +142,8 @@ export function assetControllerFixture() {
           ...copy(receipts.get(input.idempotencyKey)),
           disposition: "replayed",
         };
-      let revision = null;
+      let revision = null,
+        reference = null;
       if (method === "saveCandidate") {
         const n = revisions.size + 1;
         revision = {
@@ -170,6 +184,47 @@ export function assetControllerFixture() {
           ...(method === "setLocked" ? { locked: input.request.locked } : {}),
         };
       }
+      if (method === "selectRevision")
+        revision = revisions.get(input.request.contentRevision);
+      if (method === "saveReferenceCandidate") {
+        const n = references.size + 1,
+          original = revisions.get(input.request.assetContentRevision);
+        reference = {
+          projectId: input.projectId,
+          assetId: asset.assetId,
+          referenceRevision: n,
+          assetContentRevision: original.contentRevision,
+          assetContentDigest: original.contentDigest,
+          source: {
+            conceptAssetId: input.request.conceptAssetId,
+            conceptAssetRevision: 1,
+            selectionRevision: input.request.selectionRevision,
+            conceptSelectionDigest: digest,
+            resultLinkDigest: digest,
+            generationLinkDigest: digest,
+            sourceRunId: "original-image-run",
+            sourceBindingDigest: digest,
+            pluginId: "crewon.short-drama",
+            pluginVersion: "19.0.0",
+            packageDigest: digest,
+            configurationRevision: 1,
+            configurationDigest: digest,
+            operationId: "original-image-operation",
+            operationRevision: 2,
+            operationDigest: digest,
+            rawResultDigest: digest,
+            resultIndex: 0,
+          },
+          createdAt: at,
+          contentDigest: digest,
+        };
+        references.set(n, reference);
+        asset.latestReferenceRevision = n;
+      }
+      if (method === "selectReference") {
+        reference = references.get(input.request.referenceRevision);
+        asset.selectedReferenceRevision = reference.referenceRevision;
+      }
       const kind = {
         saveCandidate: "save-content",
         selectRevision: "select-content",
@@ -182,7 +237,7 @@ export function assetControllerFixture() {
         disposition: "committed",
         asset: copy(asset),
         contentRevision: revision,
-        referenceRevision: null,
+        referenceRevision: copy(reference),
       };
       receipts.set(input.idempotencyKey, copy(result));
       record = {
@@ -194,7 +249,7 @@ export function assetControllerFixture() {
           assetId: asset.assetId,
           assetRevision: asset.revision,
           contentRevision: revision?.contentRevision ?? null,
-          referenceRevision: null,
+          referenceRevision: reference?.referenceRevision ?? null,
           requestDigest: digest,
           resultDigest: digest,
         },
@@ -214,15 +269,25 @@ export function assetControllerFixture() {
     },
     async acknowledge(input) {
       calls.push(["acknowledge", copy(input)]);
+      if (acknowledged.has(input.intentId)) {
+        assert.equal(
+          input.expectedRevision,
+          acknowledged.get(input.intentId).revision - 1,
+        );
+        return { ...acknowledged.get(input.intentId), disposition: "replayed" };
+      }
       assert.equal(record.phase, "accepted");
+      assert.equal(input.intentId, record.intentId);
       assert.equal(input.expectedRevision, record.revision);
       record = null;
       acknowledges++;
-      return {
+      const result = {
         disposition: "acknowledged",
         intentId: input.intentId,
         revision: input.expectedRevision + 1,
       };
+      acknowledged.set(input.intentId, result);
+      return result;
     },
   };
   const create = () =>
@@ -249,6 +314,13 @@ export function assetControllerFixture() {
     calls,
     revisions,
     receipts,
+    references,
+    mutateRecord(change) {
+      record = change(copy(record));
+    },
+    editAsset(change) {
+      asset = change(copy(asset));
+    },
     get record() {
       return record;
     },

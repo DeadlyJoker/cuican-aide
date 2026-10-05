@@ -25,6 +25,7 @@ export class ProjectAssetRecoveryController {
   #epoch = 0;
   #read: AbortController | null = null;
   #write: AbortController | null = null;
+  #unconfirmedAck: ProjectAssetRecoveryIntent | null = null;
   constructor(input: {
     client: PluginProjectAssetRecoveryClient;
     physicalWritesPending(): boolean;
@@ -80,8 +81,10 @@ export class ProjectAssetRecoveryController {
         { signal: request.signal },
       );
       if (!this.#current(request, epoch)) return null;
-      this.#publish({ phase: "ready", intent });
-      return intent;
+      // An empty read does not turn a lost ACK response into a confirmed ACK.
+      const retained = intent ?? this.#unconfirmedAck;
+      this.#publish({ phase: "ready", intent: retained });
+      return retained;
     } catch {
       if (this.#current(request, epoch))
         this.#publish({
@@ -101,7 +104,14 @@ export class ProjectAssetRecoveryController {
       epoch === this.#epoch
     );
   }
-  async acknowledge(expected: ProjectAssetRecoveryIntent) {
+  async acknowledge(
+    expected: ProjectAssetRecoveryIntent,
+    guard?: Readonly<{
+      isCurrent(): boolean;
+      signal: AbortSignal;
+      onAcknowledged?(): void;
+    }>,
+  ): Promise<boolean> {
     const actual = this.#snapshot.intent;
     if (
       !actual ||
@@ -111,29 +121,46 @@ export class ProjectAssetRecoveryController {
       this.#snapshot.phase !== "ready" ||
       this.#snapshot.acknowledging ||
       !this.#ready ||
-      this.#physicalWritesPending()
+      this.#physicalWritesPending() ||
+      (guard !== undefined && (!guard.isCurrent() || guard.signal.aborted))
     )
-      return;
+      return false;
     const request = new AbortController(),
       epoch = this.#epoch;
+    const withdraw = () => request.abort();
+    guard?.signal.addEventListener("abort", withdraw, { once: true });
+    const current = () =>
+      this.#current(request, epoch) && (guard?.isCurrent() ?? true);
     this.#write = request;
+    this.#unconfirmedAck = structuredClone(actual);
     this.#publish({ acknowledging: true, error: null });
     try {
       await this.#client.acknowledge(
         { intentId: actual.intentId, expectedRevision: actual.revision },
         { signal: request.signal },
       );
-      if (!this.#current(request, epoch)) return;
+      if (!current()) return false;
+      this.#unconfirmedAck = null;
+      guard?.onAcknowledged?.();
       this.#publish({ acknowledging: false });
       await this.check();
+      return (
+        current() &&
+        this.#snapshot.phase === "ready" &&
+        this.#snapshot.intent === null
+      );
     } catch {
-      if (this.#current(request, epoch))
+      if (current())
         this.#publish({
           acknowledging: false,
           error: "核对结果尚未确认，请重新读取原保存记录。",
         });
+      return false;
     } finally {
+      guard?.signal.removeEventListener("abort", withdraw);
       if (this.#write === request) this.#write = null;
+      if (!this.#disposed && this.#ready && epoch === this.#epoch)
+        this.#publish({ acknowledging: false });
     }
   }
   dispose() {

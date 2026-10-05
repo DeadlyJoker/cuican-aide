@@ -13,7 +13,7 @@ import {
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(
-    `../dist/${process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.0"}/`,
+    `../dist/${process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "19.0.1"}/`,
     import.meta.url,
   ).pathname;
 const { default: definition } = await import(
@@ -84,21 +84,22 @@ test("the actual installed module exposes manual shared assets inside the origin
     );
     assert.equal(
       f.container.querySelector('[aria-label="资产名称"]').disabled,
-      true,
-      "confirmed journal waits for actual receipt review",
-    );
-    await f.click(f.button("打开原项目并核对"));
-    await f.click(f.button("已核对这次保存"));
-    assert.equal(
-      f.container.querySelector('[aria-label="资产名称"]').disabled,
       false,
+      "this instance reviewed the exact successful receipt and immutable version before ACK",
     );
+    assert.equal(assets.acknowledges, 1);
+    assert.ok(!f.container.textContent.includes("已核对这次保存"));
     assert.equal(
       assets.calls.filter(([method]) => method === "saveCandidate").length,
       1,
     );
     await f.click(f.button("选用这版设定"));
     assert.equal(assets.asset.selectedContentRevision, 1);
+    assert.equal(assets.acknowledges, 2);
+    await f.click(f.button("锁定选用版本"));
+    assert.equal(assets.asset.locked, true);
+    assert.equal(assets.acknowledges, 3);
+    assert.ok(!f.container.textContent.includes("已核对这次保存"));
     assert.ok(!f.container.textContent.includes("视频已生成"));
   } finally {
     await f.dispose();

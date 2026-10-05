@@ -1,9 +1,20 @@
 import type { PluginProjectTextUiClient } from "../project-texts-ui-service";
+import { parsePublicProjectAssetContent } from "../project-assets-codec.mjs";
 import type {
   AssetDraft,
   AssetSnapshot,
   AssetScriptSource,
 } from "./ProjectAssetController.types";
+
+export function validAssetDraft(draft: AssetDraft | null): boolean {
+  if (!draft) return false;
+  try {
+    parsePublicProjectAssetContent(draft.content);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export function assetDraftFromRevision(
   content: NonNullable<AssetSnapshot["content"]>,

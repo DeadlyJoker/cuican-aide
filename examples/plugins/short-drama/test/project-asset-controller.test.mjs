@@ -32,7 +32,7 @@ test("the new asset phase stays dormant until explicit exploration; activation a
   }
 });
 
-test("manual candidates preserve content and do not select; confirmed records require actual presentation before ACK", async () => {
+test("warm candidates preserve content and do not select; exact immutable review clears the journal", async () => {
   const f = fixture(),
     c = await open(f);
   try {
@@ -40,9 +40,12 @@ test("manual candidates preserve content and do not select; confirmed records re
     await c.save();
     assert.equal(f.asset.selectedContentRevision, null);
     assert.deepEqual(f.revisions.get(1).content, content);
+    assert.equal(f.acknowledges, 1);
+    assert.equal(f.record, null);
+    assert.ok(
+      f.calls.some(([m, q]) => m === "getRevision" && q.contentRevision === 1),
+    );
     await c.acknowledgeRecovery();
-    assert.equal(f.acknowledges, 0);
-    await acknowledge(c);
     assert.equal(f.acknowledges, 1);
     assert.equal(c.canEdit, true);
     await c.selectContent();

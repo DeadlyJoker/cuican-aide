@@ -2,7 +2,7 @@
   "schemaVersion": "crewon.extension-manifest.v1",
   "hostApi": "crewon.extensions.v1",
   "pluginId": "crewon.short-drama",
-  "version": "19.0.0",
+  "version": "19.0.1",
   "title": "AI 短剧工作台",
   "description": "短剧插件内的项目、文字成果、角色场景道具和Krea2能力共用同一版本；Agent按当前阶段执行，用户可以手动探索、编辑、采用和锁定。",
   "task": {

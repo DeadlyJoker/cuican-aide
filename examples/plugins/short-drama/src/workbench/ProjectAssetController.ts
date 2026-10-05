@@ -3,22 +3,27 @@ import type {
   ProjectAssetContent,
   ProjectAssetKind,
 } from "../project-assets-service";
-import { parsePublicProjectAssetContent } from "../project-assets-codec.mjs";
 import type { PluginProjectTextUiClient } from "../project-texts-ui-service";
 import type { ProjectDetails } from "./creative-project-controller";
 import {
   initialAssetSnapshot,
   type AssetSnapshot,
-  type AssetDraft,
   type AssetIntent,
-  type AssetScriptSource,
 } from "./ProjectAssetController.types";
 import { ProjectAssetRecoveryController } from "./ProjectAssetRecoveryController";
-import { dispatchAssetMutation } from "./ProjectAssetMutationDispatch";
+import { readAssetVersion } from "./ProjectAssetRead";
+import {
+  assertAssetWarmRecord,
+  assetViewWithoutRegression,
+  executeWarmAssetMutation,
+  mergeAssetHeads,
+  type AssetWarmReceipt,
+} from "./ProjectAssetWarmConfirmation";
 import type { PluginProjectAssetRecoveryClient } from "../project-asset-recovery-service";
 import {
   assetDraftFromRevision,
   readAssetDraftScript,
+  validAssetDraft,
 } from "./ProjectAssetDraftSources";
 export type {
   AssetSnapshot,
@@ -45,6 +50,8 @@ export class ProjectAssetController {
   #epoch = 0;
   #read: AbortController | null = null;
   #write: AbortController | null = null;
+  #warmReceipt: AssetWarmReceipt | null = null;
+  #warmAckReceipt: AssetWarmReceipt | null = null;
   constructor(input: {
     client: PluginProjectAssetUiClient;
     texts: Pick<
@@ -61,7 +68,17 @@ export class ProjectAssetController {
       client: input.recovery,
       physicalWritesPending: input.physicalWritesPending,
     });
-    this.recovery.subscribe(() => this.#publish({}));
+    this.recovery.subscribe(() => {
+      if (
+        this.#warmReceipt &&
+        this.#warmAckReceipt === this.#warmReceipt &&
+        this.recovery.permitsNewWrite
+      ) {
+        this.#warmReceipt = null;
+        this.#warmAckReceipt = null;
+        this.#publish({ error: null });
+      } else this.#publish({});
+    });
   }
   readonly subscribe = (listener: () => void) => {
     this.#listeners.add(listener);
@@ -89,19 +106,17 @@ export class ProjectAssetController {
   get canEdit() {
     return (
       this.canRead &&
+      this.#warmReceipt === null &&
       this.#project?.project.state === "active" &&
       this.recovery.permitsNewWrite
     );
   }
   get canSave() {
-    if (!this.canEdit || !this.#snapshot.draft || !this.#snapshot.dirty)
-      return false;
-    try {
-      parsePublicProjectAssetContent(this.#snapshot.draft.content);
-      return true;
-    } catch {
-      return false;
-    }
+    return (
+      this.canEdit &&
+      this.#snapshot.dirty &&
+      validAssetDraft(this.#snapshot.draft)
+    );
   }
   #publish(patch: Partial<AssetSnapshot>) {
     if (this.#disposed) return;
@@ -208,16 +223,16 @@ export class ProjectAssetController {
         { signal: request.signal },
       );
       if (!this.#current(epoch, projectId, request)) return;
-      const assets = new Map(
-        (more ? this.#snapshot.assets : []).map((asset) => [
-          asset.assetId,
-          asset,
-        ]),
-      );
-      for (const asset of page.assets) assets.set(asset.assetId, asset);
       this.#publish({
         phase: "ready",
-        assets: [...assets.values()],
+        assets: mergeAssetHeads(
+          more
+            ? this.#snapshot.assets
+            : this.#snapshot.assets.filter((asset) =>
+                page.assets.some((next) => next.assetId === asset.assetId),
+              ),
+          page.assets,
+        ),
         nextAssetId: page.nextAssetId,
       });
       if (this.#snapshot.view)
@@ -385,32 +400,23 @@ export class ProjectAssetController {
     projectId: string,
     revision?: number,
   ) {
-    const { view } = await this.#client.getAsset(
-      { projectId, assetId },
-      { signal: request.signal },
-    );
-    if (!this.#current(epoch, projectId, request)) return;
-    if (!view) throw new Error("project_asset_missing");
-    let content = this.#snapshot.content;
-    if (replaceDraft) {
-      const result = await this.#client.getRevision(
-        {
-          projectId,
-          assetId,
-          contentRevision: revision ?? view.asset.latestContentRevision,
-        },
-        { signal: request.signal },
-      );
-      if (!this.#current(epoch, projectId, request)) return;
-      content = result.contentRevision;
-    }
-    const assets = new Map(
-      this.#snapshot.assets.map((asset) => [asset.assetId, asset]),
-    );
-    assets.set(view.asset.assetId, view.asset);
+    const read = await readAssetVersion({
+      client: this.#client,
+      projectId,
+      assetId,
+      revision: replaceDraft ? (revision ?? "latest") : null,
+      signal: request.signal,
+      isCurrent: () => this.#current(epoch, projectId, request),
+    });
+    if (!read || !this.#current(epoch, projectId, request)) return;
+    const { view, content } = read;
     this.#publish({
-      view,
-      assets: [...assets.values()],
+      view: assetViewWithoutRegression(
+        this.#snapshot.view,
+        this.#snapshot.assets,
+        view,
+      ),
+      assets: mergeAssetHeads(this.#snapshot.assets, [view.asset]),
       ...(replaceDraft && content
         ? {
             content,
@@ -631,56 +637,29 @@ export class ProjectAssetController {
       projectId = intent.input.projectId;
     this.#write = request;
     this.#publish({ saving: true, error: null, notice: null });
+    const isCurrent = () => this.#current(epoch, projectId, request);
     try {
-      const result = await dispatchAssetMutation(
-        this.#client,
+      await executeWarmAssetMutation({
         intent,
-        request.signal,
-      );
-      if (!this.#current(epoch, projectId, request)) return;
-      const assets = new Map(
-        this.#snapshot.assets.map((asset) => [asset.assetId, asset]),
-      );
-      assets.set(result.asset.assetId, result.asset);
-      this.#publish({
-        pending: null,
-        saving: false,
-        assets: [...assets.values()],
-        notice: "资产版本已保存。",
-        ...(intent.action === "crewon.project-assets.v1.saveCandidate" &&
-        result.contentRevision
-          ? {
-              content: result.contentRevision,
-              draft: assetDraftFromRevision(result.contentRevision),
-              dirty: false,
-            }
-          : {}),
+        client: this.#client,
+        recovery: this.recovery,
+        signal: request.signal,
+        isCurrent,
+        snapshot: this.getSnapshot,
+        publish: (patch) => {
+          if (isCurrent()) this.#publish(patch);
+        },
+        confirmed: (receipt) => {
+          this.#warmReceipt = receipt;
+          this.#warmAckReceipt = null;
+        },
+        acknowledged: (receipt) => {
+          this.#warmAckReceipt = receipt;
+        },
       });
-      try {
-        await this.#readAsset(
-          result.asset.assetId,
-          false,
-          request,
-          epoch,
-          projectId,
-        );
-      } catch {
-        if (this.#current(epoch, projectId, request))
-          this.#publish({
-            error: "保存已确认，当前选用暂时无法读取，请刷新。",
-          });
-      }
-    } catch {
-      if (this.#current(epoch, projectId, request))
-        this.#publish({
-          saving: false,
-          error: "尚未确认保存结果。重试会使用同一项目、版本和原请求。",
-        });
     } finally {
       if (this.#write === request) this.#write = null;
-      if (this.#current(epoch, projectId, request))
-        this.#publish({ saving: false });
-      if (this.#current(epoch, projectId, request)) await this.recovery.check();
+      if (isCurrent()) this.#publish({ saving: false });
     }
   }
   /** Restore exact journal input for review. Only an explicit retry executes a pending request. */
@@ -786,7 +765,28 @@ export class ProjectAssetController {
       this.#snapshot.saving
     )
       return;
-    await this.recovery.acknowledge(record);
+    if (this.#warmReceipt) {
+      try {
+        assertAssetWarmRecord(this.#warmReceipt, record);
+      } catch {
+        return;
+      }
+    }
+    const epoch = this.#epoch,
+      projectId = record.request.input.projectId,
+      request = this.#beginRead();
+    if (
+      await this.recovery.acknowledge(record, {
+        signal: request.signal,
+        isCurrent: () => this.#current(epoch, projectId, request),
+        onAcknowledged: () => {
+          this.#warmAckReceipt = this.#warmReceipt;
+        },
+      })
+    )
+      this.#warmReceipt = null;
+    if (this.#read === request) this.#read = null;
+    this.#publish({});
   }
   dispose() {
     if (this.#disposed) return;
