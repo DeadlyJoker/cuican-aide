@@ -1,7 +1,4 @@
-import {
-  assertCreativeProjectRunMutationCommand,
-  bindProjectRunCommitPolicy,
-} from "./creative-project-run-command.ts";
+import { prepareProjectTextMutationAuthority } from "./project-text-mutation-authority.ts";
 import {
   checkedProjectTextArtifactPage,
   checkedProjectTextRevisionPage,
@@ -72,12 +69,9 @@ import type {
   ProjectTextStore,
 } from "./project-text-store-port.ts";
 import {
-  captureProjectTextCommitAuthority,
-  parseProjectTextMutationCommand,
   projectTextInput,
   projectTextInvalidStore,
   projectTextLimit,
-  projectTextMutationReceipt,
   projectTextStored,
   projectTextUseCase,
 } from "./project-text-application-support.ts";
@@ -297,25 +291,16 @@ export class ProjectTextApplicationService {
     options?: CreativeProjectCommitOptions,
   ): Promise<ProjectTextMutationResult> {
     return projectTextUseCase(async () => {
-      let authority = captureProjectTextCommitAuthority(options);
-      const actor = creativeActor(actorInput);
-      const command = parseProjectTextMutationCommand(kind, input);
-      assertCreativeProjectRunMutationCommand(
-        authority,
-        actor,
-        kind,
-        command,
-        this.#dependencies.digester,
-      );
-      authority = bindProjectRunCommitPolicy(authority, () =>
-        this.#authorize(actor, "creativeProject:write", command.projectId),
-      );
-      const receipt = projectTextMutationReceipt(
-        actor,
-        kind,
-        command,
-        this.#dependencies.digester,
-      );
+      const { actor, command, receipt, authority } =
+        prepareProjectTextMutationAuthority(
+          actorInput,
+          kind,
+          input,
+          options,
+          this.#dependencies.digester,
+          (current, projectId) =>
+            this.#authorize(current, "creativeProject:write", projectId),
+        );
       await this.#authorize(actor, "creativeProject:write", command.projectId);
       await assertCreativeProjectCommitCurrent(authority);
       const previous = await this.#dependencies.store.loadMutationReceipt(
@@ -351,6 +336,9 @@ export class ProjectTextApplicationService {
             await assertCreativeProjectCommitCurrent(authority);
           },
           assertActive: () => assertCreativeProjectCommitActive(authority),
+          ...(authority?.textUiTransaction === undefined
+            ? {}
+            : { textUiTransaction: authority.textUiTransaction }),
           ...(authority?.runTransaction === undefined
             ? {}
             : { runTransaction: authority.runTransaction }),

@@ -7,6 +7,7 @@ import {
   type PluginUiJsonValue,
 } from "./plugin-ui-json.ts";
 import { parsePluginUiLease, type PluginUiLease } from "./plugin-ui-lease.ts";
+import { pluginUiActionInputMaximumBytes } from "./plugin-project-texts-ui-service.ts";
 import {
   copyPluginControlJson,
   pluginControlArray,
@@ -262,7 +263,9 @@ export function parseInvokePluginUiActionRequest(
   const value = pluginControlRecord(input, ["action", "input"]);
   return Object.freeze({
     action: pluginControlOpaqueId(value.action),
-    input: parsePluginUiJsonValue(value.input, { maxBytes: 24 * 1024 }),
+    input: parsePluginUiJsonValue(value.input, {
+      maxBytes: pluginUiActionInputMaximumBytes(value.action),
+    }),
   });
 }
 export function parsePluginPackageView(input: unknown): PluginPackageView {

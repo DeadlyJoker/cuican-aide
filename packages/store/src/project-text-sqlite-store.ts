@@ -1,3 +1,8 @@
+import {
+  projectTextUiCommitQualification,
+  assertSqliteProjectTextUiCommit,
+  type ProjectTextUiQualification,
+} from "./project-text-ui-commit-support.ts";
 import { assertSqliteProjectRunCommit } from "./creative-project-run-commit-sqlite.ts";
 import {
   projectRunCommitQualification,
@@ -146,17 +151,27 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       identity.kind,
       identity.receipt,
     );
-    if (q === undefined) return this.#receipt(identity);
+    const textUi = projectTextUiCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
+    if (q === undefined && textUi === undefined) return this.#receipt(identity);
     await assertCreativeProjectCommitCurrent(authority);
     if (authority?.runTransaction !== undefined)
       await authority.runTransaction.assertCurrent();
+    if (authority?.textUiTransaction !== undefined)
+      await authority.textUiTransaction.assertCurrent();
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, q);
+        assertSqliteProjectTextUiCommit(this.#database, textUi);
         return this.#receipt(identity);
       },
       authority,
       q,
+      textUi,
     );
   }
   async commitCandidate(
@@ -190,14 +205,24 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       prepared.kind,
       prepared.receipt,
     );
+    const textUi = projectTextUiCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+      prepared,
+    );
     // Never retain SQLite's writer lock across an asynchronous external authority check.
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);
     if (authority?.runTransaction !== undefined)
       await authority.runTransaction.assertCurrent();
+    if (authority?.textUiTransaction !== undefined)
+      await authority.textUiTransaction.assertCurrent();
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, runQualification);
+        assertSqliteProjectTextUiCommit(this.#database, textUi);
         const identity = textIdentity({
           actor: prepared.actor,
           kind: prepared.kind,
@@ -323,6 +348,7 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       },
       authority,
       runQualification,
+      textUi,
     );
   }
   #project(owner: CreativeProjectOwnerScope, id: string) {
@@ -416,12 +442,14 @@ export class SqliteProjectTextStore implements ProjectTextStore {
     body: () => T,
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
+    textUi?: ProjectTextUiQualification,
   ): T {
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const result = body();
       assertSqliteProjectRunCommit(this.#database, runQualification);
+      assertSqliteProjectTextUiCommit(this.#database, textUi);
       this.#active(authority);
       this.#database.exec("COMMIT");
       return result;

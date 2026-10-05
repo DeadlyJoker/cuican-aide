@@ -61,6 +61,8 @@ export function parseDesktopProjectExecutionConfiguration(
   try {
     const metadataFields = [
       "pluginUi",
+      "textArtifacts",
+      "textUi",
       "generationReads",
       "generationReadUi",
       "resultSelections",

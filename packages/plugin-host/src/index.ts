@@ -80,6 +80,7 @@ export {
 export {
   capturePluginUiHostServiceAvailability,
   appendProjectGenerationSelectionUiServiceAvailability,
+  appendProjectTextUiServiceAvailability,
   appendPluginUiRecoveryServiceAvailability,
   assertUiOnlyServiceDeclarations,
   assertPluginUiHostServiceAvailability,

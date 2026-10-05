@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./runtime": "./src/runtime.ts",
     "./plugins": "./src/plugins.ts",
-    "./project-tools": "./src/plugin-project-tools-service.ts"
+    "./project-tools": "./src/plugin-project-tools-service.ts",
+    "./project-texts-ui": "./src/project-texts-ui.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

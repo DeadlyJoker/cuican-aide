@@ -1,3 +1,4 @@
+import { pluginUiActionInputMaximumBytes } from "@crewon/contracts/project-texts-ui";
 import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
@@ -209,7 +210,9 @@ export function uiInvokeCommand(input: unknown) {
     return Object.freeze({
       mountRef: uiRef(value.mountRef),
       action: pluginInstallationOpaqueId(value.action),
-      input: parsePluginUiJsonValue(value.input, { maxBytes: 24 * 1024 }),
+      input: parsePluginUiJsonValue(value.input, {
+        maxBytes: pluginUiActionInputMaximumBytes(value.action),
+      }),
     });
   });
 }

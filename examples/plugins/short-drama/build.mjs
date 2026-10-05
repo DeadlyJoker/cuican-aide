@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "13.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "14.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -23,6 +23,21 @@ if (
   "7ac394c7ee01a4eb93278b1c23e5b57da36e36c0e043a66a21abd7b02be6f73a"
 )
   throw new Error("example_project_tools_protocol_drift");
+// Independently published text UI protocol and its self-contained strict public codec.
+for (const [file, expected] of [
+  [
+    "project-texts-ui-service.ts",
+    "6ca41f221e55f7c3aae6e541f2ebef34655df5e58a2ce45396519029e2c108c4",
+  ],
+  [
+    "project-texts-ui-codec.mjs",
+    "3b99d94c5d0cc7f5104be5135a03122b248212720e8ded4f9242139d3d5b9765",
+  ],
+]) {
+  const bytes = await readFile(join(root, "src", file));
+  if (createHash("sha256").update(bytes).digest("hex") !== expected)
+    throw new Error("example_project_texts_ui_protocol_drift");
+}
 const reviewedWorkflows = [
   {
     file: "krea2-portrait.api.json",
@@ -149,13 +164,14 @@ const descriptor = parsePluginPackageDescriptor({
   version,
   title: "AI 短剧工作台",
   description:
-    "独立短剧工作台：保存项目与概念输入，通过宿主生成、查询原任务并选用确切图片，保留原请求恢复记录。",
+    "短剧工作台：项目需求、大纲与分集剧本共用版本记录；集成概念生图、原任务查询、图片选用与 Agent 项目工具。",
   entrypoints: {
     node: "node.mjs",
     ui: { path: "ui.mjs", mode: "trustedModule" },
   },
   businessManifestPath: "business.json",
   requires: [
+    { service: "crewon.project-texts", apiVersion: "1", optional: true },
     { service: "crewon.creative-projects", apiVersion: "1", optional: true },
     { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },
     {

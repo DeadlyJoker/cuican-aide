@@ -58,7 +58,9 @@ export function textEqual(a: unknown, b: unknown): void {
 export function textAuthority(
   options: CreativeProjectCommitOptions | undefined,
 ) {
-  const authority = captureCreativeProjectCommitAuthority(options);
+  const authority = captureCreativeProjectCommitAuthority(options, {
+    allowTextUiTransaction: true,
+  });
   if (authority?.transaction !== undefined)
     projectTextFailure("project_text_transaction_authority_unsupported");
   return authority;

@@ -1,3 +1,4 @@
+import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
 import type {
   CreativeProject,
   ProjectBriefRevision,
@@ -81,6 +82,8 @@ export type CreativeProjectCommitAuthority = Readonly<{
   transaction?: CreativeProjectPluginCommitTransactionAuthority;
   /** Distinct actual Run/Tool qualification; mutually exclusive with the legacy UI transaction. */
   runTransaction?: CreativeProjectRunCommitTransactionAuthority;
+  /** Text-only manual UI qualification; mutually exclusive with both other protocols. */
+  textUiTransaction?: ProjectTextUiCommitTransactionAuthority;
 }>;
 
 export type CreativeProjectCommitOptions = Readonly<{

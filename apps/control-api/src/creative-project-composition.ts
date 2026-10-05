@@ -16,6 +16,10 @@ import {
   UuidV7ApplicationIdGenerator,
 } from "./standalone-adapters.ts";
 import {
+  captureProjectTextPluginUiConfig,
+  type ProjectTextPluginUiConfig,
+} from "./project-text-plugin-ui-composition.ts";
+import {
   captureCreativeProjectPluginUiConfig,
   type CreativeProjectPluginUiConfig,
 } from "./creative-project-plugin-ui-composition.ts";
@@ -49,6 +53,7 @@ import {
 export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
+  textUi?: ProjectTextPluginUiConfig;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -61,6 +66,7 @@ export type CreativeProjectCompositionConfig = Readonly<{
 export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
   readonly textService?: ProjectTextApplicationService;
+  readonly textUi?: ProjectTextPluginUiConfig;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
   readonly generationReads?: ProjectGenerationReadConfiguration;
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
@@ -108,6 +114,7 @@ export function captureCreativeProjectCompositionConfig(
       (key) =>
         key !== "authorization" &&
         key !== "textArtifacts" &&
+        key !== "textUi" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
@@ -145,6 +152,15 @@ export function captureCreativeProjectCompositionConfig(
       throw new Error("project_text_configuration_invalid");
     textArtifacts = Object.freeze({ version: "crewon.project-text.v1" });
   }
+  const textUiField = fields.textUi;
+  if (
+    textUiField !== undefined &&
+    (!Object.hasOwn(textUiField, "value") || !textUiField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const textUi = captureProjectTextPluginUiConfig(textUiField?.value);
+  if (textUi !== undefined && textArtifacts === undefined)
+    throw new Error("project_text_plugin_ui_store_required");
   const pluginUiField = fields.pluginUi;
   if (
     pluginUiField !== undefined &&
@@ -230,6 +246,7 @@ export function captureCreativeProjectCompositionConfig(
           authorize: descriptor.value.bind(port),
         }),
         ...(textArtifacts === undefined ? {} : { textArtifacts }),
+        ...(textUi === undefined ? {} : { textUi }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
@@ -330,6 +347,9 @@ export async function prepareCreativeProjects(
         );
   return {
     ...(textService === undefined ? {} : { textService }),
+    ...(configuration.textUi === undefined
+      ? {}
+      : { textUi: configuration.textUi }),
     ...(configuration.selectionUi === undefined
       ? {}
       : { selectionUi: configuration.selectionUi }),

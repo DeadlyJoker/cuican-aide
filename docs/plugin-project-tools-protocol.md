@@ -36,4 +36,4 @@ Workflow manifest现有有界Schema不支持null或union，模型入参中省略
 
 ## 范围与下一步
 
-这一阶段把“想法→需求→大纲→单集剧本”的真实Agent业务工具接到现有Worker与共享存储。后续工作是项目Agent对话启动/发现、工作台文字编辑与采用入口、持久阶段计划/委托，以及资产、分镜、视频、声音和合成的真实工作流。已有方案见 `short-drama-agent-workflow-design.md`；本协议不把尚未接通的阶段宣称为可执行。
+这一阶段把“想法→需求→大纲→单集剧本”的真实Agent业务工具接到现有Worker与共享存储。Short14 已通过独立[插件 UI 文本协议](./plugin-project-texts-ui-protocol.md)接通工作台文字编辑、历史、采用与锁定。后续工作是未完成文本请求冷恢复、项目 Agent 对话启动/发现、持久阶段计划/委托，以及资产、分镜、视频、声音和合成的真实工作流。已有方案见 `short-drama-agent-workflow-design.md`；本协议不把尚未接通的阶段宣称为可执行。

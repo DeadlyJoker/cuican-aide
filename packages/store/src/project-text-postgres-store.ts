@@ -1,4 +1,9 @@
 import {
+  projectTextUiCommitQualification,
+  assertPostgresProjectTextUiCommit,
+  type ProjectTextUiQualification,
+} from "./project-text-ui-commit-support.ts";
+import {
   assertPostgresProjectRunCommit,
   assertPostgresProjectRunLease,
 } from "./creative-project-run-commit-postgres.ts";
@@ -161,14 +166,23 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       identity.kind,
       identity.receipt,
     );
-    if (q === undefined) return this.#receipt(this.#pool, identity);
+    const textUi = projectTextUiCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
+    if (q === undefined && textUi === undefined)
+      return this.#receipt(this.#pool, identity);
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(client, this.#schema, q);
+        await assertPostgresProjectTextUiCommit(client, this.#schema, textUi);
         return this.#receipt(client, identity);
       },
       authority,
       q,
+      textUi,
     );
   }
   async commitCandidate(
@@ -202,6 +216,13 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       prepared.kind,
       prepared.receipt,
     );
+    const textUi = projectTextUiCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+      prepared,
+    );
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(
@@ -209,6 +230,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           this.#schema,
           runQualification,
         );
+        await assertPostgresProjectTextUiCommit(client, this.#schema, textUi);
         const identity = textIdentity({
           actor: prepared.actor,
           kind: prepared.kind,
@@ -361,6 +383,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       },
       authority,
       runQualification,
+      textUi,
     );
   }
   async #project(
@@ -481,6 +504,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     body: (client: PoolClient) => Promise<T>,
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
+    textUi?: ProjectTextUiQualification,
   ): Promise<T> {
     this.#assertOpen();
     if (authority !== undefined)
@@ -490,7 +514,9 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     try {
       await client.query("BEGIN");
       const result = await body(client);
-      if (authority?.runTransaction !== undefined)
+      if (authority?.textUiTransaction !== undefined)
+        await authority.textUiTransaction.assertCurrent();
+      else if (authority?.runTransaction !== undefined)
         await authority.runTransaction.assertCurrent();
       else if (authority !== undefined)
         await assertCreativeProjectCommitCurrent(authority);

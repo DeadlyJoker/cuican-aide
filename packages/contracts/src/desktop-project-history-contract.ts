@@ -25,6 +25,8 @@ type Publications = Readonly<{
 export type DesktopProjectHistoryConfiguration = Readonly<{
   version: typeof DESKTOP_PROJECT_HISTORY_VERSION;
   pluginUi?: Publications;
+  textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
+  textUi?: Publications;
   generationReads?: Readonly<{ version: "crewon.project-generation-read.v1" }>;
   generationReadUi?: Publications;
   resultSelections?: Readonly<{
@@ -60,6 +62,8 @@ export function parseDesktopProjectHistoryConfiguration(
     const fields = [
       "version",
       "pluginUi",
+      "textArtifacts",
+      "textUi",
       "generationReads",
       "generationReadUi",
       "resultSelections",
@@ -100,6 +104,17 @@ export function parseDesktopProjectHistoryConfiguration(
       };
     });
     const pluginUi = publications(value.pluginUi, approved);
+    const textUi = publications(value.textUi, approved);
+    const textArtifacts =
+      value.textArtifacts === undefined
+        ? undefined
+        : pluginControlRecord(value.textArtifacts, ["version"]);
+    if (
+      (textArtifacts !== undefined &&
+        textArtifacts.version !== "crewon.project-text.v1") ||
+      (textUi !== undefined && textArtifacts === undefined)
+    )
+      invalid();
     const generationReadUi = publications(value.generationReadUi, approved);
     const selectionUi = publications(value.selectionUi, approved);
     const generationReads =
@@ -122,6 +137,14 @@ export function parseDesktopProjectHistoryConfiguration(
     return Object.freeze({
       version: DESKTOP_PROJECT_HISTORY_VERSION,
       ...(pluginUi === undefined ? {} : { pluginUi }),
+      ...(textArtifacts === undefined
+        ? {}
+        : {
+            textArtifacts: Object.freeze({
+              version: "crewon.project-text.v1" as const,
+            }),
+          }),
+      ...(textUi === undefined ? {} : { textUi }),
       ...(generationReads === undefined
         ? {}
         : {

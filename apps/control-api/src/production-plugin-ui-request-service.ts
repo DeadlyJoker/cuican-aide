@@ -1,6 +1,7 @@
 import { ApplicationError } from "@crewon/application";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
+import type { ProductionProjectTextPluginRuntime } from "./production-project-text-plugin-runtime.ts";
 import type { ProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
 import type { ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import type { ProductionProjectGenerationSelectionPluginRuntime } from "./production-project-generation-selection-plugin-runtime.ts";
@@ -22,6 +23,7 @@ export function createProductionPluginUiRequestService({
   ui,
   taskRequests,
   projects,
+  texts,
   projectGenerations,
   projectGenerationReads,
   projectQueries,
@@ -31,6 +33,7 @@ export function createProductionPluginUiRequestService({
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
   projects?: ProductionCreativeProjectPluginRuntime;
+  texts?: ProductionProjectTextPluginRuntime;
   projectGenerations?: InstalledPluginProjectGenerationOwner;
   projectGenerationReads?: ProductionProjectGenerationReadPluginRuntime;
   projectQueries?: InstalledPluginProjectQueryOwner;
@@ -52,6 +55,7 @@ export function createProductionPluginUiRequestService({
   if (
     taskRequests === undefined &&
     projects === undefined &&
+    texts === undefined &&
     projectGenerations === undefined &&
     projectQueries === undefined &&
     projectGenerationReads === undefined &&
@@ -71,6 +75,23 @@ export function createProductionPluginUiRequestService({
           : recovery.run(request, actor, signal, () =>
               ui.invoke(actor, command),
             );
+      if (
+        command.action === "crewon.project-texts" ||
+        command.action.startsWith("crewon.project-texts.")
+      ) {
+        if (texts === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        return texts.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
       if (
         command.action === "crewon.project-generation-selections" ||
         command.action.startsWith("crewon.project-generation-selections.")

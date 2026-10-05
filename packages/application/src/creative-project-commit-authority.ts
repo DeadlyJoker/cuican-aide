@@ -1,3 +1,4 @@
+import { captureProjectTextUiCommitTransaction } from "./project-text-ui-commit-authority.ts";
 import type {
   CreativeProjectCommitAuthority,
   CreativeProjectCommitOptions,
@@ -48,6 +49,9 @@ export function captureCreativeProjectTransactionAuthority(
 /** Capture trusted callbacks without evaluating accessors or mutating the caller. */
 export function captureCreativeProjectCommitAuthority(
   options: CreativeProjectCommitOptions | undefined,
+  mode: Readonly<{ allowTextUiTransaction: boolean }> = {
+    allowTextUiTransaction: false,
+  },
 ): CreativeProjectCommitAuthority | undefined {
   if (options === undefined) return undefined;
   const fields = ownDataFields(options, ["authority"]);
@@ -58,17 +62,32 @@ export function captureCreativeProjectCommitAuthority(
     "assertActive",
     "transaction",
     "runTransaction",
+    "textUiTransaction",
   ]);
   if (
     typeof methods.assertCurrent !== "function" ||
     typeof methods.assertActive !== "function"
   )
     invalid();
-  if (methods.transaction !== undefined && methods.runTransaction !== undefined)
+  if (
+    [
+      methods.transaction,
+      methods.runTransaction,
+      methods.textUiTransaction,
+    ].filter((value) => value !== undefined).length > 1 ||
+    (methods.textUiTransaction !== undefined && !mode.allowTextUiTransaction)
+  )
     invalid();
   return Object.freeze({
     assertCurrent: methods.assertCurrent.bind(authority),
     assertActive: methods.assertActive.bind(authority),
+    ...(methods.textUiTransaction === undefined
+      ? {}
+      : {
+          textUiTransaction: captureProjectTextUiCommitTransaction(
+            methods.textUiTransaction,
+          ),
+        }),
     ...(methods.transaction === undefined
       ? {}
       : { transaction: capturePluginTransaction(methods.transaction) }),
@@ -172,6 +191,10 @@ export async function assertCreativeProjectCommitCurrent(
 export async function assertCreativeProjectCommitTransactionCurrent(
   authority: CreativeProjectCommitAuthority | undefined,
 ): Promise<void> {
+  if (authority?.textUiTransaction !== undefined) {
+    await authority.textUiTransaction.assertCurrent();
+    return;
+  }
   if (authority?.runTransaction !== undefined) {
     const result: unknown = await authority.runTransaction.assertCurrent();
     if (result !== undefined)

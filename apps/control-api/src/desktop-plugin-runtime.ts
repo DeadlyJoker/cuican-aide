@@ -6,7 +6,6 @@ import {
   type ContentDigester,
   type PluginUiPackageContext,
   type PluginUiPackagePort,
-  type PluginUiActionPort,
 } from "@crewon/application";
 import {
   LocalPluginUiPackageReader,
@@ -48,7 +47,11 @@ import {
   desktopProjectUiPublications,
   type DesktopProjectHistoryPluginRuntime,
 } from "./desktop-project-history-plugin-runtime.ts";
-import { combineSelectionCommittedMetadata } from "./project-generation-selection-plugin-ui-owner.ts";
+import {
+  createProjectTextPluginUiRuntime,
+  type ProjectTextPluginUiRuntime,
+} from "./project-text-plugin-ui-composition.ts";
+import { composeDesktopProjectPluginUiDispatch } from "./desktop-project-plugin-ui-dispatch.ts";
 import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 import {
   assertDesktopPluginUiRecoveryConfiguration,
@@ -216,6 +219,7 @@ export async function createDesktopPluginRuntime(
   let configurationRuntime: DesktopPluginConfigurationRuntime | null = null;
   let activation: DesktopInstalledPluginActivationOwner | null = null;
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
+  let textUi: ProjectTextPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
   let taskRuntime:
@@ -234,6 +238,7 @@ export async function createDesktopPluginRuntime(
         taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
         history?.hostUiServices ??
+        textUi?.hostUiServices ??
         projectUi?.hostUiServices
       )?.isAvailable(input) ?? false,
   });
@@ -243,6 +248,28 @@ export async function createDesktopPluginRuntime(
       projectUi = createCreativeProjectPluginUiRuntime({
         projects: dependencies.creativeProjects!.service,
         configuration: projectConfiguration,
+        authorization: {
+          authorize: async (context) => {
+            authority.assertScope(context.actor, context.scope);
+            if (installation === null)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            installation.assertProfileOwnership(context.actor);
+          },
+        },
+      });
+    }
+    if (dependencies.creativeProjects?.textUi !== undefined) {
+      if (dependencies.creativeProjects.textService === undefined)
+        throw new Error("project_text_plugin_ui_service_required");
+      textUi = createProjectTextPluginUiRuntime({
+        configuration: dependencies.creativeProjects.textUi,
+        texts: dependencies.creativeProjects.textService,
+        ...(projectUi === undefined
+          ? {}
+          : { hostUiServices: projectUi.hostUiServices }),
         authorization: {
           authorize: async (context) => {
             authority.assertScope(context.actor, context.scope);
@@ -295,7 +322,8 @@ export async function createDesktopPluginRuntime(
       },
       dependencies,
     );
-    if (projectExecution) await prepareTasks(projectUi?.hostUiServices);
+    if (projectExecution)
+      await prepareTasks(textUi?.hostUiServices ?? projectUi?.hostUiServices);
     history = await createDesktopProjectHistoryPluginRuntime({
       projects: dependencies.creativeProjects,
       configuration,
@@ -308,22 +336,29 @@ export async function createDesktopPluginRuntime(
         : {}),
       ...((taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
+        textUi?.hostUiServices ??
         projectUi?.hostUiServices) === undefined
         ? {}
         : {
             fallback:
               taskRuntime?.core.projectQueries?.hostUiServices ??
               taskRuntime?.core.projectGenerations?.hostUiServices ??
+              textUi?.hostUiServices ??
               projectUi!.hostUiServices,
           }),
     });
     if (!projectExecution)
-      await prepareTasks(history?.hostUiServices ?? projectUi?.hostUiServices);
+      await prepareTasks(
+        history?.hostUiServices ??
+          textUi?.hostUiServices ??
+          projectUi?.hostUiServices,
+      );
     const businessHostUiServices =
       (projectExecution ? history?.hostUiServices : undefined) ??
       taskRuntime?.core.projectQueries?.hostUiServices ??
       taskRuntime?.core.projectGenerations?.hostUiServices ??
       history?.hostUiServices ??
+      textUi?.hostUiServices ??
       projectUi?.hostUiServices;
     recovery = await prepareDesktopPluginUiRecovery({
       configuration: recoveryConfiguration,
@@ -411,23 +446,12 @@ export async function createDesktopPluginRuntime(
       verify: (context) => reader(context).verify(context),
       readAsset: (context) => reader(context).readAsset(context),
     };
-    const businessActions: PluginUiActionPort = {
-      invoke: async (context) => {
-        if (projectUi?.owner.supportsAction(context.action))
-          return projectUi.owner.actions.invoke(context);
-        if (history?.selectionRuntime?.owner.supportsAction(context.action))
-          return history.selectionRuntime.owner.actions.invoke(context);
-        if (
-          taskRuntime?.core.projectGenerations?.supportsAction(context.action)
-        )
-          return taskRuntime.core.projectGenerations.actions.invoke(context);
-        if (taskRuntime?.core.projectQueries?.supportsAction(context.action))
-          return taskRuntime.core.projectQueries.actions.invoke(context);
-        if (taskRuntime !== undefined)
-          return taskRuntime.core.owner.actions.invoke(context);
-        throw new ApplicationError("conflict", "plugin_ui_actions_unavailable");
-      },
-    };
+    const dispatch = composeDesktopProjectPluginUiDispatch({
+      projects: projectUi,
+      texts: textUi,
+      history,
+      tasks: taskRuntime?.core,
+    });
     const application = new PluginUiApplicationService({
       store: ledger,
       clock: dependencies.clock,
@@ -452,22 +476,15 @@ export async function createDesktopPluginRuntime(
       },
       ids: { nextId: () => randomBytes(32).toString("base64url") },
       actions:
-        history?.readRuntime?.owner.actions(businessActions) ?? businessActions,
+        history?.readRuntime?.owner.actions(dispatch.actions) ??
+        dispatch.actions,
       ...(recovery === undefined ? {} : { recovery: recovery.service }),
       ...(taskRuntime === undefined
         ? {}
         : { committedTasks: taskRuntime.core.owner.committedTasks }),
-      ...(history?.selectionRuntime === undefined && projectUi === undefined
+      ...(dispatch.committedMetadata === undefined
         ? {}
-        : {
-            committedMetadata:
-              history?.selectionRuntime === undefined
-                ? projectUi!.owner.committedMetadata
-                : combineSelectionCommittedMetadata(
-                    history.selectionRuntime.owner.committedMetadata,
-                    projectUi?.owner.committedMetadata,
-                  ),
-          }),
+        : { committedMetadata: dispatch.committedMetadata }),
     });
     const call = <T>(work: () => Promise<T>): Promise<T> => {
       available();
@@ -506,6 +523,7 @@ export async function createDesktopPluginRuntime(
       invoke: (...args) => {
         if (
           projectUi === undefined &&
+          textUi === undefined &&
           history?.selectionRuntime === undefined &&
           taskRuntime === undefined
         )
@@ -517,7 +535,8 @@ export async function createDesktopPluginRuntime(
         void result.finally(() => physical.delete(result)).catch(() => {});
         return result;
       },
-      ...(history?.readRuntime === undefined &&
+      ...(textUi === undefined &&
+      history?.readRuntime === undefined &&
       history?.selectionRuntime === undefined &&
       recovery === undefined &&
       taskRuntime === undefined
@@ -527,6 +546,11 @@ export async function createDesktopPluginRuntime(
               available();
               const invoke = () => ui.invoke(actor, command);
               const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (
+                  command.action === "crewon.project-texts" ||
+                  command.action.startsWith("crewon.project-texts.")
+                )
+                  return invoke();
                 if (projectUi?.owner.supportsAction(command.action))
                   return invoke();
                 if (
@@ -625,6 +649,7 @@ export async function createDesktopPluginRuntime(
           () => Promise.allSettled([...physical]),
           () => recovery?.close(),
           () => projectUi?.close(),
+          () => textUi?.close(),
           () => history?.close(),
           () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
@@ -640,6 +665,7 @@ export async function createDesktopPluginRuntime(
         () => taskRuntime?.close(),
         () => recovery?.close(),
         () => projectUi?.close(),
+        () => textUi?.close(),
         () => history?.close(),
         () => configurationRuntime?.close(),
         () => activation?.close(),

@@ -40,13 +40,14 @@ export function desktopProjectUiPublications(
   projects:
     | Pick<
         PreparedCreativeProjects,
-        "pluginUi" | "generationReadUi" | "selectionUi"
+        "pluginUi" | "textUi" | "generationReadUi" | "selectionUi"
       >
     | undefined,
   approved: DesktopPluginConfiguration["publications"],
 ) {
   const grants = [
     projects?.pluginUi,
+    projects?.textUi,
     projects?.generationReadUi,
     projects?.selectionUi,
   ];

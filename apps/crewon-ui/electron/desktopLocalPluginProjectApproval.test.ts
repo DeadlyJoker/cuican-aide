@@ -195,3 +195,46 @@ it("metadata derivation rejects a foreign exact package and altered bytes before
   expect(existsSync(fresh.approvalPath)).toBe(false);
   expect(fresh.commits).toBe(0);
 });
+
+it("explicit dual-entry text UI import opts into only its own text store/publication and preserves existing execution pins", async () => {
+  const f = fixture();
+  const previous = parseDesktopPluginApproval({
+    ...f.originalApproval,
+    schemaVersion: "crewon.desktop-plugin-approval.v3",
+    projects: importProjectSettings(
+      "crewon.desktop-plugin-approval.v3",
+      f.existingSource,
+    ),
+  });
+  f.writeApproval(previous);
+  f.writeDescriptor({
+    ...f.descriptor,
+    entrypoints: { node: "node/entry.mjs", ui: f.descriptor.entrypoints.ui },
+    businessManifestPath: "business/manifest.json",
+    requires: [
+      { service: "crewon.project-texts", apiVersion: "1", optional: true },
+    ],
+  });
+  const owner = f.create();
+  const preview = await owner.previewDirectory(f.source);
+  await owner.confirmPreview(sourceConfirmation(preview, publish));
+  const saved = parseDesktopPluginApproval(f.approval());
+  if (
+    saved.schemaVersion !== "crewon.desktop-plugin-approval.v3" ||
+    previous.schemaVersion !== "crewon.desktop-plugin-approval.v3"
+  )
+    throw new Error("execution fixture required");
+  const { textArtifacts, textUi, ...original } = saved.projects;
+  expect(original).toEqual(previous.projects);
+  expect(textArtifacts).toEqual({ version: "crewon.project-text.v1" });
+  expect(textUi).toEqual({
+    publications: [
+      {
+        pluginId: preview.pluginId,
+        packageDigest: preview.packageDigest,
+        contributionId: "studio",
+      },
+    ],
+  });
+  expect(existsSync(f.marker)).toBe(false);
+});

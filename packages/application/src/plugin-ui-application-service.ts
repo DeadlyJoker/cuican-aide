@@ -4,6 +4,7 @@ import {
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type { PluginProfileScope } from "@crewon/domain";
+import { isProjectTextUiMutationAction } from "@crewon/contracts/project-texts-ui";
 import { ApplicationError } from "./application-error.ts";
 import {
   PluginUiMountBinding,
@@ -377,6 +378,11 @@ export class PluginUiApplicationService {
           usesRecovery ||
           command.action ===
             "crewon.project-generation-selections.v1.selectConceptImage"
+          ? Object.freeze({
+              assertCurrent: () => this.#transactionFence(actor, binding),
+            })
+          : undefined,
+        isProjectTextUiMutationAction(command.action)
           ? Object.freeze({
               assertCurrent: () => this.#transactionFence(actor, binding),
             })

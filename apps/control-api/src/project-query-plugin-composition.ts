@@ -17,6 +17,9 @@ export function captureProductionPluginUiOwnerConfiguration(
       ? {}
       : { ownedProjectSelectionActions: input.ownedProjectSelectionActions }),
     configuration: parseProductionPluginUiConfiguration(input.configuration),
+    ...(input.ownedProjectTextActions === undefined
+      ? {}
+      : { ownedProjectTextActions: input.ownedProjectTextActions }),
     ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     ...(actions === undefined
       ? {}

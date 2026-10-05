@@ -22,6 +22,7 @@ import {
   ModelProviderSettingsApplicationService,
   OfficeApplicationService,
   WorkflowVersionApplicationService,
+  isPluginProjectTextActionOwner,
   isPluginCreativeProjectActionOwner,
   type ArtifactStorePort,
   type AutomationAuthorizationPort,
@@ -73,12 +74,10 @@ import {
 import { isInstalledPluginTaskActionOwner } from "./installed-plugin-task-action-owner.ts";
 import { isInstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
 import { validateProductionConfig } from "./production-configuration-validation.ts";
-import { assertProjectQueryExecutionComposition } from "./project-query-plugin-configuration.ts";
 import {
   captureProductionPluginUiOwnerConfiguration,
   closeProductionProjectQueryOwner,
 } from "./project-query-plugin-composition.ts";
-import { assertProjectGenerationExecutionComposition } from "./project-generation-plugin-configuration.ts";
 import {
   parseProductionPluginInstallationConfiguration,
   type ProductionPluginInstallationConfiguration,
@@ -108,15 +107,17 @@ import {
   prepareCreativeProjects,
   type CreativeProjectCompositionConfig,
 } from "./creative-project-composition.ts";
-import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
+import { assertProductionProjectPluginUiComposition } from "./production-project-plugin-ui-configuration.ts";
+import {
+  createProductionProjectTextPluginRuntime,
+  type ProductionProjectTextPluginRuntime,
+} from "./production-project-text-plugin-runtime.ts";
 import {
   createProductionCreativeProjectPluginRuntime,
   type ProductionCreativeProjectPluginRuntime,
 } from "./production-creative-project-plugin-runtime.ts";
 import { type ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
-import { assertProjectGenerationReadPluginPublications } from "./project-generation-read-plugin-ui-composition.ts";
 import {
-  assertProductionProjectSelectionComposition,
   closeProductionProjectSelectionOwner,
   composeOwnedProjectGenerationSelectionService,
 } from "./project-generation-selection-composition.ts";
@@ -168,6 +169,7 @@ export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
   const ownedTaskActions = config.pluginUi?.ownedTaskActions;
+  const ownedProjectTextActions = config.pluginUi?.ownedProjectTextActions;
   const ownedProjectGenerationActions =
     config.pluginUi?.ownedProjectGenerationActions;
   const ownedCreativeProjectActions =
@@ -185,51 +187,7 @@ export async function createProductionPostgresControlApi(
       { ...config, creativeProjects },
       uiRecovery,
     );
-    assertCreativeProjectPluginPublications(
-      creativeProjects?.pluginUi,
-      config.pluginUi?.configuration.publications,
-    );
-    assertProjectGenerationReadPluginPublications(
-      creativeProjects?.generationReadUi,
-      config.pluginUi?.configuration.publications,
-    );
-    if (
-      creativeProjects?.generationReadUi !== undefined &&
-      ownedProjectGenerationReadActions !== undefined
-    )
-      throw new Error("project_generation_read_plugin_actions_conflict");
-    if (
-      creativeProjects?.generationReadUi !== undefined &&
-      config.pluginTasks === undefined &&
-      config.pluginConfiguration === undefined
-    )
-      throw new Error("project_generation_read_ui_reader_required");
-    if (
-      creativeProjects?.generationReads !== undefined &&
-      config.pluginTasks === undefined &&
-      config.pluginConfiguration === undefined
-    )
-      throw new Error("project_generation_read_composition_required");
-    assertProductionProjectSelectionComposition(config, creativeProjects);
-    assertProjectQueryExecutionComposition({
-      queries: creativeProjects?.pluginQueries,
-      publications: config.pluginUi?.configuration.publications,
-      taskConfiguration: config.pluginTasks,
-      uiConfiguration: config.pluginUi,
-      ownedActions: config.pluginUi?.ownedProjectQueryActions,
-    });
-    assertProjectGenerationExecutionComposition({
-      generations: creativeProjects?.pluginGenerations,
-      publications: config.pluginUi?.configuration.publications,
-      taskConfiguration: config.pluginTasks,
-      uiConfiguration: config.pluginUi,
-      ownedActions: ownedProjectGenerationActions,
-    });
-    if (
-      creativeProjects?.pluginUi !== undefined &&
-      ownedCreativeProjectActions !== undefined
-    )
-      throw new Error("creative_project_plugin_actions_conflict");
+    assertProductionProjectPluginUiComposition(config, creativeProjects);
     const pluginInstallation =
       config.pluginInstallation === undefined
         ? undefined
@@ -322,6 +280,12 @@ export async function createProductionPostgresControlApi(
       } catch (failure) {
         failures.push(failure);
       }
+    if (isPluginProjectTextActionOwner(ownedProjectTextActions))
+      try {
+        await ownedProjectTextActions.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
     try {
       await store?.close();
     } catch (failure) {
@@ -367,6 +331,7 @@ async function composeProductionControlApi(
     | ProductionPluginInstallationRuntime
     | undefined;
   let projectPluginRuntime: ProductionCreativeProjectPluginRuntime | undefined;
+  let projectTextPluginRuntime: ProductionProjectTextPluginRuntime | undefined;
   let projectGenerationReadPluginRuntime:
     | ProductionProjectGenerationReadPluginRuntime
     | undefined;
@@ -398,6 +363,15 @@ async function composeProductionControlApi(
         ui: config.pluginUi.configuration,
         identity: config.identity as ProductionControlApiIdentity,
       });
+    if (creativeProjects?.textUi !== undefined && config.pluginUi !== undefined)
+      projectTextPluginRuntime = createProductionProjectTextPluginRuntime({
+        projects: creativeProjects,
+        ui: config.pluginUi.configuration,
+        identity: config.identity as ProductionControlApiIdentity,
+        ...(projectPluginRuntime === undefined
+          ? {}
+          : { hostUiServices: projectPluginRuntime.hostUiServices }),
+      });
     if (
       config.pluginUi !== undefined ||
       config.pluginInstallation !== undefined
@@ -420,10 +394,13 @@ async function composeProductionControlApi(
             ids,
             digester,
             ...(creativeProjects === undefined ? {} : { creativeProjects }),
-            ...(projectPluginRuntime === undefined
+            ...((projectTextPluginRuntime?.hostUiServices ??
+              projectPluginRuntime?.hostUiServices) === undefined
               ? {}
               : {
-                  metadataHostUiServices: projectPluginRuntime.hostUiServices,
+                  metadataHostUiServices:
+                    (projectTextPluginRuntime?.hostUiServices ??
+                      projectPluginRuntime?.hostUiServices)!,
                 }),
           },
         );
@@ -431,6 +408,7 @@ async function composeProductionControlApi(
       const existingHostUiServices =
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+        projectTextPluginRuntime?.hostUiServices ??
         projectPluginRuntime?.hostUiServices;
       const history = await composeProductionPluginUiRecoveryHistory({
         config,
@@ -473,6 +451,9 @@ async function composeProductionControlApi(
         pluginUiRuntime = createProductionPluginUiRuntime(
           {
             ...config.pluginUi,
+            ...(projectTextPluginRuntime === undefined
+              ? {}
+              : { ownedProjectTextActions: projectTextPluginRuntime.owner }),
             ...(pluginUiRecovery === undefined
               ? {}
               : { recovery: pluginUiRecovery.service }),
@@ -664,6 +645,7 @@ async function composeProductionControlApi(
             ui: pluginUiRuntime.service,
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
+            texts: projectTextPluginRuntime,
             projectGenerations: pluginTaskRuntime?.projectGenerations,
             projectQueries: pluginTaskRuntime?.projectQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
@@ -758,6 +740,7 @@ async function composeProductionControlApi(
     app.addHook("onClose", async () => {
       await closeResources([
         () => projectPluginRuntime?.close(),
+        () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),
         () => projectGenerationReadPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),
@@ -788,6 +771,7 @@ async function composeProductionControlApi(
     try {
       await closeResources([
         () => projectPluginRuntime?.close(),
+        () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),
         () => projectGenerationReadPluginRuntime?.close(),
         () => pluginTaskRuntime?.close(),

@@ -22,6 +22,9 @@ import { CreativeProjectController } from "./workbench/creative-project-controll
 import { ShortDramaPersistentWorkbench } from "./workbench/ShortDramaPersistentWorkbench";
 import { PluginWriteActivity } from "./workbench/PluginWriteActivity";
 import { createGenerationRecordReadClient } from "./workbench/GenerationRecordReadClient";
+import { createPluginProjectTextUiClient } from "./project-texts-ui-service";
+import { projectTextsUiCodec } from "./project-texts-ui-codec.mjs";
+import { ProjectTextController } from "./workbench/ProjectTextController";
 
 const contributionId = "workbench";
 
@@ -112,9 +115,11 @@ export default defineUiPlugin({
     const reactRoot = createRoot(content);
     const preview = dataFlag(props.data, "shortDramaPreview");
     let controller: CreativeProjectController | null = null;
-    const writes = new PluginWriteActivity(services, () =>
-      controller?.refreshWriteActivity(),
-    );
+    let texts: ProjectTextController | null = null;
+    const writes = new PluginWriteActivity(services, () => {
+      controller?.refreshWriteActivity();
+      texts?.refreshWriteActivity();
+    });
     const clients = writes.services;
     controller = preview
       ? null
@@ -125,6 +130,13 @@ export default defineUiPlugin({
           contexts: createPluginProjectGenerationContextClient(clients),
           queries: createPluginProjectGenerationQueryClient(clients),
           selections: createPluginProjectGenerationSelectionClient(clients),
+          physicalWritesPending: () => writes.pending,
+        });
+    texts = preview
+      ? null
+      : new ProjectTextController({
+          client: createPluginProjectTextUiClient(clients, projectTextsUiCodec),
+          projects: createPluginCreativeProjectClient(clients),
           physicalWritesPending: () => writes.pending,
         });
     let disposed = false;
@@ -150,6 +162,7 @@ export default defineUiPlugin({
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
       const ready = dataFlag(next.data, "pluginUiReady");
+      texts?.setReady(ready);
       if (!ready) controller?.setReady(false);
       controller?.setRecoveryContexts({
         selection: selectionContext(next.data),
@@ -159,8 +172,11 @@ export default defineUiPlugin({
       if (ready) controller?.setReady(true);
       flushSync(() =>
         reactRoot.render(
-          controller ? (
-            <ShortDramaPersistentWorkbench controller={controller} />
+          controller && texts ? (
+            <ShortDramaPersistentWorkbench
+              controller={controller}
+              texts={texts}
+            />
           ) : (
             <ShortDramaWorkbenchPreview
               referenceImage={new URL(referenceImage, import.meta.url).href}
@@ -174,6 +190,7 @@ export default defineUiPlugin({
     } catch (error) {
       writes.dispose();
       controller?.dispose();
+      texts?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -188,6 +205,7 @@ export default defineUiPlugin({
         disposed = true;
         writes.dispose();
         controller?.dispose();
+        texts?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

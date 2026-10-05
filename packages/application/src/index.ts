@@ -120,8 +120,10 @@ export * from "./plugin-ui-committed-task-authority.ts";
 export {
   assertPluginUiInvocationCurrent,
   capturePluginUiInvocationCommitAuthority,
+  capturePluginProjectTextUiInvocationCommitAuthority,
   type PluginUiInvocationCommitAuthority,
 } from "./plugin-ui-invocation-authority.ts";
+export * from "./plugin-project-text-action-owner.ts";
 export type { PluginTaskCommitAuthorityPort } from "./extension-plugin-task-support.ts";
 export * from "./extension-credit-quote-port.ts";
 export * from "./external-operation-store-port.ts";
@@ -182,3 +184,5 @@ export * from "./plugin-ui-intent-journal-store.ts";
 export * from "./plugin-credit-read-store-port.ts";
 export * from "./plugin-credit-read-authorization-port.ts";
 export * from "./plugin-credit-read-application-service.ts";
+
+export * from "./project-text-ui-commit-authority.ts";

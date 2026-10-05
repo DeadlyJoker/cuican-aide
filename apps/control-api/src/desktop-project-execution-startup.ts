@@ -63,6 +63,8 @@ export function issueDesktopProjectExecutionConfiguration(
     unavailable();
   for (const key of [
     "pluginUi",
+    "textArtifacts",
+    "textUi",
     "pluginGenerations",
     "pluginQueries",
     "generationReads",

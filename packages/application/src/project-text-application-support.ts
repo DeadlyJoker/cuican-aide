@@ -164,7 +164,9 @@ export function captureProjectTextCommitAuthority(
         );
     }
   }
-  const authority = captureCreativeProjectCommitAuthority(options);
+  const authority = captureCreativeProjectCommitAuthority(options, {
+    allowTextUiTransaction: true,
+  });
   if (authority?.transaction !== undefined)
     throw new ApplicationError(
       "authorization",

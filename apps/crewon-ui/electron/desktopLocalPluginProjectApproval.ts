@@ -59,8 +59,9 @@ export function composeDesktopLocalPluginProjectApproval(
         (!item.optional || dualEntry),
     );
   const projectsRequired = requested("crewon.creative-projects");
+  const textsRequired = requested("crewon.project-texts");
   const recoveryRequired = requested("crewon.plugin-ui-recovery");
-  if (!projectsRequired && !recoveryRequired) return approval;
+  if (!projectsRequired && !textsRequired && !recoveryRequired) return approval;
   const modules = descriptor.contributions
     .filter(
       (contribution) =>
@@ -81,6 +82,9 @@ export function composeDesktopLocalPluginProjectApproval(
   const metadata = [
     ...("pluginUi" in previous ? (previous.pluginUi?.publications ?? []) : []),
   ];
+  const texts = [
+    ...("textUi" in previous ? (previous.textUi?.publications ?? []) : []),
+  ];
   const recovery = [
     ...("uiRecovery" in previous
       ? (previous.uiRecovery?.publications ?? [])
@@ -94,8 +98,13 @@ export function composeDesktopLocalPluginProjectApproval(
     left.packageDigest === right.packageDigest &&
     left.contributionId === right.contributionId;
   for (const publication of modules) {
-    if (!metadata.some((current) => same(current, publication)))
+    if (
+      (projectsRequired || recoveryRequired) &&
+      !metadata.some((current) => same(current, publication))
+    )
       metadata.push(publication);
+    if (textsRequired && !texts.some((current) => same(current, publication)))
+      texts.push(publication);
     if (
       recoveryRequired &&
       !recovery.some((current) => same(current, publication))
@@ -112,7 +121,15 @@ export function composeDesktopLocalPluginProjectApproval(
         : approval.schemaVersion,
     projects: {
       ...previous,
-      pluginUi: { publications: metadata },
+      ...(metadata.length === 0
+        ? {}
+        : { pluginUi: { publications: metadata } }),
+      ...(textsRequired
+        ? {
+            textArtifacts: { version: "crewon.project-text.v1" },
+            textUi: { publications: texts },
+          }
+        : {}),
       ...(recoveryRequired
         ? {
             uiRecovery: {

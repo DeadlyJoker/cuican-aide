@@ -622,3 +622,35 @@ describe("trusted UI loader (explicit importer unit tests)", () => {
     ).toBe(true);
   });
 });
+
+it("only the ten reviewed project text actions receive the 60KiB input budget", async () => {
+  const h = uiHarness();
+  await mount(h);
+  const large = { text: "x".repeat(30 * 1024) };
+  h.ports.invoke.mockResolvedValue(null);
+  await expect(
+    h.instances[0].services.invoke(
+      "crewon.project-texts.v1.saveScriptCandidate",
+      large,
+      {},
+    ),
+  ).resolves.toBeNull();
+  expect(h.ports.invoke).toHaveBeenCalledTimes(1);
+  for (const action of [
+    "query",
+    "crewon.project-texts",
+    "crewon.project-texts.v1.unknown",
+    "crewon.creative-projects.v1.createProject",
+  ])
+    await expect(
+      h.instances[0].services.invoke(action, large, {}),
+    ).rejects.toThrow();
+  await expect(
+    h.instances[0].services.invoke(
+      "crewon.project-texts.v1.getRevision",
+      { text: "x".repeat(60 * 1024) },
+      {},
+    ),
+  ).rejects.toThrow();
+  expect(h.ports.invoke).toHaveBeenCalledTimes(1);
+});

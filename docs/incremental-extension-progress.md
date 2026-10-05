@@ -1,10 +1,26 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：进行中。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座和真实 Agent 文本工具已实现；项目对话启动/发现与插件文字编辑页面尚待接线。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座、真实 Agent 文本工具及 Short14 手动文字编辑/历史/采用/锁定入口已实现。冷启动未完成文本请求 journal、持久项目对话与绑定、真正阶段 Agent 启动、后续媒体工作流和实际 App 交付仍待完成。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
 
-最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐，共享阶段命令先落大纲/剧本；真实 Agent 项目工具已接到原 Worker，下一步继续项目对话启动/发现和工作台文本阶段入口。实际生图验证并行推进，不阻塞文本阶段。
+最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐。真实 Agent 项目工具已接到原 Worker，插件文字页现与它共用成果；下一步继续未完成文本意图冷恢复及项目对话/阶段启动。实际生图验证并行推进，不阻塞文本阶段。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-05：Short14 手动文字工作台与独立 UI 文本协议
+
+Short14 在原插件模块内接通“大纲”和“剧本”：手动编辑结构化正文、保存候选、分页历史、打开旧内容、明确采用、锁定/解锁，并读取当前真实需求和已采用大纲作为来源。保存不自动采用；上游需求或大纲采用变化时保留正文和原引用，由共享服务返回过期原因。使用新来源须明确保存新候选，版本冲突保留草稿并先读取当前状态。原宿主导航、账户入口、左右栏和全局 CSS 未改，新增样式仅限定在插件自己的模块节点。
+
+新增独立 `crewon.project-texts@1`，十个动作通过原 UI invocation 调用；公开入口 `@crewon/contracts/project-texts-ui` 提供无 import portable 文件和严格 public codec，示例携带字节一致副本与预构建 codec，构建固定 SHA-256。原 SDK0.1.0 tarball 与 v1 形状保持冻结，不借宿主私有源码。详见[插件 UI 文本协议](./plugin-project-texts-ui-protocol.md)。新动作输入和响应最多60 KiB，旧动作/未知版本仍24 KiB；长历史只裁整条记录并保留确切继续游标。
+
+四类写入由实际 UI invocation WeakMap 签发独立 textUi 事务资格，核完整主体、八字段安装身份、原 action/input、真实 selection/package 和当前项目权限。复制调用对象、旧六动作资格或伪造 Run 不能授权文本写入。SQLite 在同步写事务最后复核当前资格与安装；PostgreSQL 同一个提交连接锁住实际安装选择，事务外部 PDP/配置档回调不重借池。真实 COMMIT 回执可在迟到关闭后返回，普通读取与重放仍要求当前权限。手动编辑不进入 Node peer，也不创建 Run、资金记录、外部 operation 或供应商请求。
+
+未知文本写入在同一次挂载保留原输入与原键，只由明确“重试原请求”重放；已确认写入不会因随后读取失败而退回未知。已确认历史和显式同键复播已做冷重开验证。**未完成文本 intent journal 尚未接入持久冷恢复**，不能用这些已确认数据的读取证明未确认请求或未保存草稿能跨应用重启恢复。
+
+本轮检查：Contracts全量 **462/462**、新 owner/旧调用链 **76/76**；真实双库 text 资格 **15/15**、旧 Application **33/33**、旧 Store **74/74**；Control/Native 组合 **120/120**、production PostgreSQL `maxPoolSize:1` 原 HTTP **1/1**、审批/Loader UI **31/31**，均零跳过。各组有重叠，不求和。类型、边界、格式通过；独立 Short14 使用冻结 SDK tarball 严格编译和构建已通过，独立发行包全套 **166/166、零跳过**（原155项、新8项 DOM 与3项 controller 专项）。证据位于 `output/extensions/checks/project-text-ui-20261005/`。
+
+四个视口已用真实 Chrome 捕获并退出；页面数据来自明确的公共 DTO fixture，只证明发行包 DOM/布局，不提供生产身份、SQL 或实际模型证明。Control/SQLite/PG 的安装、挂载、十方法、四写、同键与冷读取另由真实实现验证；所有自有应用、连接池和 TLS 夹具已关闭。实际用户 App/profile、网络和原未知 Krea Run/operation 未改。
+
+本轮是手动文字协作里程碑，不是完整交付。后续继续持久文本 intent 恢复、项目对话/工作空间绑定、真正的阶段 Agent 启动与委托、角色/分镜/视频/声音/合成工作流，以及正式打包与实际桌面验收。积分后置，目标保持 ACTIVE。
 
 ## 2026-10-05：真实 Agent 项目工具与 Short13 同包执行
 

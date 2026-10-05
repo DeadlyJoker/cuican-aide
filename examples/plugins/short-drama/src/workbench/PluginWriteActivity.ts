@@ -9,6 +9,10 @@ const writes = new Set([
   "crewon.project-generations.v1.generateConcept",
   "crewon.project-generation-queries.v1.queryConceptGeneration",
   "crewon.project-generation-selections.v1.selectConceptImage",
+  "crewon.project-texts.v1.saveOutlineCandidate",
+  "crewon.project-texts.v1.saveScriptCandidate",
+  "crewon.project-texts.v1.selectRevision",
+  "crewon.project-texts.v1.setLocked",
 ]);
 
 /** SDK cancellation ends UI waiting; the original Host invocation may still be open. */

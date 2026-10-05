@@ -1,3 +1,4 @@
+import { pluginUiActionInputMaximumBytes } from "@crewon/contracts/project-texts-ui";
 import {
   parsePluginUiLease,
   parseRenewPluginUiMountResponse,
@@ -350,7 +351,10 @@ export class TrustedPluginUiLoader {
   ): Promise<PluginJsonValue> {
     this.#current(candidate, true);
     const action = checkedPluginUiAction(rawAction);
-    const input = copyPluginUiJson(rawInput, 24 * 1024);
+    const input = copyPluginUiJson(
+      rawInput,
+      pluginUiActionInputMaximumBytes(action),
+    );
     const options = uiRecord(rawOptions);
     if (Object.keys(options).some((key) => key !== "signal"))
       uiFailure("plugin_ui_invocation_options_invalid");

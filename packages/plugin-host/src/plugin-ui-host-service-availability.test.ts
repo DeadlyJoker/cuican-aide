@@ -7,6 +7,7 @@ import {
   capturePluginUiHostServiceAvailability,
   appendProjectGenerationSelectionUiServiceAvailability,
   appendPluginUiRecoveryServiceAvailability,
+  appendProjectTextUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
 import { registerProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
@@ -52,6 +53,83 @@ function candidate(input: Parameters<typeof descriptor>[0] = {}) {
 }
 const rejectsUnavailable = (work: () => unknown) =>
   assert.throws(work, { code: "plugin_dependency_unavailable" });
+
+test("text UI v1 declarations require their actual owner and preserve older availability without manufacturing paid grants", () => {
+  const text = {
+    service: "crewon.project-texts",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [text] });
+  assert.throws(() => assertUiOnlyServiceDeclarations(actual.descriptor), {
+    code: "plugin_ui_only_services_unsupported",
+  });
+  const optional = candidate({ requires: [{ ...text, optional: true }] });
+  assertPluginUiHostServiceAvailability({ scope, candidate: optional });
+  const original = { isAvailable: () => true };
+  const fallback = registerProjectGenerationHostAvailability({
+    isAvailable: () => false,
+  });
+  const extended = appendProjectTextUiServiceAvailability({
+    texts: original,
+    fallback,
+  });
+  original.isAvailable = () => false;
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: actual,
+    hostUiServices: extended,
+  });
+  const unavailable = appendProjectTextUiServiceAvailability({
+    texts: { isAvailable: () => false },
+  });
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: unavailable,
+    }),
+  );
+  const paid = candidate({
+    requires: [
+      {
+        service: "crewon.project-generations",
+        apiVersion: "1",
+        optional: false,
+      },
+    ],
+  });
+  assertUiOnlyServiceDeclarations(paid.descriptor, extended);
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: paid,
+      hostUiServices: extended,
+    }),
+  );
+  const forged = appendProjectTextUiServiceAvailability({
+    texts: registerProjectGenerationHostAvailability({
+      isAvailable: () => true,
+    }),
+  });
+  assert.throws(
+    () => assertUiOnlyServiceDeclarations(paid.descriptor, forged),
+    { code: "plugin_ui_only_services_unsupported" },
+  );
+  for (const unknown of [
+    { ...text, apiVersion: "2" },
+    { ...text, service: "example.crewon.project-texts" },
+  ])
+    assert.throws(
+      () =>
+        assertUiOnlyServiceDeclarations(
+          descriptor({ requires: [unknown] }),
+          extended,
+        ),
+      { code: "plugin_ui_only_services_unsupported" },
+    );
+  assertUiOnlyServiceDeclarations(descriptor({ node: true, requires: [text] }));
+});
 
 test("recovery requires independent actual assembly and never supplies an older owner's binding", () => {
   const recovery = {

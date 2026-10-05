@@ -314,3 +314,45 @@ test("result identities cannot name arbitrary plugins or explicitly undefined id
   );
   assert.equal(reads, 0);
 });
+
+test("text UI opt-in pins its own publications/store while missing optional fields serialize unchanged", () => {
+  const textOnly = {
+    version: DESKTOP_PROJECT_HISTORY_VERSION,
+    textArtifacts: { version: "crewon.project-text.v1" },
+    textUi: grant,
+  };
+  const parsed = parseDesktopProjectHistoryConfiguration(textOnly, options);
+  assert.deepEqual(parsed, textOnly);
+  assert.equal(parsed.pluginUi, undefined);
+  for (const invalid of [
+    { ...textOnly, textArtifacts: undefined },
+    { ...textOnly, textArtifacts: { version: "crewon.project-text.v2" } },
+    {
+      ...textOnly,
+      textUi: {
+        publications: [
+          { ...source, packageDigest: `sha256:${"f".repeat(64)}` },
+        ],
+      },
+    },
+    {
+      ...textOnly,
+      textUi: { publications: [{ ...source, actorId: "injected" }] },
+    },
+  ])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(invalid, options),
+    );
+  assert.equal(
+    JSON.stringify(
+      parseDesktopProjectHistoryConfiguration(
+        { version: DESKTOP_PROJECT_HISTORY_VERSION, pluginUi: grant },
+        options,
+      ),
+    ),
+    JSON.stringify({
+      version: DESKTOP_PROJECT_HISTORY_VERSION,
+      pluginUi: grant,
+    }),
+  );
+});

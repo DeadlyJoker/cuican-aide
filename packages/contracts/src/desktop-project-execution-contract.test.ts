@@ -382,3 +382,25 @@ test("own-data and encoded bounds reject accessors, sparse/symbol/hidden arrays 
     ),
   );
 });
+
+test("execution approvals retain independent text UI declarations without changing original mappings or recovery", () => {
+  const input = {
+    ...valid,
+    textArtifacts: { version: "crewon.project-text.v1" },
+    textUi: { publications: [source] },
+  };
+  const parsed = parseDesktopProjectExecutionConfiguration(input, options);
+  assert.deepEqual(parsed, input);
+  assert.deepEqual(parsed.pluginGenerations, valid.pluginGenerations);
+  assert.deepEqual(parsed.uiRecovery, valid.uiRecovery);
+  assert.throws(() =>
+    parseDesktopProjectExecutionConfiguration(
+      { ...input, textArtifacts: undefined },
+      options,
+    ),
+  );
+  assert.deepEqual(
+    parseDesktopProjectExecutionConfiguration(valid, options),
+    valid,
+  );
+});

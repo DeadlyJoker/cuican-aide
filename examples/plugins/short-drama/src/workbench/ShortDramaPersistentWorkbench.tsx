@@ -21,6 +21,8 @@ import { ConceptGenerationActions } from "./ConceptGenerationActions";
 import { ConceptQueryActions } from "./ConceptQueryActions";
 import { ConceptImageSelectionActions } from "./ConceptImageSelectionActions";
 import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
+import { ProjectTextController } from "./ProjectTextController";
+import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
 
 function SaveFeedback({
   controller,
@@ -82,14 +84,18 @@ function SaveFeedback({
 /** The original module layout with saved sources and read-only original task records. */
 export function ShortDramaPersistentWorkbench({
   controller,
+  texts,
 }: {
   controller: CreativeProjectController;
+  texts: ProjectTextController;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
     controller.getSnapshot,
   );
+  useSyncExternalStore(texts.subscribe, texts.getSnapshot, texts.getSnapshot);
+  const [stage, setStage] = useState<0 | 1>(0);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
   const [title, setTitle] = useState("");
@@ -97,12 +103,18 @@ export function ShortDramaPersistentWorkbench({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const { details } = snapshot;
   const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
-  const locked = projectLocked || snapshot.conceptLocked;
+  const locked = projectLocked || snapshot.conceptLocked || texts.locked;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
     (project) =>
       project.state === snapshot.state && project.title.includes(search),
   );
+  useEffect(() => {
+    texts.setProject(details);
+  }, [texts, details]);
+  useEffect(() => {
+    setStage(0);
+  }, [details?.project.projectId]);
 
   useEffect(() => {
     if (dialog) dialogRef.current?.showModal();
@@ -329,85 +341,105 @@ export function ShortDramaPersistentWorkbench({
                   "角色与场景",
                   "分镜",
                   "视频与成片",
-                ].map((stage, index) => (
-                  <div
-                    key={stage}
-                    className={`stage-item ${index === 0 ? "active" : "later"}`}
+                ].map((stageName, index) => (
+                  <button
+                    type="button"
+                    key={stageName}
+                    className={`stage-item ${index === stage ? "active" : index < 2 ? "" : "later"}`}
+                    disabled={index > 1 || locked}
+                    aria-current={index === stage ? "step" : undefined}
+                    onClick={() => {
+                      if (index < 2) setStage(index as 0 | 1);
+                    }}
                   >
                     <span className="stage-number">
                       {String(index + 1).padStart(2, "0")}
                     </span>
                     <span>
-                      {stage}
-                      <small>{index === 0 ? "当前阶段" : "后续开放"}</small>
+                      {stageName}
+                      <small>
+                        {index === stage
+                          ? "当前阶段"
+                          : index < 2
+                            ? "可进入"
+                            : "后续开放"}
+                      </small>
                     </span>
                     {index < 4 && <ChevronRight size={13} />}
-                  </div>
+                  </button>
                 ))}
               </div>
-              <div className="concept-grid">
-                <section className="brief-panel">
-                  <div className="panel-heading">
-                    <h2>
-                      <Layers3 size={17} />
-                      创作需求
-                    </h2>
-                    <button
-                      className="text-button"
-                      onClick={() => {
-                        setDialog("history");
-                        void controller.loadBriefs();
-                      }}
-                    >
-                      v{details.brief.briefRevision} · 查看历史
-                    </button>
-                  </div>
-                  <label className="visually-hidden" htmlFor="creative-brief">
-                    创作需求
-                  </label>
-                  <textarea
-                    id="creative-brief"
-                    className="description-input"
-                    value={snapshot.draft}
-                    disabled={archived || locked || snapshot.opening}
-                    onChange={(event) =>
-                      controller.setDraft(event.target.value)
-                    }
-                  />
-                  <div className="brief-footer">
-                    <span>
-                      <Clock3 size={13} />
-                      {briefBytes(snapshot.draft)} / 8,192 字节
-                    </span>
-                    <button
-                      className="button secondary"
-                      disabled={
-                        archived ||
-                        locked ||
-                        snapshot.opening ||
-                        !validBrief(snapshot.draft) ||
-                        snapshot.draft === details.brief.text
-                      }
-                      onClick={() => void controller.saveBrief()}
-                    >
-                      {snapshot.saving ? "正在保存…" : "保存为新版本"}
-                    </button>
-                  </div>
-                  {briefBytes(snapshot.draft) > 8192 && (
-                    <p className="detail-note" role="alert">
-                      需求超过 8,192 字节，请缩短后保存。
-                    </p>
-                  )}
-                  <div className="brief-help">
-                    需求改变会保存新版本，原始换行与空格会保留。
-                  </div>
-                </section>
-                <ConceptWorkbench
-                  controller={controller.concepts}
+              {stage === 1 ? (
+                <StoryScriptWorkbench
+                  controller={texts}
                   details={details}
-                  blocked={projectLocked || snapshot.opening}
+                  blocked={projectLocked || snapshot.conceptLocked}
                 />
-              </div>
+              ) : (
+                <div className="concept-grid">
+                  <section className="brief-panel">
+                    <div className="panel-heading">
+                      <h2>
+                        <Layers3 size={17} />
+                        创作需求
+                      </h2>
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setDialog("history");
+                          void controller.loadBriefs();
+                        }}
+                      >
+                        v{details.brief.briefRevision} · 查看历史
+                      </button>
+                    </div>
+                    <label className="visually-hidden" htmlFor="creative-brief">
+                      创作需求
+                    </label>
+                    <textarea
+                      id="creative-brief"
+                      className="description-input"
+                      value={snapshot.draft}
+                      disabled={archived || locked || snapshot.opening}
+                      onChange={(event) =>
+                        controller.setDraft(event.target.value)
+                      }
+                    />
+                    <div className="brief-footer">
+                      <span>
+                        <Clock3 size={13} />
+                        {briefBytes(snapshot.draft)} / 8,192 字节
+                      </span>
+                      <button
+                        className="button secondary"
+                        disabled={
+                          archived ||
+                          locked ||
+                          snapshot.opening ||
+                          !validBrief(snapshot.draft) ||
+                          snapshot.draft === details.brief.text
+                        }
+                        onClick={() => void controller.saveBrief()}
+                      >
+                        {snapshot.saving ? "正在保存…" : "保存为新版本"}
+                      </button>
+                    </div>
+                    {briefBytes(snapshot.draft) > 8192 && (
+                      <p className="detail-note" role="alert">
+                        需求超过 8,192 字节，请缩短后保存。
+                      </p>
+                    )}
+                    <div className="brief-help">
+                      需求改变会保存新版本，原始换行与空格会保留。
+                    </div>
+                  </section>
+                  <ConceptWorkbench
+                    controller={controller.concepts}
+                    details={details}
+                    blocked={projectLocked || snapshot.opening}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>

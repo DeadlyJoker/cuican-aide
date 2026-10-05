@@ -211,6 +211,16 @@
   padding: var(--space-2);
   border-radius: var(--radius-md);
   color: var(--text-faint);
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.drama-workbench .stage-item:not(:disabled):hover {
+  background: var(--control-surface-hover);
+  color: var(--text);
+}
+.drama-workbench .stage-item:disabled {
+  opacity: 1;
 }
 .drama-workbench .stage-item.active {
   color: var(--text);
@@ -550,6 +560,20 @@
   color: var(--text-muted);
   font-size: 0.92em;
   font-weight: 400;
+}
+.drama-workbench :is(.story-script-workbench, .text-editor, .text-dialogue) {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+}
+.drama-workbench .text-scene-heading {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.drama-workbench .text-dialogue {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
 }
 
 .drama-workbench .toast {
