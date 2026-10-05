@@ -21,6 +21,13 @@ export type CommandWorkspaceHostModule = Readonly<{
   content: ReactNode | ((state: Readonly<{ active: boolean }>) => ReactNode);
 }>;
 
+/** Directory availability affects callable content; the owner identifies the current host session only. */
+export type CommandWorkspaceHostModuleAvailability = Readonly<{
+  state: "available" | "unavailable";
+  ownerKey: object | null;
+  retry(): void;
+}>;
+
 /** The legacy single contribution keeps its position; duplicate identities are a host configuration error. */
 export function mergeCommandWorkspaceHostModules<
   T extends Readonly<{ id: string }>,
@@ -39,9 +46,11 @@ export function useCommandWorkspaceHostModules(
   {
     navigationScope = null,
     request = null,
+    availability,
   }: Readonly<{
     navigationScope?: string | null;
     request?: Readonly<{ id: string; requestKey: string }> | null;
+    availability?: CommandWorkspaceHostModuleAvailability;
   }> = {},
 ) {
   const idsKey = JSON.stringify(modules.map(({ id }) => id));
@@ -50,44 +59,99 @@ export function useCommandWorkspaceHostModules(
     throw new Error("command_workspace_host_module_id_duplicate");
   const [selection, setSelection] = useState<Readonly<{
     id: string;
+    label: string;
     navigationScope: string | null;
+    ownerKey: object | null;
   }> | null>(null);
-  // A removed contribution or changed thread/scene is inactive in this render, before effects run.
+  const ownerKey = availability?.ownerKey ?? null;
+  const unavailable = availability?.state === "unavailable";
+  // Failed reads withdraw callable content without turning a selected module into a chat navigation.
   const selectedId =
     selection &&
     selection.navigationScope === navigationScope &&
-    ids.has(selection.id)
+    selection.ownerKey === ownerKey &&
+    (unavailable || ids.has(selection.id))
       ? selection.id
       : null;
   useEffect(() => {
     setSelection((current) =>
       current &&
-      (current.navigationScope !== navigationScope || !ids.has(current.id))
+      (current.navigationScope !== navigationScope ||
+        current.ownerKey !== ownerKey ||
+        (!unavailable && !ids.has(current.id)))
         ? null
         : current,
     );
-  }, [ids, navigationScope]);
+  }, [ids, navigationScope, ownerKey, unavailable]);
   const close = useCallback(() => setSelection(null), []);
   const lastRequestKey = useRef<string | null>(null);
   useEffect(() => {
     if (
       request &&
+      !unavailable &&
       lastRequestKey.current !== request.requestKey &&
       ids.has(request.id)
     ) {
       lastRequestKey.current = request.requestKey;
-      setSelection({ id: request.id, navigationScope });
+      setSelection({
+        id: request.id,
+        label: modules.find((module) => module.id === request.id)!.label,
+        navigationScope,
+        ownerKey,
+      });
     }
-  }, [request, ids, navigationScope]);
+  }, [request, ids, modules, navigationScope, ownerKey, unavailable]);
   const open = useCallback(
     (id: string) => {
-      if (!ids.has(id))
+      if (unavailable || !ids.has(id))
         throw new Error("command_workspace_host_module_unavailable");
-      setSelection({ id, navigationScope });
+      setSelection({
+        id,
+        label: modules.find((module) => module.id === id)!.label,
+        navigationScope,
+        ownerKey,
+      });
     },
-    [ids, navigationScope],
+    [ids, modules, navigationScope, ownerKey, unavailable],
   );
-  return { selectedId, active: selectedId !== null, open, close };
+  return {
+    selectedId,
+    active: selectedId !== null,
+    unavailableSelection:
+      unavailable && selectedId !== null && selection
+        ? { id: selection.id, label: selection.label }
+        : null,
+    open,
+    close,
+  };
+}
+
+/** Contains no cached module or loader. A successful fresh directory is required before mounting again. */
+export function CommandWorkspaceHostModuleUnavailablePane({
+  selection,
+  locale,
+  onRetry,
+}: {
+  selection: Readonly<{ id: string; label: string }>;
+  locale: "zh" | "en";
+  onRetry(): void;
+}) {
+  return (
+    <section
+      aria-label={selection.label}
+      className="shell-view active"
+      data-host-module-id={selection.id}
+    >
+      <p role="alert">
+        {locale === "zh"
+          ? "模块暂时不可用，请重试。"
+          : "This module is temporarily unavailable. Try again."}
+      </p>
+      <button type="button" onClick={onRetry}>
+        {locale === "zh" ? "重试" : "Try again"}
+      </button>
+    </section>
+  );
 }
 
 export function useCommandWorkspaceHostModule(

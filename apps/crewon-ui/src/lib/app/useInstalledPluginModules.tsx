@@ -94,6 +94,10 @@ export function useInstalledPluginModules({
   }, [client, suspendedClient, sessionKey]);
   const current = useRef(scope);
   current.current = scope;
+  const directoryOwnerKey = useMemo(
+    () => (scope === null ? null : Object.freeze({})),
+    [scope],
+  );
   const mountedScope = useRef<typeof scope>(null);
   const mountedReceipts = useRef<ReturnType<
     typeof createInstalledPluginTaskReceipts
@@ -401,6 +405,21 @@ export function useInstalledPluginModules({
     };
   }, [scope, host, onDiagnostic, catalogRevision]);
   const catalog = snapshot?.scope === scope ? snapshot.catalog : null;
+  const retryDirectory = useCallback(() => {
+    if (scope === null || current.current !== scope) return;
+    catalogGeneration.current += 1;
+    setSnapshot(null);
+    setCatalogRevision((revision) => revision + 1);
+  }, [scope]);
+  const hostModuleAvailability = useMemo(
+    () => ({
+      state:
+        catalog === null ? ("unavailable" as const) : ("available" as const),
+      ownerKey: directoryOwnerKey,
+      retry: retryDirectory,
+    }),
+    [catalog, directoryOwnerKey, retryDirectory],
+  );
   const taskRuntime = taskContext?.runtime ?? null;
   const taskPorts = useMemo(
     () =>
@@ -593,6 +612,7 @@ export function useInstalledPluginModules({
   ]);
   return {
     hostModules,
+    hostModuleAvailability,
     planningNavigation: planning.navigation,
     planningRequest: planning.request,
     getDiagnostics: () => diagnostics.current,

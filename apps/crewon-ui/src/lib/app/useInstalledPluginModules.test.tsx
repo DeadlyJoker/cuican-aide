@@ -324,9 +324,13 @@ describe("installed plugin directory App composition (real Control client)", () 
     );
     await render(wire.client);
     expect(state.hostModules).toHaveLength(1);
+    const directoryOwner = state.hostModuleAvailability.ownerKey;
+    expect(state.hostModuleAvailability.state).toBe("available");
     failing = true;
     await refresh();
     expect(state.hostModules).toEqual([]);
+    expect(state.hostModuleAvailability.state).toBe("unavailable");
+    expect(state.hostModuleAvailability.ownerKey).toBe(directoryOwner);
     expect(state.getDiagnostics()).toHaveLength(1);
     for (let index = 0; index < 17; index++) await refresh();
     expect(state.getDiagnostics()).toHaveLength(16);
@@ -340,8 +344,18 @@ describe("installed plugin directory App composition (real Control client)", () 
         ),
     ).toBe(true);
     failing = false;
-    await refresh();
+    await act(async () => state.hostModuleAvailability.retry());
+    await settle();
     expect(state.hostModules).toHaveLength(1);
+    expect(state.hostModuleAvailability.state).toBe("available");
+    expect(state.hostModuleAvailability.ownerKey).toBe(directoryOwner);
+    const staleRetry = state.hostModuleAvailability.retry;
+    await render(null);
+    expect(state.hostModuleAvailability.ownerKey).toBeNull();
+    const calls = wire.fetch.mock.calls.length;
+    await act(async () => staleRetry());
+    await settle();
+    expect(wire.fetch.mock.calls).toHaveLength(calls);
   });
 
   it("withdraws immediately on a session event and discards an old response even if bootstrap has not replaced the client", async () => {
@@ -387,8 +401,10 @@ describe("installed plugin directory App composition (real Control client)", () 
     const old = controlUiClient(() => oldResponse.promise);
     const fresh = controlUiClient(() => freshResponse.promise);
     await render(old.client);
+    const oldOwner = state.hostModuleAvailability.ownerKey;
     expect(state.hostModules).toEqual([]);
     await render(fresh.client);
+    expect(state.hostModuleAvailability.ownerKey).not.toBe(oldOwner);
     expect(old.fetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
     oldResponse.resolve(
       controlUiResponse({ plugins: [item("example.old")], next: null }),

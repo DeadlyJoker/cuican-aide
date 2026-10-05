@@ -1377,6 +1377,7 @@ export function App({
           <AppCommandShellRoute
             showSignedOutAccount={localManagementAccess !== null}
             hostModules={installedPlugins.hostModules}
+            hostModuleAvailability={installedPlugins.hostModuleAvailability}
             hostModuleRequest={installedPlugins.planningRequest}
             teamProgress={
               commandShellRuntime.selectedThreadId

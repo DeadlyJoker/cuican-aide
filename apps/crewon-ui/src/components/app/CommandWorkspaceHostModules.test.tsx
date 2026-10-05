@@ -117,6 +117,164 @@ function fixtureModule(
 }
 
 describe("CommandWorkspace multiple host contributions", () => {
+  it("withdraws failed-directory content while keeping its selected route and retries only a fresh directory", async () => {
+    const fixture = fixtureModule("example.drama", "main", "AI 短剧");
+    const ownerKey = Object.freeze({});
+    const retry = vi.fn();
+    const available = { state: "available" as const, ownerKey, retry };
+    const unavailable = { ...available, state: "unavailable" as const };
+    await render({
+      hostModules: [fixture.module],
+      hostModuleAvailability: available,
+      selectedThreadId: "original-chat",
+    });
+    await click(navigation(fixture.module.id));
+    await click(pane(fixture.module.id).querySelector("button"));
+    expect(pane(fixture.module.id).querySelector("output")?.textContent).toBe(
+      "2",
+    );
+    const originalUrl = window.location.href;
+    // Even accidentally retained old props cannot publish callable content during a failed read.
+    await render({
+      hostModules: [fixture.module],
+      hostModuleAvailability: unavailable,
+      selectedThreadId: "original-chat",
+    });
+    expect(window.location.href).toBe(originalUrl);
+    expect(pane(fixture.module.id).hidden).toBe(false);
+    expect(pane(fixture.module.id).querySelector("article")).toBeNull();
+    expect(pane(fixture.module.id).textContent).toContain("模块暂时不可用");
+    expect(
+      container!.querySelector<HTMLElement>('[data-shell-view="command"]')!
+        .hidden,
+    ).toBe(true);
+    expect(fixture.activity.mock.calls.at(-1)).toEqual(["cleanup"]);
+    await click(pane(fixture.module.id).querySelector("button"));
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(pane(fixture.module.id).querySelector("article")).toBeNull();
+    // A successful current directory supplies the new content; the detached old instance is not reused.
+    await render({
+      hostModules: [fixture.module],
+      hostModuleAvailability: available,
+      selectedThreadId: "original-chat",
+    });
+    expect(pane(fixture.module.id).querySelector("article")).not.toBeNull();
+    expect(pane(fixture.module.id).querySelector("output")?.textContent).toBe(
+      "1",
+    );
+    expect(window.location.href).toBe(originalUrl);
+    await render({
+      hostModules: [],
+      hostModuleAvailability: available,
+      selectedThreadId: "original-chat",
+    });
+    expect(container!.querySelector("[data-host-module-id]")).toBeNull();
+    expect(
+      container!.querySelector<HTMLElement>('[data-shell-view="command"]')!
+        .hidden,
+    ).toBe(false);
+    await render({
+      hostModules: [fixture.module],
+      hostModuleAvailability: available,
+      selectedThreadId: "original-chat",
+    });
+    expect(pane(fixture.module.id).hidden).toBe(true);
+  });
+
+  it.each(["owner", "thread", "withdrawal"] as const)(
+    "clears an unavailable module route on an actual %s change",
+    async (change) => {
+      const fixture = fixtureModule("example.drama", "main", "AI 短剧");
+      const ownerKey = Object.freeze({});
+      const available = {
+        state: "available" as const,
+        ownerKey,
+        retry: vi.fn(),
+      };
+      await render({
+        hostModules: [fixture.module],
+        hostModuleAvailability: available,
+        selectedThreadId: "original-chat",
+      });
+      await click(navigation(fixture.module.id));
+      await render({
+        hostModules: [],
+        hostModuleAvailability: { ...available, state: "unavailable" },
+        selectedThreadId: "original-chat",
+      });
+      expect(pane(fixture.module.id).textContent).toContain("模块暂时不可用");
+      const next = {
+        ...available,
+        ownerKey:
+          change === "withdrawal"
+            ? null
+            : change === "owner"
+              ? Object.freeze({})
+              : ownerKey,
+      };
+      const threadId = change === "thread" ? "different-chat" : "original-chat";
+      await render({
+        hostModules: [],
+        hostModuleAvailability: { ...next, state: "unavailable" },
+        selectedThreadId: threadId,
+      });
+      expect(container!.querySelector("[data-host-module-id]")).toBeNull();
+      await render({
+        hostModules: [fixture.module],
+        hostModuleAvailability: next,
+        selectedThreadId: threadId,
+      });
+      expect(pane(fixture.module.id).hidden).toBe(true);
+    },
+  );
+
+  it("does not reopen a failed module after explicit host navigation and a successful later directory", async () => {
+    const fixture = fixtureModule("example.drama", "main", "AI 短剧");
+    const availability = {
+      state: "available" as const,
+      ownerKey: {},
+      retry: vi.fn(),
+    };
+    await render({
+      hostModules: [fixture.module],
+      hostModuleAvailability: availability,
+    });
+    await click(navigation(fixture.module.id));
+    await render({
+      hostModules: [],
+      hostModuleAvailability: { ...availability, state: "unavailable" },
+    });
+    expect(pane(fixture.module.id).hidden).toBe(false);
+    await click(container!.querySelector('[data-nav-key="command"]'));
+    expect(container!.querySelector("[data-host-module-id]")).toBeNull();
+    await render({
+      hostModules: [fixture.module],
+      hostModuleAvailability: availability,
+    });
+    expect(pane(fixture.module.id).hidden).toBe(true);
+    expect(availability.retry).not.toHaveBeenCalled();
+  });
+
+  it("keeps the normal available-directory DOM unchanged", () => {
+    const module = fixtureModule("example.drama", "main", "AI 短剧").module;
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace {...base} hostModules={[module]} />,
+    );
+    expect(
+      renderToStaticMarkup(
+        <CommandWorkspace
+          {...base}
+          hostModules={[module]}
+          hostModuleAvailability={{
+            state: "available",
+            ownerKey: {},
+            retry: noop,
+          }}
+        />,
+      ),
+    ).toBe(markup);
+  });
+
   it("preserves default SSR and the existing single-module API byte for byte", () => {
     const module = fixtureModule("example.drama", "main", "AI 短剧").module;
     expect(

@@ -40,9 +40,11 @@ import {
 } from "./CommandWorkspaceChrome";
 import {
   CommandWorkspaceHostModulePane,
+  CommandWorkspaceHostModuleUnavailablePane,
   mergeCommandWorkspaceHostModules,
   useCommandWorkspaceHostModules,
   type CommandWorkspaceHostModule,
+  type CommandWorkspaceHostModuleAvailability,
   type CommandWorkspacePlatformSnapshotLoader,
 } from "./CommandWorkspaceHostModule";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
@@ -299,6 +301,7 @@ type CommandWorkspaceProps = {
   businessExtensionEntry?: ReactNode;
   hostModule?: CommandWorkspaceHostModule;
   hostModules?: readonly CommandWorkspaceHostModule[];
+  hostModuleAvailability?: CommandWorkspaceHostModuleAvailability;
   hostModuleRequest?: Readonly<{ id: string; requestKey: string }> | null;
   platformSnapshotLoader?: CommandWorkspacePlatformSnapshotLoader;
   backgroundRunActive?: boolean;
@@ -818,6 +821,7 @@ export function CommandWorkspace({
   businessExtensionEntry = null,
   hostModule,
   hostModules,
+  hostModuleAvailability,
   hostModuleRequest,
   platformSnapshotLoader = readAgentPlatformSnapshot,
   teamProgress = null,
@@ -889,7 +893,11 @@ export function CommandWorkspace({
   onSetThreadGoalStatus,
   providerResource,
 }: CommandWorkspaceProps) {
-  const modules = mergeCommandWorkspaceHostModules({ hostModule, hostModules });
+  const modules = mergeCommandWorkspaceHostModules(
+    hostModuleAvailability?.state === "unavailable"
+      ? {}
+      : { hostModule, hostModules },
+  );
   // The browser is an outcome-focused surface. Advanced execution controls and
   // local inspection remain available in the desktop application.
   const compactWeb = platform === "web";
@@ -945,6 +953,7 @@ export function CommandWorkspace({
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const hostModuleView = useCommandWorkspaceHostModules(modules, {
     request: hostModuleRequest,
+    availability: hostModuleAvailability,
     navigationScope: JSON.stringify([
       selectedThreadId ?? selectedThread?.id ?? null,
       scene,
@@ -4286,6 +4295,13 @@ export function CommandWorkspace({
               active={hostModuleView.selectedId === module.id}
             />
           ))}
+          {hostModuleView.unavailableSelection && hostModuleAvailability ? (
+            <CommandWorkspaceHostModuleUnavailablePane
+              selection={hostModuleView.unavailableSelection}
+              locale={locale}
+              onRetry={hostModuleAvailability.retry}
+            />
+          ) : null}
         </section>
       </section>
     </section>
