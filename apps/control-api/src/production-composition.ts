@@ -702,6 +702,7 @@ async function composeProductionControlApi(
       ),
       projectConceptSelections: projectSelections,
       creativeProjects: creativeProjects?.service,
+      projectTexts: creativeProjects?.textService,
       projectGenerationReads,
       pluginUi: pluginUiService,
       extensions:

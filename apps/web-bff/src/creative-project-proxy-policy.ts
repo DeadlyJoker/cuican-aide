@@ -10,9 +10,16 @@ import {
   parseCreativeProjectRevision,
   parseProjectBriefListQuery,
   parseSelectConceptImageRequest,
+  parseProjectTextArtifactListQuery,
+  parseProjectTextRevisionListQuery,
 } from "@crewon/contracts";
 import { boundedExtensionProxyResponse } from "./extension-proxy-policy.ts";
 import { boundedPluginProxyRequest } from "./plugin-proxy-policy.ts";
+import {
+  assertProjectTextProxyBody,
+  projectTextProxyRoute,
+  type ProjectTextProxyQueryKind,
+} from "./project-text-proxy-policy.ts";
 
 const PREFIX = "/api/v1/creative-projects";
 export const CREATIVE_PROJECT_PROXY_DEADLINE_MS = 10_000;
@@ -30,7 +37,12 @@ export type CreativeProjectProxyPolicy =
         | "method_not_allowed";
     }>;
 
-type QueryKind = "projects" | "briefs" | "concepts" | "revisions" | "empty";
+type QueryKind =
+  | "projects"
+  | "briefs"
+  | "concepts"
+  | "revisions"
+  | ProjectTextProxyQueryKind;
 
 /** Inspect the HTTP adapter's original target before URL dot-segment normalization. */
 export function creativeProjectProxyPolicy(input: {
@@ -88,7 +100,15 @@ export function creativeProjectProxyPolicy(input: {
     query = "projects";
   } else if (!opaqueSegment(parts[0]!)) return denied(404, "route_not_found");
   else if (parts.length === 1) methods = ["GET"];
-  else if (parts.length === 2 && (parts[1] === "title" || parts[1] === "state"))
+  else if (parts[1] === "text-artifacts") {
+    const text = projectTextProxyRoute(parts);
+    if (text === null) return denied(404, "route_not_found");
+    methods = text.methods;
+    query = text.query;
+  } else if (
+    parts.length === 2 &&
+    (parts[1] === "title" || parts[1] === "state")
+  )
     methods = ["PUT"];
   else if (parts.length === 2 && parts[1] === "briefs") {
     methods = ["GET", "POST"];
@@ -184,6 +204,12 @@ function validQuery(search: string, kind: QueryKind): boolean {
       case "revisions":
         parseConceptRevisionListQuery(query);
         break;
+      case "text-artifacts":
+        parseProjectTextArtifactListQuery(query);
+        break;
+      case "text-revisions":
+        parseProjectTextRevisionListQuery(query);
+        break;
       case "empty":
         parseCreativeProjectEmptyQuery(query);
         break;
@@ -232,6 +258,10 @@ export async function boundedCreativeProjectProxyRequest(
     );
     if (value === null || typeof value !== "object" || Array.isArray(value))
       throw new Error("creative_project_request_invalid");
+    assertProjectTextProxyBody(
+      url.pathname.slice(PREFIX.length + 1).split("/"),
+      value,
+    );
     if (selection) {
       const checked = parseSelectConceptImageRequest(value);
       const parts = url.pathname.slice(PREFIX.length + 1).split("/");

@@ -1,4 +1,7 @@
-import { parseThreadWorkspaceId, normalizeThreadViewWorkspace } from "@crewon/contracts";
+import {
+  parseThreadWorkspaceId,
+  normalizeThreadViewWorkspace,
+} from "@crewon/contracts";
 import {
   MAX_OFFICE_THREAD_RESPONSE_BYTES,
   parseOfficeThreadResponse,
@@ -120,6 +123,7 @@ import {
 } from "./extension-control-client.ts";
 import { PluginControlClient } from "./plugin-control-client.ts";
 import { PluginCreditControlClient } from "./plugin-credit-control-client.ts";
+import { ProjectTextControlClient } from "./project-text-control-client.ts";
 import { CreativeProjectControlClient } from "./creative-project-control-client.ts";
 import type {
   CreateExtensionTaskRequest,
@@ -222,6 +226,7 @@ export class ControlApiClient {
   #pluginClient: PluginControlClient | null = null;
   #pluginCreditClient: PluginCreditControlClient | null = null;
   #creativeProjectClient: CreativeProjectControlClient | null = null;
+  #projectTextClient: ProjectTextControlClient | null = null;
 
   constructor(config: ControlApiClientConfig) {
     this.#baseUrl = parseBaseUrl(config.baseUrl);
@@ -1623,6 +1628,14 @@ export class ControlApiClient {
 
   get creativeProjects(): CreativeProjectControlClient {
     return (this.#creativeProjectClient ??= new CreativeProjectControlClient({
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
+      protocolError: (code) => new ControlApiProtocolError(code),
+    }));
+  }
+
+  get projectTexts(): ProjectTextControlClient {
+    return (this.#projectTextClient ??= new ProjectTextControlClient({
       json: (method, path, body, options) =>
         this.#json(method, path, body, options),
       protocolError: (code) => new ControlApiProtocolError(code),

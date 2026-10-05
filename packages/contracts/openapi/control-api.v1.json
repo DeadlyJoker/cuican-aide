@@ -5752,6 +5752,673 @@
         },
         "description": "Explicit renewal of a still-live mount after old-expiry CAS and full current authorization/publication checks. No query. Keeps the same reference and all publication pins; validate GET never renews. Expired or closed references cannot revive."
       }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts": {
+      "get": {
+        "operationId": "listProjectTextArtifacts",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "afterArtifactId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16,
+              "default": 16
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTextArtifactListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/outline": {
+      "get": {
+        "operationId": "getProjectOutline",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetProjectTextArtifactResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/outline/candidates": {
+      "post": {
+        "operationId": "saveProjectOutlineCandidate",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ProjectTextIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTextMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveProjectOutlineCandidateRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/scripts/{episodeId}": {
+      "get": {
+        "operationId": "getProjectScript",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetProjectTextArtifactResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/scripts/{episodeId}/candidates": {
+      "post": {
+        "operationId": "saveProjectScriptCandidate",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "episodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ProjectTextIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTextMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveProjectScriptCandidateRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}": {
+      "get": {
+        "operationId": "getProjectTextArtifact",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetProjectTextArtifactResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/revisions": {
+      "get": {
+        "operationId": "listProjectTextRevisions",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "afterContentRevision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "default": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16,
+              "default": 16
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTextRevisionListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/revisions/{contentRevision}": {
+      "get": {
+        "operationId": "getProjectTextRevision",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "contentRevision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetProjectTextRevisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/selection": {
+      "put": {
+        "operationId": "selectProjectTextRevision",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ProjectTextIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTextMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectProjectTextRevisionRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/lock": {
+      "put": {
+        "operationId": "setProjectTextArtifactLocked",
+        "description": "Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor.",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "name": "artifactId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ProjectTextIdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bounded authorized project text data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTextMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProjectTextArtifactLockedRequest"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -5981,6 +6648,17 @@
         }
       },
       "CreativeProjectIdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "ProjectTextIdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
         "required": true,
@@ -13491,6 +14169,779 @@
             "minLength": 24,
             "maxLength": 24,
             "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+          }
+        }
+      },
+      "ProjectTextOutlineContent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "logline",
+          "synopsis",
+          "episodes"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalars / 320 UTF-16 units; already trimmed."
+          },
+          "logline": {
+            "type": "string",
+            "minLength": 1,
+            "description": "At most 2048 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+          },
+          "synopsis": {
+            "type": "string",
+            "minLength": 1,
+            "description": "At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+          },
+          "episodes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "episodeId",
+                "title",
+                "summary"
+              ],
+              "properties": {
+                "episodeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+                },
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160,
+                  "description": "At most 160 Unicode scalars / 320 UTF-16 units; already trimmed."
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+                }
+              }
+            }
+          }
+        },
+        "description": "Strict outline content: unique episode identifiers and at most 16384 canonical JSON UTF-8 bytes."
+      },
+      "ProjectTextScriptContent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "scenes"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "description": "At most 160 Unicode scalars / 320 UTF-16 units; already trimmed."
+          },
+          "scenes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sceneId",
+                "location",
+                "timeOfDay",
+                "action",
+                "dialogue"
+              ],
+              "properties": {
+                "sceneId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+                },
+                "location": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "At most 640 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+                },
+                "timeOfDay": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "At most 320 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+                },
+                "action": {
+                  "type": "string",
+                  "minLength": 0,
+                  "description": "At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+                },
+                "dialogue": {
+                  "type": "array",
+                  "minItems": 0,
+                  "maxItems": 64,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "speaker",
+                      "text"
+                    ],
+                    "properties": {
+                      "speaker": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "At most 640 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+                      },
+                      "text": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Strict script content: unique scene identifiers, every scene has action or dialogue, at most 32768 canonical JSON UTF-8 bytes."
+      },
+      "PublicProjectTextArtifact": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectId",
+              "artifactId",
+              "revision",
+              "latestContentRevision",
+              "selectedContentRevision",
+              "locked",
+              "createdAt",
+              "updatedAt",
+              "kind",
+              "episodeId"
+            ],
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "artifactId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "latestContentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "selectedContentRevision": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp with milliseconds."
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp with milliseconds."
+              },
+              "kind": {
+                "const": "outline"
+              },
+              "episodeId": {
+                "type": "null"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectId",
+              "artifactId",
+              "revision",
+              "latestContentRevision",
+              "selectedContentRevision",
+              "locked",
+              "createdAt",
+              "updatedAt",
+              "kind",
+              "episodeId"
+            ],
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "artifactId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "latestContentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "selectedContentRevision": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp with milliseconds."
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp with milliseconds."
+              },
+              "kind": {
+                "const": "script"
+              },
+              "episodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              }
+            }
+          }
+        ]
+      },
+      "PublicProjectTextRevision": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectId",
+              "artifactId",
+              "contentRevision",
+              "brief",
+              "contentDigest",
+              "createdAt",
+              "kind",
+              "episodeId",
+              "outline",
+              "content"
+            ],
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "artifactId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "contentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "brief": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "briefRevision",
+                  "contentDigest"
+                ],
+                "properties": {
+                  "briefRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "contentDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "contentDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp with milliseconds."
+              },
+              "kind": {
+                "const": "outline"
+              },
+              "episodeId": {
+                "type": "null"
+              },
+              "outline": {
+                "type": "null"
+              },
+              "content": {
+                "$ref": "#/components/schemas/ProjectTextOutlineContent"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "projectId",
+              "artifactId",
+              "contentRevision",
+              "brief",
+              "contentDigest",
+              "createdAt",
+              "kind",
+              "episodeId",
+              "outline",
+              "content"
+            ],
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "artifactId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "contentRevision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "brief": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "briefRevision",
+                  "contentDigest"
+                ],
+                "properties": {
+                  "briefRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "contentDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "contentDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Canonical UTC ISO timestamp with milliseconds."
+              },
+              "kind": {
+                "const": "script"
+              },
+              "episodeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              "outline": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "artifactId",
+                      "contentRevision",
+                      "contentDigest"
+                    ],
+                    "properties": {
+                      "artifactId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+                      },
+                      "contentRevision": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "contentDigest": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "content": {
+                "$ref": "#/components/schemas/ProjectTextScriptContent"
+              }
+            }
+          }
+        ]
+      },
+      "PublicProjectTextArtifactView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifact",
+          "selectedRevision",
+          "dependencyState",
+          "staleReasons"
+        ],
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/PublicProjectTextArtifact"
+          },
+          "selectedRevision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublicProjectTextRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dependencyState": {
+            "type": "string",
+            "enum": [
+              "unselected",
+              "current",
+              "stale"
+            ]
+          },
+          "staleReasons": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "enum": [
+                "brief-changed",
+                "outline-selection-changed"
+              ]
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "SaveProjectOutlineCandidateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedArtifactRevision",
+          "briefRevision",
+          "content"
+        ],
+        "properties": {
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "content": {
+            "$ref": "#/components/schemas/ProjectTextOutlineContent"
+          }
+        }
+      },
+      "SaveProjectScriptCandidateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedArtifactRevision",
+          "briefRevision",
+          "outline",
+          "content"
+        ],
+        "properties": {
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "outline": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "artifactId",
+                  "contentRevision"
+                ],
+                "properties": {
+                  "artifactId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+                  },
+                  "contentRevision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "content": {
+            "$ref": "#/components/schemas/ProjectTextScriptContent"
+          }
+        }
+      },
+      "SelectProjectTextRevisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedArtifactRevision",
+          "contentRevision"
+        ],
+        "properties": {
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "contentRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "SetProjectTextArtifactLockedRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedArtifactRevision",
+          "locked"
+        ],
+        "properties": {
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "locked": {
+            "type": "boolean"
+          }
+        }
+      },
+      "GetProjectTextArtifactResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "view"
+        ],
+        "properties": {
+          "view": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublicProjectTextArtifactView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "GetProjectTextRevisionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contentRevision"
+        ],
+        "properties": {
+          "contentRevision": {
+            "$ref": "#/components/schemas/PublicProjectTextRevision"
+          }
+        }
+      },
+      "ProjectTextArtifactListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "artifacts",
+          "nextArtifactId"
+        ],
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/PublicProjectTextArtifact"
+            }
+          },
+          "nextArtifactId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProjectTextRevisionListResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revisions",
+          "nextContentRevision"
+        ],
+        "properties": {
+          "revisions": {
+            "type": "array",
+            "minItems": 0,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/PublicProjectTextRevision"
+            }
+          },
+          "nextContentRevision": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProjectTextMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "disposition",
+          "artifact",
+          "contentRevision"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "save-outline",
+              "save-script",
+              "select-revision",
+              "set-lock"
+            ]
+          },
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/PublicProjectTextArtifact"
+          },
+          "contentRevision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PublicProjectTextRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

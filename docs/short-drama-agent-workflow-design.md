@@ -1,6 +1,6 @@
 # AI 短剧：Agent 与工作流协同方案
 
-日期：2026-10-05。状态：产品与架构设计，新增内容尚未实现。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
+日期：2026-10-05。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，真实 Agent 工具及阶段页面仍待接线。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
 
 ## 产品决定
 

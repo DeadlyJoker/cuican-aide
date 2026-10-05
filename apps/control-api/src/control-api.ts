@@ -5,6 +5,8 @@ import { registerModelSpendingRoutes } from "./model-spending-route.ts";
 import { registerExtensionConfigurationRoutes } from "./extension-configuration-route.ts";
 import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
+import { registerProjectTextRoutes } from "./project-text-route.ts";
+import type { ProjectTextApplicationService } from "@crewon/application";
 import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
 import { registerProjectGenerationReadRoutes } from "./project-generation-read-route.ts";
 import { registerProjectGenerationSelectionRoutes } from "./project-generation-selection-route.ts";
@@ -245,6 +247,7 @@ export type ControlApiDependencies = Readonly<{
   extensionTasks?: ExtensionTaskApplicationService | null;
   extensionReads?: ExtensionReadApplicationService | null;
   creativeProjects?: CreativeProjectApplicationService | null;
+  projectTexts?: ProjectTextApplicationService | null;
   projectGenerationReads?: ProjectGenerationReadApplicationService | null;
   projectConceptSelections?: ProjectConceptSelectionApplicationService | null;
   pluginInstallation?: PluginInstallationControlService | null;
@@ -376,6 +379,12 @@ export function buildControlApi(
       identity: dependencies.identity,
       service: dependencies.pluginCreditReads,
     });
+  if (dependencies.projectTexts != null) {
+    registerProjectTextRoutes(app, {
+      identity: dependencies.identity,
+      projectTexts: dependencies.projectTexts,
+    });
+  }
   if (dependencies.creativeProjects != null) {
     registerCreativeProjectRoutes(app, {
       identity: dependencies.identity,
@@ -575,7 +584,9 @@ export function buildControlApi(
       kind: "thread.create",
       idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
       title: body.title,
-      ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),
+      ...(body.workspaceId === undefined
+        ? {}
+        : { workspaceId: body.workspaceId }),
     });
     const response: ThreadMutationResponse = {
       disposition: result.disposition,

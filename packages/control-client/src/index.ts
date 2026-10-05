@@ -3,6 +3,7 @@ export * from "./extension-control-client.ts";
 export * from "./plugin-control-client.ts";
 export * from "./plugin-credit-control-client.ts";
 export * from "./creative-project-control-client.ts";
+export * from "./project-text-control-client.ts";
 export * from "./run-event-stream.ts";
 export * from "./run-plan-view.ts";
 export * from "./run-view.ts";

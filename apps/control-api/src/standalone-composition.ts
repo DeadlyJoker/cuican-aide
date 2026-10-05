@@ -762,6 +762,7 @@ function composeControlApi(
         authorization,
       ),
       creativeProjects: preparedProjects?.service,
+      projectTexts: preparedProjects?.textService,
       projectGenerationReads,
       projectConceptSelections: composeOwnedProjectGenerationSelectionService({
         projects: preparedProjects,

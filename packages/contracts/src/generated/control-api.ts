@@ -1396,6 +1396,176 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/creative-projects/{projectId}/text-artifacts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    get: operations["listProjectTextArtifacts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/outline": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    get: operations["getProjectOutline"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/outline/candidates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    post: operations["saveProjectOutlineCandidate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/scripts/{episodeId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    get: operations["getProjectScript"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/scripts/{episodeId}/candidates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    post: operations["saveProjectScriptCandidate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    get: operations["getProjectTextArtifact"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/revisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    get: operations["listProjectTextRevisions"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/revisions/{contentRevision}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    get: operations["getProjectTextRevision"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/selection": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    put: operations["selectProjectTextRevision"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/creative-projects/{projectId}/text-artifacts/items/{artifactId}/lock": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Explicit project text opt-in, current authenticated actor and creative project authorization. Candidate/selection/lock only affect text artifact CAS; old project shape and revision remain unchanged. No model, Run, supplier, generation or billing. Exact body/query fields; total response <=60 KiB, history trims only complete suffix records with last returned cursor. */
+    put: operations["setProjectTextArtifactLocked"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3444,6 +3614,199 @@ export interface components {
       /** Format: date-time */
       expectedExpiresAt: string;
     };
+    /** @description Strict outline content: unique episode identifiers and at most 16384 canonical JSON UTF-8 bytes. */
+    ProjectTextOutlineContent: {
+      /** @description At most 160 Unicode scalars / 320 UTF-16 units; already trimmed. */
+      title: string;
+      /** @description At most 2048 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+      logline: string;
+      /** @description At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+      synopsis: string;
+      episodes: {
+        /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+        episodeId: string;
+        /** @description At most 160 Unicode scalars / 320 UTF-16 units; already trimmed. */
+        title: string;
+        /** @description At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+        summary: string;
+      }[];
+    };
+    /** @description Strict script content: unique scene identifiers, every scene has action or dialogue, at most 32768 canonical JSON UTF-8 bytes. */
+    ProjectTextScriptContent: {
+      /** @description At most 160 Unicode scalars / 320 UTF-16 units; already trimmed. */
+      title: string;
+      scenes: {
+        /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+        sceneId: string;
+        /** @description At most 640 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+        location: string;
+        /** @description At most 320 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+        timeOfDay: string;
+        /** @description At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+        action: string;
+        dialogue: {
+          /** @description At most 640 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+          speaker: string;
+          /** @description At most 8192 UTF-8 bytes; no lone surrogate, DEL or C0 except TAB/LF/CR. Creative whitespace preserved. */
+          text: string;
+        }[];
+      }[];
+    };
+    PublicProjectTextArtifact:
+      | {
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          projectId: string;
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          artifactId: string;
+          revision: number;
+          latestContentRevision: number;
+          selectedContentRevision: number | null;
+          locked: boolean;
+          /**
+           * Format: date-time
+           * @description Canonical UTC ISO timestamp with milliseconds.
+           */
+          createdAt: string;
+          /**
+           * Format: date-time
+           * @description Canonical UTC ISO timestamp with milliseconds.
+           */
+          updatedAt: string;
+          /** @constant */
+          kind: "outline";
+          episodeId: null;
+        }
+      | {
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          projectId: string;
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          artifactId: string;
+          revision: number;
+          latestContentRevision: number;
+          selectedContentRevision: number | null;
+          locked: boolean;
+          /**
+           * Format: date-time
+           * @description Canonical UTC ISO timestamp with milliseconds.
+           */
+          createdAt: string;
+          /**
+           * Format: date-time
+           * @description Canonical UTC ISO timestamp with milliseconds.
+           */
+          updatedAt: string;
+          /** @constant */
+          kind: "script";
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          episodeId: string;
+        };
+    PublicProjectTextRevision:
+      | {
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          projectId: string;
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          artifactId: string;
+          contentRevision: number;
+          brief: {
+            briefRevision: number;
+            contentDigest: string;
+          };
+          contentDigest: string;
+          /**
+           * Format: date-time
+           * @description Canonical UTC ISO timestamp with milliseconds.
+           */
+          createdAt: string;
+          /** @constant */
+          kind: "outline";
+          episodeId: null;
+          outline: null;
+          content: components["schemas"]["ProjectTextOutlineContent"];
+        }
+      | {
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          projectId: string;
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          artifactId: string;
+          contentRevision: number;
+          brief: {
+            briefRevision: number;
+            contentDigest: string;
+          };
+          contentDigest: string;
+          /**
+           * Format: date-time
+           * @description Canonical UTC ISO timestamp with milliseconds.
+           */
+          createdAt: string;
+          /** @constant */
+          kind: "script";
+          /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+          episodeId: string;
+          outline: {
+            /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+            artifactId: string;
+            contentRevision: number;
+            contentDigest: string;
+          } | null;
+          content: components["schemas"]["ProjectTextScriptContent"];
+        };
+    PublicProjectTextArtifactView: {
+      artifact: components["schemas"]["PublicProjectTextArtifact"];
+      selectedRevision:
+        | components["schemas"]["PublicProjectTextRevision"]
+        | null;
+      /** @enum {string} */
+      dependencyState: "unselected" | "current" | "stale";
+      staleReasons: ("brief-changed" | "outline-selection-changed")[];
+    };
+    SaveProjectOutlineCandidateRequest: {
+      expectedArtifactRevision: number;
+      briefRevision: number;
+      content: components["schemas"]["ProjectTextOutlineContent"];
+    };
+    SaveProjectScriptCandidateRequest: {
+      expectedArtifactRevision: number;
+      briefRevision: number;
+      outline: {
+        /** @description Opaque Unicode identifier, exact identity; no surrounding whitespace, controls or URL dot segments. */
+        artifactId: string;
+        contentRevision: number;
+      } | null;
+      content: components["schemas"]["ProjectTextScriptContent"];
+    };
+    SelectProjectTextRevisionRequest: {
+      expectedArtifactRevision: number;
+      contentRevision: number;
+    };
+    SetProjectTextArtifactLockedRequest: {
+      expectedArtifactRevision: number;
+      locked: boolean;
+    };
+    GetProjectTextArtifactResponse: {
+      view: components["schemas"]["PublicProjectTextArtifactView"] | null;
+    };
+    GetProjectTextRevisionResponse: {
+      contentRevision: components["schemas"]["PublicProjectTextRevision"];
+    };
+    ProjectTextArtifactListResponse: {
+      artifacts: components["schemas"]["PublicProjectTextArtifact"][];
+      nextArtifactId: string | null;
+    };
+    ProjectTextRevisionListResponse: {
+      revisions: components["schemas"]["PublicProjectTextRevision"][];
+      nextContentRevision: number | null;
+    };
+    ProjectTextMutationResponse: {
+      /** @enum {string} */
+      kind: "save-outline" | "save-script" | "select-revision" | "set-lock";
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      artifact: components["schemas"]["PublicProjectTextArtifact"];
+      contentRevision:
+        | components["schemas"]["PublicProjectTextRevision"]
+        | null;
+    };
   };
   responses: {
     /** @description Stable safe error envelope */
@@ -3486,6 +3849,8 @@ export interface components {
     Limit: number;
     /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
     CreativeProjectIdempotencyKey: string;
+    /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+    ProjectTextIdempotencyKey: string;
   };
   requestBodies: never;
   headers: never;
@@ -6960,6 +7325,330 @@ export interface operations {
       413: components["responses"]["Error"];
       500: components["responses"]["Error"];
       503: components["responses"]["Error"];
+    };
+  };
+  listProjectTextArtifacts: {
+    parameters: {
+      query?: {
+        afterArtifactId?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectTextArtifactListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getProjectOutline: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetProjectTextArtifactResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  saveProjectOutlineCandidate: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["ProjectTextIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SaveProjectOutlineCandidateRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectTextMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getProjectScript: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        episodeId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetProjectTextArtifactResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  saveProjectScriptCandidate: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["ProjectTextIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+        episodeId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SaveProjectScriptCandidateRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectTextMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getProjectTextArtifact: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        artifactId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetProjectTextArtifactResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listProjectTextRevisions: {
+    parameters: {
+      query?: {
+        afterContentRevision?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        projectId: string;
+        artifactId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectTextRevisionListResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getProjectTextRevision: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: string;
+        artifactId: string;
+        contentRevision: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetProjectTextRevisionResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  selectProjectTextRevision: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["ProjectTextIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+        artifactId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SelectProjectTextRevisionRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectTextMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  setProjectTextArtifactLocked: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
+        "Idempotency-Key": components["parameters"]["ProjectTextIdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        projectId: string;
+        artifactId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetProjectTextArtifactLockedRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded authorized project text data */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProjectTextMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
     };
   };
 }

@@ -8,6 +8,7 @@ import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
 import { PostgresPluginCreditSettlementStore } from "./postgres-plugin-credit-settlement-store.ts";
 import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
+import { PostgresProjectTextStore } from "./project-text-postgres-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
   RunStoreError,
@@ -228,6 +229,16 @@ export class PostgresDomainStore
   creativeProjectStore(): PostgresCreativeProjectStore {
     this.assertOpen();
     return new PostgresCreativeProjectStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Shares the parent pool and lifetime; text migration remains explicit. */
+  projectTextStore(): PostgresProjectTextStore {
+    this.assertOpen();
+    return new PostgresProjectTextStore({
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),

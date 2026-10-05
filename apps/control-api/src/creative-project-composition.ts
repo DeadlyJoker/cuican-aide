@@ -1,5 +1,7 @@
 import {
   CreativeProjectApplicationService,
+  ProjectTextApplicationService,
+  type ProjectTextStore,
   type CreativeProjectAuthorizationPort,
   type CreativeProjectStore,
 } from "@crewon/application";
@@ -46,6 +48,7 @@ import {
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
+  textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -57,6 +60,7 @@ export type CreativeProjectCompositionConfig = Readonly<{
 
 export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
+  readonly textService?: ProjectTextApplicationService;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
   readonly generationReads?: ProjectGenerationReadConfiguration;
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
@@ -86,6 +90,7 @@ export type PreparedCreativeProjects = {
 
 type CreativeProjectStoreOwner = Readonly<{
   creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
+  projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
   extensionStore?(): ProjectGenerationReadStore;
   projectConceptSelectionStore?: ProjectGenerationSelectionStoreOwner["projectConceptSelectionStore"];
 }>;
@@ -102,6 +107,7 @@ export function captureCreativeProjectCompositionConfig(
     Reflect.ownKeys(input).some(
       (key) =>
         key !== "authorization" &&
+        key !== "textArtifacts" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
@@ -114,6 +120,31 @@ export function captureCreativeProjectCompositionConfig(
     !Object.hasOwn(fields.authorization!, "value")
   )
     throw new Error("creative_project_configuration_invalid");
+  let textArtifacts: CreativeProjectCompositionConfig["textArtifacts"];
+  const textField = fields.textArtifacts;
+  if (textField !== undefined) {
+    if (!Object.hasOwn(textField, "value") || !textField.enumerable)
+      throw new Error("creative_project_configuration_invalid");
+    const input = textField.value;
+    if (
+      input === null ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      (Object.getPrototypeOf(input) !== Object.prototype &&
+        Object.getPrototypeOf(input) !== null)
+    )
+      throw new Error("project_text_configuration_invalid");
+    const descriptors = Object.getOwnPropertyDescriptors(input);
+    if (
+      Reflect.ownKeys(input).length !== 1 ||
+      !Object.hasOwn(descriptors, "version") ||
+      !Object.hasOwn(descriptors.version!, "value") ||
+      !descriptors.version!.enumerable ||
+      descriptors.version!.value !== "crewon.project-text.v1"
+    )
+      throw new Error("project_text_configuration_invalid");
+    textArtifacts = Object.freeze({ version: "crewon.project-text.v1" });
+  }
   const pluginUiField = fields.pluginUi;
   if (
     pluginUiField !== undefined &&
@@ -198,6 +229,7 @@ export function captureCreativeProjectCompositionConfig(
         authorization: Object.freeze({
           authorize: descriptor.value.bind(port),
         }),
+        ...(textArtifacts === undefined ? {} : { textArtifacts }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
@@ -244,6 +276,21 @@ export async function prepareCreativeProjects(
       : undefined;
   const store = owner.creativeProjectStore();
   await store.migrate();
+  let textService: ProjectTextApplicationService | undefined;
+  if (configuration.textArtifacts !== undefined) {
+    if (owner.projectTextStore === undefined)
+      throw new Error("project_text_composition_required");
+    const texts = owner.projectTextStore();
+    await texts.migrate();
+    textService = new ProjectTextApplicationService({
+      store: texts,
+      projects: store,
+      authorization: configuration.authorization,
+      clock: new SystemApplicationClock(),
+      ids: new UuidV7ApplicationIdGenerator(),
+      digester: new NodeSha256ContentDigester(),
+    });
+  }
   if (
     configuration.pluginGenerations !== undefined &&
     configuration.resultSelections !== undefined
@@ -282,6 +329,7 @@ export async function prepareCreativeProjects(
           configuration.resultSelections,
         );
   return {
+    ...(textService === undefined ? {} : { textService }),
     ...(configuration.selectionUi === undefined
       ? {}
       : { selectionUi: configuration.selectionUi }),

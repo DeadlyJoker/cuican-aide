@@ -9,6 +9,7 @@ import type { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
 import { SqlitePluginCreditSettlementStore } from "./sqlite-plugin-credit-settlement-store.ts";
 import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
+import { SqliteProjectTextStore } from "./project-text-sqlite-store.ts";
 import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
 import { captureSqliteInstallationDatabase } from "./sqlite-plugin-installation-profile-lock.ts";
 import { SqlitePluginInstallationProfileLifetime } from "./sqlite-plugin-installation-profile-lifetime.ts";
@@ -735,6 +736,15 @@ export class SqliteRunStore implements DomainStore {
   /** Shares the parent connection and lifetime; project migration remains explicit. */
   creativeProjectStore(): SqliteCreativeProjectStore {
     return createSqliteCreativeProjectStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Shares the parent connection and lifetime; text migration remains explicit. */
+  projectTextStore(): SqliteProjectTextStore {
+    this.#assertOpen();
+    return new SqliteProjectTextStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
     });
