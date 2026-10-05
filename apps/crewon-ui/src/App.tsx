@@ -107,7 +107,9 @@ import {
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import { useDesktopLocalManagementAccess } from "./lib/desktop/DesktopLocalManagementContext";
 import { useDesktopPluginSourceImportAccess } from "./lib/desktop/useDesktopPluginSourceImportAccess";
+import { useDesktopPluginExecutionSetupAccess } from "./lib/desktop/useDesktopPluginExecutionSetupAccess";
 import { useLocalPluginSourceImportSettingsRecovery } from "./lib/plugins/useLocalPluginSourceImportSettingsRecovery";
+import { useLocalPluginExecutionSetupSettingsRecovery } from "./lib/plugins/useLocalPluginExecutionSetupSettingsRecovery";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
@@ -141,6 +143,11 @@ export function App({
   const platformAccount = useAgentPlatformAccount();
   const localManagementAccess = useDesktopLocalManagementAccess();
   const localSourceImport = useDesktopPluginSourceImportAccess(
+    platformAccount?.user
+      ? `account:${platformAccount.user.id}`
+      : "native-local",
+  );
+  const executionSetup = useDesktopPluginExecutionSetupAccess(
     platformAccount?.user
       ? `account:${platformAccount.user.id}`
       : "native-local",
@@ -1020,6 +1027,10 @@ export function App({
     openSettings();
     openSettingsSection(section);
   });
+  useLocalPluginExecutionSetupSettingsRecovery(executionSetup, () => {
+    openSettings();
+    openSettingsSection("mcp-servers");
+  });
   useAppStateRefsEffect([
     [openLibrary, openLibraryRef],
     [openThreadSettingsPanel, openThreadSettingsPanelRef],
@@ -1295,6 +1306,7 @@ export function App({
         }
         controlClient={controlClient}
         localSourceImport={localSourceImport}
+        executionSetup={executionSetup}
         platformUser={platformAccount?.user ?? null}
         activeSection={settingsSection}
         dataMode={

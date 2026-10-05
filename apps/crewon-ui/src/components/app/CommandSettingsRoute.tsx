@@ -17,11 +17,13 @@ import {
 import { SettingsNavigation } from "../settings/SettingsNavigation";
 import { InstalledPluginSettingsLocalImport } from "../settings/InstalledPluginSettingsLocalImport";
 import type { DesktopLocalPluginSourceImportAccess } from "../../lib/desktop/desktopLocalPluginSourceImportProtocol";
+import type { DesktopLocalPluginExecutionSetupAccess } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
 
 export type CommandSettingsRouteProps = {
   onPrepareTaskPack?: TaskPackDraftHandler;
   controlClient?: ControlApiClient | null;
   localSourceImport?: DesktopLocalPluginSourceImportAccess | null;
+  executionSetup?: DesktopLocalPluginExecutionSetupAccess | null;
   platformUser?: AgentPlatformUser | null;
   activeSection: SettingsSection;
   dataMode: SettingsDataMode;
@@ -42,6 +44,7 @@ export function CommandSettingsRoute({
   onPrepareTaskPack,
   controlClient = null,
   localSourceImport = null,
+  executionSetup = null,
   platformUser = null,
   activeSection,
   dataMode,
@@ -97,6 +100,7 @@ export function CommandSettingsRoute({
               activeSection={activeSection}
               client={controlClient}
               localSourceImport={localSourceImport}
+              executionSetup={executionSetup}
               pluginConfigurationClient={controlClient}
               locale={locale}
               platformUser={platformUser}

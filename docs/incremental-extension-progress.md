@@ -1,10 +1,28 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：BLOCKED（受阻），当前 Native 生图链路等待用户选择真实 DNS 或现有系统代理接入；不能据此认为完整插件子系统已经交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：进行中。统一短剧包和原 Settings 执行准备已实现并完成隔离正式 Main 验收；在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
 
-当前用户要求优先跑通调用流程，再细化插件产品形态。第一个真实场景已确定为用户提供的 ComfyUI Krea2 文生图工作流，生成全部由外部服务完成。
+最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐，下一项产品开发优先交付共享阶段命令和 Agent 文本阶段入口；实际生图验证并行推进，不阻塞文本阶段。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-05：统一短剧包与原 Settings 执行准备
+
+参考 [shuohao-skills](https://github.com/eternityspring/shuohao-skills) 和 [Reelbench](https://reelbench.79px.com/)，创作阶段继续按大纲、角色/美术/剧本、分镜组织；各阶段产物归入同一个短剧项目。`crewon.short-drama` 12.0.0 已将原 UI 与 T01 Krea2 生图、T04 三视图执行适配器合并为一个可安装包，未新增独立预设插件。大纲、锚点派生、分镜、视频和配音仍是后续产品阶段，不能由 T04 文本三视图推断人物一致性已经实现。
+
+接线审计发现 Settings 原来只有导入、安装、保存配置和启用选择，执行依赖预写的私有 policy，项目执行审批 helper 没有生产调用。现在在原参数面板增加明确的本机执行准备：Main 读取确切安装包和已保存配置，展示服务地址及四类受控请求；用户确认后，沿原 Supervisor 队列两次物理停止、准备和重启，追加私有执行策略，再用真实 prepared entry 组合同包项目 v3 映射。最后按新 epoch 的完整包、配置和 target 核验准备结果。保存参数、Node 来源信任均不能隐式授予执行或网络权限。
+
+原启用选择保持，准备不创建生成任务；已启用的选择仍由原启动恢复逻辑处理。两阶段的提交事实分别保存，重启失败返回需要重启，不把政策提交解释为执行就绪。原 Settings 自身重挂通过有界 Main 回执和公共票据恢复；外部会话变化撤回旧票据，未知结果只读取原状态，不再次确认。旧 Web/旧 preload 缺少新可选能力时保持原页面，所有原 CSS 和短剧包 UI 不变。
+
+本次准备入口暂只支持已核验的 `example.publisher` / `crewon.short-drama` 12.0.0 同包协议。已有 Krea 策略、网络授权及项目映射逐项保留；已有 Short 服务地址授权冲突时拒绝替换，不能借新的准备修改旧请求绑定。通用安装、服务和 Node action 协议继续保留，任意第三方能力的授权产品入口仍需按其真实声明扩展。用户桌面安装尚未替换，积分继续后置；本机准备不证明供应商连通或在线 S0 已完成。
+
+最终相关 Host/IPC/设置/旧桥组合 **15 文件、172/172、零跳过**，类型、UI/Host 构建、format 与 boundary 通过。正式编译 Main/preload/file 页面、实际 Native/Control/Worker 和独立 userData 验收 **1/1、零跳过**：初始只有 metadata-v2 且无 policy，从原用户栏进入设置，安装停用的真实 Short12，保存参数 revision 1，提前发生真实 owner 通知后再预览与明确许可，沿原流程两次物理停止/启动，返回完整核验的 prepared/ready/mappingCommitted 回执。来源下线后实际冷重开仍读取同一安装/配置/policy/v3，内存回执为 null，不制造旧成功。全部自有进程已物理退场，无强制遗留；5 张桌面、低高度、窄宽和暖/冷截图确认原设置布局及可滚动到主要动作，无横向溢出。
+
+证据位于 `output/extensions/checks/short-drama-native-execution-setup-20261005/native-execution-setup-proof.json` 及同目录退场 JSON/PNG。SQLite 保持 disabled、selection revision 1，activation/Run/任务/生成/operation 全零；只允许本地具名模型目录 GET（5 次），无模型 POST，生成地址为 `.invalid`，未调用供应商。这是正式源码 Main 的隔离验收，不等同已安装的用户 `.app`、启用后的完整生图或在线 S0。真实用户 App 仍为 0.1.14。
+
+专项前两次发现合法 `credentialKind:none` 启动接线缺失：Main 不应声明必须含密钥的 private probe，且应按现有协议显式产生 `CREWON_MODEL_CREDENTIAL_REQUIRED=0`。现只修 Main producer，原 Worker/Control 校验不放宽。随后两次失败来自新 DOM driver 误用共用 class 选中来源导入区；依据真实按钮 label/disabled 诊断限定「插件管理」区后通过，未改产品按钮或延长超时。历史失败证据保留，不以它代替最终成功。
+
+全量 UI 已运行：**4,406 通过、26 失败、51 跳过**，不能称全量绿色。8 个来源权限断言受本轮 shell umask 077 影响，022 窄跑 **63/63**；soak 的五秒并行超时窄跑 **4/4**。其余17个在提交版源码中已存在：11个 UI/Thread 行为失败以隔离 `git archive HEAD` 同例复现，设置积分GET/架构扫描2项旧失配，以及旧 Native执行/升级/业务流4项以完整隔离 HEAD 同例复现。未删除测试、改快照或放宽断言；旧严格 Thread schema 的 workspaceId 兼容问题及其他基线失败仍需单独修复。范围分别记录于 `native-execution-setup-narrow-final-20261005.log`、`native-execution-setup-ui-full-20261005.log`、`native-execution-setup-ui-baseline-comparison-20261005.json` 和 `native-execution-setup-failure-classification-20261005.json`，各专项有重叠，不求和。
 
 ## 2026-10-05：SSH 服务核验与既有代理的原任务读取
 

@@ -31,6 +31,7 @@ import { bindDesktopHttpLifetime } from "./desktopHttpLifetime.ts";
 import { desktopHttpReply } from "./desktopHttpReply.ts";
 import { DesktopPluginUiAssetBroker } from "./desktopPluginUiAssets.ts";
 import { bindDesktopLocalPluginSourceImportIpc } from "./desktopLocalPluginSourceImportIpc.ts";
+import { bindDesktopLocalPluginExecutionSetupIpc } from "./desktopLocalPluginExecutionSetupIpc.ts";
 import { recoverDesktopLocalPluginSourceImport } from "./desktopLocalPluginSourceImport.ts";
 import {
   bindDesktopPluginUiProtocol,
@@ -203,6 +204,16 @@ async function launch(): Promise<void> {
     },
     diagnostic: desktopLog,
   });
+  const pluginExecutionSetup = bindDesktopLocalPluginExecutionSetupIpc({
+    window,
+    ipc: ipcMain,
+    dataDirectory: runtimeDataDirectory,
+    rendererUrl:
+      process.env.CREWON_UI_DEV_URL?.trim() ||
+      pathToFileURL(join(moduleDirectory, "../dist/index.html")).href,
+    runtime,
+    diagnostic: desktopLog,
+  });
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
   const pluginUiAssets = new DesktopPluginUiAssetBroker({
@@ -255,8 +266,14 @@ async function launch(): Promise<void> {
     quitting = true;
     removeSessionListener();
     removeLocalManagementListener();
-    void pluginSourceImports
-      .close()
+    void Promise.allSettled([
+      pluginSourceImports.close(),
+      pluginExecutionSetup.close(),
+    ])
+      .then((results) => {
+        if (results.some((result) => result.status === "rejected"))
+          desktopLog("desktop_plugin_management_cleanup_failed");
+      })
       .then(() => pluginUiAssets.close())
       .catch(() => desktopLog("desktop_plugin_ui_cleanup_failed"))
       .then(() => runtime?.stop())

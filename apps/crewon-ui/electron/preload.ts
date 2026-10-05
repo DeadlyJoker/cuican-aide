@@ -25,6 +25,10 @@ import {
   DESKTOP_LOCAL_PLUGIN_SOURCE_IMPORT_VERSION,
   type DesktopLocalPluginSourceImportClient,
 } from "../src/lib/desktop/desktopLocalPluginSourceImportProtocol.ts";
+import {
+  DESKTOP_LOCAL_PLUGIN_EXECUTION_SETUP_VERSION,
+  type DesktopLocalPluginExecutionSetupClient,
+} from "../src/lib/desktop/desktopLocalPluginExecutionSetupProtocol.ts";
 
 const invoke = <T>(channel: string, ...args: unknown[]): Promise<T> =>
   ipcRenderer.invoke(channel, ...args) as Promise<T>;
@@ -39,6 +43,32 @@ const invokeHttp = async <T>(channel: string, value: unknown): Promise<T> => {
 
 const bridge: CrewonDesktopBridge = {
   version: DESKTOP_BRIDGE_VERSION,
+  pluginExecutionSetup: Object.freeze<DesktopLocalPluginExecutionSetupClient>({
+    version: DESKTOP_LOCAL_PLUGIN_EXECUTION_SETUP_VERSION,
+    preview: (request) => invoke("crewon:plugin-execution:preview-v1", request),
+    confirm: (request) => invoke("crewon:plugin-execution:confirm-v1", request),
+    cancel: (request) => invoke("crewon:plugin-execution:cancel-v1", request),
+    readStatus: (request) =>
+      invoke("crewon:plugin-execution:status-v1", request),
+    subscribeStatusChanged: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("crewon:plugin-execution:status-changed-v1", handler);
+      return () =>
+        ipcRenderer.removeListener(
+          "crewon:plugin-execution:status-changed-v1",
+          handler,
+        );
+    },
+    subscribeOwnerChanged: (listener) => {
+      const handler = () => listener();
+      ipcRenderer.on("crewon:plugin-execution:owner-changed-v1", handler);
+      return () =>
+        ipcRenderer.removeListener(
+          "crewon:plugin-execution:owner-changed-v1",
+          handler,
+        );
+    },
+  }),
   pluginSourceImports: Object.freeze<DesktopLocalPluginSourceImportClient>({
     version: DESKTOP_LOCAL_PLUGIN_SOURCE_IMPORT_VERSION,
     previewDirectory: () => invoke("crewon:plugin-sources:preview-v1"),

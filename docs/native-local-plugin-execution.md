@@ -8,7 +8,13 @@
 
 可信 UI 明确声明必需的 `crewon.creative-projects` / `crewon.plugin-ui-recovery` v1 时，来源导入可增量添加本机项目元数据的发布配置。该路径只保存和读取元数据，不生成任务、报价或钱包。
 
-执行需要宿主在实际 runtime dataDirectory 下配置私有 `plugin-native-policy.json`，权限为 0600。其格式为 `crewon.desktop-native-plugin-policy.v1`，包含：
+`crewon.short-drama` 12.0.0 可在原业务配置表单完成执行准备：保存 `baseUrl` 和 `preset`，点击「预览执行准备」，核对 Main 返回的确切包、配置修订及网络范围，明确允许 Node 执行，再点击「允许并准备」。安装、保存、准备与启用各自独立；准备保持原启用选择，不创建生成任务。新入口仅在提供 version 1 本机能力的桌面端出现，Web 和旧 preload 保持原界面。
+
+该入口当前只接受已验证的 `example.publisher / crewon.short-drama / 12.0.0`，不是任意第三方插件的通用执行审批器。T01/T04 同属这个短剧包，`preset` 使用 `krea2-portrait` 或 `krea2-character-three-view`；网络范围只包含 `POST /prompt`、`GET /queue`、`GET /history/` 的操作路径前缀及 `GET /view`。页面显示准备成功只说明本机执行环境已核验，服务连通和真实图片仍需实际任务验收。
+
+Main 通过原 Supervisor 队列串行完成两次停止、物理退场和原启动：先保存私有执行批准并准备实际 release，再从仍有效的 release 捕获完整执行目标，保存同包 v3 项目映射并核验重启后的全部身份。Renderer 只提交一次性 `previewId` 与明确同意，不能指定路径、actor、包摘要或网络权限。配置/包/选择变化、文档退出或外部重启会撤回旧准备；发生结果未知时只能读取原状态，不重复确认。自身重启导致设置页重新挂载时保留同一公开回执，冷启动不制造上次进程的回执。
+
+旧 Krea2 和其他尚未接入此入口的包，仍由宿主在实际 runtime dataDirectory 下配置私有 `plugin-native-policy.json`，权限为 0600。其格式为 `crewon.desktop-native-plugin-policy.v1`，包含：
 
 - `packages`：完整 `pluginId`、`publisherId`、`version`、`packageDigest`，以及 `approvalRequirement`。
 - `networkGrants`：同一完整包身份、精确 HTTPS `baseUrl`、配置参数名 `baseUrlParameter`、允许的 HTTP 方法与路径。
@@ -21,7 +27,7 @@ Native Settings 的选择动作通过 Main 调用原选择 API，再对已批准
 
 ## 项目生成与积分后置
 
-短剧模块到 Krea2 的生成、查询和选用映射需要明确的 v3 项目执行审批。`composeDesktopLocalComfyProjectExecutionApproval` 只从真实批准的 UI、真实准备 release 的完整身份、参数和执行目标计算配置；该 helper 本身不授予运行权限。
+短剧模块的生成、查询和选用映射需要明确的 v3 项目执行审批。统一 Short12 的设置准备入口按上述批准链写入同包映射；旧短剧 UI → Krea2 映射保持原绑定。`composeDesktopLocalComfyProjectExecutionApproval` 只从真实批准的 UI、真实准备 release 的完整身份、参数和执行目标计算配置；该 helper 本身不授予运行权限。
 
 项目就绪、生成和查询分别核验来源 UI 包的 `read` 与目标 Node 包的 `submit` 权限。来源仍需完整安装身份、当前启用状态、发布映射和 UI 策略允许，不因只读用途绕过核验；目标始终要求真实执行授权。同一个包同时承担两种角色时也分别检查。普通 Node 任务仍只走 `submit`，纯短剧 UI 不需要额外 Node 执行授权。
 

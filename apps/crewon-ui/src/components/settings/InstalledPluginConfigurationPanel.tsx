@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import type { PluginSelectionView } from "@crewon/contracts";
 import type { Locale } from "../../lib/i18n";
 import {
@@ -7,6 +7,8 @@ import {
 } from "../../lib/plugins/useInstalledPluginConfiguration";
 import { Button } from "../ui/button";
 import { InstalledPluginConfigurationFields } from "./InstalledPluginConfigurationFields";
+import type { DesktopLocalPluginExecutionSetupAccess } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
+import { InstalledPluginExecutionSetup } from "./InstalledPluginExecutionSetup";
 import "./InstalledPluginConfigurationPanel.css";
 
 export function InstalledPluginConfigurationPanel({
@@ -14,16 +16,30 @@ export function InstalledPluginConfigurationPanel({
   selection,
   locale,
   disabled = false,
+  executionSetup,
 }: {
   client: InstalledPluginConfigurationClient;
   selection: PluginSelectionView;
   locale: Locale;
   disabled?: boolean;
+  executionSetup?: DesktopLocalPluginExecutionSetupAccess | null;
 }) {
   const state = useInstalledPluginConfiguration({ client, selection, locale });
   const idPrefix = useId();
   const zh = locale === "zh";
-  const locked = disabled || state.busy || state.retryable;
+  const [executionPending, setExecutionPending] = useState(false);
+  const locked = disabled || state.busy || state.retryable || executionPending;
+  const parameters = state.configuration?.parameters;
+  const baseUrl =
+    parameters && typeof parameters === "object" && !Array.isArray(parameters)
+      ? (Object.getOwnPropertyDescriptor(parameters, "baseUrl")
+          ?.value as unknown)
+      : null;
+  const preset =
+    parameters && typeof parameters === "object" && !Array.isArray(parameters)
+      ? (Object.getOwnPropertyDescriptor(parameters, "preset")
+          ?.value as unknown)
+      : null;
   return (
     <section
       className="installed-plugin-configuration"
@@ -72,7 +88,7 @@ export function InstalledPluginConfigurationPanel({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (!disabled && !state.saveDisabled) void state.save();
+              if (!locked && !state.saveDisabled) void state.save();
             }}
           >
             <p className="installed-plugin-configuration-hint">
@@ -130,7 +146,7 @@ export function InstalledPluginConfigurationPanel({
                 type="submit"
                 variant="outline"
                 size="sm"
-                disabled={disabled || state.saveDisabled}
+                disabled={locked || state.saveDisabled}
               >
                 {state.busy
                   ? zh
@@ -170,6 +186,34 @@ export function InstalledPluginConfigurationPanel({
           </Button>
         </div>
       )}
+      {executionSetup?.client.version === 1 &&
+        selection.pluginId === "crewon.short-drama" &&
+        state.status === "available" &&
+        state.package !== null &&
+        state.configuration !== null &&
+        state.configuration.pluginVersion === state.package.version &&
+        typeof baseUrl === "string" &&
+        (preset === "krea2-portrait" ||
+          preset === "krea2-character-three-view") && (
+          <InstalledPluginExecutionSetup
+            access={executionSetup}
+            identity={{
+              pluginId: selection.pluginId,
+              publisherId: selection.publisherId,
+              version: state.package.version,
+              packageDigest: state.package.packageDigest,
+              manifestDigest: state.configuration.manifestDigest,
+              implementationDigest: state.configuration.implementationDigest,
+              selectionRevision: selection.revision,
+              configurationRevision: state.configuration.revision,
+              configurationDigest: state.configuration.contentDigest,
+            }}
+            parameters={{ baseUrl, preset }}
+            disabled={locked || state.dirty || state.credentialsUnsupported}
+            locale={locale}
+            onMutationPendingChange={setExecutionPending}
+          />
+        )}
     </section>
   );
 }

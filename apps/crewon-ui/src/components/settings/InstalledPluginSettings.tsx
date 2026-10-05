@@ -12,21 +12,28 @@ import {
 import { Button } from "../ui/button";
 import type { InstalledPluginConfigurationClient } from "../../lib/plugins/useInstalledPluginConfiguration";
 import { InstalledPluginConfigurationPanel } from "./InstalledPluginConfigurationPanel";
+import type { DesktopLocalPluginExecutionSetupAccess } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
+import { currentLocalPluginExecutionSetupPluginId } from "../../lib/plugins/localPluginExecutionSetupRecovery";
 import "./InstalledPluginSettings.css";
 
 export function InstalledPluginSettings({
   client,
   configurationClient,
+  executionSetup,
   locale,
 }: {
   client: PluginInstallationSettingsClient;
   configurationClient?: InstalledPluginConfigurationClient;
+  executionSetup?: DesktopLocalPluginExecutionSetupAccess | null;
   locale: Locale;
 }) {
   const state = usePluginInstallationSettings(client, locale);
   const [versionPlugin, setVersionPlugin] = useState<string | null>(null);
   const [configurationPlugin, setConfigurationPlugin] = useState<string | null>(
-    null,
+    () =>
+      executionSetup
+        ? currentLocalPluginExecutionSetupPluginId(executionSetup)
+        : null,
   );
   const zh = locale === "zh";
   const disabled = state.busy || state.loading || state.retryable;
@@ -234,6 +241,7 @@ export function InstalledPluginSettings({
                         selection={selection}
                         locale={locale}
                         disabled={disabled}
+                        executionSetup={executionSetup}
                       />
                     </div>
                   )}

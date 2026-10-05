@@ -18,6 +18,7 @@ import { InstalledPluginSettings } from "../settings/InstalledPluginSettings";
 import type { TaskPackDraftHandler } from "../../lib/plugin/prepareTaskPackDraft";
 import type { InstalledPluginConfigurationClient } from "../../lib/plugins/useInstalledPluginConfiguration";
 import type { DesktopLocalPluginSourceImportAccess } from "../../lib/desktop/desktopLocalPluginSourceImportProtocol";
+import type { DesktopLocalPluginExecutionSetupAccess } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
 import { InstalledPluginSettingsLocalImport } from "../settings/InstalledPluginSettingsLocalImport";
 import { InstalledPluginCreditSettings } from "../settings/InstalledPluginCreditSettings";
 
@@ -26,6 +27,7 @@ export function ControlSettingsContent({
   client,
   pluginConfigurationClient,
   localSourceImport = null,
+  executionSetup = null,
   locale,
   platformUser,
   onSectionChange,
@@ -36,6 +38,7 @@ export function ControlSettingsContent({
     Partial<Pick<ControlApiClient, "plugins" | "pluginCredits">>;
   pluginConfigurationClient?: InstalledPluginConfigurationClient;
   localSourceImport?: DesktopLocalPluginSourceImportAccess | null;
+  executionSetup?: DesktopLocalPluginExecutionSetupAccess | null;
   locale: Locale;
   platformUser: AgentPlatformUser | null;
   onSectionChange: (section: SettingsSection) => void;
@@ -88,6 +91,7 @@ export function ControlSettingsContent({
         <InstalledPluginSettings
           client={client.plugins}
           configurationClient={pluginConfigurationClient}
+          executionSetup={executionSetup}
           locale={locale}
         />
       )}

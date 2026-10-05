@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`explicit Native execution setup in original settings > previews real public pins with an original inline Switch and only confirms after explicit consent 1`] = `
+{
+  "confirmDisabled": true,
+  "consentLabel": "我允许此包在本机执行 Node 代码，并按上列范围访问生成服务。",
+  "metadata": [
+    "使用已保存的参数准备本机执行环境。准备不会修改插件启用状态或提交生成。",
+    "crewon.short-drama · 12.0.0",
+    "保存配置版本：3",
+    "生成服务：https://named-comfy-generation.test/",
+    "预设：Krea2 写实人像（1MP）",
+    "允许的网络请求：POST /prompt · GET /queue · GET /history/…",
+    "准备会重启本机运行环境，正在运行的任务可能中断。",
+  ],
+  "rootClass": "installed-plugin-configuration-field",
+  "switchChecked": "false",
+}
+`;

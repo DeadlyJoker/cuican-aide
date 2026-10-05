@@ -82,6 +82,14 @@ import {
   type RuntimeStoppedMutationOptions,
   type RuntimeStoppedMutationResult,
 } from "./runtimeStoppedMutation.ts";
+import {
+  runDesktopLocalPluginExecutionSetup,
+  type DesktopLocalPluginExecutionSetupOwner,
+  type DesktopLocalPluginExecutionSetupClaim,
+} from "./desktopLocalPluginExecutionSetup.ts";
+import type { DesktopPluginBootstrap } from "./desktopPluginBootstrap.ts";
+import type { DesktopLocalPluginExecutionResult } from "../src/lib/desktop/desktopLocalPluginExecutionSetupProtocol.ts";
+import { withDesktopProviderProbeEnvironment } from "./desktopProviderProbeEnvironment.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -162,6 +170,7 @@ export class RuntimeSupervisor {
   #managementControl: ChildProcess | null = null;
   #pluginBootstrap: DesktopPluginBootstrapOwner | null = null;
   #installedRuntimeOwner: DesktopInstalledPluginRuntime | null = null;
+  #nativeInstalledRuntimeOwner: DesktopInstalledPluginRuntime | null = null;
   #financialEnvironment: DesktopPluginCreditSettlementEnvironment | null = null;
   #automaticInstalledRuntimeOwner: AutomaticDesktopInstalledPluginRuntime | null =
     null;
@@ -423,6 +432,8 @@ export class RuntimeSupervisor {
         if (installed !== null) {
           const installedRuntime = installed;
           this.#installedRuntimeOwner = installedRuntime;
+          if (nativeInstalled !== null)
+            this.#nativeInstalledRuntimeOwner = installedRuntime;
           installed.assertCurrent();
           await this.#runOnce(
             "Runtime release",
@@ -767,6 +778,52 @@ export class RuntimeSupervisor {
     return operation;
   }
 
+  /** Holds the original restart queue across both authority changes and their physical joins. */
+  preparePluginExecutionSetup(
+    options: Readonly<{
+      owner: DesktopLocalPluginExecutionSetupOwner;
+      claim: DesktopLocalPluginExecutionSetupClaim;
+      onStopInvalidation(stop: () => Promise<void>): Promise<void>;
+    }>,
+  ): Promise<DesktopLocalPluginExecutionResult> {
+    const operation = this.#restart
+      .catch(() => {})
+      .then(() =>
+        runDesktopLocalPluginExecutionSetup(options, {
+          mutateWhileStopped: (mutation) =>
+            runRuntimeStoppedMutation(mutation, {
+              stop: () => this.stop(),
+              start: () => this.start(),
+              assertReady: () => {
+                this.session();
+              },
+            }),
+          preparedRuntime: () => {
+            this.session();
+            this.#nativeInstalledRuntimeOwner?.assertCurrent();
+            return this.#nativeInstalledRuntimeOwner;
+          },
+        }),
+      );
+    this.#restart = operation.then(() => {});
+    void this.#restart.catch(() => {});
+    return operation;
+  }
+
+  /** Main-only issued bootstrap. The renderer never receives it or its file paths. */
+  async currentPluginBootstrap(): Promise<DesktopPluginBootstrap> {
+    this.session();
+    const owner = this.#pluginBootstrap;
+    if (owner === null)
+      throw new Error("desktop_plugin_execution_bootstrap_unavailable");
+    const bootstrap = await owner.prepared();
+    this.session();
+    if (owner !== this.#pluginBootstrap || bootstrap === null)
+      throw new Error("desktop_plugin_execution_bootstrap_unavailable");
+    bootstrap.assertCurrent?.();
+    return bootstrap;
+  }
+
   /** Updates cloud Agent profiles and restarts the runtime so they take effect. */
   async updateCloudAgentProfiles(
     profiles: readonly CloudAgentProfile[],
@@ -801,6 +858,7 @@ export class RuntimeSupervisor {
     this.#runtimeAbort = null;
     this.#pluginBootstrap?.withdraw();
     this.#installedRuntimeOwner?.withdraw();
+    this.#nativeInstalledRuntimeOwner = null;
     this.#automaticInstalledRuntimeOwner?.withdraw();
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
@@ -1118,6 +1176,7 @@ export class RuntimeSupervisor {
       CREWON_CONTROL_TARGET: `http://127.0.0.1:${this.#controlPort}`,
       CREWON_MODEL_ADAPTER: "responses",
       CREWON_MODEL_API_KEY: provider.apiKey ?? "",
+      CREWON_MODEL_CREDENTIAL_REQUIRED: provider.apiKey === null ? "0" : "1",
       CREWON_MODEL_CATALOG_JSON: JSON.stringify(modelCatalog),
       CREWON_MODEL_ID: provider.modelId,
       CREWON_DEV_AGENT_PROFILES_JSON: JSON.stringify(devAgentProfiles),
@@ -1128,14 +1187,6 @@ export class RuntimeSupervisor {
       CREWON_NATIVE_WORKSPACE_READ_ENABLED: "0",
       CREWON_POLICY_SNAPSHOT_ID: "standalone-policy-v0",
       CREWON_PRINCIPAL_ID: DESKTOP_RUNTIME_OWNER.principalId,
-      CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT: "CREWON_MODEL_API_KEY",
-      CREWON_PROVIDER_PROBE_ENDPOINT: provider.endpoint,
-      CREWON_PROVIDER_PROBE_PORT: String(this.#probePort),
-      CREWON_PROVIDER_PROBE_PROVIDER_ID: provider.providerId,
-      CREWON_PROVIDER_PROBE_RUNTIME_BINDING_ID: `desktop-${fingerprint.slice(0, 32)}`,
-      CREWON_PROVIDER_PROBE_TOKEN: this.#probeToken,
-      CREWON_PROVIDER_PROBE_WORKER_ORIGIN: `http://127.0.0.1:${this.#probePort}`,
-      CREWON_PROVIDER_PROBE_WORKER_TOKEN: this.#probeToken,
       CREWON_RELEASE_ACTOR_ID: DESKTOP_RUNTIME_OWNER.actorId,
       CREWON_RELEASE_PRINCIPAL_ID: DESKTOP_RUNTIME_OWNER.principalId,
       CREWON_RESPONSES_ENDPOINT: responsesEndpoint(provider.endpoint),
@@ -1163,7 +1214,13 @@ export class RuntimeSupervisor {
     ]) {
       delete environment[name];
     }
-    return environment;
+    return withDesktopProviderProbeEnvironment({
+      environment,
+      provider,
+      port: this.#probePort,
+      token: this.#probeToken,
+      runtimeBindingId: `desktop-${fingerprint.slice(0, 32)}`,
+    });
   }
 
   #writeMcpConfig(workspace: string): string | null {

@@ -4,6 +4,7 @@ import type {
 } from "./desktopHttpProtocol.ts";
 import type { DesktopPluginUiAssets } from "./desktopPluginUiProtocol.ts";
 import type { DesktopLocalPluginSourceImportClient } from "./desktopLocalPluginSourceImportProtocol.ts";
+import type { DesktopLocalPluginExecutionSetupClient } from "./desktopLocalPluginExecutionSetupProtocol.ts";
 import type {
   ErrorCategory,
   PluginSelectionResponse,
@@ -103,6 +104,8 @@ export interface CrewonDesktopBridge {
   readonly pluginUiAssets?: DesktopPluginUiAssets;
   /** Additive Native chooser and approval capability; absent on Web and older preloads. */
   readonly pluginSourceImports?: DesktopLocalPluginSourceImportClient;
+  /** Explicit Native business execution preparation; absent on Web and older preloads. */
+  readonly pluginExecutionSetup?: DesktopLocalPluginExecutionSetupClient;
   readonly agentPlatformCredentials: {
     catalog(): Promise<AgentPlatformCredentialCatalog>;
     upsert(
