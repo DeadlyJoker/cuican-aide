@@ -5,6 +5,7 @@ import {
   type ExtensionCreditAdmission,
   type ExtensionRunBinding,
   type WorkflowSchemaValue,
+  type ProjectStageRunAdmission,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
@@ -21,6 +22,7 @@ export async function quoteExtensionTaskGeneration(
   binding: ExtensionRunBinding,
   receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
   input: WorkflowSchemaValue,
+  qualification?: Readonly<{ projectStageAdmission: ProjectStageRunAdmission }>,
 ): Promise<ExtensionCreditAdmission> {
   if (
     dependencies.extensions.creditAdmissionVersion !==
@@ -32,14 +34,30 @@ export async function quoteExtensionTaskGeneration(
     );
   let raw: unknown;
   try {
-    raw = await dependencies.creditQuotes!.quoteGeneration(
-      Object.freeze({
-        actor,
-        binding,
-        input: JSON.parse(extensionCanonicalJson(input)) as WorkflowSchemaValue,
-        commandRequestDigest: receipt.requestDigest,
-      }),
-    );
+    const request = Object.freeze({
+      actor,
+      binding,
+      input: JSON.parse(extensionCanonicalJson(input)) as WorkflowSchemaValue,
+      commandRequestDigest: receipt.requestDigest,
+    });
+    if (qualification === undefined)
+      raw = await dependencies.creditQuotes!.quoteGeneration(request);
+    else {
+      const quote =
+        dependencies.creditQuotes?.quoteProjectConversationGeneration;
+      if (typeof quote !== "function")
+        throw new ApplicationError(
+          "conflict",
+          "extension_project_conversation_credit_quote_unavailable",
+        );
+      raw = await quote.call(
+        dependencies.creditQuotes,
+        Object.freeze({
+          ...request,
+          projectStageAdmission: qualification.projectStageAdmission,
+        }),
+      );
+    }
   } catch (error) {
     if (error instanceof ApplicationError) throw error;
     throw new ApplicationError(

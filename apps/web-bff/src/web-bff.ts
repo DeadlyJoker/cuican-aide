@@ -1,3 +1,9 @@
+import {
+  projectConversationProxyPolicy,
+  boundedProjectConversationProxyRequest,
+  boundedProjectConversationProxyResponse,
+  PROJECT_CONVERSATION_PROXY_DEADLINE_MS,
+} from "./project-conversation-proxy-policy.ts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import type {
@@ -108,6 +114,12 @@ export function createWebBff(config: {
       if (pluginPolicy?.outcome === "deny") {
         return errorResponse(pluginPolicy.status, pluginPolicy.code);
       }
+      const conversationPolicy = projectConversationProxyPolicy(policyInput);
+      if (conversationPolicy?.outcome === "deny")
+        return errorResponse(
+          conversationPolicy.status,
+          conversationPolicy.code,
+        );
       const projectPolicy = creativeProjectProxyPolicy(policyInput);
       if (projectPolicy?.outcome === "deny") {
         return errorResponse(projectPolicy.status, projectPolicy.code);
@@ -163,17 +175,20 @@ export function createWebBff(config: {
         return errorResponse(extensionPolicy.status, extensionPolicy.code);
       }
       const upstreamSignal =
+        conversationPolicy !== null ||
         pluginPolicy !== null ||
         extensionPolicy !== null ||
         projectPolicy !== null
           ? AbortSignal.any([
               request.signal,
               AbortSignal.timeout(
-                pluginPolicy !== null
-                  ? PLUGIN_PROXY_DEADLINE_MS
-                  : projectPolicy !== null
-                    ? CREATIVE_PROJECT_PROXY_DEADLINE_MS
-                    : EXTENSION_PROXY_DEADLINE_MS,
+                conversationPolicy !== null
+                  ? PROJECT_CONVERSATION_PROXY_DEADLINE_MS
+                  : pluginPolicy !== null
+                    ? PLUGIN_PROXY_DEADLINE_MS
+                    : projectPolicy !== null
+                      ? CREATIVE_PROJECT_PROXY_DEADLINE_MS
+                      : EXTENSION_PROXY_DEADLINE_MS,
               ),
             ])
           : request.signal;
@@ -181,11 +196,20 @@ export function createWebBff(config: {
       let requestBody: ArrayBuffer | Uint8Array<ArrayBuffer> | null | Response;
       try {
         requestBody =
-          projectPolicy !== null
-            ? await boundedCreativeProjectProxyRequest(request, upstreamSignal)
-            : pluginPolicy === null
-              ? await boundedRequestBody(request)
-              : await boundedPluginProxyRequest(request, upstreamSignal);
+          conversationPolicy !== null
+            ? await boundedProjectConversationProxyRequest(
+                request,
+                upstreamSignal,
+                conversationPolicy,
+              )
+            : projectPolicy !== null
+              ? await boundedCreativeProjectProxyRequest(
+                  request,
+                  upstreamSignal,
+                )
+              : pluginPolicy === null
+                ? await boundedRequestBody(request)
+                : await boundedPluginProxyRequest(request, upstreamSignal);
       } catch (error) {
         return errorResponse(
           error instanceof Error &&
@@ -193,9 +217,11 @@ export function createWebBff(config: {
               error.message === "creative_project_body_too_large")
             ? 413
             : 400,
-          projectPolicy !== null
-            ? "creative_project_request_invalid"
-            : "plugin_request_invalid",
+          conversationPolicy !== null
+            ? "project_conversation_request_invalid"
+            : projectPolicy !== null
+              ? "creative_project_request_invalid"
+              : "plugin_request_invalid",
         );
       }
       if (requestBody instanceof Response) {
@@ -225,7 +251,16 @@ export function createWebBff(config: {
       } catch {
         return errorResponse(502, "control_api_unavailable");
       }
-      if (pluginPolicy !== null) {
+      if (conversationPolicy !== null) {
+        try {
+          upstream = await boundedProjectConversationProxyResponse({
+            upstream,
+            signal: upstreamSignal,
+          });
+        } catch {
+          return errorResponse(502, "control_api_response_invalid");
+        }
+      } else if (pluginPolicy !== null) {
         try {
           upstream = await boundedPluginProxyResponse({
             upstream,

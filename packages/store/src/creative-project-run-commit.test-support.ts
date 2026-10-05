@@ -17,6 +17,7 @@ import {
   extensionToolName,
   prepareToolExecutionReceipt,
   type ToolActionIntentState,
+  type ProjectStageRunAdmission,
 } from "@crewon/domain";
 import { unmeteredFixture } from "./plugin-task-unmetered.test-support.ts";
 import { extensionStoreDigester as digester } from "./extension-store-records.ts";
@@ -25,10 +26,16 @@ import { extensionStoreDigester as digester } from "./extension-store-records.ts
 export async function projectRunCommitFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  prepareAdmission?: (
+    fixture: Awaited<ReturnType<typeof unmeteredFixture>>,
+  ) => ReturnType<Awaited<ReturnType<typeof unmeteredFixture>>["generate"]>,
 ) {
   const f = await unmeteredFixture(t, backend);
   const parent = f.first.parent;
-  const admitted = await f.generate();
+  const admitted =
+    prepareAdmission === undefined
+      ? await f.generate()
+      : await prepareAdmission(f);
   const locator = { tenantId: f.actor.tenantId, runId: admitted.binding.runId };
   const admission = await f.first.store.loadPluginTaskAdmission!(
     admitted.binding,
@@ -127,6 +134,7 @@ export async function projectRunCommitFixture(
   async function prepareOperation(
     operationId: ProjectToolMutationOperation,
     request: unknown,
+    projectStageAdmission?: ProjectStageRunAdmission,
   ) {
     active();
     const run = await parent.loadRun(locator);
@@ -210,6 +218,9 @@ export async function projectRunCommitFixture(
         admission: admission!,
         selection: f.enabled.selection,
         package: f.installed.package,
+        ...(projectStageAdmission === undefined
+          ? {}
+          : { projectStageAdmission }),
         assertCurrent: async () => {
           state.transactionChecks++;
           await state.beforeTransaction?.();

@@ -401,6 +401,9 @@ export class InstalledPluginRuntimeResolver
       projectTools = createInstalledPluginProjectToolsOwner({
         dependencies: this.#dependencies.projectTools,
         context: prepared.snapshot.context,
+        stageAdmission: this.#dependencies.contexts.verifiedProjectStage(
+          prepared.snapshot,
+        ),
         admission: prepared.admission,
         tools: prepared.proof.registration.manifest.tools,
         authorizeCurrent: async (operation) => {
@@ -421,12 +424,23 @@ export class InstalledPluginRuntimeResolver
             fail("installed_plugin_runtime_resolver_closed");
         },
       });
+      if (
+        this.#dependencies.contexts.verifiedProjectStage(prepared.snapshot) !==
+          null &&
+        projectTools === null
+      )
+        fail("installed_plugin_project_stage_services_unavailable");
       // Old hosts that do not support this hook deny the synchronous commit below. The async
       // post-setup current-authority check can never silently degrade to an initial grant.
       const openInput = {
         ...(projectTools === null
           ? {}
-          : { hostServices: [projectTools.hostService()] }),
+          : {
+              hostServices: [
+                projectTools.hostService(),
+                projectTools.contextHostService(),
+              ],
+            }),
         activation: {
           installRoot: this.#dependencies.installRoot,
           expectedPluginId: prepared.admission.pluginId,

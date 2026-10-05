@@ -27,8 +27,46 @@ import { projectTextsUiCodec } from "./project-texts-ui-codec.mjs";
 import { ProjectTextController } from "./workbench/ProjectTextController";
 import { createPluginProjectTextRecoveryClient } from "./project-text-recovery-service";
 import { projectTextRecoveryCodec } from "./project-text-recovery-codec.mjs";
+import { createPluginProjectConversationsClient } from "./project-conversations-service";
+import { projectConversationsCodec } from "./project-conversations-codec.mjs";
+import {
+  ProjectConversationController,
+  type CreationWorkspace,
+} from "./workbench/ProjectConversationController";
 
 const contributionId = "workbench";
+
+function creationWorkspace(
+  data: PluginUiProps["data"],
+): CreationWorkspace | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const context = Object.getOwnPropertyDescriptor(
+    data,
+    "projectConversationContext",
+  )?.value;
+  if (!context || typeof context !== "object" || Array.isArray(context))
+    return null;
+  const id = Object.getOwnPropertyDescriptor(
+    context,
+    "creationWorkspaceId",
+  )?.value;
+  if (
+    id !== null &&
+    (typeof id !== "string" ||
+      !id ||
+      id.length > 256 ||
+      /[\u0000-\u001f\u007f\ud800-\udfff]/u.test(id))
+  )
+    return null;
+  const label = Object.getOwnPropertyDescriptor(
+    context,
+    "creationWorkspaceName",
+  )?.value;
+  return {
+    workspaceId: id,
+    name: typeof label === "string" && label.length <= 160 ? label : null,
+  };
+}
 
 function assertContribution(props: PluginUiProps) {
   if (
@@ -118,9 +156,11 @@ export default defineUiPlugin({
     const preview = dataFlag(props.data, "shortDramaPreview");
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
+    let conversations: ProjectConversationController | null = null;
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
+      conversations?.refreshWriteActivity();
     });
     const clients = writes.services;
     controller = preview
@@ -145,6 +185,15 @@ export default defineUiPlugin({
             projectTextRecoveryCodec,
           ),
         });
+    conversations = preview
+      ? null
+      : new ProjectConversationController({
+          client: createPluginProjectConversationsClient(
+            clients,
+            projectConversationsCodec,
+          ),
+          physicalWritesPending: () => writes.pending,
+        });
     let disposed = false;
     let appliedTokens: string[] = [];
     function update(next: PluginUiProps) {
@@ -168,6 +217,8 @@ export default defineUiPlugin({
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
       const ready = dataFlag(next.data, "pluginUiReady");
+      conversations?.setWorkspace(creationWorkspace(next.data));
+      conversations?.setReady(ready);
       texts?.setReady(ready);
       if (!ready) controller?.setReady(false);
       controller?.setRecoveryContexts({
@@ -178,10 +229,11 @@ export default defineUiPlugin({
       if (ready) controller?.setReady(true);
       flushSync(() =>
         reactRoot.render(
-          controller && texts ? (
+          controller && texts && conversations ? (
             <ShortDramaPersistentWorkbench
               controller={controller}
               texts={texts}
+              conversations={conversations}
             />
           ) : (
             <ShortDramaWorkbenchPreview
@@ -197,6 +249,7 @@ export default defineUiPlugin({
       writes.dispose();
       controller?.dispose();
       texts?.dispose();
+      conversations?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -212,6 +265,7 @@ export default defineUiPlugin({
         writes.dispose();
         controller?.dispose();
         texts?.dispose();
+        conversations?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

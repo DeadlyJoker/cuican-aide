@@ -1,10 +1,24 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座、真实 Agent 文本工具、Short14 手动文字编辑/历史/采用/锁定入口及 Short15 已发送文字请求冷恢复已实现。持久项目对话与绑定、真正阶段 Agent 启动、后续媒体工作流和实际 App 交付仍待完成。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座、真实 Agent 文本工具、手动文字编辑/历史/采用/锁定、已发送文字请求冷恢复，以及 Short16 项目对话绑定和单阶段 Agent 启动已实现。持久跨阶段自动计划、后续媒体工作流和实际 App 交付继续实施。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
 
-最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐。真实 Agent 项目工具已接到原 Worker，插件文字页现与它共用成果；下一步接通项目对话/工作空间绑定及真实阶段 Agent 启动。实际生图验证并行推进，不阻塞文本阶段。
+最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐。原聊天页和插件文字页现共用项目及成果，单阶段执行固定项目、分集和上游修订；下一步验收正式桌面产物并实现有明确终点、选用规则和暂停恢复的持久文字计划。实际生图验证并行推进，不阻塞文本阶段。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：Short16 项目对话与单阶段 Agent
+
+项目概览增加“与 Agent 创作”，明确创建或进入实际关联 Thread，工作空间来自宿主当前创建选择。原聊天 Composer 增加讨论、需求、大纲、分集剧本的阶段选择和项目刷新；插件正文编辑页保留小型对话入口。两端共用需求、大纲、剧本及历史。没有另建聊天页面或项目数据，原导航、左右栏、账户、设置和全局 CSS 保持原样。
+
+独立公开 `crewon.project-conversations@1` 提供七种有界动作，`crewon.project-context@1` 让真实 Worker 命令读取当前固定范围。继续使用冻结 SDK0.1.0，插件自持 portable 与严格 codec 并固定摘要。真正 Thread/关联/回执、真正 Turn/Run/队列/阶段准入分别在父 Store 的同一个提交连接保存；重试沿原请求返回原 Run 和来源。讨论只读；需求追加当前需求修订；大纲和剧本保存候选，采用与锁定仍由工作台明确操作。阶段 Run 不允许跨项目、自动选用或提交媒体，新范围缺失或损坏不能降级为历史无范围任务。协议和限制见[项目对话说明](./plugin-project-conversations-protocol.md)。
+
+真实已安装最终 Short16 包、原 Kernel/Worker 和两库验证通过：大纲候选写入后丢失工具回执，冷重开沿原任务恢复而不重复保存；流式内容持久化并按原事件游标重读；手动采用和修改剧本后，后续 Run 读取同一项目的新版本。原 Control HTTP 在 Native SQLite 和 Remote PostgreSQL 各验证实际 Node 声明、原 Task/Run/阶段提交、同键重放、原 GET/SSE 与重连。模型为明确无网络夹具；这些检查不等于实际用户模型或在线媒体已验收。
+
+冻结 SDK 仓外严格 UI/Node 编译、独立发行包 **192/192**，真实双库 Store 专项 **25/25**、旧 Store **155/155**；Contracts **479/479**，原 Kernel/阶段/旧收费兼容 **10/10**，Application 新报价兼容 **30/30**，均零跳过。组间有重复，不相加。九种真实 Chrome 场景覆盖项目对话、文字编辑、低高度、窄屏、深色与原文字冷恢复；页面数据是公开 DTO 夹具，浏览器和服务已关闭。最终源码、发行包和各组证明位于 `output/extensions/checks/project-conversation-stage-20261006/`。
+
+Control 实际阶段 HTTP **2/2**、元数据 **2/2**、缺新报价能力拒绝 **1/1**；Renderer/原 Runtime/Setup **168/168**，新旧报价、BFF、客户端及 PluginHost **41/41**，均零跳过。类型、边界、UI lint、格式和 diff 通过。自有应用与连接池全部退出，PG52835 的9个捕获进程、socket、PID文件和自有目录已物理退场。PluginHost 既有类型脚本曾间接重建忽略的 SDK dist；公开 SDK 源码、冻结 tarball 与发行包字节未变，后续使用直接类型检查。该事实与最终宿主源码 SHA 见 `output/extensions/checks/project-conversations-20261006/backend-verification.json`。
+
+最终包为 `crewon.short-drama@16.0.0`，摘要 `sha256:536aed576dd9ac7080ce030e819a8de8d0ca773139ca0e180f05591161608b8c`，位于 `output/extensions/installable-plugins/short-drama-project-conversations-20261006/short-drama/16.0.0`。旧包不改写，原未知 Krea 任务不重新提交。单阶段已接通，跨阶段委托、原普通对话从想法创建项目、角色/分镜/视频/声音/合成和实际 App 联合验收继续实施；积分产品后置，目标保持 ACTIVE。
 
 ## 2026-10-06：Short15 已发送文字请求的持久冷恢复
 

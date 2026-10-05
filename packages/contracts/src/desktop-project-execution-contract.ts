@@ -64,6 +64,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "textArtifacts",
       "textUi",
       "textRecovery",
+      "conversations",
       "generationReads",
       "generationReadUi",
       "resultSelections",

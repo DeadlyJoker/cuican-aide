@@ -193,12 +193,26 @@ export function metadataService({ pageSize = 20 } = {}) {
         action.startsWith("crewon.creative-projects.v1.") ||
           action ===
             "crewon.project-generation-reads.v1.getConceptGeneration" ||
-          action === "crewon.project-text-recovery.v1.getPending",
+          action === "crewon.project-text-recovery.v1.getPending" ||
+          action === "crewon.project-conversations.v1.listConversations",
       );
       // Empty public journal fixture for the original concept/media regression cases.
       if (action === "crewon.project-text-recovery.v1.getPending") {
         assert.deepEqual(Object.keys(input), ["projectId"]);
         return { intent: null };
+      }
+      // Empty conversation metadata for legacy cases; never fabricates a Thread or Run.
+      if (action === "crewon.project-conversations.v1.listConversations") {
+        assert.deepEqual(Object.keys(input).sort(), [
+          "afterThreadId",
+          "limit",
+          "projectId",
+        ]);
+        assert.equal(input.afterThreadId, null);
+        assert.equal(input.limit, 8);
+        if (refuse) throw new Error("plugin_ui_action_not_permitted");
+        projectRecord(input.projectId);
+        return { bindings: [], nextThreadId: null };
       }
       if (
         action === "crewon.project-generation-reads.v1.getConceptGeneration"

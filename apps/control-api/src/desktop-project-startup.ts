@@ -59,6 +59,9 @@ export function composeDesktopProjectStartup(
           "creativeProject:write",
         ] as const)),
     ...(data.textUi === undefined ? [] : (["creativeProject:write"] as const)),
+    ...(data.conversations === undefined
+      ? []
+      : (["creativeProject:write"] as const)),
     ...(resultSelections === undefined
       ? []
       : (["creativeProject:write"] as const)),

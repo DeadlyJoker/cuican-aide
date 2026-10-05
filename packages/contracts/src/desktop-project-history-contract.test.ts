@@ -61,6 +61,45 @@ test("metadata-only approval neither adds history nor selection nor recovery", (
   );
 });
 
+test("conversation publication is an independent exact metadata approval and leaves older serialized approvals unchanged", () => {
+  const original = {
+    version: DESKTOP_PROJECT_HISTORY_VERSION,
+    pluginUi: grant,
+  };
+  const parsed = parseDesktopProjectHistoryConfiguration(original, options);
+  assert.equal(Object.hasOwn(parsed, "conversations"), false);
+  const input = {
+    version: DESKTOP_PROJECT_HISTORY_VERSION,
+    conversations: grant,
+  };
+  assert.deepEqual(
+    parseDesktopProjectHistoryConfiguration(input, options),
+    input,
+  );
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        ...input,
+        conversations: {
+          publications: [
+            { ...source, packageDigest: `sha256:${"f".repeat(64)}` },
+          ],
+        },
+      },
+      options,
+    ),
+  );
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        ...input,
+        conversations: { publications: [source], actor: {} },
+      },
+      options,
+    ),
+  );
+});
+
 test("Native metadata recovery binds the exact project module without a history or business action grant", () => {
   const value = {
     version: DESKTOP_PROJECT_HISTORY_VERSION,

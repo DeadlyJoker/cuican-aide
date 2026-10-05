@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { browser, fixture, settle } from "./ui.test-support.mjs";
 import { persistentProps } from "./persistent-ui.test-support.mjs";
 import { recoveryTextService } from "./text-recovery.test-support.mjs";
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "15.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(`../dist/${version}/`, import.meta.url).pathname;

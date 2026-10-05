@@ -1,3 +1,10 @@
+import {
+  captureProjectStageTurn,
+  assertSqliteProjectStage,
+  assertStageReplay,
+  loadSqliteStageIfAvailable,
+  stageValues,
+} from "./project-stage-run-store-support.ts";
 import { assertUnmeteredReplay } from "./plugin-task-unmetered-store-support.ts";
 import {
   captureUnmeteredTurn,
@@ -110,6 +117,9 @@ export async function commitSqliteExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const capturedStage = captureProjectStageTurn(input, options);
+  const stage = capturedStage.stage;
+  options = capturedStage.options;
   const unmetered = captureUnmeteredTurn(input, host.unmeteredEnabled, options);
   if (unmetered.admission !== undefined)
     input = { ...input, unmeteredAdmission: unmetered.admission };
@@ -145,6 +155,11 @@ export async function commitSqliteExtensionTurn(
     });
   if (pluginAdmission !== undefined)
     input = capturePluginTaskTurnInput(input, pluginAdmission);
+  if (stage !== null) {
+    await stage.authority.assertCurrent();
+    await stage.authority.assertTransactionCurrent();
+    stage.authority.assertActive();
+  }
   const binding = validateExtensionTurnCommit(input);
   const creditAdmission = checkedExtensionCreditAdmission({
     admission: input.creditAdmission,
@@ -172,6 +187,7 @@ export async function commitSqliteExtensionTurn(
       if (projectQuery !== null)
         admitSqliteProjectQueryPublication(host.database, projectQuery);
       const replay = host.receipt(binding, "task", input.receipt);
+      assertSqliteProjectStage(host.database, stage, input, replay === null);
       if (replay !== null) {
         const saved = host.verifyCreditReceipt(
           parseExtensionTurnReceipt(replay, binding, input.receipt),
@@ -216,6 +232,10 @@ export async function commitSqliteExtensionTurn(
             saved.binding,
             input.receipt,
           );
+        assertStageReplay(
+          stage,
+          loadSqliteStageIfAvailable(host.database, saved.binding),
+        );
         return saved;
       }
       if (prepared?.publication !== undefined)
@@ -291,7 +311,11 @@ export async function commitSqliteExtensionTurn(
       if (creditAdmission !== undefined)
         host.saveCreditAdmission(creditAdmission);
       if (pluginAdmission !== undefined)
-        saveSqlitePluginTask(host.database, pluginAdmission);
+        saveSqlitePluginTask(
+          host.database,
+          pluginAdmission,
+          stage?.admission.contentDigest,
+        );
       if (unmetered.admission !== undefined)
         saveSqlitePluginTaskUnmeteredAdmission(
           host.database,
@@ -314,10 +338,17 @@ export async function commitSqliteExtensionTurn(
         host.database
           .prepare(projectQueryInsertSql())
           .run(...projectQueryValues(queryLink));
+      if (stage !== null)
+        host.database
+          .prepare(
+            "INSERT INTO project_stage_run_admissions VALUES(?,?,?,?,?,?,?)",
+          )
+          .run(...stageValues(stage.admission));
       return result;
     },
     {
       beforeCommit: () => {
+        stage?.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();
           unmetered.authority.assertActive();

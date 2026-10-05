@@ -53,6 +53,7 @@ export function InstalledPluginModule({
   selectionPorts = null,
   selectedThreadId = null,
   runIds = [],
+  projectConversationContext,
   onOpenTask,
 }: Readonly<{
   host: ControlPluginUiHost;
@@ -67,6 +68,10 @@ export function InstalledPluginModule({
   selectionPorts?: InstalledPluginProjectSelectionPorts | null;
   selectedThreadId?: string | null;
   runIds?: readonly string[];
+  projectConversationContext?: Readonly<{
+    creationWorkspaceId: string | null;
+    creationWorkspaceName?: string | null;
+  }>;
   onOpenTask?(threadId: string): void;
 }>) {
   const taskEnabled = module.plugin.descriptor.requires.some(
@@ -242,6 +247,9 @@ export function InstalledPluginModule({
       data: Object.freeze({
         locale,
         pluginUiReady: ready === context,
+        ...(projectConversationContext === undefined
+          ? {}
+          : { projectConversationContext }),
         ...(taskEnabled && taskPorts
           ? (tasks.data as Readonly<Record<string, PluginJsonValue>>)
           : {}),
@@ -274,6 +282,7 @@ export function InstalledPluginModule({
       selection.context,
       ready,
       context,
+      projectConversationContext,
     ],
   );
   const onMounted = useCallback(() => {

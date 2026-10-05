@@ -1,3 +1,4 @@
+import { PostgresProjectConversationStore } from "./project-conversation-postgres-store.ts";
 import { PostgresProjectConceptSelectionStore } from "./postgres-project-concept-selection-store.ts";
 import { PostgresPluginUiIntentJournalStore } from "./postgres-plugin-ui-intent-journal-store.ts";
 import type { PluginUiIntentPayloadVerifier } from "@crewon/application";
@@ -242,6 +243,19 @@ export class PostgresDomainStore
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Same borrowed parent pool; conversation schema migration remains explicit. */
+  projectConversationStore(): PostgresProjectConversationStore {
+    this.assertOpen();
+    return new PostgresProjectConversationStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+      commitThreadWithin: (client, input) => this.commitThreadWithin(client, input),
+      loadThreadWithin: (client, tenantId, threadId) =>
+        this.loadThreadWithin(client, { tenantId, threadId }, true),
     });
   }
 

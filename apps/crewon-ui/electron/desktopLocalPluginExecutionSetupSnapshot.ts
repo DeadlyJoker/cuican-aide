@@ -252,7 +252,9 @@ export async function captureSetupSnapshot(input: {
     verified.packageDigest !== records.pkg.packageDigest ||
     descriptor.pluginId !== SHORT_PLUGIN_ID ||
     descriptor.publisherId !== "example.publisher" ||
-    descriptor.version !== "12.0.0" ||
+    !["12.0.0", "13.0.0", "14.0.0", "15.0.0", "16.0.0"].includes(
+      descriptor.version,
+    ) ||
     descriptor.publisherId !== records.pkg.publisherId ||
     descriptor.version !== records.pkg.version ||
     descriptor.entrypoints.node === null ||
@@ -291,6 +293,28 @@ export async function captureSetupSnapshot(input: {
         : "deny";
     },
   });
+  if (
+    descriptor.version === "16.0.0" &&
+    (![
+      "crewon.project-conversations",
+      "crewon.project-context",
+      "crewon.project-tools",
+    ].every((service) =>
+      descriptor.requires.some(
+        (requirement) =>
+          requirement.service === service && requirement.apiVersion === "1",
+      ),
+    ) ||
+      !registration.manifest.tools.some(
+        (tool) =>
+          tool.operationId === "project_context_read" &&
+          tool.adapterId === "crewon.project-context" &&
+          tool.effect === "readOnly" &&
+          tool.recovery === "replaySafe" &&
+          tool.capability === "project.read",
+      ))
+  )
+    setupInvalid("package_unsupported");
   const configuration = validateInstalledPluginConfiguration(
     registration,
     records.configuration,

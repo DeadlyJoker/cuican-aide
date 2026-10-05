@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useProjectConversationComposer } from "./lib/app/useProjectConversationComposer";
 import { BusinessExtensionController } from "./components/extensions/BusinessExtensionController";
 import { StreamingTextScope } from "./components/StreamingTextScope";
 import { useControlThreadCatalog } from "./lib/control-runtime/useControlThreadCatalog";
@@ -244,6 +246,7 @@ export function App({
   } = workspaceStatus;
   const { automationRunByTurnRef, officeRunByTurnRef } =
     useAppRunTrackingRefs();
+  const [, refreshProjectConversationRequest] = useState(0);
   const {
     automationRuntime: controlAutomationRuntime,
     connected: controlRuntimeConnected,
@@ -254,6 +257,8 @@ export function App({
     threadGoal: controlThreadGoal,
     teamProgressByThread,
   } = useControlThreadRuntime({
+    onProjectConversationRequestChanged: () =>
+      refreshProjectConversationRequest((value) => value + 1),
     appendStreamingTextDelta: threadState.appendStreamingTextDelta,
     client: controlClient,
     manageThreads: true,
@@ -471,6 +476,15 @@ export function App({
     sessionKey: platformAccount ? String(platformAccount.user.id) : null,
     theme,
     locale,
+    ...(creationWorkspaceId === undefined
+      ? {}
+      : {
+          projectConversationContext: {
+            creationWorkspaceId,
+            creationWorkspaceName:
+              controlWorkspace.nativeWorkspace?.displayName ?? null,
+          },
+        }),
     taskContext: {
       runtime: controlRuntimeConnected ? controlThreadRuntime : null,
       selectedThreadId: commandShellRuntime.selectedThreadId,
@@ -923,6 +937,19 @@ export function App({
     setCapabilityPanel,
     setTerminalProcessId,
     terminalCommand,
+  });
+  const projectConversationComposer = useProjectConversationComposer({
+    client: controlRuntimeConnected ? controlClient : null,
+    threadId: commandShellRuntime.selectedThreadId,
+    threadRevision: commandShellRuntime.selectedThread?.updatedAt ?? null,
+    retainedSelection:
+      commandShellRuntime.selectedThreadId === null
+        ? null
+        : (controlThreadRuntime?.retainedProjectConversationSelection(
+            commandShellRuntime.selectedThreadId,
+          ) ?? null),
+    locale,
+    busy: isSending,
   });
   const controlSandboxClient = controlRuntimeConnected
     ? (desktopSandboxClient() ?? controlClient)
@@ -1650,7 +1677,46 @@ export function App({
               }
               void sendMessageInNewThread(text, settings, null, images);
             }}
-            onSend={sendMessage}
+            projectConversationComposer={projectConversationComposer.view}
+            onSend={(text, settings, images) => {
+              if (projectConversationComposer.blocked) {
+                setComposerValue(text);
+                setNotice({
+                  tone: "warning",
+                  text:
+                    locale === "zh"
+                      ? "项目会话状态暂不可用，请重新进入会话"
+                      : "Project conversation unavailable. Reopen the conversation.",
+                });
+                return;
+              }
+              if (
+                projectConversationComposer.selection !== null &&
+                settings?.executionIntent !== undefined &&
+                settings.executionIntent !== "none"
+              ) {
+                setComposerValue(text);
+                setNotice({
+                  tone: "warning",
+                  text:
+                    locale === "zh"
+                      ? "项目会话按所选创作阶段发送，请关闭计划或目标模式"
+                      : "Project conversations use the selected stage. Turn off plan or goal mode.",
+                });
+                return;
+              }
+              void sendMessage(
+                text,
+                projectConversationComposer.selection === null
+                  ? settings
+                  : {
+                      ...settings,
+                      projectConversation:
+                        projectConversationComposer.selection,
+                    },
+                images,
+              );
+            }}
             onReplayMessage={
               controlThreadRuntime && controlRuntimeConnected
                 ? async (request) => {

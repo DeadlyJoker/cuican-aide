@@ -43,6 +43,11 @@ import {
 } from "./installedPluginTaskReceipt";
 import type { InstalledPluginGenerationJournal } from "./installedPluginGenerationJournal";
 import type { InstalledPluginProjectQueryJournal } from "./installedPluginProjectQueryJournal";
+import {
+  invokeInstalledPluginConversation,
+  isInstalledPluginConversationAction,
+  type InstalledPluginConversationOpenEvent,
+} from "./installedPluginConversationTransport";
 
 export function installedDesktopPluginUiAssets(): DesktopPluginUiAssets | null {
   const assets = getDesktopBridge()?.pluginUiAssets;
@@ -62,6 +67,9 @@ export function createDesktopPluginUiHost(
     assertCurrent: PluginUiCurrentScope;
     onDiagnostic(error: unknown): void;
     onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
+    onProjectConversationOpen?(
+      event: InstalledPluginConversationOpenEvent,
+    ): void;
     generationJournal?: InstalledPluginGenerationJournal;
     projectQueryJournal?: InstalledPluginProjectQueryJournal;
     selectionJournal?: InstalledPluginProjectSelectionJournal;
@@ -130,6 +138,18 @@ export function createDesktopPluginUiHost(
       },
       async invoke(originalLease, input) {
         return leases.run(originalLease, input.signal, async (lease) => {
+          if (isInstalledPluginConversationAction(input.action))
+            return invokeInstalledPluginConversation(
+              {
+                client,
+                assertCurrent,
+                ...(options.onProjectConversationOpen === undefined
+                  ? {}
+                  : { onOpen: options.onProjectConversationOpen }),
+              },
+              lease,
+              input,
+            );
           if (
             PROJECT_GENERATION_SELECTION_UI_ACTIONS.some(
               (action) => action === input.action,

@@ -4,9 +4,9 @@
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 15.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 16.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
-UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1` 与 `crewon.project-text-recovery@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
+UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
 执行配置只有 `baseUrl` 和 `preset`：地址为 HTTPS 根地址，预设为 `krea2-portrait` 或 `krea2-character-three-view`，没有隐式默认。T01 沿用已确认的 1MP 图；T04 保留原 16 节点及随机种子哨兵 `-1`，不能据此承诺人物跨图一致性或确定性重生成。只有提示词及输出文件前缀可变，构建检查模板 hash、完整节点和连接；任务的配置修订与整图请求摘要保护原任务恢复。已有提交或未知受理只查询原 history/queue，不能重新 POST；不使用供应商全局取消。
 
@@ -28,7 +28,7 @@ pnpm build
 pnpm test
 ```
 
-默认构建生成完整预构建安装目录 `dist/15.0.0/`，并拒绝构建 14 及更早主版本，避免覆盖已冻结的 UI 包。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=15.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0 至 14.0.0 已发布安装包保持冻结。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。
+默认构建生成完整预构建安装目录 `dist/16.0.0/`，并拒绝构建 15 及更早主版本，避免覆盖已冻结的 UI 包。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=16.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0 至 15.0.0 已发布安装包保持冻结。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。
 
 ## 页面与生命周期
 
@@ -58,7 +58,21 @@ SDK 取消界面等待后，插件仍在本次挂载内跟踪原 Host 写调用�
 
 `pnpm test` 对实际构建 ESM 运行持久模式和显式演示模式的行为与生命周期检查；新增观察器专项另对当前源码及实际 SDK 运行计时、取消、冷恢复和后台图片更新检查。包内使用公开 happy-dom 与严格 metadata fixture，不能据此宣称生产保存或浏览器原生 dialog 已验证。宿主另有真实安装字节、Host HTTP 与 SQLite 冷恢复集成，验证需求与概念来源冻结、不可变输入历史及稳定资产 ID；该集成的分页通过真实 SDK/HTTP 发送有界游标，发行包 DOM 另测分页控件。元数据公共服务的 PostgreSQL 验证保持独立。正式 Main/full App/packaged 生图与积分验收仍待完成。原工作区、左右栏和账号设置入口属于宿主，插件只修改自己的模块节点。
 
-## 15.0.0 的文字请求冷恢复
+## 16.0.0 的项目对话与阶段 Agent
+
+项目概览新增“与 Agent 创作”：明确新建或打开项目关联对话，工作空间来自宿主实际创建选择，不借用随意打开的 Thread。完整入口只在概览，正文编辑区保留小型返回按钮。对话进入宿主原聊天页，共享当前需求、大纲、分集剧本和历史；原左右栏、账号、设置及全局 CSS 不变。
+
+`crewon.project-conversations@1` 提供有界查询、创建、打开、来源刷新、状态和阶段启动；`crewon.project-context@1` 让实际 Worker 命令读取本轮固定项目范围。公开 portable 与严格 codec 在包内独立打包、固定摘要，不修改冻结 SDK0.1.0。宿主须显式组装服务、准备实际 Node action 和批准确切包，版本号及声明不授权。
+
+原 Composer 的讨论、需求、大纲、分集剧本分别限定执行范围；需求阶段追加需求修订，大纲/剧本阶段保存该阶段候选。讨论只读，剧本固定分集，所有写入核确切需求/大纲来源和当前 CAS。用户可以读旧稿后生成新候选，采用和锁定仍在工作台明确操作。该范围不允许列出其他项目、选择成果或提交媒体；历史无阶段任务保持原行为，新范围损坏不能降级到历史模式。
+
+真实 Thread/关联/回执和原 Turn/Run/队列/阶段范围各在父 Store 同一个提交连接保存。同键恢复读取原已受理 Run 和原来源，上游手动修改不重建旧任务。工作台创建响应未知时只明确重试原 workspace/input/key；真实回执之后的读取失败不把成功改成未知。完整协议及本轮恢复限制见[项目对话说明](../../../docs/plugin-project-conversations-protocol.md)。
+
+本版本先打通单阶段文字创作，不宣称“从一句话自动做完整短剧”。下一项是有明确终点和选用规则的持久阶段计划，再按实际输入/结果协议接入资产、分镜、视频、配音与合成。现有 T01/T04 同包保留，未知原 Krea operation 不重新提交。实际用户 App 与线上模型/媒体另做联合验收。
+
+仓外冻结 SDK 严格编译和独立构建通过，发行包 **192/192、零跳过**。真实已安装包、原 Kernel/Worker 与两库阶段执行/冷恢复及旧收费兼容 **10/10**，双库 Store 专项 **25/25**、旧 Store **155/155**，均零跳过；这些组重叠，不求和。九种实际 Chrome 场景使用明确公共 DTO 夹具验证模块布局，不代表实际用户身份或模型。最终可安装包摘要为 `sha256:536aed576dd9ac7080ce030e819a8de8d0ca773139ca0e180f05591161608b8c`，源码与检查证据见[实施进度](../../../docs/incremental-extension-progress.md)。
+
+## 15.0.0 的文字请求冷恢复（历史）
 
 新增 `crewon.project-text-recovery@1`，公开入口为 `@crewon/contracts/project-text-recovery`。`getPending` 只读取当前项目的一条未确认原请求，`acknowledge` 仅确认已保存或已确定拒绝的结果；恢复提示不授予业务执行权限。包内携带无 import 的 portable 协议与预构建严格 codec，构建固定其摘要，继续使用冻结 SDK0.1.0 的原 `services.invoke`。
 
@@ -90,6 +104,6 @@ SDK 取消界面等待后，插件仍在本次挂载内跟踪原 Host 写调用�
 
 ## 构建思路
 
-参考 [shuohao-skills](https://github.com/eternityspring/shuohao-skills) 与关联的 [Reelbench](https://reelbench.79px.com/)，按大纲、剧本、角色/美术、分镜逐步组织项目成果；Agent 负责阶段编排，ComfyUI 负责明确的媒体任务。15.0.0 已有共享文字工具、手动编辑与文字请求冷恢复，媒体仍保留原文本生图与文本角色三视图；参考图派生、分镜、视频、配音及成片导出按实际 API 逐阶段接入。详见[参考与接入顺序](../../../docs/short-drama-workbench-reference.md)。
+参考 [shuohao-skills](https://github.com/eternityspring/shuohao-skills) 与关联的 [Reelbench](https://reelbench.79px.com/)，按大纲、剧本、角色/美术、分镜逐步组织项目成果；Agent 负责阶段编排，ComfyUI 负责明确的媒体任务。16.0.0 增加项目对话与单阶段范围，保留共享文字工具、手动编辑与文字请求冷恢复，媒体仍保留原文本生图与文本角色三视图；参考图派生、分镜、视频、配音及成片导出按实际 API 逐阶段接入。详见[参考与接入顺序](../../../docs/short-drama-workbench-reference.md)。
 
 12.0.0 历史验收（2026-10-05）：实际 SDK tarball 在仓外离线安装、UI/Node 严格类型编译及自持构建成功；152 项插件检查与 52 项宿主审批/身份检查通过。真实文件安装器将最终包写入隔离不可变目录，删除开发副本后以 execution-only 和 tasks2-only Host 分别加载，验证两预设的完整图和未知提交冷恢复只读、不重复 POST。这些端口是明确的内存 I/O 夹具，不代表供应商已生图或用户桌面已升级。产物位于 `output/extensions/installable-plugins/short-drama-unified-20261005/short-drama/12.0.0`。

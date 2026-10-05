@@ -10,7 +10,9 @@
     "./plugins": "./src/plugins.ts",
     "./project-tools": "./src/plugin-project-tools-service.ts",
     "./project-texts-ui": "./src/project-texts-ui.ts",
-    "./project-text-recovery": "./src/project-text-recovery.ts"
+    "./project-text-recovery": "./src/project-text-recovery.ts",
+    "./project-conversations": "./src/project-conversations.ts",
+    "./project-context": "./src/project-context.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

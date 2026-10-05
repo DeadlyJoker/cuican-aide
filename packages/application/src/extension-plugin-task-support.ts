@@ -157,6 +157,9 @@ export async function resolvePluginTaskReceipt(
     pin: PluginTaskAdmissionPin;
     digester: ContentDigester;
     projectGeneration?: ProjectGenerationReference;
+    projectConversationReceipt?: (
+      base: ExtensionMutationReceipt,
+    ) => ExtensionMutationReceipt;
   }>,
 ): Promise<
   Readonly<{
@@ -178,9 +181,11 @@ export async function resolvePluginTaskReceipt(
   });
   const makeReceipt = (receiptPin: PluginTaskAdmissionPin) => {
     const base = pluginTaskReceipt(actor, command, receiptPin, digester);
-    return reference === undefined
-      ? base
-      : projectGenerationTaskReceipt(base, reference, digester);
+    const receipt =
+      reference === undefined
+        ? base
+        : projectGenerationTaskReceipt(base, reference, digester);
+    return input.projectConversationReceipt?.(receipt) ?? receipt;
   };
   const receipt = makeReceipt(pin);
   const store = input.store;

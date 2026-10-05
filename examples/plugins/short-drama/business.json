@@ -2,7 +2,7 @@
   "schemaVersion": "crewon.extension-manifest.v0",
   "hostApi": "crewon.extensions.v0",
   "pluginId": "crewon.short-drama",
-  "version": "15.0.0",
+  "version": "16.0.0",
   "title": "AI 短剧工作台",
   "description": "一个短剧插件内包含项目、需求、大纲、分集剧本的Agent工具与Krea2预设，手动入口共享同一项目版本。",
   "task": {
@@ -11,14 +11,14 @@
       "properties": {
         "prompt": {
           "type": "string",
-          "maxLength": 2000,
+          "maxLength": 9999,
           "enum": null
         }
       },
       "required": ["prompt"],
       "additionalProperties": false
     },
-    "instructions": "使用真实业务工具处理用户目标。先读取或创建项目，读取当前需求和阶段元数据，再按确切修订分段读取相关内容。文字创作由当前Agent模型完成，工具校验并追加候选，大纲和每集剧本分别保存；保存不自动采用。用户授权采用后调用text_select，锁定项不能覆盖。发生版本冲突时重读并说明差异，不能盲目重试覆盖。每个工具的resultJson是宿主返回的JSON业务结果，所有ID和版本从实际结果取得，不能编造。content_read必须沿nextOffset读取到null，避免把部分JSON当完整内容。不把全项目和历史一次注入。仅在用户授权媒体生成且Krea2已配置时，调用submit一次并保存operationId，再observe查询实际状态；unknownOutcome不能重新提交。视频、声音、合成尚未接通，不能假称完成。不同阶段按用户授权的终点推进，不擅自扩大执行范围。"
+    "instructions": "先调用 project_context_read 读取实际执行范围。scope 非空时，只处理其 projectId、阶段与确切来源；讨论阶段只读取和提出建议，需求阶段追加需求修订，大纲、剧本阶段分别使用允许的写工具保存候选，不能创建另一项目、跨集写入、自动采用/锁定或执行媒体工具。若所需阶段或来源未获准，说明缺口并请用户在对话中切换阶段。scope 为 null 的原独立任务沿原行为：先读取或创建项目，读取当前需求和阶段元数据。文字创作由当前 Agent 模型完成，业务工具校验需求修订和成果候选；大纲/剧本保存不自动采用。每个工具 resultJson 为实际宿主结果，ID、版本和摘要从真实结果取得。content_read 沿 nextOffset 读取至 null，不把部分 JSON 当全文，不一次注入全项目和历史。版本冲突先读取并说明差异，不能盲目覆盖。原媒体任务仅在用户授权且 Krea2 已配置时 submit 一次，再 observe 原 operation；unknownOutcome 不能重新提交。视频、声音和合成尚未接通，不能假称完成。"
   },
   "configurationSchema": {
     "type": "object",
@@ -857,6 +857,33 @@
       "effect": "mutation",
       "recovery": "reconcilable",
       "capability": "project.write"
+    },
+    {
+      "operationId": "project_context_read",
+      "adapterId": "crewon.project-context",
+      "description": "Read the host-persisted project, stage and exact source revisions for this Run. A null scope denotes a legacy standalone task. Use actual IDs and stay within allowedOperations; this metadata never grants execution rights.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
     }
   ],
   "resultViews": ["text", "externalOperation", "externalResult"]

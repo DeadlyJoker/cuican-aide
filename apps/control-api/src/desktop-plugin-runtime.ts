@@ -64,6 +64,9 @@ import {
 } from "./desktop-installed-plugin-task-runtime.ts";
 import type { InstalledPluginTaskRuntimeCore } from "./installed-plugin-task-runtime-core.ts";
 import { pluginSecurityUiRequest } from "./plugin-security-validation.ts";
+import { createDesktopProjectConversationRuntime } from "./desktop-project-conversation-runtime.ts";
+import type { ThreadApplicationService } from "@crewon/application";
+import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -71,6 +74,9 @@ export type DesktopPluginRuntime = Readonly<{
   ui: PluginUiControlService;
   configuration: DesktopPluginConfigurationRuntime;
   tasks?: InstalledPluginTaskRuntimeCore;
+  bindProjectConversations?(
+    threads: ThreadApplicationService,
+  ): ProjectConversationControlOwner | undefined;
   close(): Promise<void>;
 }>;
 
@@ -220,6 +226,7 @@ export async function createDesktopPluginRuntime(
   let textUi: ProjectTextPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
+  let conversations: ReturnType<typeof createDesktopProjectConversationRuntime>;
   let taskRuntime:
     | DesktopInstalledPluginTaskRuntime
     | DesktopNativePluginTaskRuntime
@@ -231,6 +238,7 @@ export async function createDesktopPluginRuntime(
   const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (input) =>
       (
+        conversations?.hostUiServices ??
         recovery?.hostUiServices ??
         (projectExecution ? history?.hostUiServices : undefined) ??
         taskRuntime?.core.projectQueries?.hostUiServices ??
@@ -378,8 +386,27 @@ export async function createDesktopPluginRuntime(
         process.emitWarning("plugin_ui_recovery_persistence_failed");
       },
     });
+    conversations = createDesktopProjectConversationRuntime({
+      projects: dependencies.creativeProjects,
+      store: dependencies.store,
+      configuration,
+      authority,
+      installation,
+      installed: configurationRuntime,
+      registry,
+      nativeControl,
+      tasks: () => taskRuntime,
+      clock: dependencies.clock,
+      digester: dependencies.digester,
+      ...((recovery?.hostUiServices ?? businessHostUiServices)
+        ? { fallback: recovery?.hostUiServices ?? businessHostUiServices }
+        : {}),
+    });
     deferredServices?.bind(
-      recovery?.hostUiServices ?? businessHostUiServices ?? hostUiServices,
+      conversations?.hostUiServices ??
+        recovery?.hostUiServices ??
+        businessHostUiServices ??
+        hostUiServices,
     );
     let closed = false;
     let closing: Promise<void> | null = null;
@@ -431,6 +458,7 @@ export async function createDesktopPluginRuntime(
       readAsset: (context) => reader(context).readAsset(context),
     };
     const dispatch = composeDesktopProjectPluginUiDispatch({
+      conversations: () => conversations?.owner(),
       projects: projectUi,
       texts: textUi,
       history,
@@ -507,6 +535,7 @@ export async function createDesktopPluginRuntime(
       invoke: (...args) => {
         if (
           projectUi === undefined &&
+          conversations === undefined &&
           textUi === undefined &&
           history?.selectionRuntime === undefined &&
           taskRuntime === undefined
@@ -520,6 +549,7 @@ export async function createDesktopPluginRuntime(
         return result;
       },
       ...(textUi === undefined &&
+      conversations === undefined &&
       history?.readRuntime === undefined &&
       history?.selectionRuntime === undefined &&
       recovery === undefined &&
@@ -530,6 +560,24 @@ export async function createDesktopPluginRuntime(
               available();
               const invoke = () => ui.invoke(actor, command);
               const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (
+                  command.action === "crewon.project-conversations" ||
+                  command.action.startsWith("crewon.project-conversations.")
+                ) {
+                  const owner = conversations?.owner();
+                  if (owner === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "plugin_ui_actions_unavailable",
+                    );
+                  return owner.runAuthenticatedRequest(
+                    request,
+                    actor,
+                    command.action,
+                    requestSignal,
+                    invoke,
+                  );
+                }
                 if (
                   command.action === "crewon.project-texts" ||
                   command.action.startsWith("crewon.project-texts.") ||
@@ -625,6 +673,8 @@ export async function createDesktopPluginRuntime(
       ui,
       configuration: ownedConfiguration,
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),
+      bindProjectConversations: (threads) =>
+        conversations?.bindThreads(threads),
       close: () => {
         if (closing !== null) return closing;
         closed = true;
@@ -632,6 +682,7 @@ export async function createDesktopPluginRuntime(
         authority.withdraw();
         return (closing = closeAll([
           () => taskRuntime?.close(),
+          () => conversations?.close(),
           () => Promise.allSettled([...physical]),
           () => recovery?.close(),
           () => projectUi?.close(),
@@ -648,6 +699,7 @@ export async function createDesktopPluginRuntime(
     authority.withdraw();
     try {
       await closeAll([
+        () => conversations?.close(),
         () => taskRuntime?.close(),
         () => recovery?.close(),
         () => projectUi?.close(),

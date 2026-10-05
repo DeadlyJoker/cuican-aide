@@ -20,15 +20,19 @@ import {
   ThreadApplicationService,
   TurnApplicationService,
   type ActorContext,
+  type ApplicationClock,
   type AuthorizationPort,
   type CreateExtensionTaskCommand,
   type PluginInstallationStore,
+  type ExtensionCreditQuotePort,
 } from "@crewon/application";
 import {
   createExtensionConfiguration,
   extensionToolName,
   parsePluginTaskAdmissionPin,
+  parseProjectStageRunAdmission,
   type PluginSelection,
+  type PluginProfileScope,
   type PluginTaskAdmissionPin,
   type WorkflowSchemaValue,
 } from "@crewon/domain";
@@ -65,17 +69,19 @@ import type { InstalledPluginExecutionIoConfig } from "./plugins/installed-plugi
 import { composeInstalledPluginExecutionReadiness } from "./plugins/installed-plugin-runtime-composition.ts";
 export { digester };
 
-export const actor: ActorContext = {
+const defaultFixtureActor: ActorContext = {
   tenantId: "business-tenant",
   spaceId: "business-space",
   principalId: "business-principal",
   actorId: "business-actor",
 };
-export const scope = {
+export const actor = defaultFixtureActor;
+const defaultFixtureScope: PluginProfileScope = {
   tenantId: actor.tenantId,
   spaceId: actor.spaceId,
   profileId: "professional-profile",
 };
+export const scope = defaultFixtureScope;
 export const toolName = extensionToolName(
   businessManifest.pluginId,
   "generate",
@@ -126,6 +132,8 @@ export async function businessExecutionFixture(
   t: TestContext,
   backend: "sqlite" | "postgres" = "sqlite",
   options: Readonly<{
+    actor?: ActorContext;
+    scope?: PluginProfileScope;
     packageDirectory?: string;
     upgradePackageDirectory?: string;
     configurationParameters?: Readonly<Record<string, WorkflowSchemaValue>>;
@@ -136,11 +144,25 @@ export async function businessExecutionFixture(
     projectTools?: NonNullable<
       RuntimeWorkerCompositionConfig["installedPluginExecution"]
     >["projectTools"];
+    projectConversationQuotes?: boolean;
     maxToolRounds?: number;
+    taskClock?: ApplicationClock;
     approvalRequirement?: "none" | "perAction";
     installedQueryHost?: boolean;
   }> = {},
 ) {
+  const actor = Object.freeze({ ...(options.actor ?? defaultFixtureActor) });
+  const scope = Object.freeze({ ...(options.scope ?? defaultFixtureScope) });
+  assert.equal(
+    scope.tenantId,
+    actor.tenantId,
+    "fixture scope must match its real actor",
+  );
+  assert.equal(
+    scope.spaceId,
+    actor.spaceId,
+    "fixture scope must match its real actor",
+  );
   const directory = await mkdtemp(join(tmpdir(), "crewon-business-execution-"));
   const databasePath = join(directory, "control.sqlite");
   const connectionString = process.env.CREWON_TEST_POSTGRES_URL;
@@ -538,7 +560,7 @@ export async function businessExecutionFixture(
     host,
     ...(queryHost === null ? {} : { pluginQueryHost: queryHost }),
     authorization,
-    clock,
+    clock: options.taskClock ?? clock,
     ids,
     digester,
     creditQuotes: {
@@ -552,6 +574,53 @@ export async function businessExecutionFixture(
           quotedCredits: "30",
         };
       },
+      ...(options.projectConversationQuotes === true
+        ? {
+            async quoteProjectConversationGeneration(
+              input: Parameters<
+                NonNullable<
+                  ExtensionCreditQuotePort["quoteProjectConversationGeneration"]
+                >
+              >[0],
+            ) {
+              const stage = parseProjectStageRunAdmission(
+                input.projectStageAdmission,
+                digester,
+              );
+              assert.deepEqual(input.actor, actor);
+              assert.deepEqual(stage.actor, actor);
+              assert.ok(
+                input.input !== null &&
+                  typeof input.input === "object" &&
+                  !Array.isArray(input.input),
+              );
+              assert.deepEqual(Object.keys(input.input).sort(), ["prompt"]);
+              const prompt = (
+                input.input as Record<string, WorkflowSchemaValue>
+              ).prompt;
+              assert.ok(typeof prompt === "string");
+              assert.equal(stage.runId, input.binding.runId);
+              assert.equal(stage.threadId, input.binding.threadId);
+              assert.equal(
+                stage.extensionBindingDigest,
+                input.binding.bindingDigest,
+              );
+              assert.equal(stage.requestDigest, input.commandRequestDigest);
+              assert.equal(stage.userContentDigest, digester.sha256(prompt));
+              assert.equal(input.binding.inputDigest, stage.userContentDigest);
+              assert.equal(
+                stage.installation.pluginId,
+                registration.identity.pluginId,
+              );
+              controls.quotes++;
+              return {
+                poolId: creditScope.poolId,
+                priceRevision: 1,
+                quotedCredits: "30",
+              };
+            },
+          }
+        : {}),
     },
   });
   const commitAuthority = {

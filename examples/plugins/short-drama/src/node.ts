@@ -16,6 +16,11 @@ import {
   CREWON_PROJECT_TOOLS_API_VERSION,
   type PluginProjectToolsService,
 } from "./project-tools-service.js";
+import {
+  CREWON_PROJECT_CONTEXT_SERVICE,
+  CREWON_PROJECT_CONTEXT_API_VERSION,
+  type PluginProjectContextService,
+} from "./project-context-service.js";
 
 export default definePlugin({
   apiVersion: "crewon.plugin-host.v1",
@@ -35,10 +40,17 @@ export default definePlugin({
       CREWON_PROJECT_TOOLS_SERVICE,
       CREWON_PROJECT_TOOLS_API_VERSION,
     );
+    const projectContext =
+      context.services.getOptional<PluginProjectContextService>(
+        CREWON_PROJECT_CONTEXT_SERVICE,
+        CREWON_PROJECT_CONTEXT_API_VERSION,
+      );
     if (execution) {
       const registration = execution.register({
         create: (runtimeContext, services) =>
-          createShortDramaRuntime(runtimeContext, projects ?? null, services),
+          createShortDramaRuntime(runtimeContext, projects ?? null, services, {
+            projectContext: projectContext ?? null,
+          }),
       });
       context.onDispose(() => registration.dispose());
     }

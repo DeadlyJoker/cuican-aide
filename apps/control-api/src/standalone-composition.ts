@@ -785,6 +785,9 @@ function composeControlApi(
       pluginInstallation: preparedPlugins?.runtime.installation,
       pluginSources: preparedPlugins?.runtime.sources,
       pluginUi: preparedPlugins?.runtime.ui,
+      projectConversations:
+        preparedPlugins?.runtime.bindProjectConversations?.(threads),
+      projectConversationRouting: store.projectConversationStore(),
       compactions,
       rollbacks,
       approvals,

@@ -97,6 +97,13 @@ export class ThreadApplicationService {
     actor: ActorContext,
     command: CreateThreadCommand,
   ): Promise<CommitThreadResult> {
+    return this.#commit(await this.prepareCreateThread(actor, command));
+  }
+
+  async prepareCreateThread(
+    actor: ActorContext,
+    command: CreateThreadCommand,
+  ): Promise<CommitThreadInput> {
     validateActor(actor);
     validateCreateCommand(command);
     await this.#authorize(actor, "thread:create", {
@@ -126,15 +133,14 @@ export class ThreadApplicationService {
         workspaceId,
       },
     };
-    const result = await this.#commit({
+    return {
       tenantId: actor.tenantId,
       idempotency: idempotencyDescriptor(actor, command),
       expectedRevision: 0,
       events: [event],
       messages: [],
       history: { expectedLastSequence: 0, items: [] },
-    });
-    return result;
+    };
   }
 
   async appendMessage(

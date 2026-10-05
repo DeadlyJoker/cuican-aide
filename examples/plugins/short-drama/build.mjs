@@ -7,11 +7,11 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "15.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
-  BigInt(version.split(".")[0]) <= 14n
+  BigInt(version.split(".")[0]) <= 15n
 )
   throw new Error("example_version_invalid");
 // Pinned portable public capability protocol; no private host source import.
@@ -40,6 +40,22 @@ for (const [file, expected] of [
   [
     "project-text-recovery-codec.mjs",
     "73f27132eb7356bf7c7f826faef446f9df7297e58886812311bbf48776da2696",
+  ],
+  [
+    "project-conversations-service.ts",
+    "2e31b156324314fdee7a5917ce3c60abc14a6687b5bcac8aff3a81d99713d8de",
+  ],
+  [
+    "project-conversations-codec.mjs",
+    "f32e610143d343883e61500d2d7febe1efc93894920819276175ecf3c6213fc5",
+  ],
+  [
+    "project-context-service.ts",
+    "0bd9d1b7842744bc2ef0d3fe60f3481332a658193898794b05d0e8d415bf0dce",
+  ],
+  [
+    "project-context-codec.mjs",
+    "3d375dcfc66455fc2ce7f1e3a45c1973bdc937afdeba4bbf8893bd26f94bde17",
   ],
 ]) {
   const bytes = await readFile(join(root, "src", file));
@@ -179,6 +195,12 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
+    {
+      service: "crewon.project-conversations",
+      apiVersion: "1",
+      optional: true,
+    },
+    { service: "crewon.project-context", apiVersion: "1", optional: true },
     {
       service: "crewon.project-text-recovery",
       apiVersion: "1",

@@ -409,6 +409,7 @@ type CommandWorkspaceProps = {
   streamingText?: string;
   taskChanges?: ComposerTaskChangeSummary | null;
   taskDetailTrigger?: ReactNode;
+  projectConversationComposer?: ReactNode;
   /**
    * Goal steering the selected thread, when the backend reports one. The
    * composer renders it as an editable bar above the input.
@@ -853,6 +854,7 @@ export function CommandWorkspace({
   streamingText = "",
   taskChanges = null,
   taskDetailTrigger = null,
+  projectConversationComposer = null,
   onTaskDetailAvailabilityChange,
   threadGoal = null,
   threadGoalBusy = false,
@@ -3403,6 +3405,7 @@ export function CommandWorkspace({
               )}
 
               <div className="command-composer-stack">
+                {projectConversationComposer}
                 {showProgressPill ? (
                   <ComposerProgressPill
                     key={`${threadProgress.runId ?? "none"}:${threadProgress.runPlan?.planId ?? "none"}`}

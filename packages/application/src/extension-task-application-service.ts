@@ -1,3 +1,16 @@
+import { loadExtensionTaskConfiguration } from "./extension-task-configuration.ts";
+import {
+  authorizeExtensionTaskThread,
+  authorizeExtensionTaskQuerySource,
+} from "./extension-task-authorization.ts";
+import {
+  createProjectConversationTurnFromHost,
+  type ProjectConversationTaskPreparation,
+  projectConversationTaskReceipt,
+  projectConversationTaskAdmission,
+  assertSavedProjectConversationTask,
+  type ProjectConversationTask,
+} from "./project-conversation-task-support.ts";
 import type { PluginTaskUnmeteredAuthorityPort } from "./plugin-task-unmetered-authority-port.ts";
 import {
   capturePluginTaskUnmeteredPort,
@@ -35,7 +48,6 @@ import {
   extensionCanonicalJson,
   extensionOpaqueId,
   parseExtensionActivation,
-  parseExtensionConfiguration,
   parseExtensionExecutionTarget,
   validateExtensionTaskInput,
   type ExtensionRunBinding,
@@ -158,6 +170,31 @@ export class ExtensionTaskApplicationService {
     );
   }
 
+  /** Explicit host-qualified project Turn; the user Message remains plain text. */
+  async createProjectConversationTurnFromHost(
+    actor: ActorContext,
+    command: CreateExtensionTaskCommand,
+    task: ProjectConversationTask | ProjectConversationTaskPreparation,
+  ) {
+    return createProjectConversationTurnFromHost({
+      actor,
+      command,
+      task,
+      extensions: this.#dependencies.extensions,
+      digester: this.#dependencies.digester,
+      create: (captured, onStage) =>
+        this.#createTask(
+          actor,
+          command,
+          captured.authority.pin,
+          null,
+          null,
+          captured,
+          onStage,
+        ),
+    });
+  }
+
   async createQueryTaskFromPlugin(
     actor: ActorContext,
     input: CreateExtensionTaskCommand,
@@ -227,8 +264,16 @@ export class ExtensionTaskApplicationService {
     pin: PluginTaskAdmissionPin | null,
     commitAuthority: PluginTaskCommitAuthorityPort | null = null,
     projectTask: CapturedProjectGenerationTask | null = null,
+    conversation: ProjectConversationTask | null = null,
+    onProjectStage?: (
+      stage: import("@crewon/domain").ProjectStageRunAdmission,
+    ) => void,
   ) {
     return extensionUseCase(async () => {
+      if (conversation !== null) {
+        await conversation.authority.assertCurrent();
+        conversation.authority.assertActive();
+      }
       const actor =
         pin === null
           ? extensionActor(actorInput)
@@ -298,7 +343,11 @@ export class ExtensionTaskApplicationService {
         intent.kind === "generate" ? "extension:run" : "extension:query",
         scope,
       );
-      await this.#authorizeThread(actor, threadId);
+      await authorizeExtensionTaskThread(
+        this.#dependencies.authorization,
+        actor,
+        threadId,
+      );
       const currentThread = await this.#dependencies.store.loadThreadInSpace({
         ...actor,
         threadId,
@@ -308,7 +357,12 @@ export class ExtensionTaskApplicationService {
       // Query permission on the original Run is rechecked even for an idempotent replay.
       const source =
         intent.kind === "query"
-          ? await this.#source(actor, scope.pluginId, intent)
+          ? await loadExtensionLegacyQuerySource(
+              this.#dependencies,
+              actor,
+              scope.pluginId,
+              intent,
+            )
           : null;
       const pluginReceipt =
         pin !== null
@@ -321,6 +375,16 @@ export class ExtensionTaskApplicationService {
               ...(generation === null
                 ? {}
                 : { projectGeneration: generation.reference }),
+              ...(conversation === null
+                ? {}
+                : {
+                    projectConversationReceipt: (base) =>
+                      projectConversationTaskReceipt(
+                        base,
+                        conversation,
+                        this.#dependencies.digester,
+                      ),
+                  }),
             })
           : null;
       const taskReceipt =
@@ -383,6 +447,26 @@ export class ExtensionTaskApplicationService {
           await generation.assertCurrent();
           generation.assertActive();
         }
+        if (conversation !== null) {
+          const savedAdmission = await this.#dependencies.extensions
+            .loadPluginTaskAdmission!({
+            tenantId: scope.tenantId,
+            spaceId: scope.spaceId,
+            runId: previous.binding.runId,
+          });
+          if (savedAdmission === null)
+            throw new ApplicationError(
+              "internal",
+              "plugin_task_admission_invalid",
+            );
+          const savedStage = await assertSavedProjectConversationTask(
+            conversation,
+            savedAdmission,
+            previous.binding,
+            this.#dependencies.digester,
+          );
+          onProjectStage?.(savedStage);
+        }
         return previous;
       }
       if (pin !== null)
@@ -417,37 +501,13 @@ export class ExtensionTaskApplicationService {
         (activation.state !== "enabled" || activation.target === null)
       )
         throw new ApplicationError("conflict", "extension_generation_disabled");
-      const target = parseExtensionExecutionTarget(
-        source?.target ?? activation.target,
-      );
-      const configuration =
-        await this.#dependencies.extensions.loadExtensionConfiguration({
-          ...scope,
-          revision:
-            source?.configurationRevision ?? activation.configurationRevision,
-        });
-      if (configuration === null)
-        throw new ApplicationError(
-          "notFound",
-          "extension_configuration_not_found",
-        );
-      const frozen = parseExtensionConfiguration(
-        configuration,
-        this.#dependencies.digester,
-      );
-      if (
-        frozen.tenantId !== scope.tenantId ||
-        frozen.spaceId !== scope.spaceId ||
-        frozen.pluginId !== scope.pluginId ||
-        frozen.revision !==
-          (source?.configurationRevision ?? activation.configurationRevision) ||
-        frozen.contentDigest !==
-          (source?.configurationDigest ?? activation.configurationDigest)
-      )
-        throw new ApplicationError(
-          "conflict",
-          "extension_configuration_mismatch",
-        );
+      const { target, frozen } = await loadExtensionTaskConfiguration({
+        extensions: this.#dependencies.extensions,
+        digester: this.#dependencies.digester,
+        scope,
+        activation,
+        source,
+      });
       const identity = Object.freeze({
         pluginId: frozen.pluginId,
         pluginVersion: frozen.pluginVersion,
@@ -505,7 +565,12 @@ export class ExtensionTaskApplicationService {
           : { kind: "query", operationId: intent.operationId };
       if (generation !== null) await generation.assertNewInput(taskInput);
       if (queryHost !== undefined && source !== null)
-        await this.#authorizeQuerySource(actor, scope.pluginId, source);
+        await authorizeExtensionTaskQuerySource(
+          this.#dependencies.authorization,
+          actor,
+          scope.pluginId,
+          source,
+        );
       const readinessInput = Object.freeze({
         actor,
         registration,
@@ -542,7 +607,8 @@ export class ExtensionTaskApplicationService {
           "conflict",
           "extension_execution_target_mismatch",
         );
-      const content = extensionCanonicalJson(taskInput);
+      const content =
+        conversation?.content ?? extensionCanonicalJson(taskInput);
       if (new TextEncoder().encode(content).length > 16 * 1024)
         throw new ApplicationError(
           "validation",
@@ -591,7 +657,31 @@ export class ExtensionTaskApplicationService {
         this.#dependencies.digester,
       );
       if (queryHost !== undefined && source !== null)
-        await this.#authorizeQuerySource(actor, scope.pluginId, source);
+        await authorizeExtensionTaskQuerySource(
+          this.#dependencies.authorization,
+          actor,
+          scope.pluginId,
+          source,
+        );
+      const taskAdmission =
+        pin === null
+          ? undefined
+          : pluginTaskAdmission(
+              pin,
+              binding,
+              receipt,
+              this.#dependencies.digester,
+            );
+      const stageAdmission =
+        conversation === null
+          ? undefined
+          : projectConversationTaskAdmission(
+              conversation,
+              taskAdmission!,
+              binding,
+              event.occurredAt,
+              this.#dependencies.digester,
+            );
       const creditAdmission =
         intent.kind === "generate" &&
         unmeteredAuthority === null &&
@@ -602,6 +692,9 @@ export class ExtensionTaskApplicationService {
               binding,
               receipt,
               taskInput as WorkflowSchemaValue,
+              stageAdmission === undefined
+                ? undefined
+                : { projectStageAdmission: stageAdmission },
             )
           : undefined;
       if (creditAdmission !== undefined || unmeteredAuthority !== null) {
@@ -612,31 +705,36 @@ export class ExtensionTaskApplicationService {
           "extension:run",
           scope,
         );
-        await this.#authorizeThread(actor, threadId);
+        await authorizeExtensionTaskThread(
+          this.#dependencies.authorization,
+          actor,
+          threadId,
+        );
       }
-      const taskAdmission =
-        pin === null
-          ? undefined
-          : pluginTaskAdmission(
-              pin,
-              binding,
-              receipt,
-              this.#dependencies.digester,
-            );
       const unmeteredAdmission = pluginTaskUnmeteredProof(
         unmeteredAuthority,
         taskAdmission,
         this.#dependencies.digester,
       );
-      const commitOptions = pluginTaskFinancialOptions(
+      const financialOptions = pluginTaskFinancialOptions(
         unmeteredAuthority,
         generation?.commitOptions,
       );
+      const commitOptions =
+        conversation === null
+          ? financialOptions
+          : {
+              ...financialOptions,
+              projectStageAuthority: conversation.authority,
+            };
       const commitInput = {
         turn,
         binding,
         receipt,
         expectedActivationRevision: activation.revision,
+        ...(stageAdmission === undefined
+          ? {}
+          : { projectStageAdmission: stageAdmission }),
         ...(generation === null
           ? {}
           : { projectGeneration: generation.reference }),
@@ -653,6 +751,10 @@ export class ExtensionTaskApplicationService {
       if (pin !== null && commitAuthority !== null)
         await commitAuthority.assertCurrent({ actor, pin });
       if (generation !== null) await generation.assertDispatchCurrent();
+      if (conversation !== null) {
+        await conversation.authority.assertCurrent();
+        conversation.authority.assertActive();
+      }
       const result = await (pin === null
         ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
         : generation === null
@@ -705,77 +807,33 @@ export class ExtensionTaskApplicationService {
         });
       if (generation !== null)
         await generation.assertSaved(result.binding, receipt);
+      if (conversation !== null) {
+        if (result.run.disposition === "committed")
+          onProjectStage?.(stageAdmission!);
+        else {
+          const savedAdmission = await this.#dependencies.extensions
+            .loadPluginTaskAdmission!({
+            tenantId: scope.tenantId,
+            spaceId: scope.spaceId,
+            runId: result.binding.runId,
+          });
+          if (savedAdmission === null)
+            throw new ApplicationError(
+              "internal",
+              "plugin_task_admission_invalid",
+            );
+          onProjectStage?.(
+            await assertSavedProjectConversationTask(
+              conversation,
+              savedAdmission,
+              result.binding,
+              this.#dependencies.digester,
+              false,
+            ),
+          );
+        }
+      }
       return result;
     });
-  }
-
-  async #authorizeThread(actor: ActorContext, threadId: string) {
-    for (const request of [
-      {
-        actor,
-        action: "thread:message:append" as const,
-        resource: {
-          kind: "thread" as const,
-          tenantId: actor.tenantId,
-          spaceId: actor.spaceId,
-          threadId,
-        },
-      },
-      {
-        actor,
-        action: "run:create" as const,
-        resource: {
-          kind: "run" as const,
-          tenantId: actor.tenantId,
-          spaceId: actor.spaceId,
-          threadId,
-          runId: null,
-        },
-      },
-    ])
-      if (
-        (await this.#dependencies.authorization.authorize(request)).outcome !==
-        "allow"
-      )
-        throw new ApplicationError("authorization", "authorization_denied");
-  }
-
-  async #authorizeQuerySource(
-    actor: ActorContext,
-    pluginId: string,
-    source: ExtensionRunBinding,
-  ) {
-    await authorizeExtension(
-      this.#dependencies.authorization,
-      actor,
-      "extension:query",
-      extensionScopeFor(actor, pluginId),
-    );
-    const decision = await this.#dependencies.authorization.authorize({
-      actor,
-      action: "run:read",
-      resource: {
-        kind: "run",
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        threadId: source.threadId,
-        runId: source.runId,
-      },
-    });
-    if (decision.outcome !== "allow")
-      throw new ApplicationError("authorization", "authorization_denied");
-  }
-
-  async #source(
-    actor: ActorContext,
-    pluginId: string,
-    intent: Extract<ExtensionTaskIntent, { kind: "query" }>,
-  ): Promise<ExtensionRunBinding> {
-    return loadExtensionLegacyQuerySource(
-      this.#dependencies,
-      actor,
-      pluginId,
-      intent,
-    );
   }
 }

@@ -1,3 +1,5 @@
+import { productionPluginUiOwnerConfiguration } from "./production-plugin-ui-owner-configuration.ts";
+import { createProductionProjectConversationRuntime } from "./production-project-conversation-runtime.ts";
 import { closeResources } from "./production-control-resource-cleanup.ts";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import {
@@ -109,7 +111,6 @@ import {
 import { assertProductionProjectPluginUiComposition } from "./production-project-plugin-ui-configuration.ts";
 import {
   createProductionProjectTextPluginRuntime,
-  productionProjectTextOwnerConfiguration,
   captureProductionProjectTextOwnerCleanup,
   type ProductionProjectTextPluginRuntime,
 } from "./production-project-text-plugin-runtime.ts";
@@ -322,6 +323,10 @@ async function composeProductionControlApi(
       retention: config.outboxRetention,
     },
   );
+  let conversations: ReturnType<
+    typeof createProductionProjectConversationRuntime
+  >;
+  let initializePluginUi: (() => void) | undefined;
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   let pluginUiRuntime: ProductionPluginUiRuntime | undefined;
   let pluginUiRecovery: ProductionPluginUiRecoveryRuntime | undefined;
@@ -407,7 +412,33 @@ async function composeProductionControlApi(
           },
         );
       }
+      if (
+        creativeProjects?.conversationFoundation !== undefined &&
+        config.pluginUi !== undefined
+      )
+        conversations = createProductionProjectConversationRuntime({
+          projects: creativeProjects,
+          store,
+          ui: config.pluginUi.configuration,
+          identity: config.identity as ProductionControlApiIdentity,
+          registry,
+          tasks: () => pluginTaskRuntime,
+          clock,
+          digester,
+          ...((pluginTaskRuntime?.projectQueries?.hostUiServices ??
+            pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+            projectTextPluginRuntime?.hostUiServices ??
+            projectPluginRuntime?.hostUiServices) === undefined
+            ? {}
+            : {
+                fallback: (pluginTaskRuntime?.projectQueries?.hostUiServices ??
+                  pluginTaskRuntime?.projectGenerations?.hostUiServices ??
+                  projectTextPluginRuntime?.hostUiServices ??
+                  projectPluginRuntime?.hostUiServices)!,
+              }),
+        });
       const existingHostUiServices =
+        conversations?.hostUiServices ??
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
         projectTextPluginRuntime?.hostUiServices ??
@@ -450,48 +481,24 @@ async function composeProductionControlApi(
           );
       }
       if (config.pluginUi !== undefined)
-        pluginUiRuntime = createProductionPluginUiRuntime(
-          {
-            ...config.pluginUi,
-            ...productionProjectTextOwnerConfiguration(
-              projectTextPluginRuntime,
-            ),
-            ...(pluginUiRecovery === undefined
-              ? {}
-              : { recovery: pluginUiRecovery.service }),
-            ...(projectSelectionPluginRuntime === undefined
-              ? {}
-              : {
-                  ownedProjectSelectionActions:
-                    projectSelectionPluginRuntime.owner,
-                }),
-            ...(pluginTaskRuntime === undefined
-              ? {}
-              : { ownedTaskActions: pluginTaskRuntime.owner }),
-            ...(pluginTaskRuntime?.projectQueries === undefined
-              ? {}
-              : { ownedProjectQueryActions: pluginTaskRuntime.projectQueries }),
-            ...(pluginTaskRuntime?.projectGenerations === undefined
-              ? {}
-              : {
-                  ownedProjectGenerationActions:
-                    pluginTaskRuntime.projectGenerations,
-                }),
-            ...(projectPluginRuntime === undefined
-              ? {}
-              : { ownedCreativeProjectActions: projectPluginRuntime.owner }),
-            ...(projectGenerationReadPluginRuntime === undefined
-              ? {}
-              : {
-                  ownedProjectGenerationReadActions:
-                    projectGenerationReadPluginRuntime.owner,
-                }),
-          },
-          {
-            ledger,
-            clock,
-          },
-        );
+        initializePluginUi = () => {
+          pluginUiRuntime = createProductionPluginUiRuntime(
+            productionPluginUiOwnerConfiguration({
+              configuration: config.pluginUi!,
+              conversations: conversations?.owner(),
+              texts: projectTextPluginRuntime,
+              recovery: pluginUiRecovery?.service,
+              selection: projectSelectionPluginRuntime?.owner,
+              tasks: pluginTaskRuntime,
+              projects: projectPluginRuntime?.owner,
+              generationReads: projectGenerationReadPluginRuntime?.owner,
+            }),
+            {
+              ledger,
+              clock,
+            },
+          );
+        };
     }
     if (
       config.pluginConfiguration !== undefined &&
@@ -540,6 +547,8 @@ async function composeProductionControlApi(
       ids,
       digester,
     });
+    conversations?.bindThreads(threads);
+    initializePluginUi?.();
     const taskChanges = new ThreadTaskChangeQueryService({ store, threads });
     const turns = new TurnApplicationService({
       store,
@@ -648,6 +657,7 @@ async function composeProductionControlApi(
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
             texts: projectTextPluginRuntime,
+            conversations: conversations?.owner(),
             projectGenerations: pluginTaskRuntime?.projectGenerations,
             projectQueries: pluginTaskRuntime?.projectQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
@@ -687,6 +697,8 @@ async function composeProductionControlApi(
       projectConceptSelections: projectSelections,
       creativeProjects: creativeProjects?.service,
       projectTexts: creativeProjects?.textService,
+      projectConversations: conversations?.owner(),
+      projectConversationRouting: store.projectConversationStore(),
       projectGenerationReads,
       pluginUi: pluginUiService,
       extensions:
@@ -741,6 +753,7 @@ async function composeProductionControlApi(
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
       await closeResources([
+        () => conversations?.close(),
         () => projectPluginRuntime?.close(),
         () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),
@@ -772,6 +785,7 @@ async function composeProductionControlApi(
   } catch (error) {
     try {
       await closeResources([
+        () => conversations?.close(),
         () => projectPluginRuntime?.close(),
         () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),

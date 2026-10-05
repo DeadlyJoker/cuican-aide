@@ -43,6 +43,7 @@ export function desktopProjectUiPublications(
         | "pluginUi"
         | "textUi"
         | "textRecovery"
+        | "conversations"
         | "generationReadUi"
         | "selectionUi"
       >
@@ -53,6 +54,7 @@ export function desktopProjectUiPublications(
     projects?.pluginUi,
     projects?.textUi,
     projects?.textRecovery,
+    projects?.conversations,
     projects?.generationReadUi,
     projects?.selectionUi,
   ];

@@ -19,7 +19,11 @@ export function projectMethod(name: string): ProjectToolsMethod | null {
 }
 export const projectDefinitions: readonly PluginToolDefinition[] =
   business.tools
-    .filter((tool) => tool.adapterId === "crewon.project-tools")
+    .filter((tool) =>
+      ["crewon.project-tools", "crewon.project-context"].includes(
+        tool.adapterId,
+      ),
+    )
     .map((tool) => ({
       schemaVersion: "crewon.tool-definition.v0",
       kind: "function",
@@ -34,7 +38,12 @@ export function projectPolicy(
   kind: string,
   name: string,
 ): PluginToolExecutionPolicy | null {
-  if (kind !== "function" || !projectMethod(name)) return null;
+  if (
+    kind !== "function" ||
+    (!projectMethod(name) &&
+      name !== "crewon_short_drama__project_context_read")
+  )
+    return null;
   const operation = business.tools.find(
     (tool) => "crewon_short_drama__" + tool.operationId === name,
   )!;
@@ -62,11 +71,24 @@ export function projectRequest(
   approval: "none" | "perAction",
   command: PluginToolExecutionCommand,
 ): { method: ProjectToolsMethod; request: Record<string, unknown> } {
-  const method = projectMethod(command.name),
-    policy = projectPolicy(context, approval, command.kind, command.name),
+  const method = projectMethod(command.name);
+  if (!method) throw new Error("short_drama_project_command_mismatch");
+  const value = projectCommandInput(context, approval, command);
+  if (method === "listProjects" && !Object.hasOwn(value, "after"))
+    value.after = null;
+  if (method === "saveScriptCandidate" && !Object.hasOwn(value, "outline"))
+    value.outline = null;
+  return { method, request: value };
+}
+
+export function projectCommandInput(
+  context: PluginToolRuntimeContext,
+  approval: "none" | "perAction",
+  command: PluginToolExecutionCommand,
+): Record<string, unknown> {
+  const policy = projectPolicy(context, approval, command.kind, command.name),
     intent = command.actionIntent;
   if (
-    !method ||
     !policy ||
     command.runId !== context.run.runId ||
     intent.runId !== command.runId ||
@@ -91,11 +113,7 @@ export function projectRequest(
   if (!request || typeof request !== "object" || Array.isArray(request))
     throw new Error("short_drama_project_input_invalid");
   const value = request as Record<string, unknown>;
-  if (method === "listProjects" && !Object.hasOwn(value, "after"))
-    value.after = null;
-  if (method === "saveScriptCandidate" && !Object.hasOwn(value, "outline"))
-    value.outline = null;
-  return { method, request: value };
+  return value;
 }
 
 /** Convert only the documented Workflow schema sentinels to model JSON Schema. */

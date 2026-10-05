@@ -33,8 +33,18 @@ const writeMethods = new Set<ProjectToolsMethod>([
   "setLocked",
 ]);
 /** Real admitted task/Run/queue/Tool writers; named local PDP ports, never the user's profile. */
-export async function projectToolsOwnerFixture(t: TestContext) {
-  const f = await projectRunCommitFixture(t, "sqlite");
+export async function projectToolsOwnerFixture(
+  t: TestContext,
+  options: {
+    prepareAdmission?: Parameters<typeof projectRunCommitFixture>[2];
+    stageAdmission?: () => ProjectToolsServiceOwnerDependencies["stageAdmission"];
+  } = {},
+) {
+  const f = await projectRunCommitFixture(
+    t,
+    "sqlite",
+    options.prepareAdmission,
+  );
   const binding = await f.first.store.loadExtensionRunBinding({
     ...f.actor,
     runId: f.admission.runId,
@@ -113,6 +123,9 @@ export async function projectToolsOwnerFixture(t: TestContext) {
   const dependencies: ProjectToolsServiceOwnerDependencies = {
     context,
     admission: f.admission,
+    ...(options.stageAdmission === undefined
+      ? {}
+      : { stageAdmission: options.stageAdmission() }),
     tools,
     projects: f.projects,
     texts: f.text,
@@ -194,11 +207,10 @@ export async function projectToolsOwnerFixture(t: TestContext) {
       },
     );
   };
-  async function prepareRead(method: ProjectToolsMethod, request: unknown) {
+  async function prepareReadOperation(operationId: string, request: unknown) {
     const run = await f.parent.loadRun(f.locator);
     assert.ok(run);
-    const operationId = PROJECT_TOOL_OPERATIONS[method],
-      commandInput = JSON.stringify(request);
+    const commandInput = JSON.stringify(request);
     const name = extensionToolName(f.admission.pluginId, operationId),
       callId = randomUUID(),
       segmentId = randomUUID();
@@ -291,12 +303,15 @@ export async function projectToolsOwnerFixture(t: TestContext) {
   return {
     ...f,
     context,
+    binding,
     tools,
     controls,
     dependencies,
     owner,
     service,
     invoke,
-    prepareRead,
+    prepareRead: (method: ProjectToolsMethod, request: unknown) =>
+      prepareReadOperation(PROJECT_TOOL_OPERATIONS[method], request),
+    prepareReadOperation,
   };
 }

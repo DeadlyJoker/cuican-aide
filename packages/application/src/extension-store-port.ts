@@ -1,3 +1,5 @@
+import type { ProjectStageRunAdmission } from "@crewon/domain";
+import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
 import type {
   ExtensionActivation,
   ExtensionConfiguration,
@@ -96,6 +98,7 @@ export type CommitExtensionTurnInput = Readonly<{
   pluginAdmission?: PluginTaskAdmission;
   pluginQueryAdmission?: PluginQueryTaskAdmission;
   /** Internal confirmed project source; committed atomically with the original Turn and credits. */
+  projectStageAdmission?: ProjectStageRunAdmission;
   projectGeneration?: ProjectGenerationReference;
   /** Historical source selected by the actual project owner; no metadata CAS or new generation slot. */
   projectQuery?: Readonly<{
@@ -105,6 +108,7 @@ export type CommitExtensionTurnInput = Readonly<{
 }>;
 export type CommitExtensionTurnOptions = Readonly<{
   unmeteredAuthority?: PluginTaskUnmeteredPreparedAuthority;
+  projectStageAuthority?: ProjectConversationCommitAuthority;
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
   /** Detached source and execution installation pins; the Store locks both using its existing connection. */
@@ -127,6 +131,7 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
  * Ordinary RunStore writes cannot attach a plugin after dispatch.
  */
 export interface ExtensionStore {
+  readonly projectStageAdmissionVersion?: "crewon.project-stage-run-admission.v1";
   /** Older adapters cannot silently accept a paid task without reserving its credits. */
   readonly creditAdmissionVersion?: "crewon.extension-credit-admission.v0";
   readonly pluginAdmissionVersion?: "crewon.plugin-task-admission.v1";

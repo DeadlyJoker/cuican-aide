@@ -3,6 +3,7 @@ import {
   ProjectTextApplicationService,
   type PluginProjectTextRecoveryApplicationService,
   type ProjectTextStore,
+  type ProjectConversationStore,
   type CreativeProjectAuthorizationPort,
   type CreativeProjectStore,
 } from "@crewon/application";
@@ -53,6 +54,11 @@ import {
   prepareProjectTextRecovery,
   type ProjectTextRecoveryStoreOwner,
 } from "./project-text-recovery-composition.ts";
+import {
+  prepareProjectConversations,
+  type PreparedProjectConversations,
+  type ProjectConversationConfiguration,
+} from "./project-conversation-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
@@ -60,6 +66,7 @@ export type CreativeProjectCompositionConfig = Readonly<{
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
   textUi?: ProjectTextPluginUiConfig;
   textRecovery?: ProjectTextPluginUiConfig;
+  conversations?: ProjectConversationConfiguration;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -75,6 +82,8 @@ export type PreparedCreativeProjects = {
   readonly textUi?: ProjectTextPluginUiConfig;
   readonly textRecovery?: ProjectTextPluginUiConfig;
   readonly textRecoveryService?: PluginProjectTextRecoveryApplicationService;
+  readonly conversations?: ProjectConversationConfiguration;
+  readonly conversationFoundation?: PreparedProjectConversations;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
   readonly generationReads?: ProjectGenerationReadConfiguration;
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
@@ -106,7 +115,12 @@ type CreativeProjectStoreOwner = ProjectTextRecoveryStoreOwner &
   Readonly<{
     creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
     projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
-    extensionStore?(): ProjectGenerationReadStore;
+    projectConversationStore?(): ProjectConversationStore;
+    pluginInstallationStore?(): { migrate(): Promise<void> };
+    extensionStore?(): ProjectGenerationReadStore & {
+      migrate(): Promise<void>;
+      migratePluginAdmissions(): Promise<void>;
+    };
     projectConceptSelectionStore?: ProjectGenerationSelectionStoreOwner["projectConceptSelectionStore"];
   }>;
 
@@ -125,6 +139,7 @@ export function captureCreativeProjectCompositionConfig(
         key !== "textArtifacts" &&
         key !== "textUi" &&
         key !== "textRecovery" &&
+        key !== "conversations" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
@@ -178,6 +193,18 @@ export function captureCreativeProjectCompositionConfig(
   )
     throw new Error("creative_project_configuration_invalid");
   const textRecovery = captureProjectTextPluginUiConfig(recoveryField?.value);
+  const conversationField = fields.conversations;
+  if (
+    conversationField !== undefined &&
+    (!Object.hasOwn(conversationField, "value") ||
+      !conversationField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const conversations = captureCreativeProjectPluginUiConfig(
+    conversationField?.value,
+  );
+  if (conversations !== undefined && textArtifacts === undefined)
+    throw new Error("project_conversation_text_store_required");
   if (
     textRecovery !== undefined &&
     (textUi === undefined ||
@@ -279,6 +306,7 @@ export function captureCreativeProjectCompositionConfig(
         ...(textArtifacts === undefined ? {} : { textArtifacts }),
         ...(textUi === undefined ? {} : { textUi }),
         ...(textRecovery === undefined ? {} : { textRecovery }),
+        ...(conversations === undefined ? {} : { conversations }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
@@ -326,10 +354,12 @@ export async function prepareCreativeProjects(
   const store = owner.creativeProjectStore();
   await store.migrate();
   let textService: ProjectTextApplicationService | undefined;
+  let textStore: ProjectTextStore | undefined;
   if (configuration.textArtifacts !== undefined) {
     if (owner.projectTextStore === undefined)
       throw new Error("project_text_composition_required");
     const texts = owner.projectTextStore();
+    textStore = texts;
     await texts.migrate();
     textService = new ProjectTextApplicationService({
       store: texts,
@@ -343,6 +373,12 @@ export async function prepareCreativeProjects(
   const textRecoveryService = await prepareProjectTextRecovery(owner, {
     configuration: configuration.textRecovery,
     projects: store,
+    authorization: configuration.authorization,
+  });
+  const conversationFoundation = await prepareProjectConversations(owner, {
+    configuration: configuration.conversations,
+    projects: store,
+    texts: textStore,
     authorization: configuration.authorization,
   });
   if (
@@ -383,6 +419,12 @@ export async function prepareCreativeProjects(
           configuration.resultSelections,
         );
   return {
+    ...(conversationFoundation === undefined
+      ? {}
+      : {
+          conversationFoundation,
+          conversations: configuration.conversations!,
+        }),
     ...(textRecoveryService === undefined ? {} : { textRecoveryService }),
     ...(textService === undefined ? {} : { textService }),
     ...(configuration.textUi === undefined

@@ -195,6 +195,32 @@ export function appendProjectTextRecoveryUiServiceAvailability(
   return port;
 }
 
+/** Conversation metadata publishes only its own protocol, never an executable Run grant. */
+export function appendProjectConversationUiServiceAvailability(
+  input: Readonly<{
+    conversations: PluginUiHostServiceAvailabilityPort;
+    fallback?: PluginUiHostServiceAvailabilityPort;
+  }>,
+): PluginUiHostServiceAvailabilityPort {
+  const conversations = capturePluginUiHostServiceAvailability(
+    input.conversations,
+  )!;
+  const fallback = capturePluginUiHostServiceAvailability(input.fallback);
+  let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
+    isAvailable: (request) =>
+      request.requirement.service === "crewon.project-conversations"
+        ? request.requirement.apiVersion === "1" &&
+          conversations.isAvailable(request)
+        : fallback?.isAvailable(request) === true,
+  });
+  if (fallback !== undefined) {
+    port = preserveProjectGenerationHostAvailability(fallback, port);
+    port = preserveProjectGenerationContextHostAvailability(fallback, port);
+    port = preserveProjectGenerationQueryHostAvailability(fallback, port);
+  }
+  return port;
+}
+
 /** Known optional protocols can be declared without an owner; required generation protocols need actual assembly. */
 export function assertUiOnlyServiceDeclarations(
   descriptor: PluginPackageDescriptor,
@@ -221,6 +247,9 @@ export function assertUiOnlyServiceDeclarations(
             requirement.apiVersion === CREWON_PROJECT_TEXTS_API_VERSION &&
             (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === "crewon.project-text-recovery" &&
+            requirement.apiVersion === "1" &&
+            (requirement.optional || hostUiServices !== undefined)) ||
+          (requirement.service === "crewon.project-conversations" &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&

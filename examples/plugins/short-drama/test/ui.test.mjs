@@ -12,7 +12,7 @@ import {
   settle,
 } from "./ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "15.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -30,6 +30,20 @@ test("ships a unified self-contained UI and execution package with the original 
   assert.equal(descriptor.entrypoints.node, "node.mjs");
   assert.equal(descriptor.businessManifestPath, "business.json");
   assert.deepEqual(descriptor.requires, [
+    ...(Number(version.split(".")[0]) >= 16
+      ? [
+          {
+            service: "crewon.project-conversations",
+            apiVersion: "1",
+            optional: true,
+          },
+          {
+            service: "crewon.project-context",
+            apiVersion: "1",
+            optional: true,
+          },
+        ]
+      : []),
     ...(Number(version.split(".")[0]) >= 15
       ? [
           {

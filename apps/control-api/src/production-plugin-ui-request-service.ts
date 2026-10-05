@@ -1,3 +1,4 @@
+import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { ApplicationError } from "@crewon/application";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
@@ -29,6 +30,7 @@ export function createProductionPluginUiRequestService({
   projectQueries,
   projectSelections,
   recovery,
+  conversations,
 }: Readonly<{
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
@@ -39,6 +41,7 @@ export function createProductionPluginUiRequestService({
   projectQueries?: InstalledPluginProjectQueryOwner;
   projectSelections?: ProductionProjectGenerationSelectionPluginRuntime;
   recovery?: ProductionPluginUiRecoveryRuntime;
+  conversations?: ProjectConversationControlOwner;
 }>): PluginUiControlService {
   if (
     projectQueries !== undefined &&
@@ -60,7 +63,8 @@ export function createProductionPluginUiRequestService({
     projectQueries === undefined &&
     projectGenerationReads === undefined &&
     projectSelections === undefined &&
-    recovery === undefined
+    recovery === undefined &&
+    conversations === undefined
   )
     return ui;
   return Object.freeze({
@@ -75,6 +79,26 @@ export function createProductionPluginUiRequestService({
           : recovery.run(request, actor, signal, () =>
               ui.invoke(actor, command),
             );
+      if (
+        command.action === "crewon.project-conversations" ||
+        command.action.startsWith("crewon.project-conversations.")
+      ) {
+        if (
+          conversations === undefined ||
+          !conversations.supportsAction(command.action)
+        )
+          throw new ApplicationError(
+            "conflict",
+            "project_conversation_unavailable",
+          );
+        return conversations.runAuthenticatedRequest(
+          request,
+          actor,
+          command.action,
+          signal,
+          invoke,
+        );
+      }
       if (
         command.action === "crewon.project-texts" ||
         command.action.startsWith("crewon.project-texts.") ||

@@ -43,12 +43,18 @@ export function useInstalledPluginModules({
   theme,
   locale,
   taskContext,
+  projectConversationContext,
 }: Readonly<{
   client: ControlApiClient | null;
   /** A host account lifecycle key only; HTTP authority continues to come from its authenticated session. */
   sessionKey: string | null;
   theme: Theme;
   locale: Locale;
+  /** A creation hint from the current workspace owner, never a conversation or Run authority. */
+  projectConversationContext?: Readonly<{
+    creationWorkspaceId: string | null;
+    creationWorkspaceName?: string | null;
+  }>;
   /** Formal host composition; portable modules never receive these ports. */
   taskContext?: Readonly<{
     runtime: Pick<ControlThreadRuntime, "adoptExtensionTask"> | null;
@@ -224,6 +230,15 @@ export function useInstalledPluginModules({
             ...(generationJournal ? { generationJournal } : {}),
             ...(projectQueryJournal ? { projectQueryJournal } : {}),
             ...(selectionJournal ? { selectionJournal } : {}),
+            onProjectConversationOpen: (event) => {
+              if (
+                current.current !== scope ||
+                mountedScope.current !== scope ||
+                taskContextRef.current?.runtime == null
+              )
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+              taskContextRef.current.onOpenTask(event.binding.threadId);
+            },
           })
         : null,
     [
@@ -480,6 +495,7 @@ export function useInstalledPluginModules({
               selectionPorts={selectionPorts}
               selectedThreadId={selectedTaskThreadId}
               runIds={taskRunIds}
+              projectConversationContext={projectConversationContext}
               onOpenTask={(threadId) => {
                 taskPorts?.assertSessionCurrent();
                 if (taskPorts) taskContextRef.current?.onOpenTask(threadId);
@@ -501,6 +517,7 @@ export function useInstalledPluginModules({
     selectionPorts,
     selectedTaskThreadId,
     taskRunIds,
+    projectConversationContext,
   ]);
   return { hostModules, getDiagnostics: () => diagnostics.current };
 }

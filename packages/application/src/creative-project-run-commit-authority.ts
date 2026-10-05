@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   creativeProjectOpaqueId,
   extensionCanonicalJson,
@@ -16,6 +17,9 @@ import {
   type PluginTaskAdmission,
   type RunState,
   type ToolExecutionReceiptState,
+  type ProjectStageRunAdmission,
+  parseProjectStageRunAdmission,
+  assertProjectStageToolRequest,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
 import type { WorkItemClaim } from "./durable-queue-port.ts";
@@ -77,6 +81,8 @@ export type CreativeProjectRunCommitTransactionAuthority = Readonly<{
   installation: ProjectToolInstallationPin;
   /** Original genuine persisted task admission, never synthesized from installation trust. */
   admission: PluginTaskAdmission;
+  /** Immutable host stage record, if this Run was admitted through a project conversation. */
+  projectStageAdmission?: ProjectStageRunAdmission;
   selection: PluginSelection;
   package: InstalledPluginPackage;
   /** Live Worker dispatch/actor/PDP fence. Must not borrow the committing Store's pool. */
@@ -100,6 +106,11 @@ export function captureCreativeProjectRunCommitTransaction(
     "selection",
     "package",
     "assertCurrent",
+    ...(input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "projectStageAdmission")
+      ? ["projectStageAdmission"]
+      : []),
   ]);
   if (
     fields.version !== "crewon.creative-project-run-commit.v1" ||
@@ -113,6 +124,13 @@ export function captureCreativeProjectRunCommitTransaction(
   const receipt = copy(fields.receipt) as ToolExecutionReceiptState;
   const claim = copy(fields.claim) as WorkItemClaim;
   const admission = parsePluginTaskAdmission(copy(fields.admission));
+  const stage =
+    fields.projectStageAdmission === undefined
+      ? undefined
+      : parseProjectStageRunAdmission(copy(fields.projectStageAdmission), {
+          sha256: (text) =>
+            `sha256:${createHash("sha256").update(text).digest("hex")}`,
+        });
   const pin = parseProjectToolInstallationPin(fields.installation);
   const operations = [
     "project_create",
@@ -214,6 +232,25 @@ export function captureCreativeProjectRunCommitTransaction(
   creativeProjectOpaqueId(claim.lease.ownerId);
   creativeProjectOpaqueId(claim.lease.leaseId);
   const current = fields.assertCurrent.bind(input);
+  if (stage !== undefined) {
+    if (
+      stage.runId !== run.runId ||
+      stage.threadId !== run.threadId ||
+      extensionCanonicalJson(stage.actor) !== extensionCanonicalJson(actor) ||
+      extensionCanonicalJson(stage.installation) !==
+        extensionCanonicalJson(pin) ||
+      stage.pluginTaskAdmissionDigest !==
+        `sha256:${createHash("sha256").update(extensionCanonicalJson(admission)).digest("hex")}`
+    )
+      denied();
+    assertProjectStageToolRequest(
+      stage,
+      fields.operationId as string,
+      fields.operationId === "script_save"
+        ? { outline: null, ...JSON.parse(fields.commandInput) }
+        : JSON.parse(fields.commandInput),
+    );
+  }
   return Object.freeze({
     version: "crewon.creative-project-run-commit.v1",
     actor,
@@ -224,6 +261,7 @@ export function captureCreativeProjectRunCommitTransaction(
     operationId: fields.operationId as ProjectToolMutationOperation,
     installation: pin,
     admission,
+    ...(stage === undefined ? {} : { projectStageAdmission: stage }),
     selection,
     package: pkg,
     assertCurrent: async () => {

@@ -31,17 +31,53 @@ const styles = new Map(
   ].map((name) => [`/styles/${name}`, name]),
 );
 const service = recoveryTextService();
-service.metadata.create(
+const { project } = service.metadata.create(
   "迟到的来信",
   "都市悬疑，三集短剧。快递员收到十年前自己寄出的信，决定寻找寄件人。",
 );
-const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Short15 module visual fixture</title><link rel="stylesheet" href="/styles/neutral-scale.css"><link rel="stylesheet" href="/styles/app.css"><link rel="stylesheet" href="/styles/original-shell-overrides.css"><link rel="stylesheet" href="/styles/team-workspace.css"><link rel="stylesheet" href="/styles/appearance.css"><style>html,body,#root,#theme-source{height:100%;width:100%;margin:0;overflow:hidden}#theme-source{display:block;min-width:0;min-height:0;border:0;padding:0}</style></head><body><div id="theme-source" class="screen-shell command-screen"><div id="root"></div></div><script type="module">
+// Explicit public DTO ledger for appearance checks; no production Thread or Run.
+const bindings = [],
+  conversationCalls = [];
+async function invoke(action, input) {
+  if (!action.startsWith("crewon.project-conversations.v1."))
+    return service.services.invoke(action, input);
+  conversationCalls.push({ action, input: structuredClone(input) });
+  assert.equal(input.projectId, project.projectId);
+  if (action.endsWith(".listConversations"))
+    return { bindings, nextThreadId: null };
+  if (action.endsWith(".openConversation"))
+    return {
+      binding: bindings.find((value) => value.threadId === input.threadId),
+    };
+  assert.equal(action, "crewon.project-conversations.v1.createConversation");
+  assert.equal(input.workspaceId, "visual-workspace");
+  const binding = {
+    bindingId: "visual-binding",
+    projectId: project.projectId,
+    threadId: "visual-thread",
+    workspaceId: input.workspaceId,
+    revision: 1,
+    state: "active",
+    source: {
+      pluginId: descriptor.pluginId,
+      publisherId: descriptor.publisherId,
+      version: descriptor.version,
+      packageDigest: "sha256:" + "a".repeat(64),
+      selectionRevision: 1,
+    },
+    createdAt: "2026-10-06T00:00:00.000Z",
+    updatedAt: "2026-10-06T00:00:00.000Z",
+  };
+  bindings.push(binding);
+  return { disposition: "committed", binding };
+}
+const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Short ${descriptor.version} module visual fixture</title><link rel="stylesheet" href="/styles/neutral-scale.css"><link rel="stylesheet" href="/styles/app.css"><link rel="stylesheet" href="/styles/original-shell-overrides.css"><link rel="stylesheet" href="/styles/team-workspace.css"><link rel="stylesheet" href="/styles/appearance.css"><style>html,body,#root,#theme-source{height:100%;width:100%;margin:0;overflow:hidden}#theme-source{display:block;min-width:0;min-height:0;border:0;padding:0}</style></head><body><div id="theme-source" class="screen-shell command-screen"><div id="root"></div></div><script type="module">
 import definition from '/ui.mjs';
 const mode=new URL(location.href).searchParams.get('mode')==='dark'?'dark':'light';
 document.documentElement.dataset.theme=mode;
 const computed=getComputedStyle(document.getElementById('theme-source'));
 const tokens=Object.fromEntries([...computed].filter(name=>name.startsWith('--')).map(name=>[name,computed.getPropertyValue(name)]));
-definition.mount(document.getElementById('root'),{schemaVersion:'crewon.plugin-ui-props.v1',contributionId:'workbench',theme:{mode,tokens},data:{pluginUiReady:true}}, {async invoke(action,input,options){const response=await fetch('/invoke',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,input}),signal:options?.signal});const value=await response.json();if(!response.ok)throw Object.assign(new Error(value.code),{code:value.code});return value;}});
+definition.mount(document.getElementById('root'),{schemaVersion:'crewon.plugin-ui-props.v1',contributionId:'workbench',theme:{mode,tokens},data:{pluginUiReady:true,projectConversationContext:{creationWorkspaceId:'visual-workspace',creationWorkspaceName:'短剧创作工作空间'}}}, {async invoke(action,input,options){const response=await fetch('/invoke',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({action,input}),signal:options?.signal});const value=await response.json();if(!response.ok)throw Object.assign(new Error(value.code),{code:value.code});return value;}});
 </script></body></html>`;
 const server = createServer(async (request, response) => {
   try {
@@ -73,9 +109,7 @@ const server = createServer(async (request, response) => {
       }
       const { action, input } = JSON.parse(body);
       response.setHeader("content-type", "application/json");
-      response.end(
-        JSON.stringify(await service.services.invoke(action, input)),
-      );
+      response.end(JSON.stringify(await invoke(action, input)));
       return;
     }
     response.writeHead(404);
@@ -107,6 +141,38 @@ try {
     await page.setViewportSize({ width, height });
     await page.goto(`${address}/?mode=${mode}`);
     await page.locator(".project-card").first().click();
+    await page
+      .getByRole("button", { name: "新建项目对话", exact: true })
+      .waitFor();
+    if (bindings.length === 0)
+      await page
+        .getByRole("button", { name: "新建项目对话", exact: true })
+        .click();
+    await page.getByRole("button", { name: "进入对话", exact: true }).waitFor();
+    await page.getByRole("button", { name: "进入对话", exact: true }).click();
+    await page.getByText("已请求打开项目对话。", { exact: true }).waitFor();
+    await page.locator(".drama-main").evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await page.screenshot({ path: join(output, `conversation-${name}.png`) });
+    const conversationMeasurements = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      contentWidth: document.querySelector(".drama-content").clientWidth,
+      scrollWidth: document.querySelector(".drama-content").scrollWidth,
+    }));
+    assert.ok(
+      conversationMeasurements.documentWidth <= width &&
+        conversationMeasurements.scrollWidth <=
+          conversationMeasurements.contentWidth + 1,
+    );
+    checks.push({
+      name: `conversation-${name}`,
+      width,
+      height,
+      mode,
+      measurements: conversationMeasurements,
+      fixtureThreadOnly: true,
+    });
     await page.locator(".stage-item").nth(1).click();
     await page.getByLabel("大纲标题", { exact: true }).waitFor();
     await page
@@ -247,6 +313,8 @@ await writeFile(
       fixture: "public DTO server; not production identity/SQL",
       package: descriptor.version,
       packageFiles: descriptor.files,
+      conversationCalls,
+      actualRunsCreated: 0,
       checks,
       errors,
       browserClosed: true,

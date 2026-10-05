@@ -42,6 +42,7 @@ export {
   type PluginNodePreparedActivation,
   type PluginNodePreparedCommit,
 } from "./plugin-node-host.ts";
+export { verifyInstalledProjectActionDeclaration } from "./plugin-action-declaration.ts";
 export {
   LocalPluginUiPackageReader,
   type LocalPluginUiPackageReaderDependencies,
@@ -82,6 +83,7 @@ export {
   appendProjectGenerationSelectionUiServiceAvailability,
   appendProjectTextUiServiceAvailability,
   appendProjectTextRecoveryUiServiceAvailability,
+  appendProjectConversationUiServiceAvailability,
   appendPluginUiRecoveryServiceAvailability,
   assertUiOnlyServiceDeclarations,
   assertPluginUiHostServiceAvailability,

@@ -38,6 +38,7 @@ export function useControlThreadRuntime(params: {
   appendStreamingTextDelta: (threadId: string, delta: string) => void;
   client: ControlApiClient | null;
   manageThreads: boolean;
+  onProjectConversationRequestChanged?: (threadId: string) => void;
   onExecutionIntentMismatch?: (threadId: string, runId: string) => void;
   onToolApprovalRequired?: (request: ControlToolApprovalRequest) => void;
   onToolApprovalResolved?: (threadId: string, runId: string) => void;
@@ -65,6 +66,11 @@ export function useControlThreadRuntime(params: {
 }> {
   const manageThreadsRef = useRef(params.manageThreads);
   manageThreadsRef.current = params.manageThreads;
+  const onProjectConversationRequestChangedRef = useRef(
+    params.onProjectConversationRequestChanged,
+  );
+  onProjectConversationRequestChangedRef.current =
+    params.onProjectConversationRequestChanged;
   const onToolApprovalRequiredRef = useRef(params.onToolApprovalRequired);
   onToolApprovalRequiredRef.current = params.onToolApprovalRequired;
   const onToolApprovalResolvedRef = useRef(params.onToolApprovalResolved);
@@ -97,6 +103,9 @@ export function useControlThreadRuntime(params: {
     control = new ControlThreadRuntime(
       { client: params.client },
       {
+        onProjectConversationRequestChanged: (threadId) => {
+          onProjectConversationRequestChangedRef.current?.(threadId);
+        },
         onTeamProgress: (threadId, progress) => {
           if (!manageThreadsRef.current) return;
           setTeamProgressByThread((current) => {
@@ -111,7 +120,10 @@ export function useControlThreadRuntime(params: {
           params.setThreads((current) =>
             upsertThread(
               current,
-              mergeThreadMetadata(current.find((item) => item.id === thread.id), thread),
+              mergeThreadMetadata(
+                current.find((item) => item.id === thread.id),
+                thread,
+              ),
             ),
           );
         },
@@ -188,13 +200,21 @@ export function useControlThreadRuntime(params: {
                 : {
                     ...thread,
                     ...(coverage.complete === false && transcriptWindow(thread)
-                      ? { controlTranscriptWindow: { ...transcriptWindow(thread)!, toolHistory: "partial" as const } }
+                      ? {
+                          controlTranscriptWindow: {
+                            ...transcriptWindow(thread)!,
+                            toolHistory: "partial" as const,
+                          },
+                        }
                       : {}),
                     turns: thread.turns.map((turn) =>
                       turn.id === runId
                         ? {
                             ...turn,
-                            itemsView: coverage.complete && !transcriptWindow(thread) ? "full" : "summary",
+                            itemsView:
+                              coverage.complete && !transcriptWindow(thread)
+                                ? "full"
+                                : "summary",
                           }
                         : turn,
                     ),
@@ -375,7 +395,6 @@ export function useControlThreadRuntime(params: {
       current = false;
     };
   }, [runtime]);
-
 
   useEffect(() => {
     if (!connected || runtime === null || !params.manageThreads) {

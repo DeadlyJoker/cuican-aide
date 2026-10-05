@@ -1,3 +1,4 @@
+import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
 import type { AskForApproval } from "@crewon/app-server-protocol/v2/AskForApproval";
 import type { ApprovalsReviewer } from "@crewon/app-server-protocol/v2/ApprovalsReviewer";
 import type { Model } from "@crewon/app-server-protocol/v2/Model";
@@ -39,6 +40,7 @@ export type CommandModelOption = {
 };
 
 export type ThreadRuntimeSettings = {
+  projectConversation?: ProjectConversationComposerSelection;
   approvalPolicy?: AskForApproval | null;
   approvalsReviewer?: ApprovalsReviewer | null;
   config?: Record<string, unknown>;

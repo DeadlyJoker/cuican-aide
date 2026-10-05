@@ -24,6 +24,8 @@ import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
 import { ProjectTextController } from "./ProjectTextController";
 import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
 import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
+import { ProjectConversationController } from "./ProjectConversationController";
+import { ProjectConversationActions } from "./ProjectConversationActions";
 
 function SaveFeedback({
   controller,
@@ -86,9 +88,11 @@ function SaveFeedback({
 export function ShortDramaPersistentWorkbench({
   controller,
   texts,
+  conversations,
 }: {
   controller: CreativeProjectController;
   texts: ProjectTextController;
+  conversations: ProjectConversationController;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -100,6 +104,11 @@ export function ShortDramaPersistentWorkbench({
     texts.getSnapshot,
     texts.getSnapshot,
   );
+  useSyncExternalStore(
+    conversations.subscribe,
+    conversations.getSnapshot,
+    conversations.getSnapshot,
+  );
   const [stage, setStage] = useState<0 | 1>(0);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
@@ -108,7 +117,11 @@ export function ShortDramaPersistentWorkbench({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const { details } = snapshot;
   const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
-  const locked = projectLocked || snapshot.conceptLocked || texts.locked;
+  const locked =
+    projectLocked ||
+    snapshot.conceptLocked ||
+    texts.locked ||
+    conversations.locked;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
     (project) =>
@@ -116,7 +129,8 @@ export function ShortDramaPersistentWorkbench({
   );
   useEffect(() => {
     texts.setProject(details);
-  }, [texts, details]);
+    conversations.setProject(details);
+  }, [texts, conversations, details]);
   useEffect(() => {
     setStage(0);
   }, [details?.project.projectId]);
@@ -333,6 +347,15 @@ export function ShortDramaPersistentWorkbench({
                 </div>
                 <div className="heading-actions">
                   <span className="genre-label">创作项目</span>
+                  {stage === 1 && (
+                    <button
+                      className="button secondary"
+                      disabled={locked}
+                      onClick={() => setStage(0)}
+                    >
+                      项目对话
+                    </button>
+                  )}
                   <button
                     className="button secondary"
                     disabled={locked || snapshot.opening}
@@ -342,6 +365,9 @@ export function ShortDramaPersistentWorkbench({
                   </button>
                 </div>
               </div>
+              {stage === 0 && (
+                <ProjectConversationActions controller={conversations} />
+              )}
               <SaveFeedback controller={controller} snapshot={snapshot} />
               {archived && (
                 <p className="detail-note" role="status">

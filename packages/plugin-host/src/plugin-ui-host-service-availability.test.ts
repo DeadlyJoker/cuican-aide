@@ -9,6 +9,7 @@ import {
   appendPluginUiRecoveryServiceAvailability,
   appendProjectTextUiServiceAvailability,
   appendProjectTextRecoveryUiServiceAvailability,
+  appendProjectConversationUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
 import { registerProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
@@ -54,6 +55,64 @@ function candidate(input: Parameters<typeof descriptor>[0] = {}) {
 }
 const rejectsUnavailable = (work: () => unknown) =>
   assert.throws(work, { code: "plugin_dependency_unavailable" });
+
+test("conversation availability requires its live independent owner and supplies no task or paid availability", () => {
+  const requirement = {
+    service: "crewon.project-conversations",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [requirement] });
+  assert.throws(() => assertUiOnlyServiceDeclarations(actual.descriptor), {
+    code: "plugin_ui_only_services_unsupported",
+  });
+  let live = true;
+  const port = appendProjectConversationUiServiceAvailability({
+    conversations: { isAvailable: () => live },
+    fallback: appendProjectTextUiServiceAvailability({
+      texts: { isAvailable: () => true },
+    }),
+  });
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: actual,
+    hostUiServices: port,
+  });
+  live = false;
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: port,
+    }),
+  );
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: candidate({
+      requires: [
+        { service: "crewon.project-texts", apiVersion: "1", optional: false },
+      ],
+    }),
+    hostUiServices: port,
+  });
+  for (const service of ["crewon.tasks", "crewon.project-generations"])
+    assert.equal(
+      port.isAvailable({
+        scope,
+        candidate: actual,
+        requirement: { ...requirement, service },
+      }),
+      false,
+    );
+  assert.equal(
+    port.isAvailable({
+      scope,
+      candidate: actual,
+      requirement: { ...requirement, apiVersion: "2" },
+    }),
+    false,
+  );
+});
 
 test("text recovery v1 needs independent actual availability and preserves the original text fallback", () => {
   const recovery = {

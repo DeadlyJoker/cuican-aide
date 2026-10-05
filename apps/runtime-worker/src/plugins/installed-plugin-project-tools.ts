@@ -17,6 +17,7 @@ import {
   type ExtensionManifest,
   type PluginTaskAdmission,
   type PluginProfileScope,
+  type ProjectStageRunAdmission,
 } from "@crewon/domain";
 import type {
   PluginActivationCandidate,
@@ -35,6 +36,7 @@ export function createInstalledPluginProjectToolsOwner(
   input: Readonly<{
     dependencies: InstalledPluginProjectToolsDependencies | undefined;
     context: PluginToolRuntimeContext;
+    stageAdmission?: ProjectStageRunAdmission | null;
     admission: PluginTaskAdmission;
     scope: PluginProfileScope;
     tools: ExtensionManifest["tools"];
@@ -52,10 +54,15 @@ export function createInstalledPluginProjectToolsOwner(
   return new ProjectToolsServiceOwner({
     ...dependencies,
     context: input.context,
+    stageAdmission: input.stageAdmission,
     admission: input.admission,
     tools: input.tools,
-    authorizeCurrent: input.authorizeCurrent,
+    authorizeCurrent: async (operation) => {
+      await dependencies.authorizeService?.(input.admission, operation.signal);
+      await input.authorizeCurrent(operation);
+    },
     authorizeTransaction: async (operation) => {
+      await dependencies.authorizeService?.(input.admission, operation.signal);
       const candidate = input.candidate();
       if (candidate === null)
         throw new Error("installed_plugin_runtime_candidate_missing");
@@ -169,6 +176,11 @@ export async function assertInstalledPluginProjectToolsExternalCurrent(
 export type InstalledPluginProjectToolsConfig = Readonly<{
   version: "crewon.project-tools.v1";
   authorization: CreativeProjectAuthorizationPort;
+  /** Optional package-specific deployment grant, independent of general Node execution approval. */
+  authorizeService?(
+    admission: PluginTaskAdmission,
+    signal: AbortSignal,
+  ): Promise<void>;
 }>;
 export type InstalledPluginProjectToolsDependencies = Readonly<{
   projects: CreativeProjectApplicationService;
@@ -177,6 +189,7 @@ export type InstalledPluginProjectToolsDependencies = Readonly<{
   installations: Pick<PluginInstallationStore, "loadSelection" | "loadPackage">;
   authorization: CreativeProjectAuthorizationPort;
   resolveActor: InstalledPluginRunContextDependencies["resolveActor"];
+  authorizeService?: InstalledPluginProjectToolsConfig["authorizeService"];
 }>;
 
 /** Services share the composition's actual stores and policy, with no secondary runtime. */
@@ -209,6 +222,9 @@ export function composeInstalledPluginProjectToolsDependencies(
     installations: input.store.pluginInstallationStore(),
     authorization: config.authorization,
     resolveActor: input.resolveActor,
+    ...(config.authorizeService === undefined
+      ? {}
+      : { authorizeService: config.authorizeService }),
   });
 }
 
@@ -224,12 +240,21 @@ export function captureInstalledPluginProjectToolsConfig(
     throw new Error("installed_plugin_project_tools_configuration_invalid");
   const fields = Object.getOwnPropertyDescriptors(input);
   if (
-    Reflect.ownKeys(input).length !== 2 ||
+    Reflect.ownKeys(input).length !==
+      (Object.hasOwn(input, "authorizeService") ? 3 : 2) ||
     !fields.version?.enumerable ||
     !("value" in fields.version) ||
     fields.version.value !== "crewon.project-tools.v1" ||
     !fields.authorization?.enumerable ||
     !("value" in fields.authorization)
+  )
+    throw new Error("installed_plugin_project_tools_configuration_invalid");
+  const service = fields.authorizeService;
+  if (
+    service !== undefined &&
+    (!service.enumerable ||
+      !("value" in service) ||
+      typeof service.value !== "function")
   )
     throw new Error("installed_plugin_project_tools_configuration_invalid");
   const authorization: unknown = fields.authorization.value;
@@ -242,6 +267,15 @@ export function captureInstalledPluginProjectToolsConfig(
       if (!("value" in method) || typeof method.value !== "function") break;
       return Object.freeze({
         version: "crewon.project-tools.v1",
+        ...(service === undefined
+          ? {}
+          : {
+              authorizeService: (service.value as Function).bind(
+                input,
+              ) as NonNullable<
+                InstalledPluginProjectToolsConfig["authorizeService"]
+              >,
+            }),
         authorization: Object.freeze({
           authorize: method.value.bind(authorization),
         }),

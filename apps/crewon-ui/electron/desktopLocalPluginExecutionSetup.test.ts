@@ -26,8 +26,8 @@ import {
 import { SHORT_NETWORK_PATHS } from "./desktopLocalPluginExecutionSetupSnapshot.ts";
 import { DESKTOP_RUNTIME_OWNER as actor } from "./desktopExtensionRuntime.ts";
 const fixtures: Awaited<ReturnType<typeof executionSetupFixture>>[] = [];
-async function fixture() {
-  const value = await executionSetupFixture();
+async function fixture(options?: Parameters<typeof executionSetupFixture>[0]) {
+  const value = await executionSetupFixture(options);
   fixtures.push(value);
   return value;
 }
@@ -85,6 +85,50 @@ function lifecycle(
 }
 
 describe("explicit Main local execution preparation", () => {
+  it.each(["12.0.0", "13.0.0", "14.0.0", "15.0.0", "16.0.0"])(
+    "previews explicitly supported exact installed version %s without execution or selection mutation",
+    async (version) => {
+      const f = await fixture({
+        version,
+        projectContext: version === "16.0.0",
+      });
+      const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
+      const owner = f.create();
+      const preview = await owner.preview({
+        bootstrap: f.bootstrap,
+        pluginId: f.identity.pluginId,
+      });
+      expect(preview.version).toBe(version);
+      expect(preview.packageDigest).toBe(f.identity.packageDigest);
+      expect(readFileSync(join(f.dataDirectory, "control.sqlite"))).toEqual(
+        before,
+      );
+      expect(existsSync(f.policyPath)).toBe(false);
+    },
+  );
+
+  it("does not turn an unsupported version declaration into execution approval", async () => {
+    const f = await fixture({ version: "17.0.0", projectContext: true });
+    const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
+    await expect(
+      f
+        .create()
+        .preview({ bootstrap: f.bootstrap, pluginId: f.identity.pluginId }),
+    ).rejects.toThrow("package_unsupported");
+    expect(readFileSync(join(f.dataDirectory, "control.sqlite"))).toEqual(
+      before,
+    );
+    expect(existsSync(f.policyPath)).toBe(false);
+  });
+  it("requires the declared stage context services for version 16 without granting a project Run", async () => {
+    const f = await fixture({ version: "16.0.0" });
+    await expect(
+      f
+        .create()
+        .preview({ bootstrap: f.bootstrap, pluginId: f.identity.pluginId }),
+    ).rejects.toThrow("package_unsupported");
+    expect(existsSync(f.policyPath)).toBe(false);
+  });
   it("previews exact real installed/configuration pins without importing code, writing policy, mapping or selection", async () => {
     const f = await fixture(),
       owner = f.create();
@@ -236,13 +280,11 @@ describe("explicit Main local execution preparation", () => {
         .loadSelection({ scope: f.scope, pluginId: f.identity.pluginId }),
     ).toEqual(f.installedSelection);
     expect(
-      await f.store
-        .extensionStore()
-        .loadExtensionActivation({
-          tenantId: f.scope.tenantId,
-          spaceId: f.scope.spaceId,
-          pluginId: f.identity.pluginId,
-        }),
+      await f.store.extensionStore().loadExtensionActivation({
+        tenantId: f.scope.tenantId,
+        spaceId: f.scope.spaceId,
+        pluginId: f.identity.pluginId,
+      }),
     ).toBeNull();
   });
 
@@ -314,17 +356,15 @@ describe("explicit Main local execution preparation", () => {
       },
       { sha256: fixtureHash },
     );
-    await f.store
-      .extensionStore()
-      .saveExtensionConfiguration({
-        configuration: next,
-        expectedRevision: 1,
-        receipt: {
-          actorId: actor.actorId,
-          idempotencyKey: "changed-config",
-          requestDigest: fixtureHash("changed-config"),
-        },
-      });
+    await f.store.extensionStore().saveExtensionConfiguration({
+      configuration: next,
+      expectedRevision: 1,
+      receipt: {
+        actorId: actor.actorId,
+        idempotencyKey: "changed-config",
+        requestDigest: fixtureHash("changed-config"),
+      },
+    });
     await expect(
       owner.commitProjectMappingWhileStopped(mapping),
     ).rejects.toThrow("records_changed");
@@ -338,22 +378,20 @@ describe("explicit Main local execution preparation", () => {
   it("rejects a current selection revision change without granting policy", async () => {
     const f = await fixture(),
       { owner, claim } = await previewClaim(f);
-    await f.store
-      .pluginInstallationStore()
-      .commitSelection({
-        scope: f.scope,
-        actor,
-        expectedSelectionRevision: 1,
-        selection: parsePluginSelection({
-          ...f.installedSelection,
-          revision: 2,
-          state: "enabled",
-        }),
-        receipt: {
-          idempotencyKey: "changed-selection",
-          requestDigest: fixtureHash("changed-selection"),
-        },
-      });
+    await f.store.pluginInstallationStore().commitSelection({
+      scope: f.scope,
+      actor,
+      expectedSelectionRevision: 1,
+      selection: parsePluginSelection({
+        ...f.installedSelection,
+        revision: 2,
+        state: "enabled",
+      }),
+      receipt: {
+        idempotencyKey: "changed-selection",
+        requestDigest: fixtureHash("changed-selection"),
+      },
+    });
     await expect(owner.commitPolicyWhileStopped(claim)).rejects.toThrow(
       "records_changed",
     );
@@ -545,17 +583,15 @@ describe("explicit Main local execution preparation", () => {
       },
       { sha256: fixtureHash },
     );
-    await f.store
-      .extensionStore()
-      .saveExtensionConfiguration({
-        configuration: next,
-        expectedRevision: 1,
-        receipt: {
-          actorId: actor.actorId,
-          idempotencyKey: "http-config",
-          requestDigest: fixtureHash("http-config"),
-        },
-      });
+    await f.store.extensionStore().saveExtensionConfiguration({
+      configuration: next,
+      expectedRevision: 1,
+      receipt: {
+        actorId: actor.actorId,
+        idempotencyKey: "http-config",
+        requestDigest: fixtureHash("http-config"),
+      },
+    });
     await expect(
       f
         .create()

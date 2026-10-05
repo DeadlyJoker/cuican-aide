@@ -8,6 +8,7 @@ import type {
   PluginInstallationStore,
   RunStore,
   ExternalOperationStore,
+  ProjectConversationStore,
 } from "@crewon/application";
 import { loadPluginQuerySource } from "@crewon/application";
 import {
@@ -34,8 +35,10 @@ import {
   assertPluginQueryTaskAdmission,
   type PluginQueryTaskAdmission,
   type PluginTaskAdmissionPin,
+  type ProjectStageRunAdmission,
 } from "@crewon/domain";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
+import { readProjectStageRuntimeScope } from "./project-stage-runtime-scope.ts";
 
 export type InstalledPluginRunPurpose = "submit" | "observe";
 export type InstalledPluginRunSnapshot = Readonly<{
@@ -47,6 +50,10 @@ export type InstalledPluginRunContextDependencies = Readonly<{
   installations: PluginInstallationStore;
   authorization: AuthorizationPort;
   operations?: Pick<ExternalOperationStore, "loadExternalOperation">;
+  conversations?: Pick<
+    ProjectConversationStore,
+    "loadStageAdmission" | "readRequiredStageDigest"
+  >;
   resolveActor(
     owner: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
     signal: AbortSignal,
@@ -58,6 +65,7 @@ type SavedContext = Readonly<{
   context: PluginToolRuntimeContext;
   toolPermissionMode: RunState["toolPermissionMode"] | null;
   query: PluginQueryTaskAdmission | null;
+  projectStage: ProjectStageRunAdmission | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -163,6 +171,13 @@ export class InstalledPluginRunContext {
     if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
     return saved.toolPermissionMode;
   }
+  verifiedProjectStage(
+    snapshot: InstalledPluginRunSnapshot,
+  ): ProjectStageRunAdmission | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.projectStage;
+  }
 
   async #read(
     locator: ExtensionRunLocator,
@@ -257,6 +272,22 @@ export class InstalledPluginRunContext {
     signal.throwIfAborted();
     if (run === null) fail("installed_plugin_run_missing");
     assertRun(run, binding, original);
+    const projectStage =
+      this.#dependencies.conversations === undefined
+        ? null
+        : await readProjectStageRuntimeScope({
+            conversations: this.#dependencies.conversations,
+            admission,
+            binding,
+            signal,
+          });
+    if (
+      projectStage !== null &&
+      (query !== null ||
+        (rawReceipt.turn.threadState.workspaceId ?? null) !==
+          projectStage.workspaceId)
+    )
+      fail("installed_plugin_project_stage_mismatch");
     const rawConfiguration = await extensions.loadExtensionConfiguration({
       ...binding,
       revision: binding.configurationRevision,
@@ -328,6 +359,7 @@ export class InstalledPluginRunContext {
       context,
       toolPermissionMode: run.toolPermissionMode ?? null,
       query,
+      projectStage,
     });
   }
 

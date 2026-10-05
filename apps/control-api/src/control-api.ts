@@ -1,3 +1,10 @@
+import { ApplicationError } from "@crewon/application";
+import {
+  registerProjectConversationRoutes,
+  projectConversationUnavailable,
+  type ProjectConversationRouting,
+} from "./project-conversation-route.ts";
+import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { wakeOutbox, type OutboxWakeupPort } from "./outbox-wakeup.ts";
 export type { OutboxWakeupPort } from "./outbox-wakeup.ts";
 import { registerModelPricingRoutes } from "./model-pricing-route.ts";
@@ -248,6 +255,8 @@ export type ControlApiDependencies = Readonly<{
   extensionReads?: ExtensionReadApplicationService | null;
   creativeProjects?: CreativeProjectApplicationService | null;
   projectTexts?: ProjectTextApplicationService | null;
+  projectConversations?: ProjectConversationControlOwner | null;
+  projectConversationRouting?: ProjectConversationRouting | null;
   projectGenerationReads?: ProjectGenerationReadApplicationService | null;
   projectConceptSelections?: ProjectConceptSelectionApplicationService | null;
   pluginInstallation?: PluginInstallationControlService | null;
@@ -371,6 +380,13 @@ export function buildControlApi(
     return response;
   });
 
+  registerProjectConversationRoutes(app, {
+    identity: dependencies.identity,
+    threads: dependencies.threads,
+    owner: dependencies.projectConversations,
+    routing: dependencies.projectConversationRouting,
+    outboxWakeup: dependencies.outboxWakeup,
+  });
   registerModelPricingRoutes(app, dependencies);
   registerModelSpendingRoutes(app, dependencies);
   registerPluginControlRoutes(app, dependencies);
@@ -1233,6 +1249,43 @@ export function buildControlApi(
       executionIntent: body.executionIntent,
       toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
     };
+    if (
+      dependencies.projectConversationRouting != null &&
+      (await dependencies.projectConversationRouting.hasThreadBinding({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId,
+      }))
+    ) {
+      if (dependencies.projectConversations == null)
+        projectConversationUnavailable();
+      if (command.executionIntent !== "none")
+        throw new ApplicationError(
+          "validation",
+          "project_conversation_execution_intent_unsupported",
+        );
+      const result = await dependencies.projectConversations.startBoundTurn(
+        requestContext(request),
+        actor,
+        {
+          threadId,
+          expectedThreadRevision: body.expectedRevision,
+          content: body.content,
+          idempotencyKey,
+        },
+      );
+      wakeOutbox(dependencies.outboxWakeup);
+      return reply
+        .code(result.result.turn.disposition === "committed" ? 201 : 200)
+        .send(
+          projectTurnStart(
+            result.result.turn,
+            "none",
+            requireExecutionIntentAcknowledgement ||
+              acceptsExecutionIntentAcknowledgement(request.headers.accept),
+          ),
+        );
+    }
     const replay = await dependencies.turns.replayTurn(actor, command);
     if (replay !== null) {
       wakeOutbox(dependencies.outboxWakeup);

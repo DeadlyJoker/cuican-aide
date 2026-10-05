@@ -1,3 +1,4 @@
+import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
@@ -64,6 +65,7 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedTaskActions?: InstalledPluginTaskActionOwner;
   /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
+  ownedProjectConversationActions?: ProjectConversationControlOwner;
   ownedProjectTextActions?: PluginProjectTextActionOwner;
   ownedProjectTextRecoveryActions?: PluginProjectTextRecoveryActionOwner;
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
@@ -127,12 +129,21 @@ export function createProductionPluginUiRuntime(
     !isPluginProjectTextRecoveryActionOwner(textRecoveryOwner)
   )
     throw new Error("production_plugin_ui_text_recovery_owner_invalid");
-  const committedMetadata =
+  const recoveryMetadata =
     textRecoveryOwner === undefined
       ? textMetadata
       : combineSelectionCommittedMetadata(
           textRecoveryOwner.committedMetadata,
           textMetadata,
+        );
+  const conversationOwner = input.ownedProjectConversationActions;
+  if (conversationOwner !== undefined) conversationOwner.assertAvailable();
+  const committedMetadata =
+    conversationOwner === undefined
+      ? recoveryMetadata
+      : combineSelectionCommittedMetadata(
+          conversationOwner.committedMetadata,
+          recoveryMetadata,
         );
   if (
     queryOwner !== undefined &&
@@ -243,6 +254,20 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (
+            request.action === "crewon.project-conversations" ||
+            request.action.startsWith("crewon.project-conversations.")
+          ) {
+            if (
+              conversationOwner === undefined ||
+              !conversationOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "project_conversation_unavailable",
+              );
+            return conversationOwner.actions.invoke(request);
+          }
           if (
             request.action === "crewon.project-text-recovery" ||
             request.action.startsWith("crewon.project-text-recovery.")

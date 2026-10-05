@@ -6,6 +6,7 @@ import {
   type ContentDigester,
   type PluginInstallationHostProfilePort,
   type PluginUiAuthorizationPort,
+  type ExtensionCreditQuotePort,
 } from "@crewon/application";
 import {
   extensionCanonicalJson,
@@ -23,6 +24,7 @@ import { assertProjectGenerationPluginPublications } from "./project-generation-
 import { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import {
   createInstalledPluginTaskRuntimeCore,
+  inheritInstalledPluginTaskRuntimeCoreBinding,
   type InstalledPluginTaskRuntimeCore,
 } from "./installed-plugin-task-runtime-core.ts";
 import { InstalledPluginPeerClient } from "./installed-plugin-peer-client.ts";
@@ -30,6 +32,7 @@ import {
   InstalledPluginCreditQuoteAuthority,
   InstalledPluginTaskHttpAuthority,
 } from "./installed-plugin-credit-quote-authority.ts";
+import { InstalledProjectConversationCreditQuoteAuthority } from "./installed-project-conversation-credit-quote-authority.ts";
 import {
   assertInstalledPluginTaskConfiguration,
   type InstalledPluginTaskConfiguration,
@@ -206,12 +209,32 @@ export async function createInstalledPluginTaskRuntime(
         return pluginSecurityUiDecision(response);
       },
     });
-    const quotes = new InstalledPluginCreditQuoteAuthority({
+    const quoteDependencies = {
       endpoint: configuration.quoteAuthority,
       http,
       digester: dependencies.digester,
       currentSignal: () => current().currentSignal(),
       assertCurrent: () => current().assertCurrent(),
+    };
+    const legacyQuotes = new InstalledPluginCreditQuoteAuthority(
+      quoteDependencies,
+    );
+    const conversationQuotes =
+      configuration.projectConversationQuotes === undefined
+        ? undefined
+        : new InstalledProjectConversationCreditQuoteAuthority(
+            quoteDependencies,
+          );
+    const quotes: ExtensionCreditQuotePort = Object.freeze({
+      quoteGeneration: legacyQuotes.quoteGeneration.bind(legacyQuotes),
+      ...(conversationQuotes === undefined
+        ? {}
+        : {
+            quoteProjectConversationGeneration:
+              conversationQuotes.quoteProjectConversationGeneration.bind(
+                conversationQuotes,
+              ),
+          }),
     });
     core = await createInstalledPluginTaskRuntimeCore({
       store: dependencies.store,
@@ -238,7 +261,7 @@ export async function createInstalledPluginTaskRuntime(
       actualRequests = requests,
       actualMetadata = metadata;
     let closing: Promise<void> | null = null;
-    return Object.freeze({
+    const runtime = Object.freeze({
       ...actualCore,
       close: () =>
         (closing ??= closeAll([
@@ -250,6 +273,8 @@ export async function createInstalledPluginTaskRuntime(
           () => http.close(),
         ])),
     });
+    inheritInstalledPluginTaskRuntimeCoreBinding(runtime, actualCore);
+    return runtime;
   } catch (error) {
     try {
       await closeAll([

@@ -1,3 +1,4 @@
+import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
 import { SqlitePluginUiIntentJournalStore } from "./sqlite-plugin-ui-intent-journal-store.ts";
 import type { PluginUiIntentPayloadVerifier } from "@crewon/application";
@@ -747,6 +748,19 @@ export class SqliteRunStore implements DomainStore {
     return new SqliteProjectTextStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Same parent connection; explicit conversation migration never creates a Thread or Run. */
+  projectConversationStore(): SqliteProjectConversationStore {
+    this.#assertOpen();
+    return new SqliteProjectConversationStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      commitThreadWithin: (input) =>
+        this.#commitThread(input, { withinTransaction: true }),
+      loadThreadWithin: (tenantId, threadId) =>
+        this.#loadThread({ tenantId, threadId }),
     });
   }
 

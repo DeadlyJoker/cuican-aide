@@ -1,3 +1,4 @@
+import { readProjectContextScope } from "./project-context-service-read.ts";
 import { createHash } from "node:crypto";
 import {
   captureCreativeProjectRunCommitTransaction,
@@ -20,6 +21,9 @@ import {
   validateCreativeProjectActor,
   type ExtensionManifest,
   type PluginTaskAdmission,
+  type ProjectStageRunAdmission,
+  parseProjectStageRunAdmission,
+  assertProjectStageToolRequest,
 } from "@crewon/domain";
 import type { PluginHostService } from "@crewon/plugin-host";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
@@ -50,6 +54,11 @@ import {
   projectToolsBriefMutation,
   projectToolsContent,
 } from "./project-tools-service-projection.ts";
+import {
+  CREWON_PROJECT_CONTEXT_SERVICE,
+  CREWON_PROJECT_CONTEXT_API_VERSION,
+  type PluginProjectContextService,
+} from "@crewon/contracts/project-context";
 
 export type ProjectToolsDispatchInvocation = Readonly<{
   command: ToolExecutionCommand;
@@ -65,6 +74,7 @@ export type ProjectToolsAuthorizationInvocation =
 export type ProjectToolsServiceOwnerDependencies = Readonly<{
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
+  stageAdmission?: ProjectStageRunAdmission | null;
   tools: ExtensionManifest["tools"];
   projects: CreativeProjectApplicationService;
   texts: ProjectTextApplicationService;
@@ -106,6 +116,7 @@ const digester = Object.freeze({
 export class ProjectToolsServiceOwner {
   readonly #dependencies: ProjectToolsServiceOwnerDependencies;
   readonly #admission: PluginTaskAdmission;
+  readonly #stage: ProjectStageRunAdmission | null;
   readonly #abort = new AbortController();
   readonly #invocations = new WeakMap<object, Invocation>();
   readonly #active = new Set<Invocation>();
@@ -116,6 +127,39 @@ export class ProjectToolsServiceOwner {
   constructor(dependencies: ProjectToolsServiceOwnerDependencies) {
     this.#dependencies = dependencies;
     this.#admission = parsePluginTaskAdmission(dependencies.admission);
+    this.#stage =
+      dependencies.stageAdmission == null
+        ? null
+        : parseProjectStageRunAdmission(dependencies.stageAdmission, digester);
+    if (
+      this.#stage !== null &&
+      (this.#stage.runId !== this.#admission.runId ||
+        this.#stage.threadId !== this.#admission.threadId ||
+        this.#stage.extensionBindingDigest !==
+          dependencies.context.run.bindingDigest ||
+        this.#stage.userContentDigest !==
+          dependencies.context.run.inputDigest ||
+        this.#stage.requestDigest !== this.#admission.requestDigest ||
+        this.#stage.idempotencyKey !== this.#admission.idempotencyKey ||
+        (
+          [
+            "tenantId",
+            "spaceId",
+            "profileId",
+            "pluginId",
+            "publisherId",
+            "version",
+            "packageDigest",
+            "selectionRevision",
+          ] as const
+        ).some((k) => this.#stage!.installation[k] !== this.#admission[k]) ||
+        (["tenantId", "spaceId", "principalId", "actorId"] as const).some(
+          (k) => this.#stage!.actor[k] !== this.#admission[k],
+        ) ||
+        this.#stage.pluginTaskAdmissionDigest !==
+          digester.sha256(extensionCanonicalJson(this.#admission)))
+    )
+      denied();
     if (
       dependencies.context.run.source !== null ||
       this.#admission.runId !== dependencies.context.run.runId ||
@@ -157,6 +201,28 @@ export class ProjectToolsServiceOwner {
       },
     });
   }
+  contextHostService(): PluginHostService {
+    const value: PluginProjectContextService = Object.freeze({
+      readScope: (input: Readonly<{ command: unknown }>) =>
+        this.#readScope(input),
+    });
+    return Object.freeze({
+      service: CREWON_PROJECT_CONTEXT_SERVICE,
+      apiVersion: CREWON_PROJECT_CONTEXT_API_VERSION,
+      value,
+      bindForPlugin: (identity, lifetime) => {
+        this.#assertActive();
+        if (
+          (["pluginId", "version", "packageDigest"] as const).some(
+            (k) => identity[k] !== this.#dependencies.context.identity[k],
+          )
+        )
+          denied();
+        lifetime.onDispose(() => this.close());
+        return value;
+      },
+    });
+  }
   async withInvocation<T>(
     input: ProjectToolsDispatchInvocation,
     delegate: () => Promise<T>,
@@ -174,6 +240,31 @@ export class ProjectToolsServiceOwner {
     this.#active.add(invocation);
     const task = Promise.resolve().then(() => {
       this.#check(invocation);
+      if (this.#stage !== null) {
+        const definition = this.#dependencies.tools.find(
+          (t) =>
+            extensionToolName(this.#admission.pluginId, t.operationId) ===
+            input.command.name,
+        );
+        if (definition === undefined) denied();
+        const method = (
+          Object.keys(PROJECT_TOOL_OPERATIONS) as ProjectToolsMethod[]
+        ).find((m) => PROJECT_TOOL_OPERATIONS[m] === definition.operationId);
+        const request =
+          definition.operationId === "project_context_read"
+            ? JSON.parse(input.command.input)
+            : method === undefined
+              ? denied()
+              : parseProjectToolsRequest(
+                  method,
+                  JSON.parse(input.command.input),
+                );
+        assertProjectStageToolRequest(
+          this.#stage,
+          definition.operationId,
+          request as Readonly<Record<string, unknown>>,
+        );
+      }
       return delegate();
     });
     this.#pending.add(task);
@@ -225,6 +316,18 @@ export class ProjectToolsServiceOwner {
     )
       denied();
     return evidence;
+  }
+  #readScope(input: Readonly<{ command: unknown }>) {
+    return readProjectContextScope(input, {
+      invocations: this.#invocations,
+      check: (invocation) => this.#check(invocation),
+      ownerSignal: this.#abort.signal,
+      dependencies: this.#dependencies,
+      actor: (id, signal) => this.#actor(id, signal),
+      admission: this.#admission,
+      stage: this.#stage,
+      pending: this.#pending,
+    });
   }
   #call(method: ProjectToolsMethod, input: unknown): Promise<unknown> {
     try {
@@ -431,6 +534,9 @@ export class ProjectToolsServiceOwner {
           ] as ProjectToolMutationOperation,
           installation,
           admission: this.#admission,
+          ...(this.#stage === null
+            ? {}
+            : { projectStageAdmission: this.#stage }),
           selection,
           package: pkg,
           assertCurrent: assertTransactionCurrent,
@@ -446,6 +552,22 @@ export class ProjectToolsServiceOwner {
           await assertTransactionCurrent();
         },
       };
+    }
+    if (this.#stage?.stage.kind === "script" && method === "readContent") {
+      const read = request as ProjectToolsRequests["readContent"];
+      if (read.source.kind === "text") {
+        const revision = await this.#dependencies.texts.getRevision(actor, {
+          projectId: read.projectId,
+          artifactId: read.source.artifactId,
+          contentRevision: read.source.contentRevision,
+        });
+        if (
+          revision.kind === "script" &&
+          revision.episodeId !== this.#stage.stage.episodeId
+        )
+          denied();
+        this.#check(invocation);
+      }
     }
     const value = await this.#invoke(method, request, actor, key, authority);
     await this.#dependencies.authorizeCurrent(authorization);

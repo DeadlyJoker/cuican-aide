@@ -195,3 +195,30 @@ test("actual private file rejects links/public permissions and loads only verifi
     /configuration_invalid/,
   );
 });
+
+test("project conversation quotes require an explicit exact protocol; old deployment shape stays absent", () => {
+  const legacy = parseInstalledPluginTaskConfiguration(document, environment);
+  assert.equal(Object.hasOwn(legacy, "projectConversationQuotes"), false);
+  const declaration = {
+    version: "crewon.project-conversation-credit-quote.v1",
+  };
+  const enabled = parseInstalledPluginTaskConfiguration(
+    { ...document, projectConversationQuotes: declaration },
+    environment,
+  );
+  assert.deepEqual(enabled.projectConversationQuotes, declaration);
+  assert.ok(Object.isFrozen(enabled.projectConversationQuotes));
+  for (const value of [
+    null,
+    { version: "legacy" },
+    { ...declaration, enabled: true },
+  ])
+    assert.throws(
+      () =>
+        parseInstalledPluginTaskConfiguration(
+          { ...document, projectConversationQuotes: value },
+          environment,
+        ),
+      /configuration_invalid/,
+    );
+});

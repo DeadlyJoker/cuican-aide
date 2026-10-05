@@ -75,6 +75,8 @@ const coreBindings = new WeakMap<
     store: InstalledPluginTaskRuntimeCoreInput["store"];
     requests: InstalledPluginRequestOwner;
     assertActive(): void;
+    authorizePackage: InstalledPluginTaskRuntimeCoreInput["authorizePackage"];
+    uiAuthorization: PluginUiAuthorizationPort;
   }>
 >();
 
@@ -97,6 +99,37 @@ export function assertInstalledPluginTaskRuntimeCoreBinding(
   )
     invalid();
   binding.assertActive();
+}
+
+export function inheritInstalledPluginTaskRuntimeCoreBinding(
+  alias: InstalledPluginTaskRuntimeCore,
+  original: InstalledPluginTaskRuntimeCore,
+): void {
+  const binding = coreBindings.get(original);
+  if (
+    binding === undefined ||
+    alias.requests !== original.requests ||
+    alias.owner !== original.owner ||
+    alias.extensionTasks !== original.extensionTasks
+  )
+    invalid();
+  binding.assertActive();
+  coreBindings.set(alias, binding);
+}
+
+/** Only an issued, still-active Core can lend its actual current request/PDP callbacks. */
+export function installedProjectConversationTaskAuthority(
+  core: InstalledPluginTaskRuntimeCore,
+) {
+  const binding = coreBindings.get(core);
+  if (binding === undefined) invalid();
+  binding.assertActive();
+  return Object.freeze({
+    requests: binding.requests,
+    authorizePackage: binding.authorizePackage,
+    authorization: binding.uiAuthorization,
+    assertActive: binding.assertActive,
+  });
 }
 
 /** Borrows an issued request owner and the real parent store; explicitly migrates execution, never identity, prices or funds. */
@@ -163,6 +196,10 @@ export async function createInstalledPluginTaskRuntimeCore(
     input.creditQuotes === undefined
       ? undefined
       : method(input.creditQuotes, "quoteGeneration");
+  const projectConversationQuote =
+    input.creditQuotes?.quoteProjectConversationGeneration === undefined
+      ? undefined
+      : method(input.creditQuotes, "quoteProjectConversationGeneration");
   const prepareUnmetered =
     input.unmeteredTasks === undefined
       ? undefined
@@ -232,6 +269,22 @@ export async function createInstalledPluginTaskRuntimeCore(
             active();
             return result;
           },
+          ...(projectConversationQuote === undefined
+            ? {}
+            : {
+                quoteProjectConversationGeneration: async (
+                  request: Parameters<
+                    NonNullable<
+                      ExtensionCreditQuotePort["quoteProjectConversationGeneration"]
+                    >
+                  >[0],
+                ) => {
+                  active();
+                  const result = await projectConversationQuote(request);
+                  active();
+                  return result;
+                },
+              }),
         });
   const unmeteredTasks: PluginTaskUnmeteredAuthorityPort | undefined =
     prepareUnmetered === undefined
@@ -373,6 +426,7 @@ export async function createInstalledPluginTaskRuntimeCore(
             }),
       }),
       {
+        createProjectConversationTurnFromHost: "mutation",
         createTask: "mutation",
         createTaskFromPlugin: "mutation",
         createQueryTaskFromPlugin: "mutation",
@@ -507,7 +561,13 @@ export async function createInstalledPluginTaskRuntimeCore(
     });
     coreBindings.set(
       core,
-      Object.freeze({ store: input.store, requests, assertActive: active }),
+      Object.freeze({
+        store: input.store,
+        requests,
+        assertActive: active,
+        authorizePackage: packageAuthorization,
+        uiAuthorization,
+      }),
     );
     return core;
   } catch (error) {

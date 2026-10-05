@@ -10,6 +10,8 @@ export const INSTALLED_PLUGIN_TASK_CONFIG_ENV =
   "CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH";
 export const INSTALLED_PLUGIN_TASK_CONFIG_SCHEMA =
   "crewon.installed-plugin-control-tasks.v1";
+export const PROJECT_CONVERSATION_CREDIT_QUOTE_VERSION =
+  "crewon.project-conversation-credit-quote.v1";
 export type InstalledPluginTaskEndpoint = Readonly<{
   url: string;
   serviceToken: string;
@@ -21,6 +23,9 @@ export type InstalledPluginTaskConfiguration = Readonly<{
   quoteAuthority: InstalledPluginTaskEndpoint;
   timeoutMs: number;
   maximumPackages: number;
+  projectConversationQuotes?: Readonly<{
+    version: typeof PROJECT_CONVERSATION_CREDIT_QUOTE_VERSION;
+  }>;
 }>;
 const configurations = new WeakSet<object>();
 const MAX_BYTES = 64 * 1024;
@@ -46,6 +51,9 @@ export function parseInstalledPluginTaskConfiguration(
       "quoteAuthority",
       "timeoutMs",
       "maximumPackages",
+      ...(Object.hasOwn(input as object, "projectConversationQuotes")
+        ? ["projectConversationQuotes"]
+        : []),
     ]);
     if (value.schemaVersion !== INSTALLED_PLUGIN_TASK_CONFIG_SCHEMA) invalid();
     const peer = pluginSecurityRecord(value.peer, [
@@ -67,6 +75,18 @@ export function parseInstalledPluginTaskConfiguration(
       token: token(peer.tokenEnvironmentVariable, environment),
       deadlineMs: value.timeoutMs as number,
     });
+    const projectConversationQuotes = Object.hasOwn(
+      value,
+      "projectConversationQuotes",
+    )
+      ? pluginSecurityRecord(value.projectConversationQuotes, ["version"])
+      : undefined;
+    if (
+      projectConversationQuotes !== undefined &&
+      projectConversationQuotes.version !==
+        PROJECT_CONVERSATION_CREDIT_QUOTE_VERSION
+    )
+      invalid();
     const configuration = {
       installRoot: privatePath(value.installRoot),
       peer: Object.freeze({
@@ -77,6 +97,13 @@ export function parseInstalledPluginTaskConfiguration(
       quoteAuthority: endpoint(value.quoteAuthority, environment),
       timeoutMs: value.timeoutMs as number,
       maximumPackages: value.maximumPackages as number,
+      ...(projectConversationQuotes === undefined
+        ? {}
+        : {
+            projectConversationQuotes: Object.freeze({
+              version: PROJECT_CONVERSATION_CREDIT_QUOTE_VERSION,
+            }),
+          }),
     };
     const redacted = () => ({
       ...configuration,

@@ -197,6 +197,46 @@ describe("installed plugin directory App composition (real Control client)", () 
     );
   });
 
+  it("projects only the explicitly supplied creation workspace, without deriving it from the selected task Thread", async () => {
+    const wire = controlUiClient(() =>
+      controlUiResponse({ plugins: [item("example.a")], next: null }),
+    );
+    const taskContext = {
+      runtime: null,
+      selectedThreadId: "unrelated-task-thread",
+      runIds: [],
+      onOpenTask: vi.fn(),
+    };
+    const projected = () =>
+      (
+        presentation() as ReturnType<typeof presentation> & {
+          projectConversationContext?: Input["projectConversationContext"];
+        }
+      ).projectConversationContext;
+    await render(wire.client, { taskContext });
+    expect(projected()).toBeUndefined();
+    await render(wire.client, {
+      taskContext,
+      projectConversationContext: { creationWorkspaceId: null },
+    });
+    expect(projected()).toEqual({ creationWorkspaceId: null });
+    await render(wire.client, {
+      taskContext,
+      projectConversationContext: {
+        creationWorkspaceId: "actual-workspace",
+        creationWorkspaceName: "实际工作空间",
+      },
+    });
+    expect(projected()).toEqual({
+      creationWorkspaceId: "actual-workspace",
+      creationWorkspaceName: "实际工作空间",
+    });
+    expect(taskContext.onOpenTask).not.toHaveBeenCalled();
+    expect(
+      wire.fetch.mock.calls.every(([, init]) => init?.method === "GET"),
+    ).toBe(true);
+  });
+
   it("withdraws immediately after a selection change and only republishes from a fresh authenticated directory", async () => {
     const updated = deferred<Response>();
     let changed = false;

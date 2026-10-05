@@ -1,5 +1,13 @@
 import { isDeepStrictEqual } from "node:util";
-import type { ActorContext, AuthorizationPort } from "@crewon/application";
+import type {
+  ActorContext,
+  AuthorizationPort,
+  CreativeProjectAuthorizationPort,
+} from "@crewon/application";
+import {
+  parseDesktopProjectExecutionConfiguration,
+  type DesktopProjectExecutionConfiguration,
+} from "@crewon/contracts/plugins";
 import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
 import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
@@ -64,6 +72,7 @@ class NativeAuthorityOwner {
   readonly config: InstalledPluginNativeWorkerConfig;
   readonly files: ReturnType<typeof captureNativePluginAuthority>;
   readonly store: SqliteRunStore;
+  readonly projects: DesktopProjectExecutionConfiguration | undefined;
   readonly #physical = new Set<Promise<unknown>>();
   #release: Readonly<{
     document: InstalledPluginReleaseDocument;
@@ -75,6 +84,16 @@ class NativeAuthorityOwner {
     assertInstalledPluginNativeWorkerConfig(config);
     this.config = config;
     this.files = captureNativePluginAuthority(config.nativeAuthorityPath);
+    const bootstrap = captureNativeAuthorityFile(
+      this.files.authority.bootstrapPath,
+      1024 * 1024,
+    ).value as Record<string, unknown>;
+    this.projects =
+      bootstrap.projects === undefined
+        ? undefined
+        : parseDesktopProjectExecutionConfiguration(bootstrap.projects, {
+            publications: this.files.authority.packages,
+          });
     if (
       config.installRoot !== this.files.authority.installRoot ||
       (config.historicalScope !== null &&
@@ -127,6 +146,48 @@ class NativeAuthorityOwner {
       fail("owner_mismatch");
     return this.files.authority.actor;
   }
+  projectPolicy: CreativeProjectAuthorizationPort["authorize"] = async (
+    provided,
+  ) => {
+    this.current();
+    const input = ioRecord(ioJson(provided, 16 * 1024), [
+      "actor",
+      "action",
+      "resource",
+    ]);
+    this.actor(input.actor);
+    const r = ioRecord(input.resource, [
+        "kind",
+        "tenantId",
+        "spaceId",
+        "projectId",
+      ]),
+      actor = this.files.authority.actor;
+    if (
+      r.kind !== "creativeProject" ||
+      r.tenantId !== actor.tenantId ||
+      r.spaceId !== actor.spaceId ||
+      ![
+        "creativeProject:create",
+        "creativeProject:list",
+        "creativeProject:read",
+        "creativeProject:write",
+      ].includes(input.action as string) ||
+      this.projects?.conversations === undefined
+    )
+      return { outcome: "deny", reasonCode: "native_project_policy_denied" };
+    if (r.projectId === null)
+      return input.action === "creativeProject:create" ||
+        input.action === "creativeProject:list"
+        ? { outcome: "allow" }
+        : { outcome: "deny", reasonCode: "native_project_policy_denied" };
+    if (typeof r.projectId !== "string")
+      return { outcome: "deny", reasonCode: "native_project_policy_denied" };
+    // Project ownership/current state are checked by the real Application/Store on its
+    // existing connection. This independent approval PDP must not borrow it inside COMMIT.
+    this.current();
+    return { outcome: "allow" };
+  };
   scope(input: unknown): PluginProfileScope {
     const scope = parsePluginProfileScope(input);
     if (!isDeepStrictEqual(scope, this.files.authority.scope))
@@ -222,12 +283,10 @@ class NativeAuthorityOwner {
     )
       fail("selection_revision_invalid");
     if (!(await this.package(identity, "read"))) return false;
-    const selection = await this.store
-      .pluginInstallationStore()
-      .loadSelection({
-        scope: this.files.authority.scope,
-        pluginId: identity.pluginId,
-      });
+    const selection = await this.store.pluginInstallationStore().loadSelection({
+      scope: this.files.authority.scope,
+      pluginId: identity.pluginId,
+    });
     this.current();
     return (
       selection !== null &&
@@ -554,6 +613,42 @@ export function createInstalledPluginNativeWorkerAuthority(
     resolveProfile,
     installedPluginExecution: Object.freeze({
       installRoot: config.installRoot,
+      ...(owner.projects?.conversations === undefined
+        ? {}
+        : {
+            projectTools: Object.freeze({
+              version: "crewon.project-tools.v1" as const,
+              authorization: Object.freeze({
+                authorize: (
+                  input: Parameters<
+                    CreativeProjectAuthorizationPort["authorize"]
+                  >[0],
+                ) => owner.operate(() => owner.projectPolicy(input)),
+              }),
+              authorizeService: (
+                admission: import("@crewon/domain").PluginTaskAdmission,
+                signal: AbortSignal,
+              ) =>
+                owner.operate(async () => {
+                  owner.current(signal);
+                  owner.actor({
+                    tenantId: admission.tenantId,
+                    spaceId: admission.spaceId,
+                    principalId: admission.principalId,
+                    actorId: admission.actorId,
+                  });
+                  if (
+                    !owner.projects!.conversations!.publications.some(
+                      (p) =>
+                        p.pluginId === admission.pluginId &&
+                        p.packageDigest === admission.packageDigest &&
+                        p.contributionId === admission.contributionId,
+                    )
+                  )
+                    fail("project_service_unapproved");
+                }, signal),
+            }),
+          }),
       authorization: Object.freeze({
         authorize: (input: Parameters<AuthorizationPort["authorize"]>[0]) =>
           owner.operate(() => owner.policy(input)),

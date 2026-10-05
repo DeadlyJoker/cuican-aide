@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`initial binding read blocks send, shows the real project stages and retains phase on same Thread update 1`] = `"项目创作 讨论（只读）需求大纲分集剧本刷新项目"`;

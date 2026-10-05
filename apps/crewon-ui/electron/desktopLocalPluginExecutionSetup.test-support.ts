@@ -25,7 +25,10 @@ export const fixtureHash = (value: string | Buffer) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
 
 /** Actual immutable installation + original SQLite mutations. The declared Node entry throws if imported. */
-export async function executionSetupFixture() {
+export async function executionSetupFixture(
+  options: Readonly<{ version?: string; projectContext?: boolean }> = {},
+) {
+  const version = options.version ?? "12.0.0";
   const directory = realpathSync(
     mkdtempSync(join(tmpdir(), "crewon-local-execution-setup-")),
   );
@@ -45,13 +48,20 @@ export async function executionSetupFixture() {
     ],
     [
       "business.json",
-      readFileSync(
-        fileURLToPath(
-          new URL(
-            "../../../examples/plugins/short-drama/business.json",
-            import.meta.url,
+      Buffer.from(
+        JSON.stringify({
+          ...JSON.parse(
+            readFileSync(
+              fileURLToPath(
+                new URL(
+                  "../../../examples/plugins/short-drama/business.json",
+                  import.meta.url,
+                ),
+              ),
+            ).toString("utf8"),
           ),
-        ),
+          version,
+        }),
       ),
     ],
   ]);
@@ -61,7 +71,7 @@ export async function executionSetupFixture() {
     hostApi: "crewon.plugin-host.v1",
     pluginId: "crewon.short-drama",
     publisherId: "example.publisher",
-    version: "12.0.0",
+    version,
     title: "Actual installed metadata fixture",
     description:
       "Never imported; lifecycle ports below are named test doubles.",
@@ -80,6 +90,13 @@ export async function executionSetupFixture() {
         "crewon.project-generation-queries",
         "crewon.project-generation-selections",
         "crewon.project-generation-contexts",
+        ...(options.projectContext === true
+          ? [
+              "crewon.project-conversations",
+              "crewon.project-context",
+              "crewon.project-tools",
+            ]
+          : []),
       ].map((service) => ({ service, apiVersion: "1", optional: true })),
     ],
     provides: [],
@@ -185,17 +202,15 @@ export async function executionSetupFixture() {
     },
     { sha256: fixtureHash },
   );
-  await store
-    .extensionStore()
-    .saveExtensionConfiguration({
-      configuration,
-      expectedRevision: 0,
-      receipt: {
-        actorId: actor.actorId,
-        idempotencyKey: "save-fixture",
-        requestDigest: fixtureHash("save-fixture"),
-      },
-    });
+  await store.extensionStore().saveExtensionConfiguration({
+    configuration,
+    expectedRevision: 0,
+    receipt: {
+      actorId: actor.actorId,
+      idempotencyKey: "save-fixture",
+      requestDigest: fixtureHash("save-fixture"),
+    },
+  });
   let current = true;
   const owners: ReturnType<
     typeof createDesktopLocalPluginExecutionSetupOwner

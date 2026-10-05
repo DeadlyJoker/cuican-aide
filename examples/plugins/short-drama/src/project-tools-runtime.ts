@@ -12,6 +12,7 @@ import {
   projectMethod,
   projectPolicy,
   projectRequest,
+  projectCommandInput,
 } from "./project-tools-catalog.js";
 import {
   MAX_PROJECT_TOOLS_RESPONSE_BYTES,
@@ -19,11 +20,20 @@ import {
 } from "./project-tools-service.js";
 import { RetainedResults } from "./retained-results.js";
 import { createKreaRuntime } from "./runtime.js";
+import type { PluginProjectContextService } from "./project-context-service.js";
+import {
+  PROJECT_CONTEXT_TOOL,
+  readProjectRunScope,
+  assertProjectRunOperation,
+} from "./project-run-scope.js";
 /** One installed package, one actual host Agent runtime, with stage text and media tools. */
 export function createShortDramaRuntime(
   context: PluginToolRuntimeContext,
   projects: PluginProjectToolsService | null,
   services?: PluginExecutionServices,
+  options: { projectContext: PluginProjectContextService | null } = {
+    projectContext: null,
+  },
 ): PluginToolRuntime {
   const approval = services?.approvalRequirement ?? "none",
     retained = new RetainedResults(context),
@@ -38,23 +48,53 @@ export function createShortDramaRuntime(
   function mediaRuntime() {
     return (media ??= createKreaRuntime(context, services));
   }
-  async function dispatch(
+  async function invoke(
     command: PluginToolExecutionCommand,
     signal: PluginAbortSignal,
     method: "execute" | "reconcile" | "cancel",
   ) {
     if (closed) throw new Error("short_drama_runtime_closed");
     signal.throwIfAborted();
-    if (!projectMethod(command.name))
+    if (Date.parse(command.executionLease.expiresAt) <= Date.now())
+      throw new Error("short_drama_execution_lease_expired");
+    const project = projectMethod(command.name)
+      ? projectRequest(context, approval, command)
+      : null;
+    if (
+      command.name === PROJECT_CONTEXT_TOOL &&
+      Object.keys(projectCommandInput(context, approval, command)).length
+    )
+      throw new Error("short_drama_project_context_input_invalid");
+    const scope = await readProjectRunScope(
+      context,
+      command,
+      options.projectContext,
+    );
+    if (closed) throw new Error("short_drama_runtime_closed");
+    signal.throwIfAborted();
+    if (command.name === PROJECT_CONTEXT_TOOL) {
+      const previous = retained.prepare(command);
+      if (previous?.status === "completed" || previous?.status === "canceled")
+        return previous;
+      if (method === "cancel")
+        return {
+          status: "canceled" as const,
+          executionId: command.executionId,
+          providerReceiptId: null,
+        };
+      return retain(command, { scope });
+    }
+    if (!project) {
+      assertProjectRunOperation(scope, null, null);
       return mediaRuntime()[method](command, signal);
-    const input = projectRequest(context, approval, command),
-      previous = retained.prepare(command);
+    }
+    const previous = retained.prepare(command);
+    assertProjectRunOperation(scope, project.method, project.request);
     if (previous?.status === "completed" || previous?.status === "canceled")
       return previous;
     if (!projects) throw new Error("short_drama_project_tools_unavailable");
     if (Date.parse(command.executionLease.expiresAt) <= Date.now())
       throw new Error("short_drama_execution_lease_expired");
-    if (pending.size) throw new Error("short_drama_runtime_busy");
     if (method === "cancel")
       return {
         // A cold owner cannot prove a durable mutation did not COMMIT. Never
@@ -67,43 +107,48 @@ export function createShortDramaRuntime(
         providerReceiptId: null,
       };
     // Reconciliation reuses the exact host-derived command key and immutable receipt.
-    const call = projects[input.method] as (value: {
+    const call = projects[project.method] as (value: {
       command: unknown;
       request: Record<string, unknown>;
     }) => Promise<unknown>;
-    const task = call
-      .call(projects, { command, request: input.request })
-      .then((result) => {
-        const resultJson = JSON.stringify(result),
-          output = JSON.stringify({ resultJson });
-        if (Buffer.byteLength(output) > MAX_PROJECT_TOOLS_RESPONSE_BYTES)
-          throw new Error("short_drama_project_output_limit");
-        return retained.retain(command, {
-          status: "completed",
-          executionId: command.executionId,
-          providerReceiptId: command.executionId,
-          result: {
-            schemaVersion: "crewon.tool-result.v0",
-            callId: command.callId,
-            output,
-            isError: false,
-            artifactRef: null,
-          },
-        });
-      });
-    activeExecutionId = command.executionId;
+    return call
+      .call(projects, { command, request: project.request })
+      .then((result) => retain(command, result));
+  }
+  function retain(command: PluginToolExecutionCommand, result: unknown) {
+    const resultJson = JSON.stringify(result),
+      output = JSON.stringify({ resultJson });
+    if (Buffer.byteLength(output) > MAX_PROJECT_TOOLS_RESPONSE_BYTES)
+      throw new Error("short_drama_project_output_limit");
+    return retained.retain(command, {
+      status: "completed",
+      executionId: command.executionId,
+      providerReceiptId: command.executionId,
+      result: {
+        schemaVersion: "crewon.tool-result.v0",
+        callId: command.callId,
+        output,
+        isError: false,
+        artifactRef: null,
+      },
+    });
+  }
+  async function dispatch(
+    command: PluginToolExecutionCommand,
+    signal: PluginAbortSignal,
+    method: "execute" | "reconcile" | "cancel",
+  ) {
+    if (closed) throw new Error("short_drama_runtime_closed");
+    if (pending.size) throw new Error("short_drama_runtime_busy");
+    const task = invoke(command, signal, method);
     pending.add(task);
-    void task.then(
-      () => {
-        pending.delete(task);
-        activeExecutionId = null;
-      },
-      () => {
-        pending.delete(task);
-        activeExecutionId = null;
-      },
-    );
-    return task;
+    activeExecutionId = command.executionId;
+    try {
+      return await task;
+    } finally {
+      pending.delete(task);
+      activeExecutionId = null;
+    }
   }
   return {
     definitions: () => structuredClone([...definitions, ...projectDefinitions]),

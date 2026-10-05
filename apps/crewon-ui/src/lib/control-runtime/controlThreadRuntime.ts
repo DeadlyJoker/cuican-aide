@@ -1,8 +1,12 @@
+import { ControlProjectConversationTurn } from "./controlProjectConversationTurn";
 import { cancelControlActiveRun } from "./controlSteerActiveRun";
 import { parseThreadWorkspaceId } from "@crewon/contracts";
 import type { ControlWorkspaceThread } from "./controlThreadWorkspace";
 import { readControlReplayBoundary } from "./controlReplayBoundary";
-import { ControlTranscriptReads, waitForControlTranscriptRead } from "./controlTranscriptReads";
+import {
+  ControlTranscriptReads,
+  waitForControlTranscriptRead,
+} from "./controlTranscriptReads";
 import { readControlTranscript } from "./controlTranscriptRead";
 import { projectControlTranscriptWindow } from "./controlTranscriptWindow";
 import { findControlAssistantThread } from "./controlAssistantThreadLookup";
@@ -150,6 +154,7 @@ type ActiveRunEventStream = {
 type ControlToolHistoryMode = "hydrate" | "skip";
 
 export type ControlThreadRuntimeCallbacks = Readonly<{
+  onProjectConversationRequestChanged?: (threadId: string) => void;
   onTeamProgress?: (
     threadId: string,
     progress: ControlTeamProgress | null,
@@ -264,6 +269,7 @@ export class ControlThreadRuntime {
   // focus before exposing the runtime, so UI reads never retain background SSEs.
   #threadEventStreamFocus: string | null | undefined;
   #nextThreadStreamGeneration = 0;
+  readonly #projectTurns: ControlProjectConversationTurn;
   #closed = false;
 
   constructor(
@@ -278,6 +284,10 @@ export class ControlThreadRuntime {
     this.#idempotencyKey =
       config.idempotencyKey ??
       ((operation) => `${operation}:${globalThis.crypto.randomUUID()}`);
+    this.#projectTurns = new ControlProjectConversationTurn(
+      this.#client,
+      this.#idempotencyKey,
+    );
     this.#reconnectDelay = config.reconnectDelay ?? defaultReconnectDelay;
     this.#runStatusPollDelay = config.runStatusPollDelay;
     this.#toolHistoryTimeoutMs =
@@ -348,6 +358,7 @@ export class ControlThreadRuntime {
   }
 
   close(): void {
+    void this.#projectTurns.close();
     this.catalog.close();
     this.#transcriptReads.close();
     this.#closed = true;
@@ -671,65 +682,88 @@ export class ControlThreadRuntime {
     this.#messageReplays.add(request.threadId);
     const controller = new AbortController();
     this.#readControllers.add(controller);
-    const timer = setTimeout(() => controller.abort(new Error("control_replay_read_timeout")), 30_000);
-    const read = <T>(promise: Promise<T>) => waitForControlTranscriptRead(promise, controller.signal);
+    const timer = setTimeout(
+      () => controller.abort(new Error("control_replay_read_timeout")),
+      30_000,
+    );
+    const read = <T>(promise: Promise<T>) =>
+      waitForControlTranscriptRead(promise, controller.signal);
     try {
       await replayControlMessage({
         request,
         runtime: {
-          readThread: (threadId) => this.readThread(threadId, { signal: controller.signal }),
+          readThread: (threadId) =>
+            this.readThread(threadId, { signal: controller.signal }),
           rollbackThread: this.rollbackThread.bind(this),
           startTurn: this.startTurn.bind(this),
         },
         readRevision: async () =>
-          (await read(this.#getThreadSnapshot(request.threadId, controller.signal))).thread.revision,
-        readBoundary: (revision) => read(readControlReplayBoundary({ client: this.#client, threadId: request.threadId, userMessageId: request.userMessageId, revision, signal: controller.signal })),
-        preflight: () => read((async () => {
-          validateSupportedTurnInput([], request.settings, []);
-          const catalog = await this.#client.getActiveAgentVersionCatalog({ signal: controller.signal });
-          controller.signal.throwIfAborted();
-          const target = request.settings?.scene?.executionTarget;
-          if (target?.kind === "team" || target?.kind === "experts") {
-            const office = await readLatestControlOffice(
-              this.#client,
-              target.id,
-            );
-            controller.signal.throwIfAborted();
-            if (
-              request.settings?.teamTargetMemberId &&
-              !office.members.some(
-                (member) =>
-                  member.memberId === request.settings!.teamTargetMemberId,
-              )
-            ) {
-              throw new Error("control_office_target_member_not_found");
-            }
-            if (office.members.length > 1) {
-              await resolveControlTeamPlan({
-                client: this.#client,
-                threadId: request.threadId,
-                officeVersionId: office.officeVersionId,
-                catalog,
-                office,
-                memberProfiles: request.settings?.teamMemberProfiles,
+          (
+            await read(
+              this.#getThreadSnapshot(request.threadId, controller.signal),
+            )
+          ).thread.revision,
+        readBoundary: (revision) =>
+          read(
+            readControlReplayBoundary({
+              client: this.#client,
+              threadId: request.threadId,
+              userMessageId: request.userMessageId,
+              revision,
+              signal: controller.signal,
+            }),
+          ),
+        preflight: () =>
+          read(
+            (async () => {
+              validateSupportedTurnInput([], request.settings, []);
+              const catalog = await this.#client.getActiveAgentVersionCatalog({
+                signal: controller.signal,
               });
-            } else {
-              await selectTurnAgentVersion(
-                this.#client,
-                request.threadId,
-                catalog,
-                request.settings,
-              );
-            }
-          } else {
-            await selectTurnAgentVersion(
-              this.#client,
-              request.threadId,
-              catalog,
-              request.settings,
-            );
-          }
-        })()),
+              controller.signal.throwIfAborted();
+              const target = request.settings?.scene?.executionTarget;
+              if (target?.kind === "team" || target?.kind === "experts") {
+                const office = await readLatestControlOffice(
+                  this.#client,
+                  target.id,
+                );
+                controller.signal.throwIfAborted();
+                if (
+                  request.settings?.teamTargetMemberId &&
+                  !office.members.some(
+                    (member) =>
+                      member.memberId === request.settings!.teamTargetMemberId,
+                  )
+                ) {
+                  throw new Error("control_office_target_member_not_found");
+                }
+                if (office.members.length > 1) {
+                  await resolveControlTeamPlan({
+                    client: this.#client,
+                    threadId: request.threadId,
+                    officeVersionId: office.officeVersionId,
+                    catalog,
+                    office,
+                    memberProfiles: request.settings?.teamMemberProfiles,
+                  });
+                } else {
+                  await selectTurnAgentVersion(
+                    this.#client,
+                    request.threadId,
+                    catalog,
+                    request.settings,
+                  );
+                }
+              } else {
+                await selectTurnAgentVersion(
+                  this.#client,
+                  request.threadId,
+                  catalog,
+                  request.settings,
+                );
+              }
+            })(),
+          ),
       });
     } finally {
       clearTimeout(timer);
@@ -848,18 +882,40 @@ export class ControlThreadRuntime {
         cursor: options.transcriptCursor,
         mode: `${options.toolHistoryMode ?? "hydrate"}:${options.includeTaskChanges === true}`,
         signal: options.signal,
-        read: (cursor, signal) => this.#readThreadWindow(threadId, { ...options, transcriptCursor: cursor, signal }),
+        read: (cursor, signal) =>
+          this.#readThreadWindow(threadId, {
+            ...options,
+            transcriptCursor: cursor,
+            signal,
+          }),
       }),
     );
   }
 
-  async navigateTranscript(threadId: string, cursor: string | null, options: { signal?: AbortSignal; includeTaskChanges?: boolean } = {}): Promise<Thread> {
-    const thread = await this.readThread(threadId, { ...options, transcriptCursor: cursor, publishBase: false });
+  async navigateTranscript(
+    threadId: string,
+    cursor: string | null,
+    options: { signal?: AbortSignal; includeTaskChanges?: boolean } = {},
+  ): Promise<Thread> {
+    const thread = await this.readThread(threadId, {
+      ...options,
+      transcriptCursor: cursor,
+      publishBase: false,
+    });
     this.#callbacks.onThread(thread);
     return thread;
   }
 
-  async #readThreadWindow(threadId: string, options: { publishBase?: boolean; signal?: AbortSignal; toolHistoryMode?: ControlToolHistoryMode; transcriptCursor: string | null; includeTaskChanges?: boolean }): Promise<Thread> {
+  async #readThreadWindow(
+    threadId: string,
+    options: {
+      publishBase?: boolean;
+      signal?: AbortSignal;
+      toolHistoryMode?: ControlToolHistoryMode;
+      transcriptCursor: string | null;
+      includeTaskChanges?: boolean;
+    },
+  ): Promise<Thread> {
     const controller = new AbortController();
     const abortFromCaller = () => controller.abort(options.signal?.reason);
     if (this.#closed || options.signal?.aborted) {
@@ -901,16 +957,19 @@ export class ControlThreadRuntime {
   }> {
     return this.#toolHistoryReaders.run(threadId, (historySignal) =>
       this.#projectionReads.run(threadId, (read) =>
-        waitForControlTranscriptRead(this.#readThreadProjection(
-          threadId,
-          read,
+        waitForControlTranscriptRead(
+          this.#readThreadProjection(
+            threadId,
+            read,
+            signal,
+            toolHistoryMode,
+            publishBase,
+            transcriptCursor,
+            includeTaskChanges,
+            historySignal,
+          ),
           signal,
-          toolHistoryMode,
-          publishBase,
-          transcriptCursor,
-          includeTaskChanges,
-          historySignal,
-        ), signal),
+        ),
       ),
     );
   }
@@ -926,12 +985,24 @@ export class ControlThreadRuntime {
     historySignal: AbortSignal,
   ): Promise<{ thread: Thread; eventSequence: number }> {
     signal?.throwIfAborted();
-    const priorStreams = new Map([...this.#runStreams].filter(([, stream]) => stream.threadId === threadId));
+    const priorStreams = new Map(
+      [...this.#runStreams].filter(
+        ([, stream]) => stream.threadId === threadId,
+      ),
+    );
     const snapshot = await this.#getThreadSnapshot(threadId, signal);
     read.assertCurrent();
     const [transcript, taskChangeLedgerResult] = await Promise.all([
-      readControlTranscript({ client: this.#client, threadId, threadRevision: snapshot.thread.revision, cursor: transcriptCursor, signal }),
-      includeTaskChanges ? this.#loadThreadTaskChangeLedger(threadId, signal) : Promise.resolve(null),
+      readControlTranscript({
+        client: this.#client,
+        threadId,
+        threadRevision: snapshot.thread.revision,
+        cursor: transcriptCursor,
+        signal,
+      }),
+      includeTaskChanges
+        ? this.#loadThreadTaskChangeLedger(threadId, signal)
+        : Promise.resolve(null),
     ]);
     const { runs, activeRun: authoritativeActiveRun } = transcript;
     read.assertCurrent();
@@ -978,7 +1049,12 @@ export class ControlThreadRuntime {
     for (const [runId, stream] of priorStreams) {
       // Settlement owns its final backfill. Its own refresh must
       // not abort that work merely because the server has cleared active-run.
-      if (stream.settlement !== null || runId === authoritativeActiveRun?.runId || this.#runStreams.get(runId) !== stream) continue;
+      if (
+        stream.settlement !== null ||
+        runId === authoritativeActiveRun?.runId ||
+        this.#runStreams.get(runId) !== stream
+      )
+        continue;
       stream.controller.abort();
       this.#runStreams.delete(runId);
       this.#draftStatesByRun.delete(runId);
@@ -1021,20 +1097,43 @@ export class ControlThreadRuntime {
     }
     const projectThread = (): ControlProjectedThread => {
       const projected = projectControlTranscriptWindow({
-        summary: controlThreadSummary(thread), window: transcript.window, cursor: transcript.cursor, runs, activeRun: authoritativeActiveRun,
-        visibleUserContent: visibleControlUserContent, isInternalUser: isInternalUserContent,
-        projectRun: (run, user, assistants) => projectedTurnWithAssistants(user, assistants, run,
-          controlToolItemsWithTaskChanges(this.#toolStatesByRun.get(run.runId), this.#taskChangeStatesByRun.get(run.runId)),
-          this.#toolCoverageByRun.get(run.runId)?.complete === true && this.#toolCoverageByRun.get(run.runId)!.throughSequence >= run.lastSequence,
-          this.#taskChangeCoverageByRun.get(run.runId)?.complete === true && this.#taskChangeCoverageByRun.get(run.runId)!.throughSequence >= run.lastSequence,
-          true,
-        ),
+        summary: controlThreadSummary(thread),
+        window: transcript.window,
+        cursor: transcript.cursor,
+        runs,
+        activeRun: authoritativeActiveRun,
+        visibleUserContent: visibleControlUserContent,
+        isInternalUser: isInternalUserContent,
+        projectRun: (run, user, assistants) =>
+          projectedTurnWithAssistants(
+            user,
+            assistants,
+            run,
+            controlToolItemsWithTaskChanges(
+              this.#toolStatesByRun.get(run.runId),
+              this.#taskChangeStatesByRun.get(run.runId),
+            ),
+            this.#toolCoverageByRun.get(run.runId)?.complete === true &&
+              this.#toolCoverageByRun.get(run.runId)!.throughSequence >=
+                run.lastSequence,
+            this.#taskChangeCoverageByRun.get(run.runId)?.complete === true &&
+              this.#taskChangeCoverageByRun.get(run.runId)!.throughSequence >=
+                run.lastSequence,
+            true,
+          ),
       });
       projected.controlTranscriptWindow!.toolHistory = runs.some((run) => {
         if ((run.purpose ?? "turn") !== "turn") return false;
         const coverage = this.#toolCoverageByRun.get(run.runId);
-        return coverage?.complete === false || (isTerminalRun(run) && run.lastSequence > 0 && (!coverage || coverage.throughSequence < run.lastSequence));
-      }) ? "partial" : "ready";
+        return (
+          coverage?.complete === false ||
+          (isTerminalRun(run) &&
+            run.lastSequence > 0 &&
+            (!coverage || coverage.throughSequence < run.lastSequence))
+        );
+      })
+        ? "partial"
+        : "ready";
       return { ...projected, controlTaskChangeLedger: taskChangeLedger };
     };
     const turnRuns = runs.filter((run) => (run.purpose ?? "turn") === "turn");
@@ -1209,6 +1308,10 @@ export class ControlThreadRuntime {
     return response;
   }
 
+  retainedProjectConversationSelection(threadId: string) {
+    return this.#projectTurns.retainedSelection(threadId);
+  }
+
   async startTurn(
     threadId: string,
     text: string,
@@ -1217,6 +1320,39 @@ export class ControlThreadRuntime {
     images: ComposerImageInput[] = [],
   ): Promise<TurnStartResponse> {
     validateSupportedTurnInput(mentions, settings, images);
+    if (settings?.projectConversation !== undefined) {
+      if (this.#closed) throw new Error("control_thread_runtime_closed");
+      if (
+        images.length > 0 ||
+        mentions.length > 0 ||
+        (settings.executionIntent !== undefined &&
+          settings.executionIntent !== "none") ||
+        settings.projectConversation.binding.threadId !== threadId
+      )
+        throw new Error("control_project_conversation_input_unsupported");
+      const current = await this.#getThreadSnapshot(threadId);
+      const pending = this.#projectTurns.start({
+        threadId,
+        content: text,
+        expectedThreadRevision: current.thread.revision,
+        selection: settings.projectConversation,
+      });
+      this.#callbacks.onProjectConversationRequestChanged?.(threadId);
+      try {
+        const receipt = await pending;
+        await this.adoptExtensionTask(receipt);
+        const thread = await this.readThread(threadId);
+        if (this.#closed) throw new Error("control_thread_runtime_closed");
+        const turn = thread.turns.find((entry) => entry.id === receipt.runId);
+        if (turn === undefined)
+          throw new Error("control_project_conversation_adoption_invalid");
+        this.#projectTurns.adopted(threadId, receipt.runId);
+        return { turn };
+      } finally {
+        if (!this.#closed)
+          this.#callbacks.onProjectConversationRequestChanged?.(threadId);
+      }
+    }
     const content = controlTurnContent(
       text,
       mentions,
@@ -1630,7 +1766,9 @@ export class ControlThreadRuntime {
     if (options.adoptPlan !== false) this.#adoptRunPlan(threadId, runId);
     const controller = new AbortController();
     const presentationChanged = retireOtherRunPresentations(
-      this.#runStreams, threadId, runId,
+      this.#runStreams,
+      threadId,
+      runId,
     );
     this.#runStreams.set(runId, {
       threadId,
@@ -1748,7 +1886,10 @@ export class ControlThreadRuntime {
             // refresh is in flight.
             this.#stopRunStreamsForThread(threadId);
             this.#transcriptReads.reset(threadId);
-            const projection = await this.#loadThreadProjection(threadId, stream.controller.signal);
+            const projection = await this.#loadThreadProjection(
+              threadId,
+              stream.controller.signal,
+            );
             if (
               stream.controller.signal.aborted ||
               this.#threadStreams.get(threadId)?.generation !==
@@ -2427,7 +2568,8 @@ function projectedTurnWithAssistants(
     }
   }
   if (
-    !partialMessages && run?.status === "completed" &&
+    !partialMessages &&
+    run?.status === "completed" &&
     run.collaborationMode === "plan" &&
     assistants.every((assistant) => assistant.proposedPlan === null)
   ) {
@@ -2436,18 +2578,22 @@ function projectedTurnWithAssistants(
   return {
     id: run?.runId ?? `orphan:${user!.messageId}`,
     items: [
-      ...(user === null ? [] : [{
-        type: "userMessage" as const,
-        id: user.messageId,
-        clientId: null,
-        content: [
-          {
-            type: "text" as const,
-            text: visibleControlUserContent(user.content),
-            text_elements: [],
-          },
-        ],
-      }]),
+      ...(user === null
+        ? []
+        : [
+            {
+              type: "userMessage" as const,
+              id: user.messageId,
+              clientId: null,
+              content: [
+                {
+                  type: "text" as const,
+                  text: visibleControlUserContent(user.content),
+                  text_elements: [],
+                },
+              ],
+            },
+          ]),
       ...toolItems,
       ...assistants.map((assistant) =>
         assistant.proposedPlan !== null

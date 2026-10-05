@@ -57,3 +57,6 @@ export {
 } from "./sqlite-plugin-installation-profile-owner.ts";
 export { SqliteProjectTextUiIntentJournalStore } from "./project-text-ui-intent-sqlite-store.ts";
 export { PostgresProjectTextUiIntentJournalStore } from "./project-text-ui-intent-postgres-store.ts";
+
+export { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
+export { PostgresProjectConversationStore } from "./project-conversation-postgres-store.ts";

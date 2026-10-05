@@ -191,3 +191,8 @@ export * from "./project-text-ui-intent-journal-store-port.ts";
 export * from "./project-text-recovery-commit-authority.ts";
 export * from "./plugin-project-text-recovery-application-service.ts";
 export * from "./plugin-project-text-recovery-action-owner.ts";
+
+export * from "./project-conversation-store-port.ts";
+
+export * from "./project-conversation-authority.ts";
+export * from "./project-conversation-application-service.ts";

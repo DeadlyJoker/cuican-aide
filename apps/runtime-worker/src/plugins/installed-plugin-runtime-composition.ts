@@ -193,6 +193,7 @@ export function composeInstalledPluginRuntimeResolver(input: {
     installations,
     authorization: config.authorization,
     operations: store.externalOperationStore(),
+    conversations: store.projectConversationStore(),
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({

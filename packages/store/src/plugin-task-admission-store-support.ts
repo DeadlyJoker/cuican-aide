@@ -207,19 +207,39 @@ export async function admitPostgresPluginTaskPin(
 export function saveSqlitePluginTask(
   database: DatabaseSync,
   admission: PluginTaskAdmission,
+  projectStageDigest?: string,
 ): void {
+  const columns =
+    "tenant_id,space_id,profile_id,plugin_id,principal_id,actor_id,run_id,package_digest,selection_revision,extension_binding_digest,admission_json";
   database
-    .prepare("INSERT INTO plugin_task_admissions VALUES(?,?,?,?,?,?,?,?,?,?,?)")
-    .run(...admissionValues(admission), JSON.stringify(admission));
+    .prepare(
+      `INSERT INTO plugin_task_admissions(${columns}${projectStageDigest === undefined ? "" : ",project_stage_digest"}) VALUES(${Array(
+        projectStageDigest === undefined ? 11 : 12,
+      )
+        .fill("?")
+        .join(",")})`,
+    )
+    .run(
+      ...admissionValues(admission),
+      JSON.stringify(admission),
+      ...(projectStageDigest === undefined ? [] : [projectStageDigest]),
+    );
 }
 export async function savePostgresPluginTask(
   client: PoolClient,
   schema: string,
   admission: PluginTaskAdmission,
+  projectStageDigest?: string,
 ): Promise<void> {
+  const columns =
+    "tenant_id,space_id,profile_id,plugin_id,principal_id,actor_id,run_id,package_digest,selection_revision,extension_binding_digest,admission_json";
   await client.query(
-    `INSERT INTO ${prefix(schema)}plugin_task_admissions VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [...admissionValues(admission), admission],
+    `INSERT INTO ${prefix(schema)}plugin_task_admissions(${columns}${projectStageDigest === undefined ? "" : ",project_stage_digest"}) VALUES(${Array.from({ length: projectStageDigest === undefined ? 11 : 12 }, (_, i) => `$${i + 1}`).join(",")})`,
+    [
+      ...admissionValues(admission),
+      admission,
+      ...(projectStageDigest === undefined ? [] : [projectStageDigest]),
+    ],
   );
 }
 

@@ -87,6 +87,7 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  readonly projectStageAdmissionVersion = "crewon.project-stage-run-admission.v1" as const;
   readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
   readonly pluginQueryAdmissionVersion =
     "crewon.plugin-query-task-admission.v1" as const;

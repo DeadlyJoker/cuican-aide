@@ -1,3 +1,4 @@
+import { PluginProjectConversationsContractError } from "@crewon/contracts/project-conversations";
 import { ApplicationError } from "@crewon/application";
 import {
   ContractValidationError,
@@ -34,6 +35,13 @@ export function errorResponse(
       error.category === "authentication" ? 401 : 403,
     );
   }
+  if (error instanceof PluginProjectConversationsContractError)
+    return response(
+      "validation",
+      "project_conversation_request_invalid",
+      requestId,
+      400,
+    );
   if (error instanceof ContractValidationError) {
     return response("validation", error.code, requestId, 400);
   }

@@ -377,138 +377,153 @@ export class PostgresThreadStore
 
   async commitThread(input: CommitThreadInput): Promise<CommitThreadResult> {
     this.assertOpen();
-    const threadId = validateThreadCommitInput(input);
+    validateThreadCommitInput(input);
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await this.#lockCommit(client, input, threadId);
-      const prior = await this.#loadReceipt(client, input);
-      if (prior !== null) {
-        const result = decodePostgresThreadReceipt(prior);
-        validateThreadReceiptResult(result, {
-          tenantId: prior.tenant_id,
-          threadId: prior.thread_id,
-        });
-        if (input.officeBinding) assertOfficeThreadReplay(input.officeBinding, await this.#officeThreads.load(client, input.officeBinding), result.state);
-        await client.query("COMMIT");
-        return {
-          ...result,
-          disposition: "replayed",
-        };
-      }
-      if (input.officeBinding) {
-        await this.#officeThreads.assertOffice(client, input.officeBinding);
-        await this.#officeThreads.assertAvailable(client, input.officeBinding);
-      }
-      await this.#validateSourceFence(client, input);
-      const locator = { tenantId: input.tenantId, threadId };
-      const current = await this.loadThreadWithin(client, locator, true);
-      if ((current?.revision ?? 0) !== input.expectedRevision) {
-        throw new RunStoreError("revision_conflict");
-      }
-      if (input.tombstone !== undefined) {
-        await this.#assertNoActiveRun(client, input.tenantId, threadId);
-        const currentGoal = await this.loadThreadGoalWithin(
-          client,
-          { tenantId: input.tenantId, threadId },
-          true,
-        );
-        if (
-          (currentGoal?.revision ?? null) !==
-          input.tombstone.expectedGoalRevision
-        ) {
-          throw new RunStoreError("goal_revision_conflict");
-        }
-      }
-
-      const eventIds = await this.#existingIds(
-        client,
-        "thread_events",
-        "event_id",
-        input.events.map((event) => event.eventId),
-      );
-      const messageIds = await this.#existingIds(
-        client,
-        "messages",
-        "message_id",
-        input.messages.map((message) => message.messageId),
-      );
-      validateThreadEvents(input.events, threadId, (id) => eventIds.has(id));
-      validateMessages(
-        input.messages,
-        input.events,
-        threadId,
-        input.tenantId,
-        (id) => messageIds.has(id),
-      );
-      await this.validateModelHistoryWithin(client, locator, input.history);
-
-      let next = current;
-      for (const event of input.events) {
-        next = reduceThreadLifecycleEvent(next, event);
-      }
-      if (next === null) throw new RunStoreError("thread_events_empty");
-      await writePostgresThreadSnapshot(
-        client,
-        this.schemaSql(),
-        current,
-        next,
-        input.expectedRevision,
-      );
-      await writePostgresThreadEvents(
-        client,
-        this.schemaSql(),
-        input.events,
-        input.tenantId,
-      );
-      await writePostgresMessages(client, this.schemaSql(), input.messages);
-      await writePostgresModelHistory(
-        client,
-        this.schemaSql(),
-        input.history.items,
-      );
-      if (input.tombstone !== undefined) {
-        await this.writeTurnStartGoalWithin(
-          client,
-          {
-            kind: "clear",
-            expectedRevision: input.tombstone.expectedGoalRevision,
-            occurredAt: input.tombstone.occurredAt,
-          },
-          null,
-          { tenantId: input.tenantId, threadId },
-        );
-      }
-
-      if (input.officeBinding) await this.#officeThreads.insert(client, input.officeBinding);
-      const result: CommitThreadResult = {
-        disposition: "committed",
-        state: next,
-        events: input.events,
-        messages: input.messages,
-        historyItems: input.history.items,
-      };
-      await client.query(
-        `INSERT INTO ${this.#tableSql("thread_idempotency_receipts")}
-           (tenant_id, scope, idempotency_key, thread_id, fingerprint, result_json)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          input.tenantId,
-          input.idempotency.scope,
-          input.idempotency.key,
-          threadId,
-          input.idempotency.requestFingerprint,
-          stableJson(result),
-        ],
-      );
+      const result = await this.commitThreadWithin(client, input);
       await client.query("COMMIT");
-      return structuredClone(result);
+      return result;
     } catch (error) {
       await rollbackPostgres(client);
       throw normalizePostgresError(error);
     } finally {
       client.release();
     }
+  }
+
+  /** Original Thread commit on the caller's transaction; never borrows, begins or settles it. */
+  async commitThreadWithin(
+    client: PoolClient,
+    input: CommitThreadInput,
+  ): Promise<CommitThreadResult> {
+    this.assertOpen();
+    const threadId = validateThreadCommitInput(input);
+    await this.#lockCommit(client, input, threadId);
+    const prior = await this.#loadReceipt(client, input);
+    if (prior !== null) {
+      const result = decodePostgresThreadReceipt(prior);
+      validateThreadReceiptResult(result, {
+        tenantId: prior.tenant_id,
+        threadId: prior.thread_id,
+      });
+      if (input.officeBinding)
+        assertOfficeThreadReplay(
+          input.officeBinding,
+          await this.#officeThreads.load(client, input.officeBinding),
+          result.state,
+        );
+      return {
+        ...result,
+        disposition: "replayed",
+      };
+    }
+    if (input.officeBinding) {
+      await this.#officeThreads.assertOffice(client, input.officeBinding);
+      await this.#officeThreads.assertAvailable(client, input.officeBinding);
+    }
+    await this.#validateSourceFence(client, input);
+    const locator = { tenantId: input.tenantId, threadId };
+    const current = await this.loadThreadWithin(client, locator, true);
+    if ((current?.revision ?? 0) !== input.expectedRevision) {
+      throw new RunStoreError("revision_conflict");
+    }
+    if (input.tombstone !== undefined) {
+      await this.#assertNoActiveRun(client, input.tenantId, threadId);
+      const currentGoal = await this.loadThreadGoalWithin(
+        client,
+        { tenantId: input.tenantId, threadId },
+        true,
+      );
+      if (
+        (currentGoal?.revision ?? null) !== input.tombstone.expectedGoalRevision
+      ) {
+        throw new RunStoreError("goal_revision_conflict");
+      }
+    }
+
+    const eventIds = await this.#existingIds(
+      client,
+      "thread_events",
+      "event_id",
+      input.events.map((event) => event.eventId),
+    );
+    const messageIds = await this.#existingIds(
+      client,
+      "messages",
+      "message_id",
+      input.messages.map((message) => message.messageId),
+    );
+    validateThreadEvents(input.events, threadId, (id) => eventIds.has(id));
+    validateMessages(
+      input.messages,
+      input.events,
+      threadId,
+      input.tenantId,
+      (id) => messageIds.has(id),
+    );
+    await this.validateModelHistoryWithin(client, locator, input.history);
+
+    let next = current;
+    for (const event of input.events) {
+      next = reduceThreadLifecycleEvent(next, event);
+    }
+    if (next === null) throw new RunStoreError("thread_events_empty");
+    await writePostgresThreadSnapshot(
+      client,
+      this.schemaSql(),
+      current,
+      next,
+      input.expectedRevision,
+    );
+    await writePostgresThreadEvents(
+      client,
+      this.schemaSql(),
+      input.events,
+      input.tenantId,
+    );
+    await writePostgresMessages(client, this.schemaSql(), input.messages);
+    await writePostgresModelHistory(
+      client,
+      this.schemaSql(),
+      input.history.items,
+    );
+    if (input.tombstone !== undefined) {
+      await this.writeTurnStartGoalWithin(
+        client,
+        {
+          kind: "clear",
+          expectedRevision: input.tombstone.expectedGoalRevision,
+          occurredAt: input.tombstone.occurredAt,
+        },
+        null,
+        { tenantId: input.tenantId, threadId },
+      );
+    }
+
+    if (input.officeBinding)
+      await this.#officeThreads.insert(client, input.officeBinding);
+    const result: CommitThreadResult = {
+      disposition: "committed",
+      state: next,
+      events: input.events,
+      messages: input.messages,
+      historyItems: input.history.items,
+    };
+    await client.query(
+      `INSERT INTO ${this.#tableSql("thread_idempotency_receipts")}
+       (tenant_id, scope, idempotency_key, thread_id, fingerprint, result_json)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        input.tenantId,
+        input.idempotency.scope,
+        input.idempotency.key,
+        threadId,
+        input.idempotency.requestFingerprint,
+        stableJson(result),
+      ],
+    );
+    return structuredClone(result);
   }
 
   async loadThreadRollbackReceipt(

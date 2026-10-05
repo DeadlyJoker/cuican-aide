@@ -61,6 +61,7 @@ export function composeDesktopLocalPluginProjectApproval(
   const projectsRequired = requested("crewon.creative-projects");
   const textsRequired = requested("crewon.project-texts");
   const textRecoveryRequired = requested("crewon.project-text-recovery");
+  const conversationsRequired = requested("crewon.project-conversations");
   if (textRecoveryRequired && !textsRequired)
     invalid("project_text_recovery_requires_texts");
   const recoveryRequired = requested("crewon.plugin-ui-recovery");
@@ -68,7 +69,8 @@ export function composeDesktopLocalPluginProjectApproval(
     !projectsRequired &&
     !textsRequired &&
     !recoveryRequired &&
-    !textRecoveryRequired
+    !textRecoveryRequired &&
+    !conversationsRequired
   )
     return approval;
   const modules = descriptor.contributions
@@ -99,6 +101,11 @@ export function composeDesktopLocalPluginProjectApproval(
       ? (previous.textRecovery?.publications ?? [])
       : []),
   ];
+  const conversations = [
+    ...("conversations" in previous
+      ? (previous.conversations?.publications ?? [])
+      : []),
+  ];
   const recovery = [
     ...("uiRecovery" in previous
       ? (previous.uiRecovery?.publications ?? [])
@@ -124,6 +131,11 @@ export function composeDesktopLocalPluginProjectApproval(
       !textRecovery.some((current) => same(current, publication))
     )
       textRecovery.push(publication);
+    if (
+      conversationsRequired &&
+      !conversations.some((current) => same(current, publication))
+    )
+      conversations.push(publication);
     if (
       recoveryRequired &&
       !recovery.some((current) => same(current, publication))
@@ -151,6 +163,9 @@ export function composeDesktopLocalPluginProjectApproval(
         : {}),
       ...(textRecoveryRequired
         ? { textRecovery: { publications: textRecovery } }
+        : {}),
+      ...(conversationsRequired
+        ? { conversations: { publications: conversations } }
         : {}),
       ...(recoveryRequired
         ? {
