@@ -166,6 +166,7 @@ export function captureProjectTextCommitAuthority(
   }
   const authority = captureCreativeProjectCommitAuthority(options, {
     allowTextUiTransaction: true,
+    allowPlanTransaction: true,
   });
   if (authority?.transaction !== undefined)
     throw new ApplicationError(

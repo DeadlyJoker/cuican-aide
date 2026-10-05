@@ -365,6 +365,14 @@ export class ProjectConversationControlOwner {
       threadId,
     });
   }
+  /** Internal current-owner issuance; it creates no UI context and still verifies real Node actions for execution. */
+  issuePlanConversationAuthority(
+    actor: ActorContext,
+    installation: ProjectConversationInstallation,
+    purpose: "metadata" | "execute",
+  ): Promise<ProjectConversationCommitAuthority> {
+    return this.#track(() => this.#issue(actor, installation, purpose));
+  }
   async #issue(
     actor: ActorContext,
     expected: ProjectConversationInstallation,

@@ -18,7 +18,9 @@ import {
   type RunState,
   type ToolExecutionReceiptState,
   type ProjectStageRunAdmission,
+  type ProjectTextPlanRunAdmission,
   parseProjectStageRunAdmission,
+  parseProjectTextPlanRunAdmission,
   assertProjectStageToolRequest,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
@@ -83,6 +85,8 @@ export type CreativeProjectRunCommitTransactionAuthority = Readonly<{
   admission: PluginTaskAdmission;
   /** Immutable host stage record, if this Run was admitted through a project conversation. */
   projectStageAdmission?: ProjectStageRunAdmission;
+  /** Required whenever the original task-admission plan marker is non-null. */
+  projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   selection: PluginSelection;
   package: InstalledPluginPackage;
   /** Live Worker dispatch/actor/PDP fence. Must not borrow the committing Store's pool. */
@@ -111,6 +115,11 @@ export function captureCreativeProjectRunCommitTransaction(
     Object.hasOwn(input, "projectStageAdmission")
       ? ["projectStageAdmission"]
       : []),
+    ...(input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "projectTextPlanAdmission")
+      ? ["projectTextPlanAdmission"]
+      : []),
   ]);
   if (
     fields.version !== "crewon.creative-project-run-commit.v1" ||
@@ -132,6 +141,16 @@ export function captureCreativeProjectRunCommitTransaction(
             `sha256:${createHash("sha256").update(text).digest("hex")}`,
         });
   const pin = parseProjectToolInstallationPin(fields.installation);
+  const plan =
+    fields.projectTextPlanAdmission === undefined
+      ? undefined
+      : parseProjectTextPlanRunAdmission(
+          copy(fields.projectTextPlanAdmission),
+          {
+            sha256: (text) =>
+              `sha256:${createHash("sha256").update(text).digest("hex")}`,
+          },
+        );
   const operations = [
     "project_create",
     "brief_append",
@@ -232,6 +251,18 @@ export function captureCreativeProjectRunCommitTransaction(
   creativeProjectOpaqueId(claim.lease.ownerId);
   creativeProjectOpaqueId(claim.lease.leaseId);
   const current = fields.assertCurrent.bind(input);
+  if (
+    plan !== undefined &&
+    (stage === undefined ||
+      plan.runId !== run.runId ||
+      plan.threadId !== run.threadId ||
+      plan.stageAdmissionDigest !== stage.contentDigest ||
+      plan.extensionBindingDigest !== stage.extensionBindingDigest ||
+      plan.projectId !== stage.projectId ||
+      extensionCanonicalJson(plan.actor) !== extensionCanonicalJson(actor) ||
+      extensionCanonicalJson(plan.installation) !== extensionCanonicalJson(pin))
+  )
+    denied();
   if (stage !== undefined) {
     if (
       stage.runId !== run.runId ||
@@ -262,6 +293,7 @@ export function captureCreativeProjectRunCommitTransaction(
     installation: pin,
     admission,
     ...(stage === undefined ? {} : { projectStageAdmission: stage }),
+    ...(plan === undefined ? {} : { projectTextPlanAdmission: plan }),
     selection,
     package: pkg,
     assertCurrent: async () => {

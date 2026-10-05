@@ -41,6 +41,66 @@ afterEach(async () => {
 });
 const publish = { publicAssets: ["ui/entry.mjs"], trustUiModule: true };
 
+it("explicit dual-entry plan declaration adds only exact plan metadata membership and survives a real cold bootstrap", async () => {
+  const f = fixture();
+  f.writeDescriptor({
+    ...f.descriptor,
+    entrypoints: { node: "node/entry.mjs", ui: f.descriptor.entrypoints.ui },
+    businessManifestPath: "business/manifest.json",
+    requires: [
+      "crewon.creative-projects",
+      "crewon.project-texts",
+      "crewon.project-conversations",
+      "crewon.project-text-plans",
+    ].map((service) => ({ service, apiVersion: "1", optional: true })),
+  });
+  const owner = f.create(),
+    preview = await owner.previewDirectory(f.source);
+  await owner.confirmPreview(sourceConfirmation(preview, publish));
+  const saved = parseDesktopPluginApproval(f.approval());
+  if (saved.schemaVersion === "crewon.desktop-plugin-approval.v1")
+    throw new Error("plan metadata missing");
+  const pin = {
+    pluginId: preview.pluginId,
+    packageDigest: preview.packageDigest,
+    contributionId: "studio",
+  };
+  expect(saved.projects.textPlans).toEqual({ publications: [pin] });
+  expect(saved.projects.pluginUi).toEqual({ publications: [pin] });
+  expect("pluginGenerations" in saved.projects).toBe(false);
+  expect(Object.hasOwn(saved.projects, "delegation")).toBe(false);
+  const bootstrap = await prepareDesktopPluginBootstrap({
+    dataDirectory: f.dataDirectory,
+    actor: DESKTOP_RUNTIME_OWNER,
+    sessionEntropy: "real-plan-metadata-bootstrap-session-00001",
+  });
+  expect(bootstrap).not.toBeNull();
+  await bootstrap?.cleanup();
+  expect(existsSync(f.marker)).toBe(false);
+});
+
+it("plan metadata cannot be imported with a missing declared text or conversation prerequisite", async () => {
+  const f = fixture();
+  f.writeApproval(f.originalApproval);
+  f.writeDescriptor({
+    ...f.descriptor,
+    requires: [
+      { service: "crewon.creative-projects", apiVersion: "1", optional: false },
+      {
+        service: "crewon.project-text-plans",
+        apiVersion: "1",
+        optional: false,
+      },
+    ],
+  });
+  const owner = f.create(),
+    preview = await owner.previewDirectory(f.source);
+  await expect(
+    owner.confirmPreview(sourceConfirmation(preview, publish)),
+  ).rejects.toThrow();
+  expect(f.approval()).toEqual(f.originalApproval);
+});
+
 it("first explicit UI import creates exact local metadata approval and a cold original bootstrap without history, targets or funds", async () => {
   const f = fixture();
   const owner = f.create();

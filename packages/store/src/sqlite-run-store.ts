@@ -1,3 +1,4 @@
+import { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
 import { SqlitePluginUiIntentJournalStore } from "./sqlite-plugin-ui-intent-journal-store.ts";
@@ -752,6 +753,14 @@ export class SqliteRunStore implements DomainStore {
   }
 
   /** Same parent connection; explicit conversation migration never creates a Thread or Run. */
+  projectTextPlanStore(): SqliteProjectTextPlanStore {
+    this.#assertOpen();
+    return new SqliteProjectTextPlanStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
   projectConversationStore(): SqliteProjectConversationStore {
     this.#assertOpen();
     return new SqliteProjectConversationStore({

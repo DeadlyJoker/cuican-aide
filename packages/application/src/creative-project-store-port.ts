@@ -1,4 +1,5 @@
 import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
+import type { ProjectTextPlanSelectionCommitAuthority } from "./project-text-plan-store-port.ts";
 import type {
   CreativeProject,
   ProjectBriefRevision,
@@ -84,6 +85,8 @@ export type CreativeProjectCommitAuthority = Readonly<{
   runTransaction?: CreativeProjectRunCommitTransactionAuthority;
   /** Text-only manual UI qualification; mutually exclusive with both other protocols. */
   textUiTransaction?: ProjectTextUiCommitTransactionAuthority;
+  /** Independently delegated exact-result selection; mutually exclusive with all other protocols. */
+  planTransaction?: ProjectTextPlanSelectionCommitAuthority;
 }>;
 
 export type CreativeProjectCommitOptions = Readonly<{

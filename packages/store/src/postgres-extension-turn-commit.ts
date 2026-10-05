@@ -1,4 +1,12 @@
 import {
+  captureProjectTextPlanTurn,
+  beginPostgresPlanTurn,
+  finishPostgresPlanTurn,
+  assertPlanTurnCurrent,
+} from "./project-text-plan-turn.ts";
+import { loadPostgresPlanAdmission } from "./project-text-plan-markers.ts";
+import { planEqual } from "./project-text-plan-records.ts";
+import {
   captureProjectStageTurn,
   assertPostgresProjectStage,
   assertStageReplay,
@@ -131,6 +139,10 @@ export async function commitPostgresExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ) {
+  const capturedPlan = captureProjectTextPlanTurn(input, options);
+  const plan = capturedPlan.plan;
+  options = capturedPlan.options;
+  await assertPlanTurnCurrent(plan);
   const capturedStage = captureProjectStageTurn(input, options);
   const stage = capturedStage.stage;
   options = capturedStage.options;
@@ -212,6 +224,12 @@ export async function commitPostgresExtensionTurn(
         frozenInput,
         replay === null,
       );
+      const planCheckpoint = await beginPostgresPlanTurn(
+        client,
+        host.schema,
+        plan,
+        replay !== null,
+      );
       if (replay !== null) {
         const result = parseExtensionTurnReceipt(
           replay,
@@ -282,7 +300,20 @@ export async function commitPostgresExtensionTurn(
           ),
         );
         await stage?.authority.assertTransactionCurrent();
-        return result;
+        await plan?.q.authority.assertTransactionCurrent();
+        const savedPlan = await loadPostgresPlanAdmission(
+          client,
+          host.schema,
+          result.binding,
+        );
+        planEqual(
+          plan?.admission ?? null,
+          savedPlan,
+          "project_text_plan_admission_conflict",
+        );
+        return savedPlan === null
+          ? result
+          : { ...result, projectTextPlanAdmission: savedPlan };
       }
       const creditAdmission = checkedExtensionCreditAdmission({
         admission: frozenInput.creditAdmission,
@@ -408,6 +439,7 @@ export async function commitPostgresExtensionTurn(
           host.schema,
           pluginAdmission,
           stage?.admission.contentDigest,
+          plan?.admission.contentDigest,
         );
       if (unmetered.admission !== undefined)
         await savePostgresPluginTaskUnmeteredAdmission(
@@ -446,6 +478,7 @@ export async function commitPostgresExtensionTurn(
           [...stageValues(stage.admission)],
         );
         await stage.authority.assertTransactionCurrent();
+        await plan?.q.authority.assertTransactionCurrent();
       }
       if (prepared !== null)
         await assertCreativeProjectCommitCurrent(prepared.authority);
@@ -453,11 +486,15 @@ export async function commitPostgresExtensionTurn(
         await assertCreativeProjectCommitCurrent(projectQuery.authority);
       if (unmetered.authority !== undefined)
         await unmetered.authority.assertCurrent();
-      return result;
+      await finishPostgresPlanTurn(client, host.schema, plan, planCheckpoint);
+      return plan === null
+        ? result
+        : { ...result, projectTextPlanAdmission: plan.admission };
     },
     {
       beforeCommit: () => {
         stage?.authority.assertActive();
+        plan?.q.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();
           unmetered.authority.assertActive();

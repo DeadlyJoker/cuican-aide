@@ -196,3 +196,12 @@ export * from "./project-conversation-store-port.ts";
 
 export * from "./project-conversation-authority.ts";
 export * from "./project-conversation-application-service.ts";
+export * from "./project-text-plan-store-port.ts";
+export * from "./project-text-plan-authority.ts";
+export * from "./project-text-plan-application-service.ts";
+export * from "./project-text-plan-continuation-port.ts";
+export * from "./project-text-plan-coordinator.ts";
+
+export * from "./plugin-project-text-plan-action-owner.ts";
+export type { PluginProjectTextPlanInvocationAuthority } from "./plugin-project-text-plan-action-context.ts";
+export { capturePluginProjectTextPlanInvocationCommitAuthority } from "./plugin-ui-invocation-authority.ts";

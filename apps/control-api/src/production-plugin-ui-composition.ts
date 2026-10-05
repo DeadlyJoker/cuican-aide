@@ -9,6 +9,8 @@ import {
   type PluginProjectTextActionOwner,
   isPluginProjectTextRecoveryActionOwner,
   type PluginProjectTextRecoveryActionOwner,
+  isPluginProjectTextPlanActionOwner,
+  type PluginProjectTextPlanActionOwner,
   isPluginCreativeProjectActionOwner,
   type PluginCreativeProjectActionOwner,
   type ApplicationClock,
@@ -66,6 +68,7 @@ export type ProductionPluginUiConfig = Readonly<{
   /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
   ownedProjectConversationActions?: ProjectConversationControlOwner;
+  ownedProjectTextPlanActions?: PluginProjectTextPlanActionOwner;
   ownedProjectTextActions?: PluginProjectTextActionOwner;
   ownedProjectTextRecoveryActions?: PluginProjectTextRecoveryActionOwner;
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
@@ -138,12 +141,22 @@ export function createProductionPluginUiRuntime(
         );
   const conversationOwner = input.ownedProjectConversationActions;
   if (conversationOwner !== undefined) conversationOwner.assertAvailable();
-  const committedMetadata =
+  const conversationMetadata =
     conversationOwner === undefined
       ? recoveryMetadata
       : combineSelectionCommittedMetadata(
           conversationOwner.committedMetadata,
           recoveryMetadata,
+        );
+  const planOwner = input.ownedProjectTextPlanActions;
+  if (planOwner !== undefined && !isPluginProjectTextPlanActionOwner(planOwner))
+    throw new Error("production_plugin_ui_plan_owner_invalid");
+  const committedMetadata =
+    planOwner === undefined
+      ? conversationMetadata
+      : combineSelectionCommittedMetadata(
+          planOwner.committedMetadata,
+          conversationMetadata,
         );
   if (
     queryOwner !== undefined &&
@@ -254,6 +267,20 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (
+            request.action === "crewon.project-text-plans" ||
+            request.action.startsWith("crewon.project-text-plans.")
+          ) {
+            if (
+              planOwner === undefined ||
+              !planOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "project_text_plan_unavailable",
+              );
+            return planOwner.actions.invoke(request);
+          }
           if (
             request.action === "crewon.project-conversations" ||
             request.action.startsWith("crewon.project-conversations.")
@@ -427,6 +454,7 @@ export function createProductionPluginUiRuntime(
         textOwner?.close(),
         textRecoveryOwner?.close(),
         selectionOwner?.close(),
+        planOwner?.close(),
       ]).then((results) => {
         const failures = results.flatMap((result) =>
           result.status === "rejected" ? [result.reason] : [],

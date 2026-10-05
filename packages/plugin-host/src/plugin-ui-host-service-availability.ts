@@ -252,6 +252,9 @@ export function assertUiOnlyServiceDeclarations(
           (requirement.service === "crewon.project-conversations" &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
+          (requirement.service === "crewon.project-text-plans" &&
+            requirement.apiVersion === "1" &&
+            (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
             requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&
             (requirement.optional ||

@@ -1,3 +1,8 @@
+import {
+  captureInstalledPluginDelegatedIdentityInput,
+  type InstalledPluginDelegatedIdentityInput,
+  type InstalledPluginDelegatedIdentityPort,
+} from "./installed-plugin-delegated-identity.ts";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   ApplicationError,
@@ -42,7 +47,12 @@ const serviceOwners = new WeakMap<
 const owners = new WeakSet<object>();
 
 type State = {
-  request: ControlApiRequestContext;
+  source:
+    | Readonly<{ kind: "http"; request: ControlApiRequestContext }>
+    | Readonly<{
+        kind: "delegated";
+        input: InstalledPluginDelegatedIdentityInput;
+      }>;
   actor: ActorContext;
   scope: PluginProfileScope | null;
   prepared: InstalledPluginPeerPrepared | null;
@@ -68,6 +78,9 @@ export class InstalledPluginRequestOwner {
   readonly #metadata:
     | InstalledPluginConfigurationMetadataPort["prepare"]
     | undefined;
+  readonly #delegatedIdentity:
+    | InstalledPluginDelegatedIdentityPort["resolveCurrentActor"]
+    | undefined;
   #closing: Promise<void> | null = null;
 
   constructor(
@@ -76,10 +89,14 @@ export class InstalledPluginRequestOwner {
       profiles: PluginInstallationHostProfilePort;
       peer?: Pick<InstalledPluginPeerClient, "prepare">;
       metadata?: InstalledPluginConfigurationMetadataPort;
+      delegatedIdentity?: InstalledPluginDelegatedIdentityPort;
     }>,
   ) {
     owners.add(this);
     this.#identity = input.identity.resolveCurrentActor.bind(input.identity);
+    this.#delegatedIdentity = input.delegatedIdentity?.resolveCurrentActor.bind(
+      input.delegatedIdentity,
+    );
     this.#profile = input.profiles.resolve.bind(input.profiles);
     this.#prepare = input.peer?.prepare.bind(input.peer);
     this.#metadata = input.metadata?.prepare.bind(input.metadata);
@@ -154,20 +171,72 @@ export class InstalledPluginRequestOwner {
     }>,
     work: () => Promise<T>,
   ): Promise<T> {
+    return this.#run(
+      { kind: "http", request: captureRequest(input.request) },
+      pluginSecurityActor(input.actor),
+      input.signal,
+      input.preparation ?? "execution",
+      work,
+    );
+  }
+
+  supportsDelegatedIdentity(): boolean {
+    return this.#delegatedIdentity !== undefined;
+  }
+
+  runDelegated<T>(
+    input: InstalledPluginDelegatedIdentityInput &
+      Readonly<{ signal?: AbortSignal }>,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    if (this.#delegatedIdentity === undefined)
+      throw new ApplicationError(
+        "authorization",
+        "project_text_plan_authorization_unavailable",
+      );
+    const fields = pluginSecurityRecord(input, [
+      "actor",
+      "scope",
+      "installation",
+      "delegation",
+      ...(Object.hasOwn(input, "signal") ? ["signal"] : []),
+    ]);
+    const captured = captureInstalledPluginDelegatedIdentityInput({
+      actor: fields.actor,
+      scope: fields.scope,
+      installation: fields.installation,
+      delegation: fields.delegation,
+    });
+    return this.#run(
+      { kind: "delegated", input: captured },
+      captured.actor,
+      input.signal,
+      "configuration",
+      work,
+    );
+  }
+
+  #run<T>(
+    source: State["source"],
+    actor: ActorContext,
+    signal: AbortSignal | undefined,
+    preparation: State["preparation"],
+    work: () => Promise<T>,
+  ): Promise<T> {
     if (this.#lifetime.signal.aborted || this.#states.size >= 128) denied();
     const controller = new AbortController();
     const state: State = {
-      request: captureRequest(input.request),
-      actor: pluginSecurityActor(input.actor),
+      source,
+      actor,
       scope: null,
       prepared: null,
       metadata: null,
-      preparation: input.preparation ?? "execution",
+      preparation,
       controller,
       signal: AbortSignal.any([
         controller.signal,
         this.#lifetime.signal,
-        ...(input.signal ? [input.signal] : []),
+        ...(signal ? [signal] : []),
       ]),
       alive: true,
     };
@@ -201,6 +270,16 @@ export class InstalledPluginRequestOwner {
       () => this.#pending.delete(physical),
     );
     return physical;
+  }
+
+  async prepareDelegatedExecution(): Promise<void> {
+    const state = this.#current();
+    if (state.source.kind !== "delegated") denied();
+    const prepared = await this.#executionPrepared();
+    if (prepared === null) denied();
+    this.#sameState(state);
+    await this.assertCurrent();
+    state.preparation = "execution";
   }
 
   currentSignal(): AbortSignal {
@@ -243,7 +322,9 @@ export class InstalledPluginRequestOwner {
     let actor: ActorContext;
     try {
       actor = pluginSecurityActor(
-        await this.#identity(state.request, state.signal),
+        await (state.source.kind === "http"
+          ? this.#identity(state.source.request, state.signal)
+          : this.#delegatedIdentity!(state.source.input, state.signal)),
       );
     } catch {
       denied();
@@ -256,6 +337,11 @@ export class InstalledPluginRequestOwner {
       scope.tenantId !== actor.tenantId ||
       scope.spaceId !== actor.spaceId ||
       (state.scope !== null && !same(scope, state.scope))
+    )
+      denied();
+    if (
+      state.source.kind === "delegated" &&
+      !same(scope, state.source.input.scope)
     )
       denied();
     state.scope = scope;

@@ -1,4 +1,8 @@
 import type { ActorContext } from "./authorization-port.ts";
+import {
+  assertProjectTextPlanSelectionCommand,
+  bindProjectTextPlanSelectionPolicy,
+} from "./project-text-plan-selection-policy.ts";
 import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { CreativeProjectCommitOptions } from "./creative-project-store-port.ts";
 import type { ProjectTextMutationCommand } from "./project-text-commands.ts";
@@ -38,9 +42,11 @@ export function prepareProjectTextMutationAuthority(
     digester,
   );
   assertProjectTextUiMutationCommand(authority, actor, kind, command, digester);
+  assertProjectTextPlanSelectionCommand(authority, actor, kind, command);
   const currentPolicy = () => assertPolicy(actor, command.projectId);
   authority = bindProjectTextUiCommitPolicy(authority, currentPolicy);
   authority = bindProjectRunCommitPolicy(authority, currentPolicy);
+  authority = bindProjectTextPlanSelectionPolicy(authority, currentPolicy);
   return Object.freeze({
     actor,
     command,

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "17.0.0";
 const plugin = (
   await import(
     process.env.CREWON_SHORT_DRAMA_PLUGIN_DIR

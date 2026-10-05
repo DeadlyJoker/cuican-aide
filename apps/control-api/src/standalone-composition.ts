@@ -557,7 +557,13 @@ function composeControlApi(
   }
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
-    { store, eventHub },
+    {
+      store,
+      eventHub,
+      consumeRunEvents: (events) =>
+        preparedPlugins?.runtime.consumeProjectTextPlanRunEvents?.(events) ??
+        Promise.resolve(),
+    },
     {
       ownerId: `outbox:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
@@ -834,6 +840,7 @@ function composeControlApi(
       storageAdmission: storageCapacity.admission,
     });
     outboxDispatcher.start();
+    preparedPlugins?.runtime.startProjectTextPlans?.();
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {

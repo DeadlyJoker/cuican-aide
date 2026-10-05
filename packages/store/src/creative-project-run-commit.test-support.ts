@@ -29,8 +29,9 @@ export async function projectRunCommitFixture(
   prepareAdmission?: (
     fixture: Awaited<ReturnType<typeof unmeteredFixture>>,
   ) => ReturnType<Awaited<ReturnType<typeof unmeteredFixture>>["generate"]>,
+  existingFixture?: Awaited<ReturnType<typeof unmeteredFixture>>,
 ) {
-  const f = await unmeteredFixture(t, backend);
+  const f = existingFixture ?? (await unmeteredFixture(t, backend));
   const parent = f.first.parent;
   const admitted =
     prepareAdmission === undefined

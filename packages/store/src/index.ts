@@ -60,3 +60,6 @@ export { PostgresProjectTextUiIntentJournalStore } from "./project-text-ui-inten
 
 export { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
 export { PostgresProjectConversationStore } from "./project-conversation-postgres-store.ts";
+
+export { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
+export { PostgresProjectTextPlanStore } from "./project-text-plan-postgres-store.ts";

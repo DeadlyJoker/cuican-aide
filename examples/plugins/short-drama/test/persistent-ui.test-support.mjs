@@ -194,8 +194,21 @@ export function metadataService({ pageSize = 20 } = {}) {
           action ===
             "crewon.project-generation-reads.v1.getConceptGeneration" ||
           action === "crewon.project-text-recovery.v1.getPending" ||
-          action === "crewon.project-conversations.v1.listConversations",
+          action === "crewon.project-conversations.v1.listConversations" ||
+          action === "crewon.project-text-plans.v1.list",
       );
+      if (action === "crewon.project-text-plans.v1.list") {
+        assert.deepEqual(Object.keys(input).sort(), [
+          "afterPlanId",
+          "limit",
+          "projectId",
+        ]);
+        assert.equal(input.afterPlanId, null);
+        assert.equal(input.limit, 8);
+        if (refuse) throw new Error("plugin_ui_action_not_permitted");
+        projectRecord(input.projectId);
+        return { plans: [], nextPlanId: null };
+      }
       // Empty public journal fixture for the original concept/media regression cases.
       if (action === "crewon.project-text-recovery.v1.getPending") {
         assert.deepEqual(Object.keys(input), ["projectId"]);

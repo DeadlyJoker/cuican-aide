@@ -1,3 +1,4 @@
+import { createDesktopProjectPlanDelegatedIdentity } from "./desktop-project-plan-delegated-identity.ts";
 import {
   ApplicationError,
   ExtensionConfigurationApplicationService,
@@ -229,6 +230,11 @@ export async function createDesktopPluginConfigurationRuntime(
       },
       profiles,
       metadata,
+      delegatedIdentity: createDesktopProjectPlanDelegatedIdentity({
+        configuration,
+        authority,
+        assertCurrent: () => assertOwner(configuration.actor),
+      }),
       ...(activation === undefined ? {} : { peer: activation.peer }),
     });
     const historyAuthorization =

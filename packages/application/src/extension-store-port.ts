@@ -1,4 +1,8 @@
-import type { ProjectStageRunAdmission } from "@crewon/domain";
+import type {
+  ProjectStageRunAdmission,
+  ProjectTextPlanRunAdmission,
+} from "@crewon/domain";
+import type { ProjectTextPlanTurnCommitAuthority } from "./project-text-plan-store-port.ts";
 import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
 import type {
   ExtensionActivation,
@@ -99,6 +103,7 @@ export type CommitExtensionTurnInput = Readonly<{
   pluginQueryAdmission?: PluginQueryTaskAdmission;
   /** Internal confirmed project source; committed atomically with the original Turn and credits. */
   projectStageAdmission?: ProjectStageRunAdmission;
+  projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   projectGeneration?: ProjectGenerationReference;
   /** Historical source selected by the actual project owner; no metadata CAS or new generation slot. */
   projectQuery?: Readonly<{
@@ -109,6 +114,7 @@ export type CommitExtensionTurnInput = Readonly<{
 export type CommitExtensionTurnOptions = Readonly<{
   unmeteredAuthority?: PluginTaskUnmeteredPreparedAuthority;
   projectStageAuthority?: ProjectConversationCommitAuthority;
+  projectTextPlanAuthority?: ProjectTextPlanTurnCommitAuthority;
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
   /** Detached source and execution installation pins; the Store locks both using its existing connection. */
@@ -123,6 +129,8 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
   Readonly<{
     schemaVersion: "crewon.extension-turn-admission.v0";
     turn: CommitTurnStartResult;
+    /** Returned from the same original COMMIT/replay, never reconstructed after confirmation. */
+    projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   }>;
 
 /**
@@ -132,6 +140,7 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
  */
 export interface ExtensionStore {
   readonly projectStageAdmissionVersion?: "crewon.project-stage-run-admission.v1";
+  readonly projectTextPlanAdmissionVersion?: "crewon.project-text-plan-run-admission.v1";
   /** Older adapters cannot silently accept a paid task without reserving its credits. */
   readonly creditAdmissionVersion?: "crewon.extension-credit-admission.v0";
   readonly pluginAdmissionVersion?: "crewon.plugin-task-admission.v1";

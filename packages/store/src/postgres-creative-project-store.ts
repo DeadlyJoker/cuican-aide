@@ -1,4 +1,8 @@
 import {
+  beginPostgresPlanResult,
+  finishPostgresPlanResult,
+} from "./project-text-plan-tool.ts";
+import {
   assertPostgresProjectRunCommit,
   assertPostgresProjectRunLease,
 } from "./creative-project-run-commit-postgres.ts";
@@ -253,7 +257,20 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(client, this.#schema, q);
-        return this.#receipt(client, identity);
+        const planResult = await beginPostgresPlanResult(
+          client,
+          this.#schema,
+          q,
+        );
+        const result = await this.#receipt(client, identity);
+        if (result !== null)
+          await finishPostgresPlanResult(
+            client,
+            this.#schema,
+            planResult,
+            result,
+          );
+        return result;
       },
       authority,
       q,
@@ -375,8 +392,21 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
           identity.kind,
           identity.receipt.idempotencyKey,
         ]);
+        const planResult = await beginPostgresPlanResult(
+          client,
+          this.#schema,
+          runQualification,
+        );
         const previous = await this.#receipt(client, identity);
-        if (previous !== null) return previous;
+        if (previous !== null) {
+          await finishPostgresPlanResult(
+            client,
+            this.#schema,
+            planResult,
+            previous,
+          );
+          return previous;
+        }
         await this.#lock(client, [
           "creative-project-project",
           this.#schema,
@@ -437,6 +467,12 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
             result.project.projectId,
             creativeRecordJson(result),
           ],
+        );
+        await finishPostgresPlanResult(
+          client,
+          this.#schema,
+          planResult,
+          result,
         );
         return result;
       },

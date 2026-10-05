@@ -1,4 +1,10 @@
 import { ApplicationError } from "./application-error.ts";
+import { createHash, randomBytes } from "node:crypto";
+import { extensionCanonicalJson } from "@crewon/domain";
+import {
+  projectTextPlanActionContext,
+  type PluginProjectTextPlanInvocationAuthority,
+} from "./plugin-project-text-plan-action-context.ts";
 import type { PluginUiActionContext } from "./plugin-ui-ports.ts";
 import type { CreativeProjectPluginCommitTransactionAuthority } from "./creative-project-store-port.ts";
 import { committedTaskContext } from "./plugin-ui-committed-task-support.ts";
@@ -31,6 +37,12 @@ type Invocation = Readonly<{
     Readonly<{ fingerprint: string }>;
   recoveryTransaction?: ProjectTextRecoveryCommitTransactionAuthority &
     Readonly<{ fingerprint: string }>;
+  planUiTransaction?: ReturnType<typeof projectTextPlanActionContext> &
+    Readonly<{
+      invocationId: string;
+      delegation: PluginProjectTextPlanInvocationAuthority["delegation"];
+      assertCurrent(): Promise<void>;
+    }>;
 }>;
 const invocations = new WeakMap<object, Invocation>();
 
@@ -42,6 +54,7 @@ export function registerPluginUiInvocation(
   transaction?: Readonly<{ assertCurrent(): Promise<void> }>,
   textUiTransaction?: Readonly<{ assertCurrent(): Promise<void> }>,
   recoveryTransaction?: Readonly<{ assertCurrent(): Promise<void> }>,
+  planUiTransaction?: Readonly<{ assertCurrent(): Promise<void> }>,
 ): () => void {
   if (
     context === null ||
@@ -49,9 +62,12 @@ export function registerPluginUiInvocation(
     typeof assertCurrent !== "function" ||
     (assertActive !== undefined && typeof assertActive !== "function") ||
     invocations.has(context) ||
-    [transaction, textUiTransaction, recoveryTransaction].filter(
-      (value) => value !== undefined,
-    ).length > 1
+    [
+      transaction,
+      textUiTransaction,
+      recoveryTransaction,
+      planUiTransaction,
+    ].filter((value) => value !== undefined).length > 1
   )
     throw new ApplicationError(
       "internal",
@@ -60,6 +76,48 @@ export function registerPluginUiInvocation(
   let capturedTransaction: Invocation["transaction"];
   let capturedTextTransaction: Invocation["textUiTransaction"];
   let capturedRecoveryTransaction: Invocation["recoveryTransaction"];
+  let capturedPlanTransaction: Invocation["planUiTransaction"];
+  if (planUiTransaction !== undefined) {
+    const method = Object.getOwnPropertyDescriptor(
+      planUiTransaction,
+      "assertCurrent",
+    );
+    if (
+      ![Object.prototype, null].includes(
+        Object.getPrototypeOf(planUiTransaction),
+      ) ||
+      Reflect.ownKeys(planUiTransaction).length !== 1 ||
+      !method?.enumerable ||
+      !Object.hasOwn(method, "value") ||
+      typeof method.value !== "function"
+    )
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_invocation_registration_invalid",
+      );
+    const snapshot = projectTextPlanActionContext(context),
+      invocationId = `plan-ui-${randomBytes(32).toString("hex")}`;
+    const action = snapshot.request.action;
+    const delegation =
+      action === "crewon.project-text-plans.v1.start" ||
+      action === "crewon.project-text-plans.v1.resume" ||
+      action === "crewon.project-text-plans.v1.reviseRemaining"
+        ? Object.freeze({
+            kind: "pluginUi" as const,
+            contributionId: snapshot.context.lease.contributionId,
+            actionId: action,
+            invocationId,
+            idempotencyKey: snapshot.request.input.idempotencyKey,
+            inputDigest: `sha256:${createHash("sha256").update(extensionCanonicalJson(snapshot.request)).digest("hex")}`,
+          })
+        : null;
+    capturedPlanTransaction = Object.freeze({
+      ...snapshot,
+      invocationId,
+      delegation,
+      assertCurrent: method.value.bind(planUiTransaction),
+    });
+  }
   if (recoveryTransaction !== undefined) {
     const method = Object.getOwnPropertyDescriptor(
       recoveryTransaction,
@@ -175,6 +233,9 @@ export function registerPluginUiInvocation(
     ...(capturedRecoveryTransaction === undefined
       ? {}
       : { recoveryTransaction: capturedRecoveryTransaction }),
+    ...(capturedPlanTransaction === undefined
+      ? {}
+      : { planUiTransaction: capturedPlanTransaction }),
   });
   invocations.set(context, invocation);
   return () => {
@@ -197,7 +258,8 @@ export function capturePluginProjectTextUiInvocationCommitAuthority(
   if (
     invocation === undefined ||
     invocation.transaction !== undefined ||
-    invocation.recoveryTransaction !== undefined
+    invocation.recoveryTransaction !== undefined ||
+    invocation.planUiTransaction !== undefined
   )
     throw new ApplicationError(
       "authorization",
@@ -289,7 +351,8 @@ export function capturePluginProjectTextRecoveryInvocationCommitAuthority(
   if (
     invocation?.recoveryTransaction === undefined ||
     invocation.transaction !== undefined ||
-    invocation.textUiTransaction !== undefined
+    invocation.textUiTransaction !== undefined ||
+    invocation.planUiTransaction !== undefined
   )
     throw new ApplicationError(
       "authorization",
@@ -350,6 +413,75 @@ export function capturePluginProjectTextRecoveryInvocationCommitAuthority(
         }
       },
     }),
+  });
+}
+
+/** Plan delegation belongs to one actual live invocation, separately from text/Run/recovery authority. */
+export function capturePluginProjectTextPlanInvocationCommitAuthority(
+  context: PluginUiActionContext,
+): PluginProjectTextPlanInvocationAuthority {
+  const invocation =
+    context !== null && typeof context === "object"
+      ? invocations.get(context)
+      : undefined;
+  if (
+    invocation?.planUiTransaction === undefined ||
+    invocation.transaction !== undefined ||
+    invocation.textUiTransaction !== undefined ||
+    invocation.recoveryTransaction !== undefined
+  )
+    throw new ApplicationError(
+      "authorization",
+      "plugin_project_text_plan_invocation_required",
+    );
+  const base = capturePluginUiInvocationCommitAuthority(context),
+    captured = invocation.planUiTransaction;
+  const current = () => {
+    base.assertActive();
+    if (
+      projectTextPlanActionContext(context).fingerprint !== captured.fingerprint
+    )
+      throw new ApplicationError(
+        "authorization",
+        "plugin_ui_invocation_unavailable",
+      );
+  };
+  current();
+  return Object.freeze({
+    actor: captured.context.actor,
+    installation: captured.installation,
+    selection: captured.context.selection,
+    package: captured.context.package,
+    contributionId: captured.context.lease.contributionId,
+    actionId: captured.request.action,
+    input: captured.request.input,
+    invocationId: captured.invocationId,
+    delegation: captured.delegation,
+    assertActive: current,
+    assertCurrent: async () => {
+      current();
+      await base.assertCurrent();
+      current();
+    },
+    assertTransactionCurrent: async () => {
+      try {
+        current();
+        if ((await captured.assertCurrent()) !== undefined)
+          throw new ApplicationError(
+            "authorization",
+            "plugin_ui_invocation_current_check_invalid",
+          );
+        current();
+      } catch (error) {
+        if (
+          error instanceof ApplicationError &&
+          error.code === "plugin_ui_authorization_denied" &&
+          invocations.get(context) === invocation
+        )
+          invocations.delete(context);
+        throw error;
+      }
+    },
   });
 }
 

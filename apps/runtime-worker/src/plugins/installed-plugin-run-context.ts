@@ -9,6 +9,7 @@ import type {
   RunStore,
   ExternalOperationStore,
   ProjectConversationStore,
+  ProjectTextPlanStore,
 } from "@crewon/application";
 import { loadPluginQuerySource } from "@crewon/application";
 import {
@@ -36,8 +37,10 @@ import {
   type PluginQueryTaskAdmission,
   type PluginTaskAdmissionPin,
   type ProjectStageRunAdmission,
+  type ProjectTextPlanRunAdmission,
 } from "@crewon/domain";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
+import { readProjectTextPlanRuntimeScope } from "./project-text-plan-runtime-scope.ts";
 import { readProjectStageRuntimeScope } from "./project-stage-runtime-scope.ts";
 
 export type InstalledPluginRunPurpose = "submit" | "observe";
@@ -54,6 +57,10 @@ export type InstalledPluginRunContextDependencies = Readonly<{
     ProjectConversationStore,
     "loadStageAdmission" | "readRequiredStageDigest"
   >;
+  plans?: Pick<
+    ProjectTextPlanStore,
+    "readRequiredPlanDigest" | "loadRunAdmission"
+  >;
   resolveActor(
     owner: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
     signal: AbortSignal,
@@ -66,6 +73,7 @@ type SavedContext = Readonly<{
   toolPermissionMode: RunState["toolPermissionMode"] | null;
   query: PluginQueryTaskAdmission | null;
   projectStage: ProjectStageRunAdmission | null;
+  projectTextPlan: ProjectTextPlanRunAdmission | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -179,6 +187,14 @@ export class InstalledPluginRunContext {
     return saved.projectStage;
   }
 
+  verifiedProjectTextPlan(
+    snapshot: InstalledPluginRunSnapshot,
+  ): ProjectTextPlanRunAdmission | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.projectTextPlan;
+  }
+
   async #read(
     locator: ExtensionRunLocator,
     expectedTarget: ExtensionExecutionTarget,
@@ -288,6 +304,16 @@ export class InstalledPluginRunContext {
           projectStage.workspaceId)
     )
       fail("installed_plugin_project_stage_mismatch");
+    const projectTextPlan =
+      this.#dependencies.plans === undefined
+        ? null
+        : await readProjectTextPlanRuntimeScope({
+            plans: this.#dependencies.plans,
+            admission,
+            binding,
+            stage: projectStage,
+            signal,
+          });
     const rawConfiguration = await extensions.loadExtensionConfiguration({
       ...binding,
       revision: binding.configurationRevision,
@@ -360,6 +386,7 @@ export class InstalledPluginRunContext {
       toolPermissionMode: run.toolPermissionMode ?? null,
       query,
       projectStage,
+      projectTextPlan,
     });
   }
 

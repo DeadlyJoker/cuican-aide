@@ -29,6 +29,7 @@ export type DesktopProjectHistoryConfiguration = Readonly<{
   textUi?: Publications;
   textRecovery?: Publications;
   conversations?: Publications;
+  textPlans?: Publications;
   generationReads?: Readonly<{ version: "crewon.project-generation-read.v1" }>;
   generationReadUi?: Publications;
   resultSelections?: Readonly<{
@@ -68,6 +69,7 @@ export function parseDesktopProjectHistoryConfiguration(
       "textUi",
       "textRecovery",
       "conversations",
+      "textPlans",
       "generationReads",
       "generationReadUi",
       "resultSelections",
@@ -111,6 +113,23 @@ export function parseDesktopProjectHistoryConfiguration(
     const textUi = publications(value.textUi, approved);
     const textRecovery = publications(value.textRecovery, approved);
     const conversations = publications(value.conversations, approved);
+    const textPlans = publications(value.textPlans, approved);
+    if (
+      textPlans !== undefined &&
+      textPlans.publications.some((publication) =>
+        [pluginUi, textUi, conversations].some(
+          (required) =>
+            required === undefined ||
+            !required.publications.some(
+              (entry) =>
+                entry.pluginId === publication.pluginId &&
+                entry.packageDigest === publication.packageDigest &&
+                entry.contributionId === publication.contributionId,
+            ),
+        ),
+      )
+    )
+      invalid();
     const textArtifacts =
       value.textArtifacts === undefined
         ? undefined
@@ -167,6 +186,7 @@ export function parseDesktopProjectHistoryConfiguration(
       ...(textUi === undefined ? {} : { textUi }),
       ...(textRecovery === undefined ? {} : { textRecovery }),
       ...(conversations === undefined ? {} : { conversations }),
+      ...(textPlans === undefined ? {} : { textPlans }),
       ...(generationReads === undefined
         ? {}
         : {

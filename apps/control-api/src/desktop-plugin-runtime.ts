@@ -67,6 +67,7 @@ import { pluginSecurityUiRequest } from "./plugin-security-validation.ts";
 import { createDesktopProjectConversationRuntime } from "./desktop-project-conversation-runtime.ts";
 import type { ThreadApplicationService } from "@crewon/application";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
+import type { RunLifecycleEvent } from "@crewon/domain";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -77,6 +78,10 @@ export type DesktopPluginRuntime = Readonly<{
   bindProjectConversations?(
     threads: ThreadApplicationService,
   ): ProjectConversationControlOwner | undefined;
+  startProjectTextPlans?(): void;
+  consumeProjectTextPlanRunEvents?(
+    events: readonly RunLifecycleEvent[],
+  ): Promise<void>;
   close(): Promise<void>;
 }>;
 
@@ -128,6 +133,7 @@ export async function createDesktopPluginRuntime(
       "generationReads",
       "generationReadUi",
       "selectionUi",
+      "textPlans",
     ] as const) {
       const actual = dependencies.creativeProjects?.[field];
       if (
@@ -459,6 +465,7 @@ export async function createDesktopPluginRuntime(
     };
     const dispatch = composeDesktopProjectPluginUiDispatch({
       conversations: () => conversations?.owner(),
+      plans: () => conversations?.textPlans(),
       projects: projectUi,
       texts: textUi,
       history,
@@ -560,6 +567,24 @@ export async function createDesktopPluginRuntime(
               available();
               const invoke = () => ui.invoke(actor, command);
               const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (
+                  command.action === "crewon.project-text-plans" ||
+                  command.action.startsWith("crewon.project-text-plans.")
+                ) {
+                  const plans = conversations?.textPlans();
+                  if (plans === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "project_text_plan_unavailable",
+                    );
+                  return plans.invokeAuthenticatedRequest(
+                    request,
+                    actor,
+                    command,
+                    requestSignal,
+                    invoke,
+                  );
+                }
                 if (
                   command.action === "crewon.project-conversations" ||
                   command.action.startsWith("crewon.project-conversations.")
@@ -675,14 +700,18 @@ export async function createDesktopPluginRuntime(
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),
       bindProjectConversations: (threads) =>
         conversations?.bindThreads(threads),
+      startProjectTextPlans: () => conversations?.textPlans()?.start(),
+      consumeProjectTextPlanRunEvents: (events) =>
+        conversations?.textPlans()?.consumeRunEvents(events) ??
+        Promise.resolve(),
       close: () => {
         if (closing !== null) return closing;
         closed = true;
         deferredServices?.close();
         authority.withdraw();
         return (closing = closeAll([
-          () => taskRuntime?.close(),
           () => conversations?.close(),
+          () => taskRuntime?.close(),
           () => Promise.allSettled([...physical]),
           () => recovery?.close(),
           () => projectUi?.close(),

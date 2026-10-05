@@ -44,6 +44,7 @@ export function desktopProjectUiPublications(
         | "textUi"
         | "textRecovery"
         | "conversations"
+        | "textPlans"
         | "generationReadUi"
         | "selectionUi"
       >
@@ -55,6 +56,7 @@ export function desktopProjectUiPublications(
     projects?.textUi,
     projects?.textRecovery,
     projects?.conversations,
+    projects?.textPlans,
     projects?.generationReadUi,
     projects?.selectionUi,
   ];

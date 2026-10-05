@@ -18,6 +18,12 @@ const writes = new Set([
   "crewon.project-conversations.v1.refreshSource",
   "crewon.project-conversations.v1.setState",
   "crewon.project-conversations.v1.startStage",
+  "crewon.project-text-plans.v1.start",
+  "crewon.project-text-plans.v1.pause",
+  "crewon.project-text-plans.v1.resume",
+  "crewon.project-text-plans.v1.revoke",
+  "crewon.project-text-plans.v1.reviseRemaining",
+  "crewon.project-text-plans.v1.continue",
 ]);
 
 /** SDK cancellation ends UI waiting; the original Host invocation may still be open. */

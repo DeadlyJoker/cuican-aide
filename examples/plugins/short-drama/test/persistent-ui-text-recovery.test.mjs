@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { browser, fixture, settle } from "./ui.test-support.mjs";
 import { persistentProps } from "./persistent-ui.test-support.mjs";
 import { recoveryTextService } from "./text-recovery.test-support.mjs";
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
+import { deferred } from "./persistent-ui.test-support.mjs";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "17.0.0";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(`../dist/${version}/`, import.meta.url).pathname;
@@ -63,6 +64,41 @@ test("cold unresolved request restores full original draft and waits for explici
     assert.equal(service.intents.size, 0);
     assert.equal(service.acknowledgements.size, 1);
   } finally {
+    await f.dispose();
+  }
+});
+
+test("adoption remains disabled during the committed-view read before recovery acknowledgement and enables after the original acknowledgement", async () => {
+  const service = recoveryTextService(),
+    gate = deferred();
+  service.metadata.create("来信", "保留真实候选与采用边界。");
+  let hold = false;
+  const services = {
+    async invoke(action, input, options) {
+      if (hold && action === "crewon.project-texts.v1.getArtifact")
+        await gate.promise;
+      return service.services.invoke(action, input, options);
+    },
+  };
+  const f = await open(service, services);
+  try {
+    await outline(f);
+    hold = true;
+    await f.click(f.button("保存候选版本"));
+    assert.equal([...service.artifacts.values()][0].revisions.length, 1);
+    assert.equal(f.button("采用此版本").disabled, true);
+    assert.equal(service.writeCalls.length, 1);
+    gate.resolve();
+    await settle();
+    assert.equal(f.button("采用此版本").disabled, false);
+    await f.click(f.button("采用此版本"));
+    assert.equal(
+      [...service.artifacts.values()][0].artifact.selectedContentRevision,
+      1,
+    );
+    assert.equal(service.writeCalls.length, 2);
+  } finally {
+    gate.resolve();
     await f.dispose();
   }
 });

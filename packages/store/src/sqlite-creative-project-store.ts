@@ -1,3 +1,7 @@
+import {
+  beginSqlitePlanResult,
+  finishSqlitePlanResult,
+} from "./project-text-plan-tool.ts";
 import { assertSqliteProjectRunCommit } from "./creative-project-run-commit-sqlite.ts";
 import {
   projectRunCommitQualification,
@@ -248,7 +252,11 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, q);
-        return this.#receipt(identity);
+        const planResult = beginSqlitePlanResult(this.#database, q);
+        const result = this.#receipt(identity);
+        if (result !== null)
+          finishSqlitePlanResult(this.#database, planResult, result);
+        return result;
       },
       authority,
       q,
@@ -357,8 +365,15 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
           receipt: prepared.receipt,
           kind: prepared.kind,
         });
+        const planResult = beginSqlitePlanResult(
+          this.#database,
+          runQualification,
+        );
         const replay = this.#receipt(identity);
-        if (replay !== null) return replay;
+        if (replay !== null) {
+          finishSqlitePlanResult(this.#database, planResult, replay);
+          return replay;
+        }
         const current = this.#project(
           identity.owner,
           prepared.project.projectId,
@@ -414,6 +429,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
         }
         this.#assertCommitActive(authority);
         this.#saveReceipt(identity, result);
+        finishSqlitePlanResult(this.#database, planResult, result);
         return result;
       },
       authority,

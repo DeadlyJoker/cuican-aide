@@ -6,6 +6,7 @@ import {
 import type { PluginProfileScope } from "@crewon/domain";
 import { isProjectTextUiMutationAction } from "@crewon/contracts/project-texts-ui";
 import { isProjectTextRecoveryAction } from "@crewon/contracts/project-text-recovery";
+import { isProjectTextPlanAction } from "./plugin-project-text-plan-action-context.ts";
 import { ApplicationError } from "./application-error.ts";
 import {
   PluginUiMountBinding,
@@ -389,6 +390,11 @@ export class PluginUiApplicationService {
             })
           : undefined,
         isProjectTextRecoveryAction(command.action)
+          ? Object.freeze({
+              assertCurrent: () => this.#transactionFence(actor, binding),
+            })
+          : undefined,
+        isProjectTextPlanAction(command.action)
           ? Object.freeze({
               assertCurrent: () => this.#transactionFence(actor, binding),
             })

@@ -342,6 +342,9 @@ export class ProjectTextApplicationService {
           ...(authority?.runTransaction === undefined
             ? {}
             : { runTransaction: authority.runTransaction }),
+          ...(authority?.planTransaction === undefined
+            ? {}
+            : { planTransaction: authority.planTransaction }),
         }),
       });
       let prepared: Readonly<{

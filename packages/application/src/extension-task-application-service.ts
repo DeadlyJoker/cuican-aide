@@ -1,5 +1,11 @@
 import { loadExtensionTaskConfiguration } from "./extension-task-configuration.ts";
 import {
+  commitProjectTextPlanTurnFromHost,
+  projectTextPlanTaskAdmission,
+  assertSavedProjectTextPlanTask,
+} from "./extension-task-project-text-plan-support.ts";
+import type { ProjectTextPlanTurnCommitAuthority } from "./project-text-plan-store-port.ts";
+import {
   authorizeExtensionTaskThread,
   authorizeExtensionTaskQuerySource,
 } from "./extension-task-authorization.ts";
@@ -209,6 +215,34 @@ export class ExtensionTaskApplicationService {
     );
   }
 
+  /** Independent delegated plan path; the original conversation/UI request shape is unchanged. */
+  async createProjectTextPlanTurnFromHost(
+    actor: ActorContext,
+    command: CreateExtensionTaskCommand,
+    task: ProjectConversationTask | ProjectConversationTaskPreparation,
+    planAuthority: ProjectTextPlanTurnCommitAuthority,
+  ) {
+    return commitProjectTextPlanTurnFromHost({
+      actor,
+      command,
+      task,
+      planAuthority,
+      extensions: this.#dependencies.extensions,
+      digester: this.#dependencies.digester,
+      create: (captured, onStage, q) =>
+        this.#createTask(
+          actor,
+          command,
+          captured.authority.pin,
+          null,
+          null,
+          captured,
+          onStage,
+          q,
+        ),
+    });
+  }
+
   createPublishedProjectQueryTaskFromPlugin(
     input: CreatePublishedProjectQueryTaskInput,
   ) {
@@ -268,8 +302,13 @@ export class ExtensionTaskApplicationService {
     onProjectStage?: (
       stage: import("@crewon/domain").ProjectStageRunAdmission,
     ) => void,
+    projectTextPlan: ProjectTextPlanTurnCommitAuthority | null = null,
   ) {
     return extensionUseCase(async () => {
+      if (projectTextPlan !== null) {
+        await projectTextPlan.authority.assertCurrent();
+        projectTextPlan.authority.assertActive();
+      }
       if (conversation !== null) {
         await conversation.authority.assertCurrent();
         conversation.authority.assertActive();
@@ -467,6 +506,12 @@ export class ExtensionTaskApplicationService {
           );
           onProjectStage?.(savedStage);
         }
+        if (projectTextPlan !== null)
+          assertSavedProjectTextPlanTask(
+            projectTextPlan,
+            previous,
+            this.#dependencies.digester,
+          );
         return previous;
       }
       if (pin !== null)
@@ -697,6 +742,17 @@ export class ExtensionTaskApplicationService {
                 : { projectStageAdmission: stageAdmission },
             )
           : undefined;
+      const planAdmission =
+        projectTextPlan === null
+          ? undefined
+          : projectTextPlanTaskAdmission(
+              projectTextPlan,
+              stageAdmission!,
+              binding,
+              command.idempotencyKey,
+              event.occurredAt,
+              this.#dependencies.digester,
+            );
       if (creditAdmission !== undefined || unmeteredAuthority !== null) {
         // A price-policy await cannot retain permission that was revoked in the meantime.
         await authorizeExtension(
@@ -726,6 +782,9 @@ export class ExtensionTaskApplicationService {
           : {
               ...financialOptions,
               projectStageAuthority: conversation.authority,
+              ...(projectTextPlan === null
+                ? {}
+                : { projectTextPlanAuthority: projectTextPlan }),
             };
       const commitInput = {
         turn,
@@ -735,6 +794,9 @@ export class ExtensionTaskApplicationService {
         ...(stageAdmission === undefined
           ? {}
           : { projectStageAdmission: stageAdmission }),
+        ...(planAdmission === undefined
+          ? {}
+          : { projectTextPlanAdmission: planAdmission }),
         ...(generation === null
           ? {}
           : { projectGeneration: generation.reference }),
@@ -751,6 +813,10 @@ export class ExtensionTaskApplicationService {
       if (pin !== null && commitAuthority !== null)
         await commitAuthority.assertCurrent({ actor, pin });
       if (generation !== null) await generation.assertDispatchCurrent();
+      if (projectTextPlan !== null) {
+        await projectTextPlan.authority.assertCurrent();
+        projectTextPlan.authority.assertActive();
+      }
       if (conversation !== null) {
         await conversation.authority.assertCurrent();
         conversation.authority.assertActive();

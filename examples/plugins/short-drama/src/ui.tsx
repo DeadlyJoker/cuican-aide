@@ -33,6 +33,9 @@ import {
   ProjectConversationController,
   type CreationWorkspace,
 } from "./workbench/ProjectConversationController";
+import { createPluginProjectTextPlansClient } from "./project-text-plans-service";
+import { projectTextPlansCodec } from "./project-text-plans-codec.mjs";
+import { ProjectTextPlanController } from "./workbench/ProjectTextPlanController";
 
 const contributionId = "workbench";
 
@@ -157,10 +160,12 @@ export default defineUiPlugin({
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
     let conversations: ProjectConversationController | null = null;
+    let plans: ProjectTextPlanController | null = null;
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
       conversations?.refreshWriteActivity();
+      plans?.refreshWriteActivity();
     });
     const clients = writes.services;
     controller = preview
@@ -194,6 +199,15 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    plans = preview
+      ? null
+      : new ProjectTextPlanController({
+          client: createPluginProjectTextPlansClient(
+            clients,
+            projectTextPlansCodec,
+          ),
+          physicalWritesPending: () => writes.pending,
+        });
     let disposed = false;
     let appliedTokens: string[] = [];
     function update(next: PluginUiProps) {
@@ -220,6 +234,7 @@ export default defineUiPlugin({
       conversations?.setWorkspace(creationWorkspace(next.data));
       conversations?.setReady(ready);
       texts?.setReady(ready);
+      plans?.setReady(ready);
       if (!ready) controller?.setReady(false);
       controller?.setRecoveryContexts({
         selection: selectionContext(next.data),
@@ -229,11 +244,12 @@ export default defineUiPlugin({
       if (ready) controller?.setReady(true);
       flushSync(() =>
         reactRoot.render(
-          controller && texts && conversations ? (
+          controller && texts && conversations && plans ? (
             <ShortDramaPersistentWorkbench
               controller={controller}
               texts={texts}
               conversations={conversations}
+              plans={plans}
             />
           ) : (
             <ShortDramaWorkbenchPreview
@@ -250,6 +266,7 @@ export default defineUiPlugin({
       controller?.dispose();
       texts?.dispose();
       conversations?.dispose();
+      plans?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -266,6 +283,7 @@ export default defineUiPlugin({
         controller?.dispose();
         texts?.dispose();
         conversations?.dispose();
+        plans?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

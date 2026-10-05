@@ -1,4 +1,5 @@
 import { captureProjectTextUiCommitTransaction } from "./project-text-ui-commit-authority.ts";
+import { captureProjectTextPlanSelectionCommitAuthority } from "./project-text-plan-authority.ts";
 import type {
   CreativeProjectCommitAuthority,
   CreativeProjectCommitOptions,
@@ -49,7 +50,10 @@ export function captureCreativeProjectTransactionAuthority(
 /** Capture trusted callbacks without evaluating accessors or mutating the caller. */
 export function captureCreativeProjectCommitAuthority(
   options: CreativeProjectCommitOptions | undefined,
-  mode: Readonly<{ allowTextUiTransaction: boolean }> = {
+  mode: Readonly<{
+    allowTextUiTransaction: boolean;
+    allowPlanTransaction?: boolean;
+  }> = {
     allowTextUiTransaction: false,
   },
 ): CreativeProjectCommitAuthority | undefined {
@@ -63,6 +67,7 @@ export function captureCreativeProjectCommitAuthority(
     "transaction",
     "runTransaction",
     "textUiTransaction",
+    "planTransaction",
   ]);
   if (
     typeof methods.assertCurrent !== "function" ||
@@ -74,13 +79,23 @@ export function captureCreativeProjectCommitAuthority(
       methods.transaction,
       methods.runTransaction,
       methods.textUiTransaction,
+      methods.planTransaction,
     ].filter((value) => value !== undefined).length > 1 ||
-    (methods.textUiTransaction !== undefined && !mode.allowTextUiTransaction)
+    (methods.textUiTransaction !== undefined && !mode.allowTextUiTransaction) ||
+    (methods.planTransaction !== undefined &&
+      mode.allowPlanTransaction !== true)
   )
     invalid();
   return Object.freeze({
     assertCurrent: methods.assertCurrent.bind(authority),
     assertActive: methods.assertActive.bind(authority),
+    ...(methods.planTransaction === undefined
+      ? {}
+      : {
+          planTransaction: captureProjectTextPlanSelectionCommitAuthority(
+            methods.planTransaction,
+          ),
+        }),
     ...(methods.textUiTransaction === undefined
       ? {}
       : {
@@ -191,6 +206,10 @@ export async function assertCreativeProjectCommitCurrent(
 export async function assertCreativeProjectCommitTransactionCurrent(
   authority: CreativeProjectCommitAuthority | undefined,
 ): Promise<void> {
+  if (authority?.planTransaction !== undefined) {
+    await authority.planTransaction.assertCurrent();
+    return;
+  }
   if (authority?.textUiTransaction !== undefined) {
     await authority.textUiTransaction.assertCurrent();
     return;

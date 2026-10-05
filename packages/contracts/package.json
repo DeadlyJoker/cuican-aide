@@ -12,7 +12,8 @@
     "./project-texts-ui": "./src/project-texts-ui.ts",
     "./project-text-recovery": "./src/project-text-recovery.ts",
     "./project-conversations": "./src/project-conversations.ts",
-    "./project-context": "./src/project-context.ts"
+    "./project-context": "./src/project-context.ts",
+    "./project-text-plans": "./src/project-text-plans.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

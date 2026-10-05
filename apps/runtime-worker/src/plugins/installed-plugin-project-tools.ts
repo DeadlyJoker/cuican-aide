@@ -18,6 +18,7 @@ import {
   type PluginTaskAdmission,
   type PluginProfileScope,
   type ProjectStageRunAdmission,
+  type ProjectTextPlanRunAdmission,
 } from "@crewon/domain";
 import type {
   PluginActivationCandidate,
@@ -37,6 +38,7 @@ export function createInstalledPluginProjectToolsOwner(
     dependencies: InstalledPluginProjectToolsDependencies | undefined;
     context: PluginToolRuntimeContext;
     stageAdmission?: ProjectStageRunAdmission | null;
+    planAdmission?: ProjectTextPlanRunAdmission | null;
     admission: PluginTaskAdmission;
     scope: PluginProfileScope;
     tools: ExtensionManifest["tools"];
@@ -55,6 +57,7 @@ export function createInstalledPluginProjectToolsOwner(
     ...dependencies,
     context: input.context,
     stageAdmission: input.stageAdmission,
+    planAdmission: input.planAdmission,
     admission: input.admission,
     tools: input.tools,
     authorizeCurrent: async (operation) => {

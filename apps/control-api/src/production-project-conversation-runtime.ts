@@ -7,6 +7,7 @@ import {
 } from "@crewon/application";
 import {
   appendProjectConversationUiServiceAvailability,
+  appendProjectTextPlanUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import { PostgresDomainStore } from "@crewon/store";
@@ -31,6 +32,10 @@ import type { ProductionPluginSourceRegistry } from "./production-plugin-source-
 import { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { UuidV7ApplicationIdGenerator } from "./standalone-adapters.ts";
 import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
+import {
+  createProjectTextPlanPluginUiRuntime,
+  type ProjectTextPlanPluginUiRuntime,
+} from "./project-text-plan-plugin-ui-composition.ts";
 
 /** Independent approved metadata; real task Core lends execution authority only when start is requested. */
 export function createProductionProjectConversationRuntime(
@@ -70,7 +75,8 @@ export function createProductionProjectConversationRuntime(
   });
   let owner: ProjectConversationControlOwner | undefined,
     closed = false;
-  const hostUiServices = appendProjectConversationUiServiceAvailability({
+  let plans: ProjectTextPlanPluginUiRuntime | undefined;
+  const conversationServices = appendProjectConversationUiServiceAvailability({
     conversations: {
       isAvailable: (request) =>
         !closed &&
@@ -88,9 +94,37 @@ export function createProductionProjectConversationRuntime(
     },
     ...(input.fallback === undefined ? {} : { fallback: input.fallback }),
   });
+  const planFoundation = input.projects?.planFoundation;
+  if (planFoundation !== undefined)
+    assertCreativeProjectPluginPublications(
+      planFoundation.configuration,
+      input.ui.publications,
+    );
+  const hostUiServices =
+    planFoundation === undefined
+      ? conversationServices
+      : appendProjectTextPlanUiServiceAvailability({
+          fallback: conversationServices,
+          plans: {
+            isAvailable: (request) =>
+              !closed &&
+              planFoundation.configuration.publications.some(
+                (p) =>
+                  p.pluginId === request.candidate.descriptor.pluginId &&
+                  p.packageDigest === request.candidate.packageDigest &&
+                  request.candidate.descriptor.contributions.some(
+                    (c) =>
+                      c.id === p.contributionId &&
+                      c.kind === "module" &&
+                      c.slot === "main.content",
+                  ),
+              ),
+          },
+        });
   return Object.freeze({
     hostUiServices,
     owner: () => owner,
+    textPlans: () => plans,
     bindThreads(threads: ThreadApplicationService) {
       if (closed) throw new Error("project_conversation_unavailable");
       if (owner !== undefined) return owner;
@@ -152,10 +186,25 @@ export function createProductionProjectConversationRuntime(
           requests.currentSignal().throwIfAborted();
         },
       });
+      if (planFoundation !== undefined) {
+        if (input.projects?.textService === undefined)
+          throw new Error("project_text_plan_text_commands_required");
+        plans = createProjectTextPlanPluginUiRuntime({
+          foundation: planFoundation,
+          conversations: owner,
+          requests,
+          store: input.store,
+          tasks: input.tasks,
+          textCommands: input.projects.textService,
+          clock: input.clock,
+          digester: input.digester,
+        });
+      }
       return owner;
     },
     close: async () => {
       closed = true;
+      await plans?.close();
       await Promise.allSettled([owner?.close(), metadataRequests.close()]);
     },
   });

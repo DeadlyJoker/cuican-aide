@@ -1,3 +1,13 @@
+import { observePostgresPlanManualSelection } from "./project-text-plan-manual-selection.ts";
+import {
+  planSelectionQualification,
+  beginPostgresPlanSelection,
+  finishPostgresPlanSelection,
+} from "./project-text-plan-selection.ts";
+import {
+  beginPostgresPlanResult,
+  finishPostgresPlanResult,
+} from "./project-text-plan-tool.ts";
 import {
   projectTextUiCommitQualification,
   assertPostgresProjectTextUiCommit,
@@ -172,6 +182,13 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       identity.kind,
       identity.receipt,
     );
+
+    const planSelection = planSelectionQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(client, this.#schema, q);
@@ -182,7 +199,40 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           textUi,
           identity,
         );
+        const planResult = await beginPostgresPlanResult(
+          client,
+          this.#schema,
+          q,
+        );
+        const selectionCheckpoint = await beginPostgresPlanSelection(
+          client,
+          this.#schema,
+          planSelection,
+        );
         const result = await this.#receipt(client, identity);
+        if (result !== null) {
+          await finishPostgresPlanResult(
+            client,
+            this.#schema,
+            planResult,
+            result,
+          );
+          await finishPostgresPlanSelection(
+            client,
+            this.#schema,
+            selectionCheckpoint,
+            result,
+          );
+          if (planSelection === undefined)
+            await observePostgresPlanManualSelection(
+              client,
+              this.#schema,
+              identity.actor,
+              identity.receipt,
+              result,
+              textUi,
+            );
+        }
         if (result !== null)
           await finishPostgresTextIntentCommit(client, this.#schema, intent);
         return result;
@@ -230,6 +280,13 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       prepared.receipt,
       prepared,
     );
+
+    const planSelection = planSelectionQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(
@@ -259,8 +316,39 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           textUi,
           identity,
         );
+        const planResult = await beginPostgresPlanResult(
+          client,
+          this.#schema,
+          runQualification,
+        );
+        const selectionCheckpoint = await beginPostgresPlanSelection(
+          client,
+          this.#schema,
+          planSelection,
+        );
         const replay = await this.#receipt(client, identity);
         if (replay !== null) {
+          await finishPostgresPlanResult(
+            client,
+            this.#schema,
+            planResult,
+            replay,
+          );
+          await finishPostgresPlanSelection(
+            client,
+            this.#schema,
+            selectionCheckpoint,
+            replay,
+          );
+          if (planSelection === undefined)
+            await observePostgresPlanManualSelection(
+              client,
+              this.#schema,
+              identity.actor,
+              identity.receipt,
+              replay,
+              textUi,
+            );
           await finishPostgresTextIntentCommit(client, this.#schema, intent);
           return replay;
         }
@@ -396,6 +484,27 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           ],
         );
         await finishPostgresTextIntentCommit(client, this.#schema, intent);
+        await finishPostgresPlanResult(
+          client,
+          this.#schema,
+          planResult,
+          result,
+        );
+        await finishPostgresPlanSelection(
+          client,
+          this.#schema,
+          selectionCheckpoint,
+          result,
+        );
+        if (planSelection === undefined)
+          await observePostgresPlanManualSelection(
+            client,
+            this.#schema,
+            identity.actor,
+            identity.receipt,
+            result,
+            textUi,
+          );
         return result;
       },
       authority,
@@ -531,7 +640,10 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     try {
       await client.query("BEGIN");
       const result = await body(client);
-      if (authority?.textUiTransaction !== undefined)
+      if (authority?.planTransaction !== undefined) {
+        await authority.planTransaction.assertCurrent();
+        await authority.planTransaction.authority.assertTransactionCurrent();
+      } else if (authority?.textUiTransaction !== undefined)
         await authority.textUiTransaction.assertCurrent();
       else if (authority?.runTransaction !== undefined)
         await authority.runTransaction.assertCurrent();

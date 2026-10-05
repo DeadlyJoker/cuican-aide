@@ -1,4 +1,12 @@
 import {
+  captureProjectTextPlanTurn,
+  beginSqlitePlanTurn,
+  finishSqlitePlanTurn,
+  assertPlanTurnCurrent,
+} from "./project-text-plan-turn.ts";
+import { loadSqlitePlanAdmission } from "./project-text-plan-markers.ts";
+import { planEqual } from "./project-text-plan-records.ts";
+import {
   captureProjectStageTurn,
   assertSqliteProjectStage,
   assertStageReplay,
@@ -117,6 +125,10 @@ export async function commitSqliteExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const capturedPlan = captureProjectTextPlanTurn(input, options);
+  const plan = capturedPlan.plan;
+  options = capturedPlan.options;
+  await assertPlanTurnCurrent(plan);
   const capturedStage = captureProjectStageTurn(input, options);
   const stage = capturedStage.stage;
   options = capturedStage.options;
@@ -188,6 +200,11 @@ export async function commitSqliteExtensionTurn(
         admitSqliteProjectQueryPublication(host.database, projectQuery);
       const replay = host.receipt(binding, "task", input.receipt);
       assertSqliteProjectStage(host.database, stage, input, replay === null);
+      const planCheckpoint = beginSqlitePlanTurn(
+        host.database,
+        plan,
+        replay !== null,
+      );
       if (replay !== null) {
         const saved = host.verifyCreditReceipt(
           parseExtensionTurnReceipt(replay, binding, input.receipt),
@@ -236,7 +253,15 @@ export async function commitSqliteExtensionTurn(
           stage,
           loadSqliteStageIfAvailable(host.database, saved.binding),
         );
-        return saved;
+        const savedPlan = loadSqlitePlanAdmission(host.database, saved.binding);
+        planEqual(
+          plan?.admission ?? null,
+          savedPlan,
+          "project_text_plan_admission_conflict",
+        );
+        return savedPlan === null
+          ? saved
+          : { ...saved, projectTextPlanAdmission: savedPlan };
       }
       if (prepared?.publication !== undefined)
         admitSqliteProjectGenerationPublication(
@@ -315,6 +340,7 @@ export async function commitSqliteExtensionTurn(
           host.database,
           pluginAdmission,
           stage?.admission.contentDigest,
+          plan?.admission.contentDigest,
         );
       if (unmetered.admission !== undefined)
         saveSqlitePluginTaskUnmeteredAdmission(
@@ -344,11 +370,15 @@ export async function commitSqliteExtensionTurn(
             "INSERT INTO project_stage_run_admissions VALUES(?,?,?,?,?,?,?)",
           )
           .run(...stageValues(stage.admission));
-      return result;
+      finishSqlitePlanTurn(host.database, plan, planCheckpoint);
+      return plan === null
+        ? result
+        : { ...result, projectTextPlanAdmission: plan.admission };
     },
     {
       beforeCommit: () => {
         stage?.authority.assertActive();
+        plan?.q.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();
           unmetered.authority.assertActive();

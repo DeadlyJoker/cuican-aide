@@ -1,3 +1,4 @@
+import { loadPostgresPlanAdmission } from "./project-text-plan-markers.ts";
 import {
   migratePostgresUnmeteredWithPool,
   loadPostgresPluginTaskUnmeteredAdmission,
@@ -87,7 +88,10 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
-  readonly projectStageAdmissionVersion = "crewon.project-stage-run-admission.v1" as const;
+  readonly projectTextPlanAdmissionVersion =
+    "crewon.project-text-plan-run-admission.v1" as const;
+  readonly projectStageAdmissionVersion =
+    "crewon.project-stage-run-admission.v1" as const;
   readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
   readonly pluginQueryAdmissionVersion =
     "crewon.plugin-query-task-admission.v1" as const;
@@ -479,8 +483,21 @@ export class PostgresExtensionStore implements ExtensionStore {
     const result = parseExtensionTaskReceipt(value, input, input.receipt);
     await this.#assertCreditLink(this.#pool, result.creditAdmission);
     await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
-    this.#host.assertOpen();
-    return result;
+    const client = await this.#pool.connect();
+    try {
+      this.#host.assertOpen();
+      const projectTextPlanAdmission = await loadPostgresPlanAdmission(
+        client,
+        this.#schemaName,
+        { tenantId: result.binding.tenantId, runId: result.binding.runId },
+      );
+      this.#host.assertOpen();
+      return projectTextPlanAdmission === null
+        ? result
+        : { ...result, projectTextPlanAdmission };
+    } finally {
+      client.release();
+    }
   }
 
   async commitExtensionRun(input: CommitExtensionRunInput) {
@@ -534,8 +551,21 @@ export class PostgresExtensionStore implements ExtensionStore {
     const result = parseExtensionTurnReceipt(value, input, input.receipt);
     await this.#assertCreditLink(this.#pool, result.creditAdmission);
     await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
-    this.#host.assertOpen();
-    return result;
+    const client = await this.#pool.connect();
+    try {
+      this.#host.assertOpen();
+      const projectTextPlanAdmission = await loadPostgresPlanAdmission(
+        client,
+        this.#schemaName,
+        { tenantId: result.binding.tenantId, runId: result.binding.runId },
+      );
+      this.#host.assertOpen();
+      return projectTextPlanAdmission === null
+        ? result
+        : { ...result, projectTextPlanAdmission };
+    } finally {
+      client.release();
+    }
   }
 
   async loadExtensionCreditAdmission(input: ExtensionRunLocator) {

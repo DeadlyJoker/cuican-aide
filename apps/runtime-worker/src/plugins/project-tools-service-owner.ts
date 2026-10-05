@@ -22,6 +22,9 @@ import {
   type ExtensionManifest,
   type PluginTaskAdmission,
   type ProjectStageRunAdmission,
+  type ProjectTextPlanRunAdmission,
+  parseProjectTextPlanRunAdmission,
+  assertProjectTextPlanOutlineEpisodes,
   parseProjectStageRunAdmission,
   assertProjectStageToolRequest,
 } from "@crewon/domain";
@@ -75,6 +78,7 @@ export type ProjectToolsServiceOwnerDependencies = Readonly<{
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
   stageAdmission?: ProjectStageRunAdmission | null;
+  planAdmission?: ProjectTextPlanRunAdmission | null;
   tools: ExtensionManifest["tools"];
   projects: CreativeProjectApplicationService;
   texts: ProjectTextApplicationService;
@@ -117,6 +121,7 @@ export class ProjectToolsServiceOwner {
   readonly #dependencies: ProjectToolsServiceOwnerDependencies;
   readonly #admission: PluginTaskAdmission;
   readonly #stage: ProjectStageRunAdmission | null;
+  readonly #plan: ProjectTextPlanRunAdmission | null;
   readonly #abort = new AbortController();
   readonly #invocations = new WeakMap<object, Invocation>();
   readonly #active = new Set<Invocation>();
@@ -127,6 +132,13 @@ export class ProjectToolsServiceOwner {
   constructor(dependencies: ProjectToolsServiceOwnerDependencies) {
     this.#dependencies = dependencies;
     this.#admission = parsePluginTaskAdmission(dependencies.admission);
+    this.#plan =
+      dependencies.planAdmission == null
+        ? null
+        : parseProjectTextPlanRunAdmission(
+            dependencies.planAdmission,
+            digester,
+          );
     this.#stage =
       dependencies.stageAdmission == null
         ? null
@@ -160,6 +172,40 @@ export class ProjectToolsServiceOwner {
           digester.sha256(extensionCanonicalJson(this.#admission)))
     )
       denied();
+    if (this.#plan !== null) {
+      const p = this.#plan,
+        s = this.#stage;
+      if (
+        s === null ||
+        p.stageAdmissionDigest !== s.contentDigest ||
+        p.extensionBindingDigest !== dependencies.context.run.bindingDigest ||
+        p.inputDigest !== dependencies.context.run.inputDigest ||
+        p.configurationRevision !==
+          dependencies.context.configuration.revision ||
+        p.configurationDigest !==
+          dependencies.context.configuration.contentDigest ||
+        p.idempotencyKey !== this.#admission.idempotencyKey ||
+        p.kind !== s.stage.kind ||
+        p.episodeId !==
+          (s.stage.kind === "script" ? s.stage.episodeId : null) ||
+        extensionCanonicalJson(p.actor) !== extensionCanonicalJson(s.actor) ||
+        extensionCanonicalJson(p.installation) !==
+          extensionCanonicalJson(s.installation) ||
+        extensionCanonicalJson(p.sources) !==
+          extensionCanonicalJson(s.sources) ||
+        (
+          [
+            "runId",
+            "threadId",
+            "projectId",
+            "bindingId",
+            "bindingRevision",
+            "workspaceId",
+          ] as const
+        ).some((key) => p[key] !== s[key])
+      )
+        denied();
+    }
     if (
       dependencies.context.run.source !== null ||
       this.#admission.runId !== dependencies.context.run.runId ||
@@ -537,10 +583,20 @@ export class ProjectToolsServiceOwner {
           ...(this.#stage === null
             ? {}
             : { projectStageAdmission: this.#stage }),
+          ...(this.#plan === null
+            ? {}
+            : { projectTextPlanAdmission: this.#plan }),
           selection,
           package: pkg,
           assertCurrent: assertTransactionCurrent,
         });
+      if (this.#plan !== null && method === "saveOutlineCandidate")
+        assertProjectTextPlanOutlineEpisodes(
+          this.#plan,
+          (
+            request as ProjectToolsRequests["saveOutlineCandidate"]
+          ).content.episodes.map((episode) => episode.episodeId),
+        );
       key = deriveProjectToolMutationIdempotencyKey(transaction, digester);
       authority = {
         runTransaction: transaction,

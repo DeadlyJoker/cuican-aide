@@ -1,3 +1,4 @@
+import type { RunLifecycleEvent } from "@crewon/domain";
 import type {
   OutboxClaim,
   OutboxMessage,
@@ -41,6 +42,9 @@ export class OutboxDispatcher {
   readonly #scanIntervalMs: number | null;
   readonly #maxBatchSize: number;
   readonly #retention: OutboxRetentionMaintenance;
+  readonly #consumeRunEvents:
+    | ((events: readonly RunLifecycleEvent[]) => Promise<void>)
+    | undefined;
   #timer: NodeJS.Timeout | null = null;
   #drain: Promise<void> | null = null;
   #closed = false;
@@ -52,10 +56,17 @@ export class OutboxDispatcher {
   #closeDeadlineExceeded = false;
 
   constructor(
-    dependencies: { store: RunStore; eventHub: RunEventHub },
+    dependencies: {
+      store: RunStore;
+      eventHub: RunEventHub;
+      consumeRunEvents?: (
+        events: readonly RunLifecycleEvent[],
+      ) => Promise<void>;
+    },
     config: OutboxDispatcherConfig,
   ) {
     this.#store = dependencies.store;
+    this.#consumeRunEvents = dependencies.consumeRunEvents?.bind(dependencies);
     this.#eventHub = dependencies.eventHub;
     this.#ownerId = requireString(config.ownerId, "outbox_owner_id_invalid");
     this.#nextLeaseId = config.nextLeaseId;
@@ -260,6 +271,8 @@ export class OutboxDispatcher {
       ) {
         throw new Error("outbox_event_reference_invalid");
       }
+      await this.#consumeRunEvents?.(events);
+      if (this.#closed) return 0;
       for (const event of events) {
         if (this.#closed) return 0;
         this.#eventHub.publish([event]);
@@ -283,6 +296,8 @@ export class OutboxDispatcher {
     ) {
       throw new Error("outbox_event_reference_invalid");
     }
+    await this.#consumeRunEvents?.([event]);
+    if (this.#closed) return 0;
     this.#eventHub.publish([event]);
     return 1;
   }

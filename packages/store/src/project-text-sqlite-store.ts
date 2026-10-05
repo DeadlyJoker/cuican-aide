@@ -1,3 +1,13 @@
+import { observeSqlitePlanManualSelection } from "./project-text-plan-manual-selection.ts";
+import {
+  planSelectionQualification,
+  beginSqlitePlanSelection,
+  finishSqlitePlanSelection,
+} from "./project-text-plan-selection.ts";
+import {
+  beginSqlitePlanResult,
+  finishSqlitePlanResult,
+} from "./project-text-plan-tool.ts";
 import {
   projectTextUiCommitQualification,
   assertSqliteProjectTextUiCommit,
@@ -157,11 +167,23 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       identity.kind,
       identity.receipt,
     );
+
+    const planSelection = planSelectionQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
     if (authority?.runTransaction !== undefined)
       await authority.runTransaction.assertCurrent();
     if (authority?.textUiTransaction !== undefined)
       await authority.textUiTransaction.assertCurrent();
+    if (authority?.planTransaction !== undefined) {
+      await authority.planTransaction.assertCurrent();
+      await authority.planTransaction.authority.assertTransactionCurrent();
+      authority.planTransaction.authority.assertActive();
+    }
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, q);
@@ -171,7 +193,28 @@ export class SqliteProjectTextStore implements ProjectTextStore {
           textUi,
           identity,
         );
+        const planResult = beginSqlitePlanResult(this.#database, q);
+        const selectionCheckpoint = beginSqlitePlanSelection(
+          this.#database,
+          planSelection,
+        );
         const result = this.#receipt(identity);
+        if (result !== null) {
+          finishSqlitePlanResult(this.#database, planResult, result);
+          finishSqlitePlanSelection(
+            this.#database,
+            selectionCheckpoint,
+            result,
+          );
+          if (planSelection === undefined)
+            observeSqlitePlanManualSelection(
+              this.#database,
+              identity.actor,
+              identity.receipt,
+              result,
+              textUi,
+            );
+        }
         if (result !== null)
           finishSqliteTextIntentCommit(this.#database, intent);
         return result;
@@ -219,13 +262,24 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       prepared.receipt,
       prepared,
     );
-    // Never retain SQLite's writer lock across an asynchronous external authority check.
+
+    const planSelection = planSelectionQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    ); // Never retain SQLite's writer lock across an asynchronous external authority check.
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);
     if (authority?.runTransaction !== undefined)
       await authority.runTransaction.assertCurrent();
     if (authority?.textUiTransaction !== undefined)
       await authority.textUiTransaction.assertCurrent();
+    if (authority?.planTransaction !== undefined) {
+      await authority.planTransaction.assertCurrent();
+      await authority.planTransaction.authority.assertTransactionCurrent();
+      authority.planTransaction.authority.assertActive();
+    }
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, runQualification);
@@ -240,8 +294,30 @@ export class SqliteProjectTextStore implements ProjectTextStore {
           textUi,
           identity,
         );
+        const planResult = beginSqlitePlanResult(
+          this.#database,
+          runQualification,
+        );
+        const selectionCheckpoint = beginSqlitePlanSelection(
+          this.#database,
+          planSelection,
+        );
         const replay = this.#receipt(identity);
         if (replay !== null) {
+          finishSqlitePlanResult(this.#database, planResult, replay);
+          finishSqlitePlanSelection(
+            this.#database,
+            selectionCheckpoint,
+            replay,
+          );
+          if (planSelection === undefined)
+            observeSqlitePlanManualSelection(
+              this.#database,
+              identity.actor,
+              identity.receipt,
+              replay,
+              textUi,
+            );
           finishSqliteTextIntentCommit(this.#database, intent);
           return replay;
         }
@@ -360,6 +436,16 @@ export class SqliteProjectTextStore implements ProjectTextStore {
           ],
         );
         finishSqliteTextIntentCommit(this.#database, intent);
+        finishSqlitePlanResult(this.#database, planResult, result);
+        finishSqlitePlanSelection(this.#database, selectionCheckpoint, result);
+        if (planSelection === undefined)
+          observeSqlitePlanManualSelection(
+            this.#database,
+            identity.actor,
+            identity.receipt,
+            result,
+            textUi,
+          );
         return result;
       },
       authority,
@@ -466,6 +552,7 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       const result = body();
       assertSqliteProjectRunCommit(this.#database, runQualification);
       assertSqliteProjectTextUiCommit(this.#database, textUi);
+      authority?.planTransaction?.authority.assertActive();
       this.#active(authority);
       this.#database.exec("COMMIT");
       return result;

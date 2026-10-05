@@ -1,3 +1,4 @@
+import { PostgresProjectTextPlanStore } from "./project-text-plan-postgres-store.ts";
 import { PostgresProjectConversationStore } from "./project-conversation-postgres-store.ts";
 import { PostgresProjectConceptSelectionStore } from "./postgres-project-concept-selection-store.ts";
 import { PostgresPluginUiIntentJournalStore } from "./postgres-plugin-ui-intent-journal-store.ts";
@@ -247,13 +248,23 @@ export class PostgresDomainStore
   }
 
   /** Same borrowed parent pool; conversation schema migration remains explicit. */
+  projectTextPlanStore(): PostgresProjectTextPlanStore {
+    this.assertOpen();
+    return new PostgresProjectTextPlanStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
   projectConversationStore(): PostgresProjectConversationStore {
     this.assertOpen();
     return new PostgresProjectConversationStore({
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
-      commitThreadWithin: (client, input) => this.commitThreadWithin(client, input),
+      commitThreadWithin: (client, input) =>
+        this.commitThreadWithin(client, input),
       loadThreadWithin: (client, tenantId, threadId) =>
         this.loadThreadWithin(client, { tenantId, threadId }, true),
     });

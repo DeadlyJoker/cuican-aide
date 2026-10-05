@@ -7,6 +7,7 @@ import {
 } from "@crewon/application";
 import {
   appendProjectConversationUiServiceAvailability,
+  appendProjectTextPlanUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import type { SqliteRunStore } from "@crewon/store";
@@ -24,6 +25,10 @@ import {
 } from "./desktop-native-plugin-control-environment.ts";
 import { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { UuidV7ApplicationIdGenerator } from "./standalone-adapters.ts";
+import {
+  createProjectTextPlanPluginUiRuntime,
+  type ProjectTextPlanPluginUiRuntime,
+} from "./project-text-plan-plugin-ui-composition.ts";
 
 /** The formal composer lends its real Thread service after shared startup, before HTTP starts. */
 export function createDesktopProjectConversationRuntime(
@@ -50,7 +55,8 @@ export function createDesktopProjectConversationRuntime(
   let owner: ProjectConversationControlOwner | undefined;
   let originalThreads: ThreadApplicationService | undefined;
   let closed = false;
-  const hostUiServices = appendProjectConversationUiServiceAvailability({
+  let plans: ProjectTextPlanPluginUiRuntime | undefined;
+  const conversationServices = appendProjectConversationUiServiceAvailability({
     conversations: {
       isAvailable: (request) => {
         if (closed || owner === undefined) return false;
@@ -70,9 +76,33 @@ export function createDesktopProjectConversationRuntime(
     },
     ...(input.fallback === undefined ? {} : { fallback: input.fallback }),
   });
+  const planFoundation = input.projects?.planFoundation;
+  const hostUiServices =
+    planFoundation === undefined
+      ? conversationServices
+      : appendProjectTextPlanUiServiceAvailability({
+          fallback: conversationServices,
+          plans: {
+            isAvailable: (request) =>
+              !closed &&
+              plans !== undefined &&
+              planFoundation.configuration.publications.some(
+                (p) =>
+                  p.pluginId === request.candidate.descriptor.pluginId &&
+                  p.packageDigest === request.candidate.packageDigest &&
+                  request.candidate.descriptor.contributions.some(
+                    (c) =>
+                      c.id === p.contributionId &&
+                      c.kind === "module" &&
+                      c.slot === "main.content",
+                  ),
+              ),
+          },
+        });
   return Object.freeze({
     hostUiServices,
     owner: () => owner,
+    textPlans: () => plans,
     bindThreads(
       threads: ThreadApplicationService,
     ): ProjectConversationControlOwner {
@@ -139,11 +169,27 @@ export function createDesktopProjectConversationRuntime(
         clock: input.clock,
         digester: input.digester,
       });
+      if (planFoundation !== undefined) {
+        if (input.projects?.textService === undefined)
+          throw new Error("project_text_plan_text_commands_required");
+        plans = createProjectTextPlanPluginUiRuntime({
+          foundation: planFoundation,
+          conversations: owner,
+          requests: input.installed.requests,
+          store: input.store,
+          tasks: () => input.tasks()?.core,
+          textCommands: input.projects.textService,
+          scope: input.configuration.scope,
+          clock: input.clock,
+          digester: input.digester,
+        });
+      }
       return owner;
     },
-    close: () => {
+    close: async () => {
       closed = true;
-      return owner?.close() ?? Promise.resolve();
+      await plans?.close();
+      await owner?.close();
     },
   });
 }

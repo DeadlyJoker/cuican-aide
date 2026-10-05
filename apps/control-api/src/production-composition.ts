@@ -315,7 +315,13 @@ async function composeProductionControlApi(
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
-    { store, eventHub },
+    {
+      store,
+      eventHub,
+      consumeRunEvents: (events) =>
+        conversations?.textPlans()?.consumeRunEvents(events) ??
+        Promise.resolve(),
+    },
     {
       ownerId: `outbox:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
@@ -486,6 +492,7 @@ async function composeProductionControlApi(
             productionPluginUiOwnerConfiguration({
               configuration: config.pluginUi!,
               conversations: conversations?.owner(),
+              plans: conversations?.textPlans()?.owner,
               texts: projectTextPluginRuntime,
               recovery: pluginUiRecovery?.service,
               selection: projectSelectionPluginRuntime?.owner,
@@ -658,6 +665,7 @@ async function composeProductionControlApi(
             projects: projectPluginRuntime,
             texts: projectTextPluginRuntime,
             conversations: conversations?.owner(),
+            plans: conversations?.textPlans(),
             projectGenerations: pluginTaskRuntime?.projectGenerations,
             projectQueries: pluginTaskRuntime?.projectQueries,
             projectGenerationReads: projectGenerationReadPluginRuntime,
@@ -749,6 +757,7 @@ async function composeProductionControlApi(
       storageAdmission: storageCapacity.admission,
     });
     outboxDispatcher.start();
+    conversations?.textPlans()?.start();
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {

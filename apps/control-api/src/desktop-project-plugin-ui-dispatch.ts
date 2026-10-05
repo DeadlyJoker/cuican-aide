@@ -5,6 +5,7 @@ import type { DesktopProjectHistoryPluginRuntime } from "./desktop-project-histo
 import type { InstalledPluginTaskRuntimeCore } from "./installed-plugin-task-runtime-core.ts";
 import { combineSelectionCommittedMetadata } from "./project-generation-selection-plugin-ui-owner.ts";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
+import type { ProjectTextPlanPluginUiRuntime } from "./project-text-plan-plugin-ui-composition.ts";
 
 /** Metadata namespaces are dispatched before the independent execution owner. */
 export function composeDesktopProjectPluginUiDispatch(
@@ -14,11 +15,24 @@ export function composeDesktopProjectPluginUiDispatch(
     history: DesktopProjectHistoryPluginRuntime | undefined;
     tasks: InstalledPluginTaskRuntimeCore | undefined;
     conversations?: () => ProjectConversationControlOwner | undefined;
+    plans?: () => ProjectTextPlanPluginUiRuntime | undefined;
   }>,
 ) {
   const { projects, texts, history, tasks } = input;
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
+      if (
+        context.action === "crewon.project-text-plans" ||
+        context.action.startsWith("crewon.project-text-plans.")
+      ) {
+        const owner = input.plans?.()?.owner;
+        if (owner === undefined || !owner.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_text_plan_unavailable",
+          );
+        return owner.actions.invoke(context);
+      }
       if (
         context.action === "crewon.project-conversations" ||
         context.action.startsWith("crewon.project-conversations.")
@@ -68,14 +82,37 @@ export function composeDesktopProjectPluginUiDispatch(
       throw new ApplicationError("conflict", "plugin_ui_actions_unavailable");
     },
   };
+  const metadata = committedDesktopProjectMetadata(
+    projects,
+    history,
+    texts,
+    input.conversations,
+  );
   return {
     actions,
-    ...committedDesktopProjectMetadata(
-      projects,
-      history,
-      texts,
-      input.conversations,
-    ),
+    ...(input.plans === undefined
+      ? metadata
+      : {
+          committedMetadata: combineSelectionCommittedMetadata(
+            {
+              isOutcome: (
+                value,
+              ): value is import("@crewon/application").PluginUiCommittedMetadataOutcome =>
+                input.plans?.()?.owner.committedMetadata.isOutcome(value) ===
+                true,
+              verify: (context, value) => {
+                const owner = input.plans?.()?.owner;
+                if (owner === undefined)
+                  throw new ApplicationError(
+                    "authorization",
+                    "project_text_plan_unavailable",
+                  );
+                return owner.committedMetadata.verify(context, value);
+              },
+            },
+            metadata.committedMetadata,
+          ),
+        }),
   };
 }
 

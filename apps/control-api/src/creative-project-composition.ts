@@ -59,6 +59,12 @@ import {
   type PreparedProjectConversations,
   type ProjectConversationConfiguration,
 } from "./project-conversation-composition.ts";
+import {
+  captureProjectTextPlanConfiguration,
+  prepareProjectTextPlans,
+  type PreparedProjectTextPlans,
+} from "./project-text-plan-composition.ts";
+import type { ProjectTextPlanStore, ExtensionStore } from "@crewon/application";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
@@ -67,6 +73,7 @@ export type CreativeProjectCompositionConfig = Readonly<{
   textUi?: ProjectTextPluginUiConfig;
   textRecovery?: ProjectTextPluginUiConfig;
   conversations?: ProjectConversationConfiguration;
+  textPlans?: CreativeProjectPluginUiConfig;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -84,6 +91,8 @@ export type PreparedCreativeProjects = {
   readonly textRecoveryService?: PluginProjectTextRecoveryApplicationService;
   readonly conversations?: ProjectConversationConfiguration;
   readonly conversationFoundation?: PreparedProjectConversations;
+  readonly textPlans?: CreativeProjectPluginUiConfig;
+  readonly planFoundation?: PreparedProjectTextPlans;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
   readonly generationReads?: ProjectGenerationReadConfiguration;
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
@@ -116,11 +125,13 @@ type CreativeProjectStoreOwner = ProjectTextRecoveryStoreOwner &
     creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
     projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
     projectConversationStore?(): ProjectConversationStore;
+    projectTextPlanStore?(): ProjectTextPlanStore;
     pluginInstallationStore?(): { migrate(): Promise<void> };
-    extensionStore?(): ProjectGenerationReadStore & {
-      migrate(): Promise<void>;
-      migratePluginAdmissions(): Promise<void>;
-    };
+    extensionStore?(): ProjectGenerationReadStore &
+      ExtensionStore & {
+        migrate(): Promise<void>;
+        migratePluginAdmissions(): Promise<void>;
+      };
     projectConceptSelectionStore?: ProjectGenerationSelectionStoreOwner["projectConceptSelectionStore"];
   }>;
 
@@ -140,6 +151,7 @@ export function captureCreativeProjectCompositionConfig(
         key !== "textUi" &&
         key !== "textRecovery" &&
         key !== "conversations" &&
+        key !== "textPlans" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
@@ -226,6 +238,17 @@ export function captureCreativeProjectCompositionConfig(
   )
     throw new Error("creative_project_configuration_invalid");
   const pluginUi = captureCreativeProjectPluginUiConfig(pluginUiField?.value);
+  const planField = fields.textPlans;
+  if (
+    planField !== undefined &&
+    (!Object.hasOwn(planField, "value") || !planField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const textPlans = captureProjectTextPlanConfiguration(planField?.value, {
+    projects: pluginUi,
+    texts: textUi,
+    conversations,
+  });
   const generationsField = fields.pluginGenerations;
   if (
     generationsField !== undefined &&
@@ -307,6 +330,7 @@ export function captureCreativeProjectCompositionConfig(
         ...(textUi === undefined ? {} : { textUi }),
         ...(textRecovery === undefined ? {} : { textRecovery }),
         ...(conversations === undefined ? {} : { conversations }),
+        ...(textPlans === undefined ? {} : { textPlans }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
@@ -381,6 +405,10 @@ export async function prepareCreativeProjects(
     texts: textStore,
     authorization: configuration.authorization,
   });
+  const planFoundation = await prepareProjectTextPlans(owner, {
+    configuration: configuration.textPlans,
+    conversations: conversationFoundation,
+  });
   if (
     configuration.pluginGenerations !== undefined &&
     configuration.resultSelections !== undefined
@@ -419,6 +447,12 @@ export async function prepareCreativeProjects(
           configuration.resultSelections,
         );
   return {
+    ...(planFoundation === undefined
+      ? {}
+      : {
+          planFoundation,
+          textPlans: planFoundation.configuration,
+        }),
     ...(conversationFoundation === undefined
       ? {}
       : {

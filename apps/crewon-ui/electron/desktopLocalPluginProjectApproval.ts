@@ -62,6 +62,12 @@ export function composeDesktopLocalPluginProjectApproval(
   const textsRequired = requested("crewon.project-texts");
   const textRecoveryRequired = requested("crewon.project-text-recovery");
   const conversationsRequired = requested("crewon.project-conversations");
+  const textPlansRequired = requested("crewon.project-text-plans");
+  if (
+    textPlansRequired &&
+    (!projectsRequired || !textsRequired || !conversationsRequired)
+  )
+    invalid("project_text_plans_require_metadata_texts_and_conversations");
   if (textRecoveryRequired && !textsRequired)
     invalid("project_text_recovery_requires_texts");
   const recoveryRequired = requested("crewon.plugin-ui-recovery");
@@ -106,6 +112,11 @@ export function composeDesktopLocalPluginProjectApproval(
       ? (previous.conversations?.publications ?? [])
       : []),
   ];
+  const textPlans = [
+    ...("textPlans" in previous
+      ? (previous.textPlans?.publications ?? [])
+      : []),
+  ];
   const recovery = [
     ...("uiRecovery" in previous
       ? (previous.uiRecovery?.publications ?? [])
@@ -137,6 +148,11 @@ export function composeDesktopLocalPluginProjectApproval(
     )
       conversations.push(publication);
     if (
+      textPlansRequired &&
+      !textPlans.some((current) => same(current, publication))
+    )
+      textPlans.push(publication);
+    if (
       recoveryRequired &&
       !recovery.some((current) => same(current, publication))
     )
@@ -167,6 +183,7 @@ export function composeDesktopLocalPluginProjectApproval(
       ...(conversationsRequired
         ? { conversations: { publications: conversations } }
         : {}),
+      ...(textPlansRequired ? { textPlans: { publications: textPlans } } : {}),
       ...(recoveryRequired
         ? {
             uiRecovery: {

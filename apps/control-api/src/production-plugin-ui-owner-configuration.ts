@@ -6,6 +6,7 @@ export function productionPluginUiOwnerConfiguration(
   input: Readonly<{
     configuration: ProductionPluginUiConfig;
     conversations: ProductionPluginUiConfig["ownedProjectConversationActions"];
+    plans?: ProductionPluginUiConfig["ownedProjectTextPlanActions"];
     texts: Parameters<typeof productionProjectTextOwnerConfiguration>[0];
     recovery: ProductionPluginUiConfig["recovery"];
     selection: ProductionPluginUiConfig["ownedProjectSelectionActions"];
@@ -26,6 +27,9 @@ export function productionPluginUiOwnerConfiguration(
     ...(input.conversations === undefined
       ? {}
       : { ownedProjectConversationActions: input.conversations }),
+    ...(input.plans === undefined
+      ? {}
+      : { ownedProjectTextPlanActions: input.plans }),
     ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     ...(input.selection === undefined
       ? {}

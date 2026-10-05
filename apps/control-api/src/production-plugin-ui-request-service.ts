@@ -1,4 +1,5 @@
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
+import type { ProjectTextPlanPluginUiRuntime } from "./project-text-plan-plugin-ui-composition.ts";
 import { ApplicationError } from "@crewon/application";
 import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
@@ -31,6 +32,7 @@ export function createProductionPluginUiRequestService({
   projectSelections,
   recovery,
   conversations,
+  plans,
 }: Readonly<{
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
@@ -42,6 +44,7 @@ export function createProductionPluginUiRequestService({
   projectSelections?: ProductionProjectGenerationSelectionPluginRuntime;
   recovery?: ProductionPluginUiRecoveryRuntime;
   conversations?: ProjectConversationControlOwner;
+  plans?: ProjectTextPlanPluginUiRuntime;
 }>): PluginUiControlService {
   if (
     projectQueries !== undefined &&
@@ -64,7 +67,8 @@ export function createProductionPluginUiRequestService({
     projectGenerationReads === undefined &&
     projectSelections === undefined &&
     recovery === undefined &&
-    conversations === undefined
+    conversations === undefined &&
+    plans === undefined
   )
     return ui;
   return Object.freeze({
@@ -79,6 +83,23 @@ export function createProductionPluginUiRequestService({
           : recovery.run(request, actor, signal, () =>
               ui.invoke(actor, command),
             );
+      if (
+        command.action === "crewon.project-text-plans" ||
+        command.action.startsWith("crewon.project-text-plans.")
+      ) {
+        if (plans === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "project_text_plan_unavailable",
+          );
+        return plans.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
       if (
         command.action === "crewon.project-conversations" ||
         command.action.startsWith("crewon.project-conversations.")

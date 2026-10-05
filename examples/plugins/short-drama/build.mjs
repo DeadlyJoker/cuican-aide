@@ -7,11 +7,11 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "17.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
-  BigInt(version.split(".")[0]) <= 15n
+  BigInt(version.split(".")[0]) <= 16n
 )
   throw new Error("example_version_invalid");
 // Pinned portable public capability protocol; no private host source import.
@@ -25,6 +25,14 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-text-plans-service.ts",
+    "54c3ce5c9b3a75e20de0e935754a50e1c65b820b17b6a7d50acc6814407a7d0e",
+  ],
+  [
+    "project-text-plans-codec.mjs",
+    "593250f1443e1c1b87708caf724e4df177945f99cc1df670a9161f357cc64ca5",
+  ],
   [
     "project-texts-ui-service.ts",
     "6ca41f221e55f7c3aae6e541f2ebef34655df5e58a2ce45396519029e2c108c4",
@@ -188,13 +196,14 @@ const descriptor = parsePluginPackageDescriptor({
   version,
   title: "AI 短剧工作台",
   description:
-    "短剧工作台：项目需求、大纲与分集剧本共用版本记录；集成概念生图、原任务查询、图片选用与 Agent 项目工具。",
+    "短剧工作台：原 Agent 项目对话、可暂停恢复的文字计划与手动创作共用成果；集成概念生图、原任务查询和图片选用。",
   entrypoints: {
     node: "node.mjs",
     ui: { path: "ui.mjs", mode: "trustedModule" },
   },
   businessManifestPath: "business.json",
   requires: [
+    { service: "crewon.project-text-plans", apiVersion: "1", optional: true },
     {
       service: "crewon.project-conversations",
       apiVersion: "1",

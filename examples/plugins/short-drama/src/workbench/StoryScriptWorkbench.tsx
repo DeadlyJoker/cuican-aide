@@ -561,6 +561,7 @@ export function StoryScriptWorkbench({
                   className="button secondary"
                   disabled={
                     disabled ||
+                    controller.recovery.blocksWrites ||
                     !artifact ||
                     artifact.locked ||
                     snapshot.dirty ||
@@ -576,7 +577,7 @@ export function StoryScriptWorkbench({
             {artifact?.selectedContentRevision && (
               <button
                 className="button secondary"
-                disabled={disabled}
+                disabled={disabled || controller.recovery.blocksWrites}
                 onClick={() => void controller.setLocked()}
               >
                 {artifact.locked ? "解锁采用版本" : "锁定采用版本"}

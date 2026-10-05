@@ -1,3 +1,4 @@
+export { appendProjectTextPlanUiServiceAvailability } from "./plugin-project-text-plan-ui-service-availability.ts";
 export {
   DEFAULT_LOCAL_PLUGIN_PACKAGE_LIMITS,
   LocalPluginPackageError,

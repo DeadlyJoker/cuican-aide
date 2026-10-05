@@ -1,3 +1,4 @@
+import { assertSqliteProjectTextPlanTool } from "./project-text-plan-tool.ts";
 import { assertSqliteProjectStageTool } from "./project-stage-run-tool-qualification.ts";
 import type { DatabaseSync } from "node:sqlite";
 import { assertSqliteProjectRunSchema } from "./creative-project-run-commit-schema.ts";
@@ -89,6 +90,7 @@ export function assertSqliteProjectRunCommit(
     configuration: projectRunJson(binding.configuration_json),
   });
   assertSqliteProjectStageTool(db, q);
+  assertSqliteProjectTextPlanTool(db, q);
   assertSqliteProjectRunLease(db, q);
 }
 export function assertSqliteProjectRunLease(

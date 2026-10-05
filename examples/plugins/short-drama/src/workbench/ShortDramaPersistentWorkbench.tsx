@@ -26,6 +26,8 @@ import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
 import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
+import { ProjectTextPlanController } from "./ProjectTextPlanController";
+import { ProjectTextPlanActions } from "./ProjectTextPlanActions";
 
 function SaveFeedback({
   controller,
@@ -89,10 +91,12 @@ export function ShortDramaPersistentWorkbench({
   controller,
   texts,
   conversations,
+  plans,
 }: {
   controller: CreativeProjectController;
   texts: ProjectTextController;
   conversations: ProjectConversationController;
+  plans: ProjectTextPlanController;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -109,6 +113,7 @@ export function ShortDramaPersistentWorkbench({
     conversations.getSnapshot,
     conversations.getSnapshot,
   );
+  useSyncExternalStore(plans.subscribe, plans.getSnapshot, plans.getSnapshot);
   const [stage, setStage] = useState<0 | 1>(0);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
@@ -121,7 +126,8 @@ export function ShortDramaPersistentWorkbench({
     projectLocked ||
     snapshot.conceptLocked ||
     texts.locked ||
-    conversations.locked;
+    conversations.locked ||
+    plans.locked;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
     (project) =>
@@ -130,7 +136,8 @@ export function ShortDramaPersistentWorkbench({
   useEffect(() => {
     texts.setProject(details);
     conversations.setProject(details);
-  }, [texts, conversations, details]);
+    plans.setProject(details);
+  }, [texts, conversations, plans, details]);
   useEffect(() => {
     setStage(0);
   }, [details?.project.projectId]);
@@ -367,6 +374,26 @@ export function ShortDramaPersistentWorkbench({
               </div>
               {stage === 0 && (
                 <ProjectConversationActions controller={conversations} />
+              )}
+              {stage === 0 && (
+                <ProjectTextPlanActions
+                  controller={plans}
+                  conversations={conversations}
+                  texts={texts}
+                  details={details}
+                  openText={(step) => {
+                    setStage(1);
+                    void texts.open(
+                      step.kind === "script" && step.episodeId !== null
+                        ? {
+                            kind: "script",
+                            episodeId: step.episodeId,
+                            title: "分集剧本",
+                          }
+                        : { kind: "outline" },
+                    );
+                  }}
+                />
               )}
               <SaveFeedback controller={controller} snapshot={snapshot} />
               {archived && (

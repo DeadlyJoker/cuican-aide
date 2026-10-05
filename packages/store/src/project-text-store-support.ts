@@ -60,6 +60,7 @@ export function textAuthority(
 ) {
   const authority = captureCreativeProjectCommitAuthority(options, {
     allowTextUiTransaction: true,
+    allowPlanTransaction: true,
   });
   if (authority?.transaction !== undefined)
     projectTextFailure("project_text_transaction_authority_unsupported");

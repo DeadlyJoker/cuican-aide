@@ -1,3 +1,4 @@
+import { assertPostgresProjectTextPlanTool } from "./project-text-plan-tool.ts";
 import { assertPostgresProjectStageTool } from "./project-stage-run-tool-qualification.ts";
 import type { PoolClient } from "pg";
 import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
@@ -109,6 +110,7 @@ export async function assertPostgresProjectRunCommit(
     configuration: projectRunJson(binding.configuration_json),
   });
   await assertPostgresProjectStageTool(client, schema, q);
+  await assertPostgresProjectTextPlanTool(client, schema, q);
 }
 /** The physical database clock is re-read after every async fence, immediately before COMMIT. */
 export async function assertPostgresProjectRunLease(

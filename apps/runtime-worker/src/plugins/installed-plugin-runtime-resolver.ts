@@ -404,6 +404,9 @@ export class InstalledPluginRuntimeResolver
         stageAdmission: this.#dependencies.contexts.verifiedProjectStage(
           prepared.snapshot,
         ),
+        planAdmission: this.#dependencies.contexts.verifiedProjectTextPlan(
+          prepared.snapshot,
+        ),
         admission: prepared.admission,
         tools: prepared.proof.registration.manifest.tools,
         authorizeCurrent: async (operation) => {

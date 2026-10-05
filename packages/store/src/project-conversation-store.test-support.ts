@@ -177,6 +177,7 @@ export async function conversationFixture(
   });
   return {
     ...f,
+    originalTaskFixture: f,
     parent,
     store,
     threads,

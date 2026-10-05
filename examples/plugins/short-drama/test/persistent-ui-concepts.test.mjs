@@ -9,7 +9,7 @@ import {
   persistentProps,
 } from "./persistent-ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "16.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "17.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -105,7 +105,8 @@ test("creates a concept against the saved brief, preserves both raw drafts and b
           call.action ===
             "crewon.project-generation-reads.v1.getConceptGeneration" ||
           call.action === "crewon.project-text-recovery.v1.getPending" ||
-          call.action === "crewon.project-conversations.v1.listConversations",
+          call.action === "crewon.project-conversations.v1.listConversations" ||
+          call.action === "crewon.project-text-plans.v1.list",
       ),
       true,
     );

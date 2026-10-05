@@ -1,3 +1,4 @@
+import { loadSqlitePlanAdmission } from "./project-text-plan-markers.ts";
 import {
   migrateSqliteUnmeteredPluginAdmissions,
   loadSqlitePluginTaskUnmeteredAdmission,
@@ -106,7 +107,10 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
-  readonly projectStageAdmissionVersion = "crewon.project-stage-run-admission.v1" as const;
+  readonly projectTextPlanAdmissionVersion =
+    "crewon.project-text-plan-run-admission.v1" as const;
+  readonly projectStageAdmissionVersion =
+    "crewon.project-stage-run-admission.v1" as const;
   readonly pluginAdmissionVersion = "crewon.plugin-task-admission.v1" as const;
   readonly pluginQueryAdmissionVersion =
     "crewon.plugin-query-task-admission.v1" as const;
@@ -488,11 +492,17 @@ export class SqliteExtensionStore implements ExtensionStore {
   ) {
     this.#host.assertOpen();
     const value = this.#receipt(input, "task", input.receipt);
-    return value === null
-      ? null
-      : this.#verifyCreditReceipt(
-          parseExtensionTurnReceipt(value, input, input.receipt),
-        );
+    if (value === null) return null;
+    const result = this.#verifyCreditReceipt(
+      parseExtensionTurnReceipt(value, input, input.receipt),
+    );
+    const projectTextPlanAdmission = loadSqlitePlanAdmission(this.#db, {
+      tenantId: result.binding.tenantId,
+      runId: result.binding.runId,
+    });
+    return projectTextPlanAdmission === null
+      ? result
+      : { ...result, projectTextPlanAdmission };
   }
 
   async commitExtensionTurn(
