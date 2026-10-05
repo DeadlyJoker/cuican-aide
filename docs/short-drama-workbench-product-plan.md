@@ -1,5 +1,7 @@
 # AI 短剧工作台：产品方案与第一条项目闭环
 
+2026-10-05 用户补充：各阶段需要 AI 与多个工作流协同，既能从 Agent 对话完成想法，也能手动探索和执行。完整产品设计见[Agent 与工作流协同方案](./short-drama-agent-workflow-design.md)；下一项产品开发优先补共享项目命令及 Agent 文本阶段入口。本文保留现有 S0 的具体协议与验收依据，不把生图当作整个短剧工作台。
+
 日期：2026-10-05。状态：已实现 S0 领域、应用及 SQLite/PostgreSQL 项目与输入修订存储、[项目公共 HTTP/BFF/Client 服务](./creative-project-public-service.md)和[生成事务关联](./project-generation-link.md)。独立短剧 5.0.0 已接入项目/需求/概念输入保存、只读生成历史、[就绪检查、原会话准备和生成控件](./installed-plugin-generation-context-actions.md)，6.0.0 已接入[原 operation 显式查询](./project-generation-query-ui-protocol.md)，7.0.0 已接入[确切图片选用](./project-generation-selection-protocol.md)、独立当前指针及同进程重挂恢复，并通过分层验证。实际安装的 9.0.0 已在原完整 Web App/Main/BFF 中联合验证三类原请求的冷恢复、实际选用提交及进程重启后的原键重放；生成和查询仅验证 stage 与 hydrate，完整在线 S0、Native/打包版及真实个人钱包/定价仍未验收。依据[参考结论](./short-drama-workbench-reference.md)及[已验证的插件调用链](./incremental-extension-progress.md)。正式界面仍沿用 CrewON 的[设计约定](../.codex/skills/crewon-design-reference/SKILL.md)。
 
 页面预览包含项目列表、项目概览和概念图详情，可体验需求修订、概念图新版本、模拟提交/查询/选用及记录弹窗。数据仅保存在当前页面内存，明确标注演示，不调用外部服务，不替代下文的实际项目闭环。现有首页、聊天与团队入口保持原行为。
@@ -7,6 +9,8 @@
 独立 10.0.0 已新增[不同来源原请求的逐条恢复](./short-drama-multi-source-recovery.md)，通过发行 ESM 和独立浏览器夹具验证。新包尚未替换生产批准或项目映射；现有完整 Web App 9.0.0 的验收范围不因此扩大。
 
 用户明确插件应独立开发后安装。[可安装插件协议及加载器](./installable-plugin-protocol-plan.md)已按阶段接通，短剧业务界面以独立包接入原内容区。可点击演示仍不代表安装包的实际生成验收；业务代码继续属于独立插件，宿主只提供通用协议与执行接线。
+
+2026-10-05 的新包为统一的 `crewon.short-drama` 12.0.0：Krea2 生图与三视图作为同包适配器，原工作台 UI 保持。原 Settings 增加显式执行准备，将确切已保存配置、实际 prepared entry 和同包项目映射接通；未选择的预设、参考图上传、人物锚点派生和视频仍不开放。新包及新桌面接线尚未替换当前用户安装，在线 S0 继续等待实际连接路径验证，详见[当前实施状态](./incremental-extension-progress.md)。
 
 当前已经验证在线 Krea2 文生图的 Agent 调用、外部任务记录、查询、跨进程恢复及事件游标续读；另以本地模型/Comfy HTTPS 夹具完成同一次生产 UI 到实际 Node Worker 的保存、启用、生图、查询、原会话输出及真实 Control SSE 自动游标重连。两类证据分别记录于[实施进度](./incremental-extension-progress.md)，界面验收没有再次调用在线供应商。生产权威身份与第二个实际企业 API 继续属于原实施计划，不由短剧方案替代。
 

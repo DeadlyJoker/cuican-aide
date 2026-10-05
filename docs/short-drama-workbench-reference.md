@@ -1,10 +1,14 @@
 # AI 短剧工作台：参考结论与接入顺序
 
+用户最新要求的全阶段 AI/工作流、Agent 对话与手动工作台协作，已整理为[完整产品设计](./short-drama-agent-workflow-design.md)，以共享项目状态和有界阶段执行为基础，不止接一个生图工作流。
+
 日期：2026-10-05。重新核对用户提供的 [shuohao-skills 当前说明](https://github.com/eternityspring/shuohao-skills)与其关联的 [Reelbench](https://reelbench.79px.com/)。早期研究依据用户提供的 [shuohao-skills](https://github.com/eternityspring/shuohao-skills)，研究版本 `ef4ac0c313c7eeb1f918db5f0f0eb319745900bc`。本文记录参考结论和后续实施约束；不是已经实现的产品功能，也不提前冻结工作台页面设计。当前仍按[增量扩展方案](./incremental-extension-subsystem-plan.md)先完成 ComfyUI 的正式调用链。
 
 2026-10-02：生图调用、升级恢复及同一次 UI 到实际 Worker 的闭环已取得执行证据，下一步的[工作台产品方案](./short-drama-workbench-product-plan.md)已具体划分 S0 项目/概念图、页面操作、修订与原任务关联及验收顺序。该方案仍未实现项目存储或页面，也不代替生产身份及第二企业 API 的原计划。
 
 2026-10-05：按用户要求改为一个可安装的 `crewon.short-drama` 12.0.0 包，集成 T01 生图和 T04 角色三视图。仓外离线构建、152 项插件行为检查、52 项宿主身份/审批检查、真实隔离安装与 Node 加载均通过。与旧 11.0.0 UI 比较，仅三行 SDK 安装路径注释不同，页面执行代码与 CSS 完全一致。未替换用户桌面安装，未提交新的供应商生成请求；当前线上流程仍待连接路径确定。前述日期段落保留为历史实施记录。
+
+随后补齐原 Settings 的本机执行准备接线：安装与保存参数之后，用户预览确切配置、包版本及生成服务范围，明确批准，再由原 Main 准备执行版本和同包项目映射。准备与插件启用选择、实际生成各自独立，不依赖手写私有 policy；不因此改变原短剧页面或开放尚未接通的创作阶段。验证范围与交付状态见[实施进度](./incremental-extension-progress.md)。
 
 ## 参考中值得采用的部分
 
