@@ -30,9 +30,18 @@ export async function executionSetupFixture(
     version?: string;
     projectContext?: boolean;
     historicalQueries?: boolean;
+    contract?: "legacy" | "assets";
+    omitServices?: readonly string[];
+    omitOperations?: readonly string[];
+    requirements?: readonly Readonly<{
+      service: string;
+      apiVersion: string;
+      optional: boolean;
+    }>[];
   }> = {},
 ) {
   const version = options.version ?? "12.0.0";
+  const assets = options.contract === "assets" || version === "19.0.0";
   const directory = realpathSync(
     mkdtempSync(join(tmpdir(), "crewon-local-execution-setup-")),
   );
@@ -52,19 +61,27 @@ export async function executionSetupFixture(
       "utf8",
     ),
   );
-  // Named old-version fixtures retain v0's original tool family; asset declarations belong only to v19.
-  const business =
-    version === "19.0.0"
-      ? currentBusiness
-      : {
-          ...currentBusiness,
-          schemaVersion: "crewon.extension-manifest.v0",
-          hostApi: "crewon.extensions.v0",
-          tools: currentBusiness.tools.filter(
-            (tool: { operationId: string }) =>
-              !tool.operationId.startsWith("asset_"),
-          ),
-        };
+  // Historical fixtures retain their original protocol; new versions explicitly choose a contract.
+  const baseBusiness = assets
+    ? currentBusiness
+    : {
+        ...currentBusiness,
+        schemaVersion: "crewon.extension-manifest.v0",
+        hostApi: "crewon.extensions.v0",
+        tools: currentBusiness.tools.filter(
+          (tool: { operationId: string }) =>
+            !tool.operationId.startsWith("asset_"),
+        ),
+      };
+  const business = {
+    ...baseBusiness,
+    tools: baseBusiness.tools.filter(
+      (tool: { operationId: string }) =>
+        !options.omitOperations?.includes(tool.operationId) &&
+        (options.projectContext === true ||
+          tool.operationId !== "project_context_read"),
+    ),
+  };
   const files = new Map([
     [
       "node.mjs",
@@ -116,22 +133,24 @@ export async function executionSetupFixture(
           "17.0.0",
           "18.0.0",
           "19.0.0",
-        ].includes(version)
+        ].includes(version) || assets
           ? ["crewon.project-texts"]
           : []),
-        ...(["15.0.0", "16.0.0", "17.0.0", "18.0.0", "19.0.0"].includes(version)
+        ...(["15.0.0", "16.0.0", "17.0.0", "18.0.0", "19.0.0"].includes(
+          version,
+        ) || assets
           ? ["crewon.project-text-recovery"]
           : []),
         ...(options.historicalQueries === true || version === "18.0.0"
           ? ["crewon.project-historical-queries"]
           : []),
-        ...(["17.0.0", "18.0.0", "19.0.0"].includes(version)
+        ...(["17.0.0", "18.0.0", "19.0.0"].includes(version) || assets
           ? ["crewon.project-text-plans"]
           : []),
-        ...(["18.0.0", "19.0.0"].includes(version)
+        ...(["18.0.0", "19.0.0"].includes(version) || assets
           ? ["crewon.project-planning-drafts"]
           : []),
-        ...(version === "19.0.0"
+        ...(assets
           ? [
               "crewon.project-assets",
               "crewon.project-asset-recovery",
@@ -164,6 +183,15 @@ export async function executionSetupFixture(
       sha256: fixtureHash(bytes).slice(7),
     })),
   };
+  descriptor.requires = descriptor.requires
+    .filter((entry) => !options.omitServices?.includes(entry.service))
+    .filter(
+      (entry) =>
+        !options.requirements?.some(
+          (replacement) => replacement.service === entry.service,
+        ),
+    )
+    .concat(options.requirements ?? []);
   writeFileSync(join(source, "crewon.plugin.json"), JSON.stringify(descriptor));
   const installRoot = join(dataDirectory, "plugins");
   mkdirSync(installRoot, { mode: 0o700 });
@@ -231,6 +259,11 @@ export async function executionSetupFixture(
     expectedPackageDigest: identity.packageDigest,
     authorizeRead: async () => "allow",
     signal: new AbortController().signal,
+  }).catch(async (error) => {
+    await bootstrap.cleanup();
+    await store.close();
+    removeFixtureDirectory(directory);
+    throw error;
   });
   const configuration = createExtensionConfiguration(
     {
@@ -345,15 +378,19 @@ export async function executionSetupFixture(
       for (const owner of owners) await owner.close();
       await bootstrap.cleanup();
       await store.close();
-      function unlock(path: string) {
-        const stat = lstatSync(path);
-        if (stat.isDirectory()) {
-          chmodSync(path, 0o700);
-          for (const child of readdirSync(path)) unlock(join(path, child));
-        }
-      }
-      unlock(directory);
-      rmSync(directory, { recursive: true, force: true });
+      removeFixtureDirectory(directory);
     },
   };
+}
+
+function removeFixtureDirectory(directory: string) {
+  function unlock(path: string) {
+    const stat = lstatSync(path);
+    if (stat.isDirectory()) {
+      chmodSync(path, 0o700);
+      for (const child of readdirSync(path)) unlock(join(path, child));
+    }
+  }
+  unlock(directory);
+  rmSync(directory, { recursive: true });
 }

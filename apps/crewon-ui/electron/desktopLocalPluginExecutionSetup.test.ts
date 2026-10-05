@@ -95,7 +95,7 @@ describe("explicit Main local execution preparation", () => {
     "18.0.0",
     "19.0.0",
   ])(
-    "previews explicitly supported exact installed version %s without execution or selection mutation",
+    "previews the historical installed contract %s without execution or selection mutation",
     async (version) => {
       const f = await fixture({
         version,
@@ -119,21 +119,95 @@ describe("explicit Main local execution preparation", () => {
     },
   );
 
-  it("does not turn an unsupported version declaration into execution approval", async () => {
-    const f = await fixture({ version: "20.0.0", projectContext: true });
-    const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
-    await expect(
-      f
-        .create()
-        .preview({ bootstrap: f.bootstrap, pluginId: f.identity.pluginId }),
-    ).rejects.toThrow("package_unsupported");
-    expect(readFileSync(join(f.dataDirectory, "control.sqlite"))).toEqual(
-      before,
-    );
+  it.each(["19.0.1", "22.4.8"])(
+    "accepts independent release %s with the same supported asset protocols and exact publication pins",
+    async (version) => {
+      const f = await fixture({
+        version,
+        contract: "assets",
+        projectContext: true,
+      });
+      const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
+      const preview = await f.create().preview({
+        bootstrap: f.bootstrap,
+        pluginId: f.identity.pluginId,
+      });
+      expect(preview).toMatchObject(f.identity);
+      expect(readFileSync(join(f.dataDirectory, "control.sqlite"))).toEqual(
+        before,
+      );
+      expect(existsSync(f.policyPath)).toBe(false);
+    },
+  );
+  it.each([
+    {
+      requirements: [
+        { service: "crewon.project-assets", apiVersion: "2", optional: true },
+      ],
+    },
+    { omitServices: ["crewon.project-asset-context"] },
+    { omitServices: ["crewon.project-context"] },
+    { omitOperations: ["asset_save"] },
+    { omitOperations: ["project_context_read"] },
+  ])(
+    "rejects incompatible declared execution contracts before granting any authority: %j",
+    async (contract) => {
+      const f = await fixture({
+        version: "19.0.1",
+        contract: "assets",
+        projectContext: true,
+        ...contract,
+      });
+      const before = readFileSync(join(f.dataDirectory, "control.sqlite"));
+      await expect(
+        f
+          .create()
+          .preview({ bootstrap: f.bootstrap, pluginId: f.identity.pluginId }),
+      ).rejects.toThrow("package_unsupported");
+      expect(readFileSync(join(f.dataDirectory, "control.sqlite"))).toEqual(
+        before,
+      );
+      expect(existsSync(f.policyPath)).toBe(false);
+    },
+  );
+  it("does not treat unknown optional capabilities as an execution approval", async () => {
+    const f = await fixture({
+      version: "19.0.1",
+      contract: "assets",
+      projectContext: true,
+      requirements: [
+        { service: "example.future-ui", apiVersion: "2", optional: true },
+      ],
+    });
+    const approval = readFileSync(f.approvalPath);
+    await f
+      .create()
+      .preview({ bootstrap: f.bootstrap, pluginId: f.identity.pluginId });
+    expect(readFileSync(f.approvalPath)).toEqual(approval);
     expect(existsSync(f.policyPath)).toBe(false);
   });
-  it("requires the declared stage context services for version 16 without granting a project Run", async () => {
-    const f = await fixture({ version: "16.0.0" });
+  it("rejects an unknown required Node service while reading installed metadata, before any execution preview", async () => {
+    await expect(
+      executionSetupFixture({
+        version: "19.0.1",
+        contract: "assets",
+        projectContext: true,
+        requirements: [
+          {
+            service: "example.future-execution",
+            apiVersion: "1",
+            optional: false,
+          },
+        ],
+      }),
+    ).rejects.toThrow("installed_plugin_business_execution_unavailable");
+  });
+  it("requires complete declared stage context services independently of release number", async () => {
+    const f = await fixture({
+      version: "16.0.0",
+      projectContext: true,
+      omitServices: ["crewon.project-tools"],
+    });
     await expect(
       f
         .create()
@@ -222,83 +296,89 @@ describe("explicit Main local execution preparation", () => {
     await expect(owner.commitPolicyWhileStopped({} as never)).rejects.toThrow();
   });
 
-  it("runs both original stopped mutations and captures mapping before withdrawal, keeps original disabled selection", async () => {
-    const f = await fixture(),
-      { owner, preview, claim } = await previewClaim(f),
-      l = lifecycle(f);
-    const result = await runDesktopLocalPluginExecutionSetup(
-      { owner, claim, onStopInvalidation: (stop) => stop() },
-      l.port,
-    );
-    expect(result).toEqual({
-      pluginId: preview.pluginId,
-      publisherId: preview.publisherId,
-      version: preview.version,
-      packageDigest: preview.packageDigest,
-      manifestDigest: preview.manifestDigest,
-      implementationDigest: preview.implementationDigest,
-      selectionRevision: 1,
-      configurationRevision: 1,
-      configurationDigest: preview.configurationDigest,
-      state: "prepared",
-      runtimeStatus: "ready",
-      stage: "mappingCommitted",
-    });
-    expect(l.events).toEqual([
-      "stop",
-      "start",
-      "ready",
-      "capture",
-      "stop",
-      "start",
-      "ready",
-      "capture",
-    ]);
-    const policy = JSON.parse(readFileSync(f.policyPath, "utf8")),
-      approval = JSON.parse(readFileSync(f.approvalPath, "utf8"));
-    expect(policy.packages).toEqual([
-      { ...f.identity, approvalRequirement: "none" },
-    ]);
-    expect(policy.networkGrants).toEqual([
-      {
-        ...f.identity,
-        baseUrl: preview.baseUrl,
-        baseUrlParameter: "baseUrl",
-        paths: SHORT_NETWORK_PATHS,
-      },
-    ]);
-    expect(approval.projects.pluginGenerations.publications).toEqual([
-      {
-        source: {
-          pluginId: f.identity.pluginId,
-          packageDigest: f.identity.packageDigest,
-          contributionId: "workbench",
+  it.each([
+    { version: "12.0.0" },
+    { version: "19.0.1", contract: "assets" as const, projectContext: true },
+  ])(
+    "runs both original stopped mutations and captures exact mapping for %j before withdrawal, keeps original disabled selection",
+    async (contract) => {
+      const f = await fixture(contract),
+        { owner, preview, claim } = await previewClaim(f),
+        l = lifecycle(f);
+      const result = await runDesktopLocalPluginExecutionSetup(
+        { owner, claim, onStopInvalidation: (stop) => stop() },
+        l.port,
+      );
+      expect(result).toEqual({
+        pluginId: preview.pluginId,
+        publisherId: preview.publisherId,
+        version: preview.version,
+        packageDigest: preview.packageDigest,
+        manifestDigest: preview.manifestDigest,
+        implementationDigest: preview.implementationDigest,
+        selectionRevision: 1,
+        configurationRevision: 1,
+        configurationDigest: preview.configurationDigest,
+        state: "prepared",
+        runtimeStatus: "ready",
+        stage: "mappingCommitted",
+      });
+      expect(l.events).toEqual([
+        "stop",
+        "start",
+        "ready",
+        "capture",
+        "stop",
+        "start",
+        "ready",
+        "capture",
+      ]);
+      const policy = JSON.parse(readFileSync(f.policyPath, "utf8")),
+        approval = JSON.parse(readFileSync(f.approvalPath, "utf8"));
+      expect(policy.packages).toEqual([
+        { ...f.identity, approvalRequirement: "none" },
+      ]);
+      expect(policy.networkGrants).toEqual([
+        {
+          ...f.identity,
+          baseUrl: preview.baseUrl,
+          baseUrlParameter: "baseUrl",
+          paths: SHORT_NETWORK_PATHS,
         },
-        target: {
-          pluginId: f.identity.pluginId,
-          packageDigest: f.identity.packageDigest,
-          contributionId: "workbench",
-          action: "image.generate",
+      ]);
+      expect(approval.projects.pluginGenerations.publications).toEqual([
+        {
+          source: {
+            pluginId: f.identity.pluginId,
+            packageDigest: f.identity.packageDigest,
+            contributionId: "workbench",
+          },
+          target: {
+            pluginId: f.identity.pluginId,
+            packageDigest: f.identity.packageDigest,
+            contributionId: "workbench",
+            action: "image.generate",
+          },
         },
-      },
-    ]);
-    expect(approval.projects.pluginQueries.publications[0].target.action).toBe(
-      "image.query",
-    );
-    expect(lstatSync(f.policyPath).mode & 0o777).toBe(0o600);
-    expect(
-      await f.store
-        .pluginInstallationStore()
-        .loadSelection({ scope: f.scope, pluginId: f.identity.pluginId }),
-    ).toEqual(f.installedSelection);
-    expect(
-      await f.store.extensionStore().loadExtensionActivation({
-        tenantId: f.scope.tenantId,
-        spaceId: f.scope.spaceId,
-        pluginId: f.identity.pluginId,
-      }),
-    ).toBeNull();
-  });
+      ]);
+      expect(
+        approval.projects.pluginQueries.publications[0].target.action,
+      ).toBe("image.query");
+      expect(lstatSync(f.policyPath).mode & 0o777).toBe(0o600);
+      expect(
+        await f.store
+          .pluginInstallationStore()
+          .loadSelection({ scope: f.scope, pluginId: f.identity.pluginId }),
+      ).toEqual(f.installedSelection);
+      expect(
+        await f.store.extensionStore().loadExtensionActivation({
+          tenantId: f.scope.tenantId,
+          spaceId: f.scope.spaceId,
+          pluginId: f.identity.pluginId,
+        }),
+      ).toBeNull();
+    },
+  );
 
   it.each([1, 2])(
     "returns committed restartRequired for original stage %i startup failure",

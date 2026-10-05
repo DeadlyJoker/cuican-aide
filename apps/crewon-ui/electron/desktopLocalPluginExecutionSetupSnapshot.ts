@@ -45,6 +45,8 @@ import {
   type FileSnapshot,
 } from "./desktopLocalPluginSourceImportFiles.ts";
 
+import { assertDesktopLocalShortDramaExecutionContract } from "./desktopLocalShortDramaExecutionContract.ts";
+
 export const SHORT_PLUGIN_ID = "crewon.short-drama";
 export const SHORT_NETWORK_PATHS = Object.freeze([
   Object.freeze({ method: "POST" as const, path: "/prompt" }),
@@ -252,16 +254,6 @@ export async function captureSetupSnapshot(input: {
     verified.packageDigest !== records.pkg.packageDigest ||
     descriptor.pluginId !== SHORT_PLUGIN_ID ||
     descriptor.publisherId !== "example.publisher" ||
-    ![
-      "12.0.0",
-      "13.0.0",
-      "14.0.0",
-      "15.0.0",
-      "16.0.0",
-      "17.0.0",
-      "18.0.0",
-      "19.0.0",
-    ].includes(descriptor.version) ||
     descriptor.publisherId !== records.pkg.publisherId ||
     descriptor.version !== records.pkg.version ||
     descriptor.entrypoints.node === null ||
@@ -300,73 +292,10 @@ export async function captureSetupSnapshot(input: {
         : "deny";
     },
   });
-  if (
-    ["16.0.0", "17.0.0", "18.0.0", "19.0.0"].includes(descriptor.version) &&
-    (![
-      "crewon.project-conversations",
-      "crewon.project-context",
-      "crewon.project-tools",
-    ].every((service) =>
-      descriptor.requires.some(
-        (requirement) =>
-          requirement.service === service && requirement.apiVersion === "1",
-      ),
-    ) ||
-      !registration.manifest.tools.some(
-        (tool) =>
-          tool.operationId === "project_context_read" &&
-          tool.adapterId === "crewon.project-context" &&
-          tool.effect === "readOnly" &&
-          tool.recovery === "replaySafe" &&
-          tool.capability === "project.read",
-      ))
-  )
-    setupInvalid("package_unsupported");
-  if (descriptor.version === "19.0.0") {
-    const services = [
-      "crewon.project-assets",
-      "crewon.project-asset-stages",
-      "crewon.project-asset-tools",
-      "crewon.project-asset-context",
-    ];
-    if (
-      !services.every((service) =>
-        descriptor.requires.some(
-          (v) => v.service === service && v.apiVersion === "1",
-        ),
-      )
-    )
-      setupInvalid("package_unsupported");
-    const operations = [
-      "asset_context_read",
-      "asset_list",
-      "asset_read",
-      "asset_history",
-      "asset_content_read",
-      "asset_save",
-    ];
-    if (
-      !operations.every((operation) =>
-        registration.manifest.tools.some(
-          (tool) =>
-            tool.operationId === operation &&
-            tool.adapterId ===
-              (operation === "asset_context_read"
-                ? "crewon.project-asset-context"
-                : "crewon.project-asset-tools") &&
-            tool.capability ===
-              (operation === "asset_save"
-                ? "project.asset.write"
-                : "project.asset.read") &&
-            tool.effect ===
-              (operation === "asset_save" ? "mutation" : "readOnly") &&
-            tool.recovery ===
-              (operation === "asset_save" ? "reconcilable" : "replaySafe"),
-        ),
-      )
-    )
-      setupInvalid("package_unsupported");
-  }
+  assertDesktopLocalShortDramaExecutionContract(
+    descriptor,
+    registration.manifest,
+  );
   const configuration = validateInstalledPluginConfiguration(
     registration,
     records.configuration,
