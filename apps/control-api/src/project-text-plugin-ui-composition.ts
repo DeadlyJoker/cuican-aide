@@ -1,11 +1,15 @@
 import {
   PluginProjectTextActionOwner,
+  PluginProjectTextRecoveryActionOwner,
   type PluginProjectTextActionAuthorizationPort,
   type PluginProjectTextActionPublication,
   type ProjectTextApplicationService,
+  type PluginProjectTextRecoveryApplicationService,
+  type PluginProjectTextRecoveryAuthorizationPort,
 } from "@crewon/application";
 import {
   appendProjectTextUiServiceAvailability,
+  appendProjectTextRecoveryUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import {
@@ -29,6 +33,7 @@ export const assertProjectTextPluginPublications =
 
 export type ProjectTextPluginUiRuntime = Readonly<{
   owner: PluginProjectTextActionOwner;
+  recoveryOwner?: PluginProjectTextRecoveryActionOwner;
   hostUiServices: PluginUiHostServiceAvailabilityPort;
   close(): Promise<void>;
 }>;
@@ -39,16 +44,37 @@ export function createProjectTextPluginUiRuntime(
     texts: ProjectTextApplicationService;
     authorization: PluginProjectTextActionAuthorizationPort;
     hostUiServices?: PluginUiHostServiceAvailabilityPort;
+    recovery?: Readonly<{
+      configuration: ProjectTextPluginUiConfig;
+      service: PluginProjectTextRecoveryApplicationService;
+      authorization: PluginProjectTextRecoveryAuthorizationPort;
+    }>;
   }>,
 ): ProjectTextPluginUiRuntime {
   const configuration = captureProjectTextPluginUiConfig(input.configuration);
   if (configuration === undefined)
     throw new Error("project_text_plugin_ui_configuration_required");
+  const recoveryConfiguration = captureProjectTextPluginUiConfig(
+    input.recovery?.configuration,
+  );
+  if (input.recovery !== undefined && recoveryConfiguration === undefined)
+    throw new Error("project_text_recovery_configuration_required");
   const owner = new PluginProjectTextActionOwner({
     texts: input.texts,
     publications: configuration.publications,
     authorization: input.authorization,
+    ...(input.recovery === undefined
+      ? {}
+      : { recovery: input.recovery.service }),
   });
+  const recoveryOwner =
+    input.recovery === undefined
+      ? undefined
+      : new PluginProjectTextRecoveryActionOwner({
+          recovery: input.recovery.service,
+          publications: recoveryConfiguration!.publications,
+          authorization: input.recovery.authorization,
+        });
   const texts: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) => {
       try {
@@ -72,9 +98,58 @@ export function createProjectTextPluginUiRuntime(
       );
     },
   });
-  const hostUiServices = appendProjectTextUiServiceAvailability({
+  const textServices = appendProjectTextUiServiceAvailability({
     texts,
     fallback: input.hostUiServices,
   });
-  return Object.freeze({ owner, hostUiServices, close: () => owner.close() });
+  const hostUiServices =
+    recoveryOwner === undefined
+      ? textServices
+      : appendProjectTextRecoveryUiServiceAvailability({
+          fallback: textServices,
+          recovery: {
+            isAvailable: (request) => {
+              try {
+                recoveryOwner.assertAvailable();
+              } catch {
+                return false;
+              }
+              return (
+                request.requirement.apiVersion === "1" &&
+                recoveryConfiguration!.publications.some(
+                  (publication) =>
+                    publication.pluginId ===
+                      request.candidate.descriptor.pluginId &&
+                    publication.packageDigest ===
+                      request.candidate.packageDigest &&
+                    request.candidate.descriptor.contributions.some(
+                      (entry) =>
+                        entry.id === publication.contributionId &&
+                        entry.kind === "module" &&
+                        entry.slot === "main.content",
+                    ),
+                )
+              );
+            },
+          },
+        });
+  return Object.freeze({
+    owner,
+    ...(recoveryOwner === undefined ? {} : { recoveryOwner }),
+    hostUiServices,
+    close: async () => {
+      const results = await Promise.allSettled([
+        owner.close(),
+        recoveryOwner?.close(),
+      ]);
+      const failures = results.flatMap((result) =>
+        result.status === "rejected" ? [result.reason] : [],
+      );
+      if (failures.length)
+        throw new AggregateError(
+          failures,
+          "project_text_plugin_ui_cleanup_failed",
+        );
+    },
+  });
 }

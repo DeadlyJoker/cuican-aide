@@ -18,6 +18,20 @@ export function composeDesktopProjectPluginUiDispatch(
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
       if (
+        context.action === "crewon.project-text-recovery" ||
+        context.action.startsWith("crewon.project-text-recovery.")
+      ) {
+        if (
+          texts?.recoveryOwner === undefined ||
+          !texts.recoveryOwner.supportsAction(context.action)
+        )
+          throw new ApplicationError(
+            "conflict",
+            "plugin_ui_actions_unavailable",
+          );
+        return texts.recoveryOwner.actions.invoke(context);
+      }
+      if (
         context.action === "crewon.project-texts" ||
         context.action.startsWith("crewon.project-texts.")
       ) {
@@ -62,7 +76,12 @@ function committedDesktopProjectMetadata(
     texts === undefined
       ? original
       : combineSelectionCommittedMetadata(
-          texts.owner.committedMetadata,
+          texts.recoveryOwner === undefined
+            ? texts.owner.committedMetadata
+            : combineSelectionCommittedMetadata(
+                texts.recoveryOwner.committedMetadata,
+                texts.owner.committedMetadata,
+              ),
           original,
         );
   return combined === undefined ? {} : { committedMetadata: combined };

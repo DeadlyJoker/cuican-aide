@@ -157,7 +157,6 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       identity.kind,
       identity.receipt,
     );
-    if (q === undefined && textUi === undefined) return this.#receipt(identity);
     await assertCreativeProjectCommitCurrent(authority);
     if (authority?.runTransaction !== undefined)
       await authority.runTransaction.assertCurrent();
@@ -167,7 +166,15 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       () => {
         assertSqliteProjectRunCommit(this.#database, q);
         assertSqliteProjectTextUiCommit(this.#database, textUi);
-        return this.#receipt(identity);
+        const intent = beginSqliteTextIntentCommit(
+          this.#database,
+          textUi,
+          identity,
+        );
+        const result = this.#receipt(identity);
+        if (result !== null)
+          finishSqliteTextIntentCommit(this.#database, intent);
+        return result;
       },
       authority,
       q,
@@ -228,8 +235,16 @@ export class SqliteProjectTextStore implements ProjectTextStore {
           kind: prepared.kind,
           receipt: prepared.receipt,
         });
+        const intent = beginSqliteTextIntentCommit(
+          this.#database,
+          textUi,
+          identity,
+        );
         const replay = this.#receipt(identity);
-        if (replay !== null) return replay;
+        if (replay !== null) {
+          finishSqliteTextIntentCommit(this.#database, intent);
+          return replay;
+        }
         const owner = identity.owner,
           id = prepared.project.projectId;
         const project = this.#project(owner, id);
@@ -344,6 +359,7 @@ export class SqliteProjectTextStore implements ProjectTextStore {
             textJson(result),
           ],
         );
+        finishSqliteTextIntentCommit(this.#database, intent);
         return result;
       },
       authority,
@@ -463,3 +479,7 @@ export class SqliteProjectTextStore implements ProjectTextStore {
     }
   }
 }
+import {
+  beginSqliteTextIntentCommit,
+  finishSqliteTextIntentCommit,
+} from "./project-text-ui-intent-commit.ts";

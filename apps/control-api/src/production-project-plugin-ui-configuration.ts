@@ -16,6 +16,15 @@ export function assertProductionProjectPluginUiComposition(
     creativeProjects?.textUi,
     config.pluginUi?.configuration.publications,
   );
+  assertProjectTextPluginPublications(
+    creativeProjects?.textRecovery,
+    config.pluginUi?.configuration.publications,
+  );
+  if (
+    creativeProjects?.textRecovery !== undefined &&
+    config.pluginUi?.ownedProjectTextRecoveryActions !== undefined
+  )
+    throw new Error("project_text_recovery_actions_conflict");
   if (
     creativeProjects?.textUi !== undefined &&
     config.pluginUi?.ownedProjectTextActions !== undefined

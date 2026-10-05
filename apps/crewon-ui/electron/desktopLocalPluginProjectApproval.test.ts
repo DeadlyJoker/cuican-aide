@@ -213,6 +213,11 @@ it("explicit dual-entry text UI import opts into only its own text store/publica
     businessManifestPath: "business/manifest.json",
     requires: [
       { service: "crewon.project-texts", apiVersion: "1", optional: true },
+      {
+        service: "crewon.project-text-recovery",
+        apiVersion: "1",
+        optional: true,
+      },
     ],
   });
   const owner = f.create();
@@ -224,9 +229,10 @@ it("explicit dual-entry text UI import opts into only its own text store/publica
     previous.schemaVersion !== "crewon.desktop-plugin-approval.v3"
   )
     throw new Error("execution fixture required");
-  const { textArtifacts, textUi, ...original } = saved.projects;
+  const { textArtifacts, textUi, textRecovery, ...original } = saved.projects;
   expect(original).toEqual(previous.projects);
   expect(textArtifacts).toEqual({ version: "crewon.project-text.v1" });
+  expect(textRecovery).toEqual(textUi);
   expect(textUi).toEqual({
     publications: [
       {

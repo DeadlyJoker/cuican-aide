@@ -1,9 +1,20 @@
-import { ApplicationError, type ActorContext } from "@crewon/application";
+import {
+  ApplicationError,
+  isPluginProjectTextActionOwner,
+  isPluginProjectTextRecoveryActionOwner,
+  type ActorContext,
+  type PluginUiActionContext,
+} from "@crewon/application";
 import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import { extensionCanonicalJson } from "@crewon/domain";
 import type { InvokePluginUiActionCommand } from "@crewon/application";
 import type { PluginUiJsonValue } from "@crewon/contracts/plugins";
 import { parseProjectTextUiActionRequest } from "@crewon/contracts/project-texts-ui";
+import {
+  isProjectTextRecoveryNamespaceAction,
+  parseProjectTextRecoveryActionRequest,
+} from "@crewon/contracts/project-text-recovery";
+import type { ProductionPluginUiConfig } from "./production-plugin-ui-composition.ts";
 import type { ControlApiRequestContext } from "./control-api-ports.ts";
 import {
   AbortSecurityDeadline,
@@ -48,6 +59,15 @@ export function createProductionProjectTextPluginRuntime(
   if (!(input.identity instanceof ProductionControlApiIdentity))
     throw new Error("production_project_text_identity_required");
   assertProjectTextPluginPublications(configuration, input.ui.publications);
+  assertProjectTextPluginPublications(
+    input.projects.textRecovery,
+    input.ui.publications,
+  );
+  if (
+    input.projects.textRecovery !== undefined &&
+    input.projects.textRecoveryService === undefined
+  )
+    throw new Error("project_text_recovery_service_required");
   let requests: InstalledPluginRequestOwner | undefined;
   const deadline = new AbortSecurityDeadline();
   const profiles = new AuthorityPluginHostProfile({
@@ -73,42 +93,62 @@ export function createProductionProjectTextPluginRuntime(
     profiles,
   });
   const currentRequests = requests;
+  const authorization = {
+    authorize: async (context: PluginUiActionContext) => {
+      await currentRequests.assertCurrent();
+      if (
+        extensionCanonicalJson(context.actor) !==
+          extensionCanonicalJson(currentRequests.currentActor()) ||
+        extensionCanonicalJson(context.scope) !==
+          extensionCanonicalJson(currentRequests.currentScope())
+      )
+        throw new ApplicationError(
+          "authorization",
+          "plugin_ui_invocation_unavailable",
+        );
+    },
+  };
   const metadata = createProjectTextPluginUiRuntime({
     texts: input.projects.textService!,
     configuration,
     ...(input.hostUiServices === undefined
       ? {}
       : { hostUiServices: input.hostUiServices }),
-    authorization: {
-      authorize: async (context) => {
-        await currentRequests.assertCurrent();
-        if (
-          extensionCanonicalJson(context.actor) !==
-            extensionCanonicalJson(currentRequests.currentActor()) ||
-          extensionCanonicalJson(context.scope) !==
-            extensionCanonicalJson(currentRequests.currentScope())
-        )
-          throw new ApplicationError(
-            "authorization",
-            "plugin_ui_invocation_unavailable",
-          );
-      },
-    },
+    authorization,
+    ...(input.projects.textRecovery === undefined
+      ? {}
+      : {
+          recovery: {
+            configuration: input.projects.textRecovery,
+            service: input.projects.textRecoveryService!,
+            authorization,
+          },
+        }),
   });
   let closing: Promise<void> | undefined;
   return Object.freeze({
     ...metadata,
     invokeAuthenticatedRequest: (request, actor, command, signal, invoke) => {
-      if (!metadata.owner.supportsAction(command.action))
+      const recovery = isProjectTextRecoveryNamespaceAction(command.action);
+      if (
+        recovery
+          ? !metadata.recoveryOwner?.supportsAction(command.action)
+          : !metadata.owner.supportsAction(command.action)
+      )
         throw new ApplicationError(
           "validation",
           "plugin_project_text_action_invalid",
         );
-      const action = parseProjectTextUiActionRequest({
+      const raw = {
         action: command.action,
         input: command.input,
-      });
-      const isMutation = Object.hasOwn(action.input, "idempotencyKey");
+      };
+      const action = recovery
+        ? parseProjectTextRecoveryActionRequest(raw)
+        : parseProjectTextUiActionRequest(raw);
+      const isMutation =
+        Object.hasOwn(action.input, "idempotencyKey") ||
+        action.action === "crewon.project-text-recovery.v1.acknowledge";
       return currentRequests.run(
         { request, actor, signal, preparation: "configuration" },
         async () => {
@@ -134,4 +174,58 @@ export function createProductionProjectTextPluginRuntime(
       }));
     },
   });
+}
+
+export function productionProjectTextOwnerConfiguration(
+  runtime: ProjectTextPluginUiRuntime | undefined,
+): Pick<
+  ProductionPluginUiConfig,
+  "ownedProjectTextActions" | "ownedProjectTextRecoveryActions"
+> {
+  return runtime === undefined
+    ? {}
+    : {
+        ownedProjectTextActions: runtime.owner,
+        ...(runtime.recoveryOwner === undefined
+          ? {}
+          : { ownedProjectTextRecoveryActions: runtime.recoveryOwner }),
+      };
+}
+
+/** Capture failure joins only transferred genuine metadata owners, never structural copies. */
+export async function closeProductionProjectTextOwners(
+  input: Readonly<{ texts: unknown; recovery: unknown }>,
+): Promise<void> {
+  const results = await Promise.allSettled([
+    isPluginProjectTextActionOwner(input.texts)
+      ? input.texts.close()
+      : undefined,
+    isPluginProjectTextRecoveryActionOwner(input.recovery)
+      ? input.recovery.close()
+      : undefined,
+  ]);
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (failures.length)
+    throw new AggregateError(
+      failures,
+      "production_project_text_owners_close_failed",
+    );
+}
+
+/** Capture transferred owner identities synchronously before any configuration or I/O await. */
+export function captureProductionProjectTextOwnerCleanup(
+  input:
+    | Pick<
+        ProductionPluginUiConfig,
+        "ownedProjectTextActions" | "ownedProjectTextRecoveryActions"
+      >
+    | undefined,
+): () => Promise<void> {
+  const owners = Object.freeze({
+    texts: input?.ownedProjectTextActions,
+    recovery: input?.ownedProjectTextRecoveryActions,
+  });
+  return () => closeProductionProjectTextOwners(owners);
 }

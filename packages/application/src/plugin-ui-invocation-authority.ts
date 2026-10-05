@@ -5,6 +5,11 @@ import { committedTaskContext } from "./plugin-ui-committed-task-support.ts";
 import { isProjectTextUiMutationAction } from "@crewon/contracts/project-texts-ui";
 import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
 import { projectTextActionContext } from "./plugin-project-text-action-context.ts";
+import { projectTextRecoveryContext } from "./plugin-project-text-recovery-context.ts";
+import type {
+  ProjectTextRecoveryCommitAuthority,
+  ProjectTextRecoveryCommitTransactionAuthority,
+} from "./project-text-recovery-commit-authority.ts";
 
 export type PluginUiInvocationCommitAuthority = Readonly<{
   assertCurrent(): Promise<void>;
@@ -24,6 +29,8 @@ type Invocation = Readonly<{
   }>;
   textUiTransaction?: ProjectTextUiCommitTransactionAuthority &
     Readonly<{ fingerprint: string }>;
+  recoveryTransaction?: ProjectTextRecoveryCommitTransactionAuthority &
+    Readonly<{ fingerprint: string }>;
 }>;
 const invocations = new WeakMap<object, Invocation>();
 
@@ -34,6 +41,7 @@ export function registerPluginUiInvocation(
   assertActive?: () => void,
   transaction?: Readonly<{ assertCurrent(): Promise<void> }>,
   textUiTransaction?: Readonly<{ assertCurrent(): Promise<void> }>,
+  recoveryTransaction?: Readonly<{ assertCurrent(): Promise<void> }>,
 ): () => void {
   if (
     context === null ||
@@ -41,7 +49,9 @@ export function registerPluginUiInvocation(
     typeof assertCurrent !== "function" ||
     (assertActive !== undefined && typeof assertActive !== "function") ||
     invocations.has(context) ||
-    (transaction !== undefined && textUiTransaction !== undefined)
+    [transaction, textUiTransaction, recoveryTransaction].filter(
+      (value) => value !== undefined,
+    ).length > 1
   )
     throw new ApplicationError(
       "internal",
@@ -49,6 +59,40 @@ export function registerPluginUiInvocation(
     );
   let capturedTransaction: Invocation["transaction"];
   let capturedTextTransaction: Invocation["textUiTransaction"];
+  let capturedRecoveryTransaction: Invocation["recoveryTransaction"];
+  if (recoveryTransaction !== undefined) {
+    const method = Object.getOwnPropertyDescriptor(
+      recoveryTransaction,
+      "assertCurrent",
+    );
+    if (
+      ![Object.prototype, null].includes(
+        Object.getPrototypeOf(recoveryTransaction),
+      ) ||
+      Reflect.ownKeys(recoveryTransaction).length !== 1 ||
+      method === undefined ||
+      !method.enumerable ||
+      !Object.hasOwn(method, "value") ||
+      typeof method.value !== "function"
+    )
+      throw new ApplicationError(
+        "internal",
+        "plugin_ui_invocation_registration_invalid",
+      );
+    const snapshot = projectTextRecoveryContext(context);
+    capturedRecoveryTransaction = Object.freeze({
+      version: "crewon.project-text-recovery-commit.v1",
+      actor: snapshot.context.actor,
+      installation: snapshot.installation,
+      contributionId: snapshot.context.lease.contributionId,
+      actionId: snapshot.request.action,
+      input: snapshot.request.input,
+      selection: snapshot.context.selection,
+      package: snapshot.context.package,
+      fingerprint: snapshot.fingerprint,
+      assertCurrent: method.value.bind(recoveryTransaction),
+    });
+  }
   if (textUiTransaction !== undefined) {
     const method = Object.getOwnPropertyDescriptor(
       textUiTransaction,
@@ -82,6 +126,7 @@ export function registerPluginUiInvocation(
       input: snapshot.request.input,
       selection: snapshot.context.selection,
       package: snapshot.context.package,
+      contributionId: snapshot.context.lease.contributionId,
       fingerprint: snapshot.fingerprint,
       assertCurrent: method.value.bind(textUiTransaction),
     });
@@ -127,6 +172,9 @@ export function registerPluginUiInvocation(
     ...(capturedTextTransaction === undefined
       ? {}
       : { textUiTransaction: capturedTextTransaction }),
+    ...(capturedRecoveryTransaction === undefined
+      ? {}
+      : { recoveryTransaction: capturedRecoveryTransaction }),
   });
   invocations.set(context, invocation);
   return () => {
@@ -146,7 +194,11 @@ export function capturePluginProjectTextUiInvocationCommitAuthority(
     context !== null && typeof context === "object"
       ? invocations.get(context)
       : undefined;
-  if (invocation === undefined || invocation.transaction !== undefined)
+  if (
+    invocation === undefined ||
+    invocation.transaction !== undefined ||
+    invocation.recoveryTransaction !== undefined
+  )
     throw new ApplicationError(
       "authorization",
       "plugin_ui_invocation_unavailable",
@@ -193,6 +245,9 @@ export function capturePluginProjectTextUiInvocationCommitAuthority(
             input: captured.input,
             selection: captured.selection,
             package: captured.package,
+            ...(captured.contributionId === undefined
+              ? {}
+              : { contributionId: captured.contributionId }),
             assertCurrent: async () => {
               try {
                 current();
@@ -220,6 +275,81 @@ export function capturePluginProjectTextUiInvocationCommitAuthority(
             },
           }),
         }),
+  });
+}
+
+/** Independent read/ACK grant issued only by an exact actual live recovery invocation. */
+export function capturePluginProjectTextRecoveryInvocationCommitAuthority(
+  context: PluginUiActionContext,
+): ProjectTextRecoveryCommitAuthority {
+  const invocation =
+    context !== null && typeof context === "object"
+      ? invocations.get(context)
+      : undefined;
+  if (
+    invocation?.recoveryTransaction === undefined ||
+    invocation.transaction !== undefined ||
+    invocation.textUiTransaction !== undefined
+  )
+    throw new ApplicationError(
+      "authorization",
+      "plugin_project_text_recovery_transaction_required",
+    );
+  const base = capturePluginUiInvocationCommitAuthority(context),
+    captured = invocation.recoveryTransaction;
+  const current = () => {
+    base.assertActive();
+    if (
+      projectTextRecoveryContext(context).fingerprint !== captured.fingerprint
+    )
+      throw new ApplicationError(
+        "authorization",
+        "plugin_ui_invocation_unavailable",
+      );
+  };
+  current();
+  return Object.freeze({
+    assertActive: current,
+    assertCurrent: async () => {
+      current();
+      await base.assertCurrent();
+      current();
+    },
+    recoveryTransaction: Object.freeze({
+      version: captured.version,
+      actor: captured.actor,
+      installation: captured.installation,
+      contributionId: captured.contributionId,
+      actionId: captured.actionId,
+      input: captured.input,
+      selection: captured.selection,
+      package: captured.package,
+      assertCurrent: async () => {
+        try {
+          current();
+          const result: unknown = await captured.assertCurrent();
+          if (result !== undefined)
+            throw new ApplicationError(
+              "authorization",
+              "plugin_ui_invocation_current_check_invalid",
+            );
+          current();
+        } catch (error) {
+          if (
+            error instanceof ApplicationError &&
+            error.code === "plugin_ui_authorization_denied" &&
+            invocations.get(context) === invocation
+          )
+            invocations.delete(context);
+          if (error instanceof ApplicationError) throw error;
+          throw new ApplicationError(
+            "authorization",
+            "plugin_ui_invocation_unavailable",
+            { cause: error },
+          );
+        }
+      },
+    }),
   });
 }
 

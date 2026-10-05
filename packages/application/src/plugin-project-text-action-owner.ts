@@ -14,6 +14,10 @@ import {
 import { ApplicationError } from "./application-error.ts";
 import { ProjectTextApplicationService } from "./project-text-application-service.ts";
 import { capturePluginProjectTextUiInvocationCommitAuthority } from "./plugin-ui-invocation-authority.ts";
+import {
+  PluginProjectTextRecoveryApplicationService,
+  isPluginProjectTextRecoveryApplicationService,
+} from "./plugin-project-text-recovery-application-service.ts";
 import { projectTextActionContext } from "./plugin-project-text-action-context.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
@@ -48,6 +52,7 @@ export type PluginProjectTextActionOwnerDependencies = Readonly<{
   texts: ProjectTextApplicationService;
   publications: readonly PluginProjectTextActionPublication[];
   authorization: PluginProjectTextActionAuthorizationPort;
+  recovery?: PluginProjectTextRecoveryApplicationService;
 }>;
 type Outcome = Readonly<{
   context: PluginUiActionContext;
@@ -69,6 +74,13 @@ export class PluginProjectTextActionOwner {
   readonly #texts: ReturnType<typeof captureTexts>;
   readonly #publications: readonly PluginProjectTextActionPublication[];
   readonly #authorize: PluginProjectTextActionAuthorizationPort["authorize"];
+  readonly #recovery:
+    | Readonly<{
+        supports: PluginProjectTextRecoveryApplicationService["supports"];
+        stage: PluginProjectTextRecoveryApplicationService["stage"];
+        observeFailure: PluginProjectTextRecoveryApplicationService["observeFailure"];
+      }>
+    | undefined;
   readonly #outcomes = new WeakMap<object, Outcome>();
   #closed = false;
   #pending = 0;
@@ -76,10 +88,25 @@ export class PluginProjectTextActionOwner {
   #finishClose: (() => void) | undefined;
   constructor(input: PluginProjectTextActionOwnerDependencies) {
     try {
-      const value = uiRecord(input, ["texts", "publications", "authorization"]);
+      const value = uiRecord(input, [
+        "texts",
+        "publications",
+        "authorization",
+        ...(Object.hasOwn(input, "recovery") ? ["recovery"] : []),
+      ]);
       this.#texts = captureTexts(value.texts);
-      this.#publications = capturePublications(value.publications);
+      this.#publications = captureProjectTextPublications(value.publications);
       this.#authorize = captureAuthorization(value.authorization);
+      if (value.recovery !== undefined) {
+        if (!isPluginProjectTextRecoveryApplicationService(value.recovery))
+          throw new Error("plugin_project_text_recovery_config_invalid");
+        const proto = PluginProjectTextRecoveryApplicationService.prototype;
+        this.#recovery = Object.freeze({
+          supports: proto.supports.bind(value.recovery),
+          stage: proto.stage.bind(value.recovery),
+          observeFailure: proto.observeFailure.bind(value.recovery),
+        });
+      }
     } catch (cause) {
       throw new ApplicationError(
         "internal",
@@ -186,7 +213,32 @@ export class PluginProjectTextActionOwner {
     this.#pending++;
     try {
       await authority.assertCurrent();
-      const result = await this.#dispatch(snapshot.context, request, authority);
+      const journal =
+        this.#recovery !== undefined &&
+        original.textUiTransaction !== undefined &&
+        this.#recovery.supports(snapshot.context)
+          ? this.#recovery
+          : undefined;
+      const committedAuthority =
+        journal === undefined
+          ? authority
+          : await journal.stage(invocation, authority);
+      let result: Readonly<{ kind: "read" | "metadata"; output: unknown }>;
+      try {
+        result = await this.#dispatch(
+          snapshot.context,
+          request,
+          committedAuthority,
+        );
+      } catch (error) {
+        if (journal !== undefined)
+          try {
+            await journal.observeFailure(invocation, committedAuthority, error);
+          } catch {
+            /* Unknown journal outcome never replaces the original business error or clears pending. */
+          }
+        throw error;
+      }
       if (result.kind === "read") await authority.assertCurrent();
       // The finite text/content bounds guarantee a single write acknowledgement fits this budget.
       const output = parsePluginUiJsonValue(
@@ -426,7 +478,7 @@ function captureTexts(input: unknown) {
     setLocked: proto.setLocked.bind(input),
   });
 }
-function capturePublications(
+export function captureProjectTextPublications(
   input: unknown,
 ): readonly PluginProjectTextActionPublication[] {
   if (

@@ -47,10 +47,8 @@ import {
   desktopProjectUiPublications,
   type DesktopProjectHistoryPluginRuntime,
 } from "./desktop-project-history-plugin-runtime.ts";
-import {
-  createProjectTextPluginUiRuntime,
-  type ProjectTextPluginUiRuntime,
-} from "./project-text-plugin-ui-composition.ts";
+import { type ProjectTextPluginUiRuntime } from "./project-text-plugin-ui-composition.ts";
+import { createDesktopProjectTextPluginRuntime } from "./desktop-project-text-plugin-runtime.ts";
 import { composeDesktopProjectPluginUiDispatch } from "./desktop-project-plugin-ui-dispatch.ts";
 import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 import {
@@ -261,28 +259,14 @@ export async function createDesktopPluginRuntime(
         },
       });
     }
-    if (dependencies.creativeProjects?.textUi !== undefined) {
-      if (dependencies.creativeProjects.textService === undefined)
-        throw new Error("project_text_plugin_ui_service_required");
-      textUi = createProjectTextPluginUiRuntime({
-        configuration: dependencies.creativeProjects.textUi,
-        texts: dependencies.creativeProjects.textService,
-        ...(projectUi === undefined
-          ? {}
-          : { hostUiServices: projectUi.hostUiServices }),
-        authorization: {
-          authorize: async (context) => {
-            authority.assertScope(context.actor, context.scope);
-            if (installation === null)
-              throw new ApplicationError(
-                "conflict",
-                "plugin_ui_actions_unavailable",
-              );
-            installation.assertProfileOwnership(context.actor);
-          },
-        },
-      });
-    }
+    textUi = createDesktopProjectTextPluginRuntime({
+      projects: dependencies.creativeProjects,
+      authority,
+      installation: () => installation,
+      ...(projectUi === undefined
+        ? {}
+        : { hostUiServices: projectUi.hostUiServices }),
+    });
     installation = await createDesktopPluginInstallationRuntime(
       { configuration, registry, authority },
       {
@@ -548,7 +532,9 @@ export async function createDesktopPluginRuntime(
               const dispatch = (requestSignal: AbortSignal | undefined) => {
                 if (
                   command.action === "crewon.project-texts" ||
-                  command.action.startsWith("crewon.project-texts.")
+                  command.action.startsWith("crewon.project-texts.") ||
+                  command.action === "crewon.project-text-recovery" ||
+                  command.action.startsWith("crewon.project-text-recovery.")
                 )
                   return invoke();
                 if (projectUi?.owner.supportsAction(command.action))

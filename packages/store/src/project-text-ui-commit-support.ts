@@ -106,7 +106,9 @@ const installationTables = [
 /** No Run/credit schema is needed; these are the three original installation tables. */
 export function assertSqliteProjectTextUiCommit(
   database: DatabaseSync,
-  q: ProjectTextUiQualification | undefined,
+  q:
+    | Pick<ProjectTextUiQualification, "installation" | "selection" | "package">
+    | undefined,
 ): void {
   if (q === undefined) return;
   for (const table of installationTables) {
@@ -128,7 +130,9 @@ export function assertSqliteProjectTextUiCommit(
 export async function assertPostgresProjectTextUiCommit(
   client: PoolClient,
   schema: string,
-  q: ProjectTextUiQualification | undefined,
+  q:
+    | Pick<ProjectTextUiQualification, "installation" | "selection" | "package">
+    | undefined,
 ): Promise<void> {
   if (q === undefined) return;
   // Validate the configured schema string without search_path or another connection.

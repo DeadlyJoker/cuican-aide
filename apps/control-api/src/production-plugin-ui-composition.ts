@@ -6,6 +6,8 @@ import {
   type PluginUiRecoveryApplicationService,
   isPluginProjectTextActionOwner,
   type PluginProjectTextActionOwner,
+  isPluginProjectTextRecoveryActionOwner,
+  type PluginProjectTextRecoveryActionOwner,
   isPluginCreativeProjectActionOwner,
   type PluginCreativeProjectActionOwner,
   type ApplicationClock,
@@ -63,6 +65,7 @@ export type ProductionPluginUiConfig = Readonly<{
   /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
   ownedProjectTextActions?: PluginProjectTextActionOwner;
+  ownedProjectTextRecoveryActions?: PluginProjectTextRecoveryActionOwner;
   ownedProjectGenerationActions?: InstalledPluginProjectGenerationOwner;
   ownedProjectGenerationReadActions?: PluginProjectGenerationReadActionBridge;
   ownedProjectQueryActions?: InstalledPluginProjectQueryOwner;
@@ -90,6 +93,7 @@ export function createProductionPluginUiRuntime(
     captureProductionPluginUiActions(input);
   const metadataOwner = input.ownedCreativeProjectActions;
   const textOwner = input.ownedProjectTextActions;
+  const textRecoveryOwner = input.ownedProjectTextRecoveryActions;
   const generationOwner = input.ownedProjectGenerationActions;
   const generationReadOwner = input.ownedProjectGenerationReadActions;
   const queryOwner = input.ownedProjectQueryActions;
@@ -111,12 +115,24 @@ export function createProductionPluginUiRuntime(
         );
   if (textOwner !== undefined && !isPluginProjectTextActionOwner(textOwner))
     throw new Error("production_plugin_ui_text_owner_invalid");
-  const committedMetadata =
+  const textMetadata =
     textOwner === undefined
       ? originalCommittedMetadata
       : combineSelectionCommittedMetadata(
           textOwner.committedMetadata,
           originalCommittedMetadata,
+        );
+  if (
+    textRecoveryOwner !== undefined &&
+    !isPluginProjectTextRecoveryActionOwner(textRecoveryOwner)
+  )
+    throw new Error("production_plugin_ui_text_recovery_owner_invalid");
+  const committedMetadata =
+    textRecoveryOwner === undefined
+      ? textMetadata
+      : combineSelectionCommittedMetadata(
+          textRecoveryOwner.committedMetadata,
+          textMetadata,
         );
   if (
     queryOwner !== undefined &&
@@ -227,6 +243,20 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (
+            request.action === "crewon.project-text-recovery" ||
+            request.action.startsWith("crewon.project-text-recovery.")
+          ) {
+            if (
+              textRecoveryOwner === undefined ||
+              !textRecoveryOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return textRecoveryOwner.actions.invoke(request);
+          }
           if (
             request.action === "crewon.project-texts" ||
             request.action.startsWith("crewon.project-texts.")
@@ -370,6 +400,7 @@ export function createProductionPluginUiRuntime(
         owner?.close(),
         metadataOwner?.close(),
         textOwner?.close(),
+        textRecoveryOwner?.close(),
         selectionOwner?.close(),
       ]).then((results) => {
         const failures = results.flatMap((result) =>
@@ -393,6 +424,13 @@ export function captureProductionPluginUiActions(
   committedTasks: PluginUiCommittedTaskPort | undefined;
   owner: InstalledPluginTaskActionOwner | undefined;
 }> {
+  if (
+    input.ownedProjectTextRecoveryActions !== undefined &&
+    !isPluginProjectTextRecoveryActionOwner(
+      input.ownedProjectTextRecoveryActions,
+    )
+  )
+    throw new Error("production_plugin_ui_text_recovery_owner_invalid");
   if (
     input.ownedProjectTextActions !== undefined &&
     !isPluginProjectTextActionOwner(input.ownedProjectTextActions)

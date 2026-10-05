@@ -1,6 +1,7 @@
 import {
   CreativeProjectApplicationService,
   ProjectTextApplicationService,
+  type PluginProjectTextRecoveryApplicationService,
   type ProjectTextStore,
   type CreativeProjectAuthorizationPort,
   type CreativeProjectStore,
@@ -48,12 +49,17 @@ import {
   type ProjectGenerationSelectionStore,
   type ProjectGenerationSelectionStoreOwner,
 } from "./project-generation-selection-composition.ts";
+import {
+  prepareProjectTextRecovery,
+  type ProjectTextRecoveryStoreOwner,
+} from "./project-text-recovery-composition.ts";
 
 /** Explicit trusted host authority; local project management does not grant paid execution. */
 export type CreativeProjectCompositionConfig = Readonly<{
   authorization: CreativeProjectAuthorizationPort;
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
   textUi?: ProjectTextPluginUiConfig;
+  textRecovery?: ProjectTextPluginUiConfig;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -67,6 +73,8 @@ export type PreparedCreativeProjects = {
   readonly service: CreativeProjectApplicationService;
   readonly textService?: ProjectTextApplicationService;
   readonly textUi?: ProjectTextPluginUiConfig;
+  readonly textRecovery?: ProjectTextPluginUiConfig;
+  readonly textRecoveryService?: PluginProjectTextRecoveryApplicationService;
   readonly pluginUi?: CreativeProjectPluginUiConfig;
   readonly generationReads?: ProjectGenerationReadConfiguration;
   readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
@@ -94,12 +102,13 @@ export type PreparedCreativeProjects = {
   failureCleanup?: Promise<void>;
 };
 
-type CreativeProjectStoreOwner = Readonly<{
-  creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
-  projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
-  extensionStore?(): ProjectGenerationReadStore;
-  projectConceptSelectionStore?: ProjectGenerationSelectionStoreOwner["projectConceptSelectionStore"];
-}>;
+type CreativeProjectStoreOwner = ProjectTextRecoveryStoreOwner &
+  Readonly<{
+    creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
+    projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
+    extensionStore?(): ProjectGenerationReadStore;
+    projectConceptSelectionStore?: ProjectGenerationSelectionStoreOwner["projectConceptSelectionStore"];
+  }>;
 
 /** Capture the borrowed method before asynchronous startup without changing the caller. */
 export function captureCreativeProjectCompositionConfig(
@@ -115,6 +124,7 @@ export function captureCreativeProjectCompositionConfig(
         key !== "authorization" &&
         key !== "textArtifacts" &&
         key !== "textUi" &&
+        key !== "textRecovery" &&
         key !== "pluginUi" &&
         key !== "pluginGenerations" &&
         key !== "pluginQueries" &&
@@ -161,6 +171,27 @@ export function captureCreativeProjectCompositionConfig(
   const textUi = captureProjectTextPluginUiConfig(textUiField?.value);
   if (textUi !== undefined && textArtifacts === undefined)
     throw new Error("project_text_plugin_ui_store_required");
+  const recoveryField = fields.textRecovery;
+  if (
+    recoveryField !== undefined &&
+    (!Object.hasOwn(recoveryField, "value") || !recoveryField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const textRecovery = captureProjectTextPluginUiConfig(recoveryField?.value);
+  if (
+    textRecovery !== undefined &&
+    (textUi === undefined ||
+      textRecovery.publications.some(
+        (publication) =>
+          !textUi.publications.some(
+            (entry) =>
+              entry.pluginId === publication.pluginId &&
+              entry.packageDigest === publication.packageDigest &&
+              entry.contributionId === publication.contributionId,
+          ),
+      ))
+  )
+    throw new Error("project_text_recovery_publication_required");
   const pluginUiField = fields.pluginUi;
   if (
     pluginUiField !== undefined &&
@@ -247,6 +278,7 @@ export function captureCreativeProjectCompositionConfig(
         }),
         ...(textArtifacts === undefined ? {} : { textArtifacts }),
         ...(textUi === undefined ? {} : { textUi }),
+        ...(textRecovery === undefined ? {} : { textRecovery }),
         ...(pluginUi === undefined ? {} : { pluginUi }),
         ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
         ...(pluginQueries === undefined ? {} : { pluginQueries }),
@@ -308,6 +340,11 @@ export async function prepareCreativeProjects(
       digester: new NodeSha256ContentDigester(),
     });
   }
+  const textRecoveryService = await prepareProjectTextRecovery(owner, {
+    configuration: configuration.textRecovery,
+    projects: store,
+    authorization: configuration.authorization,
+  });
   if (
     configuration.pluginGenerations !== undefined &&
     configuration.resultSelections !== undefined
@@ -346,10 +383,14 @@ export async function prepareCreativeProjects(
           configuration.resultSelections,
         );
   return {
+    ...(textRecoveryService === undefined ? {} : { textRecoveryService }),
     ...(textService === undefined ? {} : { textService }),
     ...(configuration.textUi === undefined
       ? {}
       : { textUi: configuration.textUi }),
+    ...(configuration.textRecovery === undefined
+      ? {}
+      : { textRecovery: configuration.textRecovery }),
     ...(configuration.selectionUi === undefined
       ? {}
       : { selectionUi: configuration.selectionUi }),

@@ -5,6 +5,7 @@ import type {
   PublicProjectTextRevision,
 } from "../project-texts-ui-service";
 import type { TextDraft } from "./ProjectTextDraft";
+import type { TextRecoverySnapshot } from "./ProjectTextRecoveryController";
 
 export type TextTarget =
   | Readonly<{ kind: "outline" }>
@@ -41,6 +42,7 @@ export type TextSnapshot = Readonly<{
   conflictRefreshed: boolean;
   error: string | null;
   notice: string | null;
+  recovery: TextRecoverySnapshot;
 }>;
 export type TextIntent =
   | Readonly<{
@@ -83,4 +85,10 @@ export const initialTextSnapshot = (): TextSnapshot => ({
   conflictRefreshed: false,
   error: null,
   notice: null,
+  recovery: {
+    phase: "disabled",
+    intent: null,
+    acknowledging: false,
+    error: null,
+  },
 });

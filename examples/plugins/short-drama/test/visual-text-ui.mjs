@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
-import { textService } from "./text-ui.test-support.mjs";
+import { recoveryTextService } from "./text-recovery.test-support.mjs";
 
 // Dev-only browser verification. The package itself has no browser automation dependency.
 const { chromium } = await import(
@@ -30,12 +30,12 @@ const styles = new Map(
     "appearance.css",
   ].map((name) => [`/styles/${name}`, name]),
 );
-const service = textService();
+const service = recoveryTextService();
 service.metadata.create(
   "迟到的来信",
   "都市悬疑，三集短剧。快递员收到十年前自己寄出的信，决定寻找寄件人。",
 );
-const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Short14 module visual fixture</title><link rel="stylesheet" href="/styles/neutral-scale.css"><link rel="stylesheet" href="/styles/app.css"><link rel="stylesheet" href="/styles/original-shell-overrides.css"><link rel="stylesheet" href="/styles/team-workspace.css"><link rel="stylesheet" href="/styles/appearance.css"><style>html,body,#root,#theme-source{height:100%;width:100%;margin:0;overflow:hidden}#theme-source{display:block;min-width:0;min-height:0;border:0;padding:0}</style></head><body><div id="theme-source" class="screen-shell command-screen"><div id="root"></div></div><script type="module">
+const html = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Short15 module visual fixture</title><link rel="stylesheet" href="/styles/neutral-scale.css"><link rel="stylesheet" href="/styles/app.css"><link rel="stylesheet" href="/styles/original-shell-overrides.css"><link rel="stylesheet" href="/styles/team-workspace.css"><link rel="stylesheet" href="/styles/appearance.css"><style>html,body,#root,#theme-source{height:100%;width:100%;margin:0;overflow:hidden}#theme-source{display:block;min-width:0;min-height:0;border:0;padding:0}</style></head><body><div id="theme-source" class="screen-shell command-screen"><div id="root"></div></div><script type="module">
 import definition from '/ui.mjs';
 const mode=new URL(location.href).searchParams.get('mode')==='dark'?'dark':'light';
 document.documentElement.dataset.theme=mode;
@@ -179,6 +179,59 @@ try {
     await page.screenshot({ path: join(output, `script-${name}.png`) });
     checks.push({ name, width, height, mode, measurements });
   }
+  await page.setViewportSize({ width: 640, height: 900 });
+  await page.locator(".stage-item").nth(1).click();
+  await page.getByRole("button", { name: "故事大纲", exact: true }).click();
+  const synopsis = "原请求重启后仍然保留。\n快递员决定寻找那封信的来源。";
+  await page.getByLabel("故事梗概", { exact: true }).fill(synopsis);
+  service.loseBeforeNextWrite();
+  await page.getByRole("button", { name: "保存候选版本", exact: true }).click();
+  await page
+    .getByRole("button", { name: "用原请求重试", exact: true })
+    .waitFor();
+  const writeCount = service.writeCalls.length;
+  await page.reload();
+  await page.locator(".project-card").first().click();
+  await page
+    .getByRole("button", { name: "用原请求重试", exact: true })
+    .waitFor();
+  assert.equal(
+    await page.getByLabel("故事梗概", { exact: true }).inputValue(),
+    synopsis,
+  );
+  assert.equal(
+    service.writeCalls.length,
+    writeCount,
+    "cold mount must not repeat a business write",
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "保存候选版本", exact: true })
+      .isEnabled(),
+    false,
+  );
+  const recoveryMeasurements = await page.evaluate(() => ({
+    documentWidth: document.documentElement.scrollWidth,
+    contentWidth: document.querySelector(".drama-content").clientWidth,
+    scrollWidth: document.querySelector(".drama-content").scrollWidth,
+  }));
+  assert.ok(
+    recoveryMeasurements.documentWidth <= 640 &&
+      recoveryMeasurements.scrollWidth <= recoveryMeasurements.contentWidth + 1,
+  );
+  await page.locator(".drama-main").evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  await page.screenshot({ path: join(output, "recovery-narrow.png") });
+  checks.push({
+    name: "cold-pending-narrow",
+    width: 640,
+    height: 900,
+    mode: "dark",
+    measurements: recoveryMeasurements,
+    sameOriginalDraft: true,
+    automaticWrites: 0,
+  });
   assert.deepEqual(errors, []);
 } finally {
   if (browser) await browser.close();

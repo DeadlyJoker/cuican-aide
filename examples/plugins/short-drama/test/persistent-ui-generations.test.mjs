@@ -9,7 +9,7 @@ import {
   persistentProps,
 } from "./persistent-ui.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "14.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "15.0.0";
 const packageDirectory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;
@@ -136,6 +136,10 @@ function assertReadCall(call, expected) {
 function assertOnlyReads(service) {
   for (const call of service.calls) {
     if (call.action === readAction) continue;
+    if (call.action === "crewon.project-text-recovery.v1.getPending") {
+      assert.deepEqual(Object.keys(call.input), ["projectId"]);
+      continue;
+    }
     assert.ok(call.action.startsWith("crewon.creative-projects.v1."));
     assert.ok(readMethods.has(call.action.split(".").at(-1)), call.action);
   }

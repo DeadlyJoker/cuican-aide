@@ -750,6 +750,15 @@ export class SqliteRunStore implements DomainStore {
     });
   }
 
+  /** Independent journal; construction does not migrate or grant text write authority. */
+  projectTextUiIntentJournalStore(): SqliteProjectTextUiIntentJournalStore {
+    this.#assertOpen();
+    return new SqliteProjectTextUiIntentJournalStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
   /** Independent recovery journal; construction neither migrates nor enables it. */
   pluginUiIntentJournalStore(input: {
     verifier: PluginUiIntentPayloadVerifier;
@@ -7369,3 +7378,4 @@ import type {
   ArtifactRetentionReadOptions,
 } from "@crewon/application";
 import { canRetireSqliteArtifact } from "./artifact-retention-guard.ts";
+import { SqliteProjectTextUiIntentJournalStore } from "./project-text-ui-intent-sqlite-store.ts";

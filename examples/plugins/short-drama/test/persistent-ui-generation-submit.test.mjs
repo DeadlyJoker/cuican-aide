@@ -13,7 +13,7 @@ import {
   reference,
 } from "./generation-submit.test-support.mjs";
 
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "14.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "15.0.0";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL("../dist/" + version + "/", import.meta.url).pathname;

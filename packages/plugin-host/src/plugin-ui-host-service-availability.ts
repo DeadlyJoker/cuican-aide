@@ -171,6 +171,30 @@ export function appendProjectTextUiServiceAvailability(
   return port;
 }
 
+/** An independent metadata recovery owner never grants Node execution or older protocol availability. */
+export function appendProjectTextRecoveryUiServiceAvailability(
+  input: Readonly<{
+    recovery: PluginUiHostServiceAvailabilityPort;
+    fallback?: PluginUiHostServiceAvailabilityPort;
+  }>,
+): PluginUiHostServiceAvailabilityPort {
+  const recovery = capturePluginUiHostServiceAvailability(input.recovery)!;
+  const fallback = capturePluginUiHostServiceAvailability(input.fallback);
+  let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
+    isAvailable: (request) =>
+      request.requirement.service === "crewon.project-text-recovery"
+        ? request.requirement.apiVersion === "1" &&
+          recovery.isAvailable(request)
+        : fallback?.isAvailable(request) === true,
+  });
+  if (fallback !== undefined) {
+    port = preserveProjectGenerationHostAvailability(fallback, port);
+    port = preserveProjectGenerationContextHostAvailability(fallback, port);
+    port = preserveProjectGenerationQueryHostAvailability(fallback, port);
+  }
+  return port;
+}
+
 /** Known optional protocols can be declared without an owner; required generation protocols need actual assembly. */
 export function assertUiOnlyServiceDeclarations(
   descriptor: PluginPackageDescriptor,
@@ -195,6 +219,9 @@ export function assertUiOnlyServiceDeclarations(
             requirement.apiVersion === CREWON_PLUGIN_UI_RECOVERY_API_VERSION) ||
           (requirement.service === CREWON_PROJECT_TEXTS_SERVICE &&
             requirement.apiVersion === CREWON_PROJECT_TEXTS_API_VERSION &&
+            (requirement.optional || hostUiServices !== undefined)) ||
+          (requirement.service === "crewon.project-text-recovery" &&
+            requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === CREWON_PROJECT_GENERATIONS_SERVICE &&
             requirement.apiVersion === CREWON_PROJECT_GENERATIONS_API_VERSION &&

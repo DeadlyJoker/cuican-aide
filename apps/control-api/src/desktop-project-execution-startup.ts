@@ -65,6 +65,7 @@ export function issueDesktopProjectExecutionConfiguration(
     "pluginUi",
     "textArtifacts",
     "textUi",
+    "textRecovery",
     "pluginGenerations",
     "pluginQueries",
     "generationReads",

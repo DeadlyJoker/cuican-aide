@@ -40,7 +40,11 @@ export function desktopProjectUiPublications(
   projects:
     | Pick<
         PreparedCreativeProjects,
-        "pluginUi" | "textUi" | "generationReadUi" | "selectionUi"
+        | "pluginUi"
+        | "textUi"
+        | "textRecovery"
+        | "generationReadUi"
+        | "selectionUi"
       >
     | undefined,
   approved: DesktopPluginConfiguration["publications"],
@@ -48,6 +52,7 @@ export function desktopProjectUiPublications(
   const grants = [
     projects?.pluginUi,
     projects?.textUi,
+    projects?.textRecovery,
     projects?.generationReadUi,
     projects?.selectionUi,
   ];

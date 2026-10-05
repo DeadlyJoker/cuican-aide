@@ -7,6 +7,10 @@ import type {
 } from "../project-texts-ui-service";
 import type { ProjectDetails } from "./creative-project-controller";
 import type { PluginCreativeProjectClient } from "@crewon/plugin-sdk/ui";
+import type { PluginProjectTextRecoveryClient } from "../project-text-recovery-service";
+import { ProjectTextRecoveryController } from "./ProjectTextRecoveryController";
+import { loadProjectTextRecoveryView } from "./ProjectTextRecoveryView";
+import { readProjectTextView } from "./ProjectTextViewRead";
 import {
   emptyOutline,
   emptyScript,
@@ -22,24 +26,15 @@ import {
   type TextTarget,
 } from "./ProjectTextController.types";
 export type { TextSnapshot, TextTarget } from "./ProjectTextController.types";
-
-function conflict(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error
-      ? error.code
-      : error instanceof Error
-        ? error.message
-        : "";
-  return (
-    typeof code === "string" &&
-    /(?:revision_conflict|project_text_locked|project_text_dependencies_stale|project_text_(?:outline|brief)_reference_invalid|project_text_selection_required|idempotency_conflict|artifact_locked|project_archived)/u.test(
-      code,
-    )
-  );
-}
+import {
+  invokeTextIntent,
+  projectTextConflict,
+  projectTextMutationProjection,
+} from "./ProjectTextMutation";
 
 /** Manual edits use the same immutable text records as Agent tools, through real mount invokes. */
 export class ProjectTextController {
+  readonly recovery: ProjectTextRecoveryController;
   #client: PluginProjectTextUiClient;
   #projects: Pick<PluginCreativeProjectClient, "getProject" | "getBrief">;
   #details: ProjectDetails | null = null;
@@ -51,6 +46,7 @@ export class ProjectTextController {
   #reads = new Map<string, AbortController>();
   #write: AbortController | null = null;
   #intent: Intent | null = null;
+  #presentedRecovery: string | null = null;
   #drafts = new Map<
     string,
     Readonly<{
@@ -66,10 +62,20 @@ export class ProjectTextController {
     client: PluginProjectTextUiClient;
     projects: Pick<PluginCreativeProjectClient, "getProject" | "getBrief">;
     physicalWritesPending?: () => boolean;
+    recovery?: PluginProjectTextRecoveryClient;
   }) {
     this.#client = ports.client;
     this.#projects = ports.projects;
     this.#physicalWritesPending = ports.physicalWritesPending ?? (() => false);
+    this.recovery = new ProjectTextRecoveryController({
+      client: ports.recovery,
+      physicalWritesPending: this.#physicalWritesPending,
+      changed: () => this.#update({ recovery: this.recovery.getSnapshot() }),
+    });
+    this.#snapshot = {
+      ...this.#snapshot,
+      recovery: this.recovery.getSnapshot(),
+    };
   }
   getSnapshot = (): TextSnapshot => this.#snapshot;
   subscribe = (listener: () => void): (() => void) => {
@@ -80,6 +86,7 @@ export class ProjectTextController {
     return (
       Boolean(this.#intent) ||
       this.#snapshot.saving ||
+      this.recovery.navigationLocked ||
       this.#physicalWritesPending()
     );
   }
@@ -88,6 +95,7 @@ export class ProjectTextController {
     return (
       this.#available() &&
       !this.locked &&
+      !this.recovery.blocksWrites &&
       !opening &&
       dirty &&
       Boolean(draft) &&
@@ -96,9 +104,28 @@ export class ProjectTextController {
         : scriptValid(draft as Parameters<typeof scriptValid>[0]))
     );
   }
+  get contentReadBlocked(): boolean {
+    return (
+      Boolean(this.#intent) ||
+      this.#snapshot.saving ||
+      this.#physicalWritesPending() ||
+      this.recovery.getSnapshot().intent !== null
+    );
+  }
+  get canAcknowledgeRecovery(): boolean {
+    const record = this.recovery.getSnapshot().intent;
+    return Boolean(
+      record &&
+        record.phase !== "pending" &&
+        `${record.intentId}:${record.revision}` === this.#presentedRecovery &&
+        !this.#snapshot.opening &&
+        !this.#snapshot.saving,
+    );
+  }
   setReady(ready: boolean) {
     if (this.#disposed || ready === this.#ready) return;
     this.#ready = ready;
+    this.recovery.setReady(ready);
     if (!ready) {
       ++this.#epoch;
       this.#abortReads();
@@ -115,6 +142,7 @@ export class ProjectTextController {
           : {}),
       });
     }
+    if (ready && this.#details) void this.refreshRecovery();
   }
   setProject(details: ProjectDetails | null) {
     if (this.#disposed) return;
@@ -138,14 +166,18 @@ export class ProjectTextController {
     this.#abortReads();
     this.#write?.abort();
     this.#details = details;
+    this.recovery.setProject(details?.project.projectId ?? null);
     this.#intent = null;
+    this.#presentedRecovery = null;
     this.#snapshot = initial();
     this.#snapshot = {
       ...this.#snapshot,
       currentBriefRevision: details?.brief.briefRevision ?? null,
       archived: details?.project.state === "archived",
+      recovery: this.recovery.getSnapshot(),
     };
     this.#emit();
+    if (this.#ready && details) void this.refreshRecovery();
   }
   refreshWriteActivity() {
     this.#emit();
@@ -219,9 +251,10 @@ export class ProjectTextController {
     };
   }
   async open(target: TextTarget = this.#snapshot.target) {
-    if (!this.#canRead() || this.locked) return;
+    if (!this.#canRead() || this.contentReadBlocked) return;
     this.#remember();
     this.#reads.get("view")?.abort();
+    this.#reads.get("conflict")?.abort();
     const read = this.#reading("open");
     this.#reads.get("history")?.abort();
     const projectId = this.#details!.project.projectId;
@@ -240,57 +273,16 @@ export class ProjectTextController {
       notice: null,
     });
     try {
-      const project = (
-        await this.#projects.getProject(
-          { projectId },
-          { signal: read.controller.signal },
-        )
-      ).project;
+      const { details, view, outline, content } = await readProjectTextView({
+        client: this.#client,
+        projects: this.#projects,
+        projectId,
+        target,
+        signal: read.controller.signal,
+      });
       if (!read.current()) return;
-      const brief = (
-        await this.#projects.getBrief(
-          { projectId, briefRevision: project.latestBriefRevision },
-          { signal: read.controller.signal },
-        )
-      ).brief;
-      if (!read.current()) return;
-      if (project.revision >= this.#details!.project.revision)
-        this.#details = { project, brief };
-      const result =
-        target.kind === "outline"
-          ? await this.#client.getOutline(
-              { projectId },
-              { signal: read.controller.signal },
-            )
-          : await this.#client.getScript(
-              { projectId, episodeId: target.episodeId },
-              { signal: read.controller.signal },
-            );
-      if (!read.current()) return;
-      const view = result.view;
-      const outline =
-        target.kind === "outline"
-          ? view
-          : (
-              await this.#client.getOutline(
-                { projectId },
-                { signal: read.controller.signal },
-              )
-            ).view;
-      if (!read.current()) return;
-      let content = view?.selectedRevision ?? null;
-      if (!content && view) {
-        const latest = await this.#client.getRevision(
-          {
-            projectId,
-            artifactId: view.artifact.artifactId,
-            contentRevision: view.artifact.latestContentRevision,
-          },
-          { signal: read.controller.signal },
-        );
-        if (!read.current()) return;
-        content = latest.contentRevision;
-      }
+      if (details.project.revision >= this.#details!.project.revision)
+        this.#details = details;
       const cached = this.#drafts.get(this.#key(target));
       const saved = cached?.dirty ? cached : undefined;
       this.#update({
@@ -468,6 +460,7 @@ export class ProjectTextController {
     const artifact = this.#snapshot.view?.artifact;
     if (
       !this.#available() ||
+      this.recovery.blocksWrites ||
       this.locked ||
       !artifact ||
       artifact.locked ||
@@ -491,6 +484,7 @@ export class ProjectTextController {
     const artifact = this.#snapshot.view?.artifact;
     if (
       !this.#available() ||
+      this.recovery.blocksWrites ||
       this.locked ||
       !artifact ||
       artifact.selectedContentRevision === null
@@ -530,6 +524,11 @@ export class ProjectTextController {
       this.#physicalWritesPending()
     )
       return;
+    if (this.recovery.getSnapshot().intent?.phase === "refused") return;
+    if (this.recovery.getSnapshot().intent?.phase === "accepted") {
+      await this.refreshRecovery();
+      return;
+    }
     await this.#execute(this.#intent);
   }
   async refreshConflict() {
@@ -556,6 +555,14 @@ export class ProjectTextController {
               { signal: read.controller.signal },
             );
       if (!read.current()) return;
+      const current = this.#snapshot.view?.artifact;
+      if (
+        current &&
+        (!result.view ||
+          result.view.artifact.artifactId !== current.artifactId ||
+          result.view.artifact.revision < current.revision)
+      )
+        return;
       this.#update({
         view: result.view,
         conflictRefreshed: true,
@@ -566,13 +573,23 @@ export class ProjectTextController {
         this.#update({ error: "当前版本读取失败，草稿已保留。" });
     }
   }
-  continueDraft() {
+  async continueDraft() {
     if (
       !this.#snapshot.conflictRefreshed ||
       this.#snapshot.saving ||
       this.#physicalWritesPending()
     )
       return;
+    if (this.recovery.getSnapshot().phase !== "disabled") {
+      await this.recovery.check();
+      const record = this.recovery.getSnapshot().intent;
+      if (
+        record &&
+        (record.phase !== "refused" || !(await this.recovery.acknowledge()))
+      )
+        return;
+      if (this.recovery.blocksWrites) return;
+    }
     this.#intent = null;
     this.#update({
       failure: null,
@@ -587,6 +604,7 @@ export class ProjectTextController {
     const controller = new AbortController();
     this.#write = controller;
     this.#intent = intent;
+    this.recovery.beforeWrite();
     this.#update({
       saving: true,
       pendingKind: intent.kind,
@@ -598,56 +616,28 @@ export class ProjectTextController {
     const current = () =>
       !this.#disposed && epoch === this.#epoch && this.#write === controller;
     try {
-      const options = { signal: controller.signal };
-      const result: ProjectTextMutationResponse =
-        intent.kind === "save-outline"
-          ? await this.#client.saveOutlineCandidate(intent.input, options)
-          : intent.kind === "save-script"
-            ? await this.#client.saveScriptCandidate(intent.input, options)
-            : intent.kind === "select-revision"
-              ? await this.#client.selectRevision(intent.input, options)
-              : await this.#client.setLocked(intent.input, options);
+      const result = await invokeTextIntent(
+        this.#client,
+        intent,
+        controller.signal,
+      );
       if (!current()) return;
       this.#intent = null;
       this.#write = null;
-      const saved =
-        intent.kind === "save-outline" || intent.kind === "save-script";
-      const view: PublicProjectTextArtifactView = {
-        artifact: result.artifact,
-        selectedRevision:
-          intent.kind === "select-revision"
-            ? result.contentRevision
-            : (this.#snapshot.view?.selectedRevision ?? null),
-        dependencyState: this.#snapshot.view?.dependencyState ?? "unselected",
-        staleReasons: this.#snapshot.view?.staleReasons ?? [],
-      };
-      this.#update({
-        saving: false,
-        pendingKind: null,
-        failure: null,
-        view,
-        ...(saved
-          ? {
-              content: result.contentRevision,
-              draft: result.contentRevision?.content ?? this.#snapshot.draft,
-              dirty: false,
-            }
-          : {}),
-        notice: saved
-          ? "候选已保存，采用后成为后续阶段的来源。"
-          : intent.kind === "select-revision"
-            ? "已采用所选内容版本。"
-            : result.artifact.locked
-              ? "当前采用版本已锁定，仍可保存新的候选。"
-              : "已解锁，可以采用其他版本。",
-      });
+      this.#update(
+        projectTextMutationProjection(intent, result, this.#snapshot),
+      );
       this.#remember();
       await this.#refreshCommittedView(result);
+      await this.recovery.afterConfirmed(intent);
+      const record = this.recovery.getSnapshot().intent;
+      if (this.recovery.matches(intent) && record?.phase === "accepted")
+        this.#presentedRecovery = `${record.intentId}:${record.revision}`;
       void this.loadArtifacts();
     } catch (error) {
       if (!current()) return;
       this.#write = null;
-      const knownConflict = conflict(error);
+      const knownConflict = projectTextConflict(error);
       this.#update({
         saving: false,
         failure: knownConflict ? "conflict" : "uncertain",
@@ -655,7 +645,81 @@ export class ProjectTextController {
           ? "版本已改变或采用版本已锁定，草稿保留。请先读取当前状态。"
           : "尚未确认这次操作的结果。请用原请求重试，避免重复保存。",
       });
+      await this.recovery.check();
+      if (this.recovery.getSnapshot().intent?.phase === "accepted")
+        await this.refreshRecovery();
     }
+  }
+  async refreshRecovery() {
+    if (
+      !this.#canRead() ||
+      this.#snapshot.saving ||
+      this.#physicalWritesPending()
+    )
+      return;
+    const epoch = this.#epoch,
+      projectId = this.#details!.project.projectId;
+    const record = await this.recovery.check();
+    if (
+      !record ||
+      !this.#canRead() ||
+      epoch !== this.#epoch ||
+      projectId !== this.#details?.project.projectId
+    )
+      return;
+    const read = this.#reading("recovery-view");
+    for (const lane of ["open", "view", "history", "conflict"])
+      this.#reads.get(lane)?.abort();
+    this.#update({ opening: true });
+    try {
+      const restored = await loadProjectTextRecoveryView({
+        client: this.#client,
+        projects: this.#projects,
+        record,
+        signal: read.controller.signal,
+      });
+      if (
+        !read.current() ||
+        this.recovery.getSnapshot().intent?.intentId !== record.intentId ||
+        this.recovery.getSnapshot().intent?.revision !== record.revision
+      )
+        return;
+      if (restored.details.project.revision >= this.#details!.project.revision)
+        this.#details = restored.details;
+      this.#intent = record.phase === "accepted" ? null : restored.intent;
+      this.#presentedRecovery = `${record.intentId}:${record.revision}`;
+      this.#update({
+        ...restored.update,
+        currentBriefRevision: this.#details!.brief.briefRevision,
+        archived: this.#details!.project.state === "archived",
+      });
+      this.#remember();
+      void this.loadArtifacts();
+    } catch {
+      if (read.current())
+        this.#update({
+          opening: false,
+          error: "原请求保留，相关版本读取失败。请重新读取恢复记录。",
+        });
+    } finally {
+      if (read.current()) this.#update({ opening: false });
+    }
+  }
+  async acknowledgeRecovery() {
+    if (!this.canAcknowledgeRecovery) return;
+    const record = this.recovery.getSnapshot().intent;
+    if (!record || record.phase === "pending") return;
+    if (!(await this.recovery.acknowledge())) return;
+    this.#intent = null;
+    this.#update({
+      failure: null,
+      pendingKind: null,
+      error: null,
+      notice:
+        record.phase === "accepted"
+          ? "已确认上次保存结果，可以继续创作。"
+          : "原请求已关闭，草稿保留；可按当前版本保存新候选。",
+    });
   }
   async #refreshCommittedView(result: ProjectTextMutationResponse) {
     // Read publication has its own fence: a confirmed mutation cannot become unknown.
@@ -693,6 +757,7 @@ export class ProjectTextController {
     ++this.#epoch;
     this.#abortReads();
     this.#write?.abort();
+    this.recovery.dispose();
     this.#listeners.clear();
   }
 }

@@ -60,8 +60,17 @@ export function composeDesktopLocalPluginProjectApproval(
     );
   const projectsRequired = requested("crewon.creative-projects");
   const textsRequired = requested("crewon.project-texts");
+  const textRecoveryRequired = requested("crewon.project-text-recovery");
+  if (textRecoveryRequired && !textsRequired)
+    invalid("project_text_recovery_requires_texts");
   const recoveryRequired = requested("crewon.plugin-ui-recovery");
-  if (!projectsRequired && !textsRequired && !recoveryRequired) return approval;
+  if (
+    !projectsRequired &&
+    !textsRequired &&
+    !recoveryRequired &&
+    !textRecoveryRequired
+  )
+    return approval;
   const modules = descriptor.contributions
     .filter(
       (contribution) =>
@@ -85,6 +94,11 @@ export function composeDesktopLocalPluginProjectApproval(
   const texts = [
     ...("textUi" in previous ? (previous.textUi?.publications ?? []) : []),
   ];
+  const textRecovery = [
+    ...("textRecovery" in previous
+      ? (previous.textRecovery?.publications ?? [])
+      : []),
+  ];
   const recovery = [
     ...("uiRecovery" in previous
       ? (previous.uiRecovery?.publications ?? [])
@@ -105,6 +119,11 @@ export function composeDesktopLocalPluginProjectApproval(
       metadata.push(publication);
     if (textsRequired && !texts.some((current) => same(current, publication)))
       texts.push(publication);
+    if (
+      textRecoveryRequired &&
+      !textRecovery.some((current) => same(current, publication))
+    )
+      textRecovery.push(publication);
     if (
       recoveryRequired &&
       !recovery.some((current) => same(current, publication))
@@ -129,6 +148,9 @@ export function composeDesktopLocalPluginProjectApproval(
             textArtifacts: { version: "crewon.project-text.v1" },
             textUi: { publications: texts },
           }
+        : {}),
+      ...(textRecoveryRequired
+        ? { textRecovery: { publications: textRecovery } }
         : {}),
       ...(recoveryRequired
         ? {

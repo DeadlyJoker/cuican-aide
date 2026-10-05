@@ -85,6 +85,9 @@ export function textService() {
     });
   }
   async function invoke(action, input, options) {
+    // Empty-journal public fixture for the original manual text regression cases.
+    // Cold recovery itself is exercised by text-recovery.test-support and real host SQL tests.
+    if (action === "crewon.project-text-recovery.v1.getPending") return { intent: null };
     if (!action.startsWith("crewon.project-texts.v1."))
       return metadata.services.invoke(action, input, options);
     const method = action.split(".").at(-1);

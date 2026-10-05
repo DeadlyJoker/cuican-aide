@@ -245,6 +245,16 @@ export class PostgresDomainStore
     });
   }
 
+  /** Independent journal; construction does not migrate or grant text write authority. */
+  projectTextUiIntentJournalStore(): PostgresProjectTextUiIntentJournalStore {
+    this.assertOpen();
+    return new PostgresProjectTextUiIntentJournalStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
   /** Independent recovery journal; construction neither migrates nor enables it. */
   pluginUiIntentJournalStore(input: {
     verifier: PluginUiIntentPayloadVerifier;
@@ -1802,3 +1812,4 @@ function validateReleaseActivationInput(input: {
     throw new RunStoreError("agent_version_release_activation_mismatch");
   }
 }
+import { PostgresProjectTextUiIntentJournalStore } from "./project-text-ui-intent-postgres-store.ts";

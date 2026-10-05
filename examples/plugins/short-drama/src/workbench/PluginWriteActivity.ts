@@ -13,6 +13,7 @@ const writes = new Set([
   "crewon.project-texts.v1.saveScriptCandidate",
   "crewon.project-texts.v1.selectRevision",
   "crewon.project-texts.v1.setLocked",
+  "crewon.project-text-recovery.v1.acknowledge",
 ]);
 
 /** SDK cancellation ends UI waiting; the original Host invocation may still be open. */

@@ -27,6 +27,7 @@ export type DesktopProjectHistoryConfiguration = Readonly<{
   pluginUi?: Publications;
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
   textUi?: Publications;
+  textRecovery?: Publications;
   generationReads?: Readonly<{ version: "crewon.project-generation-read.v1" }>;
   generationReadUi?: Publications;
   resultSelections?: Readonly<{
@@ -64,6 +65,7 @@ export function parseDesktopProjectHistoryConfiguration(
       "pluginUi",
       "textArtifacts",
       "textUi",
+      "textRecovery",
       "generationReads",
       "generationReadUi",
       "resultSelections",
@@ -105,6 +107,7 @@ export function parseDesktopProjectHistoryConfiguration(
     });
     const pluginUi = publications(value.pluginUi, approved);
     const textUi = publications(value.textUi, approved);
+    const textRecovery = publications(value.textRecovery, approved);
     const textArtifacts =
       value.textArtifacts === undefined
         ? undefined
@@ -113,6 +116,20 @@ export function parseDesktopProjectHistoryConfiguration(
       (textArtifacts !== undefined &&
         textArtifacts.version !== "crewon.project-text.v1") ||
       (textUi !== undefined && textArtifacts === undefined)
+    )
+      invalid();
+    if (
+      textRecovery !== undefined &&
+      (textUi === undefined ||
+        textRecovery.publications.some(
+          (publication) =>
+            !textUi.publications.some(
+              (entry) =>
+                entry.pluginId === publication.pluginId &&
+                entry.packageDigest === publication.packageDigest &&
+                entry.contributionId === publication.contributionId,
+            ),
+        ))
     )
       invalid();
     const generationReadUi = publications(value.generationReadUi, approved);
@@ -145,6 +162,7 @@ export function parseDesktopProjectHistoryConfiguration(
             }),
           }),
       ...(textUi === undefined ? {} : { textUi }),
+      ...(textRecovery === undefined ? {} : { textRecovery }),
       ...(generationReads === undefined
         ? {}
         : {

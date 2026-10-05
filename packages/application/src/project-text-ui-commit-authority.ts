@@ -4,6 +4,8 @@ import {
   parsePluginSelection,
   projectTextRecord,
   validateCreativeProjectActor,
+  creativeProjectOpaqueId,
+  projectTextOpaqueId,
   type InstalledPluginPackage,
   type PluginSelection,
 } from "@crewon/domain";
@@ -36,6 +38,10 @@ export type ProjectTextUiCommitTransactionAuthority = Readonly<{
   input: unknown;
   selection: PluginSelection;
   package: InstalledPluginPackage;
+  /** Actual UI contribution, required when this invocation participates in the cold journal. */
+  contributionId?: string;
+  /** A journal locator, never a permission or a caller-issued commit receipt. */
+  intentRef?: Readonly<{ intentId: string; requestDigest: string }>;
   /** Live invocation/profile/policy checks only; never borrow the committing pool. */
   assertCurrent(): Promise<void>;
 }>;
@@ -61,6 +67,8 @@ export function captureProjectTextUiCommitTransaction(
     "selection",
     "package",
     "assertCurrent",
+    "contributionId",
+    "intentRef",
   ]);
   if (
     fields.version !== "crewon.project-text-plugin-commit.v1" ||
@@ -90,6 +98,27 @@ export function captureProjectTextUiCommitTransaction(
   )
     denied();
   const current = fields.assertCurrent.bind(input);
+  const contributionId =
+    fields.contributionId === undefined
+      ? undefined
+      : creativeProjectOpaqueId(fields.contributionId);
+  let intentRef: ProjectTextUiCommitTransactionAuthority["intentRef"];
+  if (fields.intentRef !== undefined) {
+    if (contributionId === undefined) denied();
+    const ref = projectTextRecord(fields.intentRef, [
+      "intentId",
+      "requestDigest",
+    ]);
+    if (
+      typeof ref.requestDigest !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/.test(ref.requestDigest)
+    )
+      denied();
+    intentRef = Object.freeze({
+      intentId: projectTextOpaqueId(ref.intentId),
+      requestDigest: ref.requestDigest,
+    });
+  }
   return Object.freeze({
     version: "crewon.project-text-plugin-commit.v1",
     actor,
@@ -98,6 +127,8 @@ export function captureProjectTextUiCommitTransaction(
     input: clone(fields.input),
     selection,
     package: pkg,
+    ...(contributionId === undefined ? {} : { contributionId }),
+    ...(intentRef === undefined ? {} : { intentRef }),
     assertCurrent: async () => {
       const result: unknown = await current();
       if (result !== undefined) denied();
@@ -210,7 +241,12 @@ function authorityFields(
     denied();
   const fields: Record<string, unknown> = Object.create(null);
   const keys = Reflect.ownKeys(input);
-  if (keys.length !== allowed.length) denied();
+  if (
+    keys.length < 8 ||
+    keys.length > allowed.length ||
+    allowed.slice(0, 8).some((key) => !Object.hasOwn(input, key))
+  )
+    denied();
   for (const key of keys) {
     if (typeof key !== "string" || !allowed.includes(key)) denied();
     const descriptor = Object.getOwnPropertyDescriptor(input, key);

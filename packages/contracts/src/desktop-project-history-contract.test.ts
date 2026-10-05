@@ -356,3 +356,45 @@ test("text UI opt-in pins its own publications/store while missing optional fiel
     }),
   );
 });
+
+test("text recovery is a separate opt-in pinned to an existing exact text UI publication", () => {
+  const original = {
+    version: DESKTOP_PROJECT_HISTORY_VERSION,
+    textArtifacts: { version: "crewon.project-text.v1" },
+    textUi: grant,
+  };
+  assert.equal(
+    parseDesktopProjectHistoryConfiguration(original, options).textRecovery,
+    undefined,
+  );
+  const enabled = { ...original, textRecovery: grant };
+  assert.deepEqual(
+    parseDesktopProjectHistoryConfiguration(enabled, options),
+    enabled,
+  );
+  for (const invalid of [
+    { ...enabled, textUi: undefined },
+    { ...enabled, textArtifacts: undefined },
+    {
+      ...enabled,
+      textRecovery: {
+        publications: [{ ...source, contributionId: "another-module" }],
+      },
+    },
+    {
+      ...enabled,
+      textRecovery: {
+        publications: [
+          { ...source, packageDigest: `sha256:${"e".repeat(64)}` },
+        ],
+      },
+    },
+    {
+      ...enabled,
+      textRecovery: { publications: [{ ...source, actorId: "forged" }] },
+    },
+  ])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(invalid, options),
+    );
+});

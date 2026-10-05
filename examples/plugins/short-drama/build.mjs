@@ -7,11 +7,11 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "14.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "15.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
-  BigInt(version.split(".")[0]) <= 11n
+  BigInt(version.split(".")[0]) <= 14n
 )
   throw new Error("example_version_invalid");
 // Pinned portable public capability protocol; no private host source import.
@@ -32,6 +32,14 @@ for (const [file, expected] of [
   [
     "project-texts-ui-codec.mjs",
     "3b99d94c5d0cc7f5104be5135a03122b248212720e8ded4f9242139d3d5b9765",
+  ],
+  [
+    "project-text-recovery-service.ts",
+    "60e3d01d59deedaf9adff20ffea17334d0ce0c39ad59c8ac3753d0af8f38561a",
+  ],
+  [
+    "project-text-recovery-codec.mjs",
+    "73f27132eb7356bf7c7f826faef446f9df7297e58886812311bbf48776da2696",
   ],
 ]) {
   const bytes = await readFile(join(root, "src", file));
@@ -171,6 +179,11 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
+    {
+      service: "crewon.project-text-recovery",
+      apiVersion: "1",
+      optional: true,
+    },
     { service: "crewon.project-texts", apiVersion: "1", optional: true },
     { service: "crewon.creative-projects", apiVersion: "1", optional: true },
     { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },

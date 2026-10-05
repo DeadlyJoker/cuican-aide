@@ -55,3 +55,5 @@ export {
   SQLITE_PLUGIN_PROFILE_OWNER_LIMITS,
   type SqlitePluginInstallationProfileOwnerInput,
 } from "./sqlite-plugin-installation-profile-owner.ts";
+export { SqliteProjectTextUiIntentJournalStore } from "./project-text-ui-intent-sqlite-store.ts";
+export { PostgresProjectTextUiIntentJournalStore } from "./project-text-ui-intent-postgres-store.ts";

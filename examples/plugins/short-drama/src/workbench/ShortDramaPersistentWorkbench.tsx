@@ -23,6 +23,7 @@ import { ConceptImageSelectionActions } from "./ConceptImageSelectionActions";
 import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
 import { ProjectTextController } from "./ProjectTextController";
 import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
+import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 
 function SaveFeedback({
   controller,
@@ -94,7 +95,11 @@ export function ShortDramaPersistentWorkbench({
     controller.getSnapshot,
     controller.getSnapshot,
   );
-  useSyncExternalStore(texts.subscribe, texts.getSnapshot, texts.getSnapshot);
+  const textSnapshot = useSyncExternalStore(
+    texts.subscribe,
+    texts.getSnapshot,
+    texts.getSnapshot,
+  );
   const [stage, setStage] = useState<0 | 1>(0);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
@@ -115,6 +120,9 @@ export function ShortDramaPersistentWorkbench({
   useEffect(() => {
     setStage(0);
   }, [details?.project.projectId]);
+  useEffect(() => {
+    if (textSnapshot.recovery.intent) setStage(1);
+  }, [textSnapshot.recovery.intent?.intentId]);
 
   useEffect(() => {
     if (dialog) dialogRef.current?.showModal();
@@ -165,6 +173,12 @@ export function ShortDramaPersistentWorkbench({
         </div>
         <div className="drama-content">
           <ConceptRecoveryActions controller={controller} />
+          {details && (
+            <ProjectTextRecoveryActions
+              controller={texts}
+              snapshot={textSnapshot}
+            />
+          )}
           {!details &&
             controller.concepts.submissions.getSnapshot().request && (
               <ConceptGenerationActions

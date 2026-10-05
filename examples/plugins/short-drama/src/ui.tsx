@@ -25,6 +25,8 @@ import { createGenerationRecordReadClient } from "./workbench/GenerationRecordRe
 import { createPluginProjectTextUiClient } from "./project-texts-ui-service";
 import { projectTextsUiCodec } from "./project-texts-ui-codec.mjs";
 import { ProjectTextController } from "./workbench/ProjectTextController";
+import { createPluginProjectTextRecoveryClient } from "./project-text-recovery-service";
+import { projectTextRecoveryCodec } from "./project-text-recovery-codec.mjs";
 
 const contributionId = "workbench";
 
@@ -138,6 +140,10 @@ export default defineUiPlugin({
           client: createPluginProjectTextUiClient(clients, projectTextsUiCodec),
           projects: createPluginCreativeProjectClient(clients),
           physicalWritesPending: () => writes.pending,
+          recovery: createPluginProjectTextRecoveryClient(
+            clients,
+            projectTextRecoveryCodec,
+          ),
         });
     let disposed = false;
     let appliedTokens: string[] = [];

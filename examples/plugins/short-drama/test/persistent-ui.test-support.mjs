@@ -191,8 +191,15 @@ export function metadataService({ pageSize = 20 } = {}) {
       calls.push({ action, input: copy(input), signal: options?.signal });
       assert.ok(
         action.startsWith("crewon.creative-projects.v1.") ||
-          action === "crewon.project-generation-reads.v1.getConceptGeneration",
+          action ===
+            "crewon.project-generation-reads.v1.getConceptGeneration" ||
+          action === "crewon.project-text-recovery.v1.getPending",
       );
+      // Empty public journal fixture for the original concept/media regression cases.
+      if (action === "crewon.project-text-recovery.v1.getPending") {
+        assert.deepEqual(Object.keys(input), ["projectId"]);
+        return { intent: null };
+      }
       if (
         action === "crewon.project-generation-reads.v1.getConceptGeneration"
       ) {

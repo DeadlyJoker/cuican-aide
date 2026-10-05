@@ -8,6 +8,7 @@ import {
   appendProjectGenerationSelectionUiServiceAvailability,
   appendPluginUiRecoveryServiceAvailability,
   appendProjectTextUiServiceAvailability,
+  appendProjectTextRecoveryUiServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
 import { registerProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
@@ -53,6 +54,78 @@ function candidate(input: Parameters<typeof descriptor>[0] = {}) {
 }
 const rejectsUnavailable = (work: () => unknown) =>
   assert.throws(work, { code: "plugin_dependency_unavailable" });
+
+test("text recovery v1 needs independent actual availability and preserves the original text fallback", () => {
+  const recovery = {
+    service: "crewon.project-text-recovery",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [recovery] });
+  assert.throws(() => assertUiOnlyServiceDeclarations(actual.descriptor), {
+    code: "plugin_ui_only_services_unsupported",
+  });
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: candidate({ requires: [{ ...recovery, optional: true }] }),
+  });
+  let live = true;
+  const raw = { isAvailable: () => live };
+  const text = {
+    service: "crewon.project-texts",
+    apiVersion: "1",
+    optional: false,
+  };
+  const port = appendProjectTextRecoveryUiServiceAvailability({
+    recovery: raw,
+    fallback: appendProjectTextUiServiceAvailability({
+      texts: { isAvailable: () => true },
+    }),
+  });
+  raw.isAvailable = () => false;
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: candidate({ requires: [recovery, text] }),
+    hostUiServices: port,
+  });
+  live = false;
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: port,
+    }),
+  );
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: candidate({ requires: [text] }),
+    hostUiServices: port,
+  });
+  for (const requirement of [
+    { ...recovery, apiVersion: "2" },
+    { ...recovery, service: "example.crewon.project-text-recovery" },
+  ])
+    assert.throws(
+      () =>
+        assertUiOnlyServiceDeclarations(
+          descriptor({ requires: [requirement] }),
+          port,
+        ),
+      { code: "plugin_ui_only_services_unsupported" },
+    );
+  const paid = candidate({
+    requires: [
+      {
+        service: "crewon.project-generations",
+        apiVersion: "1",
+        optional: false,
+      },
+    ],
+  });
+  assert.throws(() => assertUiOnlyServiceDeclarations(paid.descriptor, port), {
+    code: "plugin_ui_only_services_unsupported",
+  });
+});
 
 test("text UI v1 declarations require their actual owner and preserve older availability without manufacturing paid grants", () => {
   const text = {

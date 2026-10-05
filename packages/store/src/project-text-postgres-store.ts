@@ -172,13 +172,20 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       identity.kind,
       identity.receipt,
     );
-    if (q === undefined && textUi === undefined)
-      return this.#receipt(this.#pool, identity);
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(client, this.#schema, q);
         await assertPostgresProjectTextUiCommit(client, this.#schema, textUi);
-        return this.#receipt(client, identity);
+        const intent = await beginPostgresTextIntentCommit(
+          client,
+          this.#schema,
+          textUi,
+          identity,
+        );
+        const result = await this.#receipt(client, identity);
+        if (result !== null)
+          await finishPostgresTextIntentCommit(client, this.#schema, intent);
+        return result;
       },
       authority,
       q,
@@ -246,8 +253,17 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           identity.kind,
           identity.receipt.idempotencyKey,
         ]);
+        const intent = await beginPostgresTextIntentCommit(
+          client,
+          this.#schema,
+          textUi,
+          identity,
+        );
         const replay = await this.#receipt(client, identity);
-        if (replay !== null) return replay;
+        if (replay !== null) {
+          await finishPostgresTextIntentCommit(client, this.#schema, intent);
+          return replay;
+        }
         // Exactly the same lock namespace as project archival and brief mutations.
         await this.#lock(client, [
           "creative-project-project",
@@ -379,6 +395,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
             textJson(result),
           ],
         );
+        await finishPostgresTextIntentCommit(client, this.#schema, intent);
         return result;
       },
       authority,
@@ -540,3 +557,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     }
   }
 }
+import {
+  beginPostgresTextIntentCommit,
+  finishPostgresTextIntentCommit,
+} from "./project-text-ui-intent-commit.ts";

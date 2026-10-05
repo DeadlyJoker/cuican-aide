@@ -1,10 +1,20 @@
 # 增量扩展子系统实施进度
 
-目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座、真实 Agent 文本工具及 Short14 手动文字编辑/历史/采用/锁定入口已实现。冷启动未完成文本请求 journal、持久项目对话与绑定、真正阶段 Agent 启动、后续媒体工作流和实际 App 交付仍待完成。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
+目标：按 [实施方案](./incremental-extension-subsystem-plan.md) 推进。状态：**ACTIVE，进行中**。统一短剧包、原 Settings 执行准备、共享大纲/剧本底座、真实 Agent 文本工具、Short14 手动文字编辑/历史/采用/锁定入口及 Short15 已发送文字请求冷恢复已实现。持久项目对话与绑定、真正阶段 Agent 启动、后续媒体工作流和实际 App 交付仍待完成。在线生图链路仍等待用户选择真实 DNS 或现有系统代理接入，完整插件子系统尚未交付。
 
-最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐。真实 Agent 项目工具已接到原 Worker，插件文字页现与它共用成果；下一步继续未完成文本意图冷恢复及项目对话/阶段启动。实际生图验证并行推进，不阻塞文本阶段。
+最初先跑通 ComfyUI Krea2 调用流程；用户现明确要求完整阶段的 AI/多工作流、Agent 对话自动推进和手动探索协作。[新设计](./short-drama-agent-workflow-design.md)已补齐。真实 Agent 项目工具已接到原 Worker，插件文字页现与它共用成果；下一步接通项目对话/工作空间绑定及真实阶段 Agent 启动。实际生图验证并行推进，不阻塞文本阶段。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：Short15 已发送文字请求的持久冷恢复
+
+新增独立 `crewon.project-text-recovery@1` 和公开 portable/严格 codec，保留 SDK0.1.0、原十种文字动作及已发行 Short1–14 的字节。宿主显式开启后，四类写入先保存完整原输入与原键；真实业务回执与 accepted journal 在同一 SQLite/PostgreSQL 提交连接原子落库。确定拒绝必须同时证明原回执不存在并建立迟到提交防护；未知响应仍保留 pending。实际普通 HTTP 与已准入 Run/Tool 的同键别名不能读取或写入另一个 UI 来源的保留请求。
+
+重开插件只读取当前项目的一条原请求。pending 恢复完整稿件并等待明确同键重试；accepted 读取确切已保存版本，不重新保存；refused 保留草稿，经明确确认后才能建立新请求。ACK 丢失仍保持业务成功，迟到的旧项目或冲突读取不能覆盖新项目与新版本。未发送草稿不持久保存，停用重启/升级后的新安装选择不自动迁移旧来源 journal。协议与预算见[文字恢复说明](./plugin-project-text-recovery-protocol.md)。
+
+最终检查：Contracts **471/471**、Application **649/649**；新 journal/alias 真实 SQLite 与 PostgreSQL **26/26**、原 Store 兼容 **39/39**、Domain **3/3**；Control/Native 原 HTTP **78/78**、桌面批准 **7/7**；独立发行包 **177/177**，均零跳过。各组范围有重叠，不相加。仓外冻结 SDK 严格 UI/Node 编译、完整 UI lint、边界和格式通过。自有数据库、应用与连接池已关闭，PG55483 全部捕获进程和自有目录已物理退场。最终证据位于 `output/extensions/checks/project-text-recovery-20261006/`，双库证明另见 `project-text-ui-intent-store-proof-20261006.json`。
+
+本轮只完成文字协作恢复，不代表实际桌面或在线生图已验收；原用户 App/profile、网络与原未知 Krea Run/operation 未修改。继续接通原对话页的项目绑定与每轮真实 Agent 准入，随后推进资产、分镜、视频、声音和合成；积分后置，目标保持 ACTIVE。
 
 ## 2026-10-05：Short14 手动文字工作台与独立 UI 文本协议
 

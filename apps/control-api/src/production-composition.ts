@@ -1,11 +1,11 @@
-import { ModelPricingApplicationService } from "@crewon/application";
-import { ModelSpendingApplicationService } from "@crewon/application";
 import { closeResources } from "./production-control-resource-cleanup.ts";
-import { OfficeThreadApplicationService } from "@crewon/application";
-import type { StorageAdmissionPort } from "@crewon/application";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
-import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
+  ModelPricingApplicationService,
+  ModelSpendingApplicationService,
+  OfficeThreadApplicationService,
+  type StorageAdmissionPort,
+  type OutboxRetentionPolicy,
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
@@ -22,7 +22,6 @@ import {
   ModelProviderSettingsApplicationService,
   OfficeApplicationService,
   WorkflowVersionApplicationService,
-  isPluginProjectTextActionOwner,
   isPluginCreativeProjectActionOwner,
   type ArtifactStorePort,
   type AutomationAuthorizationPort,
@@ -110,6 +109,8 @@ import {
 import { assertProductionProjectPluginUiComposition } from "./production-project-plugin-ui-configuration.ts";
 import {
   createProductionProjectTextPluginRuntime,
+  productionProjectTextOwnerConfiguration,
+  captureProductionProjectTextOwnerCleanup,
   type ProductionProjectTextPluginRuntime,
 } from "./production-project-text-plugin-runtime.ts";
 import {
@@ -169,7 +170,9 @@ export async function createProductionPostgresControlApi(
   config: ProductionPostgresControlApiConfig,
 ): Promise<StandaloneControlApiRuntime> {
   const ownedTaskActions = config.pluginUi?.ownedTaskActions;
-  const ownedProjectTextActions = config.pluginUi?.ownedProjectTextActions;
+  const closeOwnedProjectTexts = captureProductionProjectTextOwnerCleanup(
+    config.pluginUi,
+  );
   const ownedProjectGenerationActions =
     config.pluginUi?.ownedProjectGenerationActions;
   const ownedCreativeProjectActions =
@@ -280,12 +283,11 @@ export async function createProductionPostgresControlApi(
       } catch (failure) {
         failures.push(failure);
       }
-    if (isPluginProjectTextActionOwner(ownedProjectTextActions))
-      try {
-        await ownedProjectTextActions.close();
-      } catch (failure) {
-        failures.push(failure);
-      }
+    try {
+      await closeOwnedProjectTexts();
+    } catch (failure) {
+      failures.push(failure);
+    }
     try {
       await store?.close();
     } catch (failure) {
@@ -451,9 +453,9 @@ async function composeProductionControlApi(
         pluginUiRuntime = createProductionPluginUiRuntime(
           {
             ...config.pluginUi,
-            ...(projectTextPluginRuntime === undefined
-              ? {}
-              : { ownedProjectTextActions: projectTextPluginRuntime.owner }),
+            ...productionProjectTextOwnerConfiguration(
+              projectTextPluginRuntime,
+            ),
             ...(pluginUiRecovery === undefined
               ? {}
               : { recovery: pluginUiRecovery.service }),

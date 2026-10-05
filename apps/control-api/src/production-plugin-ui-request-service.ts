@@ -77,7 +77,9 @@ export function createProductionPluginUiRequestService({
             );
       if (
         command.action === "crewon.project-texts" ||
-        command.action.startsWith("crewon.project-texts.")
+        command.action.startsWith("crewon.project-texts.") ||
+        command.action === "crewon.project-text-recovery" ||
+        command.action.startsWith("crewon.project-text-recovery.")
       ) {
         if (texts === undefined)
           throw new ApplicationError(

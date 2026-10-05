@@ -121,6 +121,7 @@ export {
   assertPluginUiInvocationCurrent,
   capturePluginUiInvocationCommitAuthority,
   capturePluginProjectTextUiInvocationCommitAuthority,
+  capturePluginProjectTextRecoveryInvocationCommitAuthority,
   type PluginUiInvocationCommitAuthority,
 } from "./plugin-ui-invocation-authority.ts";
 export * from "./plugin-project-text-action-owner.ts";
@@ -186,3 +187,7 @@ export * from "./plugin-credit-read-authorization-port.ts";
 export * from "./plugin-credit-read-application-service.ts";
 
 export * from "./project-text-ui-commit-authority.ts";
+export * from "./project-text-ui-intent-journal-store-port.ts";
+export * from "./project-text-recovery-commit-authority.ts";
+export * from "./plugin-project-text-recovery-application-service.ts";
+export * from "./plugin-project-text-recovery-action-owner.ts";

@@ -64,7 +64,7 @@ const { view } = await texts.getOutline({ projectId }, { signal });
 
 当前读取的 `view` 包含 `artifact`、`selectedRevision`、`dependencyState` 与 `staleReasons`。需求或大纲采用变化后保留历史正文，由服务返回 `brief-changed` 或 `outline-selection-changed`；UI 不通过改写来源把旧稿伪装成最新内容。打开历史只读取原内容，明确“采用”才修改当前指针；使用新来源也需保留正文、显示新来源，并由用户保存新候选。
 
-已保存数据可在关闭后重新读取；未知写入保留原输入与原幂等键，明确重试只发送原请求。已确认写回执不会因随后的当前视图读取失败而回退为未知。Short14 当前的未确认文本请求与草稿仅保留于本次挂载；冷启动后的未完成文本 intent journal 尚未实现，不能用已确认数据的冷读取或显式同键重放声称它已经可恢复。
+已保存数据可在关闭后重新读取；未知写入保留原输入与原幂等键，明确重试只发送原请求。已确认写回执不会因随后的当前视图读取失败而回退为未知。历史 Short14 的未确认文本请求与草稿仅保留于本次挂载，没有持久文本 intent journal；它的已确认数据冷读取或同键重放不代表未完成请求可冷恢复。Short15 的独立[文本冷恢复协议](./plugin-project-text-recovery-protocol.md)为已发送的四类写意图提供真实 stage、原子确认和明确 ACK；未发送草稿仍不在恢复范围内。
 
 ## 输入和响应预算
 

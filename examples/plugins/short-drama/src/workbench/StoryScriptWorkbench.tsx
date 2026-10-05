@@ -29,7 +29,7 @@ function TextFeedback({
           {snapshot.notice}
         </p>
       )}
-      {snapshot.failure === "uncertain" && (
+      {snapshot.failure === "uncertain" && !snapshot.recovery.intent && (
         <button
           className="button secondary"
           disabled={snapshot.saving}
@@ -38,7 +38,7 @@ function TextFeedback({
           用原请求重试
         </button>
       )}
-      {snapshot.failure === "conflict" && (
+      {snapshot.failure === "conflict" && !snapshot.recovery.intent && (
         <div className="detail-actions">
           <button
             className="button secondary"
@@ -50,7 +50,7 @@ function TextFeedback({
           {snapshot.conflictRefreshed && (
             <button
               className="button secondary"
-              onClick={() => controller.continueDraft()}
+              onClick={() => void controller.continueDraft()}
             >
               保留草稿继续编辑
             </button>
@@ -398,7 +398,7 @@ export function StoryScriptWorkbench({
         <div className="detail-actions">
           <button
             className={`button ${snapshot.target.kind === "outline" ? "primary" : "secondary"}`}
-            disabled={controller.locked || snapshot.opening}
+            disabled={controller.contentReadBlocked || snapshot.opening}
             onClick={() => void controller.open({ kind: "outline" })}
           >
             故事大纲
@@ -407,7 +407,7 @@ export function StoryScriptWorkbench({
             <button
               className={`button ${snapshot.target.kind === "script" && snapshot.target.episodeId === episodeId ? "primary" : "secondary"}`}
               key={episodeId}
-              disabled={controller.locked || snapshot.opening}
+              disabled={controller.contentReadBlocked || snapshot.opening}
               onClick={() =>
                 void controller.open({ kind: "script", episodeId, title })
               }
@@ -427,7 +427,7 @@ export function StoryScriptWorkbench({
         </div>
         <button
           className="text-button"
-          disabled={controller.locked || snapshot.opening}
+          disabled={controller.contentReadBlocked || snapshot.opening}
           onClick={() => void controller.open()}
         >
           刷新内容

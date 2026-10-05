@@ -9,7 +9,8 @@
     "./runtime": "./src/runtime.ts",
     "./plugins": "./src/plugins.ts",
     "./project-tools": "./src/plugin-project-tools-service.ts",
-    "./project-texts-ui": "./src/project-texts-ui.ts"
+    "./project-texts-ui": "./src/project-texts-ui.ts",
+    "./project-text-recovery": "./src/project-text-recovery.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

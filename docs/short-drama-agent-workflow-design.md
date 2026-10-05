@@ -1,6 +1,6 @@
 # AI 短剧：Agent 与工作流协同方案
 
-日期：2026-10-05。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；项目对话启动/发现及阶段页面仍待接线。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
+日期：2026-10-06。状态：完整产品与架构设计；[共享大纲/剧本底座](./project-text-artifact-protocol.md)已实现，[真实 Agent 项目工具](./plugin-project-tools-protocol.md)已接到原 Worker；[手动文字页](./plugin-project-texts-ui-protocol.md)与[文字请求冷恢复](./plugin-project-text-recovery-protocol.md)已实现，项目对话启动/发现及后续阶段页面仍待接线。此方案补充[当前 S0 实施方案](./short-drama-workbench-product-plan.md)，按用户最新要求覆盖完整短剧项目、Agent 自动推进和手动探索。现有能力与实际验收范围仍以[实施进度](./incremental-extension-progress.md)为准。
 
 ## 产品决定
 
@@ -11,7 +11,7 @@
 - **Agent 对话**：说出想法、修改要求或执行目标，Agent 结合当前项目提出方案，生成内容并执行获准的阶段。
 - **项目工作台**：查看和编辑成果，选择工作流与参数，单独执行或批量执行，比较候选、选用结果，再交给 Agent 继续。
 
-两个入口共用项目、修订、工作流配置、执行计划和任务记录。聊天不会建立另一份项目；手动点击也不会绕过 Agent/Run 的执行与恢复机制。两端都能看见对方刚产生的成果。
+两个入口共用项目、修订、工作流配置、执行计划和任务记录。聊天不会建立另一份项目；手动生成与查询沿同一 Run 执行和恢复机制；单纯编辑、保存和选用文字成果使用独立项目服务，不要求先创建 Agent Run。两端都能看见对方刚产生的成果。
 
 用户也可以从已有剧本、一个角色或单个镜头开始，不强制把所有前置环节重新跑一遍。进入某阶段时检查该工作流的必需输入；现有素材可以保存为明确的输入成果，再补缺失的设定或引用。缺少必需输入时由用户填写或让 Agent 补齐，不能把未做过的阶段标成已完成。
 

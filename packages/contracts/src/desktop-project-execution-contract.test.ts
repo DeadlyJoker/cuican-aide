@@ -388,6 +388,7 @@ test("execution approvals retain independent text UI declarations without changi
     ...valid,
     textArtifacts: { version: "crewon.project-text.v1" },
     textUi: { publications: [source] },
+    textRecovery: { publications: [source] },
   };
   const parsed = parseDesktopProjectExecutionConfiguration(input, options);
   assert.deepEqual(parsed, input);

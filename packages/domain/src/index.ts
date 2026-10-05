@@ -84,3 +84,4 @@ export * from "./current-concept-selection.ts";
 export * from "./project-generation-selection-publication.ts";
 export * from "./plugin-ui-intent.ts";
 export * from "./plugin-ui-intent-validation.ts";
+export * from "./project-text-ui-intent.ts";

@@ -20,6 +20,12 @@ export function captureProductionPluginUiOwnerConfiguration(
     ...(input.ownedProjectTextActions === undefined
       ? {}
       : { ownedProjectTextActions: input.ownedProjectTextActions }),
+    ...(input.ownedProjectTextRecoveryActions === undefined
+      ? {}
+      : {
+          ownedProjectTextRecoveryActions:
+            input.ownedProjectTextRecoveryActions,
+        }),
     ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     ...(actions === undefined
       ? {}
