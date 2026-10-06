@@ -1,3 +1,6 @@
+import { createPluginMediaInputUiClient } from "./project-media-inputs-ui-client";
+import { projectMediaInputsUiCodec } from "./project-media-inputs-ui-codec.mjs";
+import { ProjectMediaInputController } from "./workbench/ProjectMediaInputController";
 import {
   createPluginCreativeProjectClient,
   createPluginProjectGenerationClient,
@@ -210,6 +213,7 @@ export default defineUiPlugin({
     let association: ProjectConversationAssociationController | null = null;
     let plans: ProjectTextPlanController | null = null;
     let assets: ProjectAssetController | null = null;
+    let mediaInputs: ProjectMediaInputController | null = null;
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
@@ -217,6 +221,7 @@ export default defineUiPlugin({
       association?.refreshWriteActivity();
       plans?.refreshWriteActivity();
       assets?.refreshWriteActivity();
+      mediaInputs?.refreshWriteActivity();
     });
     const clients = writes.services;
     controller = preview
@@ -289,6 +294,20 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    mediaInputs = preview
+      ? null
+      : new ProjectMediaInputController({
+          client: createPluginMediaInputUiClient(
+            clients,
+            projectMediaInputsUiCodec,
+          ),
+          assets: createPluginProjectAssetUiClient(
+            clients,
+            projectAssetsUiCodec,
+          ),
+          texts: createPluginProjectTextUiClient(clients, projectTextsUiCodec),
+          physicalWritesPending: () => writes.pending,
+        });
     let disposed = false;
     let appliedTokens: string[] = [];
     function update(next: PluginUiProps) {
@@ -324,6 +343,7 @@ export default defineUiPlugin({
       texts?.setReady(ready);
       plans?.setReady(ready);
       assets?.setReady(ready);
+      mediaInputs?.setReady(ready);
       if (!ready) controller?.setReady(false);
       controller?.setRecoveryContexts({
         selection: selectionContext(next.data),
@@ -341,6 +361,7 @@ export default defineUiPlugin({
               conversations={conversations}
               plans={plans}
               assets={assets ?? undefined}
+              mediaInputs={mediaInputs ?? undefined}
               planningDraft={planningDraft(next.data)}
               association={association ?? undefined}
               associationReady={ready}
@@ -369,6 +390,7 @@ export default defineUiPlugin({
       association?.dispose();
       plans?.dispose();
       assets?.dispose();
+      mediaInputs?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -388,6 +410,7 @@ export default defineUiPlugin({
         association?.dispose();
         plans?.dispose();
         assets?.dispose();
+        mediaInputs?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

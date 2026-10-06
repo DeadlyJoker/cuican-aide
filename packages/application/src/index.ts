@@ -229,6 +229,7 @@ export * from "./project-material-preparation-authority.ts";
 export * from "./project-material-target-application-service.ts";
 export * from "./project-material-preparation-authorization-port.ts";
 export * from "./project-media-input-port.ts";
+export * from "./project-media-input-catalog.ts";
 export * from "./project-media-input-record.ts";
 export * from "./project-media-input-application-authority.ts";
 export * from "./project-media-input-application-service.ts";

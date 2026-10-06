@@ -1,4 +1,5 @@
 import { types } from "node:util";
+import { parseProjectMediaInputListQuery } from "./project-media-input-catalog.ts";
 import { ProjectAssetReferenceImageApplicationService } from "./project-asset-reference-image-application-service.ts";
 import { ProjectMaterialTargetApplicationService } from "./project-material-target-application-service.ts";
 import type { ActorContext } from "./authorization-port.ts";
@@ -73,6 +74,7 @@ export class ProjectMediaInputApplicationService {
         input.targets,
       );
     this.#store = Object.freeze({
+      list: bound<ProjectMediaInputStore["list"]>(input.store, "list"),
       load: bound<ProjectMediaInputStore["load"]>(input.store, "load"),
       loadReceipt: bound<ProjectMediaInputStore["loadReceipt"]>(
         input.store,
@@ -171,6 +173,30 @@ export class ProjectMediaInputApplicationService {
       },
       authority,
     );
+  }
+  listInputs(
+    actor: ActorContext,
+    input: Omit<Parameters<ProjectMediaInputStore["list"]>[0], "actor">,
+  ) {
+    const query = parseProjectMediaInputListQuery({
+      actor,
+      ...materialPreparationFields(input, [
+        "projectId",
+        "afterMediaInputId",
+        "limit",
+      ]),
+    });
+    const authority = projectMediaInputAuthority({
+      actor: query.actor,
+      projectId: query.projectId,
+      mediaInputId: null,
+      inputRevision: null,
+      action: "read",
+      review: null,
+      command: null,
+      authorization: this.#authorization,
+    });
+    return this.#store.list(query, authority);
   }
   loadInput(
     actorInput: ActorContext,

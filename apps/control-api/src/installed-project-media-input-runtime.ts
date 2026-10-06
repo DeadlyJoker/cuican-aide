@@ -1,4 +1,11 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  parseListMediaInputsRequest,
+  parseListMediaInputsResponse,
+  type ListMediaInputsRequest,
+  parseMediaInputOptionsRequest,
+  parseMediaInputOptionsResponse,
+} from "@crewon/contracts/project-media-input-catalog";
 import { randomUUID } from "node:crypto";
 import { types } from "node:util";
 import {
@@ -58,6 +65,7 @@ export class InstalledProjectMediaInputRuntime {
   readonly #assertActive: () => void;
   readonly #lifetime: AbortController;
   readonly #uiPackages: readonly string[];
+  readonly #reviews: readonly import("@crewon/application").ProjectMediaWorkflowReview[];
   readonly #uiInvocations: AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>;
   readonly #physical = new Set<Promise<unknown>>();
   #closing: Promise<void> | undefined;
@@ -68,6 +76,7 @@ export class InstalledProjectMediaInputRuntime {
     lifetime: AbortController,
     uiInvocations: AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>,
     uiPackages: readonly string[],
+    reviews: readonly import("@crewon/application").ProjectMediaWorkflowReview[],
   ) {
     this.#core = core;
     this.#service = service;
@@ -75,6 +84,7 @@ export class InstalledProjectMediaInputRuntime {
     this.#lifetime = lifetime;
     this.#uiInvocations = uiInvocations;
     this.#uiPackages = Object.freeze([...uiPackages]);
+    this.#reviews = reviews;
     issued.add(this);
   }
   static async prepare(
@@ -267,6 +277,7 @@ export class InstalledProjectMediaInputRuntime {
       lifetime,
       uiInvocations,
       configuration.reviews.map((r) => r.targetIdentity.packageDigest),
+      configuration.reviews,
     );
   }
   saveInput(
@@ -311,6 +322,66 @@ export class InstalledProjectMediaInputRuntime {
         parseLoadMediaInputRequest(context.input),
       );
     });
+  }
+  listInputsFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    return this.#ui(context, signal, () => {
+      if (context.action !== "crewon.project-media-inputs.v1.listInputs")
+        denied();
+      return this.#list(
+        context.actor,
+        parseListMediaInputsRequest(context.input),
+      );
+    });
+  }
+  getOptionsFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    return this.#ui(context, signal, async () => {
+      if (context.action !== "crewon.project-media-inputs.v1.getOptions")
+        denied();
+      const query = parseMediaInputOptionsRequest(context.input);
+      // Original read purpose and original SQL project ownership, including an empty catalog.
+      await this.#list(context.actor, {
+        ...query,
+        afterMediaInputId: null,
+        limit: 1,
+      });
+      const configuration = await this.#core.extensions.getConfiguration(
+        context.actor,
+        {
+          pluginId: "crewon.short-drama",
+          revision: null,
+        },
+      );
+      const workflows =
+        configuration === null
+          ? []
+          : this.#reviews
+              .filter(
+                (r) =>
+                  r.targetIdentity.packageDigest ===
+                    context.package.packageDigest &&
+                  r.targetIdentity.version === configuration.pluginVersion &&
+                  r.targetIdentity.manifestDigest ===
+                    configuration.manifestDigest &&
+                  r.targetIdentity.implementationDigest ===
+                    configuration.implementationDigest,
+              )
+              .map((r) => r.workflow.workflowId);
+      return parseMediaInputOptionsResponse({
+        configuration:
+          configuration === null || workflows.length === 0
+            ? null
+            : { revision: configuration.revision, workflows },
+      });
+    });
+  }
+  async #list(actor: ActorContext, query: ListMediaInputsRequest) {
+    const result =
+      await ProjectMediaInputApplicationService.prototype.listInputs.call(
+        this.#service,
+        actor,
+        query,
+      );
+    return parseListMediaInputsResponse(query, result);
   }
   assertAvailable(): void {
     this.#assertActive();

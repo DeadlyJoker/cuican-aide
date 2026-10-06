@@ -1,4 +1,12 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
+import {
+  parseListMediaInputsRequest,
+  parseListMediaInputsResponse,
+  type ListMediaInputsRequest,
+  parseMediaInputOptionsRequest,
+  parseMediaInputOptionsResponse,
+  type MediaInputOptionsRequest,
+} from "./project-media-input-catalog.ts";
 import { pluginControlRecord } from "./plugin-control-contract-support.ts";
 import { parsePluginUiJsonValue } from "./plugin-ui-json.ts";
 import {
@@ -15,10 +23,20 @@ export const CREWON_PROJECT_MEDIA_INPUTS_SERVICE =
   "crewon.project-media-inputs";
 export const CREWON_PROJECT_MEDIA_INPUTS_API_VERSION = "1";
 export const PROJECT_MEDIA_INPUT_UI_ACTIONS = Object.freeze({
+  getOptions: "crewon.project-media-inputs.v1.getOptions",
+  listInputs: "crewon.project-media-inputs.v1.listInputs",
   loadInput: "crewon.project-media-inputs.v1.loadInput",
   saveInput: "crewon.project-media-inputs.v1.saveInput",
 } as const);
 export type ProjectMediaInputUiRequest =
+  | Readonly<{
+      action: typeof PROJECT_MEDIA_INPUT_UI_ACTIONS.getOptions;
+      input: MediaInputOptionsRequest;
+    }>
+  | Readonly<{
+      action: typeof PROJECT_MEDIA_INPUT_UI_ACTIONS.listInputs;
+      input: ListMediaInputsRequest;
+    }>
   | Readonly<{
       action: typeof PROJECT_MEDIA_INPUT_UI_ACTIONS.loadInput;
       input: LoadMediaInputRequest;
@@ -47,6 +65,16 @@ export function parseProjectMediaInputUiRequest(
     ["action", "input"],
   );
   switch (r.action) {
+    case PROJECT_MEDIA_INPUT_UI_ACTIONS.getOptions:
+      return Object.freeze({
+        action: r.action,
+        input: parseMediaInputOptionsRequest(r.input),
+      });
+    case PROJECT_MEDIA_INPUT_UI_ACTIONS.listInputs:
+      return Object.freeze({
+        action: r.action,
+        input: parseListMediaInputsRequest(r.input),
+      });
     case PROJECT_MEDIA_INPUT_UI_ACTIONS.loadInput:
       return Object.freeze({
         action: r.action,
@@ -68,6 +96,10 @@ export function parseProjectMediaInputUiResponse(
   request: ProjectMediaInputUiRequest,
   input: unknown,
 ) {
+  if (request.action === PROJECT_MEDIA_INPUT_UI_ACTIONS.getOptions)
+    return parseMediaInputOptionsResponse(input);
+  if (request.action === PROJECT_MEDIA_INPUT_UI_ACTIONS.listInputs)
+    return parseListMediaInputsResponse(request.input, input);
   return request.action === PROJECT_MEDIA_INPUT_UI_ACTIONS.loadInput
     ? parseLoadMediaInputResponse(request.input, input)
     : parseSaveMediaInputResponse(request.input, input);

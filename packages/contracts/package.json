@@ -21,6 +21,8 @@
     "./project-media-execution": "./src/plugin-project-media-execution-service.ts",
     "./project-media-inputs": "./src/project-media-inputs.ts",
     "./project-media-inputs-ui": "./src/project-media-inputs-ui.ts",
+    "./project-media-input-catalog": "./src/project-media-input-catalog.ts",
+    "./project-media-inputs-ui-client": "./src/project-media-inputs-ui-client.ts",
     "./desktop-project-media-inputs": "./src/desktop-project-media-inputs.ts",
     "./project-text-plans": "./src/project-text-plans.ts",
     "./project-planning": "./src/project-planning.ts",

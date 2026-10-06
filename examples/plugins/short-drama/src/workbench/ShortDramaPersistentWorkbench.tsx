@@ -1,3 +1,5 @@
+import { ProjectMediaInputController } from "./ProjectMediaInputController";
+import { ProjectMediaInputWorkbench } from "./ProjectMediaInputWorkbench";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ChevronRight,
@@ -102,6 +104,7 @@ export function ShortDramaPersistentWorkbench({
   conversations,
   plans,
   assets,
+  mediaInputs,
   planningDraft = null,
   association,
   associationReady = false,
@@ -112,6 +115,7 @@ export function ShortDramaPersistentWorkbench({
   conversations: ProjectConversationController;
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
+  mediaInputs?: ProjectMediaInputController;
   planningDraft?: ProjectPlanningProposal | null;
   association?: ProjectConversationAssociationController;
   associationReady?: boolean;
@@ -143,7 +147,13 @@ export function ShortDramaPersistentWorkbench({
     assets?.getSnapshot ?? noAssetSnapshot,
     assets?.getSnapshot ?? noAssetSnapshot,
   );
-  const [stage, setStage] = useState<0 | 1 | 2>(0);
+  useSyncExternalStore(
+    mediaInputs?.subscribe ?? emptySubscribe,
+    mediaInputs?.getSnapshot ?? noAssetSnapshot,
+    mediaInputs?.getSnapshot ?? noAssetSnapshot,
+  );
+  const stageCount = mediaInputs ? 4 : assets ? 3 : 2;
+  const [stage, setStage] = useState<0 | 1 | 2 | 3>(0);
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
   const [title, setTitle] = useState("");
@@ -163,7 +173,8 @@ export function ShortDramaPersistentWorkbench({
     texts.locked ||
     conversations.locked ||
     plans.locked ||
-    assets?.locked === true;
+    assets?.locked === true ||
+    mediaInputs?.locked === true;
   const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
   const visibleProjects = snapshot.projects.filter(
@@ -182,7 +193,8 @@ export function ShortDramaPersistentWorkbench({
     conversations.setProject(details);
     plans.setProject(details);
     assets?.setProject(details);
-  }, [texts, conversations, plans, assets, details]);
+    mediaInputs?.setProject(details);
+  }, [texts, conversations, plans, assets, mediaInputs, details]);
   useEffect(() => {
     setStage(0);
   }, [details?.project.projectId]);
@@ -503,19 +515,20 @@ export function ShortDramaPersistentWorkbench({
                   "项目与概念图",
                   "大纲与剧本",
                   "角色与场景",
-                  "分镜",
+                  "参考与分镜探索",
                   "视频与成片",
                 ].map((stageName, index) => (
                   <button
                     type="button"
                     key={stageName}
-                    className={`stage-item ${index === stage ? "active" : index < (assets ? 3 : 2) ? "" : "later"}`}
-                    disabled={index >= (assets ? 3 : 2) || locked}
+                    className={`stage-item ${index === stage ? "active" : index < stageCount ? "" : "later"}`}
+                    disabled={index >= stageCount || locked}
                     aria-current={index === stage ? "step" : undefined}
                     onClick={() => {
-                      if (index < (assets ? 3 : 2)) {
+                      if (index < stageCount) {
                         if (index === 2) assets?.activate();
-                        setStage(index as 0 | 1 | 2);
+                        if (index === 3) mediaInputs?.activate();
+                        setStage(index as 0 | 1 | 2 | 3);
                       }
                     }}
                   >
@@ -527,7 +540,7 @@ export function ShortDramaPersistentWorkbench({
                       <small>
                         {index === stage
                           ? "当前阶段"
-                          : index < (assets ? 3 : 2)
+                          : index < stageCount
                             ? "可进入"
                             : "后续开放"}
                       </small>
@@ -536,7 +549,20 @@ export function ShortDramaPersistentWorkbench({
                   </button>
                 ))}
               </div>
-              {stage === 2 && assets ? (
+              {stage === 3 && mediaInputs ? (
+                <ProjectMediaInputWorkbench
+                  controller={mediaInputs}
+                  blocked={
+                    projectLocked ||
+                    snapshot.conceptLocked ||
+                    texts.locked ||
+                    conversations.locked ||
+                    plans.locked ||
+                    assets?.locked === true ||
+                    association?.locked === true
+                  }
+                />
+              ) : stage === 2 && assets ? (
                 <ProjectAssetWorkbench
                   controller={assets}
                   images={controller.concepts.images}

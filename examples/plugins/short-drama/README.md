@@ -4,7 +4,7 @@
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 21.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 22.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
 UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
@@ -28,7 +28,15 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/21.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=21.0.1 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录，包括 20.0.2 和 21.0.0，保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建生成完整预构建安装目录 `dist/22.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=22.0.1 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录，包括 20.0.2、21.0.0和21.0.1，保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+
+## 22.0.0 的参考素材确认输入页面
+
+原第四阶段新增“参考与分镜探索”。独立 `crewon.project-media-inputs@1` 客户端支持读取当前逻辑工作流、分页目录、确切输入历史及保存修订。T10选择已采用角色参考；D18选择已采用剧本、场景和两个有序不同角色。编辑提示词保留原引用，只有明确选择当前采用版本才更新来源。保存前严格校验提示词与完整请求预算；未知响应保留原请求/键，仅明确重试，物理写入仍参与原互锁。
+
+重新进入页面只读取已确认记录，不自动创建生成任务。当前未确认媒体保存只有本次挂载重试，没有跨重启持久journal。页面没有Agent新工具或参考媒体生成/采用入口，完整镜头表另接结构化分镜服务；原T01/T04、Node23个工具、配置及旧执行能力保持。
+
+原模块表单和宿主主题变量继续复用，CSS仅增加限定在新section内的select规则，原宿主、侧栏、用户栏和设置没有改动。仓外冻结SDK严格编译、实际包320/320检查通过，9项新页面/controller为子集；浏览器1280/390布局检查使用具名公共DTO模拟数据，不代表用户App已更新。详见[页面协议及验收](../../../docs/project-media-input-page-protocol.md)与[产品交互](../../../docs/short-drama-product-experience.md)。
 
 ## 21.0.0 的确认媒体执行工具
 

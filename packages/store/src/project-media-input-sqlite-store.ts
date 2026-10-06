@@ -5,6 +5,7 @@ import {
   assertProjectMediaInputActive,
   captureProjectMediaInputWrite,
   parseProjectMediaInputQuery,
+  parseProjectMediaInputListQuery,
   parseSaveProjectMediaInputCommand,
   mediaInputActor,
   materialPreparationFields,
@@ -23,6 +24,7 @@ import {
 } from "./project-media-input-schema.ts";
 import {
   loadProjectMediaInputPlan,
+  listProjectMediaInputPlan,
   loadProjectMediaInputReceipt,
   saveProjectMediaInputPlan,
   qualifySavedProjectMediaInput,
@@ -59,6 +61,20 @@ export class SqliteProjectMediaInputStore implements ProjectMediaInputStore {
       this.#rollback();
       throw e;
     }
+  }
+  list(input: Input<"list">, authority: ProjectMediaInputAuthority) {
+    const q = parseProjectMediaInputListQuery(input),
+      a = captureProjectMediaInputAuthority(
+        authority,
+        q.actor,
+        q.projectId,
+        "read",
+      );
+    return this.#transaction(
+      listProjectMediaInputPlan(this.#d, q),
+      a,
+      () => null,
+    );
   }
   load(input: Input<"load">, authority: ProjectMediaInputAuthority) {
     const q = parseProjectMediaInputQuery(input),

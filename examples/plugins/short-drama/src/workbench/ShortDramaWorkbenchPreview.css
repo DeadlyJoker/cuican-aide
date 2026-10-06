@@ -266,6 +266,7 @@
 }
 .drama-workbench .description-input,
 .drama-workbench .form-field :is(input, textarea),
+.drama-workbench .media-input-workbench .form-field select,
 .drama-workbench .concept-version-bar select {
   width: 100%;
   min-width: 0;
@@ -277,6 +278,7 @@
 }
 .drama-workbench .description-input:hover:not(:disabled),
 .drama-workbench .form-field :is(input, textarea):hover,
+.drama-workbench .media-input-workbench .form-field select:hover,
 .drama-workbench .concept-version-bar select:hover {
   border-color: var(--control-ring);
   background: var(--control-surface-hover);

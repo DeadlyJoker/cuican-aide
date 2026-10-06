@@ -40,7 +40,10 @@ export type ProjectMediaPreparedMaterials = Readonly<{
 }>;
 /** Saved input -> per-role actual material preparation. Metadata/byte observations do not admit a Run. */
 export class ProjectMediaMaterialPreparer {
-  readonly #store: ProjectMediaInputStore;
+  readonly #store: Pick<
+    ProjectMediaInputStore,
+    "load" | "loadReceipt" | "save" | "qualify"
+  >;
   readonly #reviews: readonly ProjectMediaWorkflowReview[];
   readonly #authorization: ProjectMediaInputAuthorizationPort;
   readonly #prepare: ProjectMaterialPreparer["prepareSelectedReference"];

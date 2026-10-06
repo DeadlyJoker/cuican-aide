@@ -1,6 +1,7 @@
 import type { PluginUiServices } from "@crewon/plugin-sdk/ui";
 
 const writes = new Set([
+  "crewon.project-media-inputs.v1.saveInput",
   "crewon.creative-projects.v1.createProject",
   "crewon.creative-projects.v1.appendBrief",
   "crewon.creative-projects.v1.setProjectState",

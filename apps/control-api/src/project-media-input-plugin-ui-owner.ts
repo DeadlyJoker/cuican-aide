@@ -54,6 +54,8 @@ export class ProjectMediaInputPluginUiOwner {
   readonly committedMetadata: PluginUiCommittedMetadataPort;
   readonly #save: InstalledProjectMediaInputRuntime["saveInputFromPluginUi"];
   readonly #load: InstalledProjectMediaInputRuntime["loadInputFromPluginUi"];
+  readonly #list: InstalledProjectMediaInputRuntime["listInputsFromPluginUi"];
+  readonly #options: InstalledProjectMediaInputRuntime["getOptionsFromPluginUi"];
   readonly #assertRuntime: InstalledProjectMediaInputRuntime["assertAvailable"];
   readonly #publications: CreativeProjectPluginUiConfig["publications"];
   readonly #outcomes = new WeakMap<object, Outcome>();
@@ -74,6 +76,14 @@ export class ProjectMediaInputPluginUiOwner {
       );
     this.#load =
       InstalledProjectMediaInputRuntime.prototype.loadInputFromPluginUi.bind(
+        fields.runtime,
+      );
+    this.#list =
+      InstalledProjectMediaInputRuntime.prototype.listInputsFromPluginUi.bind(
+        fields.runtime,
+      );
+    this.#options =
+      InstalledProjectMediaInputRuntime.prototype.getOptionsFromPluginUi.bind(
         fields.runtime,
       );
     this.#assertRuntime =
@@ -186,7 +196,11 @@ export class ProjectMediaInputPluginUiOwner {
       captured.request.action === PROJECT_MEDIA_INPUT_UI_ACTIONS.saveInput;
     const value = save
       ? await this.#save(context, this.#lifetime.signal)
-      : await this.#load(context, this.#lifetime.signal);
+      : captured.request.action === PROJECT_MEDIA_INPUT_UI_ACTIONS.getOptions
+        ? await this.#options(context, this.#lifetime.signal)
+        : captured.request.action === PROJECT_MEDIA_INPUT_UI_ACTIONS.listInputs
+          ? await this.#list(context, this.#lifetime.signal)
+          : await this.#load(context, this.#lifetime.signal);
     const output = parsePluginUiJsonValue(
       parseProjectMediaInputUiResponse(captured.request, value),
       { maxBytes: MAX_PROJECT_MEDIA_INPUT_RESPONSE_BYTES },

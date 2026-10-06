@@ -99,6 +99,25 @@ export type ProjectMediaInputState = Readonly<{
   input: ProjectMediaInputRevision;
   latestInputRevision: number;
 }>;
+/** Bounded discovery of original input identities; no prompts or supplier paths. */
+export type ProjectMediaInputListQuery = Readonly<{
+  actor: ActorContext;
+  projectId: string;
+  afterMediaInputId: string | null;
+  limit: number;
+}>;
+export type ProjectMediaInputSummary = Readonly<{
+  projectId: string;
+  mediaInputId: string;
+  latestInputRevision: number;
+  item: ProjectMediaItem;
+  workflowId: ProjectMediaWorkflowId;
+  createdAt: string;
+}>;
+export type ProjectMediaInputPage = Readonly<{
+  inputs: readonly ProjectMediaInputSummary[];
+  nextMediaInputId: string | null;
+}>;
 export type ProjectMediaInputWrite = Readonly<{
   actor: ActorContext;
   command: SaveProjectMediaInputCommand;
@@ -122,6 +141,10 @@ export type ProjectMediaInputAuthority = Readonly<{
   assertActive(): void;
 }>;
 export interface ProjectMediaInputStore {
+  list(
+    query: ProjectMediaInputListQuery,
+    authority: ProjectMediaInputAuthority,
+  ): Promise<ProjectMediaInputPage>;
   load(
     query: ProjectMediaInputQuery,
     authority: ProjectMediaInputAuthority,

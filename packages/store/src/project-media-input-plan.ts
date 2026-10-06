@@ -109,6 +109,49 @@ export function* loadProjectMediaInputPlan(
     fail("history_invalid");
   return Object.freeze({ input: r, latestInputRevision: latest });
 }
+export function* listProjectMediaInputPlan(
+  d: AssetDialect,
+  q: Input<"list">,
+): ProjectMediaInputPlan<Awaited<ReturnType<ProjectMediaInputStore["list"]>>> {
+  yield* owner(d, q.actor, q.projectId);
+  const rows = yield* assetQuery(
+    d,
+    `SELECT media_input_id FROM ${d.prefix}project_media_inputs WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND (${d.postgres ? "$4::text" : "$4"} IS NULL OR media_input_id COLLATE ${d.postgres ? '"C"' : "BINARY"}>$4) ORDER BY media_input_id COLLATE ${d.postgres ? '"C"' : "BINARY"} LIMIT $5`,
+    [
+      q.actor.tenantId,
+      q.actor.spaceId,
+      q.projectId,
+      q.afterMediaInputId,
+      q.limit + 1,
+    ],
+  );
+  const inputs = [];
+  for (const row of rows.slice(0, q.limit)) {
+    const state = yield* loadProjectMediaInputPlan(d, {
+      actor: q.actor,
+      projectId: q.projectId,
+      mediaInputId: String(row.media_input_id),
+      inputRevision: null,
+    });
+    if (state === null) fail("history_invalid");
+    const r = state.input;
+    inputs.push(
+      Object.freeze({
+        projectId: r.projectId,
+        mediaInputId: r.mediaInputId,
+        latestInputRevision: state.latestInputRevision,
+        item: r.item,
+        workflowId: r.workflow.workflowId,
+        createdAt: r.createdAt,
+      }),
+    );
+  }
+  return Object.freeze({
+    inputs: Object.freeze(inputs),
+    nextMediaInputId:
+      rows.length > q.limit ? inputs.at(-1)!.mediaInputId : null,
+  });
+}
 export function* loadProjectMediaInputReceipt(
   d: AssetDialect,
   input: Input<"loadReceipt">,
