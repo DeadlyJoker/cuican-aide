@@ -11,7 +11,9 @@ import type {
   ProjectMediaRole,
   ProjectMediaWorkflowId,
   ProjectMediaInputAuthority,
+  ProjectMediaInputRevision,
 } from "./project-media-input-port.ts";
+import type { ProjectMaterialPreparationState } from "./project-material-preparation-port.ts";
 
 /** Original preparation event identities. Historical verification is not a current byte-read grant. */
 export type ProjectMediaGenerationReference = Readonly<{
@@ -39,6 +41,15 @@ export type ProjectMediaGenerationLink = Readonly<{
   admission: PluginTaskAdmission;
   receipt: ExtensionMutationReceipt;
   contentDigest: string;
+}>;
+/** Private coherent accepted history. Never a supplier dispatch or current-byte grant. */
+export type ProjectMediaGenerationContext = Readonly<{
+  link: ProjectMediaGenerationLink;
+  input: ProjectMediaInputRevision;
+  materials: readonly Readonly<{
+    role: ProjectMediaRole;
+    preparation: ProjectMaterialPreparationState;
+  }>[];
 }>;
 /** Dedicated generation purpose. Transaction callbacks are PDP/activity only, never file/HTTP/pool reads. */
 export type ProjectMediaGenerationCommitAuthority = Readonly<{

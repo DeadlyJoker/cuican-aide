@@ -187,6 +187,14 @@ export class InstalledPluginRunContext {
     if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
     return saved.toolPermissionMode;
   }
+  /** Actual immutable task identity, available only to this reader's host-owned snapshot. */
+  verifiedTaskAdmission(
+    snapshot: InstalledPluginRunSnapshot,
+  ): PluginTaskAdmission {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.admission;
+  }
   verifiedProjectStage(
     snapshot: InstalledPluginRunSnapshot,
   ): ProjectStageRunAdmission | null {

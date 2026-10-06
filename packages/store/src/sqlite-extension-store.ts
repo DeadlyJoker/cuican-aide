@@ -119,6 +119,9 @@ export class SqliteExtensionStore implements ExtensionStore {
   get projectMediaGenerationVersion() {
     return this.#mediaGenerations.version;
   }
+  loadProjectMediaGenerationContext(input: ExtensionRunLocator) {
+    return this.#mediaGenerations.loadContext(input);
+  }
   migrateProjectMediaGenerations() {
     return this.#mediaGenerations.migrate();
   }

@@ -1,6 +1,6 @@
 # 确认媒体输入与原 Run 的事务关联
 
-2026-10-06。状态：宿主内部媒体 Run 准入已实现并验证；Worker 媒体上下文、供应商提交、公开 Main 服务和手动/Agent 入口继续接线。沿[双入口编排规格](./short-drama-orchestration-spec.md)推进，一个 `crewon.short-drama` 插件包含多个工作流。本文不发布新的 SDK 或 HTTP 请求。
+2026-10-06。状态：宿主内部媒体 Run 准入已实现并验证；[Worker私有上下文与字节检查](./project-media-worker-context-protocol.md)随后补齐，供应商原请求占用/提交、公开 Main 服务和手动/Agent 入口继续接线。沿[双入口编排规格](./short-drama-orchestration-spec.md)推进，一个 `crewon.short-drama` 插件包含多个工作流。本文不发布新的 SDK 或 HTTP 请求。
 
 ## 执行身份
 
@@ -20,7 +20,7 @@ SQLite/PostgreSQL 在原 Turn 的同一连接和项目锁内核验输入 head、
 
 `projectMedia:generate` 是独立用途；输入读写、准备上传、目标观察和旧文字执行资格不能代替它。事务前及适用的事务检查点核对 PDP，SQL 每步前后及提交前核对 owner/profile 活动。SQLite 异步资格在 BEGIN 前完成，锁内只做同步活动检查。事务内撤销活动时全部新 Run、资金及关联回滚。
 
-新任务在报价前和派发前实际观察各目标副本，核对原事件、字节和输入。远端字节与本地 SQL 无法成为同一个原子事务；**Worker 在真正供应商提交前的再次字节检查尚待接线**。当前 Run 准入不能单独作为已生成媒体的证明。
+新任务在报价前和派发前实际观察各目标副本，核对原事件、字节和输入。远端字节与本地 SQL 无法成为同一个原子事务；Worker私有再次字节检查已补齐，与真正Tool/供应商IO边界的接线尚待验收。当前 Run 准入不能单独作为已生成媒体的证明。
 
 原显式不扣积分模式继续走原 unmetered 准入；此次没有设定插件价格。对应回归断言无报价、无新积分 hold，冷恢复保持。原已计费任务兼容回归也保持，积分产品设计继续后置。
 

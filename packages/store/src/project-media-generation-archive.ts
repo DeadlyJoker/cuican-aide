@@ -12,7 +12,7 @@ import {
   executeSqliteMediaGenerationPlan,
   executePostgresMediaGenerationPlan,
 } from "./project-media-generation-transaction.ts";
-import { loadProjectMediaGenerationLinkPlan } from "./project-media-generation-read.ts";
+import { loadProjectMediaGenerationContextPlan } from "./project-media-generation-read.ts";
 const version = "crewon.project-media-generation-link.v1" as const;
 export class SqliteProjectMediaGenerationArchive {
   #enabled = false;
@@ -46,6 +46,9 @@ export class SqliteProjectMediaGenerationArchive {
     }
   }
   async load(input: ExtensionRunLocator) {
+    return (await this.loadContext(input))?.link ?? null;
+  }
+  async loadContext(input: ExtensionRunLocator) {
     this.#open();
     if (!this.#enabled) throw new Error("project_media_generation_unavailable");
     this.#db.exec("BEGIN IMMEDIATE");
@@ -53,7 +56,7 @@ export class SqliteProjectMediaGenerationArchive {
       assertSqliteProjectMediaGenerationSchema(this.#db);
       const result = executeSqliteMediaGenerationPlan(
         this.#db,
-        loadProjectMediaGenerationLinkPlan(
+        loadProjectMediaGenerationContextPlan(
           { postgres: false, schema: "main", prefix: "" },
           input,
         ),
@@ -112,6 +115,9 @@ export class PostgresProjectMediaGenerationArchive {
     }
   }
   async load(input: ExtensionRunLocator) {
+    return (await this.loadContext(input))?.link ?? null;
+  }
+  async loadContext(input: ExtensionRunLocator) {
     this.#open();
     if (!this.#enabled) throw new Error("project_media_generation_unavailable");
     const c = await this.#pool.connect();
@@ -122,7 +128,7 @@ export class PostgresProjectMediaGenerationArchive {
       const result = await executePostgresMediaGenerationPlan(
         c,
         this.#schema,
-        loadProjectMediaGenerationLinkPlan(
+        loadProjectMediaGenerationContextPlan(
           {
             postgres: true,
             schema: this.#schema,

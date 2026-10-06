@@ -32,7 +32,11 @@ import { ProjectMediaGenerationTaskPreparer } from "./project-media-generation-t
 export async function mediaGenerationFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: Readonly<{ migrate?: boolean; unmetered?: boolean }> = {},
+  options: Readonly<{
+    migrate?: boolean;
+    unmetered?: boolean;
+    configurationFixture?: "large";
+  }> = {},
 ) {
   const f = await projectMediaInputFixture(t, backend);
   const string = { type: "string" as const, maxLength: 256, enum: null },
@@ -73,6 +77,20 @@ export async function mediaGenerationFixture(
       properties: {
         baseUrl: { type: "string", maxLength: 4096, enum: null },
         preset: { type: "string", maxLength: 32, enum: ["standard"] },
+        ...(options.configurationFixture === "large"
+          ? {
+              fixturePaddingOne: {
+                type: "string",
+                maxLength: 9000,
+                enum: null,
+              },
+              fixturePaddingTwo: {
+                type: "string",
+                maxLength: 9000,
+                enum: null,
+              },
+            }
+          : {}),
       },
       required: ["baseUrl", "preset"],
       additionalProperties: false,
@@ -89,6 +107,15 @@ export async function mediaGenerationFixture(
       ...f.target.configuration,
       revision: 2,
       manifestDigest: registration.manifestDigest,
+      parameters: {
+        ...f.target.configuration.parameters,
+        ...(options.configurationFixture === "large"
+          ? {
+              fixturePaddingOne: "a".repeat(7500),
+              fixturePaddingTwo: "b".repeat(7500),
+            }
+          : {}),
+      },
       createdAt: f.dependencies.clock.now(),
     },
     f.digester,

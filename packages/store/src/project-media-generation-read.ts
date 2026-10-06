@@ -7,6 +7,9 @@ import {
   mediaGenerationFail as fail,
   type ExtensionRunLocator,
   type ProjectMediaGenerationLink,
+  type ProjectMediaGenerationContext,
+  parseProjectMaterialPreparationInitial,
+  parseProjectMaterialPreparationEvent,
 } from "@crewon/application";
 import { projectAssetId } from "@crewon/domain";
 import {
@@ -42,6 +45,12 @@ export function* loadProjectMediaGenerationLinkPlan(
   d: AssetDialect,
   input: ExtensionRunLocator,
 ): ProjectMediaInputPlan<ProjectMediaGenerationLink | null> {
+  return (yield* loadProjectMediaGenerationContextPlan(d, input))?.link ?? null;
+}
+export function* loadProjectMediaGenerationContextPlan(
+  d: AssetDialect,
+  input: ExtensionRunLocator,
+): ProjectMediaInputPlan<ProjectMediaGenerationContext | null> {
   const fields = materialPreparationFields(input, [
       "tenantId",
       "spaceId",
@@ -101,12 +110,13 @@ export function* loadProjectMediaGenerationLinkPlan(
     fail("history_invalid");
   const materials = yield* assetQuery(
     d,
-    `SELECT m.*,p.content_digest,e.initial_digest AS event_initial_digest,e.record_json AS event_json FROM ${d.prefix}project_media_generation_materials m JOIN ${d.prefix}project_material_preparations p ON p.intent_id=m.intent_id JOIN ${d.prefix}project_material_preparation_events e ON e.intent_id=m.intent_id AND e.revision=m.event_revision WHERE m.tenant_id=$1 AND m.run_id=$2`,
+    `SELECT m.*,p.content_digest,p.record_json AS preparation_json,e.initial_digest AS event_initial_digest,e.record_json AS event_json FROM ${d.prefix}project_media_generation_materials m JOIN ${d.prefix}project_material_preparations p ON p.intent_id=m.intent_id JOIN ${d.prefix}project_material_preparation_events e ON e.intent_id=m.intent_id AND e.revision=m.event_revision WHERE m.tenant_id=$1 AND m.run_id=$2`,
     [q.tenantId, q.runId],
   );
   if (materials.length !== link.reference.materials.length)
     fail("history_invalid");
-  for (const m of link.reference.materials) {
+  const prepared = [];
+  for (const [index, m] of link.reference.materials.entries()) {
     const found = materials.find((row) => row.role === m.role);
     if (
       !found ||
@@ -119,6 +129,35 @@ export function* loadProjectMediaGenerationLinkPlan(
       mediaInputDigest(raw(found.event_json)) !== m.eventDigest
     )
       fail("history_invalid");
+    const initial = parseProjectMaterialPreparationInitial(
+        raw(found.preparation_json),
+      ),
+      event = parseProjectMaterialPreparationEvent(
+        raw(found.event_json),
+        initial,
+      ),
+      source = saved.input.references[index]!;
+    if (
+      initial.intentId !== m.intentId ||
+      initial.contentDigest !== m.initialDigest ||
+      event.revision !== m.eventRevision ||
+      event.phase !== "verified" ||
+      source.role !== m.role ||
+      !mediaInputSame(initial.request, source.preparation) ||
+      !mediaInputSame(initial.target, saved.input.target) ||
+      !mediaInputSame(initial.request.source.actor, link.actor)
+    )
+      fail("history_invalid");
+    prepared.push(
+      Object.freeze({
+        role: m.role,
+        preparation: Object.freeze({ initial, event }),
+      }),
+    );
   }
-  return link;
+  return Object.freeze({
+    link,
+    input: saved.input,
+    materials: Object.freeze(prepared),
+  });
 }
