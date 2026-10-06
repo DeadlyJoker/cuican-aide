@@ -4,7 +4,7 @@
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 16.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 20.0.1。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
 UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
@@ -23,12 +23,18 @@ UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `
 使用 Node.js 24、pnpm 10.33.0。SDK 尚未发布到 registry，先由宿主的统一 SDK 分发步骤提供 `crewon-plugin-sdk-0.1.0.tgz`。在复制后的独立项目中，将 `package.json` 的 `dependencies["@crewon/plugin-sdk"]` 写为 `file:/absolute/sdk-output/crewon-plugin-sdk-0.1.0.tgz`，再执行以下命令；不能用示例版本占位值查询私有 SDK 的 registry 包：
 
 ```sh
-pnpm install --ignore-scripts
-pnpm build
-pnpm test
+pnpm --ignore-workspace install --ignore-scripts
+pnpm --ignore-workspace build
+pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/16.0.0/`，并拒绝构建 15 及更早主版本，避免覆盖已冻结的 UI 包。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=16.0.0 pnpm build` 构建升级版本，测试时设置相同变量。既有 1.0.0 至 15.0.0 已发布安装包保持冻结。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。
+默认构建生成完整预构建安装目录 `dist/20.0.1/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=20.0.2 pnpm --ignore-workspace build` 构建新的候选版本，测试时设置相同变量。既有 1.0.0 至 20.0.0 及已交付的 20.0.1 安装目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+
+## 20.0.1 的设定到概念图探索
+
+在角色、场景或道具页采用设定后，点击“用这版设定探索概念图”，把该已选版本的名称和画面描述原样复制为可编辑概念输入。锁定的设定仍允许探索；尚未采用的候选不会代替已选版本。存在未保存概念草稿、设定来源过期或写入未确认时，先处理这些状态再继续。
+
+用户明确保存输入后，沿原生成、查询和图片选用流程执行，再在资产页把确切结果建立为参考候选并选用。复制动作本身只创建当前页面的本地草稿，不写资产、不生成图片。提示中的设定来源不是持久依赖，重开后只恢复已保存概念输入；真实参考关联仍由已有服务明确建立。Node 执行入口、工作流请求、冻结 SDK 和插件 CSS 保持不变。资产到媒体的自动计划及 T10/D18 素材准备继续实施。
 
 ## 页面与生命周期
 

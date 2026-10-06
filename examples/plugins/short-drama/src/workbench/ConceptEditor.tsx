@@ -35,6 +35,13 @@ export function ConceptEditor({
           返回概念列表
         </button>
       </div>
+      {draft.copiedFromAsset && (
+        <p className="detail-note" aria-label="概念描述起点">
+          起始画面描述复制自：{draft.copiedFromAsset.name} · 已选设定 v
+          {draft.copiedFromAsset.contentRevision}
+          。参考图生成后仍需在资产页确认关联。
+        </p>
+      )}
       {editing && !selection && (
         <label className="form-field">
           概念名称

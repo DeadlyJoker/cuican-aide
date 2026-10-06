@@ -3,6 +3,8 @@ import { ProjectAssetController } from "./ProjectAssetController";
 import type { ConceptImageSelectionController } from "./ConceptImageSelectionController";
 import type { ProjectDetails } from "./creative-project-controller";
 import type { ProjectAssetKind } from "../project-assets-service";
+import type { ConceptController } from "./ConceptController";
+import { ProjectAssetConceptActions } from "./ProjectAssetConceptActions";
 const labels: Record<ProjectAssetKind, string> = {
   character: "角色",
   scene: "场景",
@@ -15,11 +17,15 @@ export function ProjectAssetWorkbench({
   images,
   details,
   blocked,
+  concepts,
+  onOpenConcept,
 }: {
   controller: ProjectAssetController;
   images: ConceptImageSelectionController;
   details: ProjectDetails;
   blocked: boolean;
+  concepts: ConceptController;
+  onOpenConcept(): void;
 }) {
   const state = useSyncExternalStore(
     controller.subscribe,
@@ -204,6 +210,13 @@ export function ProjectAssetWorkbench({
                 </button>
               )}
             </div>
+            <ProjectAssetConceptActions
+              assets={controller}
+              concepts={concepts}
+              details={details}
+              blocked={blocked}
+              onOpen={onOpenConcept}
+            />
           </section>
           <section
             className="detail-panel text-editor"

@@ -24,6 +24,13 @@ export type ConceptDraft = Readonly<{
   name: string;
   prompt: string;
   source: PublicProjectBrief;
+  /** Local input-review annotation only. This is deliberately absent from all public requests. */
+  copiedFromAsset?: Readonly<{
+    assetId: string;
+    kind: "character" | "scene" | "prop";
+    name: string;
+    contentRevision: number;
+  }>;
 }>;
 export type ConceptSelection = Readonly<{
   asset: PublicConceptAsset;

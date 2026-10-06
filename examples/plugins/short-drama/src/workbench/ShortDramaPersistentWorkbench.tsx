@@ -540,7 +540,9 @@ export function ShortDramaPersistentWorkbench({
                 <ProjectAssetWorkbench
                   controller={assets}
                   images={controller.concepts.images}
+                  concepts={controller.concepts}
                   details={details}
+                  onOpenConcept={() => setStage(0)}
                   blocked={
                     projectLocked ||
                     snapshot.conceptLocked ||

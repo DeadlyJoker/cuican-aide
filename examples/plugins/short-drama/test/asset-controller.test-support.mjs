@@ -40,7 +40,7 @@ const settle = async () => {
 };
 
 /** Public controller-port fixture only; genuine source qualification and SQL are covered by host tests. */
-export function assetControllerFixture() {
+export function assetControllerFixture({ briefDigest = digest } = {}) {
   const calls = [],
     receipts = new Map(),
     revisions = new Map(),
@@ -153,7 +153,7 @@ export function assetControllerFixture() {
           contentRevision: n,
           brief: {
             briefRevision: input.request.briefRevision,
-            contentDigest: digest,
+            contentDigest: briefDigest,
           },
           script: null,
           content: copy(input.request.content),

@@ -4,6 +4,14 @@ import { ConceptQueryController } from "./ConceptQueryController";
 import { ConceptImageSelectionController } from "./ConceptImageSelectionController";
 import { bindConceptCapabilities } from "./ConceptCapabilityBinding";
 import { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
+import { assetConceptDescription } from "./AssetConceptDescription";
+import type { PublicProjectAssetView } from "../project-assets-service";
+import {
+  canSaveConceptDraft,
+  initialConceptSnapshot as initial,
+  conceptErrorCode as code,
+} from "./ConceptControllerState";
+export { validConceptName, validConceptPrompt } from "./ConceptControllerState";
 import type { PublicConceptAsset } from "@crewon/plugin-sdk/contracts";
 import type {
   ConceptDraft,
@@ -12,50 +20,6 @@ import type {
   ConceptSnapshot,
   ConceptSelection,
 } from "./ConceptController.types";
-
-export function validConceptPrompt(prompt: string): boolean {
-  return (
-    Boolean(prompt.trim()) &&
-    prompt.length <= 2000 &&
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ud800-\udfff]/u.test(prompt)
-  );
-}
-export function validConceptName(name: string): boolean {
-  return (
-    Boolean(name.trim()) &&
-    [...name.trim()].length <= 160 &&
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ud800-\udfff]/u.test(name)
-  );
-}
-function code(error: unknown): string {
-  if (
-    error &&
-    typeof error === "object" &&
-    "code" in error &&
-    typeof error.code === "string"
-  )
-    return error.code;
-  return error instanceof Error ? error.message : "";
-}
-const initial = (): ConceptSnapshot => ({
-  phase: "idle",
-  assets: [],
-  nextAfterAssetId: null,
-  selection: null,
-  opening: false,
-  editing: false,
-  draft: null,
-  confirmedOldBrief: false,
-  saving: false,
-  pendingKind: null,
-  failure: null,
-  conflictRefreshed: false,
-  error: null,
-  notice: null,
-  revisions: [],
-  nextAfterAssetRevision: null,
-  loadingHistory: false,
-});
 
 /** Owns confirmed concept inputs only; asset identity and input revision remain distinct. */
 export class ConceptController {
@@ -377,14 +341,34 @@ export class ConceptController {
     )
       return;
     this.#remember();
-    this.#reads.get("selection")?.abort();
-    this.#reads.get("history")?.abort();
-    const saved = this.#drafts.get(this.#cacheKey(null));
-    const draft = saved ?? {
+    const draft = this.#drafts.get(this.#cacheKey(null)) ?? {
       name: "概念图",
       prompt: "",
       source: this.#details!.brief,
     };
+    this.#startDraft(draft);
+  }
+  get canStartDescriptionDraft(): boolean {
+    const cached = this.#drafts.get(this.#cacheKey(null));
+    return (
+      this.#available() &&
+      !this.locked &&
+      this.#details!.project.state === "active" &&
+      !this.#snapshot.editing &&
+      (!cached || (!cached.prompt.trim() && cached.name === "概念图"))
+    );
+  }
+  startFromAssetDescription(view: PublicProjectAssetView | null): boolean {
+    if (!this.canStartDescriptionDraft) return false;
+    const draft = assetConceptDescription(view, this.#details);
+    if (!draft) return false;
+    this.#startDraft(draft);
+    return true;
+  }
+  #startDraft(draft: ConceptDraft) {
+    this.#remember();
+    this.#reads.get("selection")?.abort();
+    this.#reads.get("history")?.abort();
     this.#update({
       selection: null,
       editing: true,
@@ -532,26 +516,17 @@ export class ConceptController {
     this.#update({ confirmedOldBrief });
   }
   get canSave(): boolean {
-    const draft = this.#snapshot.draft;
-    return (
-      this.#available() &&
-      !this.submissions.locked &&
-      !this.queries.locked &&
-      !this.historicalQueries.locked &&
-      !this.images.locked &&
-      !this.#snapshot.saving &&
-      Boolean(draft) &&
-      this.#snapshot.editing &&
-      this.#details!.project.state === "active" &&
-      validConceptPrompt(draft!.prompt) &&
-      validConceptName(draft!.name) &&
-      (draft!.source.briefRevision ===
-        this.#details!.project.latestBriefRevision ||
-        this.#snapshot.confirmedOldBrief) &&
-      (!this.#intent ||
-        (this.#snapshot.failure === "conflict" &&
-          this.#snapshot.conflictRefreshed))
-    );
+    return canSaveConceptDraft({
+      snapshot: this.#snapshot,
+      project: this.#details?.project ?? null,
+      available: this.#available(),
+      operationBlocked:
+        this.submissions.locked ||
+        this.queries.locked ||
+        this.historicalQueries.locked ||
+        this.images.locked,
+      intent: this.#intent,
+    });
   }
   async save() {
     if (!this.canSave) return;
