@@ -1,4 +1,11 @@
 import {
+  captureProjectMediaInputStageTurn,
+  assertSqliteMediaInputStageTurn,
+  assertMediaInputStageReplay,
+  mediaInputStageValues,
+} from "./project-media-input-stage-turn.ts";
+import { loadSqliteMediaInputStage } from "./project-media-input-stage-markers.ts";
+import {
   assertProjectMediaGenerationCurrent,
   assertProjectMediaGenerationActive,
 } from "@crewon/application";
@@ -195,6 +202,9 @@ export async function commitSqliteExtensionTurn(
         generationLinkDigest: historicalQuery.generationLinkDigest,
       },
     };
+  const capturedMediaInput = captureProjectMediaInputStageTurn(input, options);
+  const mediaInputStage = capturedMediaInput.stage;
+  options = capturedMediaInput.options;
   const capturedAsset = captureProjectAssetStageTurn(input, options);
   const assetStage = capturedAsset.stage;
   options = capturedAsset.options;
@@ -240,6 +250,11 @@ export async function commitSqliteExtensionTurn(
     });
   if (pluginAdmission !== undefined)
     input = capturePluginTaskTurnInput(input, pluginAdmission);
+  if (mediaInputStage !== null) {
+    await mediaInputStage.authority.assertCurrent();
+    await mediaInputStage.authority.assertTransactionCurrent();
+    mediaInputStage.authority.assertActive();
+  }
   if (assetStage !== null) {
     await assetStage.authority.assertCurrent();
     await assetStage.authority.assertTransactionCurrent();
@@ -301,9 +316,14 @@ export async function commitSqliteExtensionTurn(
         );
       }
       const replay = host.receipt(binding, "task", input.receipt);
-      if (assetStage === null)
+      if (assetStage === null && mediaInputStage === null)
         assertSqliteProjectStage(host.database, stage, input, replay === null);
       assertSqliteAssetStageTurn(host.database, assetStage, replay === null);
+      assertSqliteMediaInputStageTurn(
+        host.database,
+        mediaInputStage,
+        replay === null,
+      );
       const planCheckpoint = beginSqlitePlanTurn(
         host.database,
         plan,
@@ -381,6 +401,11 @@ export async function commitSqliteExtensionTurn(
           stage,
           loadSqliteStageIfAvailable(host.database, saved.binding),
         );
+        const savedMediaInput = loadSqliteMediaInputStage(
+          host.database,
+          saved.binding,
+        );
+        assertMediaInputStageReplay(mediaInputStage, savedMediaInput);
         const savedAsset = loadSqliteAssetStage(host.database, saved.binding);
         assertAssetStageReplay(assetStage, savedAsset);
         const savedPlan = loadSqlitePlanAdmission(host.database, saved.binding);
@@ -394,6 +419,9 @@ export async function commitSqliteExtensionTurn(
           ...(savedPlan === null
             ? {}
             : { projectTextPlanAdmission: savedPlan }),
+          ...(savedMediaInput === null
+            ? {}
+            : { projectMediaInputStageAdmission: savedMediaInput }),
           ...(savedAsset === null
             ? {}
             : { projectAssetStageAdmission: savedAsset }),
@@ -493,6 +521,9 @@ export async function commitSqliteExtensionTurn(
           stage?.admission.contentDigest,
           plan?.admission.contentDigest,
           assetStage?.admission.contentDigest,
+          mediaInputStage === null
+            ? undefined
+            : { stageDigest: mediaInputStage.admission.contentDigest },
         );
       if (unmetered.admission !== undefined)
         saveSqlitePluginTaskUnmeteredAdmission(
@@ -532,6 +563,12 @@ export async function commitSqliteExtensionTurn(
         host.database
           .prepare(projectHistoricalQueryInsertSql())
           .run(...projectHistoricalQueryValues(historicalLink));
+      if (mediaInputStage !== null)
+        host.database
+          .prepare(
+            "INSERT INTO project_media_input_stage_run_admissions VALUES(?,?,?,?,?,?,?,?)",
+          )
+          .run(...mediaInputStageValues(mediaInputStage.admission));
       if (assetStage !== null)
         host.database
           .prepare(
@@ -542,6 +579,9 @@ export async function commitSqliteExtensionTurn(
       return {
         ...result,
         ...(plan === null ? {} : { projectTextPlanAdmission: plan.admission }),
+        ...(mediaInputStage === null
+          ? {}
+          : { projectMediaInputStageAdmission: mediaInputStage.admission }),
         ...(assetStage === null
           ? {}
           : { projectAssetStageAdmission: assetStage.admission }),
@@ -555,6 +595,7 @@ export async function commitSqliteExtensionTurn(
         }
         stage?.authority.assertActive();
         assetStage?.authority.assertActive();
+        mediaInputStage?.authority.assertActive();
         plan?.q.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();

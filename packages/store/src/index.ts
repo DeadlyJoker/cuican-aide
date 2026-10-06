@@ -1,3 +1,4 @@
+export * from "./project-media-input-stage-store.ts";
 export * from "./postgres-project-concept-selection-store.ts";
 export * from "./sqlite-project-concept-selection-store.ts";
 export * from "./sqlite-plugin-ui-intent-journal-store.ts";

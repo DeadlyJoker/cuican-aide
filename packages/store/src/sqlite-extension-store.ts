@@ -1,3 +1,4 @@
+import { loadSqliteMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { SqliteProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { SqliteProjectMediaResultStore } from "./project-media-result-store.ts";
 import { loadSqliteAssetStage } from "./project-asset-stage-markers.ts";
@@ -134,6 +135,8 @@ export class SqliteExtensionStore implements ExtensionStore {
   loadProjectMediaGenerationLink(input: ExtensionRunLocator) {
     return this.#mediaGenerations.load(input);
   }
+  readonly projectMediaInputStageAdmissionVersion =
+    "crewon.project-media-input-stage-run-admission.v1";
   readonly projectAssetStageAdmissionVersion =
     "crewon.project-asset-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion =
@@ -558,6 +561,10 @@ export class SqliteExtensionStore implements ExtensionStore {
       tenantId: result.binding.tenantId,
       runId: result.binding.runId,
     });
+    const projectMediaInputStageAdmission = loadSqliteMediaInputStage(
+      this.#db,
+      result.binding,
+    );
     const projectAssetStageAdmission = loadSqliteAssetStage(
       this.#db,
       result.binding,
@@ -567,6 +574,9 @@ export class SqliteExtensionStore implements ExtensionStore {
       ...(projectTextPlanAdmission === null
         ? {}
         : { projectTextPlanAdmission }),
+      ...(projectMediaInputStageAdmission === null
+        ? {}
+        : { projectMediaInputStageAdmission }),
       ...(projectAssetStageAdmission === null
         ? {}
         : { projectAssetStageAdmission }),

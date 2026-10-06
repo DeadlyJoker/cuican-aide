@@ -1,4 +1,11 @@
 import {
+  captureProjectMediaInputStageTurn,
+  assertPostgresMediaInputStageTurn,
+  assertMediaInputStageReplay,
+  mediaInputStageValues,
+} from "./project-media-input-stage-turn.ts";
+import { loadPostgresMediaInputStage } from "./project-media-input-stage-markers.ts";
+import {
   assertProjectMediaGenerationCurrent,
   assertProjectMediaGenerationActive,
 } from "@crewon/application";
@@ -209,6 +216,9 @@ export async function commitPostgresExtensionTurn(
         generationLinkDigest: historicalQuery.generationLinkDigest,
       },
     };
+  const capturedMediaInput = captureProjectMediaInputStageTurn(input, options);
+  const mediaInputStage = capturedMediaInput.stage;
+  options = capturedMediaInput.options;
   const capturedAsset = captureProjectAssetStageTurn(input, options);
   const assetStage = capturedAsset.stage;
   options = capturedAsset.options;
@@ -255,6 +265,10 @@ export async function commitPostgresExtensionTurn(
     pluginAdmission === undefined
       ? structuredClone(input)
       : capturePluginTaskTurnInput(input, pluginAdmission);
+  if (mediaInputStage !== null) {
+    await mediaInputStage.authority.assertCurrent();
+    mediaInputStage.authority.assertActive();
+  }
   if (assetStage !== null) {
     await assetStage.authority.assertCurrent();
     assetStage.authority.assertActive();
@@ -327,7 +341,7 @@ export async function commitPostgresExtensionTurn(
         "task",
         frozenInput.receipt,
       );
-      if (assetStage === null)
+      if (assetStage === null && mediaInputStage === null)
         await assertPostgresProjectStage(
           client,
           host.schema,
@@ -335,6 +349,12 @@ export async function commitPostgresExtensionTurn(
           frozenInput,
           replay === null,
         );
+      await assertPostgresMediaInputStageTurn(
+        client,
+        host.schema,
+        mediaInputStage,
+        replay === null,
+      );
       await assertPostgresAssetStageTurn(
         client,
         host.schema,
@@ -449,7 +469,14 @@ export async function commitPostgresExtensionTurn(
         );
         await stage?.authority.assertTransactionCurrent();
         await assetStage?.authority.assertTransactionCurrent();
+        await mediaInputStage?.authority.assertTransactionCurrent();
         await plan?.q.authority.assertTransactionCurrent();
+        const savedMediaInput = await loadPostgresMediaInputStage(
+          client,
+          host.schema,
+          result.binding,
+        );
+        assertMediaInputStageReplay(mediaInputStage, savedMediaInput);
         const savedAsset = await loadPostgresAssetStage(
           client,
           host.schema,
@@ -476,6 +503,9 @@ export async function commitPostgresExtensionTurn(
           ...(savedPlan === null
             ? {}
             : { projectTextPlanAdmission: savedPlan }),
+          ...(savedMediaInput === null
+            ? {}
+            : { projectMediaInputStageAdmission: savedMediaInput }),
           ...(savedAsset === null
             ? {}
             : { projectAssetStageAdmission: savedAsset }),
@@ -627,6 +657,9 @@ export async function commitPostgresExtensionTurn(
           stage?.admission.contentDigest,
           plan?.admission.contentDigest,
           assetStage?.admission.contentDigest,
+          mediaInputStage === null
+            ? undefined
+            : { stageDigest: mediaInputStage.admission.contentDigest },
         );
       if (unmetered.admission !== undefined)
         await savePostgresPluginTaskUnmeteredAdmission(
@@ -675,6 +708,11 @@ export async function commitPostgresExtensionTurn(
         );
       if (historicalQuery !== null)
         await assertCreativeProjectCommitCurrent(historicalQuery.authority);
+      if (mediaInputStage !== null)
+        await client.query(
+          `INSERT INTO ${prefix}.project_media_input_stage_run_admissions VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [...mediaInputStageValues(mediaInputStage.admission)],
+        );
       if (assetStage !== null)
         await client.query(
           `INSERT INTO ${prefix}.project_asset_stage_run_admissions VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -696,6 +734,7 @@ export async function commitPostgresExtensionTurn(
         await unmetered.authority.assertCurrent();
       await finishPostgresPlanTurn(client, host.schema, plan, planCheckpoint);
       await assetStage?.authority.assertTransactionCurrent();
+      await mediaInputStage?.authority.assertTransactionCurrent();
       if (media !== null)
         await assertProjectMediaGenerationCurrent(
           media.authority,
@@ -704,6 +743,9 @@ export async function commitPostgresExtensionTurn(
       return {
         ...result,
         ...(plan === null ? {} : { projectTextPlanAdmission: plan.admission }),
+        ...(mediaInputStage === null
+          ? {}
+          : { projectMediaInputStageAdmission: mediaInputStage.admission }),
         ...(assetStage === null
           ? {}
           : { projectAssetStageAdmission: assetStage.admission }),
@@ -717,6 +759,7 @@ export async function commitPostgresExtensionTurn(
         }
         stage?.authority.assertActive();
         assetStage?.authority.assertActive();
+        mediaInputStage?.authority.assertActive();
         plan?.q.authority.assertActive();
         if (unmetered.authority !== undefined) {
           host.assertOpen();

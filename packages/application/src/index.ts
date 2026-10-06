@@ -1,3 +1,6 @@
+export * from "./project-media-input-conversation-task-support.ts";
+export * from "./project-media-input-stage-authority.ts";
+export * from "./project-media-input-stage-store-port.ts";
 export * from "./model-pricing-store-port.ts";
 export * from "./model-spending-application-service.ts";
 export * from "./model-pricing-application-service.ts";

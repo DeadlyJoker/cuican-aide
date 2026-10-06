@@ -1,3 +1,5 @@
+import { assertSavedProjectMediaInputConversationTask } from "./project-media-input-conversation-task-support.ts";
+import type { ExtensionTaskStartRequest } from "./extension-task-turn.ts";
 import type { ContentDigester } from "./application-runtime-ports.ts";
 import type {
   CommitExtensionTurnResult,
@@ -30,6 +32,8 @@ export async function publishExtensionProjectTaskStages(
       task: ProjectAssetConversationTask;
       onStage(stage: ProjectAssetStageRunAdmission): void;
     }> | null;
+    mediaInputStage: ExtensionTaskStartRequest["mediaInputStage"];
+    mediaInputStageAdmission?: import("@crewon/domain").ProjectMediaInputStageRunAdmission;
     projectTextPlan: ProjectTextPlanTurnCommitAuthority | null;
     onProjectStage?: (stage: ProjectStageRunAdmission) => void;
     phase: "replay" | "result";
@@ -74,6 +78,20 @@ export async function publishExtensionProjectTaskStages(
   }
   if (phase === "replay" && projectTextPlan !== null)
     assertSavedProjectTextPlanTask(projectTextPlan, result, digester);
+  if (input.mediaInputStage != null) {
+    if (committed)
+      input.mediaInputStage.onStage(input.mediaInputStageAdmission!);
+    else
+      input.mediaInputStage.onStage(
+        await assertSavedProjectMediaInputConversationTask(
+          input.mediaInputStage.task,
+          await readAdmission(),
+          result.binding,
+          digester,
+          phase === "replay",
+        ),
+      );
+  }
   if (assetStage !== null) {
     if (committed) assetStage.onStage(input.assetStageAdmission!);
     else

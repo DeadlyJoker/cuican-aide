@@ -71,6 +71,7 @@ export function captureProjectAssetStageTurn(
     q === undefined ||
     input.pluginAdmission === undefined ||
     input.projectStageAdmission !== undefined ||
+    input.projectMediaInputStageAdmission !== undefined ||
     input.projectTextPlanAdmission !== undefined ||
     input.projectGeneration !== undefined ||
     input.projectQuery !== undefined ||

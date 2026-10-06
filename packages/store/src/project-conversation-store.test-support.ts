@@ -197,7 +197,12 @@ export async function conversationFixture(
 export function observeStageCommit(
   backend: "sqlite" | "postgres",
   afterCommit: () => void,
+  options: Readonly<{ stage: "text" | "media-input" }> = { stage: "text" },
 ): () => void {
+  const insertion =
+    options.stage === "media-input"
+      ? /INSERT INTO .*project_media_input_stage_run_admissions/u
+      : /INSERT INTO .*project_stage_run_admissions/u;
   const prototype =
     backend === "sqlite" ? DatabaseSync.prototype : Client.prototype;
   const key = backend === "sqlite" ? "exec" : "query",
@@ -212,10 +217,7 @@ export function observeStageCommit(
       ...insertDescriptor,
       value: function (this: DatabaseSync, ...args: unknown[]) {
         const result = Reflect.apply(insertDescriptor.value, this, args);
-        if (
-          typeof args[0] === "string" &&
-          /INSERT INTO .*project_stage_run_admissions/u.test(args[0])
-        ) {
+        if (typeof args[0] === "string" && insertion.test(args[0])) {
           const statement = result as { run(...values: unknown[]): unknown };
           const run = statement.run.bind(statement);
           statement.run = (...values) => {
@@ -233,8 +235,7 @@ export function observeStageCommit(
       const value = Reflect.apply(descriptor.value, this, args);
       const sql = typeof args[0] === "string" ? args[0] : "";
       const observe = () => {
-        if (/INSERT INTO .*project_stage_run_admissions/u.test(sql))
-          inserted = true;
+        if (insertion.test(sql)) inserted = true;
         if (sql === "COMMIT" && inserted) {
           inserted = false;
           afterCommit();

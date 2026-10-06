@@ -1,3 +1,4 @@
+import { loadPostgresMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { PostgresProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { PostgresProjectMediaResultStore } from "./project-media-result-store.ts";
 import { loadPostgresAssetStage } from "./project-asset-stage-markers.ts";
@@ -111,6 +112,8 @@ export class PostgresExtensionStore implements ExtensionStore {
   loadProjectMediaGenerationLink(input: ExtensionRunLocator) {
     return this.#mediaGenerations.load(input);
   }
+  readonly projectMediaInputStageAdmissionVersion =
+    "crewon.project-media-input-stage-run-admission.v1";
   readonly projectAssetStageAdmissionVersion =
     "crewon.project-asset-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion =
@@ -533,6 +536,11 @@ export class PostgresExtensionStore implements ExtensionStore {
         { tenantId: result.binding.tenantId, runId: result.binding.runId },
       );
       this.#host.assertOpen();
+      const projectMediaInputStageAdmission = await loadPostgresMediaInputStage(
+        client,
+        this.#schemaName,
+        result.binding,
+      );
       const projectAssetStageAdmission = await loadPostgresAssetStage(
         client,
         this.#schemaName,
@@ -543,6 +551,9 @@ export class PostgresExtensionStore implements ExtensionStore {
         ...(projectTextPlanAdmission === null
           ? {}
           : { projectTextPlanAdmission }),
+        ...(projectMediaInputStageAdmission === null
+          ? {}
+          : { projectMediaInputStageAdmission }),
         ...(projectAssetStageAdmission === null
           ? {}
           : { projectAssetStageAdmission }),
@@ -612,6 +623,11 @@ export class PostgresExtensionStore implements ExtensionStore {
         { tenantId: result.binding.tenantId, runId: result.binding.runId },
       );
       this.#host.assertOpen();
+      const projectMediaInputStageAdmission = await loadPostgresMediaInputStage(
+        client,
+        this.#schemaName,
+        result.binding,
+      );
       const projectAssetStageAdmission = await loadPostgresAssetStage(
         client,
         this.#schemaName,
@@ -622,6 +638,9 @@ export class PostgresExtensionStore implements ExtensionStore {
         ...(projectTextPlanAdmission === null
           ? {}
           : { projectTextPlanAdmission }),
+        ...(projectMediaInputStageAdmission === null
+          ? {}
+          : { projectMediaInputStageAdmission }),
         ...(projectAssetStageAdmission === null
           ? {}
           : { projectAssetStageAdmission }),

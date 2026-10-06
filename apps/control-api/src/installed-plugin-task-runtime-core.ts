@@ -502,6 +502,7 @@ export async function createInstalledPluginTaskRuntimeCore(
       {
         createProjectConversationTurnFromHost: "mutation",
         createProjectAssetStageTurnFromHost: "mutation",
+        createProjectMediaInputStageTurnFromHost: "mutation",
         createProjectTextPlanTurnFromHost: "mutation",
         createProjectMediaTaskFromHost: "mutation",
         createTask: "mutation",

@@ -1,6 +1,7 @@
 import type {
   ProjectStageRunAdmission,
   ProjectAssetStageRunAdmission,
+  ProjectMediaInputStageRunAdmission,
   ProjectTextPlanRunAdmission,
 } from "@crewon/domain";
 import type {
@@ -8,6 +9,7 @@ import type {
   ProjectMediaGenerationLink,
   ProjectMediaGenerationCommitAuthority,
 } from "./project-media-generation-port.ts";
+import type { ProjectMediaInputStageCommitAuthority } from "./project-media-input-stage-authority.ts";
 import type { ProjectAssetStageCommitAuthority } from "./project-asset-stage-authority.ts";
 import type { ProjectTextPlanTurnCommitAuthority } from "./project-text-plan-store-port.ts";
 import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
@@ -111,6 +113,7 @@ export type CommitExtensionTurnInput = Readonly<{
   /** Internal confirmed project source; committed atomically with the original Turn and credits. */
   projectStageAdmission?: ProjectStageRunAdmission;
   projectAssetStageAdmission?: ProjectAssetStageRunAdmission;
+  projectMediaInputStageAdmission?: ProjectMediaInputStageRunAdmission;
   projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   projectGeneration?: ProjectGenerationReference;
   /** Dedicated host media input and original material event identities; not a v0 concept generation. */
@@ -129,6 +132,7 @@ export type CommitExtensionTurnOptions = Readonly<{
   unmeteredAuthority?: PluginTaskUnmeteredPreparedAuthority;
   projectStageAuthority?: ProjectConversationCommitAuthority;
   projectAssetStageAuthority?: ProjectAssetStageCommitAuthority;
+  projectMediaInputStageAuthority?: ProjectMediaInputStageCommitAuthority;
   projectTextPlanAuthority?: ProjectTextPlanTurnCommitAuthority;
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
@@ -150,6 +154,7 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
     /** Returned from the same original COMMIT/replay, never reconstructed after confirmation. */
     projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
     projectAssetStageAdmission?: ProjectAssetStageRunAdmission;
+    projectMediaInputStageAdmission?: ProjectMediaInputStageRunAdmission;
   }>;
 
 /**
@@ -162,6 +167,7 @@ export interface ExtensionStore {
   loadProjectMediaGenerationLink?(
     input: ExtensionRunLocator,
   ): Promise<ProjectMediaGenerationLink | null>;
+  readonly projectMediaInputStageAdmissionVersion?: "crewon.project-media-input-stage-run-admission.v1";
   readonly projectAssetStageAdmissionVersion?: "crewon.project-asset-stage-run-admission.v1";
   readonly projectStageAdmissionVersion?: "crewon.project-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion?: "crewon.project-text-plan-run-admission.v1";

@@ -28,7 +28,9 @@ function marker(
   const required = digest(row.project_asset_stage_digest);
   if (
     required !== null &&
-    (row.project_stage_digest != null || row.project_text_plan_digest != null)
+    (row.project_stage_digest != null ||
+      row.project_text_plan_digest != null ||
+      row.project_media_input_stage_digest != null)
   )
     projectAssetFailure("project_asset_stage_marker_invalid");
   return required;

@@ -1,3 +1,4 @@
+import { SqliteProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
 import { SqliteProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-sqlite-store.ts";
 import { SqliteProjectAssetStore } from "./project-asset-sqlite-store.ts";
 import { SqliteProjectAssetStageStore } from "./project-asset-stage-store.ts";
@@ -764,6 +765,12 @@ export class SqliteRunStore implements DomainStore {
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
       ...(input.verifier === undefined ? {} : { verifier: input.verifier }),
+    });
+  }
+  projectMediaInputStageStore(): SqliteProjectMediaInputStageStore {
+    return new SqliteProjectMediaInputStageStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
     });
   }
   projectAssetStageStore(): SqliteProjectAssetStageStore {

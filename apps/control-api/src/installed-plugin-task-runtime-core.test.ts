@@ -461,6 +461,21 @@ test(
       task,
       /installed_plugin_request_authority_unavailable/u,
     );
+    // Closure is checked before the new internal method can inspect a stage or create a Turn.
+    await assert.rejects(
+      f.core.extensionTasks.createProjectMediaInputStageTurnFromHost(
+        actor,
+        {
+          pluginId: scope.pluginId,
+          threadId: commandInput.threadId,
+          expectedThreadRevision: commandInput.expectedThreadRevision,
+          idempotencyKey: "closed-core-media-input",
+          intent: { kind: "generate", input: commandInput.input },
+        },
+        null as never,
+      ),
+      /installed_plugin_request_authority_unavailable/u,
+    );
     assert.equal(f.state.quoteCalls, 1);
   },
 );

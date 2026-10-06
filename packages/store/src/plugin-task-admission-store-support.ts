@@ -210,16 +210,18 @@ export function saveSqlitePluginTask(
   projectStageDigest?: string,
   projectTextPlanDigest?: string,
   projectAssetStageDigest?: string,
+  mediaInput?: Readonly<{ stageDigest: string }>,
 ): void {
   const columns =
     "tenant_id,space_id,profile_id,plugin_id,principal_id,actor_id,run_id,package_digest,selection_revision,extension_binding_digest,admission_json";
   database
     .prepare(
-      `INSERT INTO plugin_task_admissions(${columns}${projectStageDigest === undefined ? "" : ",project_stage_digest"}${projectTextPlanDigest === undefined ? "" : ",project_text_plan_digest"}${projectAssetStageDigest === undefined ? "" : ",project_asset_stage_digest"}) VALUES(${Array(
+      `INSERT INTO plugin_task_admissions(${columns}${projectStageDigest === undefined ? "" : ",project_stage_digest"}${projectTextPlanDigest === undefined ? "" : ",project_text_plan_digest"}${projectAssetStageDigest === undefined ? "" : ",project_asset_stage_digest"}${mediaInput === undefined ? "" : ",project_media_input_stage_digest"}) VALUES(${Array(
         11 +
           (projectStageDigest === undefined ? 0 : 1) +
           (projectTextPlanDigest === undefined ? 0 : 1) +
-          (projectAssetStageDigest === undefined ? 0 : 1),
+          (projectAssetStageDigest === undefined ? 0 : 1) +
+          (mediaInput === undefined ? 0 : 1),
       )
         .fill("?")
         .join(",")})`,
@@ -232,6 +234,7 @@ export function saveSqlitePluginTask(
       ...(projectAssetStageDigest === undefined
         ? []
         : [projectAssetStageDigest]),
+      ...(mediaInput === undefined ? [] : [mediaInput.stageDigest]),
     );
 }
 export async function savePostgresPluginTask(
@@ -241,11 +244,12 @@ export async function savePostgresPluginTask(
   projectStageDigest?: string,
   projectTextPlanDigest?: string,
   projectAssetStageDigest?: string,
+  mediaInput?: Readonly<{ stageDigest: string }>,
 ): Promise<void> {
   const columns =
     "tenant_id,space_id,profile_id,plugin_id,principal_id,actor_id,run_id,package_digest,selection_revision,extension_binding_digest,admission_json";
   await client.query(
-    `INSERT INTO ${prefix(schema)}plugin_task_admissions(${columns}${projectStageDigest === undefined ? "" : ",project_stage_digest"}${projectTextPlanDigest === undefined ? "" : ",project_text_plan_digest"}${projectAssetStageDigest === undefined ? "" : ",project_asset_stage_digest"}) VALUES(${Array.from({ length: 11 + (projectStageDigest === undefined ? 0 : 1) + (projectTextPlanDigest === undefined ? 0 : 1) + (projectAssetStageDigest === undefined ? 0 : 1) }, (_, i) => `$${i + 1}`).join(",")})`,
+    `INSERT INTO ${prefix(schema)}plugin_task_admissions(${columns}${projectStageDigest === undefined ? "" : ",project_stage_digest"}${projectTextPlanDigest === undefined ? "" : ",project_text_plan_digest"}${projectAssetStageDigest === undefined ? "" : ",project_asset_stage_digest"}${mediaInput === undefined ? "" : ",project_media_input_stage_digest"}) VALUES(${Array.from({ length: 11 + (projectStageDigest === undefined ? 0 : 1) + (projectTextPlanDigest === undefined ? 0 : 1) + (projectAssetStageDigest === undefined ? 0 : 1) + (mediaInput === undefined ? 0 : 1) }, (_, i) => `$${i + 1}`).join(",")})`,
     [
       ...admissionValues(admission),
       admission,
@@ -254,6 +258,7 @@ export async function savePostgresPluginTask(
       ...(projectAssetStageDigest === undefined
         ? []
         : [projectAssetStageDigest]),
+      ...(mediaInput === undefined ? [] : [mediaInput.stageDigest]),
     ],
   );
 }

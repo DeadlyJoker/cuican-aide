@@ -1,3 +1,4 @@
+import { PostgresProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
 import { PostgresProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-postgres-store.ts";
 import { PostgresProjectAssetStore } from "./project-asset-postgres-store.ts";
 import { PostgresProjectAssetStageStore } from "./project-asset-stage-store.ts";
@@ -259,6 +260,13 @@ export class PostgresDomainStore
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
       ...(input.verifier === undefined ? {} : { verifier: input.verifier }),
+    });
+  }
+  projectMediaInputStageStore(): PostgresProjectMediaInputStageStore {
+    return new PostgresProjectMediaInputStageStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
     });
   }
   projectAssetStageStore(): PostgresProjectAssetStageStore {

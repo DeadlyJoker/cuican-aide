@@ -31,7 +31,8 @@ export function* assertProjectAssetCurrentScriptSource(
   options: Readonly<{
     failureCode:
       | "project_asset_stage_sources_stale"
-      | "project_asset_source_stale";
+      | "project_asset_source_stale"
+      | "project_media_input_stage_sources_stale";
   }>,
 ): AssetPlan<void> {
   function stale(): never {

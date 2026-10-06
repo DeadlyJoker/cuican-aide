@@ -1,3 +1,8 @@
+import {
+  createProjectMediaInputStageTurnFromHost,
+  type ProjectMediaInputConversationTask,
+  type ProjectMediaInputConversationTaskPreparation,
+} from "./project-media-input-conversation-task-support.ts";
 import { createExtensionTaskTurn } from "./extension-task-turn.ts";
 import type { ProjectMediaGenerationTask } from "./project-media-generation-port.ts";
 
@@ -183,6 +188,38 @@ export class ExtensionTaskApplicationService {
           null,
           captured,
           onStage,
+        ),
+    });
+  }
+
+  /** Independently approved media-input preparation; preserves the original Thread/Turn and unmetered admission. */
+  createProjectMediaInputStageTurnFromHost(
+    actor: ActorContext,
+    command: CreateExtensionTaskCommand,
+    task:
+      | ProjectMediaInputConversationTask
+      | ProjectMediaInputConversationTaskPreparation,
+  ) {
+    return createProjectMediaInputStageTurnFromHost({
+      actor,
+      command,
+      task,
+      extensions: this.#dependencies.extensions,
+      digester: this.#dependencies.digester,
+      create: (captured, onStage) =>
+        createExtensionTaskTurn(
+          {
+            dependencies: this.#dependencies,
+            unmeteredTasks: this.#unmeteredTasks,
+            taskAdmissionMode: this.#taskAdmissionMode,
+            turns: this.#turns,
+          },
+          {
+            actorInput: actor,
+            input: command,
+            pin: captured.authority.pin,
+            mediaInputStage: { task: captured, onStage },
+          },
         ),
     });
   }

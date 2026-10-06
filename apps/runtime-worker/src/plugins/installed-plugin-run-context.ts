@@ -301,6 +301,8 @@ export class InstalledPluginRunContext {
     });
     signal.throwIfAborted();
     if (rawReceipt === null) fail("installed_plugin_task_receipt_missing");
+    if (rawReceipt.projectMediaInputStageAdmission !== undefined)
+      fail("installed_plugin_media_input_stage_runtime_unavailable");
     const original = validateReceipt(
       rawReceipt,
       binding,

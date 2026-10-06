@@ -1,6 +1,14 @@
+import {
+  assertExtensionContentStages,
+  extensionContentStageReceipt,
+  extensionContentStageCommitOptions,
+} from "./extension-task-content-stages.ts";
+import {
+  projectMediaInputConversationTaskAdmission,
+  type ProjectMediaInputConversationTask,
+} from "./project-media-input-conversation-task-support.ts";
 import { loadExtensionTaskConfiguration } from "./extension-task-configuration.ts";
 import {
-  projectAssetConversationTaskReceipt,
   projectAssetConversationTaskAdmission,
   type ProjectAssetConversationTask,
 } from "./project-asset-conversation-task-support.ts";
@@ -11,7 +19,6 @@ import {
   authorizeExtensionTaskQuerySource,
 } from "./extension-task-authorization.ts";
 import {
-  projectConversationTaskReceipt,
   projectConversationTaskAdmission,
   type ProjectConversationTask,
 } from "./project-conversation-task-support.ts";
@@ -106,6 +113,12 @@ export type ExtensionTaskStartRequest = Readonly<{
       stage: import("@crewon/domain").ProjectAssetStageRunAdmission,
     ): void;
   }> | null;
+  mediaInputStage?: Readonly<{
+    task: ProjectMediaInputConversationTask;
+    onStage(
+      stage: import("@crewon/domain").ProjectMediaInputStageRunAdmission,
+    ): void;
+  }> | null;
   mediaTask?: ProjectMediaGenerationTask | null;
 }>;
 /** Sole task Turn orchestration, called by the original application facade. */
@@ -123,31 +136,11 @@ export async function createExtensionTaskTurn(
     onProjectStage,
     projectTextPlan = null,
     assetStage = null,
+    mediaInputStage = null,
     mediaTask = null,
   } = request;
   return extensionUseCase(async () => {
-    if (assetStage !== null) {
-      if (
-        conversation !== null ||
-        projectTextPlan !== null ||
-        projectTask !== null ||
-        pin === null
-      )
-        throw new ApplicationError(
-          "authorization",
-          "project_asset_stage_admission_invalid",
-        );
-      await assetStage.task.authority.assertCurrent();
-      assetStage.task.authority.assertActive();
-    }
-    if (projectTextPlan !== null) {
-      await projectTextPlan.authority.assertCurrent();
-      projectTextPlan.authority.assertActive();
-    }
-    if (conversation !== null) {
-      await conversation.authority.assertCurrent();
-      conversation.authority.assertActive();
-    }
+    await assertExtensionContentStages(request);
     const actor =
       pin === null
         ? extensionActor(actorInput)
@@ -216,6 +209,7 @@ export async function createExtensionTaskTurn(
         projectTask !== null ||
         conversation !== null ||
         assetStage !== null ||
+        mediaInputStage !== null ||
         projectTextPlan !== null)
     )
       mediaGenerationFail("task_invalid");
@@ -284,21 +278,17 @@ export async function createExtensionTaskTurn(
             ...(media === null
               ? {}
               : { projectConversationReceipt: (base) => media.receipt(base) }),
-            ...(conversation === null && assetStage === null
+            ...(conversation === null &&
+            assetStage === null &&
+            mediaInputStage === null
               ? {}
               : {
                   projectConversationReceipt: (base) =>
-                    assetStage !== null
-                      ? projectAssetConversationTaskReceipt(
-                          base,
-                          assetStage.task,
-                          context.dependencies.digester,
-                        )
-                      : projectConversationTaskReceipt(
-                          base,
-                          conversation!,
-                          context.dependencies.digester,
-                        ),
+                    extensionContentStageReceipt(
+                      base,
+                      request,
+                      context.dependencies.digester,
+                    ),
                 }),
           })
         : null;
@@ -373,6 +363,7 @@ export async function createExtensionTaskTurn(
         result: previous,
         conversation,
         assetStage,
+        mediaInputStage,
         projectTextPlan,
         onProjectStage,
         phase: "replay",
@@ -517,6 +508,7 @@ export async function createExtensionTaskTurn(
         "extension_execution_target_mismatch",
       );
     const content =
+      mediaInputStage?.task.content ??
       assetStage?.task.content ??
       conversation?.content ??
       extensionCanonicalJson(taskInput);
@@ -600,6 +592,21 @@ export async function createExtensionTaskTurn(
             event.occurredAt,
             context.dependencies.digester,
           );
+    const mediaInputStageAdmission =
+      mediaInputStage === null
+        ? undefined
+        : projectMediaInputConversationTaskAdmission(
+            mediaInputStage.task,
+            taskAdmission!,
+            binding,
+            event.occurredAt,
+            context.dependencies.digester,
+          );
+    if (mediaInputStage !== null && unmeteredAuthority === null)
+      throw new ApplicationError(
+        "conflict",
+        "project_media_input_stage_unmetered_required",
+      );
     const creditAdmission =
       intent.kind === "generate" &&
       unmeteredAuthority === null &&
@@ -651,21 +658,10 @@ export async function createExtensionTaskTurn(
       unmeteredAuthority,
       media?.commitOptions ?? generation?.commitOptions,
     );
-    const commitOptions =
-      assetStage !== null
-        ? {
-            ...financialOptions,
-            projectAssetStageAuthority: assetStage.task.authority,
-          }
-        : conversation === null
-          ? financialOptions
-          : {
-              ...financialOptions,
-              projectStageAuthority: conversation.authority,
-              ...(projectTextPlan === null
-                ? {}
-                : { projectTextPlanAuthority: projectTextPlan }),
-            };
+    const commitOptions = extensionContentStageCommitOptions(
+      request,
+      financialOptions,
+    );
     const commitInput = {
       turn,
       binding,
@@ -674,6 +670,9 @@ export async function createExtensionTaskTurn(
       ...(stageAdmission === undefined
         ? {}
         : { projectStageAdmission: stageAdmission }),
+      ...(mediaInputStageAdmission === undefined
+        ? {}
+        : { projectMediaInputStageAdmission: mediaInputStageAdmission }),
       ...(assetStageAdmission === undefined
         ? {}
         : { projectAssetStageAdmission: assetStageAdmission }),
@@ -709,6 +708,10 @@ export async function createExtensionTaskTurn(
     if (assetStage !== null) {
       await assetStage.task.authority.assertCurrent();
       assetStage.task.authority.assertActive();
+    }
+    if (mediaInputStage !== null) {
+      await mediaInputStage.task.authority.assertCurrent();
+      mediaInputStage.task.authority.assertActive();
     }
     const result = await (pin === null
       ? context.dependencies.extensions.commitExtensionTurn(commitInput)
@@ -769,11 +772,13 @@ export async function createExtensionTaskTurn(
       result,
       conversation,
       assetStage,
+      mediaInputStage,
       projectTextPlan,
       onProjectStage,
       phase: "result",
       stageAdmission,
       assetStageAdmission,
+      mediaInputStageAdmission,
     });
     return result;
   });
