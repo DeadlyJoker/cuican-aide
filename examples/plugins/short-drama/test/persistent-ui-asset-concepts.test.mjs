@@ -45,7 +45,7 @@ async function setup() {
   const f = fixture(definition, { props: persistentProps(true), services });
   await settle();
   await f.click(f.container.querySelector(".project-card"));
-  await f.click(f.container.querySelectorAll(".stage-item")[2]);
+  await f.click(f.container.querySelector('[data-project-page="characters"]'));
   await f.click(f.button("新建角色"));
   await edit(f, first);
   await f.click(f.button("保存设定候选"));
@@ -138,7 +138,9 @@ test("the installed module copies the adopted setting, preserves exact text and 
       ),
       false,
     );
-    await f.click(f.container.querySelectorAll(".stage-item")[2]);
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
     assert.equal(f.button("用这版设定探索概念图").disabled, false);
   } finally {
     await f.dispose();
@@ -147,24 +149,28 @@ test("the installed module copies the adopted setting, preserves exact text and 
 test("visible and closed unsaved concept drafts are never replaced by a setting copy", async () => {
   const { f, text } = await setup();
   try {
-    await f.click(f.container.querySelectorAll(".stage-item")[0]);
+    await f.click(f.container.querySelector('[data-project-page="overview"]'));
     await f.click(f.button("新建概念输入"));
     await f.input(
       f.container.querySelector("#concept-prompt"),
       "独立探索草稿，必须保留",
     );
-    await f.click(f.container.querySelectorAll(".stage-item")[2]);
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
     assert.equal(f.button("用这版设定探索概念图").disabled, true);
     await f.click(f.button("用这版设定探索概念图"));
-    await f.click(f.container.querySelectorAll(".stage-item")[0]);
+    await f.click(f.container.querySelector('[data-project-page="overview"]'));
     assert.equal(
       f.container.querySelector("#concept-prompt").value,
       "独立探索草稿，必须保留",
     );
     await f.click(f.button("返回概念列表"));
-    await f.click(f.container.querySelectorAll(".stage-item")[2]);
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
     assert.equal(f.button("用这版设定探索概念图").disabled, true);
-    await f.click(f.container.querySelectorAll(".stage-item")[0]);
+    await f.click(f.container.querySelector('[data-project-page="overview"]'));
     await f.click(f.button("新建概念输入"));
     assert.equal(
       f.container.querySelector("#concept-prompt").value,
@@ -172,7 +178,9 @@ test("visible and closed unsaved concept drafts are never replaced by a setting 
     );
     assert.equal(text.metadata.methodCalls("createConcept").length, 0);
     await f.click(f.button("保存概念输入"));
-    await f.click(f.container.querySelectorAll(".stage-item")[2]);
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
     assert.equal(f.button("用这版设定探索概念图").disabled, false);
   } finally {
     await f.dispose();
@@ -184,7 +192,9 @@ test("changed requirements disable the copy instead of relabelling an old settin
     text.metadata.externalBrief(created.project.projectId, "换成未来科幻背景");
     await f.click(f.container.querySelector(".breadcrumbs button"));
     await f.click(f.container.querySelector(".project-card"));
-    await f.click(f.container.querySelectorAll(".stage-item")[2]);
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
     const assetButton = f.container.querySelector(
       '[aria-label="资产列表"] button',
     );

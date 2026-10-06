@@ -38,7 +38,9 @@ test("the real package module confirms T10 and D18 with adopted source selectors
       0,
       "project browsing does not touch new service",
     );
-    await f.click(f.container.querySelectorAll(".stage-item")[3]);
+    await f.click(
+      f.container.querySelector('[data-project-page="references"]'),
+    );
     await f.click(f.button("新建T10 · 角色参考四视图"));
     const markup = f.container.querySelector(
       '[aria-label="参考工作流确认输入"]',
@@ -87,7 +89,9 @@ test("the real package module confirms T10 and D18 with adopted source selectors
     });
     await settle();
     await f.click(f.container.querySelector(".project-card"));
-    await f.click(f.container.querySelectorAll(".stage-item")[3]);
+    await f.click(
+      f.container.querySelector('[data-project-page="references"]'),
+    );
     assert.equal(
       f.container
         .querySelector('[aria-label="已保存媒体输入"]')

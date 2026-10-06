@@ -58,7 +58,7 @@ test("actual installable module starts only from an explicitly selected project 
       true,
       "unfinished plan occupies its chat",
     );
-    assert.equal(f.container.querySelectorAll(".stage-item").length, 5);
+    assert.equal(f.container.querySelectorAll(".stage-item").length, 7);
   } finally {
     await f.dispose();
   }
@@ -103,13 +103,16 @@ test("an uncertain plan operation blocks navigation and retries only its origina
     s.loseNextAck();
     await f.click(f.button("开始文字计划"));
     const first = s.calls.find((x) => x.action.endsWith(".start"));
-    assert.equal(f.container.querySelectorAll(".stage-item")[1].disabled, true);
+    assert.equal(
+      f.container.querySelector('[data-project-page="outline"]').disabled,
+      true,
+    );
     await f.click(f.button("重试原计划操作"));
     const attempts = s.calls.filter((x) => x.action.endsWith(".start"));
     assert.equal(attempts.length, 2);
     assert.deepEqual(attempts[1].input, first.input);
     assert.equal(
-      f.container.querySelectorAll(".stage-item")[1].disabled,
+      f.container.querySelector('[data-project-page="outline"]').disabled,
       false,
     );
   } finally {

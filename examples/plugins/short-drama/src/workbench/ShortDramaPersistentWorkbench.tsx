@@ -1,6 +1,10 @@
 import { usePluginDialog } from "./usePluginDialog";
 import { ShortDramaProjectHome } from "./ShortDramaProjectHome";
-import { ShortDramaProjectNavigation } from "./ShortDramaProjectNavigation";
+import {
+  ShortDramaProjectNavigation,
+  projectPages,
+  type ShortDramaProjectPage,
+} from "./ShortDramaProjectNavigation";
 import { ProjectMediaInputController } from "./ProjectMediaInputController";
 import { ProjectMediaInputWorkbench } from "./ProjectMediaInputWorkbench";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -146,8 +150,7 @@ export function ShortDramaPersistentWorkbench({
     mediaInputs?.getSnapshot ?? noAssetSnapshot,
     mediaInputs?.getSnapshot ?? noAssetSnapshot,
   );
-  const stageCount = mediaInputs ? 4 : assets ? 3 : 2;
-  const [stage, setStage] = useState<0 | 1 | 2 | 3>(0);
+  const [page, setPage] = useState<ShortDramaProjectPage>("overview");
   const [search, setSearch] = useState("");
   const [homeIdea, setHomeIdea] = useState("");
   const [navigationExpanded, setNavigationExpanded] = useState(true);
@@ -188,11 +191,11 @@ export function ShortDramaPersistentWorkbench({
     mediaInputs?.setProject(details);
   }, [texts, conversations, plans, assets, mediaInputs, details]);
   useEffect(() => {
-    setStage(0);
+    setPage("overview");
   }, [details?.project.projectId]);
   useEffect(() => {
-    if (textSnapshot.recovery.intent) setStage(1);
-  }, [textSnapshot.recovery.intent?.intentId]);
+    if (textSnapshot.recovery.intent) setPage(textSnapshot.target.kind);
+  }, [textSnapshot.recovery.intent?.intentId, textSnapshot.target.kind]);
 
   usePluginDialog(dialogRef, dialog !== null);
   useEffect(() => {
@@ -250,7 +253,14 @@ export function ShortDramaPersistentWorkbench({
             <ProjectAssetRecoveryActions
               assets={assets}
               projects={controller}
-              onRestore={() => setStage(2)}
+              onRestore={() =>
+                setPage(
+                  assets?.getSnapshot().draft?.kind === "scene" ||
+                    assets?.getSnapshot().draft?.kind === "prop"
+                    ? "art"
+                    : "characters",
+                )
+              }
             />
           )}
           <ConceptRecoveryActions controller={controller} />
@@ -334,30 +344,37 @@ export function ShortDramaPersistentWorkbench({
               data-navigation-expanded={navigationExpanded}
             >
               <ShortDramaProjectNavigation
-                stage={stage}
-                availableCount={stageCount}
+                page={page}
+                assetsAvailable={Boolean(assets)}
+                referencesAvailable={Boolean(mediaInputs)}
                 locked={locked}
                 expanded={navigationExpanded}
                 onExpandedChange={setNavigationExpanded}
                 onSelect={(next) => {
-                  if (next === 2) assets?.activate();
-                  if (next === 3) mediaInputs?.activate();
-                  setStage(next);
+                  if (next === "characters" || next === "art")
+                    assets?.activate();
+                  if (next === "references") mediaInputs?.activate();
+                  setPage(next);
                 }}
               />
               <div className="drama-project-editor">
                 <div className="page-heading">
                   <div>
                     <h1>{details.project.title}</h1>
-                    <p>先确认故事，再保存每一次新的创作需求。</p>
+                    <p>
+                      {
+                        projectPages.find((item) => item.id === page)
+                          ?.description
+                      }
+                    </p>
                   </div>
                   <div className="heading-actions">
                     <span className="genre-label">创作项目</span>
-                    {stage === 1 && (
+                    {(page === "outline" || page === "script") && (
                       <button
                         className="button secondary"
                         disabled={locked}
-                        onClick={() => setStage(0)}
+                        onClick={() => setPage("overview")}
                       >
                         项目对话
                       </button>
@@ -371,7 +388,7 @@ export function ShortDramaPersistentWorkbench({
                     </button>
                   </div>
                 </div>
-                {stage === 0 && (
+                {page === "overview" && (
                   <>
                     <ProjectConversationActions controller={conversations} />
                     {association && (
@@ -385,7 +402,7 @@ export function ShortDramaPersistentWorkbench({
                     )}
                   </>
                 )}
-                {stage === 0 && (
+                {page === "overview" && (
                   <ProjectTextPlanActions
                     initialDraft={
                       projectDraft?.projectId === details.project.projectId
@@ -397,7 +414,7 @@ export function ShortDramaPersistentWorkbench({
                     texts={texts}
                     details={details}
                     openText={(step) => {
-                      setStage(1);
+                      setPage(step.kind === "script" ? "script" : "outline");
                       void texts.open(
                         step.kind === "script" && step.episodeId !== null
                           ? {
@@ -416,7 +433,7 @@ export function ShortDramaPersistentWorkbench({
                     项目已归档。需求历史仍可查看，恢复项目后继续编辑。
                   </p>
                 )}
-                {stage === 3 && mediaInputs ? (
+                {page === "references" && mediaInputs ? (
                   <ProjectMediaInputWorkbench
                     controller={mediaInputs}
                     blocked={
@@ -429,13 +446,15 @@ export function ShortDramaPersistentWorkbench({
                       association?.locked === true
                     }
                   />
-                ) : stage === 2 && assets ? (
+                ) : (page === "characters" || page === "art") && assets ? (
                   <ProjectAssetWorkbench
                     controller={assets}
+                    page={page === "art" ? "art" : "characters"}
+                    onPageChange={setPage}
                     images={controller.concepts.images}
                     concepts={controller.concepts}
                     details={details}
-                    onOpenConcept={() => setStage(0)}
+                    onOpenConcept={() => setPage("overview")}
                     blocked={
                       projectLocked ||
                       snapshot.conceptLocked ||
@@ -444,9 +463,11 @@ export function ShortDramaPersistentWorkbench({
                       plans.locked
                     }
                   />
-                ) : stage === 1 ? (
+                ) : page === "outline" || page === "script" ? (
                   <StoryScriptWorkbench
                     controller={texts}
+                    page={page === "script" ? "script" : "outline"}
+                    onPageChange={setPage}
                     details={details}
                     blocked={projectLocked || snapshot.conceptLocked}
                   />
@@ -525,7 +546,14 @@ export function ShortDramaPersistentWorkbench({
             <ProjectAssetRecoveryActions
               assets={assets}
               projects={controller}
-              onRestore={() => setStage(2)}
+              onRestore={() =>
+                setPage(
+                  assets?.getSnapshot().draft?.kind === "scene" ||
+                    assets?.getSnapshot().draft?.kind === "prop"
+                    ? "art"
+                    : "characters",
+                )
+              }
             />
           )}
         </div>

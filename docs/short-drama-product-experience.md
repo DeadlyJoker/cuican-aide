@@ -4,7 +4,7 @@
 
 参考 [shuohao-skills](https://github.com/eternityspring/shuohao-skills) 的结构化阶段成果与确定性检查，采用 CrewON 自己的共享项目和执行协议。
 
-用户进一步指定 [ReelBench 工作台](https://reelbench.79px.com/dashboard)作为插件内部 UI、交互与流程参考。[页面参考与适配范围](./short-drama-reelbench-ui-reference.md)区分已查看的公开截图、CrewON 适配决定和待登录核对的操作；外层 CrewON 仍保持原版。
+用户进一步指定 [ReelBench 工作台](https://reelbench.79px.com/dashboard)作为插件内部 UI、交互与流程参考，并明确视觉沿用 CrewON。[页面参考与适配范围](./short-drama-reelbench-ui-reference.md)记录已查看的登录后页面、CrewON 适配决定和未经实际执行的参考站操作；外层 CrewON 仍保持原版。
 
 ## 一个项目，两个入口
 

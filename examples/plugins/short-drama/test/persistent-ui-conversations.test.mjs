@@ -147,7 +147,7 @@ test("project conversation is created explicitly in the selected workspace and o
       service.calls.some((call) => call.action.endsWith(".startStage")),
       false,
     );
-    await f.click(f.container.querySelectorAll(".stage-item")[1]);
+    await f.click(f.container.querySelector('[data-project-page="outline"]'));
     assert.equal(
       f.container.querySelector('[aria-label="项目 Agent 对话"]'),
       null,

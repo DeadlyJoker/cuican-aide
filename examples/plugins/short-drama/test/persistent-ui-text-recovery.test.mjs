@@ -15,7 +15,7 @@ const { default: definition } = await import(
 );
 after(async () => browser.happyDOM.close());
 const field = (f, name) => f.container.querySelector(`[aria-label="${name}"]`);
-const stage = (f) => f.container.querySelectorAll(".stage-item")[1];
+const stage = (f) => f.container.querySelector('[data-project-page="outline"]');
 async function open(service, services = service.services) {
   const f = fixture(definition, { props: persistentProps(true), services });
   await settle();

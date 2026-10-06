@@ -2,6 +2,7 @@ import { useId } from "react";
 import {
   Clapperboard,
   FileText,
+  Palette,
   Image,
   Layers3,
   PanelLeftClose,
@@ -9,38 +10,75 @@ import {
   Users,
 } from "lucide-react";
 
-export type ShortDramaProjectStage = 0 | 1 | 2 | 3;
-const sections = [
+export type ShortDramaProjectPage =
+  | "overview"
+  | "outline"
+  | "script"
+  | "characters"
+  | "art"
+  | "references";
+export const projectPages = [
   {
+    id: "overview",
     title: "项目与概念图",
     description: "需求 · Agent · 画面探索",
     icon: Layers3,
   },
   {
-    title: "大纲与剧本",
-    description: "故事 · 分集 · 候选版本",
+    id: "outline",
+    title: "故事大纲",
+    description: "主线 · 人物关系 · 分集",
     icon: FileText,
   },
-  { title: "角色与场景", description: "角色 · 美术 · 道具", icon: Users },
-  { title: "参考与分镜探索", description: "画面描述 · 参考素材", icon: Image },
-  { title: "视频与成片", description: "后续开放", icon: Clapperboard },
+  {
+    id: "script",
+    title: "分集剧本",
+    description: "场次 · 动作 · 对白",
+    icon: FileText,
+  },
+  {
+    id: "characters",
+    title: "角色",
+    description: "设定 · 形象 · 参考图",
+    icon: Users,
+  },
+  {
+    id: "art",
+    title: "美术",
+    description: "场景 · 道具 · 参考图",
+    icon: Palette,
+  },
+  {
+    id: "references",
+    title: "参考与分镜探索",
+    description: "画面描述 · 参考素材",
+    icon: Image,
+  },
+  {
+    id: "delivery",
+    title: "视频与成片",
+    description: "后续开放",
+    icon: Clapperboard,
+  },
 ] as const;
 
 /** Navigation changes only the plugin content; it never overlays the host canvas. */
 export function ShortDramaProjectNavigation({
-  stage,
-  availableCount,
+  page,
+  assetsAvailable,
+  referencesAvailable,
   locked,
   expanded,
   onExpandedChange,
   onSelect,
 }: {
-  stage: ShortDramaProjectStage;
-  availableCount: number;
+  page: ShortDramaProjectPage;
+  assetsAvailable: boolean;
+  referencesAvailable: boolean;
   locked: boolean;
   expanded: boolean;
   onExpandedChange(value: boolean): void;
-  onSelect(value: ShortDramaProjectStage): void;
+  onSelect(value: ShortDramaProjectPage): void;
 }) {
   const id = useId();
   return (
@@ -63,27 +101,33 @@ export function ShortDramaProjectNavigation({
         </button>
       </div>
       <div className="drama-navigation-items" id={id}>
-        {sections.map(({ title, description, icon: Icon }, index) => (
-          <button
-            type="button"
-            key={title}
-            className={`stage-item ${stage === index ? "active" : index < availableCount ? "" : "later"}`}
-            aria-label={title}
-            title={title}
-            aria-current={stage === index ? "page" : undefined}
-            disabled={locked || index >= availableCount}
-            onClick={() => {
-              if (index < availableCount)
-                onSelect(index as ShortDramaProjectStage);
-            }}
-          >
-            <Icon size={18} />
-            <span className="drama-navigation-label">
-              {title}
-              <small>{description}</small>
-            </span>
-          </button>
-        ))}
+        {projectPages.map(({ id, title, description, icon: Icon }) => {
+          const available =
+            id !== "delivery" &&
+            (id !== "references" || referencesAvailable) &&
+            (!["characters", "art"].includes(id) || assetsAvailable);
+          return (
+            <button
+              type="button"
+              key={id}
+              data-project-page={id}
+              className={`stage-item ${page === id ? "active" : available ? "" : "later"}`}
+              aria-label={title}
+              title={title}
+              aria-current={page === id ? "page" : undefined}
+              disabled={locked || !available}
+              onClick={() => {
+                if (available) onSelect(id as ShortDramaProjectPage);
+              }}
+            >
+              <Icon size={18} />
+              <span className="drama-navigation-label">
+                {title}
+                <small>{description}</small>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </nav>
   );

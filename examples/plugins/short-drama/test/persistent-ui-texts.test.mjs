@@ -15,7 +15,7 @@ const { default: definition } = await import(
 after(async () => browser.happyDOM.close());
 const field = (f, label) =>
   f.container.querySelector(`[aria-label="${label}"]`);
-const stage = (f) => f.container.querySelectorAll(".stage-item")[1];
+const stage = (f) => f.container.querySelector('[data-project-page="outline"]');
 const episodeButton = (f) =>
   [...f.container.querySelectorAll(".story-script-workbench button")].find(
     (button) => /^第 1 集 ·/u.test(button.textContent),
@@ -188,7 +188,7 @@ test("immutable source provenance stays explicit when requirements change; dirty
     await f.click(f.button("查看内容历史"));
     await f.input(field(f, "故事梗概"), "在原来源上继续编辑。");
     assert.equal(f.button("打开内容 v1").disabled, true);
-    await f.click(f.container.querySelectorAll(".stage-item")[0]);
+    await f.click(f.container.querySelector('[data-project-page="overview"]'));
     await f.input(f.container.querySelector("#creative-brief"), "第二版需求。");
     await f.click(f.button("保存为新版本"));
     await f.click(stage(f));

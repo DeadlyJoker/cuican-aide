@@ -103,7 +103,7 @@ test("viewing a chat draft performs no write; explicit project confirmation save
       ).length,
       0,
     );
-    assert.equal(f.container.querySelectorAll(".stage-item").length, 5);
+    assert.equal(f.container.querySelectorAll(".stage-item").length, 7);
   } finally {
     await f.dispose();
   }

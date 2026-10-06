@@ -44,7 +44,9 @@ test("the actual installed module exposes manual shared assets inside the origin
       "ordinary project browsing does not call new asset services",
     );
     await f.click(f.container.querySelector(".project-card"));
-    await f.click(f.container.querySelectorAll(".stage-item")[2]);
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
     assert.ok(f.container.querySelector('.text-editor[aria-label="共享资产"]'));
     await f.click(f.button("新建角色"));
     const snapshot = new URL(
@@ -101,6 +103,28 @@ test("the actual installed module exposes manual shared assets inside the origin
     assert.equal(assets.acknowledges, 3);
     assert.ok(!f.container.textContent.includes("已核对这次保存"));
     assert.ok(!f.container.textContent.includes("视频已生成"));
+    await f.click(f.button("读取设定与参考图历史"));
+    assert.match(
+      f.container.querySelector('[aria-label="资产设定历史"]').textContent,
+      /设定 v1/,
+    );
+    await f.click(f.container.querySelector('[data-project-page="art"]'));
+    assert.equal(
+      f.container.querySelector('[aria-label="资产设定历史"]'),
+      null,
+    );
+    assert.equal(
+      f.container.querySelector('[aria-label="资产参考图历史"]'),
+      null,
+    );
+    await f.click(
+      f.container.querySelector('[data-project-page="characters"]'),
+    );
+    assert.match(
+      f.container.querySelector('[aria-label="资产设定历史"]').textContent,
+      /设定 v1/,
+    );
+    assert.equal(assets.asset.locked, true);
   } finally {
     await f.dispose();
   }

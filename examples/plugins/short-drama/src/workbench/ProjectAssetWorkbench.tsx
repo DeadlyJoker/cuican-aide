@@ -14,6 +14,8 @@ const labels: Record<ProjectAssetKind, string> = {
 /** This plugin's shared assets use the existing module's forms and theme. */
 export function ProjectAssetWorkbench({
   controller,
+  page,
+  onPageChange,
   images,
   details,
   blocked,
@@ -21,6 +23,8 @@ export function ProjectAssetWorkbench({
   onOpenConcept,
 }: {
   controller: ProjectAssetController;
+  page: "characters" | "art";
+  onPageChange(page: "characters" | "art"): void;
   images: ConceptImageSelectionController;
   details: ProjectDetails;
   blocked: boolean;
@@ -40,6 +44,15 @@ export function ProjectAssetWorkbench({
   const editable = controller.canEdit && !blocked;
   const readable = controller.canRead && !blocked;
   const { draft, view, content } = state;
+  const matchesPage = (kind: ProjectAssetKind) =>
+    page === "characters" ? kind === "character" : kind !== "character";
+  const visibleAssets = state.assets.filter((asset) => matchesPage(asset.kind));
+  const otherDraft = Boolean(
+    draft &&
+      !matchesPage(draft.kind) &&
+      state.dirty &&
+      Object.values(draft.content).some((value) => value.length > 0),
+  );
   const choice = imageState.phase === "ready" ? imageState.current : null;
   const reference = choice?.current;
   const sameProjectImage =
@@ -47,7 +60,7 @@ export function ProjectAssetWorkbench({
   return (
     <section className="text-editor" aria-label="共享资产">
       <div className="panel-heading">
-        <h2>角色、场景与道具</h2>
+        <h2>{page === "characters" ? "角色" : "美术 · 场景与道具"}</h2>
         <button
           className="text-button"
           disabled={state.saving || blocked}
@@ -84,27 +97,29 @@ export function ProjectAssetWorkbench({
         </p>
       )}
       <div className="detail-actions">
-        {(Object.keys(labels) as ProjectAssetKind[]).map((kind) => (
-          <button
-            key={kind}
-            className="button secondary"
-            disabled={!editable}
-            onClick={() => controller.newAsset(kind)}
-          >
-            新建{labels[kind]}
-          </button>
-        ))}
+        {(Object.keys(labels) as ProjectAssetKind[])
+          .filter(matchesPage)
+          .map((kind) => (
+            <button
+              key={kind}
+              className="button secondary"
+              disabled={!editable || otherDraft}
+              onClick={() => controller.newAsset(kind)}
+            >
+              新建{labels[kind]}
+            </button>
+          ))}
       </div>
       <div className="detail-actions" aria-label="资产列表">
-        {state.assets.map((asset) => (
+        {visibleAssets.map((asset) => (
           <button
             key={asset.assetId}
             className="button secondary"
-            disabled={!readable}
+            disabled={!readable || otherDraft}
             aria-pressed={view?.asset.assetId === asset.assetId}
             onClick={() => void controller.open(asset.assetId)}
           >
-            {labels[asset.kind]} · {asset.assetId.slice(0, 8)} ·{" "}
+            {labels[asset.kind]} · {asset.assetId} ·{" "}
             {asset.selectedContentRevision
               ? `选用 v${asset.selectedContentRevision}`
               : "未选用"}
@@ -120,7 +135,29 @@ export function ProjectAssetWorkbench({
           </button>
         )}
       </div>
-      {draft && (
+      {otherDraft && draft && (
+        <p className="detail-note" role="status">
+          另一个页面有未保存的{labels[draft.kind]}设定。
+          <button
+            className="text-button"
+            onClick={() =>
+              onPageChange(draft.kind === "character" ? "characters" : "art")
+            }
+          >
+            返回继续编辑
+          </button>
+          先保存该候选，再创建或打开其他资产。
+        </p>
+      )}
+      {state.phase === "ready" && visibleAssets.length === 0 && (
+        <p className="detail-note">
+          已加载资产中暂无{page === "characters" ? "角色" : "场景或道具"}。
+          {state.nextAssetId !== null
+            ? "可继续加载更多资产。"
+            : "可以新建设定，或让项目 Agent 帮你创作。"}
+        </p>
+      )}
+      {draft && matchesPage(draft.kind) && (
         <div className="concept-grid">
           <section className="brief-panel text-editor" aria-label="资产设定">
             <div className="panel-heading">
@@ -342,59 +379,66 @@ export function ProjectAssetWorkbench({
           </section>
         </div>
       )}
-      <div className="detail-actions" aria-label="资产设定历史">
-        {state.history.map((revision) => (
-          <button
-            className="button secondary"
-            key={revision.contentRevision}
-            disabled={!readable}
-            onClick={() =>
-              void controller.open(revision.assetId, revision.contentRevision)
-            }
-          >
-            设定 v{revision.contentRevision} · {revision.content.name}
-          </button>
-        ))}
-      </div>
-      <div className="detail-actions" aria-label="资产参考图历史">
-        {state.references.map((revision) => (
-          <div className="version-card" key={revision.referenceRevision}>
-            <strong>
-              参考图 v{revision.referenceRevision} · 设定 v
-              {revision.assetContentRevision}
-            </strong>
-            <p className="detail-note">
-              原图结果 {revision.source.resultIndex + 1} ·{" "}
-              {revision.source.pluginVersion}
-            </p>
-            <button
-              className="button secondary"
-              disabled={
-                !editable ||
-                view?.asset.locked ||
-                view?.asset.selectedContentRevision !==
-                  revision.assetContentRevision ||
-                view?.asset.selectedReferenceRevision ===
-                  revision.referenceRevision
-              }
-              onClick={() =>
-                void controller.selectReference(revision.referenceRevision)
-              }
-            >
-              选用这版参考图
-            </button>
+      {draft && matchesPage(draft.kind) && (
+        <>
+          <div className="detail-actions" aria-label="资产设定历史">
+            {state.history.map((revision) => (
+              <button
+                className="button secondary"
+                key={revision.contentRevision}
+                disabled={!readable}
+                onClick={() =>
+                  void controller.open(
+                    revision.assetId,
+                    revision.contentRevision,
+                  )
+                }
+              >
+                设定 v{revision.contentRevision} · {revision.content.name}
+              </button>
+            ))}
           </div>
-        ))}
-      </div>
-      {(state.nextContentRevision !== null ||
-        state.nextReferenceRevision !== null) && (
-        <button
-          className="text-button"
-          disabled={!readable}
-          onClick={() => void controller.loadHistory({ more: true })}
-        >
-          更多历史版本
-        </button>
+          <div className="detail-actions" aria-label="资产参考图历史">
+            {state.references.map((revision) => (
+              <div className="version-card" key={revision.referenceRevision}>
+                <strong>
+                  参考图 v{revision.referenceRevision} · 设定 v
+                  {revision.assetContentRevision}
+                </strong>
+                <p className="detail-note">
+                  原图结果 {revision.source.resultIndex + 1} ·{" "}
+                  {revision.source.pluginVersion}
+                </p>
+                <button
+                  className="button secondary"
+                  disabled={
+                    !editable ||
+                    view?.asset.locked ||
+                    view?.asset.selectedContentRevision !==
+                      revision.assetContentRevision ||
+                    view?.asset.selectedReferenceRevision ===
+                      revision.referenceRevision
+                  }
+                  onClick={() =>
+                    void controller.selectReference(revision.referenceRevision)
+                  }
+                >
+                  选用这版参考图
+                </button>
+              </div>
+            ))}
+          </div>
+          {(state.nextContentRevision !== null ||
+            state.nextReferenceRevision !== null) && (
+            <button
+              className="text-button"
+              disabled={!readable}
+              onClick={() => void controller.loadHistory({ more: true })}
+            >
+              更多历史版本
+            </button>
+          )}
+        </>
       )}
     </section>
   );
