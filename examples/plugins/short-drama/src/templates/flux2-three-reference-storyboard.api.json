@@ -1,0 +1,578 @@
+{
+  "17": {
+    "inputs": {
+      "filename_prefix": "rainy_selected/D18_storyboard",
+      "images": [
+        "214:213",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "240": {
+    "inputs": {
+      "image": "rainy_room.jpg",
+      "enabled": true
+    },
+    "class_type": "LoadImageWithSwitch",
+    "_meta": {
+      "title": "Load Image with Switch"
+    }
+  },
+  "277": {
+    "inputs": {
+      "image": "rainy_room.jpg",
+      "enabled": false
+    },
+    "class_type": "LoadImageWithSwitch",
+    "_meta": {
+      "title": "Load Image with Switch"
+    }
+  },
+  "278": {
+    "inputs": {
+      "image": "rainy_man.png",
+      "enabled": true
+    },
+    "class_type": "LoadImageWithSwitch",
+    "_meta": {
+      "title": "Load Image with Switch"
+    }
+  },
+  "279": {
+    "inputs": {
+      "image": "rainy_woman.png",
+      "enabled": true
+    },
+    "class_type": "LoadImageWithSwitch",
+    "_meta": {
+      "title": "Load Image with Switch"
+    }
+  },
+  "548": {
+    "inputs": {
+      "image": "rainy_room.jpg",
+      "enabled": false
+    },
+    "class_type": "LoadImageWithSwitch",
+    "_meta": {
+      "title": "Load Image with Switch"
+    }
+  },
+  "235:227": {
+    "inputs": {
+      "unet_name": "flux/Flux2-Klein-9B-True-v2-fp8mixed.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "235:229": {
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "235:233": {
+    "inputs": {
+      "value": 832
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Width"
+    }
+  },
+  "235:228": {
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "235:231": {
+    "inputs": {
+      "text": "参考图1是雨夜客厅，仅参考场景结构与光线。参考图2是成年女主的角色设定图，仅参考同一个女人的脸、黑色长发和灰色针织上衣，不要复制多视图。参考图3是成年男主的角色设定图，仅参考同一个男人的脸、发型和灰色短袖黑色长裤，不要复制多视图。生成一张横屏电影写实分镜，只有这两位成年人，女主在左、男主在右，并排坐在灰色沙发上，互相温柔对视，两人的内侧手自然轻触。女主穿灰色针织衫和深色长裤，男主穿灰色T恤和黑色长裤。保持脸、服饰、沙发、左侧雨窗、右侧暖色落地灯的空间关系。中景、固定机位、自然人体比例、手指清晰、单幅连续画面，无分格、无字幕、无文字。",
+      "clip": [
+        "235:229",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Positive Prompt)"
+    }
+  },
+  "235:232": {
+    "inputs": {
+      "value": 480
+    },
+    "class_type": "easy int",
+    "_meta": {
+      "title": "Height"
+    }
+  },
+  "235:230": {
+    "inputs": {
+      "width": [
+        "235:233",
+        0
+      ],
+      "height": [
+        "235:232",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {
+      "title": "空Latent图像（Flux2）"
+    }
+  },
+  "285:237": {
+    "inputs": {
+      "pixels": [
+        "285:236",
+        0
+      ],
+      "vae": [
+        "235:228",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "285:238": {
+    "inputs": {
+      "conditioning": [
+        "235:231",
+        0
+      ],
+      "latent": [
+        "285:237",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "285:239": {
+    "inputs": {
+      "boolean": [
+        "240",
+        2
+      ],
+      "on_true": [
+        "285:238",
+        0
+      ],
+      "on_false": [
+        "235:231",
+        0
+      ]
+    },
+    "class_type": "Switch conditioning [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch conditioning"
+    }
+  },
+  "285:236": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "240",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "292:242": {
+    "inputs": {
+      "pixels": [
+        "292:245",
+        0
+      ],
+      "vae": [
+        "235:228",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "292:243": {
+    "inputs": {
+      "conditioning": [
+        "285:239",
+        0
+      ],
+      "latent": [
+        "292:242",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "292:244": {
+    "inputs": {
+      "boolean": [
+        "277",
+        2
+      ],
+      "on_true": [
+        "292:243",
+        0
+      ],
+      "on_false": [
+        "285:239",
+        0
+      ]
+    },
+    "class_type": "Switch conditioning [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch conditioning"
+    }
+  },
+  "292:245": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "277",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "286:247": {
+    "inputs": {
+      "pixels": [
+        "286:250",
+        0
+      ],
+      "vae": [
+        "235:228",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "286:248": {
+    "inputs": {
+      "conditioning": [
+        "292:244",
+        0
+      ],
+      "latent": [
+        "286:247",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "286:249": {
+    "inputs": {
+      "boolean": [
+        "279",
+        2
+      ],
+      "on_true": [
+        "286:248",
+        0
+      ],
+      "on_false": [
+        "292:244",
+        0
+      ]
+    },
+    "class_type": "Switch conditioning [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch conditioning"
+    }
+  },
+  "286:250": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "279",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "287:252": {
+    "inputs": {
+      "pixels": [
+        "287:255",
+        0
+      ],
+      "vae": [
+        "235:228",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "287:253": {
+    "inputs": {
+      "conditioning": [
+        "286:249",
+        0
+      ],
+      "latent": [
+        "287:252",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "287:254": {
+    "inputs": {
+      "boolean": [
+        "278",
+        2
+      ],
+      "on_true": [
+        "287:253",
+        0
+      ],
+      "on_false": [
+        "286:249",
+        0
+      ]
+    },
+    "class_type": "Switch conditioning [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch conditioning"
+    }
+  },
+  "287:255": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "278",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "291:261": {
+    "inputs": {
+      "pixels": [
+        "291:264",
+        0
+      ],
+      "vae": [
+        "235:228",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "291:262": {
+    "inputs": {
+      "conditioning": [
+        "287:254",
+        0
+      ],
+      "latent": [
+        "291:261",
+        0
+      ]
+    },
+    "class_type": "ReferenceLatent",
+    "_meta": {
+      "title": "参考Latent"
+    }
+  },
+  "291:263": {
+    "inputs": {
+      "boolean": [
+        "548",
+        2
+      ],
+      "on_true": [
+        "291:262",
+        0
+      ],
+      "on_false": [
+        "287:254",
+        0
+      ]
+    },
+    "class_type": "Switch conditioning [Crystools]",
+    "_meta": {
+      "title": "🪛 Switch conditioning"
+    }
+  },
+  "291:264": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 1,
+      "image": [
+        "548",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {
+      "title": "缩放图像（像素）"
+    }
+  },
+  "214:209": {
+    "inputs": {
+      "noise_seed": 20260920
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "随机噪波"
+    }
+  },
+  "214:212": {
+    "inputs": {
+      "noise": [
+        "214:209",
+        0
+      ],
+      "guider": [
+        "214:549",
+        0
+      ],
+      "sampler": [
+        "214:210",
+        0
+      ],
+      "sigmas": [
+        "214:211",
+        0
+      ],
+      "latent_image": [
+        "235:230",
+        0
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "自定义采样器（高级）"
+    }
+  },
+  "214:213": {
+    "inputs": {
+      "samples": [
+        "214:212",
+        0
+      ],
+      "vae": [
+        "235:228",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "214:549": {
+    "inputs": {
+      "cfg": 1,
+      "model": [
+        "235:227",
+        0
+      ],
+      "positive": [
+        "291:263",
+        0
+      ],
+      "negative": [
+        "291:263",
+        0
+      ]
+    },
+    "class_type": "CFGGuider",
+    "_meta": {
+      "title": "CFG引导器"
+    }
+  },
+  "214:211": {
+    "inputs": {
+      "steps": 4,
+      "width": [
+        "235:233",
+        0
+      ],
+      "height": [
+        "235:232",
+        0
+      ]
+    },
+    "class_type": "Flux2Scheduler",
+    "_meta": {
+      "title": "Flux2调度器"
+    }
+  },
+  "214:210": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "K采样器选择"
+    }
+  }
+}

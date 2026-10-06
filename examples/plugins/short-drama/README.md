@@ -4,7 +4,7 @@
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 20.0.1。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 20.0.2。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
 UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
@@ -28,7 +28,13 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/20.0.1/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=20.0.2 pnpm --ignore-workspace build` 构建新的候选版本，测试时设置相同变量。既有 1.0.0 至 20.0.0 及已交付的 20.0.1 安装目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建生成完整预构建安装目录 `dist/20.0.2/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=20.0.3 pnpm --ignore-workspace build` 构建新的候选版本，测试时设置相同变量。既有 1.0.0 至 20.0.1 及已交付的 20.0.2 安装目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+
+## 20.0.2 的参考图工作流适配器
+
+同包Node产物携带T10参考图四视图和D18三素材分镜的完整原图，提供纯渲染与按工作流读取结果的函数。保留所有原节点、模型、seed和连接，只修改声明的图像、提示词及输出前缀槽位。D18的关闭图像节点复用有效场景文件，两个角色按明确顺序传入；T10保持正向143和空负向133。相同服务的已核验output使用明确`[output]`注解，跨服务要求另行准备素材。
+
+两项已用工作流自带示例素材通过真实ComfyUI生成，独立完整包311项测试通过；UI字节保持20.0.1。新函数不注册任务能力，输入DTO不提供项目、素材或执行授权。生产项目的真实已选参考解析、字节回执、媒体输入保存和原Run准入继续按[素材接线](../../../docs/short-drama-reference-workflows.md)实施，界面及Agent没有提前开放媒体自动执行。
 
 ## 20.0.1 的设定到概念图探索
 

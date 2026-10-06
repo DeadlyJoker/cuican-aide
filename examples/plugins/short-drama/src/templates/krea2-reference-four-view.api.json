@@ -1,0 +1,238 @@
+{
+  "122": {
+    "inputs": {
+      "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+      "type": "krea2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "加载CLIP"
+    }
+  },
+  "123": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "加载VAE"
+    }
+  },
+  "125": {
+    "inputs": {
+      "pixels": [
+        "136",
+        0
+      ],
+      "vae": [
+        "123",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE编码"
+    }
+  },
+  "127": {
+    "inputs": {
+      "samples": [
+        "142",
+        0
+      ],
+      "vae": [
+        "123",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码"
+    }
+  },
+  "128": {
+    "inputs": {
+      "unet_name": "krea/krea2_turbo_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器"
+    }
+  },
+  "129": {
+    "inputs": {
+      "filename_prefix": "krea2_identity_edit",
+      "images": [
+        "127",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "保存图像"
+    }
+  },
+  "131": {
+    "inputs": {
+      "image": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "GetImageSize",
+    "_meta": {
+      "title": "获取图像尺寸"
+    }
+  },
+  "132": {
+    "inputs": {
+      "ref_boost": 1,
+      "ref_boost_a": 1,
+      "fit_mode": "fit",
+      "model": [
+        "145",
+        0
+      ],
+      "source_latent": [
+        "125",
+        0
+      ],
+      "vae": [
+        "123",
+        0
+      ],
+      "source_image": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "Krea2EditModelPatch",
+    "_meta": {
+      "title": "Krea2 Edit (source patch)"
+    }
+  },
+  "133": {
+    "inputs": {
+      "prompt": "",
+      "grounding_px": 768,
+      "system_prompt": "",
+      "clip": [
+        "122",
+        0
+      ],
+      "image": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "Krea2EditGroundedEncode",
+    "_meta": {
+      "title": "negative (leave empty)"
+    }
+  },
+  "136": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "upscale_method": "lanczos",
+      "keep_proportion": "resize",
+      "pad_color": "0, 0, 0",
+      "crop_position": "center",
+      "divisible_by": 2,
+      "device": "cpu",
+      "image": [
+        "146",
+        0
+      ]
+    },
+    "class_type": "ImageResizeKJv2",
+    "_meta": {
+      "title": "Resize Image v2"
+    }
+  },
+  "141": {
+    "inputs": {
+      "width": 1536,
+      "height": 1024,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {
+      "title": "空Latent图像（SD3）"
+    }
+  },
+  "142": {
+    "inputs": {
+      "seed": 311378956942475,
+      "steps": 10,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "132",
+        0
+      ],
+      "positive": [
+        "143",
+        0
+      ],
+      "negative": [
+        "133",
+        0
+      ],
+      "latent_image": [
+        "141",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器"
+    }
+  },
+  "143": {
+    "inputs": {
+      "prompt": "Convert the character in the image to a Character Sheet showing a face close-up, front full body, side full body and back full body views",
+      "grounding_px": 0,
+      "system_prompt": "",
+      "clip": [
+        "122",
+        0
+      ],
+      "image": [
+        "136",
+        0
+      ]
+    },
+    "class_type": "Krea2EditGroundedEncode",
+    "_meta": {
+      "title": "Krea2 Edit (grounded encode)"
+    }
+  },
+  "145": {
+    "inputs": {
+      "lora_name": "krea2/krea2_4panel.safetensors",
+      "strength_model": 1,
+      "model": [
+        "128",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA加载器（仅模型）"
+    }
+  },
+  "146": {
+    "inputs": {
+      "image": "123.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Body Reference"
+    }
+  }
+}

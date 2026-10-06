@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.1";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.2";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -124,6 +124,26 @@ for (const [file, expected] of [
 }
 const reviewedWorkflows = [
   {
+    file: "krea2-reference-four-view.api.json",
+    sha256: "be639307e191225d9664a9b5c2f3488e62dc70cc9c167c229b0c610b51e8a099",
+    nodeCount: 15,
+    options: {
+      outputNodeId: "129",
+      prompt: { nodeId: "143", input: "prompt" },
+      outputPrefix: { nodeId: "129", input: "filename_prefix" },
+    },
+  },
+  {
+    file: "flux2-three-reference-storyboard.api.json",
+    sha256: "398840d13a306074d979ad05a62891f64f83b0c906c9e6fbe946bcf20a1f2e84",
+    nodeCount: 39,
+    options: {
+      outputNodeId: "17",
+      prompt: { nodeId: "235:231", input: "text" },
+      outputPrefix: { nodeId: "17", input: "filename_prefix" },
+    },
+  },
+  {
     file: "krea2-portrait.api.json",
     sha256: "fee684ddcda82366507eb4a10f2aec4b682fa2cfa772866b59a057a9a07790bb",
     nodeCount: 11,
@@ -206,6 +226,10 @@ await writeFile(join(output, "business.json"), JSON.stringify(business));
 await cp(
   join(root, "src/templates/provenance.json"),
   join(output, "workflow-provenance.json"),
+);
+await cp(
+  join(root, "src/templates/reference-provenance.json"),
+  join(output, "reference-workflow-provenance.json"),
 );
 
 const sdkDirectory = dirname(

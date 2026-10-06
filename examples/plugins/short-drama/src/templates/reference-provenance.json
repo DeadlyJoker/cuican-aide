@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "crewon.short-drama-reference-workflows.v1",
+  "pluginId": "crewon.short-drama",
+  "source": "User-provided ComfyUI frontend API exports, captured 2026-10-05; unchanged source bytes",
+  "workflows": [
+    {
+      "workflowId": "krea2-reference-four-view",
+      "file": "krea2-reference-four-view.api.json",
+      "sourceSha256": "be639307e191225d9664a9b5c2f3488e62dc70cc9c167c229b0c610b51e8a099",
+      "nodeCount": 15,
+      "outputNodeId": "129",
+      "prompt": { "nodeId": "143", "input": "prompt" },
+      "imageRoles": { "character": ["146"] },
+      "fixedNegativePromptNodeId": "133"
+    },
+    {
+      "workflowId": "flux2-three-reference-storyboard",
+      "file": "flux2-three-reference-storyboard.api.json",
+      "sourceSha256": "398840d13a306074d979ad05a62891f64f83b0c906c9e6fbe946bcf20a1f2e84",
+      "nodeCount": 39,
+      "outputNodeId": "17",
+      "prompt": { "nodeId": "235:231", "input": "text" },
+      "imageRoles": {
+        "scene": ["240", "277", "548"],
+        "characterOne": ["278"],
+        "characterTwo": ["279"]
+      },
+      "fixedDisabledImageNodeIds": ["277", "548"]
+    }
+  ],
+  "policy": "Only declared prompt, output-prefix and image slots vary. Original model selectors, seeds, flags, connections and all other inputs are preserved. Prepared same-service output references use explicit [output] annotations; different services require a separately authorized transfer.",
+  "verificationScope": "Pure adapters, not stage authorization or material-read proof. Host project/reference resolution, verified bytes, operation admission and automatic media plans must be supplied before production execution. Existing T01/T04 configuration and runtime tools are unchanged."
+}

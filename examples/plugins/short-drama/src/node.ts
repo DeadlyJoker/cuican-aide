@@ -148,3 +148,8 @@ function exact(value: object, keys: readonly string[]): void {
   )
     throw new Error("krea_plugin_action_input_invalid");
 }
+export {
+  referenceWorkflowCatalog,
+  renderReferenceWorkflow,
+  observeReferenceWorkflow,
+} from "./reference-workflows.js";

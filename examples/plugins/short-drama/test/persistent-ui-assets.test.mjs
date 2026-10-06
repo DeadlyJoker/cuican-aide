@@ -13,7 +13,7 @@ import {
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(
-    `../dist/${process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.1"}/`,
+    `../dist/${process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.2"}/`,
     import.meta.url,
   ).pathname;
 const { default: definition } = await import(

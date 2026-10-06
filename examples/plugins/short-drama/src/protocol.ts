@@ -28,7 +28,12 @@ export function acceptedPromptId(input: PluginJsonValue): string {
 export async function observeJob(
   id: string,
   read: (path: string) => Promise<PluginJsonValue>,
+  options: Readonly<{ outputNodeId: "29" | "129" | "17" }> = {
+    outputNodeId: "29",
+  },
 ): Promise<Observation> {
+  if (!["29", "129", "17"].includes(options.outputNodeId))
+    throw new Error("krea_plugin_output_node_invalid");
   id = promptId(id);
   const history = object(await read("/history/" + id));
   if (Object.hasOwn(history, id)) {
@@ -36,7 +41,7 @@ export async function observeJob(
     const status = object(record.status);
     if (status.status_str === "error") return { status: "failed", images: [] };
     if (status.completed === true && status.status_str === "success") {
-      const output = object(object(record.outputs)["29"]);
+      const output = object(object(record.outputs)[options.outputNodeId]);
       if (
         !Array.isArray(output.images) ||
         output.images.length < 1 ||
