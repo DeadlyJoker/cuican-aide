@@ -121,7 +121,9 @@ export function composeDesktopNativeProjectMediaInputConfiguration(
           resource.tenantId === scope.tenantId &&
           resource.spaceId === scope.spaceId &&
           resource.profileId === scope.profileId &&
-          resource.pluginId === "crewon.short-drama" &&
+          // getPackage first authorizes the digest before reading its plugin ID.
+          (resource.pluginId === "crewon.short-drama" ||
+            (resource.pluginId === null && resource.packageDigest !== null)) &&
           (resource.packageDigest === null ||
             declared.reviews.some(
               (r) => r.targetIdentity.packageDigest === resource.packageDigest,

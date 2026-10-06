@@ -6,9 +6,51 @@ import test from "node:test";
 import { ThreadApplicationService } from "@crewon/application";
 import { desktopNativeMediaInputFixture } from "./desktop-native-project-media-input.test-support.ts";
 import { assertInstalledPluginTaskRuntimeCoreBinding } from "./installed-plugin-task-runtime-core.ts";
-import { assertDesktopNativeProjectMediaInputDeclaration } from "./desktop-native-project-media-input-composition.ts";
+import {
+  assertDesktopNativeProjectMediaInputDeclaration,
+  composeDesktopNativeProjectMediaInputConfiguration,
+} from "./desktop-native-project-media-input-composition.ts";
 import { createDesktopPluginRuntime } from "./desktop-plugin-runtime.ts";
 const options = { skip: process.platform === "win32", timeout: 25_000 };
+test(
+  "Native metadata permits the reviewed digest pre-read without granting a package listing or foreign plugin access",
+  options,
+  async (t) => {
+    const f = await desktopNativeMediaInputFixture(t);
+    const config = composeDesktopNativeProjectMediaInputConfiguration({
+      configuration: f.bootstrap,
+      nativeControl: f.nativeControl,
+      assertRequestCurrent: async (actor) => assert.deepEqual(actor, f.actor),
+      assertTransactionCurrent: (actor) => assert.deepEqual(actor, f.actor),
+    });
+    assert.ok(config);
+    const base = {
+      kind: "pluginInstallation" as const,
+      ...f.scope,
+      pluginId: null as string | null,
+      packageDigest: f.entry.identity.packageDigest as string | null,
+    };
+    for (const [resource, expected] of [
+      [base, "allow"],
+      [{ ...base, pluginId: "crewon.short-drama" }, "allow"],
+      [
+        { ...base, pluginId: "crewon.short-drama", packageDigest: null },
+        "allow",
+      ],
+      [{ ...base, packageDigest: null }, "deny"],
+      [{ ...base, packageDigest: `sha256:${"0".repeat(64)}` }, "deny"],
+      [{ ...base, pluginId: "crewon.foreign" }, "deny"],
+      [{ ...base, profileId: "another-profile" }, "deny"],
+    ] as const) {
+      const result = await config.installations.authorize({
+        actor: f.actor,
+        action: "pluginInstallation:read",
+        resource,
+      });
+      assert.equal(result.outcome, expected);
+    }
+  },
+);
 test(
   "Native exact-byte UI declaration composes original metadata request dispatch independently, without execution or fabricated mount",
   options,

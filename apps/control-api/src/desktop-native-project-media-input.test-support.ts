@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { TestContext } from "node:test";
 import Fastify from "fastify";
@@ -48,6 +48,8 @@ export async function desktopNativeMediaInputFixture(
     mediaGenerations?: boolean;
     materialStorageFixture?: "missing" | "invalid-key";
     peerOrigin?: string;
+    generationFlow?: boolean;
+    mediaTransportGrant?: "none" | "read" | "all";
   } = {},
 ) {
   const owners: {
@@ -115,6 +117,16 @@ export async function desktopNativeMediaInputFixture(
     version: pkg.descriptor.version,
     packageDigest: pkg.packageDigest,
   };
+  if (options.generationFlow) {
+    const privateSource = join(data, "approved-source");
+    await cp(sourceDirectory, privateSource, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    });
+    await chmod(privateSource, 0o700);
+    source.directory = privateSource;
+  }
   const scope = {
     tenantId: actor.tenantId,
     spaceId: actor.spaceId,
@@ -183,7 +195,7 @@ export async function desktopNativeMediaInputFixture(
     ],
     referenceIdentities: [
       {
-        pluginId: "crewon.short-drama",
+        pluginId: "crewon.short-drama" as const,
         pluginVersion: source.version,
         manifestDigest: registration.manifestDigest,
         implementationDigest: registration.implementationDigest,
@@ -195,6 +207,65 @@ export async function desktopNativeMediaInputFixture(
     textArtifacts: { version: "crewon.project-text.v1" },
     assetArtifacts: { version: "crewon.project-asset.v1" },
     mediaInputs,
+    ...(options.generationFlow
+      ? {
+          pluginUi: {
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+          pluginGenerations: {
+            publications: [
+              {
+                source: {
+                  pluginId: source.pluginId,
+                  packageDigest: source.packageDigest,
+                  contributionId: "workbench",
+                },
+                target: {
+                  pluginId: source.pluginId,
+                  packageDigest: source.packageDigest,
+                  contributionId: "workbench",
+                  action: "image.generate",
+                },
+              },
+            ],
+          },
+          generationReads: { version: "crewon.project-generation-read.v1" },
+          resultSelections: {
+            version: "crewon.project-concept-selection.v1",
+            adapter: "comfyui-krea2",
+            identities: mediaInputs.referenceIdentities,
+          },
+          selectionUi: {
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+          uiRecovery: {
+            version: "crewon.plugin-ui-recovery.v1",
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+                actions: [
+                  "crewon.project-generations.v1.generateConcept",
+                  "crewon.project-generation-selections.v1.selectConceptImage",
+                ],
+              },
+            ],
+          },
+        }
+      : {}),
     ...(options.mediaGenerations
       ? {
           mediaGenerations: {
@@ -289,6 +360,22 @@ export async function desktopNativeMediaInputFixture(
     version: source.version,
     packageDigest: source.packageDigest,
   };
+  const networkGrants =
+    options.generationFlow && options.mediaTransportGrant !== "none"
+      ? [
+          {
+            ...packageIdentity,
+            baseUrl: "https://named-comfy.provider.example:8443/",
+            baseUrlParameter: "baseUrl",
+            paths: [
+              { method: "GET", path: "/view" },
+              ...(options.mediaTransportGrant === "read"
+                ? []
+                : [{ method: "POST", path: "/upload/image" }]),
+            ],
+          },
+        ]
+      : [];
   await write(approvalPath, {
     schemaVersion: "crewon.desktop-plugin-approval.v3",
     sources: document.sources,
@@ -303,7 +390,7 @@ export async function desktopNativeMediaInputFixture(
   await write(policyPath, {
     schemaVersion: "crewon.desktop-native-plugin-policy.v1",
     packages: [{ ...packageIdentity, approvalRequirement: "none" }],
-    networkGrants: [],
+    networkGrants,
   });
   const authorityDirectory = join(data, ".native-plugin-authority-media-test"),
     controlDirectory = join(data, ".installed-plugin-preparation-media-test");
@@ -327,7 +414,7 @@ export async function desktopNativeMediaInputFixture(
     policyPath,
     policyDigest: sha.sha256(await readFile(policyPath)),
     packages: [packageIdentity],
-    networkGrants: [],
+    networkGrants,
   });
   const configuration = createExtensionConfiguration(
     {
@@ -378,7 +465,7 @@ export async function desktopNativeMediaInputFixture(
       ),
       { mode: 0o600 },
     );
-  const routeState = { wakes: 0 };
+  const routeState = { wakes: 0, errors: [] as unknown[] };
   const open = async (store: SqliteRunStore) => {
     const nativeControl = loadDesktopNativePluginControlEnvironment(
       {
@@ -449,7 +536,13 @@ export async function desktopNativeMediaInputFixture(
       { financialMode: "unmetered" },
     );
     const runtime = await createDesktopPluginRuntime(
-      { configuration: bootstrap, nativeControl },
+      {
+        configuration: bootstrap,
+        nativeControl,
+        ...(startup.uiRecovery === undefined
+          ? {}
+          : { uiRecovery: startup.uiRecovery }),
+      },
       {
         store,
         identity,
@@ -467,6 +560,7 @@ export async function desktopNativeMediaInputFixture(
     owners.push({ runtime, app });
     assert.ok(runtime.tasks?.projectMediaInputs);
     app.setErrorHandler((error, request, reply) => {
+      routeState.errors.push(error);
       const e = errorResponse(error, request.id);
       return reply.code(e.statusCode).send(e.body);
     });
@@ -552,6 +646,9 @@ export async function desktopNativeMediaInputFixture(
     mediaInputs,
     entry,
     peerCatalog: { ...entry, manifest: registration.manifest },
+    clock,
+    digester: sha,
+    projectService: seedProjects,
     peer,
     project,
     approvalPath,

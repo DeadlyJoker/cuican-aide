@@ -75,10 +75,11 @@ export function assertDesktopPluginConfigurationRuntime(
     issued.installation !== binding.installation ||
     issued.activation !== binding.activation ||
     issued.store !== binding.store ||
-    !same(
-      issued.configuration,
-      parseDesktopPluginConfiguration(binding.configuration),
-    )
+    (issued.configuration !== binding.configuration &&
+      !same(
+        issued.configuration,
+        parseDesktopPluginConfiguration(binding.configuration),
+      ))
   )
     denied();
   issued.assertActive();

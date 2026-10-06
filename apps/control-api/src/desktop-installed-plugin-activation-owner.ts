@@ -189,7 +189,8 @@ export class DesktopInstalledPluginActivationOwner {
       input.registry !== this.#dependencies.registry ||
       input.authority !== this.#dependencies.authority ||
       input.store !== this.#dependencies.store ||
-      !same(input.configuration, this.#dependencies.configuration)
+      (input.configuration !== this.#dependencies.configuration &&
+        !same(input.configuration, this.#dependencies.configuration))
     )
       denied();
     this.#assertOwner(input.configuration.actor);
