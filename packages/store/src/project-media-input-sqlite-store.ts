@@ -1,6 +1,8 @@
+import { assertSqliteProjectMediaInputRunQualification } from "./project-media-input-run-qualification.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   captureProjectMediaInputAuthority,
+  assertProjectMediaInputRunCommand,
   assertProjectMediaInputCurrent,
   assertProjectMediaInputActive,
   captureProjectMediaInputWrite,
@@ -105,6 +107,7 @@ export class SqliteProjectMediaInputStore implements ProjectMediaInputStore {
         q.command.projectId,
         "read",
       );
+    assertProjectMediaInputRunCommand(a.runTransaction, q.actor, q.command);
     return this.#transaction(
       loadProjectMediaInputReceipt(this.#d, q),
       a,
@@ -119,6 +122,7 @@ export class SqliteProjectMediaInputStore implements ProjectMediaInputStore {
         q.command.projectId,
         "write",
       );
+    assertProjectMediaInputRunCommand(a.runTransaction, q.actor, q.command);
     return this.#transaction(
       saveProjectMediaInputPlan(this.#d, q, a, this.#verifier),
       a,
@@ -193,6 +197,7 @@ export class SqliteProjectMediaInputStore implements ProjectMediaInputStore {
     try {
       assertSqliteProjectAssetSchema(this.#db);
       assertSqliteProjectMediaInputSchema(this.#db);
+      assertSqliteProjectMediaInputRunQualification(this.#db, a);
       const result = this.#execute(plan, a),
         record = qualify(result);
       if (record)
@@ -201,6 +206,8 @@ export class SqliteProjectMediaInputStore implements ProjectMediaInputStore {
           a,
         );
       this.#active();
+      assertProjectMediaInputActive(a);
+      assertSqliteProjectMediaInputRunQualification(this.#db, a);
       assertProjectMediaInputActive(a);
       this.#db.exec("COMMIT");
       return result;

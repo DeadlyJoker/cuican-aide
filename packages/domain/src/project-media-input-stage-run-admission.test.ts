@@ -169,6 +169,17 @@ test("media-input stage permits matching metadata preparation and project reads,
   assert.doesNotThrow(() =>
     assertProjectMediaInputStageToolRequest(scope, "media_input", request),
   );
+  assert.doesNotThrow(() =>
+    assertProjectMediaInputStageToolRequest(scope, "media_input", {
+      method: "getContext",
+    }),
+  );
+  assert.throws(() =>
+    assertProjectMediaInputStageToolRequest(scope, "media_input", {
+      method: "getContext",
+      projectId: "foreign",
+    }),
+  );
   for (const method of ["getOptions", "listInputs", "getInput", "readPrompt"])
     assert.doesNotThrow(() =>
       assertProjectMediaInputStageToolRequest(scope, "media_input", {

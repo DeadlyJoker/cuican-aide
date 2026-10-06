@@ -1,4 +1,9 @@
 import { types } from "node:util";
+import {
+  captureProjectMediaInputRunCommitTransaction,
+  assertProjectMediaInputRunCommand,
+  type ProjectMediaInputRunCommitTransactionAuthority,
+} from "./project-media-input-run-commit-authority.ts";
 import { parseProjectMediaInputListQuery } from "./project-media-input-catalog.ts";
 import { ProjectAssetReferenceImageApplicationService } from "./project-asset-reference-image-application-service.ts";
 import { ProjectMaterialTargetApplicationService } from "./project-material-target-application-service.ts";
@@ -93,10 +98,21 @@ export class ProjectMediaInputApplicationService {
   async saveInput(
     actorInput: ActorContext,
     input: SaveProjectMediaInputCommand,
+    options?: Readonly<{
+      runTransaction: ProjectMediaInputRunCommitTransactionAuthority;
+    }>,
   ) {
     const actor = mediaInputActor(actorInput),
-      command = parseSaveProjectMediaInputCommand(input),
-      roles = mediaInputRoles(command.workflowId),
+      command = parseSaveProjectMediaInputCommand(input);
+    const runTransaction =
+      options === undefined
+        ? undefined
+        : captureProjectMediaInputRunCommitTransaction(
+            materialPreparationFields(options, ["runTransaction"])
+              .runTransaction,
+          );
+    assertProjectMediaInputRunCommand(runTransaction, actor, command);
+    const roles = mediaInputRoles(command.workflowId),
       read = projectMediaInputAuthority({
         actor,
         projectId: command.projectId,
@@ -106,6 +122,7 @@ export class ProjectMediaInputApplicationService {
         inputRevision: null,
         command,
         authorization: this.#authorization,
+        ...(runTransaction === undefined ? {} : { runTransaction }),
       });
     const intent = projectMediaInputAuthority({
       actor,
@@ -116,6 +133,7 @@ export class ProjectMediaInputApplicationService {
       inputRevision: null,
       command,
       authorization: this.#authorization,
+      ...(runTransaction === undefined ? {} : { runTransaction }),
     });
     await intent.assertCurrent();
     const existing = await this.#store.loadReceipt({ actor, command }, read);
@@ -150,6 +168,7 @@ export class ProjectMediaInputApplicationService {
         inputRevision: null,
         command,
         authorization: this.#authorization,
+        ...(runTransaction === undefined ? {} : { runTransaction }),
       });
     await authority.assertCurrent();
     const sources = [];

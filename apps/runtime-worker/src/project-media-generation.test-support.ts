@@ -38,6 +38,7 @@ export async function mediaGenerationFixture(
     configurationFixture?: "large";
     /** Only Task scheduling uses real current time, so original queue leases can be exercised. */
     taskClockFixture?: "current";
+    taskKindFixture?: "media-input";
     installedFixture?: import("../../../packages/store/src/project-material-preparation.test-support.ts").MaterialTargetFixture & {
       manifest: import("@crewon/domain").ExtensionManifest;
     };
@@ -93,7 +94,17 @@ export async function mediaGenerationFixture(
         task: {
           instructions:
             "Execute only the confirmed media-input reference through its admitted host context.",
-          inputSchema: schema,
+          inputSchema:
+            options.taskKindFixture === "media-input"
+              ? {
+                  type: "object",
+                  properties: {
+                    prompt: { type: "string", maxLength: 9999, enum: null },
+                  },
+                  required: ["prompt"],
+                  additionalProperties: false,
+                }
+              : schema,
         },
         configurationSchema: {
           type: "object",
@@ -206,7 +217,10 @@ export async function mediaGenerationFixture(
     principalId: f.actor.principalId,
     actorId: f.actor.actorId,
     contributionId: "workbench",
-    action: "media.generate",
+    action:
+      options.taskKindFixture === "media-input"
+        ? "project.execute"
+        : "media.generate",
     authorityEpoch: "named-media-run-epoch",
   });
   const open = (next = f) => {

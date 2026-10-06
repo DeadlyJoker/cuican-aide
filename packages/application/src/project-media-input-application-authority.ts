@@ -1,4 +1,8 @@
 import { types } from "node:util";
+import {
+  captureProjectMediaInputRunCommitTransaction,
+  type ProjectMediaInputRunCommitTransactionAuthority,
+} from "./project-media-input-run-commit-authority.ts";
 import { ApplicationError } from "./application-error.ts";
 import type {
   ActorContext,
@@ -63,6 +67,7 @@ export function projectMediaInputAuthority(
     command: SaveProjectMediaInputCommand | null;
     authorization: ProjectMediaInputAuthorizationPort;
     signal?: AbortSignal;
+    runTransaction?: ProjectMediaInputRunCommitTransactionAuthority;
   }>,
 ): ProjectMediaInputAuthority {
   const permission = mediaInputData({
@@ -79,6 +84,7 @@ export function projectMediaInputAuthority(
   }) as ProjectMediaInputPermission;
   const active = () => {
     input.signal?.throwIfAborted();
+    input.runTransaction?.assertActive();
     return input.authorization.assertActive(permission);
   };
   let authority: ProjectMediaInputAuthority;
@@ -101,6 +107,13 @@ export function projectMediaInputAuthority(
     assertCurrent: () => check("before"),
     assertTransactionCurrent: () => check("transaction"),
     assertActive: active,
+    ...(input.runTransaction === undefined
+      ? {}
+      : {
+          runTransaction: captureProjectMediaInputRunCommitTransaction(
+            input.runTransaction,
+          ),
+        }),
   });
   return authority;
 }

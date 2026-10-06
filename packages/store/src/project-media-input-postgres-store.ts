@@ -1,6 +1,8 @@
+import { assertPostgresProjectMediaInputRunQualification } from "./project-media-input-run-qualification.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   captureProjectMediaInputAuthority,
+  assertProjectMediaInputRunCommand,
   assertProjectMediaInputCurrent,
   assertProjectMediaInputActive,
   captureProjectMediaInputWrite,
@@ -113,6 +115,7 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
         q.command.projectId,
         "read",
       );
+    assertProjectMediaInputRunCommand(a.runTransaction, q.actor, q.command);
     return this.#transaction(
       loadProjectMediaInputReceipt(this.#d, q),
       a,
@@ -127,6 +130,7 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
         q.command.projectId,
         "write",
       );
+    assertProjectMediaInputRunCommand(a.runTransaction, q.actor, q.command);
     return this.#transaction(
       saveProjectMediaInputPlan(this.#d, q, a, this.#verifier),
       a,
@@ -211,6 +215,11 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
       try {
         await assertPostgresProjectAssetSchema(c, this.#d.schema);
         await assertPostgresProjectMediaInputSchema(c, this.#d.schema);
+        await assertPostgresProjectMediaInputRunQualification(
+          c,
+          this.#d.schema,
+          a,
+        );
         const result = await this.#execute(c, plan, a);
         await assertProjectMediaInputCurrent(a, "transaction");
         const record = qualify(result);
@@ -221,6 +230,12 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
             a,
           );
         this.#open();
+        assertProjectMediaInputActive(a);
+        await assertPostgresProjectMediaInputRunQualification(
+          c,
+          this.#d.schema,
+          a,
+        );
         assertProjectMediaInputActive(a);
         await c.query("COMMIT");
         return result;

@@ -131,6 +131,7 @@ export type ProjectMediaInputWrite = Readonly<{
   at: string;
 }>;
 export type ProjectMediaInputAuthority = Readonly<{
+  runTransaction?: import("./project-media-input-run-commit-authority.ts").ProjectMediaInputRunCommitTransactionAuthority;
   version: "crewon.project-media-input-commit.v1";
   actor: ActorContext;
   projectId: string;

@@ -344,6 +344,10 @@ export function assertProjectMediaInputStageToolRequest(
     if (Object.keys(request).length !== 0) invalid();
     return;
   }
+  if (operation === "media_input" && request.method === "getContext") {
+    if (Object.keys(request).length !== 1) invalid();
+    return;
+  }
   if (
     !scope.allowedOperations.includes(
       operation as ProjectMediaInputStageOperation,

@@ -1,6 +1,6 @@
 # Agent 媒体输入准备：原会话阶段范围
 
-2026-10-06。状态：内部任务入口与 SQLite/PostgreSQL 保存、恢复已实现。实际 Agent 工具、独立运行授权、原 Composer 入口与联合验收尚未接通。接续 [Short22 手动输入页面](./project-media-input-page-protocol.md)，遵循[双入口产品交互](./short-drama-product-experience.md)。
+2026-10-06。状态：内部任务入口与 SQLite/PostgreSQL 保存、恢复已实现。[媒体输入工具宿主服务与原执行资格](./project-media-input-agent-tools-protocol.md)已实现；插件 Node 工具、生产装配、原 Composer 入口与联合验收尚未接通。接续 [Short22 手动输入页面](./project-media-input-page-protocol.md)，遵循[双入口产品交互](./short-drama-product-experience.md)。
 
 ## 用户场景与本次边界
 
@@ -12,9 +12,9 @@
 
 `crewon.project-media-input-stage-run-admission.v1` 冻结真实 actor、项目会话关联与修订、工作空间、确切插件安装、原 Run、配置修订、工作流、需求版本和可选剧本版本及摘要。T10 可以没有剧本，D18 必须指定剧本及所属集。
 
-允许的范围限于输入元数据准备和原项目、文字、资产读取。计划中的 `media_input` 工具只处理配置目录、输入目录、输入读取、分段提示词读取和保存；保存必须匹配本阶段的项目、工作流、配置、需求和剧本。完整引用及当前已采用素材仍需由共享媒体输入服务检查。这个范围不授予素材上传、外部生成、候选采用、锁定或其他阶段写入。
+允许的范围限于输入元数据准备和原项目、文字、资产读取。`media_input` 宿主服务处理原任务范围、配置目录、输入目录、输入读取、分段提示词读取和保存；保存必须匹配本阶段的项目、工作流、配置、需求和剧本。完整引用及当前已采用素材仍需由共享媒体输入服务检查。这个范围不授予素材上传、外部生成、候选采用、锁定或其他阶段写入。
 
-宿主提交需要独立 `crewon.project-media-input-stage-commit.v1` authority；现有页面 invocation、资产阶段资格或生成资格不能替代它。实际发布审查、Node 声明核验与运行期服务资格仍待专用 owner 接入，当前测试的这些外部判定明确使用具名夹具。
+宿主提交需要独立 `crewon.project-media-input-stage-commit.v1` authority；现有页面 invocation、资产阶段资格或生成资格不能替代它。专用工具 owner 已实现独立服务资格和原 dispatch 核验；实际包声明、发布审查和生产装配仍待连接，当前测试的这些外部判定明确使用具名夹具。
 
 输入准备只接受已有的 unmetered 授权。缺失时在报价和写任务之前拒绝；原收费任务行为保持，积分没有扩展。
 

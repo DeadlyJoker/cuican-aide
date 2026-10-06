@@ -1,3 +1,4 @@
+import { captureProjectMediaInputRunCommitTransaction } from "./project-media-input-run-commit-authority.ts";
 import { types } from "node:util";
 import {
   extensionCanonicalJson,
@@ -510,6 +511,11 @@ export function captureProjectMediaInputAuthority(
     "assertCurrent",
     "assertTransactionCurrent",
     "assertActive",
+    ...(input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "runTransaction")
+      ? ["runTransaction"]
+      : []),
   ]);
   if (
     a.version !== "crewon.project-media-input-commit.v1" ||
@@ -522,6 +528,17 @@ export function captureProjectMediaInputAuthority(
     (action === "read" ? a.review !== null : a.review === null)
   )
     fail("authority_invalid");
+  const runTransaction =
+    a.runTransaction === undefined
+      ? undefined
+      : captureProjectMediaInputRunCommitTransaction(a.runTransaction);
+  if (
+    runTransaction !== undefined &&
+    (action === "qualify" ||
+      !mediaInputSame(runTransaction.actor, actor) ||
+      runTransaction.mediaInputStageAdmission.projectId !== projectId)
+  )
+    fail("authority_invalid");
   return Object.freeze({
     version: a.version,
     actor,
@@ -532,9 +549,11 @@ export function captureProjectMediaInputAuthority(
     assertCurrent: a.assertCurrent.bind(input),
     assertTransactionCurrent: a.assertTransactionCurrent.bind(input),
     assertActive: a.assertActive.bind(input),
+    ...(runTransaction === undefined ? {} : { runTransaction }),
   });
 }
 export function assertProjectMediaInputActive(a: ProjectMediaInputAuthority) {
+  a.runTransaction?.assertActive();
   const result: unknown = a.assertActive();
   if (result === undefined) return;
   try {
@@ -559,6 +578,10 @@ export async function assertProjectMediaInputCurrent(
   )
     fail("authority_invalid");
   assertProjectMediaInputActive(a);
+  if (a.runTransaction !== undefined) {
+    await a.runTransaction.assertCurrent();
+    assertProjectMediaInputActive(a);
+  }
 }
 export function assertProjectMediaWorkflowReview(
   review: ProjectMediaWorkflowReview | null,
