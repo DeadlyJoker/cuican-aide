@@ -5,6 +5,7 @@ import {
   type ListMediaInputsRequest,
   parseMediaInputOptionsRequest,
   parseMediaInputOptionsResponse,
+  type MediaInputOptionsRequest,
 } from "@crewon/contracts/project-media-input-catalog";
 import { randomUUID } from "node:crypto";
 import { types } from "node:util";
@@ -66,6 +67,7 @@ export class InstalledProjectMediaInputRuntime {
   readonly #lifetime: AbortController;
   readonly #uiPackages: readonly string[];
   readonly #reviews: readonly import("@crewon/application").ProjectMediaWorkflowReview[];
+  readonly #selection: PluginInstallationApplicationService["getSelection"];
   readonly #uiInvocations: AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>;
   readonly #physical = new Set<Promise<unknown>>();
   #closing: Promise<void> | undefined;
@@ -77,6 +79,7 @@ export class InstalledProjectMediaInputRuntime {
     uiInvocations: AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>,
     uiPackages: readonly string[],
     reviews: readonly import("@crewon/application").ProjectMediaWorkflowReview[],
+    installations: PluginInstallationApplicationService,
   ) {
     this.#core = core;
     this.#service = service;
@@ -85,6 +88,10 @@ export class InstalledProjectMediaInputRuntime {
     this.#uiInvocations = uiInvocations;
     this.#uiPackages = Object.freeze([...uiPackages]);
     this.#reviews = reviews;
+    this.#selection =
+      PluginInstallationApplicationService.prototype.getSelection.bind(
+        installations,
+      );
     issued.add(this);
   }
   static async prepare(
@@ -278,6 +285,7 @@ export class InstalledProjectMediaInputRuntime {
       uiInvocations,
       configuration.reviews.map((r) => r.targetIdentity.packageDigest),
       configuration.reviews,
+      installations,
     );
   }
   saveInput(
@@ -301,6 +309,15 @@ export class InstalledProjectMediaInputRuntime {
     return this.#run(request, actor, signal, async () => {
       return this.#load(actor, query);
     });
+  }
+  getOptions(
+    request: ControlApiRequestContext,
+    actor: ActorContext,
+    input: MediaInputOptionsRequest,
+    signal?: AbortSignal,
+  ) {
+    const query = parseMediaInputOptionsRequest(input);
+    return this.#run(request, actor, signal, () => this.#options(actor, query));
   }
   /** A live Application invocation and original authenticated request are both required. */
   saveInputFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
@@ -337,41 +354,74 @@ export class InstalledProjectMediaInputRuntime {
     return this.#ui(context, signal, async () => {
       if (context.action !== "crewon.project-media-inputs.v1.getOptions")
         denied();
-      const query = parseMediaInputOptionsRequest(context.input);
-      // Original read purpose and original SQL project ownership, including an empty catalog.
-      await this.#list(context.actor, {
-        ...query,
-        afterMediaInputId: null,
-        limit: 1,
-      });
-      const configuration = await this.#core.extensions.getConfiguration(
+      return this.#options(
         context.actor,
-        {
-          pluginId: "crewon.short-drama",
-          revision: null,
-        },
+        parseMediaInputOptionsRequest(context.input),
+        context.package.packageDigest,
       );
-      const workflows =
-        configuration === null
-          ? []
-          : this.#reviews
-              .filter(
-                (r) =>
-                  r.targetIdentity.packageDigest ===
-                    context.package.packageDigest &&
-                  r.targetIdentity.version === configuration.pluginVersion &&
-                  r.targetIdentity.manifestDigest ===
-                    configuration.manifestDigest &&
-                  r.targetIdentity.implementationDigest ===
-                    configuration.implementationDigest,
-              )
-              .map((r) => r.workflow.workflowId);
-      return parseMediaInputOptionsResponse({
-        configuration:
-          configuration === null || workflows.length === 0
-            ? null
-            : { revision: configuration.revision, workflows },
-      });
+    });
+  }
+  async #options(
+    actor: ActorContext,
+    query: MediaInputOptionsRequest,
+    uiPackageDigest?: string,
+  ) {
+    // The same read purpose and SQL project ownership also protect an empty catalog.
+    const projectQuery = { ...query, afterMediaInputId: null, limit: 1 };
+    await this.#list(actor, projectQuery);
+    const selectionQuery = { pluginId: "crewon.short-drama" };
+    const selection = await this.#selection(actor, selectionQuery);
+    const configurationQuery = { ...selectionQuery, revision: null };
+    const configuration = await this.#core.extensions.getConfiguration(
+      actor,
+      configurationQuery,
+    );
+    await this.#core.requests.assertCurrent();
+    if (
+      uiPackageDigest !== undefined &&
+      selection?.selectedPackageDigest !== uiPackageDigest
+    )
+      denied();
+    const workflows =
+      configuration === null || selection?.state !== "enabled"
+        ? []
+        : [
+            ...new Set(
+              this.#reviews
+                .filter(
+                  (r) =>
+                    r.targetIdentity.packageDigest ===
+                      selection.selectedPackageDigest &&
+                    r.targetIdentity.version === configuration.pluginVersion &&
+                    r.targetIdentity.manifestDigest ===
+                      configuration.manifestDigest &&
+                    r.targetIdentity.implementationDigest ===
+                      configuration.implementationDigest,
+                )
+                .map((r) => r.workflow.workflowId),
+            ),
+          ];
+    const currentSelection = await this.#selection(actor, selectionQuery);
+    const currentConfiguration = await this.#core.extensions.getConfiguration(
+      actor,
+      configurationQuery,
+    );
+    await this.#core.requests.assertCurrent();
+    if (
+      !mediaInputSame(selection, currentSelection) ||
+      !mediaInputSame(configuration, currentConfiguration)
+    )
+      throw new ApplicationError(
+        "conflict",
+        "project_media_input_target_unavailable",
+      );
+    // Revalidate project/read authority after installation and configuration I/O.
+    await this.#list(actor, projectQuery);
+    return parseMediaInputOptionsResponse({
+      configuration:
+        configuration === null || workflows.length === 0
+          ? null
+          : { revision: configuration.revision, workflows },
     });
   }
   async #list(actor: ActorContext, query: ListMediaInputsRequest) {

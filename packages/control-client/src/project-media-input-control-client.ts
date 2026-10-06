@@ -13,12 +13,43 @@ import type {
   CreativeProjectControlTransport,
   CreativeProjectControlRequestOptions,
 } from "./creative-project-control-client.ts";
+import {
+  parseMediaInputOptionsRequest,
+  parseMediaInputOptionsResponse,
+  type MediaInputOptionsRequest,
+  type MediaInputOptionsResponse,
+} from "@crewon/contracts/project-media-input-catalog";
 
 /** Shared logical input commands over the original authenticated transport; no retry or execution grant. */
 export class ProjectMediaInputControlClient {
   readonly #transport: CreativeProjectControlTransport;
   constructor(transport: CreativeProjectControlTransport) {
     this.#transport = transport;
+  }
+  async getOptions(
+    input: MediaInputOptionsRequest,
+    options: CreativeProjectControlRequestOptions = {},
+  ): Promise<MediaInputOptionsResponse> {
+    const query = this.#checked("request", () =>
+        parseMediaInputOptionsRequest(input),
+      ),
+      signal = this.#signal(options);
+    signal.throwIfAborted();
+    const value = await this.#transport.json(
+      "GET",
+      `/api/v1/creative-projects/${encodeURIComponent(query.projectId)}/media-input-options`,
+      null,
+      {
+        signal,
+        expectedStatuses: [200],
+        maximumResponseBytes: 1024,
+        redirect: "manual",
+      },
+    );
+    signal.throwIfAborted();
+    return this.#checked("response", () =>
+      parseMediaInputOptionsResponse(value),
+    );
   }
   async saveInput(
     input: SaveMediaInputRequest,

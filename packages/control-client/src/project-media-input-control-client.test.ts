@@ -53,6 +53,72 @@ function client(
     fetch,
   });
 }
+test("options client reads bounded reviewed catalog using encoded project and original transport", async () => {
+  let calls = 0;
+  const c = client(async (url, init) => {
+    calls++;
+    assert.equal(
+      String(url),
+      `https://control.test/api/v1/creative-projects/${encodeURIComponent(command.projectId)}/media-input-options`,
+    );
+    assert.equal(init?.method, "GET");
+    assert.equal(
+      new Headers(init?.headers).get("authorization"),
+      "Bearer named-session",
+    );
+    assert.equal(init?.redirect, "manual");
+    return Response.json({
+      configuration: { revision: 3, workflows: ["krea2-reference-four-view"] },
+    });
+  });
+  assert.deepEqual(
+    await c.projectMediaInputs.getOptions({ projectId: command.projectId }),
+    {
+      configuration: { revision: 3, workflows: ["krea2-reference-four-view"] },
+    },
+  );
+  await assert.rejects(
+    c.projectMediaInputs.getOptions({
+      projectId: command.projectId,
+      packageDigest: "foreign",
+    } as { projectId: string }),
+    ControlApiProtocolError,
+  );
+  await assert.rejects(
+    c.projectMediaInputs.getOptions(
+      { projectId: command.projectId },
+      { signal: AbortSignal.abort() },
+    ),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls, 1);
+  for (const value of [
+    {
+      configuration: { revision: 0, workflows: ["krea2-reference-four-view"] },
+    },
+    { configuration: { revision: 1, workflows: ["unreviewed"] } },
+    { configuration: null, authority: true },
+    {
+      configuration: {
+        revision: 1,
+        workflows: ["krea2-reference-four-view", "krea2-reference-four-view"],
+      },
+    },
+    { configuration: null, padding: "x".repeat(1024) },
+  ])
+    await assert.rejects(
+      client(async () => Response.json(value)).projectMediaInputs.getOptions({
+        projectId: command.projectId,
+      }),
+      ControlApiProtocolError,
+    );
+  assert.deepEqual(
+    await client(async () =>
+      Response.json({ configuration: null }),
+    ).projectMediaInputs.getOptions({ projectId: command.projectId }),
+    { configuration: null },
+  );
+});
 test("shared media input client uses original headers, encoded path and a lazy bounded group", async () => {
   const calls: { url: string; init: RequestInit }[] = [];
   const c = client(async (url, init) => {

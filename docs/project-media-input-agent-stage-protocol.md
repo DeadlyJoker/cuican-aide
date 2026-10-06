@@ -1,6 +1,6 @@
 # Agent 媒体输入准备：原会话阶段范围
 
-2026-10-06。状态：内部任务入口与 SQLite/PostgreSQL 保存、恢复已实现。[媒体输入工具宿主服务与原执行资格](./project-media-input-agent-tools-protocol.md)已实现；Short23 的插件 Node 工具与实际安装调用已验证；Worker 生产装配与真实调度已接通，原 Composer 入口与界面联合验收尚未接通。接续 [Short22 手动输入页面](./project-media-input-page-protocol.md)，遵循[双入口产品交互](./short-drama-product-experience.md)。
+2026-10-06。状态：内部任务入口与 SQLite/PostgreSQL 保存、恢复已实现。[媒体输入工具宿主服务与原执行资格](./project-media-input-agent-tools-protocol.md)已实现；Short23 的插件 Node 工具与实际安装调用已验证；Worker 生产装配与真实调度已接通，原 Composer 可见入口已接通，用户 App 与插件页面的联合部署验收待完成。接续 [Short22 手动输入页面](./project-media-input-page-protocol.md)，遵循[双入口产品交互](./short-drama-product-experience.md)。
 
 ## 用户场景与本次边界
 
@@ -14,7 +14,7 @@
 
 允许的范围限于输入元数据准备和原项目、文字、资产读取。`media_input` 宿主服务处理原任务范围、配置目录、输入目录、输入读取、分段提示词读取和保存；保存必须匹配本阶段的项目、工作流、配置、需求和剧本。完整引用及当前已采用素材仍需由共享媒体输入服务检查。这个范围不授予素材上传、外部生成、候选采用、锁定或其他阶段写入。
 
-宿主提交需要独立 `crewon.project-media-input-stage-commit.v1` authority；现有页面 invocation、资产阶段资格或生成资格不能替代它。专用工具 owner 已实现独立服务资格和原 dispatch 核验；Short23 的实际包声明及工具调用已验证；Worker 生产装配已支持显式独立部署；正式 App 配置和原 Composer 仍待连接，测试中的外部 PDP 判定使用具名夹具。
+宿主提交需要独立 `crewon.project-media-input-stage-commit.v1` authority；现有页面 invocation、资产阶段资格或生成资格不能替代它。专用工具 owner 已实现独立服务资格和原 dispatch 核验；Short23 的实际包声明及工具调用已验证；Worker 生产装配已支持显式独立部署；原 Composer 已连接，正式 App 配置仍待部署验收，测试中的外部 PDP 判定使用具名夹具。
 
 输入准备只接受已有的 unmetered 授权。缺失时在报价和写任务之前拒绝；原收费任务行为保持，积分没有扩展。
 
@@ -34,6 +34,6 @@
 
 证据在 `output/extensions/checks/project-media-input-agent-stage-20261006/`。原 SDK、Short22 及更早完整包、App 保持冻结，本次没有更新用户 App。
 
-Short23 同包真实 `media_input` 已接原 Worker，双库验证六个方法、流式输出和冷恢复。受阶段约束的原项目、文字、资产读取已接通，可从真实返回值发现参考素材。接下来连接原 Composer 入口，再验证“对话保存 → 页面读取与编辑 → 对话继续”及流式/中断恢复。随后接实际媒体生成、查询、候选采用和有界跨阶段计划。结构化分镜、视频、声音与成片仍按完整八阶段方案继续，目标保持 ACTIVE。
+Short23 同包真实 `media_input` 已接原 Worker，双库验证六个方法、流式输出和冷恢复。受阶段约束的原项目、文字、资产读取已接通，可从真实返回值发现参考素材。原 Composer 入口已连接，接下来验证“对话保存 → 页面读取与编辑 → 对话继续”及流式/中断恢复。随后接实际媒体生成、查询、候选采用和有界跨阶段计划。结构化分镜、视频、声音与成片仍按完整八阶段方案继续，目标保持 ACTIVE。
 
-公开请求、安装核验与双端装配见[原对话媒体输入任务入口](./project-media-input-stage-entry.md)。当前已连接 HTTP 与 ControlClient，原 Composer 的可见阶段控件仍待接入。
+公开请求、安装核验与双端装配见[原对话媒体输入任务入口](./project-media-input-stage-entry.md)。当前已连接 HTTP、ControlClient 和原 Composer 可见阶段控件，保留原任务采用及流式重连路径。

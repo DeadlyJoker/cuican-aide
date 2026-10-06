@@ -1,3 +1,5 @@
+import { ControlProjectMediaInputStageTurn } from "./controlProjectMediaInputStageTurn";
+import { startPresentedProjectMediaInputStageTurn } from "./controlProjectMediaInputStagePresentation";
 import { ControlProjectAssetStageTurn } from "./controlProjectAssetStageTurn";
 import { startPresentedProjectAssetStageTurn } from "./controlProjectAssetStagePresentation";
 import { ControlProjectConversationTurn } from "./controlProjectConversationTurn";
@@ -273,6 +275,7 @@ export class ControlThreadRuntime {
   #nextThreadStreamGeneration = 0;
   readonly #projectTurns: ControlProjectConversationTurn;
   readonly #assetTurns:ControlProjectAssetStageTurn;
+  readonly #mediaInputTurns: ControlProjectMediaInputStageTurn;
   #closed = false;
 
   constructor(
@@ -288,6 +291,10 @@ export class ControlThreadRuntime {
       config.idempotencyKey ??
       ((operation) => `${operation}:${globalThis.crypto.randomUUID()}`);
     this.#assetTurns=new ControlProjectAssetStageTurn(this.#client,this.#idempotencyKey);
+    this.#mediaInputTurns = new ControlProjectMediaInputStageTurn(
+      this.#client,
+      this.#idempotencyKey,
+    );
     this.#projectTurns = new ControlProjectConversationTurn(
       this.#client,
       this.#idempotencyKey,
@@ -362,6 +369,7 @@ export class ControlThreadRuntime {
   }
 
   close(): void {
+    void this.#mediaInputTurns.close();
     void this.#assetTurns.close();
     void this.#projectTurns.close();
     this.catalog.close();
@@ -1313,6 +1321,9 @@ export class ControlThreadRuntime {
     return response;
   }
 
+  retainedProjectMediaInputStageSelection(threadId: string) {
+    return this.#mediaInputTurns.retainedSelection(threadId);
+  }
   retainedProjectAssetStageSelection(threadId:string){return this.#assetTurns.retainedSelection(threadId);}
   retainedProjectConversationSelection(threadId: string) {
     return this.#projectTurns.retainedSelection(threadId);
@@ -1326,6 +1337,17 @@ export class ControlThreadRuntime {
     images: ComposerImageInput[] = [],
   ): Promise<TurnStartResponse> {
     validateSupportedTurnInput(mentions, settings, images);
+    if (settings?.projectMediaInputStage !== undefined)
+      return startPresentedProjectMediaInputStageTurn({
+        threadId, text, settings,
+        hasAttachments: images.length > 0 || mentions.length > 0,
+        closed: () => this.#closed,
+        turns: this.#mediaInputTurns,
+        getSnapshot: id => this.#getThreadSnapshot(id),
+        adopt: receipt => this.adoptExtensionTask(receipt),
+        readThread: id => this.readThread(id),
+        changed: id => this.#callbacks.onProjectConversationRequestChanged?.(id),
+      });
     if(settings?.projectAssetStage!==undefined)return startPresentedProjectAssetStageTurn({threadId,text,settings,hasAttachments:images.length>0||mentions.length>0,closed:()=>this.#closed,turns:this.#assetTurns,getSnapshot:id=>this.#getThreadSnapshot(id),adopt:receipt=>this.adoptExtensionTask(receipt),readThread:id=>this.readThread(id),changed:id=>this.#callbacks.onProjectConversationRequestChanged?.(id)});
     if (settings?.projectConversation !== undefined) {
       if (this.#closed) throw new Error("control_thread_runtime_closed");

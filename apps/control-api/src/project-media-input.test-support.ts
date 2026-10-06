@@ -64,6 +64,8 @@ export async function mediaInputControlFixture(
       | undefined
       | ((permission: ProjectMediaInputPermission) => Promise<void>),
     projectReads: 0,
+    errors: [] as string[],
+    beforeConfiguration: undefined as undefined | (() => Promise<void>),
   };
   const owners: {
     core: Awaited<ReturnType<typeof createInstalledPluginTaskRuntimeCore>>;
@@ -130,7 +132,10 @@ export async function mediaInputControlFixture(
       ],
       profiles,
       businessAuthorization: {
-        authorize: async () => f.decision(f.state.configurationAllowed),
+        authorize: async () => {
+          await state.beforeConfiguration?.();
+          return f.decision(f.state.configurationAllowed);
+        },
       },
       uiAuthorization: {
         authorize: async () => ({
@@ -154,6 +159,11 @@ export async function mediaInputControlFixture(
     assert.ok(core.projectMediaInputs);
     const app = Fastify();
     app.setErrorHandler((error, request, reply) => {
+      state.errors.push(
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : String(error),
+      );
       const response = errorResponse(error, request.id);
       return reply.code(response.statusCode).send(response.body);
     });

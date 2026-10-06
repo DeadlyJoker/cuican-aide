@@ -6,6 +6,8 @@ import { ControlApiClient } from "@crewon/control-client";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
 import { useProjectConversationComposer } from "./useProjectConversationComposer";
 import { notifyProjectConversationBindingChanged } from "../plugins/projectConversationBindingChanges";
+import { ControlProjectMediaInputStageTurn } from "../control-runtime/controlProjectMediaInputStageTurn";
+import { scriptView } from "../control-runtime/controlProjectMediaInputStage.test-support";
 const at = "2026-10-06T00:00:00.000Z",
   projectId = "project/中文 %2F";
 const digest = `sha256:${"a".repeat(64)}`;
@@ -362,4 +364,110 @@ it("unknown original script retains its episode and source through actual readon
   await f.render("actual-project-thread", 2, null);
   expect(f.current().selection?.stage).toEqual({ kind: "discussion" });
   expect(f.current().selection?.binding.revision).toBe(2);
+});
+it("original Composer selects reviewed media preparation, requires D18 script, and sends the exact selection through the original client", async () => {
+  const posts: Array<{ path: string; body: unknown }> = [];
+  const f = await fixture(async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    if (init?.method === "POST") {
+      posts.push({ path, body: JSON.parse(init.body as string) });
+      return Response.json(
+        {
+          disposition: "committed",
+          threadId: binding.threadId,
+          threadRevision: 4,
+          runId: "prepared-input-run",
+          runRevision: 1,
+          bindingRevision: 1,
+          stageAdmissionDigest: digest,
+        },
+        { status: 201 },
+      );
+    }
+    if (path.endsWith("project-conversation"))
+      return Response.json({ binding });
+    if (path.endsWith("project-asset-stage"))
+      return Response.json({ available: false });
+    if (path.endsWith("project-media-input-stage"))
+      return Response.json({ available: true });
+    if (path.endsWith("media-input-options"))
+      return Response.json({
+        configuration: {
+          revision: 4,
+          workflows: [
+            "krea2-reference-four-view",
+            "flux2-three-reference-storyboard",
+          ],
+        },
+      });
+    if (path.endsWith("outline"))
+      return Response.json({ view: publicTextView });
+    if (path.includes("/scripts/")) {
+      const view = scriptView("episode/中文").view!;
+      return Response.json({
+        view: {
+          ...view,
+          artifact: { ...view.artifact, projectId },
+          selectedRevision: { ...view.selectedRevision, projectId },
+        },
+      });
+    }
+    return Response.json({ project });
+  });
+  async function select(label: string, value: string) {
+    await act(async () => {
+      const el = f.container.querySelector(
+        `select[aria-label="${label}"]`,
+      ) as HTMLSelectElement;
+      expect(el).not.toBeNull();
+      el.value = value;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
+  await select("创作阶段", "media-input");
+  expect(f.current().selection).toBeNull();
+  expect(f.current().assetSelection).toBeNull();
+  expect(f.current().mediaInputSelection?.stage).toEqual({
+    kind: "media-input",
+    workflowId: "krea2-reference-four-view",
+    configurationRevision: 4,
+    briefRevision: 1,
+    script: null,
+  });
+  await select("输入准备工作流", "flux2-three-reference-storyboard");
+  expect(f.current().blocked).toBe(true);
+  expect(posts).toHaveLength(0);
+  await select("画面剧本来源", "episode/中文");
+  expect(f.current().blocked).toBe(false);
+  expect(f.container.innerHTML).toMatchSnapshot();
+  const turns = new ControlProjectMediaInputStageTurn(
+    f.client,
+    () => "composer-input-key",
+  );
+  try {
+    const receipt = await turns.start({
+      threadId: binding.threadId,
+      content: "准备雨夜相遇的画面，先不要生成。",
+      expectedThreadRevision: 3,
+      selection: f.current().mediaInputSelection!,
+    });
+    expect(receipt.runId).toBe("prepared-input-run");
+    expect(posts).toEqual([
+      {
+        path: `/api/v1/threads/${binding.threadId}/project-media-input-stage`,
+        body: {
+          projectId,
+          threadId: binding.threadId,
+          content: "准备雨夜相遇的画面，先不要生成。",
+          expectedThreadRevision: 3,
+          expectedBindingRevision: 1,
+          idempotencyKey: "composer-input-key",
+          stage: f.current().mediaInputSelection!.stage,
+        },
+      },
+    ]);
+  } finally {
+    await turns.close();
+  }
 });

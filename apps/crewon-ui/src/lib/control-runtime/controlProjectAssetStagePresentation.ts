@@ -26,6 +26,7 @@ export async function startPresentedProjectAssetStageTurn(
   if (
     input.hasAttachments ||
     input.settings.projectConversation !== undefined ||
+    input.settings.projectMediaInputStage !== undefined ||
     (input.settings.executionIntent !== undefined &&
       input.settings.executionIntent !== "none") ||
     selection.binding.threadId !== input.threadId

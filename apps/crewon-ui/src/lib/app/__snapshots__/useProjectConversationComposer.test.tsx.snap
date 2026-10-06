@@ -1,3 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`initial binding read blocks send, shows the real project stages and retains phase on same Thread update 1`] = `"项目创作 讨论（只读）需求大纲分集剧本刷新项目"`;
+
+exports[`original Composer selects reviewed media preparation, requires D18 script, and sends the exact selection through the original client 1`] = `"<div class="composer-state" aria-label="项目创作阶段"><span>项目创作</span> <select aria-label="创作阶段"><option value="discussion">讨论（只读）</option><option value="brief">需求</option><option value="outline">大纲</option><option value="script">分集剧本</option><option value="media-input">准备生成输入</option></select><select aria-label="输入准备工作流"><option value="krea2-reference-four-view">T10 · 角色参考四视图</option><option value="flux2-three-reference-storyboard">D18 · 三素材分镜探索</option></select><select aria-label="画面剧本来源"><option value="">请选择已采用的分集剧本</option><option value="episode/中文">第一集</option></select><span>准备描述与参考素材，不开始生成</span><button type="button">刷新项目</button></div>"`;

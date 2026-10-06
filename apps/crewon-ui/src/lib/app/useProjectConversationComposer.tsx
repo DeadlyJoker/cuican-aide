@@ -1,3 +1,6 @@
+import { useProjectMediaInputStageComposer } from "./useProjectMediaInputStageComposer";
+import { ProjectMediaInputStageControls } from "./ProjectMediaInputStageControls";
+import type { ProjectMediaInputStageComposerSelection } from "../control-runtime/controlProjectMediaInputStageTurn";
 import { useProjectAssetStageComposer } from "./useProjectAssetStageComposer";
 import type { ProjectAssetStageComposerSelection } from "../control-runtime/controlProjectAssetStageTurn";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -31,6 +34,7 @@ export function useProjectConversationComposer(
     busy: boolean;
     retainedSelection?: ProjectConversationComposerSelection | null;
     retainedAssetSelection?: ProjectAssetStageComposerSelection | null;
+    retainedMediaInputSelection?: ProjectMediaInputStageComposerSelection | null;
   }>,
 ) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
@@ -38,9 +42,9 @@ export function useProjectConversationComposer(
     [loading, setLoading] = useState(
       input.client !== null && input.threadId !== null,
     ),
-    [kind, setKind] = useState<ProjectConversationStage["kind"] | "assets">(
-      "discussion",
-    ),
+    [kind, setKind] = useState<
+      ProjectConversationStage["kind"] | "assets" | "media-input"
+    >("discussion"),
     [episode, setEpisode] = useState(""),
     [refresh, setRefresh] = useState(0);
   const owner = useMemo(
@@ -151,8 +155,15 @@ export function useProjectConversationComposer(
     input.retainedAssetSelection?.binding.threadId === owner.threadId
       ? input.retainedAssetSelection
       : null;
+  const retainedMedia =
+    input.retainedMediaInputSelection?.binding.threadId === owner.threadId
+      ? input.retainedMediaInputSelection
+      : null;
   const selectedKind =
-    retainedAsset?.stage.kind ?? retained?.stage.kind ?? kind;
+    retainedMedia?.stage.kind ??
+    retainedAsset?.stage.kind ??
+    retained?.stage.kind ??
+    kind;
   const assets = useProjectAssetStageComposer({
     client: owner.client,
     binding: actual?.binding ?? null,
@@ -163,9 +174,19 @@ export function useProjectConversationComposer(
     refresh,
     retained: retainedAsset,
   });
+  const media = useProjectMediaInputStageComposer({
+    client: owner.client,
+    binding: actual?.binding ?? null,
+    briefRevision: actual?.briefRevision ?? 0,
+    episodeIds: actual?.outline?.episodes.map((e) => e.episodeId) ?? [],
+    active: selectedKind === "media-input",
+    threadRevision: input.threadRevision,
+    refresh,
+    retained: retainedMedia,
+  });
   const stage: ProjectConversationStage =
     retained?.stage ??
-    (kind === "assets"
+    (kind === "assets" || kind === "media-input"
       ? { kind: "discussion" }
       : kind === "discussion"
         ? { kind }
@@ -184,7 +205,9 @@ export function useProjectConversationComposer(
                     },
             });
   const selection: ProjectConversationComposerSelection | null =
-    actual === null || selectedKind === "assets"
+    actual === null ||
+    selectedKind === "assets" ||
+    selectedKind === "media-input"
       ? null
       : (retained ?? { binding: actual.binding, stage });
   const zh = input.locale === "zh";
@@ -206,10 +229,18 @@ export function useProjectConversationComposer(
         <select
           aria-label={zh ? "创作阶段" : "Creation stage"}
           value={selectedKind}
-          disabled={input.busy || retained !== null || retainedAsset !== null}
+          disabled={
+            input.busy ||
+            retained !== null ||
+            retainedAsset !== null ||
+            retainedMedia !== null
+          }
           onChange={(event) =>
             setKind(
-              event.target.value as ProjectConversationStage["kind"] | "assets",
+              event.target.value as
+                | ProjectConversationStage["kind"]
+                | "assets"
+                | "media-input",
             )
           }
         >
@@ -230,13 +261,29 @@ export function useProjectConversationComposer(
               {zh ? "角色、场景与道具" : "Characters, scenes and props"}
             </option>
           ) : null}
+          {media.available || retainedMedia !== null ? (
+            <option value="media-input" disabled={actual.briefRevision < 1}>
+              {zh ? "准备生成输入" : "Prepare media input"}
+            </option>
+          ) : null}
         </select>
+        {selectedKind === "media-input" ? (
+          <ProjectMediaInputStageControls
+            media={media}
+            episodes={actual.outline?.episodes ?? []}
+            retained={retainedMedia !== null}
+            busy={input.busy}
+            zh={zh}
+          />
+        ) : null}
         {selectedKind === "assets" ? (
           <>
             <select
               aria-label={zh ? "资产类型" : "Asset kind"}
               value={assets.assetKind}
-              disabled={input.busy || retainedAsset !== null}
+              disabled={
+                input.busy || retainedAsset !== null || retainedMedia !== null
+              }
               onChange={(e) =>
                 assets.setAssetKind(
                   e.target.value as "character" | "scene" | "prop",
@@ -250,7 +297,9 @@ export function useProjectConversationComposer(
             <select
               aria-label={zh ? "资产剧本来源" : "Asset script source"}
               value={assets.episodeId}
-              disabled={input.busy || retainedAsset !== null}
+              disabled={
+                input.busy || retainedAsset !== null || retainedMedia !== null
+              }
               onChange={(e) => assets.setEpisodeId(e.target.value)}
             >
               <option value="">{zh ? "仅依据需求" : "Brief only"}</option>
@@ -278,7 +327,9 @@ export function useProjectConversationComposer(
             ) : null}
           </>
         ) : null}
-        {retained !== null || retainedAsset !== null ? (
+        {retained !== null ||
+        retainedAsset !== null ||
+        retainedMedia !== null ? (
           <span>
             {zh
               ? "重试将继续原请求的阶段与来源"
@@ -290,7 +341,12 @@ export function useProjectConversationComposer(
           <select
             aria-label={zh ? "剧本集数" : "Script episode"}
             value={retainedScript !== null ? retainedScript.episodeId : episode}
-            disabled={input.busy || retained !== null || retainedAsset !== null}
+            disabled={
+              input.busy ||
+              retained !== null ||
+              retainedAsset !== null ||
+              retainedMedia !== null
+            }
             onChange={(event) => setEpisode(event.target.value)}
           >
             {retainedScript !== null &&
@@ -323,11 +379,13 @@ export function useProjectConversationComposer(
   return {
     selection,
     assetSelection: assets.selection,
+    mediaInputSelection: media.selection,
     view,
     blocked:
       owner.client !== null &&
       owner.threadId !== null &&
       (assets.blocked ||
+        media.blocked ||
         snapshotOwner !== owner ||
         failure ||
         loading ||

@@ -2296,7 +2296,7 @@ describe("Control thread runtime", () => {
     }
   });
 
-  it("starts a bound project stage through the original transcript, SSE and reconnect cursor without a default Turn", async () => {
+  it.each(["text", "media-input"] as const)("starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn", async (kind) => {
     let submitted = false,
       terminal = false,
       attempt = 0;
@@ -2318,7 +2318,7 @@ describe("Control thread runtime", () => {
           : [],
     });
     const start = vi
-      .spyOn(client.projectConversations, "startStage")
+      .spyOn(kind === "text" ? client.projectConversations : client.projectMediaInputStages, "startStage")
       .mockImplementation(async (_threadId, request) => {
         submitted = true;
         return {
@@ -2366,7 +2366,7 @@ describe("Control thread runtime", () => {
       runtimeCallbacks,
     );
     try {
-      const result = await runtime.startTurn("thread-1", "写第一集", [], {
+      const textSettings = {
         executionIntent: "none",
         projectConversation: {
           binding: {
@@ -2393,6 +2393,10 @@ describe("Control thread runtime", () => {
             outline: null,
           },
         },
+      } as const;
+      const mediaStage = {kind:"media-input",workflowId:"flux2-three-reference-storyboard",configurationRevision:4,briefRevision:1,script:{artifactId:"script-1",episodeId:"episode-1",contentRevision:2}} as const;
+      const result = await runtime.startTurn("thread-1", "写第一集", [], kind === "text" ? textSettings : {
+        executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
       });
       expect(result.turn.id).toBe("run-1");
       await settled.promise;
@@ -2403,7 +2407,7 @@ describe("Control thread runtime", () => {
         content: "写第一集",
         expectedThreadRevision: 1,
         expectedBindingRevision: 2,
-        stage: { kind: "script", episodeId: "episode-1", outline: null },
+        stage: kind === "text" ? { kind: "script", episodeId: "episode-1", outline: null } : mediaStage,
       });
       expect(client.startTurn).not.toHaveBeenCalled();
       expect(client.getActiveAgentVersionCatalog).not.toHaveBeenCalled();

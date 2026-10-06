@@ -944,6 +944,12 @@ export function App({
     client: controlRuntimeConnected ? controlClient : null,
     threadId: commandShellRuntime.selectedThreadId,
     threadRevision: commandShellRuntime.selectedThread?.updatedAt ?? null,
+    retainedMediaInputSelection:
+      commandShellRuntime.selectedThreadId === null
+        ? null
+        : (controlThreadRuntime?.retainedProjectMediaInputStageSelection(
+            commandShellRuntime.selectedThreadId,
+          ) ?? null),
     retainedAssetSelection:commandShellRuntime.selectedThreadId===null?null:controlThreadRuntime?.retainedProjectAssetStageSelection(commandShellRuntime.selectedThreadId)??null,
     retainedSelection:
       commandShellRuntime.selectedThreadId === null
@@ -1697,7 +1703,9 @@ export function App({
                 return;
               }
               if (
-                (projectConversationComposer.selection !== null||projectConversationComposer.assetSelection!==null) &&
+                (projectConversationComposer.selection !== null ||
+                  projectConversationComposer.assetSelection !== null ||
+                  projectConversationComposer.mediaInputSelection !== null) &&
                 settings?.executionIntent !== undefined &&
                 settings.executionIntent !== "none"
               ) {
@@ -1713,7 +1721,9 @@ export function App({
               }
               void sendMessage(
                 text,
-                projectConversationComposer.assetSelection!==null?{...settings,projectAssetStage:projectConversationComposer.assetSelection}:projectConversationComposer.selection === null
+                projectConversationComposer.mediaInputSelection !== null
+                  ? { ...settings, projectMediaInputStage: projectConversationComposer.mediaInputSelection }
+                  : projectConversationComposer.assetSelection!==null?{...settings,projectAssetStage:projectConversationComposer.assetSelection}:projectConversationComposer.selection === null
                   ? settings
                   : {
                       ...settings,

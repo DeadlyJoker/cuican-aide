@@ -6,6 +6,7 @@ import {
   MAX_PROJECT_MEDIA_INPUT_REQUEST_BYTES,
 } from "@crewon/contracts/project-media-inputs";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
+import { parseMediaInputOptionsRequest } from "@crewon/contracts/project-media-input-catalog";
 import { requestContext } from "./request-context.ts";
 import {
   isInstalledProjectMediaInputRuntime,
@@ -29,6 +30,27 @@ export function registerProjectMediaInputRoutes(
     load = InstalledProjectMediaInputRuntime.prototype.loadInput.bind(
       input.owner,
     );
+  const getOptions =
+    InstalledProjectMediaInputRuntime.prototype.getOptions.bind(input.owner);
+  // Separate path preserves every existing /media-inputs/:mediaInputId lookup.
+  app.get<{ Params: { projectId: string }; Querystring: unknown }>(
+    "/api/v1/creative-projects/:projectId/media-input-options",
+    { exposeHeadRoute: false },
+    async (request, reply) =>
+      withRequestSignal(request, reply, async (signal) => {
+        querySnapshot(request.query, []);
+        const context = requestContext(request),
+          actor = await input.identity.resolveActor(context);
+        return getOptions(
+          context,
+          actor,
+          parseMediaInputOptionsRequest({
+            projectId: request.params.projectId,
+          }),
+          signal,
+        );
+      }),
+  );
   app.post<{
     Params: { projectId: string };
     Querystring: unknown;

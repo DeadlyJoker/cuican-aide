@@ -1,3 +1,4 @@
+import type { ProjectMediaInputStageComposerSelection } from "../control-runtime/controlProjectMediaInputStageTurn";
 import type { ProjectAssetStageComposerSelection } from "../control-runtime/controlProjectAssetStageTurn";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
 import type { AskForApproval } from "@crewon/app-server-protocol/v2/AskForApproval";
@@ -43,6 +44,7 @@ export type CommandModelOption = {
 export type ThreadRuntimeSettings = {
   projectConversation?: ProjectConversationComposerSelection;
   projectAssetStage?:ProjectAssetStageComposerSelection;
+  projectMediaInputStage?: ProjectMediaInputStageComposerSelection;
   approvalPolicy?: AskForApproval | null;
   approvalsReviewer?: ApprovalsReviewer | null;
   config?: Record<string, unknown>;
