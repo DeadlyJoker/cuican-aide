@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { deferred } from "./runtime-store-access.test-support.ts";
-import { mediaWorkerFixture } from "./project-media-worker.test-support.ts";
+import {
+  mediaWorkerFixture,
+  finishMediaWorkerRun,
+} from "./project-media-worker.test-support.ts";
 import { assetTestOptions } from "../../../packages/store/src/project-asset.test-support.ts";
 import {
   captureInstalledPluginExecutionConfig,
@@ -27,7 +30,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
             spaceId: f.actor.spaceId,
             runId: f.accepted.binding.runId,
           });
-        const outcome = await opened.worker.wake();
+        const { outcome } = await finishMediaWorkerRun(
+          opened.worker,
+          f.accepted.binding.runId,
+        );
         assert.equal(outcome.kind, "completed", JSON.stringify(outcome));
         assert.equal(
           (await f.parent.loadRun(f.accepted.binding))?.status,
@@ -105,7 +111,11 @@ for (const backend of ["sqlite", "postgres"] as const) {
       const cold = await f.cold();
       f.state.submit = false;
       const second = await f.open({ ...f, ...cold });
-      assert.equal((await second.worker.wake()).kind, "completed");
+      assert.equal(
+        (await finishMediaWorkerRun(second.worker, f.accepted.binding.runId))
+          .outcome.kind,
+        "completed",
+      );
       assert.equal(f.state.posts, before[0]);
       assert.equal(f.state.gets, before[1]! + 1);
       assert.deepEqual(

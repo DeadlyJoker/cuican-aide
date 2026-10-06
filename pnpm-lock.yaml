@@ -48,6 +48,9 @@ importers:
       '@crewon/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@crewon/media-runtime':
+        specifier: workspace:*
+        version: link:../../packages/media-runtime
       '@crewon/plugin-host':
         specifier: workspace:*
         version: link:../../packages/plugin-host
@@ -297,6 +300,9 @@ importers:
       '@crewon/mcp-runtime':
         specifier: workspace:*
         version: link:../../packages/mcp-runtime
+      '@crewon/media-runtime':
+        specifier: workspace:*
+        version: link:../../packages/media-runtime
       '@crewon/plugin-host':
         specifier: workspace:*
         version: link:../../packages/plugin-host
@@ -532,6 +538,28 @@ importers:
       '@crewon/test-contracts':
         specifier: workspace:*
         version: link:../test-contracts
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/media-runtime:
+    dependencies:
+      '@crewon/application':
+        specifier: workspace:*
+        version: link:../application
+      '@crewon/artifacts':
+        specifier: workspace:*
+        version: link:../artifacts
+      '@crewon/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@crewon/store':
+        specifier: workspace:*
+        version: link:../store
+    devDependencies:
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3

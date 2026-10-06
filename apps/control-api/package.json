@@ -16,6 +16,7 @@
     "@crewon/artifacts": "workspace:*",
     "@crewon/contracts": "workspace:*",
     "@crewon/domain": "workspace:*",
+    "@crewon/media-runtime": "workspace:*",
     "@crewon/plugin-host": "workspace:*",
     "@crewon/process-lifecycle": "workspace:*",
     "@crewon/store": "workspace:*",

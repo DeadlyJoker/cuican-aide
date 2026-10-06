@@ -125,6 +125,20 @@ export function requirePluginTaskQuotes(
     );
 }
 
+/** Shared lookup key for the original task receipt; this does not validate its command digest. */
+export function pluginTaskReceiptKey(
+  input: Readonly<{
+    actor: ActorContext;
+    profileId: string;
+    pluginId: string;
+    idempotencyKey: string;
+  }>,
+  digester: ContentDigester,
+): string {
+  const { actor, profileId, pluginId, idempotencyKey } = input;
+  return `plugin-task:${extensionDigest(digester.sha256(extensionCanonicalJson([actor.tenantId, actor.spaceId, profileId, actor.principalId, actor.actorId, pluginId, idempotencyKey]))).slice(7)}`;
+}
+
 export function pluginTaskReceipt(
   actor: ActorContext,
   command: CreateExtensionTaskCommand,
@@ -133,7 +147,15 @@ export function pluginTaskReceipt(
 ): ExtensionMutationReceipt {
   return Object.freeze({
     actorId: actor.actorId,
-    idempotencyKey: `plugin-task:${extensionDigest(digester.sha256(extensionCanonicalJson([actor.tenantId, actor.spaceId, pin.profileId, actor.principalId, actor.actorId, pin.pluginId, command.idempotencyKey]))).slice(7)}`,
+    idempotencyKey: pluginTaskReceiptKey(
+      {
+        actor,
+        profileId: pin.profileId,
+        pluginId: pin.pluginId,
+        idempotencyKey: command.idempotencyKey,
+      },
+      digester,
+    ),
     requestDigest: extensionDigest(
       digester.sha256(
         extensionCanonicalJson({

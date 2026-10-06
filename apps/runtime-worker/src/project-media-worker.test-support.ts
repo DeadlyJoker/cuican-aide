@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { setTimeout } from "node:timers/promises";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdtempSync, rmSync, chmodSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,6 +34,7 @@ import {
   reviewedMediaGraphs,
   providerId,
 } from "./project-media-execution.test-support.ts";
+import { ProjectMediaGenerationCommands } from "@crewon/media-runtime";
 import { ProjectMediaResultPublisher } from "./project-media-result-publisher.ts";
 import { materialPng } from "./project-material-png.test-support.ts";
 import { mediaExecutionDigest } from "./project-media-execution-review.ts";
@@ -51,6 +53,7 @@ export async function mediaWorkerFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
+  creationEntry: "qualified-task" | "shared-command" = "qualified-task",
 ) {
   const root = mkdtempSync(join(tmpdir(), "crewon-media-worker-")),
     inode = statSync(root);
@@ -239,18 +242,57 @@ export async function mediaWorkerFixture(
     });
     if (!held) break;
   }
-  const { task } = await f.prepare(kind),
-    accepted = await f.create(task),
-    reviews = graphs.graphs.map((g) => ({
-      ...f.reviews.find((r) => r.workflow.workflowId === g.id)!,
-      targetIdentity: {
-        ...f.reviewedTarget,
-        manifestDigest: registration.manifestDigest,
+  const commands = new ProjectMediaGenerationCommands({
+    profileId: f.pin.profileId,
+    preparer: f.issuer,
+    tasks: f.service,
+    extensions: f.ext,
+    admissions: { resolve: async () => f.pin },
+  });
+  lifetimes.push(commands);
+  const saved =
+    creationEntry === "shared-command"
+      ? await f.app.saveInput(
+          f.actor,
+          kind === "T10" ? f.command : f.d18Command,
+        )
+      : null;
+  const command =
+    saved === null
+      ? null
+      : {
+          ...f.mediaQuery(saved.input),
+          executionId: "shared-command-intent",
+          threadId: "media-task-thread",
+          expectedThreadRevision: 1,
+          idempotencyKey: "shared-command-key",
+        };
+  const legacy = command === null ? await f.prepare(kind) : null;
+  const accepted =
+    command === null
+      ? await f.create(legacy!.task)
+      : await commands.generate(f.actor, command, f.signal());
+  const task =
+    legacy?.task ??
+    (await f.issuer.restoreAcceptedTask(
+      f.actor,
+      {
+        tenantId: f.actor.tenantId,
+        spaceId: f.actor.spaceId,
+        runId: accepted.binding.runId,
       },
-      template: g.template,
-      promptBinding: g.promptBinding,
-      imageBindings: g.imageBindings,
-    }));
+      f.signal(),
+    ));
+  const reviews = graphs.graphs.map((g) => ({
+    ...f.reviews.find((r) => r.workflow.workflowId === g.id)!,
+    targetIdentity: {
+      ...f.reviewedTarget,
+      manifestDigest: registration.manifestDigest,
+    },
+    template: g.template,
+    promptBinding: g.promptBinding,
+    imageBindings: g.imageBindings,
+  }));
   assert.equal(entry.scope.profileId, f.pin.profileId);
   const open = async (
     current: Pick<typeof f, "parent" | "ext" | "materials"> = f,
@@ -456,6 +498,8 @@ export async function mediaWorkerFixture(
     materialState: f.state,
     task,
     accepted,
+    commands,
+    sharedCommand: command,
     open,
     publish,
   };
@@ -464,3 +508,18 @@ const digester = {
   sha256: (s: string) =>
     "sha256:" + createHash("sha256").update(s).digest("hex"),
 };
+
+/** Continue only a persisted fairness yield on the same Run, preserving the production scheduler budget. */
+export async function finishMediaWorkerRun(
+  worker: RuntimeWorker,
+  runId: string,
+) {
+  for (let yields = 0; yields < 8; yields++) {
+    const outcome = await worker.wake();
+    if (outcome.kind !== "retried" || outcome.code !== "run_execution_yield")
+      return { outcome, yields };
+    assert.equal(outcome.runId, runId);
+    await setTimeout(2); // Original durable queue schedules the yielded work item 1ms later.
+  }
+  throw new Error("named_media_generation_fairness_limit");
+}

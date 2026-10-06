@@ -130,6 +130,7 @@ export {
   type PluginUiInvocationCommitAuthority,
 } from "./plugin-ui-invocation-authority.ts";
 export * from "./plugin-project-text-action-owner.ts";
+export { pluginTaskReceiptKey } from "./extension-plugin-task-support.ts";
 export type { PluginTaskCommitAuthorityPort } from "./extension-plugin-task-support.ts";
 export * from "./extension-credit-quote-port.ts";
 export * from "./external-operation-store-port.ts";

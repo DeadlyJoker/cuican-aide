@@ -43,3 +43,7 @@
 下一项是可信 Main 中的共享媒体命令与结果发布协调，再接原 Agent 和手动工作台的同一入口。媒体候选采用、结构化分镜、视频、声音、剪辑交付及有限跨阶段自动执行继续按既有顺序实施。用户 App 未更新，积分继续后置，完整目标 ACTIVE。
 
 证据：`output/extensions/checks/project-media-worker-composition-20261006/`。完整回归中磁盘耗尽造成 PostgreSQL 崩溃的一轮单独保留，不能计作通过；后续分批运行同一完整文件清单，只调整自有测试实例的 WAL 容量和文件并发，不改变事务持久性或产品断言。
+
+## 共享宿主命令（2026-10-07）
+
+素材与候选实现现已提取到私有 `@crewon/media-runtime`，原 Worker 路径重导出同一实现。新增[共享生成命令](./shared-project-media-commands.md)将实际素材准备、原输入资格、原 TaskCore 受理和已接受请求恢复连接在一起；页面与 Agent 的宿主适配器将复用它。该命令尚未装配到正式 Control/Main 的公开入口，候选采用和可见按钮继续接线。

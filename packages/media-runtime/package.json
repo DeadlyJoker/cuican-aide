@@ -1,0 +1,38 @@
+{
+  "name": "@crewon/media-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./provider-probe-egress": "./src/provider-probe-egress.ts",
+    "./network-egress": "./src/network-egress.ts",
+    "./pinned-node-http": "./src/pinned-node-http.ts",
+    "./material-byte-snapshot": "./src/material-byte-snapshot.ts",
+    "./project-material-png": "./src/project-material-png.ts",
+    "./comfyui-material-upload": "./src/comfyui-material-upload.ts",
+    "./project-reference-material-reader": "./src/project-reference-material-reader.ts",
+    "./project-reference-material-freezer": "./src/project-reference-material-freezer.ts",
+    "./project-material-preparation-support": "./src/project-material-preparation-support.ts",
+    "./project-material-preparer": "./src/project-material-preparer.ts",
+    "./project-media-material-preparer": "./src/project-media-material-preparer.ts",
+    "./project-media-generation-task-preparer": "./src/project-media-generation-task-preparer.ts",
+    "./project-media-result-publisher": "./src/project-media-result-publisher.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@crewon/application": "workspace:*",
+    "@crewon/artifacts": "workspace:*",
+    "@crewon/domain": "workspace:*",
+    "@crewon/store": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}
