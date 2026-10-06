@@ -1,6 +1,6 @@
 # Agent 媒体输入工具：共享记录与执行恢复
 
-2026-10-06。已实现独立宿主服务 owner、原 Worker dispatch 核验及 SQLite/PostgreSQL 写入资格。**Short23 已注册同包 Node 工具并验证实际安装调用，Worker 生产装配和原 Composer 入口尚未接通**，不代表用户 App 已能调用。接续[原会话阶段范围](./project-media-input-agent-stage-protocol.md)，产品目标见[双入口交互](./short-drama-product-experience.md)。
+2026-10-06。已实现独立宿主服务 owner、原 Worker dispatch 核验及 SQLite/PostgreSQL 写入资格。**Short23 已注册同包 Node 工具，Worker 生产装配与真实 Agent/Worker 调用已验证；原 Composer 入口尚未接通**，不代表用户 App 已能调用。接续[原会话阶段范围](./project-media-input-agent-stage-protocol.md)，产品目标见[双入口交互](./short-drama-product-experience.md)。
 
 ## 用户行为
 
@@ -41,10 +41,22 @@ SQLite/PostgreSQL 在保存输入使用的同一连接内，写入前和 COMMIT 
 
 日志与核验位于 `output/extensions/checks/project-media-input-agent-tool-20261006/`。SDK、原完整插件包及 App 保持冻结。
 
-同包工具注册和实际安装调用现已完成。接下来依次连接 Worker 生产装配、原 Composer 发起阶段任务，以及“对话保存 → 插件页面编辑 → 对话继续”的流式和恢复联合验收。在这条链路完成前，现有 Worker 的 `installed_plugin_media_input_stage_runtime_unavailable` 保护继续保留。之后继续实际生成/查询/候选采用、结构化分镜和跨阶段执行；完整八阶段目标仍 ACTIVE。
+同包工具与 Worker 生产装配已完成。下一步补齐媒体输入阶段的原项目/剧本/资产有界读取，再连接原 Composer 发起阶段任务，完成“对话保存 → 插件页面编辑 → 对话继续”的界面联合验收。未部署独立服务时仍保留 `installed_plugin_media_input_stage_runtime_unavailable`。之后继续实际生成/查询/候选采用、结构化分镜和跨阶段执行；完整八阶段目标仍 ACTIVE。
 
 ## Short23 完整插件包
 
 `crewon.short-drama` 版本 `23.0.0` 在原 23 项工具上新增一项 `media_input`，未拆分工作流包，未修改原 UI 源码或 SDK。完整包位于 `output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0`。构建使用原冻结 SDK tar，包内仅含独立 Node/UI 产物和自身依赖。
 
 包内 320 项回归（含原页面快照）通过；安装调用与原服务/事务检查 33 项、宿主与便携解码器 10 项通过，均无跳过。实际包调用覆盖 T10/D18、原输入保存、最新/历史读取、手动追加修订、提示词分段、ACK 保留、插件冷重开恢复、缺少服务拒绝、未提交任务的保守取消、关闭等待和迟到读取拒绝。它证明安装包到共享服务这一段，不代替原 Agent 流式和页面联合验收。证据在 `output/extensions/checks/project-media-input-agent-package-20261006/`。
+
+## 原 Worker 装配与真实调度
+
+原 `InstalledPluginExecutionConfig` 新增可选 `projectMediaInputs`，版本 `crewon.project-media-input-tools.v1`。可信部署方通过同步 `createInputs({ store })` 在组合工厂的实际父库上创建共享媒体输入应用服务，配置项目 PDP 和独立 `authorizeService`；该工厂只组合元数据服务，不拥有第二套运行时或异步资源。它不自动迁移来源、不推断 UI 授权，也不从插件参数取得权限。
+
+原 Run reader 读取必需摘要及不可变阶段，核验配置修订、任务、安装、会话、工作空间与原回执一致；宿主私有快照不可复制。只有这样的阶段能得到输入准备 owner。原文字/资产 owner 仍服务原任务；即使同时部署普通项目工具，媒体输入任务也不能借它创建项目、改写剧本或生成图片。当前装配只开放六个 `media_input` 方法；阶段协议预留的原文字/资产读取尚待独立接线，不能据此宣称已可自动发现全部素材。
+
+服务 owner 纳入原安装包借用、dispatch、retirement 和关闭链。每次执行仍由实际 Worker 的原队列租约和 Tool 回执签发资格；事务中的外部检查只调用部署 PDP/包策略/身份解析，不嵌套借用父库连接。关闭先撤销服务并等待实际调用结束，再释放包。
+
+新增验证使用完整冻结 Short23、实际 AgentVersion 编译与安装包工厂、原 RuntimeWorker、双库队列和 Tool/Run 事件。具名模型连续调用六个方法，再发出两段流式回复；保存后可由原手动服务追加修订。保存成功而 Tool ACK 丢失后，关闭全部旧 Worker/插件 owner、冷开原数据库和新 Worker，返回原修订且保留新的手动 head。缺失部署、独立拒绝、跨项目、生成、普通项目写入均不能保存；关闭能等待被挂起的服务调用。模型、PDP 与已有参考来源为明确夹具，未调用真实模型或供应商，也未从用户 Composer 操作。
+
+证据：`output/extensions/checks/project-media-input-worker-20261006/`。原 SDK、Short23 和更早完整包、正式 App 保持冻结。

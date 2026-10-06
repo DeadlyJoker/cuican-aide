@@ -1,3 +1,6 @@
+import { readProjectMediaInputStageRuntimeScope } from "./project-media-input-stage-runtime-scope.ts";
+import type { ProjectMediaInputStageStore } from "@crewon/application";
+import type { ProjectMediaInputStageRunAdmission } from "@crewon/domain";
 import { readProjectAssetStageRuntimeScope } from "./project-asset-stage-runtime-scope.ts";
 import type { ProjectAssetStageStore } from "@crewon/application";
 import type { ProjectAssetStageRunAdmission } from "@crewon/domain";
@@ -64,6 +67,10 @@ export type InstalledPluginRunContextDependencies = Readonly<{
     ProjectAssetStageStore,
     "loadAssetStageAdmission" | "readRequiredAssetStageDigest"
   >;
+  mediaInputStages?: Pick<
+    ProjectMediaInputStageStore,
+    "loadMediaInputStageAdmission" | "readRequiredMediaInputStageDigest"
+  >;
   plans?: Pick<
     ProjectTextPlanStore,
     "readRequiredPlanDigest" | "loadRunAdmission"
@@ -82,6 +89,7 @@ type SavedContext = Readonly<{
   projectStage: ProjectStageRunAdmission | null;
   projectTextPlan: ProjectTextPlanRunAdmission | null;
   projectAssetStage: ProjectAssetStageRunAdmission | null;
+  projectMediaInputStage: ProjectMediaInputStageRunAdmission | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -203,6 +211,14 @@ export class InstalledPluginRunContext {
     return saved.projectStage;
   }
 
+  verifiedProjectMediaInputStage(
+    snapshot: InstalledPluginRunSnapshot,
+  ): ProjectMediaInputStageRunAdmission | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.projectMediaInputStage;
+  }
+
   verifiedProjectAssetStage(
     snapshot: InstalledPluginRunSnapshot,
   ): ProjectAssetStageRunAdmission | null {
@@ -301,7 +317,10 @@ export class InstalledPluginRunContext {
     });
     signal.throwIfAborted();
     if (rawReceipt === null) fail("installed_plugin_task_receipt_missing");
-    if (rawReceipt.projectMediaInputStageAdmission !== undefined)
+    if (
+      rawReceipt.projectMediaInputStageAdmission !== undefined &&
+      this.#dependencies.mediaInputStages === undefined
+    )
       fail("installed_plugin_media_input_stage_runtime_unavailable");
     const original = validateReceipt(
       rawReceipt,
@@ -314,6 +333,25 @@ export class InstalledPluginRunContext {
     signal.throwIfAborted();
     if (run === null) fail("installed_plugin_run_missing");
     assertRun(run, binding, original);
+    const projectMediaInputStage =
+      this.#dependencies.mediaInputStages === undefined
+        ? null
+        : await readProjectMediaInputStageRuntimeScope({
+            stages: this.#dependencies.mediaInputStages,
+            admission,
+            binding,
+            signal,
+          });
+    if (
+      extensionCanonicalJson(
+        rawReceipt.projectMediaInputStageAdmission ?? null,
+      ) !== extensionCanonicalJson(projectMediaInputStage) ||
+      (projectMediaInputStage !== null &&
+        (query !== null ||
+          (rawReceipt.turn.threadState.workspaceId ?? null) !==
+            projectMediaInputStage.workspaceId))
+    )
+      fail("installed_plugin_media_input_stage_mismatch");
     const projectAssetStage =
       this.#dependencies.assetStages === undefined
         ? null
@@ -358,6 +396,13 @@ export class InstalledPluginRunContext {
             stage: projectStage,
             signal,
           });
+    if (
+      projectMediaInputStage !== null &&
+      (projectStage !== null ||
+        projectAssetStage !== null ||
+        projectTextPlan !== null)
+    )
+      fail("installed_plugin_media_input_stage_conflict");
     const rawConfiguration = await extensions.loadExtensionConfiguration({
       ...binding,
       revision: binding.configurationRevision,
@@ -432,6 +477,7 @@ export class InstalledPluginRunContext {
       projectStage,
       projectTextPlan,
       projectAssetStage,
+      projectMediaInputStage,
     });
   }
 

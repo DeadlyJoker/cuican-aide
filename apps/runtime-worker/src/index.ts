@@ -54,3 +54,5 @@ export * from "./plugins/installed-plugin-business-registration.ts";
 export * from "./plugins/installed-plugin-agent-version.ts";
 export * from "./plugins/installed-plugin-agent-runtime-factory.ts";
 export * from "./plugins/installed-plugin-extension-host.ts";
+
+export type { InstalledPluginProjectMediaInputToolsConfig } from "./plugins/installed-plugin-project-media-input-tools.ts";

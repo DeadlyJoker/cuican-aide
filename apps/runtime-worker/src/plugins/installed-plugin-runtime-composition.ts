@@ -1,4 +1,9 @@
 import {
+  captureInstalledPluginProjectMediaInputToolsConfig,
+  composeInstalledPluginProjectMediaInputTools,
+  type InstalledPluginProjectMediaInputToolsConfig,
+} from "./installed-plugin-project-media-input-tools.ts";
+import {
   captureInstalledPluginProjectAssetToolsConfig,
   composeInstalledPluginProjectAssetTools,
   type InstalledPluginProjectAssetToolsConfig,
@@ -59,6 +64,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   projectTools?: InstalledPluginProjectToolsConfig;
   projectAssetTools?: InstalledPluginProjectAssetToolsConfig;
   projectMedia?: InstalledPluginProjectMediaConfig;
+  projectMediaInputs?: InstalledPluginProjectMediaInputToolsConfig;
   /** Historical observation is an explicit profile-scoped deployment, never today's catalog. */
   historicalQuery?: InstalledPluginHistoricalQueryConfig;
 }>;
@@ -93,6 +99,14 @@ export function captureInstalledPluginExecutionConfig(
   if (config.projectMedia !== undefined && config.executionIo === undefined)
     throw new Error("installed_plugin_media_io_unavailable");
   return Object.freeze({
+    ...(config.projectMediaInputs === undefined
+      ? {}
+      : {
+          projectMediaInputs:
+            captureInstalledPluginProjectMediaInputToolsConfig(
+              config.projectMediaInputs,
+            ),
+        }),
     ...(config.projectMedia === undefined
       ? {}
       : {
@@ -246,9 +260,21 @@ export function composeInstalledPluginRuntimeResolver(input: {
     conversations: store.projectConversationStore(),
     plans: store.projectTextPlanStore(),
     assetStages: store.projectAssetStageStore(),
+    ...(config.projectMediaInputs === undefined
+      ? {}
+      : { mediaInputStages: store.projectMediaInputStageStore() }),
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({
+    ...(config.projectMediaInputs === undefined
+      ? {}
+      : {
+          projectMediaInputs: composeInstalledPluginProjectMediaInputTools({
+            store,
+            config: config.projectMediaInputs,
+            resolveActor: config.resolveActor,
+          }),
+        }),
     ...(media === null
       ? {}
       : {

@@ -1,3 +1,8 @@
+import {
+  createInstalledPluginProjectServices,
+  type InstalledPluginProjectServices,
+} from "./installed-plugin-project-services.ts";
+import type { InstalledPluginProjectMediaInputToolsDependencies } from "./installed-plugin-project-media-input-tools.ts";
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 import type { PluginInstallationStore } from "@crewon/application";
@@ -57,10 +62,8 @@ import {
 } from "./installed-plugin-media-execution.ts";
 import {
   closeInstalledPluginProjectToolsStartup,
-  createInstalledPluginProjectToolsOwner,
   type InstalledPluginProjectToolsDependencies,
 } from "./installed-plugin-project-tools.ts";
-import { ProjectToolsServiceOwner } from "./project-tools-service-owner.ts";
 import {
   canRetireInstalledPluginRuntimeResident,
   closeInstalledPluginRuntimeResident,
@@ -94,12 +97,13 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   executionIo?: InstalledPluginExecutionIoDependencies;
   projectTools?: InstalledPluginProjectToolsDependencies;
   projectMedia?: InstalledPluginMediaExecutionDependencies;
+  projectMediaInputs?: InstalledPluginProjectMediaInputToolsDependencies;
 }>;
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
 type Resident = InstalledPluginRuntimeResidentLifetime & {
   candidate: PluginActivationCandidate;
   prepared: Prepared;
-  projectTools: ProjectToolsServiceOwner | null;
+  projectTools: InstalledPluginProjectServices | null;
   io: PluginExecutionIoOwner | null;
 };
 type Entry = {
@@ -415,7 +419,7 @@ export class InstalledPluginRuntimeResolver
   ): Promise<Resident> {
     let candidate: PluginActivationCandidate | null = null;
     let committedAuthority = false;
-    let projectTools: ProjectToolsServiceOwner | null = null;
+    let projectTools: InstalledPluginProjectServices | null = null;
     let mediaIo: PluginExecutionIoOwner | null = null;
     try {
       const media = createInstalledPluginMediaBoundary({
@@ -435,7 +439,12 @@ export class InstalledPluginRuntimeResolver
                   fail("installed_plugin_runtime_resolver_closed");
               },
             });
-      projectTools = createInstalledPluginProjectToolsOwner({
+      projectTools = createInstalledPluginProjectServices({
+        mediaInputDependencies: this.#dependencies.projectMediaInputs,
+        mediaInputStage:
+          this.#dependencies.contexts.verifiedProjectMediaInputStage(
+            prepared.snapshot,
+          ),
         dependencies: this.#dependencies.projectTools,
         context: prepared.snapshot.context,
         assetStageAdmission:
@@ -468,15 +477,6 @@ export class InstalledPluginRuntimeResolver
             fail("installed_plugin_runtime_resolver_closed");
         },
       });
-      if (
-        (this.#dependencies.contexts.verifiedProjectStage(prepared.snapshot) !==
-          null ||
-          this.#dependencies.contexts.verifiedProjectAssetStage(
-            prepared.snapshot,
-          ) !== null) &&
-        projectTools === null
-      )
-        fail("installed_plugin_project_stage_services_unavailable");
       // Old hosts that do not support this hook deny the synchronous commit below. The async
       // post-setup current-authority check can never silently degrade to an initial grant.
       const openInput = {
@@ -484,13 +484,7 @@ export class InstalledPluginRuntimeResolver
           ? {}
           : {
               hostServices: [
-                ...(projectTools === null
-                  ? []
-                  : [
-                      projectTools.hostService(),
-                      projectTools.contextHostService(),
-                      ...projectTools.assetHostServices(),
-                    ]),
+                ...(projectTools === null ? [] : projectTools.hostServices()),
                 ...(mediaService === null ? [] : [mediaService]),
               ],
             }),
