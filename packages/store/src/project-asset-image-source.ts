@@ -82,7 +82,7 @@ export function* verifyProjectAssetSavedImageSource(
   actor: ActorContext,
   reference: ProjectAssetReferenceRevision,
   verifier: ProjectGenerationImageResultVerifier | undefined,
-): SelectionPlan<void> {
+): SelectionPlan<OperationResultLink> {
   const adapter = verifierRequired(verifier),
     s = reference.source;
   const values = [
@@ -151,4 +151,5 @@ export function* verifyProjectAssetSavedImageSource(
   if (Object.entries(expected).some(([k, v]) => s[k as keyof typeof s] !== v))
     projectAssetFailure("project_asset_reference_proof_changed");
   yield* proveLink(d, actor, link, adapter);
+  return link;
 }

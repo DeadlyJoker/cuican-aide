@@ -9,6 +9,7 @@ import {
   captureProjectGenerationImageResultVerifier,
   type ProjectGenerationImageResultVerifier,
   type ProjectAssetStore,
+  type ProjectAssetReferenceImageStore,
   type ProjectAssetCommitAuthority,
   type ProjectAssetCommitOptions,
 } from "@crewon/application";
@@ -35,13 +36,19 @@ import {
 } from "./project-asset-mutation-plan.ts";
 import { verifyProjectAssetSavedImageSource } from "./project-asset-image-source.ts";
 import {
+  captureAssetReferenceImageRead,
+  loadAssetReferenceImagePlan,
+} from "./project-asset-reference-image-plan.ts";
+import {
   assertPostgresProjectAssetSchema,
   migratePostgresProjectAssets,
 } from "./project-asset-schema.ts";
 import { assertPostgresProjectAssetQualification } from "./project-asset-qualification.ts";
 
 /** One parent pool borrow per operation, including every dependency and final current check. */
-export class PostgresProjectAssetStore implements ProjectAssetStore {
+export class PostgresProjectAssetStore
+  implements ProjectAssetStore, ProjectAssetReferenceImageStore
+{
   readonly #pool: Pool;
   readonly #open: () => void;
   readonly #verifier: ProjectGenerationImageResultVerifier | undefined;
@@ -83,6 +90,21 @@ export class PostgresProjectAssetStore implements ProjectAssetStore {
   async loadAsset(input: AssetInput<"loadAsset">) {
     const q = captureAssetRead(input, ["assetId"]);
     return this.#read(assetHead(this.#d, q.owner, q.projectId, q.assetId!));
+  }
+  async loadReferenceImageSource(
+    input: Parameters<
+      ProjectAssetReferenceImageStore["loadReferenceImageSource"]
+    >[0],
+  ) {
+    const q = captureAssetReferenceImageRead(input);
+    return this.#transaction(
+      (client) =>
+        this.#execute(
+          client,
+          loadAssetReferenceImagePlan(this.#d, q, this.#verifier),
+        ),
+      undefined,
+    );
   }
   async loadRevision(input: AssetInput<"loadRevision">) {
     const q = captureAssetRead(input, ["assetId", "contentRevision"]);

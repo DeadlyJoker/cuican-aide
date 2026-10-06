@@ -218,6 +218,8 @@ export {
 export * from "./project-historical-query-resolver.ts";
 export * from "./project-asset-commands.ts";
 export * from "./project-asset-store-port.ts";
+export * from "./project-asset-reference-image-store-port.ts";
+export * from "./project-asset-reference-image-application-service.ts";
 export * from "./project-asset-ui-intent-journal-store-port.ts";
 export * from "./project-asset-commit-authority.ts";
 export * from "./project-asset-application-service.ts";

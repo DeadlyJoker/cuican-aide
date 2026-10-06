@@ -240,6 +240,7 @@ export async function projectAssetUseCase<T>(
       : [
             "creative_project_archived",
             "project_asset_revision_conflict",
+            "project_asset_reference_image_changed",
             "project_asset_locked",
             "project_asset_source_stale",
             "project_asset_reference_stale",

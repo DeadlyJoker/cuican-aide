@@ -9,6 +9,7 @@ import {
   captureProjectGenerationImageResultVerifier,
   type ProjectGenerationImageResultVerifier,
   type ProjectAssetStore,
+  type ProjectAssetReferenceImageStore,
   type ProjectAssetCommitAuthority,
   type ProjectAssetCommitOptions,
 } from "@crewon/application";
@@ -34,13 +35,19 @@ import {
 } from "./project-asset-mutation-plan.ts";
 import { verifyProjectAssetSavedImageSource } from "./project-asset-image-source.ts";
 import {
+  captureAssetReferenceImageRead,
+  loadAssetReferenceImagePlan,
+} from "./project-asset-reference-image-plan.ts";
+import {
   assertSqliteProjectAssetSchema,
   migrateSqliteProjectAssets,
 } from "./project-asset-schema.ts";
 import { assertSqliteProjectAssetQualification } from "./project-asset-qualification.ts";
 
 /** Parent-owned connection. Construction never migrates or invokes a supplier. */
-export class SqliteProjectAssetStore implements ProjectAssetStore {
+export class SqliteProjectAssetStore
+  implements ProjectAssetStore, ProjectAssetReferenceImageStore
+{
   readonly #db: DatabaseSync;
   readonly #open: () => void;
   readonly #verifier: ProjectGenerationImageResultVerifier | undefined;
@@ -75,6 +82,18 @@ export class SqliteProjectAssetStore implements ProjectAssetStore {
   async loadAsset(input: AssetInput<"loadAsset">) {
     const q = captureAssetRead(input, ["assetId"]);
     return this.#read(assetHead(this.#d, q.owner, q.projectId, q.assetId!));
+  }
+  async loadReferenceImageSource(
+    input: Parameters<
+      ProjectAssetReferenceImageStore["loadReferenceImageSource"]
+    >[0],
+  ) {
+    const q = captureAssetReferenceImageRead(input);
+    return this.#transaction(
+      () =>
+        this.#execute(loadAssetReferenceImagePlan(this.#d, q, this.#verifier)),
+      undefined,
+    );
   }
   async loadRevision(input: AssetInput<"loadRevision">) {
     const q = captureAssetRead(input, ["assetId", "contentRevision"]);
