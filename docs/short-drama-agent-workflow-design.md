@@ -33,7 +33,7 @@ Agent 在原对话里整理出制作范围：三集大纲、第一集剧本、�
 
 ## 完整生产流程
 
-各阶段的必需输入、AI/工作流职责、完成依据和双入口接力进一步细化在[阶段执行契约](./short-drama-stage-execution-contract.md)。它同时明确镜头与生成分段的区别、D18适用范围及手动采用对自动计划的影响。
+各阶段的必需输入、AI/工作流职责、完成依据和双入口接力进一步细化在[阶段执行契约](./short-drama-stage-execution-contract.md)。它同时明确镜头与生成分段的区别、D18适用范围及手动采用对自动计划的影响。[确认媒体输入](./project-media-input-protocol.md)已固定提示词、工作流及T10/D18逐角色来源，保存和素材准备分开；它是后续两入口共用的宿主底座，原Run、公开手动入口和Agent媒体步骤继续实施。
 
 参考 [shuohao-skills](https://github.com/eternityspring/shuohao-skills) 的结构化创作产物与确定性检查，以及其链接的 [Reelbench](https://reelbench.79px.com/) 以项目管理资产、分镜和生成记录的方式。以下是 CrewON 的设计决定，不将参考产品的实现、秒数或部署方式直接作为我们的协议。
 

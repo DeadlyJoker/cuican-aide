@@ -68,6 +68,8 @@ export * from "./project-asset-sqlite-store.ts";
 export * from "./project-asset-postgres-store.ts";
 export * from "./project-material-preparation-sqlite-store.ts";
 export * from "./project-material-preparation-postgres-store.ts";
+export * from "./project-media-input-sqlite-store.ts";
+export * from "./project-media-input-postgres-store.ts";
 export * from "./project-asset-stage-store.ts";
 export * from "./project-asset-ui-intent-sqlite-store.ts";
 export * from "./project-asset-ui-intent-postgres-store.ts";

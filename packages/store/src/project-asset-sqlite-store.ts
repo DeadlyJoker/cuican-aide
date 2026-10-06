@@ -44,6 +44,7 @@ import {
 } from "./project-asset-schema.ts";
 import { assertSqliteProjectAssetQualification } from "./project-asset-qualification.ts";
 import { SqliteProjectMaterialPreparationStore } from "./project-material-preparation-sqlite-store.ts";
+import { SqliteProjectMediaInputStore } from "./project-media-input-sqlite-store.ts";
 
 /** Parent-owned connection. Construction never migrates or invokes a supplier. */
 export class SqliteProjectAssetStore
@@ -82,6 +83,13 @@ export class SqliteProjectAssetStore
   }
   projectMaterialPreparationStore(): SqliteProjectMaterialPreparationStore {
     return new SqliteProjectMaterialPreparationStore({
+      database: this.#db,
+      assertOpen: this.#open,
+      ...(this.#verifier === undefined ? {} : { verifier: this.#verifier }),
+    });
+  }
+  projectMediaInputStore(): SqliteProjectMediaInputStore {
+    return new SqliteProjectMediaInputStore({
       database: this.#db,
       assertOpen: this.#open,
       ...(this.#verifier === undefined ? {} : { verifier: this.#verifier }),

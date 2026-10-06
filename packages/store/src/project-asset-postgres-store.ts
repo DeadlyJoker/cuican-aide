@@ -45,6 +45,7 @@ import {
 } from "./project-asset-schema.ts";
 import { assertPostgresProjectAssetQualification } from "./project-asset-qualification.ts";
 import { PostgresProjectMaterialPreparationStore } from "./project-material-preparation-postgres-store.ts";
+import { PostgresProjectMediaInputStore } from "./project-media-input-postgres-store.ts";
 
 /** One parent pool borrow per operation, including every dependency and final current check. */
 export class PostgresProjectAssetStore
@@ -90,6 +91,14 @@ export class PostgresProjectAssetStore
   }
   projectMaterialPreparationStore(): PostgresProjectMaterialPreparationStore {
     return new PostgresProjectMaterialPreparationStore({
+      pool: this.#pool,
+      schema: this.#d.schema,
+      assertOpen: this.#open,
+      ...(this.#verifier === undefined ? {} : { verifier: this.#verifier }),
+    });
+  }
+  projectMediaInputStore(): PostgresProjectMediaInputStore {
+    return new PostgresProjectMediaInputStore({
       pool: this.#pool,
       schema: this.#d.schema,
       assertOpen: this.#open,
