@@ -226,6 +226,8 @@ export * from "./project-reference-material-freeze-record.ts";
 export * from "./project-material-preparation-port.ts";
 export * from "./project-material-preparation-record.ts";
 export * from "./project-material-preparation-authority.ts";
+export * from "./project-material-target-application-service.ts";
+export * from "./project-material-preparation-authorization-port.ts";
 export * from "./project-asset-ui-intent-journal-store-port.ts";
 export * from "./project-asset-commit-authority.ts";
 export * from "./project-asset-application-service.ts";

@@ -1,6 +1,6 @@
 # ComfyUI 素材传输适配与目标准备边界
 
-2026-10-06。状态：宿主内部传输适配器与受限图片上传模式已实现，真实供应商字节上传及冷查询组件验证通过。后续[真实项目准备journal](./project-material-preparation-journal-protocol.md)已实现。**准备应用服务与传输组合、媒体输入、Run准入及页面/Agent接线尚未完成。** 这项继续[源字节冻结](./project-reference-material-freeze-protocol.md)，属于[八阶段执行契约](./short-drama-stage-execution-contract.md)中的素材准备，不是独立插件、另一套Agent或完整媒体阶段交付。
+2026-10-06。状态：宿主内部传输适配器与受限图片上传模式已实现，真实供应商字节上传及冷查询组件验证通过。后续[真实项目准备journal](./project-material-preparation-journal-protocol.md)及[准备服务组合](./project-material-preparer-protocol.md)已实现。**公开入口与Main实际批准、媒体输入、Run准入及页面/Agent接线尚未完成。** 这项继续[源字节冻结](./project-reference-material-freeze-protocol.md)，属于[八阶段执行契约](./short-drama-stage-execution-contract.md)中的素材准备，不是独立插件、另一套Agent或完整媒体阶段交付。
 
 ## 已实现的传输规则
 
@@ -22,7 +22,7 @@
 
 准备记录冻结实际调用者/项目、已采用资产及设定/参考修订、源归档身份和记录/字节摘要、真实目标安装包及选择、实际配置修订/摘要和规范化服务地址、原准备键、目标路径、multipart请求摘要。服务器从实际项目与安装/config记录解析它们；字段自报或适配器DTO不能成为准入证明。每个D18素材有各自的来源和准备记录，再按scene、characterOne、characterTwo的明确角色排列，不能用一个共同origin代替逐项证明。
 
-以下状态规则已由独立journal和双库检查实现；取得claimed仍须通过真正的源归档、目标字节及独立网络资格。实际上传组合尚未接线：
+以下状态规则已由独立journal和双库检查实现；取得claimed仍须通过真正的源归档、目标字节及独立网络资格。内部服务组合已实现；实际Main批准与公开入口尚未接线：
 
 | 状态           | 允许动作                                       | 恢复规则                                           |
 | -------------- | ---------------------------------------------- | -------------------------------------------------- |

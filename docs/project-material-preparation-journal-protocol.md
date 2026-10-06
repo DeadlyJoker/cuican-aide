@@ -1,6 +1,6 @@
 # 项目素材准备记录与唯一发送协调
 
-2026-10-06。状态：真实项目的独立准备journal已实现并通过SQLite/Postgres行为验证。宿主[传输适配器](./comfyui-material-transfer-protocol.md)已完成真实外部组件验证；**准备应用服务与实际传输的组合、媒体输入/Run及页面/Agent接线尚未完成。** 一个journal回执不代表已上传或已具备媒体执行能力，完整目标继续ACTIVE。
+2026-10-06。状态：真实项目的独立准备journal已实现并通过SQLite/Postgres行为验证。宿主[传输适配器](./comfyui-material-transfer-protocol.md)已完成真实外部组件验证；后续[准备服务组合](./project-material-preparer-protocol.md)已实现。**公开入口与Main实际批准、媒体输入/Run及页面/Agent接线尚未完成。** 一个journal回执不代表已上传或已具备媒体执行能力，完整目标继续ACTIVE。
 
 ## 原请求与不可变快照
 
@@ -27,7 +27,7 @@
 
 ## 实际来源、安装与事务资格
 
-所有读写都要求新的`crewon.project-material-preparation-commit.v1`资格，原资产UI、文字计划或任务资格不能代替。资格绑定完整业务请求，必须有独立外部PDP/profile/owner检查与同步active fence，无允许默认值。回调是宿主内部能力，不通过JSON输入；实际Main批准与服务组合仍待接线。
+所有读写都要求新的`crewon.project-material-preparation-commit.v1`资格，原资产UI、文字计划或任务资格不能代替。资格绑定完整业务请求，必须有独立外部PDP/profile/owner检查与同步active fence，无允许默认值。回调是宿主内部能力，不通过JSON输入；内部服务组合已实现，实际Main批准与公开入口仍待接线。
 
 同一父连接核验原项目归属及active状态、当前采用指针、设定/参考修订、需求/剧本和大纲依赖、原结果链接、实际来源Run/admission/funding、原operation和真实结果验证器、历史来源配置。再核验目标实际配置完整记录、真实安装选择与package全快照，含安装审计和选择revision。缺少验证器、撤安装、更改原配置、来源过期、跨归属或归档记录自报的Run/结果证明均拒绝。
 
