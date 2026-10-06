@@ -770,6 +770,7 @@ function composeControlApi(
       creativeProjects: preparedProjects?.service,
       projectTexts: preparedProjects?.textService,
       projectAssets: preparedProjects?.assetService,
+      projectMediaInputs: preparedPlugins?.runtime.tasks?.projectMediaInputs,
       projectGenerationReads,
       projectConceptSelections: composeOwnedProjectGenerationSelectionService({
         projects: preparedProjects,

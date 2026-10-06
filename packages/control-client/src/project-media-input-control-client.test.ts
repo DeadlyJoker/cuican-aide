@@ -1,0 +1,156 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  ControlApiClient,
+  ControlApiProtocolError,
+} from "./control-api-client.ts";
+import { parseSaveMediaInputRequest } from "@crewon/contracts/project-media-inputs";
+
+const command = parseSaveMediaInputRequest({
+  projectId: "project/雨夜",
+  mediaInputId: null,
+  expectedInputRevision: 0,
+  item: { kind: "character-reference", assetId: "character" },
+  briefRevision: 1,
+  script: null,
+  workflowId: "krea2-reference-four-view",
+  configurationRevision: 1,
+  prompt: "保持原人物。",
+  references: {
+    character: {
+      projectId: "project/雨夜",
+      assetId: "character",
+      kind: "character",
+      expectedAssetRevision: 4,
+      contentRevision: 1,
+      referenceRevision: 1,
+    },
+  },
+  idempotencyKey: "original-confirmed-input-key",
+});
+const {
+  expectedInputRevision: _,
+  idempotencyKey: __,
+  mediaInputId: ___,
+  ...content
+} = command;
+const input = {
+  ...content,
+  mediaInputId: "input/一",
+  inputRevision: 1,
+  createdAt: "2026-10-06T00:00:00.000Z",
+  contentDigest: "sha256:" + "a".repeat(64),
+};
+function client(
+  fetch: typeof globalThis.fetch,
+  csrfToken: string | null = "named-csrf",
+) {
+  return new ControlApiClient({
+    baseUrl: "https://control.test",
+    accessToken: "named-session",
+    csrfToken,
+    origin: "https://ui.test",
+    fetch,
+  });
+}
+test("shared media input client uses original headers, encoded path and a lazy bounded group", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const c = client(async (url, init) => {
+    calls.push({ url: String(url), init: init! });
+    return Response.json(
+      init!.method === "POST"
+        ? { disposition: "committed", input }
+        : { state: { input, latestInputRevision: 1 } },
+    );
+  });
+  assert.equal(c.projectMediaInputs, c.projectMediaInputs);
+  assert.equal(calls.length, 0);
+  assert.deepEqual(
+    (await c.projectMediaInputs.saveInput(command)).input,
+    input,
+  );
+  const query = {
+    projectId: command.projectId,
+    mediaInputId: input.mediaInputId,
+    inputRevision: 1,
+  };
+  assert.deepEqual(
+    (await c.projectMediaInputs.loadInput(query)).state?.input,
+    input,
+  );
+  assert.equal(
+    calls[0]!.url,
+    `https://control.test/api/v1/creative-projects/${encodeURIComponent(command.projectId)}/media-inputs`,
+  );
+  assert.equal(
+    calls[1]!.url,
+    `${calls[0]!.url}/${encodeURIComponent(input.mediaInputId)}?inputRevision=1`,
+  );
+  const headers = new Headers(calls[0]!.init.headers);
+  for (const [name, value] of [
+    ["authorization", "Bearer named-session"],
+    ["x-csrf-token", "named-csrf"],
+    ["origin", "https://ui.test"],
+    ["idempotency-key", command.idempotencyKey],
+  ])
+    assert.equal(headers.get(name!), value);
+  assert.equal(calls[0]!.init.credentials, "include");
+  assert.equal(calls[0]!.init.redirect, "manual");
+  const { projectId: p, idempotencyKey: key, ...body } = command;
+  assert.deepEqual(JSON.parse(calls[0]!.init.body as string), body);
+});
+test("metadata client rejects authority, missing CSRF, cancelled request and bad response without retry", async () => {
+  let calls = 0;
+  const c = client(async () => {
+    calls++;
+    return Response.json({
+      disposition: "committed",
+      input: { ...input, prompt: "wrong-prompt" },
+    });
+  });
+  await assert.rejects(
+    c.projectMediaInputs.saveInput({
+      ...command,
+      target: {},
+    } as typeof command),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(
+    client(async () => {
+      calls++;
+      return Response.json({});
+    }, null).projectMediaInputs.saveInput(command),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(
+    c.projectMediaInputs.saveInput(command, { signal: AbortSignal.abort() }),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls, 0);
+  await assert.rejects(
+    c.projectMediaInputs.saveInput(command),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls, 1);
+  for (const value of [
+    {
+      state: {
+        input: { ...input, projectId: "foreign" },
+        latestInputRevision: 1,
+      },
+    },
+    { state: { input, latestInputRevision: 2 } },
+    { state: null, actorId: "foreign" },
+  ]) {
+    await assert.rejects(
+      client(async () => Response.json(value)).projectMediaInputs.loadInput({
+        projectId: command.projectId,
+        mediaInputId: input.mediaInputId,
+        inputRevision: null,
+      }),
+      ControlApiProtocolError,
+    );
+  }
+});

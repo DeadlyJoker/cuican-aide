@@ -16,6 +16,8 @@ import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
 import { registerProjectTextRoutes } from "./project-text-route.ts";
 import { registerProjectAssetRoutes } from "./project-asset-route.ts";
+import { registerProjectMediaInputRoutes } from "./project-media-input-route.ts";
+import type { InstalledProjectMediaInputRuntime } from "./installed-project-media-input-runtime.ts";
 import type { ProjectAssetApplicationService } from "@crewon/application";
 import type { ProjectTextApplicationService } from "@crewon/application";
 import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
@@ -260,6 +262,7 @@ export type ControlApiDependencies = Readonly<{
   creativeProjects?: CreativeProjectApplicationService | null;
   projectTexts?: ProjectTextApplicationService | null;
   projectAssets?: ProjectAssetApplicationService | null;
+  projectMediaInputs?: InstalledProjectMediaInputRuntime | null;
   projectConversations?: ProjectConversationControlOwner | null;
   projectAssetStages?:ProjectAssetStageControlOwner|null;
   projectConversationRouting?: ProjectConversationRouting | null;
@@ -409,6 +412,11 @@ export function buildControlApi(
     });
   }
   if (dependencies.projectAssets != null) registerProjectAssetRoutes(app, { identity: dependencies.identity, assets: dependencies.projectAssets });
+  if (dependencies.projectMediaInputs != null)
+    registerProjectMediaInputRoutes(app, {
+      identity: dependencies.identity,
+      owner: dependencies.projectMediaInputs,
+    });
   if (dependencies.creativeProjects != null) {
     registerCreativeProjectRoutes(app, {
       identity: dependencies.identity,

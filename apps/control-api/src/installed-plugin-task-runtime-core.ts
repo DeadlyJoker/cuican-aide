@@ -1,5 +1,9 @@
 import { prepareProjectHistoricalQueryResolver } from "@crewon/application";
 import type { ProjectHistoricalQueryPublication } from "@crewon/domain";
+import {
+  pluginInstallationNamespaceId,
+  pluginInstallationDigest,
+} from "@crewon/domain";
 import { InstalledPluginProjectHistoricalQueryOwner } from "./installed-plugin-project-historical-query-owner.ts";
 import { assertProjectHistoricalQueryPluginPublications } from "./project-historical-query-plugin-configuration.ts";
 import { randomBytes } from "node:crypto";
@@ -38,6 +42,11 @@ import {
 import { pluginSecurityRecord } from "./plugin-security-validation.ts";
 import { assertProjectGenerationPluginPublications } from "./project-generation-plugin-configuration.ts";
 import { assertProjectQueryPluginPublications } from "./project-query-plugin-configuration.ts";
+import {
+  captureInstalledProjectMediaInputConfiguration,
+  type InstalledProjectMediaInputConfiguration,
+} from "./installed-project-media-input-configuration.ts";
+import { InstalledProjectMediaInputRuntime } from "./installed-project-media-input-runtime.ts";
 
 export type InstalledPluginTaskRuntimeCore = Readonly<{
   owner: InstalledPluginTaskActionOwner;
@@ -45,6 +54,7 @@ export type InstalledPluginTaskRuntimeCore = Readonly<{
   projectQueries?: InstalledPluginProjectQueryOwner;
   historicalQueries?: InstalledPluginProjectHistoricalQueryOwner;
   projectGenerationReads?: ProjectGenerationReadApplicationService;
+  projectMediaInputs?: InstalledProjectMediaInputRuntime;
   requests: InstalledPluginRequestOwner;
   extensions: ExtensionConfigurationApplicationService;
   extensionTasks: ExtensionTaskApplicationService;
@@ -71,6 +81,7 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
   creativeProjects?: PreparedCreativeProjects;
+  projectMediaInputs?: InstalledProjectMediaInputConfiguration;
   metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
   assertHistoricalTarget?(publication: ProjectHistoricalQueryPublication): void;
 }>;
@@ -83,6 +94,7 @@ const coreBindings = new WeakMap<
     assertActive(): void;
     authorizePackage: InstalledPluginTaskRuntimeCoreInput["authorizePackage"];
     uiAuthorization: PluginUiAuthorizationPort;
+    publications: InstalledPluginTaskRuntimeCoreInput["publications"];
   }>
 >();
 
@@ -138,6 +150,27 @@ export function installedProjectConversationTaskAuthority(
   });
 }
 
+/** Metadata approval is independent; every reviewed target must still belong to this original Core's publication. */
+export function assertInstalledProjectMediaInputPublications(
+  core: InstalledPluginTaskRuntimeCore,
+  configuration: InstalledProjectMediaInputConfiguration,
+): void {
+  const binding = coreBindings.get(core);
+  if (binding === undefined) invalid();
+  binding.assertActive();
+  if (
+    configuration.reviews.some(
+      (review) =>
+        !binding.publications.some(
+          (publication) =>
+            publication.pluginId === review.targetIdentity.pluginId &&
+            publication.packageDigest === review.targetIdentity.packageDigest,
+        ),
+    )
+  )
+    invalid();
+}
+
 /** Borrows an issued request owner and the real parent store; explicitly migrates execution, never identity, prices or funds. */
 export async function createInstalledPluginTaskRuntimeCore(
   provided: InstalledPluginTaskRuntimeCoreInput,
@@ -169,10 +202,28 @@ export async function createInstalledPluginTaskRuntimeCore(
     ...(Object.hasOwn(provided, "creativeProjects")
       ? ["creativeProjects"]
       : []),
+    ...(Object.hasOwn(provided, "projectMediaInputs")
+      ? ["projectMediaInputs"]
+      : []),
     ...(Object.hasOwn(provided, "metadataHostUiServices")
       ? ["metadataHostUiServices"]
       : []),
   ]) as InstalledPluginTaskRuntimeCoreInput;
+  const mediaInputs =
+    input.projectMediaInputs === undefined
+      ? undefined
+      : captureInstalledProjectMediaInputConfiguration(
+          input.projectMediaInputs,
+        );
+  const publications = Object.freeze(
+    input.publications.map((item) => {
+      const r = pluginSecurityRecord(item, ["pluginId", "packageDigest"]);
+      return Object.freeze({
+        pluginId: pluginInstallationNamespaceId(r.pluginId),
+        packageDigest: pluginInstallationDigest(r.packageDigest),
+      });
+    }),
+  );
   if (
     (!(input.store instanceof SqliteRunStore) &&
       !(input.store instanceof PostgresDomainStore)) ||
@@ -632,9 +683,27 @@ export async function createInstalledPluginTaskRuntimeCore(
         assertActive: active,
         authorizePackage: packageAuthorization,
         uiAuthorization,
+        publications,
       }),
     );
-    return core;
+    if (mediaInputs === undefined) return core;
+    const projectMediaInputs = await InstalledProjectMediaInputRuntime.prepare({
+      core,
+      store: input.store,
+      configuration: mediaInputs,
+    });
+    let mediaClosing: Promise<void> | undefined;
+    const complete: InstalledPluginTaskRuntimeCore = Object.freeze({
+      ...core,
+      projectMediaInputs,
+      close: () =>
+        (mediaClosing ??= closeAll([
+          () => projectMediaInputs.close(),
+          () => core.close(),
+        ])),
+    });
+    inheritInstalledPluginTaskRuntimeCoreBinding(complete, core);
+    return complete;
   } catch (error) {
     lifetime.abort();
     try {
