@@ -1,4 +1,17 @@
 import { assertPostgresUnmeteredDispatch } from "./plugin-task-unmetered-operation-support.ts";
+import {
+  PROJECT_MEDIA_OPERATION_VERSION,
+  type ExternalOperationScope,
+} from "@crewon/application";
+import { migratePostgresProjectMediaOperations } from "./project-media-operation-schema.ts";
+import { executePostgresMediaOperationPlan } from "./project-media-operation-transaction.ts";
+import {
+  prepareProjectMediaOperationPlan,
+  assertProjectMediaOperationReplayPlan,
+  saveProjectMediaOperationPlan,
+  loadProjectMediaOperationPlan,
+  type MediaOperationPlan,
+} from "./project-media-operation-plan.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertExtensionCreditAdmission,
@@ -50,6 +63,7 @@ export class PostgresExternalOperationStore
   readonly #prefix: string;
   readonly #table: string;
   readonly #host: Readonly<{ assertOpen(): void }> | undefined;
+  #mediaOperationsEnabled = false;
   constructor(
     pool: Pool,
     schema: string,
@@ -75,6 +89,65 @@ export class PostgresExternalOperationStore
     );`);
   }
 
+  get projectMediaOperationsVersion() {
+    return this.#mediaOperationsEnabled
+      ? PROJECT_MEDIA_OPERATION_VERSION
+      : undefined;
+  }
+
+  /** Explicit opt-in on the exact native owner, after prerequisite migrations. */
+  async migrateProjectMediaOperations(): Promise<void> {
+    this.#host?.assertOpen();
+    const client = await this.#pool.connect();
+    try {
+      await this.#query(client, "BEGIN");
+      await migratePostgresProjectMediaOperations(client, this.#schema);
+      this.#host?.assertOpen();
+      await client.query("COMMIT");
+      this.#mediaOperationsEnabled = true;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async loadProjectMediaOperation(input: ExternalOperationScope) {
+    this.#host?.assertOpen();
+    const client = await this.#pool.connect();
+    try {
+      await this.#query(
+        client,
+        "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+      );
+      const result = await this.#mediaPlan(
+        client,
+        loadProjectMediaOperationPlan(
+          this.#mediaDialect(),
+          input,
+          this.#mediaOperationsEnabled,
+        ),
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  #mediaDialect() {
+    return { postgres: true, schema: this.#schema, prefix: this.#prefix };
+  }
+  #mediaPlan<T>(client: PoolClient, plan: MediaOperationPlan<T>) {
+    return executePostgresMediaOperationPlan(client, this.#schema, plan, () =>
+      this.#host?.assertOpen(),
+    );
+  }
+
   async reserveExternalOperation(input: ReserveExternalOperation) {
     this.#host?.assertOpen();
     const operation = initialExternalOperation(input);
@@ -86,6 +159,14 @@ export class PostgresExternalOperationStore
         await this.#query(client, "BEGIN");
         const existing = await this.#receipt(client, operation);
         if (existing !== null) {
+          await this.#mediaPlan(
+            client,
+            assertProjectMediaOperationReplayPlan(
+              this.#mediaDialect(),
+              existing,
+              this.#mediaOperationsEnabled,
+            ),
+          );
           await client.query("COMMIT");
           return { disposition: "existing" as const, operation: existing };
         }
@@ -107,6 +188,14 @@ export class PostgresExternalOperationStore
         const raced = await this.#receipt(client, operation);
         let result;
         if (raced !== null) {
+          await this.#mediaPlan(
+            client,
+            assertProjectMediaOperationReplayPlan(
+              this.#mediaDialect(),
+              raced,
+              this.#mediaOperationsEnabled,
+            ),
+          );
           // Recovery after cancellation/settlement grants no new dispatch.
           result = { disposition: "existing" as const, operation: raced };
         } else {
@@ -116,7 +205,29 @@ export class PostgresExternalOperationStore
             this.#schema,
             operation,
           );
+          const media = await this.#mediaPlan(
+            client,
+            prepareProjectMediaOperationPlan(
+              this.#mediaDialect(),
+              operation,
+              this.#mediaOperationsEnabled,
+            ),
+          );
           result = await this.#insert(client, operation);
+          if (media && result.disposition === "created")
+            await this.#mediaPlan(
+              client,
+              saveProjectMediaOperationPlan(this.#mediaDialect(), media),
+            );
+          if (result.disposition === "existing")
+            await this.#mediaPlan(
+              client,
+              assertProjectMediaOperationReplayPlan(
+                this.#mediaDialect(),
+                result.operation,
+                this.#mediaOperationsEnabled,
+              ),
+            );
         }
         this.#host?.assertOpen();
         // A confirmed COMMIT remains success if the host closes afterward.

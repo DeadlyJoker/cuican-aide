@@ -234,6 +234,7 @@ export * from "./project-media-input-application-authority.ts";
 export * from "./project-media-input-application-service.ts";
 export * from "./project-media-generation-port.ts";
 export * from "./project-media-generation-record.ts";
+export * from "./project-media-operation-record.ts";
 export * from "./project-asset-ui-intent-journal-store-port.ts";
 export * from "./project-asset-commit-authority.ts";
 export * from "./project-asset-application-service.ts";

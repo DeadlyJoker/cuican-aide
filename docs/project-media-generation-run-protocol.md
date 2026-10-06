@@ -1,6 +1,6 @@
 # 确认媒体输入与原 Run 的事务关联
 
-2026-10-06。状态：宿主内部媒体 Run 准入已实现并验证；[Worker私有上下文与字节检查](./project-media-worker-context-protocol.md)随后补齐，供应商原请求占用/提交、公开 Main 服务和手动/Agent 入口继续接线。沿[双入口编排规格](./short-drama-orchestration-spec.md)推进，一个 `crewon.short-drama` 插件包含多个工作流。本文不发布新的 SDK 或 HTTP 请求。
+2026-10-06。状态：宿主内部媒体 Run 准入、[Worker私有上下文与字节检查](./project-media-worker-context-protocol.md)及[候选原请求占用](./project-media-operation-protocol.md)已补齐。真实 Tool 提交/查询、公开 Main 服务和手动/Agent 入口继续接线。沿[双入口编排规格](./short-drama-orchestration-spec.md)推进，一个 `crewon.short-drama` 插件包含多个工作流。本文不发布新的 SDK 或 HTTP 请求。
 
 ## 执行身份
 

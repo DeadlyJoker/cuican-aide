@@ -26,7 +26,7 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 [媒体原Run事务准入](./project-media-generation-run-protocol.md)已通过宿主内部双库验证：同一原Turn固定输入修订、真实准备事件和候选执行意图，原键重放/冷恢复不重新上传，来源和目标变化阻止新Run，事务中撤活动回滚全部新行。190项相关回归通过、零跳过；真实Worker提交、结果回写、Main和手动/Agent入口继续接线。原前端、SDK、完整插件包及用户App保持，积分后置，完整目标继续ACTIVE。
 
-[Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。供应商请求占用、真实Tool/IO接线、结果回写及Main/两入口仍待实施，不作为正式媒体流程交付，完整目标继续ACTIVE。
+[Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。[候选原供应商请求占用](./project-media-operation-protocol.md)随后通过234项相关回归；真实Tool/IO接线、结果回写及Main/两入口仍待实施，不作为正式媒体流程交付，完整目标继续ACTIVE。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
@@ -38,7 +38,15 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 相关回归**239/239**通过、零失败/取消/跳过，新增27项为子集。Application/Store/Runtime-worker类型、边界、仓库和TS格式通过；SDK源/dist/tar、原完整插件包及冻结/用户App保持。实际项目、Run、SQL、PNG、加密归档/journal真实；权限/发布清单/DNS/供应商返回为具名夹具，未执行远端生成POST。首次字段/actor/类型误用、超配置上限夹具及旧Pg测试在高并发下超时的日志保留；修正实际合法夹具和文件并发，不改原超时/并发断言或产品保护。五轮自有Pg正常停止并按目录身份清理，证据为 `output/extensions/checks/project-media-worker-context-20261006/`。
 
-没有公开新SDK/HTTP或更新完整包/用户App，也没有接实际Tool提交、原operation恢复、Main或产品按钮。本项为Worker私有检查组件；下一项原请求领取/Tool接线之后再接结果候选及手动/Agent共同入口，随后分镜和有限跨阶段计划。完整目标继续ACTIVE。
+没有公开新SDK/HTTP或更新完整包/用户App，也没有接实际Tool提交、供应商查询恢复、Main或产品按钮。本项为Worker私有检查组件；随后补齐原请求领取，再接Tool、结果候选及手动/Agent共同入口，随后分镜和有限跨阶段计划。完整目标继续ACTIVE。
+
+## 2026-10-06：候选原供应商请求占用
+
+[占用协议](./project-media-operation-protocol.md)在实际native ExternalOperationStore事务内固定一份媒体候选到一条原供应商operation。不同Tool键不能领取第二个请求，宿主历史读取得到已占用原操作；unknownOutcome、源变化及冷恢复都不释放或改绑占用。原资金检查保持，新增媒体实时Run状态检查使原显式不扣积分模式也拒绝未启动、取消和终态下的新领取。原operation与占用一起提交，最后物理INSERT后owner退场一起回滚。
+
+**234/234**相关检查通过、零跳过，新增28项双库检查为其中子集。四包类型、边界、仓库/TS格式及原SDK/完整插件包/App文件核验通过；四轮自有PostgreSQL已正常停止并按身份清理，原失败日志保留。检查使用真实TaskCore、原队列lease/start、项目/Run和SQL；供应商/PDP/报价等仍为具名夹具，没有新增真实生成POST。
+
+该协议没有接公开服务、安装插件实际Tool或产品入口。下一项在真实command/invocation和受控IO边界内组合Worker检查、原占用与同包T10/D18渲染/查询，然后项目结果回写、Main/两个入口，继续结构化分镜和跨阶段计划。原UI、SDK、完整包和用户App保持，完整目标仍ACTIVE。
 
 ## 2026-10-06：确认媒体输入与原Run事务关联
 

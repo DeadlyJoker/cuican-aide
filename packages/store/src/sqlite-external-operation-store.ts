@@ -1,4 +1,17 @@
 import { assertSqliteUnmeteredDispatch } from "./plugin-task-unmetered-operation-support.ts";
+import {
+  PROJECT_MEDIA_OPERATION_VERSION,
+  type ExternalOperationScope,
+} from "@crewon/application";
+import { migrateSqliteProjectMediaOperations } from "./project-media-operation-schema.ts";
+import { executeSqliteMediaOperationPlan } from "./project-media-operation-transaction.ts";
+import {
+  prepareProjectMediaOperationPlan,
+  assertProjectMediaOperationReplayPlan,
+  saveProjectMediaOperationPlan,
+  loadProjectMediaOperationPlan,
+  type MediaOperationPlan,
+} from "./project-media-operation-plan.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   extensionCanonicalJson,
@@ -57,6 +70,7 @@ export class SqliteExternalOperationStore
 {
   readonly #database: DatabaseSync;
   readonly #host: Readonly<{ assertOpen(): void }> | undefined;
+  #mediaOperationsEnabled = false;
   constructor(database: DatabaseSync, host?: Readonly<{ assertOpen(): void }>) {
     this.#database = database;
     this.#host = host;
@@ -65,6 +79,44 @@ export class SqliteExternalOperationStore
   async migrate(): Promise<void> {
     this.#host?.assertOpen();
     migrateSqliteExternalOperations(this.#database);
+  }
+
+  get projectMediaOperationsVersion() {
+    return this.#mediaOperationsEnabled
+      ? PROJECT_MEDIA_OPERATION_VERSION
+      : undefined;
+  }
+
+  /** Explicit opt-in on the exact native owner; a constructor or ordinary migrate never enables it. */
+  async migrateProjectMediaOperations(): Promise<void> {
+    this.#host?.assertOpen();
+    this.#transaction(() => {
+      migrateSqliteProjectMediaOperations(this.#database);
+      this.#host?.assertOpen();
+    });
+    this.#mediaOperationsEnabled = true;
+  }
+
+  async loadProjectMediaOperation(input: ExternalOperationScope) {
+    this.#host?.assertOpen();
+    return this.#transaction(() =>
+      this.#mediaPlan(
+        loadProjectMediaOperationPlan(
+          this.#mediaDialect(),
+          input,
+          this.#mediaOperationsEnabled,
+        ),
+      ),
+    );
+  }
+
+  #mediaDialect() {
+    return { postgres: false, schema: "main", prefix: "main." };
+  }
+  #mediaPlan<T>(plan: MediaOperationPlan<T>) {
+    return executeSqliteMediaOperationPlan(this.#database, plan, () =>
+      this.#host?.assertOpen(),
+    );
   }
 
   async reserveExternalOperation(input: ReserveExternalOperation) {
@@ -86,10 +138,24 @@ export class SqliteExternalOperationStore
       if (existing !== undefined) {
         const saved = parseExternalOperation(JSON.parse(existing.record_json));
         assertExternalOperationReplay(saved, operation);
+        this.#mediaPlan(
+          assertProjectMediaOperationReplayPlan(
+            this.#mediaDialect(),
+            saved,
+            this.#mediaOperationsEnabled,
+          ),
+        );
         return { disposition: "existing" as const, operation: saved };
       }
       this.#assertPaidDispatch(operation);
       assertSqliteUnmeteredDispatch(this.#database, operation);
+      const media = this.#mediaPlan(
+        prepareProjectMediaOperationPlan(
+          this.#mediaDialect(),
+          operation,
+          this.#mediaOperationsEnabled,
+        ),
+      );
       const inserted = this.#database
         .prepare(
           `INSERT INTO extension_external_operations
@@ -106,8 +172,13 @@ export class SqliteExternalOperationStore
           operation.revision,
           JSON.stringify(operation),
         );
-      if (inserted.changes === 1)
+      if (inserted.changes === 1) {
+        if (media)
+          this.#mediaPlan(
+            saveProjectMediaOperationPlan(this.#mediaDialect(), media),
+          );
         return { disposition: "created" as const, operation };
+      }
       const row = this.#database
         .prepare(
           `SELECT record_json FROM extension_external_operations
@@ -121,6 +192,13 @@ export class SqliteExternalOperationStore
         ) as { record_json: string };
       const saved = parseExternalOperation(JSON.parse(row.record_json));
       assertExternalOperationReplay(saved, operation);
+      this.#mediaPlan(
+        assertProjectMediaOperationReplayPlan(
+          this.#mediaDialect(),
+          saved,
+          this.#mediaOperationsEnabled,
+        ),
+      );
       return { disposition: "existing" as const, operation: saved };
     });
   }

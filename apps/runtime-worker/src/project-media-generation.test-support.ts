@@ -36,6 +36,8 @@ export async function mediaGenerationFixture(
     migrate?: boolean;
     unmetered?: boolean;
     configurationFixture?: "large";
+    /** Only Task scheduling uses real current time, so original queue leases can be exercised. */
+    taskClockFixture?: "current";
   }> = {},
 ) {
   const f = await projectMediaInputFixture(t, backend);
@@ -229,7 +231,10 @@ export async function mediaGenerationFixture(
         }),
       },
       authorization: { authorize: async () => f.decision(true) },
-      clock: f.dependencies.clock,
+      clock:
+        options.taskClockFixture === "current"
+          ? { now: () => new Date().toISOString() }
+          : f.dependencies.clock,
       ids: { nextId: () => randomUUID() },
       digester: f.digester,
       ...(options.unmetered
