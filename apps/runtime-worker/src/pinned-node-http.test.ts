@@ -27,6 +27,156 @@ const loopbackPolicy: NetworkEgressPolicy = {
   }),
 };
 
+test("image upload carries over 1 MiB only with the explicit profile and exact upload route", async (t) => {
+  let requests = 0;
+  let received: Buffer | undefined;
+  const bytes = Buffer.alloc(1024 * 1024 + 1, 31);
+  const original = Buffer.from(bytes);
+  Object.defineProperties(bytes, {
+    length: { value: 64 * 1024 * 1024 },
+    byteLength: {
+      get() {
+        throw new Error("must_not_read_byte_length");
+      },
+    },
+    buffer: {
+      get() {
+        throw new Error("must_not_read_buffer");
+      },
+    },
+    byteOffset: {
+      get() {
+        throw new Error("must_not_read_offset");
+      },
+    },
+  });
+  const server = await listen(t, (request, response) => {
+    requests++;
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      received = Buffer.concat(chunks);
+      response.end("{}");
+    });
+  });
+  const q = {
+    ...input(server, 64 * 1024),
+    method: "POST" as const,
+    target: {
+      endpoint: new URL(`${origin(server)}/upload/image`),
+      address: "127.0.0.1",
+      family: 4 as const,
+    },
+    headers: { "content-type": "multipart/form-data; boundary=crewon-test" },
+    body: bytes,
+    maxRequestBytes: 16 * 1024 * 1024 + 64 * 1024,
+  };
+  await assert.rejects(
+    new PinnedNodeHttpTransport().request(q, new AbortController().signal),
+    /body_too_large/u,
+  );
+  assert.equal(requests, 0);
+  const pending = new PinnedNodeHttpTransport({
+    responseProfile: "imageUpload",
+  }).request(q, new AbortController().signal);
+  Uint8Array.prototype.fill.call(bytes, 0);
+  const result = await pending;
+  assert.equal(result.status, 200);
+  assert.deepEqual(received, original);
+  assert.equal(requests, 1);
+});
+
+test("image upload profile rejects expanded routes, methods, headers and limits before dispatch", async (t) => {
+  let requests = 0;
+  const server = await listen(t, (_request, response) => {
+    requests++;
+    response.end();
+  });
+  const transport = new PinnedNodeHttpTransport({
+    responseProfile: "imageUpload",
+  });
+  const q = {
+    ...input(server, 64 * 1024),
+    method: "POST" as const,
+    target: {
+      endpoint: new URL(`${origin(server)}/upload/image`),
+      address: "127.0.0.1",
+      family: 4 as const,
+    },
+    headers: { "content-type": "multipart/form-data; boundary=crewon-test" },
+    body: Buffer.from("fixture"),
+    maxRequestBytes: 16 * 1024 * 1024 + 64 * 1024,
+  };
+  for (const r of [
+    { ...q, method: "GET" as const },
+    { ...q, body: undefined },
+    {
+      ...q,
+      target: { ...q.target, endpoint: new URL(`${origin(server)}/prompt`) },
+    },
+    {
+      ...q,
+      target: {
+        ...q.target,
+        endpoint: new URL(`${origin(server)}/upload/image?x=1`),
+      },
+    },
+    {
+      ...q,
+      target: {
+        ...q.target,
+        endpoint: new URL(`${origin(server)}/upload/image#x`),
+      },
+    },
+    { ...q, headers: { "content-type": "application/json" } },
+    {
+      ...q,
+      headers: { "content-type": "multipart/form-data; boundary=bad\r\n" },
+    },
+    { ...q, maxRequestBytes: q.maxRequestBytes + 1 },
+    { ...q, maxResponseBytes: 64 * 1024 + 1 },
+    { ...q, maxRequestBytes: 0 },
+  ])
+    await assert.rejects(transport.request(r, new AbortController().signal));
+  assert.equal(requests, 0);
+});
+
+test("upload acknowledgement is capped and redirects are returned without following", async (t) => {
+  let requests = 0;
+  const server = await listen(t, (_request, response) => {
+    requests++;
+    if (requests === 1) response.end(Buffer.alloc(64 * 1024 + 1));
+    else {
+      response.writeHead(307, { location: `${origin(server)}/other` });
+      response.end();
+    }
+  });
+  const transport = new PinnedNodeHttpTransport({
+    responseProfile: "imageUpload",
+  });
+  const q = {
+    ...input(server, 64 * 1024),
+    method: "POST" as const,
+    target: {
+      endpoint: new URL(`${origin(server)}/upload/image`),
+      address: "127.0.0.1",
+      family: 4 as const,
+    },
+    headers: { "content-type": "multipart/form-data; boundary=crewon-test" },
+    body: Buffer.from("fixture"),
+    maxRequestBytes: 100,
+  };
+  await assert.rejects(
+    transport.request(q, new AbortController().signal),
+    /body_too_large/u,
+  );
+  assert.equal(
+    (await transport.request(q, new AbortController().signal)).status,
+    307,
+  );
+  assert.equal(requests, 2);
+});
+
 test("image material profile reads over 1 MiB while the original profile remains bounded", async (t) => {
   let requests = 0;
   const bytes = Buffer.alloc(1024 * 1024 + 1, 7);

@@ -3,10 +3,17 @@ import { request as httpsRequest, type RequestOptions } from "node:https";
 import { isIP, SocketAddress } from "node:net";
 
 import type { PinnedNetworkEndpoint } from "./network-egress.ts";
+import {
+  materialByteLength,
+  copyBoundedMaterialBytes,
+} from "./material-byte-snapshot.ts";
 
 const HARD_MAX_REQUEST_BYTES = 1024 * 1024;
 const HARD_MAX_RESPONSE_BYTES = 1024 * 1024;
 const HARD_MAX_IMAGE_RESPONSE_BYTES = 16 * 1024 * 1024;
+const HARD_MAX_IMAGE_UPLOAD_BYTES = 16 * 1024 * 1024 + 64 * 1024;
+const HARD_MAX_IMAGE_UPLOAD_RESPONSE_BYTES = 64 * 1024;
+type ResponseProfile = "standard" | "imageMaterial" | "imageUpload";
 
 export type PinnedHttpResponse = Readonly<{
   status: number;
@@ -44,14 +51,14 @@ export interface PinnedHttpPort {
 export class PinnedNodeHttpTransport implements PinnedHttpPort {
   readonly #certificateAuthority: string | undefined;
   readonly #remoteAddressMatches: typeof sameRemoteAddress;
-  readonly #responseProfile: "standard" | "imageMaterial";
+  readonly #responseProfile: ResponseProfile;
 
   constructor(
     options: {
       certificateAuthority?: string;
       remoteAddressMatches?: typeof sameRemoteAddress;
       /** Explicit host-only opt-in; existing JSON clients retain their 1 MiB ceiling. */
-      responseProfile?: "standard" | "imageMaterial";
+      responseProfile?: ResponseProfile;
     } = {},
   ) {
     this.#certificateAuthority = options.certificateAuthority;
@@ -60,7 +67,8 @@ export class PinnedNodeHttpTransport implements PinnedHttpPort {
     this.#responseProfile = options.responseProfile ?? "standard";
     if (
       this.#responseProfile !== "standard" &&
-      this.#responseProfile !== "imageMaterial"
+      this.#responseProfile !== "imageMaterial" &&
+      this.#responseProfile !== "imageUpload"
     )
       throw new PinnedNodeHttpError("response_profile_invalid");
   }
@@ -69,8 +77,18 @@ export class PinnedNodeHttpTransport implements PinnedHttpPort {
     input: PinnedHttpRequest,
     signal: AbortSignal,
   ): Promise<PinnedHttpResponse> {
+    let body: Uint8Array | undefined;
     try {
       validateBounds(input, this.#responseProfile);
+      // The host plan retains mutable binary storage despite readonly DTO fields.
+      // Capture uploads before yielding so a caller cannot change the dispatched bytes.
+      body =
+        this.#responseProfile === "imageUpload"
+          ? copyBoundedMaterialBytes(input.body, {
+              maxBytes: input.maxRequestBytes,
+              expectedBytes: null,
+            })
+          : input.body;
     } catch (error) {
       if (error instanceof PinnedNodeHttpError) throw error;
       throw new PinnedNodeHttpError("request_invalid");
@@ -156,7 +174,7 @@ export class PinnedNodeHttpTransport implements PinnedHttpPort {
           response.once("error", reject);
         });
         request.once("error", reject);
-        request.end(input.body);
+        request.end(body);
       });
     } catch (error) {
       if (error instanceof PinnedNodeHttpError) throw error;
@@ -169,19 +187,28 @@ export class PinnedNodeHttpTransport implements PinnedHttpPort {
 
 function validateBounds(
   input: PinnedHttpRequest,
-  profile: "standard" | "imageMaterial",
+  profile: ResponseProfile,
 ): void {
   if (
     !Number.isSafeInteger(input.maxRequestBytes) ||
     input.maxRequestBytes < 0 ||
-    input.maxRequestBytes > HARD_MAX_REQUEST_BYTES ||
+    input.maxRequestBytes >
+      (profile === "imageUpload"
+        ? HARD_MAX_IMAGE_UPLOAD_BYTES
+        : HARD_MAX_REQUEST_BYTES) ||
     !Number.isSafeInteger(input.maxResponseBytes) ||
     input.maxResponseBytes < 0 ||
     input.maxResponseBytes >
       (profile === "imageMaterial"
         ? HARD_MAX_IMAGE_RESPONSE_BYTES
-        : HARD_MAX_RESPONSE_BYTES) ||
-    (input.body?.byteLength ?? 0) > input.maxRequestBytes
+        : profile === "imageUpload"
+          ? HARD_MAX_IMAGE_UPLOAD_RESPONSE_BYTES
+          : HARD_MAX_RESPONSE_BYTES) ||
+    (input.body === undefined
+      ? 0
+      : profile === "imageUpload"
+        ? materialByteLength(input.body)
+        : input.body.byteLength) > input.maxRequestBytes
   ) {
     throw new PinnedNodeHttpError("body_too_large");
   }
@@ -190,6 +217,15 @@ function validateBounds(
       (input.method !== "GET" ||
         input.body !== undefined ||
         input.maxRequestBytes !== 0)) ||
+    (profile === "imageUpload" &&
+      (input.method !== "POST" ||
+        !(input.body instanceof Uint8Array) ||
+        input.target.endpoint.pathname !== "/upload/image" ||
+        input.target.endpoint.search !== "" ||
+        input.target.endpoint.hash !== "" ||
+        !/^multipart\/form-data; boundary=[A-Za-z0-9-]{1,96}$/u.test(
+          input.headers?.["content-type"] ?? "",
+        ))) ||
     (input.method !== "GET" && input.method !== "POST") ||
     (input.method === "GET" && input.body !== undefined) ||
     (input.body !== undefined && !(input.body instanceof Uint8Array)) ||
