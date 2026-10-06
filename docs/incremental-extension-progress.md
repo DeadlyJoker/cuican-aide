@@ -26,9 +26,19 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 [媒体原Run事务准入](./project-media-generation-run-protocol.md)已通过宿主内部双库验证：同一原Turn固定输入修订、真实准备事件和候选执行意图，原键重放/冷恢复不重新上传，来源和目标变化阻止新Run，事务中撤活动回滚全部新行。190项相关回归通过、零跳过；真实Worker提交、结果回写、Main和手动/Agent入口继续接线。原前端、SDK、完整插件包及用户App保持，积分后置，完整目标继续ACTIVE。
 
-[Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。[候选原供应商请求占用](./project-media-operation-protocol.md)随后通过234项相关回归；[原Tool IO与确认图/字节检查](./project-media-execution-io-protocol.md)已接到实际宿主owner与resolver，通过303项相关回归。新包实际媒体handler、结果回写及Main/两入口仍待联合接线，不作为正式媒体流程交付，完整目标继续ACTIVE。
+[Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。[候选原供应商请求占用](./project-media-operation-protocol.md)随后通过234项相关回归；[原Tool IO与确认图/字节检查](./project-media-execution-io-protocol.md)已接到实际宿主owner与resolver，通过303项相关回归。[Short21实际媒体工具](./plugin-project-media-execution-protocol.md)及独立安装包随后通过319项相关回归与311项包检查。结果候选回写、Main/完整Worker及Agent/手动联合验收继续实施，不作为正式媒体流程交付，完整目标继续ACTIVE。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：Short21实际媒体工具与独立安装包
+
+[确认媒体执行协议](./plugin-project-media-execution-protocol.md)已实现同包T10/D18的实际Node handler及可复制公开协议源。新增media_submit/media_observe空参数工具，真实宿主从原Run提供确认输入；首次提交沿原一次性dispatch，已有/未知/不同Tool键只观察原operation。只读无占用不准备素材，正确读取129/17输出节点；晚到受理保存原证据，取消不全局中断。原概念图、文字与资产任务保持。
+
+冻结SDK tar在独立私有目录离线构建21.0.0，**311/311**完整包检查和**319/319**相关双库回归通过，零失败/取消/跳过；新增16项实际handler集成是319中的子集。实际文件安装、业务注册、Node setup/工厂、媒体TaskCore/Run/队列lease及原IO参与；PDP/部署审查、DNS/供应商响应和私有Tool回执签发为具名夹具，未宣称完整Worker循环或实际模型。完整图片证据保留在原操作，Agent摘要有界并明确裁剪。
+
+新独立包位于 `output/extensions/installable-plugins/short-drama-media-handler-20261006/short-drama/21.0.0`，摘要 `sha256:03a5c7dfe97c21513d72fe8788fe24e61c7cfa409cd265f9b53627525b329216`。原UI/CSS源码保持，新ui.mjs全部执行代码及样式与20.0.2逐字相同，仅三条SDK来源路径注释不同。冻结SDK、原完整插件包、旧正式App及用户实际App文件核验通过；没有修改主检出或更新用户App。四轮自有PostgreSQL正常停止并按目录身份清理，失败日志和自有只读安装夹具退场记录保留在 `output/extensions/checks/short21-media-handler-20261006/`。
+
+下一项核验真实供应商结果字节并写项目候选，再接Main、原Agent与手动共用入口及完整Worker循环。结构化分镜、有界跨阶段计划、视频/声音/合成继续按序实施。产品联合验收尚未完成，完整目标保持ACTIVE，积分仍后置。
 
 ## 2026-10-06：原 Tool IO 与已确认媒体图
 

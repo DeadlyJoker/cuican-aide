@@ -18,6 +18,7 @@
     "./project-conversations": "./src/project-conversations.ts",
     "./project-conversation-association": "./src/project-conversation-association.ts",
     "./project-context": "./src/project-context.ts",
+    "./project-media-execution": "./src/plugin-project-media-execution-service.ts",
     "./project-text-plans": "./src/project-text-plans.ts",
     "./project-planning": "./src/project-planning.ts",
     "./project-historical-queries": "./src/project-historical-queries.ts"

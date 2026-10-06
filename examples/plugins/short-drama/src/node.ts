@@ -29,6 +29,11 @@ import {
   type PluginProjectAssetToolsService,
   type PluginProjectAssetContextService,
 } from "./project-asset-tools-service.js";
+import {
+  CREWON_PROJECT_MEDIA_EXECUTION_SERVICE,
+  CREWON_PROJECT_MEDIA_EXECUTION_API_VERSION,
+  type PluginProjectMediaExecutionService,
+} from "./project-media-execution-service.js";
 
 export default definePlugin({
   apiVersion: "crewon.plugin-host.v1",
@@ -62,6 +67,11 @@ export default definePlugin({
         CREWON_PROJECT_ASSET_CONTEXT_SERVICE,
         CREWON_PROJECT_ASSET_TOOLS_API_VERSION,
       );
+    const mediaExecution =
+      context.services.getOptional<PluginProjectMediaExecutionService>(
+        CREWON_PROJECT_MEDIA_EXECUTION_SERVICE,
+        CREWON_PROJECT_MEDIA_EXECUTION_API_VERSION,
+      );
     if (execution) {
       const registration = execution.register({
         create: (runtimeContext, services) =>
@@ -69,6 +79,7 @@ export default definePlugin({
             projectContext: projectContext ?? null,
             assets: assets ?? null,
             assetContext: assetContext ?? null,
+            mediaExecution: mediaExecution ?? null,
           }),
       });
       context.onDispose(() => registration.dispose());
@@ -108,6 +119,17 @@ export default definePlugin({
             "idempotencyKey",
             "input",
           ]);
+          const legacyInput = (input as Record<string, unknown>).input;
+          if (
+            !legacyInput ||
+            typeof legacyInput !== "object" ||
+            Array.isArray(legacyInput)
+          )
+            throw new Error("krea_plugin_action_input_invalid");
+          exact(legacyInput, ["prompt"]);
+          const legacyPrompt = (legacyInput as Record<string, unknown>).prompt;
+          if (typeof legacyPrompt !== "string" || legacyPrompt.length > 9999)
+            throw new Error("krea_plugin_action_input_invalid");
           return tasks.createTask({
             ...(input as unknown as Omit<PluginTaskRequest, "invocationRef">),
             invocationRef: invocation.invocationRef,

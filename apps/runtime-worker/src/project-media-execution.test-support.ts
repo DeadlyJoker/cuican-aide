@@ -116,6 +116,11 @@ export async function mediaExecutionFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
+  options: {
+    installedFixture?: NonNullable<
+      Parameters<typeof mediaOperationFixture>[2]
+    >["installedFixture"];
+  } = {},
 ) {
   const adapter = await reviewedMediaGraphs();
   const workflowDigestsFixture = Object.fromEntries(
@@ -124,6 +129,7 @@ export async function mediaExecutionFixture(
   const f = await mediaOperationFixture(t, backend, {
     kind,
     workflowDigestsFixture,
+    installedFixture: options.installedFixture,
   });
   const baseline = await f.counts();
   const controls = {
@@ -357,6 +363,7 @@ export async function mediaExecutionFixture(
     original: ToolExecutionCommand,
     delegate: (checked: ToolExecutionCommand) => Promise<void>,
     signal = f.signal().signal,
+    method: "execute" | "reconcile" | "cancel" = "execute",
   ) => {
     const now = new Date().toISOString();
     const receipt = dispatchToolExecutionReceipt(
@@ -385,7 +392,7 @@ export async function mediaExecutionFixture(
       now,
     );
     const checked = structuredClone(original),
-      invocation = { command: checked, method: "execute" as const, signal };
+      invocation = { command: checked, method, signal };
     return withWorkerToolDispatch(
       {
         ...invocation,

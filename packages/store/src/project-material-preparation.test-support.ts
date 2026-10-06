@@ -19,6 +19,14 @@ import { selectionVerifier } from "./project-concept-selection.test-support.ts";
 import { creativeStoreDigester as digester } from "./creative-project-store-records.ts";
 
 export const materialPreparationAt = "2026-10-06T08:00:00.000Z";
+export type MaterialTargetFixture = Readonly<{
+  version: string;
+  publisherId: string;
+  packageDigest: string;
+  manifestDigest: string;
+  implementationDigest: string;
+  preset: string;
+}>;
 /** Real adopted project/source/Run and installation/config records.
  * Archive/media observation, package bytes and external preparation grants are named fixtures.
  * This journal test does not prove a source archive read, upload, Main or media Run admission.
@@ -26,7 +34,7 @@ export const materialPreparationAt = "2026-10-06T08:00:00.000Z";
 export async function materialPreparationFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: { migrate?: boolean } = {},
+  options: { migrate?: boolean; targetFixture?: MaterialTargetFixture } = {},
 ) {
   const f = await projectAssetReferenceImageFixture(t, backend),
     source = await f.resolver().resolveSelectedReference(f.actor, f.query);
@@ -88,7 +96,13 @@ export async function materialPreparationFixture(
       scope,
       actor: f.actor,
       pluginId: "crewon.short-drama",
-      version: "20.0.2",
+      version: options.targetFixture?.version ?? "20.0.2",
+      ...(options.targetFixture
+        ? {
+            publisherId: options.targetFixture.publisherId,
+            packageDigest: options.targetFixture.packageDigest,
+          }
+        : {}),
     }),
   );
   const enabled = await f.installs.commitSelection(
@@ -104,11 +118,15 @@ export async function materialPreparationFixture(
       pluginId: installed.package.pluginId,
       revision: 1,
       pluginVersion: installed.package.version,
-      manifestDigest: digester.sha256("named-target-manifest"),
-      implementationDigest: digester.sha256("named-target-implementation"),
+      manifestDigest:
+        options.targetFixture?.manifestDigest ??
+        digester.sha256("named-target-manifest"),
+      implementationDigest:
+        options.targetFixture?.implementationDigest ??
+        digester.sha256("named-target-implementation"),
       parameters: {
         baseUrl: "https://target.provider.example:8443/",
-        preset: "standard",
+        preset: options.targetFixture?.preset ?? "standard",
       },
       credentialBindings: [],
       createdByActorId: f.actor.actorId,

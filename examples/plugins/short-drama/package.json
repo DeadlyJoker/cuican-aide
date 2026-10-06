@@ -1,11 +1,11 @@
 {
   "name": "crewon-short-drama-example",
-  "version": "20.0.2",
+  "version": "21.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json && node build.mjs",
-    "test": "node --test --test-concurrency=1 test/*.test.mjs"
+    "test": "node test/run-tests.mjs"
   },
   "dependencies": {
     "@crewon/plugin-sdk": "0.1.0",

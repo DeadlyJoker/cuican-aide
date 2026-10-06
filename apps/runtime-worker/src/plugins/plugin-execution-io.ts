@@ -184,6 +184,19 @@ export class PluginExecutionIoOwner {
       return result;
     });
   }
+  readProjectMediaOperation(value: Readonly<{ command: unknown }>) {
+    const input = ioRecord(value, ["command"]),
+      invocation = this.#invocation(input.command, true);
+    if (!this.#media) ioFailure("media_unavailable");
+    return this.#track(invocation, async () => {
+      await this.#authorize(invocation, "observe");
+      const result = await this.#media!.readObservation(
+        this.#mediaSignal(invocation),
+      );
+      this.#assertGrant(invocation, true);
+      return result;
+    });
+  }
   #mediaSignal(invocation: Invocation): AbortSignal {
     return AbortSignal.any([
       invocation.signal,

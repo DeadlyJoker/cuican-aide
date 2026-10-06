@@ -376,11 +376,13 @@ test("requires explicit host IO and applies perAction only to submit", async () 
     const noIo = factory().factory.create(context());
     assert.equal(
       noIo.definitions().length,
-      Number(version.split(".")[0]) >= 19
-        ? 21
-        : Number(version.split(".")[0]) >= 16
-          ? 15
-          : 14,
+      Number(version.split(".")[0]) >= 21
+        ? 23
+        : Number(version.split(".")[0]) >= 19
+          ? 21
+          : Number(version.split(".")[0]) >= 16
+            ? 15
+            : 14,
     );
     await assert.rejects(
       noIo.execute(fixture().command(), signal()),
@@ -477,6 +479,27 @@ test("Node actions use tasks@2 and actual invocation reference; query only passe
     /action_input_invalid/,
   );
   assert.equal(calls.length, 2);
+  if (Number(version.split(".")[0]) >= 21) {
+    for (const action of ["project.execute", "image.generate"])
+      for (const input of [
+        {},
+        { prompt: "valid", mediaInputId: "invented" },
+        {
+          kind: "crewon.short-drama.reference-generation.v1",
+          projectId: "invented",
+        },
+      ])
+        await assert.rejects(
+          actions.invoke({
+            invocationRef: "forged-media",
+            contributionId: "workbench",
+            action,
+            input: { ...common, input },
+          }),
+          /action_input_invalid/,
+        );
+    assert.equal(calls.length, 2);
+  }
   if (Number(version.split(".")[0]) >= 13) {
     await actions.invoke({
       invocationRef: "actual-project",

@@ -19,6 +19,9 @@ export async function mediaOperationFixture(
     start?: boolean;
     paid?: boolean;
     kind?: "T10" | "D18";
+    installedFixture?: NonNullable<
+      Parameters<typeof mediaGenerationFixture>[2]
+    >["installedFixture"];
     workflowDigestsFixture?: Partial<
       Record<import("@crewon/application").ProjectMediaWorkflowId, string>
     >;
@@ -28,6 +31,7 @@ export async function mediaOperationFixture(
     unmetered: !options.paid,
     taskClockFixture: "current",
     workflowDigestsFixture: options.workflowDigestsFixture,
+    installedFixture: options.installedFixture,
   });
   const { task } = await f.prepare(options.kind ?? "T10"),
     accepted = await f.create(task);

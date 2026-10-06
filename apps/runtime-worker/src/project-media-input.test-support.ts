@@ -27,9 +27,12 @@ export async function projectMediaInputFixture(
     migrate?: boolean;
     sameCharacterBytes?: boolean;
     workflowDigestsFixture?: Partial<Record<ProjectMediaWorkflowId, string>>;
+    targetFixture?: import("../../../packages/store/src/project-material-preparation.test-support.ts").MaterialTargetFixture;
   } = {},
 ) {
-  const f = await projectMaterialPreparerFixture(t, backend);
+  const f = await projectMaterialPreparerFixture(t, backend, {
+    targetFixture: options.targetFixture,
+  });
   const newReference = async (
     kind: "scene" | "character",
     name: string,

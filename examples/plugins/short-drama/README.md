@@ -4,7 +4,7 @@
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 20.0.2。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图与角色三视图；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认版本为 21.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
 UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
@@ -28,7 +28,17 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/20.0.2/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=20.0.3 pnpm --ignore-workspace build` 构建新的候选版本，测试时设置相同变量。既有 1.0.0 至 20.0.1 及已交付的 20.0.2 安装目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建生成完整预构建安装目录 `dist/21.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=21.0.1 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录，包括 20.0.2 和 21.0.0，保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+
+## 21.0.0 的确认媒体执行工具
+
+Node 增加可选 `crewon.project-media-execution@1` 协议及两个空参数工具 `media_submit` / `media_observe`。真实宿主已准入的媒体 Run 使用前者执行确切确认输入；后者只读原操作，不准备或重新发送。T10 使用输出节点129，D18使用17；原概念图仍使用29。其他项目、资产及原自由生图工具在媒体范围内拒绝执行，普通旧任务继续沿原路径。
+
+协议源是可独立复制的 TypeScript 文件，构建固定其摘要，不导入宿主实现，不扩展冻结 SDK。模型不能提交提示词、工作流或文件路径；实际宿主服务只接受真实活动 Tool invocation 的原 command。插件在同包内渲染已审查整图，通过原 SDK IO 领取一次发送资格、保存原响应并观察 history/queue。未知受理、不同 Tool 键、冷启动和已终态操作均复用原供应商请求。完整图片证据遵守原 operation 的16KiB上限；Agent 摘要最多四图并遵守原字符串9999字节限制，裁剪明确标记。
+
+旧 Node `image.generate` / `project.execute` 动作只接受原 `{prompt}`，不能通过它们发起新媒体任务。新业务清单兼容原提示词，并容纳宿主专用媒体选择器；真正六字段资格由原专用 TaskCore 准入检查，清单、DTO和setup服务本身均不授予能力。新公共Main入口和产品动作尚未开放。
+
+已用冻结 SDK tar 在私有独立目录离线构建，完整包安装、业务注册、Node setup/工厂、真实媒体 Run 和原 IO 的双库集成通过。UI执行代码与样式保持20.0.2，生成文件仅三条SDK来源路径注释不同。详情与验收边界见[媒体工具协议](../../../docs/plugin-project-media-execution-protocol.md)。项目候选发布/采用、完整 RuntimeWorker 循环、Main与Agent/手动页面联合验收继续实施；此版本没有更新用户实际App。
 
 ## 20.0.2 的参考图工作流适配器
 

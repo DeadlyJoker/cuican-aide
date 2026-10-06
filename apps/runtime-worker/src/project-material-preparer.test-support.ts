@@ -46,8 +46,11 @@ const digester = {
 export async function projectMaterialPreparerFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  options: {
+    targetFixture?: import("../../../packages/store/src/project-material-preparation.test-support.ts").MaterialTargetFixture;
+  } = {},
 ) {
-  const f = await materialPreparationFixture(t, backend),
+  const f = await materialPreparationFixture(t, backend, options),
     root = mkdtempSync(join(tmpdir(), "crewon-material-preparer-")),
     archives: FilesystemProjectMaterialArchive[] = [];
   t.after(() => {

@@ -30,6 +30,15 @@ test("ships a unified self-contained UI and execution package with the original 
   assert.equal(descriptor.entrypoints.node, "node.mjs");
   assert.equal(descriptor.businessManifestPath, "business.json");
   assert.deepEqual(descriptor.requires, [
+    ...(Number(version.split(".")[0]) >= 21
+      ? [
+          {
+            service: "crewon.project-media-execution",
+            apiVersion: "1",
+            optional: true,
+          },
+        ]
+      : []),
     ...(Number(version.split(".")[0]) >= 19
       ? [
           "crewon.project-assets",

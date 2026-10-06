@@ -211,11 +211,13 @@ test("Short13 catalog includes stage and original media tools with model schemas
   const f = fixture();
   assert.equal(
     f.runtime.definitions().length,
-    Number(version.split(".")[0]) >= 19
-      ? 21
-      : Number(version.split(".")[0]) >= 16
-        ? 15
-        : 14,
+    Number(version.split(".")[0]) >= 21
+      ? 23
+      : Number(version.split(".")[0]) >= 19
+        ? 21
+        : Number(version.split(".")[0]) >= 16
+          ? 15
+          : 14,
   );
   const list = f.runtime
     .definitions()
@@ -235,6 +237,26 @@ test("Short13 catalog includes stage and original media tools with model schemas
     f.runtime.executionPolicy("function", tool("submit")).capability,
     "extension.image.generate",
   );
+  if (Number(version.split(".")[0]) >= 21) {
+    for (const name of ["media_submit", "media_observe"])
+      assert.deepEqual(
+        f.runtime.definitions().find((d) => d.name === tool(name)).inputSchema,
+        {
+          type: "object",
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
+      );
+    assert.equal(
+      f.runtime.executionPolicy("function", tool("media_observe")).effect,
+      "readOnly",
+    );
+    assert.equal(
+      f.runtime.executionPolicy("function", tool("media_submit")).recovery,
+      "reconcilable",
+    );
+  }
 });
 test("cold mutation cancellation stays unknown and does not call a second write", async () => {
   const f = fixture();

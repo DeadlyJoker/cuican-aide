@@ -22,6 +22,12 @@ import {
 } from "./project-tools-service.js";
 import { RetainedResults } from "./retained-results.js";
 import { createKreaRuntime } from "./runtime.js";
+import {
+  createProjectMediaRuntime,
+  mediaDefinitions,
+  mediaPolicy,
+} from "./project-media-runtime.js";
+import type { PluginProjectMediaExecutionService } from "./project-media-execution-service.js";
 import type { PluginProjectContextService } from "./project-context-service.js";
 import {
   PROJECT_CONTEXT_TOOL,
@@ -52,6 +58,7 @@ export function createShortDramaRuntime(
     projectContext: PluginProjectContextService | null;
     assets?: PluginProjectAssetToolsService | null;
     assetContext?: PluginProjectAssetContextService | null;
+    mediaExecution?: PluginProjectMediaExecutionService | null;
   } = {
     projectContext: null,
   },
@@ -61,13 +68,17 @@ export function createShortDramaRuntime(
     pending = new Set<Promise<PluginToolExecutionResolution>>();
   let media: PluginToolRuntime | null =
     services?.externalOperations && services.jsonHttp
-      ? createKreaRuntime(context, services)
+      ? options.mediaExecution
+        ? createProjectMediaRuntime(context, options.mediaExecution, services)
+        : createKreaRuntime(context, services)
       : null;
   let closed = false;
   let activeExecutionId: string | null = null;
   let scanProjectFirst = true;
   function mediaRuntime() {
-    return (media ??= createKreaRuntime(context, services));
+    return (media ??= options.mediaExecution
+      ? createProjectMediaRuntime(context, options.mediaExecution, services)
+      : createKreaRuntime(context, services));
   }
   async function invoke(
     command: PluginToolExecutionCommand,
@@ -78,6 +89,13 @@ export function createShortDramaRuntime(
     signal.throwIfAborted();
     if (Date.parse(command.executionLease.expiresAt) <= Date.now())
       throw new Error("short_drama_execution_lease_expired");
+    if (options.mediaExecution) {
+      if (!mediaDefinitions.some((d) => d.name === command.name))
+        throw new Error("short_drama_media_stage_operation_denied");
+      return mediaRuntime()[method](command, signal);
+    }
+    if (mediaDefinitions.some((d) => d.name === command.name))
+      throw new Error("short_drama_media_services_unavailable");
     const asset = assetMethod(command.name);
     const assetRequest = asset
       ? parseProjectAssetToolCommand(
@@ -226,8 +244,14 @@ export function createShortDramaRuntime(
     }
   }
   return {
-    definitions: () => structuredClone([...definitions, ...projectDefinitions]),
+    definitions: () =>
+      structuredClone([
+        ...definitions,
+        ...projectDefinitions,
+        ...mediaDefinitions,
+      ]),
     executionPolicy: (kind, name) =>
+      mediaPolicy(context, approval, kind, name) ??
       projectPolicy(context, approval, kind, name) ??
       toolPolicy(context, approval, kind, name),
     execute: (command, signal) => dispatch(command, signal, "execute"),

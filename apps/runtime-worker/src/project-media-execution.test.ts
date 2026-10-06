@@ -445,9 +445,14 @@ for (const backend of ["sqlite", "postgres"] as const) {
       });
       const bridge = service.value as {
         readInput: typeof io.readProjectMediaInput;
+        readOperation: typeof io.readProjectMediaOperation;
       };
       assert.throws(
         () => bridge.readInput({ command: original }),
+        /plugin_execution_io_invocation_invalid/u,
+      );
+      assert.throws(
+        () => bridge.readOperation({ command: original }),
         /plugin_execution_io_invocation_invalid/u,
       );
       await f.invoke(io, original, async (checked) => {
@@ -455,6 +460,11 @@ for (const backend of ["sqlite", "postgres"] as const) {
           () => bridge.readInput({ command: structuredClone(checked) }),
           /plugin_execution_io_invocation_invalid/u,
         );
+        assert.throws(
+          () => bridge.readOperation({ command: structuredClone(checked) }),
+          /plugin_execution_io_invocation_invalid/u,
+        );
+        assert.equal(await bridge.readOperation({ command: checked }), null);
         assert.equal(
           (await bridge.readInput({ command: checked })).kind,
           "new",
@@ -462,6 +472,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
         live = false;
         assert.throws(
           () => bridge.readInput({ command: checked }),
+          /named_bridge_retired/u,
+        );
+        assert.throws(
+          () => bridge.readOperation({ command: checked }),
           /named_bridge_retired/u,
         );
       });

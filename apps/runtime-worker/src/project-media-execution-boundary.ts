@@ -184,6 +184,22 @@ export class ProjectMediaExecutionBoundary {
       ...prepared,
     });
   }
+  async readObservation(signal: AbortSignal) {
+    const state = await this.readOperation(signal);
+    const media = await this.#media("observe", signal);
+    if (!state) return null;
+    const observation = await this.#observe(media, { signal });
+    if (
+      state.link.executionId !== observation.reference.executionId ||
+      state.link.projectId !== observation.reference.projectId
+    )
+      fail("operation_mismatch");
+    return Object.freeze({
+      kind: "existing" as const,
+      ...observation,
+      operation: state.operation,
+    });
+  }
   #review(media: ProjectMediaRunSnapshot) {
     const target = this.#target(media),
       reviews = this.#reviews.filter(
@@ -251,6 +267,7 @@ export function captureProjectMediaExecutionBoundary(
   const p = ProjectMediaExecutionBoundary.prototype;
   return Object.freeze({
     readInput: p.readInput.bind(input),
+    readObservation: p.readObservation.bind(input),
     readOperation: p.readOperation.bind(input),
     hasOperation: p.hasOperation.bind(input),
     assertSubmission: p.assertSubmission.bind(input),

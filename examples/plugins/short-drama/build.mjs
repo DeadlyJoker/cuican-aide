@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.2";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "21.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -122,6 +122,14 @@ for (const [file, expected] of [
   if (createHash("sha256").update(bytes).digest("hex") !== expected)
     throw new Error("example_project_texts_ui_protocol_drift");
 }
+const mediaProtocol = await readFile(
+  join(root, "src/project-media-execution-service.ts"),
+);
+if (
+  createHash("sha256").update(mediaProtocol).digest("hex") !==
+  "1c884be265bbf71d299025845c2e202b0d0e3799d06937505545f6cd046b0323"
+)
+  throw new Error("example_project_media_protocol_drift");
 const reviewedWorkflows = [
   {
     file: "krea2-reference-four-view.api.json",
@@ -279,6 +287,11 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
+    {
+      service: "crewon.project-media-execution",
+      apiVersion: "1",
+      optional: true,
+    },
     ...[
       "crewon.project-assets",
       "crewon.project-asset-recovery",

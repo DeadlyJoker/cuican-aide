@@ -19,9 +19,16 @@ import {
   type InstalledPluginRunSnapshot,
 } from "./installed-plugin-run-context.ts";
 import { PluginExecutionIoOwner } from "./plugin-execution-io.ts";
+import {
+  CREWON_PROJECT_MEDIA_EXECUTION_SERVICE,
+  CREWON_PROJECT_MEDIA_EXECUTION_API_VERSION,
+  type PluginProjectMediaExecutionService,
+} from "@crewon/contracts/project-media-execution";
 
-export const PROJECT_MEDIA_EXECUTION_SERVICE = "crewon.project-media-execution";
-export const PROJECT_MEDIA_EXECUTION_API_VERSION = "1";
+export const PROJECT_MEDIA_EXECUTION_SERVICE =
+  CREWON_PROJECT_MEDIA_EXECUTION_SERVICE;
+export const PROJECT_MEDIA_EXECUTION_API_VERSION =
+  CREWON_PROJECT_MEDIA_EXECUTION_API_VERSION;
 /** Host composition only. The exact original native operation instance is explicitly opted in. */
 export type InstalledPluginMediaExecutionDependencies = Readonly<{
   contexts: ProjectMediaRunContext;
@@ -83,9 +90,7 @@ export function installedPluginMediaHostService(
 ): PluginHostService {
   let live = true;
   const value = Object.freeze({
-    readInput: (
-      request: Parameters<PluginExecutionIoOwner["readProjectMediaInput"]>[0],
-    ) => {
+    readInput: (request: Readonly<{ command: unknown }>) => {
       input.assertActive();
       if (!live) fail("unavailable");
       const io = input.io();
@@ -93,10 +98,23 @@ export function installedPluginMediaHostService(
         fail("unavailable");
       return PluginExecutionIoOwner.prototype.readProjectMediaInput.call(
         io,
+        request as Parameters<
+          PluginExecutionIoOwner["readProjectMediaInput"]
+        >[0],
+      );
+    },
+    readOperation: (request: Readonly<{ command: unknown }>) => {
+      input.assertActive();
+      if (!live) fail("unavailable");
+      const io = input.io();
+      if (!(io instanceof PluginExecutionIoOwner) || types.isProxy(io))
+        fail("unavailable");
+      return PluginExecutionIoOwner.prototype.readProjectMediaOperation.call(
+        io,
         request,
       );
     },
-  });
+  } satisfies PluginProjectMediaExecutionService);
   return Object.freeze({
     service: PROJECT_MEDIA_EXECUTION_SERVICE,
     apiVersion: PROJECT_MEDIA_EXECUTION_API_VERSION,

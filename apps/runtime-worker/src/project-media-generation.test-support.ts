@@ -38,6 +38,9 @@ export async function mediaGenerationFixture(
     configurationFixture?: "large";
     /** Only Task scheduling uses real current time, so original queue leases can be exercised. */
     taskClockFixture?: "current";
+    installedFixture?: import("../../../packages/store/src/project-material-preparation.test-support.ts").MaterialTargetFixture & {
+      manifest: import("@crewon/domain").ExtensionManifest;
+    };
     workflowDigestsFixture?: Partial<
       Record<import("@crewon/application").ProjectMediaWorkflowId, string>
     >;
@@ -45,6 +48,7 @@ export async function mediaGenerationFixture(
 ) {
   const f = await projectMediaInputFixture(t, backend, {
     workflowDigestsFixture: options.workflowDigestsFixture,
+    targetFixture: options.installedFixture,
   });
   const string = { type: "string" as const, maxLength: 256, enum: null },
     schema = {
@@ -71,39 +75,41 @@ export async function mediaGenerationFixture(
       ],
       additionalProperties: false,
     };
-  const manifest = parseExtensionManifest({
-    ...extensionManifestFixture("crewon.short-drama"),
-    version: f.target.package.version,
-    task: {
-      instructions:
-        "Execute only the confirmed media-input reference through its admitted host context.",
-      inputSchema: schema,
-    },
-    configurationSchema: {
-      type: "object",
-      properties: {
-        baseUrl: { type: "string", maxLength: 4096, enum: null },
-        preset: { type: "string", maxLength: 32, enum: ["standard"] },
-        ...(options.configurationFixture === "large"
-          ? {
-              fixturePaddingOne: {
-                type: "string",
-                maxLength: 9000,
-                enum: null,
-              },
-              fixturePaddingTwo: {
-                type: "string",
-                maxLength: 9000,
-                enum: null,
-              },
-            }
-          : {}),
-      },
-      required: ["baseUrl", "preset"],
-      additionalProperties: false,
-    },
-    credentialSlots: [],
-  });
+  const manifest = options.installedFixture
+    ? parseExtensionManifest(options.installedFixture.manifest)
+    : parseExtensionManifest({
+        ...extensionManifestFixture("crewon.short-drama"),
+        version: f.target.package.version,
+        task: {
+          instructions:
+            "Execute only the confirmed media-input reference through its admitted host context.",
+          inputSchema: schema,
+        },
+        configurationSchema: {
+          type: "object",
+          properties: {
+            baseUrl: { type: "string", maxLength: 4096, enum: null },
+            preset: { type: "string", maxLength: 32, enum: ["standard"] },
+            ...(options.configurationFixture === "large"
+              ? {
+                  fixturePaddingOne: {
+                    type: "string",
+                    maxLength: 9000,
+                    enum: null,
+                  },
+                  fixturePaddingTwo: {
+                    type: "string",
+                    maxLength: 9000,
+                    enum: null,
+                  },
+                }
+              : {}),
+          },
+          required: ["baseUrl", "preset"],
+          additionalProperties: false,
+        },
+        credentialSlots: [],
+      });
   const registration = {
     manifest,
     manifestDigest: f.digester.sha256(extensionCanonicalJson(manifest)),
