@@ -27,6 +27,46 @@ const loopbackPolicy: NetworkEgressPolicy = {
   }),
 };
 
+test("image material profile reads over 1 MiB while the original profile remains bounded", async (t) => {
+  let requests = 0;
+  const bytes = Buffer.alloc(1024 * 1024 + 1, 7);
+  const server = await listen(t, (_request, response) => {
+    requests++;
+    response.end(bytes);
+  });
+  const q = input(server, bytes.length);
+  await assert.rejects(
+    new PinnedNodeHttpTransport().request(q, new AbortController().signal),
+    /body_too_large/u,
+  );
+  assert.equal(requests, 0);
+  const result = await new PinnedNodeHttpTransport({
+    responseProfile: "imageMaterial",
+  }).request(q, new AbortController().signal);
+  assert.deepEqual(result.body, bytes);
+  assert.equal(requests, 1);
+});
+
+test("image material transport does not widen write requests or its absolute byte ceiling", async (t) => {
+  let requests = 0;
+  const server = await listen(t, (_request, response) => {
+    requests++;
+    response.end();
+  });
+  const transport = new PinnedNodeHttpTransport({
+      responseProfile: "imageMaterial",
+    }),
+    q = input(server, 16 * 1024 * 1024);
+  for (const r of [
+    { ...q, method: "POST" as const },
+    { ...q, maxRequestBytes: 1 },
+    { ...q, body: Buffer.from("x") },
+    { ...q, maxResponseBytes: 16 * 1024 * 1024 + 1 },
+  ])
+    await assert.rejects(transport.request(r, new AbortController().signal));
+  assert.equal(requests, 0);
+});
+
 test("production policy rejects every non-public address", () => {
   const policy = new ProductionNetworkEgressPolicy();
   for (const address of [
