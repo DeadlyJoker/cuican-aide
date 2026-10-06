@@ -1,3 +1,4 @@
+export * from "./project-media-input-stage-application-service.ts";
 export * from "./project-media-input-conversation-task-support.ts";
 export * from "./project-media-input-stage-authority.ts";
 export * from "./project-media-input-run-commit-authority.ts";

@@ -42,6 +42,13 @@ export async function mediaInputWorkerFixture(
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
   options: Readonly<{
+    admitStage?: (
+      input: Parameters<
+        import("./project-media-input-stage-worker.test-support.ts").MediaInputPublicAdmissionFixture
+      >[0] & { installRoot: string },
+    ) => ReturnType<
+      import("./project-media-input-stage-worker.test-support.ts").MediaInputPublicAdmissionFixture
+    >;
     transport?: ModelTransportPort;
     maxToolRounds?: number;
   }> = {},
@@ -169,6 +176,12 @@ export async function mediaInputWorkerFixture(
   let entry!: InstalledPluginAgentRuntimeEntry,
     target!: ReturnType<typeof installedPluginAgentRuntimeTarget>;
   const f = await mediaInputStageWorkerFixture(t, backend, kind, {
+    ...(options.admitStage === undefined
+      ? {}
+      : {
+          admitStage: (input) =>
+            options.admitStage!({ ...input, installRoot: root }),
+        }),
     installedFixture: {
       version: pkg.descriptor.version,
       publisherId: pkg.descriptor.publisherId,

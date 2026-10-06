@@ -1,3 +1,5 @@
+import { createProjectMediaInputStagePluginOwner } from "./project-media-input-stage-plugin-runtime.ts";
+import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { createProjectAssetStagePluginOwner } from "./project-asset-stage-plugin-runtime.ts";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import {
@@ -55,6 +57,7 @@ export function createDesktopProjectConversationRuntime(
 ) {
   const foundation = input.projects?.conversationFoundation;
   if (foundation === undefined) return undefined;
+  let mediaInputStages: ProjectMediaInputStageControlOwner | undefined;
   let owner: ProjectConversationControlOwner | undefined;
   let assetStages: ProjectAssetStageControlOwner | undefined;
   let originalThreads: ThreadApplicationService | undefined;
@@ -103,6 +106,7 @@ export function createDesktopProjectConversationRuntime(
               ),
           },
         });
+  const mediaInputFoundation = input.projects?.mediaInputStageFoundation;
   const assetFoundation = input.projects?.assetStageFoundation;
   const hostUiServices =
     assetFoundation === undefined
@@ -129,6 +133,7 @@ export function createDesktopProjectConversationRuntime(
   return Object.freeze({
     hostUiServices,
     owner: () => owner,
+    mediaInputStages: () => mediaInputStages,
     assetStages: () => assetStages,
     textPlans: () => plans,
     bindThreads(
@@ -248,6 +253,57 @@ export function createDesktopProjectConversationRuntime(
           },
         });
       }
+      if (mediaInputFoundation !== undefined) {
+        mediaInputStages = createProjectMediaInputStagePluginOwner({
+          foundation: mediaInputFoundation,
+          threadStore: input.store,
+          digester: input.digester,
+          tasks: {
+            createProjectMediaInputStageTurnFromHost: (...args) => {
+              const actual = input.tasks();
+              if (actual === undefined)
+                throw new ApplicationError(
+                  "conflict",
+                  "project_media_input_stage_execution_unavailable",
+                );
+              return actual.core.extensionTasks.createProjectMediaInputStageTurnFromHost(
+                ...args,
+              );
+            },
+          },
+          authority: {
+            installations: input.store.pluginInstallationStore(),
+            requests: input.installed.requests,
+            installRoot: input.configuration.installRoot,
+            authorization: input.authority.ui,
+            authorizePackage: async (candidate, signal) => {
+              input.authority.assertScope(candidate.actor, candidate.scope);
+              signal.throwIfAborted();
+              const actual = input.tasks();
+              return actual === undefined
+                ? candidate.purpose === "read"
+                  ? input.registry.authorizeCandidate(candidate.candidate)
+                  : "deny"
+                : actual.authority.authorizePackage(candidate, signal);
+            },
+            assertExternal: (actor) => {
+              if (closed)
+                throw new ApplicationError(
+                  "authorization",
+                  "project_media_input_stage_authority_changed",
+                );
+              input.authority.assertScope(actor, input.configuration.scope);
+              input.installation.assertProfileOwnershipForSelectionCommit(
+                actor,
+              );
+              if (input.nativeControl !== undefined)
+                assertDesktopNativePluginControlConfigCurrent(
+                  input.nativeControl,
+                );
+            },
+          },
+        });
+      }
       if (planFoundation !== undefined) {
         if (input.projects?.textService === undefined)
           throw new Error("project_text_plan_text_commands_required");
@@ -267,6 +323,7 @@ export function createDesktopProjectConversationRuntime(
     },
     close: async () => {
       closed = true;
+      await mediaInputStages?.close();
       await plans?.close();
       await assetStages?.close();
       await owner?.close();

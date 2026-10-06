@@ -35,3 +35,5 @@
 证据在 `output/extensions/checks/project-media-input-agent-stage-20261006/`。原 SDK、Short22 及更早完整包、App 保持冻结，本次没有更新用户 App。
 
 Short23 同包真实 `media_input` 已接原 Worker，双库验证六个方法、流式输出和冷恢复。受阶段约束的原项目、文字、资产读取已接通，可从真实返回值发现参考素材。接下来连接原 Composer 入口，再验证“对话保存 → 页面读取与编辑 → 对话继续”及流式/中断恢复。随后接实际媒体生成、查询、候选采用和有界跨阶段计划。结构化分镜、视频、声音与成片仍按完整八阶段方案继续，目标保持 ACTIVE。
+
+公开请求、安装核验与双端装配见[原对话媒体输入任务入口](./project-media-input-stage-entry.md)。当前已连接 HTTP 与 ControlClient，原 Composer 的可见阶段控件仍待接入。

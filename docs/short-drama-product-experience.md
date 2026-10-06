@@ -59,4 +59,4 @@ Agent 在原对话提出一张可编辑制作卡：故事范围、执行到角�
 
 接下来依次接通 Agent 同一媒体输入命令、手动与 Agent 的实际生成/查询/采用、结构化分镜、有界跨阶段计划，再接视频、声音和成片。每项验收既覆盖业务保存与恢复，也覆盖真正的原对话和插件页面；测试页面不会冒充用户 App 已更新。
 
-[Agent 媒体输入阶段范围](./project-media-input-agent-stage-protocol.md)已进入原会话任务与双库事务：冻结项目、工作流和来源版本，恢复保留同一个任务。[媒体输入工具宿主服务](./project-media-input-agent-tools-protocol.md)现已支持同一记录保存与原工具恢复；Short23 已完成同包 Node 注册和安装后的调用验证；原 Worker 装配已接通并通过真实调度、流式和冷恢复测试。当前六个媒体输入方法和原项目、剧本、资产读取可在独立阶段任务中执行，Agent可从实际采用的素材组合输入。公开对话入口仍在接入，不能从用户 App 的对话直接调用。
+[Agent 媒体输入阶段范围](./project-media-input-agent-stage-protocol.md)已进入原会话任务与双库事务：冻结项目、工作流和来源版本，恢复保留同一个任务。[媒体输入工具宿主服务](./project-media-input-agent-tools-protocol.md)现已支持同一记录保存与原工具恢复；Short23 已完成同包 Node 注册和安装后的调用验证；原 Worker 装配已接通并通过真实调度、流式和冷恢复测试。当前六个媒体输入方法和原项目、剧本、资产读取可在独立阶段任务中执行，Agent可从实际采用的素材组合输入。[公开任务入口](./project-media-input-stage-entry.md)已连接 HTTP、ControlClient 和双端装配，并验证请求进入原 Worker；原 Composer 的可见控件仍在接入，不能从用户 App 的对话直接调用。

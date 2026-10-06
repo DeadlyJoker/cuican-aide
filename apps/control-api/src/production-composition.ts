@@ -757,6 +757,7 @@ async function composeProductionControlApi(
       projectTexts: creativeProjects?.textService,
       projectAssets: creativeProjects?.assetService,
       projectAssetStages: conversations?.assetStages(),
+      projectMediaInputStages: conversations?.mediaInputStages(),
       projectConversations: conversations?.owner(),
       projectConversationRouting: store.projectConversationStore(),
       projectGenerationReads,

@@ -1,3 +1,4 @@
+import { ProjectMediaInputStageControlClient } from "./project-media-input-stage-control-client.ts";
 import {
   parseThreadWorkspaceId,
   normalizeThreadViewWorkspace,
@@ -231,6 +232,7 @@ export class ControlApiClient {
   #creativeProjectClient: CreativeProjectControlClient | null = null;
   #projectTextClient: ProjectTextControlClient | null = null;
   #projectConversationClient: ProjectConversationControlClient | null = null;
+  #projectMediaInputStageClient: ProjectMediaInputStageControlClient | null = null;
   #projectAssetStageClient: ProjectAssetStageControlClient | null = null;
   #projectMediaInputClient: ProjectMediaInputControlClient | null = null;
 
@@ -1660,6 +1662,15 @@ export class ControlApiClient {
   get projectAssetStages(): ProjectAssetStageControlClient {
     return (this.#projectAssetStageClient ??=
       new ProjectAssetStageControlClient({
+        json: (method, path, body, options) =>
+          this.#json(method, path, body, options),
+        protocolError: (code) => new ControlApiProtocolError(code),
+      }));
+  }
+
+  get projectMediaInputStages(): ProjectMediaInputStageControlClient {
+    return (this.#projectMediaInputStageClient ??=
+      new ProjectMediaInputStageControlClient({
         json: (method, path, body, options) =>
           this.#json(method, path, body, options),
         protocolError: (code) => new ControlApiProtocolError(code),

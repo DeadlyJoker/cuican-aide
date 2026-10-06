@@ -27,7 +27,8 @@
     "./desktop-project-media-inputs": "./src/desktop-project-media-inputs.ts",
     "./project-text-plans": "./src/project-text-plans.ts",
     "./project-planning": "./src/project-planning.ts",
-    "./project-historical-queries": "./src/project-historical-queries.ts"
+    "./project-historical-queries": "./src/project-historical-queries.ts",
+    "./project-media-input-stages": "./src/project-media-input-stages.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

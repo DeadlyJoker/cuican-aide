@@ -796,6 +796,7 @@ function composeControlApi(
       projectConversations:
         preparedPlugins?.runtime.bindProjectConversations?.(threads),
       projectAssetStages:preparedPlugins?.runtime.projectAssetStages?.(),
+      projectMediaInputStages:preparedPlugins?.runtime.projectMediaInputStages?.(),
       projectConversationRouting: store.projectConversationStore(),
       compactions,
       rollbacks,

@@ -129,6 +129,12 @@ export function projectMediaInputConversationTaskAdmission(
   at: string,
   digester: ContentDigester,
 ) {
+  // A user can submit a previously displayed configuration; fail as a refreshable conflict before any Run is committed.
+  if (task.stage.configurationRevision !== binding.configurationRevision)
+    throw new ApplicationError(
+      "conflict",
+      "project_media_input_stage_configuration_changed",
+    );
   return createProjectMediaInputStageRunAdmission(
     {
       actor: task.authority.actor,

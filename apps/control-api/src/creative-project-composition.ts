@@ -1,4 +1,11 @@
 import {
+  captureProjectMediaInputStageConfiguration,
+  prepareProjectMediaInputStages,
+  type ProjectMediaInputStageConfiguration,
+  type PreparedProjectMediaInputStages,
+} from "./project-media-input-stage-composition.ts";
+import type { ProjectMediaInputStageStore } from "@crewon/application";
+import {
   prepareProjectAssetStages,
   type PreparedProjectAssetStages,
 } from "./project-asset-stage-composition.ts";
@@ -90,6 +97,7 @@ export type CreativeProjectCompositionConfig = ProjectAssetCompositionConfig &
     textUi?: ProjectTextPluginUiConfig;
     textRecovery?: ProjectTextPluginUiConfig;
     conversations?: ProjectConversationConfiguration;
+    mediaInputStages?: ProjectMediaInputStageConfiguration;
     textPlans?: CreativeProjectPluginUiConfig;
     pluginUi?: CreativeProjectPluginUiConfig;
     pluginGenerations?: ProjectGenerationPluginConfiguration;
@@ -113,6 +121,7 @@ export type PreparedCreativeProjects = ProjectAssetCompositionConfig &
     readonly textPlans?: CreativeProjectPluginUiConfig;
     readonly planFoundation?: PreparedProjectTextPlans;
     readonly assetStageFoundation?: PreparedProjectAssetStages;
+    readonly mediaInputStageFoundation?: PreparedProjectMediaInputStages;
     readonly pluginUi?: CreativeProjectPluginUiConfig;
     readonly generationReads?: ProjectGenerationReadConfiguration;
     readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
@@ -153,6 +162,7 @@ type CreativeProjectStoreOwner = ProjectTextRecoveryStoreOwner &
     projectConversationStore?(): ProjectConversationStore;
     projectTextPlanStore?(): ProjectTextPlanStore;
     projectAssetStageStore?(): ProjectAssetStageStore;
+    projectMediaInputStageStore?(): ProjectMediaInputStageStore;
     pluginInstallationStore?(): { migrate(): Promise<void> };
     extensionStore?(): ProjectGenerationReadStore &
       ExtensionStore & {
@@ -180,6 +190,7 @@ export function captureCreativeProjectCompositionConfig(
         key !== "assetRecovery" &&
         key !== "assetReferences" &&
         key !== "assetStages" &&
+        key !== "mediaInputStages" &&
         key !== "textUi" &&
         key !== "textRecovery" &&
         key !== "conversations" &&
@@ -249,6 +260,16 @@ export function captureCreativeProjectCompositionConfig(
     throw new Error("creative_project_configuration_invalid");
   const conversations = captureCreativeProjectPluginUiConfig(
     conversationField?.value,
+  );
+  const mediaField = fields.mediaInputStages;
+  if (
+    mediaField !== undefined &&
+    (!Object.hasOwn(mediaField, "value") || !mediaField.enumerable)
+  )
+    throw new Error("project_media_input_stage_configuration_invalid");
+  const mediaInputStages = captureProjectMediaInputStageConfiguration(
+    mediaField?.value,
+    conversations,
   );
   if (conversations !== undefined && textArtifacts === undefined)
     throw new Error("project_conversation_text_store_required");
@@ -379,6 +400,7 @@ export function captureCreativeProjectCompositionConfig(
         throw new Error("creative_project_authorization_required");
       return Object.freeze({
         ...assets,
+        ...(mediaInputStages === undefined ? {} : { mediaInputStages }),
         authorization: Object.freeze({
           authorize: descriptor.value.bind(port),
         }),
@@ -479,6 +501,16 @@ export async function prepareCreativeProjects(
     texts: textStore,
     authorization: configuration.authorization,
   });
+  const mediaInputStageFoundation = await prepareProjectMediaInputStages(
+    owner,
+    {
+      configuration: configuration.mediaInputStages,
+      conversations: conversationFoundation?.store,
+      projects: store,
+      texts: textStore,
+      authorization: configuration.authorization,
+    },
+  );
   const planFoundation = await prepareProjectTextPlans(owner, {
     configuration: configuration.textPlans,
     conversations: conversationFoundation,
@@ -522,6 +554,9 @@ export async function prepareCreativeProjects(
         );
   return {
     ...assets,
+    ...(mediaInputStageFoundation === undefined
+      ? {}
+      : { mediaInputStageFoundation }),
     ...(assetStageFoundation === undefined
       ? {}
       : {

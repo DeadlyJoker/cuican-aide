@@ -1,3 +1,5 @@
+import { createProjectMediaInputStagePluginOwner } from "./project-media-input-stage-plugin-runtime.ts";
+import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { createProjectAssetStagePluginOwner } from "./project-asset-stage-plugin-runtime.ts";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import {
@@ -76,6 +78,7 @@ export function createProductionProjectConversationRuntime(
     timeoutMs: input.ui.timeoutMs,
     deadline,
   });
+  let mediaInputStages: ProjectMediaInputStageControlOwner | undefined;
   let owner: ProjectConversationControlOwner | undefined,
     closed = false;
   let plans: ProjectTextPlanPluginUiRuntime | undefined;
@@ -126,6 +129,12 @@ export function createProductionProjectConversationRuntime(
               ),
           },
         });
+  const mediaInputFoundation = input.projects?.mediaInputStageFoundation;
+  if (mediaInputFoundation !== undefined)
+    assertCreativeProjectPluginPublications(
+      mediaInputFoundation.configuration,
+      input.ui.publications,
+    );
   const assetFoundation = input.projects?.assetStageFoundation;
   if (assetFoundation !== undefined)
     assertCreativeProjectPluginPublications(
@@ -157,6 +166,7 @@ export function createProductionProjectConversationRuntime(
   return Object.freeze({
     hostUiServices,
     owner: () => owner,
+    mediaInputStages: () => mediaInputStages,
     textPlans: () => plans,
     assetStages: () => assets,
     bindThreads(threads: ThreadApplicationService) {
@@ -265,6 +275,51 @@ export function createProductionProjectConversationRuntime(
           },
         });
       }
+      if (mediaInputFoundation !== undefined) {
+        mediaInputStages = createProjectMediaInputStagePluginOwner({
+          foundation: mediaInputFoundation,
+          threadStore: input.store,
+          digester: input.digester,
+          tasks: {
+            createProjectMediaInputStageTurnFromHost: (...args) => {
+              const actual = input.tasks();
+              if (actual === undefined)
+                throw new ApplicationError(
+                  "conflict",
+                  "project_media_input_stage_execution_unavailable",
+                );
+              return actual.extensionTasks.createProjectMediaInputStageTurnFromHost(
+                ...args,
+              );
+            },
+          },
+          authority: {
+            installations: input.store.pluginInstallationStore(),
+            requests,
+            installRoot: input.ui.installRoot,
+            authorization:
+              taskAuthority?.authorization ?? metadataAuthorization,
+            authorizePackage: async (candidate, signal) => {
+              if (taskAuthority !== undefined)
+                return taskAuthority.authorizePackage(candidate, signal);
+              await requests.assertCurrent();
+              return candidate.purpose === "read" &&
+                input.registry !== undefined
+                ? input.registry.authorizeCandidate(candidate.candidate)
+                : "deny";
+            },
+            assertExternal: () => {
+              if (closed)
+                throw new ApplicationError(
+                  "authorization",
+                  "project_media_input_stage_authority_changed",
+                );
+              taskAuthority?.assertActive();
+              requests.currentSignal().throwIfAborted();
+            },
+          },
+        });
+      }
       if (planFoundation !== undefined) {
         if (input.projects?.textService === undefined)
           throw new Error("project_text_plan_text_commands_required");
@@ -286,6 +341,7 @@ export function createProductionProjectConversationRuntime(
       return (closing ??= Promise.allSettled([
         plans?.close(),
         assets?.close(),
+        mediaInputStages?.close(),
         owner?.close(),
         metadataRequests.close(),
       ]).then((results) => {

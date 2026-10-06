@@ -1,3 +1,5 @@
+import { registerProjectMediaInputStageRoutes } from "./project-media-input-stage-route.ts";
+import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { registerProjectAssetStageRoutes } from "./project-asset-stage-route.ts";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { ApplicationError } from "@crewon/application";
@@ -264,6 +266,7 @@ export type ControlApiDependencies = Readonly<{
   projectAssets?: ProjectAssetApplicationService | null;
   projectMediaInputs?: InstalledProjectMediaInputRuntime | null;
   projectConversations?: ProjectConversationControlOwner | null;
+  projectMediaInputStages?:ProjectMediaInputStageControlOwner|null;
   projectAssetStages?:ProjectAssetStageControlOwner|null;
   projectConversationRouting?: ProjectConversationRouting | null;
   projectGenerationReads?: ProjectGenerationReadApplicationService | null;
@@ -390,6 +393,7 @@ export function buildControlApi(
   });
 
   registerProjectAssetStageRoutes(app,{identity:dependencies.identity,owner:dependencies.projectAssetStages,outboxWakeup:dependencies.outboxWakeup,threads:dependencies.threads});
+  registerProjectMediaInputStageRoutes(app,{identity:dependencies.identity,owner:dependencies.projectMediaInputStages,outboxWakeup:dependencies.outboxWakeup,threads:dependencies.threads});
   registerProjectConversationRoutes(app, {
     identity: dependencies.identity,
     threads: dependencies.threads,

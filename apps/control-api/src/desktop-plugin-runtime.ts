@@ -1,3 +1,4 @@
+import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { isProjectMediaInputUiNamespaceAction } from "@crewon/contracts/project-media-inputs-ui";
 import { composeDesktopProjectMediaInputUi } from "./desktop-project-media-input-ui-composition.ts";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
@@ -87,6 +88,7 @@ export type DesktopPluginRuntime = Readonly<{
   bindProjectConversations?(
     threads: ThreadApplicationService,
   ): ProjectConversationControlOwner | undefined;
+  projectMediaInputStages?(): ProjectMediaInputStageControlOwner | undefined;
   projectAssetStages?(): ProjectAssetStageControlOwner | undefined;
   startProjectTextPlans?(): void;
   consumeProjectTextPlanRunEvents?(
@@ -786,6 +788,7 @@ export async function createDesktopPluginRuntime(
       bindProjectConversations: (threads) =>
         conversations?.bindThreads(threads),
       projectAssetStages: () => conversations?.assetStages(),
+      projectMediaInputStages: () => conversations?.mediaInputStages(),
       startProjectTextPlans: () => conversations?.textPlans()?.start(),
       consumeProjectTextPlanRunEvents: (events) =>
         conversations?.textPlans()?.consumeRunEvents(events) ??

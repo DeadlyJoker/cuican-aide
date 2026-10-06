@@ -1,3 +1,29 @@
+import type {
+  ExtensionTaskApplicationService,
+  ProjectConversationStore,
+  ProjectMediaInputStageStore,
+} from "@crewon/application";
+import type {
+  ProjectConversationBinding,
+  ProjectMediaInputStage,
+} from "@crewon/domain";
+export type MediaInputPublicAdmissionFixture = (
+  input: Readonly<{
+    fixture: Awaited<ReturnType<typeof mediaGenerationFixture>>;
+    binding: ProjectConversationBinding;
+    conversations: ProjectConversationStore;
+    stages: ProjectMediaInputStageStore;
+    threadService: ThreadApplicationService;
+    stage: ProjectMediaInputStage;
+    content: string;
+  }>,
+) => Promise<
+  Awaited<
+    ReturnType<
+      ExtensionTaskApplicationService["createProjectMediaInputStageTurnFromHost"]
+    >
+  >
+>;
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { TestContext } from "node:test";
@@ -14,6 +40,7 @@ export async function mediaInputStageWorkerFixture(
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
   options: Readonly<{
+    admitStage?: MediaInputPublicAdmissionFixture;
     installedFixture?: NonNullable<
       Parameters<typeof mediaGenerationFixture>[2]
     >["installedFixture"];
@@ -140,48 +167,61 @@ export async function mediaInputStageWorkerFixture(
           episodeId: "episode-1",
           contentRevision: 1,
         };
-  const admitted = await f.service.createProjectMediaInputStageTurnFromHost(
-    f.actor,
-    {
-      pluginId: f.pin.pluginId,
-      threadId: binding.threadId,
-      expectedThreadRevision: 1,
-      idempotencyKey: "media-input-agent-stage",
-      intent: {
-        kind: "generate",
-        input: {
-          prompt: "Prepare confirmed media input for the selected workflow.",
+  const content = "Prepare confirmed media input for the selected workflow.";
+  const stage: ProjectMediaInputStage = {
+    kind: "media-input",
+    workflowId:
+      kind === "T10"
+        ? "krea2-reference-four-view"
+        : "flux2-three-reference-storyboard",
+    configurationRevision: 2,
+    briefRevision: 1,
+    script,
+  };
+  const admitted = options.admitStage
+    ? await options.admitStage({
+        fixture: f,
+        binding,
+        conversations,
+        stages,
+        threadService,
+        stage,
+        content,
+      })
+    : await f.service.createProjectMediaInputStageTurnFromHost(
+        f.actor,
+        {
+          pluginId: f.pin.pluginId,
+          threadId: binding.threadId,
+          expectedThreadRevision: 1,
+          idempotencyKey: "media-input-agent-stage",
+          intent: {
+            kind: "generate",
+            input: {
+              prompt:
+                "Prepare confirmed media input for the selected workflow.",
+            },
+          },
         },
-      },
-    },
-    {
-      binding,
-      stage: {
-        kind: "media-input",
-        workflowId:
-          kind === "T10"
-            ? "krea2-reference-four-view"
-            : "flux2-three-reference-storyboard",
-        configurationRevision: 2,
-        briefRevision: 1,
-        script,
-      },
-      sources: {
-        brief: { briefRevision: 1, contentDigest: brief.contentDigest },
-        script:
-          script === null
-            ? null
-            : {
-                ...script,
-                contentDigest: f.script.contentRevision!.contentDigest,
-              },
-      },
-      content: "Prepare confirmed media input for the selected workflow.",
-      authority,
-      conversations,
-      stages,
-    },
-  );
+        {
+          binding,
+          stage,
+          sources: {
+            brief: { briefRevision: 1, contentDigest: brief.contentDigest },
+            script:
+              script === null
+                ? null
+                : {
+                    ...script,
+                    contentDigest: f.script.contentRevision!.contentDigest,
+                  },
+          },
+          content: "Prepare confirmed media input for the selected workflow.",
+          authority,
+          conversations,
+          stages,
+        },
+      );
   const locator = {
     tenantId: f.actor.tenantId,
     spaceId: f.actor.spaceId,
