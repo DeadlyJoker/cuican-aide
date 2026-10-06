@@ -38,9 +38,14 @@ export async function mediaGenerationFixture(
     configurationFixture?: "large";
     /** Only Task scheduling uses real current time, so original queue leases can be exercised. */
     taskClockFixture?: "current";
+    workflowDigestsFixture?: Partial<
+      Record<import("@crewon/application").ProjectMediaWorkflowId, string>
+    >;
   }> = {},
 ) {
-  const f = await projectMediaInputFixture(t, backend);
+  const f = await projectMediaInputFixture(t, backend, {
+    workflowDigestsFixture: options.workflowDigestsFixture,
+  });
   const string = { type: "string" as const, maxLength: 256, enum: null },
     schema = {
       type: "object" as const,

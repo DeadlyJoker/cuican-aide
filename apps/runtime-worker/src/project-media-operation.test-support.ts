@@ -19,11 +19,15 @@ export async function mediaOperationFixture(
     start?: boolean;
     paid?: boolean;
     kind?: "T10" | "D18";
+    workflowDigestsFixture?: Partial<
+      Record<import("@crewon/application").ProjectMediaWorkflowId, string>
+    >;
   }> = {},
 ) {
   const f = await mediaGenerationFixture(t, backend, {
     unmetered: !options.paid,
     taskClockFixture: "current",
+    workflowDigestsFixture: options.workflowDigestsFixture,
   });
   const { task } = await f.prepare(options.kind ?? "T10"),
     accepted = await f.create(task);
@@ -160,6 +164,8 @@ export async function mediaOperationFixture(
     second,
     transition,
     counts,
+    claim,
+    lease,
     retire: () => {
       open = false;
     },

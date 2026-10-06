@@ -43,12 +43,18 @@ import {
   readPackage,
 } from "./installed-plugin-runtime-resolver-package.ts";
 import { PluginExecutionIoOwner } from "./plugin-execution-io.ts";
-import { captureNetworkApproval } from "./plugin-execution-io-network.ts";
 import {
   captureInstalledPluginExecutionIoConfig,
-  installedPluginHasExternalOperation,
   type InstalledPluginExecutionIoDependencies,
 } from "./installed-plugin-execution-io-config.ts";
+import { createInstalledPluginExecutionIoOwner } from "./installed-plugin-execution-io-owner.ts";
+import { authorizeInstalledPluginRuntimeTool } from "./installed-plugin-runtime-tool-authorization.ts";
+import {
+  captureInstalledPluginMediaExecution,
+  createInstalledPluginMediaBoundary,
+  installedPluginMediaHostService,
+  type InstalledPluginMediaExecutionDependencies,
+} from "./installed-plugin-media-execution.ts";
 import {
   closeInstalledPluginProjectToolsStartup,
   createInstalledPluginProjectToolsOwner,
@@ -87,6 +93,7 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoDependencies;
   projectTools?: InstalledPluginProjectToolsDependencies;
+  projectMedia?: InstalledPluginMediaExecutionDependencies;
 }>;
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
 type Resident = InstalledPluginRuntimeResidentLifetime & {
@@ -139,8 +146,20 @@ export class InstalledPluginRuntimeResolver
       fail("installed_plugin_runtime_capacity_invalid");
     this.#maximum = maximum;
     const io = dependencies.executionIo;
+    if (
+      dependencies.projectMedia !== undefined &&
+      dependencies.projectMedia.operations !== io?.operations
+    )
+      fail("installed_plugin_media_operation_owner_mismatch");
     this.#dependencies = Object.freeze({
       ...dependencies,
+      ...(dependencies.projectMedia === undefined
+        ? {}
+        : {
+            projectMedia: captureInstalledPluginMediaExecution(
+              dependencies.projectMedia,
+            ),
+          }),
       ...(io === undefined
         ? {}
         : {
@@ -397,7 +416,25 @@ export class InstalledPluginRuntimeResolver
     let candidate: PluginActivationCandidate | null = null;
     let committedAuthority = false;
     let projectTools: ProjectToolsServiceOwner | null = null;
+    let mediaIo: PluginExecutionIoOwner | null = null;
     try {
+      const media = createInstalledPluginMediaBoundary({
+        dependencies: this.#dependencies.projectMedia,
+        installed: this.#dependencies.contexts,
+        snapshot: prepared.snapshot,
+        admission: prepared.admission,
+      });
+      const mediaService =
+        media === null
+          ? null
+          : installedPluginMediaHostService({
+              context: prepared.snapshot.context,
+              io: () => mediaIo,
+              assertActive: () => {
+                if (this.#closing || entry.closing)
+                  fail("installed_plugin_runtime_resolver_closed");
+              },
+            });
       projectTools = createInstalledPluginProjectToolsOwner({
         dependencies: this.#dependencies.projectTools,
         context: prepared.snapshot.context,
@@ -443,13 +480,18 @@ export class InstalledPluginRuntimeResolver
       // Old hosts that do not support this hook deny the synchronous commit below. The async
       // post-setup current-authority check can never silently degrade to an initial grant.
       const openInput = {
-        ...(projectTools === null
+        ...(projectTools === null && mediaService === null
           ? {}
           : {
               hostServices: [
-                projectTools.hostService(),
-                projectTools.contextHostService(),
-                ...projectTools.assetHostServices(),
+                ...(projectTools === null
+                  ? []
+                  : [
+                      projectTools.hostService(),
+                      projectTools.contextHostService(),
+                      ...projectTools.assetHostServices(),
+                    ]),
+                ...(mediaService === null ? [] : [mediaService]),
               ],
             }),
         activation: {
@@ -568,43 +610,19 @@ export class InstalledPluginRuntimeResolver
         approvalRequirement: prepared.proof.approvalRequirement,
       });
       const io = this.#dependencies.executionIo;
-      if (io !== undefined) {
-        const network = await io.resolveNetwork(context, input.signal);
-        this.#assertOpen(input.signal);
-        await this.#authorize(resident, input.purpose, input.signal);
-        if (network !== null) {
-          resident.io = new PluginExecutionIoOwner({
-            ...io,
-            context,
-            approvalRequirement: prepared.proof.approvalRequirement,
-            network,
-            authorize: async (operation) => {
-              await this.#authorize(
-                resident,
-                operation.purpose,
-                operation.signal,
-              );
-              const current = await io.resolveNetwork(
-                context,
-                operation.signal,
-              );
-              operation.signal.throwIfAborted();
-              if (
-                current === null ||
-                extensionCanonicalJson(captureNetworkApproval(current)) !==
-                  extensionCanonicalJson(resident.io!.networkApproval)
-              )
-                fail("installed_plugin_runtime_network_denied");
-              await this.#authorize(
-                resident,
-                operation.purpose,
-                operation.signal,
-              );
-            },
-          });
-          services = resident.io.services;
-        }
-      }
+      resident.io = await createInstalledPluginExecutionIoOwner({
+        context,
+        approvalRequirement: prepared.proof.approvalRequirement,
+        config: io,
+        media,
+        purpose: input.purpose,
+        signal: input.signal,
+        authorize: (purpose, signal) =>
+          this.#authorize(resident, purpose, signal),
+        assertOpen: (signal) => this.#assertOpen(signal),
+      });
+      mediaIo = resident.io;
+      if (resident.io !== null) services = resident.io.services;
       this.#assertOpen(input.signal);
       const raw = await resident.borrow.factory.create(context, services);
       resident.hasRuntime = true;
@@ -614,44 +632,17 @@ export class InstalledPluginRuntimeResolver
         context: prepared.snapshot.context,
         definitions: prepared.definitions,
         policyContext: prepared.policyContext,
-        authorize: async (operation) => {
-          const declared = prepared.proof.registration.manifest.tools.find(
-            (tool) =>
-              extensionToolName(
-                prepared.admission.pluginId,
-                tool.operationId,
-              ) === operation.command.name,
-          );
-          const intent = operation.command.actionIntent;
-          if (
-            declared === undefined ||
-            intent.effect !== declared.effect ||
-            intent.recovery !== declared.recovery ||
-            intent.capability !== declared.capability ||
-            intent.approvalRequirement !==
-              (declared.effect === "mutation"
-                ? prepared.proof.approvalRequirement
-                : "none") ||
-            (context.run.source !== null && declared.effect !== "readOnly")
-          )
-            fail("installed_plugin_runtime_policy_mismatch");
-          let purpose = installedPluginToolOperationPurpose(operation);
-          if (
-            purpose === "submit" &&
-            operation.method === "execute" &&
-            resident.io !== null &&
-            io !== undefined &&
-            context.run.source === null &&
-            (await installedPluginHasExternalOperation({
-              context,
-              command: operation.command,
-              operations: io.operations,
-              signal: operation.signal,
-            }))
-          )
-            purpose = "observe";
-          await this.#authorize(resident, purpose, operation.signal);
-        },
+        authorize: (operation) =>
+          authorizeInstalledPluginRuntimeTool({
+            operation,
+            context,
+            tools: prepared.proof.registration.manifest.tools,
+            approvalRequirement: prepared.proof.approvalRequirement,
+            operations: resident.io === null ? undefined : io?.operations,
+            media,
+            authorize: (purpose, signal) =>
+              this.#authorize(resident, purpose, signal),
+          }),
         ...(resident.io === null && resident.projectTools === null
           ? {}
           : {

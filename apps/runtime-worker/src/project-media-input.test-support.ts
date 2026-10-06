@@ -7,6 +7,7 @@ import {
   type ProjectMediaWorkflowReview,
   type ProjectMediaInputAuthorizationPort,
   projectMediaInputAuthority,
+  type ProjectMediaWorkflowId,
 } from "@crewon/application";
 import { projectMaterialPreparerFixture } from "./project-material-preparer.test-support.ts";
 import { selectionVerifier } from "../../../packages/store/src/project-concept-selection.test-support.ts";
@@ -22,7 +23,11 @@ import { materialPng } from "./project-material-png.test-support.ts";
 export async function projectMediaInputFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: { migrate?: boolean; sameCharacterBytes?: boolean } = {},
+  options: {
+    migrate?: boolean;
+    sameCharacterBytes?: boolean;
+    workflowDigestsFixture?: Partial<Record<ProjectMediaWorkflowId, string>>;
+  } = {},
 ) {
   const f = await projectMaterialPreparerFixture(t, backend);
   const newReference = async (
@@ -145,7 +150,9 @@ export async function projectMediaInputFixture(
       targetIdentity: f.reviewedTarget,
       workflow: {
         workflowId: "krea2-reference-four-view",
-        workflowDigest: f.digester.sha256("named-deployed-T10-graph"),
+        workflowDigest:
+          options.workflowDigestsFixture?.["krea2-reference-four-view"] ??
+          f.digester.sha256("named-deployed-T10-graph"),
         output: { kind: "image", nodeId: "129", dimensions: "workflow-native" },
       },
     },
@@ -153,7 +160,10 @@ export async function projectMediaInputFixture(
       targetIdentity: f.reviewedTarget,
       workflow: {
         workflowId: "flux2-three-reference-storyboard",
-        workflowDigest: f.digester.sha256("named-deployed-D18-graph"),
+        workflowDigest:
+          options.workflowDigestsFixture?.[
+            "flux2-three-reference-storyboard"
+          ] ?? f.digester.sha256("named-deployed-D18-graph"),
         output: { kind: "image", nodeId: "17", dimensions: "workflow-native" },
       },
     },

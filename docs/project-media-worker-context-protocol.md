@@ -24,7 +24,7 @@
 
 本组件的返回值是已检查的**渲染输入数据**，不是Tool执行或网络授权。下一项必须在原Tool owner的实际command、invocation、operation reservation及受控IO边界内接它：首次发送前检查，已dispatch/受理未知时只沿原操作恢复；不能因拿到DTO而发HTTP，也不能先创建新operation来规避旧未知状态。真实工作流适配器还须核模板摘要与已接受工作流摘要相同。
 
-原Run唯一不等于供应商请求唯一。现有通用IO按Tool请求键派生operation，模型再次调用可产生不同键。[候选原请求占用](./project-media-operation-protocol.md)已在原 native operation 事务内实现，固定到已接受的executionId/Run；不同Tool请求键不能领取第二个请求，宿主可读取已占用原请求。观察结果未明时不释放占用；明确的新候选经过新的执行意图和Run准入。实际Tool服务与提交/查询适配器仍待接线。
+原Run唯一不等于供应商请求唯一。现有通用IO按Tool请求键派生operation，模型再次调用可产生不同键。[候选原请求占用](./project-media-operation-protocol.md)已在原 native operation 事务内实现，固定到已接受的executionId/Run；不同Tool请求键不能领取第二个请求，宿主可读取已占用原请求。观察结果未明时不释放占用；明确的新候选经过新的执行意图和Run准入。[原 Tool IO 与确认图/字节检查](./project-media-execution-io-protocol.md)已在实际宿主 owner 与 resolver 接线；新包实际 handler、结果回写及 Main/两入口继续实施。
 
 ## 验证与下一项
 

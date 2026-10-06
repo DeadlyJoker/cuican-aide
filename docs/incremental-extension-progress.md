@@ -26,9 +26,21 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 [媒体原Run事务准入](./project-media-generation-run-protocol.md)已通过宿主内部双库验证：同一原Turn固定输入修订、真实准备事件和候选执行意图，原键重放/冷恢复不重新上传，来源和目标变化阻止新Run，事务中撤活动回滚全部新行。190项相关回归通过、零跳过；真实Worker提交、结果回写、Main和手动/Agent入口继续接线。原前端、SDK、完整插件包及用户App保持，积分后置，完整目标继续ACTIVE。
 
-[Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。[候选原供应商请求占用](./project-media-operation-protocol.md)随后通过234项相关回归；真实Tool/IO接线、结果回写及Main/两入口仍待实施，不作为正式媒体流程交付，完整目标继续ACTIVE。
+[Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。[候选原供应商请求占用](./project-media-operation-protocol.md)随后通过234项相关回归；[原Tool IO与确认图/字节检查](./project-media-execution-io-protocol.md)已接到实际宿主owner与resolver，通过303项相关回归。新包实际媒体handler、结果回写及Main/两入口仍待联合接线，不作为正式媒体流程交付，完整目标继续ACTIVE。
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：原 Tool IO 与已确认媒体图
+
+[实际 IO 接线](./project-media-execution-io-protocol.md)把原 Worker 私有输入、真实候选占用和受控 HTTP 组合起来。新具名 Host Service 必须在实际原 Tool invocation 中读取输入；setup、命令副本和错误 reader 不取得资格。T10/D18 插件仍渲染自己的模板，宿主核完整确认图，只开放已审查提示词、参考图和原 operation 输出前缀，其余模型/种子/连接保持。原 operation 领取前和真正 POST 前核当前字节，DNS后再核网络/PDP/输入和 Worker 派发资格。合法 service origin 的尾部根路径差异已修正。
+
+已有候选通过原槽读出 operation，不同 Tool 键可观察原记录，不能另领或重发；源/head变化不要求旧观察重新读取图像或上传。实际收到的响应允许保存晚到证据，受理未知不释放占用。原 resolver 只把已经占用的图像生成重放按 observe 核资格，不降低其他项目 mutation。
+
+相关回归 **303/303** 通过，零失败/取消/跳过；新增29项为其中子集，各轮不重复累加。四包类型、架构边界和TS/仓库格式通过；原SDK源/dist/tar、完整插件包和App保持核验通过。双库检查使用实际项目/Run/领取/leased start、加密PNG/原journal和原IO/私有Worker proof；原完整20.0.2包经核验后仅用实际纯渲染适配器。目标安装元数据、PDP/发布与部署审查、DNS/供应商响应和工具回执签发是具名夹具，不作为真实新包handler、完整RuntimeWorker/Main、正式桌面或远端模型/供应商生成验收。
+
+首轮合法origin比较和总行数基线失败保留；该轮明确结束自有测试子进程，不算完整通过。随后92/93的审查输出解析错误修正为合法字段的错误模板类测试，最终303项回归通过。三轮自有PostgreSQL正常停止并按目录身份清理，运行均已结束，记录见 `output/extensions/checks/project-media-execution-io-20261006/verification.json`。
+
+下一项落实新包实际媒体handler/原查询和结果候选，再接Main、手动与Agent同一入口。结构化分镜、视频/声音/成片及跨阶段自动化继续按完整规格推进；原UI和用户App保持，积分后置，目标ACTIVE。
 
 ## 2026-10-06：Worker私有媒体上下文与提交前检查
 

@@ -36,6 +36,10 @@ import {
   type PluginExecutionNetworkApproval,
   type PluginIoHttpRequest,
 } from "./plugin-execution-io-network.ts";
+import {
+  ProjectMediaExecutionBoundary,
+  captureProjectMediaExecutionBoundary,
+} from "../project-media-execution-boundary.ts";
 
 type InvocationInput = Readonly<{
   command: ToolExecutionCommand;
@@ -62,6 +66,8 @@ export type PluginExecutionIoDependencies = Readonly<{
   dns?: NetworkDnsResolver;
   transport?: PinnedHttpPort;
   now?: () => Date;
+  /** Genuine host composition for admitted confirmed-media Runs, never a plugin DTO or SDK field. */
+  projectMedia?: ProjectMediaExecutionBoundary;
 }>;
 
 /** Host-only IO owner. Neither public context metadata nor copied commands can enter this scope. */
@@ -75,11 +81,23 @@ export class PluginExecutionIoOwner {
   readonly #abort = new AbortController();
   readonly #idleWaiters = new Set<() => void>();
   readonly #now: () => Date;
+  readonly #media: ReturnType<
+    typeof captureProjectMediaExecutionBoundary
+  > | null;
+  readonly #origin: string;
   #closed = false;
   #closeTask: Promise<void> | null = null;
   readonly services: PluginExecutionServices;
 
   constructor(input: PluginExecutionIoDependencies) {
+    this.#media =
+      input.projectMedia === undefined
+        ? null
+        : captureProjectMediaExecutionBoundary(
+            input.projectMedia,
+            input.context,
+            input.operations,
+          );
     this.#network = captureNetworkApproval(input.network);
     this.#dependencies = Object.freeze({
       ...input,
@@ -98,6 +116,7 @@ export class PluginExecutionIoOwner {
     const baseUrl =
       input.context.configuration.parameters[this.#network.baseUrlParameter];
     if (typeof baseUrl !== "string") ioFailure("service_configuration_invalid");
+    this.#origin = new URL(baseUrl).origin;
     this.#http = new PluginExecutionJsonHttp({
       baseUrl,
       tenantId: input.context.scope.tenantId,
@@ -151,6 +170,29 @@ export class PluginExecutionIoOwner {
   get networkApproval(): PluginExecutionNetworkApproval {
     return this.#network;
   }
+  /** Host service bridge only. The actual active command is required, including through Node setup. */
+  readProjectMediaInput(value: Readonly<{ command: ToolExecutionCommand }>) {
+    const input = ioRecord(value, ["command"]),
+      invocation = this.#invocation(input.command, true);
+    if (!this.#media) ioFailure("media_unavailable");
+    return this.#track(invocation, async () => {
+      const signal = this.#mediaSignal(invocation);
+      const existing = await this.#media!.readOperation(signal);
+      await this.#authorize(invocation, existing ? "observe" : "submit");
+      const result = await this.#media!.readInput(signal);
+      this.#assertGrant(invocation, true);
+      return result;
+    });
+  }
+  #mediaSignal(invocation: Invocation): AbortSignal {
+    return AbortSignal.any([
+      invocation.signal,
+      this.#abort.signal,
+      AbortSignal.timeout(
+        Math.min(30000, invocation.command.actionIntent.limits.timeoutMs),
+      ),
+    ]);
+  }
 
   canRetire(): boolean {
     return !this.#closed && this.#active.size === 0 && this.#pending.size === 0;
@@ -202,6 +244,16 @@ export class PluginExecutionIoOwner {
   async #authorize(invocation: Invocation, purpose: "submit" | "observe") {
     this.#assertGrant(invocation, true);
     if (this.#closed) ioFailure("closed");
+    if (
+      this.#media &&
+      (purpose === "submit"
+        ? invocation.command.actionIntent.capability !==
+          "extension.image.generate"
+        : !["extension.image.generate", "extension.image.read"].includes(
+            invocation.command.actionIntent.capability,
+          ))
+    )
+      ioFailure("media_capability_denied");
     if (
       purpose === "submit" &&
       (invocation.method !== "execute" ||
@@ -338,6 +390,11 @@ export class PluginExecutionIoOwner {
       if (existing !== null) {
         await this.#authorize(invocation, "observe");
         const operation = this.#record(existing, locator);
+        await this.#media?.assertOperation(
+          operation,
+          "observe",
+          this.#mediaSignal(invocation),
+        );
         this.#replay(operation, command, requestDigest);
         return {
           disposition: "existing" as const,
@@ -346,6 +403,12 @@ export class PluginExecutionIoOwner {
         };
       }
       await this.#authorize(invocation, "submit");
+      await this.#media?.assertSubmission(
+        request,
+        locator.operationId,
+        this.#origin,
+        this.#mediaSignal(invocation),
+      );
       const saved =
         await this.#dependencies.operations.reserveExternalOperation({
           ...locator,
@@ -357,6 +420,11 @@ export class PluginExecutionIoOwner {
           createdAt: this.#now().toISOString(),
         });
       const operation = this.#record(saved.operation, locator);
+      await this.#media?.assertOperation(
+        operation,
+        saved.disposition === "created" ? "submit" : "observe",
+        this.#mediaSignal(invocation),
+      );
       this.#replay(operation, command, requestDigest);
       this.#assertGrant(invocation, true);
       this.#allows(request, operation);
@@ -400,7 +468,14 @@ export class PluginExecutionIoOwner {
       const operation =
         await this.#dependencies.operations.loadExternalOperation(locator);
       this.#assertGrant(invocation, true);
-      return operation === null ? null : this.#record(operation, locator);
+      if (operation === null) return null;
+      const saved = this.#record(operation, locator);
+      await this.#media?.assertOperation(
+        saved,
+        "observe",
+        this.#mediaSignal(invocation),
+      );
+      return saved;
     });
   }
 
@@ -428,6 +503,7 @@ export class PluginExecutionIoOwner {
         await this.#dependencies.operations.loadExternalOperation(locator);
       if (current === null) ioFailure("operation_missing");
       const operation = this.#record(current, locator);
+      await this.#media?.assertOperationIdentity(operation);
       const state = ioJson(
         {
           expectedRevision: input.expectedRevision,
@@ -502,6 +578,11 @@ export class PluginExecutionIoOwner {
         await this.#dependencies.operations.loadExternalOperation(locator);
       if (saved === null) ioFailure("operation_missing");
       const operation = this.#record(saved, locator);
+      await this.#media?.assertOperation(
+        operation,
+        purpose,
+        this.#mediaSignal(invocation),
+      );
       if (method === "POST") {
         this.#replay(operation, invocation.command, digest(request));
         if (
@@ -511,6 +592,13 @@ export class PluginExecutionIoOwner {
           ioFailure("dispatch_capability_invalid");
       }
       this.#allows(request, operation);
+      if (method === "POST")
+        await this.#media?.assertSubmission(
+          request as PluginJsonHttpSubmission,
+          locator.operationId,
+          this.#origin,
+          this.#mediaSignal(invocation),
+        );
       const signal = AbortSignal.any([
         invocation.signal,
         this.#abort.signal,
@@ -524,6 +612,11 @@ export class PluginExecutionIoOwner {
           await this.#dependencies.operations.loadExternalOperation(locator);
         if (current === null) ioFailure("operation_missing");
         const fresh = this.#record(current, locator);
+        await this.#media?.assertOperation(
+          fresh,
+          purpose,
+          this.#mediaSignal(invocation),
+        );
         this.#assertGrant(invocation, true);
         if (method === "POST") {
           this.#replay(fresh, invocation.command, digest(request));
@@ -534,6 +627,14 @@ export class PluginExecutionIoOwner {
             ioFailure("dispatch_capability_invalid");
         }
         this.#allows(request, fresh);
+        if (method === "POST")
+          await this.#media?.assertSubmission(
+            request as PluginJsonHttpSubmission,
+            locator.operationId,
+            this.#origin,
+            this.#mediaSignal(invocation),
+          );
+        this.#assertGrant(invocation, true);
       });
       invocation.responses.add(locator.operationId);
       return response;

@@ -16,6 +16,7 @@ import {
   type ProjectMediaInputAuthorizationPort,
   type ProjectMediaWorkflow,
   type ProjectMediaRole,
+  type ProjectMediaWorkflowReview,
 } from "@crewon/application";
 import type { PluginTaskAdmission } from "@crewon/domain";
 import { SqliteExtensionStore, PostgresExtensionStore } from "@crewon/store";
@@ -74,6 +75,7 @@ type Saved = Readonly<{
  * Actual installed Run, accepted SQL history and current bytes have distinct roles.
  */
 export class ProjectMediaRunContext {
+  readonly #installedOwner: InstalledPluginRunContext;
   readonly #installedCurrent: InstalledPluginRunContext["assertCurrent"];
   readonly #admission: InstalledPluginRunContext["verifiedTaskAdmission"];
   readonly #read: SqliteExtensionStore["loadProjectMediaGenerationContext"];
@@ -107,6 +109,7 @@ export class ProjectMediaRunContext {
       )
     )
       fail("dependency_invalid");
+    this.#installedOwner = input.installed;
     this.#installedCurrent =
       InstalledPluginRunContext.prototype.assertCurrent.bind(input.installed);
     this.#admission =
@@ -239,6 +242,33 @@ export class ProjectMediaRunContext {
       reference: saved.context.link.reference,
       workflow: saved.context.input.workflow,
     });
+  }
+  /** Host-only current identity/history checks. Neither this nor its target projection grants IO. */
+  async assertCurrent(
+    snapshot: ProjectMediaRunSnapshot,
+    options: Readonly<{
+      purpose: InstalledPluginRunPurpose;
+      signal: AbortSignal;
+    }>,
+  ): Promise<void> {
+    const { purpose, signal } = this.#options(options);
+    await this.#current(this.#saved(snapshot), purpose, signal);
+  }
+  verifiedExecutionTarget(
+    snapshot: ProjectMediaRunSnapshot,
+  ): ProjectMediaWorkflowReview["targetIdentity"] {
+    const target = this.#saved(snapshot).context.input.target;
+    return Object.freeze({
+      pluginId: "crewon.short-drama",
+      version: target.installation.version,
+      publisherId: target.installation.publisherId,
+      packageDigest: target.installation.packageDigest,
+      manifestDigest: target.configuration.manifestDigest,
+      implementationDigest: target.configuration.implementationDigest,
+    });
+  }
+  assertInstalledReader(installed: InstalledPluginRunContext): void {
+    if (installed !== this.#installedOwner) fail("dependency_invalid");
   }
   #saved(snapshot: ProjectMediaRunSnapshot) {
     const value = this.#snapshots.get(snapshot);
