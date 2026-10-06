@@ -1,3 +1,4 @@
+import { checkNativeOwnershipFile } from "./desktop-native-ownership-check.ts";
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 import { lstatSync } from "node:fs";
@@ -64,7 +65,7 @@ export function assertDesktopNativePluginControlConfigCurrent(
   value: unknown,
 ): asserts value is DesktopNativePluginControlConfig {
   if (!isDesktopNativePluginControlConfig(value)) invalid();
-  issued.get(value)!.assertCurrent();
+  checkNativeOwnershipFile(value, issued.get(value)!.assertCurrent);
 }
 /** Only the original Main's private, byte-pinned file can lend this local execution authority. */
 export function loadDesktopNativePluginControlEnvironment(

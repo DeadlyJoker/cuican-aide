@@ -1,3 +1,4 @@
+import { validateNativeOwnership } from "./desktop-native-ownership-check.ts";
 import {
   ApplicationError,
   type ActorContext,
@@ -222,7 +223,6 @@ export class DesktopNativePluginTaskAuthority {
     ) =>
       this.#operation(async () => {
         const request = pluginSecurityUiRequest(provided);
-        this.#owner(request.actor);
         this.#binding.authority.assertScope(request.actor, {
           tenantId: request.resource.tenantId,
           spaceId: request.resource.spaceId,
@@ -355,50 +355,64 @@ export class DesktopNativePluginTaskAuthority {
     ));
   }
   #owner(actor: ActorContext): void {
-    this.#lifetime.signal.throwIfAborted();
-    assertDesktopNativePluginControlConfigCurrent(this.#binding.nativeControl);
-    this.#binding.authority.assertScope(
-      pluginSecurityActor(actor),
-      this.#binding.configuration.scope,
-    );
-    this.#binding.installation.assertProfileOwnership(actor);
-    this.#binding.activationOwner.assertTaskPeerBorrow({
-      ...this.#binding,
-      activation: this.#binding.nativeControl,
+    validateNativeOwnership(() => {
+      this.#lifetime.signal.throwIfAborted();
+      assertDesktopNativePluginControlConfigCurrent(
+        this.#binding.nativeControl,
+      );
+      this.#binding.authority.assertScope(
+        pluginSecurityActor(actor),
+        this.#binding.configuration.scope,
+      );
+      this.#binding.installation.assertProfileOwnership(actor);
+      this.#binding.activationOwner.assertTaskPeerBorrow({
+        ...this.#binding,
+        activation: this.#binding.nativeControl,
+      });
+      assertDesktopPluginConfigurationRuntime(this.#binding.installed, {
+        ...this.#binding,
+        activation: this.#binding.activationOwner,
+      });
+      this.#lifetime.signal.throwIfAborted();
     });
-    assertDesktopPluginConfigurationRuntime(this.#binding.installed, {
-      ...this.#binding,
-      activation: this.#binding.activationOwner,
-    });
-    this.#lifetime.signal.throwIfAborted();
   }
   #commitOwner(actor: ActorContext): void {
-    this.#lifetime.signal.throwIfAborted();
-    assertDesktopNativePluginControlConfigCurrent(this.#binding.nativeControl);
-    this.#binding.authority.assertScope(
-      actor,
-      this.#binding.configuration.scope,
-    );
-    this.#binding.installation.assertProfileOwnershipForSelectionCommit(actor);
-    this.requests.currentSignal().throwIfAborted();
-    if (
-      !same(this.requests.currentActor(), actor) ||
-      !same(this.requests.currentScope(), this.#binding.configuration.scope)
-    )
-      denied();
+    validateNativeOwnership(() => {
+      this.#lifetime.signal.throwIfAborted();
+      assertDesktopNativePluginControlConfigCurrent(
+        this.#binding.nativeControl,
+      );
+      this.#binding.authority.assertScope(
+        actor,
+        this.#binding.configuration.scope,
+      );
+      this.#binding.installation.assertProfileOwnershipForSelectionCommit(
+        actor,
+      );
+      this.requests.currentSignal().throwIfAborted();
+      if (
+        !same(this.requests.currentActor(), actor) ||
+        !same(this.requests.currentScope(), this.#binding.configuration.scope)
+      )
+        denied();
+    });
   }
   async #request(actor: ActorContext): Promise<void> {
-    this.#owner(actor);
+    this.#lifetime.signal.throwIfAborted();
     if (
       !same(this.requests.currentActor(), actor) ||
       !same(this.requests.currentScope(), this.#binding.configuration.scope)
     )
       denied();
     await this.requests.assertCurrent();
+    // The original request owner authenticates and resolves the live profile.
+    // Validate every borrowed owner after that await, before granting anything.
     this.#owner(actor);
   }
   #operation<T>(work: () => Promise<T>): Promise<T> {
-    this.#owner(this.#binding.configuration.actor);
+    // Each operation checks its owner before returning a decision or receipt.
+    // Scheduling bounded work does not itself grant access.
+    this.#lifetime.signal.throwIfAborted();
     if (this.#physical.size >= 128) denied();
     const pending = Promise.resolve().then(work);
     this.#physical.add(pending);

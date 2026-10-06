@@ -1,3 +1,4 @@
+import { validateNativeOwnership } from "./desktop-native-ownership-check.ts";
 import {
   ApplicationError,
   type ActorContext,
@@ -416,20 +417,22 @@ export class DesktopInstalledPluginActivationOwner {
     });
   }
   #assertOwner(actorInput: ActorContext): void {
-    this.#lifetime.signal.throwIfAborted();
-    assertActivation(this.#dependencies.activation);
-    const actor = pluginSecurityActor(actorInput);
-    this.#dependencies.authority.assertScope(
-      actor,
-      this.#dependencies.configuration.scope,
-    );
-    assertActivation(this.#dependencies.activation);
-    this.#dependencies.installation.assertProfileOwnership(actor);
-    this.#dependencies.authority.assertScope(
-      actor,
-      this.#dependencies.configuration.scope,
-    );
-    this.#lifetime.signal.throwIfAborted();
+    validateNativeOwnership(() => {
+      this.#lifetime.signal.throwIfAborted();
+      assertActivation(this.#dependencies.activation);
+      const actor = pluginSecurityActor(actorInput);
+      this.#dependencies.authority.assertScope(
+        actor,
+        this.#dependencies.configuration.scope,
+      );
+      assertActivation(this.#dependencies.activation);
+      this.#dependencies.installation.assertProfileOwnership(actor);
+      this.#dependencies.authority.assertScope(
+        actor,
+        this.#dependencies.configuration.scope,
+      );
+      this.#lifetime.signal.throwIfAborted();
+    });
   }
   #assertSelectionCommitOwner(actorInput: ActorContext): void {
     this.#lifetime.signal.throwIfAborted();

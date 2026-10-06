@@ -1,3 +1,4 @@
+import { validateNativeOwnership } from "./desktop-native-ownership-check.ts";
 import { createDesktopProjectPlanDelegatedIdentity } from "./desktop-project-plan-delegated-identity.ts";
 import {
   ApplicationError,
@@ -158,20 +159,21 @@ export async function createDesktopPluginConfigurationRuntime(
       store: dependencies.store,
     });
   }
-  const assertOwner = (actor: ActorContext) => {
-    if (fileConfiguration !== undefined)
-      assertDesktopPluginConfigurationFileCurrent(fileConfiguration);
-    authority.assertScope(actor, configuration.scope);
-    installation.assertProfileOwnership(actor);
-    authority.assertScope(actor, configuration.scope);
-    activation?.assertBinding({
-      configuration,
-      registry,
-      authority,
-      installation,
-      store: dependencies.store,
+  const assertOwner = (actor: ActorContext) =>
+    validateNativeOwnership(() => {
+      if (fileConfiguration !== undefined)
+        assertDesktopPluginConfigurationFileCurrent(fileConfiguration);
+      authority.assertScope(actor, configuration.scope);
+      installation.assertProfileOwnership(actor);
+      authority.assertScope(actor, configuration.scope);
+      activation?.assertBinding({
+        configuration,
+        registry,
+        authority,
+        installation,
+        store: dependencies.store,
+      });
     });
-  };
   assertOwner(configuration.actor);
   let requests: InstalledPluginRequestOwner | undefined;
   let metadata: InstalledPluginConfigurationMetadata | undefined;
@@ -192,10 +194,11 @@ export async function createDesktopPluginConfigurationRuntime(
         if (!same(actor, current().currentActor())) denied();
         const signal = current().currentSignal();
         signal.throwIfAborted();
-        assertOwner(actor);
         const scope = await authority.profile(actor);
         signal.throwIfAborted();
-        authority.assertScope(actor, scope);
+        if (!same(scope, configuration.scope)) denied();
+        // profile() validates its own authority. Recheck the complete owner
+        // after the await so withdrawal or takeover cannot escape this read.
         assertOwner(actor);
         return scope;
       },

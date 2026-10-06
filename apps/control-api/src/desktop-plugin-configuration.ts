@@ -1,3 +1,4 @@
+import { checkNativeOwnershipFile } from "./desktop-native-ownership-check.ts";
 import {
   closeSync,
   constants,
@@ -333,64 +334,66 @@ export async function loadDesktopPluginConfiguration(
 export function assertDesktopPluginConfigurationFileCurrent(
   value: DesktopPluginConfiguration,
 ): void {
-  try {
-    const issued = fileIssued.get(value);
-    if (issued === undefined) invalid();
-    const directories = () => {
-      for (const pin of issued.directories) {
-        const current = lstatSync(pin.path, { bigint: true });
-        if (
-          !current.isDirectory() ||
-          current.isSymbolicLink() ||
-          current.dev !== pin.stat.dev ||
-          current.ino !== pin.stat.ino ||
-          current.mode !== pin.stat.mode ||
-          current.uid !== pin.stat.uid
-        )
-          invalid();
-      }
-    };
-    directories();
-    const before = lstatSync(issued.filename, { bigint: true });
-    if (
-      !before.isFile() ||
-      before.isSymbolicLink() ||
-      !sameLeaf(before, issued.leaf)
-    )
-      invalid();
-    const fd = openSync(
-      issued.filename,
-      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-    );
+  checkNativeOwnershipFile(value, () => {
     try {
-      if (!sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf)) invalid();
-      const storage = Buffer.allocUnsafe(MAX_BYTES + 1);
-      let length = 0;
-      while (length < storage.length) {
-        const count = readSync(
-          fd,
-          storage,
-          length,
-          storage.length - length,
-          null,
-        );
-        if (count === 0) break;
-        length += count;
-      }
+      const issued = fileIssued.get(value);
+      if (issued === undefined) invalid();
+      const directories = () => {
+        for (const pin of issued.directories) {
+          const current = lstatSync(pin.path, { bigint: true });
+          if (
+            !current.isDirectory() ||
+            current.isSymbolicLink() ||
+            current.dev !== pin.stat.dev ||
+            current.ino !== pin.stat.ino ||
+            current.mode !== pin.stat.mode ||
+            current.uid !== pin.stat.uid
+          )
+            invalid();
+        }
+      };
+      directories();
+      const before = lstatSync(issued.filename, { bigint: true });
       if (
-        length !== Number(issued.leaf.size) ||
-        !storage.subarray(0, length).equals(issued.bytes) ||
-        !sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf) ||
-        !sameLeaf(lstatSync(issued.filename, { bigint: true }), issued.leaf)
+        !before.isFile() ||
+        before.isSymbolicLink() ||
+        !sameLeaf(before, issued.leaf)
       )
         invalid();
-      directories();
-    } finally {
-      closeSync(fd);
+      const fd = openSync(
+        issued.filename,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        if (!sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf)) invalid();
+        const storage = Buffer.allocUnsafe(MAX_BYTES + 1);
+        let length = 0;
+        while (length < storage.length) {
+          const count = readSync(
+            fd,
+            storage,
+            length,
+            storage.length - length,
+            null,
+          );
+          if (count === 0) break;
+          length += count;
+        }
+        if (
+          length !== Number(issued.leaf.size) ||
+          !storage.subarray(0, length).equals(issued.bytes) ||
+          !sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf) ||
+          !sameLeaf(lstatSync(issued.filename, { bigint: true }), issued.leaf)
+        )
+          invalid();
+        directories();
+      } finally {
+        closeSync(fd);
+      }
+    } catch {
+      invalid();
     }
-  } catch {
-    invalid();
-  }
+  });
 }
 function sameLeaf(a: BigIntStats, b: BigIntStats): boolean {
   return (
