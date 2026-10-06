@@ -312,6 +312,8 @@ export async function mediaGenerationControlFixture(
     command,
     binding,
     controlState: state,
+    request,
+    identity,
     generate,
     revoke,
     run,

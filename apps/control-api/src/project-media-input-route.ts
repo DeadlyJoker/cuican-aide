@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { ContractValidationError } from "@crewon/contracts";
 import {
   parseSaveMediaInputHttpRequest,
@@ -12,6 +12,8 @@ import {
   isInstalledProjectMediaInputRuntime,
   InstalledProjectMediaInputRuntime,
 } from "./installed-project-media-input-runtime.ts";
+
+import { withProjectMediaRequestSignal as withRequestSignal } from "./project-media-request-signal.ts";
 
 const ROOT = "/api/v1/creative-projects/:projectId/media-inputs";
 /** Authenticated metadata only. The native owner derives actor/profile and rechecks purpose inside SQL. */
@@ -114,26 +116,6 @@ function querySnapshot(input: unknown, allowed: readonly string[]) {
     copy[key] = field.value;
   }
   return Object.freeze(copy);
-}
-async function withRequestSignal<T>(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  work: (signal: AbortSignal) => Promise<T>,
-): Promise<T> {
-  const controller = new AbortController(),
-    abort = () => controller.abort(),
-    closed = () => {
-      if (!reply.raw.writableEnded) abort();
-    };
-  request.raw.once("aborted", abort);
-  reply.raw.once("close", closed);
-  if (request.raw.aborted || reply.raw.destroyed) abort();
-  try {
-    return await work(controller.signal);
-  } finally {
-    request.raw.removeListener("aborted", abort);
-    reply.raw.removeListener("close", closed);
-  }
 }
 function invalid(): never {
   throw new ContractValidationError("project_media_inputs_contract_invalid");

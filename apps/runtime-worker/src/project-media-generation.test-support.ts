@@ -414,6 +414,8 @@ export async function mediaGenerationFixture(
   return {
     ...f,
     ...current,
+    generationReviews: reviews,
+    generationAuthorization: authorization,
     command,
     d18Command,
     generation: state,

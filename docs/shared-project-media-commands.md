@@ -20,7 +20,7 @@
 
 ## 产品接入范围
 
-该服务是宿主内部入口，尚不直接注册 HTTP 或页面动作，也不把原内部 Run/候选记录原样返回模型。下一步在原 Control/Main 装配当前 profile 和会话权限，提供有界生成、查询与候选投影，再连接短剧插件按钮和 Agent 工具。候选采用需独立校验预期版本，不能用供应商任务成功代替采用。
+共享命令仍是宿主内部服务。Control 已增加可选的请求运行时和有界 HTTP 生成入口（见下节），默认不注册；正式 Native Main 的独立生成声明、页面动作和 Agent 工具尚待装配。后续提供查询与候选投影，不能把原内部 Run/候选记录原样返回模型。候选采用需独立校验预期版本，不能用供应商任务成功代替采用。
 
 真实外部生图、正式桌面双入口接力以及后续结构化分镜、视频、声音和成片仍需分别验收；积分继续后置。
 
@@ -55,3 +55,24 @@ Thread 预期修订继续由原 TaskCore 在查找回执之后核验，避免并
 并行执行时，初始验收将原调度器 `run_execution_yield` 误当失败。按原5秒预算及1毫秒重排继续同一个 Run，最多8次；其他错误和不同 Run 立即失败。没有修改生产调度预算或放宽最终完成、提交次数和候选来源断言。最初夹具变量重名及该调度假设的失败日志均保留。
 
 12个提取模块与原实现逐字节一致，13个旧模块导出与共享模块的对象/类身份相同；生成资格器只增加显式新执行的准备入口。原宿主 UI、SDK、Short26及历史完整包、已验收与用户 App保持。证据位于 `output/extensions/checks/shared-media-commands-20261007/`；这里不把具名网络夹具当成真实生图或用户桌面已经更新。
+
+## 请求运行时与 HTTP 协议
+
+`InstalledProjectMediaGenerationRuntime.prepare` 只借用真实、已显式准备媒体受理存储的 Core。宿主配置单独声明 profile、工作流审核、元数据/生成 PDP、来源校验器和实际素材工厂。工厂收到同一个父 Store；它只拥有自己创建的资源。元数据配置不隐式授予上传或生成权限。
+
+每次请求通过原 `InstalledPluginRequestOwner` 重新解析身份和 profile，并用独立异步上下文保存此次逻辑命令与实时项目受理凭据。素材元数据只能读取或校验本次输入，不能借入口写入其他项目；生成 PDP 校验确切执行意图。提供给素材工厂的 `assertCurrent` 会读取当前绑定和安装包；`assertTransactionCurrent` 只做原请求/PDP及生命周期检查。`projectMaterial:prepare` 的回调也会在 SQL 事务中执行，必须使用后者，不能再次借用数据库连接。字节读取、冻结、上传与观察的独立权限仍由实际素材服务检查。
+
+在 `buildControlApi` 显式传入 `projectMediaGenerations` 才注册：
+
+```text
+POST /api/v1/creative-projects/:projectId/media-generations
+Idempotency-Key: <原执行请求键>
+```
+
+请求体为 `mediaInputId`、`inputRevision`、`expectedInputRevision`、`executionId`、`threadId`、`expectedThreadRevision`，不接受 query、身份、安装 pin、URL、工作流正文或素材字节。沿用原认证和 CSRF 校验。新 contracts 子路径为 `@crewon/contracts/project-media-generations`，不修改冻结 SDK。请求最多 2 KiB；超限沿用原 Control 的验证错误封装。
+
+返回 `committed` 或 `replayed`、项目/输入/执行意图、原 Run ID、原 Thread ID 和受理修订；这些表示受理而非生成完成。不公开内部关联、部署配置或供应商地址。提交成功后唤醒原 outbox，唤醒失败由原扫描恢复。保持原请求键重试时恢复同一个 Run，参数变化报冲突；新候选需要明确的新执行意图。
+
+最多允许16个本地在途调用。HTTP 断线撤销当前准备；关闭运行时拒绝新调用、等待实际准备和任务提交退出，再释放工厂资源，不关闭借用的 Core/Store。请求结果未知时仍按原执行意图恢复，不能无条件生成新的键重投。SQLite/PostgreSQL 用例覆盖实际 HTTP 断线后重试、两个请求并发收敛、跨项目上下文隔离、PDP/CSRF拒绝、撤销绑定、关闭等待和工厂失败清理。供应商、部署/PDP仍为具名夹具，正式 Main 和插件按钮没有因此自动启用。
+
+兼容性：新增可选宿主依赖、独立协议和路由；旧的媒体输入/文字阶段权限、持久格式和页面/SDK不变。Agent 文字计划的委托不被当作生图授权，后续 Agent 生图需专用的当前权限和执行作用域。相关证据：`output/extensions/checks/media-generation-runtime-20261007/`。

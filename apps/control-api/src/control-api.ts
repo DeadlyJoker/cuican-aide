@@ -1,3 +1,5 @@
+import { registerProjectMediaGenerationRoutes } from "./project-media-generation-route.ts";
+import type { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
 import { registerProjectMediaInputStageRoutes } from "./project-media-input-stage-route.ts";
 import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { registerProjectAssetStageRoutes } from "./project-asset-stage-route.ts";
@@ -265,6 +267,7 @@ export type ControlApiDependencies = Readonly<{
   projectTexts?: ProjectTextApplicationService | null;
   projectAssets?: ProjectAssetApplicationService | null;
   projectMediaInputs?: InstalledProjectMediaInputRuntime | null;
+  projectMediaGenerations?: InstalledProjectMediaGenerationRuntime | null;
   projectConversations?: ProjectConversationControlOwner | null;
   projectMediaInputStages?:ProjectMediaInputStageControlOwner|null;
   projectAssetStages?:ProjectAssetStageControlOwner|null;
@@ -416,6 +419,12 @@ export function buildControlApi(
     });
   }
   if (dependencies.projectAssets != null) registerProjectAssetRoutes(app, { identity: dependencies.identity, assets: dependencies.projectAssets });
+  if (dependencies.projectMediaGenerations != null)
+    registerProjectMediaGenerationRoutes(app, {
+      identity: dependencies.identity,
+      owner: dependencies.projectMediaGenerations,
+      outboxWakeup: dependencies.outboxWakeup,
+    });
   if (dependencies.projectMediaInputs != null)
     registerProjectMediaInputRoutes(app, {
       identity: dependencies.identity,
