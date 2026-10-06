@@ -82,6 +82,10 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   digester: ContentDigester;
   creativeProjects?: PreparedCreativeProjects;
   projectMediaInputs?: InstalledProjectMediaInputConfiguration;
+  /** Prepares only the original admission adapter. Does not authorize material I/O or expose a UI action. */
+  projectMediaGenerationStorage?: Readonly<{
+    version: "crewon.project-media-generation-storage.v1";
+  }>;
   metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
   assertHistoricalTarget?(publication: ProjectHistoricalQueryPublication): void;
 }>;
@@ -205,6 +209,9 @@ export async function createInstalledPluginTaskRuntimeCore(
     ...(Object.hasOwn(provided, "projectMediaInputs")
       ? ["projectMediaInputs"]
       : []),
+    ...(Object.hasOwn(provided, "projectMediaGenerationStorage")
+      ? ["projectMediaGenerationStorage"]
+      : []),
     ...(Object.hasOwn(provided, "metadataHostUiServices")
       ? ["metadataHostUiServices"]
       : []),
@@ -215,6 +222,12 @@ export async function createInstalledPluginTaskRuntimeCore(
       : captureInstalledProjectMediaInputConfiguration(
           input.projectMediaInputs,
         );
+  if (
+    input.projectMediaGenerationStorage !== undefined &&
+    pluginSecurityRecord(input.projectMediaGenerationStorage, ["version"])
+      .version !== "crewon.project-media-generation-storage.v1"
+  )
+    invalid();
   const publications = Object.freeze(
     input.publications.map((item) => {
       const r = pluginSecurityRecord(item, ["pluginId", "packageDigest"]);
@@ -431,6 +444,8 @@ export async function createInstalledPluginTaskRuntimeCore(
       await extensions.migrateUnmeteredPluginAdmissions();
     }
     if (generations !== undefined) await extensions.migrateProjectGenerations();
+    if (input.projectMediaGenerationStorage !== undefined)
+      await extensions.migrateProjectMediaGenerations();
     if (queries !== undefined) {
       await extensions.migrateProjectQueries();
       await extensions.enableProjectGenerationReads();

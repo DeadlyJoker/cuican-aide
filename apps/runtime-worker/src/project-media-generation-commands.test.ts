@@ -283,4 +283,44 @@ for (const backend of ["sqlite", "postgres"] as const) {
       );
     },
   );
+
+  test(
+    `${backend}: mutable or accessor task overrides cannot replace an issued host wrapper`,
+    assetTestOptions(backend),
+    async (t) => {
+      const f = await mediaGenerationFixture(t, backend, { unmetered: true });
+      const before = await f.countRuns();
+      let reads = 0;
+      for (const descriptor of [
+        {
+          value: () => {
+            reads++;
+          },
+          writable: true,
+          configurable: true,
+        },
+        {
+          get: () => {
+            reads++;
+            return () => {};
+          },
+          configurable: true,
+        },
+      ]) {
+        Object.defineProperty(
+          f.service,
+          "createProjectMediaTaskFromHost",
+          descriptor,
+        );
+        assert.throws(
+          () => commands(f),
+          /project_media_generation_dependency_invalid/u,
+        );
+        assert.equal(reads, 0);
+        Reflect.deleteProperty(f.service, "createProjectMediaTaskFromHost");
+      }
+      assert.deepEqual(await f.countRuns(), before);
+      assert.deepEqual(ioCounts(f), [0, 0, 0]);
+    },
+  );
 }

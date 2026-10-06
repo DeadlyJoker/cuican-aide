@@ -91,10 +91,25 @@ export class ProjectMediaGenerationCommands {
       ProjectMediaGenerationTaskPreparer.prototype.restoreAcceptedTask.bind(
         input.preparer,
       );
-    this.#create =
-      ExtensionTaskApplicationService.prototype.createProjectMediaTaskFromHost.bind(
-        input.tasks,
-      );
+    // The original Control Core installs an immutable wrapper on this genuine
+    // instance to track physical mutations through shutdown. Calling the
+    // prototype directly skips that owner; retain the issued wrapper instead.
+    const create = Object.getOwnPropertyDescriptor(
+      input.tasks,
+      "createProjectMediaTaskFromHost",
+    );
+    if (
+      create !== undefined &&
+      (!("value" in create) ||
+        typeof create.value !== "function" ||
+        create.writable ||
+        create.configurable)
+    )
+      fail("dependency_invalid");
+    this.#create = (
+      create?.value ??
+      ExtensionTaskApplicationService.prototype.createProjectMediaTaskFromHost
+    ).bind(input.tasks);
     this.#lookup = proto.loadPluginTaskAdmissionByReceipt.bind(
       input.extensions,
     );

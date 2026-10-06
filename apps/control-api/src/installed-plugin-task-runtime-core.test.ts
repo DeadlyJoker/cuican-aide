@@ -392,6 +392,28 @@ test(
       /publication/u,
     );
     assert.deepEqual(calls, { ledger: 0, extensions: 0, operations: 0 });
+    let getterCalls = 0;
+    for (const configuration of [
+      { version: "crewon.project-media-generation-storage.v0" },
+      { version: "crewon.project-media-generation-storage.v1", generate: true },
+      Object.defineProperty({}, "version", {
+        enumerable: true,
+        get() {
+          getterCalls++;
+          return "crewon.project-media-generation-storage.v1";
+        },
+      }),
+    ]) {
+      await assert.rejects(
+        createInstalledPluginTaskRuntimeCore({
+          ...f.coreInput,
+          projectMediaGenerationStorage: configuration as never,
+        }),
+        /installed_plugin_task_runtime_core_invalid|plugin_security_fields_invalid/u,
+      );
+      assert.deepEqual(calls, { ledger: 0, extensions: 0, operations: 0 });
+    }
+    assert.equal(getterCalls, 0);
     assert.equal(f.nodeState.setups, 0);
     assert.equal(f.state.quoteCalls, 0);
   },

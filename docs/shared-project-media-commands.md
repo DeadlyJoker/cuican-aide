@@ -24,6 +24,16 @@
 
 真实外部生图、正式桌面双入口接力以及后续结构化分镜、视频、声音和成片仍需分别验收；积分继续后置。
 
+## 原 Control Core 的存储和生命周期
+
+Control Core 新增可选内部配置 `projectMediaGenerationStorage: { version: "crewon.project-media-generation-storage.v1" }`，只准备该 Core 实际使用的媒体任务受理适配器。省略时保留原行为，即使同一父数据库已存在相关表，也不能把另一个适配器的准备状态当作本 Core 已启用。旧版本、额外字段和访问器在取得存储适配器前拒绝。素材输入权限、素材 I/O、生成授权和页面动作仍各自独立；该配置不授予这些能力，也没有自动写入 Native Main 设置。
+
+共享命令现在保留真正 `ExtensionTaskApplicationService` 实例上由 Core 安装的不可改写方法包装。此前直接调用类原型，会绕过 Core 对进行中任务的跟踪，导致关闭操作可能在实际任务还未退出时返回。新入口沿原包装受理，关闭等待物理任务退场；可修改的方法替换或访问器不被接受。未被宿主包装的原 Application 实例仍使用原类方法。
+
+实际 SQLite/PostgreSQL 集成覆盖同一 Core 的创建与回执恢复、默认未启用、无效会话和关闭等待。该测试只借用原父数据库、请求身份和任务服务，部署/PDP及网络仍为具名夹具。恢复旧原型调用可稳定复现提前关闭，回归日志保存在 `output/extensions/checks/media-control-lifetime-20261007/original-bypass-regression.log`。本轮相关检查43项全通过，Control/Worker/共享包类型检查及7个桌面运行时组件构建通过。
+
+这一步证明共享命令能经过原 Core，尚未完成生产 admission resolver 对当前项目、会话、工作空间和安装权限的完整装配。正式 Native 执行声明、页面/Agent 入口和候选采用继续实施，不能将这里的 Core 测试当作新生成按钮已经开放。
+
 ## 验证说明
 
 使用实际 SQLite/PostgreSQL、加密素材、原 TaskCore、完整已安装 Short21.0.1 和真实 Worker 验证 T10/D18；模型流、部署审查及供应商网络响应使用具名夹具。覆盖原键冷恢复、手动追加输入后恢复旧任务、两个入口并发、外来批准、字段注入、权限拒绝及关闭等待物理 I/O。新入口测试主动缩短每次唤醒的边界数量，确认原 Run 经过真实持久调度继续完成，而不是重建 Run。
