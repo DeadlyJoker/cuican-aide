@@ -1,4 +1,8 @@
 import { captureDesktopLocalShortDramaMediaInputs } from "./desktopLocalShortDramaMediaInputs.ts";
+import {
+  captureDesktopLocalShortDramaMediaGenerations,
+  SHORT_MEDIA_UPLOAD_PATHS,
+} from "./desktopLocalShortDramaMediaGenerations.ts";
 import { createHash } from "node:crypto";
 import { lstatSync, type Stats } from "node:fs";
 import { join } from "node:path";
@@ -58,6 +62,10 @@ export const SHORT_NETWORK_PATHS = Object.freeze([
   Object.freeze({ method: "GET" as const, operationPathPrefix: "/history/" }),
   Object.freeze({ method: "GET" as const, path: "/view" }),
 ]);
+const SHORT_MEDIA_NETWORK_PATHS = Object.freeze([
+  ...SHORT_NETWORK_PATHS,
+  ...SHORT_MEDIA_UPLOAD_PATHS,
+]);
 export type PolicyDocument = Readonly<{
   schemaVersion: "crewon.desktop-native-plugin-policy.v1";
   packages: readonly Readonly<{
@@ -83,6 +91,9 @@ export type SetupSnapshot = {
   pkg: InstalledPluginPackage;
   configuration: ExtensionConfiguration;
   mediaInputs: ReturnType<typeof captureDesktopLocalShortDramaMediaInputs>;
+  mediaGenerations: ReturnType<
+    typeof captureDesktopLocalShortDramaMediaGenerations
+  >;
   baseUrl: string;
   preset: "krea2-portrait" | "krea2-character-three-view";
 };
@@ -328,9 +339,24 @@ export async function captureSetupSnapshot(input: {
       packageSnapshot,
       configuration,
     ),
+    mediaGenerations: null,
     baseUrl: parameters.baseUrl,
     preset: parameters.preset,
   };
+  snapshot.mediaGenerations = captureDesktopLocalShortDramaMediaGenerations({
+    snapshot: packageSnapshot,
+    manifest: registration.manifest,
+    mediaInputs: snapshot.mediaInputs,
+    approval,
+    uploadApproved:
+      policy?.networkGrants.some(
+        (grant) =>
+          grant.packageDigest === snapshot.pkg.packageDigest &&
+          grant.baseUrl === snapshot.baseUrl &&
+          grant.baseUrlParameter === "baseUrl" &&
+          isDeepStrictEqual(grant.paths, SHORT_MEDIA_NETWORK_PATHS),
+      ) === true,
+  });
   // The original authority parser checks canonical HTTPS and the exact bounded path rules.
   mergeSetupPolicy(
     input.dataDirectory,
@@ -412,7 +438,10 @@ export function mergeSetupPolicy(
   dataDirectory: string,
   snapshot: SetupSnapshot,
   bootstrapPath: string,
+  mediaGenerations: "preserve" | "enable" = "preserve",
 ): PolicyDocument {
+  if (mediaGenerations === "enable" && snapshot.mediaGenerations === null)
+    setupInvalid("media_generation_unavailable");
   const pkg = {
     pluginId: snapshot.pkg.pluginId,
     publisherId: snapshot.pkg.publisherId,
@@ -435,11 +464,20 @@ export function mergeSetupPolicy(
       entry.packageDigest === pkg.packageDigest &&
       entry.baseUrlParameter === "baseUrl",
   );
+  const mediaNetworkGrant = {
+    ...networkGrant,
+    paths: SHORT_MEDIA_NETWORK_PATHS,
+  };
+  const previousMediaGrant = isDeepStrictEqual(
+    previousGrant,
+    mediaNetworkGrant,
+  );
   if (
     (previousPackage !== undefined &&
       !isDeepStrictEqual(previousPackage, pkg)) ||
     (previousGrant !== undefined &&
-      !isDeepStrictEqual(previousGrant, networkGrant))
+      !isDeepStrictEqual(previousGrant, networkGrant) &&
+      !previousMediaGrant)
   )
     setupInvalid("policy_conflict");
   const packages = [
@@ -447,10 +485,16 @@ export function mergeSetupPolicy(
     ...(previousPackage === undefined ? [pkg] : []),
   ];
   if (packages.length > 32) setupInvalid("policy_limit");
-  const networkGrants = [
-    ...(snapshot.policy?.networkGrants ?? []),
-    ...(previousGrant === undefined ? [networkGrant] : []),
-  ];
+  const selectedGrant =
+    mediaGenerations === "enable" || previousMediaGrant
+      ? mediaNetworkGrant
+      : networkGrant;
+  const networkGrants =
+    previousGrant === undefined
+      ? [...(snapshot.policy?.networkGrants ?? []), selectedGrant]
+      : snapshot.policy!.networkGrants.map((entry) =>
+          entry === previousGrant ? selectedGrant : entry,
+        );
   const paths = setupPaths(dataDirectory),
     digest = `sha256:${"0".repeat(64)}`;
   const parsed = parseDesktopNativePluginAuthority({

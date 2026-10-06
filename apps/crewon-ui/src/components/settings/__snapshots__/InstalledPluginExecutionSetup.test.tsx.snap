@@ -18,6 +18,10 @@ exports[`explicit Native execution setup in original settings > previews real pu
 }
 `;
 
+exports[`explicit Native execution setup in original settings > reference generation is optional and sends consent only when selected (false) 1`] = `"参考图生成：Krea2 角色四视图 · FLUX2 分镜画面。执行时会把项目已采用的参考图上传至上方生成服务（POST /upload/image），并创建生成任务。允许上传已采用的参考图并生成画面"`;
+
+exports[`explicit Native execution setup in original settings > reference generation is optional and sends consent only when selected (true) 1`] = `"参考图生成：Krea2 角色四视图 · FLUX2 分镜画面。执行时会把项目已采用的参考图上传至上方生成服务（POST /upload/image），并创建生成任务。允许上传已采用的参考图并生成画面"`;
+
 exports[`explicit Native execution setup in original settings > requires separate explicit GET-only historical target consent and sends the exact opt-in confirmation 1`] = `
 [
   "我允许此包在本机执行 Node 代码，并按上列范围访问生成服务。",

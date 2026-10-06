@@ -35,6 +35,7 @@ type State = Readonly<{
   preview: DesktopLocalPluginExecutionPreview | null;
   consent: boolean;
   historicalQueryConsent: boolean;
+  mediaGenerationConsent: boolean;
   result: DesktopLocalPluginExecutionResult | null;
   policyCommitted: boolean;
   error: string | null;
@@ -56,6 +57,7 @@ const EMPTY: State = Object.freeze({
   preview: null,
   consent: false,
   historicalQueryConsent: false,
+  mediaGenerationConsent: false,
   result: null,
   policyCommitted: false,
   error: null,
@@ -401,6 +403,10 @@ export function useLocalPluginExecutionSetup(
           ...(before.preview.historyQuery === undefined
             ? {}
             : { approveHistoricalQueries: true as const }),
+          ...(before.mediaGenerationConsent &&
+          before.preview.mediaGenerationPreparation
+            ? { approveMediaGenerations: true as const }
+            : {}),
         }),
       );
       if (
@@ -455,6 +461,19 @@ export function useLocalPluginExecutionSetup(
     closePreview,
     setConsent,
     setHistoricalQueryConsent,
+    setMediaGenerationConsent: (mediaGenerationConsent: boolean) => {
+      const current = owner.current;
+      if (
+        !current ||
+        !alive(current) ||
+        current.operation ||
+        disabledRef.current ||
+        !current.preview?.mediaGenerationPreparation ||
+        current.preview.mediaGenerationPreparation.alreadyApproved
+      )
+        return;
+      setState((previous) => ({ ...previous, mediaGenerationConsent }));
+    },
     dismiss,
     refreshStatus: () =>
       current && alive(current) ? readStatus(current) : Promise.resolve(false),

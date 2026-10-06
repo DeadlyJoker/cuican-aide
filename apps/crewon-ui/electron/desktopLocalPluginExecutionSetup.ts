@@ -1,4 +1,5 @@
 import { composeDesktopLocalShortDramaMediaInputApproval } from "./desktopLocalShortDramaMediaInputs.ts";
+import { composeDesktopLocalShortDramaMediaGenerationApproval } from "./desktopLocalShortDramaMediaGenerations.ts";
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { performance } from "node:perf_hooks";
@@ -70,6 +71,7 @@ type Ticket = {
   verified: boolean;
   entry: DesktopInstalledPluginExpectedCatalogEntry | null;
   historyQuery: DesktopLocalHistoricalProjectQueryTarget | null;
+  approveMediaGenerations: boolean;
 };
 export type DesktopLocalPluginExecutionSetupOwner = Readonly<{
   preview(
@@ -343,7 +345,12 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           expiresAt: Date.now() + lifetime,
           baseUrl: snapshot.baseUrl,
           preset: snapshot.preset,
-          networkPaths: SHORT_NETWORK_PATHS,
+          networkPaths:
+            snapshot.policy?.networkGrants.find(
+              (grant) =>
+                grant.packageDigest === snapshot.pkg.packageDigest &&
+                grant.baseUrlParameter === "baseUrl",
+            )?.paths ?? SHORT_NETWORK_PATHS,
           approvalRequirement: "none" as const,
           ...(snapshot.mediaInputs === null
             ? {}
@@ -369,6 +376,9 @@ export function createDesktopLocalPluginExecutionSetupOwner(
                     : ("available" as const),
               }),
           ...(history === null ? {} : { historyQuery: history.preview }),
+          ...(snapshot.mediaGenerations === null
+            ? {}
+            : { mediaGenerationPreparation: snapshot.mediaGenerations }),
         });
         preview = {
           preview: publicPreview,
@@ -380,6 +390,7 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           verified: false,
           entry: null,
           historyQuery: history?.claim ?? null,
+          approveMediaGenerations: false,
         };
         return publicPreview;
       });
@@ -387,15 +398,23 @@ export function createDesktopLocalPluginExecutionSetupOwner(
     claimPreview(request) {
       active();
       const withHistory = preview !== null && preview.historyQuery !== null;
+      const withMediaGenerations =
+        request !== null &&
+        typeof request === "object" &&
+        Object.hasOwn(request, "approveMediaGenerations");
       const value = fields(request, [
         "previewId",
         "approveExecution",
         ...(withHistory ? ["approveHistoricalQueries"] : []),
+        ...(withMediaGenerations ? ["approveMediaGenerations"] : []),
       ]);
       if (
         value.approveExecution !== true ||
         typeof value.previewId !== "string" ||
-        (withHistory && value.approveHistoricalQueries !== true)
+        (withHistory && value.approveHistoricalQueries !== true) ||
+        (withMediaGenerations &&
+          (value.approveMediaGenerations !== true ||
+            preview?.snapshot.mediaGenerations == null))
       )
         setupInvalid("consent_required");
       if (
@@ -412,6 +431,7 @@ export function createDesktopLocalPluginExecutionSetupOwner(
         setupInvalid("preview_expired");
       const claim = Object.freeze({}) as DesktopLocalPluginExecutionSetupClaim;
       claimed = preview;
+      claimed.approveMediaGenerations = withMediaGenerations;
       preview = null;
       claims.set(claim, claimed);
       ticket(claim);
@@ -442,6 +462,7 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           dataDirectory,
           value.snapshot,
           value.bootstrapPath,
+          value.approveMediaGenerations ? "enable" : "preserve",
         );
         write(value, "policy", next, () => {
           value.policyCommitted = true;
@@ -504,12 +525,18 @@ export function createDesktopLocalPluginExecutionSetupOwner(
               entry: value.entry,
             },
           });
-        const selfApproval = composeDesktopLocalShortDramaMediaInputApproval({
+        const inputApproval = composeDesktopLocalShortDramaMediaInputApproval({
           approval: generationApproval,
           descriptor: source.descriptor,
           packageDigest: source.packageDigest,
           declaration: value.snapshot.mediaInputs,
         });
+        const selfApproval = value.approveMediaGenerations
+          ? composeDesktopLocalShortDramaMediaGenerationApproval({
+              approval: inputApproval,
+              packageDigest: source.packageDigest,
+            })
+          : inputApproval;
         if (value.historyQuery !== null)
           await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
             value.historyQuery,

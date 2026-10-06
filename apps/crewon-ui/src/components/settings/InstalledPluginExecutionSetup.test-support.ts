@@ -23,6 +23,29 @@ export const executionTestParameters = Object.freeze({
   baseUrl: "https://named-comfy-generation.test/",
   preset: "krea2-portrait" as const,
 });
+export function mediaGenerationPreview(alreadyApproved = false) {
+  const workflows = [
+    {
+      workflowId: "krea2-reference-four-view" as const,
+      workflowDigest: `sha256:${"a".repeat(64)}`,
+    },
+    {
+      workflowId: "flux2-three-reference-storyboard" as const,
+      workflowDigest: `sha256:${"b".repeat(64)}`,
+    },
+  ];
+  return {
+    mediaInputPreparation: { scope: "read-write-inputs" as const, workflows },
+    mediaGenerationPreparation: {
+      scope: "generate-from-adopted-references" as const,
+      alreadyApproved,
+      workflows,
+      additionalNetworkPaths: [
+        { method: "POST", path: "/upload/image" },
+      ] as const,
+    },
+  };
+}
 export function historicalQueryPreview(
   identity = executionTestIdentity,
 ): NonNullable<DesktopLocalPluginExecutionPreview["historyQuery"]> {

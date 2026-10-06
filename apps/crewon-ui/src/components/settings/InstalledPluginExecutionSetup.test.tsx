@@ -29,6 +29,7 @@ import {
   executionTestIdentity,
   executionTestParameters,
   historicalQueryPreview,
+  mediaGenerationPreview,
 } from "./InstalledPluginExecutionSetup.test-support";
 
 (
@@ -158,6 +159,66 @@ function configurationFixture() {
 }
 
 describe("explicit Native execution setup in original settings", () => {
+  it.each([false, true])(
+    "reference generation is optional and sends consent only when selected (%s)",
+    async (optIn) => {
+      const f = fixture();
+      f.onPreview = async () => ({
+        ...f.preview(),
+        ...mediaGenerationPreview(),
+      });
+      await choose(f);
+      const control =
+        container.querySelectorAll<HTMLButtonElement>('[role="switch"]')[1]!;
+      expect(control.getAttribute("aria-checked")).toBe("false");
+      expect(button("允许并准备").disabled).toBe(false);
+      expect(
+        container.querySelector("[data-media-generation-preparation]")!
+          .textContent,
+      ).toMatchSnapshot();
+      if (optIn)
+        await act(async () => {
+          control.click();
+          await settleSettings();
+        });
+      await click("允许并准备");
+      expect(f.client.confirm).toHaveBeenCalledExactlyOnceWith({
+        previewId: "named-execution-preview",
+        approveExecution: true,
+        ...(optIn ? { approveMediaGenerations: true } : {}),
+      });
+    },
+  );
+  it("generation consent resets with cancelled previews and owner changes; approved scope is shown without a new toggle", async () => {
+    const f = fixture();
+    f.onPreview = async () => ({ ...f.preview(), ...mediaGenerationPreview() });
+    await choose(f);
+    await act(async () => {
+      container
+        .querySelectorAll<HTMLButtonElement>('[role="switch"]')[1]!
+        .click();
+      await settleSettings();
+    });
+    await click("取消预览");
+    await click("预览执行准备");
+    expect(
+      container
+        .querySelectorAll('[role="switch"]')[1]!
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    await mount(f, false, "zh", f.identity, "next-owner");
+    expect(
+      container.querySelector("[data-media-generation-preparation]"),
+    ).toBeNull();
+    f.onPreview = async () => ({
+      ...f.preview(),
+      ...mediaGenerationPreview(true),
+    });
+    await click("预览执行准备");
+    expect(container.querySelectorAll('[role="switch"]')).toHaveLength(1);
+    expect(container.textContent).toContain("此包的参考图生成已获允许");
+    expect(f.client.confirm).not.toHaveBeenCalled();
+  });
   it("enables preview after a fast empty status on an automatically batched first mount", async () => {
     const f = fixture();
     const environment = globalThis as typeof globalThis & {

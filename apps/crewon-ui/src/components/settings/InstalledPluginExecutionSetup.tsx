@@ -145,6 +145,49 @@ export function InstalledPluginExecutionSetup(
               onCheckedChange={state.setConsent}
             />
           </div>
+          {preview.mediaGenerationPreparation && (
+            <div data-media-generation-preparation>
+              <p className="installed-plugin-configuration-hint">
+                {zh ? "参考图生成：" : "Reference-based generation: "}
+                {preview.mediaGenerationPreparation.workflows
+                  .map((w) =>
+                    w.workflowId === "krea2-reference-four-view"
+                      ? zh
+                        ? "Krea2 角色四视图"
+                        : "Krea2 character four-view"
+                      : zh
+                        ? "FLUX2 分镜画面"
+                        : "FLUX2 storyboard frames",
+                  )
+                  .join(" · ")}
+                {zh
+                  ? "。执行时会把项目已采用的参考图上传至上方生成服务（POST /upload/image），并创建生成任务。"
+                  : ". Execution uploads the project's adopted references to the service above (POST /upload/image) and creates a generation task."}
+              </p>
+              {preview.mediaGenerationPreparation.alreadyApproved ? (
+                <p className="installed-plugin-configuration-hint">
+                  {zh
+                    ? "此包的参考图生成已获允许，本次保留现有权限。"
+                    : "Reference-based generation is already allowed for this package. Existing permission is retained."}
+                </p>
+              ) : (
+                <div className="installed-plugin-configuration-field-header">
+                  <label htmlFor={`${consentId}-media`}>
+                    {zh
+                      ? "允许上传已采用的参考图并生成画面"
+                      : "Allow uploading adopted references and generating images"}
+                  </label>
+                  <Switch
+                    id={`${consentId}-media`}
+                    size="sm"
+                    checked={state.mediaGenerationConsent}
+                    disabled={props.disabled}
+                    onCheckedChange={state.setMediaGenerationConsent}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           {preview.historyQueryAvailability === "unavailable" && (
             <p className="installed-plugin-configuration-hint">
               {zh

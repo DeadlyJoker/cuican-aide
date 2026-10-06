@@ -59,6 +59,16 @@ export type DesktopLocalPluginExecutionPreview =
           workflowDigest: string;
         }>[];
       }>;
+      mediaGenerationPreparation?: Readonly<{
+        scope: "generate-from-adopted-references";
+        alreadyApproved: boolean;
+        workflows: NonNullable<
+          DesktopLocalPluginExecutionPreview["mediaInputPreparation"]
+        >["workflows"];
+        additionalNetworkPaths: readonly [
+          Readonly<{ method: "POST"; path: "/upload/image" }>,
+        ];
+      }>;
       historyQueryAvailability?: "available" | "unavailable";
       historyQuery?: DesktopLocalPluginHistoricalQueryPreview;
     }>;
@@ -68,6 +78,7 @@ export type DesktopLocalPluginExecutionConfirmation = Readonly<{
   previewId: string;
   approveExecution: true;
   approveHistoricalQueries?: true;
+  approveMediaGenerations?: true;
 }>;
 
 export type DesktopLocalPluginExecutionResult =

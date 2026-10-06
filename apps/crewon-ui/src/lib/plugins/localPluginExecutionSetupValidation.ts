@@ -86,6 +86,10 @@ export function captureExecutionSetupPreview(
     input !== null &&
     typeof input === "object" &&
     Object.hasOwn(input, "mediaInputPreparation");
+  const withMediaGenerations =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "mediaGenerationPreparation");
   const withHistory =
     input !== null &&
     typeof input === "object" &&
@@ -104,6 +108,7 @@ export function captureExecutionSetupPreview(
     "approvalRequirement",
     ...(withHistory ? ["historyQuery"] : []),
     ...(withMediaInputs ? ["mediaInputPreparation"] : []),
+    ...(withMediaGenerations ? ["mediaGenerationPreparation"] : []),
     ...(withAvailability ? ["historyQueryAvailability"] : []),
   ]);
   identity(fields, expected);
@@ -183,6 +188,15 @@ export function captureExecutionSetupPreview(
   const historyQuery = withHistory
     ? captureHistoricalQueryPreview(fields.historyQuery, expected)
     : undefined;
+  const mediaInputPreparation = withMediaInputs
+    ? captureMediaInputPreparation(fields.mediaInputPreparation)
+    : undefined;
+  const mediaGenerationPreparation = withMediaGenerations
+    ? captureMediaGenerationPreparation(
+        fields.mediaGenerationPreparation,
+        mediaInputPreparation,
+      )
+    : undefined;
   return Object.freeze({
     ...expected,
     previewId: fields.previewId as string,
@@ -192,13 +206,8 @@ export function captureExecutionSetupPreview(
     approvalRequirement: "none",
     networkPaths: Object.freeze(paths),
     ...(historyQuery === undefined ? {} : { historyQuery }),
-    ...(withMediaInputs
-      ? {
-          mediaInputPreparation: captureMediaInputPreparation(
-            fields.mediaInputPreparation,
-          ),
-        }
-      : {}),
+    ...(mediaInputPreparation ? { mediaInputPreparation } : {}),
+    ...(mediaGenerationPreparation ? { mediaGenerationPreparation } : {}),
     ...(withAvailability
       ? {
           historyQueryAvailability: fields.historyQueryAvailability as
@@ -386,5 +395,58 @@ function captureMediaInputPreparation(
   return Object.freeze({
     scope: "read-write-inputs",
     workflows: Object.freeze(workflows),
+  });
+}
+
+function captureMediaGenerationPreparation(
+  input: unknown,
+  prepared: DesktopLocalPluginExecutionPreview["mediaInputPreparation"],
+): NonNullable<
+  DesktopLocalPluginExecutionPreview["mediaGenerationPreparation"]
+> {
+  const value = record(input, [
+    "scope",
+    "alreadyApproved",
+    "workflows",
+    "additionalNetworkPaths",
+  ]);
+  if (
+    !prepared ||
+    value.scope !== "generate-from-adopted-references" ||
+    typeof value.alreadyApproved !== "boolean"
+  )
+    invalid();
+  const { workflows } = captureMediaInputPreparation({
+    scope: "read-write-inputs",
+    workflows: value.workflows,
+  });
+  if (
+    workflows.length !== prepared.workflows.length ||
+    workflows.some(
+      (w, i) =>
+        w.workflowId !== prepared.workflows[i]!.workflowId ||
+        w.workflowDigest !== prepared.workflows[i]!.workflowDigest,
+    )
+  )
+    invalid();
+  const paths = value.additionalNetworkPaths;
+  if (
+    !Array.isArray(paths) ||
+    Object.getPrototypeOf(paths) !== Array.prototype ||
+    paths.length !== 1 ||
+    Reflect.ownKeys(paths).length !== 2
+  )
+    invalid();
+  const path = Object.getOwnPropertyDescriptor(paths, "0");
+  if (!path?.enumerable || !("value" in path)) invalid();
+  const rule = record(path.value, ["method", "path"]);
+  if (rule.method !== "POST" || rule.path !== "/upload/image") invalid();
+  return Object.freeze({
+    scope: "generate-from-adopted-references",
+    alreadyApproved: value.alreadyApproved,
+    workflows,
+    additionalNetworkPaths: Object.freeze([
+      Object.freeze({ method: "POST", path: "/upload/image" }),
+    ] as const),
   });
 }

@@ -4,7 +4,76 @@ import {
   ExecutionSetupFixture,
   executionTestParameters,
   historicalQueryPreview,
+  mediaGenerationPreview,
 } from "../../components/settings/InstalledPluginExecutionSetup.test-support";
+
+it("generation preview matches prepared digests and exposes exactly the upload endpoint, with no extra authority", () => {
+  const fixture = new ExecutionSetupFixture();
+  const base = { ...fixture.preview(), ...mediaGenerationPreview() };
+  const parse = (value: unknown) =>
+    captureExecutionSetupPreview(
+      value,
+      fixture.identity,
+      executionTestParameters,
+    );
+  const result = parse(base);
+  expect(
+    Object.isFrozen(
+      result.mediaGenerationPreparation?.additionalNetworkPaths[0],
+    ),
+  ).toBe(true);
+  expect(result.mediaGenerationPreparation?.alreadyApproved).toBe(false);
+  const generation = base.mediaGenerationPreparation;
+  for (const patch of [
+    { scope: "read-write-inputs" },
+    { alreadyApproved: "true" },
+    { additionalNetworkPaths: [{ method: "POST", path: "/other" }] },
+    { additionalNetworkPaths: [{ method: "GET", path: "/upload/image" }] },
+    {
+      additionalNetworkPaths: [
+        ...generation.additionalNetworkPaths,
+        ...generation.additionalNetworkPaths,
+      ],
+    },
+    {
+      workflows: [
+        {
+          ...generation.workflows[0],
+          workflowDigest: `sha256:${"f".repeat(64)}`,
+        },
+      ],
+    },
+    { workflows: generation.workflows.toReversed() },
+    { actor: "forged" },
+  ])
+    expect(() =>
+      parse({
+        ...base,
+        mediaGenerationPreparation: { ...generation, ...patch },
+      }),
+    ).toThrow();
+  const { mediaInputPreparation: _removed, ...withoutInputs } = base;
+  expect(() => parse(withoutInputs)).toThrow();
+  let calls = 0;
+  const paths = [...generation.additionalNetworkPaths];
+  Object.defineProperty(paths, "0", {
+    enumerable: true,
+    get() {
+      calls++;
+      return generation.additionalNetworkPaths[0];
+    },
+  });
+  expect(() =>
+    parse({
+      ...base,
+      mediaGenerationPreparation: {
+        ...generation,
+        additionalNetworkPaths: paths,
+      },
+    }),
+  ).toThrow();
+  expect(calls).toBe(0);
+});
 
 describe("strict optional historical query preview", () => {
   const fixture = new ExecutionSetupFixture();
