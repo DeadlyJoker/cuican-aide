@@ -76,3 +76,15 @@ Idempotency-Key: <原执行请求键>
 最多允许16个本地在途调用。HTTP 断线撤销当前准备；关闭运行时拒绝新调用、等待实际准备和任务提交退出，再释放工厂资源，不关闭借用的 Core/Store。请求结果未知时仍按原执行意图恢复，不能无条件生成新的键重投。SQLite/PostgreSQL 用例覆盖实际 HTTP 断线后重试、两个请求并发收敛、跨项目上下文隔离、PDP/CSRF拒绝、撤销绑定、关闭等待和工厂失败清理。供应商、部署/PDP仍为具名夹具，正式 Main 和插件按钮没有因此自动启用。
 
 兼容性：新增可选宿主依赖、独立协议和路由；旧的媒体输入/文字阶段权限、持久格式和页面/SDK不变。Agent 文字计划的委托不被当作生图授权，后续 Agent 生图需专用的当前权限和执行作用域。相关证据：`output/extensions/checks/media-generation-runtime-20261007/`。
+
+## Control 与 Worker 的实际素材装配
+
+`@crewon/media-runtime/project-media-material-runtime` 提供 `createProjectMediaMaterialRuntime`。它接收宿主借出的真实 SQLite/PostgreSQL 父存储、配置服务、profile 与各用途授权端口，装配原项目/资产来源服务、安装读取、目标解析、字节读取、冻结、上传、输入校验和同库 journal。默认网络路径继续使用原固定地址传输；启动本身不读取供应商字节、不上传，也不受理 Run。
+
+宿主给出档案ID、目录、密钥ID和密钥字节；工厂在异步迁移前复制密钥，结束初始化时清零临时副本。内部使用原 `FilesystemProjectMaterialArchive`，只写加密源字节，保留原文件权限和目录身份校验。调用方先等待自己正在处理的命令/Worker任务结束，再关闭工厂；关闭会撤销该工厂的能力并清零内部档案密钥，保留持久数据，借用的父数据库和配置服务继续由原 owner 管理。
+
+项目读取、素材输入、字节读取、冻结、准备、上传和观察各自检查原授权，不相互替代。准备回调沿原事务要求只检查外部PDP/活动状态。重复的工作流可以共用同一目标包身份，但同一包摘要的身份字段矛盾时拒绝装配。工厂不接受替身父存储或伪装的配置服务。
+
+ComfyUI参考文件解码器从 Worker 原样移入 `@crewon/media-runtime/comfyui-project-reference-material-adapter`，旧 Worker导出保留相同函数身份。它继续只接受审核过的原配置身份及其确切 `/view` 输出引用，不能把UI提供的任意URL变为素材来源。通用工厂接收可信宿主选择的纯解码器，便于原ComfyUI实现复用；测试中的具名来源解码器和供应商响应不能当作真实ComfyUI验收。
+
+Control HTTP与原Worker集成用例都改用这套实际工厂。专项验证T10/D18、档案加密、逐用途拒绝、密钥快照、关闭以及真实父数据库冷重开；冷恢复使用原准备记录和原加密数据，不重新捕获来源或上传。独立Native生成声明、私有档案配置与工作流执行审核仍须同时接到正式Control和Worker；本模块不会自动启用新的桌面或Agent入口。证据：`output/extensions/checks/shared-material-runtime-20261007/`。

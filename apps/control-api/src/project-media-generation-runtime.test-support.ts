@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import Fastify from "fastify";
-import { ProjectMediaMaterialPreparer } from "@crewon/media-runtime";
-import { ProjectMaterialPreparer } from "@crewon/media-runtime/project-material-preparer";
+import { join } from "node:path";
+import { createProjectMediaMaterialRuntime } from "@crewon/media-runtime/project-media-material-runtime";
+import { materialRuntimeFixtureInput } from "../../runtime-worker/src/project-media-material-runtime.test-support.ts";
 import { selectionVerifier } from "../../../packages/store/src/project-concept-selection.test-support.ts";
 import { mediaGenerationControlFixture } from "./project-media-generation-control.test-support.ts";
 import { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
@@ -33,18 +34,50 @@ export async function mediaGenerationRuntimeFixture(
       assert.equal(scope.store, f.parent);
       state.created++;
       materialScope = scope;
-      const preparer = new ProjectMaterialPreparer({
-        ...f.dependencies,
-        freezer: f.freezer,
-        reviewedTargets: [
-          ...new Map(
-            f.generationReviews.map((r) => [
-              r.targetIdentity.packageDigest,
-              r.targetIdentity,
-            ]),
-          ).values(),
-        ],
-        authorization: {
+      const base = materialRuntimeFixtureInput(f, {
+        archiveId: "real-control-material-archive",
+        rootDirectory: join(f.installRoot, "media-archive"),
+        keyId: "named-control-material-key",
+        encryptionKey: Buffer.alloc(32, 87),
+      });
+      const runtime = await createProjectMediaMaterialRuntime({
+        ...base,
+        store: scope.store,
+        configurations: f.core.extensions,
+        signal: scope.signal,
+        reviews: f.generationReviews,
+        metadata: scope.metadataAuthorization,
+        profiles: {
+          resolve: async (actor) => {
+            await scope.assertTransactionCurrent(actor);
+            return f.requests.currentScope();
+          },
+        },
+        projects: {
+          authorize: async (p) => {
+            await scope.assertTransactionCurrent(p.actor);
+            return base.projects.authorize(p);
+          },
+        },
+        installations: {
+          authorize: async (p) => {
+            await scope.assertTransactionCurrent(p.actor);
+            return base.installations.authorize(p);
+          },
+        },
+        read: {
+          authorize: async (p) => {
+            await scope.assertCurrent(p.actor);
+            return base.read.authorize(p);
+          },
+        },
+        freeze: {
+          authorize: async (p) => {
+            await scope.assertCurrent(p.actor);
+            return base.freeze.authorize(p);
+          },
+        },
+        preparation: {
           authorize: async (p) => {
             state.materialChecks++;
             const current =
@@ -63,13 +96,9 @@ export async function mediaGenerationRuntimeFixture(
         },
       });
       return {
-        materials: new ProjectMediaMaterialPreparer({
-          store: f.store,
-          preparer,
-          reviews: f.generationReviews,
-          authorization: scope.metadataAuthorization,
-        }),
+        materials: runtime.materials,
         close: async () => {
+          await runtime.close();
           state.closed++;
         },
       };

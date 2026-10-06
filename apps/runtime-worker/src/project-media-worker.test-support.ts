@@ -1,3 +1,5 @@
+import { createProjectMediaMaterialRuntime } from "@crewon/media-runtime/project-media-material-runtime";
+import { materialRuntimeFixtureInput } from "./project-media-material-runtime.test-support.ts";
 import assert from "node:assert/strict";
 import { setTimeout } from "node:timers/promises";
 import { randomUUID, createHash } from "node:crypto";
@@ -306,7 +308,10 @@ export async function mediaWorkerFixture(
   }));
   assert.equal(entry.scope.profileId, f.pin.profileId);
   const open = async (
-    current: Pick<typeof f, "parent" | "ext" | "materials"> = f,
+    current: Pick<
+      typeof f,
+      "parent" | "ext" | "materials" | "configurations"
+    > = f,
     workerConfig: Partial<RuntimeWorkerConfig> = {},
   ) => {
     const config: InstalledPluginExecutionConfig = {
@@ -378,12 +383,25 @@ export async function mediaWorkerFixture(
             if (!state.active) throw new Error("named_media_worker_retired");
           },
         },
-        createMaterials: async ({ store }) => {
+        createMaterials: async ({ store, signal }) => {
           assert.equal(store, current.parent);
           state.materialFactories++;
+          const materialRuntime = await createProjectMediaMaterialRuntime({
+            ...materialRuntimeFixtureInput(
+              {
+                ...f,
+                parent: current.parent,
+                configurations: current.configurations,
+              },
+              f.archiveConfiguration,
+            ),
+            reviews: f.generationReviews,
+            signal,
+          });
           return {
-            materials: current.materials,
+            materials: materialRuntime.materials,
             close: async () => {
+              await materialRuntime.close();
               state.materialCloses++;
             },
           };

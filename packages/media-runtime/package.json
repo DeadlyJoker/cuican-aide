@@ -14,6 +14,8 @@
     "./project-reference-material-reader": "./src/project-reference-material-reader.ts",
     "./project-reference-material-freezer": "./src/project-reference-material-freezer.ts",
     "./project-material-preparation-support": "./src/project-material-preparation-support.ts",
+    "./project-media-material-runtime": "./src/project-media-material-runtime.ts",
+    "./comfyui-project-reference-material-adapter": "./src/comfyui-project-reference-material-adapter.ts",
     "./project-material-preparer": "./src/project-material-preparer.ts",
     "./project-media-material-preparer": "./src/project-media-material-preparer.ts",
     "./project-media-generation-task-preparer": "./src/project-media-generation-task-preparer.ts",

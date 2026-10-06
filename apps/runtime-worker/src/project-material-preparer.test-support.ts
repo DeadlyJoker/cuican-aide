@@ -141,6 +141,12 @@ export async function projectMaterialPreparerFixture(
   const unused = async (): Promise<never> => {
     throw new Error("named_unused_mutation_host");
   };
+  const archiveConfiguration = {
+    archiveId: "actual-project-source-archive",
+    rootDirectory: root,
+    encryptionKey: Buffer.alloc(32, 86),
+    keyId: "named-material-test-key",
+  };
   const open = (parent = f.first.parent, identities = [reviewedTarget]) => {
     const common = {
         authorization: { authorize: async () => decision(f.policy.allow) },
@@ -195,12 +201,7 @@ export async function projectMaterialPreparerFixture(
         installations,
         configurations,
       }),
-      archive = new FilesystemProjectMaterialArchive({
-        archiveId: "actual-project-source-archive",
-        rootDirectory: root,
-        encryptionKey: Buffer.alloc(32, 86),
-        keyId: "named-material-test-key",
-      });
+      archive = new FilesystemProjectMaterialArchive(archiveConfiguration);
     archives.push(archive);
     const reader = new ProjectReferenceMaterialReader({
         sources,
@@ -372,6 +373,7 @@ export async function projectMaterialPreparerFixture(
     ...f,
     ...opened,
     root,
+    archiveConfiguration,
     state,
     input,
     open,
