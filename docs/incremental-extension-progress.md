@@ -18,6 +18,8 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 [ComfyUI素材传输适配](./comfyui-material-transfer-protocol.md)已实现，保留原JSON限制，新增独立的大图multipart上传和原目标字节核验。两张原示例图经实际归档重开、各一次上传及同路径冷查询核对摘要保持，未重新生成。此项是传输组件验收；实际项目的持久目标准备、媒体输入/Run和Agent接线仍未交付，原宿主UI和用户App保持。完整目标继续ACTIVE。
 
+[真实项目素材准备journal](./project-material-preparation-journal-protocol.md)已实现：独立原快照与状态历史、同项目唯一发送claim、原dispatch/unknown冷恢复及实际来源/安装/配置重核。187项相关检查通过、零跳过，新增32项双库准备检查是其中的子集。尚未将journal、源归档和实际上传组合成公开准备服务；媒体输入/Run与Agent接线继续实施。原UI、SDK、完整插件包和用户App保持，完整目标继续ACTIVE。
+
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
 ## 2026-10-06：阶段执行契约与已采用参考解析

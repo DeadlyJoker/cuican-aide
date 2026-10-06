@@ -44,6 +44,7 @@ import {
   migratePostgresProjectAssets,
 } from "./project-asset-schema.ts";
 import { assertPostgresProjectAssetQualification } from "./project-asset-qualification.ts";
+import { PostgresProjectMaterialPreparationStore } from "./project-material-preparation-postgres-store.ts";
 
 /** One parent pool borrow per operation, including every dependency and final current check. */
 export class PostgresProjectAssetStore
@@ -85,6 +86,14 @@ export class PostgresProjectAssetStore
         }
         throw error;
       }
+    });
+  }
+  projectMaterialPreparationStore(): PostgresProjectMaterialPreparationStore {
+    return new PostgresProjectMaterialPreparationStore({
+      pool: this.#pool,
+      schema: this.#d.schema,
+      assertOpen: this.#open,
+      ...(this.#verifier === undefined ? {} : { verifier: this.#verifier }),
     });
   }
   async loadAsset(input: AssetInput<"loadAsset">) {
