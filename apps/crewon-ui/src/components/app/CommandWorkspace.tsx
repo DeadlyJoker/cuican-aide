@@ -3417,7 +3417,7 @@ export function CommandWorkspace({
               )}
 
               <div className="command-composer-stack">
-                {projectConversationComposer}
+                {showCommandThread ? projectConversationComposer : null}
                 {showProgressPill ? (
                   <ComposerProgressPill
                     key={`${threadProgress.runId ?? "none"}:${threadProgress.runPlan?.planId ?? "none"}`}

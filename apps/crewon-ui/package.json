@@ -1,7 +1,7 @@
 {
   "name": "@crewon/ui",
   "private": true,
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "CrewON multi-agent collaboration workspace",
   "author": "CrewON",
   "type": "module",

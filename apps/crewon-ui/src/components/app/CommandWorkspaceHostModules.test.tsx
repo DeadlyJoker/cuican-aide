@@ -117,6 +117,58 @@ function fixtureModule(
 }
 
 describe("CommandWorkspace multiple host contributions", () => {
+  it("keeps project stage controls off a new-task homepage with a retained old thread ID", () => {
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        {...base}
+        selectedThreadId="previous-project-chat"
+        projectConversationComposer={<button>Previous project stage</button>}
+      />,
+    );
+    expect(markup).toContain("让 CrewON 完成你的工作");
+    expect(markup).not.toContain("Previous project stage");
+  });
+
+  it("withdraws the previous project stage on new task and restores it only in that original conversation", async () => {
+    const thread = {
+      id: "original-project-chat",
+      name: "原项目对话",
+      preview: "原项目对话",
+      cwd: "/fixture",
+      createdAt: 1,
+      updatedAt: 2,
+      turns: [],
+    } as unknown as Thread;
+    const stage = <button data-project-stage>项目创作阶段</button>;
+    const select = vi.fn();
+    const props = {
+      selectedThread: thread,
+      selectedThreadId: thread.id,
+      linkedThreads: [thread],
+      projectConversationComposer: stage,
+      onSelectLinkedThread: select,
+    };
+    await render(props);
+    expect(container!.querySelector("[data-project-stage]")).not.toBeNull();
+    const sidebar = container!.querySelector(".command-sidebar");
+    await click(container!.querySelector('[data-nav-key="command"]'));
+    expect(container!.querySelector("[data-project-stage]")).toBeNull();
+    expect(container!.querySelector(".home-title")?.textContent).toContain(
+      "让 CrewON 完成你的工作",
+    );
+    // A parent refresh may retain the old selected Thread while a separate draft is open.
+    await render(props);
+    expect(container!.querySelector("[data-project-stage]")).toBeNull();
+    await click(
+      container!.querySelector('[data-linked-thread-id="original-project-chat"]'),
+    );
+    expect(select).toHaveBeenLastCalledWith(thread.id);
+    expect(container!.querySelector("[data-project-stage]")).not.toBeNull();
+    expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
+    await render({ selectedThreadId: null, projectConversationComposer: stage });
+    expect(container!.querySelector("[data-project-stage]")).toBeNull();
+  });
+
   it("withdraws failed-directory content while keeping its selected route and retries only a fresh directory", async () => {
     const fixture = fixtureModule("example.drama", "main", "AI 短剧");
     const ownerKey = Object.freeze({});
