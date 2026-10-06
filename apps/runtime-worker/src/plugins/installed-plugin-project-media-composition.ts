@@ -127,7 +127,9 @@ export async function prepareInstalledPluginProjectMedia(
   )
     fail("dependency_invalid");
   signal.throwIfAborted();
-  // The Control-side media input/source schemas must already exist. Missing or corrupt history fails closed.
+  // Control owns project/source schemas. This explicit Worker opt-in prepares its journal before dependent generation tables.
+  await store.projectAssetStore().projectMaterialPreparationStore().migrate();
+  signal.throwIfAborted();
   await extensions.migrateProjectMediaGenerations();
   signal.throwIfAborted();
   const operations = store.externalOperationStore();

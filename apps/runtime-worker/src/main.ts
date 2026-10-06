@@ -44,7 +44,7 @@ import type { RuntimeExtensionCompositionConfig } from "./extensions/extension-r
 import { INSTALLED_PLUGIN_WORKER_CONFIG_ENV } from "./plugins/installed-plugin-worker-config.ts";
 import { loadInstalledPluginAuthorityConfig } from "./plugins/installed-plugin-authority-config.ts";
 import {
-  createInstalledPluginWorkerAuthority,
+  prepareInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
 } from "./plugins/installed-plugin-worker-authority.ts";
 import { resolveInstalledPluginPeerEnvironment } from "./plugins/installed-plugin-peer-environment.ts";
@@ -217,8 +217,9 @@ const initialized = await (async () => {
           )
         : undefined;
     if (installedPluginConfiguration !== undefined) {
-      installedPluginAuthority = createInstalledPluginWorkerAuthority(
+      installedPluginAuthority = await prepareInstalledPluginWorkerAuthority(
         installedPluginConfiguration,
+        environment,
       );
       const document = readInstalledPluginReleaseDocument(
         installedPluginAuthority.releaseDocumentPath,
@@ -428,9 +429,11 @@ try {
           installedPluginExecution:
             installedPluginAuthority!.installedPluginExecution,
           installedPluginAuthorityOwner: installedPluginAuthority!,
-          ...(installedPluginAuthority!.projectPlanning === undefined ? {} : {
-            projectPlanning: installedPluginAuthority!.projectPlanning,
-          }),
+          ...(installedPluginAuthority!.projectPlanning === undefined
+            ? {}
+            : {
+                projectPlanning: installedPluginAuthority!.projectPlanning,
+              }),
           ...(installedPluginPeer === undefined
             ? {}
             : {

@@ -1,7 +1,4 @@
-import {
-  createNativeProjectMediaInputTools,
-  assertNativeProjectMediaInputDeclaration,
-} from "./native-project-media-input-runtime.ts";
+import { assertNativeProjectMediaInputDeclaration } from "./native-project-media-input-runtime.ts";
 import { isDeepStrictEqual } from "node:util";
 import type {
   ActorContext,
@@ -17,7 +14,6 @@ import {
   type DesktopProjectExecutionConfiguration,
 } from "@crewon/contracts/plugins";
 import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
-import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   parseExtensionConfiguration,
   parseExtensionExecutionTarget,
@@ -53,11 +49,6 @@ import {
   type InstalledPluginReleaseIdentity,
 } from "./installed-plugin-release-document.ts";
 import type { InstalledPluginExecutionReadinessMetadata } from "./installed-plugin-execution-readiness-types.ts";
-import { createNativeProjectPlanningRuntime } from "./native-project-planning-runtime.ts";
-import type {
-  InstalledPluginWorkerAuthority,
-  InstalledPluginReadAuthorityInput,
-} from "./installed-plugin-worker-authority.ts";
 
 type Purpose = "read" | "submit" | "observe";
 const digester = installedPluginReleaseDigester;
@@ -77,7 +68,7 @@ function tuple(
   };
 }
 /** Actual Native policy and existing SQLite records, independent of remote deployment authorities. */
-class NativeAuthorityOwner {
+export class NativeAuthorityOwner {
   readonly config: InstalledPluginNativeWorkerConfig;
   readonly files: ReturnType<typeof captureNativePluginAuthority>;
   readonly store: SqliteRunStore;
@@ -622,249 +613,7 @@ class NativeAuthorityOwner {
   }
 }
 
-export function createInstalledPluginNativeWorkerAuthority(
-  config: InstalledPluginNativeWorkerConfig,
-): InstalledPluginWorkerAuthority {
-  const owner = new NativeAuthorityOwner(config);
-  const authorizeRead = (
-    input: InstalledPluginReadAuthorityInput,
-    signal: AbortSignal,
-  ) =>
-    owner.operate(async () => {
-      const value = ioRecord(input, ["identity", "scope", "purpose"]);
-      owner.scope(value.scope);
-      if (value.purpose !== "read") fail("purpose_invalid");
-      return (await owner.package(
-        value.identity as InstalledPluginReleaseIdentity,
-        "read",
-      ))
-        ? ("allow" as const)
-        : ("deny" as const);
-    }, signal);
-  const resolveProfile = (actor: ActorContext, signal: AbortSignal) =>
-    owner.operate(async () => {
-      owner.actor(actor);
-      return owner.files.authority.scope;
-    }, signal);
-  const projectMediaInputs =
-    owner.projects?.version === "crewon.desktop-project-execution.v1"
-      ? createNativeProjectMediaInputTools({
-          projects: owner.projects,
-          scope: owner.files.authority.scope,
-          packages: owner.files.authority.packages,
-          current: owner.current.bind(owner),
-          actor: owner.actor.bind(owner),
-          operate: owner.operate.bind(owner),
-        })
-      : undefined;
-  return Object.freeze({
-    installRoot: config.installRoot,
-    releaseDocumentPath: config.releaseDocumentPath,
-    authorizeRead,
-    resolveProfile,
-    ...(owner.projects?.planningDrafts === undefined
-      ? {}
-      : {
-          projectPlanning: createNativeProjectPlanningRuntime({
-            actor: owner.files.authority.actor,
-            scope: owner.files.authority.scope,
-            projects: owner.projects,
-            installRoot: config.installRoot,
-            store: owner.store,
-            current: owner.current.bind(owner),
-            operate: owner.operate.bind(owner),
-            release: owner.release.bind(owner),
-            target: owner.target.bind(owner),
-          }),
-        }),
-    installedPluginExecution: Object.freeze({
-      installRoot: config.installRoot,
-      ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
-      ...(owner.projects?.conversations === undefined
-        ? {}
-        : {
-            projectTools: Object.freeze({
-              version: "crewon.project-tools.v1" as const,
-              authorization: Object.freeze({
-                authorize: (
-                  input: Parameters<
-                    CreativeProjectAuthorizationPort["authorize"]
-                  >[0],
-                ) => owner.operate(() => owner.projectPolicy(input)),
-              }),
-              authorizeService: (
-                admission: import("@crewon/domain").PluginTaskAdmission,
-                signal: AbortSignal,
-              ) =>
-                owner.operate(async () => {
-                  owner.current(signal);
-                  owner.actor({
-                    tenantId: admission.tenantId,
-                    spaceId: admission.spaceId,
-                    principalId: admission.principalId,
-                    actorId: admission.actorId,
-                  });
-                  if (
-                    !owner.projects!.conversations!.publications.some(
-                      (p) =>
-                        p.pluginId === admission.pluginId &&
-                        p.packageDigest === admission.packageDigest &&
-                        p.contributionId === admission.contributionId,
-                    )
-                  )
-                    fail("project_service_unapproved");
-                }, signal),
-            }),
-          }),
-      ...(owner.projects?.assetStages === undefined
-        ? {}
-        : {
-            projectAssetTools: Object.freeze({
-              version: "crewon.project-asset-tools.v1" as const,
-              authorization: Object.freeze({
-                authorize: (
-                  input: Parameters<
-                    CreativeProjectAuthorizationPort["authorize"]
-                  >[0],
-                ) => owner.operate(() => owner.projectPolicy(input)),
-              }),
-              authorizeService: (
-                admission: import("@crewon/domain").PluginTaskAdmission,
-                signal: AbortSignal,
-              ) =>
-                owner.operate(async () => {
-                  owner.current(signal);
-                  owner.actor({
-                    tenantId: admission.tenantId,
-                    spaceId: admission.spaceId,
-                    principalId: admission.principalId,
-                    actorId: admission.actorId,
-                  });
-                  if (
-                    !owner.projects?.assetStages?.publications.some(
-                      (p) =>
-                        p.pluginId === admission.pluginId &&
-                        p.packageDigest === admission.packageDigest &&
-                        p.contributionId === admission.contributionId,
-                    )
-                  )
-                    fail("asset_service_unapproved");
-                }, signal),
-            }),
-          }),
-      authorization: Object.freeze({
-        authorize: (input: Parameters<AuthorizationPort["authorize"]>[0]) =>
-          owner.operate(() => owner.policy(input)),
-      }),
-      resolveActor: (
-        input: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
-        signal: AbortSignal,
-      ) =>
-        owner.operate(async () => {
-          const value = ioRecord(input, ["tenantId", "spaceId", "actorId"]),
-            actor = owner.files.authority.actor;
-          return Object.entries(value).every(
-            ([field, expected]) =>
-              actor[field as keyof ActorContext] === expected,
-          )
-            ? actor
-            : null;
-        }, signal),
-      authorizePackage: (
-        input: Readonly<{
-          candidate: Readonly<{ descriptor: unknown; packageDigest: string }>;
-          scope: PluginProfileScope;
-          purpose: "submit" | "observe";
-        }>,
-        signal: AbortSignal,
-      ) =>
-        owner.operate(async () => {
-          const value = ioRecord(input, ["candidate", "scope", "purpose"]);
-          owner.scope(value.scope);
-          if (value.purpose !== "submit" && value.purpose !== "observe")
-            fail("purpose_invalid");
-          const candidate = ioRecord(ioJson(value.candidate, 128 * 1024), [
-              "descriptor",
-              "packageDigest",
-            ]),
-            descriptor = parsePluginPackageDescriptor(candidate.descriptor);
-          return (await owner.package(
-            {
-              pluginId: descriptor.pluginId,
-              publisherId: descriptor.publisherId,
-              version: descriptor.version,
-              packageDigest: candidate.packageDigest as string,
-            },
-            value.purpose,
-          ))
-            ? ("allow" as const)
-            : ("deny" as const);
-        }, signal),
-      authorizeCandidatePackage: (
-        input: Readonly<{
-          candidate: Readonly<{ descriptor: unknown; packageDigest: string }>;
-          scope: PluginProfileScope;
-          expectedSelectionRevision: number;
-        }>,
-        signal: AbortSignal,
-      ) =>
-        owner.operate(async () => {
-          const value = ioRecord(input, [
-            "candidate",
-            "scope",
-            "expectedSelectionRevision",
-          ]);
-          owner.scope(value.scope);
-          const candidate = ioRecord(ioJson(value.candidate, 128 * 1024), [
-              "descriptor",
-              "packageDigest",
-            ]),
-            descriptor = parsePluginPackageDescriptor(candidate.descriptor);
-          return (await owner.candidatePackage(
-            {
-              pluginId: descriptor.pluginId,
-              publisherId: descriptor.publisherId,
-              version: descriptor.version,
-              packageDigest: candidate.packageDigest as string,
-            },
-            value.expectedSelectionRevision as number,
-          ))
-            ? ("allow" as const)
-            : ("deny" as const);
-        }, signal),
-      executionIo: Object.freeze({
-        resolveNetwork: (
-          context: PluginToolRuntimeContext,
-          signal: AbortSignal,
-        ) => owner.operate(() => owner.runNetwork(context, signal), signal),
-        resolveReadinessNetwork: (
-          metadata: InstalledPluginExecutionReadinessMetadata,
-          signal: AbortSignal,
-        ) =>
-          owner.operate(
-            () =>
-              owner.network(
-                ioRecord(ioJson(metadata, 128 * 1024), [
-                  "identity",
-                  "scope",
-                  "configuration",
-                  "target",
-                  "purpose",
-                ]) as unknown as InstalledPluginExecutionReadinessMetadata,
-                false,
-              ),
-            signal,
-          ),
-      }),
-      ...(config.historicalScope === null
-        ? {}
-        : {
-            historicalQuery: Object.freeze({
-              scope: config.historicalScope,
-              resolveProfile,
-            }),
-          }),
-    }),
-    close: () => owner.close(),
-  });
-}
+export {
+  createInstalledPluginNativeWorkerAuthority,
+  prepareInstalledPluginNativeWorkerAuthority,
+} from "./installed-plugin-native-worker-composition.ts";

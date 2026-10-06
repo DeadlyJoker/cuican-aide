@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import type { ActorContext, AuthorizationPort, ProjectPlanningRuntimePort } from "@crewon/application";
+import type {
+  ActorContext,
+  AuthorizationPort,
+  ProjectPlanningRuntimePort,
+} from "@crewon/application";
 import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   extensionDigest,
@@ -26,7 +30,10 @@ import type { InstalledPluginExecutionReadinessMetadata } from "./installed-plug
 import type { InstalledPluginExtensionHostDependencies } from "./installed-plugin-extension-host.ts";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import type { InstalledPluginAuthorityConfig } from "./installed-plugin-authority-config.ts";
-import { createInstalledPluginNativeWorkerAuthority } from "./installed-plugin-native-authority.ts";
+import {
+  createInstalledPluginNativeWorkerAuthority,
+  prepareInstalledPluginNativeWorkerAuthority,
+} from "./installed-plugin-native-authority.ts";
 
 export type InstalledPluginReadAuthorityInput = Readonly<{
   identity: InstalledPluginReleaseIdentity;
@@ -474,4 +481,14 @@ export function createInstalledPluginWorkerAuthority(
     installedPluginExecution: execution,
     close: () => http.close(),
   });
+}
+
+/** Production Main uses the asynchronous path; legacy metadata/remote callers retain their existing API. */
+export async function prepareInstalledPluginWorkerAuthority(
+  config: InstalledPluginAuthorityConfig,
+  environment: Readonly<Record<string, string | undefined>>,
+): Promise<InstalledPluginWorkerAuthority> {
+  return "nativeAuthorityPath" in config
+    ? prepareInstalledPluginNativeWorkerAuthority(config, environment)
+    : createInstalledPluginWorkerAuthority(config);
 }

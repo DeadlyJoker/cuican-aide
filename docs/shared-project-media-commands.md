@@ -88,3 +88,15 @@ Idempotency-Key: <原执行请求键>
 ComfyUI参考文件解码器从 Worker 原样移入 `@crewon/media-runtime/comfyui-project-reference-material-adapter`，旧 Worker导出保留相同函数身份。它继续只接受审核过的原配置身份及其确切 `/view` 输出引用，不能把UI提供的任意URL变为素材来源。通用工厂接收可信宿主选择的纯解码器，便于原ComfyUI实现复用；测试中的具名来源解码器和供应商响应不能当作真实ComfyUI验收。
 
 Control HTTP与原Worker集成用例都改用这套实际工厂。专项验证T10/D18、档案加密、逐用途拒绝、密钥快照、关闭以及真实父数据库冷重开；冷恢复使用原准备记录和原加密数据，不重新捕获来源或上传。独立Native生成声明、私有档案配置与工作流执行审核仍须同时接到正式Control和Worker；本模块不会自动启用新的桌面或Agent入口。证据：`output/extensions/checks/shared-material-runtime-20261007/`。
+
+## Native Worker 的独立生成装配
+
+2026-10-07：原桌面项目执行配置增加可选 `mediaGenerations`，版本为 `crewon.desktop-project-media-generations.v1`，只接受已有项目会话和媒体工作流审核所对应的 `workbench` publication。旧素材读写、阶段工具和文字计划声明均不推导此项授权。当前 Settings 仍只写入原素材输入声明；本项独立生成声明尚未从产品设置开放。
+
+原 Worker Main 现在等待异步宿主准备：从完整校验的实际安装包读取 T10、D18 图文件，核对包身份、Manifest/实现摘要、工作流摘要及固定提示词/图片输入节点，再提供原媒体执行配置。准备阶段不导入插件 Node/UI 入口、不调用模型或供应商；后续执行继续由原 Run、安装选择、实时文件权限和网络准入负责。旧同步工厂保留旧配置行为，遇到新媒体生成声明时要求走异步准备，避免忽略声明后启动一个缺少媒体能力的 Worker。
+
+素材存储使用原宿主环境的 artifact 根目录和密钥文件引用。通过带用途与 profile 的 HKDF 派生独立加密密钥，档案位于 artifact 根目录的同级 `*-project-materials/<profile 摘要>`；临时密钥在实际档案复制后清零。Control 后续使用同一函数可以读取同一份加密档案，当前已验证同 profile 跨实例一致、跨 profile 隔离，不能据此声称 Native Control 已接入。
+
+首次启用使用空白的媒体存储时，原 Control Core 和 Worker 的独立媒体准备先迁移素材日志，再创建依赖它的生成表。已有项目、资产等基础 schema 仍必须由原宿主提供；损坏历史不会被当作空库覆盖。
+
+本阶段到达 Worker 装配，尚未完成 Native Control 工厂、Settings 生成审批、页面按钮与 Agent 生成入口。旧 App、已发布 Short26 包和 SDK 不变；正式双入口与真实供应商生成需继续验收。

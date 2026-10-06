@@ -460,8 +460,12 @@ export async function createInstalledPluginTaskRuntimeCore(
       await extensions.migrateUnmeteredPluginAdmissions();
     }
     if (generations !== undefined) await extensions.migrateProjectGenerations();
-    if (input.projectMediaGenerationStorage !== undefined)
+    if (input.projectMediaGenerationStorage !== undefined) {
+      const assets = input.store.projectAssetStore();
+      await assets.projectMediaInputStore().migrate();
+      await assets.projectMaterialPreparationStore().migrate();
       await extensions.migrateProjectMediaGenerations();
+    }
     if (queries !== undefined) {
       await extensions.migrateProjectQueries();
       await extensions.enableProjectGenerationReads();

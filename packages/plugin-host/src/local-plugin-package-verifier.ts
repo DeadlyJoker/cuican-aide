@@ -36,7 +36,7 @@ export async function verifyLocalPluginPackage(
   return (await captureLocalPluginPackage(input, false)).verification;
 }
 
-/** Installer-private bytes: copying these prevents mixing source revisions after authorization. */
+/** Host-owned byte snapshot: copying these prevents mixing source revisions after authorization. */
 export async function captureLocalPluginPackage(
   input: VerifyLocalPluginPackageInput,
   captureFiles: boolean,

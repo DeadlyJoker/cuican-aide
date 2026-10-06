@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./package-snapshot": "./src/local-plugin-package-verifier.ts"
   },
   "scripts": {
     "test": "pnpm --filter @crewon/plugin-sdk build && node --experimental-strip-types --test --test-concurrency=1 src/*.test.ts",

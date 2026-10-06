@@ -1,5 +1,15 @@
 # 增量扩展子系统实施进度
 
+## 2026-10-07：Native Worker 接入审核工作流与素材工厂
+
+原 Worker Main 改为等待异步 Native 装配。新增独立 `mediaGenerations` 部署声明，必须匹配已审核媒体包与原项目会话 publication；旧元数据或文字计划不推导生成权限。启动读取完整核验的实际安装包，验证 T10、D18 图摘要、Manifest/实现身份及固定输入节点，再装配原 Worker 媒体执行配置。插件 Node/UI 入口、模型和供应商不会在这一步执行。
+
+原素材工厂使用宿主 artifact 密钥文件引用，为当前 profile 派生独立加密密钥和稳定档案位置，临时密钥清零。真实空白 Native 媒体库暴露了迁移顺序问题：生成表依赖的素材日志尚未准备；已在 Control Core 的显式存储准备及 Worker 装配中先迁移依赖。未更改表格式、历史 Run 或原默认证明条件。
+
+**216/216** 检查通过，零跳过，涵盖实际 Native 审批文件与 Short26 图装配、旧配置、声明/图/Manifest 漂移拒绝、主体和文件撤销、关闭重开、原父存储保留，以及既有 SQLite/PostgreSQL 生成、共享素材和 Worker 回归。Native 新用例只验证装配，没有伪称其已执行实际生成；既有模型/供应商回归仍使用具名测试端口。4 项类型检查、7 个桌面组件构建/源码与包身份、边界、格式和冻结产物检查通过，临时 PostgreSQL 正常停止并清理。
+
+原用户 App、正式 App0.1.22、Short26 和 SDK 保持。Settings 尚未写入新生成声明；Native Control 素材工厂、页面与 Agent 生成按钮/工具尚待接线，完整八阶段目标保持 **ACTIVE**。下一步沿同一声明接通 Control 与实际设置，再开放双入口；不能将本阶段视为已交付短剧端到端制作。说明见[共享媒体命令](./shared-project-media-commands.md)，证据：`output/extensions/checks/native-media-worker-20261007/`。
+
 ## 2026-10-07：Control 与 Worker 共用实际素材装配
 
 新增私有共享工厂 `createProjectMediaMaterialRuntime`，使用宿主借出的真实父数据库、原配置/安装/项目读取服务和各用途权限，装配源字节读取、加密冻结、上传、观察、输入资格与原 journal。启动不访问供应商，不创建生成Run；关闭只撤销自身能力并关闭自己的档案，不接管父数据库。密钥在异步初始化前复制，临时副本随后清零；冷启动继续使用原记录和原加密档案。
