@@ -26,11 +26,17 @@ export async function mediaInputToolFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
+  options: Readonly<{
+    installedFixture?: NonNullable<
+      Parameters<typeof mediaGenerationFixture>[2]
+    >["installedFixture"];
+  }> = {},
 ) {
   const f = await mediaGenerationFixture(t, backend, {
     unmetered: true,
     taskClockFixture: "current",
     taskKindFixture: "media-input",
+    installedFixture: options.installedFixture,
   });
   // Keep unrelated historical source work out of this fixture's actual queue claim.
   for (let n = 0; n < 16; n++) {
@@ -245,6 +251,9 @@ export async function mediaInputToolFixture(
   async function prepareTool<M extends MediaInputToolMethod>(
     method: M,
     request: MediaInputToolRequests[M],
+    options: Readonly<{
+      policy?: import("@crewon/tool-broker").ToolExecutionPolicy;
+    }> = {},
   ) {
     const run = await f.parent.loadRun(locator);
     assert.ok(run);
@@ -278,6 +287,7 @@ export async function mediaInputToolFixture(
         maxOutputBytes: 8192,
         maxArtifactBytes: 8192,
       },
+      ...options.policy,
     };
     const actionDigest = f.digester.sha256(canonicalActionIntent(actionIntent));
     const initial = prepareToolExecutionReceipt({

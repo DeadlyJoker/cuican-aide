@@ -35,6 +35,11 @@ import {
   type PluginProjectMediaExecutionService,
 } from "./project-media-execution-service.js";
 
+import {
+  PROJECT_MEDIA_INPUT_TOOLS_SERVICE,
+  PROJECT_MEDIA_INPUT_TOOLS_API_VERSION,
+  type PluginProjectMediaInputToolsService,
+} from "./project-media-input-tools-service.js";
 export default definePlugin({
   apiVersion: "crewon.plugin-host.v1",
   pluginId: "crewon.short-drama",
@@ -72,6 +77,11 @@ export default definePlugin({
         CREWON_PROJECT_MEDIA_EXECUTION_SERVICE,
         CREWON_PROJECT_MEDIA_EXECUTION_API_VERSION,
       );
+    const mediaInputs =
+      context.services.getOptional<PluginProjectMediaInputToolsService>(
+        PROJECT_MEDIA_INPUT_TOOLS_SERVICE,
+        PROJECT_MEDIA_INPUT_TOOLS_API_VERSION,
+      );
     if (execution) {
       const registration = execution.register({
         create: (runtimeContext, services) =>
@@ -80,6 +90,7 @@ export default definePlugin({
             assets: assets ?? null,
             assetContext: assetContext ?? null,
             mediaExecution: mediaExecution ?? null,
+            mediaInputs: mediaInputs ?? null,
           }),
       });
       context.onDispose(() => registration.dispose());

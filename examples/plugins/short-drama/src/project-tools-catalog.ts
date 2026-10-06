@@ -15,6 +15,7 @@ import {
   PROJECT_ASSET_TOOL_OPERATIONS,
   type ProjectAssetToolMethod,
 } from "./project-asset-tools-service.js";
+export const PROJECT_MEDIA_INPUT_TOOL = "crewon_short_drama__media_input";
 export const PROJECT_ASSET_CONTEXT_TOOL =
   "crewon_short_drama__asset_context_read";
 export function assetMethod(name: string): ProjectAssetToolMethod | null {
@@ -39,6 +40,7 @@ export const projectDefinitions: readonly PluginToolDefinition[] =
         "crewon.project-context",
         "crewon.project-asset-tools",
         "crewon.project-asset-context",
+        "crewon.project-media-input-tools",
       ].includes(tool.adapterId),
     )
     .map((tool) => ({
@@ -60,6 +62,7 @@ export function projectPolicy(
     (!projectMethod(name) &&
       !assetMethod(name) &&
       name !== PROJECT_ASSET_CONTEXT_TOOL &&
+      name !== PROJECT_MEDIA_INPUT_TOOL &&
       name !== "crewon_short_drama__project_context_read")
   )
     return null;

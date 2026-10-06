@@ -1,5 +1,15 @@
 # 增量扩展子系统实施进度
 
+## 2026-10-06：Short23 同包 Agent 媒体输入工具
+
+[媒体输入工具](./project-media-input-agent-tools-protocol.md)进入同一 `crewon.short-drama` 完整安装包，版本 `23.0.0`。新增一项 `media_input`，共24项工具；六个方法读取原任务范围、目录、元数据、分段提示词及保存输入。独立便携协议、严格请求/响应验证与 Node 注册均已连接，保留原 SDK、原 UI 源码和既有工具。缺少独立宿主服务时拒绝；保存输入不宣称已生成图片。
+
+真实安装器与 PluginNodeHost 加载包，使用实际 manifest、Node factory 和工具策略，对 SQLite/PostgreSQL 的原 Stage/Run/Tool/输入记录执行。T10/D18 保存后可由原工作台服务手动追加修订；重新加载插件恢复原工具仍返回原版本，不覆盖最新手动内容。运行中关闭会等待调用，已知保存成功保留结果，迟到只读结果被拒绝；取消不通过重新保存来猜测原结果。
+
+完整包回归 **320/320**、实际安装调用及原服务/事务 **33/33**、宿主与便携解码器 **10/10**，合计 **363/363** 通过，零失败、取消和跳过；包含15项新增专项。网络依赖安装曾停在代理 SYN_SENT，核实并结束自有进程后改用原精确锁文件离线安装；SDK 未执行 build/prepack，初次依赖未完成就尝试构建的失败日志保留。
+
+完整包位于 `output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0`，核验位于 `output/extensions/checks/project-media-input-agent-package-20261006/`。这是实际 Node 包到共享服务的验证，dispatch 签发和 PDP 仍是具名测试边界，不代表原模型/Worker resolver/Composer 已跑通。下一步接生产装配及原对话入口，再做流式、恢复与页面接力联合验收。用户 App 未更新，无新供应商请求；完整八阶段目标 **ACTIVE**。
+
 ## 2026-10-06：Agent 媒体输入的宿主工具服务与真实工具恢复
 
 [独立媒体输入工具协议](./project-media-input-agent-tools-protocol.md)已实现原任务范围、输入目录、元数据、分段提示词及保存服务。T10/D18 写入同一工作台记录；Agent 工具恢复取回原输入修订，用户后来的手动修改仍保持最新。工具输出按含转义的实际外层 JSON 限制在 8192 字节，写前检查确认回执可返回。

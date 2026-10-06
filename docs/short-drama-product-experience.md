@@ -59,4 +59,4 @@ Agent 在原对话提出一张可编辑制作卡：故事范围、执行到角�
 
 接下来依次接通 Agent 同一媒体输入命令、手动与 Agent 的实际生成/查询/采用、结构化分镜、有界跨阶段计划，再接视频、声音和成片。每项验收既覆盖业务保存与恢复，也覆盖真正的原对话和插件页面；测试页面不会冒充用户 App 已更新。
 
-[Agent 媒体输入阶段范围](./project-media-input-agent-stage-protocol.md)已进入原会话任务与双库事务：冻结项目、工作流和来源版本，恢复保留同一个任务。[媒体输入工具宿主服务](./project-media-input-agent-tools-protocol.md)现已支持同一记录保存与原工具恢复；插件 Node 注册、生产装配与公开入口仍在接入，当前不能从用户对话直接调用。
+[Agent 媒体输入阶段范围](./project-media-input-agent-stage-protocol.md)已进入原会话任务与双库事务：冻结项目、工作流和来源版本，恢复保留同一个任务。[媒体输入工具宿主服务](./project-media-input-agent-tools-protocol.md)现已支持同一记录保存与原工具恢复；Short23 已完成同包 Node 注册和安装后的调用验证；生产装配与公开入口仍在接入，当前不能从用户对话直接调用。

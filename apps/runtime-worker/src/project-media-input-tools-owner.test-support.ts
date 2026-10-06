@@ -16,8 +16,9 @@ export async function mediaInputToolsOwnerFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
+  options: NonNullable<Parameters<typeof mediaInputToolFixture>[3]> = {},
 ) {
-  const f = await mediaInputToolFixture(t, backend, kind),
+  const f = await mediaInputToolFixture(t, backend, kind, options),
     binding = await f.ext.loadExtensionRunBinding(f.locator);
   assert.ok(binding);
   const configuration = await f.ext.loadExtensionConfiguration({
@@ -60,7 +61,7 @@ export async function mediaInputToolsOwnerFixture(
     inputs: f.app,
     stages: f.stages,
     conversations: f.conversations,
-    tools: [
+    tools: options.installedFixture?.manifest.tools ?? [
       {
         operationId: "media_input",
         adapterId: "named_media_input_adapter",
@@ -132,7 +133,7 @@ export async function mediaInputToolsOwnerFixture(
     options: {
       copied?: boolean;
       signal?: AbortSignal;
-      method?: "execute" | "reconcile";
+      method?: "execute" | "reconcile" | "cancel";
     } = {},
   ) {
     const i = {

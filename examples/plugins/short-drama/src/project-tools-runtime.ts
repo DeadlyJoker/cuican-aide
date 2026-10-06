@@ -15,6 +15,7 @@ import {
   projectCommandInput,
   assetMethod,
   PROJECT_ASSET_CONTEXT_TOOL,
+  PROJECT_MEDIA_INPUT_TOOL,
 } from "./project-tools-catalog.js";
 import {
   MAX_PROJECT_TOOLS_RESPONSE_BYTES,
@@ -49,6 +50,11 @@ import {
   readProjectAssetRunScope,
   assertProjectAssetRunOperation,
 } from "./project-asset-run-scope.js";
+import type { PluginProjectMediaInputToolsService } from "./project-media-input-tools-service.js";
+import {
+  parseMediaInputToolCommand,
+  parseMediaInputToolResponse,
+} from "./project-media-input-tools-codec.mjs";
 /** One installed package, one actual host Agent runtime, with stage text and media tools. */
 export function createShortDramaRuntime(
   context: PluginToolRuntimeContext,
@@ -59,6 +65,7 @@ export function createShortDramaRuntime(
     assets?: PluginProjectAssetToolsService | null;
     assetContext?: PluginProjectAssetContextService | null;
     mediaExecution?: PluginProjectMediaExecutionService | null;
+    mediaInputs?: PluginProjectMediaInputToolsService | null;
   } = {
     projectContext: null,
   },
@@ -96,6 +103,49 @@ export function createShortDramaRuntime(
     }
     if (mediaDefinitions.some((d) => d.name === command.name))
       throw new Error("short_drama_media_services_unavailable");
+    if (command.name === PROJECT_MEDIA_INPUT_TOOL) {
+      const raw = projectCommandInput(context, approval, command);
+      if (
+        typeof raw.requestJson !== "string" ||
+        Buffer.byteLength(raw.requestJson) > 9999
+      )
+        throw new Error("short_drama_media_input_request_limit");
+      const input = parseMediaInputToolCommand(raw);
+      if (!options.mediaInputs)
+        throw new Error("short_drama_media_input_tools_unavailable");
+      const previous = retained.prepare(command);
+      if (previous?.status === "completed" || previous?.status === "canceled")
+        return previous;
+      if (method === "cancel")
+        return {
+          status: "unknownOutcome" as const,
+          executionId: command.executionId,
+          providerReceiptId: null,
+        };
+      const result = await options.mediaInputs[input.method]({
+        command,
+        request: input.request as never,
+      });
+      // The host ACK is correlated before retention; a committed write is not turned into a late cancellation.
+      const checked = parseMediaInputToolResponse(
+        input.method,
+        input.request,
+        result,
+      );
+      if (
+        input.method === "getContext" &&
+        ((checked as { runId: string }).runId !== context.run.runId ||
+          (checked as { threadId: string }).threadId !== context.run.threadId ||
+          (checked as { configurationRevision: number })
+            .configurationRevision !== context.configuration.revision)
+      )
+        throw new Error("short_drama_media_input_context_mismatch");
+      if (input.method !== "saveInput") {
+        if (closed) throw new Error("short_drama_runtime_closed");
+        signal.throwIfAborted();
+      }
+      return retain(command, checked);
+    }
     const asset = assetMethod(command.name);
     const assetRequest = asset
       ? parseProjectAssetToolCommand(

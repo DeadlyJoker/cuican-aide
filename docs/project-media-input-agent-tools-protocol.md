@@ -1,6 +1,6 @@
 # Agent 媒体输入工具：共享记录与执行恢复
 
-2026-10-06。已实现独立宿主服务 owner、原 Worker dispatch 核验及 SQLite/PostgreSQL 写入资格。**尚未连接短剧安装包中的 Node 工具、Worker 生产装配和原 Composer 入口**，不代表用户 App 已能调用。接续[原会话阶段范围](./project-media-input-agent-stage-protocol.md)，产品目标见[双入口交互](./short-drama-product-experience.md)。
+2026-10-06。已实现独立宿主服务 owner、原 Worker dispatch 核验及 SQLite/PostgreSQL 写入资格。**Short23 已注册同包 Node 工具并验证实际安装调用，Worker 生产装配和原 Composer 入口尚未接通**，不代表用户 App 已能调用。接续[原会话阶段范围](./project-media-input-agent-stage-protocol.md)，产品目标见[双入口交互](./short-drama-product-experience.md)。
 
 ## 用户行为
 
@@ -10,7 +10,7 @@ Agent 和手动页面使用同一份 T10/D18 生成输入：项目、业务项�
 
 ## 可选 Node 服务
 
-`crewon.project-media-input-tools` API `1` 是独立宿主服务。它不扩展冻结的 SDK execution v1，也不新增独立插件包。计划中的同包工具 `media_input` 使用固定参数 `{method, requestJson}`；当前宿主端协议和服务已实现，插件端声明、客户端与注册尚待接入。
+`crewon.project-media-input-tools` API `1` 是独立宿主服务。它不扩展冻结的 SDK execution v1，也不新增独立插件包。Short23 同包工具 `media_input` 使用固定参数 `{method, requestJson}`，包含独立便携类型、严格解码器、声明和 Node 注册。模型参数中的 `requestJson` 保留原 manifest 单字段 9999 字节上限；工具输出仍为 8192 字节。缺少可选宿主服务时明确拒绝，不降为自由生图。
 
 | 方法         | 作用                                       | 范围                                        |
 | ------------ | ------------------------------------------ | ------------------------------------------- |
@@ -37,8 +37,14 @@ SQLite/PostgreSQL 在保存输入使用的同一连接内，写入前和 COMMIT 
 
 ## 验证及待接线
 
-测试使用真实原 Thread/Turn/Run、队列、Tool receipt、SQLite 文件及正常持久性配置的 PostgreSQL。覆盖 T10/D18 保存、工作台服务读取与手动追加修订、冷连接恢复、Unicode 提示词分段、独立权限、提交前回滚、提交后成功保留及更换真实租约后恢复。PDP、发布/工具声明和供应商来源历史仍明确使用具名夹具；没有运行模型、插件 Node 入口、浏览器或新 ComfyUI 请求。
+测试使用真实原 Thread/Turn/Run、队列、Tool receipt、SQLite 文件及正常持久性配置的 PostgreSQL。覆盖 T10/D18 保存、工作台服务读取与手动追加修订、冷连接恢复、Unicode 提示词分段、独立权限、提交前回滚、提交后成功保留及更换真实租约后恢复。宿主服务测试的 PDP、声明及供应商来源历史使用具名夹具。新增 Short23 检查通过真实安装器与 PluginNodeHost 加载完整包，使用真实 manifest、Node 注册与执行策略，跨原 SQL 读写及冷重开；dispatch 签发和 PDP 仍为具名测试边界，没有运行真实模型、原 Worker resolver、Composer 或新 ComfyUI 请求。
 
 日志与核验位于 `output/extensions/checks/project-media-input-agent-tool-20261006/`。SDK、原完整插件包及 App 保持冻结。
 
-接下来依次完成同一短剧包内的工具注册和验证、Worker 生产装配、原 Composer 发起阶段任务，以及“对话保存 → 插件页面编辑 → 对话继续”的流式和恢复联合验收。在这条链路完成前，现有 Worker 的 `installed_plugin_media_input_stage_runtime_unavailable` 保护继续保留。之后继续实际生成/查询/候选采用、结构化分镜和跨阶段执行；完整八阶段目标仍 ACTIVE。
+同包工具注册和实际安装调用现已完成。接下来依次连接 Worker 生产装配、原 Composer 发起阶段任务，以及“对话保存 → 插件页面编辑 → 对话继续”的流式和恢复联合验收。在这条链路完成前，现有 Worker 的 `installed_plugin_media_input_stage_runtime_unavailable` 保护继续保留。之后继续实际生成/查询/候选采用、结构化分镜和跨阶段执行；完整八阶段目标仍 ACTIVE。
+
+## Short23 完整插件包
+
+`crewon.short-drama` 版本 `23.0.0` 在原 23 项工具上新增一项 `media_input`，未拆分工作流包，未修改原 UI 源码或 SDK。完整包位于 `output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0`。构建使用原冻结 SDK tar，包内仅含独立 Node/UI 产物和自身依赖。
+
+包内 320 项回归（含原页面快照）通过；安装调用与原服务/事务检查 33 项、宿主与便携解码器 10 项通过，均无跳过。实际包调用覆盖 T10/D18、原输入保存、最新/历史读取、手动追加修订、提示词分段、ACK 保留、插件冷重开恢复、缺少服务拒绝、未提交任务的保守取消、关闭等待和迟到读取拒绝。它证明安装包到共享服务这一段，不代替原 Agent 流式和页面联合验收。证据在 `output/extensions/checks/project-media-input-agent-package-20261006/`。

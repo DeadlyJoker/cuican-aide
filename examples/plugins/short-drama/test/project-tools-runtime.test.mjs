@@ -211,13 +211,15 @@ test("Short13 catalog includes stage and original media tools with model schemas
   const f = fixture();
   assert.equal(
     f.runtime.definitions().length,
-    Number(version.split(".")[0]) >= 21
-      ? 23
-      : Number(version.split(".")[0]) >= 19
-        ? 21
-        : Number(version.split(".")[0]) >= 16
-          ? 15
-          : 14,
+    Number(version.split(".")[0]) >= 23
+      ? 24
+      : Number(version.split(".")[0]) >= 21
+        ? 23
+        : Number(version.split(".")[0]) >= 19
+          ? 21
+          : Number(version.split(".")[0]) >= 16
+            ? 15
+            : 14,
   );
   const list = f.runtime
     .definitions()
