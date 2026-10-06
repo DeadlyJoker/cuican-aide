@@ -37,6 +37,15 @@ import {
   composeInstalledPluginProjectToolsDependencies,
   type InstalledPluginProjectToolsConfig,
 } from "./installed-plugin-project-tools.ts";
+import {
+  captureInstalledPluginProjectMediaConfig,
+  prepareInstalledPluginProjectMedia,
+  preparedInstalledPluginMediaOwner,
+  composeInstalledPluginProjectMedia,
+  type InstalledPluginProjectMediaConfig,
+  type PreparedInstalledPluginProjectMedia,
+} from "./installed-plugin-project-media-composition.ts";
+import type { InstalledPluginRunRuntimeResolverPort } from "./installed-plugin-run-runtime.ts";
 
 /** Host deployment authority, never supplied by a plugin or inferred from an installation receipt. */
 export type InstalledPluginExecutionConfig = Readonly<{
@@ -49,6 +58,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   executionIo?: InstalledPluginExecutionIoConfig;
   projectTools?: InstalledPluginProjectToolsConfig;
   projectAssetTools?: InstalledPluginProjectAssetToolsConfig;
+  projectMedia?: InstalledPluginProjectMediaConfig;
   /** Historical observation is an explicit profile-scoped deployment, never today's catalog. */
   historicalQuery?: InstalledPluginHistoricalQueryConfig;
 }>;
@@ -80,7 +90,16 @@ export function captureInstalledPluginExecutionConfig(
     config.projectTools === undefined
   )
     throw new Error("installed_plugin_asset_read_dependencies_unavailable");
+  if (config.projectMedia !== undefined && config.executionIo === undefined)
+    throw new Error("installed_plugin_media_io_unavailable");
   return Object.freeze({
+    ...(config.projectMedia === undefined
+      ? {}
+      : {
+          projectMedia: captureInstalledPluginProjectMediaConfig(
+            config.projectMedia,
+          ),
+        }),
     ...(config.projectAssetTools === undefined
       ? {}
       : {
@@ -197,8 +216,21 @@ export function composeInstalledPluginRuntimeResolver(input: {
   store: SqliteRunStore | PostgresDomainStore;
   extensions: ExtensionStore;
   config: InstalledPluginExecutionConfig;
+  preparedMedia?: PreparedInstalledPluginProjectMedia;
 }): InstalledPluginRuntimeResolver {
-  const { extensions, store, config } = input;
+  const { extensions, store } = input,
+    config = captureInstalledPluginExecutionConfig(input.config);
+  if (config.projectMedia === undefined && input.preparedMedia !== undefined)
+    throw new Error("installed_plugin_media_preparation_mismatch");
+  const media =
+    config.projectMedia === undefined
+      ? null
+      : preparedInstalledPluginMediaOwner({
+          ...input,
+          config: config.projectMedia,
+          prepared: input.preparedMedia,
+        });
+  const operations = media?.operations ?? store.externalOperationStore();
   if (
     extensions.pluginAdmissionVersion !== "crewon.plugin-task-admission.v1" ||
     typeof extensions.loadPluginTaskAdmission !== "function"
@@ -210,13 +242,21 @@ export function composeInstalledPluginRuntimeResolver(input: {
     runs: store,
     installations,
     authorization: config.authorization,
-    operations: store.externalOperationStore(),
+    operations,
     conversations: store.projectConversationStore(),
     plans: store.projectTextPlanStore(),
     assetStages: store.projectAssetStageStore(),
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({
+    ...(media === null
+      ? {}
+      : {
+          projectMedia: composeInstalledPluginProjectMedia({
+            prepared: media,
+            installed: contexts,
+          }),
+        }),
     contexts,
     admissions: {
       pluginAdmissionVersion: extensions.pluginAdmissionVersion,
@@ -261,11 +301,63 @@ export function composeInstalledPluginRuntimeResolver(input: {
       : {
           executionIo: {
             ...captureInstalledPluginExecutionIoConfig(config.executionIo),
-            operations: store.externalOperationStore(),
+            operations,
           },
         }),
     ...(config.maximumRuntimes === undefined
       ? {}
       : { maximumRuntimes: config.maximumRuntimes }),
   });
+}
+
+/** Production startup owns preparation separately and closes it after every real resolver invocation has joined. */
+export async function prepareInstalledPluginRuntimeResolver(input: {
+  store: SqliteRunStore | PostgresDomainStore;
+  extensions: ExtensionStore;
+  config: InstalledPluginExecutionConfig;
+  signal?: AbortSignal;
+}): Promise<InstalledPluginRunRuntimeResolverPort> {
+  const config = captureInstalledPluginExecutionConfig(input.config);
+  if (config.projectMedia === undefined)
+    return composeInstalledPluginRuntimeResolver({ ...input, config });
+  const media = await prepareInstalledPluginProjectMedia({
+    ...input,
+    config: config.projectMedia,
+    signal: input.signal ?? new AbortController().signal,
+  });
+  try {
+    const resolver = composeInstalledPluginRuntimeResolver({
+      ...input,
+      config,
+      preparedMedia: media,
+    });
+    let closing: Promise<void> | null = null;
+    return Object.freeze({
+      acquire: resolver.acquire.bind(resolver),
+      nextToolResultMaintenanceLease:
+        resolver.nextToolResultMaintenanceLease.bind(resolver),
+      close: () => {
+        if (!closing) {
+          closing = (async () => {
+            await resolver.close();
+            await media.close();
+          })();
+          void closing.catch(() => {
+            closing = null;
+          });
+        }
+        return closing;
+      },
+    });
+  } catch (error) {
+    try {
+      await media.close();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        "installed_plugin_media_startup_cleanup_failed",
+      );
+    }
+    throw error;
+  }
 }

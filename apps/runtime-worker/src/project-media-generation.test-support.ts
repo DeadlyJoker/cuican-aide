@@ -44,6 +44,16 @@ export async function mediaGenerationFixture(
     workflowDigestsFixture?: Partial<
       Record<import("@crewon/application").ProjectMediaWorkflowId, string>
     >;
+    runtimeTargetFixture?(
+      input: Readonly<{
+        parent:
+          | import("@crewon/store").SqliteRunStore
+          | import("@crewon/store").PostgresDomainStore;
+        actor: import("@crewon/application").ActorContext;
+        profileId: string;
+        configuration: import("@crewon/domain").ExtensionConfiguration;
+      }>,
+    ): Promise<import("@crewon/domain").ExtensionExecutionTarget>;
   }> = {},
 ) {
   const f = await projectMediaInputFixture(t, backend, {
@@ -134,6 +144,15 @@ export async function mediaGenerationFixture(
     f.digester,
   );
   const extensions = f.parent.extensionStore();
+  const runtimeTarget =
+    options.runtimeTargetFixture === undefined
+      ? f.link.binding.target
+      : await options.runtimeTargetFixture({
+          parent: f.parent,
+          actor: f.actor,
+          profileId: f.target.installation.profileId,
+          configuration,
+        });
   await extensions.saveExtensionConfiguration({
     configuration,
     expectedRevision: 1,
@@ -146,7 +165,7 @@ export async function mediaGenerationFixture(
   await extensions.saveExtensionActivation({
     activation: activation(configuration, {
       pluginId: configuration.pluginId,
-      target: f.link.binding.target,
+      target: runtimeTarget,
     }),
     expectedRevision: 0,
     receipt: {
@@ -238,7 +257,7 @@ export async function mediaGenerationFixture(
         validateConfiguration: async () => {},
         evaluate: async () => ({
           outcome: "ready",
-          target: f.link.binding.target,
+          target: runtimeTarget,
         }),
       },
       authorization: { authorize: async () => f.decision(true) },

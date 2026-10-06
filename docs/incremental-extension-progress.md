@@ -32,6 +32,22 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
 
+## 2026-10-06：真实 Worker 媒体装配与冷恢复
+
+[Worker 媒体装配](./project-media-worker-composition-protocol.md)补齐实际 standalone 组合入口：显式宿主材料工厂收到原父 Store，原生 operation adapter 的媒体迁移与 Run/IO 共享同一实例。内部准备回执绑定确切配置、Store 和扩展 adapter；复制、错误 owner、访问器、代理及关闭后复用均拒绝。工厂资源在实际解析器/Node/IO 退场后关闭，父 Store 保持原生命周期。
+
+完整 Worker 首次暴露 Short21.0.0 的两个媒体工具描述与 manifest 不一致。新 Short21.0.1 从清单读取描述，保持原完整目录比较；原包只读保留。新包独立使用冻结 SDK tar 构建，完整包 **311/311** 检查通过，包内 UI 与原 Short21.0.0 逐字相同。摘要 `sha256:fc7e827cb5f84bbb9d4b6d9ba2a8787c6cc1b428bef75b7fe3a28ec3019a2aa2`，路径为 `output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1`。
+
+新增 **12/12** 双库检查通过：实际安装/业务注册、AgentVersion 发布和工厂、原 TaskCore/队列及 RuntimeWorker 循环签发原 Tool receipt，T10/D18 各提交一次并读原129/17结果。供应商受理后、Tool receipt 完成前中断，实际旧 Worker/存储关闭并重开后继续原操作；新 head 和禁止新提交不引发第二次 POST 或材料准备。显式原结果发布服务生成原项目候选，不冒称已安装自动发布协调器。物理供应商请求仍在等待时，解析器关闭会等待借用退场，再关闭材料工厂 owner；无效工厂和异步取消关闭已交出的资源，原父 Store 仍可读取。
+
+实际 SQL、PNG、加密归档、Worker/工具回执真实；模型流、PDP/部署审查、DNS及供应商响应为具名夹具，未调用私有 Tool proof 签发 helper，没有新的真实远端生成或图片 GET。八阶段设计继续以 AI 创作、工作流执行、候选校验和确切采用为共同链路，Agent 对话和手动工作台共用项目与计划。
+
+完整相关回归按同一26份文件分七批完成，**461/461**通过、零失败/取消/跳过，新增12项为其中子集；完整包311项为独立检查，计数不累加。五包类型、架构边界、仓库及改动代码格式检查通过。七批自有 PostgreSQL 正常停止并按目录身份清理，审计确认 fsync/full_page_writes/synchronous_commit 均启用。
+
+扩大回归的三轮磁盘耗尽/PostgreSQL 崩溃日志保留，不计通过。只清理已结束的自有测试数据库和旧独立生产者的可重建依赖缓存，保留源码、锁文件、完整包、冻结 SDK 和 App；另清理已结束、无打开文件且不含 App 的两个自有 Native 升级测试夹具，保留真实磁盘容量保护。后续分批运行同一完整文件清单，测试实例降低 WAL 容量及文件并发，保留事务持久性和原断言。完整证据位于 `output/extensions/checks/project-media-worker-composition-20261006/`。
+
+下一项接可信 Main 中共享媒体命令、结果发布与原 Agent/手动入口，再推进结构化分镜和有限跨阶段计划。视频、声音、剪辑交付及媒体采用尚未完成，原 UI/用户 App 保持，积分后置，完整目标 ACTIVE。
+
 ## 2026-10-06：原媒体结果字节与共享项目候选
 
 [内部候选协议](./project-media-result-candidate-protocol.md)沿真实已接受媒体input/link、原Run及原供应商占用取出T10/D18的确切结果位置。只接收项目/Run/index，首次原位置GET通过生产DNS出口、PNG编码/CRC/扫描线/尺寸及摘要检查后冻结字节，独立加密intent保留第一份观察。同一拥有者的另一有效Actor复用原来源身份；源/head或供应商字节变化不替换原候选。

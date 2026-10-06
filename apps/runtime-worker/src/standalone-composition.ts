@@ -48,7 +48,7 @@ import type { PluginCreditSettlementRuntimeConfig } from "./plugins/plugin-credi
 import type { InstalledPluginRunRuntimeResolverPort } from "./plugins/installed-plugin-run-runtime.ts";
 import {
   captureInstalledPluginExecutionConfig,
-  composeInstalledPluginRuntimeResolver,
+  prepareInstalledPluginRuntimeResolver,
   composeInstalledPluginQueryHost,
   composeInstalledPluginExecutionReadiness,
   type InstalledPluginExecutionConfig,
@@ -514,7 +514,7 @@ async function composeRuntimeWorker(
   const installedPluginRuntimeResolver =
     config.installedPluginExecution === undefined
       ? config.installedPluginRuntimeResolver
-      : composeInstalledPluginRuntimeResolver({
+      : await prepareInstalledPluginRuntimeResolver({
           store,
           extensions: store.extensionStore(),
           config: config.installedPluginExecution,

@@ -36,6 +36,7 @@ import {
   observeReferenceWorkflow,
 } from "./reference-workflows.js";
 import { RetainedResults } from "./retained-results.js";
+import business from "../business.json" with { type: "json" };
 
 export const MEDIA_SUBMIT = "crewon_short_drama__media_submit";
 export const MEDIA_OBSERVE = "crewon_short_drama__media_observe";
@@ -44,8 +45,9 @@ export const mediaDefinitions: readonly PluginToolDefinition[] = [
     schemaVersion: "crewon.tool-definition.v0",
     kind: "function",
     name: MEDIA_SUBMIT,
-    description:
-      "Execute the exact host-confirmed media candidate for this Run, once. Takes no prompt, paths or workflow from the model. An existing or unknown request is only observed. Never resubmit it.",
+    description: business.tools.find(
+      (tool) => tool.operationId === "media_submit",
+    )!.description,
     execution: "serial",
     inputSchema: {
       type: "object",
@@ -58,8 +60,9 @@ export const mediaDefinitions: readonly PluginToolDefinition[] = [
     schemaVersion: "crewon.tool-definition.v0",
     kind: "function",
     name: MEDIA_OBSERVE,
-    description:
-      "Observe the original confirmed media candidate for this Run. Takes no IDs from the model and never prepares materials or submits. Returns bounded actual results, not project adoption.",
+    description: business.tools.find(
+      (tool) => tool.operationId === "media_observe",
+    )!.description,
     execution: "serial",
     inputSchema: {
       type: "object",
