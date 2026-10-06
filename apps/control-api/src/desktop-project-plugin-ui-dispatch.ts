@@ -1,3 +1,5 @@
+import { isProjectMediaInputUiNamespaceAction } from "@crewon/contracts/project-media-inputs-ui";
+import type { ProjectMediaInputPluginUiOwner } from "./project-media-input-plugin-ui-owner.ts";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { isProjectAssetStagesNamespaceAction } from "@crewon/contracts/project-asset-stages";
@@ -16,6 +18,7 @@ import { isProjectAssetUiNamespaceAction } from "@crewon/contracts/project-asset
 /** Metadata namespaces are dispatched before the independent execution owner. */
 export function composeDesktopProjectPluginUiDispatch(
   input: Readonly<{
+    mediaInputs?: ProjectMediaInputPluginUiOwner;
     projects: CreativeProjectPluginUiRuntime | undefined;
     texts: ProjectTextPluginUiRuntime | undefined;
     assets?: ProjectAssetPluginUiRuntime;
@@ -29,6 +32,17 @@ export function composeDesktopProjectPluginUiDispatch(
   const { projects, texts, history, tasks } = input;
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
+      if (isProjectMediaInputUiNamespaceAction(context.action)) {
+        if (
+          input.mediaInputs === undefined ||
+          !input.mediaInputs.supportsAction(context.action)
+        )
+          throw new ApplicationError(
+            "conflict",
+            "project_media_input_ui_unavailable",
+          );
+        return input.mediaInputs.actions.invoke(context);
+      }
       if (isProjectAssetStagesNamespaceAction(context.action)) {
         const owner = input.assetStages?.();
         if (owner === undefined || !owner.supportsAction(context.action))
@@ -171,7 +185,7 @@ export function composeDesktopProjectPluginUiDispatch(
             assetMetadata.committedMetadata,
           ),
         };
-  return {
+  const dispatch = {
     actions,
     ...(input.plans === undefined
       ? stageMetadata
@@ -197,6 +211,15 @@ export function composeDesktopProjectPluginUiDispatch(
           ),
         }),
   };
+  return input.mediaInputs === undefined
+    ? dispatch
+    : {
+        ...dispatch,
+        committedMetadata: combineSelectionCommittedMetadata(
+          input.mediaInputs.committedMetadata,
+          dispatch.committedMetadata,
+        ),
+      };
 }
 
 function committedDesktopProjectMetadata(

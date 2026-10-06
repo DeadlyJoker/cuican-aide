@@ -32,12 +32,18 @@ export type ProjectMediaInputPermission = Readonly<{
 /** Separate purpose; text/asset permissions and preparation receipts are not media-input grants. */
 export interface ProjectMediaInputAuthorizationPort {
   authorize(input: ProjectMediaInputPermission): Promise<AuthorizationDecision>;
+  /** Optional transaction-safe PDP hook. Installation rows are checked by the Store on its borrowed connection. */
+  authorizeTransaction?(
+    input: ProjectMediaInputPermission,
+  ): Promise<AuthorizationDecision>;
   assertActive(input: ProjectMediaInputPermission): void;
 }
 export function captureProjectMediaInputAuthorization(
   input: ProjectMediaInputAuthorizationPort,
 ): ProjectMediaInputAuthorizationPort {
+  const authorizeTransaction = optionalTransaction(input);
   return Object.freeze({
+    ...(authorizeTransaction === undefined ? {} : { authorizeTransaction }),
     authorize: projectMediaInputBound<
       ProjectMediaInputAuthorizationPort["authorize"]
     >(input, "authorize"),
@@ -76,9 +82,12 @@ export function projectMediaInputAuthority(
     return input.authorization.assertActive(permission);
   };
   let authority: ProjectMediaInputAuthority;
-  const check = async () => {
+  const check = async (phase: "before" | "transaction") => {
     assertProjectMediaInputActive(authority);
-    const decision = await input.authorization.authorize(permission);
+    const decision = await (phase === "transaction" &&
+    input.authorization.authorizeTransaction !== undefined
+      ? input.authorization.authorizeTransaction(permission)
+      : input.authorization.authorize(permission));
     assertProjectMediaInputActive(authority);
     if (decision.outcome !== "allow")
       throw new ApplicationError("authorization", "project_media_input_denied");
@@ -89,11 +98,29 @@ export function projectMediaInputAuthority(
     projectId: input.projectId,
     action: input.action,
     review: input.review,
-    assertCurrent: check,
-    assertTransactionCurrent: check,
+    assertCurrent: () => check("before"),
+    assertTransactionCurrent: () => check("transaction"),
     assertActive: active,
   });
   return authority;
+}
+function optionalTransaction(
+  input: ProjectMediaInputAuthorizationPort,
+): ProjectMediaInputAuthorizationPort["authorizeTransaction"] {
+  if (!input || typeof input !== "object" || types.isProxy(input))
+    fail("dependency_invalid");
+  for (
+    let owner: object | null = input;
+    owner;
+    owner = Object.getPrototypeOf(owner)
+  ) {
+    const d = Object.getOwnPropertyDescriptor(owner, "authorizeTransaction");
+    if (!d) continue;
+    if (!Object.hasOwn(d, "value") || typeof d.value !== "function")
+      fail("dependency_invalid");
+    return d.value.bind(input);
+  }
+  return undefined;
 }
 export function projectMediaInputBound<T extends (...args: never[]) => unknown>(
   input: unknown,

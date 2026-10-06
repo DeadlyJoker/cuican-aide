@@ -1,3 +1,5 @@
+import { PROJECT_MEDIA_INPUT_UI_ACTIONS } from "@crewon/contracts/project-media-inputs-ui";
+import { registerPluginProjectMediaInputInvocation } from "./plugin-project-media-input-invocation.ts";
 import { isProjectAssetRecoveryAction } from "@crewon/contracts/project-asset-recovery";
 import { registerPluginProjectAssetRecoveryInvocation } from "./plugin-project-asset-recovery-invocation.ts";
 import { registerPluginHistoricalQueryInvocation } from "./plugin-project-historical-query-invocation.ts";
@@ -408,7 +410,15 @@ export class PluginUiApplicationService {
       let unregisterHistorical: (() => void) | undefined;
       let unregisterAsset: (() => void) | undefined;
       let unregisterAssetRecovery: (() => void) | undefined;
+      let unregisterMediaInputs: (() => void) | undefined;
       try {
+        unregisterMediaInputs = Object.values(
+          PROJECT_MEDIA_INPUT_UI_ACTIONS,
+        ).some((a) => a === command.action)
+          ? registerPluginProjectMediaInputInvocation(context, () =>
+              this.#transactionFence(actor, binding),
+            )
+          : undefined;
         unregisterAssetRecovery = isProjectAssetRecoveryAction(command.action)
           ? registerPluginProjectAssetRecoveryInvocation(
               context,
@@ -473,6 +483,7 @@ export class PluginUiApplicationService {
       } finally {
         unregisterHistorical?.();
         unregisterAsset?.();
+        unregisterMediaInputs?.();
         unregisterAssetRecovery?.();
         unregister();
       }

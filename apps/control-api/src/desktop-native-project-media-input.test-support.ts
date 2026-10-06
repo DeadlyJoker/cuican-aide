@@ -37,7 +37,10 @@ const actor = {
 export async function desktopNativeMediaInputFixture(
   t: TestContext,
   purposes: readonly ("read" | "write")[] = ["read", "write"],
-  options: { reviewIdentityFixture?: "different-manifest" } = {},
+  options: {
+    reviewIdentityFixture?: "different-manifest";
+    mediaInputUi?: boolean;
+  } = {},
 ) {
   const owners: {
     runtime: Awaited<ReturnType<typeof createDesktopPluginRuntime>>;
@@ -161,6 +164,19 @@ export async function desktopNativeMediaInputFixture(
     textArtifacts: { version: "crewon.project-text.v1" },
     assetArtifacts: { version: "crewon.project-asset.v1" },
     mediaInputs,
+    ...(options.mediaInputUi
+      ? {
+          mediaInputUi: {
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+        }
+      : {}),
   };
   const document = {
     schemaVersion: "crewon.desktop-plugin-bootstrap.v3",

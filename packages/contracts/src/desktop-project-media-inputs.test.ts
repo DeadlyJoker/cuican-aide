@@ -147,3 +147,52 @@ test("private approval captures only portable bounded own data and does not eval
   );
   assert.equal(called, 0);
 });
+
+test("independent UI publication requires the same reviewed short-drama package; old declarations infer no UI grant", () => {
+  const mediaInputUi = {
+    publications: [{ ...options.publications[0], contributionId: "workbench" }],
+  };
+  const projects = {
+    version: "crewon.desktop-project-execution.v1",
+    textArtifacts: { version: "crewon.project-text.v1" },
+    assetArtifacts: { version: "crewon.project-asset.v1" },
+    mediaInputs: approval,
+  };
+  assert.equal(execution(projects, options).mediaInputUi, undefined);
+  const actual = execution({ ...projects, mediaInputUi }, options);
+  assert.deepEqual(actual.mediaInputUi, mediaInputUi);
+  assert.ok(Object.isFrozen(actual.mediaInputUi!.publications[0]));
+  assert.throws(() =>
+    execution({ ...projects, mediaInputs: undefined, mediaInputUi }, options),
+  );
+  assert.throws(() =>
+    execution(
+      {
+        ...projects,
+        mediaInputUi: {
+          publications: [
+            { ...mediaInputUi.publications[0], actorId: "client" },
+          ],
+        },
+      },
+      options,
+    ),
+  );
+  const other = {
+    pluginId: "example.other",
+    packageDigest: digest,
+    contributionId: "workbench",
+  };
+  assert.throws(() =>
+    execution(
+      { ...projects, mediaInputUi: { publications: [other] } },
+      { publications: [...options.publications, other] },
+    ),
+  );
+  assert.throws(() =>
+    history(
+      { version: "crewon.desktop-project-history.v1", mediaInputUi },
+      options,
+    ),
+  );
+});

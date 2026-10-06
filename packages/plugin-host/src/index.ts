@@ -90,8 +90,11 @@ export {
   assertPluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "./plugin-ui-host-service-availability.ts";
-export { appendProjectAssetUiServiceAvailability, appendProjectAssetRecoveryUiServiceAvailability, appendProjectAssetStageUiServiceAvailability }
-  from "./plugin-project-asset-host-service-availability.ts";
+export {
+  appendProjectAssetUiServiceAvailability,
+  appendProjectAssetRecoveryUiServiceAvailability,
+  appendProjectAssetStageUiServiceAvailability,
+} from "./plugin-project-asset-host-service-availability.ts";
 export {
   createDeferredPluginUiHostServiceAvailability,
   type DeferredPluginUiHostServiceAvailability,
@@ -122,3 +125,5 @@ export {
 export * from "./plugin-project-historical-query-action-bridge.ts";
 export * from "./plugin-project-historical-query-execution-bridge.ts";
 export * from "./plugin-project-historical-query-host-availability.ts";
+
+export { appendProjectMediaInputUiServiceAvailability } from "./plugin-project-media-input-host-service-availability.ts";

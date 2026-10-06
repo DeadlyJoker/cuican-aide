@@ -1,3 +1,5 @@
+import { isProjectMediaInputUiNamespaceAction } from "@crewon/contracts/project-media-inputs-ui";
+import { composeDesktopProjectMediaInputUi } from "./desktop-project-media-input-ui-composition.ts";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { isProjectAssetStagesNamespaceAction } from "@crewon/contracts/project-asset-stages";
@@ -249,6 +251,7 @@ export async function createDesktopPluginRuntime(
   let assetUi: ProjectAssetPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
+  let mediaInputUi: ReturnType<typeof composeDesktopProjectMediaInputUi>;
   let conversations: ReturnType<typeof createDesktopProjectConversationRuntime>;
   let taskRuntime:
     | DesktopInstalledPluginTaskRuntime
@@ -263,6 +266,7 @@ export async function createDesktopPluginRuntime(
       (
         conversations?.hostUiServices ??
         recovery?.hostUiServices ??
+        mediaInputUi?.hostUiServices ??
         (projectExecution ? history?.hostUiServices : undefined) ??
         taskRuntime?.core.historicalQueries?.hostUiServices ??
         taskRuntime?.core.projectQueries?.hostUiServices ??
@@ -385,7 +389,7 @@ export async function createDesktopPluginRuntime(
           textUi?.hostUiServices ??
           projectUi?.hostUiServices,
       );
-    const businessHostUiServices =
+    const originalBusinessHostUiServices =
       (projectExecution ? history?.hostUiServices : undefined) ??
       taskRuntime?.core.historicalQueries?.hostUiServices ??
       taskRuntime?.core.projectQueries?.hostUiServices ??
@@ -394,6 +398,13 @@ export async function createDesktopPluginRuntime(
       assetUi?.hostUiServices ??
       textUi?.hostUiServices ??
       projectUi?.hostUiServices;
+    mediaInputUi = composeDesktopProjectMediaInputUi({
+      configuration,
+      core: taskRuntime?.core,
+      fallback: originalBusinessHostUiServices,
+    });
+    const businessHostUiServices =
+      mediaInputUi?.hostUiServices ?? originalBusinessHostUiServices;
     recovery = await prepareDesktopPluginUiRecovery({
       configuration: recoveryConfiguration,
       publications: configuration.publications,
@@ -500,6 +511,7 @@ export async function createDesktopPluginRuntime(
       readAsset: (context) => reader(context).readAsset(context),
     };
     const dispatch = composeDesktopProjectPluginUiDispatch({
+      mediaInputs: mediaInputUi?.owner,
       conversations: () => conversations?.owner(),
       assetStages: () => conversations?.assetStages(),
       plans: () => conversations?.textPlans(),
@@ -607,6 +619,22 @@ export async function createDesktopPluginRuntime(
               available();
               const invoke = () => ui.invoke(actor, command);
               const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (isProjectMediaInputUiNamespaceAction(command.action)) {
+                  if (mediaInputUi === undefined || taskRuntime === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "project_media_input_ui_unavailable",
+                    );
+                  return taskRuntime.core.requests.run(
+                    {
+                      request,
+                      actor,
+                      signal: requestSignal,
+                      preparation: "configuration",
+                    },
+                    invoke,
+                  );
+                }
                 if (
                   isProjectAssetUiNamespaceAction(command.action) ||
                   isProjectAssetRecoveryNamespaceAction(command.action)
@@ -775,6 +803,7 @@ export async function createDesktopPluginRuntime(
           () => projectUi?.close(),
           () => textUi?.close(),
           () => assetUi?.close(),
+          () => mediaInputUi?.close(),
           () => history?.close(),
           () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
@@ -793,6 +822,7 @@ export async function createDesktopPluginRuntime(
         () => projectUi?.close(),
         () => textUi?.close(),
         () => assetUi?.close(),
+        () => mediaInputUi?.close(),
         () => history?.close(),
         () => configurationRuntime?.close(),
         () => activation?.close(),

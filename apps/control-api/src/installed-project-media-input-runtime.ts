@@ -1,7 +1,11 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { types } from "node:util";
 import {
   ApplicationError,
+  capturePluginProjectMediaInputInvocationAuthority,
+  type PluginUiActionContext,
+  type PluginProjectMediaInputInvocationAuthority,
   CreativeProjectApplicationService,
   ProjectAssetApplicationService,
   ProjectAssetReferenceImageApplicationService,
@@ -53,6 +57,8 @@ export class InstalledProjectMediaInputRuntime {
   readonly #service: ProjectMediaInputApplicationService;
   readonly #assertActive: () => void;
   readonly #lifetime: AbortController;
+  readonly #uiPackages: readonly string[];
+  readonly #uiInvocations: AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>;
   readonly #physical = new Set<Promise<unknown>>();
   #closing: Promise<void> | undefined;
   private constructor(
@@ -60,11 +66,15 @@ export class InstalledProjectMediaInputRuntime {
     service: ProjectMediaInputApplicationService,
     assertActive: () => void,
     lifetime: AbortController,
+    uiInvocations: AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>,
+    uiPackages: readonly string[],
   ) {
     this.#core = core;
     this.#service = service;
     this.#assertActive = assertActive;
     this.#lifetime = lifetime;
+    this.#uiInvocations = uiInvocations;
+    this.#uiPackages = Object.freeze([...uiPackages]);
     issued.add(this);
   }
   static async prepare(
@@ -94,6 +104,8 @@ export class InstalledProjectMediaInputRuntime {
     );
     assertInstalledProjectMediaInputPublications(input.core, configuration);
     const lifetime = new AbortController();
+    const uiInvocations =
+      new AsyncLocalStorage<PluginProjectMediaInputInvocationAuthority>();
     const active = () => {
       lifetime.signal.throwIfAborted();
       authority.assertActive();
@@ -101,11 +113,19 @@ export class InstalledProjectMediaInputRuntime {
     const actorCurrent = (actor: ActorContext) => {
       active();
       authority.requests.currentSignal().throwIfAborted();
+      uiInvocations.getStore()?.assertActive();
       if (!mediaInputSame(actor, authority.requests.currentActor())) denied();
     };
     const current = async (actor: ActorContext) => {
       actorCurrent(actor);
       await authority.requests.assertCurrent();
+      await uiInvocations.getStore()?.assertCurrent();
+      actorCurrent(actor);
+    };
+    const transactionCurrent = async (actor: ActorContext) => {
+      actorCurrent(actor);
+      await authority.requests.assertCurrent();
+      await uiInvocations.getStore()?.assertTransactionCurrent();
       actorCurrent(actor);
     };
     const projects = input.store.creativeProjectStore(),
@@ -199,6 +219,17 @@ export class InstalledProjectMediaInputRuntime {
       configurations: input.core.extensions,
     });
     const authorization = Object.freeze({
+      authorizeTransaction: async (
+        request: Parameters<
+          InstalledProjectMediaInputConfiguration["authorization"]["authorize"]
+        >[0],
+      ) => {
+        await transactionCurrent(request.actor);
+        if (request.action === "projectMediaInput:qualify") denied();
+        const result = await configuration.authorization.authorize(request);
+        await transactionCurrent(request.actor);
+        return result;
+      },
       authorize: async (
         request: Parameters<
           InstalledProjectMediaInputConfiguration["authorization"]["authorize"]
@@ -234,6 +265,8 @@ export class InstalledProjectMediaInputRuntime {
       service,
       active,
       lifetime,
+      uiInvocations,
+      configuration.reviews.map((r) => r.targetIdentity.packageDigest),
     );
   }
   saveInput(
@@ -244,24 +277,7 @@ export class InstalledProjectMediaInputRuntime {
   ) {
     const command = parseSaveMediaInputRequest(input);
     return this.#run(request, actor, signal, async () => {
-      const { configurationRevision, ...logical } = command;
-      const outcome =
-        await ProjectMediaInputApplicationService.prototype.saveInput.call(
-          this.#service,
-          actor,
-          {
-            ...logical,
-            target: {
-              pluginId: "crewon.short-drama",
-              profileId: this.#core.requests.currentScope().profileId,
-              configurationRevision,
-            },
-          },
-        );
-      return parseSaveMediaInputResponse(command, {
-        disposition: outcome.disposition,
-        input: publicInput(outcome.input),
-      });
+      return this.#save(actor, command);
     });
   }
   loadInput(
@@ -272,22 +288,112 @@ export class InstalledProjectMediaInputRuntime {
   ) {
     const query = parseLoadMediaInputRequest(input);
     return this.#run(request, actor, signal, async () => {
-      const state =
-        await ProjectMediaInputApplicationService.prototype.loadInput.call(
-          this.#service,
-          actor,
-          query,
-        );
-      return parseLoadMediaInputResponse(query, {
-        state:
-          state === null
-            ? null
-            : {
-                input: publicInput(state.input),
-                latestInputRevision: state.latestInputRevision,
-              },
-      });
+      return this.#load(actor, query);
     });
+  }
+  /** A live Application invocation and original authenticated request are both required. */
+  saveInputFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    return this.#ui(context, signal, () => {
+      if (context.action !== "crewon.project-media-inputs.v1.saveInput")
+        denied();
+      return this.#save(
+        context.actor,
+        parseSaveMediaInputRequest(context.input),
+      );
+    });
+  }
+  loadInputFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    return this.#ui(context, signal, () => {
+      if (context.action !== "crewon.project-media-inputs.v1.loadInput")
+        denied();
+      return this.#load(
+        context.actor,
+        parseLoadMediaInputRequest(context.input),
+      );
+    });
+  }
+  assertAvailable(): void {
+    this.#assertActive();
+  }
+  async #save(actor: ActorContext, command: SaveMediaInputRequest) {
+    const { configurationRevision, ...logical } = command;
+    const outcome =
+      await ProjectMediaInputApplicationService.prototype.saveInput.call(
+        this.#service,
+        actor,
+        {
+          ...logical,
+          target: {
+            pluginId: "crewon.short-drama",
+            profileId: this.#core.requests.currentScope().profileId,
+            configurationRevision,
+          },
+        },
+      );
+    return parseSaveMediaInputResponse(command, {
+      disposition: outcome.disposition,
+      input: publicInput(outcome.input),
+    });
+  }
+  async #load(actor: ActorContext, query: LoadMediaInputRequest) {
+    const state =
+      await ProjectMediaInputApplicationService.prototype.loadInput.call(
+        this.#service,
+        actor,
+        query,
+      );
+    return parseLoadMediaInputResponse(query, {
+      state:
+        state === null
+          ? null
+          : {
+              input: publicInput(state.input),
+              latestInputRevision: state.latestInputRevision,
+            },
+    });
+  }
+  #ui<T>(
+    context: PluginUiActionContext,
+    signal: AbortSignal,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const captured = capturePluginProjectMediaInputInvocationAuthority(context);
+    const scope = this.#core.requests.currentScope();
+    if (
+      context.package.pluginId !== "crewon.short-drama" ||
+      !this.#uiPackages.includes(context.package.packageDigest) ||
+      !mediaInputSame(context.scope, scope)
+    )
+      denied();
+    const guard = Object.freeze({
+      assertActive: () => {
+        this.#assertActive();
+        signal.throwIfAborted();
+        captured.assertActive();
+      },
+      assertCurrent: async () => {
+        guard.assertActive();
+        await captured.assertCurrent();
+        guard.assertActive();
+      },
+      assertTransactionCurrent: async () => {
+        guard.assertActive();
+        await captured.assertTransactionCurrent();
+        guard.assertActive();
+      },
+    });
+    guard.assertActive();
+    // currentSignal is issued only by this Core's actual request owner; calling outside it fails.
+    this.#core.requests.currentSignal().throwIfAborted();
+    const pending = this.#uiInvocations
+      .run(guard, async () => {
+        await guard.assertCurrent();
+        return work();
+      })
+      .catch((error) => {
+        throw publicFailure(error);
+      });
+    return this.#track(pending);
   }
   close(): Promise<void> {
     this.#lifetime.abort();
@@ -318,6 +424,9 @@ export class InstalledProjectMediaInputRuntime {
       .catch((error) => {
         throw publicFailure(error);
       });
+    return this.#track(pending);
+  }
+  #track<T>(pending: Promise<T>): Promise<T> {
     this.#physical.add(pending);
     void pending.then(
       () => this.#physical.delete(pending),

@@ -9,6 +9,41 @@ import { assertDesktopNativeProjectMediaInputDeclaration } from "./desktop-nativ
 import { createDesktopPluginRuntime } from "./desktop-plugin-runtime.ts";
 const options = { skip: process.platform === "win32", timeout: 25_000 };
 test(
+  "Native exact-byte UI declaration composes original metadata request dispatch independently, without execution or fabricated mount",
+  options,
+  async (t) => {
+    for (const mediaInputUi of [false, true]) {
+      const f = await desktopNativeMediaInputFixture(t, ["read", "write"], {
+        mediaInputUi,
+      });
+      assert.equal(
+        Object.hasOwn(f.startup.creativeProjects!, "mediaInputUi"),
+        false,
+      );
+      await assert.rejects(
+        async () =>
+          f.runtime.ui.invokeAuthenticatedRequest!(
+            f.request(),
+            f.actor,
+            {
+              mountRef: "m".repeat(40),
+              action: "crewon.project-media-inputs.v1.loadInput",
+              input: f.query,
+            },
+            new AbortController().signal,
+          ),
+        {
+          code: mediaInputUi
+            ? "plugin_ui_mount_unavailable"
+            : "project_media_input_ui_unavailable",
+        },
+      );
+      assert.equal(f.runtime.tasks!.projectGenerations, undefined);
+      assert.deepEqual(f.peer, []);
+    }
+  },
+);
+test(
   "native original Main identity and file-issued Core expose explicit media metadata without ambient execution",
   options,
   async (t) => {

@@ -115,3 +115,37 @@ it("original Main approval replacement withdraws the issued media opt-in even wi
   expect(() => assertDesktopPluginBootstrapIssued(bootstrap!)).toThrow();
   await bootstrap!.cleanup();
 });
+
+it("Main preserves an independently approved media UI module without inferring it from read/write purposes", async () => {
+  const f = fixture();
+  const mediaInputUi = {
+    publications: [
+      {
+        pluginId: f.approval.sources[0]!.pluginId,
+        packageDigest: f.approval.sources[0]!.packageDigest,
+        contributionId: "workbench",
+      },
+    ],
+  };
+  f.writeApproval({
+    ...f.approval,
+    projects: { ...f.approval.projects, mediaInputUi },
+  });
+  const bootstrap = await prepareDesktopPluginBootstrap(f.input);
+  const manifest = assertDesktopPluginBootstrapIssued(bootstrap!);
+  if (manifest.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+    throw new Error("v3_required");
+  expect(manifest.projects.mediaInputUi).toEqual(mediaInputUi);
+  expect(manifest.projects.pluginGenerations).toBeUndefined();
+  await bootstrap!.cleanup();
+  const missing = fixture();
+  missing.writeApproval({
+    ...missing.approval,
+    projects: {
+      ...missing.approval.projects,
+      mediaInputs: undefined,
+      mediaInputUi,
+    },
+  });
+  await expect(prepareDesktopPluginBootstrap(missing.input)).rejects.toThrow();
+});

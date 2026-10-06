@@ -48,8 +48,13 @@ export function composeDesktopProjectStartup(
     resultSelections,
     uiRecovery,
     mediaInputs: _mediaInputs,
+    mediaInputUi: _mediaInputUi,
     ...data
-  } = { ...configuration.projects, mediaInputs: undefined };
+  } = {
+    ...configuration.projects,
+    mediaInputs: undefined,
+    mediaInputUi: undefined,
+  };
   const permitted = new Set<CreativeProjectAuthorizationAction>([
     "creativeProject:read",
     ...(data.pluginUi === undefined

@@ -49,6 +49,9 @@ export type DesktopProjectExecutionConfiguration = Omit<
     pluginQueries?: Mappings;
     historicalQueries?: DesktopProjectHistoricalQueriesConfiguration;
     mediaInputs?: DesktopProjectMediaInputsConfiguration;
+    mediaInputUi?: Readonly<{
+      publications: readonly DesktopProjectHistoryPublication[];
+    }>;
     uiRecovery?: Readonly<{
       version: typeof PLUGIN_UI_RECOVERY_VERSION;
       publications: readonly (DesktopProjectHistoryPublication &
@@ -92,6 +95,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "pluginQueries",
       "historicalQueries",
       "mediaInputs",
+      "mediaInputUi",
       "uiRecovery",
     ];
     const value = pluginControlRecord(
@@ -128,6 +132,29 @@ export function parseDesktopProjectExecutionConfiguration(
             publications: approved,
           });
     if (mediaInputs !== undefined && data.assetArtifacts === undefined)
+      invalid();
+    const mediaInputUi =
+      value.mediaInputUi === undefined
+        ? undefined
+        : parseDesktopProjectHistoryConfiguration(
+            {
+              version: DESKTOP_PROJECT_HISTORY_VERSION,
+              pluginUi: value.mediaInputUi,
+            },
+            { publications: approved },
+          ).pluginUi;
+    if (
+      mediaInputUi !== undefined &&
+      (mediaInputs === undefined ||
+        mediaInputUi.publications.some(
+          (p) =>
+            !mediaInputs.reviews.some(
+              (r) =>
+                r.targetIdentity.pluginId === p.pluginId &&
+                r.targetIdentity.packageDigest === p.packageDigest,
+            ),
+        ))
+    )
       invalid();
     const pluginQueries = mappings(value.pluginQueries, approved);
     if (pluginQueries !== undefined && data.generationReads === undefined)
@@ -168,6 +195,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...(pluginQueries === undefined ? {} : { pluginQueries }),
       ...(historicalQueries === undefined ? {} : { historicalQueries }),
       ...(mediaInputs === undefined ? {} : { mediaInputs }),
+      ...(mediaInputUi === undefined ? {} : { mediaInputUi }),
       ...(uiRecovery === undefined ? {} : { uiRecovery }),
     });
   } catch {
