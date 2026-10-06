@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { ThreadApplicationService } from "@crewon/application";
 import { desktopNativeMediaInputFixture } from "./desktop-native-project-media-input.test-support.ts";
 import { assertInstalledPluginTaskRuntimeCoreBinding } from "./installed-plugin-task-runtime-core.ts";
 import { assertDesktopNativeProjectMediaInputDeclaration } from "./desktop-native-project-media-input-composition.ts";
@@ -183,5 +184,34 @@ test(
       }),
       /desktop_native_project_media_input_declaration_invalid/u,
     );
+  },
+);
+
+test(
+  "Native Short23 private stage grant survives startup and binds the original Thread service without provider execution",
+  options,
+  async (t) => {
+    const f = await desktopNativeMediaInputFixture(t, ["read", "write"], {
+      mediaInputStages: true,
+    });
+    assert.ok(f.prepared?.mediaInputStageFoundation);
+    const threads = new ThreadApplicationService({
+      store: f.parent,
+      authorization: { authorize: async () => ({ outcome: "allow" }) },
+      clock: { now: () => new Date().toISOString() },
+      ids: { nextId: () => "native-stage-thread" },
+      digester: {
+        sha256: (bytes) =>
+          `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+      },
+    });
+    assert.ok(f.runtime.bindProjectConversations?.(threads));
+    const stage = f.runtime.projectMediaInputStages?.();
+    assert.ok(stage);
+    stage.assertAvailable();
+    assert.equal(f.runtime.tasks!.projectGenerations, undefined);
+    assert.deepEqual(f.peer, []);
+    await f.runtime.close();
+    assert.throws(() => stage.assertAvailable());
   },
 );

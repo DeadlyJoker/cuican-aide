@@ -94,3 +94,21 @@ export function composeInstalledPluginProjectMediaInputTools(
     authorizeService: config.authorizeService,
   });
 }
+
+/** Explicit media opt-in prepares only the same parent Store's existing project metadata. */
+export async function prepareInstalledPluginProjectMediaInputStores(
+  input: Readonly<{
+    store: SqliteRunStore | PostgresDomainStore;
+    config: InstalledPluginProjectMediaInputToolsConfig | undefined;
+  }>,
+): Promise<void> {
+  if (input.config === undefined) return;
+  captureInstalledPluginProjectMediaInputToolsConfig(input.config);
+  await input.store.creativeProjectStore().migrate();
+  await input.store.projectTextStore().migrate();
+  const assets = input.store.projectAssetStore();
+  await assets.migrate();
+  await assets.projectMediaInputStore().migrate();
+  await input.store.projectConversationStore().migrate();
+  await input.store.projectMediaInputStageStore().migrate();
+}

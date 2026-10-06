@@ -38,3 +38,8 @@ and model history remain intact. `deletedBytes` counts confirmed retired plainte
 content sizes, not measured reclaimed filesystem blocks. Empty hash directories,
 orphan temporary files and unknown recovery records are not removed by this
 pass; this is not a total disk quota.
+
+The package also exports the pure ComfyUI image-result decoder used by Control
+API and Native Worker. It validates the original operation, configuration and
+approved provider identity; it performs no network or storage I/O and does not
+create an execution grant.

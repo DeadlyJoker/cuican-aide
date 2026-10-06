@@ -1,3 +1,4 @@
+import { prepareInstalledPluginProjectMediaInputStores } from "./plugins/installed-plugin-project-media-input-tools.ts";
 import { prepareInstalledPluginProjectAssetToolsStores } from "./plugins/installed-plugin-project-asset-tools.ts";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -511,6 +512,10 @@ async function composeRuntimeWorker(
       store,
       config: config.installedPluginExecution.projectTools,
     });
+  await prepareInstalledPluginProjectMediaInputStores({
+    store,
+    config: config.installedPluginExecution?.projectMediaInputs,
+  });
   const installedPluginRuntimeResolver =
     config.installedPluginExecution === undefined
       ? config.installedPluginRuntimeResolver

@@ -149,3 +149,38 @@ it("Main preserves an independently approved media UI module without inferring i
   });
   await expect(prepareDesktopPluginBootstrap(missing.input)).rejects.toThrow();
 });
+
+it("Main carries an explicit Agent media-stage grant without inferring UI or generation approval", async () => {
+  const f = fixture();
+  const publication = {
+    pluginId: f.approval.sources[0]!.pluginId,
+    packageDigest: f.approval.sources[0]!.packageDigest,
+    contributionId: "workbench",
+  };
+  const mediaInputStages = {
+    version: "crewon.project-media-input-stages.v1",
+    publications: [publication],
+  };
+  const projects = {
+    ...f.approval.projects,
+    conversations: { publications: [publication] },
+    mediaInputStages,
+  };
+  f.writeApproval({ ...f.approval, projects });
+  const bootstrap = await prepareDesktopPluginBootstrap(f.input);
+  try {
+    const manifest = assertDesktopPluginBootstrapIssued(bootstrap!);
+    if (manifest.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+      throw new Error("v3_required");
+    expect(manifest.projects.mediaInputStages).toEqual(mediaInputStages);
+    expect(manifest.projects.mediaInputUi).toBeUndefined();
+    expect(manifest.projects.pluginGenerations).toBeUndefined();
+  } finally {
+    await bootstrap!.cleanup();
+  }
+  f.writeApproval({
+    ...f.approval,
+    projects: { ...projects, conversations: undefined },
+  });
+  await expect(prepareDesktopPluginBootstrap(f.input)).rejects.toThrow();
+});

@@ -196,3 +196,75 @@ test("independent UI publication requires the same reviewed short-drama package;
     ),
   );
 });
+
+test("Agent media stages require independent exact conversation publication and writable reviewed inputs", () => {
+  const publication = {
+    ...options.publications[0]!,
+    contributionId: "workbench",
+  };
+  const mediaInputStages = {
+    version: "crewon.project-media-input-stages.v1",
+    publications: [publication],
+  };
+  const original = {
+    version: "crewon.desktop-project-execution.v1",
+    textArtifacts: { version: "crewon.project-text.v1" },
+    assetArtifacts: { version: "crewon.project-asset.v1" },
+    conversations: { publications: [publication] },
+    mediaInputs: approval,
+  };
+  assert.equal(execution(original, options).mediaInputStages, undefined);
+  const actual = execution({ ...original, mediaInputStages }, options);
+  assert.deepEqual(actual.mediaInputStages, mediaInputStages);
+  assert.ok(Object.isFrozen(actual.mediaInputStages!.publications[0]));
+  assert.equal(actual.mediaInputUi, undefined);
+  assert.equal(actual.pluginGenerations, undefined);
+  for (const patch of [
+    { conversations: undefined },
+    { mediaInputs: undefined },
+    { mediaInputs: { ...approval, purposes: ["read"] } },
+    {
+      conversations: {
+        publications: [{ ...publication, contributionId: "another" }],
+      },
+    },
+    {
+      mediaInputStages: {
+        ...mediaInputStages,
+        version: "crewon.project-asset-stages.v1",
+      },
+    },
+    { mediaInputStages: { ...mediaInputStages, publications: [] } },
+    {
+      mediaInputStages: {
+        ...mediaInputStages,
+        publications: [publication, publication],
+      },
+    },
+    { mediaInputStages: { ...mediaInputStages, actorId: "client" } },
+  ])
+    assert.throws(() =>
+      execution({ ...original, mediaInputStages, ...patch }, options),
+    );
+  const other = { ...publication, packageDigest: `sha256:${"b".repeat(64)}` };
+  assert.throws(() =>
+    execution(
+      {
+        ...original,
+        conversations: { publications: [other] },
+        mediaInputStages: { ...mediaInputStages, publications: [other] },
+      },
+      { publications: [publication, other] },
+    ),
+  );
+  assert.throws(() =>
+    history(
+      {
+        ...original,
+        mediaInputStages,
+        version: "crewon.desktop-project-history.v1",
+      },
+      options,
+    ),
+  );
+});

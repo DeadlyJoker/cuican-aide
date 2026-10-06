@@ -40,6 +40,7 @@ export async function desktopNativeMediaInputFixture(
   options: {
     reviewIdentityFixture?: "different-manifest";
     mediaInputUi?: boolean;
+    mediaInputStages?: boolean;
   } = {},
 ) {
   const owners: {
@@ -78,8 +79,10 @@ export async function desktopNativeMediaInputFixture(
   });
   await mkdir(installRoot, { mode: 0o700 });
   const sourceDirectory = resolve(
-    process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
-      "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1",
+    options.mediaInputStages
+      ? "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0"
+      : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
+          "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1"),
   );
   const pkg = await installLocalPluginPackage({
     directory: sourceDirectory,
@@ -164,6 +167,29 @@ export async function desktopNativeMediaInputFixture(
     textArtifacts: { version: "crewon.project-text.v1" },
     assetArtifacts: { version: "crewon.project-asset.v1" },
     mediaInputs,
+    ...(options.mediaInputStages
+      ? {
+          conversations: {
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+          mediaInputStages: {
+            version: "crewon.project-media-input-stages.v1",
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+        }
+      : {}),
     ...(options.mediaInputUi
       ? {
           mediaInputUi: {

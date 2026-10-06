@@ -7,3 +7,4 @@ export {
 } from "./artifact-retention.ts";
 export * from "./filesystem-project-material-archive.ts";
 export * from "./filesystem-project-media-result-archive.ts";
+export * from "./comfyui-image-result-verifier.ts";

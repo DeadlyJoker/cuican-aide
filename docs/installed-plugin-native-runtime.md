@@ -189,3 +189,24 @@ v1/v2 保持该操作的原后台基础范围；显式 v3 按上节接入原 ena
 ## 后续交付
 
 下一阶段完成 Native 的独立用户执行身份、个人积分准入与结算。正式 Main/full App/packaged App 执行、ComfyUI 在线生成及历史查询、短剧持久项目和第二个真实企业 API 也在原目标范围内。v3 的实际验收结果与边界见[实施进度](./incremental-extension-progress.md)。
+
+## 原对话的媒体输入准备
+
+`crewon.desktop-project-execution.v1` 新增可选 `mediaInputStages`，版本为
+`crewon.project-media-input-stages.v1`，包含确切 `pluginId/packageDigest/contributionId`
+的 `publications`。每项必须已在 `conversations` 中声明，并存在同包的
+`mediaInputs` 工作流审定；后者必须含 `read` 与 `write`。旧配置不推导此字段，
+`mediaInputUi` 和媒体生成许可仍独立。历史配置 v1 继续拒绝此字段。
+
+Main 的原 bootstrap 文件保留声明，Control API 在原父库准备阶段关系并绑定原
+Thread 服务；Native Worker 将它转换成 `projectMediaInputs` 服务工厂，沿用该
+Worker 实际借用的父库。阶段工具要求原 actor/profile、确切包版本、工作台贡献和
+`project.execute`；只允许描述与参考素材的读取和修订，不提供 qualify、上传、生成
+或采用权限。异步调用和事务提交核对同一个 Main 文件 owner，撤销后旧服务失效。
+
+Control API 与 Worker 共用 `@crewon/artifacts` 的 ComfyUI 结果解码器，历史导出路径
+保留兼容性；结果必须仍对应原配置、原 operation、成功状态及确切输出位置。
+
+当前此项完成部署协议、原生装配和行为检查。Settings 的执行准备写入器尚未生成新声明，
+正式桌面包的“Agent → 插件页 → Agent”接力尚待验收；不得将元数据夹具或具名模型测试
+作为用户 App 已更新或真实生成成功的证明。

@@ -49,6 +49,10 @@ export type DesktopProjectExecutionConfiguration = Omit<
     pluginQueries?: Mappings;
     historicalQueries?: DesktopProjectHistoricalQueriesConfiguration;
     mediaInputs?: DesktopProjectMediaInputsConfiguration;
+    mediaInputStages?: Readonly<{
+      version: "crewon.project-media-input-stages.v1";
+      publications: readonly DesktopProjectHistoryPublication[];
+    }>;
     mediaInputUi?: Readonly<{
       publications: readonly DesktopProjectHistoryPublication[];
     }>;
@@ -96,6 +100,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "historicalQueries",
       "mediaInputs",
       "mediaInputUi",
+      "mediaInputStages",
       "uiRecovery",
     ];
     const value = pluginControlRecord(
@@ -156,6 +161,30 @@ export function parseDesktopProjectExecutionConfiguration(
         ))
     )
       invalid();
+    const mediaInputStages = stagePublications(
+      value.mediaInputStages,
+      approved,
+    );
+    if (
+      mediaInputStages !== undefined &&
+      (mediaInputs === undefined ||
+        !mediaInputs.purposes.includes("write") ||
+        mediaInputStages.publications.some(
+          (p) =>
+            !data.conversations?.publications.some(
+              (c) =>
+                c.pluginId === p.pluginId &&
+                c.packageDigest === p.packageDigest &&
+                c.contributionId === p.contributionId,
+            ) ||
+            !mediaInputs.reviews.some(
+              (r) =>
+                r.targetIdentity.pluginId === p.pluginId &&
+                r.targetIdentity.packageDigest === p.packageDigest,
+            ),
+        ))
+    )
+      invalid();
     const pluginQueries = mappings(value.pluginQueries, approved);
     if (pluginQueries !== undefined && data.generationReads === undefined)
       invalid();
@@ -196,6 +225,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...(historicalQueries === undefined ? {} : { historicalQueries }),
       ...(mediaInputs === undefined ? {} : { mediaInputs }),
       ...(mediaInputUi === undefined ? {} : { mediaInputUi }),
+      ...(mediaInputStages === undefined ? {} : { mediaInputStages }),
       ...(uiRecovery === undefined ? {} : { uiRecovery }),
     });
   } catch {
@@ -363,4 +393,24 @@ function dense(
 }
 function invalid(): never {
   return pluginControlFail("desktop_project_execution_configuration_invalid");
+}
+
+function stagePublications(
+  input: unknown,
+  approved: readonly Readonly<{ pluginId: string; packageDigest: string }>[],
+): DesktopProjectExecutionConfiguration["mediaInputStages"] {
+  if (input === undefined) return undefined;
+  const value = pluginControlRecord(input, ["version", "publications"]);
+  if (value.version !== "crewon.project-media-input-stages.v1") invalid();
+  const publication = parseDesktopProjectHistoryConfiguration(
+    {
+      version: DESKTOP_PROJECT_HISTORY_VERSION,
+      pluginUi: { publications: value.publications },
+    },
+    { publications: approved },
+  ).pluginUi!;
+  return Object.freeze({
+    version: "crewon.project-media-input-stages.v1",
+    publications: publication.publications,
+  });
 }

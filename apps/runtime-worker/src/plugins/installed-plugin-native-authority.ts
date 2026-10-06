@@ -1,3 +1,7 @@
+import {
+  createNativeProjectMediaInputTools,
+  assertNativeProjectMediaInputDeclaration,
+} from "./native-project-media-input-runtime.ts";
 import { isDeepStrictEqual } from "node:util";
 import type {
   ActorContext,
@@ -132,6 +136,11 @@ class NativeAuthorityOwner {
     )
       fail("configuration_binding_invalid");
     this.files.assertCurrent();
+    if (this.projects?.version === "crewon.desktop-project-execution.v1")
+      assertNativeProjectMediaInputDeclaration(
+        this.projects,
+        this.files.authority.packages,
+      );
     this.store = new SqliteRunStore(this.files.authority.controlDatabasePath);
     try {
       this.current();
@@ -637,6 +646,17 @@ export function createInstalledPluginNativeWorkerAuthority(
       owner.actor(actor);
       return owner.files.authority.scope;
     }, signal);
+  const projectMediaInputs =
+    owner.projects?.version === "crewon.desktop-project-execution.v1"
+      ? createNativeProjectMediaInputTools({
+          projects: owner.projects,
+          scope: owner.files.authority.scope,
+          packages: owner.files.authority.packages,
+          current: owner.current.bind(owner),
+          actor: owner.actor.bind(owner),
+          operate: owner.operate.bind(owner),
+        })
+      : undefined;
   return Object.freeze({
     installRoot: config.installRoot,
     releaseDocumentPath: config.releaseDocumentPath,
@@ -659,6 +679,7 @@ export function createInstalledPluginNativeWorkerAuthority(
         }),
     installedPluginExecution: Object.freeze({
       installRoot: config.installRoot,
+      ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
       ...(owner.projects?.conversations === undefined
         ? {}
         : {
