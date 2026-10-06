@@ -496,7 +496,7 @@ export function App({
           .map((turn) => turn.id)
           .reverse() ?? [],
       onOpenTask: (threadId) => {
-        setSelectedThreadId(threadId);
+        openCommandShellThread(threadId);
         setAppView("chat");
       },
     },

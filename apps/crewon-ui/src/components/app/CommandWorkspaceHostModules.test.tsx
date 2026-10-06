@@ -10,6 +10,7 @@ import {
   type CommandWorkspaceHostModule,
 } from "./CommandWorkspaceHostModule";
 import { emptyAgentPlatformSnapshot } from "./commandWorkspaceState";
+import { createAppCommandShellHandlers } from "../../lib/app/appCommandShellHandlers";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -442,6 +443,63 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(
       container!.querySelector<HTMLElement>('[data-shell-view="team"]')?.hidden,
     ).toBe(false);
+  });
+
+  it("returns from a plugin to an already selected conversation without replacing the shell or plugin draft", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?sceneThread=thread-a&scene=office#view-command",
+    );
+    const selectedThreadId = "thread-a";
+    const selectThread = vi.fn();
+    const handlers = createAppCommandShellHandlers({
+      selectThread,
+      sendMessageInNewThread: vi.fn(),
+      setComposerFocusSignal: vi.fn(),
+      setDraftWorkspaceCwd: vi.fn(),
+      setSelectedThreadId: vi.fn(),
+      setWorkMode: vi.fn(),
+      startDraftThread: vi.fn(),
+    });
+    const a = fixtureModule("example.drama", "main", "AI 短剧");
+    const module = {
+      ...a.module,
+      content: (state: { active: boolean }) => (
+        <>
+          {typeof a.module.content === "function"
+            ? a.module.content(state)
+            : a.module.content}
+          <button
+            data-open-project-conversation
+            onClick={() => handlers.openCommandShellThread(selectedThreadId)}
+          >
+            进入对话
+          </button>
+        </>
+      ),
+    };
+    await render({ hostModules: [module], selectedThreadId });
+    const sidebar = container!.querySelector(".command-sidebar");
+    const homepage = container!.querySelector<HTMLElement>(
+      '[data-shell-view="command"]',
+    )!;
+    await click(navigation(module.id));
+    await click(pane(module.id).querySelector("article button"));
+    const draft = pane(module.id).querySelector("article");
+    expect(homepage.hidden).toBe(true);
+    await click(
+      pane(module.id).querySelector("[data-open-project-conversation]"),
+    );
+    expect(selectThread).toHaveBeenCalledExactlyOnceWith(selectedThreadId);
+    expect(homepage.hidden).toBe(false);
+    expect(pane(module.id).hidden).toBe(true);
+    expect(window.location.search).toBe("?sceneThread=thread-a&scene=office");
+    expect(window.location.hash).toBe("#view-command");
+    expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
+    await click(navigation(module.id));
+    expect(pane(module.id).querySelector("article")).toBe(draft);
+    expect(pane(module.id).querySelector("output")?.textContent).toBe("2");
   });
 
   it("revokes module activity when the host changes thread, scene, or browser view", async () => {
