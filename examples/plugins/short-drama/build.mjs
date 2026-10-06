@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "23.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "24.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -196,6 +196,35 @@ for (const workflow of reviewedWorkflows) {
   if (Object.keys(graph).length !== workflow.nodeCount)
     throw new Error("example_workflow_nodes_changed");
 }
+const mediaInputProfile = {
+  schemaVersion: "crewon.short-drama-media-input-profile.v1",
+  pluginId: "crewon.short-drama",
+  workflows: [],
+};
+for (const workflow of reviewedWorkflows.slice(0, 2)) {
+  const graph = validateComfyApiGraph(
+    JSON.parse(await readFile(join(root, "src/templates", workflow.file))),
+    workflow.options,
+  );
+  const canonical = JSON.stringify(graph, (_key, item) =>
+    item !== null && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+        )
+      : item,
+  );
+  mediaInputProfile.workflows.push({
+    workflowId: workflow.file.replace(/\.api\.json$/u, ""),
+    file: "workflows/" + workflow.file,
+    workflowDigest:
+      "sha256:" + createHash("sha256").update(canonical).digest("hex"),
+    output: {
+      kind: "image",
+      nodeId: workflow.options.outputNodeId,
+      dimensions: "workflow-native",
+    },
+  });
+}
 const output = join(root, "dist", version);
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -254,6 +283,17 @@ await cp(
 await cp(
   join(root, "src/templates/reference-provenance.json"),
   join(output, "reference-workflow-provenance.json"),
+);
+
+await mkdir(join(output, "workflows"));
+for (const workflow of mediaInputProfile.workflows)
+  await cp(
+    join(root, "src/templates", workflow.file.slice("workflows/".length)),
+    join(output, workflow.file),
+  );
+await writeFile(
+  join(output, "media-input-profile.json"),
+  JSON.stringify(mediaInputProfile, null, 2) + "\n",
 );
 
 const sdkDirectory = dirname(

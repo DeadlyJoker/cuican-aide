@@ -82,6 +82,10 @@ export function captureExecutionSetupPreview(
   parameters: ExecutionSetupParameters,
   now = Date.now(),
 ): DesktopLocalPluginExecutionPreview {
+  const withMediaInputs =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "mediaInputPreparation");
   const withHistory =
     input !== null &&
     typeof input === "object" &&
@@ -99,6 +103,7 @@ export function captureExecutionSetupPreview(
     "networkPaths",
     "approvalRequirement",
     ...(withHistory ? ["historyQuery"] : []),
+    ...(withMediaInputs ? ["mediaInputPreparation"] : []),
     ...(withAvailability ? ["historyQueryAvailability"] : []),
   ]);
   identity(fields, expected);
@@ -187,6 +192,13 @@ export function captureExecutionSetupPreview(
     approvalRequirement: "none",
     networkPaths: Object.freeze(paths),
     ...(historyQuery === undefined ? {} : { historyQuery }),
+    ...(withMediaInputs
+      ? {
+          mediaInputPreparation: captureMediaInputPreparation(
+            fields.mediaInputPreparation,
+          ),
+        }
+      : {}),
     ...(withAvailability
       ? {
           historyQueryAvailability: fields.historyQueryAvailability as
@@ -333,4 +345,46 @@ export function captureExecutionSetupStatus(
       policyCommitted: fields.policyCommitted,
     });
   return invalid();
+}
+
+function captureMediaInputPreparation(
+  input: unknown,
+): NonNullable<DesktopLocalPluginExecutionPreview["mediaInputPreparation"]> {
+  const value = record(input, ["scope", "workflows"]);
+  if (
+    value.scope !== "read-write-inputs" ||
+    !Array.isArray(value.workflows) ||
+    Object.getPrototypeOf(value.workflows) !== Array.prototype ||
+    value.workflows.length < 1 ||
+    value.workflows.length > 2 ||
+    Reflect.ownKeys(value.workflows).length !== value.workflows.length + 1
+  )
+    invalid();
+  const workflows = Array.from(
+    { length: value.workflows.length },
+    (_, index) => {
+      const d = Object.getOwnPropertyDescriptor(value.workflows, String(index));
+      if (!d?.enumerable || !("value" in d)) invalid();
+      const w = record(d.value, ["workflowId", "workflowDigest"]);
+      if (
+        (w.workflowId !== "krea2-reference-four-view" &&
+          w.workflowId !== "flux2-three-reference-storyboard") ||
+        typeof w.workflowDigest !== "string" ||
+        !/^sha256:[a-f0-9]{64}$/u.test(w.workflowDigest)
+      )
+        invalid();
+      return Object.freeze({
+        workflowId: w.workflowId as
+          | "krea2-reference-four-view"
+          | "flux2-three-reference-storyboard",
+        workflowDigest: w.workflowDigest,
+      });
+    },
+  );
+  if (new Set(workflows.map((w) => w.workflowId)).size !== workflows.length)
+    invalid();
+  return Object.freeze({
+    scope: "read-write-inputs",
+    workflows: Object.freeze(workflows),
+  });
 }

@@ -24,3 +24,5 @@ exports[`explicit Native execution setup in original settings > requires separat
   "我允许本工作台通过这个已批准的插件查询原有生成结果，仅 GET，不授予新的生成权限。",
 ]
 `;
+
+exports[`explicit Native execution setup in original settings > shows reviewed preparation in the original confirmation and retains one consent and the original claim 1`] = `"素材准备：Krea2 角色四视图 · FLUX2 分镜画面。允许 Agent 与工作台读取、保存同一项目的画面描述和参考素材；生成需要另行执行。"`;

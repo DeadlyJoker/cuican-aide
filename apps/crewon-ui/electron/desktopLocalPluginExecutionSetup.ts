@@ -1,3 +1,4 @@
+import { composeDesktopLocalShortDramaMediaInputApproval } from "./desktopLocalShortDramaMediaInputs.ts";
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { performance } from "node:perf_hooks";
@@ -344,6 +345,21 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           preset: snapshot.preset,
           networkPaths: SHORT_NETWORK_PATHS,
           approvalRequirement: "none" as const,
+          ...(snapshot.mediaInputs === null
+            ? {}
+            : {
+                mediaInputPreparation: Object.freeze({
+                  scope: "read-write-inputs" as const,
+                  workflows: Object.freeze(
+                    snapshot.mediaInputs.reviews.map((r) =>
+                      Object.freeze({
+                        workflowId: r.workflow.workflowId,
+                        workflowDigest: r.workflow.workflowDigest,
+                      }),
+                    ),
+                  ),
+                }),
+              }),
           ...(historyRequirement === undefined
             ? {}
             : {
@@ -478,14 +494,21 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           packageDigest: value.snapshot.pkg.packageDigest,
           contributionId: "workbench",
         };
-        const selfApproval = composeDesktopLocalComfyProjectExecutionApproval({
-          approval: value.snapshot.approval,
-          source,
-          target: {
-            descriptor: value.snapshot.descriptor,
-            contributionId: "workbench",
-            entry: value.entry,
-          },
+        const generationApproval =
+          composeDesktopLocalComfyProjectExecutionApproval({
+            approval: value.snapshot.approval,
+            source,
+            target: {
+              descriptor: value.snapshot.descriptor,
+              contributionId: "workbench",
+              entry: value.entry,
+            },
+          });
+        const selfApproval = composeDesktopLocalShortDramaMediaInputApproval({
+          approval: generationApproval,
+          descriptor: source.descriptor,
+          packageDigest: source.packageDigest,
+          declaration: value.snapshot.mediaInputs,
         });
         if (value.historyQuery !== null)
           await assertDesktopLocalHistoricalProjectQueryTargetCurrent(

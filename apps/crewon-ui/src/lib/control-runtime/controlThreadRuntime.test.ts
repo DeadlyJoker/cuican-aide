@@ -2319,10 +2319,10 @@ describe("Control thread runtime", () => {
     });
     const start = vi
       .spyOn(kind === "text" ? client.projectConversations : client.projectMediaInputStages, "startStage")
-      .mockImplementation(async (_threadId, request) => {
+      .mockImplementation(async (_threadId: string, request: { expectedThreadRevision: number; expectedBindingRevision: number }) => {
         submitted = true;
         return {
-          disposition: "committed",
+          disposition: "committed" as const,
           threadId: "thread-1",
           threadRevision: request.expectedThreadRevision + 1,
           runId: "run-1",

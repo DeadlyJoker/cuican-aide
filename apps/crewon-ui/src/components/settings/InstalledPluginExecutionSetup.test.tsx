@@ -158,6 +158,63 @@ function configurationFixture() {
 }
 
 describe("explicit Native execution setup in original settings", () => {
+  it("enables preview after a fast empty status on an automatically batched first mount", async () => {
+    const f = fixture();
+    const environment = globalThis as typeof globalThis & {
+      IS_REACT_ACT_ENVIRONMENT: boolean;
+    };
+    environment.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      root.render(
+        <InstalledPluginExecutionSetup
+          access={f.access}
+          identity={f.identity}
+          parameters={executionTestParameters}
+          disabled={false}
+          locale="zh"
+        />,
+      );
+      await vi.waitFor(() =>
+        expect(button("预览执行准备").disabled).toBe(false),
+      );
+      expect(f.client.readStatus).toHaveBeenCalledOnce();
+      expect(f.client.preview).not.toHaveBeenCalled();
+      expect(f.client.confirm).not.toHaveBeenCalled();
+    } finally {
+      environment.IS_REACT_ACT_ENVIRONMENT = true;
+    }
+  });
+
+  it("shows reviewed preparation in the original confirmation and retains one consent and the original claim", async () => {
+    const f = fixture();
+    f.onPreview = async () => ({
+      ...f.preview(),
+      mediaInputPreparation: {
+        scope: "read-write-inputs",
+        workflows: [
+          {
+            workflowId: "krea2-reference-four-view",
+            workflowDigest: `sha256:${"a".repeat(64)}`,
+          },
+          {
+            workflowId: "flux2-three-reference-storyboard",
+            workflowDigest: `sha256:${"b".repeat(64)}`,
+          },
+        ],
+      },
+    });
+    await choose(f);
+    expect(
+      container.querySelector("[data-media-input-preparation]")?.textContent,
+    ).toMatchSnapshot();
+    expect(container.querySelectorAll('[role="switch"]')).toHaveLength(1);
+    await click("允许并准备");
+    expect(f.client.confirm).toHaveBeenCalledExactlyOnceWith({
+      previewId: "named-execution-preview",
+      approveExecution: true,
+    });
+  });
+
   it("an unavailable optional historical target leaves self preparation available without a historical approval flag", async () => {
     const f = fixture();
     f.onPreview = async () => ({

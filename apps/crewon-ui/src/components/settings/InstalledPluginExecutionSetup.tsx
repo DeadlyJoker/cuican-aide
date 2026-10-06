@@ -109,6 +109,28 @@ export function InstalledPluginExecutionSetup(
               )
               .join(" · ")}
           </p>
+          {preview.mediaInputPreparation && (
+            <p
+              className="installed-plugin-configuration-hint"
+              data-media-input-preparation
+            >
+              {zh ? "素材准备：" : "Input preparation: "}
+              {preview.mediaInputPreparation.workflows
+                .map((w) =>
+                  w.workflowId === "krea2-reference-four-view"
+                    ? zh
+                      ? "Krea2 角色四视图"
+                      : "Krea2 character four-view"
+                    : zh
+                      ? "FLUX2 分镜画面"
+                      : "FLUX2 storyboard frames",
+                )
+                .join(" · ")}
+              {zh
+                ? "。允许 Agent 与工作台读取、保存同一项目的画面描述和参考素材；生成需要另行执行。"
+                : ". Allow the Agent and workbench to read and save the same project's prompts and references. Generation is a separate action."}
+            </p>
+          )}
           <div className="installed-plugin-configuration-field-header">
             <label htmlFor={consentId}>
               {zh

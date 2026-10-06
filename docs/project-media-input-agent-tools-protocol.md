@@ -41,7 +41,7 @@ SQLite/PostgreSQL 在保存输入使用的同一连接内，写入前和 COMMIT 
 
 日志与核验位于 `output/extensions/checks/project-media-input-agent-tool-20261006/`。SDK、原完整插件包及 App 保持冻结。
 
-同包工具与 Worker 生产装配已完成。媒体输入阶段的原项目/剧本/资产有界读取也已接通。下一步连接原 Composer 发起阶段任务，完成“对话保存 → 插件页面编辑 → 对话继续”的界面联合验收。未部署独立服务时仍保留 `installed_plugin_media_input_stage_runtime_unavailable`。之后继续实际生成/查询/候选采用、结构化分镜和跨阶段执行；完整八阶段目标仍 ACTIVE。
+同包工具与 Worker 生产装配已完成。媒体输入阶段的原项目/剧本/资产有界读取也已接通。原 Composer 已连接阶段任务入口；目前仍需在新正式桌面包完成“对话保存 → 插件页面编辑 → 对话继续”的界面联合验收。未部署独立服务时仍保留 `installed_plugin_media_input_stage_runtime_unavailable`。之后继续实际生成/查询/候选采用、结构化分镜和跨阶段执行；完整八阶段目标仍 ACTIVE。
 
 ## Short23 完整插件包
 
@@ -72,3 +72,13 @@ Agent 先读需求和已采用剧本，再分页寻找角色/场景，读取其�
 双库实际 Worker 专项28项通过：具名模型仅从实际工具结果取得全部业务ID和参考版本，T10/D18均完成“发现 → 内容读取 → 组合 → 保存 → 流式回复”。原调度器达到每次唤醒预算时正常交还队列，测试按原1毫秒重排时间再次唤醒同一Run；保存ACK丢失后冷开数据库和Worker仍返回原修订，保留手动新版本。撤回任一服务权限、读取期间解绑原会话、跨项目、越界工具、读取后的晚撤权和关闭均有覆盖。
 
 相关12份完整检查128/128通过，包括原文字/资产阶段、原工具owner与Short23六方法回归。早期测试错用了运行目标代替安装目标、模型流类型，以及假设长流程只需一次唤醒，均已修正；未放宽生产范围或调度预算，失败日志保留在 `output/extensions/checks/project-media-input-discovery-20261006/`。模型与外部PDP为明确夹具，不代表公开Composer或真实模型验收；未调用供应商，未修改SDK、插件包或用户App。
+
+## Short24 本机执行准备元数据
+
+Short24 在原同一完整包中增加 `media-input-profile.json` 与两份原始工作流数据文件。Profile 版本为 `crewon.short-drama-media-input-profile.v1`，列出 T10/D18 的工作流 ID、包内相对路径、规范 JSON 摘要与输出节点约束；这些文件均受原包文件清单与摘要核验。Node 的实际工作流目录与 profile 使用同一图数据并有一致性测试。SDK、24 项工具和旧包字节保持原样。
+
+原 Settings 执行准备先通过 Main 捕获已验证的完整安装包及保存配置，再读取有界的纯数据 profile；预览不导入插件 Node 代码。确认、准确运行时身份核验和原停止/重启流程之后，Main 写入独立的 `mediaInputs`、`mediaInputUi`、`mediaInputStages` 声明。重复合并不产生重复项；旧工作流审定冲突拒绝，旧包没有 profile 时保留原行为，不猜测授权。旧参考来源只取自已有明确的结果验证身份。
+
+Settings 在原确认区域补充“Agent 与工作台读取、保存画面描述和参考素材”的说明，继续使用原确认开关、一次性预览与准备回执。该范围不等于外部生成成功；T10/D18 的输入准备本身不上传或调用供应商。
+
+已验证实际安装 Short24 的原 Main 准备、冷启动声明保留、原配置和启停选择不变、冻结 Short23 兼容，以及配置/文件变化与 API/适配器不匹配拒绝。Main 运行时端口与浏览器确认仍是具名夹具；未更新用户 App，也尚未完成新正式桌面包的 Agent/页面/Agent 接力验收。完整包与证据分别在 `output/extensions/installable-plugins/short-drama-media-input-settings-20261006/short-drama/24.0.0` 和 `output/extensions/checks/native-media-input-settings-20261006/`。

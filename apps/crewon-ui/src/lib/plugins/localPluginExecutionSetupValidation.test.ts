@@ -107,3 +107,63 @@ describe("strict optional historical query preview", () => {
     expect(calls).toBe(0);
   });
 });
+
+it("media preparation preview is bounded and cannot acquire generation/network or unknown workflow scope", () => {
+  const fixture = new ExecutionSetupFixture();
+  const mediaInputPreparation = {
+    scope: "read-write-inputs",
+    workflows: [
+      {
+        workflowId: "krea2-reference-four-view",
+        workflowDigest: `sha256:${"a".repeat(64)}`,
+      },
+    ],
+  };
+  const parse = (value: unknown) =>
+    captureExecutionSetupPreview(
+      { ...fixture.preview(), mediaInputPreparation: value },
+      fixture.identity,
+      executionTestParameters,
+    );
+  const result = parse(mediaInputPreparation);
+  expect(result.mediaInputPreparation).toEqual(mediaInputPreparation);
+  expect(Object.isFrozen(result.mediaInputPreparation?.workflows[0])).toBe(
+    true,
+  );
+  for (const value of [
+    { ...mediaInputPreparation, scope: "generate" },
+    { ...mediaInputPreparation, networkPaths: [] },
+    { ...mediaInputPreparation, workflows: [] },
+    {
+      ...mediaInputPreparation,
+      workflows: [
+        mediaInputPreparation.workflows[0],
+        mediaInputPreparation.workflows[0],
+      ],
+    },
+    {
+      ...mediaInputPreparation,
+      workflows: [
+        { ...mediaInputPreparation.workflows[0], workflowDigest: "bad" },
+      ],
+    },
+    {
+      ...mediaInputPreparation,
+      workflows: [
+        { ...mediaInputPreparation.workflows[0], workflowId: "unknown" },
+      ],
+    },
+  ])
+    expect(() => parse(value)).toThrow();
+  let calls = 0;
+  const workflows = [mediaInputPreparation.workflows[0]];
+  Object.defineProperty(workflows, "0", {
+    enumerable: true,
+    get() {
+      calls++;
+      return mediaInputPreparation.workflows[0];
+    },
+  });
+  expect(() => parse({ ...mediaInputPreparation, workflows })).toThrow();
+  expect(calls).toBe(0);
+});

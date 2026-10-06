@@ -145,7 +145,9 @@ export function useLocalPluginExecutionSetup(
       );
       if (status === null) {
         if (ticket || current.operation?.kind === "confirm") unconfirmed();
-        else setState(EMPTY);
+        // The owner ref was initialized after the first render. A fast status
+        // read can batch with loading, so idle must still trigger a render.
+        else setState({ ...EMPTY });
         return false;
       }
       if (status.state === "committed") showResult(current, status.result);

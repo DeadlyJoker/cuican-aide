@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  cpSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -28,6 +29,8 @@ export const fixtureHash = (value: string | Buffer) =>
 export async function executionSetupFixture(
   options: Readonly<{
     version?: string;
+    /** Copied into the owned fixture source; the supplied package is never mutated. */
+    packageDirectory?: string;
     projectContext?: boolean;
     historicalQueries?: boolean;
     contract?: "legacy" | "assets";
@@ -194,6 +197,8 @@ export async function executionSetupFixture(
     )
     .concat(options.requirements ?? []);
   writeFileSync(join(source, "crewon.plugin.json"), JSON.stringify(descriptor));
+  if (options.packageDirectory !== undefined)
+    cpSync(options.packageDirectory, source, { recursive: true });
   const installRoot = join(dataDirectory, "plugins");
   mkdirSync(installRoot, { mode: 0o700 });
   const installed = await installLocalPluginPackage({

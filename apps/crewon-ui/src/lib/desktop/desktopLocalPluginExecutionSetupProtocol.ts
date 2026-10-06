@@ -50,6 +50,15 @@ export type DesktopLocalPluginExecutionPreview =
       preset: "krea2-portrait" | "krea2-character-three-view";
       networkPaths: readonly DesktopLocalPluginExecutionNetworkPath[];
       approvalRequirement: "none";
+      mediaInputPreparation?: Readonly<{
+        scope: "read-write-inputs";
+        workflows: readonly Readonly<{
+          workflowId:
+            | "krea2-reference-four-view"
+            | "flux2-three-reference-storyboard";
+          workflowDigest: string;
+        }>[];
+      }>;
       historyQueryAvailability?: "available" | "unavailable";
       historyQuery?: DesktopLocalPluginHistoricalQueryPreview;
     }>;

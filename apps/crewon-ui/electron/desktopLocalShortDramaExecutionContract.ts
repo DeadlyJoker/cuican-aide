@@ -33,6 +33,8 @@ const KNOWN_SERVICES = new Set<string>([
   "crewon.project-text-plans",
   "crewon.project-planning-drafts",
   "crewon.project-conversation-association",
+  "crewon.project-media-inputs",
+  "crewon.project-media-input-tools",
 ]);
 
 /** The local Comfy execution profile negotiates known protocols, never release numbers.
@@ -78,6 +80,21 @@ export function assertDesktopLocalShortDramaExecutionContract(
   const hasAssets =
     ASSET_SERVICES.some(requested) ||
     manifest.tools.some((tool) => tool.operationId.startsWith("asset_"));
+  if (
+    requested("crewon.project-media-input-tools") &&
+    (!hasAssets ||
+      !hasContext ||
+      !supported("crewon.project-media-inputs") ||
+      !manifest.tools.some(
+        (tool) =>
+          tool.operationId === "media_input" &&
+          tool.adapterId === "crewon.project-media-input-tools" &&
+          tool.effect === "mutation" &&
+          tool.recovery === "reconcilable" &&
+          tool.capability === "project.media-input.write",
+      ))
+  )
+    invalid();
   if (!hasAssets) return;
   if (
     !ASSET_SERVICES.every(supported) ||

@@ -1,3 +1,4 @@
+import { captureDesktopLocalShortDramaMediaInputs } from "./desktopLocalShortDramaMediaInputs.ts";
 import { createHash } from "node:crypto";
 import { lstatSync, type Stats } from "node:fs";
 import { join } from "node:path";
@@ -21,7 +22,10 @@ import {
   loadInstalledPluginBusinessRegistration,
   validateInstalledPluginConfiguration,
 } from "../../../packages/plugin-host/src/installed-plugin-business-registration.ts";
-import { verifyLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-verifier.ts";
+import {
+  verifyLocalPluginPackage,
+  captureLocalPluginPackage,
+} from "../../../packages/plugin-host/src/local-plugin-package-verifier.ts";
 import {
   assertDesktopPluginBootstrapIssued,
   parseDesktopPluginApproval,
@@ -78,6 +82,7 @@ export type SetupSnapshot = {
   selection: PluginSelection;
   pkg: InstalledPluginPackage;
   configuration: ExtensionConfiguration;
+  mediaInputs: ReturnType<typeof captureDesktopLocalShortDramaMediaInputs>;
   baseUrl: string;
   preset: "krea2-portrait" | "krea2-character-three-view";
 };
@@ -245,10 +250,11 @@ export async function captureSetupSnapshot(input: {
     "packages",
     records.pkg.packageDigest.slice(7),
   );
-  const verified = await verifyLocalPluginPackage({
-    directory: root,
-    signal: input.signal,
-  });
+  const packageSnapshot = await captureLocalPluginPackage(
+    { directory: root, signal: input.signal },
+    true,
+  );
+  const verified = packageSnapshot.verification;
   const descriptor = verified.descriptor;
   if (
     verified.packageDigest !== records.pkg.packageDigest ||
@@ -318,6 +324,10 @@ export async function captureSetupSnapshot(input: {
     policy,
     descriptor,
     configuration,
+    mediaInputs: captureDesktopLocalShortDramaMediaInputs(
+      packageSnapshot,
+      configuration,
+    ),
     baseUrl: parameters.baseUrl,
     preset: parameters.preset,
   };
