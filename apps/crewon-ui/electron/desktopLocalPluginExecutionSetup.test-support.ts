@@ -70,7 +70,8 @@ export async function executionSetupFixture(
         hostApi: "crewon.extensions.v0",
         tools: currentBusiness.tools.filter(
           (tool: { operationId: string }) =>
-            !tool.operationId.startsWith("asset_"),
+            !tool.operationId.startsWith("asset_") &&
+            !tool.operationId.startsWith("media_"),
         ),
       };
   const business = {

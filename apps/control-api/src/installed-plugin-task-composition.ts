@@ -246,7 +246,10 @@ export async function createInstalledPluginTaskRuntime(
       requests,
       installRoot: configuration.installRoot,
       maximumPackages: configuration.maximumPackages,
-      publications: ui.publications,
+      publications: ui.publications.map(({ pluginId, packageDigest }) => ({
+        pluginId,
+        packageDigest,
+      })),
       profiles,
       businessAuthorization,
       uiAuthorization: authorization,

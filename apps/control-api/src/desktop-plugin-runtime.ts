@@ -127,7 +127,11 @@ export async function createDesktopPluginRuntime(
   if (!(dependencies.identity instanceof StandaloneIdentity))
     throw new Error("desktop_plugin_identity_required");
   const configuration = parseDesktopPluginConfiguration(input.configuration);
+  const mediaInputsDeclared =
+    configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3" &&
+    configuration.projects.mediaInputs !== undefined;
   const projectExecution =
+    mediaInputsDeclared ||
     dependencies.creativeProjects?.pluginGenerations !== undefined ||
     dependencies.creativeProjects?.pluginQueries !== undefined ||
     dependencies.creativeProjects?.historicalQueries !== undefined;
@@ -168,6 +172,8 @@ export async function createDesktopPluginRuntime(
   }
   const tasks = input.tasks;
   const nativeControl = input.nativeControl;
+  if (mediaInputsDeclared && nativeControl === undefined)
+    throw new Error("desktop_native_project_media_input_authority_required");
   if (nativeControl !== undefined) {
     if (tasks !== undefined || input.activation !== undefined)
       throw new Error("desktop_native_plugin_authority_conflict");

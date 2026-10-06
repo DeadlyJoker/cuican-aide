@@ -43,6 +43,8 @@ import {
   pluginSecurityUiRequest,
 } from "./plugin-security-validation.ts";
 import type { InstalledPluginTaskActionOwnerDependencies } from "./installed-plugin-task-action-owner.ts";
+import { composeDesktopNativeProjectMediaInputConfiguration } from "./desktop-native-project-media-input-composition.ts";
+import type { InstalledProjectMediaInputConfiguration } from "./installed-project-media-input-configuration.ts";
 
 export type DesktopNativePluginTaskBinding = Readonly<{
   configuration: DesktopPluginConfiguration;
@@ -99,6 +101,17 @@ export class DesktopNativePluginTaskAuthority {
   }
   get requests() {
     return this.#binding.installed.requests;
+  }
+  /** Only the original file-declared metadata purpose uses these private request/commit checks. */
+  projectMediaInputConfiguration():
+    | InstalledProjectMediaInputConfiguration
+    | undefined {
+    return composeDesktopNativeProjectMediaInputConfiguration({
+      configuration: this.#binding.configuration,
+      nativeControl: this.#binding.nativeControl,
+      assertRequestCurrent: (actor) => this.#request(actor),
+      assertTransactionCurrent: (actor) => this.#commitOwner(actor),
+    });
   }
   readonly profiles: PluginInstallationHostProfilePort = Object.freeze({
     resolve: (actor: ActorContext) =>

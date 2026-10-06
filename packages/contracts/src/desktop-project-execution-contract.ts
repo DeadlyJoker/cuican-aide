@@ -18,6 +18,10 @@ import {
   parseDesktopProjectHistoricalQueriesConfiguration,
   type DesktopProjectHistoricalQueriesConfiguration,
 } from "./desktop-project-historical-query-contract.ts";
+import {
+  parseDesktopProjectMediaInputsConfiguration,
+  type DesktopProjectMediaInputsConfiguration,
+} from "./desktop-project-media-inputs.ts";
 
 export const DESKTOP_PROJECT_EXECUTION_VERSION =
   "crewon.desktop-project-execution.v1";
@@ -44,6 +48,7 @@ export type DesktopProjectExecutionConfiguration = Omit<
     pluginGenerations?: Mappings;
     pluginQueries?: Mappings;
     historicalQueries?: DesktopProjectHistoricalQueriesConfiguration;
+    mediaInputs?: DesktopProjectMediaInputsConfiguration;
     uiRecovery?: Readonly<{
       version: typeof PLUGIN_UI_RECOVERY_VERSION;
       publications: readonly (DesktopProjectHistoryPublication &
@@ -86,6 +91,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "pluginGenerations",
       "pluginQueries",
       "historicalQueries",
+      "mediaInputs",
       "uiRecovery",
     ];
     const value = pluginControlRecord(
@@ -115,6 +121,14 @@ export function parseDesktopProjectExecutionConfiguration(
       version: DESKTOP_PROJECT_HISTORY_VERSION,
     };
     const pluginGenerations = mappings(value.pluginGenerations, approved);
+    const mediaInputs =
+      value.mediaInputs === undefined
+        ? undefined
+        : parseDesktopProjectMediaInputsConfiguration(value.mediaInputs, {
+            publications: approved,
+          });
+    if (mediaInputs !== undefined && data.assetArtifacts === undefined)
+      invalid();
     const pluginQueries = mappings(value.pluginQueries, approved);
     if (pluginQueries !== undefined && data.generationReads === undefined)
       invalid();
@@ -153,6 +167,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
       ...(pluginQueries === undefined ? {} : { pluginQueries }),
       ...(historicalQueries === undefined ? {} : { historicalQueries }),
+      ...(mediaInputs === undefined ? {} : { mediaInputs }),
       ...(uiRecovery === undefined ? {} : { uiRecovery }),
     });
   } catch {

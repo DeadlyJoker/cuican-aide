@@ -157,7 +157,9 @@ export async function createDesktopInstalledPluginTaskRuntime(
       requests: authority.requests,
       installRoot: input.configuration.installRoot,
       maximumPackages: input.tasks.publication.maximumPackages,
-      publications: input.tasks.publication.uiPublications,
+      publications: input.tasks.publication.uiPublications.map(
+        ({ pluginId, packageDigest }) => ({ pluginId, packageDigest }),
+      ),
       profiles: authority.profiles,
       businessAuthorization: authority.businessAuthorization,
       uiAuthorization: authority.uiAuthorization,

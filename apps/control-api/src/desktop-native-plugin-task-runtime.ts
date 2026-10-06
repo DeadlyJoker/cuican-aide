@@ -22,6 +22,7 @@ import {
   type InstalledPluginTaskRuntimeCore,
 } from "./installed-plugin-task-runtime-core.ts";
 import { createPluginTaskApplicationIds } from "./plugin-task-application-ids.ts";
+import { assertDesktopNativeProjectMediaInputDeclaration } from "./desktop-native-project-media-input-composition.ts";
 
 export type DesktopNativePluginTaskRuntime = Readonly<{
   authority: DesktopNativePluginTaskAuthority;
@@ -39,6 +40,7 @@ export function assertDesktopNativePluginTaskComposition(
   }>,
 ): void {
   assertDesktopNativePluginControlComposition(input);
+  assertDesktopNativeProjectMediaInputDeclaration(input);
   assertDesktopNativeProjectHistoricalQueryDeclaredApproval({
     ...input,
     historicalQueries: input.creativeProjects?.historicalQueries,
@@ -78,6 +80,7 @@ export async function createDesktopNativePluginTaskRuntime(
   const authority = new DesktopNativePluginTaskAuthority(input);
   let core: InstalledPluginTaskRuntimeCore | undefined;
   try {
+    const projectMediaInputs = authority.projectMediaInputConfiguration();
     core = await createInstalledPluginTaskRuntimeCore({
       assertHistoricalTarget: (publication) => {
         assertDesktopNativeProjectHistoricalQueryPreparedTarget({
@@ -89,7 +92,9 @@ export async function createDesktopNativePluginTaskRuntime(
       requests: authority.requests,
       installRoot: input.configuration.installRoot,
       maximumPackages: 32,
-      publications: input.configuration.publications,
+      publications: input.configuration.publications.map(
+        ({ pluginId, packageDigest }) => ({ pluginId, packageDigest }),
+      ),
       profiles: authority.profiles,
       businessAuthorization: authority.businessAuthorization,
       uiAuthorization: authority.uiAuthorization,
@@ -98,6 +103,7 @@ export async function createDesktopNativePluginTaskRuntime(
       clock: dependencies.clock,
       ids: createPluginTaskApplicationIds(),
       digester: dependencies.digester,
+      ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
       ...(dependencies.creativeProjects === undefined
         ? {}
         : { creativeProjects: dependencies.creativeProjects }),

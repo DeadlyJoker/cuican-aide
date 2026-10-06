@@ -1,6 +1,6 @@
 # 共享媒体输入：Control 与原客户端
 
-2026-10-06。状态：原 Control/Core 的显式元数据装配、HTTP 和客户端已实现；正式 Main 文件批准、插件页面服务、Agent 媒体工具及生成协调继续接线。沿[八阶段双入口方案](./short-drama-orchestration-spec.md)推进，复用[原确认输入](./project-media-input-protocol.md)、[Run 准入](./project-media-generation-run-protocol.md)和[实际 Worker](./project-media-worker-composition-protocol.md)。本项不会把保存输入当成素材准备成功或生成完成。
+2026-10-06。状态：原 Control/Core 的显式元数据装配、HTTP 和客户端已实现；[原 Main 独立文件声明与 Native 装配](./desktop-project-media-input-approval-protocol.md)随后落实，插件页面服务、Agent 媒体工具及生成协调继续接线。沿[八阶段双入口方案](./short-drama-orchestration-spec.md)推进，复用[原确认输入](./project-media-input-protocol.md)、[Run 准入](./project-media-generation-run-protocol.md)和[实际 Worker](./project-media-worker-composition-protocol.md)。本项不会把保存输入当成素材准备成功或生成完成。
 
 ## 共享命令
 
@@ -28,12 +28,12 @@
 
 相同原键/内容返回同一个原输入；键相同但内容变更拒绝。追加提示词不改变旧输入。HTTP 断连会撤销原请求信号；Core 关闭停止新调用并物理等待尚未返回的批准/事务，借用的 parent 不被该 owner 关闭。部分落库后的回执丢失仍以明确的原键恢复。两个业务入口各生成随机新键不能实现步骤去重，未来计划仍要共享原持久步骤/执行意图。
 
-`buildControlApi` 只注册 genuine owner；原 standalone 装配从已准备的 Core 借它。**当前正式桌面 Main 文件协议尚未声明这一新批准，因此用户 App 不会自动开启入口。** 后续先声明和核验独立数据批准，再把插件 UI/Agent 指令接到这一 owner；素材准备、Run 受理、结果候选/采用分别沿原独立协议接线。
+`buildControlApi` 只注册 genuine owner；原 standalone 装配从已准备的 Core 借它。**原桌面 Main 文件协议现已实现独立可选声明和 Native 装配，用户 App 尚未更新或开启入口。** 插件 UI/Agent 指令随后接到这一 owner；素材准备、Run 受理、结果候选/采用分别沿原独立协议接线。
 
 ## 验证边界
 
 173/173相关检查通过，零失败、取消或跳过，覆盖12份完整文件；新增协议/客户端/Control专项18项是其中的子集。真实 SQLite/Pg、原 TaskCore、issued request、原认证客户端与 HTTP 已覆盖 T10/D18、并发原键、修订/历史、失效来源、目的撤销、profile 变更、不同主体/租户/工作空间、冷重开、已保存原回执、配置注入及关闭等待。真实 loopback socket 还覆盖原客户端保存/读取，以及 HTTP 断连先撤销再拒绝事务提交。
 
-这里的部署审核、PDP、原成功媒体记录及校验器是具名测试夹具。没有替换业务 SQL/事务或签发私有执行回执，也没有调用新的远端模型、图片 API、上传或生成。单独注册 HTTP 与原 Core 的可选装配得到验证；这不等于正式 Main/完整插件 UI/Agent 媒体链已经交付。积分后置，完整目标保持 ACTIVE。
+这里的部署审核、PDP、原成功媒体记录及校验器是具名测试夹具。没有替换业务 SQL/事务或签发私有执行回执，也没有调用新的远端模型、图片 API、上传或生成。单独注册 HTTP 与原 Core 的可选装配得到验证；后续 Main 声明的验证范围独立记录，不等于正式 App/完整插件 UI/Agent 媒体链已经交付。积分后置，完整目标保持 ACTIVE。
 
 证据：`output/extensions/checks/project-media-control-inputs-20261006/`。三组均使用自有实际 PostgreSQL，保持 `fsync/full_page_writes/synchronous_commit=on`，正常停止后按目录身份清理。原 SDK、独立插件包及冻结/用户 App 仍按原摘要和文件清单核验。类型、边界、合同生成检查、仓库格式及新增 TS/相关 Core 和客户端格式检查通过。写入空间不足时只清理已核验空闲的本任务依赖缓存和正常停止的原测试 Pg 数据目录；原源码、dist、锁文件、SDK tar、服务日志和所有 App/插件包保留。
