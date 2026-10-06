@@ -1,3 +1,4 @@
+import { PostgresProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { loadPostgresAssetStage } from "./project-asset-stage-markers.ts";
 import { loadPostgresPlanAdmission } from "./project-text-plan-markers.ts";
 import {
@@ -89,6 +90,16 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  readonly #mediaGenerations: PostgresProjectMediaGenerationArchive;
+  get projectMediaGenerationVersion() {
+    return this.#mediaGenerations.version;
+  }
+  migrateProjectMediaGenerations() {
+    return this.#mediaGenerations.migrate();
+  }
+  loadProjectMediaGenerationLink(input: ExtensionRunLocator) {
+    return this.#mediaGenerations.load(input);
+  }
   readonly projectAssetStageAdmissionVersion =
     "crewon.project-asset-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion =
@@ -172,6 +183,11 @@ export class PostgresExtensionStore implements ExtensionStore {
     this.#schema = `"${schema}"`;
     this.#schemaName = schema;
     this.#host = host;
+    this.#mediaGenerations = new PostgresProjectMediaGenerationArchive(
+      pool,
+      schema,
+      () => host.assertOpen(),
+    );
     this.#projects = new PostgresProjectAssociations(pool, schema, () =>
       this.#host.assertOpen(),
     );
@@ -618,6 +634,7 @@ export class PostgresExtensionStore implements ExtensionStore {
     return commitPostgresExtensionTurn(
       {
         schema: this.#schemaName,
+        projectMediaGenerationsEnabled: this.#mediaGenerations.enabled,
         unmeteredEnabled: this.#unmeteredEnabled,
         projectGenerationsEnabled: this.#projects.generationsEnabled,
         projectQueriesEnabled: this.#projects.queriesEnabled,

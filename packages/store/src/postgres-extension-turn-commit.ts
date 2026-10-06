@@ -1,4 +1,19 @@
 import {
+  assertProjectMediaGenerationCurrent,
+  assertProjectMediaGenerationActive,
+} from "@crewon/application";
+import {
+  captureProjectMediaGenerationTurn,
+  stripProjectMediaGenerationOptions,
+  prepareProjectMediaGenerationTurn,
+  saveProjectMediaGenerationTurn,
+  assertProjectMediaGenerationReplay,
+} from "./project-media-generation-turn.ts";
+import { loadProjectMediaGenerationLinkPlan } from "./project-media-generation-read.ts";
+import { assertPostgresProjectMediaGenerationSchema } from "./project-media-generation-schema.ts";
+import { executePostgresMediaGenerationPlan } from "./project-media-generation-transaction.ts";
+import type { ProjectMediaInputPlan } from "./project-media-input-plan.ts";
+import {
   captureProjectAssetStageTurn,
   assertPostgresAssetStageTurn,
   assertAssetStageReplay,
@@ -124,6 +139,7 @@ import {
 } from "./project-historical-query-marker.ts";
 
 type PostgresExtensionTurnHost = Readonly<{
+  projectMediaGenerationsEnabled: boolean;
   schema: string;
   unmeteredEnabled: boolean;
   projectGenerationsEnabled: boolean;
@@ -169,6 +185,15 @@ export async function commitPostgresExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ) {
+  const media = captureProjectMediaGenerationTurn(
+    input,
+    checkedPluginTaskAdmission(input),
+    host.projectMediaGenerationsEnabled,
+    options,
+  );
+  options = stripProjectMediaGenerationOptions(options);
+  if (media !== null)
+    input = { ...input, projectMediaGeneration: media.reference };
   const historicalQuery = captureProjectHistoricalQuery(
     input,
     checkedPluginQueryTurn(input),
@@ -252,10 +277,32 @@ export async function commitPostgresExtensionTurn(
   if (historicalQuery !== null)
     await assertCreativeProjectCommitCurrent(historicalQuery.authority);
   assertCreativeProjectCommitActive(historicalQuery?.authority);
+  if (media !== null)
+    await assertProjectMediaGenerationCurrent(media.authority, "before");
+  const mediaDialect = {
+    postgres: true,
+    schema: host.schema,
+    prefix: `${prefix}.`,
+  };
   let creditPath = false;
   return host.transaction(
     binding,
     async (client) => {
+      const executeMedia = <T>(plan: ProjectMediaInputPlan<T>) =>
+        executePostgresMediaGenerationPlan(
+          client,
+          host.schema,
+          plan,
+          () => host.assertOpen(),
+          media?.authority,
+        );
+      if (host.projectMediaGenerationsEnabled)
+        await assertPostgresProjectMediaGenerationSchema(client, host.schema);
+      if (media !== null)
+        await assertProjectMediaGenerationCurrent(
+          media.authority,
+          "transaction",
+        );
       if (host.projectGenerationsEnabled)
         await assertPostgresProjectGenerationSchema(client, host.schema);
       if (host.projectQueriesEnabled)
@@ -308,6 +355,18 @@ export async function commitPostgresExtensionTurn(
         );
         await verifyPostgresUnmeteredReceipt(client, host.schema, result);
         assertUnmeteredReplay(result.unmeteredAdmission, unmetered.admission);
+        if (host.projectMediaGenerationsEnabled)
+          assertProjectMediaGenerationReplay(
+            media,
+            await executeMedia(
+              loadProjectMediaGenerationLinkPlan(mediaDialect, {
+                tenantId: result.binding.tenantId,
+                spaceId: result.binding.spaceId,
+                runId: result.binding.runId,
+              }),
+            ),
+            { binding: result.binding, receipt: frozenInput.receipt },
+          );
         assertExtensionCreditReplayPrincipal({
           saved: result.creditAdmission,
           requested: frozenInput.creditAdmission,
@@ -407,6 +466,11 @@ export async function commitPostgresExtensionTurn(
           savedPlan,
           "project_text_plan_admission_conflict",
         );
+        if (media !== null)
+          await assertProjectMediaGenerationCurrent(
+            media.authority,
+            "transaction",
+          );
         return {
           ...result,
           ...(savedPlan === null
@@ -459,6 +523,16 @@ export async function commitPostgresExtensionTurn(
               pluginQuery!,
             );
       await host.admit(client, binding, frozenInput.expectedActivationRevision);
+      const mediaLink =
+        media === null
+          ? null
+          : await executeMedia(
+              prepareProjectMediaGenerationTurn(
+                mediaDialect,
+                media,
+                frozenInput,
+              ),
+            );
       let projectLink: ProjectGenerationLink | undefined;
       if (prepared !== null) {
         await client.query(
@@ -580,6 +654,10 @@ export async function commitPostgresExtensionTurn(
         frozenInput.receipt,
         result,
       );
+      if (mediaLink !== null)
+        await executeMedia(
+          saveProjectMediaGenerationTurn(mediaDialect, mediaLink),
+        );
       if (projectLink !== undefined)
         await client.query(
           projectGenerationInsertSql(`${prefix}.`, true),
@@ -618,6 +696,11 @@ export async function commitPostgresExtensionTurn(
         await unmetered.authority.assertCurrent();
       await finishPostgresPlanTurn(client, host.schema, plan, planCheckpoint);
       await assetStage?.authority.assertTransactionCurrent();
+      if (media !== null)
+        await assertProjectMediaGenerationCurrent(
+          media.authority,
+          "transaction",
+        );
       return {
         ...result,
         ...(plan === null ? {} : { projectTextPlanAdmission: plan.admission }),
@@ -628,6 +711,10 @@ export async function commitPostgresExtensionTurn(
     },
     {
       beforeCommit: () => {
+        if (media !== null) {
+          host.assertOpen();
+          assertProjectMediaGenerationActive(media.authority);
+        }
         stage?.authority.assertActive();
         assetStage?.authority.assertActive();
         plan?.q.authority.assertActive();

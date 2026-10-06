@@ -1,6 +1,6 @@
 # 短剧确认媒体输入与逐素材准备
 
-2026-10-06。状态：宿主内部版本化输入及T10/D18逐素材准备已实现；原Run准入、公开Main入口、手动页面及Agent媒体步骤继续接线。一个 `crewon.short-drama` 插件包含多个工作流，沿[八阶段与双入口契约](./short-drama-stage-execution-contract.md)推进。旧插件协议、原UI、原任务和用户App保持。
+2026-10-06。状态：宿主内部版本化输入及T10/D18逐素材准备已实现；[原Run事务准入](./project-media-generation-run-protocol.md)已验证，Worker实际生成、公开Main入口、手动页面及Agent媒体步骤继续接线。一个 `crewon.short-drama` 插件包含多个工作流，沿[八阶段与双入口契约](./short-drama-stage-execution-contract.md)推进。旧插件协议、原UI、原任务和用户App保持。
 
 ## 保存、准备与执行的关系
 
@@ -9,7 +9,7 @@ flowchart LR
   A[Agent准备内容或用户编辑] --> B[确认并保存输入修订]
   B --> C[逐角色准备原素材]
   C --> D[当前字节与来源核验]
-  D --> E[原Run准入：待接线]
+  D --> E[原Run事务准入：宿主内部已验证]
   E --> F[实际生成与结果候选：待接线]
   F --> G[采用或锁定：待接线]
 ```
@@ -69,4 +69,4 @@ prepare允许沿原材料的独立权限准备尚未发送项；observe仅查询
 
 Application/Store/Runtime-worker类型、架构边界、仓库及新增TS格式检查通过；SDK源/dist/tar、冻结App、用户App及原完整插件包核验保持。总体验证及保留证据位于 `output/extensions/checks/project-media-input-20261006/`。首轮结果位置映射错误与随后测试误用已过期概念选用版本的失败日志保留；修正映射及测试的实际当前来源，没有取消来源/SQL保护。五个自有Postgres正常停止并按目录身份清理，所有本轮运行正常结束。
 
-接下来实施独立媒体生成关联和原Run准入，随后在同一个插件接手动T10/D18执行、结果候选/采用与Agent有界步骤。结构化分镜再明确镜头/生成分段，视频、声音及成片分别核验真实外部API。原前端和工作空间绑定保持，积分后置，完整目标继续ACTIVE。
+独立媒体生成关联和原Run事务准入随后已通过[双库检查](./project-media-generation-run-protocol.md)，继续接Worker实际提交及结果回写，再在同一个插件接手动T10/D18执行、结果候选/采用与Agent有界步骤。结构化分镜再明确镜头/生成分段，视频、声音及成片分别核验真实外部API。原前端和工作空间绑定保持，积分后置，完整目标继续ACTIVE。

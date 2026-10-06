@@ -1,49 +1,25 @@
-import { loadExtensionTaskConfiguration } from "./extension-task-configuration.ts";
+import { createExtensionTaskTurn } from "./extension-task-turn.ts";
+import type { ProjectMediaGenerationTask } from "./project-media-generation-port.ts";
+
 import {
   createProjectAssetStageTurnFromHost,
-  projectAssetConversationTaskReceipt,
-  projectAssetConversationTaskAdmission,
-  assertSavedProjectAssetConversationTask,
   type ProjectAssetConversationTask,
   type ProjectAssetConversationTaskPreparation,
 } from "./project-asset-conversation-task-support.ts";
-import {
-  commitProjectTextPlanTurnFromHost,
-  projectTextPlanTaskAdmission,
-  assertSavedProjectTextPlanTask,
-} from "./extension-task-project-text-plan-support.ts";
+import { commitProjectTextPlanTurnFromHost } from "./extension-task-project-text-plan-support.ts";
 import type { ProjectTextPlanTurnCommitAuthority } from "./project-text-plan-store-port.ts";
-import {
-  authorizeExtensionTaskThread,
-  authorizeExtensionTaskQuerySource,
-} from "./extension-task-authorization.ts";
+
 import {
   createProjectConversationTurnFromHost,
   type ProjectConversationTaskPreparation,
-  projectConversationTaskReceipt,
-  projectConversationTaskAdmission,
-  assertSavedProjectConversationTask,
   type ProjectConversationTask,
 } from "./project-conversation-task-support.ts";
 import type { PluginTaskUnmeteredAuthorityPort } from "./plugin-task-unmetered-authority-port.ts";
-import {
-  capturePluginTaskUnmeteredPort,
-  requirePluginTaskFinancialMode,
-  preparePluginTaskUnmeteredAuthority,
-  pluginTaskFinancialOptions,
-  pluginTaskUnmeteredProof,
-  assertSavedPluginTaskFunding,
-} from "./plugin-task-unmetered-support.ts";
-import { loadExtensionLegacyQuerySource } from "./extension-legacy-query-source.ts";
-import {
-  quoteExtensionTaskGeneration,
-  assertExtensionTaskCreditPrincipal,
-} from "./extension-task-credit-support.ts";
+import { capturePluginTaskUnmeteredPort } from "./plugin-task-unmetered-support.ts";
+
 import {
   captureProjectGenerationTask,
   capturePublishedProjectGenerationTask,
-  commitProjectGenerationTask,
-  projectGenerationTaskAdmission,
   type CapturedProjectGenerationTask,
   type ProjectGenerationApplicationPorts,
 } from "./project-generation-application-support.ts";
@@ -56,19 +32,12 @@ import {
   getPublishedProjectGenerationReadiness,
   type GetPublishedProjectGenerationReadinessInput,
 } from "./project-generation-readiness-application-service.ts";
-import { parseExtensionTaskIntent as parseIntent } from "./extension-task-intent.ts";
+
 import {
-  createExtensionRunBinding,
-  extensionCanonicalJson,
-  extensionOpaqueId,
-  parseExtensionActivation,
-  parseExtensionExecutionTarget,
-  validateExtensionTaskInput,
-  type ExtensionRunBinding,
   type WorkflowSchemaValue,
   type PluginTaskAdmissionPin,
 } from "@crewon/domain";
-import { ApplicationError } from "./application-error.ts";
+
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
 import type {
   ApplicationClock,
@@ -87,25 +56,10 @@ import type { ExternalOperationStore } from "./external-operation-store-port.ts"
 import type { RunStore } from "./run-store-port.ts";
 import type { ExtensionCreditQuotePort } from "./extension-credit-quote-port.ts";
 import { TurnApplicationService } from "./turn-application-service.ts";
+
 import {
-  authorizeExtension,
-  extensionActor,
-  extensionCommand,
-  extensionScopeFor,
-  extensionUseCase,
-  requireExtensionRegistration,
-  requirePinnedExtensionRegistration,
-} from "./extension-application-support.ts";
-import {
-  assertSavedPluginTask,
   capturePluginTaskCommitAuthority,
   checkedPluginTaskPin,
-  commitPluginTask,
-  pluginTaskActor,
-  pluginTaskAdmission,
-  pluginTaskReceipt,
-  resolvePluginTaskReceipt,
-  requirePluginTaskStore,
   type PluginTaskCommitAuthorityPort,
 } from "./extension-plugin-task-support.ts";
 
@@ -167,6 +121,30 @@ export class ExtensionTaskApplicationService {
     input: CreateExtensionTaskCommand,
   ) {
     return this.#createTask(actorInput, input, null);
+  }
+  /** Dedicated host-issued media qualification; the original public v0 command stays unchanged. */
+  createProjectMediaTaskFromHost(
+    input: Readonly<{
+      actor: ActorContext;
+      command: CreateExtensionTaskCommand;
+      pin: PluginTaskAdmissionPin;
+      task: ProjectMediaGenerationTask;
+    }>,
+  ) {
+    return createExtensionTaskTurn(
+      {
+        dependencies: this.#dependencies,
+        unmeteredTasks: this.#unmeteredTasks,
+        turns: this.#turns,
+        taskAdmissionMode: this.#taskAdmissionMode,
+      },
+      {
+        actorInput: input.actor,
+        input: input.command,
+        pin: checkedPluginTaskPin(input.pin),
+        mediaTask: input.task,
+      },
+    );
   }
 
   /** Internal host-issued authority only. The original v0 HTTP command does not accept this pin. */
@@ -355,695 +333,24 @@ export class ExtensionTaskApplicationService {
       ): void;
     }> | null = null,
   ) {
-    return extensionUseCase(async () => {
-      if (assetStage !== null) {
-        if (
-          conversation !== null ||
-          projectTextPlan !== null ||
-          projectTask !== null ||
-          pin === null
-        )
-          throw new ApplicationError(
-            "authorization",
-            "project_asset_stage_admission_invalid",
-          );
-        await assetStage.task.authority.assertCurrent();
-        assetStage.task.authority.assertActive();
-      }
-      if (projectTextPlan !== null) {
-        await projectTextPlan.authority.assertCurrent();
-        projectTextPlan.authority.assertActive();
-      }
-      if (conversation !== null) {
-        await conversation.authority.assertCurrent();
-        conversation.authority.assertActive();
-      }
-      const actor =
-        pin === null
-          ? extensionActor(actorInput)
-          : pluginTaskActor(actorInput, pin);
-      const value = extensionCommand(input, [
-        "pluginId",
-        "threadId",
-        "expectedThreadRevision",
-        "idempotencyKey",
-        "intent",
-      ]);
-      const scope = extensionScopeFor(actor, value.pluginId as string);
-      const threadId = extensionOpaqueId(value.threadId);
-      if (
-        typeof value.expectedThreadRevision !== "number" ||
-        !Number.isSafeInteger(value.expectedThreadRevision) ||
-        value.expectedThreadRevision < 1
-      )
-        throw new ApplicationError(
-          "validation",
-          "extension_thread_revision_invalid",
-        );
-      const expectedThreadRevision = value.expectedThreadRevision;
-      const idempotencyKey = extensionOpaqueId(value.idempotencyKey);
-      const intent = parseIntent(value.intent);
-      if (pin !== null) {
-        if (intent.kind !== "generate")
-          throw new ApplicationError(
-            "validation",
-            "plugin_task_query_unsupported",
-          );
-        if (pin.pluginId !== scope.pluginId)
-          throw new ApplicationError(
-            "authorization",
-            "plugin_task_admission_owner_mismatch",
-          );
-        requirePluginTaskStore(
-          this.#dependencies.extensions,
-          this.#unmeteredTasks === undefined ? "metered" : "unmetered",
-        );
-      }
-      const queryHost =
-        intent.kind === "query" ? this.#dependencies.queryHost : undefined;
-      const command = {
-        pluginId: scope.pluginId,
-        threadId,
-        expectedThreadRevision,
-        idempotencyKey,
-        intent,
-      };
-      const generation =
-        projectTask === null
-          ? null
-          : projectGenerationTaskAdmission({
-              captured: projectTask,
-              projects: this.#dependencies.creativeProjects,
-              extensions: this.#dependencies.extensions,
-              executionAuthorization: this.#dependencies.authorization,
-              digester: this.#dependencies.digester,
-              actor,
-              command,
-            });
-      if (generation !== null) await generation.assertCurrent();
-      await authorizeExtension(
-        this.#dependencies.authorization,
-        actor,
-        intent.kind === "generate" ? "extension:run" : "extension:query",
-        scope,
-      );
-      await authorizeExtensionTaskThread(
-        this.#dependencies.authorization,
-        actor,
-        threadId,
-      );
-      const currentThread = await this.#dependencies.store.loadThreadInSpace({
-        ...actor,
-        threadId,
-      });
-      if (currentThread === null || currentThread.status === "deleted")
-        throw new ApplicationError("notFound", "thread_not_found");
-      // Query permission on the original Run is rechecked even for an idempotent replay.
-      const source =
-        intent.kind === "query"
-          ? await loadExtensionLegacyQuerySource(
-              this.#dependencies,
-              actor,
-              scope.pluginId,
-              intent,
-            )
-          : null;
-      const pluginReceipt =
-        pin !== null
-          ? await resolvePluginTaskReceipt({
-              store: this.#dependencies.extensions,
-              actor,
-              command,
-              pin,
-              digester: this.#dependencies.digester,
-              ...(generation === null
-                ? {}
-                : { projectGeneration: generation.reference }),
-              ...(conversation === null && assetStage === null
-                ? {}
-                : {
-                    projectConversationReceipt: (base) =>
-                      assetStage !== null
-                        ? projectAssetConversationTaskReceipt(
-                            base,
-                            assetStage.task,
-                            this.#dependencies.digester,
-                          )
-                        : projectConversationTaskReceipt(
-                            base,
-                            conversation!,
-                            this.#dependencies.digester,
-                          ),
-                  }),
-            })
-          : null;
-      const taskReceipt =
-        pin === null
-          ? {
-              actorId: actor.actorId,
-              idempotencyKey,
-              requestDigest: this.#dependencies.digester.sha256(
-                extensionCanonicalJson({
-                  schemaVersion: "crewon.extension-task-command.v0",
-                  tenantId: actor.tenantId,
-                  spaceId: actor.spaceId,
-                  actorId: actor.actorId,
-                  command,
-                }),
-              ),
-            }
-          : (pluginReceipt?.receipt ??
-            pluginTaskReceipt(
-              actor,
-              command,
-              pin,
-              this.#dependencies.digester,
-            ));
-      const receipt =
-        generation === null || pluginReceipt !== null
-          ? taskReceipt
-          : generation.receipt(taskReceipt);
-      const previous =
-        await this.#dependencies.extensions.loadExtensionTurnReceipt({
-          ...scope,
-          receipt,
-        });
-      if (previous !== null) {
-        assertExtensionTaskCreditPrincipal(
-          this.#dependencies.digester,
-          actor,
-          previous.creditAdmission,
-          previous.binding,
-          receipt,
-        );
-        if (pin !== null) {
-          assertSavedPluginTaskFunding(
-            previous,
-            actor,
-            receipt,
-            this.#dependencies.digester,
-          );
-          await assertSavedPluginTask({
-            store: this.#dependencies.extensions,
-            pin: pluginReceipt?.receiptPin ?? pin,
-            binding: previous.binding,
-            threadId,
-            receipt,
-            digester: this.#dependencies.digester,
-          });
-        }
-        if (generation !== null) {
-          await generation.assertSaved(previous.binding, receipt);
-          await generation.assertCurrent();
-          generation.assertActive();
-        }
-        if (conversation !== null) {
-          const savedAdmission = await this.#dependencies.extensions
-            .loadPluginTaskAdmission!({
-            tenantId: scope.tenantId,
-            spaceId: scope.spaceId,
-            runId: previous.binding.runId,
-          });
-          if (savedAdmission === null)
-            throw new ApplicationError(
-              "internal",
-              "plugin_task_admission_invalid",
-            );
-          const savedStage = await assertSavedProjectConversationTask(
-            conversation,
-            savedAdmission,
-            previous.binding,
-            this.#dependencies.digester,
-          );
-          onProjectStage?.(savedStage);
-        }
-        if (projectTextPlan !== null)
-          assertSavedProjectTextPlanTask(
-            projectTextPlan,
-            previous,
-            this.#dependencies.digester,
-          );
-        if (assetStage !== null) {
-          const saved = await this.#dependencies.extensions
-            .loadPluginTaskAdmission!({
-            tenantId: scope.tenantId,
-            spaceId: scope.spaceId,
-            runId: previous.binding.runId,
-          });
-          if (saved === null)
-            throw new ApplicationError(
-              "internal",
-              "plugin_task_admission_invalid",
-            );
-          assetStage.onStage(
-            await assertSavedProjectAssetConversationTask(
-              assetStage.task,
-              saved,
-              previous.binding,
-              this.#dependencies.digester,
-            ),
-          );
-        }
-        return previous;
-      }
-      if (pin !== null)
-        requirePluginTaskFinancialMode(
-          this.#dependencies.extensions,
-          this.#dependencies.creditQuotes,
-          this.#unmeteredTasks,
-        );
-      const unmeteredAuthority = await preparePluginTaskUnmeteredAuthority(
-        this.#unmeteredTasks,
-        actor,
+    return createExtensionTaskTurn(
+      {
+        dependencies: this.#dependencies,
+        unmeteredTasks: this.#unmeteredTasks,
+        taskAdmissionMode: this.#taskAdmissionMode,
+        turns: this.#turns,
+      },
+      {
+        actorInput,
+        input,
         pin,
-      );
-      const activationValue =
-        await this.#dependencies.extensions.loadExtensionActivation(scope);
-      if (activationValue === null)
-        throw new ApplicationError("authorization", "extension_access_revoked");
-      const activation = parseExtensionActivation(activationValue);
-      if (
-        activation.tenantId !== scope.tenantId ||
-        activation.spaceId !== scope.spaceId ||
-        activation.pluginId !== scope.pluginId
-      )
-        throw new ApplicationError(
-          "internal",
-          "extension_activation_scope_mismatch",
-        );
-      if (activation.state === "revoked")
-        throw new ApplicationError("authorization", "extension_access_revoked");
-      if (
-        source === null &&
-        (activation.state !== "enabled" || activation.target === null)
-      )
-        throw new ApplicationError("conflict", "extension_generation_disabled");
-      const { target, frozen } = await loadExtensionTaskConfiguration({
-        extensions: this.#dependencies.extensions,
-        digester: this.#dependencies.digester,
-        scope,
-        activation,
-        source,
-      });
-      const identity = Object.freeze({
-        pluginId: frozen.pluginId,
-        pluginVersion: frozen.pluginVersion,
-        manifestDigest: frozen.manifestDigest,
-        implementationDigest: frozen.implementationDigest,
-      });
-      const resolved =
-        queryHost === undefined
-          ? undefined
-          : await queryHost.resolveRegistration(
-              Object.freeze({ actor, identity }),
-            );
-      if (resolved === null)
-        throw new ApplicationError(
-          "conflict",
-          "extension_implementation_unavailable",
-        );
-      const registration =
-        queryHost === undefined
-          ? requireExtensionRegistration(
-              this.#dependencies.catalog,
-              this.#dependencies.digester,
-              frozen,
-            )
-          : requirePinnedExtensionRegistration(
-              resolved,
-              this.#dependencies.digester,
-              identity,
-            );
-      if (
-        registration.manifestDigest !== frozen.manifestDigest ||
-        registration.implementationDigest !== frozen.implementationDigest
-      )
-        throw new ApplicationError(
-          "conflict",
-          "extension_implementation_unavailable",
-        );
-      const admissionMode =
-        this.#taskAdmissionMode === undefined
-          ? "legacy"
-          : this.#taskAdmissionMode(Object.freeze({ registration }));
-      if (admissionMode !== "legacy" && admissionMode !== "installed")
-        throw new ApplicationError(
-          "internal",
-          "extension_task_admission_mode_invalid",
-        );
-      if (admissionMode === "installed" && pin === null)
-        throw new ApplicationError(
-          "conflict",
-          "installed_plugin_task_admission_required",
-        );
-      const taskInput =
-        intent.kind === "generate"
-          ? validateExtensionTaskInput(registration.manifest, intent.input)
-          : { kind: "query", operationId: intent.operationId };
-      if (generation !== null) await generation.assertNewInput(taskInput);
-      if (queryHost !== undefined && source !== null)
-        await authorizeExtensionTaskQuerySource(
-          this.#dependencies.authorization,
-          actor,
-          scope.pluginId,
-          source,
-        );
-      const readinessInput = Object.freeze({
-        actor,
-        registration,
-        configuration: frozen,
-        agentVersionId: target.agentVersionId,
-      });
-      const readiness =
-        queryHost === undefined
-          ? await this.#dependencies.host.evaluate(readinessInput)
-          : await queryHost.evaluate(
-              Object.freeze({ ...readinessInput, expectedTarget: target }),
-            );
-      if (readiness.outcome !== "ready")
-        throw new ApplicationError(
-          "conflict",
-          readiness.outcome === "unavailable"
-            ? readiness.reasonCode
-            : "extension_runtime_unavailable",
-        );
-      let readyTarget: typeof target;
-      try {
-        readyTarget = parseExtensionExecutionTarget(readiness.target);
-      } catch (error) {
-        throw new ApplicationError(
-          "internal",
-          "extension_runtime_target_invalid",
-          { cause: error },
-        );
-      }
-      if (
-        extensionCanonicalJson(readyTarget) !== extensionCanonicalJson(target)
-      )
-        throw new ApplicationError(
-          "conflict",
-          "extension_execution_target_mismatch",
-        );
-      const content =
-        assetStage?.task.content ??
-        conversation?.content ??
-        extensionCanonicalJson(taskInput);
-      if (new TextEncoder().encode(content).length > 16 * 1024)
-        throw new ApplicationError(
-          "validation",
-          "extension_task_input_invalid",
-        );
-      const turn = await this.#turns.prepareTurn(actor, {
-        kind: "turn.start",
-        threadId,
-        expectedThreadRevision,
-        idempotencyKey: receipt.idempotencyKey,
-        content,
-        executionIntentVersion: "v1",
-        executionIntent: "none",
-        requestedAgentVersionId: target.agentVersionId,
-        route: {
-          agentVersionId: target.agentVersionId,
-          authorityId: target.authorityId,
-          runtimeGeneration: target.runtimeGeneration,
-          policySnapshotId: target.policySnapshotId,
-          workspaceBindingId: target.workspaceBindingId,
-        },
-      });
-      const event = turn.run.events[0]!;
-      if (event.type !== "run.created" || event.data.goalBinding != null)
-        throw new ApplicationError("conflict", "extension_thread_goal_active");
-      const binding = createExtensionRunBinding(
-        {
-          schemaVersion: "crewon.extension-run-binding.v0",
-          ...scope,
-          actorId: actor.actorId,
-          threadId,
-          runId: event.identity.runId,
-          configurationRevision: frozen.revision,
-          configurationDigest: frozen.contentDigest,
-          target,
-          inputDigest: this.#dependencies.digester.sha256(content),
-          source:
-            source === null || intent.kind !== "query"
-              ? null
-              : {
-                  runId: source.runId,
-                  bindingDigest: source.bindingDigest,
-                  operationId: intent.operationId,
-                },
-        },
-        this.#dependencies.digester,
-      );
-      if (queryHost !== undefined && source !== null)
-        await authorizeExtensionTaskQuerySource(
-          this.#dependencies.authorization,
-          actor,
-          scope.pluginId,
-          source,
-        );
-      const taskAdmission =
-        pin === null
-          ? undefined
-          : pluginTaskAdmission(
-              pin,
-              binding,
-              receipt,
-              this.#dependencies.digester,
-            );
-      const stageAdmission =
-        conversation === null
-          ? undefined
-          : projectConversationTaskAdmission(
-              conversation,
-              taskAdmission!,
-              binding,
-              event.occurredAt,
-              this.#dependencies.digester,
-            );
-      const assetStageAdmission =
-        assetStage === null
-          ? undefined
-          : projectAssetConversationTaskAdmission(
-              assetStage.task,
-              taskAdmission!,
-              binding,
-              event.occurredAt,
-              this.#dependencies.digester,
-            );
-      const creditAdmission =
-        intent.kind === "generate" &&
-        unmeteredAuthority === null &&
-        this.#dependencies.creditQuotes !== undefined
-          ? await quoteExtensionTaskGeneration(
-              this.#dependencies,
-              actor,
-              binding,
-              receipt,
-              taskInput as WorkflowSchemaValue,
-              assetStageAdmission !== undefined
-                ? { projectAssetStageAdmission: assetStageAdmission }
-                : stageAdmission === undefined
-                  ? undefined
-                  : { projectStageAdmission: stageAdmission },
-            )
-          : undefined;
-      const planAdmission =
-        projectTextPlan === null
-          ? undefined
-          : projectTextPlanTaskAdmission(
-              projectTextPlan,
-              stageAdmission!,
-              binding,
-              command.idempotencyKey,
-              event.occurredAt,
-              this.#dependencies.digester,
-            );
-      if (creditAdmission !== undefined || unmeteredAuthority !== null) {
-        // A price-policy await cannot retain permission that was revoked in the meantime.
-        await authorizeExtension(
-          this.#dependencies.authorization,
-          actor,
-          "extension:run",
-          scope,
-        );
-        await authorizeExtensionTaskThread(
-          this.#dependencies.authorization,
-          actor,
-          threadId,
-        );
-      }
-      const unmeteredAdmission = pluginTaskUnmeteredProof(
-        unmeteredAuthority,
-        taskAdmission,
-        this.#dependencies.digester,
-      );
-      const financialOptions = pluginTaskFinancialOptions(
-        unmeteredAuthority,
-        generation?.commitOptions,
-      );
-      const commitOptions =
-        assetStage !== null
-          ? {
-              ...financialOptions,
-              projectAssetStageAuthority: assetStage.task.authority,
-            }
-          : conversation === null
-            ? financialOptions
-            : {
-                ...financialOptions,
-                projectStageAuthority: conversation.authority,
-                ...(projectTextPlan === null
-                  ? {}
-                  : { projectTextPlanAuthority: projectTextPlan }),
-              };
-      const commitInput = {
-        turn,
-        binding,
-        receipt,
-        expectedActivationRevision: activation.revision,
-        ...(stageAdmission === undefined
-          ? {}
-          : { projectStageAdmission: stageAdmission }),
-        ...(assetStageAdmission === undefined
-          ? {}
-          : { projectAssetStageAdmission: assetStageAdmission }),
-        ...(planAdmission === undefined
-          ? {}
-          : { projectTextPlanAdmission: planAdmission }),
-        ...(generation === null
-          ? {}
-          : { projectGeneration: generation.reference }),
-        ...(creditAdmission === undefined ? {} : { creditAdmission }),
-        ...(taskAdmission === undefined
-          ? {}
-          : { pluginAdmission: taskAdmission }),
-        ...(unmeteredAdmission === undefined ? {} : { unmeteredAdmission }),
-      };
-      if (unmeteredAuthority !== null) {
-        await unmeteredAuthority.assertCurrent();
-        unmeteredAuthority.assertActive();
-      }
-      if (pin !== null && commitAuthority !== null)
-        await commitAuthority.assertCurrent({ actor, pin });
-      if (generation !== null) await generation.assertDispatchCurrent();
-      if (projectTextPlan !== null) {
-        await projectTextPlan.authority.assertCurrent();
-        projectTextPlan.authority.assertActive();
-      }
-      if (conversation !== null) {
-        await conversation.authority.assertCurrent();
-        conversation.authority.assertActive();
-      }
-      if (assetStage !== null) {
-        await assetStage.task.authority.assertCurrent();
-        assetStage.task.authority.assertActive();
-      }
-      const result = await (pin === null
-        ? this.#dependencies.extensions.commitExtensionTurn(commitInput)
-        : generation === null
-          ? commitPluginTask(
-              this.#dependencies.extensions,
-              commitInput,
-              commitOptions,
-            )
-          : commitProjectGenerationTask(() =>
-              commitPluginTask(
-                this.#dependencies.extensions,
-                commitInput,
-                commitOptions,
-              ),
-            ));
-      assertExtensionTaskCreditPrincipal(
-        this.#dependencies.digester,
-        actor,
-        result.creditAdmission,
-        result.binding,
-        receipt,
-      );
-      if (
-        creditAdmission !== undefined &&
-        (result.run.disposition === "committed" || pin !== null) &&
-        result.creditAdmission === undefined
-      )
-        throw new ApplicationError(
-          "internal",
-          "extension_credit_admission_missing",
-        );
-      if (pin !== null)
-        assertSavedPluginTaskFunding(
-          result,
-          actor,
-          receipt,
-          this.#dependencies.digester,
-        );
-      if (pin !== null)
-        await assertSavedPluginTask({
-          store: this.#dependencies.extensions,
-          pin,
-          binding: result.binding,
-          threadId,
-          ...(result.run.disposition === "committed"
-            ? { committedBinding: binding }
-            : {}),
-          receipt,
-          digester: this.#dependencies.digester,
-        });
-      if (generation !== null)
-        await generation.assertSaved(result.binding, receipt);
-      if (conversation !== null) {
-        if (result.run.disposition === "committed")
-          onProjectStage?.(stageAdmission!);
-        else {
-          const savedAdmission = await this.#dependencies.extensions
-            .loadPluginTaskAdmission!({
-            tenantId: scope.tenantId,
-            spaceId: scope.spaceId,
-            runId: result.binding.runId,
-          });
-          if (savedAdmission === null)
-            throw new ApplicationError(
-              "internal",
-              "plugin_task_admission_invalid",
-            );
-          onProjectStage?.(
-            await assertSavedProjectConversationTask(
-              conversation,
-              savedAdmission,
-              result.binding,
-              this.#dependencies.digester,
-              false,
-            ),
-          );
-        }
-      }
-      if (assetStage !== null) {
-        if (result.run.disposition === "committed")
-          assetStage.onStage(assetStageAdmission!);
-        else {
-          const saved = await this.#dependencies.extensions
-            .loadPluginTaskAdmission!({
-            tenantId: scope.tenantId,
-            spaceId: scope.spaceId,
-            runId: result.binding.runId,
-          });
-          if (saved === null)
-            throw new ApplicationError(
-              "internal",
-              "plugin_task_admission_invalid",
-            );
-          assetStage.onStage(
-            await assertSavedProjectAssetConversationTask(
-              assetStage.task,
-              saved,
-              result.binding,
-              this.#dependencies.digester,
-              false,
-            ),
-          );
-        }
-      }
-      return result;
-    });
+        commitAuthority,
+        projectTask,
+        conversation,
+        onProjectStage,
+        projectTextPlan,
+        assetStage,
+      },
+    );
   }
 }

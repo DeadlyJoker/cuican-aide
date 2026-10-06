@@ -1,3 +1,4 @@
+import { SqliteProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { loadSqliteAssetStage } from "./project-asset-stage-markers.ts";
 import { loadSqlitePlanAdmission } from "./project-text-plan-markers.ts";
 import {
@@ -114,6 +115,16 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
+  readonly #mediaGenerations: SqliteProjectMediaGenerationArchive;
+  get projectMediaGenerationVersion() {
+    return this.#mediaGenerations.version;
+  }
+  migrateProjectMediaGenerations() {
+    return this.#mediaGenerations.migrate();
+  }
+  loadProjectMediaGenerationLink(input: ExtensionRunLocator) {
+    return this.#mediaGenerations.load(input);
+  }
   readonly projectAssetStageAdmissionVersion =
     "crewon.project-asset-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion =
@@ -180,6 +191,10 @@ export class SqliteExtensionStore implements ExtensionStore {
   constructor(database: DatabaseSync, host: SqliteExtensionStoreHost) {
     this.#db = database;
     this.#host = host;
+    this.#mediaGenerations = new SqliteProjectMediaGenerationArchive(
+      database,
+      () => host.assertOpen(),
+    );
   }
 
   async migrate() {
@@ -556,6 +571,7 @@ export class SqliteExtensionStore implements ExtensionStore {
     return commitSqliteExtensionTurn(
       {
         database: this.#db,
+        projectMediaGenerationsEnabled: this.#mediaGenerations.enabled,
         unmeteredEnabled: this.#unmeteredEnabled,
         projectGenerationsEnabled: this.#projectGenerationsEnabled,
         projectQueriesEnabled: this.#projectQueriesEnabled,

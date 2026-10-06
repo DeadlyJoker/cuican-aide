@@ -3,6 +3,11 @@ import type {
   ProjectAssetStageRunAdmission,
   ProjectTextPlanRunAdmission,
 } from "@crewon/domain";
+import type {
+  ProjectMediaGenerationReference,
+  ProjectMediaGenerationLink,
+  ProjectMediaGenerationCommitAuthority,
+} from "./project-media-generation-port.ts";
 import type { ProjectAssetStageCommitAuthority } from "./project-asset-stage-authority.ts";
 import type { ProjectTextPlanTurnCommitAuthority } from "./project-text-plan-store-port.ts";
 import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
@@ -108,6 +113,8 @@ export type CommitExtensionTurnInput = Readonly<{
   projectAssetStageAdmission?: ProjectAssetStageRunAdmission;
   projectTextPlanAdmission?: ProjectTextPlanRunAdmission;
   projectGeneration?: ProjectGenerationReference;
+  /** Dedicated host media input and original material event identities; not a v0 concept generation. */
+  projectMediaGeneration?: ProjectMediaGenerationReference;
   /** Historical source selected by the actual project owner; no metadata CAS or new generation slot. */
   projectHistoricalQuery?: Readonly<{
     reference: ProjectQueryReference;
@@ -125,6 +132,7 @@ export type CommitExtensionTurnOptions = Readonly<{
   projectTextPlanAuthority?: ProjectTextPlanTurnCommitAuthority;
   /** Trusted per-invocation callbacks, never captured as JSON in the input or receipt. */
   projectGenerationAuthority?: CreativeProjectCommitAuthority;
+  projectMediaGenerationAuthority?: ProjectMediaGenerationCommitAuthority;
   /** Detached source and execution installation pins; the Store locks both using its existing connection. */
   projectGenerationPublication?: ProjectGenerationExecutionPublication;
   /** Transaction-safe identity/policy fences; must never borrow a second connection. */
@@ -150,6 +158,10 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
  * Ordinary RunStore writes cannot attach a plugin after dispatch.
  */
 export interface ExtensionStore {
+  readonly projectMediaGenerationVersion?: "crewon.project-media-generation-link.v1";
+  loadProjectMediaGenerationLink?(
+    input: ExtensionRunLocator,
+  ): Promise<ProjectMediaGenerationLink | null>;
   readonly projectAssetStageAdmissionVersion?: "crewon.project-asset-stage-run-admission.v1";
   readonly projectStageAdmissionVersion?: "crewon.project-stage-run-admission.v1";
   readonly projectTextPlanAdmissionVersion?: "crewon.project-text-plan-run-admission.v1";

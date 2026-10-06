@@ -1,4 +1,19 @@
 import {
+  assertProjectMediaGenerationCurrent,
+  assertProjectMediaGenerationActive,
+} from "@crewon/application";
+import {
+  captureProjectMediaGenerationTurn,
+  stripProjectMediaGenerationOptions,
+  prepareProjectMediaGenerationTurn,
+  saveProjectMediaGenerationTurn,
+  assertProjectMediaGenerationReplay,
+} from "./project-media-generation-turn.ts";
+import { loadProjectMediaGenerationLinkPlan } from "./project-media-generation-read.ts";
+import { assertSqliteProjectMediaGenerationSchema } from "./project-media-generation-schema.ts";
+import { executeSqliteMediaGenerationPlan } from "./project-media-generation-transaction.ts";
+import type { ProjectMediaInputPlan } from "./project-media-input-plan.ts";
+import {
   captureProjectAssetStageTurn,
   assertSqliteAssetStageTurn,
   assertAssetStageReplay,
@@ -120,6 +135,7 @@ import {
 } from "./project-historical-query-marker.ts";
 
 type SqliteExtensionTurnHost = Readonly<{
+  projectMediaGenerationsEnabled: boolean;
   database: DatabaseSync;
   unmeteredEnabled: boolean;
   projectGenerationsEnabled: boolean;
@@ -155,6 +171,15 @@ export async function commitSqliteExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const media = captureProjectMediaGenerationTurn(
+    input,
+    checkedPluginTaskAdmission(input),
+    host.projectMediaGenerationsEnabled,
+    options,
+  );
+  options = stripProjectMediaGenerationOptions(options);
+  if (media !== null)
+    input = { ...input, projectMediaGeneration: media.reference };
   const historicalQuery = captureProjectHistoricalQuery(
     input,
     checkedPluginQueryTurn(input),
@@ -246,8 +271,22 @@ export async function commitSqliteExtensionTurn(
   if (historicalQuery !== null)
     await assertCreativeProjectCommitCurrent(historicalQuery.authority);
   assertCreativeProjectCommitActive(historicalQuery?.authority);
+  if (media !== null) {
+    await assertProjectMediaGenerationCurrent(media.authority, "before");
+    await assertProjectMediaGenerationCurrent(media.authority, "transaction");
+  }
+  const mediaDialect = { postgres: false, schema: "main", prefix: "" };
+  const executeMedia = <T>(plan: ProjectMediaInputPlan<T>) =>
+    executeSqliteMediaGenerationPlan(
+      host.database,
+      plan,
+      () => host.assertOpen(),
+      media?.authority,
+    );
   return host.transaction(
     () => {
+      if (host.projectMediaGenerationsEnabled)
+        assertSqliteProjectMediaGenerationSchema(host.database);
       if (host.projectGenerationsEnabled)
         assertSqliteProjectGenerationSchema(host.database);
       if (host.projectQueriesEnabled)
@@ -275,6 +314,18 @@ export async function commitSqliteExtensionTurn(
           parseExtensionTurnReceipt(replay, binding, input.receipt),
         );
         assertUnmeteredReplay(saved.unmeteredAdmission, unmetered.admission);
+        if (host.projectMediaGenerationsEnabled)
+          assertProjectMediaGenerationReplay(
+            media,
+            executeMedia(
+              loadProjectMediaGenerationLinkPlan(mediaDialect, {
+                tenantId: saved.binding.tenantId,
+                spaceId: saved.binding.spaceId,
+                runId: saved.binding.runId,
+              }),
+            ),
+            { binding: saved.binding, receipt: input.receipt },
+          );
         assertExtensionCreditReplayPrincipal({
           saved: saved.creditAdmission,
           requested: creditAdmission,
@@ -376,6 +427,12 @@ export async function commitSqliteExtensionTurn(
               pluginQuery!,
             );
       host.admit(binding, input.expectedActivationRevision);
+      const mediaLink =
+        media === null
+          ? null
+          : executeMedia(
+              prepareProjectMediaGenerationTurn(mediaDialect, media, input),
+            );
       let projectLink: ProjectGenerationLink | undefined;
       if (prepared !== null) {
         projectLink = prepareSqliteProjectGeneration(
@@ -455,6 +512,8 @@ export async function commitSqliteExtensionTurn(
         unmetered.admission,
       );
       host.saveReceipt(binding, "task", input.receipt, result);
+      if (mediaLink !== null)
+        executeMedia(saveProjectMediaGenerationTurn(mediaDialect, mediaLink));
       if (projectLink !== undefined)
         host.database
           .prepare(projectGenerationInsertSql())
@@ -490,6 +549,10 @@ export async function commitSqliteExtensionTurn(
     },
     {
       beforeCommit: () => {
+        if (media !== null) {
+          host.assertOpen();
+          assertProjectMediaGenerationActive(media.authority);
+        }
         stage?.authority.assertActive();
         assetStage?.authority.assertActive();
         plan?.q.authority.assertActive();
