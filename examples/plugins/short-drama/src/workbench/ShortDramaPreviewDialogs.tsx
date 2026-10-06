@@ -80,7 +80,7 @@ export function ShortDramaPreviewDialogs({
           <label className="form-field">
             项目名称
             <input
-              autoFocus
+              data-dialog-autofocus
               maxLength={160}
               required
               value={newTitle}

@@ -1,5 +1,8 @@
 .drama-workbench {
+  container: drama-workbench / inline-size;
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -588,7 +591,22 @@
   background: var(--control-surface);
   color: var(--text);
 }
+.drama-workbench .drama-dialog-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text) 35%, transparent);
+}
+.drama-workbench .drama-dialog-layer[hidden] {
+  display: none;
+}
 .drama-workbench .modal {
+  position: relative;
+  inset: auto;
+  margin: auto;
   width: min(560px, 92%);
   max-height: 85%;
   padding: var(--space-5);
@@ -599,9 +617,6 @@
   color: var(--text);
   font: inherit;
   box-shadow: var(--shadow-modal);
-}
-.drama-workbench .modal::backdrop {
-  background: color-mix(in srgb, var(--text) 35%, transparent);
 }
 .drama-workbench .modal h2 {
   font-size: 1.25em;
@@ -652,7 +667,7 @@
   border: 0;
 }
 
-@media (max-width: 1100px) {
+@container drama-workbench (max-width: 1100px) {
   .drama-workbench .project-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -661,7 +676,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@container drama-workbench (max-width: 640px) {
   .drama-workbench :is(.drama-topbar, .preview-strip, .toast) {
     padding-right: var(--space-3);
     padding-left: var(--space-3);
@@ -680,5 +695,196 @@
   }
   .drama-workbench .revision-item {
     flex-wrap: wrap;
+  }
+}
+
+/* Project home and navigation inherit the host's theme; all layout stays in the plugin. */
+.drama-workbench .drama-project-home,
+.drama-workbench .drama-home-projects,
+.drama-workbench .drama-project-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.drama-workbench .drama-home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+  text-align: center;
+}
+.drama-workbench .drama-home-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+.drama-workbench .drama-home-hero h1 {
+  font-size: clamp(24px, 3.4cqi, 34px);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+}
+.drama-workbench .drama-home-hero > p {
+  max-width: 52em;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-idea-composer {
+  width: 100%;
+  max-width: 800px;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  text-align: left;
+}
+.drama-workbench .drama-idea-composer:focus-within {
+  border-color: var(--control-ring-strong);
+}
+.drama-workbench .drama-idea-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  line-height: 1.8;
+}
+.drama-workbench .drama-idea-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.drama-workbench .drama-idea-actions > span,
+.drama-workbench .drama-project-card-heading {
+  color: var(--text-muted);
+  font-size: 0.92em;
+}
+.drama-workbench .drama-project-card-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) 0;
+}
+.drama-workbench .drama-project-card-heading > svg:last-child {
+  margin-left: auto;
+}
+.drama-workbench .drama-home-projects > .section-row > h2 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+.drama-workbench .drama-content.drama-project-content {
+  max-width: none;
+}
+.drama-workbench .drama-project-layout {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+  min-width: 0;
+}
+.drama-workbench .drama-project-layout[data-navigation-expanded="false"] {
+  grid-template-columns: 48px minmax(0, 1fr);
+}
+.drama-workbench .drama-project-navigation {
+  position: sticky;
+  top: 0;
+  min-width: 0;
+}
+.drama-workbench .drama-navigation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  color: var(--text-muted);
+}
+.drama-workbench .drama-navigation-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.drama-workbench .drama-project-navigation .stage-item {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-3);
+  color: var(--text-muted);
+}
+.drama-workbench .drama-project-navigation .stage-item.active {
+  color: var(--text);
+}
+.drama-workbench [data-navigation-expanded="false"] .drama-navigation-label,
+.drama-workbench
+  [data-navigation-expanded="false"]
+  .drama-navigation-heading
+  > span {
+  display: none;
+}
+.drama-workbench [data-navigation-expanded="false"] .drama-navigation-heading,
+.drama-workbench
+  [data-navigation-expanded="false"]
+  .drama-project-navigation
+  .stage-item {
+  justify-content: center;
+}
+@container drama-workbench (max-width: 980px) {
+  .drama-workbench .drama-project-layout,
+  .drama-workbench .drama-project-layout[data-navigation-expanded="false"] {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+  .drama-workbench .drama-project-navigation {
+    position: static;
+  }
+  .drama-workbench .drama-navigation-items {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: var(--space-2);
+  }
+  .drama-workbench .drama-project-navigation .stage-item {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: var(--control-h-md);
+    white-space: nowrap;
+  }
+  .drama-workbench .drama-navigation-label small {
+    display: none;
+  }
+  .drama-workbench [data-navigation-expanded="false"] .drama-navigation-items {
+    display: none;
+  }
+  .drama-workbench
+    [data-navigation-expanded="false"]
+    .drama-navigation-heading
+    > span {
+    display: inline;
+  }
+  .drama-workbench
+    [data-navigation-expanded="false"]
+    .drama-navigation-heading {
+    justify-content: space-between;
+  }
+  .drama-workbench .drama-project-editor :is(.concept-grid, .detail-layout) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@container drama-workbench (max-width: 600px) {
+  .drama-workbench .drama-content {
+    padding: var(--space-4);
+  }
+  .drama-workbench .drama-home-hero {
+    padding: var(--space-3) 0;
+  }
+  .drama-workbench .drama-recent-projects {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

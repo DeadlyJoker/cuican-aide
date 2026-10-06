@@ -1,3 +1,4 @@
+import { usePluginDialog } from "./usePluginDialog";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -59,16 +60,7 @@ export function ShortDramaWorkbenchPreview({
     null;
   const currentBrief = project.briefs.at(-1)!;
 
-  useEffect(() => {
-    if (dialog) dialogRef.current?.showModal();
-    else dialogRef.current?.close();
-  }, [dialog]);
-  useEffect(() => {
-    const element = dialogRef.current;
-    return () => {
-      if (element?.open) element.close();
-    };
-  }, []);
+  usePluginDialog(dialogRef, dialog !== null);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(null), 4000);
@@ -190,7 +182,7 @@ export function ShortDramaWorkbenchPreview({
 
   return (
     <section className="drama-workbench" aria-label="AI 短剧工作台">
-      <div className="drama-main">
+      <div className="drama-main" inert={dialog !== null}>
         <header className="drama-topbar">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
             <button onClick={() => setPage("projects")}>AI 短剧</button>
@@ -633,18 +625,20 @@ export function ShortDramaWorkbenchPreview({
           {notice}
         </div>
       )}
-      <ShortDramaPreviewDialogs
-        dialog={dialog}
-        dialogRef={dialogRef}
-        project={project}
-        concept={concept}
-        newTitle={newTitle}
-        newBrief={newBrief}
-        onTitleChange={setNewTitle}
-        onBriefChange={setNewBrief}
-        onCreate={createProject}
-        onClose={() => setDialog(null)}
-      />
+      <div className="drama-dialog-layer" hidden={dialog === null}>
+        <ShortDramaPreviewDialogs
+          dialog={dialog}
+          dialogRef={dialogRef}
+          project={project}
+          concept={concept}
+          newTitle={newTitle}
+          newBrief={newBrief}
+          onTitleChange={setNewTitle}
+          onBriefChange={setNewBrief}
+          onCreate={createProject}
+          onClose={() => setDialog(null)}
+        />
+      </div>
     </section>
   );
 }

@@ -176,7 +176,11 @@ test("ships a unified self-contained UI and execution package with the original 
     css,
     /(?:^|\n)\s*(?:body|html|:root|\.command-|\.screen-shell)/u,
   );
-  assert.doesNotMatch(css, /position:\s*fixed|100[ds]?vh/u);
+  assert.doesNotMatch(
+    css,
+    /position:\s*fixed|100[ds]?vh|@media\s*\(\s*max-width/u,
+  );
+  assert.match(css, /@container drama-workbench/u);
   assert.match(css, /font-family: inherit/u);
   const f = fixture(definition);
   try {
