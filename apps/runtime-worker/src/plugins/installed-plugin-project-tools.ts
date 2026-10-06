@@ -39,6 +39,9 @@ export function createInstalledPluginProjectToolsOwner(
     context: PluginToolRuntimeContext;
     stageAdmission?: ProjectStageRunAdmission | null;
     planAdmission?: ProjectTextPlanRunAdmission | null;
+    mediaInputStageAdmission?:
+      | import("@crewon/domain").ProjectMediaInputStageRunAdmission
+      | null;
     admission: PluginTaskAdmission;
     assetStageAdmission?:
       | import("@crewon/domain").ProjectAssetStageRunAdmission
@@ -63,6 +66,7 @@ export function createInstalledPluginProjectToolsOwner(
       ? {}
       : { assets: dependencies.assetTools(input.admission) }),
     stageAdmission: input.stageAdmission,
+    mediaInputStageAdmission: input.mediaInputStageAdmission,
     assetStageAdmission: input.assetStageAdmission,
     planAdmission: input.planAdmission,
     admission: input.admission,

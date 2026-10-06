@@ -1,3 +1,12 @@
+import { assertProjectAssetStageDispatch } from "./project-stage-dispatch-scope.ts";
+import {
+  captureMediaInputReadScope,
+  mediaInputStageReadCommand,
+} from "./project-media-input-read-scope.ts";
+import {
+  assertProjectMediaInputStageToolRequest,
+  type ProjectMediaInputStageRunAdmission,
+} from "@crewon/domain";
 import {
   projectAssetToolHead as head,
   projectAssetToolRevision as revision,
@@ -37,11 +46,6 @@ import {
 import type { PluginHostService } from "@crewon/plugin-host";
 import type { ToolExecutionCommand } from "@crewon/tool-broker";
 import { assertWorkerToolDispatchEvidence } from "./worker-tool-dispatch-authority.ts";
-import { parseProjectToolsRequest } from "./project-tools-service-request.ts";
-import {
-  PROJECT_TOOL_OPERATIONS,
-  type ProjectToolsMethod,
-} from "@crewon/contracts/project-tools";
 import type {
   ProjectToolsServiceOwnerDependencies,
   ProjectToolsDispatchInvocation,
@@ -69,6 +73,7 @@ const sha = Object.freeze({
 export class ProjectAssetToolsServiceOwner {
   readonly #d: ProjectAssetToolsServiceOwnerDependencies;
   readonly #stage: ProjectAssetStageRunAdmission | null;
+  readonly #mediaInputStage: ProjectMediaInputStageRunAdmission | null;
   readonly #invocations = new WeakMap<object, Invocation>();
   readonly #active = new Set<Invocation>();
   readonly #pending = new Set<Promise<unknown>>();
@@ -84,6 +89,16 @@ export class ProjectAssetToolsServiceOwner {
     )
       denied();
     const admission = parsePluginTaskAdmission(input.admission);
+    this.#mediaInputStage = captureMediaInputReadScope(
+      input.mediaInputStageAdmission,
+      input.context,
+      admission,
+    );
+    if (
+      this.#mediaInputStage &&
+      (input.assetStageAdmission || input.stageAdmission || input.planAdmission)
+    )
+      denied();
     this.#d = Object.freeze({
       ...input,
       admission,
@@ -220,7 +235,20 @@ export class ProjectAssetToolsServiceOwner {
     this.#active.add(invocation);
     const task = Promise.resolve().then(() => {
       this.#check(invocation);
-      if (this.#stage !== null) this.#guardCommand(input.command);
+      if (this.#mediaInputStage !== null)
+        mediaInputStageReadCommand({
+          stage: this.#mediaInputStage,
+          command: input.command,
+          tools: this.#d.tools,
+          context: this.#d.context,
+        });
+      if (this.#stage !== null)
+        assertProjectAssetStageDispatch(
+          this.#stage,
+          this.#d.tools,
+          this.#d.admission.pluginId,
+          input.command,
+        );
       return delegate();
     });
     this.#pending.add(task);
@@ -234,35 +262,6 @@ export class ProjectAssetToolsServiceOwner {
       this.#active.delete(invocation);
       this.#pending.delete(task);
     }
-  }
-  #guardCommand(command: ToolExecutionCommand) {
-    const definition = this.#d.tools.find(
-      (t) =>
-        extensionToolName(this.#d.admission.pluginId, t.operationId) ===
-        command.name,
-    );
-    if (!definition) denied();
-    const operation = definition.operationId;
-    let request: Readonly<Record<string, unknown>>;
-    if (operation === "asset_context_read") {
-      const v = data(JSON.parse(command.input), []);
-      request = v;
-    } else {
-      const assetMethod = (
-        Object.keys(PROJECT_ASSET_TOOL_OPERATIONS) as ProjectAssetToolMethod[]
-      ).find((m) => PROJECT_ASSET_TOOL_OPERATIONS[m] === operation);
-      const oldMethod = (
-        Object.keys(PROJECT_TOOL_OPERATIONS) as ProjectToolsMethod[]
-      ).find((m) => PROJECT_TOOL_OPERATIONS[m] === operation);
-      request = (
-        assetMethod
-          ? parseProjectAssetToolCommand(assetMethod, JSON.parse(command.input))
-          : oldMethod
-            ? parseProjectToolsRequest(oldMethod, JSON.parse(command.input))
-            : denied()
-      ) as Readonly<Record<string, unknown>>;
-    }
-    assertProjectAssetStageToolRequest(this.#stage!, operation, request);
   }
   canRetire() {
     return this.#active.size === 0 && this.#pending.size === 0;
@@ -340,19 +339,22 @@ export class ProjectAssetToolsServiceOwner {
             ...i,
             signal,
             operationId: "asset_context_read",
-            projectId: this.#stage?.projectId ?? null,
+            projectId:
+              (this.#stage ?? this.#mediaInputStage)?.projectId ?? null,
           });
           this.#check(i);
           const actor = await this.#actor(signal);
           const run = await this.#run(i);
-          if (this.#stage !== null)
-            await this.#policy(actor, this.#stage.projectId, false);
+          const project = this.#stage ?? this.#mediaInputStage;
+          if (project !== null)
+            await this.#policy(actor, project.projectId, false);
           this.#check(i);
           await this.#d.authorizeCurrent({
             ...i,
             signal,
             operationId: "asset_context_read",
-            projectId: this.#stage?.projectId ?? null,
+            projectId:
+              (this.#stage ?? this.#mediaInputStage)?.projectId ?? null,
           });
           const s = this.#stage;
           const result = projectAssetToolsCodec.parseContextResponse({
@@ -385,7 +387,7 @@ export class ProjectAssetToolsServiceOwner {
     try {
       const v = data(input, ["command", "request"]),
         i = this.#invocation(v.command);
-      if (this.#stage === null) denied();
+      if (this.#stage === null && this.#mediaInputStage === null) denied();
       const request = projectAssetToolsCodec.parseRequest(method, v.request),
         original = parseProjectAssetToolCommand(
           method,
@@ -415,11 +417,18 @@ export class ProjectAssetToolsServiceOwner {
         action.limits.maxOutputBytes < 8192
       )
         denied();
-      assertProjectAssetStageToolRequest(
-        this.#stage,
-        operation,
-        request as Readonly<Record<string, unknown>>,
-      );
+      if (this.#mediaInputStage !== null)
+        assertProjectMediaInputStageToolRequest(
+          this.#mediaInputStage,
+          operation,
+          request as Readonly<Record<string, unknown>>,
+        );
+      else
+        assertProjectAssetStageToolRequest(
+          this.#stage!,
+          operation,
+          request as Readonly<Record<string, unknown>>,
+        );
       return this.#track(i, this.#execute(method, request, i));
     } catch (error) {
       return Promise.reject(error);
@@ -572,7 +581,11 @@ export class ProjectAssetToolsServiceOwner {
         actor,
         request as ProjectAssetToolsRequests["getAsset"],
       );
-      if (view !== null && view.asset.kind !== this.#stage!.stage.assetKind)
+      if (
+        this.#stage !== null &&
+        view !== null &&
+        view.asset.kind !== this.#stage.stage.assetKind
+      )
         denied();
       value = {
         view:
@@ -626,7 +639,8 @@ export class ProjectAssetToolsServiceOwner {
             contentRevision: q.contentRevision,
           },
         );
-      if (record.kind !== this.#stage!.stage.assetKind) denied();
+      if (this.#stage !== null && record.kind !== this.#stage.stage.assetKind)
+        denied();
       const points = Array.from(extensionCanonicalJson(record.content));
       if (q.offset > points.length) denied();
       const end = Math.min(points.length, q.offset + 1024);
@@ -640,6 +654,7 @@ export class ProjectAssetToolsServiceOwner {
       };
     }
     if (method !== "saveCandidate") {
+      await this.#d.authorizeAssetService(signal);
       await this.#d.authorizeCurrent(operation);
       await this.#actor(signal);
       await this.#policy(actor, request.projectId, false);
@@ -661,7 +676,10 @@ export class ProjectAssetToolsServiceOwner {
       actor,
       { projectId, assetId },
     );
-    if (view === null || view.asset.kind !== this.#stage!.stage.assetKind)
+    if (
+      view === null ||
+      (this.#stage !== null && view.asset.kind !== this.#stage.stage.assetKind)
+    )
       denied();
   }
   async #policy(

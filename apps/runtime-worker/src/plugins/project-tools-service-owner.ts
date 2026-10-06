@@ -1,3 +1,13 @@
+import { invokeProjectTool } from "./project-tools-service-invoke.ts";
+import { assertProjectTextStageDispatch } from "./project-stage-dispatch-scope.ts";
+import {
+  captureMediaInputReadScope,
+  mediaInputStageReadCommand,
+} from "./project-media-input-read-scope.ts";
+import {
+  assertProjectMediaInputStageToolRequest,
+  type ProjectMediaInputStageRunAdmission,
+} from "@crewon/domain";
 import {
   ProjectAssetToolsServiceOwner,
   type ProjectAssetToolsServiceOwnerDependencies,
@@ -34,7 +44,6 @@ import {
   parseProjectTextPlanRunAdmission,
   assertProjectTextPlanOutlineEpisodes,
   parseProjectStageRunAdmission,
-  assertProjectStageToolRequest,
 } from "@crewon/domain";
 import type { PluginHostService } from "@crewon/plugin-host";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
@@ -55,16 +64,7 @@ import {
   parseProjectToolsRequest,
   type ProjectToolsRequests,
 } from "./project-tools-service-request.ts";
-import {
-  boundedProjectToolsResponse,
-  projectToolsProject,
-  projectToolsBrief,
-  projectToolsView,
-  projectToolsRevision,
-  projectToolsTextMutation,
-  projectToolsBriefMutation,
-  projectToolsContent,
-} from "./project-tools-service-projection.ts";
+import { boundedProjectToolsResponse } from "./project-tools-service-projection.ts";
 import {
   CREWON_PROJECT_CONTEXT_SERVICE,
   CREWON_PROJECT_CONTEXT_API_VERSION,
@@ -86,6 +86,7 @@ export type ProjectToolsServiceOwnerDependencies = Readonly<{
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
   assetStageAdmission?: ProjectAssetStageRunAdmission | null;
+  mediaInputStageAdmission?: ProjectMediaInputStageRunAdmission | null;
   assets?: Readonly<{
     service: import("@crewon/application").ProjectAssetApplicationService;
     authorizeService(signal: AbortSignal): Promise<void>;
@@ -135,6 +136,7 @@ export class ProjectToolsServiceOwner {
   readonly #admission: PluginTaskAdmission;
   readonly #assetOwner: ProjectAssetToolsServiceOwner | null;
   readonly #assetStage: ProjectAssetStageRunAdmission | null;
+  readonly #mediaInputStage: ProjectMediaInputStageRunAdmission | null;
   readonly #stage: ProjectStageRunAdmission | null;
   readonly #plan: ProjectTextPlanRunAdmission | null;
   readonly #abort = new AbortController();
@@ -147,6 +149,18 @@ export class ProjectToolsServiceOwner {
   constructor(dependencies: ProjectToolsServiceOwnerDependencies) {
     this.#dependencies = dependencies;
     this.#assetStage = dependencies.assetStageAdmission ?? null;
+    this.#mediaInputStage = captureMediaInputReadScope(
+      dependencies.mediaInputStageAdmission,
+      dependencies.context,
+      dependencies.admission,
+    );
+    if (
+      this.#mediaInputStage &&
+      (dependencies.stageAdmission ||
+        dependencies.assetStageAdmission ||
+        dependencies.planAdmission)
+    )
+      denied();
     if (this.#assetStage !== null && dependencies.assets === undefined)
       denied();
     this.#assetOwner =
@@ -316,31 +330,20 @@ export class ProjectToolsServiceOwner {
     this.#active.add(invocation);
     const task = Promise.resolve().then(() => {
       this.#check(invocation);
-      if (this.#stage !== null) {
-        const definition = this.#dependencies.tools.find(
-          (t) =>
-            extensionToolName(this.#admission.pluginId, t.operationId) ===
-            input.command.name,
-        );
-        if (definition === undefined) denied();
-        const method = (
-          Object.keys(PROJECT_TOOL_OPERATIONS) as ProjectToolsMethod[]
-        ).find((m) => PROJECT_TOOL_OPERATIONS[m] === definition.operationId);
-        const request =
-          definition.operationId === "project_context_read"
-            ? JSON.parse(input.command.input)
-            : method === undefined
-              ? denied()
-              : parseProjectToolsRequest(
-                  method,
-                  JSON.parse(input.command.input),
-                );
-        assertProjectStageToolRequest(
+      if (this.#mediaInputStage !== null)
+        mediaInputStageReadCommand({
+          stage: this.#mediaInputStage,
+          command: input.command,
+          tools: this.#dependencies.tools,
+          context: this.#dependencies.context,
+        });
+      if (this.#stage !== null)
+        assertProjectTextStageDispatch(
           this.#stage,
-          definition.operationId,
-          request as Readonly<Record<string, unknown>>,
+          this.#dependencies.tools,
+          this.#admission.pluginId,
+          input.command,
         );
-      }
       return this.#assetOwner === null
         ? delegate()
         : this.#assetOwner.withInvocation(input, delegate);
@@ -467,6 +470,12 @@ export class ProjectToolsServiceOwner {
       if (this.#assetStage !== null)
         assertProjectAssetStageToolRequest(
           this.#assetStage,
+          operationId,
+          request as Readonly<Record<string, unknown>>,
+        );
+      if (this.#mediaInputStage !== null)
+        assertProjectMediaInputStageToolRequest(
+          this.#mediaInputStage,
           operationId,
           request as Readonly<Record<string, unknown>>,
         );
@@ -669,7 +678,14 @@ export class ProjectToolsServiceOwner {
         this.#check(invocation);
       }
     }
-    const value = await this.#invoke(method, request, actor, key, authority);
+    const value = await invokeProjectTool({
+      dependencies: this.#dependencies,
+      method,
+      request,
+      actor,
+      idempotencyKey: key,
+      authority,
+    });
     await this.#dependencies.authorizeCurrent(authorization);
     await this.#actor(run.createdByActorId, authorization.signal);
     const decision = await this.#dependencies.authorization.authorize({
@@ -711,165 +727,6 @@ export class ProjectToolsServiceOwner {
     )
       denied();
     return actor;
-  }
-  async #invoke(
-    method: ProjectToolsMethod,
-    request: ProjectToolsRequests[ProjectToolsMethod],
-    actor: ActorContext,
-    idempotencyKey: string | undefined,
-    authority: CreativeProjectCommitAuthority | undefined,
-  ): Promise<unknown> {
-    const projects = this.#dependencies.projects,
-      texts = this.#dependencies.texts;
-    const options = { authority };
-    // Each branch reuses the original owned Application use case; no raw storage writes.
-    switch (method) {
-      case "listProjects": {
-        const page = await projects.listProjects(
-          actor,
-          request as ProjectToolsRequests["listProjects"],
-        );
-        return {
-          projects: page.projects.map(projectToolsProject),
-          next: page.next,
-        };
-      }
-      case "readProject": {
-        const query = request as ProjectToolsRequests["readProject"];
-        const project = await projects.getProject(actor, query);
-        const brief =
-          project.latestBriefRevision === 0
-            ? null
-            : await projects.getBrief(actor, {
-                projectId: project.projectId,
-                briefRevision: project.latestBriefRevision,
-              });
-        return {
-          project: projectToolsProject(project),
-          brief: brief === null ? null : projectToolsBrief(brief),
-        };
-      }
-      case "createProject":
-        return projectToolsBriefMutation(
-          await projects.createProject(
-            actor,
-            {
-              ...(request as ProjectToolsRequests["createProject"]),
-              idempotencyKey: idempotencyKey!,
-            },
-            options,
-          ),
-        );
-      case "appendBrief":
-        return projectToolsBriefMutation(
-          await projects.appendBrief(
-            actor,
-            {
-              ...(request as ProjectToolsRequests["appendBrief"]),
-              idempotencyKey: idempotencyKey!,
-            },
-            options,
-          ),
-        );
-      case "readOutline":
-        return {
-          view: projectToolsView(
-            await texts.getOutline(
-              actor,
-              request as ProjectToolsRequests["readOutline"],
-            ),
-          ),
-        };
-      case "readScript":
-        return {
-          view: projectToolsView(
-            await texts.getScript(
-              actor,
-              request as ProjectToolsRequests["readScript"],
-            ),
-          ),
-        };
-      case "readContent": {
-        const query = request as ProjectToolsRequests["readContent"];
-        if (query.source.kind === "brief") {
-          const brief = await projects.getBrief(actor, {
-            projectId: query.projectId,
-            briefRevision: query.source.briefRevision,
-          });
-          return projectToolsContent(
-            brief.contentDigest,
-            "text",
-            brief.text,
-            query.offset,
-          );
-        }
-        const revision = await texts.getRevision(actor, {
-          projectId: query.projectId,
-          artifactId: query.source.artifactId,
-          contentRevision: query.source.contentRevision,
-        });
-        return projectToolsContent(
-          revision.contentDigest,
-          "canonical-json",
-          extensionCanonicalJson(revision.content),
-          query.offset,
-        );
-      }
-      case "listRevisions": {
-        const page = await texts.listRevisions(
-          actor,
-          request as ProjectToolsRequests["listRevisions"],
-        );
-        return {
-          revisions: page.revisions.map(projectToolsRevision),
-          nextContentRevision: page.nextContentRevision,
-        };
-      }
-      case "saveOutlineCandidate":
-        return projectToolsTextMutation(
-          await texts.saveOutlineCandidate(
-            actor,
-            {
-              ...(request as ProjectToolsRequests["saveOutlineCandidate"]),
-              idempotencyKey: idempotencyKey!,
-            },
-            options,
-          ),
-        );
-      case "saveScriptCandidate":
-        return projectToolsTextMutation(
-          await texts.saveScriptCandidate(
-            actor,
-            {
-              ...(request as ProjectToolsRequests["saveScriptCandidate"]),
-              idempotencyKey: idempotencyKey!,
-            },
-            options,
-          ),
-        );
-      case "selectRevision":
-        return projectToolsTextMutation(
-          await texts.selectRevision(
-            actor,
-            {
-              ...(request as ProjectToolsRequests["selectRevision"]),
-              idempotencyKey: idempotencyKey!,
-            },
-            options,
-          ),
-        );
-      case "setLocked":
-        return projectToolsTextMutation(
-          await texts.setLocked(
-            actor,
-            {
-              ...(request as ProjectToolsRequests["setLocked"]),
-              idempotencyKey: idempotencyKey!,
-            },
-            options,
-          ),
-        );
-    }
   }
 }
 function denied(): never {

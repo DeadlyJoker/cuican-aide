@@ -1,3 +1,4 @@
+import { mediaInputStageReadCommand } from "./project-media-input-read-scope.ts";
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import {
@@ -245,10 +246,25 @@ export class ProjectMediaInputToolsServiceOwner {
     const invocation: Invocation = { ...input, live: true, pending: new Set() };
     this.#invocations.set(input.command, invocation);
     this.#active.add(invocation);
-    const task = Promise.resolve().then(() => {
+    const task = Promise.resolve().then(async () => {
       this.#check(invocation);
-      this.#guardCommand(input.command);
-      return delegate();
+      if (
+        input.command.name ===
+        extensionToolName(this.#d.admission.pluginId, "media_input")
+      ) {
+        this.#guardCommand(input.command);
+        return delegate();
+      }
+      const read = mediaInputStageReadCommand({
+        stage: this.#stage,
+        command: input.command,
+        tools: this.#d.tools,
+        context: this.#d.context,
+      });
+      await this.#authorizeRead(invocation, read.operationId);
+      const result = await delegate();
+      await this.#authorizeRead(invocation, read.operationId);
+      return result;
     });
     this.#pending.add(task);
     try {
@@ -539,6 +555,23 @@ export class ProjectMediaInputToolsServiceOwner {
       this.#check(i);
     }
     return parseMediaInputToolResponse(parsed.method, parsed.request, result);
+  }
+  async #authorizeRead(i: Invocation, operationId: string) {
+    const signal = AbortSignal.any([i.signal, this.#abort.signal]);
+    signal.throwIfAborted();
+    await this.#d.authorizeMediaInputService(signal);
+    await this.#d.authorizeCurrent({
+      ...i,
+      signal,
+      operationId,
+      projectId: this.#stage.projectId,
+    });
+    await this.#run(i);
+    const actor = await this.#actor(signal);
+    await this.#scopeCurrent(i);
+    await this.#policy(actor, this.#stage.projectId, false);
+    signal.throwIfAborted();
+    this.#check(i);
   }
   async #scopeCurrent(i: Invocation) {
     const s = this.#stage,

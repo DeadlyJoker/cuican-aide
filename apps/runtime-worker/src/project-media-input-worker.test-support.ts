@@ -1,3 +1,4 @@
+import { setTimeout } from "node:timers/promises";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import { mkdtempSync, rmSync, chmodSync, readdirSync, statSync } from "node:fs";
@@ -40,6 +41,10 @@ export async function mediaInputWorkerFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
+  options: Readonly<{
+    transport?: ModelTransportPort;
+    maxToolRounds?: number;
+  }> = {},
 ) {
   const root = mkdtempSync(join(tmpdir(), "crewon-media-input-worker-")),
     inode = statSync(root);
@@ -70,6 +75,10 @@ export async function mediaInputWorkerFixture(
   });
   const state = {
     service: true,
+    projectRead: true,
+    assetRead: true,
+    assetServiceCalls: 0,
+    beforeAssetService: null as (() => Promise<void>) | null,
     active: true,
     package: true,
     factories: 0,
@@ -83,7 +92,7 @@ export async function mediaInputWorkerFixture(
     adapterName: "named-short23-media-input-model",
     adapterVersion: "1",
     modelId: "fixture-media-input-agent",
-    async *stream(r) {
+    async *stream(r, signal, observation) {
       state.requests.push(r);
       assert.equal(
         r.tools.filter((t) => t.name.startsWith("crewon_short_drama__")).length,
@@ -95,6 +104,10 @@ export async function mediaInputWorkerFixture(
           i.callId,
           JSON.parse(JSON.parse(i.output).resultJson),
         );
+      if (options.transport) {
+        yield* options.transport.stream(r, signal, observation);
+        return;
+      }
       const saved = state.observed.get("saveInput"),
         projectId = f.request.projectId;
       const query = {
@@ -184,7 +197,7 @@ export async function mediaInputWorkerFixture(
             route,
             transport,
             toolRuntime: new InMemoryToolBroker([], new Map()),
-            maxToolRounds: 12,
+            maxToolRounds: options.maxToolRounds ?? 12,
           },
           digester,
         ),
@@ -236,7 +249,7 @@ export async function mediaInputWorkerFixture(
           route,
           transport,
           toolRuntime: new InMemoryToolBroker([], new Map()),
-          maxToolRounds: 12,
+          maxToolRounds: options.maxToolRounds ?? 12,
           additionalAgentVersions: [version],
           agentVersionDeployments: factory.deploymentBindings(actor.tenantId),
         },
@@ -268,6 +281,19 @@ export async function mediaInputWorkerFixture(
         authorization: { authorize: async () => f.decision(state.active) },
         authorizeService: async () => {
           state.projectServiceCalls++;
+          if (!state.projectRead)
+            throw Error("named_media_input_project_read_denied");
+        },
+      },
+      projectAssetTools: {
+        version: "crewon.project-asset-tools.v1",
+        authorization: { authorize: async () => f.decision(state.active) },
+        authorizeService: async (_admission, signal) => {
+          state.assetServiceCalls++;
+          await state.beforeAssetService?.();
+          signal.throwIfAborted();
+          if (!state.assetRead)
+            throw Error("named_media_input_asset_read_denied");
         },
       },
       ...(deployment === "absent"
@@ -361,6 +387,7 @@ export async function mediaInputWorkerFixture(
     pkg,
     registration,
     materialState: f.state,
+    materialTarget: f.target,
     state,
     entry,
     target,
@@ -371,3 +398,19 @@ const digester = {
   sha256: (s: string) =>
     "sha256:" + createHash("sha256").update(s).digest("hex"),
 };
+
+/** Follow only the original scheduler's explicit fairness yield; never replace or restart the Run. */
+export async function wakeMediaInputStage(
+  worker: RuntimeWorker,
+  runId: string,
+) {
+  for (let n = 0; n < 8; n++) {
+    const outcome = await worker.wake();
+    if (outcome.kind !== "retried" || outcome.code !== "run_execution_yield")
+      return outcome;
+    assert.equal(outcome.runId, runId);
+    // The native fairness queue explicitly schedules this same work item 1ms later.
+    await setTimeout(2);
+  }
+  throw new Error("named_media_input_stage_yield_limit");
+}

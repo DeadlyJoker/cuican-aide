@@ -1,5 +1,8 @@
 import type { PluginHostService } from "@crewon/plugin-host";
-import type { ProjectMediaInputStageRunAdmission } from "@crewon/domain";
+import {
+  extensionToolName,
+  type ProjectMediaInputStageRunAdmission,
+} from "@crewon/domain";
 import {
   assertInstalledPluginProjectToolsExternalCurrent,
   createInstalledPluginProjectToolsOwner,
@@ -19,7 +22,7 @@ export type InstalledPluginProjectServices = Readonly<{
   close(): Promise<void>;
 }>;
 
-/** A media-input task gets its independently scoped service, never the unrestricted text/task owner. */
+/** Media-input tasks compose the shared readers under their independent stage guard. */
 export function createInstalledPluginProjectServices(
   input: Parameters<typeof createInstalledPluginProjectToolsOwner>[0] &
     Readonly<{
@@ -42,7 +45,7 @@ export function createInstalledPluginProjectServices(
       throw new Error(
         "installed_plugin_media_input_stage_services_unavailable",
       );
-    return new ProjectMediaInputToolsServiceOwner({
+    const media = new ProjectMediaInputToolsServiceOwner({
       ...d,
       context: input.context,
       admission: input.admission,
@@ -69,6 +72,44 @@ export function createInstalledPluginProjectServices(
         });
       },
       assertActive: input.assertActive,
+    });
+    const reads = createInstalledPluginProjectToolsOwner({
+      ...input,
+      mediaInputStageAdmission: stage,
+    });
+    if (reads === null) return media;
+    return Object.freeze({
+      hostServices: () => [
+        ...media.hostServices(),
+        reads.hostService(),
+        reads.contextHostService(),
+        ...reads.assetHostServices(),
+      ],
+      withInvocation: <T>(
+        invocation: ProjectToolsDispatchInvocation,
+        delegate: () => Promise<T>,
+      ) =>
+        media.withInvocation(invocation, () =>
+          invocation.command.name ===
+          extensionToolName(input.admission.pluginId, "media_input")
+            ? delegate()
+            : reads.withInvocation(invocation, delegate),
+        ),
+      canRetire: () => media.canRetire() && reads.canRetire(),
+      close: async () => {
+        const results = await Promise.allSettled([
+          media.close(),
+          reads.close(),
+        ]);
+        const failures = results.filter(
+          (r): r is PromiseRejectedResult => r.status === "rejected",
+        );
+        if (failures.length)
+          throw new AggregateError(
+            failures.map((r) => r.reason),
+            "installed_plugin_media_input_services_close_failed",
+          );
+      },
     });
   }
   const owner = createInstalledPluginProjectToolsOwner(input);
