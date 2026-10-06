@@ -1,4 +1,5 @@
 import { SqliteProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
+import { SqliteProjectMediaResultStore } from "./project-media-result-store.ts";
 import { loadSqliteAssetStage } from "./project-asset-stage-markers.ts";
 import { loadSqlitePlanAdmission } from "./project-text-plan-markers.ts";
 import {
@@ -115,6 +116,11 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
+  projectMediaResults() {
+    return new SqliteProjectMediaResultStore(this.#db, () =>
+      this.#host.assertOpen(),
+    );
+  }
   readonly #mediaGenerations: SqliteProjectMediaGenerationArchive;
   get projectMediaGenerationVersion() {
     return this.#mediaGenerations.version;

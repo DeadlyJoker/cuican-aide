@@ -73,3 +73,4 @@ export * from "./project-media-input-postgres-store.ts";
 export * from "./project-asset-stage-store.ts";
 export * from "./project-asset-ui-intent-sqlite-store.ts";
 export * from "./project-asset-ui-intent-postgres-store.ts";
+export * from "./project-media-result-store.ts";

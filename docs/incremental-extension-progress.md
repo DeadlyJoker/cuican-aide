@@ -28,7 +28,21 @@ Short20.0.2 将T10参考图四视图与D18三素材分镜适配器加入同包�
 
 [Worker私有媒体上下文与字节检查](./project-media-worker-context-protocol.md)已通过239项相关双库回归：真实原Run身份、接受输入/准备历史与提交前字节分别核验，源/head变化阻止新提交，原观察与冷恢复不重新准备；大组合记录沿逐项摘要比较，旧JSON和配置限制保持。[候选原供应商请求占用](./project-media-operation-protocol.md)随后通过234项相关回归；[原Tool IO与确认图/字节检查](./project-media-execution-io-protocol.md)已接到实际宿主owner与resolver，通过303项相关回归。[Short21实际媒体工具](./plugin-project-media-execution-protocol.md)及独立安装包随后通过319项相关回归与311项包检查。结果候选回写、Main/完整Worker及Agent/手动联合验收继续实施，不作为正式媒体流程交付，完整目标继续ACTIVE。
 
+[原媒体结果候选](./project-media-result-candidate-protocol.md)已实现宿主内部PNG读取核验、不可变加密归档及原项目双库候选保存。T10/D18实际安装包的结果位置参与同一来源核验；重放/父存储和归档关闭重开读取原字节，候选保存不采用或改上游。Main、完整Worker循环及Agent/手动共同产品入口继续接线，完整目标保持ACTIVE。
+
 历史章节保留当时的验收范围和剩余工作；当前状态与最新验收范围以首节为准。
+
+## 2026-10-06：原媒体结果字节与共享项目候选
+
+[内部候选协议](./project-media-result-candidate-protocol.md)沿真实已接受媒体input/link、原Run及原供应商占用取出T10/D18的确切结果位置。只接收项目/Run/index，首次原位置GET通过生产DNS出口、PNG编码/CRC/扫描线/尺寸及摘要检查后冻结字节，独立加密intent保留第一份观察。同一拥有者的另一有效Actor复用原来源身份；源/head或供应商字节变化不替换原候选。
+
+新候选在DNS前后检查项目状态，归档项目不能触发新GET；已有候选仍可独立获准读或重放。实际native子存储显式迁移，不可变候选与marker受原SQL保护；最后INSERT后owner退场回滚候选，已有归档在恢复时复用，不再次GET。文件丢失/损坏、错误密钥或目录被替换时保留原候选并失败，不自动回源替换。每个原Run/resultIndex唯一，保存不采用参考或改变上游。
+
+检查包含实际冻结Short21安装、Node handler、原项目/Run/operation、真实SQLite/PostgreSQL及加密文件。权限/部署审查、DNS/供应商响应与私有Tool回执签发为具名夹具；没有新增真实远端生成或图片GET，也未宣称完整RuntimeWorker、Main、模型或正式桌面联合验收。首轮夹具误传执行审查的额外字段、随后误用既有PNG错误码的失败日志保留；修正夹具的确切公开审查投影和原错误断言，没有放宽解析、PNG或SQL保护。
+
+相关回归**362/362**通过、零失败/取消/跳过，新增28项双库候选检查为其中子集。Application、Artifacts、Store、Runtime-worker、Control类型检查、架构边界及格式通过。Artifacts包46项回归通过（与362项中的原归档检查有重叠，不累加），原SDK源/dist/tar、完整Short19/20/20.0.1/20.0.2/21及原App文件核验保持；没有构建或重写冻结产物，也没有改主检出的用户工作。三轮自有PostgreSQL正常停止并按目录身份清理，日志保留在 `output/extensions/checks/project-media-result-candidates-20261006/`。
+
+下一项接候选到Main、原Agent和手动共同命令，补完整Worker回执/恢复及独立采用动作，再继续结构化分镜、有界跨阶段计划、视频/声音/成片。原UI和用户App保持，积分后置，完整目标继续ACTIVE。
 
 ## 2026-10-06：Short21实际媒体工具与独立安装包
 

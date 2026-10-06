@@ -1,4 +1,5 @@
 import { PostgresProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
+import { PostgresProjectMediaResultStore } from "./project-media-result-store.ts";
 import { loadPostgresAssetStage } from "./project-asset-stage-markers.ts";
 import { loadPostgresPlanAdmission } from "./project-text-plan-markers.ts";
 import {
@@ -90,6 +91,13 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  projectMediaResults() {
+    return new PostgresProjectMediaResultStore(
+      this.#pool,
+      this.#schemaName,
+      () => this.#host.assertOpen(),
+    );
+  }
   readonly #mediaGenerations: PostgresProjectMediaGenerationArchive;
   get projectMediaGenerationVersion() {
     return this.#mediaGenerations.version;

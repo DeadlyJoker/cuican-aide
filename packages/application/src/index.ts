@@ -259,3 +259,5 @@ export {
   ProjectAssetStageApplicationService,
   type ProjectAssetStageApplicationDependencies,
 } from "./project-asset-stage-application-service.ts";
+export * from "./project-media-result-port.ts";
+export * from "./project-media-result-record.ts";
