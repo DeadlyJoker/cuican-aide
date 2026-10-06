@@ -67,3 +67,9 @@ export type ProjectReferenceMaterialObservation = Readonly<{
   height: number;
   observedAt: string;
 }>;
+
+/** Host-internal exact bytes, never a plugin/Agent response or an execution grant. */
+export type ProjectReferenceMaterialReadContent = Readonly<{
+  observation: ProjectReferenceMaterialObservation;
+  bytes: Uint8Array;
+}>;

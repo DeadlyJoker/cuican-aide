@@ -7,6 +7,7 @@ import {
   type ProjectAssetReferenceImageQuery,
   type ProjectAssetReferenceImageSource,
   type ProjectReferenceMaterialObservation,
+  type ProjectReferenceMaterialReadContent,
   type ProjectReferenceMaterialReadAuthorizationPort,
   type ProjectReferenceMaterialSourceAdapter,
 } from "@crewon/application";
@@ -81,6 +82,21 @@ export class ProjectReferenceMaterialReader {
     queryInput: ProjectAssetReferenceImageQuery,
     options: Readonly<{ signal: AbortSignal }>,
   ): Promise<ProjectReferenceMaterialObservation> {
+    const result =
+      await ProjectReferenceMaterialReader.prototype.readSelectedReferenceBytes.call(
+        this,
+        actorInput,
+        queryInput,
+        options,
+      );
+    return result.observation;
+  }
+
+  async readSelectedReferenceBytes(
+    actorInput: ActorContext,
+    queryInput: ProjectAssetReferenceImageQuery,
+    options: Readonly<{ signal: AbortSignal }>,
+  ): Promise<ProjectReferenceMaterialReadContent> {
     const actor = validateCreativeProjectActor(
         projectAssetInputFields(actorInput, [
           "tenantId",
@@ -181,7 +197,7 @@ export class ProjectReferenceMaterialReader {
     )
       fail("clock_invalid");
     signal.throwIfAborted();
-    return Object.freeze({
+    const observation: ProjectReferenceMaterialObservation = Object.freeze({
       actor,
       projectId: query.projectId,
       assetId: query.assetId,
@@ -207,6 +223,7 @@ export class ProjectReferenceMaterialReader {
       ...size,
       observedAt,
     });
+    return Object.freeze({ observation, bytes });
   }
 
   #destination(source: ProjectAssetReferenceImageSource) {
