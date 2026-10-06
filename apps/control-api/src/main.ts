@@ -1,4 +1,5 @@
 import { DEFAULT_OUTBOX_RETENTION } from "./outbox-retention-maintenance.ts";
+import { desktopProjectMaterialStorageFromEnvironment } from "@crewon/media-runtime/desktop-project-material-archive";
 import { installProcessShutdown } from "@crewon/process-lifecycle";
 import type { AddressInfo } from "node:net";
 
@@ -228,21 +229,28 @@ if (securityMode === "production" && connectionString === undefined) {
 const artifactEncryptionKeyId = requiredEnvironment(
   "CREWON_ARTIFACT_ENCRYPTION_KEY_ID",
 );
+const artifactRoot = requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+  artifactEncryptionKeyPath = requiredEnvironment(
+    "CREWON_ARTIFACT_ENCRYPTION_KEY_PATH",
+  );
+const projectMaterialEnvironment = Object.freeze({
+  CREWON_ARTIFACT_ROOT: artifactRoot,
+  CREWON_ARTIFACT_ENCRYPTION_KEY_PATH: artifactEncryptionKeyPath,
+  CREWON_ARTIFACT_ENCRYPTION_KEY_ID: artifactEncryptionKeyId,
+});
 const artifactRetention = configuredArtifactRetention(
   process.env.CREWON_ARTIFACT_RETENTION,
 );
 const artifactStore = new FilesystemArtifactStore({
-  rootDirectory: requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+  rootDirectory: artifactRoot,
   databasePath: requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
-  encryptionKey: loadArtifactEncryptionKey(
-    requiredEnvironment("CREWON_ARTIFACT_ENCRYPTION_KEY_PATH"),
-  ),
+  encryptionKey: loadArtifactEncryptionKey(artifactEncryptionKeyPath),
   keyId: artifactEncryptionKeyId,
 });
 const sharedConfig = {
   artifactRetention,
   localStoragePaths: [
-    requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+    artifactRoot,
     requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
   ],
   artifactStore,
@@ -401,6 +409,16 @@ try {
               ...standaloneConfig,
               databasePath,
               desktopPlugins,
+              ...(desktopPlugins.schemaVersion ===
+                "crewon.desktop-plugin-bootstrap.v3" &&
+              desktopPlugins.projects.mediaGenerations !== undefined
+                ? {
+                    desktopProjectMaterialStorage:
+                      desktopProjectMaterialStorageFromEnvironment(
+                        projectMaterialEnvironment,
+                      ),
+                  }
+                : {}),
               ...(desktopNativePluginControl === undefined
                 ? {}
                 : { desktopNativePluginControl }),

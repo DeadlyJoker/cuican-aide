@@ -6,7 +6,10 @@ import type { TestContext } from "node:test";
 import Fastify from "fastify";
 import { SqliteRunStore } from "@crewon/store";
 import { CreativeProjectApplicationService } from "@crewon/application";
-import { createExtensionConfiguration } from "@crewon/domain";
+import {
+  createExtensionConfiguration,
+  extensionCanonicalJson,
+} from "@crewon/domain";
 import {
   installLocalPluginPackage,
   loadInstalledPluginBusinessRegistration,
@@ -21,6 +24,7 @@ import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { prepareCreativeProjects } from "./creative-project-composition.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import { registerProjectMediaInputRoutes } from "./project-media-input-route.ts";
+import { registerProjectMediaGenerationRoutes } from "./project-media-generation-route.ts";
 import { errorResponse } from "./control-api-errors.ts";
 const sha = {
   sha256: (bytes: string | Buffer) =>
@@ -41,6 +45,9 @@ export async function desktopNativeMediaInputFixture(
     reviewIdentityFixture?: "different-manifest";
     mediaInputUi?: boolean;
     mediaInputStages?: boolean;
+    mediaGenerations?: boolean;
+    materialStorageFixture?: "missing" | "invalid-key";
+    peerOrigin?: string;
   } = {},
 ) {
   const owners: {
@@ -79,9 +86,11 @@ export async function desktopNativeMediaInputFixture(
   });
   await mkdir(installRoot, { mode: 0o700 });
   const sourceDirectory = resolve(
-    options.mediaInputStages
-      ? "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0"
-      : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
+    options.mediaGenerations
+      ? "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0"
+      : options.mediaInputStages
+        ? "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0"
+        : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
           "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1"),
   );
   const pkg = await installLocalPluginPackage({
@@ -119,6 +128,19 @@ export async function desktopNativeMediaInputFixture(
     manifestDigest: registration.manifestDigest,
     implementationDigest: registration.implementationDigest,
   };
+  const workflowDigest = async (workflowId: string, named: string) =>
+    options.mediaGenerations
+      ? sha.sha256(
+          extensionCanonicalJson(
+            JSON.parse(
+              await readFile(
+                join(sourceDirectory, "workflows", `${workflowId}.api.json`),
+                "utf8",
+              ),
+            ),
+          ),
+        )
+      : sha.sha256(named);
   const mediaInputs = {
     version: "crewon.desktop-project-media-inputs.v1",
     purposes,
@@ -132,7 +154,10 @@ export async function desktopNativeMediaInputFixture(
         },
         workflow: {
           workflowId: "krea2-reference-four-view",
-          workflowDigest: sha.sha256("named-reviewed-T10-graph"),
+          workflowDigest: await workflowDigest(
+            "krea2-reference-four-view",
+            "named-reviewed-T10-graph",
+          ),
           output: {
             kind: "image",
             nodeId: "129",
@@ -144,7 +169,10 @@ export async function desktopNativeMediaInputFixture(
         targetIdentity,
         workflow: {
           workflowId: "flux2-three-reference-storyboard",
-          workflowDigest: sha.sha256("named-reviewed-D18-graph"),
+          workflowDigest: await workflowDigest(
+            "flux2-three-reference-storyboard",
+            "named-reviewed-D18-graph",
+          ),
           output: {
             kind: "image",
             nodeId: "17",
@@ -167,6 +195,29 @@ export async function desktopNativeMediaInputFixture(
     textArtifacts: { version: "crewon.project-text.v1" },
     assetArtifacts: { version: "crewon.project-asset.v1" },
     mediaInputs,
+    ...(options.mediaGenerations
+      ? {
+          mediaGenerations: {
+            version: "crewon.desktop-project-media-generations.v1",
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+          conversations: {
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+        }
+      : {}),
     ...(options.mediaInputStages
       ? {
           conversations: {
@@ -307,12 +358,27 @@ export async function desktopNativeMediaInputFixture(
     schemaVersion: "crewon.desktop-native-plugin-control.v1",
     authorityPath,
     peer: {
-      origin: "http://127.0.0.1:3299",
+      origin: options.peerOrigin ?? "http://127.0.0.1:3299",
       tokenEnvironmentVariable: "CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN",
     },
     entries: [entry],
   });
   const peer: string[] = [];
+  const storage = Object.freeze({
+    artifactRoot: join(data, "artifacts"),
+    encryptionKeyPath: join(data, "artifact-master.key"),
+    encryptionKeyId: "named-native-media-master",
+  });
+  if (options.mediaGenerations)
+    await writeFile(
+      storage.encryptionKeyPath,
+      Buffer.alloc(
+        options.materialStorageFixture === "invalid-key" ? 1 : 32,
+        73,
+      ),
+      { mode: 0o600 },
+    );
+  const routeState = { wakes: 0 };
   const open = async (store: SqliteRunStore) => {
     const nativeControl = loadDesktopNativePluginControlEnvironment(
       {
@@ -343,6 +409,24 @@ export async function desktopNativeMediaInputFixture(
     const fetch: typeof globalThis.fetch = async (_url, init) => {
       const p = parseInstalledPluginPeerRequest(JSON.parse(String(init?.body)));
       peer.push(p.operation);
+      if (
+        options.mediaGenerations &&
+        (p.operation === "prepareCandidate" || p.operation === "readiness")
+      )
+        return Response.json({
+          protocol: "crewon.installed-plugin-peer-response.v1",
+          requestId: p.requestId,
+          operation: p.operation,
+          actor,
+          scope,
+          identity: p.identity,
+          configurationDigest: p.configuration.contentDigest,
+          expectedTarget: p.expectedTarget,
+          ...(p.operation === "prepareCandidate"
+            ? { expectedSelectionRevision: p.expectedSelectionRevision }
+            : {}),
+          result: { outcome: "ready", target: activationTarget },
+        });
       if (p.operation !== "catalog")
         throw new Error("named_media_metadata_must_not_prepare_execution");
       return Response.json({
@@ -373,6 +457,10 @@ export async function desktopNativeMediaInputFixture(
         digester: sha,
         creativeProjects: prepared,
         fetch,
+        ...(options.mediaGenerations &&
+        options.materialStorageFixture !== "missing"
+          ? { projectMaterialStorage: storage }
+          : {}),
       },
     );
     const app = Fastify();
@@ -386,6 +474,16 @@ export async function desktopNativeMediaInputFixture(
       identity,
       owner: runtime.tasks.projectMediaInputs,
     });
+    if (runtime.projectMediaGenerations !== undefined)
+      registerProjectMediaGenerationRoutes(app, {
+        identity,
+        owner: runtime.projectMediaGenerations,
+        outboxWakeup: {
+          wake: async () => {
+            routeState.wakes++;
+          },
+        },
+      });
     const headers = {
       "authorization": `Bearer ${token}`,
       origin,
@@ -453,6 +551,7 @@ export async function desktopNativeMediaInputFixture(
     command,
     mediaInputs,
     entry,
+    peerCatalog: { ...entry, manifest: registration.manifest },
     peer,
     project,
     approvalPath,
@@ -461,6 +560,9 @@ export async function desktopNativeMediaInputFixture(
     controlPath,
     profilePath,
     policyPath,
+    storage,
+    routeState,
+    databasePath,
     reopen,
   };
 }

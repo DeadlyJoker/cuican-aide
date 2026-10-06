@@ -23,10 +23,13 @@ import {
 } from "./installed-plugin-task-runtime-core.ts";
 import { createPluginTaskApplicationIds } from "./plugin-task-application-ids.ts";
 import { assertDesktopNativeProjectMediaInputDeclaration } from "./desktop-native-project-media-input-composition.ts";
+import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
+import { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
 
 export type DesktopNativePluginTaskRuntime = Readonly<{
   authority: DesktopNativePluginTaskAuthority;
   core: InstalledPluginTaskRuntimeCore;
+  mediaGenerations?: InstalledProjectMediaGenerationRuntime;
   close(): Promise<void>;
 }>;
 export function assertDesktopNativePluginTaskComposition(
@@ -71,6 +74,7 @@ export async function createDesktopNativePluginTaskRuntime(
     digester: ContentDigester;
     creativeProjects?: PreparedCreativeProjects;
     metadataHostUiServices?: PluginUiHostServiceAvailabilityPort;
+    projectMaterialStorage?: DesktopProjectMaterialStorage;
   }>,
 ): Promise<DesktopNativePluginTaskRuntime> {
   assertDesktopNativePluginTaskComposition({
@@ -79,6 +83,7 @@ export async function createDesktopNativePluginTaskRuntime(
   });
   const authority = new DesktopNativePluginTaskAuthority(input);
   let core: InstalledPluginTaskRuntimeCore | undefined;
+  let mediaGenerations: InstalledProjectMediaGenerationRuntime | undefined;
   try {
     const projectMediaInputs = authority.projectMediaInputConfiguration();
     core = await createInstalledPluginTaskRuntimeCore({
@@ -104,6 +109,15 @@ export async function createDesktopNativePluginTaskRuntime(
       ids: createPluginTaskApplicationIds(),
       digester: dependencies.digester,
       ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
+      ...(input.configuration.schemaVersion ===
+        "crewon.desktop-plugin-bootstrap.v3" &&
+      input.configuration.projects.mediaGenerations !== undefined
+        ? {
+            projectMediaGenerationStorage: {
+              version: "crewon.project-media-generation-storage.v1" as const,
+            },
+          }
+        : {}),
       ...(dependencies.creativeProjects === undefined
         ? {}
         : { creativeProjects: dependencies.creativeProjects }),
@@ -111,17 +125,40 @@ export async function createDesktopNativePluginTaskRuntime(
         ? {}
         : { metadataHostUiServices: dependencies.metadataHostUiServices }),
     });
+    const generationConfiguration =
+      authority.projectMediaGenerationConfiguration({
+        configurations: core.extensions,
+        clock: dependencies.clock,
+        ...(dependencies.projectMaterialStorage === undefined
+          ? {}
+          : { storage: dependencies.projectMaterialStorage }),
+      });
+    if (generationConfiguration !== undefined)
+      mediaGenerations = await InstalledProjectMediaGenerationRuntime.prepare({
+        core,
+        configuration: generationConfiguration,
+      });
     const owned = core;
+    const ownedMedia = mediaGenerations;
     let closing: Promise<void> | undefined;
     return Object.freeze({
       authority,
       core: owned,
+      ...(ownedMedia === undefined ? {} : { mediaGenerations: ownedMedia }),
       close: () =>
-        (closing ??= closeAll([() => authority.close(), () => owned.close()])),
+        (closing ??= closeAll([
+          () => authority.close(),
+          () => ownedMedia?.close(),
+          () => owned.close(),
+        ])),
     });
   } catch (error) {
     try {
-      await closeAll([() => authority.close(), () => core?.close()]);
+      await closeAll([
+        () => authority.close(),
+        () => mediaGenerations?.close(),
+        () => core?.close(),
+      ]);
     } catch (cleanup) {
       throw new AggregateError(
         [error, cleanup],

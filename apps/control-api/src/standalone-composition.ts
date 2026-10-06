@@ -74,6 +74,7 @@ import {
 } from "./desktop-plugin-extension-composition.ts";
 
 import { buildControlApi } from "./control-api.ts";
+import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
 import { composePluginCreditReads } from "./plugin-credit-read-composition.ts";
 import { closeStandaloneCompositionOwners as closeOwners } from "./standalone-composition-cleanup.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
@@ -238,11 +239,16 @@ export async function createStandaloneControlApiWithPlugins(
       desktopPluginActivation?: DesktopInstalledPluginActivationConfig;
       desktopPluginTasks?: DesktopInstalledPluginTaskConfig;
       desktopNativePluginControl?: DesktopNativePluginControlConfig;
+      desktopProjectMaterialStorage?: DesktopProjectMaterialStorage;
       uiRecovery?: PluginUiRecoveryConfiguration;
       extensionWorker?: ExtensionWorkerConfig;
     }>,
 ): Promise<StandaloneControlApiRuntime> {
   const configuration = parseDesktopPluginConfiguration(config.desktopPlugins);
+  const projectMaterialStorage =
+    config.desktopProjectMaterialStorage === undefined
+      ? undefined
+      : Object.freeze({ ...config.desktopProjectMaterialStorage });
   const nativeField = Object.getOwnPropertyDescriptor(
     config,
     "desktopNativePluginControl",
@@ -332,6 +338,9 @@ export async function createStandaloneControlApiWithPlugins(
         clock: new SystemApplicationClock(),
         digester: new NodeSha256ContentDigester(),
         ...(projects === undefined ? {} : { creativeProjects: projects }),
+        ...(projectMaterialStorage === undefined
+          ? {}
+          : { projectMaterialStorage }),
       },
     );
     const namespaces = new Set(
@@ -771,6 +780,7 @@ function composeControlApi(
       projectTexts: preparedProjects?.textService,
       projectAssets: preparedProjects?.assetService,
       projectMediaInputs: preparedPlugins?.runtime.tasks?.projectMediaInputs,
+      projectMediaGenerations: preparedPlugins?.runtime.projectMediaGenerations,
       projectGenerationReads,
       projectConceptSelections: composeOwnedProjectGenerationSelectionService({
         projects: preparedProjects,
@@ -795,8 +805,9 @@ function composeControlApi(
       pluginUi: preparedPlugins?.runtime.ui,
       projectConversations:
         preparedPlugins?.runtime.bindProjectConversations?.(threads),
-      projectAssetStages:preparedPlugins?.runtime.projectAssetStages?.(),
-      projectMediaInputStages:preparedPlugins?.runtime.projectMediaInputStages?.(),
+      projectAssetStages: preparedPlugins?.runtime.projectAssetStages?.(),
+      projectMediaInputStages:
+        preparedPlugins?.runtime.projectMediaInputStages?.(),
       projectConversationRouting: store.projectConversationStore(),
       compactions,
       rollbacks,

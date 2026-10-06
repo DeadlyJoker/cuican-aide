@@ -78,6 +78,8 @@ import { createDesktopProjectConversationRuntime } from "./desktop-project-conve
 import type { ThreadApplicationService } from "@crewon/application";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import type { RunLifecycleEvent } from "@crewon/domain";
+import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
+import type { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
@@ -85,6 +87,7 @@ export type DesktopPluginRuntime = Readonly<{
   ui: PluginUiControlService;
   configuration: DesktopPluginConfigurationRuntime;
   tasks?: InstalledPluginTaskRuntimeCore;
+  projectMediaGenerations?: InstalledProjectMediaGenerationRuntime;
   bindProjectConversations?(
     threads: ThreadApplicationService,
   ): ProjectConversationControlOwner | undefined;
@@ -123,6 +126,7 @@ export async function createDesktopPluginRuntime(
     clock: ApplicationClock;
     digester: ContentDigester;
     creativeProjects?: PreparedCreativeProjects;
+    projectMaterialStorage?: DesktopProjectMaterialStorage;
     fetch?: typeof globalThis.fetch;
   }>,
 ): Promise<DesktopPluginRuntime> {
@@ -785,6 +789,9 @@ export async function createDesktopPluginRuntime(
       ui,
       configuration: ownedConfiguration,
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),
+      ...(taskRuntime !== undefined && "mediaGenerations" in taskRuntime
+        ? { projectMediaGenerations: taskRuntime.mediaGenerations }
+        : {}),
       bindProjectConversations: (threads) =>
         conversations?.bindThreads(threads),
       projectAssetStages: () => conversations?.assetStages(),
@@ -870,6 +877,9 @@ export async function createDesktopPluginRuntime(
           clock: dependencies.clock,
           digester: dependencies.digester,
           creativeProjects: dependencies.creativeProjects,
+          ...(dependencies.projectMaterialStorage === undefined
+            ? {}
+            : { projectMaterialStorage: dependencies.projectMaterialStorage }),
           ...(metadataHostUiServices === undefined
             ? {}
             : { metadataHostUiServices }),

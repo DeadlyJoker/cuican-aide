@@ -100,3 +100,17 @@ Control HTTP与原Worker集成用例都改用这套实际工厂。专项验证T1
 首次启用使用空白的媒体存储时，原 Control Core 和 Worker 的独立媒体准备先迁移素材日志，再创建依赖它的生成表。已有项目、资产等基础 schema 仍必须由原宿主提供；损坏历史不会被当作空库覆盖。
 
 本阶段到达 Worker 装配，尚未完成 Native Control 工厂、Settings 生成审批、页面按钮与 Agent 生成入口。旧 App、已发布 Short26 包和 SDK 不变；正式双入口与真实供应商生成需继续验收。
+
+## Native Control 的生成装配
+
+2026-10-07：原 Native Control 现在读取同一独立 `mediaGenerations` 声明，在原 TaskCore 上准备生成存储、`InstalledProjectMediaGenerationRuntime` 和实际素材工厂。`createStandaloneControlApiWithPlugins` 把这个真实 owner 传入原 `buildControlApi`，注册现有生成 HTTP 协议；旧素材输入声明不会创建生成 owner 或注册生成路由。
+
+Main 从原 artifact 配置快照传入目录、密钥文件与密钥ID引用，使用与 Worker 相同的 profile 派生方式和加密档案位置。密钥不进入插件、HTTP 或 bootstrap 数据。生成运行时关闭会等待自己的调用并释放自己的档案，原父数据库仍由宿主关闭。冷重开使用同一档案目录，保留项目数据。
+
+Control 对每次素材读取、冻结、准备、上传和观察同时校验原请求/项目受理范围与 Native 文件授权。上传和观察从原配置服务读取确切修订，并匹配审核包身份、批准来源及对应 `/upload/image`、`/view` 路径；事务中的准备只调用提交时权限与生命周期检查。生成授权保持独立，不能由媒体输入写权限或文字阶段委托代替。
+
+装配测试暴露并修复启动投影遗漏：新的 Native 生成声明必须从通用项目数据配置剥离，交由专用 Native owner 消费，否则通用严格配置解析器会拒绝启动。既有项目配置和持久格式不变。
+
+新增用例覆盖真实私有批准文件、完整 Short26 包、原 SQLite、实际素材工厂、原 standalone/HTTP 装配、身份与CSRF、外来字段、缺失会话绑定、授权撤销、关闭重开及无效密钥。standalone 路径经过实际本地 HTTP peer，catalog 内容是具名测试数据。此处没有构造已采用参考图，也没有宣称 Native 已受理成功生成；完整原 Core/素材/Worker 的双数据库生成回归仍使用既有具名网络和模型端口。证据：`output/extensions/checks/native-media-control-20261007/`。
+
+Settings 尚未发布这项独立批准，页面和 Agent 尚未接通生成入口，用户 App 未更新。下一步验证具备真实绑定与已采用素材的 Native 受理路径，再接入设置和双入口；其后继续候选采用、结构化分镜、视频、声音与成片。完整八阶段目标保持 ACTIVE。

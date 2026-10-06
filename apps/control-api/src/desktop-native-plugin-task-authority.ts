@@ -45,6 +45,7 @@ import {
 import type { InstalledPluginTaskActionOwnerDependencies } from "./installed-plugin-task-action-owner.ts";
 import { composeDesktopNativeProjectMediaInputConfiguration } from "./desktop-native-project-media-input-composition.ts";
 import type { InstalledProjectMediaInputConfiguration } from "./installed-project-media-input-configuration.ts";
+import { composeDesktopNativeProjectMediaGenerationConfiguration } from "./desktop-native-project-media-generation-composition.ts";
 
 export type DesktopNativePluginTaskBinding = Readonly<{
   configuration: DesktopPluginConfiguration;
@@ -107,6 +108,23 @@ export class DesktopNativePluginTaskAuthority {
     | InstalledProjectMediaInputConfiguration
     | undefined {
     return composeDesktopNativeProjectMediaInputConfiguration({
+      configuration: this.#binding.configuration,
+      nativeControl: this.#binding.nativeControl,
+      assertRequestCurrent: (actor) => this.#request(actor),
+      assertTransactionCurrent: (actor) => this.#commitOwner(actor),
+    });
+  }
+  projectMediaGenerationConfiguration(
+    dependencies: Pick<
+      Parameters<
+        typeof composeDesktopNativeProjectMediaGenerationConfiguration
+      >[0],
+      "configurations" | "storage" | "clock"
+    >,
+  ) {
+    this.#owner(this.#binding.configuration.actor);
+    return composeDesktopNativeProjectMediaGenerationConfiguration({
+      ...dependencies,
       configuration: this.#binding.configuration,
       nativeControl: this.#binding.nativeControl,
       assertRequestCurrent: (actor) => this.#request(actor),

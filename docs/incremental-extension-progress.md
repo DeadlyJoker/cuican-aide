@@ -1,5 +1,15 @@
 # 增量扩展子系统实施进度
 
+## 2026-10-07：Native Control 接入共享素材档案与生成 HTTP
+
+原桌面 Control 在独立 `mediaGenerations` 声明下装配实际生成运行时，并经原 standalone/`buildControlApi` 注册生成路由。使用原身份、请求范围、Core、项目会话和配置服务；素材权限分别检查读取、冻结、准备、上传和观察。Main 传入原 artifact 配置快照，与 Worker 共用按 profile 派生的密钥和档案目录。旧素材输入权限不开放生成。
+
+修复新生成声明被误投影到通用项目配置、导致 Native 启动失败的问题；专用声明现在只由 Native owner 消费。首次启用、同目录冷重开、借用父存储保留、无效密钥、身份/CSRF、外来字段、缺失会话绑定和授权撤销均纳入检查。原 standalone 路径还经过实际本地 HTTP peer；catalog 是明确的具名夹具，不是实时 Worker 或供应商。
+
+**229/229** 相关回归通过，零跳过，包含 6 个新专项、原 Native 素材/任务/启动、共享素材及 SQLite/PostgreSQL 生成与 Worker 用例。随后补充同一包声明的 Worker 图审核断言，将新夹具统一为原规范化 JSON 摘要，最终 19 项 Native 专项全部通过。Control 类型检查、7 个桌面运行时构建与源码/字节身份、边界、格式及冻结 SDK/插件包/App 检查通过；临时 PostgreSQL 正常停止并按目录身份清理。证据保存在 `output/extensions/checks/native-media-control-20261007/`。
+
+此阶段没有验证具备已采用参考图的 Native 成功受理，Settings 尚未发布生成审批，页面/Agent 生成入口和用户 App 尚未更新。下一步先完成该 Native 受理验收，再接设置和双入口，继续候选采用、结构化分镜、视频、声音与成片；完整八阶段目标保持 **ACTIVE**。实现说明见[共享媒体命令](./shared-project-media-commands.md)。
+
 ## 2026-10-07：Native Worker 接入审核工作流与素材工厂
 
 原 Worker Main 改为等待异步 Native 装配。新增独立 `mediaGenerations` 部署声明，必须匹配已审核媒体包与原项目会话 publication；旧元数据或文字计划不推导生成权限。启动读取完整核验的实际安装包，验证 T10、D18 图摘要、Manifest/实现身份及固定输入节点，再装配原 Worker 媒体执行配置。插件 Node/UI 入口、模型和供应商不会在这一步执行。
