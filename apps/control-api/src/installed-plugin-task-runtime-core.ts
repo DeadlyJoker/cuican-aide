@@ -99,6 +99,8 @@ const coreBindings = new WeakMap<
     authorizePackage: InstalledPluginTaskRuntimeCoreInput["authorizePackage"];
     uiAuthorization: PluginUiAuthorizationPort;
     publications: InstalledPluginTaskRuntimeCoreInput["publications"];
+    installRoot: string;
+    mediaGenerationStorage: boolean;
   }>
 >();
 
@@ -151,6 +153,20 @@ export function installedProjectConversationTaskAuthority(
     authorizePackage: binding.authorizePackage,
     authorization: binding.uiAuthorization,
     assertActive: binding.assertActive,
+  });
+}
+
+/** Internal media admission borrows this exact Core; storage preparation is still not a generation grant. */
+export function installedProjectMediaGenerationTaskAuthority(
+  core: InstalledPluginTaskRuntimeCore,
+) {
+  const binding = coreBindings.get(core);
+  if (!binding?.mediaGenerationStorage) invalid();
+  return Object.freeze({
+    ...installedProjectConversationTaskAuthority(core),
+    store: binding.store,
+    installRoot: binding.installRoot,
+    publications: binding.publications,
   });
 }
 
@@ -700,6 +716,9 @@ export async function createInstalledPluginTaskRuntimeCore(
         authorizePackage: packageAuthorization,
         uiAuthorization,
         publications,
+        installRoot: input.installRoot,
+        mediaGenerationStorage:
+          input.projectMediaGenerationStorage !== undefined,
       }),
     );
     if (mediaInputs === undefined) return core;

@@ -5,6 +5,7 @@ import type {
   ExtensionRunBinding,
   PluginTaskAdmission,
   WorkflowSchemaValue,
+  ProjectConversationBinding,
 } from "@crewon/domain";
 import type { ExtensionMutationReceipt } from "./extension-store-port.ts";
 import type {
@@ -58,6 +59,8 @@ export type ProjectMediaGenerationCommitAuthority = Readonly<{
   reference: ProjectMediaGenerationReference;
   metadata: ProjectMediaInputAuthority;
   verifier: ProjectGenerationImageResultVerifier;
+  /** Optional for existing standalone tasks; required by the project conversation host. SQL checks the snapshot on the original Turn connection. */
+  conversation?: ProjectConversationBinding;
   assertCurrent(): Promise<void>;
   assertTransactionCurrent(): Promise<void>;
   assertActive(): void;

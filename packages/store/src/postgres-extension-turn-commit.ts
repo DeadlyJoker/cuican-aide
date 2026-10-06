@@ -19,6 +19,8 @@ import {
 import { loadProjectMediaGenerationLinkPlan } from "./project-media-generation-read.ts";
 import { assertPostgresProjectMediaGenerationSchema } from "./project-media-generation-schema.ts";
 import { executePostgresMediaGenerationPlan } from "./project-media-generation-transaction.ts";
+import { assertProjectMediaConversationTurn } from "./project-media-conversation-turn.ts";
+import { assertPostgresConversationSchema } from "./project-conversation-schema.ts";
 import type { ProjectMediaInputPlan } from "./project-media-input-plan.ts";
 import {
   captureProjectAssetStageTurn,
@@ -341,7 +343,12 @@ export async function commitPostgresExtensionTurn(
         "task",
         frozenInput.receipt,
       );
-      if (assetStage === null && mediaInputStage === null)
+      if (media?.authority.conversation !== undefined) {
+        await assertPostgresConversationSchema(client, host.schema);
+        await executeMedia(
+          assertProjectMediaConversationTurn(mediaDialect, media, input),
+        );
+      } else if (assetStage === null && mediaInputStage === null)
         await assertPostgresProjectStage(
           client,
           host.schema,

@@ -418,6 +418,13 @@ export async function mediaGenerationFixture(
     d18Command,
     generation: state,
     pin,
+    admission: () => ({
+      pin,
+      conversation: null,
+      assertCurrent: async () => {},
+      assertTransactionCurrent: async () => {},
+      assertActive: () => {},
+    }),
     configuration,
     registration,
     mediaQuery,

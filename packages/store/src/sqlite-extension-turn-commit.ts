@@ -19,6 +19,8 @@ import {
 import { loadProjectMediaGenerationLinkPlan } from "./project-media-generation-read.ts";
 import { assertSqliteProjectMediaGenerationSchema } from "./project-media-generation-schema.ts";
 import { executeSqliteMediaGenerationPlan } from "./project-media-generation-transaction.ts";
+import { assertProjectMediaConversationTurn } from "./project-media-conversation-turn.ts";
+import { assertSqliteConversationSchema } from "./project-conversation-schema.ts";
 import type { ProjectMediaInputPlan } from "./project-media-input-plan.ts";
 import {
   captureProjectAssetStageTurn,
@@ -316,7 +318,12 @@ export async function commitSqliteExtensionTurn(
         );
       }
       const replay = host.receipt(binding, "task", input.receipt);
-      if (assetStage === null && mediaInputStage === null)
+      if (media?.authority.conversation !== undefined) {
+        assertSqliteConversationSchema(host.database);
+        executeMedia(
+          assertProjectMediaConversationTurn(mediaDialect, media, input),
+        );
+      } else if (assetStage === null && mediaInputStage === null)
         assertSqliteProjectStage(host.database, stage, input, replay === null);
       assertSqliteAssetStageTurn(host.database, assetStage, replay === null);
       assertSqliteMediaInputStageTurn(

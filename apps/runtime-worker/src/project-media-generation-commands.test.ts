@@ -16,7 +16,7 @@ function commands(f: Fixture) {
     preparer: f.issuer,
     tasks: f.service,
     extensions: f.ext,
-    admissions: { resolve: async () => f.pin },
+    admissions: { resolve: async () => f.admission() },
   });
 }
 async function setup(f: Fixture) {
@@ -36,6 +36,35 @@ const ioCounts = (f: Pick<Fixture, "state">) => [
 ];
 
 for (const backend of ["sqlite", "postgres"] as const) {
+  for (const kind of ["T10", "D18"] as const)
+    test(
+      `${backend} ${kind}: project-bound media Run executes through the installed Worker`,
+      assetTestOptions(backend),
+      async (t) => {
+        const f = await mediaWorkerFixture(
+          t,
+          backend,
+          kind,
+          "shared-command",
+          "project-conversation",
+        );
+        assert.ok(f.conversation);
+        const opened = await f.open(undefined, {
+          executionBudget: { maxBoundariesPerWake: 1 },
+        });
+        const { outcome, yields } = await finishMediaWorkerRun(
+          opened.worker,
+          f.accepted.binding.runId,
+        );
+        assert.equal(outcome.kind, "completed", JSON.stringify(outcome));
+        assert.ok(yields > 0);
+        assert.equal(f.accepted.binding.threadId, f.conversation.threadId);
+        assert.equal(f.state.posts, 1);
+        const published = await f.publish();
+        assert.equal(published.result.disposition, "created");
+        await opened.close();
+      },
+    );
   for (const kind of ["T10", "D18"] as const)
     test(
       `${backend} ${kind}: shared command prepares actual materials, runs installed Worker and publishes original candidate`,
@@ -204,7 +233,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
           tasks: f.service,
           extensions: f.ext,
           admissions: {
-            resolve: async () => ({ ...f.pin, actorId: "another-actor" }),
+            resolve: async () => ({
+              ...f.admission(),
+              pin: { ...f.pin, actorId: "another-actor" },
+            }),
           },
         });
       t.after(() => foreign.close());

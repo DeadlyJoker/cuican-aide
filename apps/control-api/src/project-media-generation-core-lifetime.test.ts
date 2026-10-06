@@ -137,7 +137,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
           preparer: f.issuer,
           tasks: core.extensionTasks,
           extensions: f.ext,
-          admissions: { resolve: async () => f.pin },
+          admissions: { resolve: async () => f.admission() },
         });
         t.after(async () => {
           release.resolve();

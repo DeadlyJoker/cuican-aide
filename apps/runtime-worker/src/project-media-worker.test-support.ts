@@ -35,6 +35,7 @@ import {
   providerId,
 } from "./project-media-execution.test-support.ts";
 import { ProjectMediaGenerationCommands } from "@crewon/media-runtime";
+import { bindMediaGenerationFixtureThread } from "./project-media-conversation.test-support.ts";
 import { ProjectMediaResultPublisher } from "./project-media-result-publisher.ts";
 import { materialPng } from "./project-material-png.test-support.ts";
 import { mediaExecutionDigest } from "./project-media-execution-review.ts";
@@ -54,6 +55,7 @@ export async function mediaWorkerFixture(
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
   creationEntry: "qualified-task" | "shared-command" = "qualified-task",
+  threadScope: "standalone" | "project-conversation" = "standalone",
 ) {
   const root = mkdtempSync(join(tmpdir(), "crewon-media-worker-")),
     inode = statSync(root);
@@ -242,12 +244,21 @@ export async function mediaWorkerFixture(
     });
     if (!held) break;
   }
+  if (
+    threadScope === "project-conversation" &&
+    creationEntry !== "shared-command"
+  )
+    throw new Error("named-bound-media-requires-shared-command");
+  const conversation =
+    threadScope === "project-conversation"
+      ? await bindMediaGenerationFixtureThread(f)
+      : null;
   const commands = new ProjectMediaGenerationCommands({
     profileId: f.pin.profileId,
     preparer: f.issuer,
     tasks: f.service,
     extensions: f.ext,
-    admissions: { resolve: async () => f.pin },
+    admissions: { resolve: async () => ({ ...f.admission(), conversation }) },
   });
   lifetimes.push(commands);
   const saved =
@@ -500,6 +511,7 @@ export async function mediaWorkerFixture(
     accepted,
     commands,
     sharedCommand: command,
+    conversation,
     open,
     publish,
   };

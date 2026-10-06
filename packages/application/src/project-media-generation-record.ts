@@ -1,6 +1,7 @@
 import {
   assertPluginTaskAdmission,
   parsePluginTaskAdmission,
+  parseProjectConversationBinding,
   parseExtensionRunBinding,
   extensionCanonicalJson,
   projectAssetId,
@@ -144,6 +145,7 @@ export function captureProjectMediaGenerationAuthority(
     "assertCurrent",
     "assertTransactionCurrent",
     "assertActive",
+    ...(Object.hasOwn(input as object, "conversation") ? ["conversation"] : []),
   ]);
   if (
     a.version !== "crewon.project-media-generation-commit.v1" ||
@@ -168,6 +170,11 @@ export function captureProjectMediaGenerationAuthority(
       "qualify",
     ),
     verifier: captureProjectGenerationImageResultVerifier(a.verifier as never),
+    ...(!Object.hasOwn(a, "conversation")
+      ? {}
+      : {
+          conversation: parseProjectConversationBinding(a.conversation, hash),
+        }),
     assertCurrent: (a.assertCurrent as () => Promise<void>).bind(input),
     assertTransactionCurrent: (
       a.assertTransactionCurrent as () => Promise<void>

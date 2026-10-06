@@ -16,12 +16,16 @@ import {
   projectAssetId,
   projectAssetRevision,
   parsePluginTaskAdmission,
-  parsePluginTaskAdmissionPin,
   type PluginTaskAdmission,
-  type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import { SqliteExtensionStore, PostgresExtensionStore } from "@crewon/store";
 import { ProjectMediaGenerationTaskPreparer } from "./project-media-generation-task-preparer.ts";
+import {
+  captureProjectMediaGenerationAdmission,
+  assertMediaAdmissionCurrent,
+  bindProjectMediaGenerationAdmission,
+  type ProjectMediaGenerationAdmission,
+} from "./project-media-generation-admission.ts";
 
 /** Logical user intent shared by page and Agent adapters. No provider or deployment fields. */
 export type GenerateProjectMediaCommand = Readonly<{
@@ -43,7 +47,7 @@ type AdmissionResolver = Readonly<{
       previous: PluginTaskAdmission | null;
       signal: AbortSignal;
     }>,
-  ): Promise<PluginTaskAdmissionPin>;
+  ): Promise<ProjectMediaGenerationAdmission>;
 }>;
 
 /** Coordinates existing preparation and the original TaskCore. Owns no database or executor. */
@@ -169,9 +173,12 @@ export class ProjectMediaGenerationCommands {
         previous.action !== "media.generate")
     )
       fail("replay_conflict");
-    const pin = parsePluginTaskAdmissionPin(
+    const admission = captureProjectMediaGenerationAdmission(
       await this.#resolve({ actor, command, previous, signal }),
+      actor,
+      command,
     );
+    const { pin } = admission;
     signal.throwIfAborted();
     if (
       !mediaInputSame(
@@ -188,6 +195,7 @@ export class ProjectMediaGenerationCommands {
       pin.action !== "media.generate"
     )
       fail("owner_mismatch");
+    await assertMediaAdmissionCurrent(admission);
     const {
         projectId,
         mediaInputId,
@@ -225,12 +233,13 @@ export class ProjectMediaGenerationCommands {
     )
       fail("replay_conflict");
     signal.throwIfAborted();
+    await assertMediaAdmissionCurrent(admission);
     // TaskCore verifies the full original command digest and admission; a receipt lookup is never proof of replay.
     // Once committed, retain its known outcome even if close/abort arrives before delivery.
     return this.#create({
       actor,
       pin,
-      task,
+      task: bindProjectMediaGenerationAdmission(task, admission),
       command: {
         pluginId: "crewon.short-drama",
         threadId: command.threadId,
