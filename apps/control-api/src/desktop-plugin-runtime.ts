@@ -1,3 +1,4 @@
+import { createDesktopProjectAssetV2PluginRuntime } from "./desktop-project-asset-v2-plugin-runtime.ts";
 import { composeDesktopProjectMediaResultUi } from "./desktop-project-media-result-ui-composition.ts";
 import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
 import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
@@ -261,6 +262,9 @@ export async function createDesktopPluginRuntime(
   let projectUi: CreativeProjectPluginUiRuntime | undefined;
   let textUi: ProjectTextPluginUiRuntime | undefined;
   let assetUi: ProjectAssetPluginUiRuntime | undefined;
+  let assetV2Ui: Awaited<
+    ReturnType<typeof createDesktopProjectAssetV2PluginRuntime>
+  >;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
   let mediaGenerationUi: ReturnType<
@@ -282,6 +286,7 @@ export async function createDesktopPluginRuntime(
       (
         conversations?.hostUiServices ??
         recovery?.hostUiServices ??
+        assetV2Ui?.hostUiServices ??
         mediaResultUi?.hostUiServices ??
         mediaGenerationUi?.hostUiServices ??
         mediaInputUi?.hostUiServices ??
@@ -442,7 +447,25 @@ export async function createDesktopPluginRuntime(
         mediaInputUi?.hostUiServices ??
         originalBusinessHostUiServices,
     });
+    assetV2Ui = await createDesktopProjectAssetV2PluginRuntime({
+      configuration,
+      projects: dependencies.creativeProjects,
+      authority,
+      installation,
+      store: dependencies.store,
+      clock: dependencies.clock,
+      results:
+        taskRuntime !== undefined && "mediaResults" in taskRuntime
+          ? taskRuntime.mediaResults
+          : undefined,
+      fallback:
+        mediaResultUi?.hostUiServices ??
+        mediaGenerationUi?.hostUiServices ??
+        mediaInputUi?.hostUiServices ??
+        originalBusinessHostUiServices,
+    });
     const businessHostUiServices =
+      assetV2Ui?.hostUiServices ??
       mediaResultUi?.hostUiServices ??
       mediaGenerationUi?.hostUiServices ??
       mediaInputUi?.hostUiServices ??
@@ -563,6 +586,7 @@ export async function createDesktopPluginRuntime(
       projects: projectUi,
       texts: textUi,
       assets: assetUi,
+      assetsV2: assetV2Ui,
       history,
       tasks: taskRuntime?.core,
     });
@@ -888,6 +912,7 @@ export async function createDesktopPluginRuntime(
           () => recovery?.close(),
           () => projectUi?.close(),
           () => textUi?.close(),
+          () => assetV2Ui?.close(),
           () => assetUi?.close(),
           () => mediaResultUi?.close(),
           () => mediaInputUi?.close(),
@@ -909,6 +934,7 @@ export async function createDesktopPluginRuntime(
         () => recovery?.close(),
         () => projectUi?.close(),
         () => textUi?.close(),
+        () => assetV2Ui?.close(),
         () => assetUi?.close(),
         () => mediaResultUi?.close(),
         () => mediaInputUi?.close(),

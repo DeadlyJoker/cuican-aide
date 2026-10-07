@@ -6,6 +6,8 @@ import {
   PluginInstallationApplicationService,
   ProjectAssetApplicationService,
   ProjectAssetReferenceImageApplicationService,
+  ProjectAssetMediaReferenceImageApplicationService,
+  ProjectMediaReferenceImageApplicationService,
   ProjectMaterialTargetApplicationService,
   ProjectMediaInputApplicationService,
   type ActorContext,
@@ -179,28 +181,63 @@ export function createNativeProjectMediaInputTools(
         clock,
         digester,
       });
+      const projectService = new CreativeProjectApplicationService({
+        store: projects,
+        authorization,
+        clock,
+        ids,
+        digester,
+      });
+      const assetService = new ProjectAssetApplicationService({
+        store: assets,
+        projects,
+        texts: store.projectTextStore(),
+        authorization,
+        clock,
+        ids,
+        digester,
+      });
+      const concepts = new ProjectAssetReferenceImageApplicationService({
+        projects: projectService,
+        assets: assetService,
+        store: assets,
+        digester,
+      });
+      const results = owner.projects.assetV2
+        ? store.extensionStore().projectMediaResults()
+        : undefined;
+      const media = results
+        ? new ProjectAssetMediaReferenceImageApplicationService({
+            projects: projectService,
+            assets: assetService,
+            store: {
+              loadAdoptedAssetReference: async (...args) => {
+                await results.enableResultReads();
+                return results.loadAdoptedAssetReference(...args);
+              },
+            },
+            authorization: {
+              authorize: async (p) => {
+                currentActor(p.actor);
+                if (p.action !== "projectMediaResult:read") denied();
+                return { outcome: "allow" };
+              },
+              assertActive: (p) => {
+                currentActor(p.actor);
+                if (p.action !== "projectMediaResult:read") denied();
+              },
+            },
+          })
+        : undefined;
       return new ProjectMediaInputApplicationService({
         store: assets.projectMediaInputStore(),
-        sources: new ProjectAssetReferenceImageApplicationService({
-          projects: new CreativeProjectApplicationService({
-            store: projects,
-            authorization,
-            clock,
-            ids,
-            digester,
-          }),
-          assets: new ProjectAssetApplicationService({
-            store: assets,
-            projects,
-            texts: store.projectTextStore(),
-            authorization,
-            clock,
-            ids,
-            digester,
-          }),
-          store: assets,
-          digester,
-        }),
+        sources: media
+          ? new ProjectMediaReferenceImageApplicationService({
+              assets: assetService,
+              concepts,
+              media,
+            })
+          : concepts,
         targets: new ProjectMaterialTargetApplicationService({
           installations,
           configurations,

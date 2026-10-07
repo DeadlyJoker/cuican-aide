@@ -1,3 +1,4 @@
+import { createDesktopAdoptedMediaReader } from "@crewon/media-runtime/desktop-adopted-media-reader";
 import {
   ApplicationError,
   ExtensionConfigurationApplicationService,
@@ -131,8 +132,27 @@ export async function createNativeProjectMediaRuntime(
         digester,
       });
       const archive = loadDesktopProjectMaterialArchive(storage, scope);
+      let adopted:
+        | Awaited<ReturnType<typeof createDesktopAdoptedMediaReader>>
+        | undefined;
       try {
+        if (owner.projects.assetV2)
+          adopted = await createDesktopAdoptedMediaReader({
+            store,
+            storage,
+            scope,
+            reviews: reviews.map(({ targetIdentity, workflow }) => ({
+              targetIdentity,
+              workflow,
+            })),
+            materialArchiveId: archive.archiveId,
+            clock,
+            signal,
+            assertCurrent: async (actor) => current(actor),
+            assertActive: current,
+          });
         const runtime = await createProjectMediaMaterialRuntime({
+          ...(adopted ? { adoptedMedia: adopted.config } : {}),
           store,
           configurations,
           clock,
@@ -287,7 +307,19 @@ export async function createNativeProjectMediaRuntime(
           await runtime.close();
           throw error;
         }
-        return runtime;
+        return Object.freeze({
+          materials: runtime.materials,
+          close: async () => {
+            try {
+              await runtime.close();
+            } finally {
+              await adopted?.close();
+            }
+          },
+        });
+      } catch (error) {
+        await adopted?.close();
+        throw error;
       } finally {
         archive.encryptionKey.fill(0);
       }

@@ -17,8 +17,9 @@ import { assetMediaAdoptionFixture } from "./project-asset-media-adoption.test-s
 export async function adoptedMediaReaderFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  options: NonNullable<Parameters<typeof assetMediaAdoptionFixture>[2]> = {},
 ) {
-  const f = await assetMediaAdoptionFixture(t, backend),
+  const f = await assetMediaAdoptionFixture(t, backend, options),
     adopted = await f.adopt(),
     referenceQuery = {
       projectId: f.query.projectId,

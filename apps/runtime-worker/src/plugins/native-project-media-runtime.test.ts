@@ -40,13 +40,11 @@ test("actual Native startup awaits both installed graphs and prepares real media
   await f.prepare(reopened);
   // Closing the media runtime never closes or replaces the original borrowed parent.
   assert.ok(
-    await f.f.store
-      .extensionStore()
-      .loadExtensionConfiguration({
-        ...f.f.scope,
-        pluginId: f.f.identity.pluginId,
-        revision: 1,
-      }),
+    await f.f.store.extensionStore().loadExtensionConfiguration({
+      ...f.f.scope,
+      pluginId: f.f.identity.pluginId,
+      revision: 1,
+    }),
   );
 });
 
@@ -124,4 +122,23 @@ test("Control and Worker derive stable private archive keys, separated from arti
   } finally {
     for (const x of [a, b, other]) x.encryptionKey.fill(0);
   }
+});
+
+test("Native Worker V2 reopens the original result archive and preserves the exact material owner contract", async (t) => {
+  const f = await nativeMediaFixture(t, { assetV2: true });
+  const worker = await f.open();
+  const prepared = await f.prepare(worker);
+  await prepared.close();
+  await worker.close();
+  const cold = await f.open();
+  await f.prepare(cold);
+  assert.ok(
+    await f.f.store
+      .extensionStore()
+      .loadExtensionConfiguration({
+        ...f.f.scope,
+        pluginId: f.f.identity.pluginId,
+        revision: 1,
+      }),
+  );
 });

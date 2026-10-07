@@ -27,6 +27,7 @@ export async function nativeMediaFixture(
   t: TestContext,
   options: {
     generation?: boolean;
+    assetV2?: boolean;
     reviewMismatch?: "graph" | "manifest";
   } = {},
 ) {
@@ -104,6 +105,18 @@ export async function nativeMediaFixture(
       version: "crewon.desktop-project-media-generations.v1",
       publications: [publication],
     };
+  if (options.assetV2) {
+    approval.projects.assetUi = { publications: [publication] };
+    approval.projects.assetV2 = {
+      version: "crewon.desktop-project-assets.v2",
+      publications: [publication],
+    };
+    approval.projects.mediaResults = {
+      version: "crewon.desktop-project-media-results.v1",
+      purposes: ["read"],
+      publications: [publication],
+    };
+  }
   if (options.reviewMismatch === "graph")
     approval.projects.mediaInputs.reviews[0].workflow.workflowDigest = `sha256:${"0".repeat(64)}`;
   if (options.reviewMismatch === "manifest")
@@ -152,6 +165,18 @@ export async function nativeMediaFixture(
       store: f.store,
       config: w.installedPluginExecution.projectMediaInputs,
     });
+    // Native Control owns the explicit result migrations before Worker borrowing.
+    if (options.assetV2) {
+      await f.store
+        .projectAssetStore()
+        .projectMaterialPreparationStore()
+        .migrate();
+      await f.store.extensionStore().migrateProjectMediaGenerations();
+      const operations = f.store.externalOperationStore();
+      await operations.migrate();
+      await operations.migrateProjectMediaOperations();
+      await f.store.extensionStore().projectMediaResults().migrate();
+    }
     assert.ok(w.installedPluginExecution.projectMedia);
     const owner = await prepareInstalledPluginProjectMedia({
       store: f.store,

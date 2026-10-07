@@ -31,6 +31,9 @@ export async function mediaResultFixture(
     observe?: boolean;
     migrate?: boolean;
     outputApproval?: ProjectMediaResultOutputApproval;
+    archiveConfiguration?: (
+      scope: import("@crewon/domain").PluginProfileScope,
+    ) => ConstructorParameters<typeof FilesystemProjectMediaResultArchive>[0];
   } = {},
 ) {
   const f = await mediaPluginFixture(t, backend, kind),
@@ -121,7 +124,11 @@ export async function mediaResultFixture(
   };
   const store = f.ext.projectMediaResults();
   if (options.migrate !== false) await store.migrate();
-  const archiveConfig = {
+  const archiveConfig = options.archiveConfiguration?.({
+    tenantId: f.target.installation.tenantId,
+    spaceId: f.target.installation.spaceId,
+    profileId: f.target.installation.profileId,
+  }) ?? {
     archiveId: "named-real-result-archive",
     rootDirectory: join(root, "bytes"),
     keyId: "named-result-key",

@@ -15,9 +15,16 @@ import { mediaResultFixture } from "./project-media-result-publisher.test-suppor
 export async function assetMediaAdoptionFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: { migrate?: boolean } = {},
+  options: {
+    migrate?: boolean;
+    archiveConfiguration?: NonNullable<
+      Parameters<typeof mediaResultFixture>[3]
+    >["archiveConfiguration"];
+  } = {},
 ) {
-  const f = await mediaResultFixture(t, backend),
+  const f = await mediaResultFixture(t, backend, "T10", {
+      archiveConfiguration: options.archiveConfiguration,
+    }),
     old = await f.referenceSource(),
     candidate = (
       await f.publisher.publish(f.actor, f.query, {

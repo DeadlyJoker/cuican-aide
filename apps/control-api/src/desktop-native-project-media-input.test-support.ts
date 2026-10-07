@@ -46,6 +46,8 @@ export async function desktopNativeMediaInputFixture(
     reviewIdentityFixture?: "different-manifest";
     packageDirectory?: string;
     mediaInputUi?: boolean;
+    assetV2?: boolean;
+    assetProtocol?: "2";
     mediaInputStages?: boolean;
     mediaGenerations?: boolean;
     mediaResults?: readonly ("read" | "publish")[];
@@ -90,7 +92,7 @@ export async function desktopNativeMediaInputFixture(
     idempotencyKey: "native-media-project",
   });
   await mkdir(installRoot, { mode: 0o700 });
-  const sourceDirectory = resolve(
+  let sourceDirectory = resolve(
     options.packageDirectory ??
       (options.mediaGenerations
         ? "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0"
@@ -99,6 +101,30 @@ export async function desktopNativeMediaInputFixture(
           : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
             "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1")),
   );
+  // Test-only descriptor upgrade: preserve frozen Node/UI/workflow bytes and
+  // install the new digest normally. This is not a shipped plugin release.
+  if (options.assetProtocol === "2") {
+    const copy = join(data, "asset-v2-source");
+    await cp(sourceDirectory, copy, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    });
+    await chmod(copy, 0o700);
+    const path = join(copy, "crewon.plugin.json");
+    const descriptor = JSON.parse(await readFile(path, "utf8"));
+    descriptor.requires = descriptor.requires.map(
+      (r: { service: string; apiVersion: string; optional: boolean }) =>
+        ["crewon.project-assets", "crewon.project-asset-recovery"].includes(
+          r.service,
+        )
+          ? { ...r, apiVersion: "2" }
+          : r,
+    );
+    await chmod(path, 0o600);
+    await writeFile(path, JSON.stringify(descriptor));
+    sourceDirectory = copy;
+  }
   const pkg = await installLocalPluginPackage({
     directory: sourceDirectory,
     installRoot,
@@ -211,6 +237,29 @@ export async function desktopNativeMediaInputFixture(
     textArtifacts: { version: "crewon.project-text.v1" },
     assetArtifacts: { version: "crewon.project-asset.v1" },
     mediaInputs,
+    ...(options.assetV2
+      ? {
+          assetUi: {
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+          assetV2: {
+            version: "crewon.desktop-project-assets.v2",
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+        }
+      : {}),
     ...(options.mediaResults
       ? {
           mediaResults: {

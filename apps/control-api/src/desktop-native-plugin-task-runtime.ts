@@ -128,6 +128,17 @@ export async function createDesktopNativePluginTaskRuntime(
         ? {}
         : { metadataHostUiServices: dependencies.metadataHostUiServices }),
     });
+    const resultConfiguration = authority.projectMediaResultConfiguration({
+      clock: dependencies.clock,
+      ...(dependencies.projectMaterialStorage === undefined
+        ? {}
+        : { storage: dependencies.projectMaterialStorage }),
+    });
+    if (resultConfiguration !== undefined)
+      mediaResults = await InstalledProjectMediaResultRuntime.prepare({
+        core,
+        configuration: resultConfiguration,
+      });
     const generationConfiguration =
       authority.projectMediaGenerationConfiguration({
         configurations: core.extensions,
@@ -140,17 +151,6 @@ export async function createDesktopNativePluginTaskRuntime(
       mediaGenerations = await InstalledProjectMediaGenerationRuntime.prepare({
         core,
         configuration: generationConfiguration,
-      });
-    const resultConfiguration = authority.projectMediaResultConfiguration({
-      clock: dependencies.clock,
-      ...(dependencies.projectMaterialStorage === undefined
-        ? {}
-        : { storage: dependencies.projectMaterialStorage }),
-    });
-    if (resultConfiguration !== undefined)
-      mediaResults = await InstalledProjectMediaResultRuntime.prepare({
-        core,
-        configuration: resultConfiguration,
       });
     const owned = core;
     const ownedMedia = mediaGenerations;

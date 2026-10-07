@@ -17,6 +17,8 @@ import {
   CreativeProjectApplicationService,
   ProjectAssetApplicationService,
   ProjectAssetReferenceImageApplicationService,
+  ProjectAssetMediaReferenceImageApplicationService,
+  ProjectMediaReferenceImageApplicationService,
   ProjectMediaInputApplicationService,
   ProjectMaterialTargetApplicationService,
   PluginInstallationApplicationService,
@@ -198,6 +200,41 @@ export class InstalledProjectMediaInputRuntime {
       store: assets,
       digester,
     });
+    const resultStore = input.store.extensionStore().projectMediaResults();
+    const mediaSources =
+      configuration.adoptedReferences === undefined
+        ? undefined
+        : new ProjectAssetMediaReferenceImageApplicationService({
+            projects: projectService,
+            assets: assetService,
+            store: {
+              loadAdoptedAssetReference: async (...args) => {
+                await resultStore.enableResultReads();
+                return resultStore.loadAdoptedAssetReference(...args);
+              },
+            },
+            authorization: {
+              authorize: async (p) => {
+                await current(p.actor);
+                const result =
+                  await configuration.adoptedReferences!.authorize(p);
+                await current(p.actor);
+                return result;
+              },
+              assertActive: (p) => {
+                actorCurrent(p.actor);
+                configuration.adoptedReferences!.assertActive(p);
+                actorCurrent(p.actor);
+              },
+            },
+          });
+    const referenceSources = mediaSources
+      ? new ProjectMediaReferenceImageApplicationService({
+          assets: assetService,
+          concepts: sources,
+          media: mediaSources,
+        })
+      : sources;
     const unavailable = async (): Promise<never> => denied();
     const installations = new PluginInstallationApplicationService({
       store: input.store.pluginInstallationStore(),
@@ -270,7 +307,7 @@ export class InstalledProjectMediaInputRuntime {
     });
     const service = new ProjectMediaInputApplicationService({
       store,
-      sources,
+      sources: referenceSources,
       targets,
       reviews: configuration.reviews,
       authorization,

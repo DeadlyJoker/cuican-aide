@@ -92,6 +92,28 @@ export function composeDesktopNativeProjectMediaInputConfiguration(
   };
   return captureInstalledProjectMediaInputConfiguration({
     version: "crewon.project-media-input-control.v1",
+    ...(input.configuration.schemaVersion ===
+      "crewon.desktop-plugin-bootstrap.v3" &&
+    input.configuration.projects.assetV2
+      ? {
+          adoptedReferences: {
+            authorize: async (
+              p: import("@crewon/application").ProjectMediaResultPermission,
+            ) => {
+              await current(p.actor);
+              if (p.action !== "projectMediaResult:read") denied();
+              return { outcome: "allow" as const };
+            },
+            assertActive: (
+              p: import("@crewon/application").ProjectMediaResultPermission,
+            ) => {
+              input.assertTransactionCurrent(p.actor);
+              assertDesktopNativeProjectMediaInputDeclaration(input);
+              if (p.action !== "projectMediaResult:read") denied();
+            },
+          },
+        }
+      : {}),
     reviews: declared.reviews,
     authorization: {
       authorize: async (p: ProjectMediaInputPermission) => {

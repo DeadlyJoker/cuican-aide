@@ -1,3 +1,4 @@
+import { createDesktopAdoptedMediaReader } from "@crewon/media-runtime/desktop-adopted-media-reader";
 import {
   ApplicationError,
   type ActorContext,
@@ -119,8 +120,29 @@ export function composeDesktopNativeProjectMediaGenerationConfiguration(
         await current(actor);
       };
       const archive = loadDesktopProjectMaterialArchive(storage, scope);
+      let adopted:
+        | Awaited<ReturnType<typeof createDesktopAdoptedMediaReader>>
+        | undefined;
       try {
+        if (
+          input.configuration.schemaVersion ===
+            "crewon.desktop-plugin-bootstrap.v3" &&
+          input.configuration.projects.assetV2
+        ) {
+          adopted = await createDesktopAdoptedMediaReader({
+            store: materialScope.store,
+            storage,
+            scope,
+            reviews,
+            materialArchiveId: archive.archiveId,
+            clock: input.clock,
+            signal: materialScope.signal,
+            assertCurrent: request,
+            assertActive: active,
+          });
+        }
         const runtime = await createProjectMediaMaterialRuntime({
+          ...(adopted ? { adoptedMedia: adopted.config } : {}),
           store: materialScope.store,
           configurations: input.configurations,
           clock: input.clock,
@@ -276,7 +298,19 @@ export function composeDesktopNativeProjectMediaGenerationConfiguration(
           await runtime.close();
           throw error;
         }
-        return runtime;
+        return Object.freeze({
+          materials: runtime.materials,
+          close: async () => {
+            try {
+              await runtime.close();
+            } finally {
+              await adopted?.close();
+            }
+          },
+        });
+      } catch (error) {
+        await adopted?.close();
+        throw error;
       } finally {
         archive.encryptionKey.fill(0);
       }

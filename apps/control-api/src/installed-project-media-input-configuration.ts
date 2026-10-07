@@ -6,6 +6,7 @@ import {
   projectMediaInputBound,
   materialPreparationFields,
   type CreativeProjectAuthorizationPort,
+  type ProjectMediaResultAuthorizationPort,
   type ProjectMediaInputAuthorizationPort,
   type PluginInstallationAuthorizationPort,
   type ProjectGenerationImageResultVerifier,
@@ -20,6 +21,7 @@ export type InstalledProjectMediaInputConfiguration = Readonly<{
   projects: CreativeProjectAuthorizationPort;
   installations: PluginInstallationAuthorizationPort;
   verifier: ProjectGenerationImageResultVerifier;
+  adoptedReferences?: ProjectMediaResultAuthorizationPort;
 }>;
 export function captureInstalledProjectMediaInputConfiguration(
   input: unknown,
@@ -33,10 +35,23 @@ export function captureInstalledProjectMediaInputConfiguration(
     "projects",
     "installations",
     "verifier",
+    ...(Object.hasOwn(input, "adoptedReferences") ? ["adoptedReferences"] : []),
   ]);
   if (r.version !== "crewon.project-media-input-control.v1") invalid();
   return Object.freeze({
     version: r.version,
+    ...(Object.hasOwn(r, "adoptedReferences")
+      ? {
+          adoptedReferences: Object.freeze({
+            authorize: projectMediaInputBound<
+              ProjectMediaResultAuthorizationPort["authorize"]
+            >(r.adoptedReferences, "authorize"),
+            assertActive: projectMediaInputBound<
+              ProjectMediaResultAuthorizationPort["assertActive"]
+            >(r.adoptedReferences, "assertActive"),
+          }),
+        }
+      : {}),
     reviews: captureProjectMediaWorkflowReviews(
       r.reviews as readonly ProjectMediaWorkflowReview[],
     ),

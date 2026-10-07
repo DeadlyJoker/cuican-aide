@@ -1,4 +1,8 @@
 import {
+  parseDesktopProjectAssetsV2Configuration,
+  type DesktopProjectAssetsV2Configuration,
+} from "./desktop-project-assets-v2.ts";
+import {
   parseDesktopProjectMediaResultsConfiguration,
   type DesktopProjectMediaResultsConfiguration,
 } from "./desktop-project-media-results.ts";
@@ -54,6 +58,7 @@ export type DesktopProjectExecutionConfiguration = Omit<
     historicalQueries?: DesktopProjectHistoricalQueriesConfiguration;
     mediaInputs?: DesktopProjectMediaInputsConfiguration;
     mediaResults?: DesktopProjectMediaResultsConfiguration;
+    assetV2?: DesktopProjectAssetsV2Configuration;
     /** Independent media execution opt-in; metadata and text plans never imply this grant. */
     mediaGenerations?: Readonly<{
       version: "crewon.desktop-project-media-generations.v1";
@@ -111,6 +116,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "mediaInputs",
       "mediaGenerations",
       "mediaResults",
+      "assetV2",
       "mediaInputUi",
       "mediaInputStages",
       "uiRecovery",
@@ -249,6 +255,25 @@ export function parseDesktopProjectExecutionConfiguration(
         ))
     )
       invalid();
+    const assetV2 =
+      value.assetV2 === undefined
+        ? undefined
+        : parseDesktopProjectAssetsV2Configuration(value.assetV2, approved);
+    if (
+      assetV2 &&
+      assetV2.publications.some((p) =>
+        [data.assetUi, mediaResults].some(
+          (grant) =>
+            !grant?.publications.some(
+              (g) =>
+                g.pluginId === p.pluginId &&
+                g.packageDigest === p.packageDigest &&
+                g.contributionId === p.contributionId,
+            ),
+        ),
+      )
+    )
+      invalid();
     const pluginQueries = mappings(value.pluginQueries, approved);
     if (pluginQueries !== undefined && data.generationReads === undefined)
       invalid();
@@ -290,6 +315,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...(mediaInputs === undefined ? {} : { mediaInputs }),
       ...(mediaGenerations === undefined ? {} : { mediaGenerations }),
       ...(mediaResults === undefined ? {} : { mediaResults }),
+      ...(assetV2 === undefined ? {} : { assetV2 }),
       ...(mediaInputUi === undefined ? {} : { mediaInputUi }),
       ...(mediaInputStages === undefined ? {} : { mediaInputStages }),
       ...(uiRecovery === undefined ? {} : { uiRecovery }),

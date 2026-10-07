@@ -21,7 +21,8 @@
     "./project-material-preparer": "./src/project-material-preparer.ts",
     "./project-media-material-preparer": "./src/project-media-material-preparer.ts",
     "./project-media-generation-task-preparer": "./src/project-media-generation-task-preparer.ts",
-    "./project-media-result-publisher": "./src/project-media-result-publisher.ts"
+    "./project-media-result-publisher": "./src/project-media-result-publisher.ts",
+    "./desktop-adopted-media-reader": "./src/desktop-adopted-media-reader.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

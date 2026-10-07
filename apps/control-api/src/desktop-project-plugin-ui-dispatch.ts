@@ -1,3 +1,6 @@
+import { isProjectAssetV2Action } from "@crewon/contracts/project-assets-v2";
+import { isProjectAssetRecoveryV2Action } from "@crewon/contracts/project-asset-recovery-v2";
+import type { ProjectAssetV2PluginUiRuntime } from "./project-asset-v2-plugin-ui-composition.ts";
 import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
 import type { ProjectMediaResultPluginUiOwner } from "./project-media-result-plugin-ui-owner.ts";
 import { isProjectMediaGenerationUiNamespaceAction } from "@crewon/contracts/project-media-generations";
@@ -28,6 +31,7 @@ export function composeDesktopProjectPluginUiDispatch(
     projects: CreativeProjectPluginUiRuntime | undefined;
     texts: ProjectTextPluginUiRuntime | undefined;
     assets?: ProjectAssetPluginUiRuntime;
+    assetsV2?: ProjectAssetV2PluginUiRuntime;
     assetStages?: () => ProjectAssetStageControlOwner | undefined;
     history: DesktopProjectHistoryPluginRuntime | undefined;
     tasks: InstalledPluginTaskRuntimeCore | undefined;
@@ -73,6 +77,17 @@ export function composeDesktopProjectPluginUiDispatch(
             "project_asset_stage_unavailable",
           );
         return owner.actions.invoke(context);
+      }
+      if (
+        isProjectAssetV2Action(context.action) ||
+        isProjectAssetRecoveryV2Action(context.action)
+      ) {
+        if (!input.assetsV2?.owner.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_asset_v2_unavailable",
+          );
+        return input.assetsV2.owner.actions.invoke(context);
       }
       if (isProjectAssetRecoveryNamespaceAction(context.action)) {
         const owner = input.assets?.recoveryOwner;
@@ -183,9 +198,18 @@ export function composeDesktopProjectPluginUiDispatch(
             metadata.committedMetadata,
           ),
         };
+  const versionedAssetMetadata =
+    input.assetsV2 === undefined
+      ? assetMetadata
+      : {
+          committedMetadata: combineSelectionCommittedMetadata(
+            input.assetsV2.owner.committedMetadata,
+            assetMetadata.committedMetadata,
+          ),
+        };
   const stageMetadata =
     input.assetStages === undefined
-      ? assetMetadata
+      ? versionedAssetMetadata
       : {
           committedMetadata: combineSelectionCommittedMetadata(
             {
@@ -204,7 +228,7 @@ export function composeDesktopProjectPluginUiDispatch(
                 return owner.committedMetadata.verify(context, value);
               },
             },
-            assetMetadata.committedMetadata,
+            versionedAssetMetadata.committedMetadata,
           ),
         };
   const dispatch = {
