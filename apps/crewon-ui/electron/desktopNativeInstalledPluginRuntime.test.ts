@@ -4,11 +4,14 @@ import {
   readdirSync,
   chmodSync,
   rmSync,
+  mkdirSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { desktopInstalledPluginRuntimeFixture } from "./desktopInstalledPluginRuntime.test-support.ts";
 import { prepareNativeDesktopInstalledPluginRuntime } from "./desktopNativeInstalledPluginRuntime.ts";
+import { prepareDesktopPluginBootstrap } from "./desktopPluginBootstrap.ts";
+import { parseNativeInstalledPluginPreparationConfiguration } from "../../runtime-worker/src/plugins/installed-plugin-native-preparation-config.ts";
 import { DESKTOP_NATIVE_PLUGIN_POLICY_FILE } from "./desktopNativePluginAuthority.ts";
 
 async function fixture() {
@@ -104,6 +107,75 @@ async function fixture() {
 }
 
 describe("explicit Main Native installed plugin execution", () => {
+  it.each([
+    [false, "none"],
+    [true, "none"],
+    [false, "perAction"],
+    [true, "perAction"],
+  ] as const)(
+    "prepares one plugin for multiple approved versions while retaining exact package approvals (reverse=%s, requirement=%s)",
+    async (reverse, requirement) => {
+      const f = await fixture();
+      let owner: ReturnType<typeof f.prepare> = null;
+      let bootstrap: Awaited<ReturnType<typeof prepareDesktopPluginBootstrap>> =
+        null;
+      try {
+        const nextSource = {
+          ...f.source,
+          sourceId: "approved-short-drama-v2",
+          directory: join(f.directory, "approved-source-v2"),
+          version: "2.0.0",
+          packageDigest: `sha256:${"b".repeat(64)}`,
+        };
+        mkdirSync(nextSource.directory, { mode: 0o700 });
+        f.writeApproval({
+          ...f.approval,
+          sources: [...f.approval.sources, nextSource],
+        });
+        bootstrap = await prepareDesktopPluginBootstrap({
+          dataDirectory: f.dataDirectory,
+          actor: f.input.bootstrap
+            ? JSON.parse(readFileSync(f.bootstrap.bootstrapPath, "utf8")).actor
+            : undefined,
+          sessionEntropy: "named-upgrade-bootstrap-entropy-1234567890",
+        });
+        if (!bootstrap) throw new Error("expected upgraded bootstrap");
+        const approvals = [
+          { ...f.policy.packages[0]!, approvalRequirement: "perAction" },
+          {
+            ...f.policy.packages[0]!,
+            version: nextSource.version,
+            packageDigest: nextSource.packageDigest,
+          },
+        ];
+        f.writePolicy({
+          ...f.policy,
+          packages: reverse ? approvals.toReversed() : approvals,
+        });
+        owner = prepareNativeDesktopInstalledPluginRuntime({
+          ...f.input,
+          bootstrap,
+        })!;
+        const path =
+          owner.preparationEnvironment
+            .CREWON_INSTALLED_PLUGIN_NATIVE_PREPARATION_PATH!;
+        const document = JSON.parse(readFileSync(path, "utf8"));
+        const parsed =
+          parseNativeInstalledPluginPreparationConfiguration(document);
+        expect(parsed.plugins).toEqual([
+          { pluginId: f.source.pluginId, approvalRequirement: "perAction" },
+        ]);
+        expect(
+          parsed.approvedPackages.map((pkg) => pkg.packageDigest).sort(),
+        ).toEqual([f.source.packageDigest, nextSource.packageDigest].sort());
+      } finally {
+        await owner?.close();
+        await bootstrap?.cleanup();
+        await f.close();
+      }
+    },
+  );
+
   it("absent policy leaves default Agent and management unchanged", async () => {
     const f = await fixture();
     try {

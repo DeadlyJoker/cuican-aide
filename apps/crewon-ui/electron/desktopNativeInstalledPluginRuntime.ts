@@ -106,7 +106,17 @@ export function prepareNativeDesktopInstalledPluginRuntime(
     bootstrap,
     policy,
   });
-  const plugins = policy.packages.map(({ pluginId, approvalRequirement }) => ({
+  // Package approvals retain historical versions, while preparation has one
+  // entry per plugin. A retained version can never weaken per-action approval.
+  const requirements = new Map<string, "none" | "perAction">();
+  for (const { pluginId, approvalRequirement } of policy.packages)
+    requirements.set(
+      pluginId,
+      requirements.get(pluginId) === "perAction"
+        ? "perAction"
+        : approvalRequirement,
+    );
+  const plugins = [...requirements].map(([pluginId, approvalRequirement]) => ({
     pluginId,
     approvalRequirement,
   }));
