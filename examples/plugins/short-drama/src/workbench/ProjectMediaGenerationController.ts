@@ -182,7 +182,19 @@ export class ProjectMediaGenerationController {
         signal: controller.signal,
       });
       if (!current()) return;
-      if (
+      if (intent?.phase === "refused")
+        this.#emit({
+          phase: "ready",
+          status: "idle",
+          request: null,
+          receipt: null,
+          retryable: false,
+          error:
+            intent.request.input.projectId === this.#project?.project.projectId
+              ? "已确认原请求尚未创建任务。请检查输入和执行准备后，重新生成。"
+              : null,
+        });
+      else if (
         intent?.phase === "accepted" &&
         intent.request.input.projectId !== this.#project?.project.projectId
       )

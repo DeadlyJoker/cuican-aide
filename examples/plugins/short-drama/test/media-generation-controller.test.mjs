@@ -149,6 +149,34 @@ test("lost accepted response recovers on a cold controller without another gener
   assert.equal(cold.getSnapshot().receipt.runId, "original-run");
   assert.equal(f.calls.length, 1);
 });
+test("verified refusal unlocks editing and only an explicit new generation replaces the old key", async (t) => {
+  const f = await fixture(t),
+    c = await f.open();
+  f.loss();
+  await c.generate();
+  const original = f.calls[0];
+  f.intent({
+    request: {
+      action: "crewon.project-media-generations.v1.generate",
+      input: original,
+    },
+    phase: "refused",
+    reasonCode: "project_media_generation_not_admitted",
+    retryable: false,
+    receipt: null,
+  });
+  await c.recover();
+  assert.equal(f.calls.length, 1, "recovery must not execute");
+  assert.equal(c.locked, false);
+  assert.equal(c.canGenerate, true);
+  assert.equal(c.canRetry, false);
+  assert.equal(c.getSnapshot().request, null);
+  assert.match(c.getSnapshot().error, /尚未创建任务/);
+  await c.generate();
+  assert.equal(f.calls.length, 2);
+  assert.notEqual(f.calls[1].idempotencyKey, original.idempotencyKey);
+  assert.notEqual(f.calls[1].executionId, original.executionId);
+});
 test("pending recovery only retries the full original request and does not follow a newer thread revision", async (t) => {
   const f = await fixture(t),
     c = await f.open();

@@ -21,7 +21,7 @@ import {
   pluginUiIntentCanonicalObject,
   pluginUiIntentRequest,
   pluginUiIntentStablePin,
-  PLUGIN_UI_INTENT_SELECTION_CONFLICTS,
+  pluginUiIntentRefusalSupported,
   type PluginUiIntentJournalAccount,
   type PluginUiIntentKind,
 } from "./plugin-ui-intent-validation.ts";
@@ -142,9 +142,9 @@ export function parsePluginUiIntentRecord(
         body.reasonCode !== null
       : body.receiptJson !== null || body.receiptIdentityDigest !== null) ||
     (body.phase === "refused"
-      ? body.kind !== "selection" ||
-        count !== 1 ||
-        !(PLUGIN_UI_INTENT_SELECTION_CONFLICTS as readonly string[]).includes(
+      ? count !== 1 ||
+        !pluginUiIntentRefusalSupported(
+          body.sourcePin.action,
           body.reasonCode ?? "",
         )
       : body.reasonCode !== null) ||
@@ -288,12 +288,7 @@ export function refusePluginUiIntentFirstDispatch(
   digester: ExtensionContentDigester,
 ): PluginUiIntentRecord {
   const intent = parsePluginUiIntentRecord(input, digester);
-  if (
-    intent.kind !== "selection" ||
-    !(PLUGIN_UI_INTENT_SELECTION_CONFLICTS as readonly string[]).includes(
-      reasonCode,
-    )
-  )
+  if (!pluginUiIntentRefusalSupported(intent.sourcePin.action, reasonCode))
     creativeProjectFailure("plugin_ui_intent_refusal_unsupported");
   if (intent.phase !== "dispatched" || intent.dispatchAttemptCount !== 1)
     return intent;

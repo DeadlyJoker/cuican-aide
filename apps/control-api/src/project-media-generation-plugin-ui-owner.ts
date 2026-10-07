@@ -17,6 +17,7 @@ import {
   CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE,
   PROJECT_MEDIA_GENERATE_UI_ACTION,
   PROJECT_MEDIA_RECOVERY_UI_ACTION,
+  PROJECT_MEDIA_RECOVERY_V2_UI_ACTION,
   parseProjectMediaGenerationUiRequest,
   parseGenerateProjectMediaResponse,
 } from "@crewon/contracts/project-media-generations";
@@ -132,7 +133,8 @@ export class ProjectMediaGenerationPluginUiOwner {
   supportsAction(action: string): boolean {
     return (
       action === PROJECT_MEDIA_GENERATE_UI_ACTION ||
-      action === PROJECT_MEDIA_RECOVERY_UI_ACTION
+      action === PROJECT_MEDIA_RECOVERY_UI_ACTION ||
+      action === PROJECT_MEDIA_RECOVERY_V2_UI_ACTION
     );
   }
   recoveryPublications() {
@@ -154,7 +156,8 @@ export class ProjectMediaGenerationPluginUiOwner {
           return (
             !this.#lifetime.signal.aborted &&
             requirement.service === CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE &&
-            requirement.apiVersion === "1" &&
+            (requirement.apiVersion === "1" ||
+              requirement.apiVersion === "2") &&
             this.#publications.some(
               (p) =>
                 p.pluginId === candidate.descriptor.pluginId &&
@@ -183,7 +186,10 @@ export class ProjectMediaGenerationPluginUiOwner {
     // Membership is checked before any property read. A copied mount is never an invocation.
     capturePluginUiInvocationCommitAuthority(context);
     this.#assertRuntime();
-    if (context.action === PROJECT_MEDIA_RECOVERY_UI_ACTION) {
+    if (
+      context.action === PROJECT_MEDIA_RECOVERY_UI_ACTION ||
+      context.action === PROJECT_MEDIA_RECOVERY_V2_UI_ACTION
+    ) {
       const recovery = this.#recovery?.();
       if (!isPluginUiRecoveryApplicationService(recovery)) unavailable();
       const pending =
@@ -284,7 +290,7 @@ function snapshot(input: PluginUiActionContext) {
     !lease.descriptor.requires.some(
       (r) =>
         r.service === CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE &&
-        r.apiVersion === "1",
+        (r.apiVersion === "1" || r.apiVersion === "2"),
     ) ||
     !lease.descriptor.contributions.some(
       (c) =>

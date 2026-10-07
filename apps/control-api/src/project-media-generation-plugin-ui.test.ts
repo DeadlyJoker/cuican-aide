@@ -241,6 +241,13 @@ for (const backend of ["sqlite", "postgres"] as const) {
           ...request,
           requirement: { ...request.requirement, apiVersion: "2" },
         }),
+        true,
+      );
+      assert.equal(
+        services.isAvailable({
+          ...request,
+          requirement: { ...request.requirement, apiVersion: "3" },
+        }),
         false,
       );
       assert.equal(

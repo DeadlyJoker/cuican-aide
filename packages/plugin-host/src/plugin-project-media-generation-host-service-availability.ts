@@ -23,7 +23,8 @@ export function appendProjectMediaGenerationUiServiceAvailability(
   let result: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) =>
       request.requirement.service === CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE
-        ? request.requirement.apiVersion === "1" &&
+        ? (request.requirement.apiVersion === "1" ||
+            request.requirement.apiVersion === "2") &&
           mediaGenerations.isAvailable(request)
         : fallback?.isAvailable(request) === true,
   });

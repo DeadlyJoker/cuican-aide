@@ -9,6 +9,8 @@ import {
   parsePluginUiIntentJournalAccount,
   parsePluginUiIntentRecord,
   pluginUiIntentStablePin,
+  pluginUiIntentIdentity,
+  PLUGIN_UI_MEDIA_NOT_ADMITTED,
   type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import {
@@ -30,6 +32,7 @@ const digester = Object.freeze({
 });
 export type ProjectMediaGenerationDispatch = Readonly<{
   confirm(receipt: GenerateProjectMediaResponse): Promise<void>;
+  refuseBeforeAdmission(): Promise<void>;
 }>;
 
 /** HTTP shares the parent's existing journal with the plugin page. No UI lease, executor or database is created. */
@@ -74,7 +77,7 @@ export class ProjectMediaGenerationJournal {
       { authority },
     );
     await authority.assertCurrent();
-    const { intent } = await this.#store.markUiIntentDispatched(
+    await this.#store.markUiIntentDispatched(
       {
         account,
         intentId: staged.intent.intentId,
@@ -85,15 +88,46 @@ export class ProjectMediaGenerationJournal {
       { authority },
     );
     await authority.assertCurrent();
+    return this.observe(command, sourcePin);
+  }
+  /** Used only by the genuine runtime after the original UI wrapper has marked this exact dispatch. */
+  observe(
+    command: GenerateProjectMediaRequest,
+    sourcePin: PluginTaskAdmissionPin,
+  ): ProjectMediaGenerationDispatch {
+    const account = this.#account(sourcePin);
+    const request = parseProjectMediaGenerationUiRequest({
+      action: PROJECT_MEDIA_GENERATE_UI_ACTION,
+      input: command,
+    });
+    const intentId = pluginUiIntentIdentity(
+      account,
+      sourcePin,
+      command.idempotencyKey,
+      digester,
+    );
+    const requestDigest = digester.sha256(extensionCanonicalJson(request));
     return Object.freeze({
+      refuseBeforeAdmission: async () => {
+        // Trusted command owner proved no TaskCore call. Store CAS preserves all
+        // earlier unknown or concurrent dispatches (count > 1), and accepted Runs.
+        await this.#store.refuseUiIntentFirstDispatch({
+          account,
+          intentId,
+          requestDigest,
+          expectedDispatchAttemptCount: 1,
+          reasonCode: PLUGIN_UI_MEDIA_NOT_ADMITTED,
+          at: new Date().toISOString(),
+        });
+      },
       confirm: async (result: GenerateProjectMediaResponse) => {
         // Original TaskCore already committed. Late withdrawal must not erase its receipt.
         const receipt = parseGenerateProjectMediaResponse(command, result);
         try {
           await this.#store.confirmUiIntentAccepted({
             account,
-            intentId: intent.intentId,
-            requestDigest: intent.requestDigest,
+            intentId,
+            requestDigest,
             receiptJson: extensionCanonicalJson(receipt),
             at: new Date().toISOString(),
           });

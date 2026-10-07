@@ -165,6 +165,25 @@ it("media tool preparation requires the actual API, adapter, capability and reco
   expect(() =>
     assertDesktopLocalShortDramaExecutionContract(descriptor, manifest),
   ).not.toThrow();
+  for (const apiVersion of ["1", "2", "3"]) {
+    const mediaDescriptor = {
+      ...descriptor,
+      requires: [
+        ...descriptor.requires.filter(
+          (r) => r.service !== "crewon.project-media-generations",
+        ),
+        {
+          service: "crewon.project-media-generations",
+          apiVersion,
+          optional: true,
+        },
+      ],
+    };
+    const check = () =>
+      assertDesktopLocalShortDramaExecutionContract(mediaDescriptor, manifest);
+    if (apiVersion === "3") expect(check).toThrow();
+    else expect(check).not.toThrow();
+  }
   for (const service of [
     "crewon.project-media-inputs",
     "crewon.project-media-input-tools",

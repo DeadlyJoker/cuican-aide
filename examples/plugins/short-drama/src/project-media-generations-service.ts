@@ -1,6 +1,6 @@
 /** Independent media generation protocol; generic invoke works with the existing SDK. */
 export const MEDIA_GENERATE = "crewon.project-media-generations.v1.generate";
-export const MEDIA_RECOVERY = "crewon.project-media-generations.v1.getRecovery";
+export const MEDIA_RECOVERY = "crewon.project-media-generations.v2.getRecovery";
 export type MediaGenerationRequest = Readonly<{
   projectId: string;
   mediaInputId: string;

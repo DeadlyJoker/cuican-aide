@@ -55,6 +55,81 @@ const fresh = () =>
     { account, sourcePin: pin, requestJson, sequence: 1, at },
     digester,
   );
+test("only an exact media no-admission reason can refuse its first dispatch; concurrent and accepted states are preserved", () => {
+  const mediaPin = {
+    ...pin,
+    action: "crewon.project-media-generations.v1.generate",
+  };
+  const original = createPluginUiIntent(
+    {
+      account,
+      sourcePin: mediaPin,
+      requestJson: extensionCanonicalJson({
+        action: mediaPin.action,
+        input: { idempotencyKey: "media-key" },
+      }),
+      sequence: 1,
+      at,
+    },
+    digester,
+  );
+  const once = dispatchPluginUiIntent(original, at, digester);
+  assert.equal(
+    refusePluginUiIntentFirstDispatch(
+      once,
+      "project_media_generation_not_admitted",
+      at,
+      digester,
+    ).phase,
+    "refused",
+  );
+  const twice = dispatchPluginUiIntent(once, at, digester);
+  assert.equal(
+    refusePluginUiIntentFirstDispatch(
+      twice,
+      "project_media_generation_not_admitted",
+      at,
+      digester,
+    ).phase,
+    "dispatched",
+  );
+  const accepted = acceptPluginUiIntent(
+    once,
+    "{}",
+    digester.sha256("receipt"),
+    at,
+    digester,
+  );
+  assert.equal(
+    refusePluginUiIntentFirstDispatch(
+      accepted,
+      "project_media_generation_not_admitted",
+      at,
+      digester,
+    ).phase,
+    "accepted",
+  );
+  assert.throws(
+    () =>
+      refusePluginUiIntentFirstDispatch(
+        once,
+        "concept_selection_revision_conflict",
+        at,
+        digester,
+      ),
+    /unsupported/,
+  );
+  assert.throws(
+    () =>
+      refusePluginUiIntentFirstDispatch(
+        dispatchPluginUiIntent(fresh(), at, digester),
+        "project_media_generation_not_admitted",
+        at,
+        digester,
+      ),
+    /unsupported/,
+  );
+});
 test("intent keeps the original request/pin and accepts a stable current regrant without rekeying", () => {
   const intent = fresh();
   assert.equal(intent.phase, "prepared");

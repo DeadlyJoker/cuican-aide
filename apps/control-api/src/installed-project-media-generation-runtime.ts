@@ -59,6 +59,7 @@ type Invocation = {
   command: GenerateProjectMediaRequest;
   admission: ProjectMediaGenerationAdmission | null;
   dispatch: ProjectMediaGenerationDispatch | null;
+  ownsDispatch: boolean;
   ui: Readonly<{
     context: PluginUiActionContext;
     authority: PluginUiInvocationCommitAuthority;
@@ -81,6 +82,7 @@ export class InstalledProjectMediaGenerationRuntime {
   readonly #assertActive: () => void;
   readonly #release: () => Promise<void>;
   readonly #recover: Recover;
+  readonly #journal: ProjectMediaGenerationJournal;
   readonly #physical = new Set<Promise<unknown>>();
   #closing: Promise<void> | undefined;
   private constructor(input: {
@@ -91,6 +93,7 @@ export class InstalledProjectMediaGenerationRuntime {
     assertActive(): void;
     release(): Promise<void>;
     recover: Recover;
+    journal: ProjectMediaGenerationJournal;
   }) {
     this.#core = input.core;
     this.#commands = input.commands;
@@ -99,6 +102,7 @@ export class InstalledProjectMediaGenerationRuntime {
     this.#assertActive = input.assertActive;
     this.#release = input.release;
     this.#recover = input.recover;
+    this.#journal = input.journal;
     issued.add(this);
   }
   static async prepare(
@@ -294,6 +298,16 @@ export class InstalledProjectMediaGenerationRuntime {
         preparer,
         tasks: core.extensionTasks,
         extensions,
+        onNotAdmitted: async ({ actor, command, signal }) => {
+          const state = invocations.getStore();
+          if (
+            state &&
+            !signal.aborted &&
+            mediaInputSame(state.actor, actor) &&
+            mediaInputSame(state.command, command)
+          )
+            await state.dispatch?.refuseBeforeAdmission();
+        },
         admissions: {
           resolve: async (request) => {
             const state = context(request.actor);
@@ -311,13 +325,32 @@ export class InstalledProjectMediaGenerationRuntime {
             )
               denied();
             state.admission = result;
-            // Genuine UI invocations already use their original recovery wrapper.
-            // HTTP stages the identical recipe here, before preparation can upload media.
-            if (state.ui === null) {
-              state.dispatch = await journal.begin(
-                state.command,
-                admissions.journalAuthority(result),
-              );
+            // Recovery-aware UI uses its original wrapper; HTTP and legacy UI
+            // join the same journal here so every concurrent dispatch is counted.
+            if (state.ownsDispatch) {
+              const base = admissions.journalAuthority(result);
+              const ui = state.ui;
+              const authority =
+                ui === null
+                  ? base
+                  : Object.freeze({
+                      assertCurrent: async () => {
+                        await base.assertCurrent();
+                        await ui.authority.assertCurrent();
+                      },
+                      assertActive: () => {
+                        base.assertActive();
+                        ui.authority.assertActive();
+                      },
+                      transaction: Object.freeze({
+                        ...base.transaction!,
+                        assertCurrent: async () => {
+                          await base.transaction!.assertCurrent();
+                          await ui.authority.transaction!.assertCurrent();
+                        },
+                      }),
+                    });
+              state.dispatch = await journal.begin(state.command, authority);
               context(request.actor);
             }
             return result;
@@ -331,6 +364,7 @@ export class InstalledProjectMediaGenerationRuntime {
         lifetime,
         assertActive: active,
         release,
+        journal,
         recover: async (command) => {
           active();
           if (
@@ -422,7 +456,7 @@ export class InstalledProjectMediaGenerationRuntime {
       !context.lease.descriptor.requires.some(
         (r) =>
           r.service === CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE &&
-          r.apiVersion === "1",
+          (r.apiVersion === "1" || r.apiVersion === "2"),
       ) ||
       !context.lease.descriptor.contributions.some(
         (c) =>
@@ -442,12 +476,20 @@ export class InstalledProjectMediaGenerationRuntime {
       throw new ApplicationError("conflict", "project_media_generation_busy");
   }
   #execute(command: GenerateProjectMediaRequest, ui: Invocation["ui"]) {
+    const usesUiRecovery =
+      ui?.context.lease.descriptor.requires.some(
+        (r) =>
+          r.service === "crewon.plugin-ui-recovery" && r.apiVersion === "1",
+      ) === true;
     return this.#invocations.run(
       {
         actor: this.#core.requests.currentActor(),
         command,
         admission: null,
-        dispatch: null,
+        dispatch: usesUiRecovery
+          ? this.#journal.observe(command, ui!.authority.transaction!.pin)
+          : null,
+        ownsDispatch: !usesUiRecovery,
         ui,
       },
       async () => {
@@ -475,7 +517,8 @@ export class InstalledProjectMediaGenerationRuntime {
           threadRevision: result.turn.threadState.revision,
           runId: result.binding.runId,
         });
-        await this.#invocations.getStore()!.dispatch?.confirm(receipt);
+        const state = this.#invocations.getStore()!;
+        if (state.ownsDispatch) await state.dispatch?.confirm(receipt);
         return receipt;
       },
     );
@@ -507,6 +550,14 @@ function denied(): never {
   );
 }
 function publicFailure(error: unknown): unknown {
+  if (
+    error instanceof Error &&
+    error.message === "plugin_ui_intent_already_refused"
+  )
+    return new ApplicationError(
+      "conflict",
+      "project_media_generation_not_admitted",
+    );
   if (
     error instanceof Error &&
     [

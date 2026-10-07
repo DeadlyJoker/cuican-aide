@@ -58,6 +58,15 @@ export class ProjectMediaGenerationCommands {
   readonly #create: ExtensionTaskApplicationService["createProjectMediaTaskFromHost"];
   readonly #lookup: SqliteExtensionStore["loadPluginTaskAdmissionByReceipt"];
   readonly #resolve: AdmissionResolver["resolve"];
+  readonly #notAdmitted:
+    | ((
+        input: Readonly<{
+          actor: ActorContext;
+          command: GenerateProjectMediaCommand;
+          signal: AbortSignal;
+        }>,
+      ) => Promise<void>)
+    | undefined;
   readonly #closing = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
   #closed = false;
@@ -69,6 +78,14 @@ export class ProjectMediaGenerationCommands {
       tasks: ExtensionTaskApplicationService;
       extensions: SqliteExtensionStore | PostgresExtensionStore;
       admissions: AdmissionResolver;
+      /** Trusted owner notification, only before any TaskCore call and with no earlier receipt. */
+      onNotAdmitted?: (
+        input: Readonly<{
+          actor: ActorContext;
+          command: GenerateProjectMediaCommand;
+          signal: AbortSignal;
+        }>,
+      ) => Promise<void>;
     }>,
   ) {
     const proto =
@@ -118,6 +135,13 @@ export class ProjectMediaGenerationCommands {
       input.extensions,
     );
     this.#resolve = projectMediaInputBound(input.admissions, "resolve");
+    this.#notAdmitted =
+      input.onNotAdmitted === undefined
+        ? undefined
+        : projectMediaInputBound<NonNullable<typeof input.onNotAdmitted>>(
+            input,
+            "onNotAdmitted",
+          );
   }
 
   generate(
@@ -173,72 +197,87 @@ export class ProjectMediaGenerationCommands {
         previous.action !== "media.generate")
     )
       fail("replay_conflict");
-    const admission = captureProjectMediaGenerationAdmission(
-      await this.#resolve({ actor, command, previous, signal }),
-      actor,
-      command,
-    );
-    const { pin } = admission;
-    signal.throwIfAborted();
-    if (
-      !mediaInputSame(
-        {
-          tenantId: pin.tenantId,
-          spaceId: pin.spaceId,
-          principalId: pin.principalId,
-          actorId: pin.actorId,
-        },
+    let admission: ProjectMediaGenerationAdmission;
+    let task: ProjectMediaGenerationTask;
+    try {
+      admission = captureProjectMediaGenerationAdmission(
+        await this.#resolve({ actor, command, previous, signal }),
         actor,
-      ) ||
-      pin.profileId !== this.#profileId ||
-      pin.pluginId !== "crewon.short-drama" ||
-      pin.action !== "media.generate"
-    )
-      fail("owner_mismatch");
-    await assertMediaAdmissionCurrent(admission);
-    const {
-        projectId,
-        mediaInputId,
-        inputRevision,
-        expectedInputRevision,
-        executionId,
-      } = command,
-      selectors = {
-        projectId,
-        mediaInputId,
-        inputRevision,
-        expectedInputRevision,
-        executionId,
-      };
-    const task: ProjectMediaGenerationTask = previous
-      ? await this.#restore(
-          actor,
+        command,
+      );
+      const { pin } = admission;
+      signal.throwIfAborted();
+      if (
+        !mediaInputSame(
           {
-            tenantId: actor.tenantId,
-            spaceId: actor.spaceId,
-            runId: previous.runId,
+            tenantId: pin.tenantId,
+            spaceId: pin.spaceId,
+            principalId: pin.principalId,
+            actorId: pin.actorId,
           },
-          { signal },
-        )
-      : await this.#prepare(actor, selectors, { signal });
-    const reference = task.reference;
-    if (
-      !mediaInputSame(selectors, {
-        projectId: reference.projectId,
-        mediaInputId: reference.mediaInputId,
-        inputRevision: reference.inputRevision,
-        expectedInputRevision: reference.expectedInputRevision,
-        executionId: reference.executionId,
-      })
-    )
-      fail("replay_conflict");
-    signal.throwIfAborted();
-    await assertMediaAdmissionCurrent(admission);
+          actor,
+        ) ||
+        pin.profileId !== this.#profileId ||
+        pin.pluginId !== "crewon.short-drama" ||
+        pin.action !== "media.generate"
+      )
+        fail("owner_mismatch");
+      await assertMediaAdmissionCurrent(admission);
+      const {
+          projectId,
+          mediaInputId,
+          inputRevision,
+          expectedInputRevision,
+          executionId,
+        } = command,
+        selectors = {
+          projectId,
+          mediaInputId,
+          inputRevision,
+          expectedInputRevision,
+          executionId,
+        };
+      task = previous
+        ? await this.#restore(
+            actor,
+            {
+              tenantId: actor.tenantId,
+              spaceId: actor.spaceId,
+              runId: previous.runId,
+            },
+            { signal },
+          )
+        : await this.#prepare(actor, selectors, { signal });
+      const reference = task.reference;
+      if (
+        !mediaInputSame(selectors, {
+          projectId: reference.projectId,
+          mediaInputId: reference.mediaInputId,
+          inputRevision: reference.inputRevision,
+          expectedInputRevision: reference.expectedInputRevision,
+          executionId: reference.executionId,
+        })
+      )
+        fail("replay_conflict");
+      signal.throwIfAborted();
+      await assertMediaAdmissionCurrent(admission);
+    } catch (error) {
+      // Cancellation retains the original request. A TaskCore exception below
+      // can represent an unknown COMMIT and must never reach this notification.
+      if (previous === null && !signal.aborted) {
+        try {
+          await this.#notAdmitted?.({ actor, command, signal });
+        } catch {
+          /* Preserve the original failure and unresolved journal. */
+        }
+      }
+      throw error;
+    }
     // TaskCore verifies the full original command digest and admission; a receipt lookup is never proof of replay.
     // Once committed, retain its known outcome even if close/abort arrives before delivery.
     return this.#create({
       actor,
-      pin,
+      pin: admission.pin,
       task: bindProjectMediaGenerationAdmission(task, admission),
       command: {
         pluginId: "crewon.short-drama",
@@ -247,7 +286,7 @@ export class ProjectMediaGenerationCommands {
         idempotencyKey: command.idempotencyKey,
         intent: {
           kind: "generate",
-          input: projectMediaGenerationTaskInput(reference),
+          input: projectMediaGenerationTaskInput(task.reference),
         },
       },
     });

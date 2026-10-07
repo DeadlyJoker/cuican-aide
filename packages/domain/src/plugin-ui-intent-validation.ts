@@ -24,6 +24,19 @@ export const PLUGIN_UI_INTENT_SELECTION_CONFLICTS = Object.freeze([
   "concept_selection_operation_revision_conflict",
   "concept_selection_revision_conflict",
 ] as const);
+export const PLUGIN_UI_MEDIA_NOT_ADMITTED =
+  "project_media_generation_not_admitted";
+export function pluginUiIntentRefusalSupported(
+  action: string,
+  reason: string,
+): boolean {
+  return action === "crewon.project-media-generations.v1.generate"
+    ? reason === PLUGIN_UI_MEDIA_NOT_ADMITTED
+    : action === PLUGIN_UI_INTENT_ACTIONS.selection &&
+        (PLUGIN_UI_INTENT_SELECTION_CONFLICTS as readonly string[]).includes(
+          reason,
+        );
+}
 export function parsePluginUiIntentJournalAccount(
   input: unknown,
 ): PluginUiIntentJournalAccount {

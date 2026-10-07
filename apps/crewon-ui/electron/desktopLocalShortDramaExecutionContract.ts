@@ -56,7 +56,12 @@ export function assertDesktopLocalShortDramaExecutionContract(
     );
   for (const entry of descriptor.requires) {
     if (
-      (KNOWN_SERVICES.has(entry.service) && entry.apiVersion !== "1") ||
+      (KNOWN_SERVICES.has(entry.service) &&
+        entry.apiVersion !== "1" &&
+        !(
+          entry.service === "crewon.project-media-generations" &&
+          entry.apiVersion === "2"
+        )) ||
       (!KNOWN_SERVICES.has(entry.service) && !entry.optional)
     )
       invalid();

@@ -11,6 +11,7 @@ import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   PROJECT_MEDIA_GENERATE_UI_ACTION,
   PROJECT_MEDIA_RECOVERY_UI_ACTION,
+  PROJECT_MEDIA_RECOVERY_V2_UI_ACTION,
   parseGenerateProjectMediaResponse,
 } from "@crewon/contracts/project-media-generations";
 import { uiTestDescriptor } from "../../../packages/application/src/plugin-ui.test-support.ts";
@@ -28,6 +29,7 @@ export async function mediaGenerationUiFixture(
     publication?: string;
     kind?: "T10" | "D18";
     recovery?: boolean;
+    mediaApiVersion?: "1" | "2";
   } = {},
 ) {
   const f = await mediaGenerationRuntimeFixture(t, backend, options.kind),
@@ -46,7 +48,7 @@ export async function mediaGenerationUiFixture(
         : [
             {
               service: "crewon.project-media-generations",
-              apiVersion: "1",
+              apiVersion: options.mediaApiVersion ?? "1",
               optional: true,
             },
             ...(options.recovery
@@ -171,7 +173,10 @@ export async function mediaGenerationUiFixture(
     f.requests.run({ request, actor: f.actor }, () =>
       ui.invoke(f.actor, {
         mountRef: selectedMount,
-        action: PROJECT_MEDIA_RECOVERY_UI_ACTION,
+        action:
+          options.mediaApiVersion === "2"
+            ? PROJECT_MEDIA_RECOVERY_V2_UI_ACTION
+            : PROJECT_MEDIA_RECOVERY_UI_ACTION,
         input: null,
       }),
     );

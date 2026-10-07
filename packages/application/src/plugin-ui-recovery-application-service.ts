@@ -1,6 +1,7 @@
 import {
   PROJECT_MEDIA_GENERATE_UI_ACTION,
   PROJECT_MEDIA_RECOVERY_UI_ACTION,
+  PROJECT_MEDIA_RECOVERY_V2_UI_ACTION,
 } from "@crewon/contracts/project-media-generations";
 import { parseProjectMediaGenerationRecoveryResponse } from "@crewon/contracts/project-media-generation-recovery";
 import {
@@ -177,8 +178,21 @@ export class PluginUiRecoveryApplicationService
   async getMediaGenerationRecovery(context: PluginUiActionContext) {
     const captured = this.#capture(context);
     if (
-      captured.context.action !== PROJECT_MEDIA_RECOVERY_UI_ACTION ||
+      ![
+        PROJECT_MEDIA_RECOVERY_UI_ACTION,
+        PROJECT_MEDIA_RECOVERY_V2_UI_ACTION,
+      ].includes(captured.context.action) ||
       captured.context.input !== null
+    )
+      unavailable();
+    const v2 = captured.context.action === PROJECT_MEDIA_RECOVERY_V2_UI_ACTION;
+    if (
+      v2 &&
+      !captured.context.lease.descriptor.requires.some(
+        (r) =>
+          r.service === "crewon.project-media-generations" &&
+          r.apiVersion === "2",
+      )
     )
       unavailable();
     this.#publication(captured.context, PROJECT_MEDIA_GENERATE_UI_ACTION);
@@ -194,7 +208,8 @@ export class PluginUiRecoveryApplicationService
         (value) =>
           value.sourcePin.pluginId === captured.pin.pluginId &&
           value.sourcePin.contributionId === captured.pin.contributionId &&
-          value.sourcePin.action === PROJECT_MEDIA_GENERATE_UI_ACTION,
+          value.sourcePin.action === PROJECT_MEDIA_GENERATE_UI_ACTION &&
+          (v2 || value.phase !== "refused"),
       )
       .sort((a, b) => b.sequence - a.sequence);
     const record =
@@ -224,6 +239,14 @@ export class PluginUiRecoveryApplicationService
       { authority: captured.authority },
     );
     await captured.authority.assertCurrent();
+    if (
+      result.intent.sourcePin.action === PROJECT_MEDIA_GENERATE_UI_ACTION &&
+      result.intent.phase === "refused"
+    )
+      throw new ApplicationError(
+        "conflict",
+        "project_media_generation_not_admitted",
+      );
     return parseStagePluginUiRecoveryResponse(
       {
         version: PLUGIN_UI_RECOVERY_VERSION,
@@ -409,7 +432,11 @@ export class PluginUiRecoveryApplicationService
               : "crewon.project-generation-selections";
       if (
         !context.lease.descriptor.requires.some(
-          (item) => item.service === service && item.apiVersion === "1",
+          (item) =>
+            item.service === service &&
+            (item.apiVersion === "1" ||
+              (service === "crewon.project-media-generations" &&
+                item.apiVersion === "2")),
         )
       )
         unavailable();

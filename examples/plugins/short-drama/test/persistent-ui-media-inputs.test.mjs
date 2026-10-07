@@ -29,7 +29,7 @@ test("the real package module confirms T10 and D18 with adopted source selectors
     props: persistentProps(true),
     services: {
       invoke: (action, input, options) =>
-        action === "crewon.project-media-generations.v1.getRecovery"
+        action === "crewon.project-media-generations.v2.getRecovery"
           ? Promise.resolve({ intent: null })
           : host.services.invoke(action, input, options),
     },
@@ -92,7 +92,7 @@ test("the real package module confirms T10 and D18 with adopted source selectors
       props: persistentProps(true),
       services: {
         invoke: (action, input, options) =>
-          action === "crewon.project-media-generations.v1.getRecovery"
+          action === "crewon.project-media-generations.v2.getRecovery"
             ? Promise.resolve({ intent: null })
             : host.services.invoke(action, input, options),
       },
@@ -164,7 +164,7 @@ test("saved input generates through the project conversation; theme update and r
   });
   const services = {
     async invoke(action, input, options) {
-      if (action === "crewon.project-media-generations.v1.getRecovery")
+      if (action === "crewon.project-media-generations.v2.getRecovery")
         return { intent: structuredClone(intent) };
       if (
         [

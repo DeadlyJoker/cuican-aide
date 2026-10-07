@@ -1,4 +1,4 @@
-// ../../../packages/contracts/src/contract-validation-error.ts
+// packages/contracts/src/contract-validation-error.ts
 var ContractValidationError = class extends Error {
   code;
   constructor(code) {
@@ -8,7 +8,7 @@ var ContractValidationError = class extends Error {
   }
 };
 
-// ../../../packages/contracts/src/plugin-ui-json.ts
+// packages/contracts/src/plugin-ui-json.ts
 var PluginUiContractError = class extends ContractValidationError {
   constructor(code) {
     super(code);
@@ -133,10 +133,10 @@ function dataValue(input, name) {
   return descriptor.value;
 }
 
-// ../../../packages/contracts/src/creative-project-control-types.ts
+// packages/contracts/src/creative-project-control-types.ts
 var MAX_CREATIVE_PROJECT_RESPONSE_BYTES = 60 * 1024;
 
-// ../../../packages/contracts/src/creative-project-control-support.ts
+// packages/contracts/src/creative-project-control-support.ts
 function creativeControlFailure() {
   throw new ContractValidationError(
     "creative_project_control_contract_invalid"
@@ -191,7 +191,7 @@ function creativeControlTimestamp(input) {
   return input;
 }
 
-// ../../../packages/contracts/src/project-asset-contract-support.ts
+// packages/contracts/src/project-asset-contract-support.ts
 var MAX_PUBLIC_PROJECT_ASSET_CONTENT_BYTES = 8 * 1024;
 function assetContractFailure() {
   throw new ContractValidationError("project_asset_contract_invalid");
@@ -222,7 +222,7 @@ function assetContractId(input) {
   return value;
 }
 
-// ../../../packages/contracts/src/project-media-generations.ts
+// packages/contracts/src/project-media-generations.ts
 var PROJECT_MEDIA_GENERATE_UI_ACTION = "crewon.project-media-generations.v1.generate";
 function parseProjectMediaGenerationUiRequest(input) {
   const r = pluginUiFields(
@@ -307,7 +307,7 @@ function parseGenerateProjectMediaResponse(requestInput, input) {
   });
 }
 
-// ../../../packages/contracts/src/plugin-control-contract-support.ts
+// packages/contracts/src/plugin-control-contract-support.ts
 function pluginControlFail(code = "plugin_control_contract_invalid") {
   throw new ContractValidationError(code);
 }
@@ -319,7 +319,7 @@ function pluginControlVersion(input) {
   return input;
 }
 
-// ../../../packages/contracts/src/plugin-control-contract.ts
+// packages/contracts/src/plugin-control-contract.ts
 var MAX_PLUGIN_CONTROL_RESPONSE_BYTES = 128 * 1024;
 var MAX_PLUGIN_UI_LEASE_RESPONSE_BYTES = 512 * 1024;
 var MAX_PLUGIN_UI_CATALOG_RESPONSE_BYTES = 16 * 1024 * 1024;
@@ -335,7 +335,7 @@ function parsePluginControlPackageDigest(input) {
   return input;
 }
 
-// ../../../packages/contracts/src/creative-project-control-contract.ts
+// packages/contracts/src/creative-project-control-contract.ts
 function parseCreativeProjectId(input) {
   return creativeControlId(input);
 }
@@ -346,7 +346,7 @@ function parseCreativeProjectIdempotencyKey(input) {
   return value;
 }
 
-// ../../../packages/contracts/src/extension-control-contract.ts
+// packages/contracts/src/extension-control-contract.ts
 function parseExtensionIdempotencyKey(input) {
   return text(input, 128);
 }
@@ -363,7 +363,7 @@ function fail(code) {
   throw new ContractValidationError(code);
 }
 
-// ../../../packages/contracts/src/extension-read-contract.ts
+// packages/contracts/src/extension-read-contract.ts
 var MAX_EXTENSION_CATALOG_RESPONSE_BYTES = 2 * 1024 * 1024;
 var MAX_EXTENSION_READ_RESPONSE_BYTES = 128 * 1024;
 var MAX_EXTENSION_CATALOG_SCHEMA_BYTES = 24 * 1024;
@@ -388,7 +388,7 @@ function fail2() {
   throw new ContractValidationError("extension_read_contract_invalid");
 }
 
-// ../../../packages/contracts/src/project-generation-ui-action-contract.ts
+// packages/contracts/src/project-generation-ui-action-contract.ts
 var PROJECT_GENERATION_UI_ACTIONS = Object.freeze([
   "crewon.project-generations.v1.generateConcept"
 ]);
@@ -470,7 +470,7 @@ function parseProjectGenerationUiActionResponse(request, output) {
   });
 }
 
-// ../../../packages/contracts/src/project-generation-read-contract.ts
+// packages/contracts/src/project-generation-read-contract.ts
 function parseConceptGenerationLocator(input) {
   const value = creativeControlRecord(creativeControlCopy(input), [
     "projectId",
@@ -484,7 +484,7 @@ function parseConceptGenerationLocator(input) {
   });
 }
 
-// ../../../packages/contracts/src/project-generation-query-ui-action-contract.ts
+// packages/contracts/src/project-generation-query-ui-action-contract.ts
 var PROJECT_GENERATION_QUERY_UI_ACTIONS = Object.freeze([
   "crewon.project-generation-queries.v1.queryConceptGeneration"
 ]);
@@ -553,7 +553,7 @@ function parseProjectGenerationQueryUiActionResponse(request, output) {
   });
 }
 
-// ../../../packages/contracts/src/project-generation-selection-contract.ts
+// packages/contracts/src/project-generation-selection-contract.ts
 var MAX_PROJECT_GENERATION_SELECTION_BYTES = 24 * 1024;
 function fail3() {
   throw new ContractValidationError(
@@ -701,7 +701,7 @@ function parseSelectConceptImageResponse(input, expected) {
   });
 }
 
-// ../../../packages/contracts/src/project-generation-selection-ui-action-contract.ts
+// packages/contracts/src/project-generation-selection-ui-action-contract.ts
 var PROJECT_GENERATION_SELECTION_UI_ACTIONS = Object.freeze([
   "crewon.project-generation-selections.v1.getConceptSelection",
   "crewon.project-generation-selections.v1.selectConceptImage"
@@ -743,7 +743,7 @@ function parseProjectGenerationSelectionUiActionResponse(request, output) {
   return parseSelectConceptImageResponse(output, body);
 }
 
-// ../../../packages/contracts/src/plugin-ui-recovery-contract.ts
+// packages/contracts/src/plugin-ui-recovery-contract.ts
 var MAX_PLUGIN_UI_RECOVERY_RESPONSE_BYTES = 60 * 1024;
 var SELECTION_REFUSAL_CODES = Object.freeze([
   "creative_project_revision_conflict",
@@ -834,7 +834,7 @@ function parsePluginUiRecoveryHint(input) {
   const request = parsePluginUiRecoveryRequest(value.request);
   const count = revision(value.dispatchAttemptCount, 0);
   const checkedRevision = revision(value.revision);
-  if (typeof value.retryable !== "boolean" || value.dispatchMayHaveOccurred !== count > 0 || value.phase !== "prepared" && value.phase !== "dispatched" && value.phase !== "accepted" && value.phase !== "refused" || checkedRevision < count + 1 || value.phase === "prepared" && (count !== 0 || checkedRevision !== 1) || (value.phase === "dispatched" || value.phase === "accepted") && count === 0 || value.phase === "refused" && (count !== 1 || request.action !== PROJECT_GENERATION_SELECTION_UI_ACTIONS[1] || !SELECTION_REFUSAL_CODES.includes(value.reasonCode)) || (value.phase === "accepted" || value.phase === "refused") && value.retryable || value.phase === "accepted" !== (value.receipt !== null) || value.reasonCode !== null && (typeof value.reasonCode !== "string" || !/^[a-z][a-z0-9_]{0,127}$/u.test(value.reasonCode)) || value.phase === "accepted" && value.reasonCode !== null || value.phase === "refused" && value.reasonCode === null)
+  if (typeof value.retryable !== "boolean" || value.dispatchMayHaveOccurred !== count > 0 || value.phase !== "prepared" && value.phase !== "dispatched" && value.phase !== "accepted" && value.phase !== "refused" || checkedRevision < count + 1 || value.phase === "prepared" && (count !== 0 || checkedRevision !== 1) || (value.phase === "dispatched" || value.phase === "accepted") && count === 0 || value.phase === "refused" && (count !== 1 || !(request.action === PROJECT_MEDIA_GENERATE_UI_ACTION ? value.reasonCode === "project_media_generation_not_admitted" : request.action === PROJECT_GENERATION_SELECTION_UI_ACTIONS[1] && SELECTION_REFUSAL_CODES.includes(value.reasonCode))) || (value.phase === "accepted" || value.phase === "refused") && value.retryable || value.phase === "accepted" !== (value.receipt !== null) || value.reasonCode !== null && (typeof value.reasonCode !== "string" || !/^[a-z][a-z0-9_]{0,127}$/u.test(value.reasonCode)) || value.phase === "accepted" && value.reasonCode !== null || value.phase === "refused" && value.reasonCode === null)
     invalid();
   return Object.freeze({
     sourcePin: sourcePin(value.sourcePin),
@@ -849,17 +849,24 @@ function parsePluginUiRecoveryHint(input) {
   });
 }
 
-// ../../../packages/contracts/src/project-media-generation-recovery.ts
+// packages/contracts/src/project-media-generation-recovery.ts
 function parseProjectMediaGenerationRecoveryResponse(input) {
-  const value = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 4096 }), ["intent"]);
+  const value = pluginUiFields(
+    parsePluginUiJsonValue(input, { maxBytes: 4096 }),
+    ["intent"]
+  );
   if (value.intent === null) return Object.freeze({ intent: null });
   const intent = parsePluginUiRecoveryHint(value.intent);
   if (intent.request.action !== PROJECT_MEDIA_GENERATE_UI_ACTION)
-    throw new ContractValidationError("project_media_generation_recovery_invalid");
-  return Object.freeze({ intent });
+    throw new ContractValidationError(
+      "project_media_generation_recovery_invalid"
+    );
+  return Object.freeze({
+    intent
+  });
 }
 
-// ../../../packages/contracts/src/project-media-generations-ui-codec.ts
+// media-generation-codec-entry.ts
 var mediaGenerationCodec = Object.freeze({ parseGenerateProjectMediaRequest, parseGenerateProjectMediaResponse, parseProjectMediaGenerationRecoveryResponse });
 export {
   mediaGenerationCodec

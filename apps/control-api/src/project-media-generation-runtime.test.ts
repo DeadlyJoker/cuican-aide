@@ -108,7 +108,19 @@ for (const backend of ["sqlite", "postgres"] as const) {
       await assert.rejects(f.materialScope().assertCurrent(f.actor));
       assert.throws(() => f.materialScope().assertActive(f.actor));
       f.mediaPolicy.read = false;
-      assert.equal((await f.post()).statusCode, 403);
+      // The first denied command is terminal; exercise metadata policy with a new intent.
+      assert.equal(
+        (
+          await f.post({
+            headers: {
+              ...f.headers,
+              "idempotency-key": "metadata-read-denied",
+            },
+            body: { ...f.body, executionId: "metadata-read-denied-execution" },
+          })
+        ).statusCode,
+        403,
+      );
       assert.deepEqual(
         [f.state.sourceGets, f.state.uploads, f.state.targetGets],
         [0, 0, 0],

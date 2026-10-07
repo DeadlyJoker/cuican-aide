@@ -20,17 +20,25 @@ GET /api/v1/creative-projects/:projectId/threads/:threadId/media-generation-reco
 
 HTTP 在素材准备前用实际 Core 的安装、身份和项目会话资格保存完整命令，再标记派发。使用父 Store 原有的意图 journal、数据库生成的 realm 和原请求摘要。服务端将逻辑 action 标记为 `crewon.project-media-generations.v1.generate`；原 TaskCore 仍使用 `media.generate`。没有构造 UI 挂载凭据或创建第二套任务执行器。
 
-Short27 声明了 UI recovery，继续由原 UI recovery wrapper 保存和派发，HTTP 不对它重复计数。两个入口的请求相同时命中同一记录和原 Run。输入版本、执行 ID、幂等键或会话修订改变不能用来恢复旧请求。没有声明 recovery 的旧 UI 仍按原协议调用，不在本次完整双入口持久恢复验收范围内。
+Short27 声明了 UI recovery，继续由原 UI recovery wrapper 保存和派发，HTTP 不对它重复计数。两个入口的请求相同时命中同一记录和原 Run。输入版本、执行 ID、幂等键或会话修订改变不能用来恢复旧请求。没有声明 recovery 的旧 UI 也由实际 runtime 保存、计数和确认，保持原调用协议。所有实际生成派发均参与同一持久计数，防止漏记并发尝试。
 
 HTTP 受理成功后，只用原 TaskCore 的实际回执确认 journal。晚到的断线或撤销不会抹去已知受理。若这个次级确认失败，保留实际回执并记录诊断；journal 仍可能显示未决，明确重试原命令会从原 TaskCore 恢复，不重新读取或上传参考素材。
 
 停止等待、服务关闭、恢复读取都不会自行重投。未知请求持续占用原生成类别，直到原结果得到确认；新键返回 `409 project_media_generation_recovery_required`。本次不增加删除、取消未决记录或跳过确认的接口。`retryable` 表示原安装范围匹配，不是生成许可，重试仍经过独立 `projectMedia:generate` 校验。
 
-目前派发后的准备失败也保留原命令。若旧输入已无法满足条件，不能直接换新键跳过；对话控件开放前还需完成“明确未受理”的拒绝与解除占用流程，不能把它和响应丢失混为一类。该限制与既有页面恢复约束一致，本次没有宣称整套生成交互已经可交付。
+### 明确未受理的首次请求
+
+原命令入口在查不到既有任务回执、请求未取消，且尚未调用 TaskCore 时，才通知真实 owner 本次准备失败。owner 对精确账户、安装 pin、原请求摘要与派发计数做原 Store 的条件更新：仅 `dispatched` 且计数为 1 可以进入 `refused`，原因为 `project_media_generation_not_admitted`。受理成功的记录不会被改写。这个通知不暴露给页面或 HTTP，不能由客户端宣称“未创建”。
+
+该状态释放生成类别占用；原键保留为不可重用的终态。Short28 读取后解锁输入，明确提示检查输入和执行准备，等待用户再次点击生成才创建新请求。恢复读取和主题切换均不发起生成。
+
+取消、先前未知或并发派发导致计数大于 1，以及任何已经调用 TaskCore 后抛出的异常，仍保留原请求。即使某个 TaskCore 异常看起来是普通版本冲突，也不能推断其提交结果；本次没有新增可验证的事务未提交证明。此实现只解决可证明的首次准备失败，不能称所有失败都可以解除占用。
 
 ## 兼容与边界
 
-启用该生成运行时会准备父数据库原有 journal；未启用的宿主不注册新接口。SQL schema、原 POST 请求及成功响应、冻结 SDK 和已发布 Short27 完整包均不变。持久媒体 action 已由 Short27 宿主引入；不认识此 action 的更旧宿主仍不能读取新媒体意图，不能靠降级清除未决状态。
+启用该生成运行时会准备父数据库原有 journal；未启用的宿主不注册新接口。SQL schema、原 POST 请求及成功响应、冻结 SDK 和已发布 Short27 完整包均不变。新的媒体 `refused` 合法值扩展了持久格式，写入后需要本次兼容宿主；不认识该状态的旧宿主不能直接读取，不能靠降级清除未决状态。
+
+Short28 的可选宿主服务声明为 `crewon.project-media-generations@2`，使用 `crewon.project-media-generations.v2.getRecovery` 读取上述终态。生成 action 仍为 v1，原八个字段不变。旧 `v1.getRecovery` 不返回新的媒体拒绝记录，保留 Short27 冻结解析器的格式；旧包不能调用 v2。通用 recovery v1 继续只返回原三类 action。Native 和 Web 均只为这一个媒体服务显式支持版本 1/2，不放宽其他服务版本。
 
 事务内使用实际安装快照和只含身份、权限、生命周期检查的回调；原 Store 在同一连接核对安装记录，不在单连接 PostgreSQL 事务中再次借连接。新的恢复入口不授予媒体输入读写或生成权限。
 
@@ -43,3 +51,11 @@ UI 沿用[插件主题范围](./plugin-variability-boundary.md#ui-主题接入�
 覆盖 HTTP/页面互相读取同一记录、同请求并发只受理一个 Run、T10/D18 中断后新运行时恢复、旧键重试且不重复素材 I/O、权限撤销、外来项目/会话/profile、无效身份、额外参数和响应体边界。Native 检查另外覆盖关闭重开父数据库后的 HTTP 恢复及完整 Short27 的页面接力。
 
 最终双库及相关协议检查 78/78、Native 检查 13/13、Control Client 全量 224/224 通过，均无跳过。Control、Contracts、Control Client 类型检查、边界和格式检查通过；7 个桌面运行时组件已构建并核对源码摘要。历史完整包、冻结 SDK、已验收 App 与用户 App 的原始字节保持一致。
+
+### Short28 首次拒绝恢复验证
+
+本次证据在 `output/extensions/checks/media-generation-refusal-20261007/`，独立完整包在 `output/extensions/installable-plugins/short-drama-media-refusal-20261007/short-drama/28.0.0`。包仍使用原冻结 SDK，未改动插件 CSS 或宿主主题框架。浏览器以该完整包及具名项目/供应商响应验证拒绝恢复、明确重新生成、主题变化保留状态，并检查桌面、窄屏和低高度布局。该浏览器检查不代表真实外部生图或完整宿主首屏回归。
+
+双数据库用例覆盖首次拒绝后原键封存/新键成功、v1/v2 投影隔离、原 TaskCore 异常保持未决、取消后重试不能清除原意图，以及旧 UI 与 HTTP 共用记录。Native 使用实际 Short28 完整安装、父数据库关闭重开和修正输入后的原 Run 受理，外部供应商仍为具名测试端口。具体最终结果见该目录的 `verification.json`。
+
+用户 App 尚未替换。原对话生成控件、Agent 媒体自动执行、输出候选采用，以及后续生产阶段仍需继续实现和验收。

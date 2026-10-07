@@ -52,7 +52,7 @@ test("ships a unified self-contained UI and execution package with the original 
       ? [
           {
             service: "crewon.project-media-generations",
-            apiVersion: "1",
+            apiVersion: "2",
             optional: true,
           },
         ]
