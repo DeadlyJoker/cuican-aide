@@ -161,12 +161,17 @@ describe("CommandWorkspace multiple host contributions", () => {
     await render(props);
     expect(container!.querySelector("[data-project-stage]")).toBeNull();
     await click(
-      container!.querySelector('[data-linked-thread-id="original-project-chat"]'),
+      container!.querySelector(
+        '[data-linked-thread-id="original-project-chat"]',
+      ),
     );
     expect(select).toHaveBeenLastCalledWith(thread.id);
     expect(container!.querySelector("[data-project-stage]")).not.toBeNull();
     expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
-    await render({ selectedThreadId: null, projectConversationComposer: stage });
+    await render({
+      selectedThreadId: null,
+      projectConversationComposer: stage,
+    });
     expect(container!.querySelector("[data-project-stage]")).toBeNull();
   });
 
@@ -418,6 +423,19 @@ describe("CommandWorkspace multiple host contributions", () => {
     await render({ hostModules: [a.module, b.module] });
     await click(container!.querySelector('[data-nav-key="team"]'));
     await click(navigation(a.module.id));
+    expect(
+      container!
+        .querySelector('[data-nav-key="team"]')
+        ?.classList.contains("active"),
+    ).toBe(false);
+    expect(
+      container!
+        .querySelector('[data-nav-key="team"]')
+        ?.hasAttribute("aria-current"),
+    ).toBe(false);
+    expect(
+      container!.querySelectorAll('.sidebar-nav [aria-current="page"]'),
+    ).toHaveLength(1);
     await click(pane(a.module.id).querySelector("button"));
     const aPane = pane(a.module.id);
     await render({

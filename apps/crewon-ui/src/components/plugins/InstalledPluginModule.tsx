@@ -39,6 +39,7 @@ import {
 
 import { InstalledPluginTaskPanel } from "./InstalledPluginTaskPanel";
 import panelStyles from "./InstalledPluginTaskPanel.module.css";
+import { InstalledPluginUnavailable } from "./InstalledPluginUnavailable";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
 // Keep the original short request budget well inside the remaining finite authority window.
@@ -199,14 +200,18 @@ export function InstalledPluginModule({
       ]),
     [module],
   );
+  const [mountAttempt, setMountAttempt] = useState(0);
   const context = useMemo(
     () => ({ host, module, active }),
-    [host, modulePin, active],
+    [host, modulePin, active, mountAttempt],
   );
   const current = useRef(context);
   current.current = context;
   const monitor = useRef<Monitor | null>(null);
-  const [failed, setFailed] = useState<typeof context | null>(null);
+  const [failed, setFailed] = useState<{
+    context: typeof context;
+    error: unknown;
+  } | null>(null);
   const [ready, setReady] = useState<typeof context | null>(null);
   const diagnostic = useRef(onDiagnostic);
   diagnostic.current = onDiagnostic;
@@ -222,7 +227,7 @@ export function InstalledPluginModule({
     (error: unknown) => {
       if (current.current === context && context.active) {
         stopMonitor();
-        setFailed(context);
+        setFailed({ context, error });
       }
       try {
         diagnostic.current(error);
@@ -352,13 +357,13 @@ export function InstalledPluginModule({
     if (current.current === context && context.active) setReady(context);
   }, [context]);
   if (!active) return null;
-  if (failed === context)
+  if (failed?.context === context)
     return (
-      <p role="alert">
-        {locale === "zh"
-          ? "模块暂时不可用，请稍后重新进入。"
-          : "This module is temporarily unavailable. Reopen it to try again."}
-      </p>
+      <InstalledPluginUnavailable
+        error={failed.error}
+        locale={locale}
+        onRetry={() => setMountAttempt((attempt) => attempt + 1)}
+      />
     );
   const hasControls = Boolean(
     (generationEnabled && generationPorts) ||

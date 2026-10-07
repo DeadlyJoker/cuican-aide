@@ -465,6 +465,53 @@ describe("installed module composition (real authenticated host, explicit import
     expect(vi.getTimerCount()).toBe(1);
   });
 
+  it.each([
+    ["storage_capacity_low", "磁盘空间不足"],
+    ["storage_capacity_unknown", "暂时无法检查磁盘空间"],
+    ["plugin_ui_mount_unavailable", "模块暂时不可用"],
+  ])(
+    "explains %s and reacquires authority only on explicit reload",
+    async (code, message) => {
+      const f = fixture();
+      const gate = deferred<Response>();
+      f.gateOpen(gate);
+      gate.resolve(
+        controlUiResponse(
+          {
+            error: {
+              code,
+              category: "providerUnavailable",
+              requestId: "storage-fixture",
+              message: "private backend detail must not be displayed",
+            },
+          },
+          503,
+        ),
+      );
+      await f.render(true);
+      expect(
+        f.container.querySelector('[role="alert"]')?.textContent,
+      ).toContain(message);
+      expect(f.container.textContent).not.toContain("private backend");
+      expect(f.importer).not.toHaveBeenCalled();
+      expect(f.opened()).toHaveLength(1);
+      expect(vi.getTimerCount()).toBe(0);
+      if (code === "storage_capacity_low")
+        expect(f.container.innerHTML).toMatchSnapshot();
+      await act(async () => {
+        f.container.querySelector<HTMLButtonElement>("button")!.click();
+        await settle();
+      });
+      expect(f.opened()).toHaveLength(2);
+      expect(f.importer).toHaveBeenCalledTimes(1);
+      expect(f.container.querySelector('[role="alert"]')).toBeNull();
+      expect(f.container.querySelector("[data-plugin-ui-root]")).not.toBeNull();
+      expect(
+        f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+      ).toHaveLength(0);
+    },
+  );
+
   it("closes an importer failure and does not keep polling the failed module", async () => {
     const f = fixture();
     f.importer.mockRejectedValueOnce(new Error("fixture import failed"));
