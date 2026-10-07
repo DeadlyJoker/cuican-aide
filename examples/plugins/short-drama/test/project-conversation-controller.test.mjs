@@ -246,3 +246,151 @@ test("open only sends a read for the actual binding and rejects a different work
     f.controller.dispose();
   }
 });
+
+test("expired source requires explicit refresh, reuses the original request after lost ACK, and opens the same workspace", async () => {
+  let current = binding("test-project", "original-workspace"),
+    lost = true;
+  const writes = [],
+    opens = [];
+  const f = await fixture({
+    async listConversations() {
+      return { bindings: [current], nextThreadId: null };
+    },
+    async openConversation(input) {
+      opens.push(input);
+      if (current.revision === 1)
+        throw Object.assign(new Error("source expired"), {
+          code: "project_conversation_source_mismatch",
+        });
+      return { binding: current };
+    },
+    async refreshSource(input) {
+      writes.push(structuredClone(input));
+      current = {
+        ...current,
+        revision: 2,
+        source: {
+          ...current.source,
+          version: "32.0.0",
+          packageDigest: "sha256:" + "b".repeat(64),
+          selectionRevision: 5,
+        },
+      };
+      if (lost) {
+        lost = false;
+        throw new Error("lost_refresh_ack");
+      }
+      return { disposition: "replayed", binding: current };
+    },
+  });
+  try {
+    await f.controller.open("test-thread");
+    assert.equal(writes.length, 0);
+    assert.equal(
+      f.controller.getSnapshot().sourceRefreshThreadId,
+      "test-thread",
+    );
+    f.physical(true);
+    await f.controller.refreshSourceAndOpen("test-thread");
+    assert.equal(writes.length, 0);
+    f.physical(false);
+    await f.controller.refreshSourceAndOpen("test-thread");
+    assert.equal(f.controller.locked, true);
+    assert.equal(opens.length, 1);
+    f.controller.setWorkspace({
+      workspaceId: "unrelated-workspace",
+      name: "Other",
+    });
+    await f.controller.open("test-thread");
+    await f.controller.refreshSourceAndOpen("test-thread");
+    assert.equal(opens.length, 1);
+    assert.equal(writes.length, 1);
+    await f.controller.retrySourceRefresh();
+    assert.deepEqual(writes[1], writes[0]);
+    assert.equal(writes[0].expectedBindingRevision, 1);
+    assert.equal(f.controller.getSnapshot().pendingSourceRefresh, null);
+    assert.equal(
+      f.controller.getSnapshot().bindings[0].workspaceId,
+      "original-workspace",
+    );
+    assert.deepEqual(opens.at(-1), {
+      projectId: "test-project",
+      threadId: "test-thread",
+    });
+  } finally {
+    f.controller.dispose();
+  }
+});
+
+test("withdrawal during source refresh keeps the original request and never opens a late reply", async () => {
+  const gate = deferred(),
+    calls = [];
+  let opens = 0;
+  const original = binding("test-project", "original-workspace");
+  const updated = { ...original, revision: 2 };
+  const f = await fixture({
+    async listConversations() {
+      return { bindings: [original], nextThreadId: null };
+    },
+    async openConversation() {
+      ++opens;
+      throw new Error("project_conversation_source_mismatch");
+    },
+    async refreshSource(input) {
+      calls.push(input);
+      return calls.length === 1
+        ? gate.promise
+        : { disposition: "replayed", binding: updated };
+    },
+  });
+  try {
+    await f.controller.open(original.threadId);
+    const writing = f.controller.refreshSourceAndOpen(original.threadId);
+    f.controller.setReady(false);
+    gate.resolve({ disposition: "committed", binding: updated });
+    await writing;
+    assert.equal(opens, 1);
+    assert.equal(
+      f.controller.getSnapshot().pendingSourceRefresh.input,
+      calls[0],
+    );
+    f.controller.setReady(true);
+    await tick();
+    await f.controller.retrySourceRefresh();
+    assert.deepEqual(calls[1], calls[0]);
+  } finally {
+    f.controller.dispose();
+  }
+});
+
+test("ordinary read failures never offer source refresh and a mismatched refresh receipt cannot navigate", async () => {
+  let failure = "network_unavailable",
+    opens = 0;
+  const original = binding("test-project", "original-workspace");
+  const f = await fixture({
+    async listConversations() {
+      return { bindings: [original], nextThreadId: null };
+    },
+    async openConversation() {
+      ++opens;
+      throw new Error(failure);
+    },
+    async refreshSource() {
+      return {
+        disposition: "committed",
+        binding: { ...original, revision: 2, workspaceId: "foreign" },
+      };
+    },
+  });
+  try {
+    await f.controller.open(original.threadId);
+    assert.equal(f.controller.getSnapshot().sourceRefreshThreadId, null);
+    failure = "project_conversation_source_mismatch";
+    await f.controller.open(original.threadId);
+    await f.controller.refreshSourceAndOpen(original.threadId);
+    assert.equal(opens, 2);
+    assert.ok(f.controller.getSnapshot().pendingSourceRefresh);
+  } finally {
+    f.controller.dispose();
+  }
+});

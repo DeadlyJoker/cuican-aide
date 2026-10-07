@@ -297,3 +297,68 @@ describe("installed project conversation navigation (original authenticated clie
     expect(wire.fetch).not.toHaveBeenCalled();
   });
 });
+
+it("refreshSource verifies the full current package before refreshing the original composer, without navigating or starting a Run", async () => {
+  for (const changedField of [
+    null,
+    "pluginId",
+    "publisherId",
+    "version",
+    "packageDigest",
+    "selectionRevision",
+  ] as const) {
+    const value = { ...binding(), revision: 2 };
+    if (changedField !== null)
+      Object.assign(value.source, {
+        [changedField]:
+          changedField === "selectionRevision"
+            ? 99
+            : changedField === "packageDigest"
+              ? "sha256:" + "e".repeat(64)
+              : changedField === "version"
+                ? "99.0.0"
+                : "different",
+      });
+    const wire = controlUiClient(() =>
+      controlUiResponse({
+        output: { disposition: "committed", binding: value },
+      }),
+    );
+    const changed = vi.fn(),
+      onOpen = vi.fn();
+    const unsubscribe = subscribeProjectConversationBindingChanges(
+      wire.client,
+      value.threadId,
+      changed,
+    );
+    try {
+      const result = invokeInstalledPluginConversation(
+        { client: wire.client, assertCurrent() {}, onOpen },
+        lease,
+        {
+          action: PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource,
+          input: {
+            projectId: value.projectId,
+            threadId: value.threadId,
+            expectedBindingRevision: 1,
+            idempotencyKey: "refresh-original",
+          },
+          signal: new AbortController().signal,
+        },
+      );
+      if (changedField === null) {
+        await result;
+        expect(changed).toHaveBeenCalledOnce();
+      } else {
+        await expect(result).rejects.toThrow(
+          "plugin_ui_project_conversation_source_changed",
+        );
+        expect(changed).not.toHaveBeenCalled();
+      }
+      expect(onOpen).not.toHaveBeenCalled();
+      expect(wire.fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      unsubscribe();
+    }
+  }
+});

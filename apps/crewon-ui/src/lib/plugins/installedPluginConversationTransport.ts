@@ -106,6 +106,23 @@ export async function invokeInstalledPluginConversation(
     request,
     response.output,
   );
+  if (request.action === PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource) {
+    if (!("binding" in output) || output.binding === null)
+      uiFailure("plugin_ui_project_conversation_invalid");
+    const source = output.binding.source;
+    if (
+      source.pluginId !== lease.descriptor.pluginId ||
+      source.publisherId !== lease.descriptor.publisherId ||
+      source.version !== lease.descriptor.version ||
+      source.packageDigest !== lease.packageDigest ||
+      source.selectionRevision !== lease.selectionRevision
+    )
+      uiFailure("plugin_ui_project_conversation_source_changed");
+    notifyProjectConversationBindingChanged(
+      options.client,
+      output.binding.threadId,
+    );
+  }
   if (
     request.action === PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding &&
     "binding" in output &&

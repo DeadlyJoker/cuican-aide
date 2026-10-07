@@ -10,21 +10,27 @@ export async function conversationPackage(
   options: {
     beforeCleanup?: () => Promise<void>;
     associationProtocol?: "1";
+    version?: string;
+    source?: Awaited<ReturnType<typeof productionSourceFixture>>;
   } = {},
 ) {
-  const source = await productionSourceFixture(t, options);
-  const raw = await source.source("conversation", {
-    pluginId: "test.conversation",
-    uiOnly: true,
-    requires: [
-      "crewon.creative-projects",
-      "crewon.project-conversations",
-      ...(options.associationProtocol === "1"
-        ? ["crewon.project-conversation-association"]
-        : []),
-      "crewon.execution",
-    ].map((service) => ({ service, apiVersion: "1", optional: true })),
-  });
+  const source = options.source ?? (await productionSourceFixture(t, options));
+  const raw = await source.source(
+    `conversation-${options.version ?? "1.0.0"}`,
+    {
+      ...(options.version ? { version: options.version } : {}),
+      pluginId: "test.conversation",
+      uiOnly: true,
+      requires: [
+        "crewon.creative-projects",
+        "crewon.project-conversations",
+        ...(options.associationProtocol === "1"
+          ? ["crewon.project-conversation-association"]
+          : []),
+        "crewon.execution",
+      ].map((service) => ({ service, apiVersion: "1", optional: true })),
+    },
+  );
   const business = Buffer.from(
     JSON.stringify({
       ...extensionManifestFixture(raw.pluginId),

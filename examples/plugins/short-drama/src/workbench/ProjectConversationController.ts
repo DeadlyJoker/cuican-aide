@@ -7,6 +7,10 @@ import type { ProjectDetails } from "./creative-project-controller";
 type CreateInput = Parameters<
   PluginProjectConversationsClient["createConversation"]
 >[0];
+type SourceRefresh = Readonly<{
+  input: Parameters<PluginProjectConversationsClient["refreshSource"]>[0];
+  binding: PublicProjectConversationBinding;
+}>;
 export type CreationWorkspace = Readonly<{
   workspaceId: string | null;
   name: string | null;
@@ -20,6 +24,9 @@ export type ConversationSnapshot = Readonly<{
   creating: boolean;
   openingThreadId: string | null;
   pendingCreation: CreateInput | null;
+  sourceRefreshThreadId: string | null;
+  refreshingSource: boolean;
+  pendingSourceRefresh: SourceRefresh | null;
   error: string | null;
   notice: string | null;
 }>;
@@ -28,7 +35,10 @@ export type ConversationSnapshot = Readonly<{
 export class ProjectConversationController {
   readonly #client: Pick<
     PluginProjectConversationsClient,
-    "listConversations" | "createConversation" | "openConversation"
+    | "listConversations"
+    | "createConversation"
+    | "openConversation"
+    | "refreshSource"
   >;
   readonly #physicalWritesPending: () => boolean;
   readonly #listeners = new Set<() => void>();
@@ -41,6 +51,9 @@ export class ProjectConversationController {
     creating: false,
     openingThreadId: null,
     pendingCreation: null,
+    sourceRefreshThreadId: null,
+    refreshingSource: false,
+    pendingSourceRefresh: null,
     error: null,
     notice: null,
   };
@@ -54,7 +67,10 @@ export class ProjectConversationController {
   constructor(ports: {
     client: Pick<
       PluginProjectConversationsClient,
-      "listConversations" | "createConversation" | "openConversation"
+      | "listConversations"
+      | "createConversation"
+      | "openConversation"
+      | "refreshSource"
     >;
     physicalWritesPending(): boolean;
   }) {
@@ -70,7 +86,9 @@ export class ProjectConversationController {
     return (
       this.#snapshot.creating ||
       this.#snapshot.openingThreadId !== null ||
-      this.#snapshot.pendingCreation !== null
+      this.#snapshot.pendingCreation !== null ||
+      this.#snapshot.refreshingSource ||
+      this.#snapshot.pendingSourceRefresh !== null
     );
   }
   get canCreate() {
@@ -102,6 +120,7 @@ export class ProjectConversationController {
     this.#invalidate();
     this.#publish({
       creating: false,
+      refreshingSource: false,
       openingThreadId: null,
       phase: ready ? "loading" : "waiting",
     });
@@ -133,6 +152,8 @@ export class ProjectConversationController {
       openingThreadId: null,
       error: null,
       notice: null,
+      sourceRefreshThreadId: null,
+      refreshingSource: false,
     });
     if (this.#ready && details) void this.refresh();
   }
@@ -145,6 +166,7 @@ export class ProjectConversationController {
       this.#disposed ||
       !this.#project ||
       this.#snapshot.creating ||
+      this.#snapshot.refreshingSource ||
       this.#snapshot.openingThreadId
     )
       return;
@@ -262,8 +284,8 @@ export class ProjectConversationController {
       !this.#ready ||
       this.#disposed ||
       !this.#project ||
-      this.#snapshot.creating ||
-      this.#snapshot.openingThreadId
+      this.locked ||
+      this.#physicalWritesPending()
     )
       return;
     const binding = this.#snapshot.bindings.find(
@@ -290,15 +312,130 @@ export class ProjectConversationController {
         result.binding.revision < binding.revision
       )
         throw new Error("project_conversation_response_scope_invalid");
-      this.#publish({ notice: "已请求打开项目对话。" });
-    } catch {
+      this.#publish({
+        notice: "已请求打开项目对话。",
+        sourceRefreshThreadId: null,
+      });
+    } catch (error) {
       if (this.#current(epoch, projectId, operation))
-        this.#publish({ error: "暂时无法打开此项目对话，请重新读取后再试。" });
+        this.#publish(
+          errorCode(error) === "project_conversation_source_mismatch"
+            ? {
+                sourceRefreshThreadId: threadId,
+                error:
+                  "此会话的插件关联已过期。更新关联后可继续使用原工作空间和历史。",
+              }
+            : { error: "暂时无法打开此项目对话，请重新读取后再试。" },
+        );
     } finally {
       if (this.#operation === operation) this.#operation = null;
       if (this.#current(epoch, projectId, operation))
         this.#publish({ openingThreadId: null });
     }
+  }
+  get canRefreshSource() {
+    return (
+      this.#ready &&
+      !this.#disposed &&
+      this.#project?.project.state === "active" &&
+      !this.#snapshot.creating &&
+      !this.#snapshot.openingThreadId &&
+      !this.#snapshot.refreshingSource &&
+      !this.#snapshot.pendingCreation &&
+      !this.#physicalWritesPending()
+    );
+  }
+  async refreshSourceAndOpen(threadId: string) {
+    if (
+      !this.canRefreshSource ||
+      this.#snapshot.pendingSourceRefresh ||
+      this.#snapshot.sourceRefreshThreadId !== threadId
+    )
+      return;
+    const binding = this.#snapshot.bindings.find(
+      (b) => b.threadId === threadId,
+    );
+    if (
+      !binding ||
+      binding.state !== "active" ||
+      binding.projectId !== this.#project?.project.projectId
+    )
+      return;
+    const pending: SourceRefresh = Object.freeze({
+      binding,
+      input: Object.freeze({
+        projectId: binding.projectId,
+        threadId,
+        expectedBindingRevision: binding.revision,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    });
+    this.#publish({ pendingSourceRefresh: pending });
+    await this.#refreshSource(pending);
+  }
+  async retrySourceRefresh() {
+    const pending = this.#snapshot.pendingSourceRefresh;
+    if (
+      !pending ||
+      !this.canRefreshSource ||
+      pending.input.projectId !== this.#project?.project.projectId
+    )
+      return;
+    await this.#refreshSource(pending);
+  }
+  async #refreshSource(pending: SourceRefresh) {
+    this.#read?.abort();
+    this.#read = null;
+    const operation = new AbortController(),
+      epoch = this.#epoch;
+    this.#operation = operation;
+    this.#publish({ refreshingSource: true, error: null, notice: null });
+    let confirmed = false;
+    try {
+      const { binding } = await this.#client.refreshSource(pending.input, {
+        signal: operation.signal,
+      });
+      if (!this.#current(epoch, pending.input.projectId, operation)) return;
+      if (
+        binding.bindingId !== pending.binding.bindingId ||
+        binding.projectId !== pending.input.projectId ||
+        binding.threadId !== pending.input.threadId ||
+        binding.workspaceId !== pending.binding.workspaceId ||
+        binding.state !== "active" ||
+        binding.revision !== pending.input.expectedBindingRevision + 1 ||
+        binding.source.pluginId !== pending.binding.source.pluginId ||
+        binding.source.publisherId !== pending.binding.source.publisherId
+      )
+        throw new Error("project_conversation_response_scope_invalid");
+      confirmed = true;
+      this.#publish({
+        pendingSourceRefresh: null,
+        sourceRefreshThreadId: null,
+        bindings: this.#snapshot.bindings.map((b) =>
+          b.threadId === binding.threadId ? binding : b,
+        ),
+        notice: "会话关联已更新，原工作空间和历史已保留。",
+      });
+    } catch (error) {
+      if (this.#current(epoch, pending.input.projectId, operation)) {
+        const conflict =
+          errorCode(error) === "project_conversation_revision_conflict";
+        this.#publish({
+          ...(conflict
+            ? { pendingSourceRefresh: null, sourceRefreshThreadId: null }
+            : {}),
+          error: conflict
+            ? "会话关联已变化，请刷新项目对话后重新进入。"
+            : "尚未确认关联更新结果。重试会使用原会话、关联版本与原请求。",
+        });
+      }
+    } finally {
+      if (this.#operation === operation) this.#operation = null;
+      if (this.#current(epoch, pending.input.projectId, operation))
+        this.#publish({ refreshingSource: false });
+    }
+    if (confirmed && this.#current(epoch, pending.input.projectId, operation))
+      await this.open(pending.input.threadId);
   }
   dispose() {
     if (this.#disposed) return;
@@ -306,4 +443,13 @@ export class ProjectConversationController {
     this.#disposed = true;
     this.#listeners.clear();
   }
+}
+function errorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") return null;
+  const code = Object.getOwnPropertyDescriptor(error, "code")?.value;
+  return typeof code === "string"
+    ? code
+    : error instanceof Error
+      ? error.message
+      : null;
 }

@@ -18,7 +18,11 @@ export function ProjectConversationActions({
         <h2>与 Agent 创作</h2>
         <button
           className="text-button"
-          disabled={snapshot.creating || snapshot.openingThreadId !== null}
+          disabled={
+            snapshot.creating ||
+            snapshot.refreshingSource ||
+            snapshot.openingThreadId !== null
+          }
           onClick={() => void controller.refresh()}
         >
           刷新项目对话
@@ -72,6 +76,19 @@ export function ProjectConversationActions({
             重试原创建请求
           </button>
         )}
+        {snapshot.pendingSourceRefresh && (
+          <button
+            className="button secondary"
+            disabled={
+              !controller.canRefreshSource ||
+              snapshot.pendingSourceRefresh.input.projectId !==
+                snapshot.projectId
+            }
+            onClick={() => void controller.retrySourceRefresh()}
+          >
+            {snapshot.refreshingSource ? "正在更新关联…" : "重试原关联更新"}
+          </button>
+        )}
       </div>
       {snapshot.bindings.map((binding, index) => (
         <div className="version-card" key={binding.threadId}>
@@ -79,11 +96,7 @@ export function ProjectConversationActions({
             <strong>创作对话 {index + 1}</strong>
             <button
               className="button secondary"
-              disabled={
-                binding.state !== "active" ||
-                snapshot.creating ||
-                snapshot.openingThreadId !== null
-              }
+              disabled={binding.state !== "active" || controller.locked}
               onClick={() => void controller.open(binding.threadId)}
             >
               {snapshot.openingThreadId === binding.threadId
@@ -91,6 +104,18 @@ export function ProjectConversationActions({
                 : "进入对话"}
             </button>
           </div>
+          {snapshot.sourceRefreshThreadId === binding.threadId &&
+            !snapshot.pendingSourceRefresh && (
+              <button
+                className="button secondary"
+                disabled={!controller.canRefreshSource}
+                onClick={() =>
+                  void controller.refreshSourceAndOpen(binding.threadId)
+                }
+              >
+                更新关联并进入
+              </button>
+            )}
           <p className="detail-note">
             {new Date(binding.createdAt).toLocaleString("zh-CN")}
             {binding.state === "revoked" ? " · 已停止关联" : ""}
@@ -103,6 +128,7 @@ export function ProjectConversationActions({
           disabled={
             snapshot.phase === "loading" ||
             snapshot.creating ||
+            snapshot.refreshingSource ||
             snapshot.openingThreadId !== null
           }
           onClick={() => void controller.refresh({ more: true })}

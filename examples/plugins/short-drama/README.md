@@ -1,5 +1,7 @@
 # AI 短剧插件：工作台与生成执行
 
+Short32 增加旧项目会话的“更新关联并进入”：仅明确来源过期后显示，使用原会话、工作空间与既有刷新协议。丢失更新回执时重试原请求，刷新成功再打开同一会话。UI 继续使用模块内原控件样式，SDK 与 Short31 冻结包保持不变。
+
 将整个目录复制到 CrewON 仓库外开发。公开依赖为 `@crewon/plugin-sdk/ui`、`@crewon/plugin-sdk/node`、`@crewon/plugin-sdk/contracts`、React、ReactDOM 和 lucide-react；浏览器产物包含插件自己的 React 和全部依赖，不借用宿主源码、组件、React 实例或工作区样式表。
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。

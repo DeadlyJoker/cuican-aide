@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 import { browser, fixture, settle } from "./ui.test-support.mjs";
 import {
   metadataService,
@@ -38,12 +39,16 @@ function conversations() {
     .projectId;
   let loseAck = false,
     available = true,
+    expired = false,
     serial = 0;
   return {
     base,
     projectId,
     bindings,
     calls,
+    expireSource: () => {
+      expired = true;
+    },
     loseNextAck: () => {
       loseAck = true;
     },
@@ -59,8 +64,37 @@ function conversations() {
         assert.equal(input.projectId, projectId);
         if (action.endsWith(".listConversations"))
           return { bindings: [...bindings.values()], nextThreadId: null };
-        if (action.endsWith(".openConversation"))
+        if (action.endsWith(".openConversation")) {
+          if (expired)
+            throw Object.assign(new Error("source expired"), {
+              code: "project_conversation_source_mismatch",
+            });
           return { binding: bindings.get(input.threadId) };
+        }
+        if (action.endsWith(".refreshSource")) {
+          const previous = receipts.get(input.idempotencyKey);
+          if (previous) assert.deepEqual(previous.input, input);
+          const old = bindings.get(input.threadId);
+          const binding = previous?.binding ?? {
+            ...old,
+            revision: old.revision + 1,
+            source: {
+              ...old.source,
+              selectionRevision: old.source.selectionRevision + 1,
+            },
+          };
+          bindings.set(input.threadId, binding);
+          receipts.set(input.idempotencyKey, {
+            input: structuredClone(input),
+            binding,
+          });
+          expired = false;
+          if (loseAck) {
+            loseAck = false;
+            throw new Error("lost_refresh_ack");
+          }
+          return { disposition: previous ? "replayed" : "committed", binding };
+        }
         assert.equal(
           action,
           "crewon.project-conversations.v1.createConversation",
@@ -228,6 +262,63 @@ test("missing workspace hints and unavailable conversation service never fabrica
     await f.click(f.button("刷新项目对话"));
     await f.click(f.button("新建项目对话"));
     assert.equal([...service.bindings.values()][0].workspaceId, null);
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("built plugin offers source update only after stale open, snapshots its scoped UI and cold-reopens the same saved conversation", async () => {
+  const service = conversations();
+  let f = await open(service);
+  try {
+    await f.click(f.button("新建项目对话"));
+    const original = structuredClone([...service.bindings.values()][0]);
+    service.expireSource();
+    await f.click(f.button("进入对话"));
+    assert.equal(
+      service.calls.some((c) => c.action.endsWith(".refreshSource")),
+      false,
+    );
+    const markup = f.container
+      .querySelector('[aria-label="项目 Agent 对话"]')
+      .outerHTML.replace(
+        /<p class="detail-note">[^<]*2026[^<]*<\/p>/gu,
+        '<p class="detail-note">CREATED_AT</p>',
+      );
+    const snapshot = new URL(
+      "./snapshots/project-conversation-refresh.html",
+      import.meta.url,
+    );
+    if (process.env.CREWON_UPDATE_CONVERSATION_SNAPSHOTS === "1")
+      await writeFile(snapshot, markup + "\n");
+    assert.equal(markup, (await readFile(snapshot, "utf8")).trimEnd());
+    service.loseNextAck();
+    await f.click(f.button("更新关联并进入"));
+    assert.equal(f.button("进入对话").disabled, true);
+    assert.equal(f.button("新建项目对话").disabled, true);
+    await f.click(f.button("重试原关联更新"));
+    const refreshes = service.calls.filter((c) =>
+      c.action.endsWith(".refreshSource"),
+    );
+    assert.equal(refreshes.length, 2);
+    assert.deepEqual(refreshes[1].input, refreshes[0].input);
+    assert.equal(service.bindings.size, 1);
+    const current = [...service.bindings.values()][0];
+    assert.equal(current.threadId, original.threadId);
+    assert.equal(current.workspaceId, original.workspaceId);
+    assert.equal(current.revision, 2);
+    assert.match(f.container.textContent, /已请求打开项目对话/u);
+    await f.dispose();
+    f = await open(service);
+    await f.click(f.button("进入对话"));
+    assert.equal(
+      service.calls.filter((c) => c.action.endsWith(".refreshSource")).length,
+      2,
+    );
+    assert.equal(
+      service.calls.some((c) => /startStage|generate/.test(c.action)),
+      false,
+    );
   } finally {
     await f.dispose();
   }
