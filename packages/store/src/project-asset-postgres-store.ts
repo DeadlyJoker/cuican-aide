@@ -1,6 +1,10 @@
+import { assertPostgresAssetVtwoRecoverySchema } from "./project-asset-vtwo-recovery-schema.ts";
+import {
+  loadAssetMutationReceiptPlan,
+  type AssetCommitPlan,
+} from "./project-asset-vtwo-recovery-commit.ts";
 import { assertPostgresProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import { assertPostgresProjectMediaResultSchema } from "./project-media-result-schema.ts";
-import { beginAssetIntentCommit } from "./project-asset-ui-intent-plan.ts";
 import { assertPostgresAssetIntentSchema } from "./project-asset-ui-intent-schema.ts";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -20,7 +24,6 @@ import {
   assetHead,
   assetContent,
   assetReference,
-  assetReceipt,
   captureAssetIdentity,
   captureAssetCommit,
   type AssetInput,
@@ -36,10 +39,6 @@ import {
   assertAssetReceiptQualification,
   commitAssetPlan,
 } from "./project-asset-mutation-plan.ts";
-import {
-  verifyProjectAssetMutationReference,
-  type AssetReferenceProofPlan,
-} from "./project-asset-reference-proof-plan.ts";
 import {
   captureAssetReferenceImageRead,
   loadAssetReferenceImagePlan,
@@ -180,37 +179,23 @@ export class PostgresProjectAssetStore
     const identity = captureAssetIdentity(input),
       authority = captureProjectAssetCommitAuthority(options);
     assertAssetReceiptQualification(authority, identity);
-    return this.#transaction(async (client) => {
-      await this.#execute(
-        client,
-        beginAssetIntentCommit(
-          this.#d,
-          await assertPostgresAssetIntentSchema(client, this.#d.schema, true),
-          authority?.uiTransaction,
-          identity,
-        ),
-        authority,
-      );
-      const result = await this.#execute(
-        client,
-        assetReceipt(this.#d, identity),
-        authority,
-      );
-      if (result?.referenceRevision)
-        await this.#execute(
+    return this.#transaction(
+      async (client) =>
+        this.#execute(
           client,
-          verifyProjectAssetMutationReference(
+          loadAssetMutationReceiptPlan(
             this.#d,
-            identity.actor,
-            result.referenceRevision,
-            this.#verifier,
+            identity,
             authority,
+            this.#verifier,
+            await assertPostgresAssetIntentSchema(client, this.#d.schema, true),
           ),
           authority,
-        );
-      return result;
-    }, authority);
+        ),
+      authority,
+    );
   }
+
   async commitMutation(
     input: AssetInput<"commitMutation">,
     options?: ProjectAssetCommitOptions,
@@ -241,7 +226,7 @@ export class PostgresProjectAssetStore
   }
   async #execute<T>(
     client: PoolClient,
-    plan: AssetReferenceProofPlan<T>,
+    plan: AssetCommitPlan<T>,
     authority?: ProjectAssetCommitAuthority,
   ): Promise<T> {
     let next = plan.next();
@@ -250,7 +235,17 @@ export class PostgresProjectAssetStore
       assertProjectAssetCommitActive(authority);
       const step = next.value;
       let rows: readonly Record<string, unknown>[];
-      if ("mediaOperationSchema" in step) {
+      if ("assetVtwoRecoverySchema" in step) {
+        rows = [
+          {
+            available: await assertPostgresAssetVtwoRecoverySchema(
+              client,
+              this.#d.schema,
+              true,
+            ),
+          },
+        ];
+      } else if ("mediaOperationSchema" in step) {
         await assertPostgresProjectMediaOperationSchema(client, this.#d.schema);
         rows = [];
       } else if ("mediaResultSchema" in step) {

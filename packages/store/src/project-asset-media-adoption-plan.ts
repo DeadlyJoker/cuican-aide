@@ -1,3 +1,12 @@
+import { PROJECT_ASSET_V2_ACTIONS } from "@crewon/contracts/project-assets-v2";
+import {
+  beginAssetVtwoRecoveryCommit,
+  acceptAssetVtwoRecovery,
+} from "./project-asset-vtwo-recovery-plan.ts";
+import {
+  assetV2OperationIdentity,
+  type ProjectAssetMediaAdoptionAuthority,
+} from "@crewon/application";
 import {
   ApplicationError,
   projectAssetMediaAdoptionQualification,
@@ -20,7 +29,7 @@ import { qualifyAssetMediaReferencePlan } from "./project-asset-media-reference-
 import { loadProjectMediaGenerationContextPlan } from "./project-media-generation-read.ts";
 import {
   mediaResultLoadPlan,
-  type MediaResultPlan,
+  type MediaResultCommitPlan,
 } from "./project-media-result-plan.ts";
 import { creativeStoreDigester } from "./creative-project-store-records.ts";
 import {
@@ -38,7 +47,8 @@ import {
 export function* adoptAssetMediaReferencePlan(
   d: AssetDialect,
   input: ProjectAssetMediaAdoptionWrite,
-): MediaResultPlan<ProjectAssetMediaAdoptionResult> {
+  authority: ProjectAssetMediaAdoptionAuthority,
+): MediaResultCommitPlan<ProjectAssetMediaAdoptionResult> {
   const r = input.request,
     { actor, query: q } = r,
     owner = assetOwner(actor),
@@ -50,6 +60,17 @@ export function* adoptAssetMediaReferencePlan(
     d.schema,
     ...receiptKey,
   ]);
+  const request = {
+    action: PROJECT_ASSET_V2_ACTIONS.adoptMediaReference,
+    input: q,
+  };
+  const v2Intent = yield* beginAssetVtwoRecoveryCommit(
+    d,
+    assetV2OperationIdentity(actor, request),
+    authority.v2Recovery?.ref,
+    authority.v2Recovery?.scope,
+    request,
+  );
   yield* assetLock(d, [
     "creative-project-project",
     d.schema,
@@ -122,6 +143,7 @@ export function* adoptAssetMediaReferencePlan(
     )
       invalid("history_changed");
     // Recovery returns the original immutable result after archive/lock/content changes, without selecting it again.
+    yield* acceptAssetVtwoRecovery(d, v2Intent, input.at);
     return parseProjectAssetMediaAdoptionResult(r, {
       ...result,
       disposition: "replayed",
@@ -192,6 +214,7 @@ export function* adoptAssetMediaReferencePlan(
       assetJson(receipt),
     ],
   );
+  yield* acceptAssetVtwoRecovery(d, v2Intent, input.at);
   return result;
 }
 function invalid(code: string): never {

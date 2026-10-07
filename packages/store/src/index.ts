@@ -75,3 +75,8 @@ export * from "./project-asset-stage-store.ts";
 export * from "./project-asset-ui-intent-sqlite-store.ts";
 export * from "./project-asset-ui-intent-postgres-store.ts";
 export * from "./project-media-result-store.ts";
+
+export {
+  SqliteProjectAssetV2RecoveryStore,
+  PostgresProjectAssetV2RecoveryStore,
+} from "./project-asset-vtwo-recovery-store.ts";

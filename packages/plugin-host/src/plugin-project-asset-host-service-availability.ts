@@ -27,6 +27,11 @@ export function appendProjectAssetRecoveryUiServiceAvailability(
 ): PluginUiHostServiceAvailabilityPort {
   return append("crewon.project-asset-recovery", input);
 }
+export function appendProjectAssetRecoveryV2UiServiceAvailability(
+  input: Input,
+): PluginUiHostServiceAvailabilityPort {
+  return append("crewon.project-asset-recovery", input, "2");
+}
 export function appendProjectAssetStageUiServiceAvailability(
   input: Input,
 ): PluginUiHostServiceAvailabilityPort {
@@ -48,7 +53,8 @@ function append(
       request.requirement.service === service
         ? request.requirement.apiVersion === apiVersion
           ? assets.isAvailable(request)
-          : service === "crewon.project-assets" &&
+          : (service === "crewon.project-assets" ||
+              service === "crewon.project-asset-recovery") &&
             ["1", "2"].includes(request.requirement.apiVersion) &&
             fallback?.isAvailable(request) === true
         : fallback?.isAvailable(request) === true,

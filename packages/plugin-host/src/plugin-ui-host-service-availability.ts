@@ -274,7 +274,7 @@ export function assertUiOnlyServiceDeclarations(
           (((requirement.service === "crewon.project-assets" &&
             ["1", "2"].includes(requirement.apiVersion)) ||
             (requirement.service === "crewon.project-asset-recovery" &&
-              requirement.apiVersion === "1")) &&
+              ["1", "2"].includes(requirement.apiVersion))) &&
             (requirement.optional || hostUiServices !== undefined)) ||
           ((requirement.service === "crewon.project-conversations" ||
             requirement.service ===

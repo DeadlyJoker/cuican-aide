@@ -1,5 +1,7 @@
 # V2 素材协议与实际插件 UI 调用
 
+后续实现见 [V2 素材操作恢复](./project-asset-v2-recovery.md)。下文记录本增量当时的验证范围。
+
 2026-10-07，接续[共享采用服务](./project-asset-media-adoption-public-v2.md)。V2 现在提供原 11 个素材动作和生成图采用动作，使用实际 `PluginUiApplicationService` 的安装、选中版本、模块和调用生命周期。当前增量不更新已安装 App 或冻结插件包；正式 Control / Worker 组合、页面、Agent 与恢复日志仍需接线。
 
 ## 可变范围与兼容

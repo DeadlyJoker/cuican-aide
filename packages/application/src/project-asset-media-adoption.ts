@@ -1,3 +1,11 @@
+import {
+  parseProjectAssetUiIntentScope,
+  type ProjectAssetUiIntentScope,
+} from "@crewon/domain";
+import {
+  parseAssetV2RecoveryRef,
+  type ProjectAssetV2RecoveryRef,
+} from "./project-asset-v2-recovery-record.ts";
 import { types } from "node:util";
 import {
   parseProjectAsset,
@@ -49,6 +57,10 @@ export type ProjectAssetMediaAdoptionAuthority = Readonly<{
   version: "crewon.project-asset-media-adoption-commit.v1";
   request: ProjectAssetMediaAdoptionRequest;
   uiInstallation?: ProjectMediaResultUiInstallation;
+  v2Recovery?: Readonly<{
+    scope: ProjectAssetUiIntentScope;
+    ref: ProjectAssetV2RecoveryRef;
+  }>;
   assertCurrent(): Promise<void>;
   assertTransactionCurrent(): Promise<void>;
   assertActive(): void;
@@ -127,6 +139,7 @@ export function captureProjectAssetMediaAdoptionAuthority(
     "assertCurrent",
     "assertTransactionCurrent",
     "assertActive",
+    ...(Object.hasOwn(input, "v2Recovery") ? ["v2Recovery"] : []),
     ...(Object.hasOwn(input, "uiInstallation") ? ["uiInstallation"] : []),
   ]);
   if (
@@ -140,17 +153,30 @@ export function captureProjectAssetMediaAdoptionAuthority(
     typeof a.assertActive !== "function"
   )
     invalid("authority_invalid");
+  const uiInstallation =
+    a.uiInstallation === undefined
+      ? undefined
+      : captureProjectMediaResultUiInstallation(
+          a.uiInstallation,
+          request.actor,
+        );
+  let v2Recovery: ProjectAssetMediaAdoptionAuthority["v2Recovery"];
+  if (Object.hasOwn(a, "v2Recovery")) {
+    const v = fields(a.v2Recovery, ["scope", "ref"]),
+      scope = parseProjectAssetUiIntentScope(v.scope);
+    if (
+      !uiInstallation ||
+      !mediaInputSame(scope.actor, request.actor) ||
+      !mediaInputSame(scope.installation, uiInstallation.installation)
+    )
+      invalid("authority_invalid");
+    v2Recovery = Object.freeze({ scope, ref: parseAssetV2RecoveryRef(v.ref) });
+  }
   return Object.freeze({
     version: "crewon.project-asset-media-adoption-commit.v1",
+    ...(v2Recovery === undefined ? {} : { v2Recovery }),
     request,
-    ...(a.uiInstallation === undefined
-      ? {}
-      : {
-          uiInstallation: captureProjectMediaResultUiInstallation(
-            a.uiInstallation,
-            request.actor,
-          ),
-        }),
+    ...(uiInstallation === undefined ? {} : { uiInstallation }),
     assertCurrent: async () =>
       projectMediaResultAssertVoid(
         await Reflect.apply(a.assertCurrent as Function, input, []),

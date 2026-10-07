@@ -1,4 +1,8 @@
 import {
+  isProjectAssetRecoveryV2Action,
+  parseProjectAssetRecoveryV2Request,
+} from "@crewon/contracts/project-asset-recovery-v2";
+import {
   parseProjectAssetV2Request,
   isProjectAssetV2MutationAction,
 } from "@crewon/contracts/project-assets-v2";
@@ -10,7 +14,11 @@ import { ApplicationError } from "./application-error.ts";
 import type { PluginUiActionContext } from "./plugin-ui-ports.ts";
 
 export const projectAssetV2ActionContext = (context: PluginUiActionContext) =>
-  projectAssetActionContextUsing(context, parseProjectAssetV2Request);
+  projectAssetActionContextUsing(context, (request) =>
+    isProjectAssetRecoveryV2Action(context.action)
+      ? parseProjectAssetRecoveryV2Request(request)
+      : parseProjectAssetV2Request(request),
+  );
 type Registration = Readonly<{
   snapshot: ReturnType<typeof projectAssetV2ActionContext>;
   transaction(): Promise<void>;

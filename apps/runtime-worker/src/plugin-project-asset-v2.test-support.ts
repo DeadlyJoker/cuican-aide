@@ -1,7 +1,14 @@
+import {
+  PROJECT_ASSET_RECOVERY_V2_ACTIONS as recoveryActions,
+  parseProjectAssetRecoveryV2Request,
+  parseProjectAssetRecoveryV2Response,
+} from "@crewon/contracts/project-asset-recovery-v2";
 import { randomBytes } from "node:crypto";
 import type { TestContext } from "node:test";
 import {
   PluginUiApplicationService,
+  PluginProjectAssetV2RecoveryService,
+  type ProjectAssetV2RecoveryStore,
   PluginProjectAssetV2ActionOwner,
   PluginProjectAssetActionOwner,
   type PluginUiActionContext,
@@ -36,6 +43,8 @@ export async function assetV2UiFixture(
   };
   const state = {
     allowed: true,
+    recoveryAllowed: true,
+    recoveryProjects: [] as (string | null)[],
     dropReply: false,
     context: null as PluginUiActionContext | null,
     onContext: null as ((c: PluginUiActionContext) => void) | null,
@@ -46,10 +55,14 @@ export async function assetV2UiFixture(
       descriptorVersion?: string;
       publication?: "matching" | "foreign";
       ownerProtocol?: "v1" | "v2";
+      recovery?: boolean;
+      journal?: ProjectAssetV2RecoveryStore;
     } = {},
   ) => {
     const legacy = options.ownerProtocol === "v1";
     const apiVersion = options.descriptorVersion ?? (legacy ? "1" : "2");
+    const journal = options.journal ?? f.parent.projectAssetV2RecoveryStore();
+    if (options.recovery) await journal.migrate();
     const descriptor = parsePluginPackageDescriptor({
       ...uiTestDescriptor,
       pluginId: install.pluginId,
@@ -58,6 +71,15 @@ export async function assetV2UiFixture(
       entrypoints: { node: null, ui: uiTestDescriptor.entrypoints.ui },
       requires: [
         { service: "crewon.project-assets", apiVersion, optional: false },
+        ...(options.recovery
+          ? [
+              {
+                service: "crewon.project-asset-recovery",
+                apiVersion: "2",
+                optional: false,
+              },
+            ]
+          : []),
       ],
     });
     const dependencies = {
@@ -82,6 +104,27 @@ export async function assetV2UiFixture(
       : new PluginProjectAssetV2ActionOwner({
           ...dependencies,
           assets: f.publicService,
+          ...(options.recovery
+            ? {
+                recovery: new PluginProjectAssetV2RecoveryService({
+                  journal,
+                  projects: f.parent.creativeProjectStore(),
+                  publications: dependencies.publications,
+                  clock: { now: () => f.at },
+                  authorization: {
+                    authorize: async (p) => {
+                      state.recoveryProjects.push(p.resource.projectId);
+                      return state.recoveryAllowed
+                        ? { outcome: "allow" }
+                        : {
+                            outcome: "deny",
+                            reasonCode: "named_recovery_denied",
+                          };
+                    },
+                  },
+                }),
+              }
+            : {}),
         });
     const service = new PluginUiApplicationService({
       store: f.parent.pluginInstallationStore(),
@@ -150,8 +193,25 @@ export async function assetV2UiFixture(
         }),
       );
     };
+    const recover = async (
+      method: keyof typeof recoveryActions,
+      input: unknown = {},
+    ) => {
+      const q = parseProjectAssetRecoveryV2Request({
+        action: recoveryActions[method],
+        input,
+      });
+      return parseProjectAssetRecoveryV2Response(
+        q,
+        await service.invoke(f.actor, {
+          mountRef: lease.mountRef,
+          action: q.action,
+          input: q.input as never,
+        }),
+      );
+    };
     t.after(() => owner.close());
-    return { owner, service, lease, invoke, invokeLegacy };
+    return { owner, service, lease, invoke, invokeLegacy, recover, journal };
   };
   return { ...f, uiState: state, createUi, ...(await createUi()) };
 }

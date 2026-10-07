@@ -290,3 +290,8 @@ export {
   capturePluginProjectMediaResultInvocationAuthority,
   type PluginProjectMediaResultInvocationAuthority,
 } from "./plugin-project-media-result-invocation.ts";
+
+export * from "./project-asset-v2-recovery-record.ts";
+export * from "./project-asset-v2-recovery-port.ts";
+
+export { PluginProjectAssetV2RecoveryService } from "./plugin-project-asset-v2-recovery-service.ts";

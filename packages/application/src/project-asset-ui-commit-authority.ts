@@ -1,4 +1,8 @@
 import {
+  parseAssetV2RecoveryRef,
+  type ProjectAssetV2RecoveryRef,
+} from "./project-asset-v2-recovery-record.ts";
+import {
   creativeProjectOpaqueId,
   extensionCanonicalJson,
   type InstalledPluginPackage,
@@ -49,6 +53,7 @@ export type ProjectAssetUiCommitTransactionAuthority = Readonly<{
   contributionId: string;
   actionId: ProjectAssetVersionedUiMutationAction;
   input: unknown;
+  v2RecoveryRef?: ProjectAssetV2RecoveryRef;
   intentRef?: Readonly<{ intentId: string; requestDigest: string }>;
   selection: PluginSelection;
   package: InstalledPluginPackage;
@@ -62,7 +67,12 @@ export function captureProjectAssetUiCommitTransaction(
     input !== null &&
     typeof input === "object" &&
     Object.hasOwn(input, "intentRef");
+  const vtwo =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "v2RecoveryRef");
   const v = projectAssetAuthorityFields(input, [
+    ...(vtwo ? ["v2RecoveryRef"] : []),
     ...(optional ? ["intentRef"] : []),
     "version",
     "actor",
@@ -87,7 +97,8 @@ export function captureProjectAssetUiCommitTransaction(
       (v.actionId.startsWith("crewon.project-assets.v2.")
         ? "crewon.project-asset-plugin-commit.v2"
         : "crewon.project-asset-plugin-commit.v1") ||
-    (v.version === "crewon.project-asset-plugin-commit.v2" && optional)
+    (v.version === "crewon.project-asset-plugin-commit.v2" && optional) ||
+    (v.version !== "crewon.project-asset-plugin-commit.v2" && vtwo)
   )
     projectAssetAuthorityDenied();
   const evidence = projectAssetInstallationEvidence(v),
@@ -97,6 +108,9 @@ export function captureProjectAssetUiCommitTransaction(
     ...evidence,
     contributionId: creativeProjectOpaqueId(v.contributionId),
     actionId: v.actionId as ProjectAssetVersionedUiMutationAction,
+    ...(vtwo
+      ? { v2RecoveryRef: parseAssetV2RecoveryRef(v.v2RecoveryRef) }
+      : {}),
     ...(optional ? { intentRef: captureIntentRef(v.intentRef) } : {}),
     input: projectAssetAuthorityCopy(v.input),
     assertCurrent: async () => {
@@ -107,7 +121,10 @@ export function captureProjectAssetUiCommitTransaction(
   return transaction;
 }
 export function projectAssetUiMutationCommand(
-  transaction: ProjectAssetUiCommitTransactionAuthority,
+  transaction: Pick<
+    ProjectAssetUiCommitTransactionAuthority,
+    "actionId" | "input"
+  >,
 ): Readonly<{
   kind: ProjectAssetMutationKind;
   command: ProjectAssetMutationCommand;

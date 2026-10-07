@@ -1,4 +1,9 @@
 import {
+  beginAssetVtwoMutation,
+  type AssetCommitPlan,
+} from "./project-asset-vtwo-recovery-commit.ts";
+import { acceptAssetVtwoRecovery } from "./project-asset-vtwo-recovery-plan.ts";
+import {
   prepareAssetMutation,
   persistAssetMutation,
 } from "./project-asset-mutation-records.ts";
@@ -27,10 +32,7 @@ import {
   type AssetInput,
 } from "./project-asset-store-support.ts";
 import { loadProjectAssetCurrentImageSource } from "./project-asset-image-source.ts";
-import {
-  verifyProjectAssetMutationReference,
-  type AssetReferenceProofPlan,
-} from "./project-asset-reference-proof-plan.ts";
+import { verifyProjectAssetMutationReference } from "./project-asset-reference-proof-plan.ts";
 
 export function assertAssetReceiptQualification(
   authority: ProjectAssetCommitAuthority | undefined,
@@ -66,7 +68,7 @@ export function* commitAssetPlan(
   authority: ProjectAssetCommitAuthority | undefined,
   verifier: ProjectGenerationImageResultVerifier | undefined,
   journalAvailable = false,
-): AssetReferenceProofPlan<
+): AssetCommitPlan<
   Awaited<
     ReturnType<
       import("@crewon/application").ProjectAssetStore["commitMutation"]
@@ -90,6 +92,7 @@ export function* commitAssetPlan(
     authority?.uiTransaction,
     input,
   );
+  const v2Intent = yield* beginAssetVtwoMutation(d, input, authority);
   yield* assetLock(d, [
     "creative-project-project",
     d.schema,
@@ -108,6 +111,7 @@ export function* commitAssetPlan(
         authority,
       );
     if (intent) yield* acceptAssetIntent(d, intent, previous);
+    yield* acceptAssetVtwoRecovery(d, v2Intent, previous.asset.updatedAt);
     return previous;
   }
   const source =
@@ -134,5 +138,6 @@ export function* commitAssetPlan(
     );
   yield* persistAssetMutation(d, input, result, intent);
   if (intent) yield* acceptAssetIntent(d, intent, result);
+  yield* acceptAssetVtwoRecovery(d, v2Intent, result.asset.updatedAt);
   return result;
 }

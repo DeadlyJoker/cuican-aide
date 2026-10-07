@@ -1,3 +1,4 @@
+import { isProjectAssetRecoveryV2Action } from "@crewon/contracts/project-asset-recovery-v2";
 import { PROJECT_MEDIA_RESULT_WRITE_ACTIONS } from "@crewon/contracts/project-media-results-ui";
 import { registerPluginProjectMediaResultInvocation } from "./plugin-project-media-result-invocation.ts";
 import { PROJECT_MEDIA_INPUT_UI_ACTIONS } from "@crewon/contracts/project-media-inputs-ui";
@@ -420,11 +421,13 @@ export class PluginUiApplicationService {
       let unregisterMediaResults: (() => void) | undefined;
       let unregisterMediaInputs: (() => void) | undefined;
       try {
-        unregisterAssetV2 = isProjectAssetV2Action(command.action)
-          ? registerPluginProjectAssetV2Invocation(context, () =>
-              this.#transactionFence(actor, binding),
-            )
-          : undefined;
+        unregisterAssetV2 =
+          isProjectAssetV2Action(command.action) ||
+          isProjectAssetRecoveryV2Action(command.action)
+            ? registerPluginProjectAssetV2Invocation(context, () =>
+                this.#transactionFence(actor, binding),
+              )
+            : undefined;
         unregisterMediaResults =
           command.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.saveCandidate
             ? registerPluginProjectMediaResultInvocation(context, () =>

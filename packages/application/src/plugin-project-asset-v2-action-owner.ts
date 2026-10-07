@@ -1,3 +1,10 @@
+import {
+  isProjectAssetRecoveryV2Action,
+  PROJECT_ASSET_RECOVERY_V2_ACTIONS,
+  type ProjectAssetRecoveryV2Request,
+} from "@crewon/contracts/project-asset-recovery-v2";
+import { PluginProjectAssetV2RecoveryService } from "./plugin-project-asset-v2-recovery-service.ts";
+import { assetV2RecoveryRef } from "./project-asset-v2-recovery-record.ts";
 import { types } from "node:util";
 import {
   PROJECT_ASSET_V2_ACTIONS as actions,
@@ -43,13 +50,14 @@ const outcomePrototype = Object.freeze(Object.create(null) as object);
 export class PluginProjectAssetV2ActionOwner {
   readonly actions: PluginUiActionPort;
   readonly committedMetadata: PluginUiCommittedMetadataPort;
+  readonly #recovery: PluginProjectAssetV2RecoveryService | undefined;
   readonly #query: ProjectAssetV2ApplicationService["query"];
   readonly #mutate: ProjectAssetV2ApplicationService["mutate"];
   readonly #adopt: ProjectAssetV2ApplicationService["adoptReference"];
   readonly #publications: readonly PluginProjectTextActionPublication[];
   readonly #authorize: (
     context: PluginUiActionContext,
-    request: ProjectAssetV2Request,
+    request: ProjectAssetV2Request | ProjectAssetRecoveryV2Request,
   ) => Promise<void>;
   readonly #outcomes = new WeakMap<object, Outcome>();
   readonly #lifetime = new AbortController();
@@ -58,16 +66,18 @@ export class PluginProjectAssetV2ActionOwner {
   constructor(
     input: Readonly<{
       assets: ProjectAssetV2ApplicationService;
+      recovery?: PluginProjectAssetV2RecoveryService;
       publications: readonly PluginProjectTextActionPublication[];
       authorization: Readonly<{
         authorize(
           context: PluginUiActionContext,
-          request: ProjectAssetV2Request,
+          request: ProjectAssetV2Request | ProjectAssetRecoveryV2Request,
         ): Promise<void>;
       }>;
     }>,
   ) {
     const d = projectAssetOwnFields(input, [
+      ...(Object.hasOwn(input, "recovery") ? ["recovery"] : []),
       "assets",
       "publications",
       "authorization",
@@ -80,6 +90,18 @@ export class PluginProjectAssetV2ActionOwner {
         "validation",
         "plugin_project_asset_v2_service_invalid",
       );
+    if (
+      d.recovery !== undefined &&
+      (types.isProxy(d.recovery) ||
+        !(d.recovery instanceof PluginProjectAssetV2RecoveryService))
+    )
+      throw new ApplicationError(
+        "validation",
+        "plugin_project_asset_v2_recovery_invalid",
+      );
+    this.#recovery = d.recovery as
+      | PluginProjectAssetV2RecoveryService
+      | undefined;
     const p = ProjectAssetV2ApplicationService.prototype;
     this.#query = p.query.bind(d.assets);
     this.#mutate = p.mutate.bind(d.assets);
@@ -116,7 +138,10 @@ export class PluginProjectAssetV2ActionOwner {
     Object.freeze(this);
   }
   supportsAction(action: string): boolean {
-    return isProjectAssetV2Action(action);
+    return (
+      isProjectAssetV2Action(action) ||
+      (this.#recovery !== undefined && isProjectAssetRecoveryV2Action(action))
+    );
   }
   assertAvailable(): void {
     this.#lifetime.signal.throwIfAborted();
@@ -148,7 +173,7 @@ export class PluginProjectAssetV2ActionOwner {
       await current();
       assertActive();
     };
-    const authority: ProjectAssetCommitAuthority = Object.freeze({
+    let authority: ProjectAssetCommitAuthority = Object.freeze({
       assertActive,
       assertCurrent: () => check(original.assertCurrent),
       assertTransactionCurrent: () => check(original.assertTransactionCurrent),
@@ -163,11 +188,37 @@ export class PluginProjectAssetV2ActionOwner {
     });
     const write =
       isProjectAssetV2MutationAction(request.action) ||
-      request.action === actions.adoptMediaReference;
+      request.action === actions.adoptMediaReference ||
+      (isProjectAssetRecoveryV2Action(request.action) &&
+        request.action !== PROJECT_ASSET_RECOVERY_V2_ACTIONS.getPending);
     const pending = (async () => {
       await authority.assertCurrent();
+      const recoveryAction = isProjectAssetRecoveryV2Action(request.action);
+      const declared = snapshot.context.lease.descriptor.requires.some(
+        (r) =>
+          r.service === "crewon.project-asset-recovery" && r.apiVersion === "2",
+      );
+      if ((recoveryAction || declared) && !this.#recovery)
+        throw new ApplicationError(
+          "authorization",
+          "plugin_project_asset_v2_recovery_unavailable",
+        );
+      const staged =
+        write && !recoveryAction && declared
+          ? await this.#recovery!.stage(context, authority)
+          : undefined;
+      if (staged && authority.uiTransaction)
+        authority = Object.freeze({
+          ...authority,
+          uiTransaction: Object.freeze({
+            ...authority.uiTransaction,
+            v2RecoveryRef: assetV2RecoveryRef(staged),
+          }),
+        });
       let raw;
-      if (request.action === actions.adoptMediaReference) {
+      if (recoveryAction)
+        raw = await this.#recovery!.invoke(context, authority);
+      else if (request.action === actions.adoptMediaReference) {
         raw = await this.#adopt(snapshot.context.actor, request.input, {
           signal: this.#lifetime.signal,
           authority: {
@@ -176,6 +227,14 @@ export class PluginProjectAssetV2ActionOwner {
               actor: snapshot.context.actor,
               query: request.input,
             }),
+            ...(staged
+              ? {
+                  v2Recovery: {
+                    scope: staged.scope,
+                    ref: assetV2RecoveryRef(staged),
+                  },
+                }
+              : {}),
             uiInstallation: {
               installation: snapshot.installation,
               selection: snapshot.context.selection,
@@ -211,7 +270,9 @@ export class PluginProjectAssetV2ActionOwner {
         );
       }
       const output = parsePluginUiJsonValue(
-        parseProjectAssetV2Response(request, raw),
+        recoveryAction
+          ? raw
+          : parseProjectAssetV2Response(request as ProjectAssetV2Request, raw),
         { maxBytes: MAX_PROJECT_ASSET_UI_RESPONSE_BYTES },
       );
       if (!write) {

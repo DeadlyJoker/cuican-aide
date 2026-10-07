@@ -35,6 +35,14 @@ export type MediaResultPlan<T> = Generator<
   T,
   AssetRows
 >;
+export type MediaResultCommitPlan<T> = Generator<
+  | Yield
+  | Readonly<{ mediaOperationSchema: true }>
+  | Readonly<{ assetSchema: true }>
+  | Readonly<{ assetVtwoRecoverySchema: "optional" }>,
+  T,
+  AssetRows
+>;
 const raw = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v);
 export function* mediaResultSourcePlan(
   d: AssetDialect,

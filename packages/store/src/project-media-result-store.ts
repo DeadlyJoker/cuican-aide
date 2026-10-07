@@ -1,3 +1,7 @@
+import {
+  assertSqliteAssetVtwoRecoverySchema,
+  assertPostgresAssetVtwoRecoverySchema,
+} from "./project-asset-vtwo-recovery-schema.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -52,7 +56,7 @@ import {
   mediaResultLoadPlan,
   mediaResultSavePlan,
   mediaResultPublicationPlan,
-  type MediaResultPlan,
+  type MediaResultCommitPlan,
 } from "./project-media-result-plan.ts";
 import {
   assertSqliteProjectMediaResultSchema,
@@ -158,7 +162,7 @@ export class SqliteProjectMediaResultStore
         write.request,
       );
     return this.#transaction(
-      adoptAssetMediaReferencePlan(this.#d, write),
+      adoptAssetMediaReferencePlan(this.#d, write, captured),
       captured,
       "adoption",
     );
@@ -183,7 +187,7 @@ export class SqliteProjectMediaResultStore
     }
   }
   async #transaction<T>(
-    plan: MediaResultPlan<T>,
+    plan: MediaResultCommitPlan<T>,
     a: Pick<
       ProjectMediaResultAuthority,
       "assertCurrent" | "assertActive" | "uiInstallation"
@@ -214,7 +218,11 @@ export class SqliteProjectMediaResultStore
         this.#active();
         a.assertActive();
         let rows: readonly Record<string, unknown>[];
-        if ("mediaResultSchema" in next.value) {
+        if ("assetVtwoRecoverySchema" in next.value) {
+          rows = [
+            { available: assertSqliteAssetVtwoRecoverySchema(this.#db, true) },
+          ];
+        } else if ("mediaResultSchema" in next.value) {
           assertSqliteProjectMediaResultSchema(this.#db);
           rows = [];
         } else if ("mediaOperationSchema" in next.value) {
@@ -361,7 +369,7 @@ export class PostgresProjectMediaResultStore
         write.request,
       );
     return this.#transaction(
-      adoptAssetMediaReferencePlan(this.#d, write),
+      adoptAssetMediaReferencePlan(this.#d, write, captured),
       captured,
       "adoption",
     );
@@ -445,7 +453,7 @@ export class PostgresProjectMediaResultStore
     });
   }
   async #transaction<T>(
-    plan: MediaResultPlan<T>,
+    plan: MediaResultCommitPlan<T>,
     a: Pick<
       ProjectMediaResultAuthority,
       "assertCurrent" | "assertActive" | "uiInstallation"
@@ -490,7 +498,17 @@ export class PostgresProjectMediaResultStore
           this.#open();
           a.assertActive();
           let rows: readonly Record<string, unknown>[];
-          if ("mediaResultSchema" in next.value) {
+          if ("assetVtwoRecoverySchema" in next.value) {
+            rows = [
+              {
+                available: await assertPostgresAssetVtwoRecoverySchema(
+                  c,
+                  this.#d.schema,
+                  true,
+                ),
+              },
+            ];
+          } else if ("mediaResultSchema" in next.value) {
             await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
             rows = [];
           } else if ("mediaOperationSchema" in next.value) {

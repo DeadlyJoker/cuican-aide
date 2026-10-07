@@ -140,6 +140,9 @@ export class ProjectAssetMediaAdoptionApplicationService {
     const authority: ProjectAssetMediaAdoptionAuthority = Object.freeze({
       version: "crewon.project-asset-media-adoption-commit.v1",
       request,
+      ...(invocation.v2Recovery === undefined
+        ? {}
+        : { v2Recovery: invocation.v2Recovery }),
       ...(invocation.uiInstallation === undefined
         ? {}
         : { uiInstallation: invocation.uiInstallation }),

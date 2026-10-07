@@ -94,6 +94,7 @@ export {
   appendProjectAssetUiServiceAvailability,
   appendProjectAssetV2UiServiceAvailability,
   appendProjectAssetRecoveryUiServiceAvailability,
+  appendProjectAssetRecoveryV2UiServiceAvailability,
   appendProjectAssetStageUiServiceAvailability,
 } from "./plugin-project-asset-host-service-availability.ts";
 export {

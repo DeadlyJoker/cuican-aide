@@ -1,6 +1,10 @@
+import { assertSqliteAssetVtwoRecoverySchema } from "./project-asset-vtwo-recovery-schema.ts";
+import {
+  loadAssetMutationReceiptPlan,
+  type AssetCommitPlan,
+} from "./project-asset-vtwo-recovery-commit.ts";
 import { assertSqliteProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import { assertSqliteProjectMediaResultSchema } from "./project-media-result-schema.ts";
-import { beginAssetIntentCommit } from "./project-asset-ui-intent-plan.ts";
 import { assertSqliteAssetIntentSchema } from "./project-asset-ui-intent-schema.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
@@ -19,7 +23,6 @@ import {
   assetHead,
   assetContent,
   assetReference,
-  assetReceipt,
   captureAssetIdentity,
   captureAssetCommit,
   type AssetInput,
@@ -35,10 +38,6 @@ import {
   assertAssetReceiptQualification,
   commitAssetPlan,
 } from "./project-asset-mutation-plan.ts";
-import {
-  verifyProjectAssetMutationReference,
-  type AssetReferenceProofPlan,
-} from "./project-asset-reference-proof-plan.ts";
 import {
   captureAssetReferenceImageRead,
   loadAssetReferenceImagePlan,
@@ -167,31 +166,22 @@ export class SqliteProjectAssetStore
     const identity = captureAssetIdentity(input),
       authority = captureProjectAssetCommitAuthority(options);
     assertAssetReceiptQualification(authority, identity);
-    return this.#transaction(() => {
-      this.#execute(
-        beginAssetIntentCommit(
-          this.#d,
-          assertSqliteAssetIntentSchema(this.#db, true),
-          authority?.uiTransaction,
-          identity,
-        ),
-        authority,
-      );
-      const result = this.#execute(assetReceipt(this.#d, identity), authority);
-      if (result?.referenceRevision)
+    return this.#transaction(
+      () =>
         this.#execute(
-          verifyProjectAssetMutationReference(
+          loadAssetMutationReceiptPlan(
             this.#d,
-            identity.actor,
-            result.referenceRevision,
-            this.#verifier,
+            identity,
             authority,
+            this.#verifier,
+            assertSqliteAssetIntentSchema(this.#db, true),
           ),
           authority,
-        );
-      return result;
-    }, authority);
+        ),
+      authority,
+    );
   }
+
   async commitMutation(
     input: AssetInput<"commitMutation">,
     options?: ProjectAssetCommitOptions,
@@ -219,7 +209,7 @@ export class SqliteProjectAssetStore
     return this.#execute(plan);
   }
   #execute<T>(
-    plan: AssetReferenceProofPlan<T>,
+    plan: AssetCommitPlan<T>,
     authority?: ProjectAssetCommitAuthority,
   ): T {
     let next = plan.next();
@@ -228,7 +218,11 @@ export class SqliteProjectAssetStore
       assertProjectAssetCommitActive(authority);
       const step = next.value;
       let rows: readonly Record<string, unknown>[];
-      if ("mediaOperationSchema" in step) {
+      if ("assetVtwoRecoverySchema" in step) {
+        rows = [
+          { available: assertSqliteAssetVtwoRecoverySchema(this.#db, true) },
+        ];
+      } else if ("mediaOperationSchema" in step) {
         assertSqliteProjectMediaOperationSchema(this.#db);
         rows = [];
       } else if ("mediaResultSchema" in step) {
