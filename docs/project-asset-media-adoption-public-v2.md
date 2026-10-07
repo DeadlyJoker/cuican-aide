@@ -1,6 +1,6 @@
 # 生成图采用服务与 V2 素材读取协议
 
-2026-10-07，接续[已采用角色图接入生成输入](./adopted-media-generation-input.md)。共享采用服务和 V2 公开投影已实现。它们使用原资产、结果和事务存储，不新建插件包；尚未注册页面操作或 Agent 工具，也没有向旧宿主宣告 V2 可用。
+2026-10-07，接续[已采用角色图接入生成输入](./adopted-media-generation-input.md)。共享采用服务、V2 公开投影和实际插件 UI 调用 owner 已实现。它们使用原资产、结果和事务存储，不新建插件包；正式 Control / Worker、插件页面与 Agent 接线仍待完成。
 
 ## 共用采用命令
 
@@ -14,7 +14,7 @@ PostgreSQL 在提交前调用独立的事务权限检查；该检查不得重新
 
 ## V2 公开协议
 
-`@crewon/contracts/project-assets-v2` 定义以下明确版本的操作：
+`@crewon/contracts/project-assets-v2` 提供原 11 个素材动作的 V2 版本，另增加 `adoptMediaReference`。读取与采用包含：
 
 - `crewon.project-assets.v2.getAsset`
 - `crewon.project-assets.v2.getReferenceRevision`
@@ -23,9 +23,9 @@ PostgreSQL 在提交前调用独立的事务权限检查；该检查不得重新
 
 V2 参考的 `source.kind` 区分 `concept-selection` 与 `media-result`。媒体来源仅公开候选、原 Run / 输出、生成输入、工作流、原角色与参考版本及观察时间；不公开身份、租户、档案路径、供应商地址、配置参数或执行授权。列表按原参考版本分页，允许同时读取两种来源。
 
-旧 `crewon.project-assets.v1.*`、公开投影及解析行为不变。V1 概念图仍可读取；V1 对新媒体参考继续明确拒绝，不能把它转换成假概念图。新公开协议单独协商版本，不能通过更新 SDK 或覆盖旧包来强行启用。内容编辑、锁定和历史改选等原操作还须在页面接线时逐一复核，不能仅替换读接口后就开放采用按钮。
+旧 `crewon.project-assets.v1.*`、公开投影及解析行为不变。V1 概念图仍可读取；V1 对新媒体参考继续明确拒绝，不能把它转换成假概念图。新公开协议单独协商版本，不能通过更新 SDK 或覆盖旧包来强行启用。内容编辑、锁定和历史改选均已在实际 V2 UI 调用链路验证；正式页面切换还必须接好恢复日志、宿主组合和新版协议客户端。
 
-原插件描述符要求 `requires` 中的服务名唯一，不能同时声明 `crewon.project-assets` 的 1 和 2。因此本次四个动作是尚未发布的 V2 协议增量。正式切换前必须补齐原 11 个素材动作在 V2 中的完整映射、兼容响应与实际调用权限，再加上采用动作；不能让新插件只保留读取和采用而丢失编辑、锁定或历史改选。此约束来自原 `packages/contracts/src/plugin-package-contract.ts`，不修改 SDK 或原描述符规则。
+原插件描述符要求 `requires` 中的服务名唯一，不能同时声明 `crewon.project-assets` 的 1 和 2。因此 V2 已补齐原 11 个素材动作的完整映射、兼容响应与实际调用权限，再加上采用动作。插件仍只声明一个素材服务版本。此约束来自原 `packages/contracts/src/plugin-package-contract.ts`，不修改 SDK 或原描述符规则。
 
 `ProjectAssetV2ApplicationService` 使用原资产服务完成授权读取，并将采用操作交给共用采用服务。公开解析器继续检查项目/角色身份、选中指针、来源内容、请求版本、候选摘要和分页游标。公开读取响应有字节上限，列表只裁剪完整记录。Agent 适配层仍须沿用分块内容读取和有限摘要，不能直接把整个 UI 响应注入模型上下文。
 
@@ -35,4 +35,4 @@ V2 参考的 `source.kind` 区分 `concept-selection` 与 `media-result`。媒�
 
 新增与回归用例共 62 项通过，无失败、无跳过，其中新增服务用例 8 项、V2 合同用例 5 项。Contracts、Application、RuntimeWorker、ControlAPI 类型检查，以及仓库边界和格式检查通过。临时 PostgreSQL 已停止并清理。
 
-下一步把 V2 服务接到实际插件 UI 调用上下文与 Agent 的 Run 上下文，再接入插件内的“采用为角色参考”操作、兼容的素材读取与历史选择。随后完成桌面 Control / Worker 的媒体来源组合及真实混合 D18 执行。原主题、侧栏、账号设置、SDK、冻结插件包及用户安装 App 在本增量保持不变。
+后续增量已完成[实际插件 UI 调用与素材历史切换](./project-asset-v2-plugin-ui.md)。下一步补齐 V2 恢复日志、正式宿主组合与 Agent 的 Run 上下文，再接入插件内的“采用为角色参考”操作、兼容的素材读取与历史选择。随后完成桌面 Control / Worker 的媒体来源组合及真实混合 D18 执行。原主题、侧栏、账号设置、SDK、冻结插件包及用户安装 App 在本增量保持不变。

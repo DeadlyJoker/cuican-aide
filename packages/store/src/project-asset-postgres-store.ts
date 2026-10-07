@@ -1,3 +1,5 @@
+import { assertPostgresProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
+import { assertPostgresProjectMediaResultSchema } from "./project-media-result-schema.ts";
 import { beginAssetIntentCommit } from "./project-asset-ui-intent-plan.ts";
 import { assertPostgresAssetIntentSchema } from "./project-asset-ui-intent-schema.ts";
 import type { Pool, PoolClient } from "pg";
@@ -34,7 +36,10 @@ import {
   assertAssetReceiptQualification,
   commitAssetPlan,
 } from "./project-asset-mutation-plan.ts";
-import { verifyProjectAssetSavedImageSource } from "./project-asset-image-source.ts";
+import {
+  verifyProjectAssetMutationReference,
+  type AssetReferenceProofPlan,
+} from "./project-asset-reference-proof-plan.ts";
 import {
   captureAssetReferenceImageRead,
   loadAssetReferenceImagePlan,
@@ -194,11 +199,12 @@ export class PostgresProjectAssetStore
       if (result?.referenceRevision)
         await this.#execute(
           client,
-          verifyProjectAssetSavedImageSource(
+          verifyProjectAssetMutationReference(
             this.#d,
             identity.actor,
             result.referenceRevision,
             this.#verifier,
+            authority,
           ),
           authority,
         );
@@ -235,20 +241,30 @@ export class PostgresProjectAssetStore
   }
   async #execute<T>(
     client: PoolClient,
-    plan: AssetPlan<T>,
+    plan: AssetReferenceProofPlan<T>,
     authority?: ProjectAssetCommitAuthority,
   ): Promise<T> {
     let next = plan.next();
     while (!next.done) {
       this.#open();
       assertProjectAssetCommitActive(authority);
-      const result = await client.query<Record<string, unknown>>(
-        next.value.sql,
-        [...next.value.values],
-      );
+      const step = next.value;
+      let rows: readonly Record<string, unknown>[];
+      if ("mediaOperationSchema" in step) {
+        await assertPostgresProjectMediaOperationSchema(client, this.#d.schema);
+        rows = [];
+      } else if ("mediaResultSchema" in step) {
+        await assertPostgresProjectMediaResultSchema(client, this.#d.schema);
+        rows = [];
+      } else
+        rows = (
+          await client.query<Record<string, unknown>>(step.sql, [
+            ...step.values,
+          ])
+        ).rows;
       this.#open();
       assertProjectAssetCommitActive(authority);
-      next = plan.next(result.rows);
+      next = plan.next(rows);
     }
     return next.value;
   }

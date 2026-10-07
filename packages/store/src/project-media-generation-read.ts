@@ -15,6 +15,7 @@ import { projectAssetId } from "@crewon/domain";
 import {
   assetQuery,
   type AssetDialect,
+  type AssetPlan,
 } from "./project-asset-store-support.ts";
 import {
   loadProjectMediaInputPlan,
@@ -50,7 +51,7 @@ export function* loadProjectMediaGenerationLinkPlan(
 export function* loadProjectMediaGenerationContextPlan(
   d: AssetDialect,
   input: ExtensionRunLocator,
-): ProjectMediaInputPlan<ProjectMediaGenerationContext | null> {
+): AssetPlan<ProjectMediaGenerationContext | null> {
   const fields = materialPreparationFields(input, [
       "tenantId",
       "spaceId",

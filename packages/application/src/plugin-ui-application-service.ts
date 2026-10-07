@@ -8,6 +8,8 @@ import { registerPluginProjectAssetRecoveryInvocation } from "./plugin-project-a
 import { registerPluginHistoricalQueryInvocation } from "./plugin-project-historical-query-invocation.ts";
 import { registerPluginProjectAssetInvocation } from "./plugin-project-asset-invocation.ts";
 import { isProjectAssetUiAction } from "@crewon/contracts/project-assets";
+import { isProjectAssetV2Action } from "@crewon/contracts/project-assets-v2";
+import { registerPluginProjectAssetV2Invocation } from "./plugin-project-asset-v2-invocation.ts";
 import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
@@ -413,10 +415,16 @@ export class PluginUiApplicationService {
       );
       let unregisterHistorical: (() => void) | undefined;
       let unregisterAsset: (() => void) | undefined;
+      let unregisterAssetV2: (() => void) | undefined;
       let unregisterAssetRecovery: (() => void) | undefined;
       let unregisterMediaResults: (() => void) | undefined;
       let unregisterMediaInputs: (() => void) | undefined;
       try {
+        unregisterAssetV2 = isProjectAssetV2Action(command.action)
+          ? registerPluginProjectAssetV2Invocation(context, () =>
+              this.#transactionFence(actor, binding),
+            )
+          : undefined;
         unregisterMediaResults =
           command.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.saveCandidate
             ? registerPluginProjectMediaResultInvocation(context, () =>
@@ -494,6 +502,7 @@ export class PluginUiApplicationService {
       } finally {
         unregisterHistorical?.();
         unregisterAsset?.();
+        unregisterAssetV2?.();
         unregisterMediaInputs?.();
         unregisterMediaResults?.();
         unregisterAssetRecovery?.();

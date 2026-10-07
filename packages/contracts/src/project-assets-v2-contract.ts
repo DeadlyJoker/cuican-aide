@@ -10,15 +10,28 @@ import {
 } from "./project-asset-contract-support.ts";
 import {
   parseProjectAssetUiActionRequest,
+  parseProjectAssetUiActionResponse,
   parsePublicProjectAsset,
   parsePublicProjectAssetImageSource,
 } from "./project-assets-contract.ts";
-import { parsePublicProjectAssetViewWithReference } from "./project-asset-response-contract.ts";
+import {
+  parsePublicProjectAssetViewWithReference,
+  parseProjectAssetMutationWithReference,
+} from "./project-asset-response-contract.ts";
 import { parseCreativeProjectIdempotencyKey } from "./creative-project-control-contract.ts";
-import { MAX_PROJECT_ASSET_UI_RESPONSE_BYTES } from "./project-assets-service.ts";
+import {
+  MAX_PROJECT_ASSET_UI_INPUT_BYTES,
+  MAX_PROJECT_ASSET_UI_RESPONSE_BYTES,
+} from "./project-assets-service.ts";
 import {
   PROJECT_ASSET_V2_ACTIONS as actions,
+  isProjectAssetV2Action,
+  isProjectAssetV2MutationAction,
+  type ProjectAssetV2LegacyRequest,
   type ProjectAssetV2Request,
+  type ProjectAssetV2MutationRequest,
+  type ProjectAssetV2MutationResponse,
+  type ProjectAssetV2AdoptionResponse,
   type ProjectAssetV2Response,
   type PublicProjectAssetReferenceRevisionV2,
   type PublicProjectAssetViewV2,
@@ -140,7 +153,10 @@ export function parseProjectAssetV2Request(
   input: unknown,
 ): ProjectAssetV2Request {
   return checked(() => {
-    const r = record(copy(input, 8192), ["action", "input"]);
+    const r = record(copy(input, MAX_PROJECT_ASSET_UI_INPUT_BYTES), [
+      "action",
+      "input",
+    ]);
     switch (r.action) {
       case actions.getAsset: {
         const q = parseProjectAssetUiActionRequest({
@@ -198,7 +214,15 @@ export function parseProjectAssetV2Request(
         });
       }
       default:
-        return fail();
+        if (!isProjectAssetV2Action(r.action)) return fail();
+        const legacy = parseProjectAssetUiActionRequest({
+          action: r.action.replace(".v2.", ".v1."),
+          input: r.input,
+        });
+        return Object.freeze({
+          action: r.action,
+          input: legacy.input,
+        }) as ProjectAssetV2LegacyRequest;
     }
   });
 }
@@ -208,6 +232,21 @@ function scope(
 ) {
   if (q.projectId !== r.projectId || q.assetId !== r.assetId) fail();
 }
+export function parseProjectAssetV2Response(
+  request: Extract<
+    ProjectAssetV2Request,
+    { action: typeof actions.adoptMediaReference }
+  >,
+  input: unknown,
+): ProjectAssetV2AdoptionResponse;
+export function parseProjectAssetV2Response(
+  request: ProjectAssetV2MutationRequest,
+  input: unknown,
+): ProjectAssetV2MutationResponse;
+export function parseProjectAssetV2Response(
+  request: ProjectAssetV2Request,
+  input: unknown,
+): ProjectAssetV2Response;
 export function parseProjectAssetV2Response(
   request: ProjectAssetV2Request,
   input: unknown,
@@ -293,6 +332,41 @@ export function parseProjectAssetV2Response(
           asset,
           referenceRevision: Object.freeze({ ...reference, source }),
         });
+      }
+      default: {
+        const legacy = parseProjectAssetUiActionRequest({
+          action: q.action.replace(".v2.", ".v1."),
+          input: q.input,
+        });
+        if (isProjectAssetV2MutationAction(q.action)) {
+          if (!("request" in legacy.input)) return fail();
+          const result = parseProjectAssetMutationWithReference(
+            legacy as Extract<typeof legacy, { input: { request: unknown } }>,
+            value,
+            {
+              parseReference: parsePublicProjectAssetReferenceRevisionV2,
+              conceptSelection: (r) =>
+                r.source.kind === "concept-selection" ? r.source : null,
+            },
+          );
+          if (
+            result.referenceRevision?.source.kind === "media-result" &&
+            result.asset.kind !== "character"
+          )
+            return fail();
+          return result;
+        }
+        // These three public shapes contain no references and remain exactly compatible.
+        if (
+          legacy.action !== "crewon.project-assets.v1.getRevision" &&
+          legacy.action !== "crewon.project-assets.v1.listAssets" &&
+          legacy.action !== "crewon.project-assets.v1.listRevisions"
+        )
+          return fail();
+        return parseProjectAssetUiActionResponse(
+          legacy,
+          value,
+        ) as ProjectAssetV2Response;
       }
     }
   });

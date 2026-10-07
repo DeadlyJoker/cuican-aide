@@ -4,7 +4,10 @@ import {
   parsePublicProjectAssetViewV2,
   type PublicProjectAssetReferenceRevisionV2,
 } from "@crewon/contracts/project-assets-v2";
-import type { ProjectAssetView } from "./project-asset-store-port.ts";
+import type {
+  ProjectAssetView,
+  ProjectAssetMutationResult,
+} from "./project-asset-store-port.ts";
 import {
   projectAssetPublicHead,
   projectAssetPublicRevision,
@@ -57,4 +60,19 @@ export function projectAssetPublicViewV2(v: ProjectAssetView | null) {
         staleReasons: v.staleReasons,
         referenceState: v.referenceState,
       });
+}
+export function projectAssetPublicMutationV2(v: ProjectAssetMutationResult) {
+  return Object.freeze({
+    kind: v.kind,
+    disposition: v.disposition,
+    asset: projectAssetPublicHead(v.asset),
+    contentRevision:
+      v.contentRevision === null
+        ? null
+        : projectAssetPublicRevision(v.contentRevision),
+    referenceRevision:
+      v.referenceRevision === null
+        ? null
+        : projectAssetPublicReferenceV2(v.referenceRevision),
+  });
 }

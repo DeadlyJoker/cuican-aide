@@ -12,6 +12,15 @@ import {
 
 /** Actual mount identity and detached public request; this contains no Run or task grant. */
 export function projectAssetActionContext(input: PluginUiActionContext) {
+  return projectAssetActionContextUsing(
+    input,
+    parseProjectAssetUiActionRequest,
+  );
+}
+/** Preserve the actual wire action and full mount identity while selecting a protocol decoder. */
+export function projectAssetActionContextUsing<
+  R extends { action: string; input: unknown },
+>(input: PluginUiActionContext, parseRequest: (input: unknown) => R) {
   const v = uiRecord(input, [
     "actor",
     "scope",
@@ -27,7 +36,7 @@ export function projectAssetActionContext(input: PluginUiActionContext) {
     lease = uiPublicLease(v.lease);
   const selection = uiSelection(v.selection, scope, lease.descriptor.pluginId),
     pkg = uiPackage(v.package, scope, selection);
-  const request = parseProjectAssetUiActionRequest({
+  const request = parseRequest({
     action: v.action,
     input: v.input,
   });

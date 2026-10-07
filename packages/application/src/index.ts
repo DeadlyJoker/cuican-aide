@@ -231,6 +231,7 @@ export * from "./project-asset-media-adoption.ts";
 export * from "./project-asset-media-adoption-service.ts";
 export * from "./project-asset-public-v2.ts";
 export * from "./project-asset-v2-application-service.ts";
+export * from "./plugin-project-asset-v2-action-owner.ts";
 export * from "./project-asset-reference-image-application-service.ts";
 export * from "./project-reference-material-read-port.ts";
 export * from "./project-reference-material-freeze-port.ts";

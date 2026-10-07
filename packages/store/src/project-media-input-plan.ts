@@ -38,6 +38,7 @@ import {
   type AssetDialect,
   type AssetRows,
   type AssetSql,
+  type AssetPlan,
 } from "./project-asset-store-support.ts";
 export type ProjectMediaInputPlan<T> = Generator<
   | AssetSql
@@ -70,7 +71,7 @@ function* owner(d: AssetDialect, actor: ActorContext, projectId: string) {
 export function* loadProjectMediaInputPlan(
   d: AssetDialect,
   q: ProjectMediaInputQuery,
-): ProjectMediaInputPlan<Awaited<ReturnType<ProjectMediaInputStore["load"]>>> {
+): AssetPlan<Awaited<ReturnType<ProjectMediaInputStore["load"]>>> {
   yield* owner(d, q.actor, q.projectId);
   const heads = yield* assetQuery(
     d,

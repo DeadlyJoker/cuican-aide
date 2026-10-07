@@ -1,3 +1,5 @@
+import { assertSqliteProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
+import { assertSqliteProjectMediaResultSchema } from "./project-media-result-schema.ts";
 import { beginAssetIntentCommit } from "./project-asset-ui-intent-plan.ts";
 import { assertSqliteAssetIntentSchema } from "./project-asset-ui-intent-schema.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -33,7 +35,10 @@ import {
   assertAssetReceiptQualification,
   commitAssetPlan,
 } from "./project-asset-mutation-plan.ts";
-import { verifyProjectAssetSavedImageSource } from "./project-asset-image-source.ts";
+import {
+  verifyProjectAssetMutationReference,
+  type AssetReferenceProofPlan,
+} from "./project-asset-reference-proof-plan.ts";
 import {
   captureAssetReferenceImageRead,
   loadAssetReferenceImagePlan,
@@ -175,11 +180,12 @@ export class SqliteProjectAssetStore
       const result = this.#execute(assetReceipt(this.#d, identity), authority);
       if (result?.referenceRevision)
         this.#execute(
-          verifyProjectAssetSavedImageSource(
+          verifyProjectAssetMutationReference(
             this.#d,
             identity.actor,
             result.referenceRevision,
             this.#verifier,
+            authority,
           ),
           authority,
         );
@@ -212,12 +218,23 @@ export class SqliteProjectAssetStore
     assertSqliteProjectAssetSchema(this.#db);
     return this.#execute(plan);
   }
-  #execute<T>(plan: AssetPlan<T>, authority?: ProjectAssetCommitAuthority): T {
+  #execute<T>(
+    plan: AssetReferenceProofPlan<T>,
+    authority?: ProjectAssetCommitAuthority,
+  ): T {
     let next = plan.next();
     while (!next.done) {
       this.#open();
       assertProjectAssetCommitActive(authority);
-      const rows = this.#db.prepare(next.value.sql).all(...next.value.values);
+      const step = next.value;
+      let rows: readonly Record<string, unknown>[];
+      if ("mediaOperationSchema" in step) {
+        assertSqliteProjectMediaOperationSchema(this.#db);
+        rows = [];
+      } else if ("mediaResultSchema" in step) {
+        assertSqliteProjectMediaResultSchema(this.#db);
+        rows = [];
+      } else rows = this.#db.prepare(step.sql).all(...step.values);
       next = plan.next(rows);
     }
     return next.value;

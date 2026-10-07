@@ -238,3 +238,146 @@ test("V2 reference pagination rejects duplicate/out-of-order records and a curso
     }),
   );
 });
+
+test("V2 keeps the original content request budget and all original asset action grammars", () => {
+  const f = fixture(),
+    scope = { projectId: "project", assetId: "character" };
+  const cases = [
+    [actions.getAsset, scope],
+    [actions.getRevision, { ...scope, contentRevision: 1 }],
+    [actions.getReferenceRevision, { ...scope, referenceRevision: 1 }],
+    [
+      actions.listAssets,
+      { projectId: "project", afterAssetId: null, limit: 16 },
+    ],
+    [actions.listRevisions, { ...scope, afterContentRevision: 0, limit: 16 }],
+    [
+      actions.listReferences,
+      { ...scope, afterReferenceRevision: 0, limit: 16 },
+    ],
+    [
+      actions.saveCandidate,
+      {
+        ...f.legacy.request.input,
+        request: {
+          ...f.legacy.request.input.request,
+          content: {
+            ...f.legacy.content.content,
+            setting: "设".repeat(2048),
+            visualPrompt: "像".repeat(666),
+          },
+        },
+      },
+    ],
+    [
+      actions.selectRevision,
+      {
+        ...scope,
+        request: { expectedAssetRevision: 1, contentRevision: 1 },
+        idempotencyKey: "select",
+      },
+    ],
+    [
+      actions.setLocked,
+      {
+        ...scope,
+        request: { expectedAssetRevision: 1, locked: true },
+        idempotencyKey: "lock",
+      },
+    ],
+    [
+      actions.saveReferenceCandidate,
+      {
+        ...scope,
+        request: {
+          expectedAssetRevision: 2,
+          assetContentRevision: 1,
+          conceptAssetId: "concept",
+          selectionRevision: 1,
+        },
+        idempotencyKey: "reference",
+      },
+    ],
+    [
+      actions.selectReference,
+      {
+        ...scope,
+        request: { expectedAssetRevision: 4, referenceRevision: 2 },
+        idempotencyKey: "select-reference",
+      },
+    ],
+  ] as const;
+  assert.ok(new TextEncoder().encode(JSON.stringify(cases[6])).length > 8192);
+  for (const [action, input] of cases) {
+    assert.deepEqual(parseProjectAssetV2Request({ action, input }), {
+      action,
+      input,
+    });
+    assert.throws(() =>
+      parseProjectAssetV2Request({
+        action,
+        input: { ...input, actorId: "caller" },
+      }),
+    );
+    assert.throws(() =>
+      parseProjectAssetV2Request({
+        action: action.replace(".v2.", ".v3."),
+        input,
+      }),
+    );
+  }
+});
+
+test("V2 selection returns the real origin and never accepts a generated image as a concept candidate response", () => {
+  const f = fixture(),
+    input = {
+      projectId: "project",
+      assetId: "character",
+      request: { expectedAssetRevision: 4, referenceRevision: 2 },
+      idempotencyKey: "select-media",
+    };
+  const output = {
+    kind: "select-reference",
+    disposition: "committed",
+    asset: f.asset,
+    contentRevision: null,
+    referenceRevision: f.reference,
+  };
+  const request = { action: actions.selectReference, input };
+  assert.deepEqual(parseProjectAssetV2Response(request, output), output);
+  assert.throws(() =>
+    parseProjectAssetV2Response(request, {
+      ...output,
+      asset: { ...f.asset, kind: "scene" },
+    }),
+  );
+  assert.throws(() =>
+    parseProjectAssetV2Response(request, {
+      ...output,
+      referenceRevision: f.legacy.reference,
+    }),
+  );
+  assert.throws(() =>
+    parseProjectAssetV2Response(request, {
+      ...output,
+      asset: { ...f.asset, revision: 6 },
+    }),
+  );
+  assert.throws(() =>
+    parseProjectAssetV2Response(
+      {
+        action: actions.saveReferenceCandidate,
+        input: {
+          ...input,
+          request: {
+            expectedAssetRevision: 4,
+            assetContentRevision: 1,
+            conceptAssetId: "concept",
+            selectionRevision: 1,
+          },
+        },
+      },
+      { ...output, kind: "save-reference" },
+    ),
+  );
+});

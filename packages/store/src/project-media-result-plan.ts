@@ -19,7 +19,10 @@ import {
   type AssetRows,
 } from "./project-asset-store-support.ts";
 import { loadProjectMediaGenerationContextPlan } from "./project-media-generation-read.ts";
-import { loadProjectMediaOperationPlan } from "./project-media-operation-plan.ts";
+import {
+  loadProjectMediaOperationPlan,
+  type MediaOperationPlan,
+} from "./project-media-operation-plan.ts";
 import type { ProjectMediaInputPlan } from "./project-media-input-plan.ts";
 type Yield =
   ProjectMediaInputPlan<unknown> extends Generator<infer Y, unknown, unknown>
@@ -36,7 +39,7 @@ const raw = (v: unknown) => (typeof v === "string" ? JSON.parse(v) : v);
 export function* mediaResultSourcePlan(
   d: AssetDialect,
   request: ProjectMediaResultRequest,
-): MediaResultPlan<ProjectMediaResultSource> {
+): MediaOperationPlan<ProjectMediaResultSource> {
   const { actor, query: q } = request;
   yield* assetLock(d, [
     "creative-project-project",
@@ -179,7 +182,7 @@ function values(c: ProjectMediaResultCandidate) {
 export function* mediaResultLoadPlan(
   d: AssetDialect,
   request: ProjectMediaResultRequest,
-): MediaResultPlan<ProjectMediaResultCandidate | null> {
+): MediaOperationPlan<ProjectMediaResultCandidate | null> {
   const source = yield* mediaResultSourcePlan(d, request);
   const rows = yield* assetQuery(
     d,

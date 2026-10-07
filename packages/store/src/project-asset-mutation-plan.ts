@@ -24,13 +24,13 @@ import {
   assetReceipt,
   assertAssetCommand,
   type AssetDialect,
-  type AssetPlan,
   type AssetInput,
 } from "./project-asset-store-support.ts";
+import { loadProjectAssetCurrentImageSource } from "./project-asset-image-source.ts";
 import {
-  loadProjectAssetCurrentImageSource,
-  verifyProjectAssetSavedImageSource,
-} from "./project-asset-image-source.ts";
+  verifyProjectAssetMutationReference,
+  type AssetReferenceProofPlan,
+} from "./project-asset-reference-proof-plan.ts";
 
 export function assertAssetReceiptQualification(
   authority: ProjectAssetCommitAuthority | undefined,
@@ -66,7 +66,7 @@ export function* commitAssetPlan(
   authority: ProjectAssetCommitAuthority | undefined,
   verifier: ProjectGenerationImageResultVerifier | undefined,
   journalAvailable = false,
-): AssetPlan<
+): AssetReferenceProofPlan<
   Awaited<
     ReturnType<
       import("@crewon/application").ProjectAssetStore["commitMutation"]
@@ -100,11 +100,12 @@ export function* commitAssetPlan(
   const previous = yield* assetReceipt(d, input);
   if (previous !== null) {
     if (previous.referenceRevision !== null)
-      yield* verifyProjectAssetSavedImageSource(
+      yield* verifyProjectAssetMutationReference(
         d,
         input.actor,
         previous.referenceRevision,
         verifier,
+        authority,
       );
     if (intent) yield* acceptAssetIntent(d, intent, previous);
     return previous;
@@ -124,11 +125,12 @@ export function* commitAssetPlan(
       : undefined;
   const result = yield* prepareAssetMutation(d, input, source);
   if (input.kind === "select-reference" && result.referenceRevision !== null)
-    yield* verifyProjectAssetSavedImageSource(
+    yield* verifyProjectAssetMutationReference(
       d,
       input.actor,
       result.referenceRevision,
       verifier,
+      authority,
     );
   yield* persistAssetMutation(d, input, result, intent);
   if (intent) yield* acceptAssetIntent(d, intent, result);

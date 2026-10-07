@@ -128,9 +128,15 @@ export class PluginProjectAssetRecoveryApplicationService {
       denied();
     const authority = captureProjectAssetCommitAuthority({ authority: input }),
       tx = authority?.uiTransaction;
-    if (tx === undefined || !sameTransaction(tx, original.uiTransaction))
+    if (
+      tx === undefined ||
+      tx.version !== "crewon.project-asset-plugin-commit.v1" ||
+      !isProjectAssetUiMutationAction(tx.actionId) ||
+      !sameTransaction(tx, original.uiTransaction)
+    )
       denied();
-    const scope = scopeOf(snapshot.context, snapshot.installation),
+    const actionId = tx.actionId,
+      scope = scopeOf(snapshot.context, snapshot.installation),
       projectId = snapshot.request.input.projectId,
       { kind, command } = projectAssetUiMutationCommand(tx);
     const receipt = projectAssetMutationReceipt(
@@ -195,7 +201,7 @@ export class PluginProjectAssetRecoveryApplicationService {
         this.#d.journal.stage(
           {
             scope,
-            actionId: tx.actionId,
+            actionId,
             input: snapshot.request.input,
             intentId,
             at: this.#at(),

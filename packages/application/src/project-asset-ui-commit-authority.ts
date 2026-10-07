@@ -27,15 +27,27 @@ export const PROJECT_ASSET_UI_MUTATION_KINDS = Object.freeze({
   "crewon.project-assets.v1.setLocked": "set-lock",
   "crewon.project-assets.v1.saveReferenceCandidate": "save-reference",
   "crewon.project-assets.v1.selectReference": "select-reference",
+  "crewon.project-assets.v2.saveCandidate": "save-content",
+  "crewon.project-assets.v2.selectRevision": "select-content",
+  "crewon.project-assets.v2.setLocked": "set-lock",
+  "crewon.project-assets.v2.saveReferenceCandidate": "save-reference",
+  "crewon.project-assets.v2.selectReference": "select-reference",
 } as const);
-export type ProjectAssetUiMutationAction =
+/** The persisted V1 recovery journal intentionally retains its original action set. */
+export type ProjectAssetUiMutationAction = Extract<
+  keyof typeof PROJECT_ASSET_UI_MUTATION_KINDS,
+  `crewon.project-assets.v1.${string}`
+>;
+export type ProjectAssetVersionedUiMutationAction =
   keyof typeof PROJECT_ASSET_UI_MUTATION_KINDS;
 export type ProjectAssetUiCommitTransactionAuthority = Readonly<{
-  version: "crewon.project-asset-plugin-commit.v1";
+  version:
+    | "crewon.project-asset-plugin-commit.v1"
+    | "crewon.project-asset-plugin-commit.v2";
   actor: ActorContext;
   installation: ProjectToolInstallationPin;
   contributionId: string;
-  actionId: ProjectAssetUiMutationAction;
+  actionId: ProjectAssetVersionedUiMutationAction;
   input: unknown;
   intentRef?: Readonly<{ intentId: string; requestDigest: string }>;
   selection: PluginSelection;
@@ -63,19 +75,28 @@ export function captureProjectAssetUiCommitTransaction(
     "assertCurrent",
   ]);
   if (
-    v.version !== "crewon.project-asset-plugin-commit.v1" ||
+    (v.version !== "crewon.project-asset-plugin-commit.v1" &&
+      v.version !== "crewon.project-asset-plugin-commit.v2") ||
     typeof v.actionId !== "string" ||
     !Object.hasOwn(PROJECT_ASSET_UI_MUTATION_KINDS, v.actionId) ||
     typeof v.assertCurrent !== "function"
   )
     projectAssetAuthorityDenied();
+  if (
+    v.version !==
+      (v.actionId.startsWith("crewon.project-assets.v2.")
+        ? "crewon.project-asset-plugin-commit.v2"
+        : "crewon.project-asset-plugin-commit.v1") ||
+    (v.version === "crewon.project-asset-plugin-commit.v2" && optional)
+  )
+    projectAssetAuthorityDenied();
   const evidence = projectAssetInstallationEvidence(v),
     current = v.assertCurrent.bind(input);
   const transaction: ProjectAssetUiCommitTransactionAuthority = Object.freeze({
-    version: "crewon.project-asset-plugin-commit.v1",
+    version: v.version,
     ...evidence,
     contributionId: creativeProjectOpaqueId(v.contributionId),
-    actionId: v.actionId as ProjectAssetUiMutationAction,
+    actionId: v.actionId as ProjectAssetVersionedUiMutationAction,
     ...(optional ? { intentRef: captureIntentRef(v.intentRef) } : {}),
     input: projectAssetAuthorityCopy(v.input),
     assertCurrent: async () => {

@@ -17,6 +17,11 @@ export function appendProjectAssetUiServiceAvailability(
 ): PluginUiHostServiceAvailabilityPort {
   return append("crewon.project-assets", input);
 }
+export function appendProjectAssetV2UiServiceAvailability(
+  input: Input,
+): PluginUiHostServiceAvailabilityPort {
+  return append("crewon.project-assets", input, "2");
+}
 export function appendProjectAssetRecoveryUiServiceAvailability(
   input: Input,
 ): PluginUiHostServiceAvailabilityPort {
@@ -34,13 +39,18 @@ function append(
     | "crewon.project-asset-recovery"
     | "crewon.project-asset-stages",
   input: Input,
+  apiVersion: "1" | "2" = "1",
 ) {
   const assets = capturePluginUiHostServiceAvailability(input.assets)!,
     fallback = capturePluginUiHostServiceAvailability(input.fallback);
   let result: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) =>
       request.requirement.service === service
-        ? request.requirement.apiVersion === "1" && assets.isAvailable(request)
+        ? request.requirement.apiVersion === apiVersion
+          ? assets.isAvailable(request)
+          : service === "crewon.project-assets" &&
+            ["1", "2"].includes(request.requirement.apiVersion) &&
+            fallback?.isAvailable(request) === true
         : fallback?.isAvailable(request) === true,
   });
   if (fallback !== undefined) {

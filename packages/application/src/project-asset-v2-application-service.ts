@@ -4,6 +4,7 @@ import {
   parseProjectAssetV2Request,
   parseProjectAssetV2Response,
   type ProjectAssetV2ReadRequest,
+  type ProjectAssetV2MutationRequest,
   type AdoptProjectAssetMediaReferenceRequest,
 } from "@crewon/contracts/project-assets-v2";
 import {
@@ -14,18 +15,35 @@ import { ProjectAssetMediaAdoptionApplicationService } from "./project-asset-med
 import {
   projectAssetPublicReferenceV2,
   projectAssetPublicViewV2,
+  projectAssetPublicMutationV2,
 } from "./project-asset-public-v2.ts";
 import {
   projectAssetPublicHead,
   projectAssetPublicPage,
+  projectAssetPublicRevision,
 } from "./plugin-project-asset-action-projection.ts";
 import { projectAssetOwnFields } from "./project-asset-application-support.ts";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
+import {
+  captureProjectAssetCommitAuthority,
+  type ProjectAssetCommitAuthority,
+} from "./project-asset-commit-authority.ts";
 
 /** Shared public model for UI/Agent adapters. No route, tool or installation is registered implicitly. */
 export class ProjectAssetV2ApplicationService {
   readonly #asset: ProjectAssetApplicationService["getAsset"];
+  readonly #revision: ProjectAssetApplicationService["getRevision"];
+  readonly #list: ProjectAssetApplicationService["listAssets"];
+  readonly #revisions: ProjectAssetApplicationService["listRevisions"];
+  readonly #mutations: Pick<
+    ProjectAssetApplicationService,
+    | "saveCandidate"
+    | "selectRevision"
+    | "setLocked"
+    | "saveReferenceCandidate"
+    | "selectReference"
+  >;
   readonly #reference: ProjectAssetApplicationService["getReferenceRevision"];
   readonly #references: ProjectAssetApplicationService["listReferences"];
   readonly #adopt: ProjectAssetMediaAdoptionApplicationService["adoptReference"];
@@ -48,6 +66,17 @@ export class ProjectAssetV2ApplicationService {
     this.#asset = ProjectAssetApplicationService.prototype.getAsset.bind(
       d.assets,
     );
+    const p = ProjectAssetApplicationService.prototype;
+    this.#revision = p.getRevision.bind(d.assets);
+    this.#list = p.listAssets.bind(d.assets);
+    this.#revisions = p.listRevisions.bind(d.assets);
+    this.#mutations = Object.freeze({
+      saveCandidate: p.saveCandidate.bind(d.assets),
+      selectRevision: p.selectRevision.bind(d.assets),
+      setLocked: p.setLocked.bind(d.assets),
+      saveReferenceCandidate: p.saveReferenceCandidate.bind(d.assets),
+      selectReference: p.selectReference.bind(d.assets),
+    });
     this.#reference =
       ProjectAssetApplicationService.prototype.getReferenceRevision.bind(
         d.assets,
@@ -69,6 +98,35 @@ export class ProjectAssetV2ApplicationService {
             await this.#asset(actor, request.input),
           ),
         });
+      case actions.getRevision:
+        return parseProjectAssetV2Response(request, {
+          contentRevision: projectAssetPublicRevision(
+            await this.#revision(actor, request.input),
+          ),
+        });
+      case actions.listAssets: {
+        const page = await this.#list(actor, { ...request.input, kind: null });
+        const output = projectAssetPublicPage({
+          items: page.assets.map(projectAssetPublicHead),
+          continuation: page.nextAssetId,
+          cursorOf: (a) => a.assetId,
+          response: (assets, nextAssetId) => ({ assets, nextAssetId }),
+        });
+        return parseProjectAssetV2Response(request, output);
+      }
+      case actions.listRevisions: {
+        const page = await this.#revisions(actor, request.input);
+        const output = projectAssetPublicPage({
+          items: page.revisions.map(projectAssetPublicRevision),
+          continuation: page.nextContentRevision,
+          cursorOf: (r) => r.contentRevision,
+          response: (revisions, nextContentRevision) => ({
+            revisions,
+            nextContentRevision,
+          }),
+        });
+        return parseProjectAssetV2Response(request, output);
+      }
       case actions.getReferenceRevision:
         return parseProjectAssetV2Response(request, {
           referenceRevision: projectAssetPublicReferenceV2(
@@ -91,6 +149,103 @@ export class ProjectAssetV2ApplicationService {
       default:
         throw new ApplicationError("validation", "project_asset_v2_read_only");
     }
+  }
+  async mutate(
+    actor: ActorContext,
+    input: ProjectAssetV2MutationRequest,
+    options: Readonly<{ authority: ProjectAssetCommitAuthority }>,
+  ) {
+    projectAssetOwnFields(options, ["authority"]);
+    const authority = captureProjectAssetCommitAuthority(options);
+    if (!authority)
+      throw new ApplicationError(
+        "authorization",
+        "project_asset_v2_authority_required",
+      );
+    const request = parseProjectAssetV2Request(input),
+      commit = Object.freeze({ authority });
+    if (
+      authority.uiTransaction &&
+      (authority.uiTransaction.version !==
+        "crewon.project-asset-plugin-commit.v2" ||
+        authority.uiTransaction.actionId !== request.action)
+    )
+      throw new ApplicationError(
+        "authorization",
+        "project_asset_v2_transaction_mismatch",
+      );
+    let result;
+    switch (request.action) {
+      case actions.saveCandidate:
+        result = await this.#mutations.saveCandidate(
+          actor,
+          {
+            ...request.input.request,
+            projectId: request.input.projectId,
+            assetId: request.input.assetId,
+            idempotencyKey: request.input.idempotencyKey,
+          },
+          commit,
+        );
+        break;
+      case actions.selectRevision:
+        result = await this.#mutations.selectRevision(
+          actor,
+          {
+            ...request.input.request,
+            projectId: request.input.projectId,
+            assetId: request.input.assetId,
+            idempotencyKey: request.input.idempotencyKey,
+          },
+          commit,
+        );
+        break;
+      case actions.setLocked:
+        result = await this.#mutations.setLocked(
+          actor,
+          {
+            ...request.input.request,
+            projectId: request.input.projectId,
+            assetId: request.input.assetId,
+            idempotencyKey: request.input.idempotencyKey,
+          },
+          commit,
+        );
+        break;
+      case actions.saveReferenceCandidate:
+        result = await this.#mutations.saveReferenceCandidate(
+          actor,
+          {
+            ...request.input.request,
+            projectId: request.input.projectId,
+            assetId: request.input.assetId,
+            idempotencyKey: request.input.idempotencyKey,
+          },
+          commit,
+        );
+        break;
+      case actions.selectReference:
+        result = await this.#mutations.selectReference(
+          actor,
+          {
+            ...request.input.request,
+            projectId: request.input.projectId,
+            assetId: request.input.assetId,
+            idempotencyKey: request.input.idempotencyKey,
+          },
+          commit,
+        );
+        break;
+      default:
+        throw new ApplicationError(
+          "validation",
+          "project_asset_v2_mutation_required",
+        );
+    }
+    return parseProjectAssetV2Response(
+      request,
+      projectAssetPublicMutationV2(result),
+    );
   }
   async adoptReference(
     actor: ActorContext,

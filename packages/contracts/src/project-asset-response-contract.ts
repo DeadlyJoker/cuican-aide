@@ -453,6 +453,31 @@ function mutation(
   >,
   input: unknown,
 ): ProjectAssetMutationResponse {
+  return parseProjectAssetMutationWithReference(request, input, {
+    parseReference: parsePublicProjectAssetReferenceRevision,
+    conceptSelection: (r) => r.source,
+  });
+}
+/** Version-specific source decoding shares the original CAS and mutation result invariants. */
+export function parseProjectAssetMutationWithReference<
+  R extends Omit<PublicProjectAssetReferenceRevision, "source">,
+>(
+  request: Extract<
+    ProjectAssetUiActionRequest,
+    { input: { request: unknown } }
+  >,
+  input: unknown,
+  codec: Readonly<{
+    parseReference(input: unknown): R;
+    conceptSelection(
+      reference: R,
+    ): Readonly<{ conceptAssetId: string; selectionRevision: number }> | null;
+  }>,
+): Readonly<
+  Omit<ProjectAssetMutationResponse, "referenceRevision"> & {
+    referenceRevision: R | null;
+  }
+> {
   const value = record(input, [
       "kind",
       "disposition",
@@ -468,7 +493,7 @@ function mutation(
     reference =
       value.referenceRevision === null
         ? null
-        : parsePublicProjectAssetReferenceRevision(value.referenceRevision);
+        : codec.parseReference(value.referenceRevision);
   scope(request.input, asset);
   if (
     asset.revision !== request.input.request.expectedAssetRevision + 1 ||
@@ -523,7 +548,9 @@ function mutation(
       )
         fail();
       break;
-    case "crewon.project-assets.v1.saveReferenceCandidate":
+    case "crewon.project-assets.v1.saveReferenceCandidate": {
+      const source =
+        reference === null ? null : codec.conceptSelection(reference);
       if (
         value.kind !== "save-reference" ||
         reference === null ||
@@ -531,13 +558,12 @@ function mutation(
         reference.referenceRevision !== asset.latestReferenceRevision ||
         reference.assetContentRevision !==
           request.input.request.assetContentRevision ||
-        reference.source.conceptAssetId !==
-          request.input.request.conceptAssetId ||
-        reference.source.selectionRevision !==
-          request.input.request.selectionRevision
+        source?.conceptAssetId !== request.input.request.conceptAssetId ||
+        source?.selectionRevision !== request.input.request.selectionRevision
       )
         fail();
       break;
+    }
     case "crewon.project-assets.v1.selectReference":
       if (
         value.kind !== "select-reference" ||
