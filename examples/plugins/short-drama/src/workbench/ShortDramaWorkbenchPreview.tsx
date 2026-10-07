@@ -183,7 +183,7 @@ export function ShortDramaWorkbenchPreview({
   return (
     <section className="drama-workbench" aria-label="AI 短剧工作台">
       <div className="drama-main" inert={dialog !== null}>
-        <header className="drama-topbar">
+        <header className="drama-topbar" data-plugin-header-insets="inline">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
             <button onClick={() => setPage("projects")}>AI 短剧</button>
             <ChevronRight size={13} />

@@ -7,7 +7,7 @@
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
-  /* Keep plugin content clear of the floating shell and window controls. */
+  /* Older modules reserve a separate row for floating shell controls. */
   padding-top: 44px;
 }
 .content {
@@ -15,4 +15,19 @@
   min-height: 0;
   min-width: 0;
   overflow: auto;
+}
+
+/* Opt-in headers reserve horizontal room without a second title row. */
+.module:has([data-plugin-header-insets="inline"]) {
+  padding-top: 0;
+  --crewon-plugin-header-inset-start: 0px;
+  --crewon-plugin-header-inset-end: 48px;
+}
+:global(.command-window.sidebar-collapsed)
+  .module:has([data-plugin-header-insets="inline"]) {
+  --crewon-plugin-header-inset-start: 64px;
+}
+:global(:root[data-surface="desktop"] .command-window.sidebar-collapsed)
+  .module:has([data-plugin-header-insets="inline"]) {
+  --crewon-plugin-header-inset-start: 120px;
 }

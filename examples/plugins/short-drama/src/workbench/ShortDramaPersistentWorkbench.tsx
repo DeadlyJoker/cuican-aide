@@ -258,19 +258,7 @@ export function ShortDramaPersistentWorkbench({
   return (
     <section className="drama-workbench" aria-label="AI 短剧工作台">
       <div className="drama-main" inert={dialog !== null}>
-        {planningDraft && (
-          <ProjectPlanningDraftReview
-            proposal={planningDraft}
-            disabled={locked || dialog !== null}
-            onReview={() => {
-              reviewedDraft.current = planningDraft;
-              setTitle(planningDraft.input.title);
-              setBrief(planningDraft.input.briefText);
-              setDialog("new");
-            }}
-          />
-        )}
-        <header className="drama-topbar">
+        <header className="drama-topbar" data-plugin-header-insets="inline">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
             <button
               disabled={locked}
@@ -294,6 +282,18 @@ export function ShortDramaPersistentWorkbench({
             <span className="preview-tag">创作工作台</span>
           </div>
         </header>
+        {planningDraft && (
+          <ProjectPlanningDraftReview
+            proposal={planningDraft}
+            disabled={locked || dialog !== null}
+            onReview={() => {
+              reviewedDraft.current = planningDraft;
+              setTitle(planningDraft.input.title);
+              setBrief(planningDraft.input.briefText);
+              setDialog("new");
+            }}
+          />
+        )}
         <div
           className={`drama-content ${details ? "drama-project-content" : ""}`}
         >

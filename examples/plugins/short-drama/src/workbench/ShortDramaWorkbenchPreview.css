@@ -60,7 +60,10 @@
 .drama-workbench .drama-topbar {
   justify-content: space-between;
   flex-wrap: wrap;
-  padding: var(--space-3) var(--space-6);
+  min-height: 54px;
+  padding-block: var(--space-3);
+  padding-inline-start: max(var(--space-6), var(--crewon-plugin-header-inset-start, 0px));
+  padding-inline-end: max(var(--space-6), var(--crewon-plugin-header-inset-end, 0px));
   border-bottom: 1px solid var(--border);
 }
 .drama-workbench .breadcrumbs {

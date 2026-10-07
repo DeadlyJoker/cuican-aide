@@ -47,6 +47,9 @@ test("home reviews an exact idea before a single original project write and reta
   const service = metadataService(),
     f = await ready(service);
   try {
+    await snapshot("project-topbar", f.container.querySelector(".drama-topbar").outerHTML);
+    assert.equal(f.container.querySelector(".drama-main").firstElementChild,
+      f.container.querySelector('[data-plugin-header-insets="inline"]'));
     await snapshot(
       "project-home",
       f.container.querySelector(".drama-project-home").outerHTML,
