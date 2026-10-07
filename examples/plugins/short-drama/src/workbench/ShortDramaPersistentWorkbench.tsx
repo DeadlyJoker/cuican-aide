@@ -34,6 +34,7 @@ import { ProjectConversationActions } from "./ProjectConversationActions";
 import { ProjectConversationAssociationActions } from "./ProjectConversationAssociationActions";
 import type { ProjectConversationAssociationController } from "./ProjectConversationAssociationController";
 import { ProjectTextPlanController } from "./ProjectTextPlanController";
+import { ProjectPlanDisclosure } from "./ProjectPlanDisclosure";
 import { ProjectTextPlanActions } from "./ProjectTextPlanActions";
 import { ProjectPlanningDraftReview } from "./ProjectPlanningDraftReview";
 import type { ProjectPlanningProposal } from "../project-planning-service";
@@ -430,7 +431,7 @@ export function ShortDramaPersistentWorkbench({
                   </div>
                 </div>
                 {page === "overview" && (
-                  <>
+                  <div className="drama-conversation-tools">
                     <ProjectConversationActions controller={conversations} />
                     {association && (
                       <ProjectConversationAssociationActions
@@ -441,32 +442,41 @@ export function ShortDramaPersistentWorkbench({
                         }}
                       />
                     )}
-                  </>
+                  </div>
                 )}
                 {page === "overview" && (
-                  <ProjectTextPlanActions
-                    initialDraft={
-                      projectDraft?.projectId === details.project.projectId
-                        ? projectDraft.proposal
-                        : null
-                    }
+                  <ProjectPlanDisclosure
+                    key={details.project.projectId}
                     controller={plans}
-                    conversations={conversations}
-                    texts={texts}
-                    details={details}
-                    openText={(step) => {
-                      setPage(step.kind === "script" ? "script" : "outline");
-                      void texts.open(
-                        step.kind === "script" && step.episodeId !== null
-                          ? {
-                              kind: "script",
-                              episodeId: step.episodeId,
-                              title: "分集剧本",
-                            }
-                          : { kind: "outline" },
-                      );
-                    }}
-                  />
+                    hasDraft={
+                      projectDraft?.projectId === details.project.projectId
+                    }
+                  >
+                    <ProjectTextPlanActions
+                      initialDraft={
+                        projectDraft &&
+                        projectDraft.projectId === details.project.projectId
+                          ? projectDraft.proposal
+                          : null
+                      }
+                      controller={plans}
+                      conversations={conversations}
+                      texts={texts}
+                      details={details}
+                      openText={(step) => {
+                        setPage(step.kind === "script" ? "script" : "outline");
+                        void texts.open(
+                          step.kind === "script" && step.episodeId !== null
+                            ? {
+                                kind: "script",
+                                episodeId: step.episodeId,
+                                title: "分集剧本",
+                              }
+                            : { kind: "outline" },
+                        );
+                      }}
+                    />
+                  </ProjectPlanDisclosure>
                 )}
                 <SaveFeedback controller={controller} snapshot={snapshot} />
                 {archived && (

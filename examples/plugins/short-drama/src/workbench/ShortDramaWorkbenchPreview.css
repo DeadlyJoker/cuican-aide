@@ -132,7 +132,7 @@
 }
 .drama-workbench .page-heading h1 {
   color: var(--text);
-  font-size: 1.9em;
+  font-size: 1.55em;
   font-weight: 600;
   line-height: 1.35;
 }
@@ -269,7 +269,7 @@
 }
 .drama-workbench .description-input,
 .drama-workbench .form-field :is(input, textarea),
-.drama-workbench .media-input-workbench .form-field select,
+.drama-workbench .form-field select,
 .drama-workbench .concept-version-bar select {
   width: 100%;
   min-width: 0;
@@ -281,7 +281,7 @@
 }
 .drama-workbench .description-input:hover:not(:disabled),
 .drama-workbench .form-field :is(input, textarea):hover,
-.drama-workbench .media-input-workbench .form-field select:hover,
+.drama-workbench .form-field select:hover,
 .drama-workbench .concept-version-bar select:hover {
   border-color: var(--control-ring);
   background: var(--control-surface-hover);
@@ -704,7 +704,7 @@
 .drama-workbench .drama-project-editor {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
   min-width: 0;
 }
 .drama-workbench .drama-home-hero {
@@ -784,11 +784,12 @@
 }
 .drama-workbench .drama-content.drama-project-content {
   max-width: none;
+  padding: var(--space-4);
 }
 .drama-workbench .drama-project-layout {
   display: grid;
-  grid-template-columns: 196px minmax(0, 1fr);
-  gap: var(--space-6);
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: var(--space-4);
   align-items: start;
   min-width: 0;
 }
@@ -815,8 +816,8 @@
 }
 .drama-workbench .drama-project-navigation .stage-item {
   width: 100%;
-  min-height: 48px;
-  padding: var(--space-3);
+  min-height: 36px;
+  padding: var(--space-2);
   color: var(--text-muted);
 }
 .drama-workbench .drama-project-navigation .stage-item.active {
@@ -901,4 +902,75 @@
   height: auto;
   object-fit: contain;
   border-radius: var(--radius-sm);
+}
+
+/* Compact project tools keep the saved creative work in the first screen. */
+.drama-workbench .drama-navigation-label small {
+  display: none;
+}
+.drama-workbench .drama-conversation-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.drama-workbench .drama-conversation-tools > :only-child {
+  grid-column: 1 / -1;
+}
+.drama-workbench .drama-conversation-tools .detail-note {
+  line-height: 1.6;
+}
+.drama-workbench .drama-plan-disclosure {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.drama-workbench .drama-plan-disclosure > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  cursor: pointer;
+}
+.drama-workbench .drama-plan-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.drama-workbench .drama-plan-disclosure > summary > span {
+  color: var(--text-muted);
+  font-size: 0.92em;
+}
+.drama-workbench .drama-plan-disclosure > summary > svg:last-child {
+  margin-left: auto;
+  transform: rotate(-90deg);
+}
+.drama-workbench .drama-plan-disclosure[open] > summary > svg:last-child {
+  transform: none;
+}
+.drama-workbench .drama-plan-disclosure > summary:focus-visible {
+  outline: 2px solid var(--control-ring-strong);
+  outline-offset: -2px;
+  border-radius: inherit;
+}
+.drama-workbench .drama-plan-disclosure > .detail-panel {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.drama-workbench .form-field select {
+  min-height: var(--control-h-md);
+  padding: var(--space-1) var(--space-2);
+  border-color: var(--border-strong);
+}
+@container drama-workbench (max-width: 760px) {
+  .drama-workbench .drama-conversation-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .drama-workbench .drama-plan-disclosure > summary {
+    flex-wrap: wrap;
+  }
+  .drama-workbench .drama-plan-disclosure > summary > span {
+    display: none;
+  }
 }

@@ -3,7 +3,6 @@ import {
   BookOpen,
   Bot,
   CalendarDays,
-  Blocks,
   ChevronRight,
   ChevronUp,
   Cloud,
@@ -31,6 +30,7 @@ import {
   useState,
 } from "react";
 
+import { CommandSidebarPlugins } from "./CommandSidebarPlugins";
 import { shellNavItems } from "./commandWorkspaceData";
 import { mergeCommandWorkspaceHostModules } from "./CommandWorkspaceHostModule";
 import {
@@ -549,21 +549,7 @@ export function CommandSidebar({
             ) : null}
           </button>
         ))}
-        {modules.map((module) => (
-          <button
-            aria-current={module.active ? "page" : undefined}
-            className={classNames(module.active && "active")}
-            data-host-module-target={module.id}
-            key={module.id}
-            type="button"
-            onClick={module.onOpen}
-          >
-            <span className="nav-glyph" aria-hidden="true">
-              <Blocks aria-hidden="true" />
-            </span>
-            <strong>{module.label}</strong>
-          </button>
-        ))}
+        <CommandSidebarPlugins modules={modules} locale={locale} />
         <button
           aria-current={
             !moduleActive && activeView === "knowledge" ? "page" : undefined

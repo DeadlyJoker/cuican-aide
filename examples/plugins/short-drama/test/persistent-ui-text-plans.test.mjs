@@ -32,6 +32,9 @@ async function open(service) {
   return f;
 }
 async function prepare(f) {
+  const disclosure = f.container.querySelector(".drama-plan-disclosure");
+  if (disclosure && !disclosure.open)
+    await f.click(disclosure.querySelector("summary"));
   await select(f, "计划使用的项目对话", "fixture-thread");
   await select(f, "计划集数", "2");
   await f.input(field(f, "计划创作要求"), "保留角色动机，生成两集大纲和剧本。");
@@ -40,12 +43,24 @@ test("actual installable module starts only from an explicitly selected project 
   const s = textPlanUiService(),
     f = await open(s);
   try {
+    assert.equal(
+      f.container.querySelector(".drama-plan-disclosure").open,
+      false,
+    );
     assert.deepEqual(
       s.calls.map((x) => x.action),
       ["crewon.project-text-plans.v1.list"],
     );
     assert.equal(f.button("开始文字计划").disabled, true);
     await prepare(f);
+    const disclosure = f.container.querySelector(".drama-plan-disclosure");
+    assert.equal(disclosure.open, true);
+    await f.click(disclosure.querySelector("summary"));
+    await f.click(disclosure.querySelector("summary"));
+    assert.equal(
+      field(f, "计划创作要求").value,
+      "保留角色动机，生成两集大纲和剧本。",
+    );
     assert.equal(f.button("开始文字计划").disabled, false);
     await f.click(f.button("开始文字计划"));
     const input = s.calls.find((x) => x.action.endsWith(".start")).input;

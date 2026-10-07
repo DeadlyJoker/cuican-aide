@@ -29,7 +29,7 @@ export function ProjectConversationActions({
         </button>
       </div>
       <p className="detail-note">
-        在对话中讨论想法、完善需求、生成大纲或分集剧本。对话与手动页面使用同一份项目成果。
+        讨论想法，生成大纲和剧本；与手动创作共用项目成果。
       </p>
       {snapshot.phase === "waiting" && (
         <p className="detail-note" role="status">
@@ -53,7 +53,7 @@ export function ProjectConversationActions({
       )}
       <div className="detail-actions">
         <button
-          className="button secondary"
+          className="button primary"
           disabled={!controller.canCreate}
           onClick={() => void controller.create()}
         >

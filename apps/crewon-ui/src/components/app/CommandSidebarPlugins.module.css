@@ -1,0 +1,59 @@
+.group {
+  min-width: 0;
+}
+.group .toggle {
+  width: 100%;
+}
+.group .toggle[data-plugin-group-active="true"] {
+  color: var(--text);
+}
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  margin-left: auto;
+}
+.hint {
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.group .chevron {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transform: rotate(-90deg);
+}
+.toggle[aria-expanded="true"] .chevron {
+  transform: none;
+}
+.items {
+  display: grid;
+  gap: 2px;
+  margin: 2px 0 4px 20px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border-strong);
+}
+.items[hidden] {
+  display: none;
+}
+.group .items button {
+  width: 100%;
+  min-width: 0;
+}
+.group .items button[aria-current="page"] {
+  background: var(--control-surface-active);
+  color: var(--text);
+}
+.group .items strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

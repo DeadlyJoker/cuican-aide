@@ -194,7 +194,9 @@ describe("command sidebar overflow", () => {
       expect(footer.parentElement).toBe(sidebar);
       expect(sidebar.lastElementChild).toBe(footer);
       expect(nav.contains(footer)).toBe(false);
-      expect(nav.querySelectorAll("button")).toHaveLength(7 + moduleCount);
+      expect(nav.querySelectorAll("button")).toHaveLength(
+        7 + moduleCount + (moduleCount ? 1 : 0),
+      );
       expect(nav.querySelectorAll("[data-host-module-target]")).toHaveLength(
         moduleCount,
       );
@@ -221,6 +223,12 @@ describe("command sidebar overflow", () => {
       expect(onSettings).toHaveBeenCalledOnce();
       expect(menu.open).toBe(false);
       if (moduleCount) {
+        const pluginGroup = nav.querySelector<HTMLButtonElement>(
+          'button[aria-label="插件"]',
+        )!;
+        expect(pluginGroup.getAttribute("aria-expanded")).toBe("false");
+        await act(async () => pluginGroup.click());
+        expect(pluginGroup.getAttribute("aria-expanded")).toBe("true");
         await act(async () =>
           nav
             .querySelectorAll<HTMLButtonElement>("[data-host-module-target]")

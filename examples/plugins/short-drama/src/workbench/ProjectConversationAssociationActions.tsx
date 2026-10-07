@@ -29,7 +29,7 @@ export function ProjectConversationAssociationActions({
         </button>
       </div>
       <p className="detail-note">
-        将正在查看的会话关联到这个项目，保留它的工作空间和历史。关联后可选择创作阶段或执行计划。
+        将当前会话用于这个项目，保留原工作空间和对话历史。
       </p>
       {snapshot.candidate && (
         <p className="detail-note">
