@@ -25,6 +25,9 @@ import {
 import { DesktopNativePluginActivationAuthority } from "./desktop-native-plugin-activation-authority.ts";
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { assertDesktopNativeProjectHistoricalQueryPreparedTarget } from "./desktop-native-project-historical-query-composition.ts";
+import { assertDesktopNativePluginTaskComposition } from "./desktop-native-plugin-task-runtime.ts";
+import { prepareCreativeProjects } from "./creative-project-composition.ts";
+import { SqliteRunStore } from "@crewon/store";
 
 const actor = {
   principalId: "standalone-principal",
@@ -292,6 +295,60 @@ async function fixture(
     bootstrap: await loadDesktopPluginConfiguration(bootstrapPath, { actor }),
   };
 }
+test(
+  "Native task startup accepts prepared historical query ports but rejects declaration drift",
+  nativeOnly,
+  async (t) => {
+    const f = await fixture(t, { historical: true });
+    const nativeControl = f.load();
+    if (f.bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+      throw new Error("expected-v3");
+    const store = new SqliteRunStore(join(f.directory, "projects.sqlite"));
+    try {
+      await store.creativeProjectStore().migrate();
+      await store.extensionStore().migrate();
+      await store.extensionStore().migrateProjectGenerations();
+      const prepared = await prepareCreativeProjects(store, {
+        pluginUi: f.bootstrap.projects.pluginUi,
+        generationReads: f.bootstrap.projects.generationReads,
+        generationReadUi: f.bootstrap.projects.generationReadUi,
+        historicalQueries: f.bootstrap.projects.historicalQueries,
+        authorization: {
+          authorize: async () => {
+            assert.fail("startup must not execute query authorization");
+          },
+        },
+      });
+      assert.ok(prepared?.historicalQueries);
+      const input = { configuration: f.bootstrap, nativeControl };
+      assert.doesNotThrow(() =>
+        assertDesktopNativePluginTaskComposition({
+          ...input,
+          creativeProjects: prepared,
+        }),
+      );
+      for (const historicalQueries of [
+        undefined,
+        { ...prepared.historicalQueries, publications: [] },
+        {
+          ...prepared.historicalQueries,
+          version: "foreign" as typeof prepared.historicalQueries.version,
+        },
+      ]) {
+        assert.throws(
+          () =>
+            assertDesktopNativePluginTaskComposition({
+              ...input,
+              creativeProjects: { historicalQueries },
+            }),
+          /desktop_native_project_historical_query_configuration_invalid/u,
+        );
+      }
+    } finally {
+      await store.close();
+    }
+  },
+);
 test(
   "signed Native historical declarations require their actual approved and prepared full target",
   nativeOnly,

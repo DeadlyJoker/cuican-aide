@@ -27,6 +27,7 @@ import {
 } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
 import { extensionCanonicalJson } from "@crewon/domain";
+import { assertDesktopProjectPublications } from "./desktop-project-publication-check.ts";
 import {
   assertDesktopPluginConfigurationFileCurrent,
   parseDesktopPluginConfiguration,
@@ -154,31 +155,10 @@ export async function createDesktopPluginRuntime(
     assertDesktopPluginConfigurationFileCurrent(input.configuration);
     if (configuration.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
       throw new Error("desktop_project_execution_authority_required");
-    for (const field of [
-      "pluginUi",
-      "pluginGenerations",
-      "pluginQueries",
-      "historicalQueries",
-      "generationReads",
-      "generationReadUi",
-      "selectionUi",
-      "textPlans",
-    ] as const) {
-      const actual = dependencies.creativeProjects?.[field];
-      if (
-        extensionCanonicalJson(
-          actual === undefined
-            ? null
-            : field === "pluginGenerations" || field === "pluginQueries"
-              ? {
-                  publications:
-                    dependencies.creativeProjects![field]!.publications,
-                }
-              : actual,
-        ) !== extensionCanonicalJson(configuration.projects[field] ?? null)
-      )
-        throw new Error("desktop_project_execution_authority_required");
-    }
+    assertDesktopProjectPublications(
+      configuration.projects,
+      dependencies.creativeProjects,
+    );
     if (
       extensionCanonicalJson(input.uiRecovery ?? null) !==
       extensionCanonicalJson(configuration.projects.uiRecovery ?? null)

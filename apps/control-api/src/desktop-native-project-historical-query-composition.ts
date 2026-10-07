@@ -26,8 +26,14 @@ export function assertDesktopNativeProjectHistoricalQueryDeclaredApproval(
       : undefined;
   if (
     Object.hasOwn(input, "historicalQueries") &&
-    extensionCanonicalJson(input.historicalQueries ?? null) !==
-      extensionCanonicalJson(declared ?? null)
+    extensionCanonicalJson(
+      input.historicalQueries === undefined
+        ? null
+        : {
+            version: input.historicalQueries.version,
+            publications: input.historicalQueries.publications,
+          },
+    ) !== extensionCanonicalJson(declared ?? null)
   )
     invalid();
   if (declared !== undefined) {
