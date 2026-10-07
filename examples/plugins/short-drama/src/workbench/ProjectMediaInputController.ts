@@ -8,7 +8,7 @@ import type {
   MediaInputOptionsResponse,
 } from "../project-media-inputs-ui-client";
 import { projectMediaInputsUiCodec } from "../project-media-inputs-ui-codec.mjs";
-import type { PluginProjectAssetUiClient } from "../project-assets-service";
+import type { PluginProjectAssetUiClient } from "../project-assets-v2-service";
 import type { PluginProjectTextUiClient } from "../project-texts-ui-service";
 import type { ProjectDetails } from "./creative-project-controller";
 import {

@@ -60,11 +60,11 @@ import {
   parseProjectHistoricalQueryHostContext,
 } from "./project-historical-query-codec.mjs";
 import type { ProjectHistoricalQueryHostContext } from "./plugin-project-historical-queries-service";
-import { createPluginProjectAssetUiClient } from "./project-assets-service";
-import { projectAssetsUiCodec } from "./project-assets-codec.mjs";
+import { createPluginProjectAssetUiClient } from "./project-assets-v2-service";
+import { projectAssetsUiCodec } from "./project-assets-v2-codec.mjs";
 import { ProjectAssetController } from "./workbench/ProjectAssetController";
-import { createPluginProjectAssetRecoveryClient } from "./project-asset-recovery-service";
-import { projectAssetRecoveryCodec } from "./project-asset-recovery-codec.mjs";
+import { createPluginProjectAssetRecoveryClient } from "./project-asset-recovery-v2-service";
+import { projectAssetRecoveryCodec } from "./project-asset-recovery-v2-codec.mjs";
 
 const contributionId = "workbench";
 function historicalQueryContext(

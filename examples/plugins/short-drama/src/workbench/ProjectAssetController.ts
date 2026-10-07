@@ -1,8 +1,11 @@
+import { mediaReferenceTarget } from "./ProjectAssetMediaAdoption";
+import { reviewAssetRecovery } from "./ProjectAssetRecoveryReview";
+import type { ProjectMediaResultSummary } from "../project-media-results-service";
 import type {
   PluginProjectAssetUiClient,
   ProjectAssetContent,
   ProjectAssetKind,
-} from "../project-assets-service";
+} from "../project-assets-v2-service";
 import type { PluginProjectTextUiClient } from "../project-texts-ui-service";
 import type { ProjectDetails } from "./creative-project-controller";
 import {
@@ -19,7 +22,7 @@ import {
   mergeAssetHeads,
   type AssetWarmReceipt,
 } from "./ProjectAssetWarmConfirmation";
-import type { PluginProjectAssetRecoveryClient } from "../project-asset-recovery-service";
+import type { PluginProjectAssetRecoveryClient } from "../project-asset-recovery-v2-service";
 import {
   assetDraftFromRevision,
   readAssetDraftScript,
@@ -503,7 +506,7 @@ export class ProjectAssetController {
     const draft = this.#snapshot.draft,
       asset = this.#snapshot.view?.asset;
     await this.#start({
-      action: "crewon.project-assets.v1.saveCandidate",
+      action: "crewon.project-assets.v2.saveCandidate",
       input: {
         projectId: this.#project.project.projectId,
         assetId: asset?.assetId ?? null,
@@ -534,7 +537,7 @@ export class ProjectAssetController {
     )
       return;
     await this.#start({
-      action: "crewon.project-assets.v1.selectRevision",
+      action: "crewon.project-assets.v2.selectRevision",
       input: {
         projectId: this.#project.project.projectId,
         assetId: this.#snapshot.view.asset.assetId,
@@ -549,7 +552,7 @@ export class ProjectAssetController {
   async setLocked() {
     if (!this.canEdit || !this.#project || !this.#snapshot.view) return;
     await this.#start({
-      action: "crewon.project-assets.v1.setLocked",
+      action: "crewon.project-assets.v2.setLocked",
       input: {
         projectId: this.#project.project.projectId,
         assetId: this.#snapshot.view.asset.assetId,
@@ -573,7 +576,7 @@ export class ProjectAssetController {
     )
       return;
     await this.#start({
-      action: "crewon.project-assets.v1.saveReferenceCandidate",
+      action: "crewon.project-assets.v2.saveReferenceCandidate",
       input: {
         projectId: this.#project.project.projectId,
         assetId: this.#snapshot.view.asset.assetId,
@@ -596,7 +599,7 @@ export class ProjectAssetController {
     )
       return;
     await this.#start({
-      action: "crewon.project-assets.v1.selectReference",
+      action: "crewon.project-assets.v2.selectReference",
       input: {
         projectId: this.#project.project.projectId,
         assetId: this.#snapshot.view.asset.assetId,
@@ -607,6 +610,65 @@ export class ProjectAssetController {
         },
       },
     });
+  }
+  canAdoptMediaReference(candidate: ProjectMediaResultSummary) {
+    return (
+      this.canEdit &&
+      !this.#snapshot.dirty &&
+      mediaReferenceTarget(
+        this.#snapshot.view,
+        candidate,
+        this.#snapshot.projectId,
+      ) !== null
+    );
+  }
+  async reviewMediaReference(candidate: ProjectMediaResultSummary) {
+    if (
+      this.#disposed ||
+      this.#snapshot.dirty ||
+      this.#snapshot.pending ||
+      this.#snapshot.saving ||
+      this.#snapshot.opening ||
+      candidate.projectId !== this.#project?.project.projectId ||
+      candidate.workflowId !== "krea2-reference-four-view" ||
+      candidate.item.kind !== "character-reference"
+    )
+      return;
+    this.activate();
+    const epoch = this.#epoch;
+    await this.refresh();
+    if (
+      epoch !== this.#epoch ||
+      candidate.projectId !== this.#project?.project.projectId
+    )
+      return;
+    await this.open(candidate.item.assetId);
+  }
+  async adoptMediaReference(candidate: ProjectMediaResultSummary) {
+    const target = mediaReferenceTarget(
+      this.#snapshot.view,
+      candidate,
+      this.#snapshot.projectId,
+    );
+    if (!target || !this.canAdoptMediaReference(candidate)) return;
+    await this.#start({
+      action: "crewon.project-assets.v2.adoptMediaReference",
+      input: { ...target, idempotencyKey: crypto.randomUUID() },
+    });
+  }
+  async cancelPendingRecovery() {
+    const record = this.recovery.getSnapshot().intent;
+    if (
+      !record ||
+      record.phase !== "pending" ||
+      this.#snapshot.saving ||
+      this.#snapshot.opening ||
+      this.#snapshot.presentedRecovery !==
+        `${record.intentId}:${record.revision}`
+    )
+      return;
+    await this.recovery.cancelPending();
+    await this.restoreRecovery();
   }
   async #start(intent: AssetIntent) {
     if (!this.canEdit) return;
@@ -623,6 +685,7 @@ export class ProjectAssetController {
       this.#physicalWritesPending() ||
       intent.input.projectId !== this.#project?.project.projectId ||
       this.recovery.getSnapshot().phase !== "ready" ||
+      this.recovery.getSnapshot().cancelling ||
       (this.recovery.getSnapshot().intent !== null &&
         this.recovery.getSnapshot().intent?.phase !== "pending")
     )
@@ -679,69 +742,17 @@ export class ProjectAssetController {
       request = this.#beginRead();
     this.#publish({ opening: true, error: null, presentedRecovery: null });
     try {
-      const original = record.request;
-      const assetId =
-        record.phase === "accepted"
-          ? record.confirmed.assetId
-          : original.input.assetId;
-      if (assetId !== null)
-        await this.#readAsset(
-          assetId,
-          true,
-          request,
-          epoch,
-          projectId,
-          record.phase === "accepted"
-            ? (record.confirmed.contentRevision ?? undefined)
-            : undefined,
-        );
-      if (!this.#current(epoch, projectId, request)) return;
-      if (original.action === "crewon.project-assets.v1.saveCandidate") {
-        const script = await readAssetDraftScript({
-          texts: this.#texts,
-          projectId,
-          source: original.input.request.script,
-          signal: request.signal,
-        });
-        if (!this.#current(epoch, projectId, request)) return;
-        this.#publish({
-          draft: {
-            kind: original.input.request.kind,
-            briefRevision: original.input.request.briefRevision,
-            script,
-            content: { ...original.input.request.content },
-          },
-          dirty: record.phase === "refused",
-          ...(assetId === null
-            ? { view: null, content: null, history: [], references: [] }
-            : {}),
-        });
-      }
-      if (
-        record.phase === "accepted" &&
-        record.confirmed.referenceRevision !== null
-      ) {
-        const result = await this.#client.getReferenceRevision(
-          {
-            projectId,
-            assetId: record.confirmed.assetId,
-            referenceRevision: record.confirmed.referenceRevision,
-          },
-          { signal: request.signal },
-        );
-        if (!this.#current(epoch, projectId, request)) return;
-        this.#publish({ references: [result.referenceRevision] });
-      }
-      this.#publish({
-        phase: "ready",
-        pending: record.phase === "pending" ? structuredClone(original) : null,
-        presentedRecovery: `${record.intentId}:${record.revision}`,
-        notice:
-          record.phase === "accepted"
-            ? "已找回原保存结果；这是历史回执，当前选用以重新读取的状态为准。"
-            : record.phase === "refused"
-              ? "原请求已明确拒绝，草稿保留。核对后可按当前版本继续编辑。"
-              : "已找回原请求，请核对后用原请求重试。",
+      await reviewAssetRecovery({
+        record,
+        client: this.#client,
+        texts: this.#texts,
+        signal: request.signal,
+        isCurrent: () => this.#current(epoch, projectId, request),
+        readAsset: (assetId, revision) =>
+          this.#readAsset(assetId, true, request, epoch, projectId, revision),
+        publish: (patch) => {
+          if (this.#current(epoch, projectId, request)) this.#publish(patch);
+        },
       });
     } catch {
       if (this.#current(epoch, projectId, request))

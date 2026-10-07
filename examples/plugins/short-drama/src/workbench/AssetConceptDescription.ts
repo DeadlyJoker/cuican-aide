@@ -1,4 +1,4 @@
-import type { PublicProjectAssetView } from "../project-assets-service";
+import type { PublicProjectAssetView } from "../project-assets-v2-service";
 import type { ConceptDraft } from "./ConceptController.types";
 import type { ProjectDetails } from "./creative-project-controller";
 import { validConceptName, validConceptPrompt } from "./ConceptControllerState";

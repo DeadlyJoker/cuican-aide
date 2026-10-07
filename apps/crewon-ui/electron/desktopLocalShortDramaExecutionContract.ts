@@ -23,6 +23,10 @@ const ASSET_SERVICES = [
   "crewon.project-asset-tools",
   "crewon.project-asset-context",
 ] as const;
+const ASSET_V2_UI_SERVICES = new Set([
+  "crewon.project-assets",
+  "crewon.project-asset-recovery",
+]);
 const KNOWN_SERVICES = new Set<string>([
   ...MEDIA_SERVICES,
   ...CONTEXT_SERVICES,
@@ -52,20 +56,29 @@ export function assertDesktopLocalShortDramaExecutionContract(
     descriptor.requires.some((entry) => entry.service === service);
   const supported = (service: string) =>
     descriptor.requires.some(
-      (entry) => entry.service === service && entry.apiVersion === "1",
+      (entry) =>
+        entry.service === service &&
+        (entry.apiVersion === "1" ||
+          (ASSET_V2_UI_SERVICES.has(service) && entry.apiVersion === "2")),
     );
   for (const entry of descriptor.requires) {
     if (
       (KNOWN_SERVICES.has(entry.service) &&
         entry.apiVersion !== "1" &&
         !(
-          entry.service === "crewon.project-media-generations" &&
+          (entry.service === "crewon.project-media-generations" ||
+            ASSET_V2_UI_SERVICES.has(entry.service)) &&
           entry.apiVersion === "2"
         )) ||
       (!KNOWN_SERVICES.has(entry.service) && !entry.optional)
     )
       invalid();
   }
+  const versions = [...ASSET_V2_UI_SERVICES].map(
+    (service) =>
+      descriptor.requires.find((r) => r.service === service)?.apiVersion,
+  );
+  if (versions.includes("2") && versions.some((v) => v !== "2")) invalid();
   if (!MEDIA_SERVICES.every(supported)) invalid();
   const hasContext =
     CONTEXT_SERVICES.some(requested) ||

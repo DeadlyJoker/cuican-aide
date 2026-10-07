@@ -509,7 +509,18 @@ export function ShortDramaPersistentWorkbench({
                       />
                     )}
                     {mediaResults && (
-                      <ProjectMediaResultWorkbench controller={mediaResults} />
+                      <ProjectMediaResultWorkbench
+                        controller={mediaResults}
+                        assets={assets}
+                        blocked={locked || archived === true}
+                        onAdopted={(projectId) => {
+                          if (
+                            controller.getSnapshot().details?.project
+                              .projectId === projectId
+                          )
+                            void mediaInputs.refresh();
+                        }}
+                      />
                     )}
                   </>
                 ) : (page === "characters" || page === "art") && assets ? (

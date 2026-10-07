@@ -1,11 +1,19 @@
 import { useEffect, useSyncExternalStore } from "react";
 import type { ProjectMediaResultController } from "./ProjectMediaResultController";
+import { ProjectMediaResultAdoption } from "./ProjectMediaResultAdoption";
+import type { ProjectAssetController } from "./ProjectAssetController";
 import { mediaWorkflowNames } from "./ProjectMediaInputWorkbench";
 /** Reuses the plugin's scoped forms and panels; no dialog, portal, global theme, or host navigation. */
 export function ProjectMediaResultWorkbench({
   controller,
+  assets,
+  blocked = false,
+  onAdopted,
 }: {
   controller: ProjectMediaResultController;
+  assets?: ProjectAssetController;
+  blocked?: boolean;
+  onAdopted?(projectId: string): void;
 }) {
   const s = useSyncExternalStore(
     controller.subscribe,
@@ -83,6 +91,14 @@ export function ProjectMediaResultWorkbench({
             {s.preview.candidate.media.width} ×{" "}
             {s.preview.candidate.media.height}
           </figcaption>
+          {assets && (
+            <ProjectMediaResultAdoption
+              assets={assets}
+              onAdopted={onAdopted}
+              candidate={s.preview.candidate}
+              blocked={blocked || !controller.canRead}
+            />
+          )}
           <button
             className="text-button"
             onClick={() => controller.closePreview()}

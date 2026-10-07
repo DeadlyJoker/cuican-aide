@@ -42,7 +42,7 @@ test("save → select → reference → adopt reference → lock needs no additi
     assert.equal(c.getSnapshot().view.asset.revision, 5);
     assert.equal(
       c.getSnapshot().references[0].source.operationId,
-      "original-image-operation",
+      "11111111-1111-4111-8111-111111111111",
     );
     const methods = f.calls.map(([method]) => method);
     for (const method of [
@@ -153,7 +153,7 @@ for (const mismatch of ["action", "body", "key", "receipt", "immutable"])
         const response = await get(...args);
         if (response.intent?.phase !== "accepted") return response;
         if (mismatch === "action")
-          response.intent.request.action = "crewon.project-assets.v1.setLocked";
+          response.intent.request.action = "crewon.project-assets.v2.setLocked";
         if (mismatch === "body")
           response.intent.request.input.request.content.name =
             "a different request";

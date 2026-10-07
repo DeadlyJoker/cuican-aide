@@ -43,7 +43,10 @@ export function captureDesktopLocalShortDramaMediaInputs(
   ])
     if (
       !descriptor.requires.some(
-        (r) => r.service === service && r.apiVersion === "1",
+        (r) =>
+          r.service === service &&
+          (r.apiVersion === "1" ||
+            (service === "crewon.project-assets" && r.apiVersion === "2")),
       )
     )
       invalid();

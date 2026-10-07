@@ -39,7 +39,9 @@ export function ProjectAssetRecoveryActions({
         <h2>资产保存记录</h2>
         <button
           className="text-button"
-          disabled={state.saving || recovery.acknowledging}
+          disabled={
+            state.saving || recovery.acknowledging || recovery.cancelling
+          }
           onClick={() => void assets.recovery.check()}
         >
           重新检查保存记录
@@ -57,13 +59,18 @@ export function ProjectAssetRecoveryActions({
               ? "原保存结果尚未确认"
               : record.phase === "accepted"
                 ? "原保存已确认"
-                : "原保存已明确拒绝"}
+                : "原保存已取消"}
             ，请核对后继续。
           </p>
           <div className="detail-actions">
             <button
               className="button secondary"
-              disabled={state.saving || state.opening || recovery.acknowledging}
+              disabled={
+                state.saving ||
+                state.opening ||
+                recovery.acknowledging ||
+                recovery.cancelling
+              }
               onClick={() =>
                 void (async () => {
                   await projects.openProject(record.request.input.projectId);
@@ -84,10 +91,24 @@ export function ProjectAssetRecoveryActions({
             {record.phase === "pending" && (
               <button
                 className="button secondary"
-                disabled={!presented || state.saving}
+                disabled={!presented || state.saving || recovery.cancelling}
                 onClick={() => void assets.retry()}
               >
                 用原请求重试
+              </button>
+            )}
+            {record.phase === "pending" && (
+              <button
+                className="button secondary"
+                disabled={
+                  !presented ||
+                  state.saving ||
+                  state.opening ||
+                  recovery.cancelling
+                }
+                onClick={() => void assets.cancelPendingRecovery()}
+              >
+                {recovery.cancelling ? "正在取消…" : "取消这次待处理操作"}
               </button>
             )}
             {record.phase !== "pending" && (
@@ -97,7 +118,8 @@ export function ProjectAssetRecoveryActions({
                   !presented ||
                   state.saving ||
                   state.opening ||
-                  recovery.acknowledging
+                  recovery.acknowledging ||
+                  recovery.cancelling
                 }
                 onClick={() => void assets.acknowledgeRecovery()}
               >

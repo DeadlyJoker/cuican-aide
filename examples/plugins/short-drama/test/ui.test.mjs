@@ -91,7 +91,17 @@ test("ships a unified self-contained UI and execution package with the original 
           "crewon.project-asset-tools",
           "crewon.project-asset-context",
           "crewon.project-asset-stages",
-        ].map((service) => ({ service, apiVersion: "1", optional: true }))
+        ].map((service) => ({
+          service,
+          apiVersion:
+            Number(version.split(".")[0]) >= 31 &&
+            ["crewon.project-assets", "crewon.project-asset-recovery"].includes(
+              service,
+            )
+              ? "2"
+              : "1",
+          optional: true,
+        }))
       : []),
     ...(Number(version.split(".")[0]) >= 18
       ? [

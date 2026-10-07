@@ -6,7 +6,7 @@ import type {
   PublicProjectAssetRevision,
   PublicProjectAssetView,
   PublicProjectAssetReferenceRevision,
-} from "../project-assets-service";
+} from "../project-assets-v2-service";
 
 export type AssetScriptSource = Readonly<{
   artifactId: string;
@@ -24,11 +24,12 @@ export type AssetIntent = Extract<
   ProjectAssetUiActionRequest,
   {
     action:
-      | "crewon.project-assets.v1.saveCandidate"
-      | "crewon.project-assets.v1.selectRevision"
-      | "crewon.project-assets.v1.setLocked"
-      | "crewon.project-assets.v1.saveReferenceCandidate"
-      | "crewon.project-assets.v1.selectReference";
+      | "crewon.project-assets.v2.saveCandidate"
+      | "crewon.project-assets.v2.selectRevision"
+      | "crewon.project-assets.v2.setLocked"
+      | "crewon.project-assets.v2.saveReferenceCandidate"
+      | "crewon.project-assets.v2.selectReference"
+      | "crewon.project-assets.v2.adoptMediaReference";
   }
 >;
 export type AssetSnapshot = Readonly<{

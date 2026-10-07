@@ -57,6 +57,7 @@ export function mediaInputFixture() {
       assetContentRevision: 1,
       assetContentDigest: digest,
       source: {
+        kind: "concept-selection",
         conceptAssetId: "concept-" + id,
         conceptAssetRevision: 1,
         selectionRevision: 1,
@@ -123,7 +124,7 @@ export function mediaInputFixture() {
   };
   const services = {
     async invoke(action, input, options) {
-      if (action.startsWith("crewon.project-assets.v1."))
+      if (action.startsWith("crewon.project-assets.v2."))
         return assetClient[action.split(".").at(-1)](input, options);
       if (!action.startsWith("crewon.project-media-inputs.v1."))
         return text.services.invoke(action, input, options);

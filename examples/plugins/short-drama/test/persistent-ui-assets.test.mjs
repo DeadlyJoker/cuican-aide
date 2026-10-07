@@ -28,9 +28,9 @@ test("the actual installed module exposes manual shared assets inside the origin
   const services = {
     async invoke(action, input, options) {
       const method = action.split(".").at(-1);
-      if (action.startsWith("crewon.project-assets.v1."))
+      if (action.startsWith("crewon.project-assets.v2."))
         return assets.client[method](input, options);
-      if (action.startsWith("crewon.project-asset-recovery.v1."))
+      if (action.startsWith("crewon.project-asset-recovery.v2."))
         return assets.recovery[method](input, options);
       return text.services.invoke(action, input, options);
     },

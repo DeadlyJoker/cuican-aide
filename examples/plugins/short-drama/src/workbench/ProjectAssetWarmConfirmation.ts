@@ -1,23 +1,25 @@
 import type {
   PluginProjectAssetUiClient,
-  ProjectAssetMutationResponse,
   PublicProjectAsset,
   PublicProjectAssetReferenceRevision,
   PublicProjectAssetRevision,
   PublicProjectAssetView,
-} from "../project-assets-service";
-import type { ProjectAssetRecoveryIntent } from "../project-asset-recovery-service";
+} from "../project-assets-v2-service";
+import type { ProjectAssetRecoveryIntent } from "../project-asset-recovery-v2-service";
 import type {
   AssetIntent,
   AssetSnapshot,
 } from "./ProjectAssetController.types";
 import type { ProjectAssetRecoveryController } from "./ProjectAssetRecoveryController";
-import { dispatchAssetMutation } from "./ProjectAssetMutationDispatch";
+import {
+  dispatchAssetMutation,
+  type AssetMutationResult,
+} from "./ProjectAssetMutationDispatch";
 import { assetDraftFromRevision } from "./ProjectAssetDraftSources";
 
 export type AssetWarmReceipt = Readonly<{
   intent: AssetIntent;
-  result: ProjectAssetMutationResponse;
+  result: AssetMutationResult;
 }>;
 export type AssetWarmReview = Readonly<{
   view: PublicProjectAssetView;
@@ -70,35 +72,63 @@ export function assertAssetWarmRecord(
   { phase: "accepted" }
 > {
   const { intent, result } = receipt;
+  const contentRevision =
+    "contentRevision" in result ? result.contentRevision : null;
+  const adoption =
+    intent.action === "crewon.project-assets.v2.adoptMediaReference";
+  const expectedRevision = adoption
+    ? intent.input.expectedAssetRevision
+    : intent.input.request.expectedAssetRevision;
   const kinds = {
-    "crewon.project-assets.v1.saveCandidate": "save-content",
-    "crewon.project-assets.v1.selectRevision": "select-content",
-    "crewon.project-assets.v1.setLocked": "set-lock",
-    "crewon.project-assets.v1.saveReferenceCandidate": "save-reference",
-    "crewon.project-assets.v1.selectReference": "select-reference",
+    "crewon.project-assets.v2.saveCandidate": "save-content",
+    "crewon.project-assets.v2.selectRevision": "select-content",
+    "crewon.project-assets.v2.setLocked": "set-lock",
+    "crewon.project-assets.v2.saveReferenceCandidate": "save-reference",
+    "crewon.project-assets.v2.selectReference": "select-reference",
   } as const;
   if (
     !record ||
     record.phase !== "accepted" ||
     !same(record.request, intent) ||
-    result.kind !== kinds[intent.action] ||
+    (adoption
+      ? "kind" in result
+      : !("kind" in result) || result.kind !== kinds[intent.action]) ||
     result.asset.projectId !== intent.input.projectId ||
     (intent.input.assetId !== null &&
       result.asset.assetId !== intent.input.assetId) ||
-    result.asset.revision !== intent.input.request.expectedAssetRevision + 1 ||
-    record.confirmed.kind !== result.kind ||
+    result.asset.revision !== expectedRevision + 1 ||
     record.confirmed.assetId !== result.asset.assetId ||
     record.confirmed.assetRevision !== result.asset.revision ||
     record.confirmed.contentRevision !==
-      (result.contentRevision?.contentRevision ?? null) ||
+      (contentRevision?.contentRevision ?? null) ||
     record.confirmed.referenceRevision !==
-      (result.referenceRevision?.referenceRevision ?? null) ||
-    record.confirmed.requestDigest !== record.requestDigest
+      (result.referenceRevision?.referenceRevision ?? null)
   )
     invalid();
   switch (intent.action) {
-    case "crewon.project-assets.v1.saveCandidate": {
-      const content = result.contentRevision,
+    case "crewon.project-assets.v2.adoptMediaReference": {
+      const reference = result.referenceRevision,
+        original = intent.input;
+      if (
+        !reference ||
+        reference.source.kind !== "media-result" ||
+        reference.assetContentRevision !== original.assetContentRevision ||
+        reference.source.candidateId !== original.candidateId ||
+        reference.source.candidateDigest !== original.candidateDigest ||
+        reference.source.sourceRunId !== original.runId ||
+        reference.source.resultIndex !== original.resultIndex ||
+        reference.source.generatedFor.assetId !== original.assetId ||
+        reference.source.generatedFor.contentRevision !==
+          original.assetContentRevision ||
+        reference.source.generatedFor.contentDigest !==
+          reference.assetContentDigest ||
+        result.asset.selectedReferenceRevision !== reference.referenceRevision
+      )
+        invalid();
+      break;
+    }
+    case "crewon.project-assets.v2.saveCandidate": {
+      const content = contentRevision,
         original = intent.input.request;
       if (
         !content ||
@@ -113,31 +143,32 @@ export function assertAssetWarmRecord(
         invalid();
       break;
     }
-    case "crewon.project-assets.v1.selectRevision":
+    case "crewon.project-assets.v2.selectRevision":
       if (
-        result.contentRevision?.contentRevision !==
+        contentRevision?.contentRevision !==
           intent.input.request.contentRevision ||
         result.asset.selectedContentRevision !==
           intent.input.request.contentRevision
       )
         invalid();
       break;
-    case "crewon.project-assets.v1.setLocked":
+    case "crewon.project-assets.v2.setLocked":
       if (result.asset.locked !== intent.input.request.locked) invalid();
       break;
-    case "crewon.project-assets.v1.saveReferenceCandidate": {
+    case "crewon.project-assets.v2.saveReferenceCandidate": {
       const reference = result.referenceRevision,
         original = intent.input.request;
       if (
         !reference ||
         reference.assetContentRevision !== original.assetContentRevision ||
+        reference.source.kind !== "concept-selection" ||
         reference.source.conceptAssetId !== original.conceptAssetId ||
         reference.source.selectionRevision !== original.selectionRevision
       )
         invalid();
       break;
     }
-    case "crewon.project-assets.v1.selectReference":
+    case "crewon.project-assets.v2.selectReference":
       if (
         result.referenceRevision?.referenceRevision !==
           intent.input.request.referenceRevision ||
@@ -173,10 +204,12 @@ export async function confirmWarmAssetWrite(
     projectId = result.asset.projectId,
     assetId = result.asset.assetId,
     options = { signal: input.signal };
+  const resultContent =
+    "contentRevision" in result ? result.contentRevision : null;
   let reference: PublicProjectAssetReferenceRevision | null = null;
   const referenceRevision =
     result.referenceRevision?.referenceRevision ??
-    (result.kind === "set-lock"
+    ("kind" in result && result.kind === "set-lock"
       ? result.asset.selectedReferenceRevision
       : null);
   if (referenceRevision !== null) {
@@ -196,7 +229,7 @@ export async function confirmWarmAssetWrite(
       invalid();
   }
   const contentRevision =
-    result.contentRevision?.contentRevision ??
+    resultContent?.contentRevision ??
     reference?.assetContentRevision ??
     result.asset.selectedContentRevision ??
     result.asset.latestContentRevision;
@@ -211,8 +244,7 @@ export async function confirmWarmAssetWrite(
     content.assetId !== assetId ||
     content.kind !== result.asset.kind ||
     content.contentRevision !== contentRevision ||
-    (result.contentRevision !== null &&
-      !same(content, result.contentRevision)) ||
+    (resultContent !== null && !same(content, resultContent)) ||
     (reference !== null &&
       reference.assetContentDigest !== content.contentDigest)
   )
@@ -288,7 +320,7 @@ export async function executeWarmAssetMutation(
     acknowledged(receipt: AssetWarmReceipt): void;
   }>,
 ): Promise<void> {
-  let result: ProjectAssetMutationResponse;
+  let result: AssetMutationResult;
   try {
     result = await dispatchAssetMutation(
       input.client,
@@ -306,16 +338,21 @@ export async function executeWarmAssetMutation(
   }
   if (!input.isCurrent()) return;
   const receipt = structuredClone({ intent: input.intent, result });
+  const resultContent =
+    "contentRevision" in result ? result.contentRevision : null;
   input.confirmed(receipt);
   input.publish({
     pending: null,
     assets: mergeAssetHeads(input.snapshot().assets, [result.asset]),
-    notice: "资产版本已保存。",
-    ...(input.intent.action === "crewon.project-assets.v1.saveCandidate" &&
-    result.contentRevision
+    notice:
+      input.intent.action === "crewon.project-assets.v2.adoptMediaReference"
+        ? "已采纳为角色参考图，可在后续生成中选用。"
+        : "资产版本已保存。",
+    ...(input.intent.action === "crewon.project-assets.v2.saveCandidate" &&
+    resultContent
       ? {
-          content: result.contentRevision,
-          draft: assetDraftFromRevision(result.contentRevision),
+          content: resultContent,
+          draft: assetDraftFromRevision(resultContent),
           dirty: false,
         }
       : {}),
@@ -335,7 +372,7 @@ export async function executeWarmAssetMutation(
           view: assetViewWithoutRegression(current.view, current.assets, view),
           assets: mergeAssetHeads(current.assets, [view.asset]),
           presentedRecovery: `${record.intentId}:${record.revision}`,
-          ...(result.contentRevision
+          ...(resultContent
             ? { content, draft: assetDraftFromRevision(content), dirty: false }
             : {}),
           ...(reference ? { references: [reference] } : {}),

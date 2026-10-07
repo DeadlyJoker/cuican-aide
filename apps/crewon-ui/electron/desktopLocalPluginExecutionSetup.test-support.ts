@@ -31,6 +31,8 @@ export async function executionSetupFixture(
     version?: string;
     /** Copied into the owned fixture source; the supplied package is never mutated. */
     packageDirectory?: string;
+    /** Test-only descriptor upgrade; original frozen package bytes stay untouched. */
+    assetUiProtocol?: "2";
     projectContext?: boolean;
     historicalQueries?: boolean;
     contract?: "legacy" | "assets";
@@ -199,6 +201,20 @@ export async function executionSetupFixture(
   writeFileSync(join(source, "crewon.plugin.json"), JSON.stringify(descriptor));
   if (options.packageDirectory !== undefined)
     cpSync(options.packageDirectory, source, { recursive: true });
+  if (options.assetUiProtocol === "2") {
+    const path = join(source, "crewon.plugin.json");
+    const copied = JSON.parse(readFileSync(path, "utf8"));
+    copied.requires = copied.requires.map(
+      (r: { service: string; apiVersion: string; optional: boolean }) =>
+        ["crewon.project-assets", "crewon.project-asset-recovery"].includes(
+          r.service,
+        )
+          ? { ...r, apiVersion: "2" }
+          : r,
+    );
+    chmodSync(path, 0o600);
+    writeFileSync(path, JSON.stringify(copied));
+  }
   const installRoot = join(dataDirectory, "plugins");
   mkdirSync(installRoot, { mode: 0o700 });
   const installed = await installLocalPluginPackage({

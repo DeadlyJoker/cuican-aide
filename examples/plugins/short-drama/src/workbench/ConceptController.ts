@@ -5,7 +5,7 @@ import { ConceptImageSelectionController } from "./ConceptImageSelectionControll
 import { bindConceptCapabilities } from "./ConceptCapabilityBinding";
 import { ConceptGenerationIntentController } from "./ConceptGenerationIntentController";
 import { assetConceptDescription } from "./AssetConceptDescription";
-import type { PublicProjectAssetView } from "../project-assets-service";
+import type { PublicProjectAssetView } from "../project-assets-v2-service";
 import {
   canSaveConceptDraft,
   initialConceptSnapshot as initial,

@@ -1,3 +1,4 @@
+import { composeDesktopLocalProjectAssetV2Approval } from "./desktopLocalProjectAssetV2Approval.ts";
 import { composeDesktopLocalShortDramaMediaInputApproval } from "./desktopLocalShortDramaMediaInputs.ts";
 import { composeDesktopLocalShortDramaMediaGenerationApproval } from "./desktopLocalShortDramaMediaGenerations.ts";
 import { randomBytes } from "node:crypto";
@@ -531,12 +532,17 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           packageDigest: source.packageDigest,
           declaration: value.snapshot.mediaInputs,
         });
-        const selfApproval = value.approveMediaGenerations
+        const mediaApproval = value.approveMediaGenerations
           ? composeDesktopLocalShortDramaMediaGenerationApproval({
               approval: inputApproval,
               packageDigest: source.packageDigest,
             })
           : inputApproval;
+        const selfApproval = composeDesktopLocalProjectAssetV2Approval({
+          approval: mediaApproval,
+          descriptor: source.descriptor,
+          packageDigest: source.packageDigest,
+        });
         if (value.historyQuery !== null)
           await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
             value.historyQuery,

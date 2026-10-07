@@ -64,7 +64,9 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
         references.get(asset.selectedReferenceRevision) ?? null,
       dependencyState: asset.selectedContentRevision ? "current" : "unselected",
       staleReasons: [],
-      referenceState: "unselected",
+      referenceState: asset.selectedReferenceRevision
+        ? "current"
+        : "unselected",
     };
   const client = {
     async listAssets(input) {
@@ -107,11 +109,12 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
     "setLocked",
     "saveReferenceCandidate",
     "selectReference",
+    "adoptMediaReference",
   ]) {
     client[method] = async (input) => {
       calls.push([method, copy(input)]);
       const original = {
-        action: `crewon.project-assets.v1.${method}`,
+        action: `crewon.project-assets.v2.${method}`,
         input: copy(input),
       };
       record ??= {
@@ -121,7 +124,6 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
         request: original,
         requestDigest: digest,
         confirmed: null,
-        refusalCode: null,
       };
       assert.deepEqual(
         record.request,
@@ -196,6 +198,7 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
           assetContentRevision: original.contentRevision,
           assetContentDigest: original.contentDigest,
           source: {
+            kind: "concept-selection",
             conceptAssetId: input.request.conceptAssetId,
             conceptAssetRevision: 1,
             selectionRevision: input.request.selectionRevision,
@@ -209,7 +212,7 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
             packageDigest: digest,
             configurationRevision: 1,
             configurationDigest: digest,
-            operationId: "original-image-operation",
+            operationId: "11111111-1111-4111-8111-111111111111",
             operationRevision: 2,
             operationDigest: digest,
             rawResultDigest: digest,
@@ -225,6 +228,40 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
         reference = references.get(input.request.referenceRevision);
         asset.selectedReferenceRevision = reference.referenceRevision;
       }
+      if (method === "adoptMediaReference") {
+        const n = references.size + 1,
+          original = revisions.get(input.assetContentRevision);
+        reference = {
+          projectId: input.projectId,
+          assetId: asset.assetId,
+          referenceRevision: n,
+          assetContentRevision: original.contentRevision,
+          assetContentDigest: original.contentDigest,
+          source: {
+            kind: "media-result",
+            candidateId: input.candidateId,
+            candidateDigest: input.candidateDigest,
+            sourceRunId: input.runId,
+            resultIndex: input.resultIndex,
+            mediaInputId: "input-a",
+            inputRevision: 1,
+            workflowId: "krea2-reference-four-view",
+            observedAt: at,
+            generatedFor: {
+              assetId: asset.assetId,
+              contentRevision: original.contentRevision,
+              contentDigest: original.contentDigest,
+              referenceRevision: 1,
+              referenceDigest: digest,
+            },
+          },
+          createdAt: at,
+          contentDigest: digest,
+        };
+        references.set(n, reference);
+        asset.latestReferenceRevision = n;
+        asset.selectedReferenceRevision = n;
+      }
       const kind = {
         saveCandidate: "save-content",
         selectRevision: "select-content",
@@ -233,10 +270,11 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
         selectReference: "select-reference",
       }[method];
       const result = {
-        kind,
+        ...(method === "adoptMediaReference"
+          ? {}
+          : { kind, contentRevision: revision }),
         disposition: "committed",
         asset: copy(asset),
-        contentRevision: revision,
         referenceRevision: copy(reference),
       };
       receipts.set(input.idempotencyKey, copy(result));
@@ -245,12 +283,10 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
         phase: "accepted",
         revision: 2,
         confirmed: {
-          kind,
           assetId: asset.assetId,
           assetRevision: asset.revision,
           contentRevision: revision?.contentRevision ?? null,
           referenceRevision: reference?.referenceRevision ?? null,
-          requestDigest: digest,
           resultDigest: digest,
         },
       };
@@ -262,6 +298,19 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
     };
   }
   const recovery = {
+    async cancelPending(input) {
+      calls.push(["cancelPending", copy(input)]);
+      assert.equal(input.intentId, record.intentId);
+      if (record.phase === "pending") {
+        assert.equal(input.expectedRevision, record.revision);
+        record = {
+          ...record,
+          revision: record.revision + 1,
+          phase: "cancelled",
+        };
+      }
+      return { intent: copy(record) };
+    },
     async getPending(input) {
       calls.push(["getPending", copy(input)]);
       if (failRecovery) throw Error("journal unavailable");
@@ -276,7 +325,7 @@ export function assetControllerFixture({ briefDigest = digest } = {}) {
         );
         return { ...acknowledged.get(input.intentId), disposition: "replayed" };
       }
-      assert.equal(record.phase, "accepted");
+      assert.ok(["accepted", "cancelled"].includes(record.phase));
       assert.equal(input.intentId, record.intentId);
       assert.equal(input.expectedRevision, record.revision);
       record = null;

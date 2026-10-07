@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { ProjectAssetController } from "./ProjectAssetController";
 import type { ConceptImageSelectionController } from "./ConceptImageSelectionController";
 import type { ProjectDetails } from "./creative-project-controller";
-import type { ProjectAssetKind } from "../project-assets-service";
+import type { ProjectAssetKind } from "../project-assets-v2-service";
 import type { ConceptController } from "./ConceptController";
 import { ProjectAssetConceptActions } from "./ProjectAssetConceptActions";
 const labels: Record<ProjectAssetKind, string> = {
@@ -407,7 +407,9 @@ export function ProjectAssetWorkbench({
                 </strong>
                 <p className="detail-note">
                   原图结果 {revision.source.resultIndex + 1} ·{" "}
-                  {revision.source.pluginVersion}
+                  {revision.source.kind === "media-result"
+                    ? `角色四视图 · 输入 v${revision.source.inputRevision}`
+                    : revision.source.pluginVersion}
                 </p>
                 <button
                   className="button secondary"

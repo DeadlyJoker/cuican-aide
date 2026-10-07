@@ -43,7 +43,7 @@ function assetPageService() {
     services: {
       async invoke(action, input, options) {
         calls.push({ action, input });
-        if (action.startsWith("crewon.project-asset-recovery.v1."))
+        if (action.startsWith("crewon.project-asset-recovery.v2."))
           return recovery[action.split(".").at(-1)](input, options);
         return media.services.invoke(action, input, options);
       },

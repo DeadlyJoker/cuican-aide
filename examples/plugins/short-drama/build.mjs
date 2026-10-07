@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "30.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "31.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -25,6 +25,34 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-assets-v2-service.ts",
+    "ee3969b77609ce3814692b2dd9067698e5331a2f4920b42a67a7b82cf6230eb9",
+  ],
+  [
+    "project-assets-v2-types.ts",
+    "491fbe4d5c47d0a16d78f30b5b1f6dbdd6d70f0ef2e26c41c6640ca0833c257f",
+  ],
+  [
+    "project-assets-v2-codec.mjs",
+    "77fe1f68cbee2cd46e5ac410447714a6979a9b3416a5e19f9955337c629babb1",
+  ],
+  [
+    "project-assets-v2-codec.d.mts",
+    "ef3e9a3bdc83851cc7afc36feea35c6f79af5698212f61477fa80ad642e39e16",
+  ],
+  [
+    "project-asset-recovery-v2-service.ts",
+    "6b4557c1f1612a70f3e87b739007b61a2c959e8b300c0b5ee1bb42e8e6338b1a",
+  ],
+  [
+    "project-asset-recovery-v2-codec.mjs",
+    "722ded1ef1bf137a5cc8b9d54c1d1207377938726404d99f2bc557d8428bb1af",
+  ],
+  [
+    "project-asset-recovery-v2-codec.d.mts",
+    "493cfa852e00de194e2111275d6f15544d579204b64e4a73fff5e040c2f7b86d",
+  ],
   [
     "project-media-results-service.ts",
     "c356e52df529097743a8e05b45ac47095b3a1eefd21a35ff138a50fbd6a47c6c",
@@ -393,7 +421,16 @@ const descriptor = parsePluginPackageDescriptor({
       "crewon.project-asset-tools",
       "crewon.project-asset-context",
       "crewon.project-asset-stages",
-    ].map((service) => ({ service, apiVersion: "1", optional: true })),
+    ].map((service) => ({
+      service,
+      apiVersion: [
+        "crewon.project-assets",
+        "crewon.project-asset-recovery",
+      ].includes(service)
+        ? "2"
+        : "1",
+      optional: true,
+    })),
     {
       service: "crewon.project-planning-drafts",
       apiVersion: "1",

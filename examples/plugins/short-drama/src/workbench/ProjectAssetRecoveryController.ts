@@ -1,11 +1,12 @@
 import type {
   PluginProjectAssetRecoveryClient,
   ProjectAssetRecoveryIntent,
-} from "../project-asset-recovery-service";
+} from "../project-asset-recovery-v2-service";
 export type AssetRecoverySnapshot = Readonly<{
   phase: "waiting" | "loading" | "ready" | "unavailable";
   intent: ProjectAssetRecoveryIntent | null;
   acknowledging: boolean;
+  cancelling: boolean;
   error: string | null;
 }>;
 
@@ -18,6 +19,7 @@ export class ProjectAssetRecoveryController {
     phase: "waiting",
     intent: null,
     acknowledging: false,
+    cancelling: false,
     error: null,
   };
   #ready = false;
@@ -45,6 +47,7 @@ export class ProjectAssetRecoveryController {
       this.#snapshot.phase === "ready" &&
       this.#snapshot.intent === null &&
       !this.#snapshot.acknowledging &&
+      !this.#snapshot.cancelling &&
       !this.#physicalWritesPending()
     );
   }
@@ -64,11 +67,17 @@ export class ProjectAssetRecoveryController {
     this.#publish({
       phase: ready ? "loading" : "waiting",
       acknowledging: false,
+      cancelling: false,
     });
     if (ready) void this.check();
   }
   async check() {
-    if (!this.#ready || this.#disposed || this.#snapshot.acknowledging)
+    if (
+      !this.#ready ||
+      this.#disposed ||
+      this.#snapshot.acknowledging ||
+      this.#snapshot.cancelling
+    )
       return null;
     this.#read?.abort();
     const request = new AbortController(),
@@ -104,6 +113,44 @@ export class ProjectAssetRecoveryController {
       epoch === this.#epoch
     );
   }
+  async cancelPending(): Promise<void> {
+    const actual = this.#snapshot.intent;
+    if (
+      !actual ||
+      actual.phase !== "pending" ||
+      this.#snapshot.phase !== "ready" ||
+      !this.#ready ||
+      this.#disposed ||
+      this.#snapshot.acknowledging ||
+      this.#snapshot.cancelling ||
+      this.#physicalWritesPending()
+    )
+      return;
+    this.#read?.abort();
+    const request = new AbortController(),
+      epoch = this.#epoch;
+    this.#write = request;
+    this.#publish({ cancelling: true, error: null });
+    try {
+      const { intent } = await this.#client.cancelPending(
+        { intentId: actual.intentId, expectedRevision: actual.revision },
+        { signal: request.signal },
+      );
+      if (!this.#current(request, epoch)) return;
+      // A concurrent commit wins over cancellation; never turn that receipt into a cancelled write.
+      this.#publish({ intent, cancelling: false });
+      await this.check();
+    } catch {
+      if (this.#current(request, epoch))
+        this.#publish({
+          error: "取消结果尚未确认，请重新读取原记录后继续。",
+        });
+    } finally {
+      if (this.#write === request) this.#write = null;
+      if (!this.#disposed && this.#ready && epoch === this.#epoch)
+        this.#publish({ cancelling: false });
+    }
+  }
   async acknowledge(
     expected: ProjectAssetRecoveryIntent,
     guard?: Readonly<{
@@ -120,6 +167,7 @@ export class ProjectAssetRecoveryController {
       actual.revision !== expected.revision ||
       this.#snapshot.phase !== "ready" ||
       this.#snapshot.acknowledging ||
+      this.#snapshot.cancelling ||
       !this.#ready ||
       this.#physicalWritesPending() ||
       (guard !== undefined && (!guard.isCurrent() || guard.signal.aborted))

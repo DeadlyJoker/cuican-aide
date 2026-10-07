@@ -2,7 +2,7 @@ import type {
   PluginProjectAssetUiClient,
   PublicProjectAssetRevision,
   PublicProjectAssetView,
-} from "../project-assets-service";
+} from "../project-assets-v2-service";
 
 /** Read exactly the requested immutable version, or only the current head. Never write or ACK. */
 export async function readAssetVersion(

@@ -21,12 +21,16 @@ export function composeDesktopLocalProjectAssetApproval(
 > {
   const { descriptor: d, previous, modules } = input,
     dual = d.entrypoints.node !== null && d.businessManifestPath !== null;
-  const requested = (service: string) =>
+  const requested = (service: string, apiVersion = "1") =>
     d.requires.some(
       (v) =>
-        v.service === service && v.apiVersion === "1" && (!v.optional || dual),
+        v.service === service &&
+        v.apiVersion === apiVersion &&
+        (!v.optional || dual),
     );
-  const assets = requested("crewon.project-assets"),
+  const assets =
+      requested("crewon.project-assets") ||
+      requested("crewon.project-assets", "2"),
     recovery = requested("crewon.project-asset-recovery"),
     stages = requested("crewon.project-asset-stages");
   if (!assets && !recovery && !stages) return {};
