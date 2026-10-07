@@ -60,10 +60,12 @@ export function assertDesktopNativePluginTaskComposition(
           grant.pluginId === mapping.source.pluginId &&
           grant.packageDigest === mapping.source.packageDigest,
       ) ||
-      !input.nativeControl.publication.entries.some(
-        (entry) =>
-          entry.identity.pluginId === mapping.target.pluginId &&
-          entry.identity.packageDigest === mapping.target.packageDigest,
+      // Retained declarations survive a version change. Approval permits keeping
+      // the mapping; only a currently prepared package may execute it.
+      !input.nativeControl.authority.packages.some(
+        (pkg) =>
+          pkg.pluginId === mapping.target.pluginId &&
+          pkg.packageDigest === mapping.target.packageDigest,
       )
     )
       throw new Error("desktop_native_plugin_project_mapping_unapproved");

@@ -291,13 +291,12 @@ export class DesktopNativePluginTaskAuthority {
         const allowed =
           this.#binding.registry.authorizeCandidate(actual) === "allow" &&
           (value.purpose === "read" ||
-            this.#binding.nativeControl.authority.packages.some(
-              (pkg) =>
-                pkg.pluginId === actual.descriptor.pluginId &&
-                pkg.publisherId === actual.descriptor.publisherId &&
-                pkg.version === actual.descriptor.version &&
-                pkg.packageDigest === actual.packageDigest,
-            ));
+            this.#preparedPackage({
+              pluginId: actual.descriptor.pluginId,
+              publisherId: actual.descriptor.publisherId,
+              version: actual.descriptor.version,
+              packageDigest: actual.packageDigest,
+            }));
         await this.#request(actor);
         signal.throwIfAborted();
         return allowed ? "allow" : "deny";
@@ -321,13 +320,7 @@ export class DesktopNativePluginTaskAuthority {
           pin.principalId !== actor.principalId ||
           pin.actorId !== actor.actorId ||
           pin.authorityEpoch !== this.#binding.configuration.authorityEpoch ||
-          !this.#binding.nativeControl.authority.packages.some(
-            (pkg) =>
-              pkg.pluginId === pin.pluginId &&
-              pkg.publisherId === pin.publisherId &&
-              pkg.version === pin.version &&
-              pkg.packageDigest === pin.packageDigest,
-          ) ||
+          !this.#preparedPackage(pin) ||
           !this.#binding.configuration.publications.some(
             (grant) =>
               grant.pluginId === pin.pluginId &&
@@ -369,6 +362,24 @@ export class DesktopNativePluginTaskAuthority {
     return (this.#closing ??= Promise.allSettled([...this.#physical]).then(
       () => {},
     ));
+  }
+  #preparedPackage(identity: {
+    pluginId: string;
+    publisherId: string;
+    version: string;
+    packageDigest: string;
+  }): boolean {
+    const matches = (pkg: typeof identity) =>
+      pkg.pluginId === identity.pluginId &&
+      pkg.publisherId === identity.publisherId &&
+      pkg.version === identity.version &&
+      pkg.packageDigest === identity.packageDigest;
+    return (
+      this.#binding.nativeControl.authority.packages.some(matches) &&
+      this.#binding.nativeControl.publication.entries.some((entry) =>
+        matches(entry.identity),
+      )
+    );
   }
   #owner(actor: ActorContext): void {
     validateNativeOwnership(() => {

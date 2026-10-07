@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
 import {
   parseInstalledPluginPeerRequest,
   type PluginPackageDescriptor,
+  type DesktopProjectExecutionConfiguration,
   PLUGIN_PACKAGE_SCHEMA_VERSION,
   PLUGIN_PACKAGE_HOST_API,
 } from "@crewon/contracts/plugins";
@@ -26,6 +27,10 @@ import {
 import { createDesktopPluginRuntime } from "./desktop-plugin-runtime.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import { loadDesktopNativePluginControlEnvironment } from "./desktop-native-plugin-control-environment.ts";
+import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
+import { prepareCreativeProjects } from "./creative-project-composition.ts";
+import { assertDesktopNativePluginTaskComposition } from "./desktop-native-plugin-task-runtime.ts";
+import { installedProjectConversationTaskAuthority } from "./installed-plugin-task-runtime-core.ts";
 
 const actor = {
   principalId: "standalone-principal",
@@ -52,7 +57,10 @@ const request = () => ({
 });
 /** Actual installed Node action and original SQLite commit. Peer readiness/release is a
  * named offline fixture; this is not a live Worker/model/supplier generation acceptance. */
-async function fixture(t: TestContext) {
+async function fixture(
+  t: TestContext,
+  retainedApproval?: "approved" | "unapproved",
+) {
   let runtime:
       | Awaited<ReturnType<typeof createDesktopPluginRuntime>>
       | undefined,
@@ -125,6 +133,79 @@ async function fixture(t: TestContext) {
     version: descriptor.version,
     packageDigest: verified.packageDigest,
   };
+  const sources = [source];
+  let retained: typeof source | undefined;
+  const oldImportMarker = join(f.root, "retained-node-imported");
+  if (retainedApproval !== undefined) {
+    const directory = join(f.root, "retained-business");
+    await mkdir(directory, { mode: 0o700 });
+    const retainedFiles = files.map((file) => ({
+      ...file,
+      bytes:
+        file.path === "business.json"
+          ? Buffer.from(JSON.stringify({ ...manifest, version: "0.9.0" }))
+          : file.path === "node.mjs"
+            ? Buffer.from(
+                `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(oldImportMarker)},'unexpected-import');${node}`,
+              )
+            : file.bytes,
+    }));
+    for (const file of retainedFiles)
+      await writeFile(join(directory, file.path), file.bytes);
+    await writeFile(
+      join(directory, "crewon.plugin.json"),
+      JSON.stringify({
+        ...descriptor,
+        version: "0.9.0",
+        files: retainedFiles.map((file) => ({
+          path: file.path,
+          byteLength: file.bytes.length,
+          sha256: createHash("sha256").update(file.bytes).digest("hex"),
+        })),
+      }),
+    );
+    const verified = await verifyLocalPluginPackage({ directory });
+    retained = {
+      ...source,
+      directory,
+      sourceId: "retained-business",
+      version: "0.9.0",
+      packageDigest: verified.packageDigest,
+    };
+    sources.push(retained);
+  }
+  const modules = sources.map(({ pluginId, packageDigest }) => ({
+    pluginId,
+    packageDigest,
+    contributionId: "workbench",
+  }));
+  const projects: DesktopProjectExecutionConfiguration = {
+    version: "crewon.desktop-project-execution.v1",
+    pluginUi: { publications: modules },
+    generationReads: { version: "crewon.project-generation-read.v1" },
+    pluginGenerations: {
+      publications: modules.map((source) => ({
+        source,
+        target: { ...source, action: "image.generate" },
+      })),
+    },
+    pluginQueries: {
+      publications: modules.map((source) => ({
+        source,
+        target: { ...source, action: "image.query" },
+      })),
+    },
+    uiRecovery: {
+      version: "crewon.plugin-ui-recovery.v1",
+      publications: modules.map((source) => ({
+        ...source,
+        actions: [
+          "crewon.project-generations.v1.generateConcept",
+          "crewon.project-generation-queries.v1.queryConceptGeneration",
+        ],
+      })),
+    },
+  };
   const installRoot = join(f.root, "plugins");
   await mkdir(installRoot, { mode: 0o700 });
   const scope = {
@@ -133,20 +214,21 @@ async function fixture(t: TestContext) {
     profileId: "native-task-original-profile",
   };
   const raw = {
-    schemaVersion: "crewon.desktop-plugin-bootstrap.v1",
+    schemaVersion: retained
+      ? "crewon.desktop-plugin-bootstrap.v3"
+      : "crewon.desktop-plugin-bootstrap.v1",
     actor,
     scope,
     authorityEpoch: "native-task-original-epoch-0000000001",
     installRoot,
-    sources: [source],
-    publications: [
-      {
-        pluginId: source.pluginId,
-        publisherId: source.publisherId,
-        packageDigest: source.packageDigest,
-        publicAssets: ["ui.mjs"],
-      },
-    ],
+    sources,
+    publications: sources.map(({ pluginId, publisherId, packageDigest }) => ({
+      pluginId,
+      publisherId,
+      packageDigest,
+      publicAssets: ["ui.mjs"],
+    })),
+    ...(retained ? { projects } : {}),
   };
   const bootstrapBytes = Buffer.from(JSON.stringify(raw)),
     bootstrapPath = join(
@@ -245,6 +327,14 @@ async function fixture(t: TestContext) {
     version: source.version,
     packageDigest: source.packageDigest,
   };
+  const packageApprovals = sources
+    .filter((entry) => retainedApproval !== "unapproved" || entry === source)
+    .map(({ pluginId, publisherId, version, packageDigest }) => ({
+      pluginId,
+      publisherId,
+      version,
+      packageDigest,
+    }));
   const approvalPath = join(f.root, "plugin-approvals.json"),
     profilePath = join(f.root, "plugin-profile.json"),
     policyPath = join(f.root, "plugin-native-policy.json");
@@ -252,7 +342,7 @@ async function fixture(t: TestContext) {
     approvalPath,
     JSON.stringify({
       schemaVersion: "crewon.desktop-plugin-approval.v1",
-      sources: [source],
+      sources,
       publications: raw.publications,
     }),
     { mode: 0o600 },
@@ -270,7 +360,10 @@ async function fixture(t: TestContext) {
     policyPath,
     JSON.stringify({
       schemaVersion: "crewon.desktop-native-plugin-policy.v1",
-      packages: [{ ...packageIdentity, approvalRequirement: "none" }],
+      packages: packageApprovals.map((pkg) => ({
+        ...pkg,
+        approvalRequirement: "none",
+      })),
       networkGrants: [],
     }),
     { mode: 0o600 },
@@ -298,7 +391,7 @@ async function fixture(t: TestContext) {
       profileDigest: sha.sha256(await readFile(profilePath)),
       policyPath,
       policyDigest: sha.sha256(await readFile(policyPath)),
-      packages: [packageIdentity],
+      packages: packageApprovals,
       networkGrants: [],
     }),
     { mode: 0o600 },
@@ -381,9 +474,32 @@ async function fixture(t: TestContext) {
       });
     throw new Error("named_native_peer_operation_unexpected");
   };
+  const startup = retained
+    ? composeDesktopProjectStartup({
+        configuration: bootstrap,
+        actor,
+        nativeControl,
+      })
+    : undefined;
+  const prepared = startup
+    ? await prepareCreativeProjects(originalStore, startup.creativeProjects, {
+        financialMode: "unmetered",
+      })
+    : undefined;
   runtime = await createDesktopPluginRuntime(
-    { configuration: bootstrap, nativeControl },
-    { store: originalStore, identity, clock, digester: sha, fetch },
+    {
+      configuration: bootstrap,
+      nativeControl,
+      ...(startup?.uiRecovery ? { uiRecovery: startup.uiRecovery } : {}),
+    },
+    {
+      store: originalStore,
+      identity,
+      clock,
+      digester: sha,
+      fetch,
+      ...(prepared ? { creativeProjects: prepared } : {}),
+    },
   );
   const actual = runtime;
   assert.ok(actual.tasks);
@@ -477,6 +593,13 @@ async function fixture(t: TestContext) {
     facts,
     peerOperations,
     source,
+    retained,
+    oldImportMarker,
+    bootstrap,
+    nativeControl,
+    startup,
+    scope,
+    command,
   };
 }
 test(
@@ -528,5 +651,132 @@ test(
       unmetered: 1,
       financialTables: [],
     });
+  },
+);
+
+test(
+  "retained approved generation/query mappings survive startup, but an unprepared old version cannot import Node or commit a Run",
+  { skip: process.platform === "win32", timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t, "approved");
+    assert.ok(f.retained);
+    assert.equal(f.nativeControl.authority.packages.length, 2);
+    assert.equal(f.nativeControl.publication.entries.length, 1);
+    assert.equal(
+      f.startup?.creativeProjects?.pluginGenerations?.publications.length,
+      2,
+    );
+    assert.equal(
+      f.startup?.creativeProjects?.pluginQueries?.publications.length,
+      2,
+    );
+    assert.ok(f.actual.tasks?.projectGenerations);
+    assert.ok(f.actual.tasks?.projectQueries);
+    const first = (await f.invoke()) as Record<string, unknown>;
+    assert.equal(first.disposition, "committed");
+    const before = f.facts();
+    assert.equal(before.runs, 1);
+
+    // Exercise the real execution callbacks used by project generation/query
+    // owners: retained bytes remain readable, but cannot obtain submit authority.
+    const authority = installedProjectConversationTaskAuthority(
+      f.actual.tasks!,
+    );
+    const candidate = await verifyLocalPluginPackage({
+      directory: f.retained.directory,
+    });
+    for (const purpose of ["read", "submit"] as const) {
+      const decision = await authority.requests.run(
+        { request: request(), actor, preparation: "configuration" },
+        () =>
+          authority.authorizePackage(
+            {
+              actor,
+              scope: f.scope,
+              candidate: {
+                descriptor: candidate.descriptor,
+                packageDigest: candidate.packageDigest,
+              },
+              purpose,
+            },
+            new AbortController().signal,
+          ),
+      );
+      assert.equal(decision, purpose === "read" ? "allow" : "deny");
+    }
+    // Older clients also cannot enable it against a different prepared package.
+    const installed = await f.actual.installation.install(actor, {
+      sourceId: f.retained.sourceId,
+      expectedPluginId: f.retained.pluginId,
+      expectedPackageDigest: f.retained.packageDigest,
+      expectedSelectionRevision: 2,
+      idempotencyKey: "native-retained-install",
+    });
+    const peerBefore = [...f.peerOperations];
+    await assert.rejects(
+      () =>
+        f.actual.installation.select(actor, {
+          pluginId: f.retained!.pluginId,
+          selectedPackageDigest: f.retained!.packageDigest,
+          state: "enabled",
+          expectedSelectionRevision: installed.selection!.revision,
+          idempotencyKey: "native-retained-select",
+        }),
+      /desktop_plugin_candidate_selection_changed/,
+    );
+    await assert.rejects(() => stat(f.oldImportMarker), { code: "ENOENT" });
+    assert.deepEqual(f.peerOperations, peerBefore);
+    assert.deepEqual(f.facts(), before);
+    assert.ok(
+      await f.originalStore.loadRunInSpace({
+        ...actor,
+        runId: String(first.runId),
+      }),
+    );
+  },
+);
+
+test(
+  "retained mappings still require exact native target approval at startup",
+  { skip: process.platform === "win32", timeout: 20000 },
+  async (t) => {
+    await assert.rejects(
+      () => fixture(t, "unapproved"),
+      /desktop_native_plugin_project_mapping_unapproved/,
+    );
+  },
+);
+
+test(
+  "retained mappings cannot introduce an unapproved source or substitute another target digest",
+  { skip: process.platform === "win32", timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t, "approved");
+    for (const lane of ["pluginGenerations", "pluginQueries"] as const) {
+      for (const side of ["source", "target"] as const) {
+        const mapping = f.startup!.creativeProjects![lane]!.publications[0]!;
+        assert.throws(
+          () =>
+            assertDesktopNativePluginTaskComposition({
+              configuration: f.bootstrap,
+              nativeControl: f.nativeControl,
+              creativeProjects: {
+                [lane]: {
+                  publications: [
+                    {
+                      ...mapping,
+                      [side]: {
+                        ...mapping[side],
+                        packageDigest: sha.sha256("unapproved-package"),
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          /desktop_native_plugin_project_mapping_unapproved/,
+        );
+      }
+    }
   },
 );
