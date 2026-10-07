@@ -24,94 +24,100 @@ describe("ControlAutomationRuntime", () => {
     expect(signals).toEqual([controller.signal]);
   });
 
-  it("retries an unknown run-now outcome with the same key and adopts its Run SSE", async () => {
-    const requests: Array<{ url: string; key: string | null }> = [];
-    let runAttempts = 0;
-    const adopted: Array<{ automation: AutomationView; run: RunView }> = [];
-    const runtime = new ControlAutomationRuntime({
-      client: client(async (input, init = {}) => {
-        const url = String(input);
-        requests.push({
-          url,
-          key: new Headers(init.headers).get("idempotency-key"),
-        });
-        if (url.endsWith("/automations/automation-1")) {
-          return json({ automation: automation() });
-        }
-        if (url.endsWith("/threads/thread-1")) {
-          return json(threadResponse());
-        }
-        if (url.endsWith("/automations/automation-1:run-now")) {
-          runAttempts += 1;
-          if (runAttempts === 1) {
-            throw new TypeError("connection reset after commit");
+  it.each([undefined, null, "workspace-a"])(
+    "retries an unknown run-now outcome with workspace %s, the same key and adopts its Run SSE",
+    async (workspaceId) => {
+      const requests: Array<{ url: string; key: string | null }> = [];
+      let runAttempts = 0;
+      const adopted: Array<{ automation: AutomationView; run: RunView }> = [];
+      const runtime = new ControlAutomationRuntime({
+        client: client(async (input, init = {}) => {
+          const url = String(input);
+          requests.push({
+            url,
+            key: new Headers(init.headers).get("idempotency-key"),
+          });
+          if (url.endsWith("/automations/automation-1")) {
+            return json({ automation: automation() });
           }
-          return json({
-            disposition: "replayed",
-            automation: automation(),
-            invocation: { automationId: "automation-1", runId: "run-1" },
-            run: run(),
-          });
-        }
-        throw new Error(`unexpected request ${url}`);
-      }),
-      adopter: {
-        async adoptAutomationRun(nextAutomation, nextRun) {
-          adopted.push({ automation: nextAutomation, run: nextRun });
+          if (url.endsWith("/threads/thread-1")) {
+            return json(threadResponse(workspaceId));
+          }
+          if (url.endsWith("/automations/automation-1:run-now")) {
+            runAttempts += 1;
+            if (runAttempts === 1) {
+              throw new TypeError("connection reset after commit");
+            }
+            return json({
+              disposition: "replayed",
+              automation: automation(),
+              invocation: { automationId: "automation-1", runId: "run-1" },
+              run: run(),
+            });
+          }
+          throw new Error(`unexpected request ${url}`);
+        }),
+        adopter: {
+          async adoptAutomationRun(nextAutomation, nextRun) {
+            adopted.push({ automation: nextAutomation, run: nextRun });
+          },
         },
-      },
-      idempotencyKey: () => "same-run-key",
-    });
+        idempotencyKey: () => "same-run-key",
+      });
 
-    const result = await runtime.runAutomationNow("automation-1");
+      const result = await runtime.runAutomationNow("automation-1");
 
-    expect(result.disposition).toBe("replayed");
-    expect(
-      requests
-        .filter(({ url }) => url.endsWith(":run-now"))
-        .map(({ key }) => key),
-    ).toEqual(["same-run-key", "same-run-key"]);
-    expect(adopted).toEqual([{ automation: automation(), run: run() }]);
-    expect(requests.some(({ url }) => url.includes("/runs?"))).toBe(false);
-  });
+      expect(result.disposition).toBe("replayed");
+      expect(
+        requests
+          .filter(({ url }) => url.endsWith(":run-now"))
+          .map(({ key }) => key),
+      ).toEqual(["same-run-key", "same-run-key"]);
+      expect(adopted).toEqual([{ automation: automation(), run: run() }]);
+      expect(requests.some(({ url }) => url.includes("/runs?"))).toBe(false);
+    },
+  );
 
-  it("retries a malformed create success with the same key and accepts the receipt replay", async () => {
-    const keys: Array<string | null> = [];
-    let attempts = 0;
-    const runtime = new ControlAutomationRuntime({
-      client: client(async (input, init = {}) => {
-        const url = String(input);
-        if (url.endsWith("/threads/thread-1")) {
-          return json(threadResponse());
-        }
-        if (url.endsWith("/automations")) {
-          attempts += 1;
-          keys.push(new Headers(init.headers).get("idempotency-key"));
-          return json({
-            disposition: attempts === 1 ? "committed" : "replayed",
-            automation:
-              attempts === 1
-                ? { ...automation(), title: "substituted" }
-                : automation(),
-          });
-        }
-        throw new Error(`unexpected request ${url}`);
-      }),
-      adopter: { adoptAutomationRun: async () => undefined },
-      idempotencyKey: () => "same-create-key",
-    });
+  it.each([undefined, null, "workspace-a"])(
+    "retries a malformed create success with workspace %s, the same key and accepts the receipt replay",
+    async (workspaceId) => {
+      const keys: Array<string | null> = [];
+      let attempts = 0;
+      const runtime = new ControlAutomationRuntime({
+        client: client(async (input, init = {}) => {
+          const url = String(input);
+          if (url.endsWith("/threads/thread-1")) {
+            return json(threadResponse(workspaceId));
+          }
+          if (url.endsWith("/automations")) {
+            attempts += 1;
+            keys.push(new Headers(init.headers).get("idempotency-key"));
+            return json({
+              disposition: attempts === 1 ? "committed" : "replayed",
+              automation:
+                attempts === 1
+                  ? { ...automation(), title: "substituted" }
+                  : automation(),
+            });
+          }
+          throw new Error(`unexpected request ${url}`);
+        }),
+        adopter: { adoptAutomationRun: async () => undefined },
+        idempotencyKey: () => "same-create-key",
+      });
 
-    await expect(
-      runtime.createAutomation({
-        threadId: "thread-1",
-        title: "Review changes",
-        prompt: "Review the current changes.",
-        agentVersionId: "agent-version-1",
-        schedule: null,
-      }),
-    ).resolves.toEqual(automation());
-    expect(keys).toEqual(["same-create-key", "same-create-key"]);
-  });
+      await expect(
+        runtime.createAutomation({
+          threadId: "thread-1",
+          title: "Review changes",
+          prompt: "Review the current changes.",
+          agentVersionId: "agent-version-1",
+          schedule: null,
+        }),
+      ).resolves.toEqual(automation());
+      expect(keys).toEqual(["same-create-key", "same-create-key"]);
+    },
+  );
 
   it("retries a malformed run success with the same key and adopts only the valid replay", async () => {
     const keys: Array<string | null> = [];
@@ -284,7 +290,7 @@ describe("ControlAutomationRuntime", () => {
     });
     Object.assign(controlClient, {
       getThread: async () => ({
-        ...threadResponse(),
+        ...threadResponse(null),
         eventSequence: 1,
       }),
     });
@@ -298,6 +304,76 @@ describe("ControlAutomationRuntime", () => {
       "control_automation_thread_response_invalid",
     );
     expect(adopter.adoptAutomationRun).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { workspaceId: "/Users/example/private" },
+    { workspaceId: "space/other" },
+    { workspaceId: 42 },
+    { workspaceId: "workspace-a", root: "/private" },
+  ])(
+    "rejects malformed Thread ownership %j before create or run mutation",
+    async (ownership) => {
+      const mutations: string[] = [];
+      const adopter = { adoptAutomationRun: vi.fn(async () => undefined) };
+      const runtime = new ControlAutomationRuntime({
+        client: client(async (input, init = {}) => {
+          const url = String(input);
+          if (init.method !== "GET") mutations.push(url);
+          if (url.endsWith("/automations/automation-1")) {
+            return json({ automation: automation() });
+          }
+          if (url.endsWith("/threads/thread-1")) {
+            const snapshot = threadResponse();
+            return json({
+              ...snapshot,
+              thread: { ...snapshot.thread, ...ownership },
+            });
+          }
+          throw new Error(`unexpected request ${url}`);
+        }),
+        adopter,
+      });
+
+      await expect(
+        runtime.createAutomation({
+          threadId: "thread-1",
+          title: "Review changes",
+          prompt: "Review the current changes.",
+          agentVersionId: "agent-version-1",
+          schedule: null,
+        }),
+      ).rejects.toThrow("control_client_thread_snapshot_invalid");
+      await expect(runtime.runAutomationNow("automation-1")).rejects.toThrow(
+        "control_client_thread_snapshot_invalid",
+      );
+      expect(mutations).toEqual([]);
+      expect(adopter.adoptAutomationRun).not.toHaveBeenCalled();
+    },
+  );
+
+  it("validates workspace ownership even when a client adapter bypasses transport parsing", async () => {
+    const transport = vi.fn<typeof globalThis.fetch>(async () => {
+      throw new Error("unexpected network request");
+    });
+    const controlClient = client(transport);
+    vi.spyOn(controlClient, "getThread").mockResolvedValue(
+      threadResponse("space/other"),
+    );
+    const runtime = new ControlAutomationRuntime({
+      client: controlClient,
+      adopter: { adoptAutomationRun: async () => undefined },
+    });
+    await expect(
+      runtime.createAutomation({
+        threadId: "thread-1",
+        title: "Review changes",
+        prompt: "Review the current changes.",
+        agentVersionId: "agent-version-1",
+        schedule: null,
+      }),
+    ).rejects.toThrow("control_automation_thread_response_invalid");
+    expect(transport).not.toHaveBeenCalled();
   });
 });
 
@@ -354,7 +430,7 @@ function run(): RunView {
   };
 }
 
-function threadResponse() {
+function threadResponse(workspaceId?: string | null) {
   return {
     eventSequence: 2,
     thread: {
@@ -369,6 +445,7 @@ function threadResponse() {
       updatedAt: "2026-08-09T00:00:00Z",
       archivedAt: null,
       deletedAt: null,
+      ...(workspaceId === undefined ? {} : { workspaceId }),
     },
   };
 }

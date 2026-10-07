@@ -9,6 +9,7 @@ import type {
   RunView,
   AutomationSchedule,
 } from "@crewon/contracts";
+import { parseThreadWorkspaceId } from "@crewon/contracts";
 import {
   ControlApiClient,
   ControlApiClientError,
@@ -414,9 +415,17 @@ function validateActiveThread(
       "threadId",
       "title",
       "updatedAt",
+      "workspaceId",
     ],
     "control_automation_thread_response_invalid",
   );
+  try {
+    parseThreadWorkspaceId(response.thread.workspaceId);
+  } catch {
+    throw new ControlApiProtocolError(
+      "control_automation_thread_response_invalid",
+    );
+  }
   if (
     response.thread.threadId !== threadId ||
     response.thread.status !== "active" ||

@@ -39,6 +39,7 @@ import {
   type ResolvedExtensionRecoveryCapsule,
 } from "@crewon/agent-version/extension-recovery";
 import {
+  compileAgentVersion,
   createAgentVersionAsset,
   parseAgentVersionAsset,
 } from "../../../packages/agent-version/src/index.ts";
@@ -341,8 +342,24 @@ async function runNativeFlow(mode: "source" | "packaged") {
     expect(baseRow).toBeDefined();
     const defaultAsset = JSON.parse(String(baseRow!.asset_json));
     const baseVersion = parseAgentVersionAsset(defaultAsset, digester);
+    // This fixture binds only Comfy tools. The default Agent now also owns
+    // workspace commands; copying its catalog without their runtime is invalid.
+    const pluginBase = compileAgentVersion(
+      {
+        schemaVersion: "crewon.agent-version-source.v0",
+        agentVersionId: "native-extension-plugin-base-fixture",
+        runtimeGeneration: baseVersion.runtimeGeneration,
+        policySnapshotId: baseVersion.policySnapshotId,
+        instructions: baseVersion.instructions,
+        model: baseVersion.model,
+        execution: baseVersion.execution,
+        resources: baseVersion.resources,
+        tools: [],
+      },
+      digester,
+    );
     const version = compileComfyAgentVersion({
-      base: { executionAuthority: "crewonKernel", version: baseVersion },
+      base: { executionAuthority: "crewonKernel", version: pluginBase },
       agentVersionId: pluginAgent,
       runtimeGeneration: baseVersion.runtimeGeneration,
       policySnapshotId: "native-extension-policy",
@@ -430,7 +447,7 @@ async function runNativeFlow(mode: "source" | "packaged") {
           ),
         ),
       );
-      expect(report.outcome, logs.join("").slice(-16000)).toBe("prepared");
+      expect(report.outcome, JSON.stringify(report)).toBe("prepared");
       if (report.outcome !== "prepared")
         throw new Error("native_recovery_candidate_missing");
       capsule = await resolveExtensionRecoveryCapsule({
@@ -455,7 +472,9 @@ async function runNativeFlow(mode: "source" | "packaged") {
       `${api}/runtime?agentVersionId=${pluginAgent}&configurationRevision=${configuration.revision}`,
     );
     expect(ready.status, JSON.stringify(ready.body)).toBe(200);
-    expect(ready.body.readiness.outcome).toBe("ready");
+    expect(ready.body.readiness.outcome, JSON.stringify(ready.body)).toBe(
+      "ready",
+    );
     const activation = await json<ExtensionActivationMutationResponse>(
       session,
       `${api}/activation`,
@@ -540,6 +559,16 @@ async function runNativeFlow(mode: "source" | "packaged") {
     expect(
       (model.requests[1]!.tools as { name: string }[]).some((tool) =>
         tool.name.startsWith("crewon_comfyui_"),
+      ),
+    ).toBe(false);
+    const originalToolNames = baseVersion.tools.map((tool) => tool.name);
+    expect(originalToolNames.length).toBeGreaterThan(0);
+    expect(
+      (model.requests[1]!.tools as { name: string }[]).map((tool) => tool.name),
+    ).toEqual(expect.arrayContaining(originalToolNames));
+    expect(
+      (model.requests[0]!.tools as { name: string }[]).some((tool) =>
+        originalToolNames.includes(tool.name),
       ),
     ).toBe(false);
     await supervisor.stop();
