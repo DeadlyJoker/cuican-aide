@@ -294,6 +294,79 @@ describe("original plugin Settings Native selection and activation", () => {
     },
   );
 
+  it("disables the old Native version before selecting a replacement, and leaves the replacement disabled for setup", async () => {
+    fixture.selections = [settingsSelection(2, "enabled")];
+    fixture.packages = [settingsPackage(), settingsPackage(2)];
+    const select = native(async (input) => {
+      const serial =
+        input.request.selectedPackageDigest === settingsPackage(2).packageDigest
+          ? 2
+          : 1;
+      fixture.selections = [
+        settingsSelection(
+          input.request.expectedSelectionRevision + 1,
+          input.request.state,
+          serial,
+        ),
+      ];
+      return receipt(fixture.selections[0]!);
+    });
+    await render();
+    await click("管理版本");
+    expect(
+      container.querySelector(".installed-plugin-versions")?.innerHTML,
+    ).toMatchSnapshot();
+    await click("先停用插件");
+    expect(select.mock.calls[0]![0].request).toEqual({
+      state: "disabled",
+      selectedPackageDigest: settingsPackage().packageDigest,
+      expectedSelectionRevision: 2,
+    });
+    expect(fixture.selections[0]!.selectedPackageDigest).toBe(
+      settingsPackage().packageDigest,
+    );
+    const target = [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        ".installed-plugin-version button",
+      ),
+    ].find((item) => !item.disabled)!;
+    await act(async () => {
+      target.click();
+      await settleSettings();
+    });
+    await settle();
+    expect(select.mock.calls[1]![0].request).toEqual({
+      state: "disabled",
+      selectedPackageDigest: settingsPackage(2).packageDigest,
+      expectedSelectionRevision: 3,
+    });
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("2.0.0 · 当前版本");
+    expect(container.textContent).toContain("已停用");
+    expect(fixture.mutations).toHaveLength(0);
+  });
+
+  it("explains Native preparation refusals instead of incorrectly claiming a stale revision", async () => {
+    native(async () => ({
+      ok: false,
+      error: {
+        kind: "http",
+        status: 409,
+        category: "conflict",
+        code: "desktop_plugin_candidate_selection_changed",
+        message: "desktop_plugin_candidate_selection_changed",
+        requestId: "named-native-upgrade-refusal",
+      },
+    }));
+    await render();
+    await click("启用");
+    expect(container.textContent).toContain(
+      "请先停用插件、选择所需版本并完成业务配置，再启用。",
+    );
+    expect(container.textContent).not.toContain("插件状态已变化");
+    expect(container.textContent).not.toContain("重试上次操作");
+  });
+
   it("preserves a known Native HTTP conflict as the original refusal and uses the refreshed CAS only for a new intent", async () => {
     const select = native(async (input) => {
       if (input.request.expectedSelectionRevision === 1) {

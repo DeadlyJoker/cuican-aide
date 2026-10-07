@@ -14,6 +14,7 @@ import type { InstalledPluginConfigurationClient } from "../../lib/plugins/useIn
 import { InstalledPluginConfigurationPanel } from "./InstalledPluginConfigurationPanel";
 import type { DesktopLocalPluginExecutionSetupAccess } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
 import { currentLocalPluginExecutionSetupPluginId } from "../../lib/plugins/localPluginExecutionSetupRecovery";
+import { getDesktopBridge } from "../../lib/desktop/desktopBridge";
 import "./InstalledPluginSettings.css";
 
 export function InstalledPluginSettings({
@@ -252,6 +253,17 @@ export function InstalledPluginSettings({
                     selection={selection}
                     locale={locale}
                     disabled={disabled}
+                    disableBeforeSwitch={
+                      selection.state === "enabled" &&
+                      typeof getDesktopBridge()?.runtime?.setPluginSelection ===
+                        "function"
+                    }
+                    onDisable={() =>
+                      void state.select(selection, {
+                        state: "disabled",
+                        selectedPackageDigest: selection.selectedPackageDigest,
+                      })
+                    }
                     onSelect={(packageDigest) =>
                       void state.select(selection, {
                         state:
@@ -329,12 +341,16 @@ function PluginVersions({
   selection,
   locale,
   disabled,
+  disableBeforeSwitch,
+  onDisable,
   onSelect,
 }: {
   client: PluginInstallationSettingsClient;
   selection: PluginSelectionView;
   locale: Locale;
   disabled: boolean;
+  disableBeforeSwitch: boolean;
+  onDisable(): void;
   onSelect(packageDigest: string): void;
 }) {
   const [cursors, setCursors] = useState<readonly (string | null)[]>([null]);
@@ -376,6 +392,13 @@ function PluginVersions({
         <p role="status">{zh ? "正在读取版本…" : "Loading versions…"}</p>
       ) : (
         <>
+          {disableBeforeSwitch && (
+            <p>
+              {zh
+                ? "切换桌面插件版本前请先停用。选择新版并完成业务配置后，再启用。"
+                : "Disable the desktop plugin before switching versions. Configure the new version, then enable it."}
+            </p>
+          )}
           {page.packages.map((pkg) => (
             <div className="installed-plugin-version" key={pkg.packageDigest}>
               <span>
@@ -393,9 +416,20 @@ function PluginVersions({
                   disabled ||
                   pkg.packageDigest === selection.selectedPackageDigest
                 }
-                onClick={() => onSelect(pkg.packageDigest)}
+                onClick={() =>
+                  disableBeforeSwitch
+                    ? onDisable()
+                    : onSelect(pkg.packageDigest)
+                }
               >
-                {zh ? "使用此版本" : "Use this version"}
+                {disableBeforeSwitch &&
+                pkg.packageDigest !== selection.selectedPackageDigest
+                  ? zh
+                    ? "先停用插件"
+                    : "Disable plugin first"
+                  : zh
+                    ? "使用此版本"
+                    : "Use this version"}
               </Button>
             </div>
           ))}

@@ -192,10 +192,47 @@ export async function setDesktopPluginSelectionWithNativeBusinessActivation(
   }
   return serialized(binding, command.pluginId, async () => {
     active(binding, input.signal);
+    // A replacement is selected while disabled, then prepared with its own
+    // configuration. The old pinned release must never activate the new digest.
+    const replacingDisabledPackage =
+      command.request.state === "disabled" &&
+      command.request.selectedPackageDigest !== entry.identity.packageDigest;
+    const assertInactive = async () => {
+      const { activation } = await input.client.getExtensionActivation(
+        command.pluginId,
+        { signal: input.signal },
+      );
+      active(binding, input.signal);
+      if (activation?.state === "enabled")
+        fail("version_change_requires_disable");
+    };
+    if (replacingDisabledPackage) {
+      const current = await input.client.plugins.getSelection(
+        command.pluginId,
+        {
+          signal: input.signal,
+        },
+      );
+      active(binding, input.signal);
+      if (current.selection?.state !== "disabled")
+        fail("version_change_requires_disable");
+      await assertInactive();
+    }
     const result = await select();
     active(binding, input.signal);
     try {
-      if (result.mutation.selection.state !== "uninstalled")
+      if (replacingDisabledPackage) {
+        await assertInactive();
+        const current = await input.client.plugins.getSelection(
+          command.pluginId,
+          {
+            signal: input.signal,
+          },
+        );
+        active(binding, input.signal);
+        if (!isDeepStrictEqual(current.selection, result.mutation.selection))
+          fail("selection_changed");
+      } else if (result.mutation.selection.state !== "uninstalled")
         await reconcile({
           binding,
           entry,

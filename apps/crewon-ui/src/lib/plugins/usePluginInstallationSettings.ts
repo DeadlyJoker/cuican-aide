@@ -346,6 +346,13 @@ export function pluginInstallationError(
 ): string {
   const zh = locale === "zh";
   if (error instanceof ControlApiClientError) {
+    if (
+      error.status === 409 &&
+      error.code === "desktop_plugin_candidate_selection_changed"
+    )
+      return zh
+        ? "请先停用插件、选择所需版本并完成业务配置，再启用。"
+        : "Disable the plugin, select and configure the desired version, then enable it.";
     if (error.status === 404)
       return zh
         ? "此环境尚未开启插件管理。"
