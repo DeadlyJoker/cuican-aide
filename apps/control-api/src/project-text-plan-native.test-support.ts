@@ -31,7 +31,7 @@ export async function nativeTextPlanFixture(
   directory: string,
   options: Readonly<{
     createTransport?(): ModelTransportPort;
-    expectedVersion?: "17.0.0" | "20.0.0";
+    expectedVersion?: string;
   }> = {},
 ) {
   const runtimes = new Set<
@@ -323,6 +323,11 @@ export async function nativeTextPlanFixture(
     h,
     listen: () => runtime.app.listen({ host: "127.0.0.1", port: 0 }),
     invoke,
+    invokeText: (method: string, input: object) =>
+      h.request("POST", `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`, {
+        action: `crewon.project-texts.v1.${method}`,
+        input,
+      }),
     peerRequests,
     close: () => runtime.app.close(),
     reopen: async () => {
@@ -335,11 +340,16 @@ export async function nativeTextPlanFixture(
         ...approval,
         projects: { ...projects, textPlans: undefined },
       }),
-    conversation: async () => {
+    conversation: async (
+      input: { title?: string; briefText?: string; workspaceId?: string } = {},
+    ) => {
       const project = await h.request(
         "POST",
         "/api/v1/creative-projects",
-        { title: "真实计划项目", briefText: "两集都市悬疑" },
+        {
+          title: input.title ?? "真实计划项目",
+          briefText: input.briefText ?? "两集都市悬疑",
+        },
         "plan-project",
       );
       assert.equal(project.statusCode, 200, project.body);
@@ -351,7 +361,7 @@ export async function nativeTextPlanFixture(
           action: "crewon.project-conversations.v1.createConversation",
           input: {
             projectId,
-            workspaceId: null,
+            workspaceId: input.workspaceId ?? null,
             title: "计划对话",
             idempotencyKey: "plan-conversation",
           },
