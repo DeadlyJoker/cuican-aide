@@ -42,6 +42,7 @@ import {
   LocalWorkspaceSandbox,
 } from "./localWorkspace.ts";
 import { loadLocalEnvironment } from "./localEnvironment.ts";
+import { bindDesktopWindowActivation } from "./desktopWindowActivation.ts";
 import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
 import { loadDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
@@ -254,16 +255,18 @@ async function launch(): Promise<void> {
     removeLocalManagementListener();
     browserViews.destroyAll();
   });
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0)
-      void loadRenderer(createWindow());
-  });
   app.on("window-all-closed", () => app.quit());
   let quitting = false;
+  const removeWindowActivation = bindDesktopWindowActivation({
+    app,
+    window,
+    isQuitting: () => quitting,
+  });
   app.on("before-quit", (event) => {
     if (quitting) return;
     event.preventDefault();
     quitting = true;
+    removeWindowActivation();
     removeSessionListener();
     removeLocalManagementListener();
     void Promise.allSettled([
@@ -281,10 +284,6 @@ async function launch(): Promise<void> {
       .finally(() => app.quit());
   });
   app.on("will-quit", closeProcessRuntimeLogs);
-  app.on("second-instance", () => {
-    if (window.isMinimized()) window.restore();
-    window.focus();
-  });
 }
 
 function createWindow(): BrowserWindow {
@@ -294,6 +293,8 @@ function createWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     frame: false,
+    // Custom titlebar buttons should respond on the first click from another app.
+    acceptFirstMouse: true,
     transparent: process.platform === "darwin",
     backgroundColor: "#00000000",
     show: false,
@@ -306,6 +307,11 @@ function createWindow(): BrowserWindow {
     },
   });
   window.once("ready-to-show", () => window.show());
+  const logWindowEvent = (event: string) => () =>
+    processRuntimeLogs().write("stdout", "CrewON window", `${event}\n`);
+  window.on("minimize", logWindowEvent("minimize"));
+  window.on("restore", logWindowEvent("restore"));
+  window.on("closed", logWindowEvent("closed"));
   window.webContents.setWindowOpenHandler(({ url }) => {
     void openExternal(url);
     return { action: "deny" };

@@ -2,11 +2,15 @@
 
 日期：2026-10-07。本轮收尾，完整短剧生产目标尚未完成。
 
-## 当前可交付版本
+## 最新部署与桌面修复
+
+2026-10-07 已部署 Web / Control / Worker 到 `https://crewon.aicuican.com/`，服务器版本为 `20261007-890747ea1`。正式 `/Applications/CrewON.app` 已从 0.1.15 更新到 0.1.31，用户数据原位保留。桌面修复 Finder 环境缺少 pnpm 导致后台启动失败，以及窗口激活和首次点击行为；详情见 [部署与桌面修复记录](desktop-server-release-20261007.md)。服务器尚未启用 Web 插件安装与执行服务，不能把文件部署视为短剧插件已上线。
+
+## 先前短剧候选版本
 
 - 独立桌面候选包：0.1.30，生产源码提交 `64e164346`。
 - 单一插件：`crewon.short-drama@32.0.0`，包摘要 `sha256:eeb9701e60b64786e3c3b3ce5a8e19475dadb21e2e23f561494c66792f38e50d`。
-- 正式安装的 `/Applications/CrewON.app` 未覆盖，冻结 SDK 和已发行插件包未重建。
+- 此候选验收阶段未覆盖正式应用；后续用户授权的桌面更新见上节。冻结 SDK 和已发行插件包未重建。
 - 用户无关的票务、旅行文档及插件工作区内容保持原样。
 
 候选包位于 `output/extensions/checks/native-short32-concept-fix-20261007/release/mac-arm64/CrewON.app`。打包校验、实际启动及正常退出记录位于同目录的 `verification.json`。

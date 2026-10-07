@@ -15,6 +15,66 @@ import {
   WORKSPACE_FILE_PREFIX_BYTES,
 } from "./local-workspace-reads.mts";
 
+test("Finder PATH without developer executables still discovers tools and reads files", async (context) => {
+  const root = await mkdtemp(join(tmpdir(), "crewon-workspace-finder-"));
+  await mkdir(join(root, "apps/crewon-ui/src"), { recursive: true });
+  await writeFile(
+    join(root, "apps/crewon-ui/src/fixture.test.ts"),
+    "throw new Error('must_not_execute');",
+  );
+  await writeFile(join(root, "fixture.txt"), "still readable");
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [
+      fileURLToPath(
+        new URL("./local-workspace-checks-mcp.mjs", import.meta.url),
+      ),
+    ],
+    env: {
+      PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+      CREWON_LOCAL_WORKSPACE_ROOT: root,
+      CREWON_LOCAL_PNPM_PATH: "pnpm",
+      CREWON_LOCAL_GIT_PATH: "git",
+    },
+    stderr: "ignore",
+  });
+  const client = new Client({ name: "finder-startup", version: "1.0.0" });
+  context.after(async () => {
+    await client.close();
+    await transport.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  await client.connect(transport);
+  const catalog = await client.listTools();
+  assert.deepEqual(catalog.tools.map((tool) => tool.name).sort(), [
+    "git_status",
+    "list_files",
+    "read_file",
+    "run_ui_test",
+  ]);
+  for (const [name, args, error] of [
+    ["git_status", {}, "local_git_path_invalid"],
+    [
+      "run_ui_test",
+      { testFile: "src/fixture.test.ts" },
+      "local_pnpm_path_invalid",
+    ],
+  ] as const) {
+    const result = await client.callTool({ name, arguments: args });
+    assert.equal(result.isError, true);
+    assert.deepEqual(result.structuredContent, { error });
+  }
+  const read = await client.callTool({
+    name: "read_file",
+    arguments: { path: "fixture.txt" },
+  });
+  assert.equal(read.isError, false);
+  assert.equal(
+    (read.structuredContent as { content: string }).content,
+    "still readable",
+  );
+});
+
 test("small, boundary, empty and cut UTF-8 files preserve the existing response shape", async (context) => {
   const root = await mkdtemp(join(tmpdir(), "crewon-workspace-read-"));
   context.after(() => rm(root, { recursive: true, force: true }));

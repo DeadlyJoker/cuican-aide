@@ -30,14 +30,6 @@ const repoRoot = await requireDirectory(
   process.env.CREWON_LOCAL_WORKSPACE_ROOT,
   "local_workspace_root_invalid",
 );
-const pnpmPath = requireExecutablePath(
-  process.env.CREWON_LOCAL_PNPM_PATH,
-  "local_pnpm_path_invalid",
-);
-const gitPath = requireExecutablePath(
-  process.env.CREWON_LOCAL_GIT_PATH,
-  "local_git_path_invalid",
-);
 
 const [
   { Server },
@@ -163,7 +155,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       return toolError("git_status_input_invalid");
     }
     return executeCommand({
-      command: gitPath,
+      command: process.env.CREWON_LOCAL_GIT_PATH,
+      commandError: "local_git_path_invalid",
       args: ["status", "--short"],
       cwd: repoRoot,
       signal: extra.signal,
@@ -186,7 +179,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       );
     }
     return executeCommand({
-      command: pnpmPath,
+      command: process.env.CREWON_LOCAL_PNPM_PATH,
+      commandError: "local_pnpm_path_invalid",
       args: ["--filter", "@crewon/ui", "exec", "vitest", "run", testFile],
       cwd: repoRoot,
       signal: extra.signal,
@@ -362,7 +356,12 @@ function toolResult(result) {
 
 async function executeCommand(request) {
   try {
-    return toolResult(await commands.run(request));
+    // Finder does not inherit the developer shell's PATH. Missing optional
+    // developer tools must not prevent catalog discovery and file reads from
+    // starting the desktop runtime. Keep absolute-path validation at invocation.
+    const { commandError, ...execution } = request;
+    execution.command = requireExecutablePath(execution.command, commandError);
+    return toolResult(await commands.run(execution));
   } catch (error) {
     return toolError(
       error instanceof Error ? error.message : "workspace_command_failed",
