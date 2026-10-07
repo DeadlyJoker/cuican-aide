@@ -26,7 +26,9 @@ type Yield =
     ? Y
     : never;
 export type MediaResultPlan<T> = Generator<
-  Yield | Readonly<{ mediaOperationSchema: true }>,
+  | Yield
+  | Readonly<{ mediaOperationSchema: true }>
+  | Readonly<{ assetSchema: true }>,
   T,
   AssetRows
 >;

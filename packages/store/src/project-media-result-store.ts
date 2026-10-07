@@ -1,6 +1,17 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import {
+  parseProjectAssetMediaReferenceQualificationRequest,
+  projectAssetMediaReferenceResultRequest,
+  type ProjectAssetMediaReferenceQualificationRequest,
+  type ProjectAssetMediaReferenceQualificationStore,
+} from "@crewon/application";
+import { qualifyAssetMediaReferencePlan } from "./project-asset-media-reference-plan.ts";
+import {
+  assertSqliteProjectAssetSchema,
+  assertPostgresProjectAssetSchema,
+} from "./project-asset-schema.ts";
+import {
   parseProjectMediaResultRequest,
   parseProjectMediaResultCatalogRequest,
   captureProjectMediaResultCatalogAuthority,
@@ -51,7 +62,11 @@ const capture = (
   };
 };
 /** Explicit opt-in child on the original native connection; constructors never migrate. */
-export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
+export class SqliteProjectMediaResultStore
+  implements
+    ProjectMediaResultStore,
+    ProjectAssetMediaReferenceQualificationStore
+{
   #enabled = false;
   #catalogEnabled = false;
   #resultReadsEnabled = false;
@@ -134,6 +149,9 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
         if ("mediaOperationSchema" in next.value) {
           assertSqliteProjectMediaOperationSchema(this.#db);
           rows = [];
+        } else if ("assetSchema" in next.value) {
+          assertSqliteProjectAssetSchema(this.#db);
+          rows = [];
         } else if ("installation" in next.value) {
           assertSqliteProjectTextUiCommit(this.#db, next.value.installation);
           rows = [];
@@ -180,6 +198,22 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
       q.authority,
     );
   }
+  qualifyAssetReference(
+    input: ProjectAssetMediaReferenceQualificationRequest,
+    a: ProjectMediaResultAuthority,
+  ) {
+    const request = parseProjectAssetMediaReferenceQualificationRequest(input),
+      captured = capture(
+        projectAssetMediaReferenceResultRequest(request),
+        a,
+        "read",
+      );
+    return this.#transaction(
+      qualifyAssetMediaReferencePlan(this.#d, request),
+      captured.authority,
+      "read",
+    );
+  }
   loadSource(input: ProjectMediaResultRequest, a: ProjectMediaResultAuthority) {
     const q = capture(input, a, "read");
     return this.#transaction(
@@ -212,9 +246,27 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
   }
 }
 export class PostgresProjectMediaResultStore
-  implements ProjectMediaResultStore
+  implements
+    ProjectMediaResultStore,
+    ProjectAssetMediaReferenceQualificationStore
 {
   #enabled = false;
+  qualifyAssetReference(
+    input: ProjectAssetMediaReferenceQualificationRequest,
+    a: ProjectMediaResultAuthority,
+  ) {
+    const request = parseProjectAssetMediaReferenceQualificationRequest(input),
+      captured = capture(
+        projectAssetMediaReferenceResultRequest(request),
+        a,
+        "read",
+      );
+    return this.#transaction(
+      qualifyAssetMediaReferencePlan(this.#d, request),
+      captured.authority,
+      "read",
+    );
+  }
   #catalogEnabled = false;
   #resultReadsEnabled = false;
   readonly #pool: Pool;
@@ -310,6 +362,9 @@ export class PostgresProjectMediaResultStore
           let rows: readonly Record<string, unknown>[];
           if ("mediaOperationSchema" in next.value) {
             await assertPostgresProjectMediaOperationSchema(c, this.#d.schema);
+            rows = [];
+          } else if ("assetSchema" in next.value) {
+            await assertPostgresProjectAssetSchema(c, this.#d.schema);
             rows = [];
           } else if ("installation" in next.value) {
             await assertPostgresProjectTextUiCommit(
