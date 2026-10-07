@@ -324,7 +324,13 @@ export async function commitSqliteExtensionTurn(
           assertProjectMediaConversationTurn(mediaDialect, media, input),
         );
       } else if (assetStage === null && mediaInputStage === null)
-        assertSqliteProjectStage(host.database, stage, input, replay === null);
+        assertSqliteProjectStage(
+          host.database,
+          stage,
+          input,
+          replay === null,
+          prepared ?? projectQuery ?? historicalQuery,
+        );
       assertSqliteAssetStageTurn(host.database, assetStage, replay === null);
       assertSqliteMediaInputStageTurn(
         host.database,

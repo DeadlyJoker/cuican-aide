@@ -355,6 +355,7 @@ export async function commitPostgresExtensionTurn(
           stage,
           frozenInput,
           replay === null,
+          prepared ?? projectQuery ?? historicalQuery,
         );
       await assertPostgresMediaInputStageTurn(
         client,

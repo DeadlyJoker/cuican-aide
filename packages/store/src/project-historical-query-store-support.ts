@@ -572,7 +572,14 @@ function hostFields(
 export function stripProjectHistoricalQueryOptions(
   options: CommitExtensionTurnOptions | undefined,
 ): CommitExtensionTurnOptions | undefined {
-  if (options === undefined) return undefined;
+  // An inactive historical-query path must leave another operation's options
+  // untouched so that its owning validator rejects accessors without reading them.
+  if (
+    options === undefined ||
+    (!("projectHistoricalQueryAuthority" in options) &&
+      !("projectHistoricalQueryPublication" in options))
+  )
+    return options;
   const keys = Reflect.ownKeys(options),
     out: Record<string, unknown> = {};
   for (const key of keys) {

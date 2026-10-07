@@ -23,6 +23,7 @@ export async function nativeMediaFlowFixture(
     kind?: "T10" | "D18";
     packageDirectory?: string;
     mediaTransportGrant?: "none" | "read" | "all";
+    conceptConversation?: boolean;
   } = {},
 ) {
   const provider = nativeMediaProvider(t);
@@ -176,12 +177,24 @@ export async function nativeMediaFlowFixture(
     expectedProjectRevision: concept.project.revision,
     expectedAssetMetadataRevision: concept.asset.revision,
   };
-  await seedThread(f.parent, { ...f.actor, threadId: "native-source-thread" });
+  let sourceThreadId = "native-source-thread";
+  if (options.conceptConversation) {
+    const conversation = (await invoke(
+      "crewon.project-conversations.v1.createConversation",
+      {
+        projectId: f.query.projectId,
+        workspaceId: "native-existing-workspace",
+        title: "Concept generation in the original project conversation",
+        idempotencyKey: "native-concept-conversation",
+      },
+    )) as { binding: { threadId: string } };
+    sourceThreadId = conversation.binding.threadId;
+  } else await seedThread(f.parent, { ...f.actor, threadId: sourceThreadId });
   const created = (await invoke(
     "crewon.project-generations.v1.generateConcept",
     {
       reference,
-      threadId: "native-source-thread",
+      threadId: sourceThreadId,
       expectedThreadRevision: 1,
       idempotencyKey: "native-source-generation",
     },
@@ -429,6 +442,7 @@ export async function nativeMediaFlowFixture(
     body,
     post,
     sourceRunId: created.runId,
+    sourceThreadId,
     binding: conversation.binding,
     input,
   };

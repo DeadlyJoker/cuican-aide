@@ -44,6 +44,11 @@ import {
 } from "./project-text-ui-commit-support.ts";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
+import {
+  assertSqliteProjectConceptConversation,
+  assertPostgresProjectConceptConversation,
+  type ProjectConceptConversationTurn,
+} from "./project-concept-conversation-turn.ts";
 
 type PreparedStage = Readonly<{
   admission: ProjectStageRunAdmission;
@@ -287,16 +292,21 @@ export function assertSqliteProjectStage(
   p: PreparedStage | null,
   input: CommitExtensionTurnInput,
   requireCurrentSources = true,
+  concept: ProjectConceptConversationTurn | null = null,
 ): void {
   if (p === null) {
-    if (
-      sqliteThreadBindingMarker(db, {
-        tenantId: input.binding.tenantId,
-        spaceId: input.binding.spaceId,
-        threadId: input.binding.threadId!,
-      }) !== null
-    )
-      conversationFail("project_stage_admission_required");
+    const marker = sqliteThreadBindingMarker(db, {
+      tenantId: input.binding.tenantId,
+      spaceId: input.binding.spaceId,
+      threadId: input.binding.threadId!,
+    });
+    if (marker !== null)
+      assertSqliteProjectConceptConversation(db, {
+        marker,
+        operation: concept,
+        input,
+        newTurn: requireCurrentSources,
+      });
     return;
   }
   assertSqliteConversationSchema(db);
@@ -322,16 +332,21 @@ export async function assertPostgresProjectStage(
   p: PreparedStage | null,
   input: CommitExtensionTurnInput,
   requireCurrentSources = true,
+  concept: ProjectConceptConversationTurn | null = null,
 ): Promise<void> {
   if (p === null) {
-    if (
-      (await postgresThreadBindingMarker(c, schema, {
-        tenantId: input.binding.tenantId,
-        spaceId: input.binding.spaceId,
-        threadId: input.binding.threadId!,
-      })) !== null
-    )
-      conversationFail("project_stage_admission_required");
+    const marker = await postgresThreadBindingMarker(c, schema, {
+      tenantId: input.binding.tenantId,
+      spaceId: input.binding.spaceId,
+      threadId: input.binding.threadId!,
+    });
+    if (marker !== null)
+      await assertPostgresProjectConceptConversation(c, schema, {
+        marker,
+        operation: concept,
+        input,
+        newTurn: requireCurrentSources,
+      });
     return;
   }
   await assertPostgresConversationSchema(c, schema);
