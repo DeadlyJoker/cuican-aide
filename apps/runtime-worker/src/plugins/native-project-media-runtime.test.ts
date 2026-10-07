@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { nativeMediaFixture } from "./native-project-media-runtime.test-support.ts";
 import { createInstalledPluginWorkerAuthority } from "./installed-plugin-worker-authority.ts";
@@ -133,12 +135,63 @@ test("Native Worker V2 reopens the original result archive and preserves the exa
   const cold = await f.open();
   await f.prepare(cold);
   assert.ok(
-    await f.f.store
-      .extensionStore()
-      .loadExtensionConfiguration({
-        ...f.f.scope,
-        pluginId: f.f.identity.pluginId,
-        revision: 1,
-      }),
+    await f.f.store.extensionStore().loadExtensionConfiguration({
+      ...f.f.scope,
+      pluginId: f.f.identity.pluginId,
+      revision: 1,
+    }),
   );
 });
+
+for (const publish of [false, true])
+  test(`Native Worker-before-Control first startup ${publish ? "initializes explicitly approved" : "does not infer permission to initialize"} result storage`, async (t) => {
+    const f = await nativeMediaFixture(t, {
+      assetV2: true,
+      resultSchemaOwner: "worker",
+      mediaResultPurposes: publish ? ["read", "publish"] : ["read"],
+    });
+    let fetches = 0;
+    t.mock.method(globalThis, "fetch", async () => {
+      fetches++;
+      throw new Error("native_startup_must_not_call_provider");
+    });
+    const db = new DatabaseSync(join(f.f.dataDirectory, "control.sqlite"), {
+      readOnly: true,
+    });
+    t.after(() => db.close());
+    const exists = () =>
+      db
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name='project_media_result_candidates'",
+        )
+        .get() !== undefined;
+    const runCount = () =>
+      db.prepare("SELECT COUNT(*) AS n FROM run_snapshots").get()!.n;
+    assert.equal(exists(), false);
+    const before = runCount();
+    const worker = await f.open();
+    if (!publish) {
+      await assert.rejects(() => f.prepare(worker), /result_schema_invalid/);
+      assert.equal(exists(), false);
+    } else {
+      const prepared = await f.prepare(worker);
+      assert.equal(exists(), true);
+      assert.equal(
+        db
+          .prepare("SELECT COUNT(*) AS n FROM project_media_result_candidates")
+          .get()!.n,
+        0,
+      );
+      // A later Control reader can borrow the original schema normally.
+      await f.f.store
+        .extensionStore()
+        .projectMediaResults()
+        .enableResultReads();
+      await prepared.close();
+      await worker.close();
+      const reopened = await f.open();
+      await f.prepare(reopened);
+    }
+    assert.equal(runCount(), before);
+    assert.equal(fetches, 0);
+  });

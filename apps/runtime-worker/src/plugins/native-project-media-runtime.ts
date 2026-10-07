@@ -136,7 +136,15 @@ export async function createNativeProjectMediaRuntime(
         | Awaited<ReturnType<typeof createDesktopAdoptedMediaReader>>
         | undefined;
       try {
-        if (owner.projects.assetV2)
+        if (owner.projects.assetV2) {
+          // Native Main starts Worker before Control. An explicit result-publish
+          // grant prepares the empty shared schema before lending a read-only
+          // reader; read-only grants still require an existing valid schema.
+          if (owner.projects.mediaResults?.purposes.includes("publish")) {
+            owner.current(signal);
+            await store.extensionStore().projectMediaResults().migrate();
+            owner.current(signal);
+          }
           adopted = await createDesktopAdoptedMediaReader({
             store,
             storage,
@@ -151,6 +159,7 @@ export async function createNativeProjectMediaRuntime(
             assertCurrent: async (actor) => current(actor),
             assertActive: current,
           });
+        }
         const runtime = await createProjectMediaMaterialRuntime({
           ...(adopted ? { adoptedMedia: adopted.config } : {}),
           store,

@@ -28,6 +28,8 @@ export async function nativeMediaFixture(
   options: {
     generation?: boolean;
     assetV2?: boolean;
+    mediaResultPurposes?: readonly ("read" | "publish")[];
+    resultSchemaOwner?: "control" | "worker";
     reviewMismatch?: "graph" | "manifest";
   } = {},
 ) {
@@ -113,7 +115,7 @@ export async function nativeMediaFixture(
     };
     approval.projects.mediaResults = {
       version: "crewon.desktop-project-media-results.v1",
-      purposes: ["read"],
+      purposes: options.mediaResultPurposes ?? ["read"],
       publications: [publication],
     };
   }
@@ -165,8 +167,9 @@ export async function nativeMediaFixture(
       store: f.store,
       config: w.installedPluginExecution.projectMediaInputs,
     });
-    // Native Control owns the explicit result migrations before Worker borrowing.
-    if (options.assetV2) {
+    // Reopening an existing Control-owned schema remains supported. Cold-start
+    // tests instead exercise the real Worker-before-Control startup order.
+    if (options.assetV2 && options.resultSchemaOwner !== "worker") {
       await f.store
         .projectAssetStore()
         .projectMaterialPreparationStore()
