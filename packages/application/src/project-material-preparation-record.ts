@@ -160,7 +160,10 @@ export function createProjectMaterialPreparationInitial(
   )
     invalid();
   const body = {
-    schemaVersion: "crewon.project-material-preparation.v1" as const,
+    schemaVersion:
+      source.schemaVersion === "crewon.project-reference-frozen-material.v1"
+        ? ("crewon.project-material-preparation.v1" as const)
+        : ("crewon.project-material-preparation.v2" as const),
     ...projectMaterialPreparationIdentity(request),
     request,
     source,
@@ -207,7 +210,8 @@ export function parseProjectMaterialPreparationInitial(
       "requestDigest",
     ]);
   if (
-    r.schemaVersion !== "crewon.project-material-preparation.v1" ||
+    (r.schemaVersion !== "crewon.project-material-preparation.v1" &&
+      r.schemaVersion !== "crewon.project-material-preparation.v2") ||
     t.adapter !== "comfyui-image-upload.v1"
   )
     invalid();
@@ -224,6 +228,13 @@ export function parseProjectMaterialPreparationInitial(
     !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
       t.preparationId,
     )
+  )
+    invalid();
+  if (
+    r.schemaVersion !==
+    (source.schemaVersion === "crewon.project-reference-frozen-material.v1"
+      ? "crewon.project-material-preparation.v1"
+      : "crewon.project-material-preparation.v2")
   )
     invalid();
   const identity = projectMaterialPreparationIdentity(request),
@@ -244,7 +255,10 @@ export function parseProjectMaterialPreparationInitial(
   )
     invalid();
   const body = {
-    schemaVersion: "crewon.project-material-preparation.v1" as const,
+    schemaVersion:
+      source.schemaVersion === "crewon.project-reference-frozen-material.v1"
+        ? ("crewon.project-material-preparation.v1" as const)
+        : ("crewon.project-material-preparation.v2" as const),
     ...identity,
     request,
     source,

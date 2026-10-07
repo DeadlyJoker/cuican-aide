@@ -273,6 +273,7 @@ export * from "./project-media-result-port.ts";
 export * from "./project-media-result-record.ts";
 export * from "./project-media-result-catalog.ts";
 export * from "./project-asset-media-reference-image.ts";
+export * from "./project-adopted-media-material-record.ts";
 export * from "./project-asset-media-reference-image-service.ts";
 
 export {

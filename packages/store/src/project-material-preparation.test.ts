@@ -23,6 +23,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
         { origin: "https://invented-origin.example/" },
       ]) {
         const r = f.reservation();
+        assert.equal(
+          r.source.schemaVersion,
+          "crewon.project-reference-frozen-material.v1",
+        );
         await assert.rejects(
           f.journal.reserve(
             {
@@ -410,6 +414,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
     async (t) => {
       const f = await materialPreparationFixture(t, backend),
         first = await f.journal.reserve(f.reservation(), f.authority());
+      assert.equal(
+        f.frozen.schemaVersion,
+        "crewon.project-reference-frozen-material.v1",
+      );
       const changed = {
         ...f.request,
         target: { ...f.request.target, configurationRevision: 2 },

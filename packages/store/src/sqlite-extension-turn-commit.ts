@@ -21,7 +21,7 @@ import { assertSqliteProjectMediaGenerationSchema } from "./project-media-genera
 import { executeSqliteMediaGenerationPlan } from "./project-media-generation-transaction.ts";
 import { assertProjectMediaConversationTurn } from "./project-media-conversation-turn.ts";
 import { assertSqliteConversationSchema } from "./project-conversation-schema.ts";
-import type { ProjectMediaInputPlan } from "./project-media-input-plan.ts";
+import type { MaterialPreparationPlan as ProjectMediaInputPlan } from "./project-material-preparation-plan.ts";
 import {
   captureProjectAssetStageTurn,
   assertSqliteAssetStageTurn,

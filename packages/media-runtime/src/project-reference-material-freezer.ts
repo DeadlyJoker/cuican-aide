@@ -1,18 +1,14 @@
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import {
-  ApplicationError,
-  ProjectAssetReferenceImageApplicationService,
   parseProjectReferenceMaterialFreezeRequest,
   projectReferenceMaterialFreezeIdentity,
   parseFrozenProjectReferenceMaterial,
   frozenProjectMaterialFingerprint,
   type ActorContext,
   type ProjectAssetReferenceImageQuery,
-  type ProjectAssetReferenceImageSource,
   type ProjectReferenceMaterialFreezeRequest,
   type ProjectReferenceMaterialArchivePort,
-  type ProjectReferenceMaterialFreezeAuthorizationPort,
   type FrozenProjectReferenceMaterialContent,
   type FrozenProjectReferenceMaterial,
 } from "@crewon/application";
@@ -21,7 +17,10 @@ import {
   projectAssetInputFields,
   projectAssetId,
 } from "@crewon/domain";
-import { ProjectReferenceMaterialReader } from "./project-reference-material-reader.ts";
+import {
+  captureProjectReferenceFreezeSource,
+  type ProjectReferenceFreezeSourceInput,
+} from "./project-reference-material-freezer-source.ts";
 import { inspectProjectMaterialPng } from "./project-material-png.ts";
 
 const digester = {
@@ -32,41 +31,20 @@ const digester = {
  * This does not upload, reserve a Run, grant execution or claim supplier-side readiness.
  */
 export class ProjectReferenceMaterialFreezer {
-  readonly #source: ProjectAssetReferenceImageApplicationService["resolveSelectedReference"];
-  readonly #read: ProjectReferenceMaterialReader["readSelectedReferenceBytes"];
+  readonly #driver: ReturnType<typeof captureProjectReferenceFreezeSource>;
   readonly #archiveId: string;
   readonly #load: ProjectReferenceMaterialArchivePort["load"];
   readonly #save: ProjectReferenceMaterialArchivePort["save"];
-  readonly #authorize: ProjectReferenceMaterialFreezeAuthorizationPort["authorize"];
   constructor(
-    input: Readonly<{
-      sources: ProjectAssetReferenceImageApplicationService;
-      reader: ProjectReferenceMaterialReader;
-      archive: ProjectReferenceMaterialArchivePort;
-      authorization: ProjectReferenceMaterialFreezeAuthorizationPort;
-    }>,
+    input: ProjectReferenceFreezeSourceInput &
+      Readonly<{ archive: ProjectReferenceMaterialArchivePort }>,
   ) {
-    if (
-      !(
-        input.sources instanceof ProjectAssetReferenceImageApplicationService
-      ) ||
-      !(input.reader instanceof ProjectReferenceMaterialReader)
-    )
-      fail("dependency_invalid");
-    this.#source =
-      ProjectAssetReferenceImageApplicationService.prototype.resolveSelectedReference.bind(
-        input.sources,
-      );
-    this.#read =
-      ProjectReferenceMaterialReader.prototype.readSelectedReferenceBytes.bind(
-        input.reader,
-      );
+    this.#driver = captureProjectReferenceFreezeSource(input);
     const id = Object.getOwnPropertyDescriptor(input.archive, "archiveId");
     if (!id || !("value" in id)) fail("dependency_invalid");
     this.#archiveId = projectAssetId(id.value);
     this.#load = bound(input.archive, "load");
     this.#save = bound(input.archive, "save");
-    this.#authorize = bound(input.authorization, "authorize");
   }
   async freezeSelectedReference(
     actor: ActorContext,
@@ -84,35 +62,29 @@ export class ProjectReferenceMaterialFreezer {
     const request = this.#request(actor, input),
       signal = AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]);
     signal.throwIfAborted();
-    const source = await this.#source(request.actor, request.query);
-    await this.#grant(request, source, signal);
+    const source = await this.#driver.resolve(
+      request.actor,
+      request.query,
+      signal,
+    );
+    await this.#driver.grant(request, source, this.#archiveId, signal);
     const existing = await this.#load(request);
     if (existing) {
       const actual = this.#content(existing, request);
-      assertSource(actual.record, source);
+      this.#driver.assertSource(actual.record, source);
       await this.#current(request, source, signal);
-      await this.#grant(request, source, signal);
+      await this.#driver.grant(request, source, this.#archiveId, signal);
       return Object.freeze({ disposition: "replayed", record: actual.record });
     }
     signal.throwIfAborted();
-    const read = await this.#read(request.actor, request.query, { signal });
-    const record = parseFrozenProjectReferenceMaterial(
-      {
-        schemaVersion: "crewon.project-reference-frozen-material.v1",
-        ...projectReferenceMaterialFreezeIdentity(
-          request,
-          this.#archiveId,
-          digester,
-        ),
+    const captured = this.#content(
+        await this.#driver.read(request, this.#archiveId, signal),
         request,
-        source: read.observation,
-      },
-      digester,
-    );
-    const captured = this.#content({ record, bytes: read.bytes }, request);
-    assertSource(captured.record, source);
+      ),
+      record = captured.record;
+    this.#driver.assertSource(captured.record, source);
     await this.#current(request, source, signal);
-    await this.#grant(request, source, signal);
+    await this.#driver.grant(request, source, this.#archiveId, signal);
     const saved = await this.#save(captured);
     if (saved.disposition !== "created" && saved.disposition !== "replayed")
       fail("receipt_invalid");
@@ -131,7 +103,7 @@ export class ProjectReferenceMaterialFreezer {
     )
       fail("receipt_invalid");
     await this.#current(request, source, signal);
-    await this.#grant(request, source, signal);
+    await this.#driver.grant(request, source, this.#archiveId, signal);
     return Object.freeze({
       disposition: saved.disposition,
       record: actual.record,
@@ -149,14 +121,18 @@ export class ProjectReferenceMaterialFreezer {
     const request = this.#request(actor, input),
       signal = AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]);
     signal.throwIfAborted();
-    const source = await this.#source(request.actor, request.query);
-    await this.#grant(request, source, signal);
+    const source = await this.#driver.resolve(
+      request.actor,
+      request.query,
+      signal,
+    );
+    await this.#driver.grant(request, source, this.#archiveId, signal);
     const stored = await this.#load(request);
     if (!stored) fail("archive_missing");
     const actual = this.#content(stored, request);
-    assertSource(actual.record, source);
+    this.#driver.assertSource(actual.record, source);
     await this.#current(request, source, signal);
-    await this.#grant(request, source, signal);
+    await this.#driver.grant(request, source, this.#archiveId, signal);
     return actual;
   }
   #request(
@@ -205,79 +181,23 @@ export class ProjectReferenceMaterialFreezer {
   }
   async #current(
     request: ProjectReferenceMaterialFreezeRequest,
-    expected: ProjectAssetReferenceImageSource,
+    expected: Awaited<
+      ReturnType<
+        ReturnType<typeof captureProjectReferenceFreezeSource>["resolve"]
+      >
+    >,
     signal: AbortSignal,
   ) {
     signal.throwIfAborted();
-    const actual = await this.#source(request.actor, request.query);
+    const actual = await this.#driver.resolve(
+      request.actor,
+      request.query,
+      signal,
+    );
     signal.throwIfAborted();
     if (extensionCanonicalJson(actual) !== extensionCanonicalJson(expected))
       fail("source_changed");
   }
-  async #grant(
-    request: ProjectReferenceMaterialFreezeRequest,
-    source: ProjectAssetReferenceImageSource,
-    signal: AbortSignal,
-  ) {
-    signal.throwIfAborted();
-    const identity = projectReferenceMaterialFreezeIdentity(
-      request,
-      this.#archiveId,
-      digester,
-    );
-    const decision = await this.#authorize(
-      Object.freeze({
-        actor: request.actor,
-        action: "projectReferenceMaterial:freeze",
-        resource: Object.freeze({
-          archiveId: this.#archiveId,
-          materialId: identity.materialId,
-          query: request.query,
-          referenceDigest: source.reference.contentDigest,
-          resultLinkDigest: source.resultLink.contentDigest,
-          sourceBindingDigest: source.resultLink.sourceBindingDigest,
-          packageDigest: source.resultLink.packageDigest,
-          configurationDigest: source.configuration.contentDigest,
-        }),
-      }),
-    );
-    signal.throwIfAborted();
-    if (decision.outcome !== "allow")
-      throw new ApplicationError(
-        "authorization",
-        "project_reference_material_freeze_denied",
-      );
-  }
-}
-function assertSource(
-  record: FrozenProjectReferenceMaterial,
-  source: ProjectAssetReferenceImageSource,
-): void {
-  const s = record.source,
-    expected = {
-      assetRevision: source.asset.revision,
-      contentRevision: source.content.contentRevision,
-      contentDigest: source.content.contentDigest,
-      referenceRevision: source.reference.referenceRevision,
-      referenceDigest: source.reference.contentDigest,
-      resultLinkDigest: source.resultLink.contentDigest,
-      sourceBindingDigest: source.resultLink.sourceBindingDigest,
-      sourceRunId: source.resultLink.sourceRunId,
-      operationId: source.resultLink.operationId,
-      pluginId: source.resultLink.pluginId,
-      pluginVersion: source.resultLink.pluginVersion,
-      packageDigest: source.resultLink.packageDigest,
-      configurationRevision: source.configuration.revision,
-      configurationDigest: source.configuration.contentDigest,
-      origin: new URL(source.resultLink.image.url).origin + "/",
-    };
-  if (
-    Object.entries(expected).some(
-      ([key, value]) => s[key as keyof typeof s] !== value,
-    ) ||
-    s.output.filename !== source.resultLink.image.filename
-  )
-    fail("source_changed");
 }
 function bound<T extends (...args: never[]) => unknown>(
   input: unknown,

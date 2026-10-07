@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -74,6 +75,10 @@ export function materialArchiveInput(
       },
     },
     materialArchiveDigester,
+  );
+  assert.equal(
+    record.schemaVersion,
+    "crewon.project-reference-frozen-material.v1",
   );
   return { record, bytes };
 }

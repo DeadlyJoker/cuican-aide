@@ -1,3 +1,5 @@
+import { assertSqliteProjectMediaResultSchema } from "./project-media-result-schema.ts";
+import { assertSqliteProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   parseProjectMaterialPreparationRequest,
@@ -128,7 +130,16 @@ export class SqliteProjectMaterialPreparationStore
       this.#active();
       assertProjectMaterialPreparationActive(a);
       let rows: readonly Record<string, unknown>[];
-      if ("installation" in next.value) {
+      if ("mediaResultSchema" in next.value) {
+        assertSqliteProjectMediaResultSchema(this.#db);
+        rows = [];
+      } else if ("mediaOperationSchema" in next.value) {
+        assertSqliteProjectMediaOperationSchema(this.#db);
+        rows = [];
+      } else if ("assetSchema" in next.value) {
+        assertSqliteProjectAssetSchema(this.#db);
+        rows = [];
+      } else if ("installation" in next.value) {
         assertSqliteProjectTextUiCommit(this.#db, next.value.installation);
         rows = [];
       } else rows = this.#db.prepare(next.value.sql).all(...next.value.values);

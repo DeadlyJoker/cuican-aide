@@ -27,7 +27,9 @@ export type ProjectMaterialPreparationTarget = Readonly<{
   configuration: ExtensionConfiguration;
 }>;
 export type ProjectMaterialPreparationInitial = Readonly<{
-  schemaVersion: "crewon.project-material-preparation.v1";
+  schemaVersion:
+    | "crewon.project-material-preparation.v1"
+    | "crewon.project-material-preparation.v2";
   intentId: string;
   requestDigest: string;
   request: ProjectMaterialPreparationRequest;

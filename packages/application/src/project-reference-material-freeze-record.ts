@@ -16,6 +16,7 @@ import type {
   FrozenProjectReferenceMaterial,
   ProjectReferenceMaterialFreezeRequest,
 } from "./project-reference-material-freeze-port.ts";
+import { parseFrozenProjectAdoptedMediaMaterial } from "./project-adopted-media-material-record.ts";
 
 export function parseProjectReferenceMaterialFreezeRequest(
   input: unknown,
@@ -75,6 +76,8 @@ export function parseFrozenProjectReferenceMaterial(
     "request",
     "source",
   ]);
+  if (r.schemaVersion === "crewon.project-reference-frozen-material.v2")
+    return parseFrozenProjectAdoptedMediaMaterial(r, digester);
   if (r.schemaVersion !== "crewon.project-reference-frozen-material.v1")
     invalid();
   const request = parseProjectReferenceMaterialFreezeRequest(r.request),

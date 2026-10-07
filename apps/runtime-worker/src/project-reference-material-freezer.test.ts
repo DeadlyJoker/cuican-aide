@@ -334,14 +334,19 @@ for (const backend of ["sqlite", "postgres"] as const) {
       assert.equal(first.disposition, "created");
       const raw = await f.archive.load(first.record.request);
       assert.ok(raw);
+      assert.equal(
+        raw.record.schemaVersion,
+        "crewon.project-reference-frozen-material.v1",
+      );
+      const originalRecord = raw.record;
       const forged = f.openFreezer({
         archiveId: f.archive.archiveId,
         load: async () => ({
           ...raw,
           record: {
-            ...raw.record,
+            ...originalRecord,
             source: {
-              ...raw.record.source,
+              ...originalRecord.source,
               resultLinkDigest: `sha256:${"f".repeat(64)}`,
             },
           },

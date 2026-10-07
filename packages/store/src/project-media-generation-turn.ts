@@ -1,3 +1,4 @@
+import type { MaterialPreparationPlan as ProjectMediaInputPlan } from "./project-material-preparation-plan.ts";
 import {
   parseProjectMediaGenerationReference,
   captureProjectMediaGenerationAuthority,
@@ -16,10 +17,7 @@ import {
   type PluginTaskAdmission,
   extensionCanonicalJson,
 } from "@crewon/domain";
-import {
-  qualifySavedProjectMediaInput,
-  type ProjectMediaInputPlan,
-} from "./project-media-input-plan.ts";
+import { qualifySavedProjectMediaInput } from "./project-media-input-plan.ts";
 import { loadMaterialPreparation } from "./project-material-preparation-plan.ts";
 import {
   assetQuery,

@@ -1,5 +1,6 @@
 import {
   createProjectMaterialPreparationInitial,
+  assertFrozenProjectAdoptedMediaSource,
   parseProjectMaterialPreparationInitial,
   parseProjectMaterialPreparationEvent,
   parseProjectMaterialPreparationRequest,
@@ -22,6 +23,7 @@ import {
   projectAssetId,
 } from "@crewon/domain";
 import { creativeStoreDigester } from "./creative-project-store-records.ts";
+import { loadAssetMediaReferenceImagePlan } from "./project-asset-media-reference-image-plan.ts";
 import { loadAssetReferenceImagePlan } from "./project-asset-reference-image-plan.ts";
 import {
   assetQuery,
@@ -35,6 +37,9 @@ import {
 
 export type MaterialPreparationInstruction =
   | AssetSql
+  | Readonly<{ assetSchema: true }>
+  | Readonly<{ mediaOperationSchema: true }>
+  | Readonly<{ mediaResultSchema: true }>
   | Readonly<{ installation: ProjectMaterialPreparationInitial["target"] }>;
 export type MaterialPreparationPlan<T> = Generator<
   MaterialPreparationInstruction,
@@ -135,38 +140,59 @@ export function* qualifyMaterialPreparation(
   initial: ProjectMaterialPreparationInitial,
   verifier: ProjectGenerationImageResultVerifier | undefined,
 ): MaterialPreparationPlan<void> {
-  const frozen = initial.source,
-    s = frozen.source;
-  const source = yield* loadAssetReferenceImagePlan(
-    d,
-    {
-      actor: initial.request.source.actor,
-      query: initial.request.source.query,
-    },
-    verifier,
-  );
-  const expected = {
-    assetRevision: source.asset.revision,
-    contentRevision: source.content.contentRevision,
-    contentDigest: source.content.contentDigest,
-    referenceRevision: source.reference.referenceRevision,
-    referenceDigest: source.reference.contentDigest,
-    resultLinkDigest: source.resultLink.contentDigest,
-    sourceBindingDigest: source.resultLink.sourceBindingDigest,
-    sourceRunId: source.resultLink.sourceRunId,
-    operationId: source.resultLink.operationId,
-    pluginId: source.resultLink.pluginId,
-    pluginVersion: source.resultLink.pluginVersion,
-    packageDigest: source.resultLink.packageDigest,
-    configurationRevision: source.configuration.revision,
-    configurationDigest: source.configuration.contentDigest,
-    origin: new URL(source.resultLink.image.url).origin + "/",
-  };
-  if (
-    Object.entries(expected).some(([k, v]) => s[k as keyof typeof s] !== v) ||
-    s.output.filename !== source.resultLink.image.filename
-  )
-    fail("source_changed");
+  const frozen = initial.source;
+  if (frozen.schemaVersion === "crewon.project-reference-frozen-material.v2") {
+    yield { mediaResultSchema: true };
+    const request = {
+        actor: initial.request.source.actor,
+        query: initial.request.source.query,
+      },
+      source = yield* loadAssetMediaReferenceImagePlan(d, request, {
+        actor: request.actor,
+        query: {
+          projectId: request.query.projectId,
+          runId: frozen.source.media.sourceRunId,
+          resultIndex: frozen.source.media.resultIndex,
+        },
+      });
+    assertFrozenProjectAdoptedMediaSource(
+      frozen,
+      source,
+      creativeStoreDigester,
+    );
+  } else {
+    const s = frozen.source;
+    const source = yield* loadAssetReferenceImagePlan(
+      d,
+      {
+        actor: initial.request.source.actor,
+        query: initial.request.source.query,
+      },
+      verifier,
+    );
+    const expected = {
+      assetRevision: source.asset.revision,
+      contentRevision: source.content.contentRevision,
+      contentDigest: source.content.contentDigest,
+      referenceRevision: source.reference.referenceRevision,
+      referenceDigest: source.reference.contentDigest,
+      resultLinkDigest: source.resultLink.contentDigest,
+      sourceBindingDigest: source.resultLink.sourceBindingDigest,
+      sourceRunId: source.resultLink.sourceRunId,
+      operationId: source.resultLink.operationId,
+      pluginId: source.resultLink.pluginId,
+      pluginVersion: source.resultLink.pluginVersion,
+      packageDigest: source.resultLink.packageDigest,
+      configurationRevision: source.configuration.revision,
+      configurationDigest: source.configuration.contentDigest,
+      origin: new URL(source.resultLink.image.url).origin + "/",
+    };
+    if (
+      Object.entries(expected).some(([k, v]) => s[k as keyof typeof s] !== v) ||
+      s.output.filename !== source.resultLink.image.filename
+    )
+      fail("source_changed");
+  }
   const c = initial.target.configuration;
   const rows = yield* assetQuery(
     d,
