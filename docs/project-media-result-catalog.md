@@ -20,10 +20,10 @@ GET /api/v1/creative-projects/:projectId/media-results?limit=16&afterCandidateId
 
 `limit` 默认 16，可选 1–16。未知、多值、空或畸形参数被拒绝。不注册 HEAD，不要求生成 CSRF，不允许借读取发布新结果。响应最多 64 KiB，使用 `Cache-Control: no-store`。
 
-原 `ControlApiClient.projectMediaResults.listCandidates` 保留身份、来源和取消，编码项目路径，不重试、不跟随重定向。Host 明确注入目录服务后才开放路由；未注入时原行为不变。这个服务并未自动加入桌面 Native 配置，后续装配必须提供当前请求对应的独立目录授权，不能把生成资格直接当作目录授权。
+原 `ControlApiClient.projectMediaResults.listCandidates` 保留身份、来源和取消，编码项目路径，不重试、不跟随重定向。Host 明确注入目录服务后才开放路由；未注入时原行为不变。后续增量已经接入[桌面 Native 结果声明](./native-project-media-results.md)，由原请求提供独立目录授权，不能把生成资格直接当作目录授权。
 
 ## 验证与下一步
 
 验证使用实际 Short21 安装工作流的原 Run/operation、真实 SQLite/PostgreSQL、加密 PNG 候选、认证 HTTP 和原 Control Client；供应商响应、DNS、部署审查和授权策略为具名测试夹具。覆盖 T10/D18 原来源、分页、同拥有者不同 Actor、跨租户/空间/项目/拥有者拒绝、取消与关闭等待、冷读取、schema 不隐式迁移及响应边界。检查记录位于 `output/extensions/checks/media-result-catalog-20261007/`。
 
-本次没有 UI 或主题改动，不覆盖或重打完整插件包、SDK 和用户 App。目录 HTTP 是显式可装配的能力，尚未完成正式 Native 装配、插件页面入口和 Agent 工具接入。接下来继续接原结果发布/读取入口、候选采用与锁定，再推进 Agent 有界自动执行、结构化分镜及后续视频、声音和成片。完整目标保持进行中。
+目录增量没有 UI 或主题改动，不覆盖或重打完整插件包、SDK 和用户 App。原结果保存/读取及 Native 装配的进展见[后续记录](./native-project-media-results.md)；插件页面入口和 Agent 工具接入仍待完成。接下来继续候选预览、采用与锁定，再推进 Agent 有界自动执行、结构化分镜及后续视频、声音和成片。完整目标保持进行中。

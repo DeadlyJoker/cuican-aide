@@ -9,6 +9,7 @@ import type {
 } from "@crewon/application";
 import { FilesystemProjectMediaResultArchive } from "@crewon/artifacts";
 import { ProjectMediaResultPublisher } from "./project-media-result-publisher.ts";
+import type { ProjectMediaResultOutputApproval } from "@crewon/media-runtime/project-media-result-publisher";
 import { DatabaseSync } from "node:sqlite";
 import { Client } from "pg";
 import { mediaPluginFixture } from "./project-media-plugin-handler.test-support.ts";
@@ -25,7 +26,11 @@ export async function mediaResultFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   kind: "T10" | "D18" = "T10",
-  options: { generate?: boolean; migrate?: boolean } = {},
+  options: {
+    generate?: boolean;
+    migrate?: boolean;
+    outputApproval?: ProjectMediaResultOutputApproval;
+  } = {},
 ) {
   const f = await mediaPluginFixture(t, backend, kind),
     opened = await f.open();
@@ -131,6 +136,7 @@ export async function mediaResultFixture(
         workflow,
       })),
       authorization,
+      outputApproval: options.outputApproval,
       clock: {
         now: () =>
           new Date(Date.UTC(2026, 9, 6, 12, 0, 0, state.tick++)).toISOString(),
@@ -197,6 +203,7 @@ export async function mediaResultFixture(
   };
   return {
     ...f,
+    pluginRoot: f.root,
     root,
     query,
     request,

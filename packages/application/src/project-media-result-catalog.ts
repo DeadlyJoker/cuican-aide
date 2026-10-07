@@ -185,8 +185,6 @@ export class ProjectMediaResultCatalogApplicationService {
     const candidates = page.candidates.map((entry) => {
       const candidate = parseProjectMediaResultCandidate(entry),
         { frozen } = candidate,
-        { source } = frozen,
-        { projection } = source,
         original = frozen.request;
       if (
         original.actor.tenantId !== request.actor.tenantId ||
@@ -195,26 +193,7 @@ export class ProjectMediaResultCatalogApplicationService {
         original.query.projectId !== request.query.projectId
       )
         fail("catalog_invalid");
-      return {
-        projectId: original.query.projectId,
-        candidateId: candidate.candidateId,
-        runId: original.query.runId,
-        resultIndex: original.query.resultIndex,
-        executionId: projection.reference.executionId,
-        mediaInputId: projection.reference.mediaInputId,
-        inputRevision: projection.reference.inputRevision,
-        workflowId: projection.workflow.workflowId,
-        item: projection.item,
-        contentDigest: candidate.contentDigest,
-        media: {
-          type: source.mediaType,
-          byteDigest: source.byteDigest,
-          byteLength: source.byteLength,
-          width: source.width,
-          height: source.height,
-          observedAt: source.observedAt,
-        },
-      };
+      return projectMediaResultSummary(candidate);
     });
     const result = parseListProjectMediaResultsResponse(request.query, {
       candidates,
@@ -227,4 +206,33 @@ export class ProjectMediaResultCatalogApplicationService {
     this.#lifetime.abort();
     await Promise.allSettled([...this.#pending]);
   }
+}
+
+/** Public result metadata shared by catalog, explicit publication and verified content reads. */
+export function projectMediaResultSummary(input: ProjectMediaResultCandidate) {
+  const candidate = parseProjectMediaResultCandidate(input),
+    frozen = candidate.frozen,
+    source = frozen.source,
+    projection = source.projection,
+    original = frozen.request;
+  return {
+    projectId: original.query.projectId,
+    candidateId: candidate.candidateId,
+    runId: original.query.runId,
+    resultIndex: original.query.resultIndex,
+    executionId: projection.reference.executionId,
+    mediaInputId: projection.reference.mediaInputId,
+    inputRevision: projection.reference.inputRevision,
+    workflowId: projection.workflow.workflowId,
+    item: projection.item,
+    contentDigest: candidate.contentDigest,
+    media: {
+      type: source.mediaType,
+      byteDigest: source.byteDigest,
+      byteLength: source.byteLength,
+      width: source.width,
+      height: source.height,
+      observedAt: source.observedAt,
+    },
+  };
 }

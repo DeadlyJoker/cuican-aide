@@ -411,7 +411,8 @@ try {
               desktopPlugins,
               ...(desktopPlugins.schemaVersion ===
                 "crewon.desktop-plugin-bootstrap.v3" &&
-              desktopPlugins.projects.mediaGenerations !== undefined
+              (desktopPlugins.projects.mediaGenerations !== undefined ||
+                desktopPlugins.projects.mediaResults !== undefined)
                 ? {
                     desktopProjectMaterialStorage:
                       desktopProjectMaterialStorageFromEnvironment(

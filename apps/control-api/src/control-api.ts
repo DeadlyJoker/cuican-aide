@@ -1,3 +1,5 @@
+import { registerProjectMediaResultRoutes } from "./project-media-result-route.ts";
+import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 import { registerProjectMediaResultCatalogRoutes } from "./project-media-result-catalog-route.ts";
 import type { ProjectMediaResultCatalogApplicationService } from "@crewon/application";
 import { registerProjectMediaGenerationRoutes } from "./project-media-generation-route.ts";
@@ -271,6 +273,7 @@ export type ControlApiDependencies = Readonly<{
   projectMediaInputs?: InstalledProjectMediaInputRuntime | null;
   projectMediaGenerations?: InstalledProjectMediaGenerationRuntime | null;
   projectMediaResultCatalog?: ProjectMediaResultCatalogApplicationService | null;
+  projectMediaResults?: InstalledProjectMediaResultRuntime | null;
   projectConversations?: ProjectConversationControlOwner | null;
   projectMediaInputStages?:ProjectMediaInputStageControlOwner|null;
   projectAssetStages?:ProjectAssetStageControlOwner|null;
@@ -422,6 +425,10 @@ export function buildControlApi(
     });
   }
   if (dependencies.projectAssets != null) registerProjectAssetRoutes(app, { identity: dependencies.identity, assets: dependencies.projectAssets });
+  if (dependencies.projectMediaResults != null) {
+    if (dependencies.projectMediaResultCatalog != null) throw new Error("project_media_result_route_conflict");
+    registerProjectMediaResultRoutes(app, { identity: dependencies.identity, owner: dependencies.projectMediaResults });
+  }
   if (dependencies.projectMediaResultCatalog != null)
     registerProjectMediaResultCatalogRoutes(app, { identity: dependencies.identity, service: dependencies.projectMediaResultCatalog });
   if (dependencies.projectMediaGenerations != null)

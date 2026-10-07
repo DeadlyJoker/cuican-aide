@@ -1693,10 +1693,24 @@ export class ControlApiClient {
   }
 
   get projectMediaResults(): ProjectMediaResultControlClient {
-    return (this.#projectMediaResultClient ??= new ProjectMediaResultControlClient({
-      json: (method, path, body, options) => this.#json(method, path, body, options),
-      protocolError: (code) => new ControlApiProtocolError(code),
-    }));
+    return (this.#projectMediaResultClient ??=
+      new ProjectMediaResultControlClient({
+        json: (method, path, body, options) =>
+          this.#json(method, path, body, options),
+        content: async (path, signal) => {
+          const response = await this.#fetch(new URL(path, this.#baseUrl), {
+            method: "GET",
+            headers: this.#authenticatedHeaders("image/png"),
+            credentials: "include",
+            redirect: "manual",
+            signal,
+          });
+          if (response.status !== 200)
+            throw await controlApiError(response, 8192);
+          return response;
+        },
+        protocolError: (code) => new ControlApiProtocolError(code),
+      }));
   }
 
   get projectMediaInputs(): ProjectMediaInputControlClient {

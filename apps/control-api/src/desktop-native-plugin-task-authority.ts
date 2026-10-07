@@ -1,3 +1,4 @@
+import { composeDesktopNativeProjectMediaResultConfiguration } from "./desktop-native-project-media-result-composition.ts";
 import { validateNativeOwnership } from "./desktop-native-ownership-check.ts";
 import {
   ApplicationError,
@@ -125,6 +126,21 @@ export class DesktopNativePluginTaskAuthority {
   ) {
     this.#owner(this.#binding.configuration.actor);
     return composeDesktopNativeProjectMediaGenerationConfiguration({
+      ...dependencies,
+      configuration: this.#binding.configuration,
+      nativeControl: this.#binding.nativeControl,
+      assertRequestCurrent: (actor) => this.#request(actor),
+      assertTransactionCurrent: (actor) => this.#commitOwner(actor),
+    });
+  }
+  projectMediaResultConfiguration(
+    dependencies: Pick<
+      Parameters<typeof composeDesktopNativeProjectMediaResultConfiguration>[0],
+      "storage" | "clock"
+    >,
+  ) {
+    this.#owner(this.#binding.configuration.actor);
+    return composeDesktopNativeProjectMediaResultConfiguration({
       ...dependencies,
       configuration: this.#binding.configuration,
       nativeControl: this.#binding.nativeControl,

@@ -1,3 +1,4 @@
+import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 import { isProjectMediaGenerationUiNamespaceAction } from "@crewon/contracts/project-media-generations";
 import { composeDesktopProjectMediaGenerationUi } from "./desktop-project-media-generation-ui-composition.ts";
 import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
@@ -90,6 +91,7 @@ export type DesktopPluginRuntime = Readonly<{
   configuration: DesktopPluginConfigurationRuntime;
   tasks?: InstalledPluginTaskRuntimeCore;
   projectMediaGenerations?: InstalledProjectMediaGenerationRuntime;
+  projectMediaResults?: InstalledProjectMediaResultRuntime;
   bindProjectConversations?(
     threads: ThreadApplicationService,
   ): ProjectConversationControlOwner | undefined;
@@ -830,6 +832,7 @@ export async function createDesktopPluginRuntime(
       ...(taskRuntime !== undefined && "mediaGenerations" in taskRuntime
         ? { projectMediaGenerations: taskRuntime.mediaGenerations }
         : {}),
+      ...(taskRuntime !== undefined && "mediaResults" in taskRuntime ? { projectMediaResults: taskRuntime.mediaResults } : {}),
       bindProjectConversations: (threads) =>
         conversations?.bindThreads(threads),
       projectAssetStages: () => conversations?.assetStages(),

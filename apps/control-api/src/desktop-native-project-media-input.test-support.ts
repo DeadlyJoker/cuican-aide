@@ -23,6 +23,7 @@ import { createDesktopPluginRuntime } from "./desktop-plugin-runtime.ts";
 import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { prepareCreativeProjects } from "./creative-project-composition.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
+import { registerProjectMediaResultRoutes } from "./project-media-result-route.ts";
 import { registerProjectMediaInputRoutes } from "./project-media-input-route.ts";
 import { registerProjectMediaGenerationRoutes } from "./project-media-generation-route.ts";
 import { errorResponse } from "./control-api-errors.ts";
@@ -47,6 +48,7 @@ export async function desktopNativeMediaInputFixture(
     mediaInputUi?: boolean;
     mediaInputStages?: boolean;
     mediaGenerations?: boolean;
+    mediaResults?: readonly ("read" | "publish")[];
     materialStorageFixture?: "missing" | "invalid-key";
     peerOrigin?: string;
     generationFlow?: boolean;
@@ -209,6 +211,21 @@ export async function desktopNativeMediaInputFixture(
     textArtifacts: { version: "crewon.project-text.v1" },
     assetArtifacts: { version: "crewon.project-asset.v1" },
     mediaInputs,
+    ...(options.mediaResults
+      ? {
+          mediaResults: {
+            version: "crewon.desktop-project-media-results.v1",
+            purposes: options.mediaResults,
+            publications: [
+              {
+                pluginId: source.pluginId,
+                packageDigest: source.packageDigest,
+                contributionId: "workbench",
+              },
+            ],
+          },
+        }
+      : {}),
     ...(options.generationFlow
       ? {
           pluginUi: {
@@ -458,7 +475,7 @@ export async function desktopNativeMediaInputFixture(
     encryptionKeyPath: join(data, "artifact-master.key"),
     encryptionKeyId: "named-native-media-master",
   });
-  if (options.mediaGenerations)
+  if (options.mediaGenerations || options.mediaResults)
     await writeFile(
       storage.encryptionKeyPath,
       Buffer.alloc(
@@ -552,7 +569,7 @@ export async function desktopNativeMediaInputFixture(
         digester: sha,
         creativeProjects: prepared,
         fetch,
-        ...(options.mediaGenerations &&
+        ...((options.mediaGenerations || options.mediaResults) &&
         options.materialStorageFixture !== "missing"
           ? { projectMaterialStorage: storage }
           : {}),
@@ -570,6 +587,11 @@ export async function desktopNativeMediaInputFixture(
       identity,
       owner: runtime.tasks.projectMediaInputs,
     });
+    if (runtime.projectMediaResults !== undefined)
+      registerProjectMediaResultRoutes(app, {
+        identity,
+        owner: runtime.projectMediaResults,
+      });
     if (runtime.projectMediaGenerations !== undefined)
       registerProjectMediaGenerationRoutes(app, {
         identity,

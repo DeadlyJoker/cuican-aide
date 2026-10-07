@@ -1,3 +1,4 @@
+import { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 import {
   assertDesktopNativeProjectHistoricalQueryPreparedTarget,
   assertDesktopNativeProjectHistoricalQueryDeclaredApproval,
@@ -30,6 +31,7 @@ export type DesktopNativePluginTaskRuntime = Readonly<{
   authority: DesktopNativePluginTaskAuthority;
   core: InstalledPluginTaskRuntimeCore;
   mediaGenerations?: InstalledProjectMediaGenerationRuntime;
+  mediaResults?: InstalledProjectMediaResultRuntime;
   close(): Promise<void>;
 }>;
 export function assertDesktopNativePluginTaskComposition(
@@ -84,6 +86,7 @@ export async function createDesktopNativePluginTaskRuntime(
   const authority = new DesktopNativePluginTaskAuthority(input);
   let core: InstalledPluginTaskRuntimeCore | undefined;
   let mediaGenerations: InstalledProjectMediaGenerationRuntime | undefined;
+  let mediaResults: InstalledProjectMediaResultRuntime | undefined;
   try {
     const projectMediaInputs = authority.projectMediaInputConfiguration();
     core = await createInstalledPluginTaskRuntimeCore({
@@ -138,17 +141,31 @@ export async function createDesktopNativePluginTaskRuntime(
         core,
         configuration: generationConfiguration,
       });
+    const resultConfiguration = authority.projectMediaResultConfiguration({
+      clock: dependencies.clock,
+      ...(dependencies.projectMaterialStorage === undefined
+        ? {}
+        : { storage: dependencies.projectMaterialStorage }),
+    });
+    if (resultConfiguration !== undefined)
+      mediaResults = await InstalledProjectMediaResultRuntime.prepare({
+        core,
+        configuration: resultConfiguration,
+      });
     const owned = core;
     const ownedMedia = mediaGenerations;
+    const ownedResults = mediaResults;
     let closing: Promise<void> | undefined;
     return Object.freeze({
       authority,
       core: owned,
       ...(ownedMedia === undefined ? {} : { mediaGenerations: ownedMedia }),
+      ...(ownedResults === undefined ? {} : { mediaResults: ownedResults }),
       close: () =>
         (closing ??= closeAll([
           () => authority.close(),
           () => ownedMedia?.close(),
+          () => ownedResults?.close(),
           () => owned.close(),
         ])),
     });
@@ -157,6 +174,7 @@ export async function createDesktopNativePluginTaskRuntime(
       await closeAll([
         () => authority.close(),
         () => mediaGenerations?.close(),
+        () => mediaResults?.close(),
         () => core?.close(),
       ]);
     } catch (cleanup) {

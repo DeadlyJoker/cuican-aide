@@ -156,6 +156,19 @@ export function installedProjectConversationTaskAuthority(
   });
 }
 
+/** History result services borrow the original owner and store, without gaining generation admission. */
+export function installedProjectMediaResultTaskAuthority(
+  core: InstalledPluginTaskRuntimeCore,
+) {
+  const binding = coreBindings.get(core);
+  if (binding === undefined) invalid();
+  return Object.freeze({
+    ...installedProjectConversationTaskAuthority(core),
+    store: binding.store,
+    publications: binding.publications,
+  });
+}
+
 /** Internal media admission borrows this exact Core; storage preparation is still not a generation grant. */
 export function installedProjectMediaGenerationTaskAuthority(
   core: InstalledPluginTaskRuntimeCore,

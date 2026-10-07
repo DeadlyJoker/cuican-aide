@@ -1,4 +1,8 @@
 import {
+  parseDesktopProjectMediaResultsConfiguration,
+  type DesktopProjectMediaResultsConfiguration,
+} from "./desktop-project-media-results.ts";
+import {
   parsePluginControlPackageDigest,
   parsePluginControlPluginId,
 } from "./plugin-control-contract.ts";
@@ -49,6 +53,7 @@ export type DesktopProjectExecutionConfiguration = Omit<
     pluginQueries?: Mappings;
     historicalQueries?: DesktopProjectHistoricalQueriesConfiguration;
     mediaInputs?: DesktopProjectMediaInputsConfiguration;
+    mediaResults?: DesktopProjectMediaResultsConfiguration;
     /** Independent media execution opt-in; metadata and text plans never imply this grant. */
     mediaGenerations?: Readonly<{
       version: "crewon.desktop-project-media-generations.v1";
@@ -105,6 +110,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "historicalQueries",
       "mediaInputs",
       "mediaGenerations",
+      "mediaResults",
       "mediaInputUi",
       "mediaInputStages",
       "uiRecovery",
@@ -216,6 +222,33 @@ export function parseDesktopProjectExecutionConfiguration(
         ))
     )
       invalid();
+    const mediaResults =
+      value.mediaResults === undefined
+        ? undefined
+        : parseDesktopProjectMediaResultsConfiguration(
+            value.mediaResults,
+            approved,
+          );
+    if (
+      mediaResults !== undefined &&
+      (mediaInputs === undefined ||
+        mediaResults.publications.some(
+          (p) =>
+            !mediaInputs.reviews.some(
+              (r) =>
+                r.targetIdentity.pluginId === p.pluginId &&
+                r.targetIdentity.packageDigest === p.packageDigest,
+            ) ||
+            (mediaResults.purposes.includes("publish") &&
+              !mediaGenerations?.publications.some(
+                (g) =>
+                  g.pluginId === p.pluginId &&
+                  g.packageDigest === p.packageDigest &&
+                  g.contributionId === p.contributionId,
+              )),
+        ))
+    )
+      invalid();
     const pluginQueries = mappings(value.pluginQueries, approved);
     if (pluginQueries !== undefined && data.generationReads === undefined)
       invalid();
@@ -256,6 +289,7 @@ export function parseDesktopProjectExecutionConfiguration(
       ...(historicalQueries === undefined ? {} : { historicalQueries }),
       ...(mediaInputs === undefined ? {} : { mediaInputs }),
       ...(mediaGenerations === undefined ? {} : { mediaGenerations }),
+      ...(mediaResults === undefined ? {} : { mediaResults }),
       ...(mediaInputUi === undefined ? {} : { mediaInputUi }),
       ...(mediaInputStages === undefined ? {} : { mediaInputStages }),
       ...(uiRecovery === undefined ? {} : { uiRecovery }),

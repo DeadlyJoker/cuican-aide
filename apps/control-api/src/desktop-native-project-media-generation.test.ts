@@ -288,6 +288,7 @@ test(
     );
     const f = await desktopNativeMediaInputFixture(t, ["read", "write"], {
       mediaGenerations: true,
+      mediaResults: ["read", "publish"],
       peerOrigin: `http://127.0.0.1:${(peer.address() as AddressInfo).port}`,
     });
     current = f;
@@ -327,6 +328,17 @@ test(
           url: "/api/v1/creative-projects/:projectId/media-generations",
         }),
       );
+      const candidates = await runtime.app.inject({
+        method: "GET",
+        url: `/api/v1/creative-projects/${f.query.projectId}/media-results`,
+        headers: f.headers,
+      });
+      assert.equal(candidates.statusCode, 200, candidates.body);
+      assert.deepEqual(candidates.json(), {
+        candidates: [],
+        nextCandidateId: null,
+      });
+      assert.deepEqual(operations, []);
       const response = await runtime.app.inject(request(f));
       assert.equal(response.statusCode, 403, response.body);
       assert.deepEqual(operations, ["catalog"]);

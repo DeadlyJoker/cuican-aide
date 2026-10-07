@@ -54,6 +54,7 @@ const capture = (
 export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
   #enabled = false;
   #catalogEnabled = false;
+  #resultReadsEnabled = false;
   readonly #db: DatabaseSync;
   readonly #open: () => void;
   readonly #d: AssetDialect = Object.freeze({
@@ -72,6 +73,10 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
     this.#open();
     if (this.#db.prepare("PRAGMA foreign_keys").get()?.foreign_keys !== 1)
       fail("foreign_keys_required");
+  }
+  async enableResultReads() {
+    await this.enableCatalogReads();
+    this.#resultReadsEnabled = true;
   }
   async enableCatalogReads() {
     this.#active();
@@ -102,10 +107,14 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
   async #transaction<T>(
     plan: MediaResultPlan<T>,
     a: Pick<ProjectMediaResultAuthority, "assertCurrent" | "assertActive">,
-    purpose: "candidate" | "catalog" = "candidate",
+    purpose: "candidate" | "catalog" | "read" = "candidate",
   ): Promise<T> {
     this.#active();
-    if (!this.#enabled && !(purpose === "catalog" && this.#catalogEnabled))
+    if (
+      !this.#enabled &&
+      !(purpose === "catalog" && this.#catalogEnabled) &&
+      !(purpose === "read" && this.#resultReadsEnabled)
+    )
       fail("unavailable");
     await a.assertCurrent();
     this.#active();
@@ -170,6 +179,7 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
     return this.#transaction(
       mediaResultSourcePlan(this.#d, q.request),
       q.authority,
+      "read",
     );
   }
   loadCandidate(
@@ -180,6 +190,7 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
     return this.#transaction(
       mediaResultLoadPlan(this.#d, q.request),
       q.authority,
+      "read",
     );
   }
   saveCandidate(
@@ -199,6 +210,7 @@ export class PostgresProjectMediaResultStore
 {
   #enabled = false;
   #catalogEnabled = false;
+  #resultReadsEnabled = false;
   readonly #pool: Pool;
   readonly #open: () => void;
   readonly #d: AssetDialect;
@@ -231,6 +243,10 @@ export class PostgresProjectMediaResultStore
       /* Original failure survives. */
     }
   }
+  async enableResultReads() {
+    await this.enableCatalogReads();
+    this.#resultReadsEnabled = true;
+  }
   async enableCatalogReads() {
     await this.#client(async (c) => {
       await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
@@ -258,10 +274,14 @@ export class PostgresProjectMediaResultStore
   #transaction<T>(
     plan: MediaResultPlan<T>,
     a: Pick<ProjectMediaResultAuthority, "assertCurrent" | "assertActive">,
-    purpose: "candidate" | "catalog" = "candidate",
+    purpose: "candidate" | "catalog" | "read" = "candidate",
   ): Promise<T> {
     return this.#client(async (c) => {
-      if (!this.#enabled && !(purpose === "catalog" && this.#catalogEnabled))
+      if (
+        !this.#enabled &&
+        !(purpose === "catalog" && this.#catalogEnabled) &&
+        !(purpose === "read" && this.#resultReadsEnabled)
+      )
         fail("unavailable");
       await a.assertCurrent();
       this.#open();
@@ -331,6 +351,7 @@ export class PostgresProjectMediaResultStore
     return this.#transaction(
       mediaResultSourcePlan(this.#d, q.request),
       q.authority,
+      "read",
     );
   }
   loadCandidate(
@@ -341,6 +362,7 @@ export class PostgresProjectMediaResultStore
     return this.#transaction(
       mediaResultLoadPlan(this.#d, q.request),
       q.authority,
+      "read",
     );
   }
   saveCandidate(

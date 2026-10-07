@@ -781,6 +781,7 @@ function composeControlApi(
       projectAssets: preparedProjects?.assetService,
       projectMediaInputs: preparedPlugins?.runtime.tasks?.projectMediaInputs,
       projectMediaGenerations: preparedPlugins?.runtime.projectMediaGenerations,
+      projectMediaResults: preparedPlugins?.runtime.projectMediaResults,
       projectGenerationReads,
       projectConceptSelections: composeOwnedProjectGenerationSelectionService({
         projects: preparedProjects,

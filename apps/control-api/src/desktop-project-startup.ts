@@ -50,12 +50,14 @@ export function composeDesktopProjectStartup(
     mediaInputs: _mediaInputs,
     mediaInputUi: _mediaInputUi,
     mediaGenerations: _mediaGenerations,
+    mediaResults: _mediaResults,
     ...data
   } = {
     ...configuration.projects,
     mediaInputs: undefined,
     mediaInputUi: undefined,
     mediaGenerations: undefined,
+    mediaResults: undefined,
   };
   const permitted = new Set<CreativeProjectAuthorizationAction>([
     "creativeProject:read",

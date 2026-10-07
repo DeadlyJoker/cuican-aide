@@ -40,6 +40,16 @@ import {
   MAX_PROJECT_MATERIAL_BYTES,
 } from "./project-material-png.ts";
 
+export type ProjectMediaResultOutputApproval = Readonly<{
+  assertCurrent(
+    input: Readonly<{
+      actor: ActorContext;
+      source: ProjectMediaResultSource;
+      signal: AbortSignal;
+    }>,
+  ): Promise<void>;
+}>;
+
 /** Actual project candidates and original output bytes. No caller URLs, new Run, generation, adoption or global cancel. */
 export class ProjectMediaResultPublisher {
   readonly #store: Readonly<{
@@ -58,6 +68,7 @@ export class ProjectMediaResultPublisher {
   readonly #transport: PinnedHttpPort;
   readonly #egress: NetworkEgressResolver;
   readonly #now: () => string;
+  readonly #outputApproval?: ProjectMediaResultOutputApproval;
   readonly #closing = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
   #closed = false;
@@ -68,6 +79,7 @@ export class ProjectMediaResultPublisher {
       authorization: ProjectMediaResultAuthorizationPort;
       reviews: readonly ProjectMediaWorkflowReview[];
       clock: Readonly<{ now(): string }>;
+      outputApproval?: ProjectMediaResultOutputApproval;
       dns?: NetworkDnsResolver;
       transport?: PinnedHttpPort;
     }>,
@@ -116,6 +128,14 @@ export class ProjectMediaResultPublisher {
       input.reviews.map(parseProjectMediaWorkflowReview),
     );
     this.#now = projectMediaInputBound(input.clock, "now");
+    this.#outputApproval =
+      input.outputApproval === undefined
+        ? undefined
+        : Object.freeze({
+            assertCurrent: projectMediaInputBound<
+              ProjectMediaResultOutputApproval["assertCurrent"]
+            >(input.outputApproval, "assertCurrent"),
+          });
     this.#transport =
       input.transport === undefined
         ? new PinnedNodeHttpTransport({ responseProfile: "imageMaterial" })
@@ -252,6 +272,20 @@ export class ProjectMediaResultPublisher {
       fail("archive_invalid");
     return Object.freeze({ record, bytes });
   }
+  async #approveOutput(
+    request: ProjectMediaResultRequest,
+    source: ProjectMediaResultSource,
+    signal: AbortSignal,
+  ) {
+    this.#active(signal);
+    if (this.#outputApproval)
+      projectMediaResultAssertVoid(
+        await this.#outputApproval.assertCurrent(
+          Object.freeze({ actor: request.actor, source, signal }),
+        ),
+      );
+    this.#active(signal);
+  }
   async #readOutput(
     request: ProjectMediaResultRequest,
     source: ProjectMediaResultSource,
@@ -259,6 +293,7 @@ export class ProjectMediaResultPublisher {
   ): Promise<FrozenProjectMediaResultContent> {
     const grant = this.#authority(request, "publish", signal);
     await grant.assertCurrent();
+    await this.#approveOutput(request, source, signal);
     const target = await this.#egress.resolve(
       {
         tenantId: request.actor.tenantId,
@@ -270,6 +305,7 @@ export class ProjectMediaResultPublisher {
     await this.#publicationCurrent(request, source, signal);
     await grant.assertCurrent();
     grant.assertActive();
+    await this.#approveOutput(request, source, signal);
     const response = await this.#transport.request(
       {
         method: "GET",
@@ -302,6 +338,7 @@ export class ProjectMediaResultPublisher {
       fail("response_invalid");
     await this.#publicationCurrent(request, source, signal);
     await grant.assertCurrent();
+    await this.#approveOutput(request, source, signal);
     const record = parseFrozenProjectMediaResult({
       schemaVersion: "crewon.project-media-result-frozen.v1",
       archiveId: this.#archive.archiveId,

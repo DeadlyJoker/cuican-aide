@@ -169,3 +169,58 @@ export function parseListProjectMediaResultsResponse(
 function invalid(): never {
   throw new ContractValidationError("project_media_results_contract_invalid");
 }
+
+export type ProjectMediaResultLocator = Readonly<{
+  projectId: string;
+  runId: string;
+  resultIndex: number;
+}>;
+export function parseProjectMediaResultLocator(
+  input: unknown,
+): ProjectMediaResultLocator {
+  const r = fields(parsePluginUiJsonValue(input, { maxBytes: 2048 }), [
+    "projectId",
+    "runId",
+    "resultIndex",
+  ]);
+  return Object.freeze({
+    projectId: id(r.projectId),
+    runId: id(r.runId),
+    resultIndex: revision(r.resultIndex, 0, 15),
+  });
+}
+export function parseGetProjectMediaResultResponse(
+  request: ProjectMediaResultLocator,
+  input: unknown,
+): Readonly<{ candidate: ProjectMediaResultSummary | null }> {
+  const q = parseProjectMediaResultLocator(request),
+    r = fields(parsePluginUiJsonValue(input, { maxBytes: 8192 }), [
+      "candidate",
+    ]);
+  if (r.candidate === null) return Object.freeze({ candidate: null });
+  const candidate = parseListProjectMediaResultsResponse(
+    { projectId: q.projectId, afterCandidateId: null, limit: 1 },
+    { candidates: [r.candidate], nextCandidateId: null },
+  ).candidates[0]!;
+  if (candidate.runId !== q.runId || candidate.resultIndex !== q.resultIndex)
+    invalid();
+  return Object.freeze({ candidate });
+}
+export function parsePublishProjectMediaResultResponse(
+  request: ProjectMediaResultLocator,
+  input: unknown,
+): Readonly<{
+  disposition: "created" | "replayed";
+  candidate: ProjectMediaResultSummary;
+}> {
+  const r = fields(parsePluginUiJsonValue(input, { maxBytes: 8192 }), [
+    "disposition",
+    "candidate",
+  ]);
+  if (r.disposition !== "created" && r.disposition !== "replayed") invalid();
+  const { candidate } = parseGetProjectMediaResultResponse(request, {
+    candidate: r.candidate,
+  });
+  if (candidate === null) invalid();
+  return Object.freeze({ disposition: r.disposition, candidate });
+}
