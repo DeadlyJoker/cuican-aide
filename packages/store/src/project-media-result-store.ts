@@ -1,6 +1,20 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import {
+  parseProjectAssetMediaAdoptionWrite,
+  captureProjectAssetMediaAdoptionAuthority,
+  type ProjectAssetMediaAdoptionWrite,
+  type ProjectAssetMediaAdoptionAuthority,
+  type ProjectAssetMediaAdoptionStore,
+} from "@crewon/application";
+import { adoptAssetMediaReferencePlan } from "./project-asset-media-adoption-plan.ts";
+import {
+  assertSqliteAssetMediaAdoptionSchema,
+  assertPostgresAssetMediaAdoptionSchema,
+  migrateSqliteAssetMediaAdoptions,
+  migratePostgresAssetMediaAdoptions,
+} from "./project-asset-media-adoption-schema.ts";
+import {
   parseProjectAssetMediaReferenceQualificationRequest,
   projectAssetMediaReferenceResultRequest,
   type ProjectAssetMediaReferenceQualificationRequest,
@@ -65,9 +79,11 @@ const capture = (
 export class SqliteProjectMediaResultStore
   implements
     ProjectMediaResultStore,
-    ProjectAssetMediaReferenceQualificationStore
+    ProjectAssetMediaReferenceQualificationStore,
+    ProjectAssetMediaAdoptionStore
 {
   #enabled = false;
+  #assetAdoptionsEnabled = false;
   #catalogEnabled = false;
   #resultReadsEnabled = false;
   readonly #db: DatabaseSync;
@@ -112,6 +128,34 @@ export class SqliteProjectMediaResultStore
       throw e;
     }
   }
+  async migrateAssetAdoptions() {
+    this.#active();
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      migrateSqliteAssetMediaAdoptions(this.#db);
+      this.#active();
+      this.#db.exec("COMMIT");
+      this.#assetAdoptionsEnabled = true;
+    } catch (error) {
+      this.#rollback();
+      throw error;
+    }
+  }
+  adoptAssetReference(
+    input: ProjectAssetMediaAdoptionWrite,
+    authority: ProjectAssetMediaAdoptionAuthority,
+  ) {
+    const write = parseProjectAssetMediaAdoptionWrite(input),
+      captured = captureProjectAssetMediaAdoptionAuthority(
+        authority,
+        write.request,
+      );
+    return this.#transaction(
+      adoptAssetMediaReferencePlan(this.#d, write),
+      captured,
+      "adoption",
+    );
+  }
   #rollback() {
     try {
       this.#db.exec("ROLLBACK");
@@ -124,14 +168,17 @@ export class SqliteProjectMediaResultStore
     a: Pick<
       ProjectMediaResultAuthority,
       "assertCurrent" | "assertActive" | "uiInstallation"
-    >,
-    purpose: "candidate" | "catalog" | "read" = "candidate",
+    > &
+      Readonly<{ assertTransactionCurrent?: () => Promise<void> }>,
+    purpose: "candidate" | "catalog" | "read" | "adoption" = "candidate",
   ): Promise<T> {
     this.#active();
     if (
-      !this.#enabled &&
-      !(purpose === "catalog" && this.#catalogEnabled) &&
-      !(purpose === "read" && this.#resultReadsEnabled)
+      purpose === "adoption"
+        ? !this.#assetAdoptionsEnabled
+        : !this.#enabled &&
+          !(purpose === "catalog" && this.#catalogEnabled) &&
+          !(purpose === "read" && this.#resultReadsEnabled)
     )
       fail("unavailable");
     await a.assertCurrent();
@@ -140,6 +187,8 @@ export class SqliteProjectMediaResultStore
     this.#db.exec("BEGIN IMMEDIATE");
     try {
       assertSqliteProjectMediaResultSchema(this.#db);
+      if (purpose === "adoption")
+        assertSqliteAssetMediaAdoptionSchema(this.#db);
       assertSqliteProjectTextUiCommit(this.#db, a.uiInstallation);
       let next = plan.next();
       while (!next.done) {
@@ -248,9 +297,40 @@ export class SqliteProjectMediaResultStore
 export class PostgresProjectMediaResultStore
   implements
     ProjectMediaResultStore,
-    ProjectAssetMediaReferenceQualificationStore
+    ProjectAssetMediaReferenceQualificationStore,
+    ProjectAssetMediaAdoptionStore
 {
   #enabled = false;
+  #assetAdoptionsEnabled = false;
+  async migrateAssetAdoptions() {
+    await this.#client(async (c) => {
+      await c.query("BEGIN");
+      try {
+        await migratePostgresAssetMediaAdoptions(c, this.#d.schema);
+        this.#open();
+        await c.query("COMMIT");
+        this.#assetAdoptionsEnabled = true;
+      } catch (error) {
+        await this.#rollback(c);
+        throw error;
+      }
+    });
+  }
+  adoptAssetReference(
+    input: ProjectAssetMediaAdoptionWrite,
+    authority: ProjectAssetMediaAdoptionAuthority,
+  ) {
+    const write = parseProjectAssetMediaAdoptionWrite(input),
+      captured = captureProjectAssetMediaAdoptionAuthority(
+        authority,
+        write.request,
+      );
+    return this.#transaction(
+      adoptAssetMediaReferencePlan(this.#d, write),
+      captured,
+      "adoption",
+    );
+  }
   qualifyAssetReference(
     input: ProjectAssetMediaReferenceQualificationRequest,
     a: ProjectMediaResultAuthority,
@@ -329,27 +409,42 @@ export class PostgresProjectMediaResultStore
       }
     });
   }
-  #transaction<T>(
+  async #transaction<T>(
     plan: MediaResultPlan<T>,
     a: Pick<
       ProjectMediaResultAuthority,
       "assertCurrent" | "assertActive" | "uiInstallation"
-    >,
-    purpose: "candidate" | "catalog" | "read" = "candidate",
+    > &
+      Readonly<{ assertTransactionCurrent?: () => Promise<void> }>,
+    purpose: "candidate" | "catalog" | "read" | "adoption" = "candidate",
   ): Promise<T> {
+    // Adoption preflight may read the original project through the same one-slot
+    // pool. Finish it before borrowing the commit connection; only the dedicated
+    // transaction callback is allowed to run while that connection is held.
+    if (purpose === "adoption") {
+      this.#open();
+      if (!this.#assetAdoptionsEnabled) fail("unavailable");
+      await a.assertCurrent();
+      this.#open();
+      a.assertActive();
+    }
     return this.#client(async (c) => {
       if (
-        !this.#enabled &&
-        !(purpose === "catalog" && this.#catalogEnabled) &&
-        !(purpose === "read" && this.#resultReadsEnabled)
+        purpose === "adoption"
+          ? !this.#assetAdoptionsEnabled
+          : !this.#enabled &&
+            !(purpose === "catalog" && this.#catalogEnabled) &&
+            !(purpose === "read" && this.#resultReadsEnabled)
       )
         fail("unavailable");
-      await a.assertCurrent();
+      if (purpose !== "adoption") await a.assertCurrent();
       this.#open();
       a.assertActive();
       await c.query("BEGIN");
       try {
         await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
+        if (purpose === "adoption")
+          await assertPostgresAssetMediaAdoptionSchema(c, this.#d.schema);
         await assertPostgresProjectTextUiCommit(
           c,
           this.#d.schema,
@@ -384,7 +479,8 @@ export class PostgresProjectMediaResultStore
           this.#d.schema,
           a.uiInstallation,
         );
-        await a.assertCurrent();
+        if (a.assertTransactionCurrent) await a.assertTransactionCurrent();
+        else await a.assertCurrent();
         this.#open();
         a.assertActive();
         await c.query("COMMIT");

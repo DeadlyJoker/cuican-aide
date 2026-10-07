@@ -15,6 +15,7 @@ import type {
   ProjectAssetView,
   ProjectAssetMutationResult,
 } from "./project-asset-store-port.ts";
+import { ApplicationError } from "./application-error.ts";
 
 /** Public projection deliberately excludes actor, owner, tenant, profile and invocation authority. */
 export function projectAssetPublicHead(a: ProjectAsset): PublicProjectAsset {
@@ -50,6 +51,11 @@ export function projectAssetPublicRevision(
 export function projectAssetPublicReference(
   r: ProjectAssetReferenceRevision,
 ): PublicProjectAssetReferenceRevision {
+  if (r.schemaVersion !== "crewon.project-asset-reference.v1")
+    throw new ApplicationError(
+      "conflict",
+      "project_asset_reference_api_version_required",
+    );
   return Object.freeze({
     projectId: r.projectId,
     assetId: r.assetId,

@@ -177,6 +177,8 @@ export function checkedProjectAssetMutationResult(
         !("assetContentRevision" in command) ||
         contentRevision !== null ||
         !referenceRevision ||
+        referenceRevision.schemaVersion !==
+          "crewon.project-asset-reference.v1" ||
         referenceRevision.referenceRevision !== asset.latestReferenceRevision ||
         referenceRevision.assetContentRevision !==
           command.assetContentRevision ||

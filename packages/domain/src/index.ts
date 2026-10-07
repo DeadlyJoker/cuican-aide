@@ -64,6 +64,7 @@ export * from "./project-asset-records.ts";
 export * from "./project-asset-mutations.ts";
 export * from "./project-asset-reference.ts";
 export * from "./project-asset-media-source.ts";
+export * from "./project-asset-media-adoption.ts";
 export * from "./project-asset-ui-intent.ts";
 export * from "./project-asset-ui-intent-transitions.ts";
 export * from "./project-text-content.ts";

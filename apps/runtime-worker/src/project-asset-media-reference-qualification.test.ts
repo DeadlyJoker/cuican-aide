@@ -345,7 +345,10 @@ for (const backend of ["sqlite", "postgres"] as const) {
         { resultIndex: 16 },
         { resultIndex: -1 },
         { workflowId: "flux2-three-reference-storyboard" },
-        { conceptAssetId: f.old.reference.source.conceptAssetId },
+        {
+          conceptAssetId: parseProjectAssetImageSource(f.old.reference.source)
+            .conceptAssetId,
+        },
       ]) {
         assert.throws(() =>
           parseProjectAssetMediaImageSource({ ...q.source, ...patch }),

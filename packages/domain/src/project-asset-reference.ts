@@ -4,6 +4,7 @@ import {
   assertCreativeProjectScope,
   creativeProjectNextRevision,
 } from "./creative-project-validation.ts";
+import { parseProjectAssetMediaImageSource } from "./project-asset-media-source.ts";
 import {
   parseCurrentConceptSelection,
   assertConceptSelectionResult,
@@ -41,6 +42,7 @@ import type {
   ProjectAssetImageSource,
   ProjectAssetReferenceMutation,
   ProjectAssetReferenceRevision,
+  ProjectConceptAssetReferenceRevision,
   ProjectAssetRevision,
 } from "./project-asset-types.ts";
 
@@ -110,10 +112,23 @@ export function parseProjectAssetReferenceRevision(
       "createdAt",
       "contentDigest",
     ]);
-    if (value.schemaVersion !== "crewon.project-asset-reference.v1")
+    if (
+      value.schemaVersion !== "crewon.project-asset-reference.v1" &&
+      value.schemaVersion !== "crewon.project-asset-reference.v2"
+    )
       projectAssetFailure("project_asset_schema_unsupported");
+    const origin =
+      value.schemaVersion === "crewon.project-asset-reference.v1"
+        ? {
+            schemaVersion: "crewon.project-asset-reference.v1" as const,
+            source: parseProjectAssetImageSource(value.source),
+          }
+        : {
+            schemaVersion: "crewon.project-asset-reference.v2" as const,
+            source: parseProjectAssetMediaImageSource(value.source),
+          };
     const body = {
-      schemaVersion: "crewon.project-asset-reference.v1" as const,
+      ...origin,
       ...creativeProjectScopeFields(value),
       projectId: projectAssetId(value.projectId),
       ownerPrincipalId: creativeProjectOpaqueId(value.ownerPrincipalId),
@@ -121,15 +136,31 @@ export function parseProjectAssetReferenceRevision(
       referenceRevision: projectAssetRevision(value.referenceRevision),
       assetContentRevision: projectAssetRevision(value.assetContentRevision),
       assetContentDigest: projectAssetDigest(value.assetContentDigest),
-      source: parseProjectAssetImageSource(value.source),
       createdByActorId: creativeProjectOpaqueId(value.createdByActorId),
       createdAt: projectAssetTimestamp(value.createdAt),
     };
+    if (
+      body.schemaVersion === "crewon.project-asset-reference.v2" &&
+      (body.source.generatedFor.assetId !== body.assetId ||
+        body.source.generatedFor.contentRevision !==
+          body.assetContentRevision ||
+        body.source.generatedFor.contentDigest !== body.assetContentDigest ||
+        body.createdAt < body.source.observedAt)
+    )
+      projectAssetFailure("project_asset_reference_mismatch");
     const contentDigest = projectAssetDigest(value.contentDigest);
     if (contentDigest !== projectAssetContentDigest(body, digester))
       projectAssetFailure("project_asset_digest_mismatch");
     return Object.freeze({ ...body, contentDigest });
   });
+}
+/** The existing SQL index column stores an origin digest; the record's explicit version determines its meaning. */
+export function projectAssetReferenceOriginDigest(
+  reference: ProjectAssetReferenceRevision,
+): string {
+  return reference.schemaVersion === "crewon.project-asset-reference.v1"
+    ? reference.source.resultLinkDigest
+    : reference.source.candidateDigest;
 }
 export function assertProjectAssetReferenceRevisionIdentity(
   asset: ProjectAsset,
@@ -157,7 +188,10 @@ export function saveProjectAssetReferenceCandidate(
       expectedConceptSelectionRevision: number;
     }>,
   digester: ProjectAssetDigester,
-): ProjectAssetReferenceMutation {
+): Readonly<{
+  asset: ProjectAsset;
+  referenceRevision: ProjectConceptAssetReferenceRevision;
+}> {
   return projectAssetChecked(() => {
     input = projectAssetInputFields(input, [
       "project",
@@ -234,12 +268,15 @@ export function saveProjectAssetReferenceCandidate(
       createdByActorId: current.actor.actorId,
       createdAt: current.at,
     };
+    const referenceRevision = parseProjectAssetReferenceRevision(
+      { ...body, contentDigest: projectAssetContentDigest(body, digester) },
+      digester,
+    );
+    if (referenceRevision.schemaVersion !== "crewon.project-asset-reference.v1")
+      projectAssetFailure("project_asset_schema_unsupported");
     return Object.freeze({
       asset: next,
-      referenceRevision: parseProjectAssetReferenceRevision(
-        { ...body, contentDigest: projectAssetContentDigest(body, digester) },
-        digester,
-      ),
+      referenceRevision,
     });
   });
 }

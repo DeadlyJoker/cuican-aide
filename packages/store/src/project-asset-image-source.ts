@@ -83,6 +83,8 @@ export function* verifyProjectAssetSavedImageSource(
   reference: ProjectAssetReferenceRevision,
   verifier: ProjectGenerationImageResultVerifier | undefined,
 ): SelectionPlan<OperationResultLink> {
+  if (reference.schemaVersion !== "crewon.project-asset-reference.v1")
+    projectAssetFailure("project_asset_media_reference_reader_required");
   const adapter = verifierRequired(verifier),
     s = reference.source;
   const values = [

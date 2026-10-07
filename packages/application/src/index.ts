@@ -227,6 +227,7 @@ export * from "./project-asset-store-port.ts";
 export * from "./project-asset-reference-image-store-port.ts";
 export * from "./project-asset-media-reference-qualification.ts";
 export * from "./project-asset-media-reference-service.ts";
+export * from "./project-asset-media-adoption.ts";
 export * from "./project-asset-reference-image-application-service.ts";
 export * from "./project-reference-material-read-port.ts";
 export * from "./project-reference-material-freeze-port.ts";

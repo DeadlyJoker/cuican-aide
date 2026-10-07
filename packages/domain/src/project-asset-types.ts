@@ -1,4 +1,5 @@
 import type { CreativeProjectScope } from "./creative-project.ts";
+import type { ProjectAssetMediaImageSource } from "./project-asset-media-source.ts";
 
 export type ProjectAssetKind = "character" | "scene" | "prop";
 export type ProjectAssetContent = Readonly<{
@@ -67,7 +68,7 @@ export type ProjectAssetImageSource = Readonly<{
   rawResultDigest: string;
   resultIndex: number;
 }>;
-export type ProjectAssetReferenceRevision = CreativeProjectScope &
+export type ProjectConceptAssetReferenceRevision = CreativeProjectScope &
   Readonly<{
     schemaVersion: "crewon.project-asset-reference.v1";
     ownerPrincipalId: string;
@@ -80,6 +81,17 @@ export type ProjectAssetReferenceRevision = CreativeProjectScope &
     createdAt: string;
     contentDigest: string;
   }>;
+export type ProjectMediaAssetReferenceRevision = Omit<
+  ProjectConceptAssetReferenceRevision,
+  "schemaVersion" | "source"
+> &
+  Readonly<{
+    schemaVersion: "crewon.project-asset-reference.v2";
+    source: ProjectAssetMediaImageSource;
+  }>;
+export type ProjectAssetReferenceRevision =
+  | ProjectConceptAssetReferenceRevision
+  | ProjectMediaAssetReferenceRevision;
 export interface ProjectAssetDigester {
   sha256(input: string): string;
 }

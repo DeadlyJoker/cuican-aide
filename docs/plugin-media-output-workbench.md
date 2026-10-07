@@ -35,4 +35,4 @@
 
 本次没有请求用户的外部 ComfyUI，也没有更新用户当前安装的 App。Mac 锁屏且无可用浏览器标签，尚未做桌面目视验收；自动化 DOM 快照不替代它。
 
-完整目标仍在推进：[结果采用前校验](./asset-media-reference-qualification.md)已有后续实现，实际采用、Agent 结果工具、结构化分镜、视频、声音、导出及各阶段自动执行尚未完成。当前增量完成的是原生成产出的插件内保存入口，积分继续延后。
+完整目标仍在推进：[结果采用前校验](./asset-media-reference-qualification.md)和[原 Store 原子采用](./asset-media-reference-adoption.md)已有后续实现；页面及 Agent 采用入口、结构化分镜、视频、声音、导出及各阶段自动执行尚未完成。当前页面完成的是原生成产出的插件内保存入口，积分继续延后。

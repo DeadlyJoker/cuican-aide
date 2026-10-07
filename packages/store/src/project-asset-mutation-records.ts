@@ -10,6 +10,7 @@ import {
   selectProjectAssetReferenceRevision,
   projectAssetDependencyStatus,
   projectAssetFailure,
+  projectAssetReferenceOriginDigest,
   type ProjectAssetUiIntent,
 } from "@crewon/domain";
 import { creativeStoreDigester as digester } from "./creative-project-store-records.ts";
@@ -310,7 +311,7 @@ export function* persistAssetMutation(
         x.contentDigest,
         x.assetContentRevision,
         x.assetContentDigest,
-        x.source.resultLinkDigest,
+        projectAssetReferenceOriginDigest(x),
         assetJson(x),
       ],
     );

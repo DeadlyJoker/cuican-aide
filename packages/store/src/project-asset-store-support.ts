@@ -24,6 +24,7 @@ import {
   parseProjectAsset,
   parseProjectAssetRevision,
   parseProjectAssetReferenceRevision,
+  projectAssetReferenceOriginDigest,
   parseProjectTextArtifactRevision,
   parseProjectTextArtifact,
   type ProjectAsset,
@@ -185,7 +186,7 @@ export function decodeAssetReference(
     content_digest: r.contentDigest,
     asset_content_revision: r.assetContentRevision,
     asset_content_digest: r.assetContentDigest,
-    result_link_digest: r.source.resultLinkDigest,
+    result_link_digest: projectAssetReferenceOriginDigest(r),
   });
   if (
     r.ownerPrincipalId !== owner.principalId ||
