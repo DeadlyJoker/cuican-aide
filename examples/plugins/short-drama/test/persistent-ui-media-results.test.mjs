@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { browser, fixture, settle } from "./ui.test-support.mjs";
 import { persistentProps } from "./persistent-ui.test-support.mjs";
 import { mediaInputFixture } from "./media-input.test-support.mjs";
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "29.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "30.0.0";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(`../dist/${version}/`, import.meta.url).pathname;

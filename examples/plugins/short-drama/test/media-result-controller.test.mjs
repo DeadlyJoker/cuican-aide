@@ -122,3 +122,16 @@ test("read failures are retryable without issuing generation or adoption", async
   assert.equal(c.getSnapshot().phase, "ready");
   c.dispose();
 });
+
+test("a newly saved candidate can be previewed before it reaches the first catalog page, within its current project", async () => {
+  const f = fixture();
+  await f.controller.previewCandidate({ ...f.candidate, projectId: "foreign" });
+  assert.equal(f.calls.length, 0);
+  await f.controller.previewCandidate(f.candidate);
+  assert.equal(
+    f.controller.getSnapshot().preview.candidate.candidateId,
+    f.candidate.candidateId,
+  );
+  assert.equal(f.controller.getSnapshot().candidates.length, 0);
+  f.controller.dispose();
+});

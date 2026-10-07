@@ -1,4 +1,8 @@
-import { createPluginMediaResultClient } from "./project-media-results-service";
+import { ProjectMediaOutputController } from "./workbench/ProjectMediaOutputController";
+import {
+  createPluginMediaResultClient,
+  createPluginMediaResultActionClient,
+} from "./project-media-results-service";
 import { ProjectMediaResultController } from "./workbench/ProjectMediaResultController";
 import { ProjectMediaGenerationController } from "./workbench/ProjectMediaGenerationController";
 import { createMediaGenerationClient } from "./project-media-generations-service";
@@ -218,6 +222,7 @@ export default defineUiPlugin({
     let association: ProjectConversationAssociationController | null = null;
     let plans: ProjectTextPlanController | null = null;
     let assets: ProjectAssetController | null = null;
+    let mediaOutputs: ProjectMediaOutputController | null = null;
     let mediaResults: ProjectMediaResultController | null = null;
     let mediaInputs: ProjectMediaInputController | null = null;
     let mediaGenerations: ProjectMediaGenerationController | null = null;
@@ -230,6 +235,7 @@ export default defineUiPlugin({
       assets?.refreshWriteActivity();
       mediaInputs?.refreshWriteActivity();
       mediaGenerations?.refreshWriteActivity();
+      mediaOutputs?.refreshWriteActivity();
     });
     const clients = writes.services;
     controller = preview
@@ -312,6 +318,12 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    mediaOutputs = preview
+      ? null
+      : new ProjectMediaOutputController(
+          createPluginMediaResultActionClient(clients),
+          () => writes.pending,
+        );
     mediaResults = preview
       ? null
       : new ProjectMediaResultController(
@@ -367,6 +379,7 @@ export default defineUiPlugin({
       plans?.setReady(ready);
       assets?.setReady(ready);
       mediaResults?.setReady(ready);
+      mediaOutputs?.setReady(ready);
       mediaInputs?.setReady(ready);
       mediaGenerations?.setThread(generationContext(next.data)?.thread ?? null);
       mediaGenerations?.setReady(ready);
@@ -388,6 +401,7 @@ export default defineUiPlugin({
               plans={plans}
               assets={assets ?? undefined}
               mediaResults={mediaResults ?? undefined}
+              mediaOutputs={mediaOutputs ?? undefined}
               mediaInputs={mediaInputs ?? undefined}
               mediaGenerations={mediaGenerations ?? undefined}
               planningDraft={planningDraft(next.data)}
@@ -419,6 +433,7 @@ export default defineUiPlugin({
       plans?.dispose();
       assets?.dispose();
       mediaResults?.dispose();
+      mediaOutputs?.dispose();
       mediaInputs?.dispose();
       mediaGenerations?.dispose();
       try {
@@ -441,6 +456,7 @@ export default defineUiPlugin({
         plans?.dispose();
         assets?.dispose();
         mediaResults?.dispose();
+        mediaOutputs?.dispose();
         mediaInputs?.dispose();
         mediaGenerations?.dispose();
         try {

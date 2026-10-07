@@ -1,4 +1,4 @@
-/** Portable read-only result client; compiled codec is pinned independently of the frozen SDK. */
+/** Portable result clients; compiled codec is pinned independently of the frozen SDK. */
 import type {
   MediaInputItem,
   MediaInputWorkflowId,
@@ -8,6 +8,9 @@ import {
   parseListProjectMediaResultsResponse,
   parseProjectMediaResultLocator,
   parseGetProjectMediaResultResponse,
+  parseProjectMediaRunLocator,
+  parseProjectMediaRunOutputs,
+  parsePublishProjectMediaResultResponse,
 } from "./project-media-results-codec.mjs";
 export type ListProjectMediaResultsRequest = Readonly<{
   projectId: string;
@@ -120,4 +123,66 @@ export function createPluginMediaResultClient(services: {
 }
 export type PluginMediaResultClient = ReturnType<
   typeof createPluginMediaResultClient
+>;
+
+export type ProjectMediaRunLocator = Readonly<{
+  projectId: string;
+  runId: string;
+}>;
+export type ProjectMediaRunOutputs = Readonly<{
+  projectId: string;
+  runId: string;
+  mediaInputId: string;
+  inputRevision: number;
+  outputs: readonly Readonly<{
+    resultIndex: number;
+    candidate: ProjectMediaResultSummary | null;
+  }>[];
+}>;
+export type SavedProjectMediaResult = Readonly<{
+  disposition: "created" | "replayed";
+  candidate: ProjectMediaResultSummary;
+}>;
+/** Declared separately from preview; only an explicit save invokes the write capability. */
+export function createPluginMediaResultActionClient(services: {
+  invoke(
+    action: string,
+    input: Json,
+    options: { signal?: AbortSignal },
+  ): Promise<Json>;
+}) {
+  const invoke = services.invoke.bind(services);
+  return Object.freeze({
+    async listOutputs(
+      input: ProjectMediaRunLocator,
+      options: { signal?: AbortSignal } = {},
+    ): Promise<ProjectMediaRunOutputs> {
+      const request = parseProjectMediaRunLocator(input);
+      options.signal?.throwIfAborted();
+      const output = await invoke(
+        "crewon.project-media-result-actions.v1.listOutputs",
+        request,
+        options,
+      );
+      options.signal?.throwIfAborted();
+      return parseProjectMediaRunOutputs(request, output);
+    },
+    async saveCandidate(
+      input: ProjectMediaResultLocator,
+      options: { signal?: AbortSignal } = {},
+    ): Promise<SavedProjectMediaResult> {
+      const request = parseProjectMediaResultLocator(input);
+      options.signal?.throwIfAborted();
+      const output = await invoke(
+        "crewon.project-media-result-actions.v1.saveCandidate",
+        request,
+        options,
+      );
+      options.signal?.throwIfAborted();
+      return parsePublishProjectMediaResultResponse(request, output);
+    },
+  });
+}
+export type PluginMediaResultActionClient = ReturnType<
+  typeof createPluginMediaResultActionClient
 >;

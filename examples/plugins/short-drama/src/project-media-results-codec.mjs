@@ -120,10 +120,13 @@ function pluginUiFields(input, fields) {
   if (prototype !== Object.prototype && prototype !== null)
     pluginUiFailure("plugin_ui_object_invalid");
   const keys = Reflect.ownKeys(input);
-  if (keys.length !== fields.length || keys.some((key) => typeof key !== "string" || !fields.includes(key)))
+  if (
+    keys.length !== fields.length ||
+    keys.some((key) => typeof key !== "string" || !fields.includes(key))
+  )
     pluginUiFailure("plugin_ui_fields_invalid");
   return Object.freeze(
-    Object.fromEntries(fields.map((field) => [field, dataValue(input, field)]))
+    Object.fromEntries(fields.map((field) => [field, dataValue(input, field)])),
   );
 }
 function dataValue(input, name) {
@@ -138,13 +141,28 @@ var MAX_PUBLIC_PROJECT_ASSET_CONTENT_BYTES = 8 * 1024;
 function assetContractFailure() {
   throw new ContractValidationError("project_asset_contract_invalid");
 }
-function assetContractRevision(input, minimum = 1, maximum = Number.MAX_SAFE_INTEGER) {
-  if (typeof input !== "number" || !Number.isSafeInteger(input) || input < minimum || input > maximum)
+function assetContractRevision(
+  input,
+  minimum = 1,
+  maximum = Number.MAX_SAFE_INTEGER,
+) {
+  if (
+    typeof input !== "number" ||
+    !Number.isSafeInteger(input) ||
+    input < minimum ||
+    input > maximum
+  )
     assetContractFailure();
   return input;
 }
 function assetContractText(input, maximumBytes) {
-  if (typeof input !== "string" || !input.trim() || input.length > maximumBytes || new TextEncoder().encode(input).byteLength > maximumBytes || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(input))
+  if (
+    typeof input !== "string" ||
+    !input.trim() ||
+    input.length > maximumBytes ||
+    new TextEncoder().encode(input).byteLength > maximumBytes ||
+    /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(input)
+  )
     assetContractFailure();
   for (const point of input) {
     const code = point.codePointAt(0);
@@ -154,7 +172,11 @@ function assetContractText(input, maximumBytes) {
 }
 function assetContractOpaque(input) {
   const value = assetContractText(input, 512);
-  if (value.length > 128 || value.trim() !== value || /[\u0000-\u001f\u007f]/u.test(value))
+  if (
+    value.length > 128 ||
+    value.trim() !== value ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  )
     assetContractFailure();
   return value;
 }
@@ -169,7 +191,12 @@ function assetContractDigest(input) {
   return input;
 }
 function assetContractTimestamp(input) {
-  if (typeof input !== "string" || input.length !== 24 || !Number.isFinite(Date.parse(input)) || new Date(input).toISOString() !== input)
+  if (
+    typeof input !== "string" ||
+    input.length !== 24 ||
+    !Number.isFinite(Date.parse(input)) ||
+    new Date(input).toISOString() !== input
+  )
     assetContractFailure();
   return input;
 }
@@ -185,39 +212,52 @@ function parseListProjectMediaResultsRequest(input) {
   const r = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 2048 }), [
     "projectId",
     "afterCandidateId",
-    "limit"
+    "limit",
   ]);
   return Object.freeze({
     projectId: assetContractId(r.projectId),
-    afterCandidateId: r.afterCandidateId === null ? null : mediaResultCandidateId(r.afterCandidateId),
-    limit: assetContractRevision(r.limit, 1, 16)
+    afterCandidateId:
+      r.afterCandidateId === null
+        ? null
+        : mediaResultCandidateId(r.afterCandidateId),
+    limit: assetContractRevision(r.limit, 1, 16),
   });
 }
 function parseListProjectMediaResultsResponse(request, input) {
-  const q = parseListProjectMediaResultsRequest(request), r = pluginUiFields(
-    parsePluginUiJsonValue(input, {
-      maxBytes: MAX_MEDIA_RESULT_CATALOG_BYTES
-    }),
-    ["candidates", "nextCandidateId"]
-  );
+  const q = parseListProjectMediaResultsRequest(request),
+    r = pluginUiFields(
+      parsePluginUiJsonValue(input, {
+        maxBytes: MAX_MEDIA_RESULT_CATALOG_BYTES,
+      }),
+      ["candidates", "nextCandidateId"],
+    );
   if (!Array.isArray(r.candidates) || r.candidates.length > q.limit) invalid();
   let previous = q.afterCandidateId;
   const positions = /* @__PURE__ */ new Set();
   const candidates = r.candidates.map((entry) => {
     const c = pluginUiFields(entry, [
-      "projectId",
-      "candidateId",
-      "runId",
-      "resultIndex",
-      "executionId",
-      "mediaInputId",
-      "inputRevision",
-      "workflowId",
-      "item",
-      "contentDigest",
-      "media"
-    ]), candidateId = mediaResultCandidateId(c.candidateId), projectId = assetContractId(c.projectId), runId = assetContractId(c.runId), resultIndex = assetContractRevision(c.resultIndex, 0, 15), position = JSON.stringify([runId, resultIndex]);
-    if (projectId !== q.projectId || previous !== null && candidateId <= previous || positions.has(position))
+        "projectId",
+        "candidateId",
+        "runId",
+        "resultIndex",
+        "executionId",
+        "mediaInputId",
+        "inputRevision",
+        "workflowId",
+        "item",
+        "contentDigest",
+        "media",
+      ]),
+      candidateId = mediaResultCandidateId(c.candidateId),
+      projectId = assetContractId(c.projectId),
+      runId = assetContractId(c.runId),
+      resultIndex = assetContractRevision(c.resultIndex, 0, 15),
+      position = JSON.stringify([runId, resultIndex]);
+    if (
+      projectId !== q.projectId ||
+      (previous !== null && candidateId <= previous) ||
+      positions.has(position)
+    )
       invalid();
     previous = candidateId;
     positions.add(position);
@@ -225,13 +265,16 @@ function parseListProjectMediaResultsResponse(request, input) {
     if (c.workflowId === "krea2-reference-four-view") {
       const value = pluginUiFields(c.item, ["kind", "assetId"]);
       if (value.kind !== "character-reference") invalid();
-      item = Object.freeze({ kind: value.kind, assetId: assetContractId(value.assetId) });
+      item = Object.freeze({
+        kind: value.kind,
+        assetId: assetContractId(value.assetId),
+      });
     } else if (c.workflowId === "flux2-three-reference-storyboard") {
       const value = pluginUiFields(c.item, ["kind", "episodeId"]);
       if (value.kind !== "storyboard-frame-exploration") invalid();
       item = Object.freeze({
         kind: value.kind,
-        episodeId: assetContractId(value.episodeId)
+        episodeId: assetContractId(value.episodeId),
       });
     } else invalid();
     const m = pluginUiFields(c.media, [
@@ -240,7 +283,7 @@ function parseListProjectMediaResultsResponse(request, input) {
       "byteLength",
       "width",
       "height",
-      "observedAt"
+      "observedAt",
     ]);
     if (m.type !== "image/png") invalid();
     return Object.freeze({
@@ -260,41 +303,97 @@ function parseListProjectMediaResultsResponse(request, input) {
         byteLength: assetContractRevision(m.byteLength, 57, 16 * 1024 * 1024),
         width: assetContractRevision(m.width, 1, 4096),
         height: assetContractRevision(m.height, 1, 4096),
-        observedAt: assetContractTimestamp(m.observedAt)
-      })
+        observedAt: assetContractTimestamp(m.observedAt),
+      }),
     });
   });
-  const nextCandidateId = r.nextCandidateId === null ? null : mediaResultCandidateId(r.nextCandidateId);
-  if (nextCandidateId !== null && (candidates.length !== q.limit || candidates.at(-1)?.candidateId !== nextCandidateId))
+  const nextCandidateId =
+    r.nextCandidateId === null
+      ? null
+      : mediaResultCandidateId(r.nextCandidateId);
+  if (
+    nextCandidateId !== null &&
+    (candidates.length !== q.limit ||
+      candidates.at(-1)?.candidateId !== nextCandidateId)
+  )
     invalid();
   return Object.freeze({
     candidates: Object.freeze(candidates),
-    nextCandidateId
+    nextCandidateId,
   });
 }
 function invalid() {
   throw new ContractValidationError("project_media_results_contract_invalid");
 }
-function parseProjectMediaResultLocator(input) {
+function parseProjectMediaRunLocator(input) {
   const r = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 2048 }), [
     "projectId",
     "runId",
-    "resultIndex"
   ]);
   return Object.freeze({
     projectId: assetContractId(r.projectId),
     runId: assetContractId(r.runId),
-    resultIndex: assetContractRevision(r.resultIndex, 0, 15)
+  });
+}
+function parseProjectMediaRunOutputs(request, input) {
+  const q = parseProjectMediaRunLocator(request);
+  const r = pluginUiFields(
+    parsePluginUiJsonValue(input, { maxBytes: MAX_MEDIA_RESULT_CATALOG_BYTES }),
+    ["projectId", "runId", "mediaInputId", "inputRevision", "outputs"],
+  );
+  if (
+    r.projectId !== q.projectId ||
+    r.runId !== q.runId ||
+    !Array.isArray(r.outputs) ||
+    r.outputs.length < 1 ||
+    r.outputs.length > 16
+  )
+    invalid();
+  const mediaInputId = assetContractId(r.mediaInputId),
+    inputRevision = assetContractRevision(r.inputRevision);
+  const outputs = r.outputs.map((entry, index) => {
+    const e = pluginUiFields(entry, ["resultIndex", "candidate"]);
+    if (e.resultIndex !== index) invalid();
+    const { candidate } = parseGetProjectMediaResultResponse(
+      { ...q, resultIndex: index },
+      { candidate: e.candidate },
+    );
+    if (
+      candidate &&
+      (candidate.mediaInputId !== mediaInputId ||
+        candidate.inputRevision !== inputRevision)
+    )
+      invalid();
+    return Object.freeze({ resultIndex: index, candidate });
+  });
+  return Object.freeze({
+    ...q,
+    mediaInputId,
+    inputRevision,
+    outputs: Object.freeze(outputs),
+  });
+}
+function parseProjectMediaResultLocator(input) {
+  const r = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 2048 }), [
+    "projectId",
+    "runId",
+    "resultIndex",
+  ]);
+  return Object.freeze({
+    projectId: assetContractId(r.projectId),
+    runId: assetContractId(r.runId),
+    resultIndex: assetContractRevision(r.resultIndex, 0, 15),
   });
 }
 function parseGetProjectMediaResultResponse(request, input) {
-  const q = parseProjectMediaResultLocator(request), r = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 8192 }), [
-    "candidate"
-  ]);
+  const q = parseProjectMediaResultLocator(request),
+    r = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 8192 }), [
+      "candidate",
+    ]);
   if (r.candidate === null) return Object.freeze({ candidate: null });
   const candidate = parseListProjectMediaResultsResponse(
     { projectId: q.projectId, afterCandidateId: null, limit: 1 },
-    { candidates: [r.candidate], nextCandidateId: null }
+    { candidates: [r.candidate], nextCandidateId: null },
   ).candidates[0];
   if (candidate.runId !== q.runId || candidate.resultIndex !== q.resultIndex)
     invalid();
@@ -303,11 +402,11 @@ function parseGetProjectMediaResultResponse(request, input) {
 function parsePublishProjectMediaResultResponse(request, input) {
   const r = pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 8192 }), [
     "disposition",
-    "candidate"
+    "candidate",
   ]);
   if (r.disposition !== "created" && r.disposition !== "replayed") invalid();
   const { candidate } = parseGetProjectMediaResultResponse(request, {
-    candidate: r.candidate
+    candidate: r.candidate,
   });
   if (candidate === null) invalid();
   return Object.freeze({ disposition: r.disposition, candidate });
@@ -319,5 +418,7 @@ export {
   parseListProjectMediaResultsRequest,
   parseListProjectMediaResultsResponse,
   parseProjectMediaResultLocator,
-  parsePublishProjectMediaResultResponse
+  parseProjectMediaRunLocator,
+  parseProjectMediaRunOutputs,
+  parsePublishProjectMediaResultResponse,
 };

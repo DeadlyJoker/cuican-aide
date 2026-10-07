@@ -101,7 +101,12 @@ export class ProjectMediaResultController {
     const candidate = this.#state.candidates.find(
       (c) => c.candidateId === candidateId,
     );
-    if (!this.canRead || !candidate) return;
+    if (!candidate) return;
+    return this.previewCandidate(candidate);
+  }
+  async previewCandidate(candidate: ProjectMediaResultSummary) {
+    if (!this.canRead || candidate.projectId !== this.#state.projectId) return;
+    const candidateId = candidate.candidateId;
     this.closePreview();
     const controller = (this.#preview = new AbortController()),
       epoch = this.#epoch;

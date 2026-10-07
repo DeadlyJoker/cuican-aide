@@ -1,3 +1,5 @@
+import type { ProjectMediaOutputController } from "./ProjectMediaOutputController";
+import { ProjectMediaOutputWorkbench } from "./ProjectMediaOutputWorkbench";
 import type { ProjectMediaResultController } from "./ProjectMediaResultController";
 import { ProjectMediaResultWorkbench } from "./ProjectMediaResultWorkbench";
 import type { ProjectMediaGenerationController } from "./ProjectMediaGenerationController";
@@ -106,6 +108,7 @@ export function ShortDramaPersistentWorkbench({
   plans,
   assets,
   mediaResults,
+  mediaOutputs,
   mediaInputs,
   mediaGenerations,
   planningDraft = null,
@@ -119,6 +122,7 @@ export function ShortDramaPersistentWorkbench({
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
   mediaResults?: ProjectMediaResultController;
+  mediaOutputs?: ProjectMediaOutputController;
   mediaInputs?: ProjectMediaInputController;
   mediaGenerations?: ProjectMediaGenerationController;
   planningDraft?: ProjectPlanningProposal | null;
@@ -162,6 +166,12 @@ export function ShortDramaPersistentWorkbench({
     mediaGenerations?.getSnapshot ?? noAssetSnapshot,
     mediaGenerations?.getSnapshot ?? noAssetSnapshot,
   );
+  useSyncExternalStore(
+    mediaOutputs?.subscribe ?? emptySubscribe,
+    mediaOutputs?.getSnapshot ?? noAssetSnapshot,
+    mediaOutputs?.getSnapshot ?? noAssetSnapshot,
+  );
+  const generationReceipt = mediaGenerations?.getSnapshot().receipt ?? null;
   const [page, setPage] = useState<ShortDramaProjectPage>("overview");
   const [search, setSearch] = useState("");
   const [homeIdea, setHomeIdea] = useState("");
@@ -186,7 +196,8 @@ export function ShortDramaPersistentWorkbench({
     plans.locked ||
     assets?.locked === true ||
     mediaInputs?.locked === true ||
-    mediaGenerations?.locked === true;
+    mediaGenerations?.locked === true ||
+    mediaOutputs?.locked === true;
   const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
   useEffect(() => {
@@ -214,6 +225,12 @@ export function ShortDramaPersistentWorkbench({
     mediaGenerations,
     details,
   ]);
+  useEffect(() => {
+    mediaOutputs?.setSource(
+      details?.project.projectId ?? null,
+      generationReceipt,
+    );
+  }, [mediaOutputs, details?.project.projectId, generationReceipt]);
   useEffect(() => {
     setPage("overview");
   }, [details?.project.projectId]);
@@ -463,6 +480,7 @@ export function ShortDramaPersistentWorkbench({
                       controller={mediaInputs}
                       generations={mediaGenerations}
                       blocked={
+                        mediaOutputs?.locked === true ||
                         projectLocked ||
                         snapshot.conceptLocked ||
                         texts.locked ||
@@ -472,6 +490,24 @@ export function ShortDramaPersistentWorkbench({
                         association?.locked === true
                       }
                     />
+                    {mediaOutputs && (
+                      <ProjectMediaOutputWorkbench
+                        controller={mediaOutputs}
+                        results={mediaResults}
+                        blocked={
+                          archived === true ||
+                          projectLocked ||
+                          snapshot.conceptLocked ||
+                          texts.locked ||
+                          conversations.locked ||
+                          plans.locked ||
+                          assets?.locked === true ||
+                          association?.locked === true ||
+                          mediaInputs.locked ||
+                          mediaGenerations?.locked === true
+                        }
+                      />
+                    )}
                     {mediaResults && (
                       <ProjectMediaResultWorkbench controller={mediaResults} />
                     )}

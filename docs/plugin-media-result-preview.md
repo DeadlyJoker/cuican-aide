@@ -24,6 +24,6 @@ Native 使用现有 `mediaResults` 声明中的精确包和 `workbench` 范围�
 
 验证记录在 `output/extensions/checks/short29-media-result-ui-20261007/`。独立包完整测试 342 项通过；宿主相关 UI 测试 62 项通过。包含新预览 DOM 快照、旧主题及弹层范围回归、迟到请求清理、认证字节读取，以及实际 SQLite/PostgreSQL 原媒体候选。Native 测试使用真正安装的新包和真实挂载调用读取目录；配置、Agent 部署及供应商响应使用具名测试夹具。
 
-已保存结果的读取与预览已接通。[原任务产出与保存协议](./plugin-media-result-actions.md)已在宿主接通。页面内“保存结果”和“采用素材”尚未开放：T10/D18 采用需要扩展原素材来源协议并保留版本冲突检查。Agent 结果工具、结构化分镜、视频、配音和导出仍在完整目标中。
+已保存结果的读取与预览已接通。[原任务产出与保存协议](./plugin-media-result-actions.md)已在宿主接通，后续 30.0.0 包增加了[页面内保存与恢复](./plugin-media-output-workbench.md)。“采用素材”尚未开放：T10/D18 采用需要扩展原素材来源协议并保留版本冲突检查。Agent 结果工具、结构化分镜、视频、配音和导出仍在完整目标中。
 
 本轮没有调用用户的外部 ComfyUI，也没有更新用户当前 App。Mac 锁屏，尚未进行新页面的桌面目视验收，自动化 DOM 快照不代替该验收。
