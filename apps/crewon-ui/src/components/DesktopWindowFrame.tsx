@@ -41,6 +41,10 @@ export function DesktopWindowFrame({
         className="desktop-window-drag-strip"
         data-desktop-drag-region=""
       />
+      {children}
+      {/* Electron combines native drag rectangles in document order. Keep the
+          controls' no-drag exclusion after route-owned header drag regions;
+          a higher CSS z-index alone does not make mouse clicks reach them. */}
       <div className="desktop-window-controls-slot">
         <TitleBarWindowControls
           locale={locale}
@@ -48,7 +52,6 @@ export function DesktopWindowFrame({
           variant="command"
         />
       </div>
-      {children}
     </div>
   );
 }
