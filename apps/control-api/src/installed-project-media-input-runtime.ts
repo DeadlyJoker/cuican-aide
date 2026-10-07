@@ -310,6 +310,15 @@ export class InstalledProjectMediaInputRuntime {
       return this.#load(actor, query);
     });
   }
+  listInputs(
+    request: ControlApiRequestContext,
+    actor: ActorContext,
+    input: ListMediaInputsRequest,
+    signal?: AbortSignal,
+  ) {
+    const query = parseListMediaInputsRequest(input);
+    return this.#run(request, actor, signal, () => this.#list(actor, query));
+  }
   getOptions(
     request: ControlApiRequestContext,
     actor: ActorContext,

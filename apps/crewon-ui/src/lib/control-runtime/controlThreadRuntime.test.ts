@@ -1,3 +1,5 @@
+import { ControlProjectMediaGeneration } from "./controlProjectMediaGeneration";
+import { savedInput as savedMediaInput } from "./controlProjectMediaGeneration.test-support";
 import {
   formatThreadCatalogCursor,
   parseThreadCatalogQuery,
@@ -2296,7 +2298,7 @@ describe("Control thread runtime", () => {
     }
   });
 
-  it.each(["text", "media-input"] as const)("starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn", async (kind) => {
+  it.each(["text", "media-input", "media-generation"] as const)("starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn", async (kind) => {
     let submitted = false,
       terminal = false,
       attempt = 0;
@@ -2395,11 +2397,36 @@ describe("Control thread runtime", () => {
         },
       } as const;
       const mediaStage = {kind:"media-input",workflowId:"flux2-three-reference-storyboard",configurationRevision:4,briefRevision:1,script:{artifactId:"script-1",episodeId:"episode-1",contentRevision:2}} as const;
-      const result = await runtime.startTurn("thread-1", "写第一集", [], kind === "text" ? textSettings : {
-        executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
-      });
-      expect(result.turn.id).toBe("run-1");
+      if (kind === "media-generation") {
+        const binding = textSettings.projectConversation.binding;
+        const saved = { ...savedMediaInput, projectId: binding.projectId, references: {
+          character: { ...savedMediaInput.references.character, projectId: binding.projectId },
+        } };
+        client.getThread.mockResolvedValue({ thread: threadView({ workspaceId: binding.workspaceId }), eventSequence: 1 });
+        vi.spyOn(client.projectConversations, "getBinding").mockResolvedValue({ binding });
+        vi.spyOn(client.projectMediaGenerations, "getRecovery").mockResolvedValue({ intent: null });
+        vi.spyOn(client.projectMediaInputs, "getOptions").mockResolvedValue({ configuration: { revision: 1, workflows: [saved.workflowId] } });
+        vi.spyOn(client.projectMediaInputs, "listInputs").mockResolvedValue({ inputs: [{ projectId: binding.projectId, mediaInputId: saved.mediaInputId, latestInputRevision: 1, item: saved.item, workflowId: saved.workflowId, createdAt: saved.createdAt }], nextMediaInputId: null });
+        vi.spyOn(client.projectMediaInputs, "loadInput").mockResolvedValue({ state: { input: saved, latestInputRevision: 1 } });
+        const generate = vi.spyOn(client.projectMediaGenerations, "generate").mockImplementation(async request => {
+          submitted = true;
+          return { disposition: "committed", projectId: request.projectId, threadId: request.threadId, mediaInputId: request.mediaInputId, inputRevision: request.inputRevision, executionId: request.executionId, threadRevision: request.expectedThreadRevision + 1, runId: "run-1" };
+        });
+        const generation = new ControlProjectMediaGeneration({ client, binding, briefRevision: 1, presenter: runtime });
+        try {
+          await generation.refresh(); await generation.select(saved.mediaInputId); await generation.generate();
+          expect(generation.getSnapshot().receipt?.runId).toBe("run-1");
+          expect(generate).toHaveBeenCalledOnce();
+          expect(start).not.toHaveBeenCalled();
+        } finally { generation.dispose(); }
+      } else {
+        const result = await runtime.startTurn("thread-1", "写第一集", [], kind === "text" ? textSettings : {
+          executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
+        });
+        expect(result.turn.id).toBe("run-1");
+      }
       await settled.promise;
+      if (kind !== "media-generation") {
       expect(start).toHaveBeenCalledOnce();
       expect(start.mock.calls[0]![1]).toMatchObject({
         threadId: "thread-1",
@@ -2409,9 +2436,10 @@ describe("Control thread runtime", () => {
         expectedBindingRevision: 2,
         stage: kind === "text" ? { kind: "script", episodeId: "episode-1", outline: null } : mediaStage,
       });
+      }
       expect(client.startTurn).not.toHaveBeenCalled();
       expect(client.getActiveAgentVersionCatalog).not.toHaveBeenCalled();
-      expect(client.getRun).toHaveBeenCalledWith("run-1", {});
+      expect(client.getRun).toHaveBeenCalledWith("run-1", kind === "media-generation" ? expect.objectContaining({ signal: expect.any(AbortSignal) }) : {});
       expect(cursors).toEqual([0, 1]);
       expect(runtimeCallbacks.onTextDelta.mock.calls).toEqual([
         ["thread-1", "第一"],

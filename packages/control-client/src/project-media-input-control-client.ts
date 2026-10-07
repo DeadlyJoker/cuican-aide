@@ -14,6 +14,9 @@ import type {
   CreativeProjectControlRequestOptions,
 } from "./creative-project-control-client.ts";
 import {
+  parseListMediaInputsRequest,
+  parseListMediaInputsResponse,
+  type ListMediaInputsRequest,
   parseMediaInputOptionsRequest,
   parseMediaInputOptionsResponse,
   type MediaInputOptionsRequest,
@@ -25,6 +28,34 @@ export class ProjectMediaInputControlClient {
   readonly #transport: CreativeProjectControlTransport;
   constructor(transport: CreativeProjectControlTransport) {
     this.#transport = transport;
+  }
+  async listInputs(
+    input: ListMediaInputsRequest,
+    options: CreativeProjectControlRequestOptions = {},
+  ) {
+    const query = this.#checked("request", () =>
+      parseListMediaInputsRequest(input),
+    );
+    const signal = this.#signal(options);
+    signal.throwIfAborted();
+    const params = new URLSearchParams({ limit: String(query.limit) });
+    if (query.afterMediaInputId !== null)
+      params.set("afterMediaInputId", query.afterMediaInputId);
+    const value = await this.#transport.json(
+      "GET",
+      `${path(query.projectId)}?${params}`,
+      undefined,
+      {
+        signal,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_PROJECT_MEDIA_INPUT_RESPONSE_BYTES,
+        redirect: "manual",
+      },
+    );
+    signal.throwIfAborted();
+    return this.#checked("response", () =>
+      parseListMediaInputsResponse(query, value),
+    );
   }
   async getOptions(
     input: MediaInputOptionsRequest,

@@ -6,7 +6,10 @@ import {
   MAX_PROJECT_MEDIA_INPUT_REQUEST_BYTES,
 } from "@crewon/contracts/project-media-inputs";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
-import { parseMediaInputOptionsRequest } from "@crewon/contracts/project-media-input-catalog";
+import {
+  parseMediaInputOptionsRequest,
+  parseListMediaInputsRequest,
+} from "@crewon/contracts/project-media-input-catalog";
 import { requestContext } from "./request-context.ts";
 import {
   isInstalledProjectMediaInputRuntime,
@@ -48,6 +51,35 @@ export function registerProjectMediaInputRoutes(
           actor,
           parseMediaInputOptionsRequest({
             projectId: request.params.projectId,
+          }),
+          signal,
+        );
+      }),
+  );
+  app.get<{ Params: { projectId: string }; Querystring: unknown }>(
+    ROOT,
+    { exposeHeadRoute: false },
+    async (request, reply) =>
+      withRequestSignal(request, reply, async (signal) => {
+        const query = querySnapshot(request.query, [
+          "afterMediaInputId",
+          "limit",
+        ]);
+        if (
+          query.limit !== undefined &&
+          !/^(?:[1-9]|1[0-6])$/u.test(query.limit)
+        )
+          invalid();
+        const context = requestContext(request),
+          actor = await input.identity.resolveActor(context);
+        return InstalledProjectMediaInputRuntime.prototype.listInputs.call(
+          input.owner,
+          context,
+          actor,
+          parseListMediaInputsRequest({
+            projectId: request.params.projectId,
+            afterMediaInputId: query.afterMediaInputId ?? null,
+            limit: query.limit === undefined ? 16 : Number(query.limit),
           }),
           signal,
         );
@@ -110,7 +142,7 @@ function querySnapshot(input: unknown, allowed: readonly string[]) {
       !field?.enumerable ||
       !Object.hasOwn(field, "value") ||
       typeof field.value !== "string" ||
-      field.value.length > 32
+      field.value.length > (key === "afterMediaInputId" ? 512 : 32)
     )
       invalid();
     copy[key] = field.value;

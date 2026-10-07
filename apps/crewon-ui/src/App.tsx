@@ -941,6 +941,9 @@ export function App({
     terminalCommand,
   });
   const projectConversationComposer = useProjectConversationComposer({
+    mediaGenerationPresenter: controlRuntimeConnected
+      ? controlThreadRuntime
+      : null,
     client: controlRuntimeConnected ? controlClient : null,
     threadId: commandShellRuntime.selectedThreadId,
     threadRevision: commandShellRuntime.selectedThread?.updatedAt ?? null,
@@ -1697,8 +1700,12 @@ export function App({
                   tone: "warning",
                   text:
                     locale === "zh"
-                      ? "项目会话状态暂不可用，请重新进入会话"
-                      : "Project conversation unavailable. Reopen the conversation.",
+                      ? projectConversationComposer.generationBusy
+                        ? "正在准备画面，请等待或停止等待后继续聊天"
+                        : "项目会话状态暂不可用，请重新进入会话"
+                      : projectConversationComposer.generationBusy
+                        ? "Preparing media. Wait or stop waiting before continuing the chat."
+                        : "Project conversation unavailable. Reopen the conversation.",
                 });
                 return;
               }

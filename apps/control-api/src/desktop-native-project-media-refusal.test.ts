@@ -18,6 +18,20 @@ test(
         "output/extensions/installable-plugins/short-drama-media-refusal-20261007/short-drama/28.0.0",
       ),
     });
+    const catalog = await f.app.inject({
+      method: "GET",
+      url: `/api/v1/creative-projects/${f.query.projectId}/media-inputs?limit=16`,
+      headers: f.headers,
+    });
+    assert.equal(catalog.statusCode, 200, catalog.body);
+    assert.ok(
+      catalog
+        .json()
+        .inputs.some(
+          (entry: { mediaInputId: string }) =>
+            entry.mediaInputId === f.body.mediaInputId,
+        ),
+    );
     const invalid = {
       ...f.body,
       projectId: f.query.projectId,

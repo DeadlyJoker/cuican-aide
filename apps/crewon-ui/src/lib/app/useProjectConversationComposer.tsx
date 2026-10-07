@@ -1,3 +1,5 @@
+import { ProjectMediaGenerationComposer } from "./ProjectMediaGenerationComposer";
+import type { ProjectMediaGenerationPresenter } from "../control-runtime/controlProjectMediaGeneration";
 import { useProjectMediaInputStageComposer } from "./useProjectMediaInputStageComposer";
 import { ProjectMediaInputStageControls } from "./ProjectMediaInputStageControls";
 import type { ProjectMediaInputStageComposerSelection } from "../control-runtime/controlProjectMediaInputStageTurn";
@@ -32,11 +34,14 @@ export function useProjectConversationComposer(
     threadRevision: number | null;
     locale: "zh" | "en";
     busy: boolean;
+    mediaGenerationPresenter?: ProjectMediaGenerationPresenter | null;
     retainedSelection?: ProjectConversationComposerSelection | null;
     retainedAssetSelection?: ProjectAssetStageComposerSelection | null;
     retainedMediaInputSelection?: ProjectMediaInputStageComposerSelection | null;
   }>,
 ) {
+  const [generationBusy, setGenerationBusy] = useState(false);
+  const busy = input.busy || generationBusy;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
     [failure, setFailure] = useState(false),
     [loading, setLoading] = useState(
@@ -224,13 +229,18 @@ export function useProjectConversationComposer(
       <div
         className="composer-state"
         aria-label={zh ? "项目创作阶段" : "Project creation stage"}
+        style={
+          input.mediaGenerationPresenter
+            ? { flexWrap: "wrap", maxWidth: "100%" }
+            : undefined
+        }
       >
         <span>{zh ? "项目创作" : "Project creation"}</span>{" "}
         <select
           aria-label={zh ? "创作阶段" : "Creation stage"}
           value={selectedKind}
           disabled={
-            input.busy ||
+            busy ||
             retained !== null ||
             retainedAsset !== null ||
             retainedMedia !== null
@@ -272,7 +282,7 @@ export function useProjectConversationComposer(
             media={media}
             episodes={actual.outline?.episodes ?? []}
             retained={retainedMedia !== null}
-            busy={input.busy}
+            busy={busy}
             zh={zh}
           />
         ) : null}
@@ -282,7 +292,7 @@ export function useProjectConversationComposer(
               aria-label={zh ? "资产类型" : "Asset kind"}
               value={assets.assetKind}
               disabled={
-                input.busy || retainedAsset !== null || retainedMedia !== null
+                busy || retainedAsset !== null || retainedMedia !== null
               }
               onChange={(e) =>
                 assets.setAssetKind(
@@ -298,7 +308,7 @@ export function useProjectConversationComposer(
               aria-label={zh ? "资产剧本来源" : "Asset script source"}
               value={assets.episodeId}
               disabled={
-                input.busy || retainedAsset !== null || retainedMedia !== null
+                busy || retainedAsset !== null || retainedMedia !== null
               }
               onChange={(e) => assets.setEpisodeId(e.target.value)}
             >
@@ -342,7 +352,7 @@ export function useProjectConversationComposer(
             aria-label={zh ? "剧本集数" : "Script episode"}
             value={retainedScript !== null ? retainedScript.episodeId : episode}
             disabled={
-              input.busy ||
+              busy ||
               retained !== null ||
               retainedAsset !== null ||
               retainedMedia !== null
@@ -366,7 +376,7 @@ export function useProjectConversationComposer(
         ) : null}
         <button
           type="button"
-          disabled={input.busy || loading}
+          disabled={busy || loading}
           onClick={() => {
             setLoading(true);
             setRefresh((value) => value + 1);
@@ -374,6 +384,17 @@ export function useProjectConversationComposer(
         >
           {zh ? "刷新项目" : "Refresh project"}
         </button>
+        {owner.client !== null && input.mediaGenerationPresenter ? (
+          <ProjectMediaGenerationComposer
+            client={owner.client}
+            binding={actual.binding}
+            briefRevision={actual.briefRevision}
+            presenter={input.mediaGenerationPresenter}
+            busy={input.busy}
+            zh={zh}
+            onBusyChange={setGenerationBusy}
+          />
+        ) : null}
       </div>
     );
   return {
@@ -381,10 +402,12 @@ export function useProjectConversationComposer(
     assetSelection: assets.selection,
     mediaInputSelection: media.selection,
     view,
+    generationBusy,
     blocked:
       owner.client !== null &&
       owner.threadId !== null &&
-      (assets.blocked ||
+      (generationBusy ||
+        assets.blocked ||
         media.blocked ||
         snapshotOwner !== owner ||
         failure ||

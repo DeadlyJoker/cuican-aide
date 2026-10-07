@@ -59,3 +59,5 @@ UI 沿用[插件主题范围](./plugin-variability-boundary.md#ui-主题接入�
 双数据库用例覆盖首次拒绝后原键封存/新键成功、v1/v2 投影隔离、原 TaskCore 异常保持未决、取消后重试不能清除原意图，以及旧 UI 与 HTTP 共用记录。Native 使用实际 Short28 完整安装、父数据库关闭重开和修正输入后的原 Run 受理，外部供应商仍为具名测试端口。具体最终结果见该目录的 `verification.json`。
 
 用户 App 尚未替换。原对话生成控件、Agent 媒体自动执行、输出候选采用，以及后续生产阶段仍需继续实现和验收。
+
+对话侧已保存输入的可见执行入口与原 Run 接管现已接入，见[原项目对话中的媒体生成](./project-media-generation-conversation.md)。Agent 媒体自动执行仍未完成。

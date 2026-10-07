@@ -220,3 +220,54 @@ test("metadata client rejects authority, missing CSRF, cancelled request and bad
     );
   }
 });
+
+test("list client encodes project/cursor, preserves authentication and rejects foreign or unbounded pages", async () => {
+  let calls = 0;
+  let foreign = false;
+  const c = client(async (url, init) => {
+    calls++;
+    const parsed = new URL(String(url));
+    assert.equal(
+      parsed.pathname,
+      `/api/v1/creative-projects/${encodeURIComponent(command.projectId)}/media-inputs`,
+    );
+    assert.equal(parsed.searchParams.get("afterMediaInputId"), "input/零 &+");
+    assert.equal(parsed.searchParams.get("limit"), "1");
+    assert.equal(init?.method, "GET");
+    assert.equal(init?.redirect, "manual");
+    assert.equal(
+      new Headers(init?.headers).get("authorization"),
+      "Bearer named-session",
+    );
+    return Response.json({
+      inputs: [
+        {
+          projectId: foreign ? "foreign" : command.projectId,
+          mediaInputId: "input/龟",
+          latestInputRevision: 1,
+          item: input.item,
+          workflowId: input.workflowId,
+          createdAt: input.createdAt,
+        },
+      ],
+      nextMediaInputId: null,
+    });
+  }, null);
+  const query = {
+    projectId: command.projectId,
+    afterMediaInputId: "input/零 &+",
+    limit: 1,
+  };
+  const page = await c.projectMediaInputs.listInputs(query);
+  assert.equal(page.inputs.length, 1);
+  foreign = true;
+  await assert.rejects(
+    c.projectMediaInputs.listInputs(query),
+    ControlApiProtocolError,
+  );
+  await assert.rejects(
+    c.projectMediaInputs.listInputs({ ...query, limit: 17 }),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls, 2);
+});
