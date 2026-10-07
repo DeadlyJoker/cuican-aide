@@ -12,8 +12,10 @@ const labels: Record<ConceptRecoveryLane, string> = {
 /** Viewing a saved input and replaying its original command are separate user actions. */
 export function ConceptRecoveryActions({
   controller,
+  onShowProject,
 }: {
   controller: CreativeProjectController;
+  onShowProject?(): void;
 }) {
   const project = useSyncExternalStore(
     controller.subscribe,
@@ -76,7 +78,12 @@ export function ConceptRecoveryActions({
             className="button secondary"
             aria-pressed={choice.selected}
             disabled={!controller.canChooseRecoveryRequest(choice.lane)}
-            onClick={() => void controller.selectRecoveryRequest(choice.lane)}
+            onClick={() =>
+              void (async () => {
+                await controller.selectRecoveryRequest(choice.lane);
+                if (controller.getSnapshot().details) onShowProject?.();
+              })()
+            }
           >
             查看原输入
           </button>

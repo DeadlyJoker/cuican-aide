@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { browser, fixture, settle } from "./ui.test-support.mjs";
+import {
+  browser,
+  fixture,
+  settle,
+  openRecoveredProject,
+} from "./ui.test-support.mjs";
 import { deferred } from "./persistent-ui.test-support.mjs";
 import {
   locator,
@@ -65,6 +70,13 @@ async function ready(service, saved, { open = true, archived = false } = {}) {
       ),
     );
   }
+  if (
+    !open &&
+    [...f.container.querySelectorAll("button")].some(
+      (button) => button.textContent.trim() === "查看待处理项目",
+    )
+  )
+    await openRecoveredProject(f);
   return f;
 }
 const request = (saved, overrides = {}) => ({
@@ -494,6 +506,7 @@ test("context removal aborts late source recovery and regrant restores only read
     service.enableSelectionContext(true);
     service.publish();
     await settle();
+    await openRecoveredProject(f);
     assert.ok(generationPanel(f));
     assert.equal(f.button("重试原选用").disabled, false);
     assert.equal(service.callsFor(selectImageAction).length, 0);

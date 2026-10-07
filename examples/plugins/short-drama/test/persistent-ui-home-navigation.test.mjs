@@ -3,11 +3,22 @@ import { after, test } from "node:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
-import { browser, fixture, settle } from "./ui.test-support.mjs";
+import {
+  browser,
+  fixture,
+  settle,
+  openRecoveredProject,
+} from "./ui.test-support.mjs";
 import {
   metadataService,
   persistentProps,
 } from "./persistent-ui.test-support.mjs";
+
+import { coldRecoveryService } from "./cold-recovery.test-support.mjs";
+import {
+  reference,
+  generateAction,
+} from "./generation-submit.test-support.mjs";
 
 const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "26.0.0";
 const directory =
@@ -261,5 +272,78 @@ test("project dialogs keep the host interactive and preserve focus ownership on 
     await f.dispose();
     browser.HTMLDialogElement.prototype.showModal = modal;
     host.remove();
+  }
+});
+
+test("cold entry and re-entry land on home while delayed recovery stays collapsed and never replays a generation", async () => {
+  const service = coldRecoveryService();
+  const project = service.create("原短剧", "已保存需求");
+  const saved = service.createConcept(
+    project.project.projectId,
+    "原画面",
+    1,
+    "保留原画面描述",
+  );
+  const thread = service.context().thread;
+  const request = {
+    reference: reference(saved),
+    threadId: thread.threadId,
+    expectedThreadRevision: thread.revision,
+    idempotencyKey: "home-entry-original-generation",
+  };
+  service.setGenerationIntent({
+    request,
+    phase: "uncertain",
+    retryable: false,
+    receipt: null,
+  });
+  const gate = service.gateSource(saved.asset.assetId);
+  let f = fixture(definition, {
+    props: service.props(),
+    services: service.services,
+  });
+  try {
+    await settle();
+    assert.ok(f.container.querySelector(".drama-project-home"));
+    assert.equal(f.container.querySelector(".drama-project-layout"), null);
+    gate.resolve();
+    await settle();
+    assert.ok(
+      f.container.querySelector(".drama-project-home"),
+      "background source recovery cannot navigate",
+    );
+    const content = f.container.querySelector(".drama-content");
+    assert.equal(content.firstElementChild.className, "drama-project-home");
+    const recovery = content.querySelector(".drama-recovery-disclosure");
+    assert.equal(recovery.open, false);
+    assert.ok(recovery.querySelector('[aria-label="概念图生成"]'));
+    await snapshot("project-home-recovery", recovery.outerHTML);
+    const before = service.calls.length;
+    f.instance.update(service.props(true, { "--text": "#eee" }, "dark"));
+    await settle();
+    assert.ok(f.container.querySelector(".drama-project-home"));
+    assert.equal(service.calls.length, before);
+    await openRecoveredProject(f);
+    assert.equal(
+      f.container.querySelector("#concept-prompt").value,
+      saved.assetRevision.prompt,
+    );
+    assert.equal(f.button("重试原生成请求").disabled, true);
+    await f.dispose();
+    f = fixture(definition, {
+      props: service.props(),
+      services: service.services,
+    });
+    await settle();
+    assert.ok(f.container.querySelector(".drama-project-home"));
+    assert.equal(
+      f.container.querySelector(".drama-recovery-disclosure").open,
+      false,
+    );
+    assert.deepEqual(service.context().intent.request, request);
+    assert.equal(service.callsFor(generateAction).length, 0);
+  } finally {
+    gate.resolve();
+    await f.dispose();
   }
 });

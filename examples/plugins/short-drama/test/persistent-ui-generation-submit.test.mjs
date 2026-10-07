@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { browser, fixture, settle } from "./ui.test-support.mjs";
+import {
+  browser,
+  fixture,
+  settle,
+  openRecoveredProject,
+} from "./ui.test-support.mjs";
 import { deferred, persistentProps } from "./persistent-ui.test-support.mjs";
 import {
   generationService,
@@ -47,6 +52,13 @@ async function ready(service, saved, { context = true, open = true } = {}) {
     await f.click(f.container.querySelector(".project-card"));
     await f.click(assetButton(f, saved.asset.name));
   }
+  if (
+    !open &&
+    [...f.container.querySelectorAll("button")].some(
+      (button) => button.textContent.trim() === "查看待处理项目",
+    )
+  )
+    await openRecoveredProject(f);
   return f;
 }
 const request = (saved, overrides = {}) => ({
@@ -308,6 +320,7 @@ test("recovery read failure keeps the Host intent and retries only the exact ori
     assert.equal(f.button("新建项目").disabled, true);
     service.refuse(false);
     await f.click(f.button("重新读取原生成输入"));
+    await openRecoveredProject(f);
     assert.equal(
       f.container.querySelector("#concept-prompt").value,
       saved.assetRevision.prompt,

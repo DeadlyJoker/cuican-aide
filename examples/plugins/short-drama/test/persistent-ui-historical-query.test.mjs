@@ -320,7 +320,10 @@ test("different self and historical unknown sources remain independently visible
       record(f).dataset.runId,
       `original-generation-${historical.assetRevision.assetRevision}`,
     );
-    const retry = [...historicalChoice.querySelectorAll("button")].find(
+    const restoredChoice = f.container.querySelector(
+      '[aria-label="原历史查询请求"]',
+    );
+    const retry = [...restoredChoice.querySelectorAll("button")].find(
       (button) => button.textContent.trim() === "重试这条原请求",
     );
     assert.equal(retry.disabled, false);

@@ -22,9 +22,7 @@ import {
   type ProjectSnapshot,
 } from "./creative-project-controller";
 import { ConceptWorkbench } from "./ConceptWorkbench";
-import { ConceptGenerationActions } from "./ConceptGenerationActions";
-import { ConceptQueryActions } from "./ConceptQueryActions";
-import { ConceptImageSelectionActions } from "./ConceptImageSelectionActions";
+import { ProjectHomeRecovery } from "./ProjectHomeRecovery";
 import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
 import { ProjectTextController } from "./ProjectTextController";
 import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
@@ -187,7 +185,8 @@ export function ShortDramaPersistentWorkbench({
     projectId: string;
     proposal: ProjectPlanningProposal;
   }> | null>(null);
-  const { details } = snapshot;
+  const [showProject, setShowProject] = useState(false);
+  const details = showProject ? snapshot.details : null;
   const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
   const otherLocked =
     projectLocked ||
@@ -242,6 +241,7 @@ export function ShortDramaPersistentWorkbench({
   usePluginDialog(dialogRef, dialog !== null);
   useEffect(() => {
     if (snapshot.notice === "项目已保存") {
+      setShowProject(true);
       if (submittedDraft.current && snapshot.details)
         setProjectDraft({
           projectId: snapshot.details.project.projectId,
@@ -272,7 +272,13 @@ export function ShortDramaPersistentWorkbench({
         )}
         <header className="drama-topbar">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
-            <button disabled={locked} onClick={() => controller.closeProject()}>
+            <button
+              disabled={locked}
+              onClick={() => {
+                setShowProject(false);
+                controller.closeProject();
+              }}
+            >
               AI 短剧
             </button>
             <ChevronRight size={13} />
@@ -291,7 +297,7 @@ export function ShortDramaPersistentWorkbench({
         <div
           className={`drama-content ${details ? "drama-project-content" : ""}`}
         >
-          {assets && assets.activated && (
+          {details && assets && assets.activated && (
             <ProjectAssetRecoveryActions
               assets={assets}
               projects={controller}
@@ -305,31 +311,11 @@ export function ShortDramaPersistentWorkbench({
               }
             />
           )}
-          <ConceptRecoveryActions controller={controller} />
+          {details && <ConceptRecoveryActions controller={controller} />}
           {details && (
             <ProjectTextRecoveryActions
               controller={texts}
               snapshot={textSnapshot}
-            />
-          )}
-          {!details &&
-            controller.concepts.submissions.getSnapshot().request && (
-              <ConceptGenerationActions
-                controller={controller.concepts.submissions}
-              />
-            )}
-          {!details && controller.concepts.queries.getSnapshot().request && (
-            <ConceptQueryActions controller={controller.concepts.queries} />
-          )}
-          {!details &&
-            controller.concepts.historicalQueries.getSnapshot().request && (
-              <ConceptQueryActions
-                controller={controller.concepts.historicalQueries}
-              />
-            )}
-          {!details && controller.concepts.images.getSnapshot().request && (
-            <ConceptImageSelectionActions
-              controller={controller.concepts.images}
             />
           )}
           {snapshot.phase === "waiting" ? (
@@ -366,9 +352,11 @@ export function ShortDramaPersistentWorkbench({
               onLoadProjects={(state, more) =>
                 void controller.loadProjects(state, more)
               }
-              onOpenProject={(projectId) =>
-                void controller.openProject(projectId)
-              }
+              onOpenProject={(projectId) => {
+                setShowProject(true);
+                if (snapshot.details?.project.projectId !== projectId)
+                  void controller.openProject(projectId);
+              }}
               onReviewIdea={(value) => {
                 reviewedDraft.current = null;
                 setTitle(
@@ -629,7 +617,23 @@ export function ShortDramaPersistentWorkbench({
               </div>
             </div>
           )}
-          {assets && !assets.activated && (
+          {!details && (
+            <ProjectHomeRecovery
+              controller={controller}
+              assets={assets}
+              onShowProject={() => setShowProject(true)}
+              onRestoreAsset={() => {
+                setShowProject(true);
+                setPage(
+                  assets?.getSnapshot().draft?.kind === "scene" ||
+                    assets?.getSnapshot().draft?.kind === "prop"
+                    ? "art"
+                    : "characters",
+                );
+              }}
+            />
+          )}
+          {details && assets && !assets.activated && (
             <ProjectAssetRecoveryActions
               assets={assets}
               projects={controller}

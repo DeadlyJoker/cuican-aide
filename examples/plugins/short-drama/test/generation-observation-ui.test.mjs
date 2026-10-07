@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { browser, fixture, settle } from "./ui.test-support.mjs";
+import {
+  browser,
+  fixture,
+  settle,
+  openRecoveredProject,
+} from "./ui.test-support.mjs";
 import { deferred } from "./persistent-ui.test-support.mjs";
 import {
   generateAction,
@@ -234,13 +239,13 @@ test("actual cold mount retains an accepted query delivered before ready and wat
       "accepted recovery context before ready cannot invoke a service",
     );
     assert.equal(generationPanel(f), null);
-    // Actual ui.tsx applies recovery contexts before setReady(true). No project,
-    // concept or query button is clicked to restore this already accepted intent.
+    // Host hints restore the source without dispatch; opening its UI is explicit.
     f.instance.update(service.props());
     await settle();
     await settle();
+    await openRecoveredProject(f);
     const panel = generationPanel(f);
-    assert.ok(panel, "cold recovery opens the exact saved source");
+    assert.ok(panel, "explicit navigation opens the exact restored source");
     assert.equal(panel.dataset.runId, original.task.runId);
     assert.match(panel.textContent, /任务状态：已完成/u);
     assert.match(panel.textContent, /正在自动更新任务记录/u);

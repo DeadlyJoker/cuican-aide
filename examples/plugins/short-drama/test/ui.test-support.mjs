@@ -107,3 +107,13 @@ export function fixture(definition, configuration = {}) {
     },
   };
 }
+
+/** Recovery is read in the background; the user explicitly opens its project from home. */
+export async function openRecoveredProject(f) {
+  assert.ok(f.container.querySelector(".drama-project-home"));
+  const recovery = f.container.querySelector(".drama-recovery-disclosure");
+  assert.ok(recovery);
+  if (!recovery.open) await f.click(recovery.querySelector("summary"));
+  await f.click(f.button("查看待处理项目"));
+  assert.equal(f.container.querySelector(".drama-project-home"), null);
+}

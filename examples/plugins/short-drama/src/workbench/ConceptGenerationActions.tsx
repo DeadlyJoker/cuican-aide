@@ -103,7 +103,6 @@ export function ConceptGenerationActions({
           </button>
         </>
       )}
-      <p className="detail-note">提交前会检查插件积分是否足够。</p>
     </section>
   );
 }
