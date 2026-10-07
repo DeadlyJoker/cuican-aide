@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { types } from "node:util";
 import {
+  ApplicationError,
+  captureProjectMediaResultUiInstallation,
   parseProjectMediaResultRequest,
   parseFrozenProjectMediaResult,
   createProjectMediaResultCandidate,
@@ -18,6 +20,7 @@ import {
   type ProjectMediaResultCandidate,
   type FrozenProjectMediaResultContent,
   type ProjectMediaResultAuthority,
+  type ProjectMediaResultUiInstallation,
   type ProjectMediaResultAuthorizationPort,
   type ProjectMediaWorkflowReview,
 } from "@crewon/application";
@@ -69,6 +72,11 @@ export class ProjectMediaResultPublisher {
   readonly #egress: NetworkEgressResolver;
   readonly #now: () => string;
   readonly #outputApproval?: ProjectMediaResultOutputApproval;
+  readonly #uiInstallation?: Readonly<{
+    capture(
+      request: ProjectMediaResultRequest,
+    ): ProjectMediaResultUiInstallation | undefined;
+  }>;
   readonly #closing = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
   #closed = false;
@@ -80,6 +88,11 @@ export class ProjectMediaResultPublisher {
       reviews: readonly ProjectMediaWorkflowReview[];
       clock: Readonly<{ now(): string }>;
       outputApproval?: ProjectMediaResultOutputApproval;
+      uiInstallation?: Readonly<{
+        capture(
+          request: ProjectMediaResultRequest,
+        ): ProjectMediaResultUiInstallation | undefined;
+      }>;
       dns?: NetworkDnsResolver;
       transport?: PinnedHttpPort;
     }>,
@@ -127,6 +140,16 @@ export class ProjectMediaResultPublisher {
     this.#reviews = Object.freeze(
       input.reviews.map(parseProjectMediaWorkflowReview),
     );
+    this.#uiInstallation =
+      input.uiInstallation === undefined
+        ? undefined
+        : Object.freeze({
+            capture: projectMediaInputBound<
+              (
+                request: ProjectMediaResultRequest,
+              ) => ProjectMediaResultUiInstallation | undefined
+            >(input.uiInstallation, "capture"),
+          });
     this.#now = projectMediaInputBound(input.clock, "now");
     this.#outputApproval =
       input.outputApproval === undefined
@@ -192,9 +215,18 @@ export class ProjectMediaResultPublisher {
       );
       this.#active(signal);
     };
+    const uiInstallation = this.#uiInstallation?.capture(request);
     return Object.freeze({
       request,
       action,
+      ...(uiInstallation === undefined
+        ? {}
+        : {
+            uiInstallation: captureProjectMediaResultUiInstallation(
+              uiInstallation,
+              request.actor,
+            ),
+          }),
       assertActive,
       assertCurrent: async () => {
         assertActive();
@@ -358,6 +390,66 @@ export class ProjectMediaResultPublisher {
     });
     grant.assertActive();
     return this.#content({ record, bytes }, source);
+  }
+  /** Bounded discovery from the original observed operation, without provider I/O or generated guesses. */
+  listOutputs(
+    actor: ActorContext,
+    query: Readonly<{ projectId: string; runId: string }>,
+    options: Readonly<{ signal: AbortSignal }>,
+  ) {
+    return this.#track(async () => {
+      const initial = parseProjectMediaResultRequest({
+        actor,
+        query: { ...query, resultIndex: 0 },
+      });
+      const signal = this.#signal(options);
+      const first = await this.#source(initial, signal);
+      const outputs: Readonly<{
+        resultIndex: number;
+        candidate: ProjectMediaResultCandidate | null;
+      }>[] = [];
+      for (let resultIndex = 0; resultIndex < 16; resultIndex++) {
+        const request = parseProjectMediaResultRequest({
+          actor,
+          query: { ...query, resultIndex },
+        });
+        let source: ProjectMediaResultSource;
+        try {
+          source =
+            resultIndex === 0 ? first : await this.#source(request, signal);
+        } catch (error) {
+          if (
+            resultIndex > 0 &&
+            error instanceof ApplicationError &&
+            error.message === "project_media_result_not_found"
+          )
+            break;
+          throw error;
+        }
+        if (
+          !mediaInputSame(source.operation, first.operation) ||
+          source.generationDigest !== first.generationDigest ||
+          source.operationLinkDigest !== first.operationLinkDigest
+        )
+          fail("source_changed");
+        const candidate = await this.#store.loadCandidate(
+          request,
+          this.#authority(request, "read", signal),
+        );
+        if (
+          candidate &&
+          !mediaInputSame(candidate.frozen.source.projection, source)
+        )
+          fail("source_changed");
+        outputs.push(Object.freeze({ resultIndex, candidate }));
+      }
+      // A deletion or operation replacement must not masquerade as the end of the list.
+      await this.#current(initial, first, signal);
+      return Object.freeze({
+        reference: first.reference,
+        outputs: Object.freeze(outputs),
+      });
+    });
   }
   publish(
     actor: ActorContext,

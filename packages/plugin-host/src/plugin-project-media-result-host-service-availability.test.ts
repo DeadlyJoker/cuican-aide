@@ -29,41 +29,43 @@ test("read-only result availability extends only its explicit @1 owner and prese
   );
   deferred.bind(original);
   assert.equal(hasProjectGenerationHostAvailability(services), true);
-  for (const optional of [true, false]) {
-    const descriptor = parsePluginPackageDescriptor({
-      ...uiTestDescriptor,
-      entrypoints: { node: null, ui: uiTestDescriptor.entrypoints.ui },
-      files: uiTestDescriptor.files.filter((f) => f.path === "ui.mjs"),
-      requires: [
-        { service: "crewon.project-media-results", apiVersion: "1", optional },
-      ],
-    });
-    const request = {
-      scope: uiTestScope,
-      candidate: { descriptor, packageDigest: uiTestDigest },
-      hostUiServices: services,
-    };
-    assertUiOnlyServiceDeclarations(descriptor, services);
-    assertPluginUiHostServiceAvailability(request);
-    media = false;
-    if (optional) assertPluginUiHostServiceAvailability(request);
-    else
-      assert.throws(() => assertPluginUiHostServiceAvailability(request), {
-        code: "plugin_dependency_unavailable",
+  for (const service of [
+    "crewon.project-media-results",
+    "crewon.project-media-result-actions",
+  ])
+    for (const optional of [true, false]) {
+      const descriptor = parsePluginPackageDescriptor({
+        ...uiTestDescriptor,
+        entrypoints: { node: null, ui: uiTestDescriptor.entrypoints.ui },
+        files: uiTestDescriptor.files.filter((f) => f.path === "ui.mjs"),
+        requires: [{ service, apiVersion: "1", optional }],
       });
-    media = true;
-    assert.equal(
-      services.isAvailable({
-        ...request,
-        requirement: {
-          service: "crewon.project-media-results",
-          apiVersion: "2",
-          optional,
-        },
-      }),
-      false,
-    );
-  }
+      const request = {
+        scope: uiTestScope,
+        candidate: { descriptor, packageDigest: uiTestDigest },
+        hostUiServices: services,
+      };
+      assertUiOnlyServiceDeclarations(descriptor, services);
+      assertPluginUiHostServiceAvailability(request);
+      media = false;
+      if (optional) assertPluginUiHostServiceAvailability(request);
+      else
+        assert.throws(() => assertPluginUiHostServiceAvailability(request), {
+          code: "plugin_dependency_unavailable",
+        });
+      media = true;
+      assert.equal(
+        services.isAvailable({
+          ...request,
+          requirement: {
+            service,
+            apiVersion: "2",
+            optional,
+          },
+        }),
+        false,
+      );
+    }
   deferred.close();
   assert.equal(hasProjectGenerationHostAvailability(services), false);
 });

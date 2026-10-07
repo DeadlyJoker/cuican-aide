@@ -2,6 +2,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import {
   ApplicationError,
   capturePluginUiInvocationCommitAuthority,
+  capturePluginProjectMediaResultInvocationAuthority,
+  type PluginProjectMediaResultInvocationAuthority,
+  type ProjectMediaResultUiInstallation,
   type PluginUiActionContext,
   type PluginUiInvocationCommitAuthority,
   ProjectMediaResultCatalogApplicationService,
@@ -27,12 +30,15 @@ import {
   parseProjectMediaResultLocator,
   parseGetProjectMediaResultResponse,
   parsePublishProjectMediaResultResponse,
+  parseProjectMediaRunOutputs,
+  type ProjectMediaRunLocator,
   type ListProjectMediaResultsRequest,
   type ProjectMediaResultLocator,
 } from "@crewon/contracts/project-media-results";
 import type { ControlApiRequestContext } from "./control-api-ports.ts";
 import {
   PROJECT_MEDIA_RESULT_UI_ACTIONS,
+  PROJECT_MEDIA_RESULT_WRITE_ACTIONS,
   parseProjectMediaResultUiRequest,
 } from "@crewon/contracts/project-media-results-ui";
 import {
@@ -56,6 +62,11 @@ export type InstalledProjectMediaResultConfiguration = Readonly<{
 type Invocation = (
   | Readonly<{
       actor: ActorContext;
+      kind: "outputs";
+      query: ProjectMediaRunLocator;
+    }>
+  | Readonly<{
+      actor: ActorContext;
       kind: "list";
       query: ListProjectMediaResultsRequest;
     }>
@@ -65,7 +76,11 @@ type Invocation = (
       query: ProjectMediaResultLocator;
     }>
 ) &
-  Readonly<{ ui?: PluginUiInvocationCommitAuthority }>;
+  Readonly<{
+    ui?: PluginUiInvocationCommitAuthority;
+    saveUi?: PluginProjectMediaResultInvocationAuthority;
+    uiInstallation?: ProjectMediaResultUiInstallation;
+  }>;
 const issued = new WeakSet<object>();
 export function isInstalledProjectMediaResultRuntime(
   value: unknown,
@@ -80,6 +95,7 @@ export class InstalledProjectMediaResultRuntime {
   readonly #invocations: AsyncLocalStorage<Invocation>;
   readonly #lifetime: AbortController;
   readonly #active: () => void;
+  readonly #canPublish: boolean;
   readonly #uiScope: (context: PluginUiActionContext) => void;
   readonly #pending = new Set<Promise<unknown>>();
   #closing?: Promise<void>;
@@ -91,6 +107,7 @@ export class InstalledProjectMediaResultRuntime {
     invocations: AsyncLocalStorage<Invocation>;
     lifetime: AbortController;
     active(): void;
+    canPublish: boolean;
     uiScope(context: PluginUiActionContext): void;
   }) {
     this.#core = input.core;
@@ -101,6 +118,7 @@ export class InstalledProjectMediaResultRuntime {
     this.#lifetime = input.lifetime;
     this.#active = input.active;
     this.#uiScope = input.uiScope;
+    this.#canPublish = input.canPublish;
     issued.add(this);
   }
   static async prepare(
@@ -180,7 +198,10 @@ export class InstalledProjectMediaResultRuntime {
       const i = context(p.actor);
       if (
         i.kind === "list" ||
-        !mediaInputSame(i.query, p.resource) ||
+        !(i.kind === "outputs"
+          ? i.query.projectId === p.resource.projectId &&
+            i.query.runId === p.resource.runId
+          : mediaInputSame(i.query, p.resource)) ||
         (p.action === "projectMediaResult:publish" &&
           (!publish || i.kind !== "publish"))
       )
@@ -231,7 +252,9 @@ export class InstalledProjectMediaResultRuntime {
         authorization: {
           authorize: async (p) => {
             resultScope(p);
+            await context(p.actor).saveUi?.assertTransactionCurrent();
             const decision = await authorize(p);
+            await context(p.actor).saveUi?.assertTransactionCurrent();
             resultScope(p);
             return decision;
           },
@@ -241,6 +264,9 @@ export class InstalledProjectMediaResultRuntime {
             resultScope(p);
             return result;
           },
+        },
+        uiInstallation: {
+          capture: (request) => context(request.actor).uiInstallation,
         },
         outputApproval: {
           assertCurrent: async (p) => {
@@ -283,6 +309,7 @@ export class InstalledProjectMediaResultRuntime {
         invocations,
         lifetime,
         active,
+        canPublish: publish,
         uiScope: (context) => {
           active();
           if (
@@ -321,6 +348,10 @@ export class InstalledProjectMediaResultRuntime {
   assertAvailable(): void {
     this.#active();
   }
+  assertPublishAvailable(): void {
+    this.#active();
+    if (!this.#canPublish) denied();
+  }
   /** Exact live Application invocation, executed inside the original Core request scope. */
   readFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
     const ui = capturePluginUiInvocationCommitAuthority(context);
@@ -329,6 +360,8 @@ export class InstalledProjectMediaResultRuntime {
       action: context.action,
       input: context.input,
     });
+    if (request.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.saveCandidate)
+      denied();
     const joined = AbortSignal.any([
       signal,
       this.#lifetime.signal,
@@ -337,7 +370,9 @@ export class InstalledProjectMediaResultRuntime {
     const invocation: Invocation =
       request.action === PROJECT_MEDIA_RESULT_UI_ACTIONS.listCandidates
         ? { actor: context.actor, kind: "list", query: request.input, ui }
-        : { actor: context.actor, kind: "read", query: request.input, ui };
+        : request.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.listOutputs
+          ? { actor: context.actor, kind: "outputs", query: request.input, ui }
+          : { actor: context.actor, kind: "read", query: request.input, ui };
     if (this.#pending.size >= 16)
       throw new ApplicationError("conflict", "project_media_result_busy");
     const pending = this.#invocations
@@ -349,20 +384,102 @@ export class InstalledProjectMediaResultRuntime {
             ? await this.#catalog.listCandidates(context.actor, request.input, {
                 signal: joined,
               })
-            : await this.#publisher
-                .readCandidate(context.actor, request.input, { signal: joined })
-                .then((r) =>
-                  parseGetProjectMediaResultResponse(request.input, {
-                    candidate: r
-                      ? projectMediaResultSummary(r.candidate)
-                      : null,
-                  }),
-                );
+            : request.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.listOutputs
+              ? await this.#publisher
+                  .listOutputs(context.actor, request.input, { signal: joined })
+                  .then((r) =>
+                    parseProjectMediaRunOutputs(request.input, {
+                      ...request.input,
+                      mediaInputId: r.reference.mediaInputId,
+                      inputRevision: r.reference.inputRevision,
+                      outputs: r.outputs.map((o) => ({
+                        resultIndex: o.resultIndex,
+                        candidate: o.candidate
+                          ? projectMediaResultSummary(o.candidate)
+                          : null,
+                      })),
+                    }),
+                  )
+              : await this.#publisher
+                  .readCandidate(context.actor, request.input, {
+                    signal: joined,
+                  })
+                  .then((r) =>
+                    parseGetProjectMediaResultResponse(request.input, {
+                      candidate: r
+                        ? projectMediaResultSummary(r.candidate)
+                        : null,
+                    }),
+                  );
         await ui.assertCurrent();
         joined.throwIfAborted();
         this.#uiScope(context);
         return result;
       })
+      .catch((error) => {
+        throw publicFailure(error);
+      });
+    this.#pending.add(pending);
+    void pending.then(
+      () => this.#pending.delete(pending),
+      () => this.#pending.delete(pending),
+    );
+    return pending;
+  }
+  saveFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    const saveUi = capturePluginProjectMediaResultInvocationAuthority(context);
+    this.assertPublishAvailable();
+    this.#uiScope(context);
+    const request = parseProjectMediaResultUiRequest({
+      action: context.action,
+      input: context.input,
+    });
+    if (request.action !== PROJECT_MEDIA_RESULT_WRITE_ACTIONS.saveCandidate)
+      denied();
+    if (this.#pending.size >= 16)
+      throw new ApplicationError("conflict", "project_media_result_busy");
+    const joined = AbortSignal.any([
+      signal,
+      this.#lifetime.signal,
+      this.#core.requests.currentSignal(),
+    ]);
+    const uiInstallation = Object.freeze({
+      installation: Object.freeze({
+        ...context.scope,
+        pluginId: context.package.pluginId,
+        publisherId: context.package.publisherId,
+        version: context.package.version,
+        packageDigest: context.package.packageDigest,
+        selectionRevision: context.selection.revision,
+      }),
+      selection: context.selection,
+      package: context.package,
+    });
+    const pending = this.#invocations
+      .run(
+        {
+          actor: context.actor,
+          kind: "publish",
+          query: request.input,
+          ui: saveUi,
+          saveUi,
+          uiInstallation,
+        },
+        async () => {
+          await saveUi.assertCurrent();
+          joined.throwIfAborted();
+          const result = await this.#publisher.publish(
+            context.actor,
+            request.input,
+            { signal: joined },
+          );
+          // This receipt follows the original SQL commit; no late recheck may imply the write failed.
+          return parsePublishProjectMediaResultResponse(request.input, {
+            disposition: result.disposition,
+            candidate: projectMediaResultSummary(result.candidate),
+          });
+        },
+      )
       .catch((error) => {
         throw publicFailure(error);
       });

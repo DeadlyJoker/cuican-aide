@@ -1,3 +1,5 @@
+import { PROJECT_MEDIA_RESULT_WRITE_ACTIONS } from "@crewon/contracts/project-media-results-ui";
+import { registerPluginProjectMediaResultInvocation } from "./plugin-project-media-result-invocation.ts";
 import { PROJECT_MEDIA_INPUT_UI_ACTIONS } from "@crewon/contracts/project-media-inputs-ui";
 import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
 import { registerPluginProjectMediaInputInvocation } from "./plugin-project-media-input-invocation.ts";
@@ -412,8 +414,15 @@ export class PluginUiApplicationService {
       let unregisterHistorical: (() => void) | undefined;
       let unregisterAsset: (() => void) | undefined;
       let unregisterAssetRecovery: (() => void) | undefined;
+      let unregisterMediaResults: (() => void) | undefined;
       let unregisterMediaInputs: (() => void) | undefined;
       try {
+        unregisterMediaResults =
+          command.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.saveCandidate
+            ? registerPluginProjectMediaResultInvocation(context, () =>
+                this.#transactionFence(actor, binding),
+              )
+            : undefined;
         unregisterMediaInputs = Object.values(
           PROJECT_MEDIA_INPUT_UI_ACTIONS,
         ).some((a) => a === command.action)
@@ -486,6 +495,7 @@ export class PluginUiApplicationService {
         unregisterHistorical?.();
         unregisterAsset?.();
         unregisterMediaInputs?.();
+        unregisterMediaResults?.();
         unregisterAssetRecovery?.();
         unregister();
       }

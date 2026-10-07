@@ -28,6 +28,7 @@ export async function mediaResultFixture(
   kind: "T10" | "D18" = "T10",
   options: {
     generate?: boolean;
+    observe?: boolean;
     migrate?: boolean;
     outputApproval?: ProjectMediaResultOutputApproval;
   } = {},
@@ -56,7 +57,8 @@ export async function mediaResultFixture(
         }),
       ),
     });
-    await f.invoke(opened, f.makeCommand(opened.runtime, "media_observe"));
+    if (options.observe !== false)
+      await f.invoke(opened, f.makeCommand(opened.runtime, "media_observe"));
   }
   await opened.close();
   const root = mkdtempSync(join(tmpdir(), "crewon-media-results-")),

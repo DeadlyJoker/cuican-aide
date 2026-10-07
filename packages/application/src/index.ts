@@ -274,3 +274,8 @@ export {
   capturePluginProjectMediaInputInvocationAuthority,
   type PluginProjectMediaInputInvocationAuthority,
 } from "./plugin-project-media-input-invocation.ts";
+
+export {
+  capturePluginProjectMediaResultInvocationAuthority,
+  type PluginProjectMediaResultInvocationAuthority,
+} from "./plugin-project-media-result-invocation.ts";

@@ -233,13 +233,23 @@ export function composeDesktopProjectPluginUiDispatch(
           ),
         }),
   };
-  return input.mediaInputs === undefined
-    ? dispatch
+  const mediaInputDispatch =
+    input.mediaInputs === undefined
+      ? dispatch
+      : {
+          ...dispatch,
+          committedMetadata: combineSelectionCommittedMetadata(
+            input.mediaInputs.committedMetadata,
+            dispatch.committedMetadata,
+          ),
+        };
+  return input.mediaResults === undefined
+    ? mediaInputDispatch
     : {
-        ...dispatch,
+        ...mediaInputDispatch,
         committedMetadata: combineSelectionCommittedMetadata(
-          input.mediaInputs.committedMetadata,
-          dispatch.committedMetadata,
+          input.mediaResults.committedMetadata,
+          mediaInputDispatch.committedMetadata,
         ),
       };
 }

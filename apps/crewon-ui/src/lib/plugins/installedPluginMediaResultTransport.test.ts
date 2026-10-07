@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PROJECT_MEDIA_RESULT_UI_ACTIONS as actions } from "@crewon/contracts/project-media-results-ui";
+import {
+  PROJECT_MEDIA_RESULT_UI_ACTIONS as actions,
+  PROJECT_MEDIA_RESULT_WRITE_ACTIONS as writes,
+} from "@crewon/contracts/project-media-results-ui";
 import {
   controlUiClient,
   controlUiResponse,
@@ -36,6 +39,7 @@ function fixture() {
     allowed: true,
     corrupt: false,
     gate: null as ReturnType<typeof deferred> | null,
+    output: { candidate } as unknown,
   };
   const wire = controlUiClient(async (url, init) => {
     if (url.pathname.endsWith("/content")) {
@@ -50,7 +54,7 @@ function fixture() {
       });
     }
     expect(init.method).toBe("POST");
-    return controlUiResponse({ output: { candidate } });
+    return controlUiResponse({ output: state.output });
   });
   let n = 0;
   const create = vi
@@ -103,6 +107,37 @@ describe("plugin-owned verified result previews", () => {
           "Bearer captured-user-token",
       ),
     ).toBe(true);
+  });
+  it("explicit save and output discovery share the authenticated invocation and do not allocate or replace previews", async () => {
+    const f = fixture();
+    const preview = await f.preview();
+    f.state.output = { disposition: "created", candidate };
+    expect(
+      await f.transport.invoke(lease, {
+        action: writes.saveCandidate,
+        input: query,
+        signal: new AbortController().signal,
+      }),
+    ).toEqual(f.state.output);
+    f.state.output = {
+      projectId: query.projectId,
+      runId: query.runId,
+      mediaInputId: candidate.mediaInputId,
+      inputRevision: candidate.inputRevision,
+      outputs: [{ resultIndex: 0, candidate }],
+    };
+    expect(
+      await f.transport.invoke(lease, {
+        action: writes.listOutputs,
+        input: { projectId: query.projectId, runId: query.runId },
+        signal: new AbortController().signal,
+      }),
+    ).toEqual(f.state.output);
+    expect(f.create).toHaveBeenCalledOnce();
+    expect(f.revoke).not.toHaveBeenCalled();
+    expect(f.wire.fetch.mock.calls).toHaveLength(4);
+    f.transport.release(lease);
+    expect(f.revoke).toHaveBeenCalledWith((preview as { url: string }).url);
   });
   it("corrupt bytes or a withdrawn session never become an image URL", async () => {
     const f = fixture();

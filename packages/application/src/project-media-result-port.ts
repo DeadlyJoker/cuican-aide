@@ -1,3 +1,4 @@
+import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
 import type {
   ActorContext,
   AuthorizationDecision,
@@ -98,9 +99,15 @@ export interface ProjectMediaResultAuthorizationPort {
   ): Promise<AuthorizationDecision>;
   assertActive(input: ProjectMediaResultPermission): void;
 }
+export type ProjectMediaResultUiInstallation = Pick<
+  ProjectTextUiCommitTransactionAuthority,
+  "installation" | "selection" | "package"
+>;
 export type ProjectMediaResultAuthority = Readonly<{
   request: ProjectMediaResultRequest;
   action: "read" | "publish";
+  /** Actual current UI pin, revalidated by the borrowed SQL transaction. */
+  uiInstallation?: ProjectMediaResultUiInstallation;
   assertCurrent(): Promise<void>;
   assertActive(): void;
 }>;

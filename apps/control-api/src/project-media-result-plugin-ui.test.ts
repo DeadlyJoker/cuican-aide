@@ -1,3 +1,4 @@
+import { observeMaterialPreparationSql } from "../../../packages/store/src/project-material-preparation.test-support.ts";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -6,7 +7,10 @@ import {
   type PluginUiActionContext,
 } from "@crewon/application";
 import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
-import { PROJECT_MEDIA_RESULT_UI_ACTIONS as actions } from "@crewon/contracts/project-media-results-ui";
+import {
+  PROJECT_MEDIA_RESULT_UI_ACTIONS as actions,
+  PROJECT_MEDIA_RESULT_WRITE_ACTIONS as writes,
+} from "@crewon/contracts/project-media-results-ui";
 import { uiTestDescriptor } from "../../../packages/application/src/plugin-ui.test-support.ts";
 import { assetTestOptions } from "../../../packages/store/src/project-asset.test-support.ts";
 import { mediaResultControlFixture } from "./project-media-result-control.test-support.ts";
@@ -18,9 +22,13 @@ async function fixture(
   backend: "sqlite" | "postgres",
   declared = true,
   wrongPublication = false,
+  options: { writeDeclared?: boolean; readOnly?: boolean } = {},
 ) {
   const f = await mediaResultControlFixture(t, backend);
   const published = await f.client.projectMediaResults.publish(f.query);
+  const control = options.readOnly
+    ? await f.openControl(f.parent, ["read"])
+    : f;
   const descriptor = parsePluginPackageDescriptor({
     ...uiTestDescriptor,
     pluginId: f.target.package.pluginId,
@@ -30,6 +38,15 @@ async function fixture(
     files: uiTestDescriptor.files.filter((x) => x.path === "ui.mjs"),
     requires: declared
       ? [
+          ...(options.writeDeclared === false
+            ? []
+            : [
+                {
+                  service: "crewon.project-media-result-actions",
+                  apiVersion: "1",
+                  optional: true,
+                },
+              ]),
           {
             service: "crewon.project-media-results",
             apiVersion: "1",
@@ -38,9 +55,13 @@ async function fixture(
         ]
       : [],
   });
-  const state = { allowed: true, contexts: [] as PluginUiActionContext[] };
+  const state = {
+    allowed: true,
+    contexts: [] as PluginUiActionContext[],
+    afterInvoke: undefined as (() => void) | undefined,
+  };
   const owner = new ProjectMediaResultPluginUiOwner({
-    runtime: f.owner,
+    runtime: control.owner,
     configuration: {
       publications: [
         {
@@ -78,10 +99,13 @@ async function fixture(
     },
     clock: f.dependencies.clock,
     ids: { nextId: () => randomUUID().replaceAll("-", "") + "m".repeat(16) },
+    committedMetadata: owner.committedMetadata,
     actions: {
-      invoke: (context) => {
+      invoke: async (context) => {
         state.contexts.push(context);
-        return owner.actions.invoke(context);
+        const output = await owner.actions.invoke(context);
+        state.afterInvoke?.();
+        return output;
       },
     },
   });
@@ -95,7 +119,7 @@ async function fixture(
     action: string,
     input: import("@crewon/contracts/plugins").PluginUiJsonValue,
   ) =>
-    f.requests.run(
+    control.requests.run(
       {
         request: f.controlRequest,
         actor: f.actor,
@@ -175,6 +199,134 @@ for (const backend of ["sqlite", "postgres"] as const) {
         await f.uiOwner.close();
         await assert.rejects(f.invoke(actions.preview, f.query));
       }
+    },
+  );
+}
+
+for (const backend of ["sqlite", "postgres"] as const) {
+  test(
+    `${backend}: plugin discovers original output positions and saves one candidate with exact replay`,
+    assetTestOptions(backend),
+    async (t) => {
+      const f = await fixture(t, backend);
+      const run = { projectId: f.query.projectId, runId: f.query.runId };
+      const before = await f.referenceSource(),
+        material = f.materialCounts(),
+        gets = f.controlState.gets;
+      const outputs = (await f.invoke(writes.listOutputs, run)) as {
+        outputs: { resultIndex: number; candidate: unknown }[];
+      };
+      assert.deepEqual(outputs.outputs, [
+        { resultIndex: 0, candidate: f.published.candidate },
+        { resultIndex: 1, candidate: null },
+      ]);
+      assert.equal(f.controlState.gets, gets);
+      assert.equal(JSON.stringify(outputs).includes("https:"), false);
+      const query = { ...f.query, resultIndex: 1 };
+      const saved = (await f.invoke(writes.saveCandidate, query)) as {
+        disposition: string;
+        candidate: unknown;
+      };
+      assert.equal(saved.disposition, "created");
+      const replay = await f.invoke(writes.saveCandidate, query);
+      assert.deepEqual(replay, {
+        disposition: "replayed",
+        candidate: saved.candidate,
+      });
+      assert.equal(await f.count(), 2);
+      assert.equal(f.controlState.gets, gets + 1);
+      assert.deepEqual(await f.referenceSource(), before);
+      assert.deepEqual(f.materialCounts(), material);
+      await assert.rejects(
+        f.invoke(writes.saveCandidate, { ...query, resultIndex: 2 }),
+      );
+      assert.equal(await f.count(), 2);
+      const context = f.stateUi.contexts.find(
+        (c) => c.action === writes.saveCandidate,
+      )!;
+      assert.throws(
+        () => f.uiOwner.actions.invoke({ ...context }),
+        /invocation_unavailable/,
+      );
+    },
+  );
+  test(
+    `${backend}: read-only runtime and missing write declaration cannot save or advertise result actions`,
+    assetTestOptions(backend),
+    async (t) => {
+      for (const options of [{ writeDeclared: false }, { readOnly: true }]) {
+        const f = await fixture(t, backend, true, false, options),
+          gets = f.controlState.gets;
+        await assert.rejects(
+          f.invoke(writes.saveCandidate, { ...f.query, resultIndex: 1 }),
+        );
+        await assert.rejects(
+          f.invoke(writes.listOutputs, {
+            projectId: f.query.projectId,
+            runId: f.query.runId,
+          }),
+        );
+        assert.equal(await f.count(), 1);
+        assert.equal(f.controlState.gets, gets);
+        assert.deepEqual(await f.invoke(actions.preview, f.query), {
+          candidate: f.published.candidate,
+        });
+      }
+    },
+  );
+  test(
+    `${backend}: withdrawal during output download or original INSERT prevents candidate commit`,
+    assetTestOptions(backend),
+    async (t) => {
+      const f = await fixture(t, backend),
+        query = { ...f.query, resultIndex: 1 };
+      f.controlState.onGet = async () => {
+        f.stateUi.allowed = false;
+      };
+      await assert.rejects(f.invoke(writes.saveCandidate, query));
+      assert.equal(await f.count(), 1);
+      f.stateUi.allowed = true;
+      f.controlState.onGet = undefined;
+      let closing: Promise<void> | undefined;
+      const restore = observeMaterialPreparationSql(
+        backend,
+        /INSERT INTO .*project_media_result_candidates/u,
+        () => {
+          closing = f.uiOwner.close();
+        },
+      );
+      try {
+        await assert.rejects(f.invoke(writes.saveCandidate, query));
+      } finally {
+        restore();
+      }
+      assert.ok(closing);
+      await closing;
+      assert.equal(await f.count(), 1);
+    },
+  );
+  test(
+    `${backend}: a committed UI save survives a late policy withdrawal and can be recovered by its original position`,
+    assetTestOptions(backend),
+    async (t) => {
+      const f = await fixture(t, backend),
+        query = { ...f.query, resultIndex: 1 };
+      f.stateUi.afterInvoke = () => {
+        f.stateUi.allowed = false;
+      };
+      const output = (await f.invoke(writes.saveCandidate, query)) as {
+        disposition: string;
+        candidate: unknown;
+      };
+      assert.equal(output.disposition, "created");
+      assert.equal(await f.count(), 2);
+      f.stateUi.allowed = true;
+      f.stateUi.afterInvoke = undefined;
+      f.controlState.network = false;
+      assert.deepEqual(await f.invoke(writes.saveCandidate, query), {
+        disposition: "replayed",
+        candidate: output.candidate,
+      });
     },
   );
 }

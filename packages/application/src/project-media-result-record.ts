@@ -1,3 +1,5 @@
+import { types } from "node:util";
+import { projectAssetInstallationEvidence } from "./project-asset-qualification-data.ts";
 import {
   projectAssetId,
   projectAssetDigest,
@@ -21,6 +23,7 @@ import type {
   FrozenProjectMediaResult,
   ProjectMediaResultCandidate,
   ProjectMediaResultAuthority,
+  ProjectMediaResultUiInstallation,
 } from "./project-media-result-port.ts";
 
 export function mediaResultFail(code: string): never {
@@ -310,7 +313,9 @@ export function captureProjectMediaResultAuthority(
   request: ProjectMediaResultRequest,
   action: "read" | "publish",
 ) {
+  if (types.isProxy(input)) mediaResultFail("authority_invalid");
   const a = fields(input, [
+    ...(Object.hasOwn(input, "uiInstallation") ? ["uiInstallation"] : []),
     "request",
     "action",
     "assertCurrent",
@@ -326,6 +331,14 @@ export function captureProjectMediaResultAuthority(
   return Object.freeze({
     request,
     action,
+    ...(a.uiInstallation === undefined
+      ? {}
+      : {
+          uiInstallation: captureProjectMediaResultUiInstallation(
+            a.uiInstallation,
+            request.actor,
+          ),
+        }),
     assertCurrent: async () =>
       projectMediaResultAssertVoid(
         await Reflect.apply(a.assertCurrent as Function, input, []),
@@ -348,4 +361,23 @@ export function projectMediaResultAssertVoid(result: unknown): void {
     /* Do not inspect arbitrary thenables. */
   }
   mediaResultFail("authority_invalid");
+}
+
+export function captureProjectMediaResultUiInstallation(
+  input: unknown,
+  actor: ProjectMediaResultRequest["actor"],
+): ProjectMediaResultUiInstallation {
+  const f = fields(mediaInputData(input, 65536), [
+    "installation",
+    "selection",
+    "package",
+  ]);
+  const evidence = projectAssetInstallationEvidence({ ...f, actor });
+  if (evidence.installation.pluginId !== "crewon.short-drama")
+    mediaResultFail("authority_invalid");
+  return Object.freeze({
+    installation: evidence.installation,
+    selection: evidence.selection,
+    package: evidence.package,
+  });
 }

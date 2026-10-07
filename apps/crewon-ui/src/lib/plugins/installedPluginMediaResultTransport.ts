@@ -66,7 +66,7 @@ export function createInstalledPluginMediaResultTransport(
         action: input.action,
         input: input.input,
       });
-      if (request.action === actions.listCandidates) {
+      if (request.action !== actions.preview) {
         const response = await pluginUiControlRequest(
           (signal) =>
             options.client.plugins.invoke(lease.mountRef, request, { signal }),

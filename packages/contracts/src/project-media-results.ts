@@ -175,6 +175,71 @@ export type ProjectMediaResultLocator = Readonly<{
   runId: string;
   resultIndex: number;
 }>;
+/** A completed original Run. This does not submit or observe a provider operation. */
+export type ProjectMediaRunLocator = Readonly<{
+  projectId: string;
+  runId: string;
+}>;
+export function parseProjectMediaRunLocator(
+  input: unknown,
+): ProjectMediaRunLocator {
+  const r = fields(parsePluginUiJsonValue(input, { maxBytes: 2048 }), [
+    "projectId",
+    "runId",
+  ]);
+  return Object.freeze({ projectId: id(r.projectId), runId: id(r.runId) });
+}
+export type ProjectMediaRunOutputs = Readonly<{
+  projectId: string;
+  runId: string;
+  mediaInputId: string;
+  inputRevision: number;
+  outputs: readonly Readonly<{
+    resultIndex: number;
+    candidate: ProjectMediaResultSummary | null;
+  }>[];
+}>;
+export function parseProjectMediaRunOutputs(
+  request: ProjectMediaRunLocator,
+  input: unknown,
+): ProjectMediaRunOutputs {
+  const q = parseProjectMediaRunLocator(request);
+  const r = fields(
+    parsePluginUiJsonValue(input, { maxBytes: MAX_MEDIA_RESULT_CATALOG_BYTES }),
+    ["projectId", "runId", "mediaInputId", "inputRevision", "outputs"],
+  );
+  if (
+    r.projectId !== q.projectId ||
+    r.runId !== q.runId ||
+    !Array.isArray(r.outputs) ||
+    r.outputs.length < 1 ||
+    r.outputs.length > 16
+  )
+    invalid();
+  const mediaInputId = id(r.mediaInputId),
+    inputRevision = revision(r.inputRevision);
+  const outputs = r.outputs.map((entry, index) => {
+    const e = fields(entry, ["resultIndex", "candidate"]);
+    if (e.resultIndex !== index) invalid();
+    const { candidate } = parseGetProjectMediaResultResponse(
+      { ...q, resultIndex: index },
+      { candidate: e.candidate },
+    );
+    if (
+      candidate &&
+      (candidate.mediaInputId !== mediaInputId ||
+        candidate.inputRevision !== inputRevision)
+    )
+      invalid();
+    return Object.freeze({ resultIndex: index, candidate });
+  });
+  return Object.freeze({
+    ...q,
+    mediaInputId,
+    inputRevision,
+    outputs: Object.freeze(outputs),
+  });
+}
 export function parseProjectMediaResultLocator(
   input: unknown,
 ): ProjectMediaResultLocator {

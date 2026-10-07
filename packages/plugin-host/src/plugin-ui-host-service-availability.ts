@@ -264,7 +264,8 @@ export function assertUiOnlyServiceDeclarations(
             requirement.apiVersion === CREWON_PROJECT_TEXTS_API_VERSION &&
             (requirement.optional || hostUiServices !== undefined)) ||
           ((requirement.service === "crewon.project-media-inputs" ||
-            requirement.service === "crewon.project-media-results") &&
+            requirement.service === "crewon.project-media-results" ||
+            requirement.service === "crewon.project-media-result-actions") &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === "crewon.project-text-recovery" &&

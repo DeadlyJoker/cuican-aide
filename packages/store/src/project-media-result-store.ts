@@ -106,7 +106,10 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
   }
   async #transaction<T>(
     plan: MediaResultPlan<T>,
-    a: Pick<ProjectMediaResultAuthority, "assertCurrent" | "assertActive">,
+    a: Pick<
+      ProjectMediaResultAuthority,
+      "assertCurrent" | "assertActive" | "uiInstallation"
+    >,
     purpose: "candidate" | "catalog" | "read" = "candidate",
   ): Promise<T> {
     this.#active();
@@ -122,6 +125,7 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
     this.#db.exec("BEGIN IMMEDIATE");
     try {
       assertSqliteProjectMediaResultSchema(this.#db);
+      assertSqliteProjectTextUiCommit(this.#db, a.uiInstallation);
       let next = plan.next();
       while (!next.done) {
         this.#active();
@@ -141,6 +145,8 @@ export class SqliteProjectMediaResultStore implements ProjectMediaResultStore {
       }
       // SQLite callbacks must be synchronous while this borrowed native connection is in a transaction.
       this.#active();
+      a.assertActive();
+      assertSqliteProjectTextUiCommit(this.#db, a.uiInstallation);
       a.assertActive();
       this.#db.exec("COMMIT");
       return next.value;
@@ -273,7 +279,10 @@ export class PostgresProjectMediaResultStore
   }
   #transaction<T>(
     plan: MediaResultPlan<T>,
-    a: Pick<ProjectMediaResultAuthority, "assertCurrent" | "assertActive">,
+    a: Pick<
+      ProjectMediaResultAuthority,
+      "assertCurrent" | "assertActive" | "uiInstallation"
+    >,
     purpose: "candidate" | "catalog" | "read" = "candidate",
   ): Promise<T> {
     return this.#client(async (c) => {
@@ -289,6 +298,11 @@ export class PostgresProjectMediaResultStore
       await c.query("BEGIN");
       try {
         await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
+        await assertPostgresProjectTextUiCommit(
+          c,
+          this.#d.schema,
+          a.uiInstallation,
+        );
         let next = plan.next();
         while (!next.done) {
           this.#open();
@@ -310,6 +324,11 @@ export class PostgresProjectMediaResultStore
           a.assertActive();
           next = plan.next(rows);
         }
+        await assertPostgresProjectTextUiCommit(
+          c,
+          this.#d.schema,
+          a.uiInstallation,
+        );
         await a.assertCurrent();
         this.#open();
         a.assertActive();
