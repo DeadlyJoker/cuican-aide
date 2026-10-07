@@ -1,5 +1,6 @@
 import { parsePluginUiJsonValue, pluginUiFields } from "./plugin-ui-json.ts";
 import { ContractValidationError } from "./contract-validation-error.ts";
+import { assetContractId } from "./project-asset-contract-support.ts";
 import {
   parsePluginUiRecoveryHint,
   type PluginUiRecoveryHint,
@@ -9,6 +10,16 @@ import {
   parseProjectMediaGenerationUiRequest,
   type GenerateProjectMediaResponse,
 } from "./project-media-generations.ts";
+export function parseProjectMediaGenerationRecoveryRequest(input: unknown) {
+  const fields = pluginUiFields(
+    parsePluginUiJsonValue(input, { maxBytes: 1024 }),
+    ["projectId", "threadId"],
+  );
+  return Object.freeze({
+    projectId: assetContractId(fields.projectId),
+    threadId: assetContractId(fields.threadId),
+  });
+}
 export type ProjectMediaGenerationRecoveryHint = Omit<
   PluginUiRecoveryHint,
   "request" | "receipt"

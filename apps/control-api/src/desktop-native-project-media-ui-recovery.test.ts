@@ -46,6 +46,13 @@ for (const kind of ["T10", "D18"] as const)
       assert.equal(restored.intent?.phase, "accepted");
       assert.deepEqual(restored.intent?.receipt, result);
       assert.deepEqual(restored.intent?.request.input, command);
+      const httpRecovery = await f.app.inject({
+        method: "GET",
+        url: `/api/v1/creative-projects/${f.query.projectId}/threads/${f.binding.threadId}/media-generation-recovery`,
+        headers: f.headers,
+      });
+      assert.equal(httpRecovery.statusCode, 200, httpRecovery.body);
+      assert.deepEqual(httpRecovery.json(), restored);
       const response = await f.post();
       assert.equal(response.statusCode, 200, response.body);
       assert.equal(response.json().runId, result.runId);

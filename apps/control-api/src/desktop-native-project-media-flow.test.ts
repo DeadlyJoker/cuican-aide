@@ -64,6 +64,21 @@ for (const kind of ["T10", "D18"] as const)
       await f.app.close();
       await f.runtime.close();
       const next = await f.reopen();
+      const recovery = await next.app.inject({
+        method: "GET",
+        url: `/api/v1/creative-projects/${f.query.projectId}/threads/${f.binding.threadId}/media-generation-recovery`,
+        headers: next.headers,
+      });
+      assert.equal(recovery.statusCode, 200, recovery.body);
+      assert.equal(recovery.json().intent.phase, "accepted");
+      assert.equal(recovery.json().intent.receipt.runId, result.runId);
+      assert.deepEqual(recovery.json().intent.request.input, {
+        ...f.body,
+        projectId: f.query.projectId,
+        idempotencyKey: "native-original-media-generation",
+      });
+      assert.deepEqual(f.provider.state, before);
+      assert.deepEqual(counts(f), [2, 2, 1]);
       const cold = await next.app.inject({
         method: "POST",
         url: `/api/v1/creative-projects/${f.query.projectId}/media-generations`,

@@ -104,3 +104,58 @@ test("generation client rejects unbound response, extra authority, missing CSRF 
       ControlApiProtocolError,
     );
 });
+
+test("media recovery client reads the authenticated bounded journal without CSRF, dispatch or automatic retry", async () => {
+  const selectors = { projectId: command.projectId, threadId: "会话/1" };
+  let calls = 0;
+  const c = client(async (url, init) => {
+    calls++;
+    assert.equal(
+      String(url),
+      `https://control.test/api/v1/creative-projects/${encodeURIComponent(selectors.projectId)}/threads/${encodeURIComponent(selectors.threadId)}/media-generation-recovery`,
+    );
+    assert.equal(init?.method, "GET");
+    assert.equal(init?.redirect, "manual");
+    assert.equal(init?.body, undefined);
+    assert.equal(
+      new Headers(init?.headers).get("authorization"),
+      "Bearer named-session",
+    );
+    assert.equal(new Headers(init?.headers).get("idempotency-key"), null);
+    return Response.json({ intent: null });
+  }, null);
+  assert.deepEqual(await c.projectMediaGenerations.getRecovery(selectors), {
+    intent: null,
+  });
+  assert.equal(calls, 1);
+  await assert.rejects(
+    c.projectMediaGenerations.getRecovery({
+      ...selectors,
+      profileId: "foreign",
+    } as typeof selectors),
+  );
+  await assert.rejects(
+    c.projectMediaGenerations.getRecovery(selectors, {
+      signal: AbortSignal.abort(),
+    }),
+  );
+  assert.equal(calls, 1);
+  for (const response of [
+    { intent: null, authority: {} },
+    { intent: "x".repeat(4096) },
+  ])
+    await assert.rejects(
+      client(async () =>
+        Response.json(response),
+      ).projectMediaGenerations.getRecovery(selectors),
+      ControlApiProtocolError,
+    );
+  let attempts = 0;
+  await assert.rejects(
+    client(async () => {
+      attempts++;
+      throw new Error("disconnected");
+    }).projectMediaGenerations.getRecovery(selectors),
+  );
+  assert.equal(attempts, 1);
+});

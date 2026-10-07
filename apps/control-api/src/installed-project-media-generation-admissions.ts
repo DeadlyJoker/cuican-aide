@@ -4,7 +4,9 @@ import {
   ApplicationError,
   mediaInputSame as same,
   type ActorContext,
+  type CreativeProjectCommitAuthority,
 } from "@crewon/application";
+import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
 import {
   parseProjectConversationBinding,
   parseInstalledPluginPackage,
@@ -33,6 +35,10 @@ const hash = {
 
 /** Live admission for both adapters. It issues no material permission and never accepts a client-supplied installation pin. */
 export class InstalledProjectMediaGenerationAdmissions {
+  readonly #journalAuthorities = new WeakMap<
+    ProjectMediaGenerationAdmission,
+    CreativeProjectCommitAuthority
+  >();
   readonly #host: ReturnType<
     typeof installedProjectMediaGenerationTaskAuthority
   >;
@@ -69,6 +75,33 @@ export class InstalledProjectMediaGenerationAdmissions {
       previous: PluginTaskAdmission | null;
       signal: AbortSignal;
     }>,
+  ): Promise<ProjectMediaGenerationAdmission> {
+    return this.#resolve(input, "submit");
+  }
+  async resolveRecovery(
+    input: Readonly<{
+      actor: ActorContext;
+      command: Readonly<{ projectId: string; threadId: string }>;
+      signal: AbortSignal;
+    }>,
+  ): Promise<ProjectMediaGenerationAdmission> {
+    return this.#resolve({ ...input, previous: null }, "read");
+  }
+  /** Actual installation snapshot for the original journal, never a fabricated UI invocation. */
+  journalAuthority(admission: ProjectMediaGenerationAdmission) {
+    const authority = this.#journalAuthorities.get(admission);
+    if (!authority) denied();
+    authority.assertActive();
+    return authority;
+  }
+  async #resolve(
+    input: Readonly<{
+      actor: ActorContext;
+      command: Readonly<{ projectId: string; threadId: string }>;
+      previous: PluginTaskAdmission | null;
+      signal: AbortSignal;
+    }>,
+    purpose: "read" | "submit",
   ): Promise<ProjectMediaGenerationAdmission> {
     const { actor, command, previous } = input;
     const h = this.#host,
@@ -273,7 +306,7 @@ export class InstalledProjectMediaGenerationAdmissions {
         next.authorityEpoch !== decision.authorityEpoch
       )
         denied();
-      await checkPackage(previous === null ? "submit" : "read");
+      await checkPackage(previous === null ? purpose : "read");
       active();
     };
     const assertCurrent = async () => {
@@ -301,13 +334,32 @@ export class InstalledProjectMediaGenerationAdmissions {
       active();
     };
     await assertCurrent();
-    return Object.freeze({
+    const admission = Object.freeze({
       pin,
       conversation: b,
       assertCurrent,
       assertTransactionCurrent,
       assertActive: active,
     });
+    this.#journalAuthorities.set(
+      admission,
+      Object.freeze({
+        assertCurrent,
+        assertActive: active,
+        transaction: Object.freeze({
+          version: "crewon.creative-project-plugin-commit.v1" as const,
+          // The journal describes the shared logical command; TaskCore retains media.generate.
+          pin: parsePluginTaskAdmissionPin({
+            ...currentPin,
+            action: PROJECT_MEDIA_GENERATE_UI_ACTION,
+          }),
+          selection,
+          package: pkg,
+          assertCurrent: assertTransactionCurrent,
+        }),
+      }),
+    );
+    return admission;
   }
 }
 function denied(): never {

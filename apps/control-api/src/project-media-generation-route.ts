@@ -4,6 +4,7 @@ import {
   MAX_PROJECT_MEDIA_GENERATION_REQUEST_BYTES,
   parseGenerateProjectMediaHttpRequest,
 } from "@crewon/contracts/project-media-generations";
+import { parseProjectMediaGenerationRecoveryRequest } from "@crewon/contracts/project-media-generation-recovery";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
 import { wakeOutbox, type OutboxWakeupPort } from "./outbox-wakeup.ts";
@@ -26,6 +27,31 @@ export function registerProjectMediaGenerationRoutes(
     throw new Error("installed_project_media_generation_owner_required");
   const generate =
     InstalledProjectMediaGenerationRuntime.prototype.generate.bind(input.owner);
+  const getRecovery =
+    InstalledProjectMediaGenerationRuntime.prototype.getRecovery.bind(
+      input.owner,
+    );
+  app.get<{
+    Params: { projectId: string; threadId: string };
+    Querystring: unknown;
+  }>(
+    "/api/v1/creative-projects/:projectId/threads/:threadId/media-generation-recovery",
+    async (request, reply) =>
+      withProjectMediaRequestSignal(request, reply, async (signal) => {
+        parseExtensionEmptyQuery(request.query);
+        const context = requestContext(request);
+        const actor = await input.identity.resolveActor(context);
+        return getRecovery(
+          context,
+          actor,
+          parseProjectMediaGenerationRecoveryRequest({
+            projectId: request.params.projectId,
+            threadId: request.params.threadId,
+          }),
+          signal,
+        );
+      }),
+  );
   app.post<{
     Params: { projectId: string };
     Querystring: unknown;

@@ -77,6 +77,13 @@ test(
         }),
         mediaGenerations,
       );
+      assert.equal(
+        f.app.hasRoute({
+          method: "GET",
+          url: "/api/v1/creative-projects/:projectId/threads/:threadId/media-generation-recovery",
+        }),
+        mediaGenerations,
+      );
       assert.deepEqual(f.peer, []);
       assert.equal(f.routeState.wakes, 0);
       if (mediaGenerations) {

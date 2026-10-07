@@ -5,16 +5,45 @@ import {
   type GenerateProjectMediaRequest,
   type GenerateProjectMediaResponse,
 } from "@crewon/contracts/project-media-generations";
+import {
+  parseProjectMediaGenerationRecoveryRequest,
+  parseProjectMediaGenerationRecoveryResponse,
+} from "@crewon/contracts/project-media-generation-recovery";
 import type {
   CreativeProjectControlTransport,
   CreativeProjectControlRequestOptions,
 } from "./creative-project-control-client.ts";
 
-/** Original authenticated transport, one bounded attempt; the caller retains the full intent for recovery. */
+/** Original authenticated transport, one bounded attempt. Recovery reads never dispatch a task. */
 export class ProjectMediaGenerationControlClient {
   readonly #transport: CreativeProjectControlTransport;
   constructor(transport: CreativeProjectControlTransport) {
     this.#transport = transport;
+  }
+  async getRecovery(
+    input: ReturnType<typeof parseProjectMediaGenerationRecoveryRequest>,
+    options: CreativeProjectControlRequestOptions = {},
+  ) {
+    const command = this.#checked("request", () =>
+      parseProjectMediaGenerationRecoveryRequest(input),
+    );
+    const signal = this.#signal(options);
+    signal.throwIfAborted();
+    const value = await this.#transport.json(
+      "GET",
+      `/api/v1/creative-projects/${encodeURIComponent(command.projectId)}/threads/${encodeURIComponent(command.threadId)}/media-generation-recovery`,
+      undefined,
+      {
+        signal,
+        expectedStatuses: [200],
+        maximumResponseBytes: 4096,
+        redirect: "manual",
+      },
+    );
+    signal.throwIfAborted();
+    return this.#checked("response", () =>
+      parseProjectMediaGenerationRecoveryResponse(value),
+    );
   }
   async generate(
     input: GenerateProjectMediaRequest,

@@ -38,11 +38,27 @@ import {
   type InstalledProjectMediaGenerationConfiguration,
 } from "./installed-project-media-generation-configuration.ts";
 import { InstalledProjectMediaGenerationAdmissions } from "./installed-project-media-generation-admissions.ts";
+import {
+  ProjectMediaGenerationJournal,
+  type ProjectMediaGenerationDispatch,
+} from "./project-media-generation-journal.ts";
+import {
+  parseProjectMediaGenerationRecoveryRequest,
+  type parseProjectMediaGenerationRecoveryResponse,
+} from "@crewon/contracts/project-media-generation-recovery";
+
+type RecoveryRequest = ReturnType<
+  typeof parseProjectMediaGenerationRecoveryRequest
+>;
+type Recover = (
+  request: RecoveryRequest,
+) => Promise<ReturnType<typeof parseProjectMediaGenerationRecoveryResponse>>;
 
 type Invocation = {
   actor: ActorContext;
   command: GenerateProjectMediaRequest;
   admission: ProjectMediaGenerationAdmission | null;
+  dispatch: ProjectMediaGenerationDispatch | null;
   ui: Readonly<{
     context: PluginUiActionContext;
     authority: PluginUiInvocationCommitAuthority;
@@ -64,6 +80,7 @@ export class InstalledProjectMediaGenerationRuntime {
   readonly #lifetime: AbortController;
   readonly #assertActive: () => void;
   readonly #release: () => Promise<void>;
+  readonly #recover: Recover;
   readonly #physical = new Set<Promise<unknown>>();
   #closing: Promise<void> | undefined;
   private constructor(input: {
@@ -73,6 +90,7 @@ export class InstalledProjectMediaGenerationRuntime {
     lifetime: AbortController;
     assertActive(): void;
     release(): Promise<void>;
+    recover: Recover;
   }) {
     this.#core = input.core;
     this.#commands = input.commands;
@@ -80,6 +98,7 @@ export class InstalledProjectMediaGenerationRuntime {
     this.#lifetime = input.lifetime;
     this.#assertActive = input.assertActive;
     this.#release = input.release;
+    this.#recover = input.recover;
     issued.add(this);
   }
   static async prepare(
@@ -239,6 +258,8 @@ export class InstalledProjectMediaGenerationRuntime {
     active();
     await extensions.migrateProjectMediaGenerations();
     active();
+    const journal = await ProjectMediaGenerationJournal.prepare(core);
+    active();
     let release: (() => Promise<void>) | undefined;
     try {
       const owner = await configuration.createMaterials(
@@ -290,6 +311,15 @@ export class InstalledProjectMediaGenerationRuntime {
             )
               denied();
             state.admission = result;
+            // Genuine UI invocations already use their original recovery wrapper.
+            // HTTP stages the identical recipe here, before preparation can upload media.
+            if (state.ui === null) {
+              state.dispatch = await journal.begin(
+                state.command,
+                admissions.journalAuthority(result),
+              );
+              context(request.actor);
+            }
             return result;
           },
         },
@@ -301,6 +331,19 @@ export class InstalledProjectMediaGenerationRuntime {
         lifetime,
         assertActive: active,
         release,
+        recover: async (command) => {
+          active();
+          if (
+            host.requests.currentScope().profileId !== configuration.profileId
+          )
+            denied();
+          const admission = await admissions.resolveRecovery({
+            actor: host.requests.currentActor(),
+            command,
+            signal: host.requests.currentSignal(),
+          });
+          return journal.recover(admissions.journalAuthority(admission));
+        },
       });
     } catch (error) {
       lifetime.abort();
@@ -317,6 +360,28 @@ export class InstalledProjectMediaGenerationRuntime {
   }
   assertAvailable(): void {
     this.#assertActive();
+  }
+  getRecovery(
+    request: ControlApiRequestContext,
+    actor: ActorContext,
+    input: RecoveryRequest,
+    signal?: AbortSignal,
+  ) {
+    this.#availableSlot();
+    const command = parseProjectMediaGenerationRecoveryRequest(input);
+    return this.#track(
+      this.#core.requests.run(
+        {
+          request,
+          actor,
+          signal: AbortSignal.any([
+            this.#lifetime.signal,
+            ...(signal ? [signal] : []),
+          ]),
+        },
+        () => this.#recover(command),
+      ),
+    );
   }
   generate(
     request: ControlApiRequestContext,
@@ -382,6 +447,7 @@ export class InstalledProjectMediaGenerationRuntime {
         actor: this.#core.requests.currentActor(),
         command,
         admission: null,
+        dispatch: null,
         ui,
       },
       async () => {
@@ -399,7 +465,7 @@ export class InstalledProjectMediaGenerationRuntime {
           { signal },
         );
         // Preserve the actual durable receipt even if response delivery is cancelled later.
-        return parseGenerateProjectMediaResponse(command, {
+        const receipt = parseGenerateProjectMediaResponse(command, {
           disposition: result.run.disposition,
           projectId: command.projectId,
           mediaInputId: command.mediaInputId,
@@ -409,6 +475,8 @@ export class InstalledProjectMediaGenerationRuntime {
           threadRevision: result.turn.threadState.revision,
           runId: result.binding.runId,
         });
+        await this.#invocations.getStore()!.dispatch?.confirm(receipt);
+        return receipt;
       },
     );
   }
@@ -439,6 +507,18 @@ function denied(): never {
   );
 }
 function publicFailure(error: unknown): unknown {
+  if (
+    error instanceof Error &&
+    [
+      "plugin_ui_intent_family_unresolved",
+      "plugin_ui_intent_replay_mismatch",
+      "plugin_ui_intent_quota_exhausted",
+    ].includes(error.message)
+  )
+    return new ApplicationError(
+      "conflict",
+      "project_media_generation_recovery_required",
+    );
   if (
     error instanceof ApplicationError ||
     error instanceof ControlApiIdentityError
