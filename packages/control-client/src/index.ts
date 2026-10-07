@@ -1,3 +1,4 @@
+export * from "./project-media-generation-control-client.ts";
 export * from "./project-media-input-stage-control-client.ts";
 export * from "./control-api-client.ts";
 export * from "./extension-control-client.ts";

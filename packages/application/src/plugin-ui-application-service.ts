@@ -1,4 +1,5 @@
 import { PROJECT_MEDIA_INPUT_UI_ACTIONS } from "@crewon/contracts/project-media-inputs-ui";
+import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
 import { registerPluginProjectMediaInputInvocation } from "./plugin-project-media-input-invocation.ts";
 import { isProjectAssetRecoveryAction } from "@crewon/contracts/project-asset-recovery";
 import { registerPluginProjectAssetRecoveryInvocation } from "./plugin-project-asset-recovery-invocation.ts";
@@ -384,6 +385,7 @@ export class PluginUiApplicationService {
         () => this.#fence(actor, binding, "invoke"),
         () => this.#mounts.alive(binding),
         command.action.startsWith("crewon.creative-projects.") ||
+          command.action === PROJECT_MEDIA_GENERATE_UI_ACTION ||
           usesRecovery ||
           command.action ===
             "crewon.project-generation-selections.v1.selectConceptImage"

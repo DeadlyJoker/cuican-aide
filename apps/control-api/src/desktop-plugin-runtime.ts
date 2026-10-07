@@ -1,3 +1,5 @@
+import { isProjectMediaGenerationUiNamespaceAction } from "@crewon/contracts/project-media-generations";
+import { composeDesktopProjectMediaGenerationUi } from "./desktop-project-media-generation-ui-composition.ts";
 import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { isProjectMediaInputUiNamespaceAction } from "@crewon/contracts/project-media-inputs-ui";
 import { composeDesktopProjectMediaInputUi } from "./desktop-project-media-input-ui-composition.ts";
@@ -257,6 +259,9 @@ export async function createDesktopPluginRuntime(
   let assetUi: ProjectAssetPluginUiRuntime | undefined;
   let history: DesktopProjectHistoryPluginRuntime | undefined;
   let recovery: DesktopPluginUiRecoveryRuntime | undefined;
+  let mediaGenerationUi: ReturnType<
+    typeof composeDesktopProjectMediaGenerationUi
+  >;
   let mediaInputUi: ReturnType<typeof composeDesktopProjectMediaInputUi>;
   let conversations: ReturnType<typeof createDesktopProjectConversationRuntime>;
   let taskRuntime:
@@ -272,6 +277,7 @@ export async function createDesktopPluginRuntime(
       (
         conversations?.hostUiServices ??
         recovery?.hostUiServices ??
+        mediaGenerationUi?.hostUiServices ??
         mediaInputUi?.hostUiServices ??
         (projectExecution ? history?.hostUiServices : undefined) ??
         taskRuntime?.core.historicalQueries?.hostUiServices ??
@@ -409,8 +415,19 @@ export async function createDesktopPluginRuntime(
       core: taskRuntime?.core,
       fallback: originalBusinessHostUiServices,
     });
+    mediaGenerationUi = composeDesktopProjectMediaGenerationUi({
+      configuration,
+      runtime:
+        taskRuntime !== undefined && "mediaGenerations" in taskRuntime
+          ? taskRuntime.mediaGenerations
+          : undefined,
+      fallback: mediaInputUi?.hostUiServices ?? originalBusinessHostUiServices,
+      committedTasks: taskRuntime?.core.owner.committedTasks,
+    });
     const businessHostUiServices =
-      mediaInputUi?.hostUiServices ?? originalBusinessHostUiServices;
+      mediaGenerationUi?.hostUiServices ??
+      mediaInputUi?.hostUiServices ??
+      originalBusinessHostUiServices;
     recovery = await prepareDesktopPluginUiRecovery({
       configuration: recoveryConfiguration,
       publications: configuration.publications,
@@ -518,6 +535,7 @@ export async function createDesktopPluginRuntime(
     };
     const dispatch = composeDesktopProjectPluginUiDispatch({
       mediaInputs: mediaInputUi?.owner,
+      mediaGenerations: mediaGenerationUi?.owner,
       conversations: () => conversations?.owner(),
       assetStages: () => conversations?.assetStages(),
       plans: () => conversations?.textPlans(),
@@ -556,7 +574,11 @@ export async function createDesktopPluginRuntime(
       ...(recovery === undefined ? {} : { recovery: recovery.service }),
       ...(taskRuntime === undefined
         ? {}
-        : { committedTasks: taskRuntime.core.owner.committedTasks }),
+        : {
+            committedTasks:
+              mediaGenerationUi?.committedTasks ??
+              taskRuntime.core.owner.committedTasks,
+          }),
       ...(dispatch.committedMetadata === undefined
         ? {}
         : { committedMetadata: dispatch.committedMetadata }),
@@ -625,6 +647,20 @@ export async function createDesktopPluginRuntime(
               available();
               const invoke = () => ui.invoke(actor, command);
               const dispatch = (requestSignal: AbortSignal | undefined) => {
+                if (isProjectMediaGenerationUiNamespaceAction(command.action)) {
+                  if (
+                    mediaGenerationUi === undefined ||
+                    taskRuntime === undefined
+                  )
+                    throw new ApplicationError(
+                      "conflict",
+                      "project_media_generation_ui_unavailable",
+                    );
+                  return taskRuntime.core.requests.run(
+                    { request, actor, signal: requestSignal },
+                    invoke,
+                  );
+                }
                 if (isProjectMediaInputUiNamespaceAction(command.action)) {
                   if (mediaInputUi === undefined || taskRuntime === undefined)
                     throw new ApplicationError(
@@ -814,6 +850,7 @@ export async function createDesktopPluginRuntime(
           () => textUi?.close(),
           () => assetUi?.close(),
           () => mediaInputUi?.close(),
+          () => mediaGenerationUi?.close(),
           () => history?.close(),
           () => ownedActivation?.close(),
           () => ownedConfiguration.close(),
@@ -833,6 +870,7 @@ export async function createDesktopPluginRuntime(
         () => textUi?.close(),
         () => assetUi?.close(),
         () => mediaInputUi?.close(),
+        () => mediaGenerationUi?.close(),
         () => history?.close(),
         () => configurationRuntime?.close(),
         () => activation?.close(),

@@ -8,6 +8,35 @@ import {
 /** Logical generation intent only. Installation, provider and material authority remain host-owned. */
 export const PROJECT_MEDIA_GENERATIONS_PROTOCOL =
   "crewon.project-media-generations.v1";
+export const CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE =
+  "crewon.project-media-generations";
+export const PROJECT_MEDIA_GENERATE_UI_ACTION =
+  "crewon.project-media-generations.v1.generate";
+export function isProjectMediaGenerationUiNamespaceAction(
+  action: unknown,
+): boolean {
+  return (
+    typeof action === "string" &&
+    (action === CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE ||
+      action.startsWith(`${CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE}.`))
+  );
+}
+export function parseProjectMediaGenerationUiRequest(input: unknown) {
+  const r = pluginUiFields(
+    parsePluginUiJsonValue(input, {
+      maxBytes: MAX_PROJECT_MEDIA_GENERATION_REQUEST_BYTES + 256,
+    }),
+    ["action", "input"],
+  );
+  if (r.action !== PROJECT_MEDIA_GENERATE_UI_ACTION)
+    throw new ContractValidationError(
+      "project_media_generation_ui_action_invalid",
+    );
+  return Object.freeze({
+    action: PROJECT_MEDIA_GENERATE_UI_ACTION,
+    input: parseGenerateProjectMediaRequest(r.input),
+  });
+}
 export const MAX_PROJECT_MEDIA_GENERATION_REQUEST_BYTES = 2048;
 export type GenerateProjectMediaRequest = Readonly<{
   projectId: string;

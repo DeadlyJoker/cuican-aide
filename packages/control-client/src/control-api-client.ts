@@ -1,3 +1,4 @@
+import { ProjectMediaGenerationControlClient } from "./project-media-generation-control-client.ts";
 import { ProjectMediaInputStageControlClient } from "./project-media-input-stage-control-client.ts";
 import {
   parseThreadWorkspaceId,
@@ -232,8 +233,11 @@ export class ControlApiClient {
   #creativeProjectClient: CreativeProjectControlClient | null = null;
   #projectTextClient: ProjectTextControlClient | null = null;
   #projectConversationClient: ProjectConversationControlClient | null = null;
-  #projectMediaInputStageClient: ProjectMediaInputStageControlClient | null = null;
+  #projectMediaInputStageClient: ProjectMediaInputStageControlClient | null =
+    null;
   #projectAssetStageClient: ProjectAssetStageControlClient | null = null;
+  #projectMediaGenerationClient: ProjectMediaGenerationControlClient | null =
+    null;
   #projectMediaInputClient: ProjectMediaInputControlClient | null = null;
 
   constructor(config: ControlApiClientConfig) {
@@ -1671,6 +1675,15 @@ export class ControlApiClient {
   get projectMediaInputStages(): ProjectMediaInputStageControlClient {
     return (this.#projectMediaInputStageClient ??=
       new ProjectMediaInputStageControlClient({
+        json: (method, path, body, options) =>
+          this.#json(method, path, body, options),
+        protocolError: (code) => new ControlApiProtocolError(code),
+      }));
+  }
+
+  get projectMediaGenerations(): ProjectMediaGenerationControlClient {
+    return (this.#projectMediaGenerationClient ??=
+      new ProjectMediaGenerationControlClient({
         json: (method, path, body, options) =>
           this.#json(method, path, body, options),
         protocolError: (code) => new ControlApiProtocolError(code),

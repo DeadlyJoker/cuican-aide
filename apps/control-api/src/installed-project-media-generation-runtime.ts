@@ -5,6 +5,9 @@ import {
   materialPreparationFields,
   mediaInputSame,
   projectMediaInputBound,
+  capturePluginUiInvocationCommitAuthority,
+  type PluginUiActionContext,
+  type PluginUiInvocationCommitAuthority,
   type ActorContext,
   type ProjectMediaInputAuthorizationPort,
   type ProjectMediaGenerationAuthorizationPort,
@@ -19,6 +22,8 @@ import {
   parseGenerateProjectMediaRequest,
   parseGenerateProjectMediaResponse,
   type GenerateProjectMediaRequest,
+  parseProjectMediaGenerationUiRequest,
+  CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE,
 } from "@crewon/contracts/project-media-generations";
 import {
   ControlApiIdentityError,
@@ -38,6 +43,11 @@ type Invocation = {
   actor: ActorContext;
   command: GenerateProjectMediaRequest;
   admission: ProjectMediaGenerationAdmission | null;
+  ui: Readonly<{
+    context: PluginUiActionContext;
+    authority: PluginUiInvocationCommitAuthority;
+    signal: AbortSignal;
+  }> | null;
 };
 const issued = new WeakSet<object>();
 export function isInstalledProjectMediaGenerationRuntime(
@@ -113,6 +123,8 @@ export class InstalledProjectMediaGenerationRuntime {
       )
         denied();
       state.admission?.assertActive();
+      state.ui?.signal.throwIfAborted();
+      state.ui?.authority.assertActive();
       return state;
     };
     const assertActive = (actor: ActorContext) => {
@@ -122,12 +134,14 @@ export class InstalledProjectMediaGenerationRuntime {
       const state = context(actor);
       if (!state.admission) denied();
       await state.admission.assertCurrent();
+      await state.ui?.authority.assertCurrent();
       context(actor);
     };
     const assertTransactionCurrent = async (actor: ActorContext) => {
       const state = context(actor);
       if (!state.admission) denied();
       await state.admission.assertTransactionCurrent();
+      if (state.ui) await state.ui.authority.transaction!.assertCurrent();
       context(actor);
     };
     const metadataContext = (
@@ -265,6 +279,16 @@ export class InstalledProjectMediaGenerationRuntime {
             if (!mediaInputSame(state.command, request.command)) denied();
             const result = await admissions.resolve(request);
             context(request.actor);
+            if (
+              state.ui &&
+              (result.pin.packageDigest !==
+                state.ui.context.package.packageDigest ||
+                result.pin.pluginId !== state.ui.context.package.pluginId ||
+                result.pin.profileId !== state.ui.context.scope.profileId ||
+                result.pin.contributionId !==
+                  state.ui.context.lease.contributionId)
+            )
+              denied();
             state.admission = result;
             return result;
           },
@@ -291,18 +315,19 @@ export class InstalledProjectMediaGenerationRuntime {
       throw error;
     }
   }
+  assertAvailable(): void {
+    this.#assertActive();
+  }
   generate(
     request: ControlApiRequestContext,
     actor: ActorContext,
     input: GenerateProjectMediaRequest,
     signal?: AbortSignal,
   ) {
-    this.#assertActive();
-    if (this.#physical.size >= 16)
-      throw new ApplicationError("conflict", "project_media_generation_busy");
+    this.#availableSlot();
     const command = parseGenerateProjectMediaRequest(input);
-    const pending = this.#core.requests
-      .run(
+    return this.#track(
+      this.#core.requests.run(
         {
           request,
           actor,
@@ -311,36 +336,86 @@ export class InstalledProjectMediaGenerationRuntime {
             ...(signal ? [signal] : []),
           ]),
         },
-        () =>
-          this.#invocations.run(
-            {
-              actor: this.#core.requests.currentActor(),
-              command,
-              admission: null,
-            },
-            async () => {
-              const result = await this.#commands.generate(
-                this.#core.requests.currentActor(),
-                command,
-                { signal: this.#core.requests.currentSignal() },
-              );
-              // Use the actual committed/replayed receipt, including after response delivery is cancelled.
-              return parseGenerateProjectMediaResponse(command, {
-                disposition: result.run.disposition,
-                projectId: command.projectId,
-                mediaInputId: command.mediaInputId,
-                inputRevision: command.inputRevision,
-                executionId: command.executionId,
-                threadId: result.binding.threadId,
-                threadRevision: result.turn.threadState.revision,
-                runId: result.binding.runId,
-              });
-            },
-          ),
+        () => this.#execute(command, null),
+      ),
+    );
+  }
+  generateFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    // A copied lease or ordinary action context cannot grant generation authority.
+    const authority = capturePluginUiInvocationCommitAuthority(context);
+    this.#availableSlot();
+    const request = parseProjectMediaGenerationUiRequest({
+      action: context.action,
+      input: context.input,
+    });
+    if (
+      authority.transaction === undefined ||
+      !mediaInputSame(context.actor, this.#core.requests.currentActor()) ||
+      !mediaInputSame(context.scope, this.#core.requests.currentScope()) ||
+      context.package.pluginId !== "crewon.short-drama" ||
+      context.lease.contributionId !== "workbench" ||
+      !context.lease.descriptor.requires.some(
+        (r) =>
+          r.service === CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE &&
+          r.apiVersion === "1",
+      ) ||
+      !context.lease.descriptor.contributions.some(
+        (c) =>
+          c.id === context.lease.contributionId &&
+          c.kind === "module" &&
+          c.slot === "main.content",
       )
-      .catch((error) => {
-        throw publicFailure(error);
-      });
+    )
+      denied();
+    return this.#track(
+      this.#execute(request.input, { context, authority, signal }),
+    );
+  }
+  #availableSlot() {
+    this.#assertActive();
+    if (this.#physical.size >= 16)
+      throw new ApplicationError("conflict", "project_media_generation_busy");
+  }
+  #execute(command: GenerateProjectMediaRequest, ui: Invocation["ui"]) {
+    return this.#invocations.run(
+      {
+        actor: this.#core.requests.currentActor(),
+        command,
+        admission: null,
+        ui,
+      },
+      async () => {
+        const signal = AbortSignal.any([
+          this.#lifetime.signal,
+          this.#core.requests.currentSignal(),
+          ...(ui ? [ui.signal] : []),
+        ]);
+        signal.throwIfAborted();
+        await ui?.authority.assertCurrent();
+        signal.throwIfAborted();
+        const result = await this.#commands.generate(
+          this.#core.requests.currentActor(),
+          command,
+          { signal },
+        );
+        // Preserve the actual durable receipt even if response delivery is cancelled later.
+        return parseGenerateProjectMediaResponse(command, {
+          disposition: result.run.disposition,
+          projectId: command.projectId,
+          mediaInputId: command.mediaInputId,
+          inputRevision: command.inputRevision,
+          executionId: command.executionId,
+          threadId: result.binding.threadId,
+          threadRevision: result.turn.threadState.revision,
+          runId: result.binding.runId,
+        });
+      },
+    );
+  }
+  #track<T>(work: Promise<T>): Promise<T> {
+    const pending = work.catch((error) => {
+      throw publicFailure(error);
+    });
     this.#physical.add(pending);
     void pending.then(
       () => this.#physical.delete(pending),

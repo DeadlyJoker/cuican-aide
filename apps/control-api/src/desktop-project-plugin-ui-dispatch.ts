@@ -1,3 +1,5 @@
+import { isProjectMediaGenerationUiNamespaceAction } from "@crewon/contracts/project-media-generations";
+import type { ProjectMediaGenerationPluginUiOwner } from "./project-media-generation-plugin-ui-owner.ts";
 import { isProjectMediaInputUiNamespaceAction } from "@crewon/contracts/project-media-inputs-ui";
 import type { ProjectMediaInputPluginUiOwner } from "./project-media-input-plugin-ui-owner.ts";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
@@ -19,6 +21,7 @@ import { isProjectAssetUiNamespaceAction } from "@crewon/contracts/project-asset
 export function composeDesktopProjectPluginUiDispatch(
   input: Readonly<{
     mediaInputs?: ProjectMediaInputPluginUiOwner;
+    mediaGenerations?: ProjectMediaGenerationPluginUiOwner;
     projects: CreativeProjectPluginUiRuntime | undefined;
     texts: ProjectTextPluginUiRuntime | undefined;
     assets?: ProjectAssetPluginUiRuntime;
@@ -32,6 +35,14 @@ export function composeDesktopProjectPluginUiDispatch(
   const { projects, texts, history, tasks } = input;
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
+      if (isProjectMediaGenerationUiNamespaceAction(context.action)) {
+        if (!input.mediaGenerations?.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_media_generation_ui_unavailable",
+          );
+        return input.mediaGenerations.actions.invoke(context);
+      }
       if (isProjectMediaInputUiNamespaceAction(context.action)) {
         if (
           input.mediaInputs === undefined ||

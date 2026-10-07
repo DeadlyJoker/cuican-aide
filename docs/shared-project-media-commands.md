@@ -142,3 +142,13 @@ Renderer 使用原设置 Switch，新增许可默认关闭；未勾选时省略 
 原网络策略只允许从相同包、相同保存地址、相同四条基础路径明确增加上传路径；其他策略冲突不会被修复或覆盖。第二步在已有素材输入与会话声明上合成独立 `mediaGenerations`。已经批准的同包重复准备显示当前状态并保留权限；取消未提交预览或会话变化会清除新的勾选，原确认回执恢复不会再调用确认。设置准备不会启用插件、发起模型任务或上传素材。
 
 兼容性：使用原本机 v1 IPC 的可选字段，不修改冻结 SDK、现有插件完整包和数据库格式；旧确认请求不会增加生成权限。新增与相关 126 项回归、UI/Electron 类型与构建、原挂载主题回归及浏览器模拟配置检查通过。实际 Main 的新许可到供应商生成、页面/Agent 执行入口和用户 App 更新仍待后续验收，不能用本轮设置组件检查代替。
+
+### 插件页面与原 HTTP 共用生成命令（2026-10-07）
+
+`crewon.project-media-generations@1` 是独立可选宿主服务，UI action 为 `crewon.project-media-generations.v1.generate`。已安装插件必须声明此服务，Native 必须存在独立的 `projects.mediaGenerations` 精确包/贡献点发布，真实挂载、当前身份、项目会话和素材权限必须同时有效。仅有素材读写能力不会启用生成入口。旧包无需升级 SDK；未来包可以通过原 `services.invoke` 使用协议。
+
+页面 action 与 `ControlApiClient.projectMediaGenerations.generate` 使用相同的逻辑请求：`projectId`、`mediaInputId`、`inputRevision`、`expectedInputRevision`、`executionId`、`threadId`、`expectedThreadRevision`、`idempotencyKey`。页面不能提交工作流图、供应商地址、材料凭据或权限。原 Core 重新解析安装和项目会话，经独立素材准备后交给原 TaskCore 创建 Run。调用方必须保留完整请求；重试不能换执行 ID、幂等键或线程版本。
+
+UI 生命周期校验覆盖读取、上传前后和数据库提交。事务中的校验不再读取同一连接，避免单连接 PostgreSQL 死锁。已提交结果经私有、单次消费的任务回执投影返回；晚到的 UI 撤销不会将已知提交改写成普通失败。关闭 UI owner 中止并等待它的准备工作，但不关闭共用的 HTTP runtime。两个入口同时提交相同请求时，仍复用一个原 Run。
+
+HTTP 客户端沿用身份、CSRF、手动重定向和有界响应协议，单次尝试最长 90 秒，不自动重试。此期限仅适用于新客户端命令；通用插件 UI 的默认超时不变。下一步页面需展示准备、取消、恢复状态，并持久保存请求；当前不把此接口测试称为可见页面、真实 Agent 自动执行或冷启动 UI 恢复验收。主题和布局没有扩展到插件外部，宿主侧栏、设置和全局样式未改动。

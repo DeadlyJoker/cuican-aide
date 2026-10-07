@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  PROJECT_MEDIA_GENERATE_UI_ACTION,
+  parseProjectMediaGenerationUiRequest as ui,
+  isProjectMediaGenerationUiNamespaceAction as namespace,
   parseGenerateProjectMediaHttpRequest as http,
   parseGenerateProjectMediaRequest as parse,
   parseGenerateProjectMediaResponse as response,
@@ -100,4 +103,26 @@ test("media generation response is tied to original intent and carries no provid
     { providerUrl: "https://example.test/" },
   ])
     assert.throws(() => response(request, { ...accepted, ...change }));
+});
+
+test("media UI action accepts only the exact logical command and reserves future namespace actions", () => {
+  assert.deepEqual(
+    ui({ action: PROJECT_MEDIA_GENERATE_UI_ACTION, input: request }),
+    { action: PROJECT_MEDIA_GENERATE_UI_ACTION, input: request },
+  );
+  for (const action of [
+    "crewon.project-media-generations",
+    "crewon.project-media-generations.v2.generate",
+    "crewon.project-media-generations.v1.other",
+  ]) {
+    assert.equal(namespace(action), true);
+    assert.throws(() => ui({ action, input: request }));
+  }
+  assert.equal(namespace("crewon.project-media-generations-other"), false);
+  assert.throws(() =>
+    ui({
+      action: PROJECT_MEDIA_GENERATE_UI_ACTION,
+      input: { ...request, providerUrl: "https://supplier.test" },
+    }),
+  );
 });

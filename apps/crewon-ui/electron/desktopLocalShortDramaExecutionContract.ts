@@ -34,6 +34,7 @@ const KNOWN_SERVICES = new Set<string>([
   "crewon.project-planning-drafts",
   "crewon.project-conversation-association",
   "crewon.project-media-inputs",
+  "crewon.project-media-generations",
   "crewon.project-media-input-tools",
 ]);
 
