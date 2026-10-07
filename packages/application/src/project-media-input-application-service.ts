@@ -1,3 +1,4 @@
+import { ProjectMediaReferenceImageApplicationService } from "./project-media-reference-image-service.ts";
 import { types } from "node:util";
 import {
   captureProjectMediaInputRunCommitTransaction,
@@ -44,7 +45,7 @@ import {
 /** Saves confirmed versioned logical inputs with real selected references. No media I/O or Run is performed. */
 export class ProjectMediaInputApplicationService {
   readonly #store: ProjectMediaInputStore;
-  readonly #source: ProjectAssetReferenceImageApplicationService["resolveSelectedReference"];
+  readonly #source: ProjectMediaReferenceImageApplicationService["resolveSelectedReference"];
   readonly #target: ProjectMaterialTargetApplicationService["resolveTarget"];
   readonly #reviews: readonly ProjectMediaWorkflowReview[];
   readonly #authorization: ProjectMediaInputAuthorizationPort;
@@ -53,7 +54,9 @@ export class ProjectMediaInputApplicationService {
   constructor(
     input: Readonly<{
       store: ProjectMediaInputStore;
-      sources: ProjectAssetReferenceImageApplicationService;
+      sources:
+        | ProjectAssetReferenceImageApplicationService
+        | ProjectMediaReferenceImageApplicationService;
       targets: ProjectMaterialTargetApplicationService;
       reviews: readonly ProjectMediaWorkflowReview[];
       authorization: ProjectMediaInputAuthorizationPort;
@@ -63,7 +66,8 @@ export class ProjectMediaInputApplicationService {
   ) {
     if (
       !(
-        input.sources instanceof ProjectAssetReferenceImageApplicationService
+        input.sources instanceof ProjectAssetReferenceImageApplicationService ||
+        input.sources instanceof ProjectMediaReferenceImageApplicationService
       ) ||
       !(input.targets instanceof ProjectMaterialTargetApplicationService) ||
       types.isProxy(input.sources) ||
@@ -71,9 +75,13 @@ export class ProjectMediaInputApplicationService {
     )
       fail("dependency_invalid");
     this.#source =
-      ProjectAssetReferenceImageApplicationService.prototype.resolveSelectedReference.bind(
-        input.sources,
-      );
+      input.sources instanceof ProjectMediaReferenceImageApplicationService
+        ? ProjectMediaReferenceImageApplicationService.prototype.resolveSelectedReference.bind(
+            input.sources,
+          )
+        : ProjectAssetReferenceImageApplicationService.prototype.resolveSelectedReference.bind(
+            input.sources,
+          );
     this.#target =
       ProjectMaterialTargetApplicationService.prototype.resolveTarget.bind(
         input.targets,

@@ -9,7 +9,6 @@ import {
   projectAssetText,
   validateCreativeProjectActor,
   pluginInstallationNamespaceId,
-  operationResultIndex,
 } from "@crewon/domain";
 import { parseProjectAssetReferenceImageQuery } from "./project-asset-reference-image-store-port.ts";
 import {
@@ -20,19 +19,25 @@ import {
 } from "./project-material-preparation-record.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { ProjectAssetReferenceImageSource } from "./project-asset-reference-image-store-port.ts";
+import { parseProjectAssetMediaReferenceImageSource } from "./project-asset-media-reference-image.ts";
+import {
+  mediaInputReference,
+  parseProjectMediaInputReference,
+} from "./project-media-input-reference.ts";
 import type {
   ProjectMediaRole,
+  ProjectMediaInputSource,
   ProjectMediaWorkflowId,
   ProjectMediaItem,
   ProjectMediaWorkflow,
   ProjectMediaWorkflowReview,
   SaveProjectMediaInputCommand,
   ProjectMediaInputRevision,
-  ProjectMediaReference,
   ProjectMediaInputWrite,
   ProjectMediaInputQuery,
   ProjectMediaInputAuthority,
 } from "./project-media-input-port.ts";
+export { mediaInputReference } from "./project-media-input-reference.ts";
 export const MAX_PROJECT_MEDIA_INPUT_BYTES = 96 * 1024;
 export const mediaInputSame = (a: unknown, b: unknown) =>
   extensionCanonicalJson(a) === extensionCanonicalJson(b);
@@ -210,7 +215,7 @@ export function mediaInputPreparationRequest(
   actor: ActorContext,
   command: SaveProjectMediaInputCommand,
   role: ProjectMediaRole,
-  source: ProjectAssetReferenceImageSource,
+  source: ProjectMediaInputSource,
   target: ProjectMediaInputRevision["target"],
 ) {
   const query = command.references[role]!;
@@ -224,30 +229,10 @@ export function mediaInputPreparationRequest(
     idempotencyKey: `media-prepare-${mediaInputDigest({ actor, query, sourceDigest: mediaInputDigest(source), target }).slice(7)}`,
   });
 }
-export function mediaInputReference(
-  role: ProjectMediaRole,
-  source: ProjectAssetReferenceImageSource,
-  preparation: ProjectMediaReference["preparation"],
-): ProjectMediaReference {
-  const link = source.resultLink;
-  return Object.freeze({
-    role,
-    sourceDigest: mediaInputDigest(source),
-    contentDigest: source.content.contentDigest,
-    referenceDigest: source.reference.contentDigest,
-    resultLinkDigest: link.contentDigest,
-    sourceBindingDigest: link.sourceBindingDigest,
-    sourceRunId: link.sourceRunId,
-    operationId: link.operationId,
-    resultIndex: link.image.resultIndex,
-    sourceConfigurationDigest: source.configuration.contentDigest,
-    preparation,
-  });
-}
 export function captureProjectMediaInputWrite(
   input: ProjectMediaInputWrite,
 ): ProjectMediaInputWrite {
-  const r = fields(mediaInputData(input), [
+  const r = fields(mediaInputData(input, 768 * 1024), [
       "actor",
       "command",
       "createdMediaInputId",
@@ -264,6 +249,19 @@ export function captureProjectMediaInputWrite(
   const sources = a.map((v, index) => {
     const s = fields(v, ["role", "source"]);
     if (s.role !== roles[index]) fail("reference_invalid");
+    if (
+      s.source !== null &&
+      typeof s.source === "object" &&
+      Object.hasOwn(s.source, "candidate")
+    ) {
+      return Object.freeze({
+        role: roles[index]!,
+        source: parseProjectAssetMediaReferenceImageSource(s.source, {
+          actor,
+          query: command.references[roles[index]!]!,
+        }),
+      });
+    }
     fields(s.source, [
       "asset",
       "content",
@@ -316,7 +314,9 @@ export function createProjectMediaInputRevision(
   const q = captureProjectMediaInputWrite(input),
     c = q.command,
     body = {
-      schemaVersion: "crewon.project-media-input.v1",
+      schemaVersion: q.sources.some((s) => "candidate" in s.source)
+        ? "crewon.project-media-input.v2"
+        : "crewon.project-media-input.v1",
       actor: q.actor,
       projectId: c.projectId,
       mediaInputId: c.mediaInputId ?? q.createdMediaInputId!,
@@ -367,49 +367,20 @@ export function parseProjectMediaInputRevision(
     mediaItem = item(r.item, workflow.workflowId),
     b = fields(r.brief, ["briefRevision", "contentDigest"]);
   if (
-    r.schemaVersion !== "crewon.project-media-input.v1" ||
+    (r.schemaVersion !== "crewon.project-media-input.v1" &&
+      r.schemaVersion !== "crewon.project-media-input.v2") ||
     !Array.isArray(r.references) ||
     r.references.length !== roles.length
   )
     fail("record_invalid");
-  const references = r.references.map((v, index) => {
-    const a = fields(v, [
-        "role",
-        "sourceDigest",
-        "contentDigest",
-        "referenceDigest",
-        "resultLinkDigest",
-        "sourceBindingDigest",
-        "sourceRunId",
-        "operationId",
-        "resultIndex",
-        "sourceConfigurationDigest",
-        "preparation",
-      ]),
-      p = parseProjectMaterialPreparationRequest(a.preparation);
-    if (
-      a.role !== roles[index] ||
-      !mediaInputSame(p.source.actor, actor) ||
-      p.source.query.projectId !== projectId ||
-      p.source.query.kind !== (a.role === "scene" ? "scene" : "character")
-    )
-      fail("record_invalid");
-    return Object.freeze({
-      role: roles[index]!,
-      sourceDigest: projectAssetDigest(a.sourceDigest),
-      contentDigest: projectAssetDigest(a.contentDigest),
-      referenceDigest: projectAssetDigest(a.referenceDigest),
-      resultLinkDigest: projectAssetDigest(a.resultLinkDigest),
-      sourceBindingDigest: projectAssetDigest(a.sourceBindingDigest),
-      sourceRunId: projectAssetId(a.sourceRunId),
-      operationId: projectAssetId(a.operationId),
-      resultIndex: operationResultIndex(a.resultIndex),
-      sourceConfigurationDigest: projectAssetDigest(
-        a.sourceConfigurationDigest,
-      ),
-      preparation: p,
-    });
-  });
+  const references = r.references.map((v, index) =>
+    parseProjectMediaInputReference(v, actor, projectId, roles[index]!),
+  );
+  const schemaVersion = references.some((r) => "media" in r)
+    ? "crewon.project-media-input.v2"
+    : "crewon.project-media-input.v1";
+  if (r.schemaVersion !== schemaVersion) fail("record_invalid");
+
   if (
     new Set(references.map((x) => x.preparation.source.query.assetId)).size !==
       roles.length ||
@@ -458,8 +429,8 @@ export function parseProjectMediaInputRevision(
   }
   if (workflow.workflowId === "flux2-three-reference-storyboard" && !script)
     fail("script_required");
-  const body = {
-    schemaVersion: "crewon.project-media-input.v1" as const,
+  const body: Omit<ProjectMediaInputRevision, "contentDigest"> = {
+    schemaVersion,
     actor,
     projectId,
     mediaInputId: projectAssetId(r.mediaInputId),

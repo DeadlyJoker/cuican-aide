@@ -1,3 +1,4 @@
+import { loadAssetMediaReferenceImagePlan } from "./project-asset-media-reference-image-plan.ts";
 import {
   parseSaveProjectMediaInputCommand,
   parseProjectMediaInputQuery,
@@ -39,7 +40,11 @@ import {
   type AssetSql,
 } from "./project-asset-store-support.ts";
 export type ProjectMediaInputPlan<T> = Generator<
-  AssetSql | Readonly<{ installation: ProjectMaterialPreparationTarget }>,
+  | AssetSql
+  | Readonly<{ installation: ProjectMaterialPreparationTarget }>
+  | Readonly<{ assetSchema: true }>
+  | Readonly<{ mediaResultSchema: true }>
+  | Readonly<{ mediaOperationSchema: true }>,
   T,
   AssetRows
 >;
@@ -296,11 +301,19 @@ export function* qualifyProjectMediaInputPlan(
   )
     fail("source_changed");
   for (const r of record.references) {
-    const s = yield* loadAssetReferenceImagePlan(
-      d,
-      { actor: a.actor, query: r.preparation.source.query },
-      verifier,
-    );
+    const request = { actor: a.actor, query: r.preparation.source.query };
+    if ("media" in r) yield { mediaResultSchema: true };
+    const s =
+      "media" in r
+        ? yield* loadAssetMediaReferenceImagePlan(d, request, {
+            actor: a.actor,
+            query: {
+              projectId: record.projectId,
+              runId: r.media.sourceRunId,
+              resultIndex: r.media.resultIndex,
+            },
+          })
+        : yield* loadAssetReferenceImagePlan(d, request, verifier);
     if (!same(mediaInputReference(r.role, s, r.preparation), r))
       fail("source_changed");
     // Derive original request keys from actual source/target facts, never trust stored key strings.

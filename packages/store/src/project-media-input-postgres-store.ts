@@ -1,3 +1,5 @@
+import { assertPostgresProjectMediaResultSchema } from "./project-media-result-schema.ts";
+import { assertPostgresProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import { assertPostgresProjectMediaInputRunQualification } from "./project-media-input-run-qualification.ts";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -188,7 +190,16 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
       this.#open();
       assertProjectMediaInputActive(a);
       let rows: readonly Record<string, unknown>[];
-      if ("installation" in next.value) {
+      if ("mediaResultSchema" in next.value) {
+        await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
+        rows = [];
+      } else if ("mediaOperationSchema" in next.value) {
+        await assertPostgresProjectMediaOperationSchema(c, this.#d.schema);
+        rows = [];
+      } else if ("assetSchema" in next.value) {
+        await assertPostgresProjectAssetSchema(c, this.#d.schema);
+        rows = [];
+      } else if ("installation" in next.value) {
         await assertPostgresProjectTextUiCommit(
           c,
           this.#d.schema,

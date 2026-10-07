@@ -47,11 +47,18 @@ export class ProjectMediaMaterialPreparer {
   readonly #reviews: readonly ProjectMediaWorkflowReview[];
   readonly #authorization: ProjectMediaInputAuthorizationPort;
   readonly #prepare: ProjectMaterialPreparer["prepareSelectedReference"];
+  readonly #adopted:
+    | Readonly<{
+        prepare: ProjectMaterialPreparer["prepareSelectedReference"];
+        observe: ProjectMaterialPreparer["observePreparedReference"];
+      }>
+    | undefined;
   readonly #observe: ProjectMaterialPreparer["observePreparedReference"];
   constructor(
     input: Readonly<{
       store: ProjectMediaInputStore;
       preparer: ProjectMaterialPreparer;
+      adoptedPreparer?: ProjectMaterialPreparer;
       reviews: readonly ProjectMediaWorkflowReview[];
       authorization: ProjectMediaInputAuthorizationPort;
     }>,
@@ -80,6 +87,25 @@ export class ProjectMediaMaterialPreparer {
       ProjectMaterialPreparer.prototype.observePreparedReference.bind(
         input.preparer,
       );
+    if (
+      input.adoptedPreparer !== undefined &&
+      (types.isProxy(input.adoptedPreparer) ||
+        !(input.adoptedPreparer instanceof ProjectMaterialPreparer))
+    )
+      fail("dependency_invalid");
+    this.#adopted =
+      input.adoptedPreparer === undefined
+        ? undefined
+        : Object.freeze({
+            prepare:
+              ProjectMaterialPreparer.prototype.prepareSelectedReference.bind(
+                input.adoptedPreparer,
+              ),
+            observe:
+              ProjectMaterialPreparer.prototype.observePreparedReference.bind(
+                input.adoptedPreparer,
+              ),
+          });
     this.#reviews = captureProjectMediaWorkflowReviews(input.reviews);
     this.#authorization = captureProjectMediaInputAuthorization(
       input.authorization,
@@ -145,12 +171,18 @@ export class ProjectMediaMaterialPreparer {
         this.#store.qualify({ ...query, expectedInputRevision }, authority);
     const current = await qualify(),
       materials = [];
+    if (current.references.some((r) => "media" in r) && !this.#adopted)
+      fail("media_source_unavailable");
     for (const r of current.references) {
       await qualify();
       const request = r.preparation;
-      const preparation = await (
-        mode === "prepare" ? this.#prepare : this.#observe
-      )(
+      const invoke =
+        "media" in r
+          ? this.#adopted![mode]
+          : mode === "prepare"
+            ? this.#prepare
+            : this.#observe;
+      const preparation = await invoke(
         query.actor,
         {
           source: {
@@ -165,6 +197,16 @@ export class ProjectMediaMaterialPreparer {
       if (
         !mediaInputSame(preparation.state.initial.request, request) ||
         !mediaInputSame(preparation.state.initial.target, current.target)
+      )
+        fail("preparation_changed");
+      const frozen = preparation.state.initial.source;
+      if (
+        "media" in r
+          ? frozen.schemaVersion !==
+              "crewon.project-reference-frozen-material.v2" ||
+            !mediaInputSame(frozen.source.media, r.media)
+          : frozen.schemaVersion !==
+            "crewon.project-reference-frozen-material.v1"
       )
         fail("preparation_changed");
       await qualify();

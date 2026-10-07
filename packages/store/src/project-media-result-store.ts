@@ -214,7 +214,10 @@ export class SqliteProjectMediaResultStore
         this.#active();
         a.assertActive();
         let rows: readonly Record<string, unknown>[];
-        if ("mediaOperationSchema" in next.value) {
+        if ("mediaResultSchema" in next.value) {
+          assertSqliteProjectMediaResultSchema(this.#db);
+          rows = [];
+        } else if ("mediaOperationSchema" in next.value) {
           assertSqliteProjectMediaOperationSchema(this.#db);
           rows = [];
         } else if ("assetSchema" in next.value) {
@@ -487,7 +490,10 @@ export class PostgresProjectMediaResultStore
           this.#open();
           a.assertActive();
           let rows: readonly Record<string, unknown>[];
-          if ("mediaOperationSchema" in next.value) {
+          if ("mediaResultSchema" in next.value) {
+            await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
+            rows = [];
+          } else if ("mediaOperationSchema" in next.value) {
             await assertPostgresProjectMediaOperationSchema(c, this.#d.schema);
             rows = [];
           } else if ("assetSchema" in next.value) {

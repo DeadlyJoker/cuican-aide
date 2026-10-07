@@ -1,3 +1,7 @@
+import {
+  createAdoptedMediaMaterialSources,
+  type AdoptedMediaMaterialRuntimeInput,
+} from "./adopted-media-material-runtime.ts";
 import { randomUUID, createHash } from "node:crypto";
 import { types } from "node:util";
 import {
@@ -7,6 +11,7 @@ import {
   PluginInstallationApplicationService,
   ProjectAssetApplicationService,
   ProjectAssetReferenceImageApplicationService,
+  type ProjectMediaReferenceImageApplicationService,
   ProjectMaterialTargetApplicationService,
   captureProjectMediaInputAuthorization,
   captureProjectMediaWorkflowReviews,
@@ -52,6 +57,7 @@ export type ProjectMediaMaterialRuntimeInput = Readonly<{
   archive: ConstructorParameters<typeof FilesystemProjectMaterialArchive>[0];
   clock: ApplicationClock;
   signal: AbortSignal;
+  adoptedMedia?: AdoptedMediaMaterialRuntimeInput;
   network?: Readonly<{
     dns?: NetworkDnsResolver;
     source?: PinnedHttpPort;
@@ -61,6 +67,9 @@ export type ProjectMediaMaterialRuntimeInput = Readonly<{
 }>;
 export type ProjectMediaMaterialRuntime = Readonly<{
   materials: ProjectMediaMaterialPreparer;
+  sources:
+    | ProjectAssetReferenceImageApplicationService
+    | ProjectMediaReferenceImageApplicationService;
   /** Caller must first join its commands/Worker dispatches. This owner closes only its archive. */
   close(): Promise<void>;
 }>;
@@ -94,6 +103,7 @@ export async function createProjectMediaMaterialRuntime(
     "clock",
     "signal",
     ...(Object.hasOwn(provided, "network") ? ["network"] : []),
+    ...(Object.hasOwn(provided, "adoptedMedia") ? ["adoptedMedia"] : []),
   ]);
   const input = r as ProjectMediaMaterialRuntimeInput;
   if (
@@ -284,7 +294,7 @@ export async function createProjectMediaMaterialRuntime(
         },
       },
     });
-    const preparer = new ProjectMaterialPreparer({
+    const preparationDependencies = {
       freezer,
       targets,
       journal,
@@ -311,10 +321,32 @@ export async function createProjectMediaMaterialRuntime(
       ...(network.observation === undefined
         ? {}
         : { observationTransport: network.observation }),
-    });
+    } satisfies ConstructorParameters<typeof ProjectMaterialPreparer>[0];
+    const preparer = new ProjectMaterialPreparer(preparationDependencies),
+      adopted =
+        input.adoptedMedia === undefined
+          ? null
+          : await createAdoptedMediaMaterialSources({
+              config: input.adoptedMedia,
+              store: input.store,
+              projects: projectService,
+              assets: assetService,
+              concepts: sources,
+              archive,
+              signal,
+            });
+    active();
     const materials = new ProjectMediaMaterialPreparer({
       store: mediaInputs,
       preparer,
+      ...(adopted === null
+        ? {}
+        : {
+            adoptedPreparer: new ProjectMaterialPreparer({
+              ...preparationDependencies,
+              freezer: adopted.freezer,
+            }),
+          }),
       reviews,
       authorization: {
         authorize: async (p) => {
@@ -343,6 +375,7 @@ export async function createProjectMediaMaterialRuntime(
     const owned = archive;
     return Object.freeze({
       materials,
+      sources: adopted?.sources ?? sources,
       close: async () => {
         lifetime.abort();
         owned.close();

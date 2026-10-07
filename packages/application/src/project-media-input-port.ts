@@ -1,4 +1,6 @@
 import type { ActorContext } from "./authorization-port.ts";
+import type { ProjectAssetMediaImageSource } from "@crewon/domain";
+import type { ProjectAssetMediaReferenceImageSource } from "./project-asset-media-reference-image.ts";
 import type {
   ProjectAssetReferenceImageQuery,
   ProjectAssetReferenceImageSource,
@@ -55,7 +57,7 @@ export type SaveProjectMediaInputCommand = Readonly<{
   target: ProjectMaterialPreparationRequest["target"];
   idempotencyKey: string;
 }>;
-export type ProjectMediaReference = Readonly<{
+export type ProjectConceptMediaReference = Readonly<{
   role: ProjectMediaRole;
   sourceDigest: string;
   contentDigest: string;
@@ -68,9 +70,30 @@ export type ProjectMediaReference = Readonly<{
   sourceConfigurationDigest: string;
   preparation: ProjectMaterialPreparationRequest;
 }>;
+export type ProjectAdoptedMediaReference = Readonly<{
+  sourceKind: "media-result";
+  role: ProjectMediaRole;
+  sourceDigest: string;
+  contentDigest: string;
+  referenceDigest: string;
+  media: ProjectAssetMediaImageSource;
+  sourceRunId: string;
+  operationId: string;
+  resultIndex: number;
+  sourceConfigurationDigest: string;
+  preparation: ProjectMaterialPreparationRequest;
+}>;
+export type ProjectMediaReference =
+  | ProjectConceptMediaReference
+  | ProjectAdoptedMediaReference;
+export type ProjectMediaInputSource =
+  | ProjectAssetReferenceImageSource
+  | ProjectAssetMediaReferenceImageSource;
 /** Confirmed logical input. Preparation keys are associations, not upload receipts or media readiness. */
 export type ProjectMediaInputRevision = Readonly<{
-  schemaVersion: "crewon.project-media-input.v1";
+  schemaVersion:
+    | "crewon.project-media-input.v1"
+    | "crewon.project-media-input.v2";
   actor: ActorContext;
   projectId: string;
   mediaInputId: string;
@@ -124,7 +147,7 @@ export type ProjectMediaInputWrite = Readonly<{
   createdMediaInputId: string | null;
   sources: readonly Readonly<{
     role: ProjectMediaRole;
-    source: ProjectAssetReferenceImageSource;
+    source: ProjectMediaInputSource;
   }>[];
   target: ProjectMaterialPreparationTarget;
   workflow: ProjectMediaWorkflow;
