@@ -1,3 +1,5 @@
+import { createPluginMediaResultClient } from "./project-media-results-service";
+import { ProjectMediaResultController } from "./workbench/ProjectMediaResultController";
 import { ProjectMediaGenerationController } from "./workbench/ProjectMediaGenerationController";
 import { createMediaGenerationClient } from "./project-media-generations-service";
 import { mediaGenerationCodec } from "./project-media-generations-codec.mjs";
@@ -216,6 +218,7 @@ export default defineUiPlugin({
     let association: ProjectConversationAssociationController | null = null;
     let plans: ProjectTextPlanController | null = null;
     let assets: ProjectAssetController | null = null;
+    let mediaResults: ProjectMediaResultController | null = null;
     let mediaInputs: ProjectMediaInputController | null = null;
     let mediaGenerations: ProjectMediaGenerationController | null = null;
     const writes = new PluginWriteActivity(services, () => {
@@ -309,6 +312,11 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    mediaResults = preview
+      ? null
+      : new ProjectMediaResultController(
+          createPluginMediaResultClient(clients),
+        );
     mediaInputs = preview
       ? null
       : new ProjectMediaInputController({
@@ -358,6 +366,7 @@ export default defineUiPlugin({
       texts?.setReady(ready);
       plans?.setReady(ready);
       assets?.setReady(ready);
+      mediaResults?.setReady(ready);
       mediaInputs?.setReady(ready);
       mediaGenerations?.setThread(generationContext(next.data)?.thread ?? null);
       mediaGenerations?.setReady(ready);
@@ -378,6 +387,7 @@ export default defineUiPlugin({
               conversations={conversations}
               plans={plans}
               assets={assets ?? undefined}
+              mediaResults={mediaResults ?? undefined}
               mediaInputs={mediaInputs ?? undefined}
               mediaGenerations={mediaGenerations ?? undefined}
               planningDraft={planningDraft(next.data)}
@@ -408,6 +418,7 @@ export default defineUiPlugin({
       association?.dispose();
       plans?.dispose();
       assets?.dispose();
+      mediaResults?.dispose();
       mediaInputs?.dispose();
       mediaGenerations?.dispose();
       try {
@@ -429,6 +440,7 @@ export default defineUiPlugin({
         association?.dispose();
         plans?.dispose();
         assets?.dispose();
+        mediaResults?.dispose();
         mediaInputs?.dispose();
         mediaGenerations?.dispose();
         try {

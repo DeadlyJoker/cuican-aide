@@ -654,3 +654,19 @@ it("only the ten reviewed project text actions receive the 60KiB input budget", 
   ).rejects.toThrow();
   expect(h.ports.invoke).toHaveBeenCalledTimes(1);
 });
+
+it("aborts completed transport resources when the final mount fence rejects delivery", async () => {
+  const h = uiHarness();
+  await mount(h);
+  const released = vi.fn();
+  h.ports.invoke.mockImplementationOnce(async (_lease, input) => {
+    input.signal.addEventListener("abort", released, { once: true });
+    h.ports.validateMount.mockRejectedValueOnce(new Error("mount_withdrawn"));
+    return { url: "blob:http://localhost/owned-preview" };
+  });
+  await expect(
+    h.instances[0].services.invoke("preview", null, {}),
+  ).rejects.toThrow("mount_withdrawn");
+  expect(released).toHaveBeenCalledOnce();
+  expect(h.ports.invoke.mock.calls[0][1].signal.aborted).toBe(true);
+});

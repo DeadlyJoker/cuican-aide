@@ -2,7 +2,7 @@
 
 本协议接在 [Short21 媒体工具](./plugin-project-media-execution-protocol.md)之后。供应商成功回执中的文件位置还不是项目素材：宿主必须读取并核验原输出的 PNG 字节，冻结原来源，再写入同一项目的候选。候选保存不采用素材，不修改需求、剧本、角色参考或分镜指针。
 
-这是内部执行组件。当前没有新增 HTTP、SDK、Main 服务、插件按钮或 Agent 工具；完整 Worker 循环、两个产品入口和采用操作随后接线。原前端、SDK、完整安装包和用户 App 保持。
+此文记录内部执行组件阶段。后续已接通[原 HTTP 与 Native 服务](./native-project-media-results.md)及[插件内的已保存结果预览](./plugin-media-result-preview.md)；页面保存、采用和 Agent 结果工具仍需继续接线。SDK 和用户已安装 App 保持原版本。
 
 ## 输入与原来源
 

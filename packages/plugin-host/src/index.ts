@@ -129,3 +129,5 @@ export * from "./plugin-project-historical-query-host-availability.ts";
 export { appendProjectMediaInputUiServiceAvailability } from "./plugin-project-media-input-host-service-availability.ts";
 
 export { appendProjectMediaGenerationUiServiceAvailability } from "./plugin-project-media-generation-host-service-availability.ts";
+
+export { appendProjectMediaResultUiServiceAvailability } from "./plugin-project-media-result-host-service-availability.ts";

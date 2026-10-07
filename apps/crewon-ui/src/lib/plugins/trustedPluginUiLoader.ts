@@ -387,6 +387,10 @@ export class TrustedPluginUiLoader {
       await this.#fence(candidate, controller.signal);
       this.#current(candidate, true);
       return copyPluginUiJson(result, 64 * 1024);
+    } catch (error) {
+      // A rejected late fence must release host-owned transient resources from this invocation.
+      controller.abort();
+      throw error;
     } finally {
       const release = () => {
         candidate.actions.delete(controller);

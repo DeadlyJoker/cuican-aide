@@ -1,6 +1,9 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   ApplicationError,
+  capturePluginUiInvocationCommitAuthority,
+  type PluginUiActionContext,
+  type PluginUiInvocationCommitAuthority,
   ProjectMediaResultCatalogApplicationService,
   projectMediaResultSummary,
   materialPreparationFields as fields,
@@ -29,6 +32,10 @@ import {
 } from "@crewon/contracts/project-media-results";
 import type { ControlApiRequestContext } from "./control-api-ports.ts";
 import {
+  PROJECT_MEDIA_RESULT_UI_ACTIONS,
+  parseProjectMediaResultUiRequest,
+} from "@crewon/contracts/project-media-results-ui";
+import {
   installedProjectMediaResultTaskAuthority,
   installedProjectMediaGenerationTaskAuthority,
   type InstalledPluginTaskRuntimeCore,
@@ -46,7 +53,7 @@ export type InstalledProjectMediaResultConfiguration = Readonly<{
   clock: ApplicationClock;
   createArchive(): FilesystemProjectMediaResultArchive;
 }>;
-type Invocation =
+type Invocation = (
   | Readonly<{
       actor: ActorContext;
       kind: "list";
@@ -56,7 +63,9 @@ type Invocation =
       actor: ActorContext;
       kind: "read" | "publish";
       query: ProjectMediaResultLocator;
-    }>;
+    }>
+) &
+  Readonly<{ ui?: PluginUiInvocationCommitAuthority }>;
 const issued = new WeakSet<object>();
 export function isInstalledProjectMediaResultRuntime(
   value: unknown,
@@ -71,6 +80,7 @@ export class InstalledProjectMediaResultRuntime {
   readonly #invocations: AsyncLocalStorage<Invocation>;
   readonly #lifetime: AbortController;
   readonly #active: () => void;
+  readonly #uiScope: (context: PluginUiActionContext) => void;
   readonly #pending = new Set<Promise<unknown>>();
   #closing?: Promise<void>;
   private constructor(input: {
@@ -81,6 +91,7 @@ export class InstalledProjectMediaResultRuntime {
     invocations: AsyncLocalStorage<Invocation>;
     lifetime: AbortController;
     active(): void;
+    uiScope(context: PluginUiActionContext): void;
   }) {
     this.#core = input.core;
     this.#publisher = input.publisher;
@@ -89,6 +100,7 @@ export class InstalledProjectMediaResultRuntime {
     this.#invocations = input.invocations;
     this.#lifetime = input.lifetime;
     this.#active = input.active;
+    this.#uiScope = input.uiScope;
     issued.add(this);
   }
   static async prepare(
@@ -148,6 +160,7 @@ export class InstalledProjectMediaResultRuntime {
       active();
       host.requests.currentSignal().throwIfAborted();
       const invocation = invocations.getStore();
+      invocation?.ui?.assertActive();
       if (
         !invocation ||
         !mediaInputSame(invocation.actor, actor) ||
@@ -270,6 +283,22 @@ export class InstalledProjectMediaResultRuntime {
         invocations,
         lifetime,
         active,
+        uiScope: (context) => {
+          active();
+          if (
+            !mediaInputSame(context.actor, host.requests.currentActor()) ||
+            !mediaInputSame(context.scope, host.requests.currentScope()) ||
+            context.scope.profileId !== profileId ||
+            context.package.pluginId !== "crewon.short-drama" ||
+            context.lease.contributionId !== "workbench" ||
+            !host.publications.some(
+              (p) =>
+                p.pluginId === context.package.pluginId &&
+                p.packageDigest === context.package.packageDigest,
+            )
+          )
+            denied();
+        },
       });
     } catch (error) {
       lifetime.abort();
@@ -288,6 +317,61 @@ export class InstalledProjectMediaResultRuntime {
     return this.#run(request, { actor, kind: "list", query }, signal, (s) =>
       this.#catalog.listCandidates(actor, query, { signal: s }),
     );
+  }
+  assertAvailable(): void {
+    this.#active();
+  }
+  /** Exact live Application invocation, executed inside the original Core request scope. */
+  readFromPluginUi(context: PluginUiActionContext, signal: AbortSignal) {
+    const ui = capturePluginUiInvocationCommitAuthority(context);
+    this.#uiScope(context);
+    const request = parseProjectMediaResultUiRequest({
+      action: context.action,
+      input: context.input,
+    });
+    const joined = AbortSignal.any([
+      signal,
+      this.#lifetime.signal,
+      this.#core.requests.currentSignal(),
+    ]);
+    const invocation: Invocation =
+      request.action === PROJECT_MEDIA_RESULT_UI_ACTIONS.listCandidates
+        ? { actor: context.actor, kind: "list", query: request.input, ui }
+        : { actor: context.actor, kind: "read", query: request.input, ui };
+    if (this.#pending.size >= 16)
+      throw new ApplicationError("conflict", "project_media_result_busy");
+    const pending = this.#invocations
+      .run(invocation, async () => {
+        await ui.assertCurrent();
+        joined.throwIfAborted();
+        const result =
+          request.action === PROJECT_MEDIA_RESULT_UI_ACTIONS.listCandidates
+            ? await this.#catalog.listCandidates(context.actor, request.input, {
+                signal: joined,
+              })
+            : await this.#publisher
+                .readCandidate(context.actor, request.input, { signal: joined })
+                .then((r) =>
+                  parseGetProjectMediaResultResponse(request.input, {
+                    candidate: r
+                      ? projectMediaResultSummary(r.candidate)
+                      : null,
+                  }),
+                );
+        await ui.assertCurrent();
+        joined.throwIfAborted();
+        this.#uiScope(context);
+        return result;
+      })
+      .catch((error) => {
+        throw publicFailure(error);
+      });
+    this.#pending.add(pending);
+    void pending.then(
+      () => this.#pending.delete(pending),
+      () => this.#pending.delete(pending),
+    );
+    return pending;
   }
   publish(
     request: ControlApiRequestContext,

@@ -1,3 +1,5 @@
+import type { ProjectMediaResultController } from "./ProjectMediaResultController";
+import { ProjectMediaResultWorkbench } from "./ProjectMediaResultWorkbench";
 import type { ProjectMediaGenerationController } from "./ProjectMediaGenerationController";
 import { usePluginDialog } from "./usePluginDialog";
 import { ShortDramaProjectHome } from "./ShortDramaProjectHome";
@@ -103,6 +105,7 @@ export function ShortDramaPersistentWorkbench({
   conversations,
   plans,
   assets,
+  mediaResults,
   mediaInputs,
   mediaGenerations,
   planningDraft = null,
@@ -115,6 +118,7 @@ export function ShortDramaPersistentWorkbench({
   conversations: ProjectConversationController;
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
+  mediaResults?: ProjectMediaResultController;
   mediaInputs?: ProjectMediaInputController;
   mediaGenerations?: ProjectMediaGenerationController;
   planningDraft?: ProjectPlanningProposal | null;
@@ -197,6 +201,7 @@ export function ShortDramaPersistentWorkbench({
     conversations.setProject(details);
     plans.setProject(details);
     assets?.setProject(details);
+    mediaResults?.setProject(details?.project.projectId ?? null);
     mediaInputs?.setProject(details);
     mediaGenerations?.setProject(details);
   }, [
@@ -204,6 +209,7 @@ export function ShortDramaPersistentWorkbench({
     conversations,
     plans,
     assets,
+    mediaResults,
     mediaInputs,
     mediaGenerations,
     details,
@@ -452,19 +458,24 @@ export function ShortDramaPersistentWorkbench({
                   </p>
                 )}
                 {page === "references" && mediaInputs ? (
-                  <ProjectMediaInputWorkbench
-                    controller={mediaInputs}
-                    generations={mediaGenerations}
-                    blocked={
-                      projectLocked ||
-                      snapshot.conceptLocked ||
-                      texts.locked ||
-                      conversations.locked ||
-                      plans.locked ||
-                      assets?.locked === true ||
-                      association?.locked === true
-                    }
-                  />
+                  <>
+                    <ProjectMediaInputWorkbench
+                      controller={mediaInputs}
+                      generations={mediaGenerations}
+                      blocked={
+                        projectLocked ||
+                        snapshot.conceptLocked ||
+                        texts.locked ||
+                        conversations.locked ||
+                        plans.locked ||
+                        assets?.locked === true ||
+                        association?.locked === true
+                      }
+                    />
+                    {mediaResults && (
+                      <ProjectMediaResultWorkbench controller={mediaResults} />
+                    )}
+                  </>
                 ) : (page === "characters" || page === "art") && assets ? (
                   <ProjectAssetWorkbench
                     controller={assets}

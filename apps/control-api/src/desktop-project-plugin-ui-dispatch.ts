@@ -1,3 +1,5 @@
+import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
+import type { ProjectMediaResultPluginUiOwner } from "./project-media-result-plugin-ui-owner.ts";
 import { isProjectMediaGenerationUiNamespaceAction } from "@crewon/contracts/project-media-generations";
 import type { ProjectMediaGenerationPluginUiOwner } from "./project-media-generation-plugin-ui-owner.ts";
 import { isProjectMediaInputUiNamespaceAction } from "@crewon/contracts/project-media-inputs-ui";
@@ -20,6 +22,7 @@ import { isProjectAssetUiNamespaceAction } from "@crewon/contracts/project-asset
 /** Metadata namespaces are dispatched before the independent execution owner. */
 export function composeDesktopProjectPluginUiDispatch(
   input: Readonly<{
+    mediaResults?: ProjectMediaResultPluginUiOwner;
     mediaInputs?: ProjectMediaInputPluginUiOwner;
     mediaGenerations?: ProjectMediaGenerationPluginUiOwner;
     projects: CreativeProjectPluginUiRuntime | undefined;
@@ -35,6 +38,14 @@ export function composeDesktopProjectPluginUiDispatch(
   const { projects, texts, history, tasks } = input;
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
+      if (isProjectMediaResultUiNamespaceAction(context.action)) {
+        if (!input.mediaResults?.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_media_result_ui_unavailable",
+          );
+        return input.mediaResults.actions.invoke(context);
+      }
       if (isProjectMediaGenerationUiNamespaceAction(context.action)) {
         if (!input.mediaGenerations?.supportsAction(context.action))
           throw new ApplicationError(

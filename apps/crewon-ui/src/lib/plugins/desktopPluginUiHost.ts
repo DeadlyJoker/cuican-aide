@@ -1,3 +1,5 @@
+import { createInstalledPluginMediaResultTransport } from "./installedPluginMediaResultTransport";
+import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
 import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
 import { createInstalledPluginMediaGenerationTransport } from "./installedPluginMediaGenerationTransport";
 import { assertInstalledPluginQueryLaneAvailable } from "./installedPluginQueryLaneAvailability";
@@ -130,6 +132,11 @@ export function createDesktopPluginUiHost(
         uiFailure("plugin_ui_lease_identity_mismatch");
       return checked;
     });
+  const mediaResults = createInstalledPluginMediaResultTransport({
+    client,
+    assertCurrent,
+    validateLease,
+  });
   const mediaGeneration = createInstalledPluginMediaGenerationTransport({
     client,
     assertCurrent,
@@ -150,6 +157,8 @@ export function createDesktopPluginUiHost(
       },
       async invoke(originalLease, input) {
         return leases.run(originalLease, input.signal, async (lease) => {
+          if (isProjectMediaResultUiNamespaceAction(input.action))
+            return mediaResults.invoke(lease, input);
           if (input.action === PROJECT_MEDIA_GENERATE_UI_ACTION)
             return mediaGeneration(lease, input);
           if (isInstalledPluginConversationAction(input.action))
@@ -271,6 +280,7 @@ export function createDesktopPluginUiHost(
         });
       },
       async closeMount(lease) {
+        mediaResults.release(lease);
         leases.release(lease);
         recovery.release(lease);
         const owned = bindings.get(lease.mountRef);

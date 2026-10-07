@@ -1,3 +1,5 @@
+import { composeDesktopProjectMediaResultUi } from "./desktop-project-media-result-ui-composition.ts";
+import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
 import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 import { isProjectMediaGenerationUiNamespaceAction } from "@crewon/contracts/project-media-generations";
 import { composeDesktopProjectMediaGenerationUi } from "./desktop-project-media-generation-ui-composition.ts";
@@ -264,6 +266,7 @@ export async function createDesktopPluginRuntime(
   let mediaGenerationUi: ReturnType<
     typeof composeDesktopProjectMediaGenerationUi
   >;
+  let mediaResultUi: ReturnType<typeof composeDesktopProjectMediaResultUi>;
   let mediaInputUi: ReturnType<typeof composeDesktopProjectMediaInputUi>;
   let conversations: ReturnType<typeof createDesktopProjectConversationRuntime>;
   let taskRuntime:
@@ -279,6 +282,7 @@ export async function createDesktopPluginRuntime(
       (
         conversations?.hostUiServices ??
         recovery?.hostUiServices ??
+        mediaResultUi?.hostUiServices ??
         mediaGenerationUi?.hostUiServices ??
         mediaInputUi?.hostUiServices ??
         (projectExecution ? history?.hostUiServices : undefined) ??
@@ -427,7 +431,19 @@ export async function createDesktopPluginRuntime(
       committedTasks: taskRuntime?.core.owner.committedTasks,
       recovery: () => recovery?.service,
     });
+    mediaResultUi = composeDesktopProjectMediaResultUi({
+      configuration,
+      runtime:
+        taskRuntime !== undefined && "mediaResults" in taskRuntime
+          ? taskRuntime.mediaResults
+          : undefined,
+      fallback:
+        mediaGenerationUi?.hostUiServices ??
+        mediaInputUi?.hostUiServices ??
+        originalBusinessHostUiServices,
+    });
     const businessHostUiServices =
+      mediaResultUi?.hostUiServices ??
       mediaGenerationUi?.hostUiServices ??
       mediaInputUi?.hostUiServices ??
       originalBusinessHostUiServices;
@@ -538,6 +554,7 @@ export async function createDesktopPluginRuntime(
       readAsset: (context) => reader(context).readAsset(context),
     };
     const dispatch = composeDesktopProjectPluginUiDispatch({
+      mediaResults: mediaResultUi?.owner,
       mediaInputs: mediaInputUi?.owner,
       mediaGenerations: mediaGenerationUi?.owner,
       conversations: () => conversations?.owner(),
@@ -662,6 +679,22 @@ export async function createDesktopPluginRuntime(
                     );
                   return taskRuntime.core.requests.run(
                     { request, actor, signal: requestSignal },
+                    invoke,
+                  );
+                }
+                if (isProjectMediaResultUiNamespaceAction(command.action)) {
+                  if (mediaResultUi === undefined || taskRuntime === undefined)
+                    throw new ApplicationError(
+                      "conflict",
+                      "project_media_result_ui_unavailable",
+                    );
+                  return taskRuntime.core.requests.run(
+                    {
+                      request,
+                      actor,
+                      signal: requestSignal,
+                      preparation: "configuration",
+                    },
                     invoke,
                   );
                 }
@@ -832,7 +865,9 @@ export async function createDesktopPluginRuntime(
       ...(taskRuntime !== undefined && "mediaGenerations" in taskRuntime
         ? { projectMediaGenerations: taskRuntime.mediaGenerations }
         : {}),
-      ...(taskRuntime !== undefined && "mediaResults" in taskRuntime ? { projectMediaResults: taskRuntime.mediaResults } : {}),
+      ...(taskRuntime !== undefined && "mediaResults" in taskRuntime
+        ? { projectMediaResults: taskRuntime.mediaResults }
+        : {}),
       bindProjectConversations: (threads) =>
         conversations?.bindThreads(threads),
       projectAssetStages: () => conversations?.assetStages(),
@@ -854,6 +889,7 @@ export async function createDesktopPluginRuntime(
           () => projectUi?.close(),
           () => textUi?.close(),
           () => assetUi?.close(),
+          () => mediaResultUi?.close(),
           () => mediaInputUi?.close(),
           () => mediaGenerationUi?.close(),
           () => history?.close(),
@@ -874,6 +910,7 @@ export async function createDesktopPluginRuntime(
         () => projectUi?.close(),
         () => textUi?.close(),
         () => assetUi?.close(),
+        () => mediaResultUi?.close(),
         () => mediaInputUi?.close(),
         () => mediaGenerationUi?.close(),
         () => history?.close(),
