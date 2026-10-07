@@ -151,7 +151,7 @@ test("project conversation is created explicitly in the selected workspace and o
       service.calls.map((call) => call.action),
       ["crewon.project-conversations.v1.listConversations"],
     );
-    assert.match(f.container.textContent, /与 Agent 创作/u);
+    assert.match(f.container.textContent, /和 Agent 一起完成短剧/u);
     await f.click(f.button("新建项目对话"));
     assert.equal(service.bindings.size, 1);
     assert.deepEqual(
@@ -182,12 +182,9 @@ test("project conversation is created explicitly in the selected workspace and o
       false,
     );
     await f.click(f.container.querySelector('[data-project-page="outline"]'));
-    assert.equal(
-      f.container.querySelector('[aria-label="项目 Agent 对话"]'),
-      null,
-    );
-    await f.click(f.button("项目对话"));
-    assert.ok(f.container.querySelector('[aria-label="项目 Agent 对话"]'));
+    assert.ok(f.container.querySelector('[aria-label="项目 Agent 对话"]'), "chat remains reachable while reading output");
+    await f.click(f.button("继续与 Agent 对话"));
+    assert.equal(service.calls.at(-1).input.threadId, "project-thread-1");
   } finally {
     await f.dispose();
   }
@@ -322,4 +319,20 @@ test("built plugin offers source update only after stale open, snapshots its sco
   } finally {
     await f.dispose();
   }
+});
+
+test("primary chat entry creates and opens once, with details closed and no automatic generation", async () => {
+  const service = conversations(), f = await open(service);
+  try {
+    assert.equal(f.container.querySelector(".drama-process-disclosure").open, false);
+    await f.click(f.button("开始与 Agent 对话"));
+    assert.equal(service.bindings.size, 1);
+    assert.equal(service.calls.filter(c => c.action.endsWith(".createConversation")).length, 1);
+    assert.equal(service.calls.filter(c => c.action.endsWith(".openConversation")).length, 1);
+    assert.equal(service.calls.at(-1).input.threadId, "project-thread-1");
+    await f.click(f.button("继续与 Agent 对话"));
+    assert.equal(service.bindings.size, 1);
+    assert.equal(service.calls.filter(c => c.action.endsWith(".openConversation")).length, 2);
+    assert.equal(service.calls.some(c => /startStage|createPlan|generate/.test(c.action)), false);
+  } finally { await f.dispose(); }
 });

@@ -161,7 +161,7 @@ test("art owns scene drafts and theme changes preserve the selected object page"
     await f.click(f.button("返回继续编辑"));
     assert.equal(page(f, "art").getAttribute("aria-current"), "page");
     assert.equal(field(f, "资产名称").value, "雨夜车站");
-    assert.equal(page(f, "delivery").disabled, true);
+    assert.equal(page(f, "delivery"), null);
   } finally {
     await f.dispose();
   }

@@ -345,9 +345,11 @@ test("project_context_read returns bounded actual Run metadata and validates its
       command,
       new AbortController().signal,
     );
-    assert.deepEqual(JSON.parse(JSON.parse(result.result.output).resultJson), {
-      scope,
-    });
+    const output = JSON.parse(JSON.parse(result.result.output).resultJson);
+    assert.deepEqual(output.scope, scope);
+    assert.equal(output.guidance.skill, "novel-outline");
+    assert.match(output.guidance.source, /ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/);
+    assert.match(output.guidance.output, /outline_save/);
     assert.equal(calls[0], command);
     assert.ok(Buffer.byteLength(result.result.output) <= 8192);
     await assert.rejects(
@@ -672,9 +674,10 @@ test("asset Run reads its own actual scope and denies old writes/media or foreig
       f.command("asset_context_read", {}, 1),
       new AbortController().signal,
     );
-    assert.deepEqual(JSON.parse(JSON.parse(result.result.output).resultJson), {
-      scope: assetScope,
-    });
+    const output = JSON.parse(JSON.parse(result.result.output).resultJson);
+    assert.deepEqual(output.scope, assetScope);
+    assert.equal(output.guidance.skill, "novel-characters");
+    assert.ok(Buffer.byteLength(result.result.output) <= 8192);
     for (const [i, op, body, pattern] of [
       [
         2,

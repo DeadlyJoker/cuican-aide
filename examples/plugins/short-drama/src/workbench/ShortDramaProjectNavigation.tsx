@@ -1,6 +1,5 @@
 import { useId } from "react";
 import {
-  Clapperboard,
   FileText,
   Palette,
   Image,
@@ -20,8 +19,8 @@ export type ShortDramaProjectPage =
 export const projectPages = [
   {
     id: "overview",
-    title: "项目与概念图",
-    description: "需求 · Agent · 画面探索",
+    title: "需求与概念图",
+    description: "创作需求与画面",
     icon: Layers3,
   },
   {
@@ -53,12 +52,6 @@ export const projectPages = [
     title: "参考与分镜探索",
     description: "画面描述 · 参考素材",
     icon: Image,
-  },
-  {
-    id: "delivery",
-    title: "视频与成片",
-    description: "后续开放",
-    icon: Clapperboard,
   },
 ] as const;
 
@@ -103,7 +96,6 @@ export function ShortDramaProjectNavigation({
       <div className="drama-navigation-items" id={id}>
         {projectPages.map(({ id, title, description, icon: Icon }) => {
           const available =
-            id !== "delivery" &&
             (id !== "references" || referencesAvailable) &&
             (!["characters", "art"].includes(id) || assetsAvailable);
           return (

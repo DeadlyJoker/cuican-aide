@@ -73,7 +73,7 @@ test("actual installable module starts only from an explicitly selected project 
       true,
       "unfinished plan occupies its chat",
     );
-    assert.equal(f.container.querySelectorAll(".stage-item").length, 7);
+    assert.equal(f.container.querySelectorAll(".stage-item").length, 6);
   } finally {
     await f.dispose();
   }

@@ -1,3 +1,8 @@
+import {
+  projectCreationSkill,
+  assetCreationSkill,
+  mediaInputCreationSkill,
+} from "./creation-skills.js";
 import type {
   PluginAbortSignal,
   PluginExecutionServices,
@@ -144,7 +149,17 @@ export function createShortDramaRuntime(
         if (closed) throw new Error("short_drama_runtime_closed");
         signal.throwIfAborted();
       }
-      return retain(command, checked);
+      return retain(
+        command,
+        input.method === "getContext"
+          ? {
+              ...checked,
+              guidance: mediaInputCreationSkill(
+                (checked as { workflowId: string }).workflowId,
+              ),
+            }
+          : checked,
+      );
     }
     const asset = assetMethod(command.name);
     const assetRequest = asset
@@ -198,6 +213,10 @@ export function createShortDramaRuntime(
         };
       return retain(command, {
         scope: command.name === PROJECT_ASSET_CONTEXT_TOOL ? assetScope : scope,
+        guidance:
+          command.name === PROJECT_ASSET_CONTEXT_TOOL
+            ? assetCreationSkill(assetScope)
+            : projectCreationSkill(scope),
       });
     }
     if (asset && assetRequest) {

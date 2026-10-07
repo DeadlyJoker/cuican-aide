@@ -234,6 +234,24 @@ export class ProjectConversationController {
     this.#publish({ pendingCreation: input });
     await this.#create(input);
   }
+  /** The explicit main action creates once, then opens the actual bound host conversation. */
+  async begin() {
+    if (!this.canCreate) return;
+    const before = new Set(
+      this.#snapshot.bindings.map((binding) => binding.threadId),
+    );
+    const projectId = this.#snapshot.projectId;
+    await this.create();
+    if (
+      this.#snapshot.projectId !== projectId ||
+      this.#snapshot.pendingCreation
+    )
+      return;
+    const created = this.#snapshot.bindings.find(
+      (binding) => binding.state === "active" && !before.has(binding.threadId),
+    );
+    if (created) await this.open(created.threadId);
+  }
   async retryCreation() {
     const original = this.#snapshot.pendingCreation;
     if (

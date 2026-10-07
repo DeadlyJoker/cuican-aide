@@ -43,10 +43,7 @@ export function ShortDramaProjectHome({
           <Film size={17} /> AI 短剧工作台
         </span>
         <h1>从一个想法，开始你的短剧</h1>
-        <p>
-          写下故事、人物或一个镜头。确认创作需求后，与 Agent
-          一起完善，也可以逐步手动制作。
-        </p>
+        <p>告诉 Agent 你想拍什么。一起完成创作，随时查看各阶段产物。</p>
         <form
           className="drama-idea-composer"
           onSubmit={(event) => {

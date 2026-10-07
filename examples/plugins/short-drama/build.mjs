@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "35.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "36.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -274,6 +274,7 @@ for (const workflow of reviewedWorkflows.slice(0, 2)) {
 const output = join(root, "dist", version);
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
+await cp(join(root, "third-party"), join(output, "third-party"), { recursive: true });
 const result = await build({
   absWorkingDir: root,
   entryPoints: [join(root, "src/ui.tsx")],

@@ -136,11 +136,23 @@ export async function createDesktopNativePluginTaskRuntime(
         ? {}
         : { storage: dependencies.projectMaterialStorage }),
     });
-    if (resultConfiguration !== undefined)
+    if (resultConfiguration !== undefined) {
+      // Saved-result and asset-v2 reads need their schema on a new profile even
+      // when reference generation was never enabled. This creates no generation
+      // owner, admission capability, provider request, or network grant.
+      const assets = input.store.projectAssetStore();
+      await assets.projectMediaInputStore().migrate();
+      await assets.projectMaterialPreparationStore().migrate();
+      await input.store.extensionStore().migrateProjectMediaGenerations();
+      const operations = input.store.externalOperationStore();
+      await operations.migrate();
+      await operations.migrateProjectMediaOperations();
+      await input.store.extensionStore().projectMediaResults().migrate();
       mediaResults = await InstalledProjectMediaResultRuntime.prepare({
         core,
         configuration: resultConfiguration,
       });
+    }
     const generationConfiguration =
       authority.projectMediaGenerationConfiguration({
         configurations: core.extensions,

@@ -1,3 +1,5 @@
+import { toResponsesToolDefinition } from "./responses-tool-definition.ts";
+export { toResponsesToolDefinition } from "./responses-tool-definition.ts";
 import { parseResponsesOutputTokenLimit } from "./responses-output-budget.ts";
 import {
   ModelTransportError,
@@ -809,24 +811,6 @@ export function toResponsesInputItem(
         output: item.output,
       };
   }
-}
-
-export function toResponsesToolDefinition(
-  definition: ModelRequest["tools"][number],
-): Readonly<Record<string, unknown>> {
-  return definition.kind === "function"
-    ? {
-        type: "function",
-        name: definition.name,
-        description: definition.description,
-        parameters: definition.inputSchema,
-      }
-    : {
-        type: "custom",
-        name: definition.name,
-        description: definition.description,
-        format: { type: "text" },
-      };
 }
 
 function boundedString(value: unknown, maxBytes: number, code: string): string {

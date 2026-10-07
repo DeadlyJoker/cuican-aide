@@ -35,6 +35,10 @@ import {
   assertWorkerToolDispatch,
   withCheckedWorkerToolDispatch,
 } from "./worker-tool-dispatch-authority.ts";
+import {
+  ProjectToolInputError,
+  projectToolInputErrorResult,
+} from "./project-tool-input-error.ts";
 
 type Method = "execute" | "reconcile" | "cancel";
 export type PluginToolRuntimeAdapterInput = Readonly<{
@@ -462,6 +466,7 @@ class AdapterOwner {
                   return captured.execute();
                 },
               );
+              if (reservation.phase !== "started") reservation.release();
               return checkedResolution(result, command);
             } catch (error) {
               // A started reservation belongs to the provider's physical operation/result, even
@@ -491,13 +496,31 @@ class AdapterOwner {
     const invocation = Object.freeze({ command, method, signal });
     return withCheckedWorkerToolDispatch(
       { originalCommand, command, method, signal },
-      () =>
-        this.#dispatchAuthority!(invocation, () => {
+      async () => {
+        let delegated = false;
+        try {
+          return await this.#dispatchAuthority!(invocation, () => {
+            this.#open();
+            this.#assertPolicy(command);
+            assertWorkerToolDispatch(invocation);
+            delegated = true;
+            return delegate();
+          });
+        } catch (error) {
+          // Only deterministic, pre-dispatch input failures become model feedback.
+          // Authority failures and uncertain provider outcomes retain their original handling.
+          if (
+            delegated ||
+            method === "cancel" ||
+            !(error instanceof ProjectToolInputError)
+          )
+            throw error;
           this.#open();
-          this.#assertPolicy(command);
+          signal.throwIfAborted();
           assertWorkerToolDispatch(invocation);
-          return delegate();
-        }),
+          return projectToolInputErrorResult(error, command);
+        }
+      },
     );
   }
 

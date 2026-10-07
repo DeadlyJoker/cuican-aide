@@ -25,6 +25,19 @@ export function ProjectMediaGenerationActions({
     controller.activate();
   }, [controller]);
   const working = s.status === "preparing" || s.status === "checking";
+  if (s.phase === "unavailable" && !s.request && !s.receipt)
+    return (
+      <p className="detail-note" role="status">
+        参考图生成尚未就绪，已保存的设定和素材仍可查看。
+        <button
+          className="text-button"
+          disabled={blocked}
+          onClick={() => void controller.recover()}
+        >
+          重新检查
+        </button>
+      </p>
+    );
   return (
     <section className="detail-panel" aria-label="生成参考画面">
       <div className="panel-heading">

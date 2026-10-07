@@ -153,3 +153,24 @@ test(
     await f.runtime.ui.closeMount(f.actor, { mountRef: mount.mountRef });
   },
 );
+
+// Asset/text-only preparation can inspect saved outputs without reference upload permission.
+test(
+  "Native read-only result scope works without media generation and cannot publish",
+  options,
+  async (t) => {
+    const f = await fixture(t, ["read", "write"], { mediaResults: ["read"] });
+    const url = `/api/v1/creative-projects/${f.query.projectId}/media-results`;
+    const read = await f.app.inject({ method: "GET", url, headers: f.headers });
+    assert.equal(read.statusCode, 200, read.body);
+    assert.deepEqual(read.json(), { candidates: [], nextCandidateId: null });
+    const write = await f.app.inject({
+      method: "POST",
+      url: url + "/no-run/0",
+      headers: f.headers,
+      payload: {},
+    });
+    assert.equal(write.statusCode, 403, write.body);
+    assert.deepEqual(f.peer, []);
+  },
+);

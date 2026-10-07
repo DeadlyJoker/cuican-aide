@@ -76,6 +76,10 @@ test("same installable UI edits outline and episode scenes, separates candidate/
     const outline = [...service.artifacts.values()][0];
     assert.equal(outline.revisions[0].content.synopsis, content);
     assert.equal(outline.artifact.selectedContentRevision, null);
+    const output = f.container.querySelector('[aria-label="产物正文"]');
+    assert.match(output.textContent, /待确认/);
+    assert.ok(output.textContent.includes(content));
+    assert.equal(output.querySelector("textarea"), null);
     assert.equal(
       episodeButton(f),
       undefined,

@@ -71,13 +71,24 @@ export function fixture(definition, configuration = {}) {
     assert.ok(found, "missing button: " + label);
     return found;
   };
+  const reveal = async (element) => {
+    const ancestors = [];
+    for (let parent = element.parentElement; parent; parent = parent.parentElement)
+      if (parent.tagName === "DETAILS" && !parent.open) ancestors.unshift(parent);
+    for (const details of ancestors) {
+      details.querySelector(":scope > summary").click();
+      await settle();
+    }
+  };
   const click = async (element) => {
     assert.ok(element);
+    await reveal(element);
     element.click();
     await settle();
   };
   const input = async (element, value) => {
     assert.ok(element);
+    await reveal(element);
     const prototype =
       element instanceof browser.HTMLTextAreaElement
         ? browser.HTMLTextAreaElement.prototype

@@ -138,11 +138,11 @@ export function ProjectAssetRecoveryActions({
             </p>
           )}
         </>
-      ) : (
+      ) : recovery.phase === "loading" || recovery.phase === "waiting" ? (
         <p className="detail-note" role="status">
           正在检查上次资产保存的结果…
         </p>
-      )}
+      ) : null}
     </section>
   );
 }

@@ -5,6 +5,7 @@ import type { ProjectStageRunAdmission } from "@crewon/domain";
 import { conversationFixture } from "../../../packages/store/src/project-conversation-store.test-support.ts";
 import { projectToolsOwnerFixture } from "./project-tools-service-owner.test-support.ts";
 import { readProjectStageRuntimeScope } from "./plugins/project-stage-runtime-scope.ts";
+import { assertProjectTextStageDispatch } from "./plugins/project-stage-dispatch-scope.ts";
 import { deferred, tick } from "./plugin-tool-runtime-adapter.test-support.ts";
 
 async function scopedFixture(
@@ -61,6 +62,46 @@ async function scopedFixture(
     owner.contextHostService().value as PluginProjectContextService;
   return { ...f, stage, conversations, contextService };
 }
+
+test("text stages allow only the declared empty read-only asset scope probe, never asset access", async (t) => {
+  const f = await scopedFixture(t);
+  const base = f.tools.find((tool) => tool.operationId === "project_read")!;
+  const probe = {
+    ...base,
+    operationId: "asset_context_read",
+    adapterId: "crewon.project-asset-context",
+  };
+  const operation = await f.prepareReadOperation("asset_context_read", {});
+  const check = (command = operation.command, definition = probe) =>
+    assertProjectTextStageDispatch(
+      f.stage,
+      [...f.tools, definition],
+      f.admission.pluginId,
+      command,
+    );
+  assert.doesNotThrow(() => check());
+  for (const input of ["null", "[]", '{"projectId":"foreign"}'])
+    assert.throws(
+      () => check({ ...operation.command, input }),
+      /authority_denied/,
+    );
+  assert.throws(
+    () => check(operation.command, { ...probe, adapterId: "unrelated" }),
+    /authority_denied/,
+  );
+  assert.throws(
+    () =>
+      check({
+        ...operation.command,
+        actionIntent: { ...operation.command.actionIntent, effect: "mutation" },
+      }),
+    /authority_denied/,
+  );
+  assert.throws(
+    () => check(operation.command, { ...probe, effect: "mutation" }),
+    /authority_denied/,
+  );
+});
 
 test("actual immutable stage plus independent original-admission marker is required; genuine legacy is null", async (t) => {
   const f = await scopedFixture(t),

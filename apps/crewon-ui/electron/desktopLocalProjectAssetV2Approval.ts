@@ -56,17 +56,24 @@ export function composeDesktopLocalProjectAssetV2Approval(
     )
   )
     invalid();
-  // The existing separate workflow confirmation prepares the result schema and
-  // permits downloading its original outputs; metadata-only setup gains neither.
-  if (!approval.projects.mediaGenerations?.publications.some(exact))
-    return approval;
+  // Local asset metadata and saved result reads must work without granting
+  // reference upload/generation or downloading new provider outputs.
+  const canPublish =
+    approval.projects.mediaGenerations?.publications.some(exact) === true;
   // Purposes apply to the whole publication list. Upgrading this package must
   // not silently grant publishing to another package that was read-only.
   const results = approval.projects.mediaResults;
   if (
+    canPublish &&
     results &&
     !results.purposes.includes("publish") &&
     results.publications.some((p) => !exact(p))
+  )
+    invalid();
+  if (
+    !canPublish &&
+    results?.purposes.includes("publish") &&
+    !results.publications.some(exact)
   )
     invalid();
   const append = (previous: readonly (typeof publication)[] = []) =>
@@ -77,7 +84,9 @@ export function composeDesktopLocalProjectAssetV2Approval(
       ...approval.projects,
       mediaResults: {
         version: "crewon.desktop-project-media-results.v1",
-        purposes: ["read", "publish"],
+        purposes: canPublish
+          ? ["read", "publish"]
+          : (results?.purposes ?? ["read"]),
         publications: append(approval.projects.mediaResults?.publications),
       },
       assetV2: {

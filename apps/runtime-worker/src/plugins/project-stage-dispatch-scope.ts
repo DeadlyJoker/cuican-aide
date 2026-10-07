@@ -16,7 +16,7 @@ import {
   parseProjectAssetToolCommand,
   type ProjectAssetToolMethod,
 } from "@crewon/contracts/project-asset-tools";
-import { parseProjectToolsRequest } from "./project-tools-service-request.ts";
+import { parseProjectDispatchInput } from "./project-tool-input-error.ts";
 /** Existing immutable text/asset task guards, shared by resident owners without widening their protocols. */
 export function assertProjectTextStageDispatch(
   stage: ProjectStageRunAdmission,
@@ -28,6 +28,25 @@ export function assertProjectTextStageDispatch(
     (t) => extensionToolName(pluginId, t.operationId) === command.name,
   );
   if (definition === undefined) denied();
+  // A unified plugin discovers whether this is an asset stage before reading
+  // the text stage. In a text Run the asset owner returns only {scope: null}.
+  // Permit that empty, declared read probe; asset data and writes remain denied.
+  if (
+    definition.operationId === "asset_context_read" &&
+    definition.adapterId === "crewon.project-asset-context" &&
+    definition.effect === "readOnly" &&
+    command.actionIntent.effect === "readOnly"
+  ) {
+    const request: unknown = JSON.parse(command.input);
+    if (
+      request === null ||
+      typeof request !== "object" ||
+      Array.isArray(request) ||
+      Object.keys(request).length !== 0
+    )
+      denied();
+    return;
+  }
   const method = (
     Object.keys(PROJECT_TOOL_OPERATIONS) as ProjectToolsMethod[]
   ).find((m) => PROJECT_TOOL_OPERATIONS[m] === definition.operationId);
@@ -36,7 +55,7 @@ export function assertProjectTextStageDispatch(
       ? JSON.parse(command.input)
       : method === undefined
         ? denied()
-        : parseProjectToolsRequest(method, JSON.parse(command.input));
+        : parseProjectDispatchInput(method, command.input);
   assertProjectStageToolRequest(
     stage,
     definition.operationId,
@@ -76,7 +95,7 @@ export function assertProjectAssetStageDispatch(
       assetMethod
         ? parseProjectAssetToolCommand(assetMethod, JSON.parse(command.input))
         : oldMethod
-          ? parseProjectToolsRequest(oldMethod, JSON.parse(command.input))
+          ? parseProjectDispatchInput(oldMethod, command.input)
           : denied("asset")
     ) as Readonly<Record<string, unknown>>;
   }

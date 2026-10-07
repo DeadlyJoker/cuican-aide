@@ -12,24 +12,17 @@ export function ProjectConversationActions({
     controller.getSnapshot,
   );
   if (!snapshot.projectId) return null;
+  const active = snapshot.bindings.find(
+    (binding) => binding.state === "active",
+  );
   return (
-    <section className="detail-panel" aria-label="项目 Agent 对话">
+    <section className="drama-agent-entry" aria-label="项目 Agent 对话">
       <div className="panel-heading">
-        <h2>与 Agent 创作</h2>
-        <button
-          className="text-button"
-          disabled={
-            snapshot.creating ||
-            snapshot.refreshingSource ||
-            snapshot.openingThreadId !== null
-          }
-          onClick={() => void controller.refresh()}
-        >
-          刷新项目对话
-        </button>
+        <h2>和 Agent 一起完成短剧</h2>
       </div>
       <p className="detail-note">
-        讨论想法，生成大纲和剧本；与手动创作共用项目成果。
+        告诉 Agent
+        你的想法、想改的地方或下一步。需要检查内容时，展开下方流程查看产物。
       </p>
       {snapshot.phase === "waiting" && (
         <p className="detail-note" role="status">
@@ -54,19 +47,31 @@ export function ProjectConversationActions({
       <div className="detail-actions">
         <button
           className="button primary"
-          disabled={!controller.canCreate}
-          onClick={() => void controller.create()}
+          disabled={
+            active
+              ? controller.locked || snapshot.phase !== "ready"
+              : !controller.canCreate
+          }
+          onClick={() =>
+            void (active
+              ? controller.open(active.threadId)
+              : controller.begin())
+          }
         >
-          {snapshot.creating ? "正在创建对话…" : "新建项目对话"}
+          {snapshot.creating || snapshot.openingThreadId
+            ? "正在打开…"
+            : active
+              ? "继续与 Agent 对话"
+              : "开始与 Agent 对话"}
         </button>
-        <span className="detail-note">
-          {snapshot.workspace
-            ? (snapshot.workspace.name ??
-              (snapshot.workspace.workspaceId
-                ? "当前工作空间"
-                : "未选择工作空间"))
-            : "工作空间信息尚未就绪"}
-        </span>
+        {snapshot.phase === "unavailable" && (
+          <button
+            className="button secondary"
+            onClick={() => void controller.refresh()}
+          >
+            重新连接
+          </button>
+        )}
         {snapshot.pendingCreation && (
           <button
             className="button secondary"
@@ -90,52 +95,71 @@ export function ProjectConversationActions({
           </button>
         )}
       </div>
-      {snapshot.bindings.map((binding, index) => (
-        <div className="version-card" key={binding.threadId}>
-          <div className="panel-heading">
-            <strong>创作对话 {index + 1}</strong>
-            <button
-              className="button secondary"
-              disabled={binding.state !== "active" || controller.locked}
-              onClick={() => void controller.open(binding.threadId)}
-            >
-              {snapshot.openingThreadId === binding.threadId
-                ? "正在打开…"
-                : "进入对话"}
-            </button>
-          </div>
-          {snapshot.sourceRefreshThreadId === binding.threadId &&
-            !snapshot.pendingSourceRefresh && (
+      <details className="drama-secondary-disclosure">
+        <summary>其他对话</summary>
+        <div className="detail-actions">
+          <button
+            className="text-button"
+            disabled={controller.locked}
+            onClick={() => void controller.refresh()}
+          >
+            刷新项目对话
+          </button>
+          <button
+            className="button secondary"
+            disabled={!controller.canCreate}
+            onClick={() => void controller.create()}
+          >
+            新建项目对话
+          </button>
+        </div>
+        {snapshot.bindings.map((binding, index) => (
+          <div className="version-card" key={binding.threadId}>
+            <div className="panel-heading">
+              <strong>创作对话 {index + 1}</strong>
               <button
                 className="button secondary"
-                disabled={!controller.canRefreshSource}
-                onClick={() =>
-                  void controller.refreshSourceAndOpen(binding.threadId)
-                }
+                disabled={binding.state !== "active" || controller.locked}
+                onClick={() => void controller.open(binding.threadId)}
               >
-                更新关联并进入
+                {snapshot.openingThreadId === binding.threadId
+                  ? "正在打开…"
+                  : "进入对话"}
               </button>
-            )}
-          <p className="detail-note">
-            {new Date(binding.createdAt).toLocaleString("zh-CN")}
-            {binding.state === "revoked" ? " · 已停止关联" : ""}
-          </p>
-        </div>
-      ))}
-      {snapshot.nextThreadId && (
-        <button
-          className="button secondary"
-          disabled={
-            snapshot.phase === "loading" ||
-            snapshot.creating ||
-            snapshot.refreshingSource ||
-            snapshot.openingThreadId !== null
-          }
-          onClick={() => void controller.refresh({ more: true })}
-        >
-          加载更多项目对话
-        </button>
-      )}
+            </div>
+            {snapshot.sourceRefreshThreadId === binding.threadId &&
+              !snapshot.pendingSourceRefresh && (
+                <button
+                  className="button secondary"
+                  disabled={!controller.canRefreshSource}
+                  onClick={() =>
+                    void controller.refreshSourceAndOpen(binding.threadId)
+                  }
+                >
+                  更新关联并进入
+                </button>
+              )}
+            <p className="detail-note">
+              {new Date(binding.createdAt).toLocaleString("zh-CN")}
+              {binding.state === "revoked" ? " · 已停止关联" : ""}
+            </p>
+          </div>
+        ))}
+        {snapshot.nextThreadId && (
+          <button
+            className="button secondary"
+            disabled={
+              snapshot.phase === "loading" ||
+              snapshot.creating ||
+              snapshot.refreshingSource ||
+              snapshot.openingThreadId !== null
+            }
+            onClick={() => void controller.refresh({ more: true })}
+          >
+            加载更多项目对话
+          </button>
+        )}
+      </details>
     </section>
   );
 }

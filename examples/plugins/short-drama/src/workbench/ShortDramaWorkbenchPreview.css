@@ -62,8 +62,14 @@
   flex-wrap: wrap;
   min-height: 54px;
   padding-block: var(--space-3);
-  padding-inline-start: max(var(--space-6), var(--crewon-plugin-header-inset-start, 0px));
-  padding-inline-end: max(var(--space-6), var(--crewon-plugin-header-inset-end, 0px));
+  padding-inline-start: max(
+    var(--space-6),
+    var(--crewon-plugin-header-inset-start, 0px)
+  );
+  padding-inline-end: max(
+    var(--space-6),
+    var(--crewon-plugin-header-inset-end, 0px)
+  );
   border-bottom: 1px solid var(--border);
 }
 .drama-workbench .breadcrumbs {
@@ -976,4 +982,82 @@
   .drama-workbench .drama-plan-disclosure > summary > span {
     display: none;
   }
+}
+
+/* Conversation first; details stay within the installed plugin's content. */
+.drama-workbench .drama-project-focus {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+}
+.drama-workbench .drama-agent-entry {
+  padding: 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 18px;
+}
+.drama-workbench .drama-agent-entry h2 {
+  font-size: 22px;
+  font-weight: 600;
+}
+.drama-workbench .drama-agent-entry > .detail-actions {
+  margin-top: 4px;
+}
+.drama-workbench .drama-process-disclosure {
+  border-top: 1px solid var(--border);
+}
+.drama-workbench .drama-process-disclosure > summary {
+  padding: 20px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.drama-workbench .drama-process-disclosure[open] > summary svg {
+  transform: rotate(90deg);
+}
+.drama-workbench .drama-secondary-disclosure {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.drama-workbench .drama-secondary-disclosure > summary {
+  padding: 12px 0;
+  cursor: pointer;
+}
+.drama-workbench .drama-secondary-disclosure[open] > :not(summary) {
+  color: var(--text);
+}
+.drama-workbench .drama-output-document {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 20px;
+}
+.drama-workbench .drama-output-document section {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+}
+.drama-workbench .drama-output-document h4 {
+  margin: 0;
+}
+.drama-workbench .drama-readable-text {
+  white-space: pre-wrap;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+.drama-workbench .drama-output-empty {
+  padding: 32px 16px;
+  text-align: center;
+  display: grid;
+  gap: 12px;
+  color: var(--text-muted);
 }

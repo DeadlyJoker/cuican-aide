@@ -178,11 +178,11 @@ test("internal navigation can collapse without replacing the project, losing dra
     );
     assert.equal(
       nav
-        .querySelector('[aria-label="项目与概念图"]')
+        .querySelector('[aria-label="需求与概念图"]')
         .getAttribute("aria-current"),
       "page",
     );
-    assert.equal(nav.querySelector('[aria-label="视频与成片"]').disabled, true);
+    assert.equal(nav.querySelector('[aria-label="视频与成片"]'), null);
     assert.equal(document.documentElement.getAttribute("style"), hostStyle);
     assert.equal(f.container.querySelector(".command-sidebar"), null);
   } finally {

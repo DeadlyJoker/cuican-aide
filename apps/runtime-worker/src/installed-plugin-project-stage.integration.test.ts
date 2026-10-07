@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -18,6 +20,17 @@ import {
 } from "./installed-plugin-business-execution.integration.test-support.ts";
 
 const packageDirectory = process.env.CREWON_TEST_SHORT_DRAMA_PROJECT_PLUGIN_DIR;
+const packageManifest = packageDirectory
+  ? JSON.parse(readFileSync(join(packageDirectory, "business.json"), "utf8"))
+  : null;
+const expectedToolNames = packageManifest?.tools
+  .map(
+    (tool: { operationId: string }) =>
+      "crewon_short_drama__" + tool.operationId,
+  )
+  .sort();
+const hasStageSkills =
+  JSON.stringify(packageManifest).includes("shuohao Skill");
 const outline = {
   title: "夜航",
   logline: "摄影师追查雨夜来信",
@@ -80,7 +93,10 @@ for (const backend of ["sqlite", "postgres"] as const)
           const definitions = request.tools.filter((v) =>
             v.name.startsWith("crewon_short_drama__"),
           );
-          assert.equal(definitions.length, 15);
+          assert.deepEqual(
+            definitions.map((d) => d.name).sort(),
+            expectedToolNames,
+          );
           assert.ok(
             definitions.some((v) => v.name === name("project_context_read")),
           );
@@ -101,33 +117,54 @@ for (const backend of ["sqlite", "postgres"] as const)
           let operation: string | null = null,
             input: unknown = null,
             callId = "";
-          if (!last) {
+          if (!last && hasStageSkills) {
+            operation = "asset_context_read";
+            input = {};
+            callId = `${phase}-asset-probe`;
+          } else if (!last || last.callId === `${phase}-asset-probe`) {
+            if (last) {
+              assert.equal(value.scope, null);
+              assert.equal(value.guidance, null);
+            }
             operation = "project_context_read";
             input = {};
             callId = `${phase}-scope`;
           } else if (last.callId === `${phase}-scope`) {
             assert.equal(value.scope.projectId, projectId);
+            if (hasStageSkills) {
+              assert.equal(
+                value.guidance.skill,
+                phase === "script" ? "novel-script" : "novel-outline",
+              );
+              assert.match(
+                value.guidance.source,
+                /ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/,
+              );
+              assert.ok(Buffer.byteLength(last.output) <= 8192);
+            }
             assert.equal(
               value.scope.stage.kind,
               phase === "manual" ? "discussion" : phase,
             );
             assert.ok(!value.scope.allowedOperations.includes("text_select"));
-            operation =
-              phase === "outline"
-                ? "outline_save"
-                : phase === "script"
-                  ? "script_save"
-                  : "script_read";
-            callId = `${phase}-body`;
-            input =
-              phase === "outline"
-                ? {
-                    projectId,
-                    expectedArtifactRevision: 0,
-                    briefRevision: 1,
-                    content: outline,
-                  }
-                : phase === "script"
+            if (phase === "outline") {
+              operation = "content_read";
+              callId = `${phase}-invalid-brief`;
+              input = {
+                projectId,
+                offset: 0,
+                source: {
+                  kind: "brief",
+                  briefRevision: 1,
+                  artifactId: "brief",
+                  contentRevision: 1,
+                },
+              };
+            } else {
+              operation = phase === "script" ? "script_save" : "script_read";
+              callId = `${phase}-body`;
+              input =
+                phase === "script"
                   ? {
                       projectId,
                       episodeId: "ep-1",
@@ -140,6 +177,27 @@ for (const backend of ["sqlite", "postgres"] as const)
                       content: script,
                     }
                   : { projectId, episodeId: "ep-1" };
+            }
+          } else if (last.callId === "outline-invalid-brief") {
+            assert.equal(value.error, "plugin_project_tools_request_invalid");
+            assert.match(value.hint, /source must contain only/);
+            operation = "content_read";
+            callId = "outline-corrected-brief";
+            input = {
+              projectId,
+              offset: 0,
+              source: { kind: "brief", briefRevision: 1 },
+            };
+          } else if (last.callId === "outline-corrected-brief") {
+            assert.match(value.text, /摄影师/);
+            operation = "outline_save";
+            callId = "outline-body";
+            input = {
+              projectId,
+              expectedArtifactRevision: 0,
+              briefRevision: 1,
+              content: outline,
+            };
           } else if (last.callId === `${phase}-body`) {
             if (phase === "outline") {
               savedOutlineId = value.artifact.artifactId;
@@ -206,6 +264,21 @@ for (const backend of ["sqlite", "postgres"] as const)
         maxToolRounds: 12,
         taskClock: { now: () => new Date().toISOString() },
         projectTools: { version: "crewon.project-tools.v1", authorization },
+        ...(hasStageSkills
+          ? {
+              projectAssetTools: {
+                version: "crewon.project-asset-tools.v1" as const,
+                authorization,
+                authorizeService: async (
+                  admission: { pluginId: string },
+                  signal: AbortSignal,
+                ) => {
+                  signal.throwIfAborted();
+                  assert.equal(admission.pluginId, "crewon.short-drama");
+                },
+              },
+            }
+          : {}),
       });
       const metadata = f.store.creativeProjectStore(),
         textStore = f.store.projectTextStore(),
@@ -358,6 +431,24 @@ for (const backend of ["sqlite", "postgres"] as const)
         accepted.result.turn.messages[0]!.content,
         "根据需求起草大纲，留作候选。",
       );
+      const invalidDispatch = await f.openWorker({
+        afterToolProviderResolved: async (resolution) => {
+          if (
+            "result" in resolution &&
+            resolution.result?.callId === "outline-invalid-brief"
+          ) {
+            assert.equal(resolution.result.isError, true);
+            throw new Error("named_loss_after_input_rejection");
+          }
+        },
+      });
+      assert.deepEqual(await invalidDispatch.worker.wake(), {
+        kind: "retried",
+        runId: accepted.result.binding.runId,
+        code: "named_loss_after_input_rejection",
+      });
+      assert.equal(await texts.getOutline(actor, { projectId }), null);
+      await f.closeWorker();
       const first = await f.openWorker({
         afterToolProviderResolved: async (resolution) => {
           if (

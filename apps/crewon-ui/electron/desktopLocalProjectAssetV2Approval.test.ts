@@ -61,7 +61,7 @@ function projects(f: Awaited<ReturnType<typeof fixture>>) {
     throw new Error("v3_required");
   return b.projects;
 }
-it("Main installs an independent V2 descriptor and issues exact asset/result scopes only after existing workflow setup, then cold-reopens idempotently", async () => {
+it("Main installs an independent V2 descriptor and issues exact asset/result scopes independently of reference generation, with publishing only after workflow setup, then cold-reopens idempotently", async () => {
   const f = await fixture();
   const before = readFileSync(f.approvalPath);
   const preview = await f
@@ -71,8 +71,9 @@ it("Main installs an independent V2 descriptor and issues exact asset/result sco
   expect(readFileSync(f.approvalPath)).toEqual(before);
   await prepare(f);
   expect(projects(f).assetUi?.publications).toHaveLength(1);
-  expect(projects(f).assetV2).toBeUndefined();
-  expect(projects(f).mediaResults).toBeUndefined();
+  expect(projects(f).assetV2?.publications).toHaveLength(1);
+  expect(projects(f).mediaResults?.purposes).toEqual(["read"]);
+  expect(projects(f).mediaGenerations).toBeUndefined();
   await prepare(f, true);
   const publication = {
     pluginId: f.identity.pluginId,
@@ -121,6 +122,25 @@ it("Main installs an independent V2 descriptor and issues exact asset/result sco
             ...ownReadOnly.projects.mediaResults,
             publications: [
               publication,
+              { ...publication, packageDigest: "sha256:" + "f".repeat(64) },
+            ],
+          },
+        },
+      },
+      descriptor: f.installed.descriptor,
+      packageDigest: f.identity.packageDigest,
+    }),
+  ).toThrow("desktop_plugin_asset_v2_setup_invalid");
+  expect(() =>
+    composeDesktopLocalProjectAssetV2Approval({
+      approval: {
+        ...approval,
+        projects: {
+          ...approval.projects,
+          mediaGenerations: undefined,
+          mediaResults: {
+            ...approval.projects.mediaResults!,
+            publications: [
               { ...publication, packageDigest: "sha256:" + "f".repeat(64) },
             ],
           },

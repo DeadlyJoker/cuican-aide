@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { ProjectToolInputError } from "./plugins/project-tool-input-error.ts";
 import type { WorkItemClaim } from "@crewon/application";
 import {
   dispatchToolExecutionReceipt,
@@ -96,6 +97,86 @@ function fixture(value = command()) {
       ),
   };
 }
+
+test("pre-dispatch argument errors become bounded model feedback and release unused reservations", async () => {
+  const f = fixture();
+  let released = 0,
+    called = 0;
+  const runtime = adapt(
+    rawRuntime({
+      reserveExecution: () => ({
+        release: () => {
+          released++;
+        },
+        execute: async () => {
+          called++;
+          return result(f.invocation.command);
+        },
+      }),
+    }),
+    {
+      dispatchAuthority: async () => {
+        throw new ProjectToolInputError("readContent");
+      },
+    },
+  );
+  const reservation = runtime.reserveExecution!(
+    f.invocation.command,
+    f.invocation.signal,
+  )!;
+  const failure = await f.grant(() => reservation.execute());
+  assert.equal(failure.status, "completed");
+  if (failure.status !== "completed")
+    throw new Error("expected completed tool feedback");
+  assert.equal(failure.result.isError, true);
+  assert.match(failure.result.output, /briefRevision/);
+  assert.ok(Buffer.byteLength(failure.result.output) < 1024);
+  assert.equal(called, 0);
+  assert.equal(released, 1);
+  assert.deepEqual(
+    await f.grant(
+      () => runtime.reconcile(f.invocation.command, f.invocation.signal),
+      "reconcile",
+    ),
+    failure,
+  );
+  await assert.rejects(
+    f.grant(
+      () => runtime.cancel(f.invocation.command, f.invocation.signal),
+      "cancel",
+    ),
+    ProjectToolInputError,
+  );
+});
+
+test("argument feedback never swallows authority, aborted dispatch, or post-dispatch failures", async () => {
+  for (const reason of ["authority", "aborted", "delegated"] as const) {
+    const f = fixture();
+    const runtime = adapt(
+      rawRuntime({
+        execute: async () => {
+          throw new ProjectToolInputError("readContent");
+        },
+      }),
+      {
+        dispatchAuthority: async (_, delegate) => {
+          if (reason === "authority") throw new Error("authority_denied");
+          if (reason === "delegated") return delegate();
+          f.signal.abort(new Error("test_abort"));
+          throw new ProjectToolInputError("readContent");
+        },
+      },
+    );
+    await assert.rejects(
+      f.grant(() => runtime.execute(f.invocation.command, f.invocation.signal)),
+      reason === "authority"
+        ? /authority_denied/
+        : reason === "aborted"
+          ? /test_abort/
+          : ProjectToolInputError,
+    );
+  }
+});
 
 test("valid command/lease DTO and capacity preflight never authorize plugin I/O", async () => {
   let called = 0,
