@@ -55,6 +55,65 @@ export function* loadAssetReferenceImagePlan(
   input: ReturnType<typeof captureAssetReferenceImageRead>,
   verifier: ProjectGenerationImageResultVerifier | undefined,
 ): AssetPlan<ProjectAssetReferenceImageSource> {
+  const { asset, content, reference } =
+    yield* loadSelectedAssetReferenceRecords(d, input);
+  const { actor } = input;
+  const resultLink = yield* verifyProjectAssetSavedImageSource(
+    d,
+    actor,
+    reference,
+    verifier,
+  );
+  const rows = yield* assetQuery(
+    d,
+    `SELECT * FROM ${d.prefix}extension_configurations WHERE tenant_id=$1 AND space_id=$2 AND plugin_id=$3 AND revision=$4`,
+    [
+      actor.tenantId,
+      actor.spaceId,
+      resultLink.pluginId,
+      resultLink.configurationRevision,
+    ],
+  );
+  const row = rows[0];
+  if (!row) projectAssetFailure("project_asset_reference_proof_missing");
+  const configuration = parseExtensionConfiguration(
+    typeof row.configuration_json === "string"
+      ? JSON.parse(row.configuration_json)
+      : row.configuration_json,
+    creativeStoreDigester,
+  );
+  const fields = {
+    tenant_id: configuration.tenantId,
+    space_id: configuration.spaceId,
+    plugin_id: configuration.pluginId,
+    revision: configuration.revision,
+  };
+  if (
+    Object.entries(fields).some(([k, v]) => String(row[k]) !== String(v)) ||
+    configuration.tenantId !== actor.tenantId ||
+    configuration.spaceId !== actor.spaceId ||
+    configuration.pluginId !== resultLink.pluginId ||
+    configuration.pluginVersion !== resultLink.pluginVersion ||
+    configuration.revision !== resultLink.configurationRevision ||
+    configuration.contentDigest !== resultLink.configurationDigest
+  )
+    projectAssetFailure("project_asset_reference_proof_changed");
+  return Object.freeze({
+    asset,
+    content,
+    reference,
+    resultLink,
+    configuration,
+  });
+}
+
+/** Shared original project/asset validation, before branching on the stored reference version. */
+export function* loadSelectedAssetReferenceRecords(
+  d: AssetDialect,
+  input: ReturnType<typeof captureAssetReferenceImageRead>,
+): AssetPlan<
+  Pick<ProjectAssetReferenceImageSource, "asset" | "content" | "reference">
+> {
   const { actor, query: q } = input,
     owner = assetOwner(actor);
   yield* assetLock(d, [
@@ -116,51 +175,5 @@ export function* loadAssetReferenceImagePlan(
       brief,
       { failureCode: "project_asset_source_stale" },
     );
-  const resultLink = yield* verifyProjectAssetSavedImageSource(
-    d,
-    actor,
-    reference,
-    verifier,
-  );
-  const rows = yield* assetQuery(
-    d,
-    `SELECT * FROM ${d.prefix}extension_configurations WHERE tenant_id=$1 AND space_id=$2 AND plugin_id=$3 AND revision=$4`,
-    [
-      actor.tenantId,
-      actor.spaceId,
-      resultLink.pluginId,
-      resultLink.configurationRevision,
-    ],
-  );
-  const row = rows[0];
-  if (!row) projectAssetFailure("project_asset_reference_proof_missing");
-  const configuration = parseExtensionConfiguration(
-    typeof row.configuration_json === "string"
-      ? JSON.parse(row.configuration_json)
-      : row.configuration_json,
-    creativeStoreDigester,
-  );
-  const fields = {
-    tenant_id: configuration.tenantId,
-    space_id: configuration.spaceId,
-    plugin_id: configuration.pluginId,
-    revision: configuration.revision,
-  };
-  if (
-    Object.entries(fields).some(([k, v]) => String(row[k]) !== String(v)) ||
-    configuration.tenantId !== actor.tenantId ||
-    configuration.spaceId !== actor.spaceId ||
-    configuration.pluginId !== resultLink.pluginId ||
-    configuration.pluginVersion !== resultLink.pluginVersion ||
-    configuration.revision !== resultLink.configurationRevision ||
-    configuration.contentDigest !== resultLink.configurationDigest
-  )
-    projectAssetFailure("project_asset_reference_proof_changed");
-  return Object.freeze({
-    asset,
-    content,
-    reference,
-    resultLink,
-    configuration,
-  });
+  return Object.freeze({ asset, content, reference });
 }

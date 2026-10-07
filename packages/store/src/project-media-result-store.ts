@@ -1,6 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import {
+  parseProjectAssetMediaReferenceImageRequest,
+  type ProjectAssetMediaReferenceImageRequest,
+  type ProjectAssetMediaReferenceImageStore,
+} from "@crewon/application";
+import { loadAssetMediaReferenceImagePlan } from "./project-asset-media-reference-image-plan.ts";
+import {
   parseProjectAssetMediaAdoptionWrite,
   captureProjectAssetMediaAdoptionAuthority,
   type ProjectAssetMediaAdoptionWrite,
@@ -80,7 +86,8 @@ export class SqliteProjectMediaResultStore
   implements
     ProjectMediaResultStore,
     ProjectAssetMediaReferenceQualificationStore,
-    ProjectAssetMediaAdoptionStore
+    ProjectAssetMediaAdoptionStore,
+    ProjectAssetMediaReferenceImageStore
 {
   #enabled = false;
   #assetAdoptionsEnabled = false;
@@ -154,6 +161,18 @@ export class SqliteProjectMediaResultStore
       adoptAssetMediaReferencePlan(this.#d, write),
       captured,
       "adoption",
+    );
+  }
+  loadAdoptedAssetReference(
+    input: ProjectAssetMediaReferenceImageRequest,
+    authority: ProjectMediaResultAuthority,
+  ) {
+    const request = parseProjectAssetMediaReferenceImageRequest(input),
+      captured = capture(authority.request, authority, "read");
+    return this.#transaction(
+      loadAssetMediaReferenceImagePlan(this.#d, request, captured.request),
+      captured.authority,
+      "read",
     );
   }
   #rollback() {
@@ -298,10 +317,23 @@ export class PostgresProjectMediaResultStore
   implements
     ProjectMediaResultStore,
     ProjectAssetMediaReferenceQualificationStore,
-    ProjectAssetMediaAdoptionStore
+    ProjectAssetMediaAdoptionStore,
+    ProjectAssetMediaReferenceImageStore
 {
   #enabled = false;
   #assetAdoptionsEnabled = false;
+  loadAdoptedAssetReference(
+    input: ProjectAssetMediaReferenceImageRequest,
+    authority: ProjectMediaResultAuthority,
+  ) {
+    const request = parseProjectAssetMediaReferenceImageRequest(input),
+      captured = capture(authority.request, authority, "read");
+    return this.#transaction(
+      loadAssetMediaReferenceImagePlan(this.#d, request, captured.request),
+      captured.authority,
+      "read",
+    );
+  }
   async migrateAssetAdoptions() {
     await this.#client(async (c) => {
       await c.query("BEGIN");
