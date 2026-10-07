@@ -1,3 +1,4 @@
+import { ProjectMediaResultControlClient } from "./project-media-result-control-client.ts";
 import { ProjectMediaGenerationControlClient } from "./project-media-generation-control-client.ts";
 import { ProjectMediaInputStageControlClient } from "./project-media-input-stage-control-client.ts";
 import {
@@ -238,6 +239,7 @@ export class ControlApiClient {
   #projectAssetStageClient: ProjectAssetStageControlClient | null = null;
   #projectMediaGenerationClient: ProjectMediaGenerationControlClient | null =
     null;
+  #projectMediaResultClient: ProjectMediaResultControlClient | null = null;
   #projectMediaInputClient: ProjectMediaInputControlClient | null = null;
 
   constructor(config: ControlApiClientConfig) {
@@ -1688,6 +1690,13 @@ export class ControlApiClient {
           this.#json(method, path, body, options),
         protocolError: (code) => new ControlApiProtocolError(code),
       }));
+  }
+
+  get projectMediaResults(): ProjectMediaResultControlClient {
+    return (this.#projectMediaResultClient ??= new ProjectMediaResultControlClient({
+      json: (method, path, body, options) => this.#json(method, path, body, options),
+      protocolError: (code) => new ControlApiProtocolError(code),
+    }));
   }
 
   get projectMediaInputs(): ProjectMediaInputControlClient {

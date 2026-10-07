@@ -19,6 +19,7 @@
     "./project-conversation-association": "./src/project-conversation-association.ts",
     "./project-context": "./src/project-context.ts",
     "./project-media-execution": "./src/plugin-project-media-execution-service.ts",
+    "./project-media-results": "./src/project-media-results.ts",
     "./project-media-generations": "./src/project-media-generations.ts",
     "./project-media-generation-recovery": "./src/project-media-generation-recovery.ts",
     "./project-media-inputs": "./src/project-media-inputs.ts",

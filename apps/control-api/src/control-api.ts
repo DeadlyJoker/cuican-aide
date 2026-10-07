@@ -1,3 +1,5 @@
+import { registerProjectMediaResultCatalogRoutes } from "./project-media-result-catalog-route.ts";
+import type { ProjectMediaResultCatalogApplicationService } from "@crewon/application";
 import { registerProjectMediaGenerationRoutes } from "./project-media-generation-route.ts";
 import type { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
 import { registerProjectMediaInputStageRoutes } from "./project-media-input-stage-route.ts";
@@ -268,6 +270,7 @@ export type ControlApiDependencies = Readonly<{
   projectAssets?: ProjectAssetApplicationService | null;
   projectMediaInputs?: InstalledProjectMediaInputRuntime | null;
   projectMediaGenerations?: InstalledProjectMediaGenerationRuntime | null;
+  projectMediaResultCatalog?: ProjectMediaResultCatalogApplicationService | null;
   projectConversations?: ProjectConversationControlOwner | null;
   projectMediaInputStages?:ProjectMediaInputStageControlOwner|null;
   projectAssetStages?:ProjectAssetStageControlOwner|null;
@@ -419,6 +422,8 @@ export function buildControlApi(
     });
   }
   if (dependencies.projectAssets != null) registerProjectAssetRoutes(app, { identity: dependencies.identity, assets: dependencies.projectAssets });
+  if (dependencies.projectMediaResultCatalog != null)
+    registerProjectMediaResultCatalogRoutes(app, { identity: dependencies.identity, service: dependencies.projectMediaResultCatalog });
   if (dependencies.projectMediaGenerations != null)
     registerProjectMediaGenerationRoutes(app, {
       identity: dependencies.identity,

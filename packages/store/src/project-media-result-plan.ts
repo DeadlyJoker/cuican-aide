@@ -7,6 +7,7 @@ import {
   type ProjectMediaResultSource,
   type ProjectMediaResultCandidate,
   type ProjectMediaResultRequest,
+  type ProjectMediaResultCatalogRequest,
 } from "@crewon/application";
 import {
   assetLock,
@@ -247,4 +248,69 @@ export function* mediaResultPublicationPlan(
   );
   if (project.state !== "active") fail("project_archived");
   return yield* mediaResultSourcePlan(d, request);
+}
+
+/** The original project lock, owner filter and accepted provenance remain authoritative on every page. */
+export function* mediaResultCatalogPlan(
+  d: AssetDialect,
+  request: ProjectMediaResultCatalogRequest,
+): MediaResultPlan<
+  Readonly<{
+    candidates: readonly ProjectMediaResultCandidate[];
+    nextCandidateId: string | null;
+  }>
+> {
+  const { actor, query } = request;
+  yield* assetLock(d, [
+    "creative-project-project",
+    d.schema,
+    actor.tenantId,
+    actor.spaceId,
+    query.projectId,
+  ]);
+  yield* assetProject(d, assetOwner(actor), query.projectId);
+  const collation = d.postgres ? 'COLLATE "C"' : "COLLATE BINARY";
+  const rows = yield* assetQuery(
+    d,
+    `SELECT * FROM ${d.prefix}${table} WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND owner_principal_id=$4 AND (CAST($5 AS TEXT) IS NULL OR candidate_id ${collation}>$5) ORDER BY candidate_id ${collation} LIMIT $6`,
+    [
+      actor.tenantId,
+      actor.spaceId,
+      query.projectId,
+      actor.principalId,
+      query.afterCandidateId,
+      query.limit + 1,
+    ],
+  );
+  if (rows.length > query.limit + 1) fail("catalog_invalid");
+  const candidates: ProjectMediaResultCandidate[] = [];
+  let previous = query.afterCandidateId;
+  for (const row of rows) {
+    const candidate = parseProjectMediaResultCandidate(raw(row.record_json)),
+      indexed = values(candidate),
+      source = candidate.frozen.request;
+    if (
+      columns.some((key, i) => String(row[key]) !== String(indexed[i])) ||
+      source.actor.tenantId !== actor.tenantId ||
+      source.actor.spaceId !== actor.spaceId ||
+      source.actor.principalId !== actor.principalId ||
+      source.query.projectId !== query.projectId ||
+      (previous !== null && candidate.candidateId <= previous)
+    )
+      fail("history_invalid");
+    // Validate against original Run/input/operation history, including the lookahead row.
+    const actual = yield* mediaResultLoadPlan(d, {
+      actor,
+      query: source.query,
+    });
+    if (!mediaInputSame(actual, candidate)) fail("history_invalid");
+    previous = candidate.candidateId;
+    candidates.push(candidate);
+  }
+  const hasMore = candidates.length > query.limit;
+  if (hasMore) candidates.pop();
+  return Object.freeze({
+    candidates: Object.freeze(candidates),
+    nextCandidateId: hasMore ? candidates.at(-1)!.candidateId : null,
+  });
 }
