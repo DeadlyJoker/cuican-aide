@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`keeps the plugin as the sole content surface while preserving ready and uncertain history context across hide/reopen without dispatch > plugin content without a host task bar 1`] = `"<div class="_module_61a1d0"><div class="_content_61a1d0" data-plugin-content-slot="main.content">Plugin-owned content</div></div>"`;
+
+exports[`keeps the plugin as the sole content surface while preserving ready and uncertain history context across hide/reopen without dispatch > plugin content without a host task bar 2`] = `"<div class="_module_61a1d0"><div class="_content_61a1d0" data-plugin-content-slot="main.content">Plugin-owned content</div></div>"`;
+
+exports[`keeps the plugin as the sole content surface while preserving ready and uncertain history context across hide/reopen without dispatch > plugin content without a host task bar 3`] = `"<div class="_module_61a1d0"><div class="_content_61a1d0" data-plugin-content-slot="main.content">Plugin-owned content</div></div>"`;

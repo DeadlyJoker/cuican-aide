@@ -18,7 +18,7 @@ import { taskContextThread } from "../../lib/plugins/installedPluginTaskContext.
 import { uiHarness } from "../../lib/plugins/pluginUiLoader.test-support";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
-it("publishes only the independent session-only history context and retains the original unknown intent across module hide/reopen without staging or dispatch", async () => {
+it("keeps the plugin as the sole content surface while preserving ready and uncertain history context across hide/reopen without dispatch", async () => {
   const lease = historicalQueryLease(),
     h = uiHarness();
   let current = true;
@@ -83,6 +83,17 @@ it("publishes only the independent session-only history context and retains the 
         node.textContent?.startsWith('{"locale"'),
       )?.textContent ?? "null",
     ) as Record<string, unknown> | null;
+  const expectContentOnly = () => {
+    expect(h.root.querySelector("details, summary, button")).toBeNull();
+    expect(h.root.textContent).not.toContain("任务与连接");
+    const shell = h.root.cloneNode(true) as HTMLElement;
+    shell.querySelector(
+      '[data-plugin-content-slot="main.content"]',
+    )!.textContent = "Plugin-owned content";
+    expect(shell.innerHTML).toMatchSnapshot(
+      "plugin content without a host task bar",
+    );
+  };
   try {
     await render(true);
     await act(async () => {
@@ -96,6 +107,7 @@ it("publishes only the independent session-only history context and retains the 
       );
     });
     expect(context()).not.toHaveProperty("projectGenerationQueryContext");
+    expectContentOnly();
     const input = historicalQueryInput();
     await act(async () => {
       await journal
@@ -117,6 +129,7 @@ it("publishes only the independent session-only history context and retains the 
         }),
       );
     });
+    expectContentOnly();
     await render(false);
     expect(h.root.textContent).toBe("");
     await render(true);
@@ -129,6 +142,7 @@ it("publishes only the independent session-only history context and retains the 
         }),
       );
     });
+    expectContentOnly();
     expect(
       wire.fetch.mock.calls.some(
         ([url]) =>

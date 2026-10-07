@@ -2,7 +2,6 @@ import {
   useInstalledPluginProjectHistoricalQueryContext,
   type InstalledPluginProjectHistoricalQueryPorts,
 } from "../../lib/plugins/useInstalledPluginProjectHistoricalQueryContext";
-import { InstalledPluginProjectHistoricalQueryControls } from "./InstalledPluginProjectHistoricalQueryControls";
 import {
   useEffect,
   useCallback,
@@ -21,24 +20,20 @@ import type { Locale } from "../../lib/i18n";
 import { PluginModuleMount } from "./PluginModuleMount";
 import { useInstalledPluginTaskContext } from "../../lib/plugins/useInstalledPluginTaskContext";
 import type { InstalledPluginTaskPorts } from "../../lib/plugins/useInstalledPluginTaskContext.types";
-import { InstalledPluginTaskControls } from "./InstalledPluginTaskControls";
 import { useInstalledPluginGenerationContext } from "../../lib/plugins/useInstalledPluginGenerationContext";
 import type { InstalledPluginGenerationPorts } from "../../lib/plugins/useInstalledPluginGenerationContext.types";
-import { InstalledPluginGenerationControls } from "./InstalledPluginGenerationControls";
 
 import {
   useInstalledPluginProjectQueryContext,
   type InstalledPluginProjectQueryPorts,
 } from "../../lib/plugins/useInstalledPluginProjectQueryContext";
-import { InstalledPluginProjectQueryControls } from "./InstalledPluginProjectQueryControls";
 
 import {
   useInstalledPluginProjectSelectionContext,
   type InstalledPluginProjectSelectionPorts,
 } from "../../lib/plugins/useInstalledPluginProjectSelectionContext";
 
-import { InstalledPluginTaskPanel } from "./InstalledPluginTaskPanel";
-import panelStyles from "./InstalledPluginTaskPanel.module.css";
+import styles from "./InstalledPluginModule.module.css";
 import { InstalledPluginUnavailable } from "./InstalledPluginUnavailable";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
@@ -66,7 +61,6 @@ export function InstalledPluginModule({
   runIds = [],
   projectConversationContext,
   projectPlanningDraft,
-  onOpenTask,
 }: Readonly<{
   host: ControlPluginUiHost;
   module: ControlPluginUiModule;
@@ -365,70 +359,15 @@ export function InstalledPluginModule({
         onRetry={() => setMountAttempt((attempt) => attempt + 1)}
       />
     );
-  const hasControls = Boolean(
-    (generationEnabled && generationPorts) ||
-      (taskEnabled && taskPorts && onOpenTask) ||
-      (queryEnabled && projectQueryPorts && projectQuery.context.intent) ||
-      (historicalQueryEnabled &&
-        historicalQueryPorts &&
-        historicalQuery.context.intent),
-  );
-  const needsAttention = Boolean(
-    generation.error ||
-      tasks.error ||
-      projectQuery.error ||
-      historicalQuery.error ||
-      generation.context.phase === "uncertain" ||
-      tasks.phase === "uncertain" ||
-      [
-        generation.context.intent,
-        projectQuery.context.intent,
-        historicalQuery.context.intent,
-      ].some((intent) => intent?.phase === "uncertain"),
-  );
   return (
-    <div className={panelStyles.module}>
-      {hasControls && (
-        <InstalledPluginTaskPanel
-          locale={locale}
-          needsAttention={needsAttention}
-        >
-          {generationEnabled && generationPorts ? (
-            <InstalledPluginGenerationControls
-              state={generation}
-              locale={locale}
-            />
-          ) : null}
-          {queryEnabled && projectQueryPorts && projectQuery.context.intent ? (
-            <InstalledPluginProjectQueryControls
-              state={projectQuery}
-              locale={locale}
-            />
-          ) : null}
-          {historicalQueryEnabled &&
-          historicalQueryPorts &&
-          historicalQuery.context.intent ? (
-            <InstalledPluginProjectHistoricalQueryControls
-              state={historicalQuery}
-              locale={locale}
-            />
-          ) : null}
-          {taskEnabled && taskPorts && onOpenTask ? (
-            <InstalledPluginTaskControls
-              state={tasks}
-              locale={locale}
-              onOpenTask={onOpenTask}
-            />
-          ) : null}
-        </InstalledPluginTaskPanel>
-      )}
+    <div className={styles.module}>
       {ready !== context ? (
         <p role="status">
           {locale === "zh" ? "正在加载模块…" : "Loading module…"}
         </p>
       ) : null}
       <PluginModuleMount
-        className={panelStyles.content}
+        className={styles.content}
         active={active}
         loader={host.loader}
         acquireMount={acquireMount}
