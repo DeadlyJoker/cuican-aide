@@ -12,6 +12,7 @@
     "./project-tools": "./src/plugin-project-tools-service.ts",
     "./project-texts-ui": "./src/project-texts-ui.ts",
     "./project-assets": "./src/project-assets.ts",
+    "./project-assets-v2": "./src/project-assets-v2.ts",
     "./project-asset-recovery": "./src/project-asset-recovery.ts",
     "./project-asset-stages": "./src/project-asset-stages.ts",
     "./project-text-recovery": "./src/project-text-recovery.ts",

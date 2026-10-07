@@ -207,7 +207,7 @@ function contentIdentity(
 }
 function referenceIdentity(
   asset: PublicProjectAsset,
-  reference: PublicProjectAssetReferenceRevision,
+  reference: Omit<PublicProjectAssetReferenceRevision, "source">,
 ): void {
   if (
     asset.projectId !== reference.projectId ||
@@ -220,6 +220,22 @@ function referenceIdentity(
 export function parsePublicProjectAssetView(
   input: unknown,
 ): PublicProjectAssetView {
+  return parsePublicProjectAssetViewWithReference(
+    input,
+    parsePublicProjectAssetReferenceRevision,
+  );
+}
+/** Shared invariant validation; each protocol supplies its own strict reference decoder. */
+export function parsePublicProjectAssetViewWithReference<
+  R extends Omit<PublicProjectAssetReferenceRevision, "source">,
+>(
+  input: unknown,
+  parseReference: (input: unknown) => R,
+): Readonly<
+  Omit<PublicProjectAssetView, "selectedReferenceRevision"> & {
+    selectedReferenceRevision: R | null;
+  }
+> {
   const value = record(copy(input, MAX_PROJECT_ASSET_UI_RESPONSE_BYTES), [
       "asset",
       "selectedContentRevision",
@@ -236,9 +252,7 @@ export function parsePublicProjectAssetView(
     reference =
       value.selectedReferenceRevision === null
         ? null
-        : parsePublicProjectAssetReferenceRevision(
-            value.selectedReferenceRevision,
-          );
+        : parseReference(value.selectedReferenceRevision);
   if (
     asset.selectedContentRevision !== (content?.contentRevision ?? null) ||
     asset.selectedReferenceRevision !== (reference?.referenceRevision ?? null)
