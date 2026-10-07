@@ -41,7 +41,7 @@ import {
   type InstalledPluginReleaseIdentity,
 } from "./installed-plugin-release-document.ts";
 import {
-  createInstalledPluginWorkerAuthority,
+  prepareInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
 } from "./installed-plugin-worker-authority.ts";
 import { ioJson, ioRecord } from "./plugin-execution-io-network.ts";
@@ -245,7 +245,10 @@ export async function prepareNativeInstalledPluginRelease(
     await current();
   };
   try {
-    authority = createInstalledPluginWorkerAuthority(loaded.worker);
+    authority = await prepareInstalledPluginWorkerAuthority(
+      loaded.worker,
+      loaded.environment,
+    );
     await current();
     files.assertCurrent();
     store = new SqliteRunStore(loaded.databasePath);

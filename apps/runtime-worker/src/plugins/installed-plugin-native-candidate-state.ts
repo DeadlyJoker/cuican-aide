@@ -27,7 +27,7 @@ import {
 } from "./installed-plugin-native-preparation-config.ts";
 import { nativePreparationFailure as fail } from "./installed-plugin-native-preparation-files.ts";
 import {
-  createInstalledPluginWorkerAuthority,
+  prepareInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
 } from "./installed-plugin-worker-authority.ts";
 import type {
@@ -105,7 +105,7 @@ function unavailableFilesystem(error: unknown): boolean {
 export class NativeCandidateMetadataOwner {
   readonly #loaded: LoadedNativeInstalledPluginPreparation;
   readonly #signal: AbortSignal;
-  readonly #authority: InstalledPluginWorkerAuthority;
+  #authority: InstalledPluginWorkerAuthority | null = null;
   #store: SqliteRunStore | null = null;
 
   constructor(
@@ -114,10 +114,17 @@ export class NativeCandidateMetadataOwner {
   ) {
     this.#loaded = loaded;
     this.#signal = signal;
-    this.#authority = createInstalledPluginWorkerAuthority(loaded.worker);
   }
 
   async open(): Promise<void> {
+    if (this.#authority !== null || this.#store !== null)
+      fail("owner_already_open");
+    this.#signal.throwIfAborted();
+    assertNativeInstalledPluginPreparation(this.#loaded);
+    this.#authority = await prepareInstalledPluginWorkerAuthority(
+      this.#loaded.worker,
+      this.#loaded.environment,
+    );
     await this.current();
     this.#store = new SqliteRunStore(this.#loaded.databasePath);
   }
@@ -146,6 +153,7 @@ export class NativeCandidateMetadataOwner {
   async current(): Promise<void> {
     this.#signal.throwIfAborted();
     assertNativeInstalledPluginPreparation(this.#loaded);
+    if (this.#authority === null) fail("authority_unavailable");
     const { actor, scope } = this.#loaded.configuration;
     const actual = await this.#authority.installedPluginExecution.resolveActor(
       {
@@ -175,6 +183,7 @@ export class NativeCandidateMetadataOwner {
     identity: InstalledPluginReleaseIdentity,
   ): Promise<"allow"> {
     await this.current();
+    if (this.#authority === null) fail("authority_unavailable");
     const { actor, scope, approvedPackages } = this.#loaded.configuration;
     if (
       !approvedPackages.some((approved) =>

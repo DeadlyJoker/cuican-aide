@@ -1,7 +1,7 @@
 import type { ActorContext } from "@crewon/application";
 import { extensionOpaqueId } from "@crewon/domain";
 import {
-  createInstalledPluginWorkerAuthority,
+  prepareInstalledPluginWorkerAuthority,
   type InstalledPluginWorkerAuthority,
 } from "./installed-plugin-worker-authority.ts";
 import { INSTALLED_PLUGIN_WORKER_CONFIG_ENV } from "./installed-plugin-worker-config.ts";
@@ -94,9 +94,13 @@ export async function loadInstalledPluginReleaseCliInput(
     )
   )
     throw new Error("installed_plugin_release_bootstrap_mismatch");
-  const authority = createInstalledPluginWorkerAuthority(config);
+  const authority = await prepareInstalledPluginWorkerAuthority(
+    config,
+    input.environment,
+  );
   let release: LoadedInstalledPluginRelease | undefined;
   try {
+    input.signal?.throwIfAborted();
     release = await loadInstalledPluginRelease({
       document,
       installRoot: authority.installRoot,
