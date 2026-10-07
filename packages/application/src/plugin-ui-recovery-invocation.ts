@@ -18,6 +18,7 @@ import type {
 } from "./plugin-ui-recovery-ports.ts";
 
 const mutations = new Set([
+  "crewon.project-media-generations.v1.generate",
   "crewon.project-generations.v1.generateConcept",
   "crewon.project-generation-queries.v1.queryConceptGeneration",
   "crewon.project-generation-selections.v1.selectConceptImage",

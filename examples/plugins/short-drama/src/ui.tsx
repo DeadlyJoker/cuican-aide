@@ -1,3 +1,6 @@
+import { ProjectMediaGenerationController } from "./workbench/ProjectMediaGenerationController";
+import { createMediaGenerationClient } from "./project-media-generations-service";
+import { mediaGenerationCodec } from "./project-media-generations-codec.mjs";
 import { createPluginMediaInputUiClient } from "./project-media-inputs-ui-client";
 import { projectMediaInputsUiCodec } from "./project-media-inputs-ui-codec.mjs";
 import { ProjectMediaInputController } from "./workbench/ProjectMediaInputController";
@@ -214,6 +217,7 @@ export default defineUiPlugin({
     let plans: ProjectTextPlanController | null = null;
     let assets: ProjectAssetController | null = null;
     let mediaInputs: ProjectMediaInputController | null = null;
+    let mediaGenerations: ProjectMediaGenerationController | null = null;
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
@@ -222,6 +226,7 @@ export default defineUiPlugin({
       plans?.refreshWriteActivity();
       assets?.refreshWriteActivity();
       mediaInputs?.refreshWriteActivity();
+      mediaGenerations?.refreshWriteActivity();
     });
     const clients = writes.services;
     controller = preview
@@ -294,6 +299,16 @@ export default defineUiPlugin({
           ),
           physicalWritesPending: () => writes.pending,
         });
+    mediaGenerations = preview
+      ? null
+      : new ProjectMediaGenerationController({
+          client: createMediaGenerationClient(clients, mediaGenerationCodec),
+          conversations: createPluginProjectConversationsClient(
+            clients,
+            projectConversationsCodec,
+          ),
+          physicalWritesPending: () => writes.pending,
+        });
     mediaInputs = preview
       ? null
       : new ProjectMediaInputController({
@@ -344,6 +359,8 @@ export default defineUiPlugin({
       plans?.setReady(ready);
       assets?.setReady(ready);
       mediaInputs?.setReady(ready);
+      mediaGenerations?.setThread(generationContext(next.data)?.thread ?? null);
+      mediaGenerations?.setReady(ready);
       if (!ready) controller?.setReady(false);
       controller?.setRecoveryContexts({
         selection: selectionContext(next.data),
@@ -362,6 +379,7 @@ export default defineUiPlugin({
               plans={plans}
               assets={assets ?? undefined}
               mediaInputs={mediaInputs ?? undefined}
+              mediaGenerations={mediaGenerations ?? undefined}
               planningDraft={planningDraft(next.data)}
               association={association ?? undefined}
               associationReady={ready}
@@ -391,6 +409,7 @@ export default defineUiPlugin({
       plans?.dispose();
       assets?.dispose();
       mediaInputs?.dispose();
+      mediaGenerations?.dispose();
       try {
         flushSync(() => reactRoot.unmount());
       } finally {
@@ -411,6 +430,7 @@ export default defineUiPlugin({
         plans?.dispose();
         assets?.dispose();
         mediaInputs?.dispose();
+        mediaGenerations?.dispose();
         try {
           flushSync(() => reactRoot.unmount());
         } finally {

@@ -1,4 +1,8 @@
 import {
+  PROJECT_MEDIA_GENERATE_UI_ACTION,
+  parseGenerateProjectMediaResponse,
+} from "@crewon/contracts/project-media-generations";
+import {
   parsePluginUiRecoveryRequest,
   type PluginUiRecoveryHint,
   type PluginUiRecoveryRequest,
@@ -18,6 +22,8 @@ export function pluginUiRecoveryReceipt(
   input: unknown,
 ): NonNullable<PluginUiRecoveryHint["receipt"]> {
   switch (request.action) {
+    case PROJECT_MEDIA_GENERATE_UI_ACTION:
+      return parseGenerateProjectMediaResponse(request.input, input);
     case "crewon.project-generations.v1.generateConcept":
       return parseProjectGenerationUiActionResponse(request, input);
     case "crewon.project-generation-queries.v1.queryConceptGeneration":

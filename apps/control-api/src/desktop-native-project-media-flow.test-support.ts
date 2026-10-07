@@ -21,12 +21,14 @@ export async function nativeMediaFlowFixture(
   t: TestContext,
   options: {
     kind?: "T10" | "D18";
+    packageDirectory?: string;
     mediaTransportGrant?: "none" | "read" | "all";
   } = {},
 ) {
   const provider = nativeMediaProvider(t);
   const f = await desktopNativeMediaInputFixture(t, ["read", "write"], {
     mediaGenerations: true,
+    packageDirectory: options.packageDirectory,
     generationFlow: true,
     mediaTransportGrant: options.mediaTransportGrant,
   });
@@ -137,6 +139,7 @@ export async function nativeMediaFlowFixture(
   });
   const invoke = async (action: string, input: PluginUiJsonValue) => {
     if (
+      action === "crewon.project-media-generations.v1.generate" ||
       action === "crewon.project-generations.v1.generateConcept" ||
       action === "crewon.project-generation-selections.v1.selectConceptImage"
     ) {
@@ -419,6 +422,7 @@ export async function nativeMediaFlowFixture(
   return {
     ...f,
     provider,
+    mount,
     invoke,
     assets,
     character,

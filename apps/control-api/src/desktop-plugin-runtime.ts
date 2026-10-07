@@ -423,12 +423,14 @@ export async function createDesktopPluginRuntime(
           : undefined,
       fallback: mediaInputUi?.hostUiServices ?? originalBusinessHostUiServices,
       committedTasks: taskRuntime?.core.owner.committedTasks,
+      recovery: () => recovery?.service,
     });
     const businessHostUiServices =
       mediaGenerationUi?.hostUiServices ??
       mediaInputUi?.hostUiServices ??
       originalBusinessHostUiServices;
     recovery = await prepareDesktopPluginUiRecovery({
+      mediaGenerations: mediaGenerationUi?.owner,
       configuration: recoveryConfiguration,
       publications: configuration.publications,
       metadataUi: dependencies.creativeProjects?.pluginUi,

@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "26.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "27.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -25,6 +25,15 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-media-generations-service.ts",
+    "3512d5a3c0bcd2baee06c5f8fa36bd634fd10df65273cba42debeb6c572533a2",
+  ],
+  [
+    "project-media-generations-codec.mjs",
+    "dcb975e73cd35006a1e9a34d5bf4be7a32bebc1b9b849168e37dd18921905b64",
+  ],
+
   [
     "project-media-input-tools-service.ts",
     "6e2daf8d42f46d070653d0542b7d05186e92e5e12a744e7335c253dae0fb84d4",
@@ -349,6 +358,11 @@ const descriptor = parsePluginPackageDescriptor({
       optional: true,
     },
     { service: "crewon.project-media-inputs", apiVersion: "1", optional: true },
+    {
+      service: "crewon.project-media-generations",
+      apiVersion: "1",
+      optional: true,
+    },
     {
       service: "crewon.project-media-execution",
       apiVersion: "1",

@@ -100,12 +100,13 @@ const accepted = (index = 0) => ({
   receipt: structuredClone(index === 2 ? selectionReceipt : taskReceipt),
 });
 
-test("captures only the three original immutable command schemas, without scope or URL selectors", () => {
+test("preserves the three original immutable command schemas, without scope or URL selectors", () => {
   for (const original of requests) {
     const input = structuredClone(original);
     const parsed = parsePluginUiRecoveryRequest(input);
     input.input.idempotencyKey = "replacement";
     assert.equal(parsed.input.idempotencyKey, original.input.idempotencyKey);
+    assert.ok("reference" in parsed.input);
     assert.ok(Object.isFrozen(parsed.input.reference));
     for (const key of ["actorId", "principalId", "payerId", "url", "sourcePin"])
       assert.throws(() =>

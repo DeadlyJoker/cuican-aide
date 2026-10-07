@@ -1,4 +1,9 @@
 import {
+  PROJECT_MEDIA_GENERATE_UI_ACTION,
+  PROJECT_MEDIA_RECOVERY_UI_ACTION,
+} from "@crewon/contracts/project-media-generations";
+import { parseProjectMediaGenerationRecoveryResponse } from "@crewon/contracts/project-media-generation-recovery";
+import {
   PLUGIN_UI_RECOVERY_VERSION,
   parsePluginUiRecoveryHint,
   parsePluginUiRecoveryHintsResponse,
@@ -149,7 +154,8 @@ export class PluginUiRecoveryApplicationService
       .filter(
         (value) =>
           value.sourcePin.pluginId === captured.pin.pluginId &&
-          value.sourcePin.contributionId === captured.pin.contributionId,
+          value.sourcePin.contributionId === captured.pin.contributionId &&
+          value.sourcePin.action !== PROJECT_MEDIA_GENERATE_UI_ACTION,
       );
     const intents: PluginUiRecoveryHint[] = [];
     for (const kind of ["generation", "query", "selection"] as const) {
@@ -165,6 +171,38 @@ export class PluginUiRecoveryApplicationService
     return parsePluginUiRecoveryHintsResponse({
       version: PLUGIN_UI_RECOVERY_VERSION,
       intents,
+    });
+  }
+
+  async getMediaGenerationRecovery(context: PluginUiActionContext) {
+    const captured = this.#capture(context);
+    if (
+      captured.context.action !== PROJECT_MEDIA_RECOVERY_UI_ACTION ||
+      captured.context.input !== null
+    )
+      unavailable();
+    this.#publication(captured.context, PROJECT_MEDIA_GENERATE_UI_ACTION);
+    await captured.authority.assertCurrent();
+    const records = await this.#store.listUiIntentHints({
+      account: captured.account,
+    });
+    await captured.authority.assertCurrent();
+    if (!Array.isArray(records) || records.length > 32) invalid();
+    const family = records
+      .map((value) => this.#record(value, captured.account))
+      .filter(
+        (value) =>
+          value.sourcePin.pluginId === captured.pin.pluginId &&
+          value.sourcePin.contributionId === captured.pin.contributionId &&
+          value.sourcePin.action === PROJECT_MEDIA_GENERATE_UI_ACTION,
+      )
+      .sort((a, b) => b.sequence - a.sequence);
+    const record =
+      family.find(
+        (value) => value.phase === "prepared" || value.phase === "dispatched",
+      ) ?? family[0];
+    return parseProjectMediaGenerationRecoveryResponse({
+      intent: record ? this.#hint(record, captured.pin) : null,
     });
   }
 
@@ -361,12 +399,14 @@ export class PluginUiRecoveryApplicationService
       unavailable();
     if (action !== undefined) {
       const service =
-        action === "crewon.project-generations.v1.generateConcept"
-          ? "crewon.project-generations"
-          : action ===
-              "crewon.project-generation-queries.v1.queryConceptGeneration"
-            ? "crewon.project-generation-queries"
-            : "crewon.project-generation-selections";
+        action === PROJECT_MEDIA_GENERATE_UI_ACTION
+          ? "crewon.project-media-generations"
+          : action === "crewon.project-generations.v1.generateConcept"
+            ? "crewon.project-generations"
+            : action ===
+                "crewon.project-generation-queries.v1.queryConceptGeneration"
+              ? "crewon.project-generation-queries"
+              : "crewon.project-generation-selections";
       if (
         !context.lease.descriptor.requires.some(
           (item) => item.service === service && item.apiVersion === "1",
@@ -484,7 +524,7 @@ export function capturePluginUiRecoveryPublications(
       !Array.isArray(value.actions) ||
       Object.getPrototypeOf(value.actions) !== Array.prototype ||
       value.actions.length < (mode === "metadata-read" ? 0 : 1) ||
-      value.actions.length > 3 ||
+      value.actions.length > 4 ||
       Reflect.ownKeys(value.actions).length !== value.actions.length + 1
     )
       invalid();
@@ -500,6 +540,7 @@ export function capturePluginUiRecoveryPublications(
           !Object.hasOwn(action, "value") ||
           !action.enumerable ||
           ![
+            PROJECT_MEDIA_GENERATE_UI_ACTION,
             "crewon.project-generations.v1.generateConcept",
             "crewon.project-generation-queries.v1.queryConceptGeneration",
             "crewon.project-generation-selections.v1.selectConceptImage",

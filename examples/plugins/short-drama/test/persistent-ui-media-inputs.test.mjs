@@ -27,7 +27,12 @@ test("the real package module confirms T10 and D18 with adopted source selectors
     scriptId = await host.addScript();
   let f = fixture(definition, {
     props: persistentProps(true),
-    services: host.services,
+    services: {
+      invoke: (action, input, options) =>
+        action === "crewon.project-media-generations.v1.getRecovery"
+          ? Promise.resolve({ intent: null })
+          : host.services.invoke(action, input, options),
+    },
   });
   try {
     await settle();
@@ -85,7 +90,12 @@ test("the real package module confirms T10 and D18 with adopted source selectors
     await f.dispose();
     f = fixture(definition, {
       props: persistentProps(true),
-      services: host.services,
+      services: {
+        invoke: (action, input, options) =>
+          action === "crewon.project-media-generations.v1.getRecovery"
+            ? Promise.resolve({ intent: null })
+            : host.services.invoke(action, input, options),
+      },
     });
     await settle();
     await f.click(f.container.querySelector(".project-card"));
@@ -105,5 +115,153 @@ test("the real package module confirms T10 and D18 with adopted source selectors
     );
   } finally {
     await f.dispose();
+  }
+});
+
+test("saved input generates through the project conversation; theme update and remount only recover the original request", async () => {
+  const host = mediaInputFixture(),
+    writes = [];
+  const source = {
+    pluginId: "crewon.short-drama",
+    publisherId: "example.publisher",
+    version: "27.0.0",
+    packageDigest: "sha256:" + "a".repeat(64),
+    selectionRevision: 1,
+  };
+  const binding = {
+    bindingId: "binding",
+    projectId: host.projectId,
+    threadId: "bound-thread",
+    workspaceId: "workspace",
+    revision: 1,
+    state: "active",
+    source,
+    createdAt: "2026-10-07T00:00:00.000Z",
+    updatedAt: "2026-10-07T00:00:00.000Z",
+  };
+  let intent = null,
+    release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const props = (mode = "light") => ({
+    ...persistentProps(
+      true,
+      { "--text": mode === "dark" ? "#eee" : "#202020" },
+      mode,
+    ),
+    data: {
+      pluginUiReady: true,
+      locale: "zh",
+      projectGenerationContext: {
+        version: "crewon.project-generation-host-context.v1",
+        phase: "ready",
+        thread: { threadId: binding.threadId, revision: 4, provisional: false },
+        threadReady: true,
+        intent: null,
+      },
+    },
+  });
+  const services = {
+    async invoke(action, input, options) {
+      if (action === "crewon.project-media-generations.v1.getRecovery")
+        return { intent: structuredClone(intent) };
+      if (
+        [
+          "crewon.project-conversations.v1.getBinding",
+          "crewon.project-conversations.v1.openConversation",
+        ].includes(action)
+      )
+        return { binding };
+      if (action === "crewon.project-media-generations.v1.generate") {
+        writes.push(structuredClone(input));
+        intent = {
+          sourcePin: { ...source, contributionId: "workbench" },
+          request: { action, input: structuredClone(input) },
+          phase: "dispatched",
+          revision: 2,
+          dispatchMayHaveOccurred: true,
+          dispatchAttemptCount: 1,
+          retryable: true,
+          reasonCode: null,
+          receipt: null,
+        };
+        await gate;
+        const receipt = {
+          disposition: "committed",
+          projectId: input.projectId,
+          mediaInputId: input.mediaInputId,
+          inputRevision: input.inputRevision,
+          executionId: input.executionId,
+          threadId: input.threadId,
+          threadRevision: 5,
+          runId: "original-media-run",
+        };
+        intent = {
+          ...intent,
+          phase: "accepted",
+          revision: 3,
+          retryable: false,
+          receipt,
+        };
+        throw new Error("named-lost-accepted-response");
+      }
+      return host.services.invoke(action, input, options);
+    },
+  };
+  const outside = browser.document.createElement("aside");
+  outside.textContent = "原侧栏";
+  outside.style.color = "red";
+  browser.document.body.append(outside);
+  let f = fixture(definition, { props: props(), services });
+  const enter = async () => {
+    await settle();
+    await f.click(f.container.querySelector(".project-card"));
+    await f.click(
+      f.container.querySelector('[data-project-page="references"]'),
+    );
+  };
+  try {
+    await enter();
+    await f.click(f.button("新建T10 · 角色参考四视图"));
+    await select(f, "角色参考", "character-a");
+    await f.input(
+      f.container.querySelector('textarea[aria-label="媒体画面描述"]'),
+      "角色四视图，保留五官。",
+    );
+    assert.equal(f.button("生成画面").disabled, true);
+    await f.click(f.button("保存确认输入"));
+    assert.equal(f.button("生成画面").disabled, false);
+    await f.click(f.button("生成画面"));
+    assert.equal(writes.length, 1);
+    assert.equal(f.button("保存输入新版本").disabled, true);
+    assert.equal(
+      f.container.querySelector('textarea[aria-label="媒体画面描述"]').disabled,
+      true,
+    );
+    f.instance.update(props("dark"));
+    await settle();
+    assert.equal(writes.length, 1);
+    assert.equal(
+      outside.outerHTML,
+      '<aside style="color: red;">原侧栏</aside>',
+    );
+    release();
+    await settle();
+    assert.match(f.container.textContent, /暂未取得任务回执/);
+    await f.click(f.button("恢复原请求状态"));
+    assert.match(f.container.textContent, /任务已受理/);
+    assert.equal(writes.length, 1);
+    await f.dispose();
+    f = fixture(definition, { props: props("dark"), services });
+    await enter();
+    assert.match(f.container.textContent, /任务已受理/);
+    assert.equal(writes.length, 1);
+    await f.click(f.button("打开项目会话"));
+    assert.equal(writes.length, 1);
+  } finally {
+    release();
+    await f.dispose();
+    outside.remove();
   }
 });

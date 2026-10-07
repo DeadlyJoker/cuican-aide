@@ -2,12 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { TestContext } from "node:test";
 import {
   PluginUiApplicationService,
+  PluginUiRecoveryApplicationService,
+  createPluginUiIntentPayloadVerifier,
   type PluginUiActionContext,
   type PluginUiCommittedTaskOutcome,
 } from "@crewon/application";
 import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   PROJECT_MEDIA_GENERATE_UI_ACTION,
+  PROJECT_MEDIA_RECOVERY_UI_ACTION,
   parseGenerateProjectMediaResponse,
 } from "@crewon/contracts/project-media-generations";
 import { uiTestDescriptor } from "../../../packages/application/src/plugin-ui.test-support.ts";
@@ -24,6 +27,7 @@ export async function mediaGenerationUiFixture(
     declared?: boolean;
     publication?: string;
     kind?: "T10" | "D18";
+    recovery?: boolean;
   } = {},
 ) {
   const f = await mediaGenerationRuntimeFixture(t, backend, options.kind),
@@ -45,6 +49,15 @@ export async function mediaGenerationUiFixture(
               apiVersion: "1",
               optional: true,
             },
+            ...(options.recovery
+              ? [
+                  {
+                    service: "crewon.plugin-ui-recovery",
+                    apiVersion: "1",
+                    optional: true,
+                  },
+                ]
+              : []),
           ],
   });
   const state = {
@@ -53,8 +66,32 @@ export async function mediaGenerationUiFixture(
     outcomes: [] as PluginUiCommittedTaskOutcome[],
     afterOutcome: undefined as (() => void) | undefined,
   };
+  let recovery: PluginUiRecoveryApplicationService | undefined;
+  if (options.recovery) {
+    const store = f.parent.pluginUiIntentJournalStore({
+      verifier: createPluginUiIntentPayloadVerifier(f.digester),
+    });
+    await store.migratePluginUiIntentJournal();
+    recovery = new PluginUiRecoveryApplicationService({
+      store,
+      publications: [
+        {
+          pluginId: f.pin.pluginId,
+          packageDigest: f.pin.packageDigest,
+          contributionId: "workbench",
+          actions: [PROJECT_MEDIA_GENERATE_UI_ACTION],
+        },
+      ],
+      clock: f.dependencies.clock,
+      digester: f.digester,
+      onDiagnostic: (error) => {
+        throw error;
+      },
+    });
+  }
   const owner = new ProjectMediaGenerationPluginUiOwner({
     runtime: f.owner,
+    recovery: () => recovery,
     configuration: {
       publications: [
         {
@@ -98,6 +135,7 @@ export async function mediaGenerationUiFixture(
       },
     },
     committedTasks: owner.committedTasks,
+    ...(recovery ? { recovery } : {}),
   });
   const mount = await ui.openMount(f.actor, {
     pluginId: f.target.package.pluginId,
@@ -121,8 +159,27 @@ export async function mediaGenerationUiFixture(
     );
     return parseGenerateProjectMediaResponse(input, result);
   };
+  const stage = (input = f.command) =>
+    f.requests.run({ request, actor: f.actor }, () =>
+      ui.stageRecovery(f.actor, {
+        mountRef: mount.mountRef,
+        action: PROJECT_MEDIA_GENERATE_UI_ACTION,
+        input,
+      }),
+    );
+  const recover = (selectedMount = mount.mountRef) =>
+    f.requests.run({ request, actor: f.actor }, () =>
+      ui.invoke(f.actor, {
+        mountRef: selectedMount,
+        action: PROJECT_MEDIA_RECOVERY_UI_ACTION,
+        input: null,
+      }),
+    );
   return {
     ...f,
+    stage,
+    recover,
+    recoveryService: recovery,
     descriptor,
     stateUi: state,
     uiOwner: owner,

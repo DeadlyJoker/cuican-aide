@@ -92,6 +92,8 @@ export function recoveryReceipt(request: PluginUiRecoveryRequest) {
       return queryJournalReceipt(request.input);
     case PROJECT_GENERATION_SELECTION_UI_ACTIONS[1]:
       return selectionJournalReceipt(request.input);
+    default:
+      throw new Error("legacy_recovery_fixture_action_unsupported");
   }
 }
 export function recoveryHint(

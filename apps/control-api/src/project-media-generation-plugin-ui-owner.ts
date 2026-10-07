@@ -1,5 +1,7 @@
 import {
   ApplicationError,
+  isPluginUiRecoveryApplicationService,
+  PluginUiRecoveryApplicationService,
   capturePluginUiInvocationCommitAuthority,
   type PluginUiActionContext,
   type PluginUiActionPort,
@@ -14,6 +16,7 @@ import {
 import {
   CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE,
   PROJECT_MEDIA_GENERATE_UI_ACTION,
+  PROJECT_MEDIA_RECOVERY_UI_ACTION,
   parseProjectMediaGenerationUiRequest,
   parseGenerateProjectMediaResponse,
 } from "@crewon/contracts/project-media-generations";
@@ -45,6 +48,12 @@ type Outcome = Readonly<{
   fingerprint: string;
   output: PluginUiJsonValue;
 }>;
+const issued = new WeakSet<object>();
+export function isProjectMediaGenerationPluginUiOwner(
+  input: unknown,
+): input is ProjectMediaGenerationPluginUiOwner {
+  return input !== null && typeof input === "object" && issued.has(input);
+}
 const outcomePrototype = Object.freeze(Object.create(null) as object);
 
 /** One independent exact-package UI grant borrows the original Core generation owner. */
@@ -54,6 +63,9 @@ export class ProjectMediaGenerationPluginUiOwner {
   readonly #generate: InstalledProjectMediaGenerationRuntime["generateFromPluginUi"];
   readonly #assertRuntime: InstalledProjectMediaGenerationRuntime["assertAvailable"];
   readonly #publications: CreativeProjectPluginUiConfig["publications"];
+  readonly #recovery:
+    | (() => PluginUiRecoveryApplicationService | undefined)
+    | undefined;
   readonly #outcomes = new WeakMap<object, Outcome>();
   readonly #lifetime = new AbortController();
   readonly #pending = new Set<Promise<unknown>>();
@@ -62,9 +74,19 @@ export class ProjectMediaGenerationPluginUiOwner {
     input: Readonly<{
       runtime: InstalledProjectMediaGenerationRuntime;
       configuration: CreativeProjectPluginUiConfig;
+      recovery?: () => PluginUiRecoveryApplicationService | undefined;
     }>,
   ) {
-    const fields = pluginSecurityRecord(input, ["runtime", "configuration"]);
+    const fields = pluginSecurityRecord(input, [
+      "runtime",
+      "configuration",
+      ...(Object.hasOwn(input, "recovery") ? ["recovery"] : []),
+    ]);
+    if (fields.recovery !== undefined && typeof fields.recovery !== "function")
+      unavailable();
+    this.#recovery = fields.recovery as
+      | (() => PluginUiRecoveryApplicationService | undefined)
+      | undefined;
     if (!isInstalledProjectMediaGenerationRuntime(fields.runtime))
       unavailable();
     this.#generate =
@@ -104,10 +126,19 @@ export class ProjectMediaGenerationPluginUiOwner {
         return outcome.output;
       },
     });
+    issued.add(this);
     Object.freeze(this);
   }
   supportsAction(action: string): boolean {
-    return action === PROJECT_MEDIA_GENERATE_UI_ACTION;
+    return (
+      action === PROJECT_MEDIA_GENERATE_UI_ACTION ||
+      action === PROJECT_MEDIA_RECOVERY_UI_ACTION
+    );
+  }
+  recoveryPublications() {
+    this.#assertRuntime();
+    this.#lifetime.signal.throwIfAborted();
+    return this.#publications;
   }
   hostUiServices(
     fallback?: PluginUiHostServiceAvailabilityPort,
@@ -152,6 +183,24 @@ export class ProjectMediaGenerationPluginUiOwner {
     // Membership is checked before any property read. A copied mount is never an invocation.
     capturePluginUiInvocationCommitAuthority(context);
     this.#assertRuntime();
+    if (context.action === PROJECT_MEDIA_RECOVERY_UI_ACTION) {
+      const recovery = this.#recovery?.();
+      if (!isPluginUiRecoveryApplicationService(recovery)) unavailable();
+      const pending =
+        PluginUiRecoveryApplicationService.prototype.getMediaGenerationRecovery
+          .call(recovery, context)
+          .then((value) => {
+            this.#lifetime.signal.throwIfAborted();
+            this.#assertRuntime();
+            return value;
+          });
+      this.#pending.add(pending);
+      void pending.then(
+        () => this.#pending.delete(pending),
+        () => this.#pending.delete(pending),
+      );
+      return pending;
+    }
     const captured = snapshot(context);
     if (
       !this.#publications.some(

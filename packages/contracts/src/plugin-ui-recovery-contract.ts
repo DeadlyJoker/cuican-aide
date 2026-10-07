@@ -1,4 +1,10 @@
 import {
+  PROJECT_MEDIA_GENERATE_UI_ACTION,
+  parseProjectMediaGenerationUiRequest,
+  parseGenerateProjectMediaResponse,
+  type GenerateProjectMediaResponse,
+} from "./project-media-generations.ts";
+import {
   parsePluginControlPackageDigest,
   parsePluginControlPluginId,
 } from "./plugin-control-contract.ts";
@@ -42,6 +48,7 @@ const SELECTION_REFUSAL_CODES: readonly unknown[] = Object.freeze([
 ]);
 
 export type PluginUiRecoveryRequest =
+  | ReturnType<typeof parseProjectMediaGenerationUiRequest>
   | ProjectGenerationUiActionRequest
   | ProjectGenerationQueryUiActionRequest
   | Extract<
@@ -63,7 +70,11 @@ export type PluginUiRecoveryHint = Readonly<{
   phase: "prepared" | "dispatched" | "accepted" | "refused";
   dispatchMayHaveOccurred: boolean;
   dispatchAttemptCount: number;
-  receipt: ProjectGenerationUiReceipt | SelectConceptImageResponse | null;
+  receipt:
+    | ProjectGenerationUiReceipt
+    | SelectConceptImageResponse
+    | GenerateProjectMediaResponse
+    | null;
   /** A host hint only; retry must reacquire a real lease and revalidate the original namespace. */
   retryable: boolean;
   reasonCode: string | null;
@@ -91,7 +102,7 @@ function revision(value: unknown, minimum = 1): number {
   return value;
 }
 
-/** This is the original three-command union, not an arbitrary replay API. */
+/** Explicit supported mutations only; original GET responses retain their three-action shape. */
 export function parsePluginUiRecoveryRequest(
   input: unknown,
 ): PluginUiRecoveryRequest {
@@ -100,6 +111,8 @@ export function parsePluginUiRecoveryRequest(
     ["action", "input"],
   );
   switch (value.action) {
+    case PROJECT_MEDIA_GENERATE_UI_ACTION:
+      return parseProjectMediaGenerationUiRequest(value);
     case PROJECT_GENERATION_UI_ACTIONS[0]:
       return parseProjectGenerationUiActionRequest(value);
     case PROJECT_GENERATION_QUERY_UI_ACTIONS[0]:
@@ -134,6 +147,8 @@ function sourcePin(input: unknown): PluginUiRecoverySourcePin {
 }
 function pairedReceipt(request: PluginUiRecoveryRequest, input: unknown) {
   switch (request.action) {
+    case PROJECT_MEDIA_GENERATE_UI_ACTION:
+      return parseGenerateProjectMediaResponse(request.input, input);
     case PROJECT_GENERATION_UI_ACTIONS[0]:
       return parseProjectGenerationUiActionResponse(request, input);
     case PROJECT_GENERATION_QUERY_UI_ACTIONS[0]:
@@ -225,6 +240,12 @@ export function parsePluginUiRecoveryHintsResponse(
   )
     invalid();
   const intents = value.intents.map(parsePluginUiRecoveryHint);
+  if (
+    intents.some(
+      (intent) => intent.request.action === PROJECT_MEDIA_GENERATE_UI_ACTION,
+    )
+  )
+    invalid();
   const first = intents[0];
   if (
     new Set(intents.map((intent) => intent.request.action)).size !==

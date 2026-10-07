@@ -1,3 +1,5 @@
+import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
+import { createInstalledPluginMediaGenerationTransport } from "./installedPluginMediaGenerationTransport";
 import { assertInstalledPluginQueryLaneAvailable } from "./installedPluginQueryLaneAvailability";
 import { PROJECT_HISTORICAL_QUERY_UI_ACTIONS } from "@crewon/contracts/project-historical-queries";
 import { invokeInstalledPluginHistoricalProjectQuery } from "./installedPluginHistoricalProjectQueryTransport";
@@ -128,6 +130,11 @@ export function createDesktopPluginUiHost(
         uiFailure("plugin_ui_lease_identity_mismatch");
       return checked;
     });
+  const mediaGeneration = createInstalledPluginMediaGenerationTransport({
+    client,
+    assertCurrent,
+    stage: recovery.stage,
+  });
   const loader = new TrustedPluginUiLoader({
     assetBasePath: "/api/v1/plugins/ui/mounts",
     routeStyle: "control-mount-assets",
@@ -143,6 +150,8 @@ export function createDesktopPluginUiHost(
       },
       async invoke(originalLease, input) {
         return leases.run(originalLease, input.signal, async (lease) => {
+          if (input.action === PROJECT_MEDIA_GENERATE_UI_ACTION)
+            return mediaGeneration(lease, input);
           if (isInstalledPluginConversationAction(input.action))
             return invokeInstalledPluginConversation(
               {

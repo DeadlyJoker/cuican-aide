@@ -1,3 +1,5 @@
+import { ProjectMediaGenerationActions } from "./ProjectMediaGenerationActions";
+import type { ProjectMediaGenerationController } from "./ProjectMediaGenerationController";
 import { useSyncExternalStore } from "react";
 import { ProjectMediaInputController } from "./ProjectMediaInputController";
 import type {
@@ -20,9 +22,11 @@ const roleNames: Record<MediaInputRole, string> = {
 export function ProjectMediaInputWorkbench({
   controller,
   blocked,
+  generations,
 }: {
   controller: ProjectMediaInputController;
   blocked: boolean;
+  generations?: ProjectMediaGenerationController;
 }) {
   const s = useSyncExternalStore(
     controller.subscribe,
@@ -30,8 +34,8 @@ export function ProjectMediaInputWorkbench({
     controller.getSnapshot,
   );
   const d = s.draft,
-    editable = controller.canEdit && !blocked,
-    readable = controller.canRead && !blocked;
+    editable = controller.canEdit && !blocked && !generations?.locked,
+    readable = controller.canRead && !blocked && !generations?.locked;
   const roles: MediaInputRole[] =
     d?.workflowId === "flux2-three-reference-storyboard"
       ? ["scene", "characterOne", "characterTwo"]
@@ -72,7 +76,7 @@ export function ProjectMediaInputWorkbench({
       {s.phase === "unavailable" && (
         <button
           className="button secondary"
-          disabled={s.reading || s.saving || blocked}
+          disabled={s.reading || s.saving || blocked || generations?.locked}
           onClick={() => void controller.refresh()}
         >
           重新连接输入服务
@@ -81,7 +85,7 @@ export function ProjectMediaInputWorkbench({
       {s.pending && (
         <button
           className="button secondary"
-          disabled={s.saving || blocked}
+          disabled={s.saving || blocked || generations?.locked}
           onClick={() => void controller.retry()}
         >
           用原请求确认保存
@@ -173,7 +177,7 @@ export function ProjectMediaInputWorkbench({
             <div className="detail-actions">
               <button
                 className="button primary"
-                disabled={!controller.canSave || blocked}
+                disabled={!controller.canSave || blocked || generations?.locked}
                 onClick={() => void controller.save()}
               >
                 {s.saving
@@ -316,6 +320,20 @@ export function ProjectMediaInputWorkbench({
             </button>
           </section>
         </div>
+      )}
+      {generations && (
+        <ProjectMediaGenerationActions
+          controller={generations}
+          input={s.input}
+          inputBlocked={
+            s.dirty ||
+            controller.stale ||
+            s.input?.inputRevision !== s.latestInputRevision ||
+            s.saving ||
+            s.pending !== null
+          }
+          blocked={blocked || s.saving || s.pending !== null}
+        />
       )}
     </section>
   );

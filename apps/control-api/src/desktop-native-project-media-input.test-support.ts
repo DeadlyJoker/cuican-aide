@@ -43,6 +43,7 @@ export async function desktopNativeMediaInputFixture(
   purposes: readonly ("read" | "write")[] = ["read", "write"],
   options: {
     reviewIdentityFixture?: "different-manifest";
+    packageDirectory?: string;
     mediaInputUi?: boolean;
     mediaInputStages?: boolean;
     mediaGenerations?: boolean;
@@ -88,12 +89,13 @@ export async function desktopNativeMediaInputFixture(
   });
   await mkdir(installRoot, { mode: 0o700 });
   const sourceDirectory = resolve(
-    options.mediaGenerations
-      ? "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0"
-      : options.mediaInputStages
-        ? "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0"
-        : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
-          "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1"),
+    options.packageDirectory ??
+      (options.mediaGenerations
+        ? "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0"
+        : options.mediaInputStages
+          ? "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0"
+          : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
+            "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1")),
   );
   const pkg = await installLocalPluginPackage({
     directory: sourceDirectory,

@@ -20,6 +20,7 @@
     "./project-context": "./src/project-context.ts",
     "./project-media-execution": "./src/plugin-project-media-execution-service.ts",
     "./project-media-generations": "./src/project-media-generations.ts",
+    "./project-media-generation-recovery": "./src/project-media-generation-recovery.ts",
     "./project-media-inputs": "./src/project-media-inputs.ts",
     "./project-media-input-tools": "./src/project-media-input-tools.ts",
     "./project-media-inputs-ui": "./src/project-media-inputs-ui.ts",

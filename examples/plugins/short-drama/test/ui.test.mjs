@@ -48,6 +48,15 @@ test("ships a unified self-contained UI and execution package with the original 
           },
         ]
       : []),
+    ...(Number(version.split(".")[0]) >= 27
+      ? [
+          {
+            service: "crewon.project-media-generations",
+            apiVersion: "1",
+            optional: true,
+          },
+        ]
+      : []),
     ...(Number(version.split(".")[0]) >= 21
       ? [
           {

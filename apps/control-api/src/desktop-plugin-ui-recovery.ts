@@ -1,3 +1,8 @@
+import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
+import {
+  isProjectMediaGenerationPluginUiOwner,
+  type ProjectMediaGenerationPluginUiOwner,
+} from "./project-media-generation-plugin-ui-owner.ts";
 import {
   ApplicationError,
   PluginUiRecoveryApplicationService,
@@ -6,6 +11,7 @@ import {
   type ApplicationClock,
   type ContentDigester,
   type PluginUiActionContext,
+  type PluginUiRecoveryPublication,
 } from "@crewon/application";
 import {
   CREWON_PLUGIN_UI_RECOVERY_SERVICE,
@@ -141,6 +147,7 @@ export async function prepareDesktopPluginUiRecovery(
       requests: InstalledPluginRequestOwner;
       selection: ProjectGenerationSelectionPluginUiOwner | undefined;
       tasks?: InstalledPluginTaskRuntimeCore;
+      mediaGenerations?: ProjectMediaGenerationPluginUiOwner;
       clock: ApplicationClock;
       digester: ContentDigester;
       fallback?: PluginUiHostServiceAvailabilityPort;
@@ -167,9 +174,48 @@ export async function prepareDesktopPluginUiRecovery(
   const actions = new Set(
     configuration.publications.flatMap(({ actions }) => actions),
   );
-  const execution = actions.has(generationAction) || actions.has(queryAction);
+  const mediaGenerations = input.mediaGenerations;
+  if (
+    mediaGenerations !== undefined &&
+    !isProjectMediaGenerationPluginUiOwner(mediaGenerations)
+  )
+    invalid();
+  const mediaPublications = mediaGenerations?.recoveryPublications() ?? [];
+  if (
+    mediaPublications.some(
+      (p) =>
+        !configuration.publications.some(
+          (c) =>
+            c.pluginId === p.pluginId &&
+            c.packageDigest === p.packageDigest &&
+            c.contributionId === p.contributionId,
+        ),
+    )
+  )
+    invalid();
+  const servicePublications = configuration.publications.map((p) => ({
+    ...p,
+    actions: mediaPublications.some(
+      (m) =>
+        m.pluginId === p.pluginId &&
+        m.packageDigest === p.packageDigest &&
+        m.contributionId === p.contributionId,
+    )
+      ? [
+          ...new Set<PluginUiRecoveryPublication["actions"][number]>([
+            ...p.actions,
+            PROJECT_MEDIA_GENERATE_UI_ACTION,
+          ]),
+        ]
+      : p.actions,
+  }));
+  const execution =
+    actions.has(generationAction) ||
+    actions.has(queryAction) ||
+    mediaGenerations !== undefined;
   const assertOwners = () => {
     try {
+      mediaGenerations?.recoveryPublications();
       if (execution)
         assertInstalledPluginTaskRuntimeCoreBinding(tasks, {
           store: parent,
@@ -249,7 +295,7 @@ export async function prepareDesktopPluginUiRecovery(
   const service = new PluginUiRecoveryApplicationService({
     store,
     publicationMode: "metadata-read",
-    publications: configuration.publications,
+    publications: servicePublications,
     clock,
     digester,
     onDiagnostic,

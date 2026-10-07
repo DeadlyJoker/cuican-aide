@@ -10,6 +10,8 @@ export const PROJECT_MEDIA_GENERATIONS_PROTOCOL =
   "crewon.project-media-generations.v1";
 export const CREWON_PROJECT_MEDIA_GENERATIONS_SERVICE =
   "crewon.project-media-generations";
+export const PROJECT_MEDIA_RECOVERY_UI_ACTION =
+  "crewon.project-media-generations.v1.getRecovery";
 export const PROJECT_MEDIA_GENERATE_UI_ACTION =
   "crewon.project-media-generations.v1.generate";
 export function isProjectMediaGenerationUiNamespaceAction(

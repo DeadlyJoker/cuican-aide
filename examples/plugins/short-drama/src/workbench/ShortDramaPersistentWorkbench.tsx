@@ -1,3 +1,4 @@
+import type { ProjectMediaGenerationController } from "./ProjectMediaGenerationController";
 import { usePluginDialog } from "./usePluginDialog";
 import { ShortDramaProjectHome } from "./ShortDramaProjectHome";
 import {
@@ -103,6 +104,7 @@ export function ShortDramaPersistentWorkbench({
   plans,
   assets,
   mediaInputs,
+  mediaGenerations,
   planningDraft = null,
   association,
   associationReady = false,
@@ -114,6 +116,7 @@ export function ShortDramaPersistentWorkbench({
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
   mediaInputs?: ProjectMediaInputController;
+  mediaGenerations?: ProjectMediaGenerationController;
   planningDraft?: ProjectPlanningProposal | null;
   association?: ProjectConversationAssociationController;
   associationReady?: boolean;
@@ -150,6 +153,11 @@ export function ShortDramaPersistentWorkbench({
     mediaInputs?.getSnapshot ?? noAssetSnapshot,
     mediaInputs?.getSnapshot ?? noAssetSnapshot,
   );
+  useSyncExternalStore(
+    mediaGenerations?.subscribe ?? emptySubscribe,
+    mediaGenerations?.getSnapshot ?? noAssetSnapshot,
+    mediaGenerations?.getSnapshot ?? noAssetSnapshot,
+  );
   const [page, setPage] = useState<ShortDramaProjectPage>("overview");
   const [search, setSearch] = useState("");
   const [homeIdea, setHomeIdea] = useState("");
@@ -173,7 +181,8 @@ export function ShortDramaPersistentWorkbench({
     conversations.locked ||
     plans.locked ||
     assets?.locked === true ||
-    mediaInputs?.locked === true;
+    mediaInputs?.locked === true ||
+    mediaGenerations?.locked === true;
   const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
   useEffect(() => {
@@ -189,7 +198,16 @@ export function ShortDramaPersistentWorkbench({
     plans.setProject(details);
     assets?.setProject(details);
     mediaInputs?.setProject(details);
-  }, [texts, conversations, plans, assets, mediaInputs, details]);
+    mediaGenerations?.setProject(details);
+  }, [
+    texts,
+    conversations,
+    plans,
+    assets,
+    mediaInputs,
+    mediaGenerations,
+    details,
+  ]);
   useEffect(() => {
     setPage("overview");
   }, [details?.project.projectId]);
@@ -436,6 +454,7 @@ export function ShortDramaPersistentWorkbench({
                 {page === "references" && mediaInputs ? (
                   <ProjectMediaInputWorkbench
                     controller={mediaInputs}
+                    generations={mediaGenerations}
                     blocked={
                       projectLocked ||
                       snapshot.conceptLocked ||

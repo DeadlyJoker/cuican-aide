@@ -1,6 +1,7 @@
 import {
   ApplicationError,
   type PluginUiCommittedTaskPort,
+  type PluginUiRecoveryApplicationService,
 } from "@crewon/application";
 import type { PluginUiHostServiceAvailabilityPort } from "@crewon/plugin-host";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
@@ -14,6 +15,7 @@ export function composeDesktopProjectMediaGenerationUi(
     runtime: InstalledProjectMediaGenerationRuntime | undefined;
     fallback: PluginUiHostServiceAvailabilityPort | undefined;
     committedTasks: PluginUiCommittedTaskPort | undefined;
+    recovery?: () => PluginUiRecoveryApplicationService | undefined;
   }>,
 ) {
   const grant =
@@ -26,6 +28,7 @@ export function composeDesktopProjectMediaGenerationUi(
   const owner = new ProjectMediaGenerationPluginUiOwner({
     configuration: { publications: grant.publications },
     runtime: input.runtime,
+    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
   });
   const committedTasks = Object.freeze<PluginUiCommittedTaskPort>({
     isOutcome: (

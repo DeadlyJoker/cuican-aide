@@ -41,6 +41,9 @@ export function parsePluginUiIntentJournalAccount(
   });
 }
 export function pluginUiIntentKind(action: string): PluginUiIntentKind {
+  // Both generators share the existing unresolved generation lane and the original schema.
+  if (action === "crewon.project-media-generations.v1.generate")
+    return "generation";
   for (const kind of ["generation", "query", "selection"] as const)
     if (PLUGIN_UI_INTENT_ACTIONS[kind] === action) return kind;
   return creativeProjectFailure("plugin_ui_intent_action_unsupported");
