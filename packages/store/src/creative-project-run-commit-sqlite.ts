@@ -26,6 +26,8 @@ import {
   projectRunJson,
   denied,
   type ProjectRunQualification,
+  type ProjectRunExecutionEvidence,
+  type InstalledProjectRunExecutionEvidence,
 } from "./creative-project-run-commit-support.ts";
 
 /** Synchronous only: called after BEGIN IMMEDIATE, and once more immediately before COMMIT. */
@@ -34,6 +36,16 @@ export function assertSqliteProjectRunCommit(
   q: ProjectRunQualification | undefined,
 ): void {
   if (q === undefined) return;
+  assertSqliteInstalledProjectRunExecution(db, q);
+  assertSqliteProjectStageTool(db, q);
+  assertSqliteProjectTextPlanTool(db, q);
+  assertSqliteProjectRunLease(db, q);
+}
+/** Shared actual execution facts. Callers still qualify their own operation and stage protocol. */
+export function assertSqliteInstalledProjectRunExecution(
+  db: DatabaseSync,
+  q: InstalledProjectRunExecutionEvidence,
+): void {
   assertSqliteProjectRunSchema(db);
   assertSqlitePluginInstallationPinSchema(db);
   assertCreativeProjectPluginCommitSelection(
@@ -89,13 +101,10 @@ export function assertSqliteProjectRunCommit(
     binding: projectRunJson(binding.binding_json),
     configuration: projectRunJson(binding.configuration_json),
   });
-  assertSqliteProjectStageTool(db, q);
-  assertSqliteProjectTextPlanTool(db, q);
-  assertSqliteProjectRunLease(db, q);
 }
 export function assertSqliteProjectRunLease(
   db: DatabaseSync,
-  q: ProjectRunQualification | undefined,
+  q: ProjectRunExecutionEvidence | undefined,
 ): void {
   if (q === undefined) return;
   assertProjectRunQueue(

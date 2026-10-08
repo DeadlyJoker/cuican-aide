@@ -29,6 +29,9 @@ export type ProjectRunExecutionEvidence = Pick<
   ProjectRunQualification,
   "actor" | "run" | "receipt" | "claim" | "installation" | "admission"
 >;
+/** Exact installed snapshot shared by independently qualified business protocols. */
+export type InstalledProjectRunExecutionEvidence = ProjectRunExecutionEvidence &
+  Pick<ProjectRunQualification, "selection" | "package">;
 export function projectRunCommitQualification(
   authority: CreativeProjectCommitAuthority | undefined,
   actor: ActorContext,

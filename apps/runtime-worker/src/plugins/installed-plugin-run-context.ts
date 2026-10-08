@@ -1,3 +1,7 @@
+import {
+  validateReceipt,
+  assertRun,
+} from "./installed-plugin-run-context-data.ts";
 import { readProjectMediaInputStageRuntimeScope } from "./project-media-input-stage-runtime-scope.ts";
 import type { ProjectMediaInputStageStore } from "@crewon/application";
 import type { ProjectMediaInputStageRunAdmission } from "@crewon/domain";
@@ -8,7 +12,6 @@ import { createHash } from "node:crypto";
 import type {
   ActorContext,
   AuthorizationPort,
-  CommitExtensionTurnResult,
   ExtensionRunLocator,
   ExtensionStore,
   PluginInstallationStore,
@@ -19,7 +22,6 @@ import type {
 } from "@crewon/application";
 import { loadPluginQuerySource } from "@crewon/application";
 import {
-  assertPluginTaskFunding,
   assertPluginTaskAdmission,
   extensionCanonicalJson,
   extensionOpaqueId,
@@ -32,7 +34,6 @@ import {
   parsePluginSelection,
   parsePluginTaskAdmission,
   pluginInstallationOpaqueId,
-  reduceRunLifecycleEvent,
   type ExtensionRunBinding,
   type ExtensionExecutionTarget,
   type PluginTaskAdmission,
@@ -48,6 +49,9 @@ import {
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import { readProjectTextPlanRuntimeScope } from "./project-text-plan-runtime-scope.ts";
 import { readProjectStageRuntimeScope } from "./project-stage-runtime-scope.ts";
+import { readProjectFoundationRuntimeScope } from "./project-foundation-runtime-scope.ts";
+import type { ProjectFoundationRunAdmissionStore } from "@crewon/application";
+import type { ProjectFoundationRunAdmission } from "@crewon/domain";
 
 export type InstalledPluginRunPurpose = "submit" | "observe";
 export type InstalledPluginRunSnapshot = Readonly<{
@@ -75,6 +79,7 @@ export type InstalledPluginRunContextDependencies = Readonly<{
     ProjectTextPlanStore,
     "readRequiredPlanDigest" | "loadRunAdmission"
   >;
+  foundationRuns?: ProjectFoundationRunAdmissionStore;
   resolveActor(
     owner: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
     signal: AbortSignal,
@@ -90,6 +95,7 @@ type SavedContext = Readonly<{
   projectTextPlan: ProjectTextPlanRunAdmission | null;
   projectAssetStage: ProjectAssetStageRunAdmission | null;
   projectMediaInputStage: ProjectMediaInputStageRunAdmission | null;
+  projectFoundation: ProjectFoundationRunAdmission | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -211,6 +217,15 @@ export class InstalledPluginRunContext {
     return saved.projectStage;
   }
 
+  /** Attached host facts, available only through this reader's genuine snapshot. */
+  verifiedProjectFoundation(
+    snapshot: InstalledPluginRunSnapshot,
+  ): ProjectFoundationRunAdmission | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.projectFoundation;
+  }
+
   verifiedProjectMediaInputStage(
     snapshot: InstalledPluginRunSnapshot,
   ): ProjectMediaInputStageRunAdmission | null {
@@ -328,11 +343,12 @@ export class InstalledPluginRunContext {
       admission,
       receipt,
       query,
+      fail,
     );
     const run = await this.#dependencies.runs.loadRunInSpace(locator);
     signal.throwIfAborted();
     if (run === null) fail("installed_plugin_run_missing");
-    assertRun(run, binding, original);
+    assertRun(run, binding, original, fail);
     const projectMediaInputStage =
       this.#dependencies.mediaInputStages === undefined
         ? null
@@ -386,6 +402,23 @@ export class InstalledPluginRunContext {
       fail("installed_plugin_project_stage_mismatch");
     if (projectStage !== null && projectAssetStage !== null)
       fail("installed_plugin_asset_stage_conflict");
+    const projectFoundation =
+      this.#dependencies.foundationRuns === undefined
+        ? null
+        : await readProjectFoundationRuntimeScope({
+            foundations: this.#dependencies.foundationRuns,
+            admission,
+            binding,
+            stageAdmission: projectStage,
+            signal,
+          });
+    if (
+      projectFoundation !== null &&
+      (query !== null ||
+        (rawReceipt.turn.threadState.workspaceId ?? null) !==
+          projectFoundation.workspaceId)
+    )
+      fail("installed_plugin_project_foundation_mismatch");
     const projectTextPlan =
       this.#dependencies.plans === undefined
         ? null
@@ -478,6 +511,7 @@ export class InstalledPluginRunContext {
       projectTextPlan,
       projectAssetStage,
       projectMediaInputStage,
+      projectFoundation,
     });
   }
 
@@ -653,146 +687,6 @@ export class InstalledPluginRunContext {
       if (actor[field] !== admission[field])
         fail("installed_plugin_execution_identity_unavailable");
     return actor;
-  }
-}
-
-function validateReceipt(
-  input: CommitExtensionTurnResult,
-  binding: ExtensionRunBinding,
-  admission: PluginTaskAdmission,
-  receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
-  query: PluginQueryTaskAdmission | null = null,
-): RunState {
-  // The same bounded, accessor-free Domain JSON capture used by v0 config/binding parsing.
-  const saved = JSON.parse(
-    extensionCanonicalJson(input),
-  ) as CommitExtensionTurnResult;
-  if (
-    saved.schemaVersion !== "crewon.extension-turn-admission.v0" ||
-    !saved.turn ||
-    !saved.run ||
-    saved.run.events.length !== 1 ||
-    saved.run.events[0]?.type !== "run.created"
-  )
-    fail("installed_plugin_task_receipt_invalid");
-  if (
-    extensionCanonicalJson(
-      parseExtensionRunBinding(saved.binding, digester),
-    ) !== extensionCanonicalJson(binding)
-  )
-    fail("installed_plugin_task_receipt_mismatch");
-  const original = reduceRunLifecycleEvent(null, saved.run.events[0]);
-  assertRun(original, binding, original);
-  if (
-    extensionCanonicalJson(original) !==
-      extensionCanonicalJson(saved.run.state) ||
-    extensionCanonicalJson(original) !==
-      extensionCanonicalJson(saved.turn.runState) ||
-    extensionCanonicalJson(saved.run.events) !==
-      extensionCanonicalJson(saved.turn.runEvents)
-  )
-    fail("installed_plugin_task_receipt_mismatch");
-  if (query === null)
-    assertPluginTaskFunding(
-      {
-        ...(saved.creditAdmission === undefined
-          ? {}
-          : { creditAdmission: saved.creditAdmission }),
-        ...(saved.unmeteredAdmission === undefined
-          ? {}
-          : { unmeteredAdmission: saved.unmeteredAdmission }),
-        binding,
-        receipt,
-        principalId: admission.principalId,
-        task: admission,
-      },
-      digester,
-    );
-  else if (
-    saved.creditAdmission !== undefined ||
-    saved.unmeteredAdmission !== undefined
-  )
-    fail("installed_plugin_task_receipt_owner_mismatch");
-  const messages = saved.turn.messages;
-  if (
-    messages.length !== 1 ||
-    messages[0]?.tenantId !== binding.tenantId ||
-    messages[0]?.threadId !== binding.threadId ||
-    messages[0]?.role !== "user" ||
-    messages[0].contentDigest !== binding.inputDigest ||
-    digester.sha256(messages[0].content) !== binding.inputDigest ||
-    saved.turn.threadState.tenantId !== binding.tenantId ||
-    saved.turn.threadState.spaceId !== binding.spaceId ||
-    saved.turn.threadState.threadId !== binding.threadId
-  )
-    fail("installed_plugin_task_receipt_mismatch");
-  return original;
-}
-
-function assertRun(
-  input: RunState,
-  binding: ExtensionRunBinding,
-  original: RunState,
-): void {
-  if (
-    input === null ||
-    typeof input !== "object" ||
-    Array.isArray(input) ||
-    (Object.getPrototypeOf(input) !== Object.prototype &&
-      Object.getPrototypeOf(input) !== null)
-  )
-    fail("installed_plugin_run_authority_mismatch");
-  const expected = {
-    tenantId: binding.tenantId,
-    spaceId: binding.spaceId,
-    runId: binding.runId,
-    threadId: binding.threadId,
-    createdByActorId: binding.actorId,
-    agentVersionId: binding.target.agentVersionId,
-    authorityId: binding.target.authorityId,
-    runtimeGeneration: binding.target.runtimeGeneration,
-    policySnapshotId: binding.target.policySnapshotId,
-    workspaceBindingId: binding.target.workspaceBindingId,
-    origin: null,
-    goalBinding: null,
-    collaborationMode: original.collaborationMode,
-    createdAt: original.createdAt,
-  };
-  for (const [field, value] of Object.entries(expected)) {
-    const item = Object.getOwnPropertyDescriptor(input, field);
-    if (
-      !item?.enumerable ||
-      !Object.hasOwn(item, "value") ||
-      item.value !== value
-    )
-      fail("installed_plugin_run_authority_mismatch");
-  }
-  for (const field of [
-    "purpose",
-    "workflowVersionBinding",
-    "toolPermissionMode",
-    "goalContinuationMode",
-  ] as const) {
-    const item = Object.getOwnPropertyDescriptor(input, field);
-    const reference = Object.getOwnPropertyDescriptor(original, field);
-    // Original Turn admission still omits purpose. Preserve that exact immutable shape,
-    // with the Domain's default-turn meaning, rather than fabricating a new snapshot field.
-    if (
-      field === "purpose" &&
-      reference !== undefined &&
-      reference.value !== "turn"
-    )
-      fail("installed_plugin_run_authority_mismatch");
-    if (field === "workflowVersionBinding" && reference !== undefined)
-      fail("installed_plugin_run_authority_mismatch");
-    if (
-      (item === undefined) !== (reference === undefined) ||
-      (item !== undefined &&
-        (!item.enumerable ||
-          !Object.hasOwn(item, "value") ||
-          item.value !== reference?.value))
-    )
-      fail("installed_plugin_run_authority_mismatch");
   }
 }
 

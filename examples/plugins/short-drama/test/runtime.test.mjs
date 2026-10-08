@@ -376,15 +376,17 @@ test("requires explicit host IO and applies perAction only to submit", async () 
     const noIo = factory().factory.create(context());
     assert.equal(
       noIo.definitions().length,
-      Number(version.split(".")[0]) >= 23
-        ? 24
-        : Number(version.split(".")[0]) >= 21
-          ? 23
-          : Number(version.split(".")[0]) >= 19
-            ? 21
-            : Number(version.split(".")[0]) >= 16
-              ? 15
-              : 14,
+      Number(version.split(".")[0]) >= 40
+        ? 32
+        : Number(version.split(".")[0]) >= 23
+          ? 24
+          : Number(version.split(".")[0]) >= 21
+            ? 23
+            : Number(version.split(".")[0]) >= 19
+              ? 21
+              : Number(version.split(".")[0]) >= 16
+                ? 15
+                : 14,
     );
     await assert.rejects(
       noIo.execute(fixture().command(), signal()),

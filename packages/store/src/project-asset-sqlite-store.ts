@@ -1,5 +1,10 @@
 import { assertSqliteAssetVtwoRecoverySchema } from "./project-asset-vtwo-recovery-schema.ts";
 import {
+  captureSqliteProjectFoundationDownstream,
+  assertSqliteProjectFoundationDownstreamUnchanged,
+  type ProjectFoundationDownstreamCheck,
+} from "./project-foundation-downstream-guard.ts";
+import {
   loadAssetMutationReceiptPlan,
   type AssetCommitPlan,
 } from "./project-asset-vtwo-recovery-commit.ts";
@@ -188,6 +193,7 @@ export class SqliteProjectAssetStore
   ) {
     const prepared = captureAssetCommit(input),
       authority = captureProjectAssetCommitAuthority(options);
+    let downstream: ProjectFoundationDownstreamCheck | undefined;
     return this.#transaction(
       () =>
         this.#execute(
@@ -199,8 +205,19 @@ export class SqliteProjectAssetStore
             assertSqliteAssetIntentSchema(this.#db, true),
           ),
           authority,
+          (check) => {
+            downstream = check;
+          },
         ),
       authority,
+      () => {
+        if (downstream !== undefined)
+          assertSqliteProjectFoundationDownstreamUnchanged(
+            this.#db,
+            downstream.locator,
+            downstream.snapshot,
+          );
+      },
     );
   }
   #read<T>(plan: AssetPlan<T>): T {
@@ -211,6 +228,7 @@ export class SqliteProjectAssetStore
   #execute<T>(
     plan: AssetCommitPlan<T>,
     authority?: ProjectAssetCommitAuthority,
+    onFoundationSnapshot?: (check: ProjectFoundationDownstreamCheck) => void,
   ): T {
     let next = plan.next();
     while (!next.done) {
@@ -218,7 +236,17 @@ export class SqliteProjectAssetStore
       assertProjectAssetCommitActive(authority);
       const step = next.value;
       let rows: readonly Record<string, unknown>[];
-      if ("assetVtwoRecoverySchema" in step) {
+      if ("foundationDownstream" in step) {
+        const snapshot = captureSqliteProjectFoundationDownstream(
+          this.#db,
+          step.foundationDownstream,
+        );
+        onFoundationSnapshot?.({
+          locator: step.foundationDownstream,
+          snapshot,
+        });
+        rows = [];
+      } else if ("assetVtwoRecoverySchema" in step) {
         rows = [
           { available: assertSqliteAssetVtwoRecoverySchema(this.#db, true) },
         ];
@@ -236,6 +264,7 @@ export class SqliteProjectAssetStore
   async #transaction<T>(
     body: () => T,
     authority: ProjectAssetCommitAuthority | undefined,
+    checkDownstream?: () => void,
   ): Promise<T> {
     this.#open();
     await assertProjectAssetCommitCurrent(authority);
@@ -248,6 +277,7 @@ export class SqliteProjectAssetStore
       assertSqliteProjectAssetQualification(this.#db, authority);
       const result = body();
       assertSqliteProjectAssetQualification(this.#db, authority);
+      checkDownstream?.();
       assertProjectAssetCommitActive(authority);
       this.#open();
       this.#db.exec("COMMIT");

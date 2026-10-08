@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "crewon.extension-manifest.v1",
+  "schemaVersion": "crewon.extension-manifest.v2",
   "hostApi": "crewon.extensions.v1",
   "pluginId": "crewon.short-drama",
-  "version": "23.0.0",
+  "version": "40.0.0",
   "title": "AI 短剧工作台",
   "description": "短剧插件内的项目、文字成果、角色场景道具和Krea2能力共用同一版本；Agent按当前阶段执行，用户可以手动探索、编辑、采用和锁定。",
   "task": {
@@ -48,7 +48,7 @@
       "required": [],
       "additionalProperties": false
     },
-    "instructions": "宿主明确限定为 media-input 的生成输入准备任务时，先调用 media_input，method=getContext、requestJson=\"{}\"，从真实结果获得项目、会话、工作流、配置与需求/剧本版本，不调用 asset_context_read 或 project_context_read 代替。用同一工具的方法读取已有输入与分段提示词；从实际已采用素材取得参考 ID 和修订，缺少参考时说明缺口而不是编造。整理提示词后 saveInput 保存逻辑输入，已有输入必须带当前 expectedInputRevision；确认保存只代表准备输入，不能宣称生成或选用了图片，不调用 media_submit、submit、上传或其他阶段写入。恢复使用原工具身份，新手动修订不得覆盖；用户后续明确执行时转交独立生成任务。其他原任务遵守后续规则。对于宿主已确认的 crewon.short-drama.reference-generation.v1 任务，只调用 media_submit 和 media_observe，输入为空对象。提示词、参考与工作流从原宿主服务读取；未知请求只查询原记录。工具返回实际供应商状态，submitted不表示图片成功，成功也不表示项目已采用。不得调用其他创作/编辑或原自由生图工具。原非媒体任务遵守后续阶段规则：每轮先调用 asset_context_read，读取真实资产阶段范围。其scope非空时，只处理该项目、assetKind和冻结的需求/剧本来源；只调用allowedOperations中的工具。asset_save仅保存候选，不能自动采用、锁定、选参考图或执行媒体。使用原实际来源，不猜测最新版本；asset_content_read逐段读取至nextOffset=null，并核对同一contentDigest。资产scope为null时，调用project_context_read读取原项目执行范围：讨论只读和建议，需求追加需求修订，大纲/剧本仅保存当前获准阶段及分集的候选，不能跨项目、跨集、自动采用/锁定或执行媒体。两种scope均为null的原独立任务沿原行为：先读取或创建项目，再读取需求和阶段元数据。每个resultJson是实际宿主结果，ID、版本和摘要从真实结果取得。旧content_read沿nextOffset读至null，不把片段当全文，不一次注入全项目与历史。文字创作由当前Agent模型完成；保存候选不代表选用。版本冲突先读取并说明差异，不能盲目覆盖。原媒体任务仅在用户授权且Krea2配置完整时提交一次，再观察原operation；unknownOutcome只查询，不能重新提交。缺少服务、权限或来源时说明缺口，不绕过宿主协议。视频、声音和合成尚未接通，不能假称完成。 阶段上下文工具返回 guidance 时，按其中固定版本 shuohao Skill 的方法完成当前阶段。guidance 是创作指导，不扩展 scope 权限。缺项一次问清；读取上游已采用产物后创作，保存候选并在回复里简明说明产物和待确认项。只有真实生成成功才展示图片结果。"
+    "instructions": "宿主明确限定为 media-input 的生成输入准备任务时，先调用 media_input，method=getContext、requestJson=\"{}\"，从真实结果获得项目、会话、工作流、配置与需求/剧本版本，不调用 asset_context_read 或 project_context_read 代替。用同一工具的方法读取已有输入与分段提示词；从实际已采用素材取得参考 ID 和修订，缺少参考时说明缺口而不是编造。整理提示词后 saveInput 保存逻辑输入，已有输入必须带当前 expectedInputRevision；确认保存只代表准备输入，不能宣称生成或选用了图片，不调用 media_submit、submit、上传或其他阶段写入。恢复使用原工具身份，新手动修订不得覆盖；用户后续明确执行时转交独立生成任务。其他原任务遵守后续规则。对于宿主已确认的 crewon.short-drama.reference-generation.v1 任务，只调用 media_submit 和 media_observe，输入为空对象。提示词、参考与工作流从原宿主服务读取；未知请求只查询原记录。工具返回实际供应商状态，submitted不表示图片成功，成功也不表示项目已采用。不得调用其他创作/编辑或原自由生图工具。原非媒体任务先尝试foundation_scope；真正获得非空独立范围后，用foundation_read按parametersPage.nextOffset读齐同摘要参数，遵守scope.allowedOperations与guidance；resultJsonParts按顺序拼接只代表当前有界模型页，章节沿nextStartOffset续读，不能把片段当全文。只保存8KiB内的可读方案候选，不自动确认或执行下游。只有明确缺少独立服务/准入时才遵守后续旧阶段规则；其他冲突、撤权或失败先报告，不借旧项目写权限保存Foundation。原无Foundation范围任务遵守后续阶段规则：每轮先调用 asset_context_read，读取真实资产阶段范围。其scope非空时，只处理该项目、assetKind和冻结的需求/剧本来源；只调用allowedOperations中的工具。asset_save仅保存候选，不能自动采用、锁定、选参考图或执行媒体。使用原实际来源，不猜测最新版本；asset_content_read逐段读取至nextOffset=null，并核对同一contentDigest。资产scope为null时，调用project_context_read读取原项目执行范围：讨论只读和建议，需求追加需求修订，大纲/剧本仅保存当前获准阶段及分集的候选，不能跨项目、跨集、自动采用/锁定或执行媒体。两种scope均为null的原独立任务沿原行为：先读取或创建项目，再读取需求和阶段元数据。每个resultJson是实际宿主结果，ID、版本和摘要从真实结果取得。旧content_read沿nextOffset读至null，不把片段当全文，不一次注入全项目与历史。文字创作由当前Agent模型完成；保存候选不代表选用。版本冲突先读取并说明差异，不能盲目覆盖。原媒体任务仅在用户授权且Krea2配置完整时提交一次，再观察原operation；unknownOutcome只查询，不能重新提交。缺少服务、权限或来源时说明缺口，不绕过宿主协议。视频、声音和合成尚未接通，不能假称完成。 阶段上下文工具返回 guidance 时，按其中固定版本 shuohao Skill 的方法完成当前阶段。guidance 是创作指导，不扩展 scope 权限。缺项一次问清；读取上游已采用产物后创作，保存候选并在回复里简明说明产物和待确认项。只有真实生成成功才展示图片结果。"
   },
   "configurationSchema": {
     "type": "object",
@@ -1320,6 +1320,424 @@
       "effect": "mutation",
       "recovery": "reconcilable",
       "capability": "project.media-input.write"
+    },
+    {
+      "operationId": "foundation_scope",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read the real admitted project planning scope and the pinned method guide. No permission is granted by this guide. The output resultJsonParts is an ordered array: concatenate all parts to recover the complete JSON response; never treat one part as the whole result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_read",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read real project origin and metadata with a canonical parameter JSON page for the model. Omit parametersStartOffset/parametersLimit for 0/1024. Continue from parametersPage.nextOffset, require the same digest, and concatenate pages before using all parameters. The host DTO is complete; the model sees only this bounded projection.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "parametersStartOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8192
+          },
+          "parametersLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1024
+          }
+        },
+        "required": ["projectId"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_source",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read immutable source file metadata for the exact admitted revision and digest. Metadata is not the full novel. The output resultJsonParts is an ordered array: concatenate all parts to recover the complete JSON response; never treat one part as the whole result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "sourceRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "sourceDigest": {
+            "type": "string",
+            "maxLength": 71,
+            "enum": null
+          }
+        },
+        "required": ["projectId", "sourceRevision", "sourceDigest"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_source_page",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read at most 1024 Unicode scalars of source text. Continue only using the returned nextOffset and the same source digest. The output resultJsonParts is an ordered array: concatenate all parts to recover the complete JSON response; never treat one part as the whole result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "sourceRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "sourceDigest": {
+            "type": "string",
+            "maxLength": 71,
+            "enum": null
+          },
+          "startOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1024
+          }
+        },
+        "required": [
+          "projectId",
+          "sourceRevision",
+          "sourceDigest",
+          "startOffset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_chapters",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read source chapter offsets with full titles. Omit afterStartOffset for the first page; cursor 0 means strictly after offset 0. The model page may contain fewer than requested to fit its whole output bound; always continue from the actual nextStartOffset until null. Concatenate resultJsonParts to read the complete current page.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "sourceRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "sourceDigest": {
+            "type": "string",
+            "maxLength": 71,
+            "enum": null
+          },
+          "afterStartOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000000
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          }
+        },
+        "required": ["projectId", "sourceRevision", "sourceDigest", "limit"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_proposal",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read at most 1024 scalars of an immutable proposal candidate. Use the exact metadata revision/digest and returned nextOffset. The output resultJsonParts is an ordered array: concatenate all parts to recover the complete JSON response; never treat one part as the whole result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "proposalRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "proposalDigest": {
+            "type": "string",
+            "maxLength": 71,
+            "enum": null
+          },
+          "startOffset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8192
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1024
+          }
+        },
+        "required": [
+          "projectId",
+          "proposalRevision",
+          "proposalDigest",
+          "startOffset",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_proposals",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Read at most four proposal metadata records. Continue to nextRevision=null to find the latest revision before saving. The output resultJsonParts is an ordered array: concatenate all parts to recover the complete JSON response; never treat one part as the whole result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "afterProposalRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          }
+        },
+        "required": ["projectId", "afterProposalRevision", "limit"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "foundation_proposal_save",
+      "adapterId": "crewon.project-foundation-tools",
+      "description": "Save a readable creative plan or novel adaptation plan candidate, at most 8192 UTF8 bytes. Never confirms a candidate or starts downstream stages. Use the real frozen foundation revision and latest proposal revision. The output resultJsonParts is an ordered array: concatenate all parts to recover the complete JSON response; never treat one part as the whole result.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedFoundationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "expectedProposalRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 32,
+            "enum": ["creative-plan", "novel-adaptation"]
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 8192,
+            "enum": null
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedFoundationRevision",
+          "expectedProposalRevision",
+          "kind",
+          "text"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 4
+          }
+        },
+        "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
     }
   ],
   "resultViews": ["text", "externalOperation", "externalResult"]

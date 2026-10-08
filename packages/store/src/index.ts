@@ -47,6 +47,10 @@ export * from "./sqlite-creative-project-store.ts";
 export * from "./postgres-creative-project-store.ts";
 export * from "./project-foundation-sqlite-store.ts";
 export * from "./project-foundation-postgres-store.ts";
+export {
+  SqliteProjectFoundationRunStore,
+  PostgresProjectFoundationRunStore,
+} from "./project-foundation-run-store.ts";
 export { PROJECT_FOUNDATION_SCHEMA_VERSION } from "./project-foundation-schema.ts";
 export { SqliteProjectSourceUploadStore } from "./project-source-upload-sqlite-store.ts";
 export { PostgresProjectSourceUploadStore } from "./project-source-upload-postgres-store.ts";

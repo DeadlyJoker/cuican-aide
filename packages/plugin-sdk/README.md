@@ -1,20 +1,25 @@
 # @crewon/plugin-sdk
 
-CrewON 插件开发接口，当前源码候选版本为 `0.1.1`，尚未发布到公共 registry。插件可以在 CrewON 源码仓库外开发；SDK 的分发包包含 ESM JavaScript、TypeScript 声明、LICENSE 和 NOTICE，不依赖宿主源码、私有运行时包或 React。原 `0.1.0` 分发包保持独立。
+CrewON 插件开发接口，当前源码候选版本为 `0.1.2`，尚未发布到公共 registry。插件可以在 CrewON 源码仓库外开发；SDK 的分发包包含 ESM JavaScript、TypeScript 声明、LICENSE 和 NOTICE，不依赖宿主源码、私有运行时包或 React。原 `0.1.0`、已冻结插件 39 使用的 `0.1.1` 分发包保持独立。
 
 SDK 可打包为本地 `.tgz`，供独立开发项目安装，尚未发布到 npm registry。业务插件的安装器目前接收预构建目录；SDK 的安装命令不表示业务插件已支持压缩包输入或正式页面安装。
 
-## 三个公开入口
+## 六个公开入口
 
-| 入口                           | 内容                                                                                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@crewon/plugin-sdk/contracts` | 包描述契约、`parsePluginPackageDescriptor`、`parsePluginUiLease`、有界 `parsePluginUiJsonValue`，以及身份、生命周期、Node 上下文和 UI props 等纯类型 |
-| `@crewon/plugin-sdk/node`      | `definePlugin`、`parsePluginNodeDefinition`、`PluginSdkContractError` 与 Node ABI 类型                                                               |
-| `@crewon/plugin-sdk/ui`        | `defineUiPlugin`、`parsePluginUiDefinition`、`PluginSdkContractError` 与 UI ABI 类型                                                                 |
+| 入口                                          | 内容                                                                                                                                                 |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@crewon/plugin-sdk/contracts`                | 包描述契约、`parsePluginPackageDescriptor`、`parsePluginUiLease`、有界 `parsePluginUiJsonValue`，以及身份、生命周期、Node 上下文和 UI props 等纯类型 |
+| `@crewon/plugin-sdk/node`                     | `definePlugin`、`parsePluginNodeDefinition`、`PluginSdkContractError` 与 Node ABI 类型                                                               |
+| `@crewon/plugin-sdk/ui`                       | `defineUiPlugin`、`parsePluginUiDefinition`、`PluginSdkContractError` 与 UI ABI 类型                                                                 |
+| `@crewon/plugin-sdk/project-foundation-ui`    | 项目基础信息的原 UI 协议与有界客户端                                                                                                                 |
+| `@crewon/plugin-sdk/project-source-uploads`   | 独立原文上传数据协议与客户端                                                                                                                         |
+| `@crewon/plugin-sdk/project-foundation-tools` | 独立 Node 读取、原文/方案正文分页和保存方案候选协议与有界客户端                                                                                      |
 
 没有包根入口。包描述契约沿用 `@crewon/contracts/plugins` 的权威实现，构建时将其纯模块闭包打入 SDK。描述校验只检查结构，不读取产物字节、执行插件或授予权限。Node 入口的声明闭包无需 DOM 类型；UI 入口需要 TypeScript 的 `DOM` lib。
 
 `definePlugin` 和 `defineUiPlugin` 验证并冻结入口定义，不调用 `setup` 或 `mount`。Node 版本标签为 `crewon.plugin-host.v1`，UI 为 `crewon.plugin-ui.v1`。
+
+`project-foundation-tools` 提供独立的 `crewon.project-foundation-tools@1` Node 数据协议。调用时须转发实际 Worker 派发的原始 `command` 对象；客户端只检查业务 JSON 和结果，不授予 Run、安装或 UI 权限。八个操作读取真实项目基础信息、原文分页、章节和方案，并保存方案候选；协议没有确认方案、创建项目或直接写剧本操作。scope、正文页、历史和保存结果限制为 8KiB；完整参数与最多 16 项章节使用独立 32KiB 上限。正文页最多 1024 个 Unicode scalar，历史和保存结果不回显全文。安装该 SDK 不代表宿主已启用这个服务。
 
 ## 构建 SDK 并在仓外安装
 
@@ -27,10 +32,10 @@ mkdir -p ../../output/extensions/installable-plugins/sdk
 pnpm pack --pack-destination ../../output/extensions/installable-plugins/sdk
 ```
 
-`pack` 会通过 `prepack` 重新构建。将生成的 `crewon-plugin-sdk-0.1.1.tgz` 交给独立插件项目，再在该项目中执行：
+`pack` 会通过 `prepack` 重新构建。将生成的 `crewon-plugin-sdk-0.1.2.tgz` 交给独立插件项目，再在该项目中执行：
 
 ```sh
-pnpm add /absolute/path/crewon-plugin-sdk-0.1.1.tgz
+pnpm add /absolute/path/crewon-plugin-sdk-0.1.2.tgz
 pnpm add -D typescript@5.9.3 esbuild@0.27.7
 ```
 

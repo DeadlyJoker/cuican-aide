@@ -1,6 +1,33 @@
 # ReelBench 复刻 P1：两类项目、原文与方案的兼容扩展
 
-2026-10-08。依据[产品拆解](./reelbench-product-replication-analysis.md)和[验收清单](./reelbench-replication-acceptance.md)。两类项目、真实文件解析和双库持久化已实现；正式已安装插件的 HTTP 创建、方案确认、分片上传、原文解析和小说项目关联已在真实双库通过。SDK 0.1.1 与插件 39.0.0 为未公开发布、未安装候选；创意/小说页面与桌面原生服务组合已有定向验证，Agent 阶段执行仍待完成。用户已安装的桌面插件尚不能调用新服务，完整产品验收没有完成。
+2026-10-08。依据[产品拆解](./reelbench-product-replication-analysis.md)和[验收清单](./reelbench-replication-acceptance.md)。两类项目、真实文件解析和双库持久化已实现；正式已安装插件的 HTTP 创建、方案确认、分片上传、原文解析和小说项目关联已在真实双库通过。SDK 0.1.1 与插件 39.0.0 的候选字节已冻结；新增 Node 协议使用 SDK 0.1.2，插件 40.0.0 是下一候选，尚未安装到用户桌面，也未公开发布。创意/小说页面与桌面原生服务组合已有定向验证，Agent 阶段执行仍待完成。完整产品验收没有完成。
+
+## 2026-10-08 安装协议与实际运行接线
+
+候选40保留原24个工具并新增8个独立 Foundation 工具，共32个。原 manifest v1 的24个上限会在真实业务注册时拒绝这个包，构建成功不证明能安装。因此新增显式 `crewon.extension-manifest.v2`，仍使用 `crewon.extensions.v1` host API，工具上限固定32。v0仍最多16个、v1仍最多24个，原字段、credential slots、schema、名称、输入和总 manifest 字节预算均不变。新版本由严格 parser 识别；旧宿主拒绝新版本，不能静默降级、删掉原工具或扩大旧版本预算。[原协议与新版本测试](../packages/domain/src/extension-manifest-vtwo.test.ts)合计10项通过，包含边界、JSON重开和旧限制回归。真实候选发行与32工具组合执行仍须另外验收。
+
+桌面 Main 通过独立可选 `projectFoundationTools` 私有声明接到 [Native Worker](../apps/runtime-worker/src/plugins/native-project-foundation-runtime.ts)。它绑定已批准的包和确切模块，不从 UI 元数据许可或图片供应商配置推导；旧 v1/v2/v3未声明时仍没有新服务。Native 服务借用原 SQLite 和项目身份，授权只允许本 scope 的项目读取/写入；Node 不能创建项目、采用原文或确认方案。[实际 Main/Native 组合测试](../apps/runtime-worker/src/plugins/native-project-foundation-runtime.test.ts)4项通过，覆盖旧配置、附属规格读取、冷重开、外部身份与配置撤回。这组测试没有调用模型或供应商，也不代表桌面包已经更新。
+
+原 Run 事务的真实双库验证包含34项附属 schema/读取测试、11项 Tool 提交/未知结果重试测试，以及78项原 Stage/Run 回归，均无跳过。实际提交前撤权回滚，提交完成后准确发布已有回执；候选追加不推进 Foundation 或自动确认。另有28项新下游门禁与109项原文本/资产/计划回归验证当前来源和确认有效性。下游门禁只验证**当前资格**，尚不代替长篇计划各批次固定输入依据的完整实现。
+
+新工具的模型输出必须在其独立边界保证整个 wrapper 的 UTF8字节数小于10,000；将大 JSON 拆成字符串数组不构成多个模型 fragment。原宿主的40,000字节工具结果投影会截断更大的输出，不能依靠较大的服务 DTO 预算或包装 allowance 声称模型上下文合格。宿主仍可返回完整有界 DTO；插件参数正文和章节按明确游标分页，页面和原协议保持。整个候选40真实模型投影及流式/停止/重连验收须记录完成证据后才算通过。
+
+## 2026-10-08 独立 Node 协议与 Run 资格进度
+
+新增 [Domain 附属记录](../packages/domain/src/project-foundation-run-admission.ts)、[可移植 Node 合同](../packages/contracts/src/project-foundation-tools.ts)和 [SDK client](../packages/plugin-sdk/src/project-foundation-tools.ts)，服务为 `crewon.project-foundation-tools@1`。首期只处理原 `discussion` 阶段，八个操作为 `foundation_scope`、`foundation_read`、`foundation_source`、`foundation_source_page`、`foundation_chapters`、`foundation_proposal`、`foundation_proposals`、`foundation_proposal_save`。全部符合原插件 operation 的24字节限制，没有扩大旧规则。
+
+- 读取范围、规格、来源、章节和候选方案；唯一写操作是保存新的候选方案。Node 不确认方案，不创建项目，不改参数、来源或创意起始模式。确认仍走真实人工 UI 动作，不能用 UI pin 或旧 stage 的 allowedOps 替代新的 Node 许可。
+- 新 [Run sidecar schema](../packages/store/src/project-foundation-run-schema.ts)与旧 `ProjectStageRunAdmission`、Run DTO、项目 v0 和原 receipt namespace 分离，复用原数据库和连接。显式迁移建立附属表；构造与读取不做 DDL。原 discussion Turn 的[事务接点](../packages/store/src/project-foundation-run-turn.ts)从真实当前 binding、Foundation、参数和来源生成事实及 required marker；事实记录不授予服务或写权限。旧项目没有 Foundation 时沿原协议执行，不在读取中补写新对象。
+- [独立 Node factory](../apps/runtime-worker/src/plugins/installed-plugin-project-foundation-tools.ts)要求显式部署配置及独立服务授权；缺配置不提供新服务。真正调用还需原 Worker 的 command 对象、Tool receipt、claim/lease、任务准入、当前安装记录和 PDP。新的 [Run commit authority](../packages/application/src/project-foundation-run-commit-authority.ts)只接受自己的版本和 `foundation_proposal_save`，重试键由真实 Tool receipt 派生，插件不能指定。对已经要求新资格的 Run，私有 required marker 或对应 sidecar 缺失、不匹配时拒绝；配置、skill、可见 DTO 和附属记录均不替代授权。
+- 冻结指针包含 Foundation revision、独立 parameters revision/摘要、source 和 confirmedProposal。上游改变会返回 `project_foundation_run_inputs_stale` 冲突，损坏资格记录仍按 invalid 拒绝。latestProposal 仅为上下文提示；本 Run 保存候选不会推进 Foundation，也不会因此撤掉自己的读取资格，候选追加另以 expectedProposalRevision 做 CAS。
+- 输入最多24KiB；scope、来源/方案正文页、方案历史和保存回执最多8KiB，完整规格与16项章节页最多32KiB。原文及方案正文每页最多1024 Unicode scalar，历史每页最多4项元数据，保存回执不回显正文。32KiB 仅适用于这个新协议的两个动作，不改变旧工具限制，不静默截断参数，不注入全书。
+- `foundation_read` 可携带 `parametersStartOffset`（0..8192）和 `parametersLimit`（1..1024），供插件模型投影读取规范参数 JSON 的 scalar 页；省略表示0/1024，宿主完整规格 DTO 不变。`foundation_chapters` 省略 `afterStartOffset` 表示首屏，线上的 null 拒绝，数值0是实际游标并排除 startOffset 为0的章节。这些字段只属于新 Node 协议，不扩大原 Workflow schema 的类型范围。
+
+本支线定向验证：Domain/Contracts **20项通过**，新独立 Run authority 与原协议回归 **21项通过**；SDK 0.1.2 的真实 tarball **87项通过**，包含仓外 ES2022、无 DOM、`types: []`、不使用 skipLibCheck 的编译。新增[重放发布测试](../packages/application/src/project-foundation-application-replay.test.ts)与原 Foundation Application suite 合计 **26项通过**：Store 已完成资格核验并发布 committed replay 后即刻撤权，Application 准确返回已有事实；后续新调用仍拒绝。该 memory-port 测试只验证 Application 契约，不证明 SQL COMMIT、实际安装行或 genuine Worker dispatch。
+
+新协议已接入[原 Worker composition](../apps/runtime-worker/src/plugins/installed-plugin-runtime-composition.ts)、[私有 Run snapshot](../apps/runtime-worker/src/plugins/installed-plugin-run-context.ts)和[原 resolver](../apps/runtime-worker/src/plugins/installed-plugin-runtime-resolver.ts)。只有原安装 manifest 明确声明新工具时才组装独立 owner；旧包和没有 opt-in 的部署保持原路径。实际 SQLite 的[安装集成](../apps/runtime-worker/src/installed-plugin-foundation-tools.integration.test.ts)通过真实安装行、原 discussion Turn、附属资格和原 Worker 派发八个操作，覆盖候选保存后回执丢失、物理冷重开、单一方案、人工确认状态未变及 SSE 输出/序号续读；完整规格超过8KiB仍按独立32KiB响应预算读取。缺配置、独立服务权限撤回、全部附属表丢失分别拒绝新工具，不从旧 project.write 或 stage allowedOperations 回退。此夹具使用明确内部来源配方，不声称真实上传采用、候选40模型包装或完整短剧 Agent 已验收。原 resolver/context/lifecycle 等回归 **58项、56通过、2个原跳过**；冻结39原 Stage 的真实 SQLite 与 PostgreSQL 回归 **2项通过、0跳过**，没有重建39。
+
+日志为 `foundation-tools-contract-domain-test.log`、`foundation-tools-run-authority-test.log`、`foundation-tools-sdk-test.log`、`foundation-application-replay-test.log`、`foundation-worker-runtime-integration.log`、`foundation-worker-original-regression.log` 和 `foundation-worker-original-stage-regression.log`，均位于 `output/extensions/checks/reelbench-p1-import-20261008/`。这些合同、包编译及定向测试不代表候选40已安装，也不代表新 UI、停止/重连和完整短剧 Agent 流程已通过端到端验收。下文保留各阶段原证据；“尚未实现”描述记录当时的范围，以本节与正式上传进度为准。
 
 ## 2026-10-08 正式上传与候选页面进度
 
@@ -10,7 +37,7 @@
 - 原网页与桌面 UI loader 均沿原 Control 客户端提供可选原生字节方法；只有真实挂载声明 SourceUploads v1 时才提供该传输方法；每次请求还需实际后端 owner 与独立权限。两项新增元数据依赖保持 optional，避免整个安装包的依赖声明阻断尚未提供这些 Node 服务的原执行工厂。连接就绪提示不代表服务可用或授权。插件 39 使用模块内原主题，首页区分创意与小说，编辑参数、保存/确认方案及按需读取原文/章节；候选页面和 File 编排测试仍与实际桌面、供应商、Agent 端到端验收分开记录。
 - 插件候选双入口构建与独立 UI/File 编排行为 **385 项通过**；原宿主挂载和 raw 传输 **24 项通过**，原 UI source/preview 回归 **32 项通过**。这些覆盖与全 UI 初次运行仍有的其他失败分开记录；全 UI 尚未宣告通过。
 - [桌面正式组合](../apps/control-api/src/desktop-project-foundation.test.ts) **10 项通过**，原 Native startup、运行、恢复、计划、会话及媒体工厂回归 **76 项通过、0 跳过**。原 v3 私有配置新增可选 Foundation 声明，旧配置保持；真实 SQLite 上验证上传、解析、小说创建、方案确认、冷重开、提交前撤权回滚及 COMMIT 后返回事实。Foundation 新增可选同步外部授权钩子，最终提交仍核对原私有配置、scope 和实际 profile；Application 对应 **16 项通过**。没有修改用户 profile，也没有更新已安装 App。
-- 当前全部 packages 类型检查、UI/桌面 host lint、TypeScript boundary 与仓库格式检查通过。Control 全量启用真实 PG 后执行 1454 项：1413 通过、1 失败、7 取消、33 跳过；8 个失败/取消用例均记录执行或供应商请求超时，正在按原时限、较低文件并发复核。没有提高时限、修改生产执行或删减断言，尚不能报告 Control 全量通过。
+- 当时全部 packages 类型检查、UI/桌面 host lint、TypeScript boundary 与仓库格式检查通过。Control 全量启用真实 PG 后执行1454项：1413通过、1失败、7取消、33跳过；8个失败/取消用例记录执行或供应商请求超时。对应原文件按原时限、文件并发2重跑完成81项通过，没有提高时限、修改生产执行或删减断言；全量初次运行本身仍不能报告通过。
 - 后续阶段仍需在实际提交事务内执行来源/方案确认门禁，接入原 Run/Tool 与 shuohao skills，完成对象成果关系、媒体生成、手动/Agent 接力、冷恢复和桌面更新。HTML 快照、测试数量与 HTTP 成功不能代替这份完整产品验收。
 
 日志位于 `output/extensions/checks/reelbench-p1-import-20261008/`，包括 `source-upload-formal-http-tests.log`、`upload-raw-control-client*.log`、`source-upload-bff-test-final.log` 和 `sdk-source-upload-0.1.1-final-tests.log`。下列“本轮实施记录”保留底层阶段的原证据；其中“尚未接线”仅描述当时阶段，最新状态以上述记录为准。

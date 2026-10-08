@@ -101,6 +101,7 @@ export * from "./project-text-ui-intent.ts";
 
 export * from "./project-conversation-binding.ts";
 export * from "./project-stage-run-admission.ts";
+export * from "./project-foundation-run-admission.ts";
 export * from "./project-text-plan-types.ts";
 export * from "./project-text-plan.ts";
 export * from "./project-text-plan-step.ts";

@@ -24,6 +24,8 @@ import {
 import {
   parseDesktopProjectExecutionConfiguration,
   type DesktopProjectExecutionConfiguration,
+  parseDesktopProjectFoundationToolsConfiguration,
+  type DesktopProjectFoundationToolsConfiguration,
 } from "@crewon/contracts/plugins";
 import {
   parsePluginProfileScope,
@@ -80,6 +82,7 @@ export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
     | Readonly<{
         schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3;
         projects: DesktopProjectExecutionConfiguration;
+        projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
       }>
   );
 export type DesktopPluginApprovalSettings = Readonly<{
@@ -95,6 +98,7 @@ export type DesktopPluginApprovalSettings = Readonly<{
     | Readonly<{
         schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3;
         projects: DesktopProjectExecutionConfiguration;
+        projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
       }>
   );
 export type DesktopPluginBootstrap = Readonly<{
@@ -216,6 +220,9 @@ export async function prepareDesktopPluginBootstrap(
           schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3,
           ...manifestFields,
           projects: settings.projects,
+          ...(settings.projectFoundationTools === undefined
+            ? {}
+            : { projectFoundationTools: settings.projectFoundationTools }),
         })
       : settings.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
         ? Object.freeze({
@@ -295,7 +302,16 @@ export function parseDesktopPluginApproval(
     input,
     schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2 ||
       schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
-      ? ["schemaVersion", "sources", "publications", "projects"]
+      ? [
+          "schemaVersion",
+          "sources",
+          "publications",
+          "projects",
+          ...(schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 &&
+          Object.hasOwn(input, "projectFoundationTools")
+            ? ["projectFoundationTools"]
+            : []),
+        ]
       : ["schemaVersion", "sources", "publications"],
   );
   if (
@@ -400,13 +416,32 @@ export function parseDesktopPluginApproval(
     sources: Object.freeze(sources),
     publications: Object.freeze(publications),
   };
+  const projects =
+    value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
+      ? parseDesktopProjectExecutionConfiguration(value.projects, {
+          publications: settings.publications,
+        })
+      : undefined;
+  const foundationTools = Object.hasOwn(value, "projectFoundationTools")
+    ? parseDesktopProjectFoundationToolsConfiguration(
+        value.projectFoundationTools,
+        {
+          publications: settings.sources.map(({ pluginId, packageDigest }) => ({
+            pluginId,
+            packageDigest,
+          })),
+          metadataPublications: projects?.pluginUi?.publications ?? [],
+        },
+      )
+    : undefined;
   return value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
     ? Object.freeze({
         schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3,
         ...settings,
-        projects: parseDesktopProjectExecutionConfiguration(value.projects, {
-          publications: settings.publications,
-        }),
+        projects: projects!,
+        ...(foundationTools === undefined
+          ? {}
+          : { projectFoundationTools: foundationTools }),
       })
     : value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
       ? Object.freeze({

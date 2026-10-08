@@ -150,6 +150,7 @@ const controlAdapterImports = {
   "desktop-project-asset-v2-plugin-runtime.ts": ["@crewon/plugin-host"],
   "desktop-project-conversation-runtime.ts": ["@crewon/plugin-host"],
   "desktop-project-history-plugin-runtime.ts": ["@crewon/plugin-host"],
+  "desktop-project-foundation-plugin-runtime.ts": ["@crewon/plugin-host"],
   "desktop-project-media-generation-ui-composition.ts": ["@crewon/plugin-host"],
   "desktop-project-media-input-ui-composition.ts": ["@crewon/plugin-host"],
   "desktop-project-media-result-ui-composition.ts": ["@crewon/plugin-host"],
@@ -298,6 +299,13 @@ const workerAdapterImports = {
     "@crewon/plugin-sdk/node",
   ],
   "plugins/installed-plugin-project-services.ts": ["@crewon/plugin-host"],
+  "plugins/installed-plugin-project-foundation-tools.ts": [
+    "@crewon/plugin-host",
+    "@crewon/plugin-sdk/node",
+  ],
+  "plugins/installed-plugin-runtime-project-services.ts": [
+    "@crewon/plugin-host",
+  ],
   "plugins/installed-plugin-project-tools.ts": [
     "@crewon/plugin-host",
     "@crewon/plugin-sdk/node",
@@ -335,6 +343,11 @@ const workerAdapterImports = {
   "plugins/project-asset-tools-service-owner.ts": ["@crewon/plugin-host"],
   "plugins/project-media-input-read-scope.ts": ["@crewon/plugin-sdk/node"],
   "plugins/project-media-input-tools-service-owner.ts": ["@crewon/plugin-host"],
+  "plugins/project-foundation-runtime-scope.ts": ["@crewon/plugin-sdk/node"],
+  "plugins/project-foundation-tools-service-owner.ts": [
+    "@crewon/plugin-host",
+    "@crewon/plugin-sdk/node",
+  ],
   "plugins/project-tools-service-owner.ts": [
     "@crewon/plugin-host",
     "@crewon/plugin-sdk/node",

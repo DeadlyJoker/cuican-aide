@@ -26,6 +26,11 @@ import {
 import type { ActorContext } from "./authorization-port.ts";
 import type { WorkItemClaim } from "./durable-queue-port.ts";
 
+/** Fixed host digest for original Run/Tool qualification. It performs no I/O and grants no authority. */
+export function projectToolAuthorityContentDigest(content: string): string {
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+}
+
 /** Complete actual installation identity, without UI invocation provenance. */
 export type ProjectToolInstallationPin = Readonly<{
   tenantId: string;
@@ -137,8 +142,7 @@ export function captureCreativeProjectRunCommitTransaction(
     fields.projectStageAdmission === undefined
       ? undefined
       : parseProjectStageRunAdmission(copy(fields.projectStageAdmission), {
-          sha256: (text) =>
-            `sha256:${createHash("sha256").update(text).digest("hex")}`,
+          sha256: projectToolAuthorityContentDigest,
         });
   const pin = parseProjectToolInstallationPin(fields.installation);
   const plan =
@@ -147,8 +151,7 @@ export function captureCreativeProjectRunCommitTransaction(
       : parseProjectTextPlanRunAdmission(
           copy(fields.projectTextPlanAdmission),
           {
-            sha256: (text) =>
-              `sha256:${createHash("sha256").update(text).digest("hex")}`,
+            sha256: projectToolAuthorityContentDigest,
           },
         );
   const operations = [
@@ -271,7 +274,7 @@ export function captureCreativeProjectRunCommitTransaction(
       extensionCanonicalJson(stage.installation) !==
         extensionCanonicalJson(pin) ||
       stage.pluginTaskAdmissionDigest !==
-        `sha256:${createHash("sha256").update(extensionCanonicalJson(admission)).digest("hex")}`
+        projectToolAuthorityContentDigest(extensionCanonicalJson(admission))
     )
       denied();
     assertProjectStageToolRequest(

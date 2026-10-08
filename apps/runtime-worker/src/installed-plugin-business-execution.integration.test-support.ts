@@ -136,6 +136,7 @@ export async function businessExecutionFixture(
     actor?: ActorContext;
     scope?: PluginProfileScope;
     packageDirectory?: string;
+    packageFixture?: Parameters<typeof businessPackageFixture>[1];
     upgradePackageDirectory?: string;
     configurationParameters?: Readonly<Record<string, WorkflowSchemaValue>>;
     createTransport?(): ModelTransportPort;
@@ -145,6 +146,9 @@ export async function businessExecutionFixture(
     projectTools?: NonNullable<
       RuntimeWorkerCompositionConfig["installedPluginExecution"]
     >["projectTools"];
+    projectFoundationTools?: NonNullable<
+      RuntimeWorkerCompositionConfig["installedPluginExecution"]
+    >["projectFoundationTools"];
     projectConversationQuotes?: boolean;
     projectAssetStageQuotes?: boolean;
     beforeProjectAssetStageQuote?(): Promise<void>;
@@ -231,6 +235,7 @@ export async function businessExecutionFixture(
     options.packageDirectory === undefined
       ? await businessPackageFixture(t, {
           node: installedNodeSource(globalKey, "1.0.0"),
+          ...options.packageFixture,
         })
       : await installedBusinessPackage({
           directory: options.packageDirectory,
@@ -444,6 +449,9 @@ export async function businessExecutionFixture(
       ...(options.projectTools === undefined
         ? {}
         : { projectTools: options.projectTools }),
+      ...(options.projectFoundationTools === undefined
+        ? {}
+        : { projectFoundationTools: options.projectFoundationTools }),
       ...(options.projectAssetTools === undefined
         ? {}
         : { projectAssetTools: options.projectAssetTools }),

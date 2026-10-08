@@ -21,6 +21,7 @@ import { createNativeProjectMediaInputTools } from "./native-project-media-input
 import { createNativeProjectMediaRuntime } from "./native-project-media-runtime.ts";
 import { desktopProjectMaterialStorageFromEnvironment } from "@crewon/media-runtime/desktop-project-material-archive";
 import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-project-media-composition.ts";
+import { createNativeProjectFoundationTools } from "./native-project-foundation-runtime.ts";
 export function createInstalledPluginNativeWorkerAuthority(
   config: InstalledPluginNativeWorkerConfig,
 ): InstalledPluginWorkerAuthority {
@@ -105,6 +106,14 @@ function composeNativeWorkerAuthority(
           operate: owner.operate.bind(owner),
         })
       : undefined;
+  const projectFoundationTools = createNativeProjectFoundationTools({
+    declaration: owner.foundationTools,
+    scope: owner.files.authority.scope,
+    packages: owner.files.authority.packages,
+    current: owner.current.bind(owner),
+    actor: owner.actor.bind(owner),
+    operate: owner.operate.bind(owner),
+  });
   return Object.freeze({
     installRoot: config.installRoot,
     releaseDocumentPath: config.releaseDocumentPath,
@@ -129,6 +138,9 @@ function composeNativeWorkerAuthority(
       installRoot: config.installRoot,
       ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
       ...(projectMedia === undefined ? {} : { projectMedia }),
+      ...(projectFoundationTools === undefined
+        ? {}
+        : { projectFoundationTools }),
       ...(owner.projects?.conversations === undefined
         ? {}
         : {

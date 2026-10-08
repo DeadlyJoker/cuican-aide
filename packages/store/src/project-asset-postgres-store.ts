@@ -1,5 +1,10 @@
 import { assertPostgresAssetVtwoRecoverySchema } from "./project-asset-vtwo-recovery-schema.ts";
 import {
+  capturePostgresProjectFoundationDownstream,
+  assertPostgresProjectFoundationDownstreamUnchanged,
+  type ProjectFoundationDownstreamCheck,
+} from "./project-foundation-downstream-guard.ts";
+import {
   loadAssetMutationReceiptPlan,
   type AssetCommitPlan,
 } from "./project-asset-vtwo-recovery-commit.ts";
@@ -202,6 +207,7 @@ export class PostgresProjectAssetStore
   ) {
     const prepared = captureAssetCommit(input),
       authority = captureProjectAssetCommitAuthority(options);
+    let downstream: ProjectFoundationDownstreamCheck | undefined;
     return this.#transaction(
       async (client) =>
         this.#execute(
@@ -214,8 +220,20 @@ export class PostgresProjectAssetStore
             await assertPostgresAssetIntentSchema(client, this.#d.schema, true),
           ),
           authority,
+          (check) => {
+            downstream = check;
+          },
         ),
       authority,
+      async (client) => {
+        if (downstream !== undefined)
+          await assertPostgresProjectFoundationDownstreamUnchanged(
+            client,
+            this.#d.schema,
+            downstream.locator,
+            downstream.snapshot,
+          );
+      },
     );
   }
   async #read<T>(plan: AssetPlan<T>): Promise<T> {
@@ -228,6 +246,7 @@ export class PostgresProjectAssetStore
     client: PoolClient,
     plan: AssetCommitPlan<T>,
     authority?: ProjectAssetCommitAuthority,
+    onFoundationSnapshot?: (check: ProjectFoundationDownstreamCheck) => void,
   ): Promise<T> {
     let next = plan.next();
     while (!next.done) {
@@ -235,7 +254,18 @@ export class PostgresProjectAssetStore
       assertProjectAssetCommitActive(authority);
       const step = next.value;
       let rows: readonly Record<string, unknown>[];
-      if ("assetVtwoRecoverySchema" in step) {
+      if ("foundationDownstream" in step) {
+        const snapshot = await capturePostgresProjectFoundationDownstream(
+          client,
+          this.#d.schema,
+          step.foundationDownstream,
+        );
+        onFoundationSnapshot?.({
+          locator: step.foundationDownstream,
+          snapshot,
+        });
+        rows = [];
+      } else if ("assetVtwoRecoverySchema" in step) {
         rows = [
           {
             available: await assertPostgresAssetVtwoRecoverySchema(
@@ -276,6 +306,7 @@ export class PostgresProjectAssetStore
   async #transaction<T>(
     body: (client: PoolClient) => Promise<T>,
     authority: ProjectAssetCommitAuthority | undefined,
+    checkDownstream?: (client: PoolClient) => Promise<void>,
   ): Promise<T> {
     this.#open();
     await assertProjectAssetCommitCurrent(authority);
@@ -295,6 +326,7 @@ export class PostgresProjectAssetStore
           this.#d.schema,
           authority,
         );
+        await checkDownstream?.(client);
         assertProjectAssetCommitActive(authority);
         this.#open();
         await client.query("COMMIT");

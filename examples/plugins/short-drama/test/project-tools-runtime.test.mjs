@@ -211,15 +211,17 @@ test("Short13 catalog includes stage and original media tools with model schemas
   const f = fixture();
   assert.equal(
     f.runtime.definitions().length,
-    Number(version.split(".")[0]) >= 23
-      ? 24
-      : Number(version.split(".")[0]) >= 21
-        ? 23
-        : Number(version.split(".")[0]) >= 19
-          ? 21
-          : Number(version.split(".")[0]) >= 16
-            ? 15
-            : 14,
+    Number(version.split(".")[0]) >= 40
+      ? 32
+      : Number(version.split(".")[0]) >= 23
+        ? 24
+        : Number(version.split(".")[0]) >= 21
+          ? 23
+          : Number(version.split(".")[0]) >= 19
+            ? 21
+            : Number(version.split(".")[0]) >= 16
+              ? 15
+              : 14,
   );
   const list = f.runtime
     .definitions()
@@ -348,7 +350,10 @@ test("project_context_read returns bounded actual Run metadata and validates its
     const output = JSON.parse(JSON.parse(result.result.output).resultJson);
     assert.deepEqual(output.scope, scope);
     assert.equal(output.guidance.skill, "novel-outline");
-    assert.match(output.guidance.source, /ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/);
+    assert.match(
+      output.guidance.source,
+      /ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/,
+    );
     assert.match(output.guidance.output, /outline_save/);
     assert.equal(calls[0], command);
     assert.ok(Buffer.byteLength(result.result.output) <= 8192);

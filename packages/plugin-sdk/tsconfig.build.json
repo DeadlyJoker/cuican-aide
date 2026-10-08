@@ -14,6 +14,7 @@
     "src/node.ts",
     "src/ui.ts",
     "src/project-foundation-ui.ts",
+    "src/project-foundation-tools.ts",
     "src/project-source-uploads.ts"
   ],
   "include": []

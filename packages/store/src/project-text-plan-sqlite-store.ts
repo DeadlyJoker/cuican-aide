@@ -1,4 +1,9 @@
 import {
+  captureSqliteProjectFoundationDownstream,
+  assertSqliteProjectFoundationDownstreamUnchanged,
+  type ProjectFoundationDownstreamSnapshot,
+} from "./project-foundation-downstream-guard.ts";
+import {
   capturePlanPause,
   checkedPlanPause,
 } from "./project-text-plan-pause.ts";
@@ -172,93 +177,121 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     await p.q.assertCurrent();
     await p.q.assertTransactionCurrent();
     p.q.assertActive();
-    return this.#transaction(() => {
-      this.#ready();
-      assertSqliteProjectTextUiCommit(this.#db, {
-        ...p.q,
-        installation: p.q.binding.currentInstallation,
-      });
-      const replay = this.#receipt(o, p.receipt);
-      this.#checkRows(
-        p,
-        replay === null &&
-          (p.kind === "start" ||
-            p.kind === "resume" ||
-            p.kind === "reviseRemaining"),
-      );
-      if (replay !== null) {
+    let downstream: ProjectFoundationDownstreamSnapshot | undefined;
+    const downstreamLocator = {
+      actor: p.revision.actor,
+      projectId: p.plan.projectId,
+    };
+    return this.#transaction(
+      () => {
+        this.#ready();
+        assertSqliteProjectTextUiCommit(this.#db, {
+          ...p.q,
+          installation: p.q.binding.currentInstallation,
+        });
+        const replay = this.#receipt(o, p.receipt);
+        this.#checkRows(
+          p,
+          replay === null &&
+            (p.kind === "start" ||
+              p.kind === "resume" ||
+              p.kind === "reviseRemaining"),
+        );
+        if (replay !== null) {
+          if (
+            replay.kind !== p.kind ||
+            replay.plan.projectId !== p.plan.projectId ||
+            replay.plan.threadId !== p.plan.threadId
+          )
+            planStoreFail("project_text_plan_idempotency_conflict");
+          return replay;
+        }
+        const previous = this.#plan(o, p.plan.planId),
+          revision =
+            previous === null
+              ? null
+              : this.#revision(previous, previous.currentPlanRevision),
+          steps =
+            previous === null
+              ? []
+              : this.#steps(previous, previous.currentPlanRevision);
+        if (p.kind === "continue" && previous !== null)
+          assertSqlitePlanContinuation(this.#db, previous, steps);
+        verifyPlanControl(p, previous, revision, steps);
         if (
-          replay.kind !== p.kind ||
-          replay.plan.projectId !== p.plan.projectId ||
-          replay.plan.threadId !== p.plan.threadId
+          p.kind === "start" &&
+          this.#get(
+            "SELECT plan_id FROM project_text_plans WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND project_id=? AND thread_id=? AND state NOT IN ('completed','revoked') LIMIT 1",
+            [...planOwnerValues(o), p.plan.projectId, p.plan.threadId],
+          )
         )
-          planStoreFail("project_text_plan_idempotency_conflict");
-        return replay;
-      }
-      const previous = this.#plan(o, p.plan.planId),
-        revision =
-          previous === null
-            ? null
-            : this.#revision(previous, previous.currentPlanRevision),
-        steps =
-          previous === null
-            ? []
-            : this.#steps(previous, previous.currentPlanRevision);
-      if (p.kind === "continue" && previous !== null)
-        assertSqlitePlanContinuation(this.#db, previous, steps);
-      verifyPlanControl(p, previous, revision, steps);
-      if (
-        p.kind === "start" &&
-        this.#get(
-          "SELECT plan_id FROM project_text_plans WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND project_id=? AND thread_id=? AND state NOT IN ('completed','revoked') LIMIT 1",
-          [...planOwnerValues(o), p.plan.projectId, p.plan.threadId],
+          planStoreFail("project_text_plan_active_conflict");
+        if (
+          p.kind === "start" ||
+          p.kind === "resume" ||
+          p.kind === "reviseRemaining" ||
+          p.kind === "continue"
         )
-      )
-        planStoreFail("project_text_plan_active_conflict");
-      this.#writePlan(p.plan, previous);
-      if (
-        previous === null ||
-        p.revision.planRevision !== previous.currentPlanRevision
-      )
-        this.#db
-          .prepare("INSERT INTO project_text_plan_revisions VALUES(?,?,?,?,?)")
-          .run(
-            ...planScope(p.plan),
-            p.revision.planRevision,
-            JSON.stringify(p.revision),
+          downstream = captureSqliteProjectFoundationDownstream(
+            this.#db,
+            downstreamLocator,
           );
-      for (const step of p.steps) {
-        const old = steps.find((s) => s.stepId === step.stepId);
-        if (old === undefined)
+        this.#writePlan(p.plan, previous);
+        if (
+          previous === null ||
+          p.revision.planRevision !== previous.currentPlanRevision
+        )
           this.#db
             .prepare(
-              `INSERT INTO project_text_plan_steps(${planStepColumns}) VALUES(${Array(12).fill("?").join(",")})`,
+              "INSERT INTO project_text_plan_revisions VALUES(?,?,?,?,?)",
             )
-            .run(...planStepValues(p.plan, step));
-        else if (old.contentDigest !== step.contentDigest)
-          this.#writeStep(p.plan, step, old);
-      }
-      const result = Object.freeze({
-        kind: p.kind,
-        disposition: "committed" as const,
-        plan: p.plan,
-        planRevision: p.revision,
-        steps: p.steps,
-      });
-      this.#db
-        .prepare(
-          "INSERT INTO project_text_plan_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
-        )
-        .run(
-          ...planOwnerValues(o),
-          p.receipt.idempotencyKey,
-          p.receipt.requestDigest,
-          p.kind,
-          p.plan.planId,
-          JSON.stringify(result),
-        );
-      return result;
-    }, p.q.assertActive);
+            .run(
+              ...planScope(p.plan),
+              p.revision.planRevision,
+              JSON.stringify(p.revision),
+            );
+        for (const step of p.steps) {
+          const old = steps.find((s) => s.stepId === step.stepId);
+          if (old === undefined)
+            this.#db
+              .prepare(
+                `INSERT INTO project_text_plan_steps(${planStepColumns}) VALUES(${Array(12).fill("?").join(",")})`,
+              )
+              .run(...planStepValues(p.plan, step));
+          else if (old.contentDigest !== step.contentDigest)
+            this.#writeStep(p.plan, step, old);
+        }
+        const result = Object.freeze({
+          kind: p.kind,
+          disposition: "committed" as const,
+          plan: p.plan,
+          planRevision: p.revision,
+          steps: p.steps,
+        });
+        this.#db
+          .prepare(
+            "INSERT INTO project_text_plan_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
+          )
+          .run(
+            ...planOwnerValues(o),
+            p.receipt.idempotencyKey,
+            p.receipt.requestDigest,
+            p.kind,
+            p.plan.planId,
+            JSON.stringify(result),
+          );
+        return result;
+      },
+      p.q.assertActive,
+      () => {
+        if (downstream !== undefined)
+          assertSqliteProjectFoundationDownstreamUnchanged(
+            this.#db,
+            downstreamLocator,
+            downstream,
+          );
+      },
+    );
   }
   async commitObservation(
     input: Parameters<ProjectTextPlanStore["commitObservation"]>[0],
@@ -526,11 +559,16 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
   #all(sql: string, values: readonly SQLInputValue[] = []) {
     return this.#db.prepare(sql).all(...values);
   }
-  #transaction<T>(work: () => T, active?: () => void): T {
+  #transaction<T>(
+    work: () => T,
+    active?: () => void,
+    checkDownstream?: () => void,
+  ): T {
     this.#open();
     this.#db.exec("BEGIN IMMEDIATE");
     try {
       const result = work();
+      checkDownstream?.();
       active?.();
       this.#open();
       this.#db.exec("COMMIT");

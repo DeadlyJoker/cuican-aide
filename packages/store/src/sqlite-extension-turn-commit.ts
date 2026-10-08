@@ -1,4 +1,9 @@
 import {
+  attachSqliteFoundationRun,
+  assertSqliteFoundationTurnCurrent,
+  assertSqliteFoundationTurnReplay,
+} from "./project-foundation-run-turn.ts";
+import {
   captureProjectMediaInputStageTurn,
   assertSqliteMediaInputStageTurn,
   assertMediaInputStageReplay,
@@ -216,6 +221,7 @@ export async function commitSqliteExtensionTurn(
   await assertPlanTurnCurrent(plan);
   const capturedStage = captureProjectStageTurn(input, options);
   const stage = capturedStage.stage;
+  let foundationRun: ReturnType<typeof attachSqliteFoundationRun> = null;
   options = capturedStage.options;
   const unmetered = captureUnmeteredTurn(input, host.unmeteredEnabled, options);
   if (unmetered.admission !== undefined)
@@ -414,6 +420,11 @@ export async function commitSqliteExtensionTurn(
           stage,
           loadSqliteStageIfAvailable(host.database, saved.binding),
         );
+        assertSqliteFoundationTurnReplay(
+          host.database,
+          stage?.admission ?? null,
+          input,
+        );
         const savedMediaInput = loadSqliteMediaInputStage(
           host.database,
           saved.binding,
@@ -572,6 +583,11 @@ export async function commitSqliteExtensionTurn(
             "INSERT INTO project_stage_run_admissions VALUES(?,?,?,?,?,?,?)",
           )
           .run(...stageValues(stage.admission));
+      foundationRun = attachSqliteFoundationRun(
+        host.database,
+        stage?.admission ?? null,
+        input,
+      );
       if (historicalLink !== undefined)
         host.database
           .prepare(projectHistoricalQueryInsertSql())
@@ -618,6 +634,11 @@ export async function commitSqliteExtensionTurn(
         assertCreativeProjectCommitActive(prepared?.authority);
         assertCreativeProjectCommitActive(projectQuery?.authority);
         assertCreativeProjectCommitActive(historicalQuery?.authority);
+        assertSqliteFoundationTurnCurrent(
+          host.database,
+          stage?.admission ?? null,
+          foundationRun,
+        );
       },
     },
   );

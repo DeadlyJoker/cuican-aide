@@ -1,6 +1,6 @@
 {
   "name": "@crewon/plugin-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "description": "Portable CrewON plugin ABI and package metadata contracts",
   "type": "module",
@@ -10,6 +10,10 @@
     "dist"
   ],
   "exports": {
+    "./project-foundation-tools": {
+      "types": "./dist/types/plugin-sdk/src/project-foundation-tools.d.ts",
+      "import": "./dist/project-foundation-tools.js"
+    },
     "./project-source-uploads": {
       "types": "./dist/types/plugin-sdk/src/project-source-uploads.d.ts",
       "import": "./dist/project-source-uploads.js"

@@ -11,6 +11,15 @@ import type { InstalledPluginProjectMediaInputToolsDependencies } from "./instal
 import { ProjectMediaInputToolsServiceOwner } from "./project-media-input-tools-service-owner.ts";
 import type { ProjectToolsDispatchInvocation } from "./project-tools-service-owner.ts";
 import { installedPluginToolOperationPurpose } from "./installed-plugin-run-runtime.ts";
+import {
+  CREWON_PROJECT_FOUNDATION_TOOLS_SERVICE,
+  PROJECT_FOUNDATION_TOOL_OPERATION_IDS,
+} from "@crewon/contracts/project-foundation-tools";
+import type { ProjectFoundationRunAdmission } from "@crewon/domain";
+import {
+  createInstalledPluginProjectFoundationToolsOwner,
+  type InstalledPluginProjectFoundationToolsDependencies,
+} from "./installed-plugin-project-foundation-tools.ts";
 
 export type InstalledPluginProjectServices = Readonly<{
   hostServices(): readonly PluginHostService[];
@@ -22,7 +31,7 @@ export type InstalledPluginProjectServices = Readonly<{
   close(): Promise<void>;
 }>;
 
-/** Media-input tasks compose the shared readers under their independent stage guard. */
+/** Independent Foundation commands never enter the legacy stage allowedOperations guard. */
 export function createInstalledPluginProjectServices(
   input: Parameters<typeof createInstalledPluginProjectToolsOwner>[0] &
     Readonly<{
@@ -30,7 +39,79 @@ export function createInstalledPluginProjectServices(
         | InstalledPluginProjectMediaInputToolsDependencies
         | undefined;
       mediaInputStage: ProjectMediaInputStageRunAdmission | null;
+      foundationDependencies?: InstalledPluginProjectFoundationToolsDependencies;
+      foundationAdmission?: ProjectFoundationRunAdmission | null;
     }>,
+): InstalledPluginProjectServices | null {
+  const declared = input.tools.some(
+    (tool) =>
+      tool.adapterId === CREWON_PROJECT_FOUNDATION_TOOLS_SERVICE &&
+      PROJECT_FOUNDATION_TOOL_OPERATION_IDS.some(
+        (operation) => operation === tool.operationId,
+      ),
+  );
+  if (!declared) return createLegacyProjectServices(input);
+  const foundationAdmission = input.foundationAdmission ?? null;
+  const foundation =
+    foundationAdmission === null
+      ? null
+      : createInstalledPluginProjectFoundationToolsOwner({
+          ...input,
+          dependencies: input.foundationDependencies,
+          stageAdmission: input.stageAdmission ?? null,
+          foundationAdmission,
+        });
+  const legacy =
+    input.dependencies === undefined && foundation !== null
+      ? null
+      : createLegacyProjectServices(input);
+  return Object.freeze({
+    hostServices: () => [
+      ...(legacy?.hostServices() ?? []),
+      ...(foundation === null ? [] : [foundation.hostService()]),
+    ],
+    withInvocation: <T>(
+      invocation: ProjectToolsDispatchInvocation,
+      delegate: () => Promise<T>,
+    ) => {
+      const isFoundation = PROJECT_FOUNDATION_TOOL_OPERATION_IDS.some(
+        (operation) =>
+          invocation.command.name ===
+          extensionToolName(input.admission.pluginId, operation),
+      );
+      if (isFoundation) {
+        if (foundation === null)
+          throw new Error(
+            "installed_plugin_project_foundation_services_unavailable",
+          );
+        return foundation.withInvocation(invocation, delegate);
+      }
+      return legacy === null
+        ? delegate()
+        : legacy.withInvocation(invocation, delegate);
+    },
+    canRetire: () =>
+      (foundation?.canRetire() ?? true) && (legacy?.canRetire() ?? true),
+    close: async () => {
+      const settled = await Promise.allSettled([
+        foundation?.close(),
+        legacy?.close(),
+      ]);
+      const failures = settled.filter(
+        (item): item is PromiseRejectedResult => item.status === "rejected",
+      );
+      if (failures.length)
+        throw new AggregateError(
+          failures.map((item) => item.reason),
+          "installed_plugin_project_services_close_failed",
+        );
+    },
+  });
+}
+
+/** Media-input tasks compose the shared readers under their independent stage guard. */
+function createLegacyProjectServices(
+  input: Parameters<typeof createInstalledPluginProjectServices>[0],
 ): InstalledPluginProjectServices | null {
   const stage = input.mediaInputStage;
   if (stage !== null) {

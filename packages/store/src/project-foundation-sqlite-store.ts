@@ -1,4 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
+import { migrateSqliteProjectFoundationRuns } from "./project-foundation-run-schema.ts";
+import {
+  qualifyFoundationRunMutation,
+  assertSqliteFoundationRunCommit,
+  isFoundationReplay,
+} from "./project-foundation-run-qualification.ts";
 import {
   assertProjectFoundationCommitActive,
   assertProjectFoundationCommitCurrent,
@@ -92,7 +98,10 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     this.#sourceAdmission = input.sourceAdmission;
   }
   async migrate(): Promise<void> {
-    this.#transaction(() => migrateSqliteProjectFoundations(this.#database));
+    this.#transaction(() => {
+      migrateSqliteProjectFoundations(this.#database);
+      migrateSqliteProjectFoundationRuns(this.#database);
+    });
   }
   async loadFoundation(input: Input<"loadFoundation">) {
     this.#assertOpen();
@@ -236,6 +245,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     this.#assertOpen();
     const identity = foundationIdentity(input);
     const authority = captureProjectFoundationCommitAuthority(options);
+    qualifyFoundationRunMutation(authority, identity);
     const qualification = qualifyProjectFoundationPluginCommit(
       authority,
       identity.actor,
@@ -287,7 +297,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     qualification: Qualification,
   ) {
     await assertProjectFoundationCommitCurrent(authority);
-    if (qualification !== undefined)
+    if (qualification !== undefined || authority?.runTransaction !== undefined)
       await assertProjectFoundationCommitTransactionCurrent(authority);
   }
   async #commit(
@@ -303,6 +313,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       kind: prepared.kind,
       receipt: prepared.receipt,
     });
+    qualifyFoundationRunMutation(authority, identity, prepared);
     const qualification = qualifyProjectFoundationPluginCommit(
       authority,
       prepared.actor,
@@ -316,6 +327,10 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       () => {
         const replay = this.#receipt(identity);
         if (replay !== null) return replay;
+        assertSqliteFoundationRunCommit(
+          this.#database,
+          authority?.runTransaction,
+        );
         const projectId = prepared.foundation.projectId;
         const project = this.#project(identity.owner, projectId);
         // Creation cannot hide a conflicting identity belonging to a different owner.
@@ -726,8 +741,20 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         foundationEqual(installation.package, qualification.package);
       }
       assertProjectFoundationCommitActive(authority);
+      assertSqliteFoundationRunCommit(
+        this.#database,
+        authority?.runTransaction,
+        "receipt-publication",
+      );
       const result = work();
       assertProjectFoundationCommitActive(authority);
+      assertSqliteFoundationRunCommit(
+        this.#database,
+        authority?.runTransaction,
+        isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
+      );
+      assertProjectFoundationCommitActive(authority);
+      this.#assertOpen();
       this.#database.exec("COMMIT");
       return result;
     } catch (error) {

@@ -52,6 +52,11 @@ test("installed Run context reads the real paid task, exact original package/con
     () => f.reader.verifiedToolPermissionMode({ ...snapshot }),
     /installed_plugin_context_snapshot_invalid/,
   );
+  assert.equal(f.reader.verifiedProjectFoundation(snapshot), null);
+  assert.throws(
+    () => f.reader.verifiedProjectFoundation({ ...snapshot }),
+    /installed_plugin_context_snapshot_invalid/,
+  );
   assert.ok(Object.isFrozen(snapshot.context.configuration.parameters));
   assert.deepEqual(
     f.controls.requests.map((request) => request.action),

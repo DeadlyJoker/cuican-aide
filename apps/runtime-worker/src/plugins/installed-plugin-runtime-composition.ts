@@ -51,6 +51,12 @@ import {
   type PreparedInstalledPluginProjectMedia,
 } from "./installed-plugin-project-media-composition.ts";
 import type { InstalledPluginRunRuntimeResolverPort } from "./installed-plugin-run-runtime.ts";
+import {
+  captureInstalledPluginProjectFoundationToolsConfig,
+  composeInstalledPluginProjectFoundationToolsDependencies,
+  prepareInstalledPluginProjectFoundationStores,
+  type InstalledPluginProjectFoundationToolsConfig,
+} from "./installed-plugin-project-foundation-tools.ts";
 
 /** Host deployment authority, never supplied by a plugin or inferred from an installation receipt. */
 export type InstalledPluginExecutionConfig = Readonly<{
@@ -62,6 +68,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoConfig;
   projectTools?: InstalledPluginProjectToolsConfig;
+  projectFoundationTools?: InstalledPluginProjectFoundationToolsConfig;
   projectAssetTools?: InstalledPluginProjectAssetToolsConfig;
   projectMedia?: InstalledPluginProjectMediaConfig;
   projectMediaInputs?: InstalledPluginProjectMediaInputToolsConfig;
@@ -77,6 +84,18 @@ export type InstalledPluginHistoricalQueryConfig = Readonly<{
 export function captureInstalledPluginExecutionConfig(
   config: InstalledPluginExecutionConfig,
 ): InstalledPluginExecutionConfig {
+  const foundationField = Object.getOwnPropertyDescriptor(
+    config,
+    "projectFoundationTools",
+  );
+  if (
+    foundationField !== undefined &&
+    (!foundationField.enumerable || !("value" in foundationField))
+  )
+    throw new Error("installed_plugin_execution_configuration_invalid");
+  const foundationTools = foundationField?.value as
+    | InstalledPluginProjectFoundationToolsConfig
+    | undefined;
   if (
     typeof config.installRoot !== "string" ||
     !isAbsolute(config.installRoot) ||
@@ -99,6 +118,12 @@ export function captureInstalledPluginExecutionConfig(
   if (config.projectMedia !== undefined && config.executionIo === undefined)
     throw new Error("installed_plugin_media_io_unavailable");
   return Object.freeze({
+    ...(foundationTools === undefined
+      ? {}
+      : {
+          projectFoundationTools:
+            captureInstalledPluginProjectFoundationToolsConfig(foundationTools),
+        }),
     ...(config.projectMediaInputs === undefined
       ? {}
       : {
@@ -258,6 +283,7 @@ export function composeInstalledPluginRuntimeResolver(input: {
     authorization: config.authorization,
     operations,
     conversations: store.projectConversationStore(),
+    foundationRuns: store.projectFoundationRunStore(),
     plans: store.projectTextPlanStore(),
     assetStages: store.projectAssetStageStore(),
     ...(config.projectMediaInputs === undefined
@@ -266,6 +292,16 @@ export function composeInstalledPluginRuntimeResolver(input: {
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({
+    ...(config.projectFoundationTools === undefined
+      ? {}
+      : {
+          projectFoundationTools:
+            composeInstalledPluginProjectFoundationToolsDependencies({
+              store,
+              config: config.projectFoundationTools,
+              resolveActor: config.resolveActor,
+            }),
+        }),
     ...(config.projectMediaInputs === undefined
       ? {}
       : {
@@ -344,6 +380,10 @@ export async function prepareInstalledPluginRuntimeResolver(input: {
   signal?: AbortSignal;
 }): Promise<InstalledPluginRunRuntimeResolverPort> {
   const config = captureInstalledPluginExecutionConfig(input.config);
+  await prepareInstalledPluginProjectFoundationStores({
+    store: input.store,
+    config: config.projectFoundationTools,
+  });
   if (config.projectMedia === undefined)
     return composeInstalledPluginRuntimeResolver({ ...input, config });
   const media = await prepareInstalledPluginProjectMedia({

@@ -1,5 +1,10 @@
 import { observePostgresPlanManualSelection } from "./project-text-plan-manual-selection.ts";
 import {
+  capturePostgresProjectFoundationDownstream,
+  assertPostgresProjectFoundationDownstreamUnchanged,
+  type ProjectFoundationDownstreamSnapshot,
+} from "./project-foundation-downstream-guard.ts";
+import {
   planSelectionQualification,
   beginPostgresPlanSelection,
   finishPostgresPlanSelection,
@@ -287,6 +292,11 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       prepared.kind,
       prepared.receipt,
     );
+    let downstream: ProjectFoundationDownstreamSnapshot | undefined;
+    const downstreamLocator = {
+      actor: prepared.actor,
+      projectId: prepared.project.projectId,
+    };
     return this.#transaction(
       async (client) => {
         await assertPostgresProjectRunCommit(
@@ -432,6 +442,12 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           latestBrief,
           selectedOutline,
         });
+        if (candidate)
+          downstream = await capturePostgresProjectFoundationDownstream(
+            client,
+            this.#schema,
+            downstreamLocator,
+          );
         this.#active(authority);
         const a = result.artifact;
         if (prepared.expectedArtifactRevision === 0)
@@ -510,6 +526,15 @@ export class PostgresProjectTextStore implements ProjectTextStore {
       authority,
       runQualification,
       textUi,
+      async (client) => {
+        if (downstream !== undefined)
+          await assertPostgresProjectFoundationDownstreamUnchanged(
+            client,
+            this.#schema,
+            downstreamLocator,
+            downstream,
+          );
+      },
     );
   }
   async #project(
@@ -631,6 +656,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
     textUi?: ProjectTextUiQualification,
+    checkDownstream?: (client: PoolClient) => Promise<void>,
   ): Promise<T> {
     this.#assertOpen();
     if (authority !== undefined)
@@ -654,6 +680,7 @@ export class PostgresProjectTextStore implements ProjectTextStore {
         this.#schema,
         runQualification,
       );
+      await checkDownstream?.(client);
       this.#active(authority);
       await client.query("COMMIT");
       return result;

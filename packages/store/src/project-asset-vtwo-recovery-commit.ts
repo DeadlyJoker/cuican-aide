@@ -19,11 +19,13 @@ import {
 import { beginAssetIntentCommit } from "./project-asset-ui-intent-plan.ts";
 import { verifyProjectAssetMutationReference } from "./project-asset-reference-proof-plan.ts";
 import type { ProjectGenerationImageResultVerifier } from "@crewon/application";
+import type { ProjectFoundationDownstreamLocator } from "./project-foundation-downstream-guard.ts";
 export type AssetCommitPlan<T> = Generator<
   | AssetSql
   | Readonly<{ assetVtwoRecoverySchema: "optional" }>
   | Readonly<{ mediaOperationSchema: true }>
-  | Readonly<{ mediaResultSchema: true }>,
+  | Readonly<{ mediaResultSchema: true }>
+  | Readonly<{ foundationDownstream: ProjectFoundationDownstreamLocator }>,
   T,
   AssetRows
 >;

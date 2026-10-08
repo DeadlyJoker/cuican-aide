@@ -128,6 +128,10 @@ export function* commitAssetPlan(
         )
       : undefined;
   const result = yield* prepareAssetMutation(d, input, source);
+  if (input.kind === "save-content")
+    yield {
+      foundationDownstream: { actor: input.actor, projectId: c.projectId },
+    };
   if (input.kind === "select-reference" && result.referenceRevision !== null)
     yield* verifyProjectAssetMutationReference(
       d,

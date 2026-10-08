@@ -36,7 +36,8 @@
     "./project-media-input-stages": "./src/project-media-input-stages.ts",
     "./project-asset-recovery-v2": "./src/project-asset-recovery-v2.ts",
     "./project-foundation": "./src/project-foundation.ts",
-    "./project-source-uploads": "./src/project-source-uploads.ts"
+    "./project-source-uploads": "./src/project-source-uploads.ts",
+    "./project-foundation-tools": "./src/project-foundation-tools.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

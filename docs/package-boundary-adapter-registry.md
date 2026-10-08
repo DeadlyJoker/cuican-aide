@@ -38,6 +38,8 @@ Plugin Host 仅给已有任务、生成、上下文、查询和历史业务桥�
 
 独立上传 UI 发布再登记三条精确依赖：两种可用性组合共用 `plugin-project-foundation-host-service-availability.ts`，因此该文件另外允许公开 `@crewon/contracts/project-source-uploads`；`project-source-upload-plugin-ui-composition.ts` 与 `production-project-source-upload-plugin-runtime.ts` 各自仅额外允许 `@crewon/plugin-host`，分别组合品牌上传服务和原 HTTP 请求身份/生命周期。正式配置以 `foundation.uploads.pluginUi` 单独批准上传服务，不继承 Foundation 发布。SDK `project-source-uploads` 入口复用四个严格 JSON 动作，分片字节通过另行提供的原生传输端口，每片不超过 65,536 字节，不注入 JSON/base64，也不创建 Run 或授予上传权限。上述登记及 SDK 传输测试不表示正式安装 UI 的原文上传已完成验收。
 
+Foundation Node 工具沿[原 Native 执行](./native-local-plugin-execution.md)和[短剧 P1 兼容边界](./reelbench-replication-p1-compatibility.md)新增五个精确适配文件。Control 的 `desktop-project-foundation-plugin-runtime.ts` 只导入 Plugin Host 的现有可用性端口类型，用真实私有 bootstrap、原项目 owner 和已安装 UI 发布组合 Foundation/上传服务。Worker 的 `plugins/installed-plugin-project-foundation-tools.ts`、`plugins/project-foundation-tools-service-owner.ts` 只取得 Plugin Host 服务/候选类型及 SDK Node 原工具上下文类型；`plugins/project-foundation-runtime-scope.ts` 只取得该 SDK 上下文类型；`plugins/installed-plugin-runtime-project-services.ts` 只取得原安装候选类型。它们沿原 Run、Tool 回执、安装选择和父 Store 验证，不新增模型执行器、数据库或授权来源。独立 Native Node 声明不继承 Foundation UI 发布，也不依赖 Comfy 配置。SDK 根入口、UI 入口、私有 Host 子路径、相邻及嵌套文件均未开放；没有增加 Worker 的 SDK 运行时依赖。这些登记和静态反向测试不能代替正式安装包的流式/恢复验收。
+
 ## Store 的物理适配例外
 
 `project-media-generation-turn.ts` 的 `node:util` 用于拒绝 Proxy，`project-text-store-support.ts` 的 `node:util` 用于核对重建值与实际持久值。它们属于既有存储记录核验，未给予整个 Store `node:util` 许可。

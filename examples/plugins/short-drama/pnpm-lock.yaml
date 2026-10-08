@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@crewon/plugin-sdk':
-        specifier: file:../../../output/extensions/sdk-reelbench-source-upload-20261008/crewon-plugin-sdk-0.1.0.tgz
-        version: file:../../../output/extensions/sdk-reelbench-source-upload-20261008/crewon-plugin-sdk-0.1.0.tgz
+        specifier: file:./.sdk/crewon-plugin-sdk.tgz
+        version: file:.sdk/crewon-plugin-sdk.tgz
       lucide-react:
         specifier: 0.468.0
         version: 0.468.0(react@19.2.7)
@@ -42,9 +42,9 @@ importers:
 
 packages:
 
-  '@crewon/plugin-sdk@file:../../../output/extensions/sdk-reelbench-source-upload-20261008/crewon-plugin-sdk-0.1.0.tgz':
-    resolution: {integrity: sha512-L/8pRi+OoTNmV7P+k+VMuYBkR+vGxq7+nNMrNdIGxBC+HkWgYE4KLKeq3ND73M3vj8RXATRhY528aNNG3Z/K9g==, tarball: file:../../../output/extensions/sdk-reelbench-source-upload-20261008/crewon-plugin-sdk-0.1.0.tgz}
-    version: 0.1.0
+  '@crewon/plugin-sdk@file:.sdk/crewon-plugin-sdk.tgz':
+    resolution: {integrity: sha512-FdAjHnB7+0Gh9q0I2DVdWeZwopQlAvWYmtxGEr98H2SLCRjcgfVbhTI4/zzrQIpc255nAbq0ZJksbx1nS9E+ag==, tarball: file:.sdk/crewon-plugin-sdk.tgz}
+    version: 0.1.2
     engines: {node: '>=24 <25'}
 
   '@esbuild/aix-ppc64@0.27.7':
@@ -283,7 +283,7 @@ packages:
 
 snapshots:
 
-  '@crewon/plugin-sdk@file:../../../output/extensions/sdk-reelbench-source-upload-20261008/crewon-plugin-sdk-0.1.0.tgz': {}
+  '@crewon/plugin-sdk@file:.sdk/crewon-plugin-sdk.tgz': {}
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true

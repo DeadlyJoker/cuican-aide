@@ -15,6 +15,10 @@ import {
 } from "@crewon/contracts/plugins";
 import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
 import {
+  parseDesktopProjectFoundationToolsConfiguration,
+  type DesktopProjectFoundationToolsConfiguration,
+} from "@crewon/contracts/plugins";
+import {
   parseExtensionConfiguration,
   parseExtensionExecutionTarget,
   parsePluginProfileScope,
@@ -72,6 +76,9 @@ export class NativeAuthorityOwner {
   readonly config: InstalledPluginNativeWorkerConfig;
   readonly files: ReturnType<typeof captureNativePluginAuthority>;
   readonly store: SqliteRunStore;
+  readonly foundationTools:
+    | DesktopProjectFoundationToolsConfiguration
+    | undefined;
   readonly projects:
     | DesktopProjectHistoryConfiguration
     | DesktopProjectExecutionConfiguration
@@ -120,6 +127,22 @@ export class NativeAuthorityOwner {
       default:
         fail("project_configuration_binding_invalid");
     }
+    if (
+      bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3" &&
+      Object.hasOwn(bootstrap, "projectFoundationTools")
+    )
+      fail("project_foundation_tools_configuration_invalid");
+    this.foundationTools = Object.hasOwn(bootstrap, "projectFoundationTools")
+      ? parseDesktopProjectFoundationToolsConfiguration(
+          bootstrap.projectFoundationTools,
+          {
+            publications: this.files.authority.packages.map(
+              ({ pluginId, packageDigest }) => ({ pluginId, packageDigest }),
+            ),
+            metadataPublications: this.projects?.pluginUi?.publications ?? [],
+          },
+        )
+      : undefined;
     if (
       config.installRoot !== this.files.authority.installRoot ||
       (config.historicalScope !== null &&

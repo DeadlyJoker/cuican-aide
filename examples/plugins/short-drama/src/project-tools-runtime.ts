@@ -27,6 +27,13 @@ import {
   type PluginProjectToolsService,
 } from "./project-tools-service.js";
 import { RetainedResults } from "./retained-results.js";
+import type { PluginProjectFoundationToolsService } from "@crewon/plugin-sdk/project-foundation-tools";
+import {
+  foundationDefinitions,
+  foundationMethod,
+  foundationPolicy,
+} from "./project-foundation-tools-catalog.js";
+import { createProjectFoundationToolsRuntime } from "./project-foundation-tools-runtime.js";
 import { createKreaRuntime } from "./runtime.js";
 import {
   createProjectMediaRuntime,
@@ -71,11 +78,19 @@ export function createShortDramaRuntime(
     assetContext?: PluginProjectAssetContextService | null;
     mediaExecution?: PluginProjectMediaExecutionService | null;
     mediaInputs?: PluginProjectMediaInputToolsService | null;
+    foundations?: PluginProjectFoundationToolsService | null;
   } = {
     projectContext: null,
   },
 ): PluginToolRuntime {
   const approval = services?.approvalRequirement ?? "none",
+    foundation = options.foundations
+      ? createProjectFoundationToolsRuntime(
+          context,
+          options.foundations,
+          approval,
+        )
+      : null,
     retained = new RetainedResults(context),
     pending = new Set<Promise<PluginToolExecutionResolution>>();
   let media: PluginToolRuntime | null =
@@ -101,6 +116,11 @@ export function createShortDramaRuntime(
     signal.throwIfAborted();
     if (Date.parse(command.executionLease.expiresAt) <= Date.now())
       throw new Error("short_drama_execution_lease_expired");
+    if (foundationMethod(command.name)) {
+      if (!foundation)
+        throw new Error("short_drama_foundation_tools_unavailable");
+      return foundation[method](command, signal);
+    }
     if (options.mediaExecution) {
       if (!mediaDefinitions.some((d) => d.name === command.name))
         throw new Error("short_drama_media_stage_operation_denied");
@@ -318,8 +338,10 @@ export function createShortDramaRuntime(
         ...definitions,
         ...projectDefinitions,
         ...mediaDefinitions,
+        ...foundationDefinitions,
       ]),
     executionPolicy: (kind, name) =>
+      foundationPolicy(context, approval, kind, name) ??
       mediaPolicy(context, approval, kind, name) ??
       projectPolicy(context, approval, kind, name) ??
       toolPolicy(context, approval, kind, name),
@@ -329,23 +351,28 @@ export function createShortDramaRuntime(
     acknowledgeExecutionResult: (ack) =>
       activeExecutionId !== ack.executionId &&
       (retained.acknowledge(ack) ||
+        (foundation?.acknowledgeExecutionResult?.(ack) ?? false) ||
         (media?.acknowledgeExecutionResult?.(ack) ?? false)),
     readRetainedExecutionResult: (lookup) =>
       retained.read(lookup) ??
+      foundation?.readRetainedExecutionResult?.(lookup) ??
       media?.readRetainedExecutionResult?.(lookup) ??
       null,
     retainedExecutionResults: (query) =>
       [
         ...retained.query(query.runId, query.limit),
+        ...(foundation?.retainedExecutionResults?.(query) ?? []),
         ...(media?.retainedExecutionResults?.(query) ?? []),
       ].slice(0, query.limit),
     scanRetainedExecutionResults: (query) => {
       const projectPage = retained.scan(query.limit);
       const mediaPage = media?.scanRetainedExecutionResults?.(query) ?? [];
+      const foundationPage =
+        foundation?.scanRetainedExecutionResults?.(query) ?? [];
       const result = (
         scanProjectFirst
-          ? [...projectPage, ...mediaPage]
-          : [...mediaPage, ...projectPage]
+          ? [...projectPage, ...foundationPage, ...mediaPage]
+          : [...mediaPage, ...foundationPage, ...projectPage]
       ).slice(0, query.limit);
       scanProjectFirst = !scanProjectFirst;
       return result;
@@ -353,10 +380,13 @@ export function createShortDramaRuntime(
     canRetire: () =>
       pending.size === 0 &&
       retained.size === 0 &&
+      (foundation?.canRetire?.() ?? true) &&
       (media?.canRetire?.() ?? true),
     async close() {
       closed = true;
+      const closingFoundation = foundation?.close?.();
       await Promise.allSettled([...pending]);
+      await closingFoundation;
       await media?.close?.();
       retained.clear();
     },

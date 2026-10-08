@@ -1,8 +1,11 @@
 # AI 短剧插件：工作台与生成执行
 
-39.0.0 是当前未安装候选。首页区分创意项目和小说项目，参数、方案确认、原文及章节都使用独立 Foundation v1 公共协议。小说文件使用 SourceUploads v1 的原始字节分片通道；两个服务均为可选依赖，保留同包原 Node 能力在已有宿主中的加载。页面的连接标记仅允许发起请求，实际服务授权及响应决定是否可用；缺少原文上传端口时明确禁用导入，缺少业务服务时显示失败，不伪造成功。Agent 入口继续打开宿主原对话。Foundation 的 Node 工具和 Run 准入尚未实现，后续阶段的完整成果关联、生成与桌面验收仍在实施，不能据此视为 ReelBench 全量复刻完成。
+40.0.0 是当前未安装候选，39.0.0 及更早构建保持冻结。首页、主题和原主页对话入口保持39的页面。候选40使用显式有界业务清单 v2（32个工具，Host API仍为v1），保留全部24个旧工具，新增八个规划工具及可选 `crewon.project-foundation-tools@1` Node 服务。原执行工厂按确切工具名称分派；只有原宿主实际准入的项目讨论 Run 获得这项独立服务时，才能读取参数、原文章节/正文、方案历史/正文及保存方案候选。缺少服务时新调用明确不可用，不借旧项目写权限或指导文字执行。
 
-SDK 0.1.1 是本仓库的未公开发布候选。首次开发时先在仓库根目录执行：
+新结果使用 `resultJsonParts`，按顺序拼接恢复当前有界模型页；整条转义后的工具输出最多9999 UTF8字节。Foundation原始完整DTO留在宿主服务，模型读取核心元数据和 canonical 参数JSON的Unicode字符页：按 `parametersPage.nextOffset` 继续 `parametersStartOffset`，核对同一摘要后拼接至末页；不是把一页当完整参数。章节页可能少于请求数量，沿实际 `nextStartOffset` 读取余下完整标题。原工具的 `resultJson` 保持不变。指南根据固定版本 shuohao 的规划方法区分创意方案与小说改编，单次小于3KiB；方案是最多8KiB的可读内容，独立于未来结构化大纲。保存只产生候选，不自动确认、采用或进入下一阶段；用户继续在原页面确认。
+
+候选发行包完整检查395/395通过；实际文件安装器、业务注册和Workflow DSL验证2/2通过，使用已清理的隔离目录。这些检查不是实际用户 Agent、模型或桌面验收；用户profile安装、完整原Worker流式调用/重连、线上模型与媒体供应商仍须独立验证。本次没有更新用户桌面App，也不宣称 ReelBench 全量复刻完成。原Foundation UI v1 与SourceUploads v1保留可选声明和真实业务授权。
+SDK 0.1.2 是本仓库的未公开发布候选。首次开发时先在仓库根目录执行：
 
 ```sh
 node --experimental-strip-types scripts/prepare-short-drama-sdk.ts
@@ -21,7 +24,7 @@ Short32 增加旧项目会话的“更新关联并进入”：仅明确来源过
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认候选版本为 39.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认候选版本为 40.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
 UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
@@ -37,7 +40,7 @@ UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `
 
 ## 仓外构建
 
-使用 Node.js 24、pnpm 10.33.0。当前 SDK 0.1.1 尚未公开发布到 registry，先按上面的准备步骤生成 `.sdk/crewon-plugin-sdk.tgz`，仓外复制时保留该目录。依赖继续使用相对的 `file:./.sdk/crewon-plugin-sdk.tgz`，再执行以下命令；不能用候选版本号查询未发布的 registry 包：
+使用 Node.js 24、pnpm 10.33.0。当前 SDK 0.1.2 尚未公开发布到 registry，先按上面的准备步骤生成 `.sdk/crewon-plugin-sdk.tgz`，仓外复制时保留该目录。依赖继续使用相对的 `file:./.sdk/crewon-plugin-sdk.tgz`，再执行以下命令；不能用候选版本号查询未发布的 registry 包：
 
 ```sh
 pnpm --ignore-workspace install --ignore-scripts
@@ -45,7 +48,7 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/39.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=39.0.1 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建生成完整预构建安装目录 `dist/40.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=40.0.1 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
 
 ## 22.0.0 的参考素材确认输入页面
 

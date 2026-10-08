@@ -34,7 +34,8 @@ export type ExtensionToolManifest = Readonly<{
 export type ExtensionManifest = Readonly<{
   schemaVersion:
     | "crewon.extension-manifest.v0"
-    | "crewon.extension-manifest.v1";
+    | "crewon.extension-manifest.v1"
+    | "crewon.extension-manifest.v2";
   hostApi: "crewon.extensions.v0" | "crewon.extensions.v1";
   pluginId: string;
   version: string;
@@ -67,13 +68,22 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
   const current =
     value.schemaVersion === "crewon.extension-manifest.v1" &&
     value.hostApi === "crewon.extensions.v1";
-  if (!legacy && !current) extensionFailure("extension_host_incompatible");
+  const expanded =
+    value.schemaVersion === "crewon.extension-manifest.v2" &&
+    value.hostApi === "crewon.extensions.v1";
+  if (!legacy && !current && !expanded)
+    extensionFailure("extension_host_incompatible");
   const pluginId = extensionIdentifier(value.pluginId);
   const version = extensionText(value.version, 32);
   if (!/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version))
     extensionFailure("extension_version_invalid");
   const task = extensionRecord(value.task, ["instructions", "inputSchema"]);
-  const tools = extensionArray(value.tools, 1, legacy ? 16 : 24, parseTool);
+  const tools = extensionArray(
+    value.tools,
+    1,
+    legacy ? 16 : expanded ? 32 : 24,
+    parseTool,
+  );
   extensionUnique(
     tools.map((tool) => tool.operationId),
     "extension_operation_duplicate",
@@ -108,7 +118,9 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
   return Object.freeze({
     schemaVersion: legacy
       ? "crewon.extension-manifest.v0"
-      : "crewon.extension-manifest.v1",
+      : expanded
+        ? "crewon.extension-manifest.v2"
+        : "crewon.extension-manifest.v1",
     hostApi: legacy ? "crewon.extensions.v0" : "crewon.extensions.v1",
     pluginId,
     version,

@@ -17,6 +17,7 @@ import type {
   CreativeProjectOwnerScope,
 } from "./creative-project-store-port.ts";
 import type { ProjectSourceUploadPreparedPointer } from "./project-source-upload-port.ts";
+import type { ProjectFoundationRunCommitTransactionAuthority } from "./project-foundation-run-commit-authority.ts";
 
 export type ProjectFoundationMutationKind =
   | "create-project"
@@ -57,6 +58,8 @@ export type ProjectFoundationCommitAuthority = Readonly<{
   /** Must finish synchronously before COMMIT dispatch; a Promise establishes no authority. */
   assertActive(): void;
   transaction?: ProjectFoundationPluginCommitTransactionAuthority;
+  /** Independent original Run/Tool qualification; mutually exclusive with the manual UI pin. */
+  runTransaction?: ProjectFoundationRunCommitTransactionAuthority;
 }>;
 
 export type ProjectFoundationCommitOptions = Readonly<{

@@ -18,6 +18,7 @@ import {
   type ProjectFoundation,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { qualifyProjectFoundationRunCommand } from "./project-foundation-run-commit-authority.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type {
   ApplicationClock,
@@ -198,6 +199,13 @@ export class ProjectFoundationApplicationService {
       const command = foundationCommand(kind, input);
       const captured = captureProjectFoundationCommitAuthority(options);
       qualifyProjectFoundationPluginCommit(captured, actor, kind);
+      qualifyProjectFoundationRunCommand(
+        captured,
+        actor,
+        kind,
+        command,
+        this.#dependencies.digester,
+      );
       const projectId = "projectId" in command ? command.projectId : null;
       const action =
         kind === "create-project"
@@ -230,7 +238,7 @@ export class ProjectFoundationApplicationService {
           command,
           this.#dependencies.digester,
         );
-        await assertProjectFoundationCommitCurrent(authority);
+        // The Store already qualified replay publication and confirmed its transaction.
         return Object.freeze({ ...result, disposition: "replayed" as const });
       }
       await assertProjectFoundationCommitCurrent(authority);
@@ -258,7 +266,7 @@ export class ProjectFoundationApplicationService {
           ) as (keyof ProjectFoundationMutationResult)[])
             foundationEqual(result[key], prepared.records[key]);
         });
-      } else await assertProjectFoundationCommitCurrent(authority);
+      }
       return result;
     });
   }
@@ -630,6 +638,17 @@ function bindPolicy(
             async assertCurrent() {
               await authorize();
               await original.transaction!.assertCurrent();
+            },
+          }),
+        }),
+    ...(original?.runTransaction === undefined
+      ? {}
+      : {
+          runTransaction: Object.freeze({
+            ...original.runTransaction,
+            async assertCurrent() {
+              await authorize();
+              await original.runTransaction!.assertCurrent();
             },
           }),
         }),

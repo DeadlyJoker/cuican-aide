@@ -1,5 +1,10 @@
 import { observeSqlitePlanManualSelection } from "./project-text-plan-manual-selection.ts";
 import {
+  captureSqliteProjectFoundationDownstream,
+  assertSqliteProjectFoundationDownstreamUnchanged,
+  type ProjectFoundationDownstreamSnapshot,
+} from "./project-foundation-downstream-guard.ts";
+import {
   planSelectionQualification,
   beginSqlitePlanSelection,
   finishSqlitePlanSelection,
@@ -280,6 +285,11 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       await authority.planTransaction.authority.assertTransactionCurrent();
       authority.planTransaction.authority.assertActive();
     }
+    let downstream: ProjectFoundationDownstreamSnapshot | undefined;
+    const downstreamLocator = {
+      actor: prepared.actor,
+      projectId: prepared.project.projectId,
+    };
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, runQualification);
@@ -388,6 +398,11 @@ export class SqliteProjectTextStore implements ProjectTextStore {
           latestBrief,
           selectedOutline,
         });
+        if (candidate)
+          downstream = captureSqliteProjectFoundationDownstream(
+            this.#database,
+            downstreamLocator,
+          );
         this.#active(authority);
         const a = result.artifact;
         if (prepared.expectedArtifactRevision === 0)
@@ -451,6 +466,14 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       authority,
       runQualification,
       textUi,
+      () => {
+        if (downstream !== undefined)
+          assertSqliteProjectFoundationDownstreamUnchanged(
+            this.#database,
+            downstreamLocator,
+            downstream,
+          );
+      },
     );
   }
   #project(owner: CreativeProjectOwnerScope, id: string) {
@@ -545,6 +568,7 @@ export class SqliteProjectTextStore implements ProjectTextStore {
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
     textUi?: ProjectTextUiQualification,
+    checkDownstream?: () => void,
   ): T {
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
@@ -552,6 +576,7 @@ export class SqliteProjectTextStore implements ProjectTextStore {
       const result = body();
       assertSqliteProjectRunCommit(this.#database, runQualification);
       assertSqliteProjectTextUiCommit(this.#database, textUi);
+      checkDownstream?.();
       authority?.planTransaction?.authority.assertActive();
       this.#active(authority);
       this.#database.exec("COMMIT");

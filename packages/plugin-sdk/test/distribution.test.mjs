@@ -76,12 +76,13 @@ test("the real tarball installs offline outside the workspace, compiles independ
       await readFile(join(sdk, "package.json"), "utf8"),
     );
     assert.equal(manifest.private, false);
-    assert.equal(manifest.version, "0.1.1");
+    assert.equal(manifest.version, "0.1.2");
     assert.deepEqual(manifest.dependencies ?? {}, {});
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
     assert.deepEqual(Object.keys(manifest.exports).sort(), [
       "./contracts",
       "./node",
+      "./project-foundation-tools",
       "./project-foundation-ui",
       "./project-source-uploads",
       "./ui",
@@ -135,6 +136,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
       }
     }
     for (const name of [
+      "external-project-foundation-tools-node.ts",
       "external-project-source-uploads.ts",
       "external-project-source-uploads-ui.ts",
       "project-source-upload-responses.mjs",
@@ -172,6 +174,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
             rootDir: ".",
           },
           files: [
+            "external-project-foundation-tools-node.ts",
             "external-project-source-uploads.ts",
             "external-project-foundation.ts",
             "external-node.ts",

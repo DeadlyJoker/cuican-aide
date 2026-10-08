@@ -62,11 +62,13 @@ test("creative project declarations and UI methods work from a real offline tarb
     const manifest = JSON.parse(
       await readFile(join(sdk, "package.json"), "utf8"),
     );
+    assert.equal(manifest.version, "0.1.2");
     assert.deepEqual(manifest.dependencies ?? {}, {});
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
     assert.deepEqual(Object.keys(manifest.exports).sort(), [
       "./contracts",
       "./node",
+      "./project-foundation-tools",
       "./project-foundation-ui",
       "./project-source-uploads",
       "./ui",
@@ -109,6 +111,7 @@ test("creative project declarations and UI methods work from a real offline tarb
       }
     }
     for (const name of [
+      "external-project-foundation-tools-node.ts",
       "external-project-source-uploads.ts",
       "external-project-source-uploads-ui.ts",
       "project-source-upload-responses.mjs",
@@ -146,6 +149,7 @@ test("creative project declarations and UI methods work from a real offline tarb
         "pure",
         ["ES2022"],
         [
+          "external-project-foundation-tools-node.ts",
           "external-project-source-uploads.ts",
           "external-project-foundation.ts",
           "external-creative-project-contracts.ts",

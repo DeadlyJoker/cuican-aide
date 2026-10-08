@@ -20,6 +20,10 @@ await build({
     "node": join(packageRoot, "src/node.ts"),
     "ui": join(packageRoot, "src/ui.ts"),
     "project-foundation-ui": join(packageRoot, "src/project-foundation-ui.ts"),
+    "project-foundation-tools": join(
+      packageRoot,
+      "src/project-foundation-tools.ts",
+    ),
     "project-source-uploads": join(
       packageRoot,
       "src/project-source-uploads.ts",
@@ -110,5 +114,5 @@ await writeFile(
   await readFile(join(repositoryRoot, "NOTICE")),
 );
 console.log(
-  `Built five portable SDK entries and ${declarations} self-contained declarations.`,
+  `Built six portable SDK entries and ${declarations} self-contained declarations.`,
 );

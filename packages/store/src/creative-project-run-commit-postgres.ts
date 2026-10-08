@@ -27,6 +27,8 @@ import {
   projectRunJson,
   denied,
   type ProjectRunQualification,
+  type ProjectRunExecutionEvidence,
+  type InstalledProjectRunExecutionEvidence,
 } from "./creative-project-run-commit-support.ts";
 
 /** Same borrowed transaction connection; installation rows, Run, then queue/Tool locks. */
@@ -36,6 +38,16 @@ export async function assertPostgresProjectRunCommit(
   q: ProjectRunQualification | undefined,
 ): Promise<void> {
   if (q === undefined) return;
+  await assertPostgresInstalledProjectRunExecution(client, schema, q);
+  await assertPostgresProjectStageTool(client, schema, q);
+  await assertPostgresProjectTextPlanTool(client, schema, q);
+}
+/** Shared actual execution facts, without borrowing another business protocol's operation grant. */
+export async function assertPostgresInstalledProjectRunExecution(
+  client: PoolClient,
+  schema: string,
+  q: InstalledProjectRunExecutionEvidence,
+): Promise<void> {
   const prefix = `${pluginInstallationSchemaName(schema)}.`;
   await assertPostgresProjectRunSchema(client, schema);
   await assertPostgresPluginInstallationPinSchema(client, schema);
@@ -109,14 +121,12 @@ export async function assertPostgresProjectRunCommit(
     binding: projectRunJson(binding.binding_json),
     configuration: projectRunJson(binding.configuration_json),
   });
-  await assertPostgresProjectStageTool(client, schema, q);
-  await assertPostgresProjectTextPlanTool(client, schema, q);
 }
 /** The physical database clock is re-read after every async fence, immediately before COMMIT. */
 export async function assertPostgresProjectRunLease(
   client: PoolClient,
   schema: string,
-  q: ProjectRunQualification | undefined,
+  q: ProjectRunExecutionEvidence | undefined,
 ): Promise<void> {
   if (q === undefined) return;
   const row = (

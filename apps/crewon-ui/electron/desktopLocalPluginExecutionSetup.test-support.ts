@@ -55,17 +55,19 @@ export async function executionSetupFixture(
     source = join(directory, "source");
   mkdirSync(dataDirectory, { mode: 0o700 });
   mkdirSync(source, { mode: 0o700 });
-  const currentBusiness = JSON.parse(
-    readFileSync(
-      fileURLToPath(
-        new URL(
-          "../../../examples/plugins/short-drama/business.json",
-          import.meta.url,
-        ),
-      ),
-      "utf8",
+  // Tracked original 24-tool v1 bytes copied from dist/39.0.0/business.json.
+  // The historical fixture overrides its version explicitly; this is not a released package39.
+  const originalBusinessBytes = readFileSync(
+    fileURLToPath(
+      new URL("./test-fixtures/short-drama-business-v1.json", import.meta.url),
     ),
   );
+  if (
+    fixtureHash(originalBusinessBytes) !==
+    "sha256:9afce0e5f9c6089dcc615710e8bbfa7b8a92e8a77d5521c689f02a868be96f7c"
+  )
+    throw new Error("historical_business_fixture_bytes_changed");
+  const currentBusiness = JSON.parse(originalBusinessBytes.toString("utf8"));
   // Historical fixtures retain their original protocol; new versions explicitly choose a contract.
   const baseBusiness = assets
     ? currentBusiness

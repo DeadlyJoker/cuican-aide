@@ -9,6 +9,11 @@ import type {
 import { verifyLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-verifier.ts";
 import { installLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-installer.ts";
 import { composeDesktopLocalPluginProjectApproval } from "./desktopLocalPluginProjectApproval.ts";
+import { loadInstalledPluginBusinessRegistration } from "../../../packages/plugin-host/src/installed-plugin-business-registration.ts";
+import {
+  composeDesktopLocalShortDramaFoundationToolsApproval,
+  requestsDesktopLocalShortDramaFoundationTools,
+} from "./desktopLocalShortDramaFoundationToolsApproval.ts";
 import {
   DESKTOP_PLUGIN_APPROVAL_FILE,
   DESKTOP_PLUGIN_APPROVAL_SCHEMA,
@@ -87,7 +92,8 @@ type PreviewTicket = Readonly<{
 
 /**
  * Explicit local source/publisher trust only. This never imports a plugin, installs a
- * selection, activates Node, or issues task/network/project/financial permission.
+ * selection, activates Node, or issues task/network/financial permission. Explicit Node
+ * consent may declare a supported local Foundation service; actual Run authority remains separate.
  * The private source copy may remain unapproved after a later CAS failure; it is
  * never promoted on startup and no human source directory is removed or chmodded.
  */
@@ -316,7 +322,7 @@ class LocalSourceImporter {
                 },
               ];
         // Reject limits, duplicate versions and publisher drift before allocating a copy.
-        const next = composeDesktopLocalPluginProjectApproval({
+        let next = composeDesktopLocalPluginProjectApproval({
           approval: parseDesktopPluginApproval({
             ...previous,
             sources: [...previous.sources, source],
@@ -325,7 +331,7 @@ class LocalSourceImporter {
           descriptor: fresh.descriptor,
           packageDigest: fresh.packageDigest,
         });
-        const bytes = Buffer.from(JSON.stringify(next));
+        let bytes = Buffer.from(JSON.stringify(next));
         if (bytes.byteLength > MAX_APPROVAL_BYTES) invalid("approval_size");
         ensurePrivateDirectory(sourceRoot);
         const sourceRootPins = pinParents(sourceRoot);
@@ -362,6 +368,43 @@ class LocalSourceImporter {
           packageDigest: installed.packageDigest,
           sourceRootPins,
         });
+        if (
+          requestsDesktopLocalShortDramaFoundationTools(installed.descriptor)
+        ) {
+          const registration = await loadInstalledPluginBusinessRegistration({
+            installRoot: sourceRoot,
+            expectedPluginId: installed.descriptor.pluginId,
+            expectedPublisherId: installed.descriptor.publisherId,
+            expectedVersion: installed.descriptor.version,
+            expectedPackageDigest: installed.packageDigest,
+            signal,
+            authorizeRead: async (candidate) => {
+              this.#ticketCurrent(ticket, signal);
+              this.#approvalCurrent(ticket);
+              assertParents(sourceRootPins);
+              assertParents(ownedSourcePins);
+              assertIdentity(
+                {
+                  ...candidate.descriptor,
+                  packageDigest: candidate.packageDigest,
+                },
+                ticket.view,
+              );
+              return "allow";
+            },
+          });
+          this.#ticketCurrent(ticket, signal);
+          this.#approvalCurrent(ticket);
+          assertParents(ownedSourcePins);
+          next = composeDesktopLocalShortDramaFoundationToolsApproval({
+            approval: next,
+            descriptor: installed.descriptor,
+            registration,
+            trustNodeExecution: confirmation.trustNodeExecution,
+          });
+          bytes = Buffer.from(JSON.stringify(next));
+          if (bytes.byteLength > MAX_APPROVAL_BYTES) invalid("approval_size");
+        }
         const pending = createPending(
           this.#approvalPath + PENDING_SUFFIX,
           bytes,

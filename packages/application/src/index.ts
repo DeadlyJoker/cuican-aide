@@ -296,6 +296,8 @@ export * from "./project-asset-v2-recovery-port.ts";
 
 export { PluginProjectAssetV2RecoveryService } from "./plugin-project-asset-v2-recovery-service.ts";
 export * from "./project-foundation-store-port.ts";
+export * from "./project-foundation-run-store-port.ts";
+export * from "./project-foundation-run-commit-authority.ts";
 export * from "./project-foundation-commit-authority.ts";
 export * from "./project-foundation-commands.ts";
 export * from "./project-source-preparation-port.ts";

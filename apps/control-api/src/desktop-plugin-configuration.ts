@@ -25,6 +25,8 @@ import {
 import {
   parseDesktopProjectExecutionConfiguration,
   type DesktopProjectExecutionConfiguration,
+  parseDesktopProjectFoundationToolsConfiguration,
+  type DesktopProjectFoundationToolsConfiguration,
 } from "@crewon/contracts/plugins";
 import {
   parsePluginProfileScope,
@@ -72,6 +74,8 @@ export type DesktopPluginConfiguration = DesktopPluginConfigurationBase &
         projects: DesktopProjectExecutionConfiguration;
         /** Explicit new host capability; legacy project/history DTOs retain their exact shape. */
         projectFoundation?: ProjectFoundationStartupConfiguration;
+        /** Independent Node declaration; the sibling Foundation UI grant does not imply it. */
+        projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
       }>
   );
 const parsed = new WeakSet<object>();
@@ -101,6 +105,8 @@ export function parseDesktopPluginConfiguration(
     const v3 = schema.value === "crewon.desktop-plugin-bootstrap.v3";
     const hasFoundation =
       v3 && Object.hasOwn(input as object, "projectFoundation");
+    const hasFoundationTools =
+      v3 && Object.hasOwn(input as object, "projectFoundationTools");
     const value = pluginSecurityRecord(input, [
       "schemaVersion",
       "actor",
@@ -111,6 +117,7 @@ export function parseDesktopPluginConfiguration(
       "publications",
       ...(v2 || v3 ? ["projects"] : []),
       ...(hasFoundation ? ["projectFoundation"] : []),
+      ...(hasFoundationTools ? ["projectFoundationTools"] : []),
     ]);
     if (
       (!v2 &&
@@ -232,20 +239,35 @@ export function parseDesktopPluginConfiguration(
         publications,
       );
     }
+    const projects = v3
+      ? parseDesktopProjectExecutionConfiguration(value.projects, {
+          publications,
+        })
+      : undefined;
+    const foundationTools = hasFoundationTools
+      ? parseDesktopProjectFoundationToolsConfiguration(
+          value.projectFoundationTools,
+          {
+            publications: sources.map(({ pluginId, packageDigest }) => ({
+              pluginId,
+              packageDigest,
+            })),
+            metadataPublications: projects?.pluginUi?.publications ?? [],
+          },
+        )
+      : undefined;
     const configuration = Object.freeze(
       v3
         ? {
             schemaVersion: "crewon.desktop-plugin-bootstrap.v3" as const,
             ...common,
-            projects: parseDesktopProjectExecutionConfiguration(
-              value.projects,
-              {
-                publications,
-              },
-            ),
+            projects: projects!,
             ...(foundation === undefined
               ? {}
               : { projectFoundation: foundation }),
+            ...(foundationTools === undefined
+              ? {}
+              : { projectFoundationTools: foundationTools }),
           }
         : v2
           ? {

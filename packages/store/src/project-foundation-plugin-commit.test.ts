@@ -292,7 +292,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
       };
       await assert.rejects(
         f.foundation.commitCreation(foundationCreationRecipe("old-action"), {
-          authority: actionOnly,
+          authority: actionOnly as never,
         }),
         /project_foundation_commit_authority_invalid/,
       );

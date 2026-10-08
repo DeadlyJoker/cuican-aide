@@ -1,4 +1,9 @@
 import {
+  capturePostgresProjectFoundationDownstream,
+  assertPostgresProjectFoundationDownstreamUnchanged,
+  type ProjectFoundationDownstreamSnapshot,
+} from "./project-foundation-downstream-guard.ts";
+import {
   capturePlanPause,
   checkedPlanPause,
 } from "./project-text-plan-pause.ts";
@@ -186,113 +191,146 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
       o = { actor: p.plan.owner, profileId: p.plan.profileId };
     await p.q.assertCurrent();
     p.q.assertActive();
-    return this.#transaction(async (c) => {
-      await this.#ready(c);
-      await assertPostgresProjectTextUiCommit(c, this.#schema, {
-        ...p.q,
-        installation: p.q.binding.currentInstallation,
-      });
-      await advisoryLock(
-        c,
-        JSON.stringify([
-          "project-text-plan-receipt",
-          this.#schema,
-          ...planOwnerValues(o),
-          p.receipt.idempotencyKey,
-        ]),
-      );
-      await this.#projectLock(c, p.plan);
-      await this.#planLock(c, p.plan);
-      const replay = await this.#receipt(c, o, p.receipt);
-      await this.#checkRows(
-        c,
-        p,
-        replay === null &&
-          (p.kind === "start" ||
-            p.kind === "resume" ||
-            p.kind === "reviseRemaining"),
-      );
-      if (replay !== null) {
-        if (
-          replay.kind !== p.kind ||
-          replay.plan.projectId !== p.plan.projectId ||
-          replay.plan.threadId !== p.plan.threadId
-        )
-          planStoreFail("project_text_plan_idempotency_conflict");
-        return replay;
-      }
-      const previous = await this.#plan(c, o, p.plan.planId, true),
-        revision =
-          previous === null
-            ? null
-            : await this.#revision(c, previous, previous.currentPlanRevision),
-        steps =
-          previous === null
-            ? []
-            : await this.#steps(
-                c,
-                previous,
-                previous.currentPlanRevision,
-                true,
-              );
-      if (p.kind === "continue" && previous !== null)
-        await assertPostgresPlanContinuation(c, this.#schema, previous, steps);
-      verifyPlanControl(p, previous, revision, steps);
-      if (
-        p.kind === "start" &&
-        (await this.#get(
+    let downstream: ProjectFoundationDownstreamSnapshot | undefined;
+    const downstreamLocator = {
+      actor: p.revision.actor,
+      projectId: p.plan.projectId,
+    };
+    return this.#transaction(
+      async (c) => {
+        await this.#ready(c);
+        await assertPostgresProjectTextUiCommit(c, this.#schema, {
+          ...p.q,
+          installation: p.q.binding.currentInstallation,
+        });
+        await advisoryLock(
           c,
-          "SELECT plan_id FROM project_text_plans WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND project_id=? AND thread_id=? AND state NOT IN ('completed','revoked') LIMIT 1",
-          [...planOwnerValues(o), p.plan.projectId, p.plan.threadId],
-        ))
-      )
-        planStoreFail("project_text_plan_active_conflict");
-      await this.#writePlan(c, p.plan, previous);
-      if (
-        previous === null ||
-        p.revision.planRevision !== previous.currentPlanRevision
-      )
-        await this.#query(
-          c,
-          "INSERT INTO project_text_plan_revisions VALUES(?,?,?,?,?)",
-          [
-            ...planScope(p.plan),
-            p.revision.planRevision,
-            JSON.stringify(p.revision),
-          ],
+          JSON.stringify([
+            "project-text-plan-receipt",
+            this.#schema,
+            ...planOwnerValues(o),
+            p.receipt.idempotencyKey,
+          ]),
         );
-      for (const step of p.steps) {
-        const old = steps.find((s) => s.stepId === step.stepId);
-        if (old === undefined)
+        await this.#projectLock(c, p.plan);
+        await this.#planLock(c, p.plan);
+        const replay = await this.#receipt(c, o, p.receipt);
+        await this.#checkRows(
+          c,
+          p,
+          replay === null &&
+            (p.kind === "start" ||
+              p.kind === "resume" ||
+              p.kind === "reviseRemaining"),
+        );
+        if (replay !== null) {
+          if (
+            replay.kind !== p.kind ||
+            replay.plan.projectId !== p.plan.projectId ||
+            replay.plan.threadId !== p.plan.threadId
+          )
+            planStoreFail("project_text_plan_idempotency_conflict");
+          return replay;
+        }
+        const previous = await this.#plan(c, o, p.plan.planId, true),
+          revision =
+            previous === null
+              ? null
+              : await this.#revision(c, previous, previous.currentPlanRevision),
+          steps =
+            previous === null
+              ? []
+              : await this.#steps(
+                  c,
+                  previous,
+                  previous.currentPlanRevision,
+                  true,
+                );
+        if (p.kind === "continue" && previous !== null)
+          await assertPostgresPlanContinuation(
+            c,
+            this.#schema,
+            previous,
+            steps,
+          );
+        verifyPlanControl(p, previous, revision, steps);
+        if (
+          p.kind === "start" &&
+          (await this.#get(
+            c,
+            "SELECT plan_id FROM project_text_plans WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND project_id=? AND thread_id=? AND state NOT IN ('completed','revoked') LIMIT 1",
+            [...planOwnerValues(o), p.plan.projectId, p.plan.threadId],
+          ))
+        )
+          planStoreFail("project_text_plan_active_conflict");
+        if (
+          p.kind === "start" ||
+          p.kind === "resume" ||
+          p.kind === "reviseRemaining" ||
+          p.kind === "continue"
+        )
+          downstream = await capturePostgresProjectFoundationDownstream(
+            c,
+            this.#schema,
+            downstreamLocator,
+          );
+        await this.#writePlan(c, p.plan, previous);
+        if (
+          previous === null ||
+          p.revision.planRevision !== previous.currentPlanRevision
+        )
           await this.#query(
             c,
-            `INSERT INTO project_text_plan_steps(${planStepColumns}) VALUES(${Array(12).fill("?").join(",")})`,
-            planStepValues(p.plan, step),
+            "INSERT INTO project_text_plan_revisions VALUES(?,?,?,?,?)",
+            [
+              ...planScope(p.plan),
+              p.revision.planRevision,
+              JSON.stringify(p.revision),
+            ],
           );
-        else if (old.contentDigest !== step.contentDigest)
-          await this.#writeStep(c, p.plan, step, old);
-      }
-      const result = Object.freeze({
-        kind: p.kind,
-        disposition: "committed" as const,
-        plan: p.plan,
-        planRevision: p.revision,
-        steps: p.steps,
-      });
-      await this.#query(
-        c,
-        "INSERT INTO project_text_plan_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
-        [
-          ...planOwnerValues(o),
-          p.receipt.idempotencyKey,
-          p.receipt.requestDigest,
-          p.kind,
-          p.plan.planId,
-          JSON.stringify(result),
-        ],
-      );
-      return result;
-    }, p.q);
+        for (const step of p.steps) {
+          const old = steps.find((s) => s.stepId === step.stepId);
+          if (old === undefined)
+            await this.#query(
+              c,
+              `INSERT INTO project_text_plan_steps(${planStepColumns}) VALUES(${Array(12).fill("?").join(",")})`,
+              planStepValues(p.plan, step),
+            );
+          else if (old.contentDigest !== step.contentDigest)
+            await this.#writeStep(c, p.plan, step, old);
+        }
+        const result = Object.freeze({
+          kind: p.kind,
+          disposition: "committed" as const,
+          plan: p.plan,
+          planRevision: p.revision,
+          steps: p.steps,
+        });
+        await this.#query(
+          c,
+          "INSERT INTO project_text_plan_receipts VALUES(?,?,?,?,?,?,?,?,?,?)",
+          [
+            ...planOwnerValues(o),
+            p.receipt.idempotencyKey,
+            p.receipt.requestDigest,
+            p.kind,
+            p.plan.planId,
+            JSON.stringify(result),
+          ],
+        );
+        return result;
+      },
+      p.q,
+      async (c) => {
+        if (downstream !== undefined)
+          await assertPostgresProjectFoundationDownstreamUnchanged(
+            c,
+            this.#schema,
+            downstreamLocator,
+            downstream,
+          );
+      },
+    );
   }
   async commitObservation(
     input: Parameters<ProjectTextPlanStore["commitObservation"]>[0],
@@ -656,6 +694,7 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
   async #transaction<T>(
     work: (c: PoolClient) => Promise<T>,
     q?: ProjectTextPlanCommitAuthority,
+    checkDownstream?: (client: PoolClient) => Promise<void>,
   ): Promise<T> {
     this.#open();
     const c = await this.#pool.connect();
@@ -665,6 +704,7 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
       try {
         const result = await work(c);
         await q?.assertTransactionCurrent();
+        await checkDownstream?.(c);
         q?.assertActive();
         this.#open();
         await c.query("COMMIT");

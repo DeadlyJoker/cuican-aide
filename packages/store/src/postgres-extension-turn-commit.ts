@@ -1,4 +1,9 @@
 import {
+  attachPostgresFoundationRun,
+  assertPostgresFoundationTurnCurrent,
+  assertPostgresFoundationTurnReplay,
+} from "./project-foundation-run-turn.ts";
+import {
   captureProjectMediaInputStageTurn,
   assertPostgresMediaInputStageTurn,
   assertMediaInputStageReplay,
@@ -475,6 +480,12 @@ export async function commitPostgresExtensionTurn(
             result.binding,
           ),
         );
+        await assertPostgresFoundationTurnReplay(
+          client,
+          host.schema,
+          stage?.admission ?? null,
+          frozenInput,
+        );
         await stage?.authority.assertTransactionCurrent();
         await assetStage?.authority.assertTransactionCurrent();
         await mediaInputStage?.authority.assertTransactionCurrent();
@@ -734,6 +745,12 @@ export async function commitPostgresExtensionTurn(
         await stage.authority.assertTransactionCurrent();
         await plan?.q.authority.assertTransactionCurrent();
       }
+      const foundationRun = await attachPostgresFoundationRun(
+        client,
+        host.schema,
+        stage?.admission ?? null,
+        frozenInput,
+      );
       if (prepared !== null)
         await assertCreativeProjectCommitCurrent(prepared.authority);
       if (projectQuery !== null)
@@ -748,6 +765,12 @@ export async function commitPostgresExtensionTurn(
           media.authority,
           "transaction",
         );
+      await assertPostgresFoundationTurnCurrent(
+        client,
+        host.schema,
+        stage?.admission ?? null,
+        foundationRun,
+      );
       return {
         ...result,
         ...(plan === null ? {} : { projectTextPlanAdmission: plan.admission }),

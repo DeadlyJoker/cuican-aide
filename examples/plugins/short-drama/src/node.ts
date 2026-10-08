@@ -12,6 +12,11 @@ import {
 } from "@crewon/plugin-sdk/node";
 import { createShortDramaRuntime } from "./project-tools-runtime.js";
 import {
+  CREWON_PROJECT_FOUNDATION_TOOLS_SERVICE,
+  CREWON_PROJECT_FOUNDATION_TOOLS_API_VERSION,
+  type PluginProjectFoundationToolsService,
+} from "@crewon/plugin-sdk/project-foundation-tools";
+import {
   CREWON_PROJECT_TOOLS_SERVICE,
   CREWON_PROJECT_TOOLS_API_VERSION,
   type PluginProjectToolsService,
@@ -63,6 +68,11 @@ export default definePlugin({
         CREWON_PROJECT_CONTEXT_SERVICE,
         CREWON_PROJECT_CONTEXT_API_VERSION,
       );
+    const foundations =
+      context.services.getOptional<PluginProjectFoundationToolsService>(
+        CREWON_PROJECT_FOUNDATION_TOOLS_SERVICE,
+        CREWON_PROJECT_FOUNDATION_TOOLS_API_VERSION,
+      );
     const assets = context.services.getOptional<PluginProjectAssetToolsService>(
       CREWON_PROJECT_ASSET_TOOLS_SERVICE,
       CREWON_PROJECT_ASSET_TOOLS_API_VERSION,
@@ -91,6 +101,7 @@ export default definePlugin({
             assetContext: assetContext ?? null,
             mediaExecution: mediaExecution ?? null,
             mediaInputs: mediaInputs ?? null,
+            foundations: foundations ?? null,
           }),
       });
       context.onDispose(() => registration.dispose());

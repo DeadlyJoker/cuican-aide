@@ -1,4 +1,10 @@
+import { migratePostgresProjectFoundationRuns } from "./project-foundation-run-schema.ts";
 import type { Pool, PoolClient } from "pg";
+import {
+  qualifyFoundationRunMutation,
+  assertPostgresFoundationRunCommit,
+  isFoundationReplay,
+} from "./project-foundation-run-qualification.ts";
 import {
   assertProjectFoundationCommitActive,
   assertProjectFoundationCommitCurrent,
@@ -105,6 +111,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     await this.#transaction(async (client) => {
       await this.#lock(client, ["project-foundation-migration", this.#schema]);
       await migratePostgresProjectFoundations(client, this.#schema);
+      await migratePostgresProjectFoundationRuns(client, this.#schema);
       this.#assertOpen();
     });
   }
@@ -274,6 +281,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
   ) {
     const identity = foundationIdentity(input);
     const authority = captureProjectFoundationCommitAuthority(options);
+    qualifyFoundationRunMutation(authority, identity);
     qualifyProjectFoundationPluginCommit(
       authority,
       identity.actor,
@@ -346,6 +354,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       kind: prepared.kind,
       receipt: prepared.receipt,
     });
+    qualifyFoundationRunMutation(authority, identity, prepared);
     qualifyProjectFoundationPluginCommit(
       authority,
       identity.actor,
@@ -359,6 +368,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       await this.#admitInstallation(client, identity, authority);
       const previous = await this.#receipt(client, identity);
       if (previous !== null) return previous;
+      await assertPostgresFoundationRunCommit(
+        client,
+        this.#schema,
+        authority?.runTransaction,
+      );
       const scope = {
         owner: identity.owner,
         projectId: prepared.foundation.projectId,
@@ -683,6 +697,12 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       identity.actor,
       identity.kind,
     );
+    await assertPostgresFoundationRunCommit(
+      client,
+      this.#schema,
+      authority?.runTransaction,
+      "receipt-publication",
+    );
     if (qualified === undefined) return;
     await assertPostgresPluginInstallationPinSchema(client, this.#schema);
     const actual = await admitPostgresPluginInstallationPin(
@@ -749,6 +769,13 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       await this.#query(client, "BEGIN");
       const result = await body(client);
       await assertProjectFoundationCommitTransactionCurrent(authority);
+      assertProjectFoundationCommitActive(authority);
+      await assertPostgresFoundationRunCommit(
+        client,
+        this.#schema,
+        authority?.runTransaction,
+        isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
+      );
       assertProjectFoundationCommitActive(authority);
       this.#assertOpen();
       // No post-COMMIT liveness/policy check may deny a confirmed successful transaction.

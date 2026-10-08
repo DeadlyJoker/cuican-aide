@@ -5,6 +5,7 @@ import {
   validateCreativeProjectActor,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
+import { captureProjectFoundationRunCommitTransaction } from "./project-foundation-run-commit-authority.ts";
 import type {
   ProjectFoundationCommitAuthority,
   ProjectFoundationCommitOptions,
@@ -33,12 +34,13 @@ export function captureProjectFoundationCommitAuthority(
   const input = fields.authority;
   const methods = ownDataFields(
     input,
-    ["assertCurrent", "assertActive", "transaction"],
+    ["assertCurrent", "assertActive", "transaction", "runTransaction"],
     ["assertCurrent", "assertActive"],
   );
   if (
     typeof methods.assertCurrent !== "function" ||
-    typeof methods.assertActive !== "function"
+    typeof methods.assertActive !== "function" ||
+    (methods.transaction !== undefined && methods.runTransaction !== undefined)
   )
     invalid();
   return Object.freeze({
@@ -47,6 +49,13 @@ export function captureProjectFoundationCommitAuthority(
     ...(methods.transaction === undefined
       ? {}
       : { transaction: captureTransaction(methods.transaction) }),
+    ...(methods.runTransaction === undefined
+      ? {}
+      : {
+          runTransaction: captureProjectFoundationRunCommitTransaction(
+            methods.runTransaction,
+          ),
+        }),
   });
 }
 
@@ -160,9 +169,10 @@ export async function assertProjectFoundationCommitCurrent(
 export async function assertProjectFoundationCommitTransactionCurrent(
   authority: ProjectFoundationCommitAuthority | undefined,
 ): Promise<void> {
-  if (authority?.transaction === undefined)
+  const transaction = authority?.transaction ?? authority?.runTransaction;
+  if (transaction === undefined)
     return assertProjectFoundationCommitCurrent(authority);
-  const result: unknown = await authority.transaction.assertCurrent();
+  const result: unknown = await transaction.assertCurrent();
   if (result !== undefined) asyncResultInvalid();
 }
 

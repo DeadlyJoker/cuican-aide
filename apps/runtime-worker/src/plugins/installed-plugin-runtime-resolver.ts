@@ -1,7 +1,6 @@
-import {
-  createInstalledPluginProjectServices,
-  type InstalledPluginProjectServices,
-} from "./installed-plugin-project-services.ts";
+import type { InstalledPluginProjectServices } from "./installed-plugin-project-services.ts";
+import { createInstalledPluginRuntimeProjectServices } from "./installed-plugin-runtime-project-services.ts";
+import type { InstalledPluginProjectFoundationToolsDependencies } from "./installed-plugin-project-foundation-tools.ts";
 import type { InstalledPluginProjectMediaInputToolsDependencies } from "./installed-plugin-project-media-input-tools.ts";
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
@@ -96,6 +95,7 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   maximumRuntimes?: number;
   executionIo?: InstalledPluginExecutionIoDependencies;
   projectTools?: InstalledPluginProjectToolsDependencies;
+  projectFoundationTools?: InstalledPluginProjectFoundationToolsDependencies;
   projectMedia?: InstalledPluginMediaExecutionDependencies;
   projectMediaInputs?: InstalledPluginProjectMediaInputToolsDependencies;
 }>;
@@ -439,26 +439,9 @@ export class InstalledPluginRuntimeResolver
                   fail("installed_plugin_runtime_resolver_closed");
               },
             });
-      projectTools = createInstalledPluginProjectServices({
-        mediaInputDependencies: this.#dependencies.projectMediaInputs,
-        mediaInputStage:
-          this.#dependencies.contexts.verifiedProjectMediaInputStage(
-            prepared.snapshot,
-          ),
-        dependencies: this.#dependencies.projectTools,
-        context: prepared.snapshot.context,
-        assetStageAdmission:
-          this.#dependencies.contexts.verifiedProjectAssetStage(
-            prepared.snapshot,
-          ),
-        stageAdmission: this.#dependencies.contexts.verifiedProjectStage(
-          prepared.snapshot,
-        ),
-        planAdmission: this.#dependencies.contexts.verifiedProjectTextPlan(
-          prepared.snapshot,
-        ),
-        admission: prepared.admission,
-        tools: prepared.proof.registration.manifest.tools,
+      projectTools = createInstalledPluginRuntimeProjectServices({
+        dependencies: this.#dependencies,
+        prepared,
         authorizeCurrent: async (operation) => {
           if (candidate === null)
             fail("installed_plugin_runtime_candidate_missing");
@@ -470,8 +453,6 @@ export class InstalledPluginRuntimeResolver
           );
         },
         candidate: () => candidate,
-        scope: prepared.scope,
-        authorizePackage: this.#dependencies.authorizePackage,
         assertActive: () => {
           if (this.#closing || entry.closing)
             fail("installed_plugin_runtime_resolver_closed");
