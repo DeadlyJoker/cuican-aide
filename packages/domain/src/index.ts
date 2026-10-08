@@ -62,6 +62,7 @@ export * from "./project-proposal.ts";
 export * from "./project-source.ts";
 export * from "./project-text-types.ts";
 export * from "./project-outline-document-types.ts";
+export * from "./project-outline-document-change.ts";
 export * from "./project-outline-document.ts";
 export * from "./project-outline-quality.ts";
 export * from "./project-outline-asset-requirements.ts";

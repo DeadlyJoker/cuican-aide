@@ -1,6 +1,6 @@
 # 结构化改编大纲 v2
 
-依据[产品拆解](./reelbench-product-replication-analysis.md)的小说改编概览、大纲和资产关联，以及 [shuohao-skills 固定版本](https://github.com/eternityspring/shuohao-skills/tree/ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/skills/novel-outline)。这是 P2 的数据、校验与双库持久化实现；HTTP/UI 服务、Agent 工具和插件页面尚未接入该新格式。不能将本记录当作完整产品验收。
+依据[产品拆解](./reelbench-product-replication-analysis.md)的小说改编概览、大纲和资产关联，以及 [shuohao-skills 固定版本](https://github.com/eternityspring/shuohao-skills/tree/ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/skills/novel-outline)。当前已实现数据、校验、双库持久化、有界 Application 修改和新的只读 UI 协议，插件42增加对应产物页。公开写入、Agent新格式执行及用户桌面的42版本仍未完成，不能将本记录当作完整产品验收。
 
 ## 已实现内容
 
@@ -38,10 +38,20 @@
 
 相关检查为105项通过，无跳过：双库及兼容流程56项（其中18项为新存储行为）、领域与原 Application 流程49项。Domain、Application 和 Store 类型检查通过。日志位于 `output/extensions/checks/structured-outline-store-v2/`。这些检查使用隔离真实数据库及明确夹具，不代表已在用户资料中保存，或已通过真实 Agent、HTTP/UI 与桌面验收。
 
+## Application 与新只读协议
+
+`ProjectStructuredOutlineApplicationService` 使用原项目、Foundation、大纲槽和回执。候选修改显式区分初始化、概览、改编取舍和各实体集合；单次至多10个对象、48 KiB变更，以确切基础版本及摘要追加。120集实际双库检查通过小批次形成同一完整文档，质量与实际原文核对后采用；锁定、并发版本和关闭重开后的同键回放保留。旧 UI/Run/计划提交资格仍被拒绝，不把旧批准当作新协议批准。
+
+`crewon.project-outlines` API2目前仅有 `getOutline`、`getSection` 和 `listRevisions`，无公开写动作。请求24 KiB，响应60 KiB；概览返回版本、统计及校验摘要，正文按确切项目/产物/修订/摘要读取整项，每页至多10项。长正文不会静默截断；返回明确的下一页位置。服务通过原私有 UI 调用注册、原安装与发布身份、当前认证请求和业务权限，读取前后均检查存活和授权；没有生成、积分、Run或写回执。
+
+插件42的小说大纲页直接呈现已采用版本的分集、人物、场景、道具、爽点及改编依据，质量和历史按需展开；候选历史只查看，不改变采用项。旧宿主回退原文字页，真实传输错误显示重试。所有主题和布局限于插件，原 Agent 对话框未新增或替换。
+
+独立插件402项检查通过，包括新增阅读控制器、实际文字快照、分页与晚到请求处理。产物标签支持方向键、Home和End；键盘交互仍需真实桌面验收。Application新流程6项SQLite/PostgreSQL检查通过；原生导入与执行声明修复6项通过。新读协议的实际安装、正式HTTP及SQLite/PostgreSQL集成检查2项通过，覆盖120集完整正文分页和原权限撤回。以上夹具和服务检查不等于新版已安装、真实 Agent 已写入新格式，或完整产品验收通过。
+
 ## 后续接线顺序与兼容边界
 
-1. 将新修订接入显式版本化的 Application、HTTP/UI/Node 协议；核对实际安装、原 UI 意图或 Run/Tool 身份，保留现有保存回执、断线恢复和未知结果处理。当前双库端口不等于这些公开服务已经可用。
-2. 产物页分别显示改编取舍、人物/场景、爽点、分集和资产需求。手动修改与主页 Agent 共用同一业务记录。原主页对话框及宿主主题保持不变。
-3. 长大纲的 Agent 保存沿实际批次追加，单批至多10集；读取按正文和对象分页，不把全大纲、全书或质量报告常驻注入模型。章节原文仍走既有 Foundation 有界读取。
+1. 安装已通过原安装/正式HTTP双库检查的宿主及插件；以实际安装为验收对象。
+2. 新公开写协议核对原 UI 意图或 Run/Tool 的新版本资格，保留现有保存回执、断线恢复和未知结果处理；增加手动修改及主页 Agent 批次写入。
+3. 新大纲与后续角色/美术、剧本和分镜共享稳定实体身份及明确的上游版本。长文读取分页，不把全大纲、全书或质量报告常驻注入模型，单个模型注入片段不超过10K tokens。
 
-以上后续接线尚未计为完成。此前33项领域检查记录位于 `output/extensions/checks/structured-outline-v2/`；新一轮49项包括这些用例及原 Application 行为，不能重复相加。用户桌面、真实 Agent 写入及新公开协议仍需要独立证明。
+此前33项领域检查记录位于 `output/extensions/checks/structured-outline-v2/`；49项包括这些用例及原 Application 行为，不能重复相加。用户桌面的新格式、真实 Agent 写入及新公开写协议仍需要独立证明。

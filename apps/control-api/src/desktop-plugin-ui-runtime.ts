@@ -256,6 +256,8 @@ export function createDesktopPluginUiControlRuntime(
                 );
               }
               if (
+                command.action === "crewon.project-outlines" ||
+                command.action.startsWith("crewon.project-outlines.") ||
                 command.action === "crewon.project-texts" ||
                 command.action.startsWith("crewon.project-texts.") ||
                 command.action === "crewon.project-text-recovery" ||

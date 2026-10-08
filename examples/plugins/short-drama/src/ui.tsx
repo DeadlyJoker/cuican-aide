@@ -41,6 +41,8 @@ import { createGenerationRecordReadClient } from "./workbench/GenerationRecordRe
 import { createPluginProjectTextUiClient } from "./project-texts-ui-service";
 import { projectTextsUiCodec } from "./project-texts-ui-codec.mjs";
 import { ProjectTextController } from "./workbench/ProjectTextController";
+import { createPluginProjectOutlineUiClient } from "./project-outlines-service";
+import { ProjectOutlineController } from "./workbench/ProjectOutlineController";
 import { createPluginProjectTextRecoveryClient } from "./project-text-recovery-service";
 import { projectTextRecoveryCodec } from "./project-text-recovery-codec.mjs";
 import { createPluginProjectConversationsClient } from "./project-conversations-service";
@@ -222,6 +224,7 @@ export default defineUiPlugin({
     const preview = dataFlag(props.data, "shortDramaPreview");
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
+    let outlines: ProjectOutlineController | null = null;
     let foundations: ProjectFoundationController | null = null;
     let conversations: ProjectConversationController | null = null;
     let association: ProjectConversationAssociationController | null = null;
@@ -292,6 +295,11 @@ export default defineUiPlugin({
             projectTextRecoveryCodec,
           ),
         });
+    outlines = preview
+      ? null
+      : new ProjectOutlineController(
+          createPluginProjectOutlineUiClient(clients),
+        );
     conversations = preview
       ? null
       : new ProjectConversationController({
@@ -403,6 +411,7 @@ export default defineUiPlugin({
       conversations?.setWorkspace(creationWorkspace(next.data));
       conversations?.setReady(ready);
       texts?.setReady(ready);
+      outlines?.setReady(ready);
       foundations?.setReady(
         ready && dataFlag(next.data, "projectFoundationConnected"),
       );
@@ -427,6 +436,7 @@ export default defineUiPlugin({
             <ShortDramaPersistentWorkbench
               controller={controller}
               texts={texts}
+              outlines={outlines ?? undefined}
               foundations={foundations ?? undefined}
               sourceUpload={sourceUpload}
               conversations={conversations}
@@ -461,6 +471,7 @@ export default defineUiPlugin({
       sourceUpload?.dispose();
       controller?.dispose();
       texts?.dispose();
+      outlines?.dispose();
       foundations?.dispose();
       conversations?.dispose();
       association?.dispose();
@@ -486,6 +497,7 @@ export default defineUiPlugin({
         sourceUpload?.dispose();
         controller?.dispose();
         texts?.dispose();
+        outlines?.dispose();
         foundations?.dispose();
         conversations?.dispose();
         association?.dispose();

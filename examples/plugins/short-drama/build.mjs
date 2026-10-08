@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "41.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "42.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -25,6 +25,10 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-outlines-service.ts",
+    "c4cde7c0e73bc118aef3904255f66658c6e0c3a4d11b7b77f16c735e5f4b450f",
+  ],
   [
     "project-assets-v2-service.ts",
     "ee3969b77609ce3814692b2dd9067698e5331a2f4920b42a67a7b82cf6230eb9",
@@ -473,6 +477,7 @@ const descriptor = parsePluginPackageDescriptor({
       optional: true,
     },
     { service: "crewon.project-texts", apiVersion: "1", optional: true },
+    { service: "crewon.project-outlines", apiVersion: "2", optional: true },
     { service: "crewon.creative-projects", apiVersion: "1", optional: true },
     { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },
     {

@@ -6,6 +6,15 @@ import {
   MAX_PROJECT_TEXT_UI_RESPONSE_BYTES,
   type ProjectTextUiActionRequest,
 } from "@crewon/contracts/project-texts-ui";
+import {
+  CREWON_PROJECT_OUTLINES_SERVICE,
+  CREWON_PROJECT_OUTLINES_API_VERSION,
+  isProjectOutlineUiAction,
+  isProjectOutlineUiNamespaceAction,
+  type ProjectOutlineUiRequest,
+} from "@crewon/contracts/project-outlines";
+import { capturePluginProjectOutlineReader } from "./plugin-project-outline-reader.ts";
+import type { ProjectStructuredOutlineApplicationService } from "./project-structured-outline-application-service.ts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
   pluginInstallationDigest,
@@ -45,7 +54,7 @@ export interface PluginProjectTextActionAuthorizationPort {
   /** External identity/profile/policy only. It must not borrow the committing Store's pool. */
   authorize(
     context: PluginUiActionContext,
-    request: ProjectTextUiActionRequest,
+    request: ProjectTextUiActionRequest | ProjectOutlineUiRequest,
   ): Promise<void>;
 }
 export type PluginProjectTextActionOwnerDependencies = Readonly<{
@@ -53,6 +62,7 @@ export type PluginProjectTextActionOwnerDependencies = Readonly<{
   publications: readonly PluginProjectTextActionPublication[];
   authorization: PluginProjectTextActionAuthorizationPort;
   recovery?: PluginProjectTextRecoveryApplicationService;
+  outlines?: ProjectStructuredOutlineApplicationService;
 }>;
 type Outcome = Readonly<{
   context: PluginUiActionContext;
@@ -72,6 +82,9 @@ export class PluginProjectTextActionOwner {
   readonly actions: PluginUiActionPort;
   readonly committedMetadata: PluginUiCommittedMetadataPort;
   readonly #texts: ReturnType<typeof captureTexts>;
+  readonly #outlineReader:
+    | ReturnType<typeof capturePluginProjectOutlineReader>
+    | undefined;
   readonly #publications: readonly PluginProjectTextActionPublication[];
   readonly #authorize: PluginProjectTextActionAuthorizationPort["authorize"];
   readonly #recovery:
@@ -93,10 +106,15 @@ export class PluginProjectTextActionOwner {
         "publications",
         "authorization",
         ...(Object.hasOwn(input, "recovery") ? ["recovery"] : []),
+        ...(Object.hasOwn(input, "outlines") ? ["outlines"] : []),
       ]);
       this.#texts = captureTexts(value.texts);
       this.#publications = captureProjectTextPublications(value.publications);
       this.#authorize = captureAuthorization(value.authorization);
+      this.#outlineReader =
+        value.outlines === undefined
+          ? undefined
+          : capturePluginProjectOutlineReader(value.outlines);
       if (value.recovery !== undefined) {
         if (!isPluginProjectTextRecoveryApplicationService(value.recovery))
           throw new Error("plugin_project_text_recovery_config_invalid");
@@ -131,7 +149,14 @@ export class PluginProjectTextActionOwner {
     Object.freeze(this);
   }
   supportsAction(action: string): boolean {
-    return isProjectTextUiAction(action);
+    return (
+      isProjectTextUiAction(action) ||
+      (this.#outlineReader !== undefined && isProjectOutlineUiAction(action))
+    );
+  }
+  supportsStructuredOutlines(): boolean {
+    this.assertAvailable();
+    return this.#outlineReader !== undefined;
   }
   assertAvailable(): void {
     if (this.#closed)
@@ -153,6 +178,31 @@ export class PluginProjectTextActionOwner {
   }
   async #invoke(invocation: PluginUiActionContext) {
     this.assertAvailable();
+    const action = Object.getOwnPropertyDescriptor(invocation, "action")?.value;
+    if (isProjectOutlineUiNamespaceAction(action)) {
+      if (this.#outlineReader === undefined)
+        throw new ApplicationError(
+          "conflict",
+          "plugin_project_outline_actions_unavailable",
+        );
+      if (this.#pending >= 64)
+        throw new ApplicationError(
+          "conflict",
+          "plugin_project_text_inflight_limit",
+        );
+      this.#pending++;
+      try {
+        return await this.#outlineReader(invocation, {
+          assertAvailable: () => this.assertAvailable(),
+          assertPublication: (context) =>
+            this.#assertPublication(context, { protocol: "outline-v2" }),
+          authorize: this.#authorize,
+        });
+      } finally {
+        this.#pending--;
+        if (this.#pending === 0) this.#finishClose?.();
+      }
+    }
     if (this.#pending >= 64)
       throw new ApplicationError(
         "conflict",
@@ -292,7 +342,12 @@ export class PluginProjectTextActionOwner {
       );
     return entry.output;
   }
-  #assertPublication(context: PluginUiActionContext): void {
+  #assertPublication(
+    context: PluginUiActionContext,
+    options: Readonly<{ protocol: "text-v1" | "outline-v2" }> = {
+      protocol: "text-v1",
+    },
+  ): void {
     const descriptor = context.lease.descriptor;
     const contribution = descriptor.contributions.find(
       (value) => value.id === context.lease.contributionId,
@@ -311,8 +366,14 @@ export class PluginProjectTextActionOwner {
       contribution.slot !== "main.content" ||
       !descriptor.requires.some(
         (value) =>
-          value.service === CREWON_PROJECT_TEXTS_SERVICE &&
-          value.apiVersion === CREWON_PROJECT_TEXTS_API_VERSION &&
+          value.service ===
+            (options.protocol === "outline-v2"
+              ? CREWON_PROJECT_OUTLINES_SERVICE
+              : CREWON_PROJECT_TEXTS_SERVICE) &&
+          value.apiVersion ===
+            (options.protocol === "outline-v2"
+              ? CREWON_PROJECT_OUTLINES_API_VERSION
+              : CREWON_PROJECT_TEXTS_API_VERSION) &&
           (!value.optional || dualEntry),
       )
     )

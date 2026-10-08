@@ -37,6 +37,10 @@ import {
 } from "@crewon/contracts/project-texts-ui";
 import { preserveDeferredPluginUiHostServiceAvailability } from "./plugin-ui-deferred-host-service-availability.ts";
 import {
+  CREWON_PROJECT_OUTLINES_SERVICE,
+  CREWON_PROJECT_OUTLINES_API_VERSION,
+} from "@crewon/contracts/project-outlines";
+import {
   hasProjectGenerationHostAvailability,
   preserveProjectGenerationHostAvailability,
 } from "./plugin-project-generation-host-availability.ts";
@@ -164,17 +168,23 @@ export function appendPluginUiRecoveryServiceAvailability(
 export function appendProjectTextUiServiceAvailability(
   input: Readonly<{
     texts: PluginUiHostServiceAvailabilityPort;
+    outlines?: PluginUiHostServiceAvailabilityPort;
     fallback?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): PluginUiHostServiceAvailabilityPort {
   const texts = capturePluginUiHostServiceAvailability(input.texts)!;
+  const outlines = capturePluginUiHostServiceAvailability(input.outlines);
   const fallback = capturePluginUiHostServiceAvailability(input.fallback);
   let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) =>
-      request.requirement.service === CREWON_PROJECT_TEXTS_SERVICE
-        ? request.requirement.apiVersion === CREWON_PROJECT_TEXTS_API_VERSION &&
-          texts.isAvailable(request)
-        : fallback?.isAvailable(request) === true,
+      request.requirement.service === CREWON_PROJECT_OUTLINES_SERVICE
+        ? request.requirement.apiVersion ===
+            CREWON_PROJECT_OUTLINES_API_VERSION &&
+          outlines?.isAvailable(request) === true
+        : request.requirement.service === CREWON_PROJECT_TEXTS_SERVICE
+          ? request.requirement.apiVersion ===
+              CREWON_PROJECT_TEXTS_API_VERSION && texts.isAvailable(request)
+          : fallback?.isAvailable(request) === true,
   });
   if (fallback !== undefined) {
     port = preserveProjectGenerationHostAvailability(fallback, port);
@@ -263,7 +273,11 @@ export function assertUiOnlyServiceDeclarations(
           (requirement.service === CREWON_PROJECT_TEXTS_SERVICE &&
             requirement.apiVersion === CREWON_PROJECT_TEXTS_API_VERSION &&
             (requirement.optional || hostUiServices !== undefined)) ||
-          ((requirement.service === "crewon.project-foundation" || requirement.service === "crewon.project-source-uploads") &&
+          (requirement.service === "crewon.project-outlines" &&
+            requirement.apiVersion === "2" &&
+            (requirement.optional || hostUiServices !== undefined)) ||
+          ((requirement.service === "crewon.project-foundation" ||
+            requirement.service === "crewon.project-source-uploads") &&
             requirement.apiVersion === "1" &&
             (requirement.optional || hostUiServices !== undefined)) ||
           ((requirement.service === "crewon.project-media-inputs" ||

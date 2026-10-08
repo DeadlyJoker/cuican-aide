@@ -39,6 +39,7 @@ import {
 } from "./production-project-generation-ui.integration.test-support.ts";
 import { parseProductionPluginUiConfiguration } from "./production-plugin-ui-environment.ts";
 import { createProductionProjectFoundationPluginRuntime } from "./production-project-foundation-plugin-runtime.ts";
+import { createProductionProjectTextPluginRuntime } from "./production-project-text-plugin-runtime.ts";
 import { createProductionPluginUiRuntime } from "./production-plugin-ui-composition.ts";
 import { createProductionPluginUiRequestService } from "./production-plugin-ui-request-service.ts";
 import { registerPluginControlRoutes } from "./plugin-control-route.ts";
@@ -59,7 +60,7 @@ import { errorResponse } from "./control-api-errors.ts";
 export async function foundationUiHttpFixture(
   t: TestContext,
   backend: Backend,
-  options: Readonly<{ uploads?: true }> = {},
+  options: Readonly<{ uploads?: true; outlines?: true }> = {},
 ) {
   const f = await pluginCommitFixture(t, backend);
   const directory = await mkdtemp(join(tmpdir(), "crewon-foundation-ui-"));
@@ -91,6 +92,20 @@ export async function foundationUiHttpFixture(
       },
       businessManifestPath: null,
       requires: [
+        ...(options.outlines
+          ? [
+              {
+                service: "crewon.project-texts",
+                apiVersion: "1",
+                optional: false,
+              },
+              {
+                service: "crewon.project-outlines",
+                apiVersion: "2",
+                optional: false,
+              },
+            ]
+          : []),
         ...(options.uploads
           ? [
               {
@@ -158,6 +173,12 @@ export async function foundationUiHttpFixture(
     },
   ];
   const projects = await prepareCreativeProjects(f.parent, {
+    ...(options.outlines
+      ? {
+          textArtifacts: { version: "crewon.project-text.v1" as const },
+          textUi: { publications },
+        }
+      : {}),
     authorization: {
       authorize: async () =>
         state.businessAllowed
@@ -236,18 +257,32 @@ export async function foundationUiHttpFixture(
       })
     : undefined;
   if (options.uploads) assert.ok(uploads);
+  const texts = options.outlines
+    ? createProductionProjectTextPluginRuntime({
+        projects,
+        ui: configuration,
+        identity: authentication.identity,
+        fetch: authority.fetch,
+        hostUiServices: uploads?.hostUiServices ?? foundation.hostUiServices,
+      })
+    : undefined;
+  if (options.outlines) assert.ok(texts);
   assertPluginUiHostServiceAvailability({
     scope: f.scope,
     candidate: {
       descriptor: installed.descriptor,
       packageDigest: installed.packageDigest,
     },
-    hostUiServices: uploads?.hostUiServices ?? foundation.hostUiServices,
+    hostUiServices:
+      texts?.hostUiServices ??
+      uploads?.hostUiServices ??
+      foundation.hostUiServices,
   });
   const ui = createProductionPluginUiRuntime(
     {
       configuration,
       ownedProjectFoundationActions: foundation.owner,
+      ...(texts ? { ownedProjectTextActions: texts.owner } : {}),
       ...(uploads ? { ownedProjectSourceUploadActions: uploads.owner } : {}),
       actions: {
         invoke: async () => {
@@ -265,6 +300,7 @@ export async function foundationUiHttpFixture(
   const service = createProductionPluginUiRequestService({
     ui: ui.service,
     foundations: foundation,
+    ...(texts ? { texts } : {}),
     ...(uploads ? { sourceUploads: uploads } : {}),
   });
   const app = Fastify();
@@ -280,6 +316,7 @@ export async function foundationUiHttpFixture(
     state.active = false;
     state.uploadActive = false;
     await app.close();
+    await texts?.close();
     await uploads?.close();
     await foundation.close();
     await ui.close();
@@ -376,6 +413,7 @@ export async function foundationUiHttpFixture(
     installed,
     enabled,
     foundation,
+    texts,
     authority,
     authentication,
     app,

@@ -23,6 +23,7 @@ import {
 import {
   CreativeProjectApplicationService,
   ProjectTextApplicationService,
+  type ProjectStructuredOutlineApplicationService,
   type PluginProjectTextRecoveryApplicationService,
   type ProjectTextStore,
   type ProjectAssetStageStore,
@@ -88,6 +89,7 @@ import {
   type PreparedProjectTextPlans,
 } from "./project-text-plan-composition.ts";
 import type { ProjectTextPlanStore, ExtensionStore } from "@crewon/application";
+import { prepareProjectStructuredOutlines } from "./project-structured-outline-composition.ts";
 import {
   captureProjectAssetCompositionConfig,
   prepareProjectAssets,
@@ -122,6 +124,7 @@ export type PreparedCreativeProjects = ProjectAssetCompositionConfig &
     readonly service: CreativeProjectApplicationService;
     readonly foundation?: PreparedProjectFoundation;
     readonly textService?: ProjectTextApplicationService;
+    readonly structuredOutlineService?: ProjectStructuredOutlineApplicationService;
     readonly textUi?: ProjectTextPluginUiConfig;
     readonly textRecovery?: ProjectTextPluginUiConfig;
     readonly textRecoveryService?: PluginProjectTextRecoveryApplicationService;
@@ -487,6 +490,9 @@ export async function prepareCreativeProjects(
     authorization: configuration.authorization,
   });
   let textService: ProjectTextApplicationService | undefined;
+  let structuredOutlineService:
+    | ProjectStructuredOutlineApplicationService
+    | undefined;
   let textStore: ProjectTextStore | undefined;
   if (configuration.textArtifacts !== undefined) {
     if (owner.projectTextStore === undefined)
@@ -501,6 +507,12 @@ export async function prepareCreativeProjects(
       clock: new SystemApplicationClock(),
       ids: new UuidV7ApplicationIdGenerator(),
       digester: new NodeSha256ContentDigester(),
+    });
+    structuredOutlineService = prepareProjectStructuredOutlines(owner, {
+      foundationConfigured: foundation !== undefined,
+      texts,
+      projects: store,
+      authorization: configuration.authorization,
     });
   }
   const textRecoveryService = await prepareProjectTextRecovery(owner, {
@@ -613,6 +625,9 @@ export async function prepareCreativeProjects(
         }),
     ...(textRecoveryService === undefined ? {} : { textRecoveryService }),
     ...(textService === undefined ? {} : { textService }),
+    ...(structuredOutlineService === undefined
+      ? {}
+      : { structuredOutlineService }),
     ...(configuration.textUi === undefined
       ? {}
       : { textUi: configuration.textUi }),

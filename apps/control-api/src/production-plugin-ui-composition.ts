@@ -457,6 +457,8 @@ export function createProductionPluginUiRuntime(
             return textRecoveryOwner.actions.invoke(request);
           }
           if (
+            request.action === "crewon.project-outlines" ||
+            request.action.startsWith("crewon.project-outlines.") ||
             request.action === "crewon.project-texts" ||
             request.action.startsWith("crewon.project-texts.")
           ) {

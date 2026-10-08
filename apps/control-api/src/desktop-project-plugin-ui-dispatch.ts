@@ -168,6 +168,8 @@ export function composeDesktopProjectPluginUiDispatch(
         return texts.recoveryOwner.actions.invoke(context);
       }
       if (
+        context.action === "crewon.project-outlines" ||
+        context.action.startsWith("crewon.project-outlines.") ||
         context.action === "crewon.project-texts" ||
         context.action.startsWith("crewon.project-texts.")
       ) {

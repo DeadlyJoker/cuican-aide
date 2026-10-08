@@ -32,6 +32,8 @@ import { ProjectHomeRecovery } from "./ProjectHomeRecovery";
 import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
 import { ProjectTextController } from "./ProjectTextController";
 import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
+import { ProjectOutlineWorkbench } from "./ProjectOutlineWorkbench";
+import type { ProjectOutlineController } from "./ProjectOutlineController";
 import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
@@ -109,6 +111,7 @@ function SaveFeedback({
 export function ShortDramaPersistentWorkbench({
   controller,
   texts,
+  outlines,
   conversations,
   plans,
   assets,
@@ -125,6 +128,7 @@ export function ShortDramaPersistentWorkbench({
 }: {
   controller: CreativeProjectController;
   texts: ProjectTextController;
+  outlines?: ProjectOutlineController;
   conversations: ProjectConversationController;
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
@@ -554,17 +558,37 @@ export function ShortDramaPersistentWorkbench({
                       }
                     />
                   ) : page === "outline" || page === "script" ? (
-                    <StoryScriptWorkbench
-                      controller={texts}
-                      page={page === "script" ? "script" : "outline"}
-                      onPageChange={setPage}
-                      details={details}
-                      blocked={
-                        downstreamBlocked ||
-                        projectLocked ||
-                        snapshot.conceptLocked
-                      }
-                    />
+                    page === "outline" && origin === "novel" && outlines ? (
+                      <ProjectOutlineWorkbench
+                        controller={outlines}
+                        projectId={details.project.projectId}
+                        fallback={
+                          <StoryScriptWorkbench
+                            controller={texts}
+                            page="outline"
+                            onPageChange={setPage}
+                            details={details}
+                            blocked={
+                              downstreamBlocked ||
+                              projectLocked ||
+                              snapshot.conceptLocked
+                            }
+                          />
+                        }
+                      />
+                    ) : (
+                      <StoryScriptWorkbench
+                        controller={texts}
+                        page={page === "script" ? "script" : "outline"}
+                        onPageChange={setPage}
+                        details={details}
+                        blocked={
+                          downstreamBlocked ||
+                          projectLocked ||
+                          snapshot.conceptLocked
+                        }
+                      />
+                    )
                   ) : (
                     <div className="concept-grid">
                       <section className="brief-panel">

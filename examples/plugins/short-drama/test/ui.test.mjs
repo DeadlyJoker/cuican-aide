@@ -184,6 +184,15 @@ test("ships a unified self-contained UI and execution package with the original 
     ...(Number(version.split(".")[0]) >= 14
       ? [{ service: "crewon.project-texts", apiVersion: "1", optional: true }]
       : []),
+    ...(Number(version.split(".")[0]) >= 42
+      ? [
+          {
+            service: "crewon.project-outlines",
+            apiVersion: "2",
+            optional: true,
+          },
+        ]
+      : []),
     { service: "crewon.creative-projects", apiVersion: "1", optional: true },
     { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },
     {

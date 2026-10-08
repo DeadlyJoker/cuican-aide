@@ -11,6 +11,10 @@ import type { InvokePluginUiActionCommand } from "@crewon/application";
 import type { PluginUiJsonValue } from "@crewon/contracts/plugins";
 import { parseProjectTextUiActionRequest } from "@crewon/contracts/project-texts-ui";
 import {
+  isProjectOutlineUiNamespaceAction,
+  parseProjectOutlineUiRequest,
+} from "@crewon/contracts/project-outlines";
+import {
   isProjectTextRecoveryNamespaceAction,
   parseProjectTextRecoveryActionRequest,
 } from "@crewon/contracts/project-text-recovery";
@@ -110,6 +114,9 @@ export function createProductionProjectTextPluginRuntime(
   };
   const metadata = createProjectTextPluginUiRuntime({
     texts: input.projects.textService!,
+    ...(input.projects.structuredOutlineService === undefined
+      ? {}
+      : { outlines: input.projects.structuredOutlineService }),
     configuration,
     ...(input.hostUiServices === undefined
       ? {}
@@ -145,7 +152,9 @@ export function createProductionProjectTextPluginRuntime(
       };
       const action = recovery
         ? parseProjectTextRecoveryActionRequest(raw)
-        : parseProjectTextUiActionRequest(raw);
+        : isProjectOutlineUiNamespaceAction(command.action)
+          ? parseProjectOutlineUiRequest(raw)
+          : parseProjectTextUiActionRequest(raw);
       const isMutation =
         Object.hasOwn(action.input, "idempotencyKey") ||
         action.action === "crewon.project-text-recovery.v1.acknowledge";

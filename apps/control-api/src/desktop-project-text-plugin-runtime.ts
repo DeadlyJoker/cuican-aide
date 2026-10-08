@@ -38,6 +38,9 @@ export function createDesktopProjectTextPluginRuntime(
   return createProjectTextPluginUiRuntime({
     configuration: projects.textUi,
     texts: projects.textService,
+    ...(projects.structuredOutlineService === undefined
+      ? {}
+      : { outlines: projects.structuredOutlineService }),
     authorization,
     ...(input.hostUiServices === undefined
       ? {}

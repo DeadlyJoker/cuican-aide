@@ -4,6 +4,7 @@ import {
   type PluginProjectTextActionAuthorizationPort,
   type PluginProjectTextActionPublication,
   type ProjectTextApplicationService,
+  type ProjectStructuredOutlineApplicationService,
   type PluginProjectTextRecoveryApplicationService,
   type PluginProjectTextRecoveryAuthorizationPort,
 } from "@crewon/application";
@@ -42,6 +43,7 @@ export function createProjectTextPluginUiRuntime(
   input: Readonly<{
     configuration: ProjectTextPluginUiConfig;
     texts: ProjectTextApplicationService;
+    outlines?: ProjectStructuredOutlineApplicationService;
     authorization: PluginProjectTextActionAuthorizationPort;
     hostUiServices?: PluginUiHostServiceAvailabilityPort;
     recovery?: Readonly<{
@@ -61,6 +63,7 @@ export function createProjectTextPluginUiRuntime(
     throw new Error("project_text_recovery_configuration_required");
   const owner = new PluginProjectTextActionOwner({
     texts: input.texts,
+    ...(input.outlines === undefined ? {} : { outlines: input.outlines }),
     publications: configuration.publications,
     authorization: input.authorization,
     ...(input.recovery === undefined
@@ -100,6 +103,35 @@ export function createProjectTextPluginUiRuntime(
   });
   const textServices = appendProjectTextUiServiceAvailability({
     texts,
+    ...(input.outlines === undefined
+      ? {}
+      : {
+          outlines: {
+            isAvailable: (request) => {
+              try {
+                if (!owner.supportsStructuredOutlines()) return false;
+              } catch {
+                return false;
+              }
+              return (
+                request.requirement.apiVersion === "2" &&
+                configuration.publications.some(
+                  (publication) =>
+                    publication.pluginId ===
+                      request.candidate.descriptor.pluginId &&
+                    publication.packageDigest ===
+                      request.candidate.packageDigest &&
+                    request.candidate.descriptor.contributions.some(
+                      (entry) =>
+                        entry.id === publication.contributionId &&
+                        entry.kind === "module" &&
+                        entry.slot === "main.content",
+                    ),
+                )
+              );
+            },
+          },
+        }),
     fallback: input.hostUiServices,
   });
   const hostUiServices =
