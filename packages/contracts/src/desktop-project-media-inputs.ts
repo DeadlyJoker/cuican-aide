@@ -9,6 +9,8 @@ import type { MediaInputWorkflowId } from "./project-media-inputs.ts";
 
 export const DESKTOP_PROJECT_MEDIA_INPUTS_VERSION =
   "crewon.desktop-project-media-inputs.v1";
+const MAX_APPROVED_MEDIA_PACKAGES = 32;
+const MAX_WORKFLOWS_PER_MEDIA_PACKAGE = 2;
 export type DesktopMediaInputReview = Readonly<{
   targetIdentity: Readonly<{
     pluginId: "crewon.short-drama";
@@ -53,7 +55,7 @@ export function parseDesktopProjectMediaInputsConfiguration(
 ): DesktopProjectMediaInputsConfiguration {
   try {
     const r = pluginControlRecord(
-      parsePluginUiJsonValue(input, { maxBytes: 24 * 1024 }),
+      parsePluginUiJsonValue(input, { maxBytes: 48 * 1024 }),
       ["version", "purposes", "reviews", "referenceIdentities"],
     );
     if (r.version !== DESKTOP_PROJECT_MEDIA_INPUTS_VERSION) invalid();
@@ -61,7 +63,10 @@ export function parseDesktopProjectMediaInputsConfiguration(
       parsePluginUiJsonValue(options, { maxBytes: 16 * 1024 }),
       ["publications"],
     );
-    const approved = list(approvedValue.publications, 32).map((v) => {
+    const approved = list(
+      approvedValue.publications,
+      MAX_APPROVED_MEDIA_PACKAGES,
+    ).map((v) => {
       const p = pluginControlRecord(v, ["pluginId", "packageDigest"]);
       return {
         pluginId: parsePluginControlPluginId(p.pluginId),
@@ -75,7 +80,12 @@ export function parseDesktopProjectMediaInputsConfiguration(
     unique(purposes);
     // Saving checks the original receipt before any new work, so both purposes must be explicit.
     if (!purposes.includes("read")) invalid();
-    const reviews = list(r.reviews, 16).map((item) => {
+    // Historical package approvals remain pinned across upgrades. Each of the
+    // bounded approved packages can retain both supported workflow reviews.
+    const reviews = list(
+      r.reviews,
+      MAX_APPROVED_MEDIA_PACKAGES * MAX_WORKFLOWS_PER_MEDIA_PACKAGE,
+    ).map((item) => {
       const v = pluginControlRecord(item, ["targetIdentity", "workflow"]),
         t = pluginControlRecord(v.targetIdentity, [
           "pluginId",

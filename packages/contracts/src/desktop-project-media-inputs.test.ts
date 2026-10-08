@@ -122,7 +122,7 @@ test("private approval captures only portable bounded own data and does not eval
   assert.throws(() => parse(getter, options));
   assert.equal(called, 0);
   assert.throws(() =>
-    parse({ ...approval, reviews: Array(17).fill(review) }, options),
+    parse({ ...approval, reviews: Array(65).fill(review) }, options),
   );
   assert.throws(() =>
     parse(
@@ -146,6 +146,71 @@ test("private approval captures only portable bounded own data and does not eval
     ),
   );
   assert.equal(called, 0);
+});
+
+test("workflow reviews retain both pinned workflows after more than eight desktop plugin upgrades", () => {
+  const publications = Array.from({ length: 32 }, (_, index) => ({
+    pluginId: identity.pluginId,
+    packageDigest: `sha256:${(index + 1).toString(16).padStart(64, "0")}`,
+  }));
+  const reviews = publications.flatMap((publication, index) => {
+    const targetIdentity = {
+      ...identity,
+      version: `${index + 1}.0.0`,
+      packageDigest: publication.packageDigest,
+    };
+    return [
+      { ...review, targetIdentity },
+      {
+        targetIdentity,
+        workflow: {
+          ...review.workflow,
+          workflowId: "flux2-three-reference-storyboard",
+          output: { ...review.workflow.output, nodeId: "17" },
+        },
+      },
+    ];
+  });
+  const upgraded = { ...approval, reviews: reviews.slice(0, 18) };
+  const pinned = { publications };
+  assert.deepEqual(parse(upgraded, pinned).reviews, upgraded.reviews);
+  assert.deepEqual(
+    execution(
+      {
+        version: "crewon.desktop-project-execution.v1",
+        textArtifacts: { version: "crewon.project-text.v1" },
+        assetArtifacts: { version: "crewon.project-asset.v1" },
+        mediaInputs: upgraded,
+      },
+      pinned,
+    ).mediaInputs,
+    upgraded,
+  );
+  assert.equal(parse({ ...approval, reviews }, pinned).reviews.length, 64);
+  assert.throws(() =>
+    parse(
+      {
+        ...approval,
+        reviews: [
+          ...reviews,
+          {
+            ...reviews[0],
+            targetIdentity: {
+              ...reviews[0]!.targetIdentity,
+              implementationDigest: `sha256:${"c".repeat(64)}`,
+            },
+          },
+        ],
+      },
+      pinned,
+    ),
+  );
+  assert.throws(() =>
+    parse(upgraded, { publications: publications.slice(0, 8) }),
+  );
+  assert.throws(() =>
+    parse({ ...approval, reviews: [reviews[0], reviews[0]] }, pinned),
+  );
 });
 
 test("independent UI publication requires the same reviewed short-drama package; old declarations infer no UI grant", () => {
