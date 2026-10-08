@@ -1,6 +1,7 @@
 import {
   CreativeProjectApplicationService,
   ProjectTextApplicationService,
+  ProjectStructuredOutlineApplicationService,
   type PluginInstallationStore,
   type RunStore,
   type CreativeProjectAuthorizationPort,
@@ -207,6 +208,10 @@ export type InstalledPluginProjectToolsDependencies = Readonly<{
   >;
   projects: CreativeProjectApplicationService;
   texts: ProjectTextApplicationService;
+  outlines?: Pick<
+    ProjectStructuredOutlineApplicationService,
+    "getOutline" | "getRevision" | "listRevisions"
+  >;
   runs: Pick<RunStore, "loadRunInSpace">;
   installations: Pick<PluginInstallationStore, "loadSelection" | "loadPackage">;
   authorization: CreativeProjectAuthorizationPort;
@@ -239,6 +244,12 @@ export function composeInstalledPluginProjectToolsDependencies(
       ...common,
       projects,
       store: input.store.projectTextStore(),
+    }),
+    outlines: new ProjectStructuredOutlineApplicationService({
+      ...common,
+      projects,
+      store: input.store.projectTextStore(),
+      foundations: input.store.projectFoundationStore(),
     }),
     runs: input.store,
     installations: input.store.pluginInstallationStore(),

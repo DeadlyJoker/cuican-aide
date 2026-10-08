@@ -117,6 +117,12 @@ test("Short40 actual SDK calls preserve original command and provide real parame
     if (method === "readScope") {
       assert.ok(Buffer.byteLength(JSON.stringify(data.guidance)) < 3072);
       assert.match(data.guidance.instructions.join(""), /方案与结构化大纲/);
+      assert.match(data.guidance.instructions.join(""), /project_context_read/);
+      assert.match(
+        data.guidance.instructions.join(""),
+        /artifact.latestContentRevision/,
+      );
+      assert.match(data.guidance.instructions.join(""), /content_read/);
     }
     if (method === "getFoundation") {
       assert.equal(data.foundation.origin, "novel");

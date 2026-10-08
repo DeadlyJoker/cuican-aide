@@ -2,7 +2,16 @@ import type {
   ActorContext,
   CreativeProjectCommitAuthority,
 } from "@crewon/application";
-import { extensionCanonicalJson } from "@crewon/domain";
+import {
+  extensionCanonicalJson,
+  structuredProjectTextCanonicalJson,
+} from "@crewon/domain";
+import {
+  readProjectToolOutline,
+  readProjectToolRevision,
+  listProjectToolRevisions,
+  assertLegacyOutlineCandidateCompatible,
+} from "./project-tools-outline-reader.ts";
 import type { ProjectToolsMethod } from "@crewon/contracts/project-tools";
 import type { ProjectToolsRequests } from "./project-tools-service-request.ts";
 import type { ProjectToolsServiceOwnerDependencies } from "./project-tools-service-owner.ts";
@@ -20,7 +29,7 @@ export async function invokeProjectTool(
   input: Readonly<{
     dependencies: Pick<
       ProjectToolsServiceOwnerDependencies,
-      "projects" | "texts"
+      "projects" | "texts" | "outlines"
     >;
     method: ProjectToolsMethod;
     request: ProjectToolsRequests[ProjectToolsMethod];
@@ -85,11 +94,10 @@ export async function invokeProjectTool(
       );
     case "readOutline":
       return {
-        view: projectToolsView(
-          await texts.getOutline(
-            actor,
-            request as ProjectToolsRequests["readOutline"],
-          ),
+        view: await readProjectToolOutline(
+          dependencies,
+          actor,
+          request as ProjectToolsRequests["readOutline"],
         ),
       };
     case "readScript":
@@ -115,7 +123,7 @@ export async function invokeProjectTool(
           query.offset,
         );
       }
-      const revision = await texts.getRevision(actor, {
+      const revision = await readProjectToolRevision(dependencies, actor, {
         projectId: query.projectId,
         artifactId: query.source.artifactId,
         contentRevision: query.source.contentRevision,
@@ -123,12 +131,15 @@ export async function invokeProjectTool(
       return projectToolsContent(
         revision.contentDigest,
         "canonical-json",
-        extensionCanonicalJson(revision.content),
+        revision.schemaVersion === "crewon.project-text-revision.v2"
+          ? structuredProjectTextCanonicalJson(revision.content)
+          : extensionCanonicalJson(revision.content),
         query.offset,
       );
     }
     case "listRevisions": {
-      const page = await texts.listRevisions(
+      const page = await listProjectToolRevisions(
+        dependencies,
         actor,
         request as ProjectToolsRequests["listRevisions"],
       );
@@ -138,6 +149,11 @@ export async function invokeProjectTool(
       };
     }
     case "saveOutlineCandidate":
+      await assertLegacyOutlineCandidateCompatible(
+        dependencies,
+        actor,
+        request as ProjectToolsRequests["saveOutlineCandidate"],
+      );
       return projectToolsTextMutation(
         await texts.saveOutlineCandidate(
           actor,

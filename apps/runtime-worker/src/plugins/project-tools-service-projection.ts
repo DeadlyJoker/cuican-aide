@@ -3,7 +3,7 @@ import {
   type CreativeProject,
   type ProjectBriefRevision,
   type ProjectTextArtifact,
-  type ProjectTextArtifactRevision,
+  type StoredProjectTextArtifactRevision,
 } from "@crewon/domain";
 import type {
   CreateCreativeProjectResult,
@@ -67,7 +67,7 @@ export function projectToolsArtifact(
   );
 }
 export function projectToolsRevision(
-  value: ProjectTextArtifactRevision,
+  value: StoredProjectTextArtifactRevision,
 ): ProjectToolsRevisionMetadata {
   const common = {
     projectId: value.projectId,

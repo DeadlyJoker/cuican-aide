@@ -29,6 +29,7 @@ import {
   type CreativeProjectRunCommitTransactionAuthority,
   type PluginInstallationStore,
   type ProjectTextApplicationService,
+  type ProjectStructuredOutlineApplicationService,
   type ProjectToolMutationOperation,
   type RunStore,
 } from "@crewon/application";
@@ -96,6 +97,11 @@ export type ProjectToolsServiceOwnerDependencies = Readonly<{
   tools: ExtensionManifest["tools"];
   projects: CreativeProjectApplicationService;
   texts: ProjectTextApplicationService;
+  /** Shared immutable outline reads only; this port cannot commit structured candidates. */
+  outlines?: Pick<
+    ProjectStructuredOutlineApplicationService,
+    "getOutline" | "getRevision" | "listRevisions"
+  >;
   runs: Pick<RunStore, "loadRunInSpace">;
   installations: Pick<PluginInstallationStore, "loadSelection" | "loadPackage">;
   authorization: CreativeProjectAuthorizationPort;
