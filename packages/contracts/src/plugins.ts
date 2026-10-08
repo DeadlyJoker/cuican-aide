@@ -126,3 +126,4 @@ export * from "./desktop-native-plugin-authority-contract.ts";
 export * from "./project-historical-queries.ts";
 export * from "./desktop-project-historical-query-contract.ts";
 export * from "./project-historical-query-host-context-contract.ts";
+export * from "./desktop-project-foundation-configuration.ts";

@@ -8,6 +8,8 @@
 
 桌面 Main 通过独立可选 `projectFoundationTools` 私有声明接到 [Native Worker](../apps/runtime-worker/src/plugins/native-project-foundation-runtime.ts)。它绑定已批准的包和确切模块，不从 UI 元数据许可或图片供应商配置推导；旧 v1/v2/v3未声明时仍没有新服务。Native 服务借用原 SQLite 和项目身份，授权只允许本 scope 的项目读取/写入；Node 不能创建项目、采用原文或确认方案。[实际 Main/Native 组合测试](../apps/runtime-worker/src/plugins/native-project-foundation-runtime.test.ts)4项通过，覆盖旧配置、附属规格读取、冷重开、外部身份与配置撤回。这组测试没有调用模型或供应商，也不代表桌面包已经更新。
 
+Main 的原本机来源导入另将显式 `trustUiModule`、实际发布的 UI 入口与已安装包 metadata 的确切 contribution 联合核验，分别按 descriptor 声明生成 Foundation 与 SourceUploads UI publication。私有 v3 approval/bootstrap 新增可选 `projectFoundation`；无字段的原版本行为保持，v1/v2 拒绝新字段，v2 导入新能力时显式升 v3 并保留原项目许可。Node tools、供应商配置及 UI 包可见性均不能单独推导新 UI 权限。真实冻结40导入、保存后冷 bootstrap 和原 Control parser 转发验证包含在 [Main 测试](../apps/crewon-ui/electron/desktopLocalProjectFoundationApproval.test.ts)；与原 sourceImport、bootstrap、Node 许可回归合计97项通过、0跳过。此测试没有修改用户 profile 或安装桌面 App。
+
 原 Run 事务的真实双库验证包含34项附属 schema/读取测试、11项 Tool 提交/未知结果重试测试，以及78项原 Stage/Run 回归，均无跳过。实际提交前撤权回滚，提交完成后准确发布已有回执；候选追加不推进 Foundation 或自动确认。另有28项新下游门禁与109项原文本/资产/计划回归验证当前来源和确认有效性。下游门禁只验证**当前资格**，尚不代替长篇计划各批次固定输入依据的完整实现。
 
 新工具的模型输出必须在其独立边界保证整个 wrapper 的 UTF8字节数小于10,000；将大 JSON 拆成字符串数组不构成多个模型 fragment。原宿主的40,000字节工具结果投影会截断更大的输出，不能依靠较大的服务 DTO 预算或包装 allowance 声称模型上下文合格。宿主仍可返回完整有界 DTO；插件参数正文和章节按明确游标分页，页面和原协议保持。整个候选40真实模型投影及流式/停止/重连验收须记录完成证据后才算通过。

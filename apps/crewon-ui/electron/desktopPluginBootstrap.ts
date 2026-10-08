@@ -26,6 +26,8 @@ import {
   type DesktopProjectExecutionConfiguration,
   parseDesktopProjectFoundationToolsConfiguration,
   type DesktopProjectFoundationToolsConfiguration,
+  parseDesktopProjectFoundationConfiguration,
+  type DesktopProjectFoundationConfiguration,
 } from "@crewon/contracts/plugins";
 import {
   parsePluginProfileScope,
@@ -82,6 +84,7 @@ export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
     | Readonly<{
         schemaVersion: typeof DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3;
         projects: DesktopProjectExecutionConfiguration;
+        projectFoundation?: DesktopProjectFoundationConfiguration;
         projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
       }>
   );
@@ -98,6 +101,7 @@ export type DesktopPluginApprovalSettings = Readonly<{
     | Readonly<{
         schemaVersion: typeof DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3;
         projects: DesktopProjectExecutionConfiguration;
+        projectFoundation?: DesktopProjectFoundationConfiguration;
         projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
       }>
   );
@@ -220,6 +224,9 @@ export async function prepareDesktopPluginBootstrap(
           schemaVersion: DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3,
           ...manifestFields,
           projects: settings.projects,
+          ...(settings.projectFoundation === undefined
+            ? {}
+            : { projectFoundation: settings.projectFoundation }),
           ...(settings.projectFoundationTools === undefined
             ? {}
             : { projectFoundationTools: settings.projectFoundationTools }),
@@ -307,6 +314,10 @@ export function parseDesktopPluginApproval(
           "sources",
           "publications",
           "projects",
+          ...(schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 &&
+          Object.hasOwn(input, "projectFoundation")
+            ? ["projectFoundation"]
+            : []),
           ...(schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 &&
           Object.hasOwn(input, "projectFoundationTools")
             ? ["projectFoundationTools"]
@@ -434,11 +445,20 @@ export function parseDesktopPluginApproval(
         },
       )
     : undefined;
+  const foundation = Object.hasOwn(value, "projectFoundation")
+    ? parseDesktopProjectFoundationConfiguration(value.projectFoundation, {
+        publications: settings.publications.map(
+          ({ pluginId, packageDigest }) => ({ pluginId, packageDigest }),
+        ),
+        metadataPublications: projects?.pluginUi?.publications ?? [],
+      })
+    : undefined;
   return value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3
     ? Object.freeze({
         schemaVersion: DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3,
         ...settings,
         projects: projects!,
+        ...(foundation === undefined ? {} : { projectFoundation: foundation }),
         ...(foundationTools === undefined
           ? {}
           : { projectFoundationTools: foundationTools }),

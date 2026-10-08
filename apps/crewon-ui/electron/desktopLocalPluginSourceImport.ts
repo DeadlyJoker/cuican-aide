@@ -9,6 +9,7 @@ import type {
 import { verifyLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-verifier.ts";
 import { installLocalPluginPackage } from "../../../packages/plugin-host/src/local-plugin-package-installer.ts";
 import { composeDesktopLocalPluginProjectApproval } from "./desktopLocalPluginProjectApproval.ts";
+import { composeDesktopLocalProjectFoundationApproval } from "./desktopLocalProjectFoundationApproval.ts";
 import { loadInstalledPluginBusinessRegistration } from "../../../packages/plugin-host/src/installed-plugin-business-registration.ts";
 import {
   composeDesktopLocalShortDramaFoundationToolsApproval,
@@ -368,6 +369,14 @@ class LocalSourceImporter {
           packageDigest: installed.packageDigest,
           sourceRootPins,
         });
+        next = composeDesktopLocalProjectFoundationApproval({
+          approval: next,
+          descriptor: installed.descriptor,
+          packageDigest: installed.packageDigest,
+          trustUiModule: confirmation.trustUiModule,
+        });
+        bytes = Buffer.from(JSON.stringify(next));
+        if (bytes.byteLength > MAX_APPROVAL_BYTES) invalid("approval_size");
         if (
           requestsDesktopLocalShortDramaFoundationTools(installed.descriptor)
         ) {
