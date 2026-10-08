@@ -34,7 +34,9 @@
     "./project-planning": "./src/project-planning.ts",
     "./project-historical-queries": "./src/project-historical-queries.ts",
     "./project-media-input-stages": "./src/project-media-input-stages.ts",
-    "./project-asset-recovery-v2": "./src/project-asset-recovery-v2.ts"
+    "./project-asset-recovery-v2": "./src/project-asset-recovery-v2.ts",
+    "./project-foundation": "./src/project-foundation.ts",
+    "./project-source-uploads": "./src/project-source-uploads.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

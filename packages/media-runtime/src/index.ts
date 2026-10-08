@@ -5,3 +5,16 @@ export { ProjectAdoptedMediaReferenceReader } from "./project-adopted-media-refe
 export { ProjectMediaGenerationCommands } from "./project-media-generation-commands.ts";
 export type { GenerateProjectMediaCommand } from "./project-media-generation-commands.ts";
 export type { ProjectMediaGenerationAdmission } from "./project-media-generation-admission.ts";
+export {
+  parseProjectSourceFile,
+  ProjectSourceImportError,
+} from "./project-source-import.ts";
+export type {
+  ParsedProjectSourceFile,
+  ParseProjectSourceFileInput,
+} from "./project-source-import.ts";
+export {
+  ProjectSourceUploadPreparationAdapter,
+  ProjectSourceUploadAdapterError,
+  PROJECT_SOURCE_UPLOAD_NORMALIZATION_PARSER_VERSION,
+} from "./project-source-upload-preparation-adapter.ts";

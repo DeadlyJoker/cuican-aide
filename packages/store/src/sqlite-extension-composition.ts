@@ -3,6 +3,7 @@ import { SqliteExtensionStore } from "./sqlite-extension-store.ts";
 import { SqliteExternalOperationStore } from "./sqlite-external-operation-store.ts";
 import { SqlitePluginCreditStore } from "./sqlite-plugin-credit-store.ts";
 import { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
+import { SqliteProjectFoundationStore } from "./project-foundation-sqlite-store.ts";
 
 /** Keeps plugin construction separate from the core Run orchestration module. */
 export function createSqliteExtensionStore(
@@ -41,4 +42,14 @@ export function createSqliteCreativeProjectStore(input: {
 }): SqliteCreativeProjectStore {
   input.assertOpen();
   return new SqliteCreativeProjectStore(input);
+}
+
+/** New source/proposal storage borrows the original project connection and lifetime. */
+export function createSqliteProjectFoundationStore(input: {
+  database: DatabaseSync;
+  assertOpen(): void;
+  sourceAdmission?: "trusted-internal-recipe";
+}): SqliteProjectFoundationStore {
+  input.assertOpen();
+  return new SqliteProjectFoundationStore(input);
 }

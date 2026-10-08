@@ -31,7 +31,8 @@
     "@crewon/application": "workspace:*",
     "@crewon/artifacts": "workspace:*",
     "@crewon/domain": "workspace:*",
-    "@crewon/store": "workspace:*"
+    "@crewon/store": "workspace:*",
+    "parse5": "8.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

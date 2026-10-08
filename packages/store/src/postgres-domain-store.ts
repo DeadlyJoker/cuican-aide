@@ -15,6 +15,7 @@ import { PostgresPluginCreditStore } from "./postgres-plugin-credit-store.ts";
 import { PostgresPluginCreditSettlementStore } from "./postgres-plugin-credit-settlement-store.ts";
 import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
+import { PostgresProjectFoundationStore } from "./project-foundation-postgres-store.ts";
 import { PostgresProjectTextStore } from "./project-text-postgres-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
@@ -236,6 +237,19 @@ export class PostgresDomainStore
   creativeProjectStore(): PostgresCreativeProjectStore {
     this.assertOpen();
     return new PostgresCreativeProjectStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Attached source and proposal storage shares the original identity, pool and lifetime. */
+  projectFoundationStore(
+    input: { sourceAdmission?: "trusted-internal-recipe" } = {},
+  ): PostgresProjectFoundationStore {
+    this.assertOpen();
+    return new PostgresProjectFoundationStore({
+      ...input,
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),

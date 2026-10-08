@@ -295,3 +295,12 @@ export * from "./project-asset-v2-recovery-record.ts";
 export * from "./project-asset-v2-recovery-port.ts";
 
 export { PluginProjectAssetV2RecoveryService } from "./plugin-project-asset-v2-recovery-service.ts";
+export * from "./project-foundation-store-port.ts";
+export * from "./project-foundation-commit-authority.ts";
+export * from "./project-foundation-commands.ts";
+export * from "./project-source-preparation-port.ts";
+export * from "./project-foundation-application-service.ts";
+export * from "./project-source-upload-port.ts";
+export * from "./project-source-upload-validation.ts";
+export * from "./project-source-upload-application-service.ts";
+export * from "./project-source-upload-foundation-adapter.ts";
