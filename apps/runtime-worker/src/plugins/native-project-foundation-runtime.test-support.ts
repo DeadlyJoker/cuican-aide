@@ -22,7 +22,13 @@ import { createInstalledPluginWorkerAuthority } from "./installed-plugin-worker-
 import { prepareInstalledPluginProjectFoundationStores } from "./installed-plugin-project-foundation-tools.ts";
 
 /** Main configuration and actual parent SQLite only; this fixture does not execute a package or model. */
-export async function nativeFoundationFixture(t: TestContext, enabled = true) {
+export async function nativeFoundationFixture(
+  t: TestContext,
+  enabled = true,
+  options: Readonly<{
+    inactiveFoundationPublication?: "append" | "replace";
+  }> = {},
+) {
   const workers: ReturnType<typeof createInstalledPluginWorkerAuthority>[] = [];
   const mains: ReturnType<typeof createDesktopNativePluginAuthority>[] = [];
   const bootstraps: DesktopPluginBootstrap[] = [];
@@ -40,11 +46,36 @@ export async function nativeFoundationFixture(t: TestContext, enabled = true) {
     contributionId: "workbench",
   };
   const previous = JSON.parse(readFileSync(f.approvalPath, "utf8"));
+  const inactive = {
+    ...f.identity,
+    version: "99.0.0",
+    packageDigest: nativeDigest("approved-but-not-activated"),
+    sourceId: "inactive-source",
+    directory: join(f.directory, "inactive-source"),
+  };
+  const inactivePublication = {
+    pluginId: inactive.pluginId,
+    packageDigest: inactive.packageDigest,
+    contributionId: "workbench",
+  };
+  const foundationPublications =
+    options.inactiveFoundationPublication === "replace"
+      ? [inactivePublication]
+      : [
+          publication,
+          ...(options.inactiveFoundationPublication === "append"
+            ? [inactivePublication]
+            : []),
+        ];
   writeFileSync(
     f.approvalPath,
     JSON.stringify({
       ...previous,
       schemaVersion: "crewon.desktop-plugin-approval.v3",
+      sources: [
+        ...previous.sources,
+        ...(options.inactiveFoundationPublication ? [inactive] : []),
+      ],
       publications: [
         {
           pluginId: f.identity.pluginId,
@@ -52,17 +83,34 @@ export async function nativeFoundationFixture(t: TestContext, enabled = true) {
           packageDigest: f.identity.packageDigest,
           publicAssets: ["ui.mjs"],
         },
+        ...(options.inactiveFoundationPublication
+          ? [
+              {
+                pluginId: inactive.pluginId,
+                publisherId: inactive.publisherId,
+                packageDigest: inactive.packageDigest,
+                publicAssets: ["ui.mjs"],
+              },
+            ]
+          : []),
       ],
       projects: {
         version: "crewon.desktop-project-execution.v1",
-        pluginUi: { publications: [publication] },
+        pluginUi: {
+          publications: [
+            publication,
+            ...(options.inactiveFoundationPublication
+              ? [inactivePublication]
+              : []),
+          ],
+        },
         conversations: { publications: [publication] },
       },
       ...(enabled
         ? {
             projectFoundationTools: {
               version: "crewon.project-foundation-tools.v1",
-              publications: [publication],
+              publications: foundationPublications,
             },
           }
         : {}),

@@ -12,6 +12,40 @@ test("old v3 metadata/conversation opt-in does not infer Foundation Node authori
   assert.equal(f.worker.installedPluginExecution.projectMedia, undefined);
 });
 
+test("importing an approved inactive update does not break Native startup or grant it execution", async (t) => {
+  const f = await nativeFoundationFixture(t, true, {
+    inactiveFoundationPublication: "append",
+  });
+  assert.ok(f.config);
+  const created = await f.createProject();
+  assert.deepEqual(
+    await f.config
+      .createFoundations({ store: f.f.store })
+      .getFoundation(nativeActor, { projectId: created.project.projectId }),
+    created.foundation,
+  );
+  await assert.rejects(
+    f.config.authorizeService(
+      {
+        ...nativeActor,
+        ...f.f.scope,
+        ...f.f.identity,
+        contributionId: "workbench",
+        action: "project.execute",
+        version: "99.0.0",
+      } as PluginTaskAdmission,
+      new AbortController().signal,
+    ),
+  );
+});
+test("an import-only Foundation declaration leaves the old runtime usable with no new service grant", async (t) => {
+  const f = await nativeFoundationFixture(t, true, {
+    inactiveFoundationPublication: "replace",
+  });
+  assert.equal(f.config, undefined);
+  assert.ok(f.worker.installedPluginExecution.projectTools);
+});
+
 test("Main independent Node opt-in reaches actual Native Worker and borrows the original project store", async (t) => {
   const f = await nativeFoundationFixture(t);
   assert.ok(f.config);

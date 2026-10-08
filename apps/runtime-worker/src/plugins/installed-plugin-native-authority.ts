@@ -14,10 +14,8 @@ import {
   type DesktopProjectExecutionConfiguration,
 } from "@crewon/contracts/plugins";
 import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
-import {
-  parseDesktopProjectFoundationToolsConfiguration,
-  type DesktopProjectFoundationToolsConfiguration,
-} from "@crewon/contracts/plugins";
+import type { DesktopProjectFoundationToolsConfiguration } from "@crewon/contracts/plugins";
+import { captureNativeProjectFoundationDeclaration } from "./native-project-foundation-declaration.ts";
 import {
   parseExtensionConfiguration,
   parseExtensionExecutionTarget,
@@ -132,17 +130,12 @@ export class NativeAuthorityOwner {
       Object.hasOwn(bootstrap, "projectFoundationTools")
     )
       fail("project_foundation_tools_configuration_invalid");
-    this.foundationTools = Object.hasOwn(bootstrap, "projectFoundationTools")
-      ? parseDesktopProjectFoundationToolsConfiguration(
-          bootstrap.projectFoundationTools,
-          {
-            publications: this.files.authority.packages.map(
-              ({ pluginId, packageDigest }) => ({ pluginId, packageDigest }),
-            ),
-            metadataPublications: this.projects?.pluginUi?.publications ?? [],
-          },
-        )
-      : undefined;
+    this.foundationTools = captureNativeProjectFoundationDeclaration({
+      bootstrap,
+      approvalPath: this.files.authority.approvalPath,
+      packages: this.files.authority.packages,
+      metadataPublications: this.projects?.pluginUi?.publications ?? [],
+    });
     if (
       config.installRoot !== this.files.authority.installRoot ||
       (config.historicalScope !== null &&
