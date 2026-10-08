@@ -34,6 +34,12 @@ import { SqliteRunStore } from "@crewon/store";
 import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
 import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { captureDesktopProjectCompositionConfig } from "./desktop-project-execution-startup.ts";
+import { DesktopPluginSourceRegistry } from "./desktop-plugin-source-registry.ts";
+import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
+import {
+  createDesktopPluginInstallationRuntime,
+  assertDesktopPluginInstallationRuntime,
+} from "./desktop-plugin-installation-runtime.ts";
 
 const actor = {
   principalId: "standalone-principal",
@@ -355,6 +361,45 @@ test(
         nativeControl,
       }),
     );
+    const registry = await DesktopPluginSourceRegistry.create(f.bootstrap);
+    const authority = new DesktopPluginAuthority(f.bootstrap);
+    const store = new SqliteRunStore(f.databasePath);
+    await store.pluginInstallationStore().migrate();
+    const installation = await createDesktopPluginInstallationRuntime(
+      { configuration: f.bootstrap, registry, authority },
+      {
+        store,
+        clock: { now: () => "2026-10-09T00:00:00.000Z" },
+        digester: sha,
+      },
+    );
+    try {
+      assert.doesNotThrow(() =>
+        assertDesktopPluginInstallationRuntime(installation, {
+          configuration: f.bootstrap,
+          registry,
+          authority,
+          store,
+        }),
+      );
+      assert.throws(
+        () =>
+          assertDesktopPluginInstallationRuntime(installation, {
+            configuration: {
+              ...f.bootstrap,
+              authorityEpoch: "native-control-altered-epoch-00000001",
+            },
+            registry,
+            authority,
+            store,
+          }),
+        /desktop_plugin_installation_runtime_configuration_mismatch/u,
+      );
+    } finally {
+      await installation.close();
+      await authority.close();
+      await store.close();
+    }
     assert.throws(
       () =>
         assertDesktopNativePluginControlComposition({

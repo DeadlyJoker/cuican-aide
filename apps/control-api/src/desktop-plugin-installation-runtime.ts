@@ -31,6 +31,7 @@ import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import { installationSame } from "./production-plugin-installation-runtime-support.ts";
 import { DesktopInstallationProfile } from "./desktop-plugin-installation-profile.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
+import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
 import {
   capturePluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
@@ -90,10 +91,8 @@ export function assertDesktopPluginInstallationRuntime(
     issued.registry !== input.registry ||
     issued.authority !== input.authority ||
     issued.store !== input.store ||
-    !installationSame(
-      issued.configuration,
-      parseDesktopPluginConfiguration(input.configuration),
-    )
+    canonicalDesktopPluginConfiguration(issued.configuration) !==
+      canonicalDesktopPluginConfiguration(input.configuration)
   )
     throw new Error(
       "desktop_plugin_installation_runtime_configuration_mismatch",
