@@ -17,7 +17,7 @@ const { default: definition } = await import(
   pathToFileURL(join(directory, "ui.mjs")).href
 );
 after(async () => browser.happyDOM.close());
-async function open({ confirmed = false } = {}) {
+async function open({ confirmed = false, format = "structured-v2" } = {}) {
   const base = foundationService(),
     created = base.seed("novel"),
     outlines = outlineReadFixture(created.project.projectId);
@@ -62,6 +62,17 @@ async function open({ confirmed = false } = {}) {
             contentDigest: "sha256:" + "3".repeat(64),
           };
         }
+        if (action === "crewon.project-outlines.v2.getOutline") {
+          if (format === "empty") return { view: null };
+          const result = await outlines.services.invoke(action, input, options);
+          if (format === "legacy-v1") {
+            result.view.latestRevision.format = "legacy-v1";
+            result.view.latestRevision.quality = null;
+            result.view.selectedRevision.format = "legacy-v1";
+            result.view.selectedRevision.quality = null;
+          }
+          return result;
+        }
         return action.startsWith("crewon.project-outlines.")
           ? outlines.services.invoke(action, input, options)
           : base.services.invoke(action, input, options);
@@ -73,6 +84,45 @@ async function open({ confirmed = false } = {}) {
   await f.click(f.container.querySelector('[data-project-page="outline"]'));
   return { f, base, outlines, edits };
 }
+test("a confirmed novel starts with one outline editor and no empty legacy form", async () => {
+  const { f, edits } = await open({ confirmed: true, format: "empty" });
+  try {
+    const panel = f.container.querySelector('[aria-label="故事大纲"]');
+    assert.ok(panel);
+    assert.equal(Boolean(panel.querySelector(".text-editor")), false);
+    assert.equal(Boolean(panel.querySelector("details")), false);
+    await f.click(f.button("填写分集大纲"));
+    assert.equal(panel.querySelectorAll("form").length, 1);
+    assert.equal(
+      panel.querySelectorAll('textarea[aria-label="一句话故事"]').length,
+      1,
+    );
+    assert.equal(edits.length, 0);
+  } finally {
+    await f.dispose();
+  }
+});
+test("existing legacy output opens on demand without competing with the main outline editor", async () => {
+  const { f, edits } = await open({ confirmed: true, format: "legacy-v1" });
+  try {
+    const prior = [...f.container.querySelectorAll("details")].find(
+      (element) =>
+        element.querySelector("summary")?.textContent === "查看已有大纲",
+    );
+    assert.ok(prior);
+    assert.equal(prior.open, false);
+    assert.ok(prior.querySelector(".story-script-workbench"));
+    await f.click(f.button("填写分集大纲"));
+    assert.equal(prior.open, false);
+    assert.ok(f.container.querySelector('form[aria-label="填写分集大纲"]'));
+    prior.querySelector("summary").click();
+    await settle();
+    assert.equal(prior.open, true);
+    assert.equal(edits.length, 0);
+  } finally {
+    await f.dispose();
+  }
+});
 test("novel outputs show adopted full paragraphs, entity tabs and exact continuation without an extra Agent composer", async () => {
   const { f, base, outlines } = await open();
   try {

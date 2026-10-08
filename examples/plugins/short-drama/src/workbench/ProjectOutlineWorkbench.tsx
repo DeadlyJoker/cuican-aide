@@ -293,24 +293,31 @@ export function ProjectOutlineWorkbench({
     void controller.refresh();
     setSection("episodes");
   }, [controller, projectId]);
-  if (snapshot.state === "unsupported")
+  if (snapshot.state === "unsupported") {
+    if (!edits || !details || !foundation?.confirmedProposal) return fallback;
     return (
-      <>
-        {fallback}
-        {edits && details && foundation?.confirmedProposal && (
-          <section className="brief-panel">
-            {feedback}
-            <OutlineStartEditor
-              edits={edits}
-              details={details}
-              foundation={foundation}
-              sourceName={sourceName}
-              blocked={blocked}
-            />
-          </section>
+      <section
+        className="brief-panel story-script-workbench"
+        aria-label="故事大纲"
+      >
+        <h2>故事大纲</h2>
+        {feedback}
+        <OutlineStartEditor
+          edits={edits}
+          details={details}
+          foundation={foundation}
+          sourceName={sourceName}
+          blocked={blocked}
+        />
+        {snapshot.revision && (
+          <details className="drama-secondary-disclosure">
+            <summary>查看已有大纲</summary>
+            {fallback}
+          </details>
         )}
-      </>
+      </section>
     );
+  }
   if (!snapshot.revision || !snapshot.view)
     return (
       <section className="brief-panel story-script-workbench">
