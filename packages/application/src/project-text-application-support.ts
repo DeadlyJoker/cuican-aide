@@ -205,6 +205,7 @@ export async function projectTextUseCase<T>(
               "project_text_dependencies_stale",
               "project_text_outline_reference_invalid",
               "project_text_brief_reference_invalid",
+              "project_text_protocol_upgrade_required",
             ].includes(value)
           ? "conflict"
           : "internal";

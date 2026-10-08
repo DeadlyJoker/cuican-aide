@@ -36,13 +36,14 @@ import type {
   ProjectTextDigester,
 } from "./project-text-types.ts";
 
-type MutationInput = Readonly<{
+export type ProjectTextMutationHeadInput = Readonly<{
   project: CreativeProject;
   actor: CreativeProjectActor;
   artifact: ProjectTextArtifact | null;
   expectedArtifactRevision: number;
   at: string;
 }>;
+type MutationInput = ProjectTextMutationHeadInput;
 type CandidateInput = MutationInput &
   Readonly<{ artifactId: string; brief: ProjectBriefRevision }>;
 export type SaveProjectOutlineCandidateInput = CandidateInput &
@@ -65,7 +66,7 @@ export type ProjectTextDependencyStatus = Readonly<{
   staleReasons: readonly ProjectTextDependencyReason[];
 }>;
 
-function current(input: MutationInput) {
+export function prepareProjectTextMutationHead(input: MutationInput) {
   const project = validateCreativeProject(input.project);
   const actor = validateCreativeProjectActor(input.actor);
   assertCreativeProjectOwner(project, actor);
@@ -85,13 +86,13 @@ function current(input: MutationInput) {
     projectTextFailure("project_text_revision_conflict");
   return { project, actor, artifact, at: creativeProjectTimestamp(input.at) };
 }
-function candidate(
+export function prepareProjectTextCandidateIdentity(
   input: CandidateInput,
   kind: "outline" | "script",
   episodeId: string | null,
   digester: ProjectTextDigester,
 ) {
-  const checked = current(input);
+  const checked = prepareProjectTextMutationHead(input);
   const brief = parseProjectBriefRevision(input.brief, digester);
   assertCreativeProjectScope(checked.project, brief);
   const artifactId = projectTextOpaqueId(input.artifactId);
@@ -143,7 +144,12 @@ export function saveProjectOutlineCandidate(
   input: SaveProjectOutlineCandidateInput,
   digester: ProjectTextDigester,
 ): ProjectTextCandidateMutation {
-  const checked = candidate(input, "outline", null, digester);
+  const checked = prepareProjectTextCandidateIdentity(
+    input,
+    "outline",
+    null,
+    digester,
+  );
   const body = {
     ...checked.common,
     kind: "outline" as const,
@@ -164,7 +170,12 @@ export function saveProjectScriptCandidate(
   digester: ProjectTextDigester,
 ): ProjectTextCandidateMutation {
   const episodeId = projectTextOpaqueId(input.episodeId);
-  const checked = candidate(input, "script", episodeId, digester);
+  const checked = prepareProjectTextCandidateIdentity(
+    input,
+    "script",
+    episodeId,
+    digester,
+  );
   let outline: ProjectOutlineRevision | null = null;
   if (input.outline !== null) {
     const parsed = parseProjectTextArtifactRevision(input.outline, digester);
@@ -204,7 +215,16 @@ export function saveProjectScriptCandidate(
 }
 export function assertProjectTextRevisionIdentity(
   artifact: ProjectTextArtifact,
-  revision: ProjectTextArtifactRevision,
+  revision: Pick<
+    ProjectTextArtifactRevision,
+    | "tenantId"
+    | "spaceId"
+    | "projectId"
+    | "artifactId"
+    | "kind"
+    | "episodeId"
+    | "contentRevision"
+  >,
 ): void {
   assertCreativeProjectScope(artifact, revision);
   if (
@@ -255,7 +275,7 @@ export function selectProjectTextRevision(
     }>,
   digester: ProjectTextDigester,
 ): ProjectTextCandidateMutation {
-  const checked = current(input);
+  const checked = prepareProjectTextMutationHead(input);
   const artifact = checked.artifact;
   if (artifact === null) projectTextFailure("project_text_artifact_not_found");
   const revision = parseProjectTextArtifactRevision(
@@ -303,7 +323,7 @@ export function setProjectTextArtifactLocked(
   input: MutationInput &
     Readonly<{ artifact: ProjectTextArtifact; locked: boolean }>,
 ): Readonly<{ artifact: ProjectTextArtifact }> {
-  const checked = current(input);
+  const checked = prepareProjectTextMutationHead(input);
   const artifact = checked.artifact;
   if (artifact === null) projectTextFailure("project_text_artifact_not_found");
   if (typeof input.locked !== "boolean")

@@ -180,6 +180,7 @@ export * from "./creative-project-authorization-port.ts";
 export * from "./creative-project-application-service.ts";
 export * from "./project-text-commands.ts";
 export * from "./project-text-store-port.ts";
+export * from "./project-structured-outline-store-port.ts";
 export * from "./project-text-application-service.ts";
 export { captureProjectTextCommitAuthority } from "./project-text-application-support.ts";
 export * from "./plugin-creative-project-action-owner.ts";

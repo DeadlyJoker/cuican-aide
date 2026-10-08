@@ -1,3 +1,9 @@
+import { SqliteStructuredOutlineStorage } from "./project-structured-outline-sqlite.ts";
+import {
+  legacyTextRevision as decodeTextRevision,
+  legacyTextReceipt as decodeTextReceipt,
+  type StructuredTextInput,
+} from "./project-structured-outline-store-support.ts";
 import { observeSqlitePlanManualSelection } from "./project-text-plan-manual-selection.ts";
 import {
   captureSqliteProjectFoundationDownstream,
@@ -30,7 +36,7 @@ import {
   type CreativeProjectCommitAuthority,
   type CreativeProjectCommitOptions,
   type CreativeProjectOwnerScope,
-  type ProjectTextStore,
+  type ProjectStructuredOutlineStore,
   type ProjectTextMutationResult,
 } from "@crewon/application";
 import { projectTextFailure } from "@crewon/domain";
@@ -44,8 +50,6 @@ import {
   artifactColumns,
   artifactValues,
   decodeTextArtifact,
-  decodeTextReceipt,
-  decodeTextRevision,
   prepareText,
   prepareTextCandidate,
   revisionColumns,
@@ -68,12 +72,40 @@ const join =
   "JOIN creative_projects p ON p.tenant_id=c.tenant_id AND p.space_id=c.space_id AND p.project_id=c.project_id";
 
 /** Borrows the parent's connection and lifetime. Construction never migrates. */
-export class SqliteProjectTextStore implements ProjectTextStore {
+export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
   readonly #database: DatabaseSync;
   readonly #assertOpen: () => void;
+  readonly #structured: SqliteStructuredOutlineStorage;
   constructor(input: { database: DatabaseSync; assertOpen(): void }) {
     this.#database = input.database;
     this.#assertOpen = input.assertOpen;
+    this.#structured = new SqliteStructuredOutlineStorage(input);
+  }
+  loadStructuredRevision(input: StructuredTextInput<"loadStructuredRevision">) {
+    return this.#structured.loadRevision(input);
+  }
+  listStructuredRevisions(
+    input: StructuredTextInput<"listStructuredRevisions">,
+  ) {
+    return this.#structured.listRevisions(input);
+  }
+  loadStructuredMutationReceipt(
+    input: StructuredTextInput<"loadStructuredMutationReceipt">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return this.#structured.receipt(input, options);
+  }
+  commitStructuredOutlineCandidate(
+    input: StructuredTextInput<"commitStructuredOutlineCandidate">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return this.#structured.candidate(input, options);
+  }
+  commitStructuredOutlineSelection(
+    input: StructuredTextInput<"commitStructuredOutlineSelection">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return this.#structured.selection(input, options);
   }
   async migrate(): Promise<void> {
     this.#transaction(() => migrateSqliteProjectText(this.#database));
@@ -344,6 +376,14 @@ export class SqliteProjectTextStore implements ProjectTextStore {
           : this.#artifact(owner, id, "c.artifact_id=?", [
               prepared.artifact.artifactId,
             ]);
+        // Legacy callers cannot replace or adopt an outline after a v2 candidate exists.
+        if (artifact?.kind === "outline" && prepared.kind !== "set-lock")
+          this.#revision(
+            owner,
+            id,
+            artifact.artifactId,
+            artifact.latestContentRevision,
+          );
         const saved =
           "contentRevision" in prepared ? prepared.contentRevision : null;
         const brief =

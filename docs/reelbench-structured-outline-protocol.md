@@ -1,6 +1,6 @@
 # 结构化改编大纲 v2
 
-依据[产品拆解](./reelbench-product-replication-analysis.md)的小说改编概览、大纲和资产关联，以及 [shuohao-skills 固定版本](https://github.com/eternityspring/shuohao-skills/tree/ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/skills/novel-outline)。这是 P2 的数据与校验实现；原有持久化服务、Agent 工具和插件页面尚未接入该新格式。不能将本记录当作完整产品验收。
+依据[产品拆解](./reelbench-product-replication-analysis.md)的小说改编概览、大纲和资产关联，以及 [shuohao-skills 固定版本](https://github.com/eternityspring/shuohao-skills/tree/ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/skills/novel-outline)。这是 P2 的数据、校验与双库持久化实现；HTTP/UI 服务、Agent 工具和插件页面尚未接入该新格式。不能将本记录当作完整产品验收。
 
 ## 已实现内容
 
@@ -26,12 +26,22 @@
 
 上游校验使用临时分集序号视图；业务文档仍保留稳定 ID，不改写存储身份。报告含实际问题和固定 Skill 来源。纯校验器不能访问原小说，报告明确 `sourceEvidenceVerification: not-checked`；引句与实际原文的核对必须由持久化服务结合已确认 Foundation 来源完成。通过本校验不表示已保存、已采用、已出图或已验证原文。
 
-## 接线顺序与兼容边界
+## 已接入原有版本库
 
-1. 新持久化修订复用原 `projectId`、大纲 `artifactId`、候选历史和采用指针；使用独立版本标记及 Foundation/原文/确认方案的确切版本，不建立第二套项目身份。
-2. 沿原 SQLite/Postgres 事务核对实际项目、当前规格、来源及确认方案，保留原 CAS、幂等回执和冷恢复。新候选的保存不能覆盖已采用成果；只有完整校验及真实来源检查通过，才能明确采用。
-3. 新 HTTP/UI/Node 服务使用显式新协议。旧 v1 服务维持原形状和预算；遇到新修订须返回协议升级原因，不能将其裁成旧梗概或误写为旧格式。
-4. 产物页分别显示改编取舍、人物/场景、爽点、分集和资产需求。手动修改与主页 Agent 共用同一业务记录。原主页对话框及宿主主题保持不变。
-5. 长大纲的 Agent 保存沿实际批次追加，单批至多10集；读取按正文和对象分页，不把全大纲、全书或质量报告常驻注入模型。章节原文仍走既有 Foundation 有界读取。
+`ProjectStructuredOutlineStore` 由原 `SqliteProjectTextStore` / `PostgresProjectTextStore` 实现，借用原父级连接、连接池和生命周期。没有新迁移、项目身份、采用指针或第二套版本表；新修订标记为 `crewon.project-text-revision.v2`，仍写入原大纲槽、不可变历史及幂等回执。候选追加保留原采用项和锁定状态；同一键重试及关闭后重开返回原结果。
 
-这些接线尚未计为完成。33项领域检查通过，无跳过，包括24项新格式检查及9项既有文本行为检查；覆盖严格格式、14个实际失败门、阶段跳过、旧文本格式限制、120集、稳定引用和派生资产清单。领域类型检查、架构边界和仓库格式检查通过，记录位于 `output/extensions/checks/structured-outline-v2/`。用户桌面、真实 Agent 写入及双库接线需要后续独立证明。
+新修订绑定真实 Foundation 版本、规格版本及摘要、原文版本及摘要、已确认方案版本及摘要。提交在实际 SQLite 写事务或 PostgreSQL 原项目锁下重新读取这些记录，核对集数、题材、单集时长和改编策略，并在 COMMIT 前重新核对来源状态。缺少专业执行规格、确认方案或版本已变更时拒绝提交。
+
+完整采用会重新执行 Skill 校验，并在同一事务中遍历真实原文片段，核对连续序号、Unicode 标量偏移、逐段摘要、完整原文摘要及所有提供的保留/删减/合并引句。引句可跨片段匹配；正文使用流式哈希及小边界窗口，PostgreSQL 每页至多32段，不将整本书注入模型。未通过完整校验的草稿仍可保存，但不能采用。
+
+旧读写协议、64 KiB 标准化预算及旧内容限制保持不变。旧服务读取新修订，或者试图在已有新候选后保存/采用旧格式时，返回明确的 `project_text_protocol_upgrade_required` 冲突。原有锁定命令可以继续使用；新读取支持混合历史，不将新字段裁掉后冒充完整结果。原 v1 UI/Run/计划授权不能直接批准新形状，目前尚未注册任何新公开写入口。
+
+相关检查为105项通过，无跳过：双库及兼容流程56项（其中18项为新存储行为）、领域与原 Application 流程49项。Domain、Application 和 Store 类型检查通过。日志位于 `output/extensions/checks/structured-outline-store-v2/`。这些检查使用隔离真实数据库及明确夹具，不代表已在用户资料中保存，或已通过真实 Agent、HTTP/UI 与桌面验收。
+
+## 后续接线顺序与兼容边界
+
+1. 将新修订接入显式版本化的 Application、HTTP/UI/Node 协议；核对实际安装、原 UI 意图或 Run/Tool 身份，保留现有保存回执、断线恢复和未知结果处理。当前双库端口不等于这些公开服务已经可用。
+2. 产物页分别显示改编取舍、人物/场景、爽点、分集和资产需求。手动修改与主页 Agent 共用同一业务记录。原主页对话框及宿主主题保持不变。
+3. 长大纲的 Agent 保存沿实际批次追加，单批至多10集；读取按正文和对象分页，不把全大纲、全书或质量报告常驻注入模型。章节原文仍走既有 Foundation 有界读取。
+
+以上后续接线尚未计为完成。此前33项领域检查记录位于 `output/extensions/checks/structured-outline-v2/`；新一轮49项包括这些用例及原 Application 行为，不能重复相加。用户桌面、真实 Agent 写入及新公开协议仍需要独立证明。

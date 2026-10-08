@@ -1,3 +1,9 @@
+import { PostgresStructuredOutlineStorage } from "./project-structured-outline-postgres.ts";
+import {
+  legacyTextRevision as decodeTextRevision,
+  legacyTextReceipt as decodeTextReceipt,
+  type StructuredTextInput,
+} from "./project-structured-outline-store-support.ts";
 import { observePostgresPlanManualSelection } from "./project-text-plan-manual-selection.ts";
 import {
   capturePostgresProjectFoundationDownstream,
@@ -33,7 +39,7 @@ import {
   type CreativeProjectCommitAuthority,
   type CreativeProjectCommitOptions,
   type CreativeProjectOwnerScope,
-  type ProjectTextStore,
+  type ProjectStructuredOutlineStore,
   type ProjectTextMutationResult,
 } from "@crewon/application";
 import { projectTextFailure } from "@crewon/domain";
@@ -48,8 +54,6 @@ import {
   artifactColumns,
   artifactValues,
   decodeTextArtifact,
-  decodeTextReceipt,
-  decodeTextRevision,
   prepareText,
   prepareTextCandidate,
   revisionColumns,
@@ -72,16 +76,44 @@ const childJoin =
   "JOIN creative_projects p ON p.tenant_id=c.tenant_id AND p.space_id=c.space_id AND p.project_id=c.project_id";
 
 /** Every transaction uses one borrowed client, including dependency and receipt reads. */
-export class PostgresProjectTextStore implements ProjectTextStore {
+export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
   readonly #pool: Pool;
   readonly #schema: string;
   readonly #prefix: string;
   readonly #assertOpen: () => void;
+  readonly #structured: PostgresStructuredOutlineStorage;
   constructor(input: { pool: Pool; schema: string; assertOpen(): void }) {
     this.#pool = input.pool;
     this.#schema = input.schema;
     this.#prefix = `${creativeProjectSchemaName(input.schema)}.`;
     this.#assertOpen = input.assertOpen;
+    this.#structured = new PostgresStructuredOutlineStorage(input);
+  }
+  loadStructuredRevision(input: StructuredTextInput<"loadStructuredRevision">) {
+    return this.#structured.loadRevision(input);
+  }
+  listStructuredRevisions(
+    input: StructuredTextInput<"listStructuredRevisions">,
+  ) {
+    return this.#structured.listRevisions(input);
+  }
+  loadStructuredMutationReceipt(
+    input: StructuredTextInput<"loadStructuredMutationReceipt">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return this.#structured.receipt(input, options);
+  }
+  commitStructuredOutlineCandidate(
+    input: StructuredTextInput<"commitStructuredOutlineCandidate">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return this.#structured.candidate(input, options);
+  }
+  commitStructuredOutlineSelection(
+    input: StructuredTextInput<"commitStructuredOutlineSelection">,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return this.#structured.selection(input, options);
   }
   async migrate(): Promise<void> {
     await this.#transaction((client) =>
@@ -384,6 +416,15 @@ export class PostgresProjectTextStore implements ProjectTextStore {
           : await this.#artifact(client, owner, id, "c.artifact_id=?", [
               prepared.artifact.artifactId,
             ]);
+        // Legacy callers cannot replace or adopt an outline after a v2 candidate exists.
+        if (artifact?.kind === "outline" && prepared.kind !== "set-lock")
+          await this.#revision(
+            client,
+            owner,
+            id,
+            artifact.artifactId,
+            artifact.latestContentRevision,
+          );
         const saved =
           "contentRevision" in prepared ? prepared.contentRevision : null;
         const brief =

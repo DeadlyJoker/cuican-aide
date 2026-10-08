@@ -65,6 +65,8 @@ export * from "./project-outline-document-types.ts";
 export * from "./project-outline-document.ts";
 export * from "./project-outline-quality.ts";
 export * from "./project-outline-asset-requirements.ts";
+export * from "./project-structured-outline-revision.ts";
+export * from "./project-structured-outline-mutations.ts";
 export * from "./project-asset-types.ts";
 export * from "./project-asset-validation.ts";
 export * from "./project-asset-records.ts";
