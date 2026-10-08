@@ -47,6 +47,10 @@ async function open({ confirmed = false } = {}) {
     services: {
       async invoke(action, input, options) {
         if (action.startsWith("crewon.project-outline-edits.")) {
+          assert.ok(
+            options && typeof options === "object",
+            "installed desktop invocation options",
+          );
           edits.push(structuredClone({ action, input }));
           return {
             kind: "save-outline",

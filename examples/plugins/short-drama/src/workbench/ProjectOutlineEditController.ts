@@ -110,7 +110,11 @@ export class ProjectOutlineEditController {
       return false;
     this.#update({ saving: true, pending: true, error: null, notice: null });
     try {
-      const output = await this.#service.invoke(request.action, request.input);
+      const output = await this.#service.invoke(
+        request.action,
+        request.input,
+        {},
+      );
       const result = parseProjectOutlineEditResult(request, output);
       if (this.#disposed) return false;
       this.#request = null;

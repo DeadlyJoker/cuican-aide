@@ -173,7 +173,7 @@ export function createProjectOutlineEditsClient(
     const request = parseProjectOutlineEditRequest({ action, input });
     return parseProjectOutlineEditResult(
       request,
-      await invoke(request.action, request.input, options),
+      await invoke(request.action, request.input, options ?? {}),
     );
   }
   return Object.freeze({

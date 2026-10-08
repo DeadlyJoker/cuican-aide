@@ -4,6 +4,7 @@ import { ProjectOutlineEditController } from "../src/workbench/ProjectOutlineEdi
 import {
   parseProjectOutlineEditRequest,
   parseProjectOutlineEditResult,
+  createProjectOutlineEditsClient,
 } from "../src/project-outline-edits-service.ts";
 import { outlineReadFixture } from "./project-outline-read.test-support.mjs";
 
@@ -26,7 +27,12 @@ test("uncertain save holds navigation and retries the exact original request eve
     service: {
       service: "crewon.project-outline-edits",
       apiVersion: "1",
-      async invoke(action, input) {
+      async invoke(action, input, options) {
+        assert.deepEqual(
+          options,
+          {},
+          "desktop bridge requires an options record",
+        );
         calls.push(structuredClone({ action, input }));
         if (++attempt === 1) throw Error("connection_closed");
         return {
@@ -79,6 +85,39 @@ test("uncertain save holds navigation and retries the exact original request eve
   assert.equal(calls[1].input.base.contentRevision, 1);
   assert.equal(edits.locked, false);
   edits.dispose();
+});
+test("outline edit client normalizes omitted options and preserves explicit cancellation", async () => {
+  const calls = [];
+  const client = createProjectOutlineEditsClient({
+    service: "crewon.project-outline-edits",
+    apiVersion: "1",
+    async invoke(action, input, options) {
+      assert.ok(options && typeof options === "object");
+      calls.push(options);
+      return {
+        kind: "save-outline",
+        disposition: "committed",
+        projectId: input.projectId,
+        artifactId: "outline-artifact",
+        artifactRevision: input.expectedArtifactRevision + 1,
+        contentRevision: 1,
+        contentDigest: "sha256:" + "1".repeat(64),
+      };
+    },
+  });
+  const input = {
+    projectId: "outline-project",
+    briefRevision: 1,
+    expectedArtifactRevision: 0,
+    base: null,
+    idempotencyKey: "outline-options",
+    change: { kind: "initialize", document: {} },
+  };
+  await client.saveCandidate(input);
+  const options = { signal: new AbortController().signal };
+  await client.saveCandidate(input, options);
+  assert.deepEqual(calls[0], {});
+  assert.equal(calls[1], options);
 });
 test("corrupted acknowledgement preserves pending while a definite conflict leaves the user's draft retryable", async () => {
   const fixture = outlineReadFixture(),
