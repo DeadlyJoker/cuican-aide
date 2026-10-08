@@ -396,6 +396,16 @@ export function StoryScriptWorkbench({
     if (artifact.kind === "script" && !episodes.has(artifact.episodeId))
       episodes.set(artifact.episodeId, "独立分集剧本");
   const artifact = snapshot.view?.artifact;
+  const adopted = snapshot.view?.selectedRevision;
+  const selected = Boolean(
+    adopted &&
+      snapshot.content &&
+      adopted.projectId === details.project.projectId &&
+      adopted.artifactId === snapshot.content.artifactId &&
+      adopted.contentRevision === snapshot.content.contentRevision &&
+      adopted.contentDigest === snapshot.content.contentDigest &&
+      artifact?.selectedContentRevision === adopted.contentRevision,
+  );
   const targetKey = `${details.project.projectId}:${snapshot.target.kind}:${snapshot.target.kind === "script" ? snapshot.target.episodeId : "outline"}`;
   const editing =
     !snapshot.content || snapshot.dirty || editingTarget === targetKey;
@@ -571,12 +581,28 @@ export function StoryScriptWorkbench({
               ) : (
                 <ProjectTextDocument
                   revision={snapshot.content}
-                  selected={
-                    artifact?.selectedContentRevision ===
-                    snapshot.content?.contentRevision
-                  }
+                  selected={selected}
                   stale={snapshot.view?.dependencyState === "stale"}
                   locked={artifact?.locked ?? false}
+                  onOpenEpisode={
+                    selected &&
+                    adopted?.kind === "outline" &&
+                    !controller.contentReadBlocked &&
+                    !snapshot.opening
+                      ? (episodeId) => {
+                          const episode = adopted.content.episodes.find(
+                            (item) => item.episodeId === episodeId,
+                          );
+                          if (!episode || controller.contentReadBlocked) return;
+                          onPageChange("script");
+                          void controller.open({
+                            kind: "script",
+                            episodeId: episode.episodeId,
+                            title: episode.title,
+                          });
+                        }
+                      : undefined
+                  }
                 />
               )}
             </section>

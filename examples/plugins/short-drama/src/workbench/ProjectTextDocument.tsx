@@ -6,11 +6,13 @@ export function ProjectTextDocument({
   selected,
   stale,
   locked,
+  onOpenEpisode,
 }: {
   revision: PublicProjectTextRevision | null;
   selected: boolean;
   stale: boolean;
   locked: boolean;
+  onOpenEpisode?(episodeId: string): void;
 }) {
   if (!revision)
     return (
@@ -37,12 +39,28 @@ export function ProjectTextDocument({
         <>
           <p className="drama-readable-text">{revision.content.logline}</p>
           <p className="drama-readable-text">{revision.content.synopsis}</p>
+          {!selected && (
+            <p className="detail-note">
+              采用大纲后，可从各集故事进入对应剧本。
+            </p>
+          )}
           {revision.content.episodes.map((episode, index) => (
             <section key={episode.episodeId}>
               <h4>
                 第 {index + 1} 集 · {episode.title}
               </h4>
               <p className="drama-readable-text">{episode.summary}</p>
+              {selected && (
+                <button
+                  type="button"
+                  className="text-button"
+                  aria-label={`查看第 ${index + 1} 集剧本`}
+                  disabled={!onOpenEpisode}
+                  onClick={() => onOpenEpisode?.(episode.episodeId)}
+                >
+                  查看本集剧本
+                </button>
+              )}
             </section>
           ))}
         </>

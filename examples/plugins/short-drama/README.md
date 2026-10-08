@@ -1,10 +1,14 @@
 # AI 短剧插件：工作台与生成执行
 
-40.0.0 是当前未安装候选，39.0.0 及更早构建保持冻结。首页、主题和原主页对话入口保持39的页面。候选40使用显式有界业务清单 v2（32个工具，Host API仍为v1），保留全部24个旧工具，新增八个规划工具及可选 `crewon.project-foundation-tools@1` Node 服务。原执行工厂按确切工具名称分派；只有原宿主实际准入的项目讨论 Run 获得这项独立服务时，才能读取参数、原文章节/正文、方案历史/正文及保存方案候选。缺少服务时新调用明确不可用，不借旧项目写权限或指导文字执行。
+41.0.0 是当前未安装候选，40.0.0 及更早构建保持冻结。本次在已采用大纲的各集故事下增加“查看本集剧本”，使用稳定分集 ID 打开原剧本页；同名分集不会串读，打开操作不保存、不采用，也不启动 Agent。候选大纲仍需先采用；存在未确认写入时沿原互锁禁用切换。首页、主题和原主页对话入口保留原样。
+
+候选41保留40的显式有界业务清单 v2（32个工具，Host API仍为v1），保留全部24个旧工具、八个规划工具及可选 `crewon.project-foundation-tools@1` Node 服务。原执行工厂按确切工具名称分派；只有原宿主实际准入的项目讨论 Run 获得这项独立服务时，才能读取参数、原文章节/正文、方案历史/正文及保存方案候选。缺少服务时新调用明确不可用，不借旧项目写权限或指导文字执行。
 
 新结果使用 `resultJsonParts`，按顺序拼接恢复当前有界模型页；整条转义后的工具输出最多9999 UTF8字节。Foundation原始完整DTO留在宿主服务，模型读取核心元数据和 canonical 参数JSON的Unicode字符页：按 `parametersPage.nextOffset` 继续 `parametersStartOffset`，核对同一摘要后拼接至末页；不是把一页当完整参数。章节页可能少于请求数量，沿实际 `nextStartOffset` 读取余下完整标题。原工具的 `resultJson` 保持不变。指南根据固定版本 shuohao 的规划方法区分创意方案与小说改编，单次小于3KiB；方案是最多8KiB的可读内容，独立于未来结构化大纲。保存只产生候选，不自动确认、采用或进入下一阶段；用户继续在原页面确认。
 
-候选发行包完整检查395/395通过；实际文件安装器、业务注册和Workflow DSL验证2/2通过，使用已清理的隔离目录。这些检查不是实际用户 Agent、模型或桌面验收；用户profile安装、完整原Worker流式调用/重连、线上模型与媒体供应商仍须独立验证。本次没有更新用户桌面App，也不宣称 ReelBench 全量复刻完成。原Foundation UI v1 与SourceUploads v1保留可选声明和真实业务授权。
+冻结候选40完整检查395/395通过；实际文件安装器、业务注册和Workflow DSL验证2/2通过，使用已清理的隔离目录。这些既有结果不代替41的新包检查，也不是实际用户 Agent、模型或桌面验收。用户profile安装、完整原Worker流式调用/重连、线上模型与媒体供应商仍须独立验证。本次没有更新用户桌面App，也不宣称 ReelBench 全量复刻完成。原Foundation UI v1 与SourceUploads v1保留可选声明和真实业务授权。
+
+候选41严格 UI/Node 编译与打包通过；文本、恢复、首页、创意/小说入口及模块主题检查39/39通过，包含两份大纲正文快照。原文件安装器、重复安装和已安装业务清单读取2/2通过，临时目录已清理。新包18文件、3,447,608字节，摘要 `sha256:94af444e5ac3a430fde02ff473c565a6923c26659be3cf3988d63dd47f47c3fb`；相对冻结40仅 UI 字节和业务清单版本号改变。详见[当前交付记录](../../../docs/reelbench-replication-delivery.md)。
 SDK 0.1.2 是本仓库的未公开发布候选。首次开发时先在仓库根目录执行：
 
 ```sh
@@ -24,7 +28,7 @@ Short32 增加旧项目会话的“更新关联并进入”：仅明确来源过
 
 保留原 `lucide-react 0.468.0` 图标。React 19 类型移除了其声明引用的 `ReactSVG`，包内仅以无运行时代码的声明补回 SVG 标签名映射；`strict` 与 `skipLibCheck: false` 保持启用，不更换图标或降低类型检查。
 
-包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认候选版本为 40.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
+包标识为 `crewon.short-drama`，模块标识为 `workbench`，默认候选版本为 41.0.0。一个安装包同时提供原 `trustedModule/main.content` 工作台、Node 执行入口和业务清单，内部集成 Krea2 概念生图、角色三视图、参考图四视图与三素材画面工作流；不需要再安装单独的 Krea2 预设插件。发布者继续为 `example.publisher`。
 
 UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `crewon.project-texts@1`、`crewon.project-text-recovery@1` 与 `crewon.project-conversations@1`；Node 声明 `crewon.tasks@2`、`crewon.execution@1` 和独立 `crewon.project-tools@1`、`crewon.project-context@1`。这些服务都是可选依赖，让不同宿主可以单独加载 UI 或 Node。声明不授予能力，UI 调用仍须经过原来源批准、挂载和服务授权；缺少项目或恢复服务时如实显示不可用。Node 缺少任务服务时拒绝动作，缺少执行服务时不注册执行工厂。同一个包内的生成与查询仍各自核验权限。
 
@@ -48,7 +52,7 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/40.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=40.0.1 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建生成完整预构建安装目录 `dist/41.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=42.0.0 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
 
 ## 22.0.0 的参考素材确认输入页面
 

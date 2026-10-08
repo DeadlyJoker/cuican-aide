@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
+import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { browser, fixture, settle } from "./ui.test-support.mjs";
@@ -60,6 +61,103 @@ async function savedOutline(f) {
   await f.click(f.button("保存候选版本"));
   await f.click(f.button("采用此版本"));
 }
+
+async function documentSnapshot(name, element) {
+  const file = new URL(`./snapshots/${name}.html`, import.meta.url);
+  if (process.env.CREWON_UPDATE_PROJECT_TEXT_SNAPSHOTS === "1")
+    await writeFile(file, element.outerHTML + "\n");
+  assert.equal(element.outerHTML, (await readFile(file, "utf8")).trimEnd());
+}
+
+test("adopted outline story opens the exact episode script without writes; candidates never become navigation sources", async () => {
+  const service = textService();
+  service.metadata.create("雨夜来信", "两集悬疑，从故事直接查看对应剧本。");
+  const f = await open(service);
+  const output = () => f.container.querySelector('[aria-label="产物正文"]');
+  const openEpisode = (index) =>
+    output()?.querySelector(`[aria-label="查看第 ${index} 集剧本"]`);
+  try {
+    await f.click(stage(f));
+    await fillOutline(f);
+    await inputText(f, "第 1 集标题", "同名的来信");
+    await f.click(f.button("添加一集"));
+    await inputText(f, "第 2 集标题", "同名的来信");
+    await inputText(f, "第 2 集故事", "她在雨夜车站找到寄件人。");
+    await f.click(f.button("保存候选版本"));
+    assert.equal(openEpisode(1), null);
+    assert.equal(openEpisode(2), null);
+    assert.match(output().textContent, /采用大纲后/);
+    await documentSnapshot("outline-candidate-document", output());
+
+    await f.click(f.button("采用此版本"));
+    const outline = [...service.artifacts.values()][0];
+    const [first, second] = outline.revisions[0].content.episodes;
+    assert.notEqual(first.episodeId, second.episodeId);
+    assert.equal(openEpisode(2).disabled, false);
+    assert.equal(openEpisode(2).closest("details"), null);
+    await documentSnapshot("outline-adopted-document", output());
+    const writesBeforeOpen = service.calls.filter((call) =>
+      /save|select|setLocked/u.test(call.method),
+    ).length;
+    await f.click(openEpisode(2));
+    assert.equal(
+      f.container
+        .querySelector('[data-project-page="script"]')
+        .getAttribute("aria-current"),
+      "page",
+    );
+    assert.equal(
+      service.calls.filter((call) => call.method === "getScript").at(-1).input
+        .episodeId,
+      second.episodeId,
+    );
+    assert.equal(
+      service.calls.filter((call) => /save|select|setLocked/u.test(call.method))
+        .length,
+      writesBeforeOpen,
+    );
+    await f.click(f.button("添加场次"));
+    await inputText(f, "第 1 场地点", "雨夜车站");
+    await inputText(f, "第 1 场时间", "夜");
+    await inputText(f, "第 1 场动作", "她看见寄件人站在末班车前。");
+    await f.click(f.button("保存候选版本"));
+    await f.click(f.button("采用此版本"));
+    const script = [...service.artifacts.values()].find(
+      (item) => item.artifact.kind === "script",
+    );
+    assert.equal(script.artifact.episodeId, second.episodeId);
+    assert.equal(script.revisions[0].outline.contentRevision, 1);
+    await f.click(stage(f));
+    await f.click(openEpisode(2));
+    assert.match(output().textContent, /她看见寄件人站在末班车前/);
+
+    await f.click(stage(f));
+    await inputText(f, "第 2 集标题", "还未采用的新故事");
+    await f.click(f.button("保存候选版本"));
+    assert.equal(outline.artifact.selectedContentRevision, 1);
+    assert.equal(
+      openEpisode(2),
+      null,
+      "a candidate cannot supply downstream navigation",
+    );
+    await f.click(f.button("查看内容历史"));
+    await f.click(f.button("打开内容 v1"));
+    await f.click(openEpisode(2));
+    assert.match(output().textContent, /她看见寄件人站在末班车前/);
+    assert.equal(
+      service.calls.filter((call) => call.method === "getScript").at(-1).input
+        .episodeId,
+      second.episodeId,
+    );
+    assert.equal(script.revisions.length, 1);
+    assert.equal(
+      service.calls.some((call) => call.method === "createTask"),
+      false,
+    );
+  } finally {
+    await f.dispose();
+  }
+});
 
 test("same installable UI edits outline and episode scenes, separates candidate/adoption/lock, restores confirmed records after remount", async () => {
   const service = textService();
