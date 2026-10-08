@@ -95,7 +95,11 @@ export class ProjectOutlineController {
       if (!this.#current(epoch, read)) return;
       if (!view || view.latestRevision.format !== "structured-v2") {
         this.#snapshot = initial();
-        this.#update({ state: "unsupported" });
+        this.#update({
+          state: "unsupported",
+          view,
+          revision: view?.latestRevision ?? null,
+        });
         return;
       }
       const revision =

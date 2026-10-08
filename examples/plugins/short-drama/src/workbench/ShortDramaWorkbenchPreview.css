@@ -15,6 +15,19 @@
   font-size: var(--user-ui-font-size);
   line-height: 1.6;
 }
+.drama-workbench .drama-output-editor {
+  display: grid;
+  gap: 16px;
+  margin-block: 16px;
+}
+.drama-workbench .drama-output-editor .drama-field {
+  display: grid;
+  gap: 6px;
+}
+.drama-workbench .drama-output-editor textarea {
+  width: 100%;
+  resize: vertical;
+}
 
 .drama-workbench *,
 .drama-workbench *::before,

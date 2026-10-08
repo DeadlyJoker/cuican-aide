@@ -356,7 +356,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
         authorization: {
           authorize: async () =>
             ++checks >= 3
-              ? { outcome: "deny", reason: "withdrawn" }
+              ? { outcome: "deny", reasonCode: "withdrawn" }
               : { outcome: "allow" },
         },
       });

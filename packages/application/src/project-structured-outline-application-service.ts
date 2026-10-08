@@ -29,6 +29,7 @@ import {
   ProjectTextError,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { assertProjectOutlineUiMutationCommand } from "./project-outline-ui-commit-authority.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type {
   ApplicationClock,
@@ -327,6 +328,7 @@ export class ProjectStructuredOutlineApplicationService {
       const authority = captureCreativeProjectCommitAuthority(options, {
         allowTextUiTransaction: true,
         allowPlanTransaction: true,
+        allowOutlineUiTransaction: true,
       });
       // Neither legacy UI metadata, text v1, a plan locator nor Run-only callbacks qualify a new content protocol.
       if (
@@ -339,6 +341,13 @@ export class ProjectStructuredOutlineApplicationService {
           "authorization",
           "project_outline_commit_authority_unsupported",
         );
+      assertProjectOutlineUiMutationCommand(
+        authority,
+        actor,
+        kind,
+        command,
+        this.#d.digester,
+      );
       const receipt = projectStructuredOutlineCommandReceipt(
         actor,
         kind,
@@ -362,9 +371,26 @@ export class ProjectStructuredOutlineApplicationService {
               "creativeProject:write",
               command.projectId,
             );
-            await assertCreativeProjectCommitCurrent(authority);
+            if (authority?.outlineUiTransaction)
+              await authority.outlineUiTransaction.assertCurrent();
+            else await assertCreativeProjectCommitCurrent(authority);
           },
           assertActive: () => assertCreativeProjectCommitActive(authority),
+          ...(authority?.outlineUiTransaction === undefined
+            ? {}
+            : {
+                outlineUiTransaction: Object.freeze({
+                  ...authority.outlineUiTransaction,
+                  assertCurrent: async () => {
+                    await this.#authorize(
+                      actor,
+                      "creativeProject:write",
+                      command.projectId,
+                    );
+                    await authority.outlineUiTransaction!.assertCurrent();
+                  },
+                }),
+              }),
         }),
       };
       let prepared: Readonly<{

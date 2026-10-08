@@ -1,6 +1,7 @@
 import type { ProductionProjectSourceUploadPluginRuntime } from "./production-project-source-upload-plugin-runtime.ts";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import { isProjectOutlineUiNamespaceAction } from "@crewon/contracts/project-outlines";
+import { isProjectOutlineEditNamespaceAction } from "@crewon/contracts/project-outline-edits";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import type { ProductionProjectAssetPluginRuntime } from "./production-project-asset-plugin-runtime.ts";
 import { parseProjectHistoricalQueryUiActionRequest } from "@crewon/contracts/plugins";
@@ -259,6 +260,7 @@ export function createProductionPluginUiRequestService({
         );
       }
       if (
+        isProjectOutlineEditNamespaceAction(command.action) ||
         isProjectOutlineUiNamespaceAction(command.action) ||
         command.action === "crewon.project-texts" ||
         command.action.startsWith("crewon.project-texts.") ||

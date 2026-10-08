@@ -40,6 +40,11 @@ import {
   type ProjectFoundationDownstreamSnapshot,
 } from "./project-foundation-downstream-guard.ts";
 import { verifyPostgresProjectOutlineSourceEvidence } from "./project-outline-source-evidence.ts";
+import { assertPostgresProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
+import {
+  projectOutlineUiCommitQualification,
+  assertProjectOutlineUiPrepared,
+} from "./project-outline-ui-commit-support.ts";
 
 const filter =
   "p.tenant_id=? AND p.space_id=? AND p.owner_principal_id=? AND p.project_id=?";
@@ -100,6 +105,12 @@ export class PostgresStructuredOutlineStorage {
   ) {
     const identity = textIdentity(input);
     const authority = structuredTextAuthority(options);
+    projectOutlineUiCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind as "save-outline" | "select-revision",
+      identity.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
     this.#active(authority);
     const result = await this.#receipt(this.#pool, identity);
@@ -127,6 +138,12 @@ export class PostgresStructuredOutlineStorage {
     options?: CreativeProjectCommitOptions,
   ): Promise<StoredProjectTextMutationResult> {
     const authority = structuredTextAuthority(options);
+    const q = projectOutlineUiCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
     this.#active(authority);
     const client = await this.#pool.connect();
@@ -137,6 +154,7 @@ export class PostgresStructuredOutlineStorage {
     };
     try {
       await client.query("BEGIN");
+      await assertPostgresProjectTextUiCommit(client, this.#schema, q);
       const identity = textIdentity({
         actor: prepared.actor,
         receipt: prepared.receipt,
@@ -180,6 +198,17 @@ export class PostgresStructuredOutlineStorage {
           this.#schema,
           locator,
         );
+        const base =
+          q && "base" in q.command && q.command.base !== null
+            ? await this.#revision(
+                client,
+                owner,
+                id,
+                prepared.artifact.artifactId,
+                q.command.base.contentRevision,
+              )
+            : null;
+        assertProjectOutlineUiPrepared(q, prepared, base);
         const candidate = prepared.kind === "save-outline";
         const revision = candidate
           ? null
@@ -285,6 +314,7 @@ export class PostgresStructuredOutlineStorage {
           foundation,
         );
       this.#assertOpen();
+      await assertPostgresProjectTextUiCommit(client, this.#schema, q);
       await client.query("COMMIT");
       return result;
     } catch (error) {

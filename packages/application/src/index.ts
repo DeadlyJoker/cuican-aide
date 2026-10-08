@@ -176,6 +176,10 @@ export * from "./creative-project-store-port.ts";
 export * from "./creative-project-run-commit-authority.ts";
 export * from "./creative-project-run-command.ts";
 export * from "./creative-project-commit-authority.ts";
+export {
+  projectOutlineUiMutationCommand,
+  type ProjectOutlineUiCommitTransactionAuthority,
+} from "./project-outline-ui-commit-authority.ts";
 export * from "./creative-project-authorization-port.ts";
 export * from "./creative-project-application-service.ts";
 export * from "./project-text-commands.ts";

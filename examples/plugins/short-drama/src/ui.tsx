@@ -43,6 +43,11 @@ import { projectTextsUiCodec } from "./project-texts-ui-codec.mjs";
 import { ProjectTextController } from "./workbench/ProjectTextController";
 import { createPluginProjectOutlineUiClient } from "./project-outlines-service";
 import { ProjectOutlineController } from "./workbench/ProjectOutlineController";
+import { ProjectOutlineEditController } from "./workbench/ProjectOutlineEditController";
+import {
+  CREWON_PROJECT_OUTLINE_EDITS_SERVICE,
+  CREWON_PROJECT_OUTLINE_EDITS_API_VERSION,
+} from "./project-outline-edits-service";
 import { createPluginProjectTextRecoveryClient } from "./project-text-recovery-service";
 import { projectTextRecoveryCodec } from "./project-text-recovery-codec.mjs";
 import { createPluginProjectConversationsClient } from "./project-conversations-service";
@@ -225,6 +230,7 @@ export default defineUiPlugin({
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
     let outlines: ProjectOutlineController | null = null;
+    let outlineEdits: ProjectOutlineEditController | null = null;
     let foundations: ProjectFoundationController | null = null;
     let conversations: ProjectConversationController | null = null;
     let association: ProjectConversationAssociationController | null = null;
@@ -300,6 +306,17 @@ export default defineUiPlugin({
       : new ProjectOutlineController(
           createPluginProjectOutlineUiClient(clients),
         );
+    outlineEdits = outlines
+      ? new ProjectOutlineEditController({
+          reader: outlines,
+          physicalWritesPending: () => writes.pending,
+          service: {
+            service: CREWON_PROJECT_OUTLINE_EDITS_SERVICE,
+            apiVersion: CREWON_PROJECT_OUTLINE_EDITS_API_VERSION,
+            invoke: clients.invoke.bind(clients),
+          },
+        })
+      : null;
     conversations = preview
       ? null
       : new ProjectConversationController({
@@ -412,6 +429,7 @@ export default defineUiPlugin({
       conversations?.setReady(ready);
       texts?.setReady(ready);
       outlines?.setReady(ready);
+      outlineEdits?.setReady(ready);
       foundations?.setReady(
         ready && dataFlag(next.data, "projectFoundationConnected"),
       );
@@ -437,6 +455,7 @@ export default defineUiPlugin({
               controller={controller}
               texts={texts}
               outlines={outlines ?? undefined}
+              outlineEdits={outlineEdits ?? undefined}
               foundations={foundations ?? undefined}
               sourceUpload={sourceUpload}
               conversations={conversations}
@@ -472,6 +491,7 @@ export default defineUiPlugin({
       controller?.dispose();
       texts?.dispose();
       outlines?.dispose();
+      outlineEdits?.dispose();
       foundations?.dispose();
       conversations?.dispose();
       association?.dispose();
@@ -498,6 +518,7 @@ export default defineUiPlugin({
         controller?.dispose();
         texts?.dispose();
         outlines?.dispose();
+        outlineEdits?.dispose();
         foundations?.dispose();
         conversations?.dispose();
         association?.dispose();

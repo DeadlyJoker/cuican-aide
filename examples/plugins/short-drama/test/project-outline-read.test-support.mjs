@@ -41,6 +41,14 @@ export function outlineReadFixture(projectId = "outline-project") {
             title: summary(revision).title,
             logline: "摄影师在雨夜收到未来来信。",
             synopsis: " 保留换行\n寻找父亲，回到港口。 ",
+            source: "来信.md",
+            lang: "zh",
+            params: {
+              episodes: 12,
+              minutesPerEpisode: 2,
+              genre: "悬疑",
+              adaptMode: "抽核",
+            },
           },
         ];
       case "episodes":
@@ -51,6 +59,9 @@ export function outlineReadFixture(projectId = "outline-project") {
           summary: "第" + (index + 1) + "集故事正文",
           hook: "来信出现",
           suspense: "谁寄出了信？",
+          sceneIds: ["S1"],
+          characterIds: ["C1"],
+          propIds: ["P1"],
           warnings: [],
           crowdPlan: "",
         }));
@@ -60,6 +71,7 @@ export function outlineReadFixture(projectId = "outline-project") {
             id: "C1",
             name: "林雨",
             role: "摄影师",
+            tier: "lead",
             arc: "从等待到主动寻找",
             from: ["第一章"],
           },

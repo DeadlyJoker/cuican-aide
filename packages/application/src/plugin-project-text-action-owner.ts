@@ -14,6 +14,15 @@ import {
   type ProjectOutlineUiRequest,
 } from "@crewon/contracts/project-outlines";
 import { capturePluginProjectOutlineReader } from "./plugin-project-outline-reader.ts";
+import {
+  CREWON_PROJECT_OUTLINE_EDITS_SERVICE,
+  CREWON_PROJECT_OUTLINE_EDITS_API_VERSION,
+  isProjectOutlineEditAction,
+  isProjectOutlineEditNamespaceAction,
+  type ProjectOutlineEditRequest,
+} from "@crewon/contracts/project-outline-edits";
+import { capturePluginProjectOutlineEditor } from "./plugin-project-outline-editor.ts";
+import { projectOutlineEditActionContext } from "./plugin-project-outline-edit-invocation.ts";
 import type { ProjectStructuredOutlineApplicationService } from "./project-structured-outline-application-service.ts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
@@ -54,7 +63,10 @@ export interface PluginProjectTextActionAuthorizationPort {
   /** External identity/profile/policy only. It must not borrow the committing Store's pool. */
   authorize(
     context: PluginUiActionContext,
-    request: ProjectTextUiActionRequest | ProjectOutlineUiRequest,
+    request:
+      | ProjectTextUiActionRequest
+      | ProjectOutlineUiRequest
+      | ProjectOutlineEditRequest,
   ): Promise<void>;
 }
 export type PluginProjectTextActionOwnerDependencies = Readonly<{
@@ -84,6 +96,9 @@ export class PluginProjectTextActionOwner {
   readonly #texts: ReturnType<typeof captureTexts>;
   readonly #outlineReader:
     | ReturnType<typeof capturePluginProjectOutlineReader>
+    | undefined;
+  readonly #outlineEditor:
+    | ReturnType<typeof capturePluginProjectOutlineEditor>
     | undefined;
   readonly #publications: readonly PluginProjectTextActionPublication[];
   readonly #authorize: PluginProjectTextActionAuthorizationPort["authorize"];
@@ -115,6 +130,10 @@ export class PluginProjectTextActionOwner {
         value.outlines === undefined
           ? undefined
           : capturePluginProjectOutlineReader(value.outlines);
+      this.#outlineEditor =
+        value.outlines === undefined
+          ? undefined
+          : capturePluginProjectOutlineEditor(value.outlines);
       if (value.recovery !== undefined) {
         if (!isPluginProjectTextRecoveryApplicationService(value.recovery))
           throw new Error("plugin_project_text_recovery_config_invalid");
@@ -151,12 +170,17 @@ export class PluginProjectTextActionOwner {
   supportsAction(action: string): boolean {
     return (
       isProjectTextUiAction(action) ||
-      (this.#outlineReader !== undefined && isProjectOutlineUiAction(action))
+      (this.#outlineReader !== undefined && isProjectOutlineUiAction(action)) ||
+      (this.#outlineEditor !== undefined && isProjectOutlineEditAction(action))
     );
   }
   supportsStructuredOutlines(): boolean {
     this.assertAvailable();
     return this.#outlineReader !== undefined;
+  }
+  supportsOutlineEdits(): boolean {
+    this.assertAvailable();
+    return this.#outlineEditor !== undefined;
   }
   assertAvailable(): void {
     if (this.#closed)
@@ -179,6 +203,42 @@ export class PluginProjectTextActionOwner {
   async #invoke(invocation: PluginUiActionContext) {
     this.assertAvailable();
     const action = Object.getOwnPropertyDescriptor(invocation, "action")?.value;
+    if (isProjectOutlineEditNamespaceAction(action)) {
+      if (this.#outlineEditor === undefined)
+        throw new ApplicationError(
+          "conflict",
+          "plugin_project_outline_actions_unavailable",
+        );
+      if (this.#pending >= 64)
+        throw new ApplicationError(
+          "conflict",
+          "plugin_project_text_inflight_limit",
+        );
+      this.#pending++;
+      try {
+        const result = await this.#outlineEditor(invocation, {
+          assertAvailable: () => this.assertAvailable(),
+          assertPublication: (context) =>
+            this.#assertPublication(context, { protocol: "outline-edits-v1" }),
+          authorize: this.#authorize,
+        });
+        const outcome = Object.freeze(
+          Object.create(outcomePrototype),
+        ) as PluginUiCommittedMetadataOutcome;
+        this.#outcomes.set(
+          outcome,
+          Object.freeze({
+            context: invocation,
+            fingerprint: result.fingerprint,
+            output: result.output,
+          }),
+        );
+        return outcome;
+      } finally {
+        this.#pending--;
+        if (this.#pending === 0) this.#finishClose?.();
+      }
+    }
     if (isProjectOutlineUiNamespaceAction(action)) {
       if (this.#outlineReader === undefined)
         throw new ApplicationError(
@@ -334,7 +394,9 @@ export class PluginProjectTextActionOwner {
     if (
       entry === undefined ||
       entry.context !== context ||
-      projectTextActionContext(context).fingerprint !== entry.fingerprint
+      (isProjectOutlineEditNamespaceAction(context.action)
+        ? projectOutlineEditActionContext(context).fingerprint
+        : projectTextActionContext(context).fingerprint) !== entry.fingerprint
     )
       throw new ApplicationError(
         "internal",
@@ -344,7 +406,9 @@ export class PluginProjectTextActionOwner {
   }
   #assertPublication(
     context: PluginUiActionContext,
-    options: Readonly<{ protocol: "text-v1" | "outline-v2" }> = {
+    options: Readonly<{
+      protocol: "text-v1" | "outline-v2" | "outline-edits-v1";
+    }> = {
       protocol: "text-v1",
     },
   ): void {
@@ -369,11 +433,15 @@ export class PluginProjectTextActionOwner {
           value.service ===
             (options.protocol === "outline-v2"
               ? CREWON_PROJECT_OUTLINES_SERVICE
-              : CREWON_PROJECT_TEXTS_SERVICE) &&
+              : options.protocol === "outline-edits-v1"
+                ? CREWON_PROJECT_OUTLINE_EDITS_SERVICE
+                : CREWON_PROJECT_TEXTS_SERVICE) &&
           value.apiVersion ===
             (options.protocol === "outline-v2"
               ? CREWON_PROJECT_OUTLINES_API_VERSION
-              : CREWON_PROJECT_TEXTS_API_VERSION) &&
+              : options.protocol === "outline-edits-v1"
+                ? CREWON_PROJECT_OUTLINE_EDITS_API_VERSION
+                : CREWON_PROJECT_TEXTS_API_VERSION) &&
           (!value.optional || dualEntry),
       )
     )

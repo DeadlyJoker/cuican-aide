@@ -15,6 +15,10 @@ import {
   parseProjectOutlineUiRequest,
 } from "@crewon/contracts/project-outlines";
 import {
+  isProjectOutlineEditNamespaceAction,
+  parseProjectOutlineEditRequest,
+} from "@crewon/contracts/project-outline-edits";
+import {
   isProjectTextRecoveryNamespaceAction,
   parseProjectTextRecoveryActionRequest,
 } from "@crewon/contracts/project-text-recovery";
@@ -152,9 +156,11 @@ export function createProductionProjectTextPluginRuntime(
       };
       const action = recovery
         ? parseProjectTextRecoveryActionRequest(raw)
-        : isProjectOutlineUiNamespaceAction(command.action)
-          ? parseProjectOutlineUiRequest(raw)
-          : parseProjectTextUiActionRequest(raw);
+        : isProjectOutlineEditNamespaceAction(command.action)
+          ? parseProjectOutlineEditRequest(raw)
+          : isProjectOutlineUiNamespaceAction(command.action)
+            ? parseProjectOutlineUiRequest(raw)
+            : parseProjectTextUiActionRequest(raw);
       const isMutation =
         Object.hasOwn(action.input, "idempotencyKey") ||
         action.action === "crewon.project-text-recovery.v1.acknowledge";

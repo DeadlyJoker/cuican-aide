@@ -39,6 +39,11 @@ import {
   assertSqliteProjectFoundationDownstreamUnchanged,
 } from "./project-foundation-downstream-guard.ts";
 import { verifySqliteProjectOutlineSourceEvidence } from "./project-outline-source-evidence.ts";
+import { assertSqliteProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
+import {
+  projectOutlineUiCommitQualification,
+  assertProjectOutlineUiPrepared,
+} from "./project-outline-ui-commit-support.ts";
 
 const filter =
   "p.tenant_id=? AND p.space_id=? AND p.owner_principal_id=? AND p.project_id=?";
@@ -91,8 +96,15 @@ export class SqliteStructuredOutlineStorage {
   ) {
     const identity = textIdentity(input);
     const authority = structuredTextAuthority(options);
+    const q = projectOutlineUiCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind as "save-outline" | "select-revision",
+      identity.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
     this.#active(authority);
+    assertSqliteProjectTextUiCommit(this.#database, q);
     return this.#receipt(identity);
   }
   async candidate(
@@ -115,10 +127,17 @@ export class SqliteStructuredOutlineStorage {
     options?: CreativeProjectCommitOptions,
   ): Promise<StoredProjectTextMutationResult> {
     const authority = structuredTextAuthority(options);
+    const q = projectOutlineUiCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
+      assertSqliteProjectTextUiCommit(this.#database, q);
       const identity = textIdentity({
         actor: prepared.actor,
         receipt: prepared.receipt,
@@ -145,6 +164,16 @@ export class SqliteStructuredOutlineStorage {
         this.#database,
         { actor: prepared.actor, projectId: id },
       );
+      const base =
+        q && "base" in q.command && q.command.base !== null
+          ? this.#revision(
+              owner,
+              id,
+              prepared.artifact.artifactId,
+              q.command.base.contentRevision,
+            )
+          : null;
+      assertProjectOutlineUiPrepared(q, prepared, base);
       const candidate = prepared.kind === "save-outline";
       const revision = candidate
         ? null
@@ -227,6 +256,7 @@ export class SqliteStructuredOutlineStorage {
         foundation,
       );
       this.#assertOpen();
+      assertSqliteProjectTextUiCommit(this.#database, q);
       this.#database.exec("COMMIT");
       return result;
     } catch (error) {

@@ -1,6 +1,8 @@
 import type { PluginUiServices } from "@crewon/plugin-sdk/ui";
 
 const writes = new Set([
+  "crewon.project-outline-edits.v1.saveCandidate",
+  "crewon.project-outline-edits.v1.selectRevision",
   "crewon.project-source-uploads.v1.begin",
   "crewon.project-source-uploads.v1.prepare",
   "crewon.project-source-uploads.v1.cancel",

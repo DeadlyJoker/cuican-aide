@@ -60,7 +60,11 @@ import { errorResponse } from "./control-api-errors.ts";
 export async function foundationUiHttpFixture(
   t: TestContext,
   backend: Backend,
-  options: Readonly<{ uploads?: true; outlines?: true }> = {},
+  options: Readonly<{
+    uploads?: true;
+    outlines?: true;
+    outlineEdits?: true;
+  }> = {},
 ) {
   const f = await pluginCommitFixture(t, backend);
   const directory = await mkdtemp(join(tmpdir(), "crewon-foundation-ui-"));
@@ -92,6 +96,15 @@ export async function foundationUiHttpFixture(
       },
       businessManifestPath: null,
       requires: [
+        ...(options.outlineEdits
+          ? [
+              {
+                service: "crewon.project-outline-edits",
+                apiVersion: "1",
+                optional: false,
+              },
+            ]
+          : []),
         ...(options.outlines
           ? [
               {

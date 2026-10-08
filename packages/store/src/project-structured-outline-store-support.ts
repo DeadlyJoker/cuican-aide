@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { captureCreativeProjectCommitAuthority } from "@crewon/application";
 import type {
   CreativeProjectCommitOptions,
   ProjectStructuredOutlineStore,
@@ -233,8 +234,13 @@ export function prepareStructuredText(
 export function structuredTextAuthority(
   options: CreativeProjectCommitOptions | undefined,
 ) {
-  const authority = textAuthority(options);
+  const authority = captureCreativeProjectCommitAuthority(options, {
+    allowTextUiTransaction: true,
+    allowPlanTransaction: true,
+    allowOutlineUiTransaction: true,
+  });
   if (
+    authority?.transaction !== undefined ||
     authority?.runTransaction !== undefined ||
     authority?.textUiTransaction !== undefined ||
     authority?.planTransaction !== undefined

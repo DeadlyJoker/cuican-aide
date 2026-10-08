@@ -34,6 +34,7 @@ import { ProjectTextController } from "./ProjectTextController";
 import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
 import { ProjectOutlineWorkbench } from "./ProjectOutlineWorkbench";
 import type { ProjectOutlineController } from "./ProjectOutlineController";
+import type { ProjectOutlineEditController } from "./ProjectOutlineEditController";
 import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
@@ -112,6 +113,7 @@ export function ShortDramaPersistentWorkbench({
   controller,
   texts,
   outlines,
+  outlineEdits,
   conversations,
   plans,
   assets,
@@ -129,6 +131,7 @@ export function ShortDramaPersistentWorkbench({
   controller: CreativeProjectController;
   texts: ProjectTextController;
   outlines?: ProjectOutlineController;
+  outlineEdits?: ProjectOutlineEditController;
   conversations: ProjectConversationController;
   plans: ProjectTextPlanController;
   assets?: ProjectAssetController;
@@ -159,6 +162,11 @@ export function ShortDramaPersistentWorkbench({
     conversations.getSnapshot,
   );
   useSyncExternalStore(plans.subscribe, plans.getSnapshot, plans.getSnapshot);
+  useSyncExternalStore(
+    outlineEdits?.subscribe ?? emptySubscribe,
+    outlineEdits?.getSnapshot ?? noAssetSnapshot,
+    outlineEdits?.getSnapshot ?? noAssetSnapshot,
+  );
   useSyncExternalStore(
     association?.subscribe ?? emptySubscribe,
     association?.getSnapshot ?? noAssetSnapshot,
@@ -231,7 +239,8 @@ export function ShortDramaPersistentWorkbench({
     snapshot.saving ||
     snapshot.pendingKind !== null ||
     foundationPending ||
-    foundations?.locked === true;
+    foundations?.locked === true ||
+    outlineEdits?.locked === true;
   const otherLocked =
     projectLocked ||
     snapshot.conceptLocked ||
@@ -562,6 +571,11 @@ export function ShortDramaPersistentWorkbench({
                       <ProjectOutlineWorkbench
                         controller={outlines}
                         projectId={details.project.projectId}
+                        edits={outlineEdits}
+                        details={details}
+                        foundation={foundation}
+                        sourceName={foundationSnapshot?.source?.fileName ?? ""}
+                        blocked={downstreamBlocked || otherLocked || archived}
                         fallback={
                           <StoryScriptWorkbench
                             controller={texts}

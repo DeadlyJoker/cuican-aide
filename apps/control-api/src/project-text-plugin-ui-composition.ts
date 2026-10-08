@@ -106,6 +106,17 @@ export function createProjectTextPluginUiRuntime(
     ...(input.outlines === undefined
       ? {}
       : {
+          outlineEdits: {
+            isAvailable: (request) => {
+              try {
+                return (
+                  owner.supportsOutlineEdits() && texts.isAvailable(request)
+                );
+              } catch {
+                return false;
+              }
+            },
+          },
           outlines: {
             isAvailable: (request) => {
               try {

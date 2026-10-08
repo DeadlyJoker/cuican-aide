@@ -12,6 +12,8 @@ import { isProjectAssetUiAction } from "@crewon/contracts/project-assets";
 import { isProjectAssetV2Action } from "@crewon/contracts/project-assets-v2";
 import { registerPluginProjectAssetV2Invocation } from "./plugin-project-asset-v2-invocation.ts";
 import { isProjectTextUiMutationAction } from "@crewon/contracts/project-texts-ui";
+import { isProjectOutlineEditAction } from "@crewon/contracts/project-outline-edits";
+import { registerPluginProjectOutlineEditInvocation } from "./plugin-project-outline-edit-invocation.ts";
 import { isProjectTextRecoveryAction } from "@crewon/contracts/project-text-recovery";
 import { isProjectTextPlanAction } from "./plugin-project-text-plan-action-context.ts";
 import { registerPluginUiInvocation } from "./plugin-ui-invocation-authority.ts";
@@ -67,7 +69,14 @@ export function registerPluginUiActionInvocation(
   let unregisterMediaInputs: (() => void) | undefined;
   let unregisterFoundation: (() => void) | undefined;
   let unregisterSourceUpload: (() => void) | undefined;
+  let unregisterOutline: (() => void) | undefined;
   try {
+    unregisterOutline = isProjectOutlineEditAction(context.action)
+      ? registerPluginProjectOutlineEditInvocation(
+          context,
+          checks.assertTransactionCurrent,
+        )
+      : undefined;
     unregisterSourceUpload = isProjectSourceUploadAction(context.action)
       ? registerPluginProjectSourceUploadInvocation(
           context,
@@ -135,6 +144,7 @@ export function registerPluginUiActionInvocation(
     throw error;
   }
   function withdraw() {
+    unregisterOutline?.();
     unregisterSourceUpload?.();
     unregisterFoundation?.();
     unregisterHistorical?.();

@@ -1,4 +1,5 @@
 import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
+import type { ProjectOutlineUiCommitTransactionAuthority } from "./project-outline-ui-commit-authority.ts";
 import type { ProjectTextPlanSelectionCommitAuthority } from "./project-text-plan-store-port.ts";
 import type {
   CreativeProject,
@@ -87,6 +88,8 @@ export type CreativeProjectCommitAuthority = Readonly<{
   textUiTransaction?: ProjectTextUiCommitTransactionAuthority;
   /** Independently delegated exact-result selection; mutually exclusive with all other protocols. */
   planTransaction?: ProjectTextPlanSelectionCommitAuthority;
+  /** Explicit structured-outline UI protocol; v1 text authority never qualifies it. */
+  outlineUiTransaction?: ProjectOutlineUiCommitTransactionAuthority;
 }>;
 
 export type CreativeProjectCommitOptions = Readonly<{

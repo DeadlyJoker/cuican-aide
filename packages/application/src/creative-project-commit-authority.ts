@@ -1,4 +1,5 @@
 import { captureProjectTextUiCommitTransaction } from "./project-text-ui-commit-authority.ts";
+import { captureProjectOutlineUiCommitTransaction } from "./project-outline-ui-commit-authority.ts";
 import { captureProjectTextPlanSelectionCommitAuthority } from "./project-text-plan-authority.ts";
 import type {
   CreativeProjectCommitAuthority,
@@ -53,6 +54,7 @@ export function captureCreativeProjectCommitAuthority(
   mode: Readonly<{
     allowTextUiTransaction: boolean;
     allowPlanTransaction?: boolean;
+    allowOutlineUiTransaction?: boolean;
   }> = {
     allowTextUiTransaction: false,
   },
@@ -68,6 +70,7 @@ export function captureCreativeProjectCommitAuthority(
     "runTransaction",
     "textUiTransaction",
     "planTransaction",
+    "outlineUiTransaction",
   ]);
   if (
     typeof methods.assertCurrent !== "function" ||
@@ -80,15 +83,25 @@ export function captureCreativeProjectCommitAuthority(
       methods.runTransaction,
       methods.textUiTransaction,
       methods.planTransaction,
+      methods.outlineUiTransaction,
     ].filter((value) => value !== undefined).length > 1 ||
     (methods.textUiTransaction !== undefined && !mode.allowTextUiTransaction) ||
     (methods.planTransaction !== undefined &&
-      mode.allowPlanTransaction !== true)
+      mode.allowPlanTransaction !== true) ||
+    (methods.outlineUiTransaction !== undefined &&
+      mode.allowOutlineUiTransaction !== true)
   )
     invalid();
   return Object.freeze({
     assertCurrent: methods.assertCurrent.bind(authority),
     assertActive: methods.assertActive.bind(authority),
+    ...(methods.outlineUiTransaction === undefined
+      ? {}
+      : {
+          outlineUiTransaction: captureProjectOutlineUiCommitTransaction(
+            methods.outlineUiTransaction,
+          ),
+        }),
     ...(methods.planTransaction === undefined
       ? {}
       : {

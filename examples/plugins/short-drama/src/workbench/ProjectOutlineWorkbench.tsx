@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -9,6 +10,14 @@ import type {
   ProjectOutlineSection,
 } from "../project-outlines-service";
 import type { ProjectOutlineController } from "./ProjectOutlineController";
+import type { ProjectOutlineEditController } from "./ProjectOutlineEditController";
+import {
+  OutlineItemEditor,
+  OutlineStartEditor,
+  OutlineAddItem,
+} from "./ProjectOutlineEditor";
+import type { ProjectDetails } from "./creative-project-controller";
+import type { PublicProjectFoundation } from "@crewon/plugin-sdk/project-foundation-ui";
 
 const sections = [
   ["episodes", "分集故事"],
@@ -134,10 +143,16 @@ function SectionList({
   controller,
   section,
   label,
+  edits,
+  details,
+  blocked = false,
 }: {
   controller: ProjectOutlineController;
   section: ProjectOutlineSection;
   label?: string;
+  edits?: ProjectOutlineEditController;
+  details?: ProjectDetails;
+  blocked?: boolean;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -153,7 +168,7 @@ function SectionList({
     <>
       {label && <h4>{label}</h4>}
       {items?.map((item, index) => (
-        <OutputItem
+        <Fragment
           key={
             typeof item.episodeId === "string"
               ? item.episodeId
@@ -161,9 +176,30 @@ function SectionList({
                 ? item.id
                 : index
           }
-          item={item}
-          section={section}
-        />
+        >
+          <OutputItem item={item} section={section} />
+          {edits &&
+            details &&
+            ["episodes", "characters", "scenes", "props", "beats"].includes(
+              section,
+            ) && (
+              <OutlineItemEditor
+                edits={edits}
+                details={details}
+                section={
+                  section as
+                    | "episodes"
+                    | "characters"
+                    | "scenes"
+                    | "props"
+                    | "beats"
+                }
+                item={item}
+                label={`编辑${text(item, "name") || text(item, "title") || text(item, "type")}`}
+                blocked={blocked}
+              />
+            )}
+        </Fragment>
       ))}
       {pending && (
         <p className="detail-note" role="status">
@@ -202,10 +238,20 @@ export function ProjectOutlineWorkbench({
   controller,
   projectId,
   fallback,
+  edits,
+  details,
+  foundation,
+  sourceName = "",
+  blocked = false,
 }: {
   controller: ProjectOutlineController;
   projectId: string;
   fallback: ReactNode;
+  edits?: ProjectOutlineEditController;
+  details?: ProjectDetails;
+  foundation?: PublicProjectFoundation | null;
+  sourceName?: string;
+  blocked?: boolean;
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -214,12 +260,57 @@ export function ProjectOutlineWorkbench({
   );
   const [section, setSection] =
     useState<(typeof sections)[number][0]>("episodes");
+  const editSnapshot = useSyncExternalStore(
+    edits?.subscribe ?? noSubscribe,
+    edits?.getSnapshot ?? noSnapshot,
+    edits?.getSnapshot ?? noSnapshot,
+  );
+  const feedback = (
+    <>
+      {editSnapshot?.error && (
+        <p className="detail-note" role="alert">
+          {editSnapshot.error}
+        </p>
+      )}
+      {editSnapshot?.notice && (
+        <p className="detail-note" role="status">
+          {editSnapshot.notice}
+        </p>
+      )}
+      {editSnapshot?.pending && (
+        <button
+          className="button secondary"
+          disabled={editSnapshot.saving}
+          onClick={() => void edits?.retry()}
+        >
+          重试原保存请求
+        </button>
+      )}
+    </>
+  );
   useEffect(() => {
     controller.setProject(projectId);
     void controller.refresh();
     setSection("episodes");
   }, [controller, projectId]);
-  if (snapshot.state === "unsupported") return <>{fallback}</>;
+  if (snapshot.state === "unsupported")
+    return (
+      <>
+        {fallback}
+        {edits && details && foundation?.confirmedProposal && (
+          <section className="brief-panel">
+            {feedback}
+            <OutlineStartEditor
+              edits={edits}
+              details={details}
+              foundation={foundation}
+              sourceName={sourceName}
+              blocked={blocked}
+            />
+          </section>
+        )}
+      </>
+    );
   if (!snapshot.revision || !snapshot.view)
     return (
       <section className="brief-panel story-script-workbench">
@@ -260,8 +351,20 @@ export function ProjectOutlineWorkbench({
           >
             刷新产物
           </button>
+          {edits && !selected && (
+            <button
+              className="button secondary"
+              disabled={
+                blocked || edits.locked || revision.quality?.passed !== true
+              }
+              onClick={() => void edits.adopt()}
+            >
+              采用此版本
+            </button>
+          )}
         </div>
       </div>
+      {feedback}
       {snapshot.error && (
         <p className="detail-note" role="alert">
           {snapshot.error}
@@ -282,6 +385,16 @@ export function ProjectOutlineWorkbench({
             <Paragraph item={overview} field="logline" />
             <Paragraph item={overview} field="synopsis" />
           </>
+        )}
+        {edits && details && overview && (
+          <OutlineItemEditor
+            edits={edits}
+            details={details}
+            section="overview"
+            item={overview}
+            label="编辑故事梗概"
+            blocked={blocked}
+          />
         )}
         <div className="detail-actions" role="tablist" aria-label="大纲产物">
           {sections.map(([key, label]) => (
@@ -331,7 +444,39 @@ export function ProjectOutlineWorkbench({
               <Adaptation controller={controller} />
             </>
           ) : (
-            <SectionList controller={controller} section={section} />
+            <>
+              <SectionList
+                controller={controller}
+                section={section}
+                edits={edits}
+                details={details}
+                blocked={blocked}
+              />
+              {edits &&
+                details &&
+                ["episodes", "characters", "scenes", "props"].includes(
+                  section,
+                ) && (
+                  <OutlineAddItem
+                    key={`${section}:${revision.contentDigest}`}
+                    edits={edits}
+                    details={details}
+                    section={
+                      section as "episodes" | "characters" | "scenes" | "props"
+                    }
+                    count={
+                      revision.counts[
+                        section as
+                          | "episodes"
+                          | "characters"
+                          | "scenes"
+                          | "props"
+                      ]
+                    }
+                    blocked={blocked}
+                  />
+                )}
+            </>
           )}
         </div>
       </article>
@@ -406,6 +551,8 @@ export function ProjectOutlineWorkbench({
     </section>
   );
 }
+const noSubscribe = () => () => {};
+const noSnapshot = () => null;
 function Adaptation({ controller }: { controller: ProjectOutlineController }) {
   useEffect(() => {
     void controller.loadSection("adaptation");

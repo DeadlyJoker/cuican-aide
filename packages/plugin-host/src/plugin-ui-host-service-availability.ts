@@ -8,6 +8,10 @@ import {
 } from "@crewon/contracts/plugins";
 import { ApplicationError } from "@crewon/application";
 import {
+  CREWON_PROJECT_OUTLINE_EDITS_SERVICE,
+  CREWON_PROJECT_OUTLINE_EDITS_API_VERSION,
+} from "@crewon/contracts/project-outline-edits";
+import {
   parsePluginProfileScope,
   pluginInstallationDigest,
   type PluginProfileScope,
@@ -169,22 +173,30 @@ export function appendProjectTextUiServiceAvailability(
   input: Readonly<{
     texts: PluginUiHostServiceAvailabilityPort;
     outlines?: PluginUiHostServiceAvailabilityPort;
+    outlineEdits?: PluginUiHostServiceAvailabilityPort;
     fallback?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): PluginUiHostServiceAvailabilityPort {
   const texts = capturePluginUiHostServiceAvailability(input.texts)!;
   const outlines = capturePluginUiHostServiceAvailability(input.outlines);
+  const outlineEdits = capturePluginUiHostServiceAvailability(
+    input.outlineEdits,
+  );
   const fallback = capturePluginUiHostServiceAvailability(input.fallback);
   let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) =>
-      request.requirement.service === CREWON_PROJECT_OUTLINES_SERVICE
+      request.requirement.service === CREWON_PROJECT_OUTLINE_EDITS_SERVICE
         ? request.requirement.apiVersion ===
-            CREWON_PROJECT_OUTLINES_API_VERSION &&
-          outlines?.isAvailable(request) === true
-        : request.requirement.service === CREWON_PROJECT_TEXTS_SERVICE
+            CREWON_PROJECT_OUTLINE_EDITS_API_VERSION &&
+          outlineEdits?.isAvailable(request) === true
+        : request.requirement.service === CREWON_PROJECT_OUTLINES_SERVICE
           ? request.requirement.apiVersion ===
-              CREWON_PROJECT_TEXTS_API_VERSION && texts.isAvailable(request)
-          : fallback?.isAvailable(request) === true,
+              CREWON_PROJECT_OUTLINES_API_VERSION &&
+            outlines?.isAvailable(request) === true
+          : request.requirement.service === CREWON_PROJECT_TEXTS_SERVICE
+            ? request.requirement.apiVersion ===
+                CREWON_PROJECT_TEXTS_API_VERSION && texts.isAvailable(request)
+            : fallback?.isAvailable(request) === true,
   });
   if (fallback !== undefined) {
     port = preserveProjectGenerationHostAvailability(fallback, port);
@@ -275,6 +287,10 @@ export function assertUiOnlyServiceDeclarations(
             (requirement.optional || hostUiServices !== undefined)) ||
           (requirement.service === "crewon.project-outlines" &&
             requirement.apiVersion === "2" &&
+            (requirement.optional || hostUiServices !== undefined)) ||
+          (requirement.service === CREWON_PROJECT_OUTLINE_EDITS_SERVICE &&
+            requirement.apiVersion ===
+              CREWON_PROJECT_OUTLINE_EDITS_API_VERSION &&
             (requirement.optional || hostUiServices !== undefined)) ||
           ((requirement.service === "crewon.project-foundation" ||
             requirement.service === "crewon.project-source-uploads") &&

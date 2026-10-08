@@ -193,6 +193,9 @@ test("ships a unified self-contained UI and execution package with the original 
           },
         ]
       : []),
+    ...(Number(version.split(".")[0]) >= 43
+      ? [{ service: "crewon.project-outline-edits", apiVersion: "1", optional: true }]
+      : []),
     { service: "crewon.creative-projects", apiVersion: "1", optional: true },
     { service: "crewon.plugin-ui-recovery", apiVersion: "1", optional: true },
     {
