@@ -18,6 +18,10 @@ import {
   type PluginProjectGenerationSelectionClient,
 } from "@crewon/plugin-sdk/ui";
 import { metadataService } from "../../../../../examples/plugins/short-drama/test/persistent-ui.test-support.mjs";
+import {
+  shortDramaWorkbenchDependencies,
+  type ShortDramaWorkbenchDependencies,
+} from "./ShortDramaWorkbenchControllers.test-support";
 import { flush } from "../../lib/plugins/pluginUiLoader.test-support";
 
 // Test-only loading keeps the independent package outside the host's composite TS project.
@@ -39,7 +43,9 @@ const { CreativeProjectController } = await vi.importActual<{
   ).pathname,
 );
 const { ShortDramaPersistentWorkbench } = await vi.importActual<{
-  ShortDramaPersistentWorkbench: ComponentType<{ controller: Controller }>;
+  ShortDramaPersistentWorkbench: ComponentType<
+    { controller: Controller } & ShortDramaWorkbenchDependencies
+  >;
 }>(
   new URL(
     "../../../../../examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx",
@@ -50,13 +56,18 @@ const { ShortDramaPersistentWorkbench } = await vi.importActual<{
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-const roots: { root: Root; controller: Controller }[] = [];
+const roots: {
+  root: Root;
+  controller: Controller;
+  dependencies: ReturnType<typeof shortDramaWorkbenchDependencies>;
+}[] = [];
 async function settle() {
   for (let count = 0; count < 5; count++) await flush();
 }
 afterEach(async () => {
-  for (const { root, controller } of roots.splice(0)) {
+  for (const { root, controller, dependencies } of roots.splice(0)) {
     controller.dispose();
+    dependencies.dispose();
     await act(async () => {
       root.unmount();
       await settle();
@@ -73,12 +84,18 @@ async function fixture(service: ReturnType<typeof metadataService>) {
     queries: createPluginProjectGenerationQueryClient(service.services),
     selections: createPluginProjectGenerationSelectionClient(service.services),
   });
+  const dependencies = shortDramaWorkbenchDependencies(service.services);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  roots.push({ root, controller });
+  roots.push({ root, controller, dependencies });
   await act(async () => {
-    root.render(<ShortDramaPersistentWorkbench controller={controller} />);
+    root.render(
+      <ShortDramaPersistentWorkbench
+        controller={controller}
+        {...dependencies}
+      />,
+    );
     await settle();
   });
   const button = (label: string) => {
@@ -114,6 +131,7 @@ async function fixture(service: ReturnType<typeof metadataService>) {
     input,
     async ready() {
       await act(async () => {
+        dependencies.setReady(true);
         controller.setReady(true);
         await settle();
       });
@@ -137,8 +155,12 @@ describe("independent short-drama persistent presentation", () => {
         service.services,
       ),
     });
+    const dependencies = shortDramaWorkbenchDependencies(service.services);
     const markup = renderToStaticMarkup(
-      <ShortDramaPersistentWorkbench controller={controller} />,
+      <ShortDramaPersistentWorkbench
+        controller={controller}
+        {...dependencies}
+      />,
     );
     expect(markup).toMatchSnapshot();
     expect(markup).toContain("正在等待模块就绪");
@@ -147,6 +169,7 @@ describe("independent short-drama persistent presentation", () => {
     );
     expect(service.calls).toHaveLength(0);
     controller.dispose();
+    dependencies.dispose();
   });
 
   it("waits for actual ready and displays host refusal without an in-memory fallback", async () => {

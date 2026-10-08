@@ -19,6 +19,10 @@ import {
   type InstalledPluginTaskRuntimeCore,
 } from "./installed-plugin-task-runtime-core.ts";
 import { composeProjectGenerationSelectionService } from "./project-generation-selection-composition.ts";
+import type {
+  ProjectFoundationCompositionConfig,
+  PreparedProjectFoundation,
+} from "./project-foundation-composition.ts";
 import {
   createProjectGenerationReadPluginRuntime,
   createProjectGenerationSelectionPluginRuntime,
@@ -38,29 +42,44 @@ export type DesktopProjectHistoryPluginRuntime = Readonly<{
 /** Business source grants are independent; duplicate grants for the same module are collapsed only after validation. */
 export function desktopProjectUiPublications(
   projects:
-    | Pick<
+    | (Pick<
         PreparedCreativeProjects,
         | "pluginUi"
         | "textUi"
-        | "assetUi" | "assetRecovery"
+        | "assetUi"
+        | "assetRecovery"
         | "textRecovery"
         | "conversations"
         | "textPlans"
         | "generationReadUi"
         | "selectionUi"
-      >
+      > &
+        Readonly<{
+          foundation?:
+            | ProjectFoundationCompositionConfig
+            | Pick<PreparedProjectFoundation, "pluginUi" | "uploadUi">;
+        }>)
     | undefined,
   approved: DesktopPluginConfiguration["publications"],
 ) {
   const grants = [
     projects?.pluginUi,
     projects?.textUi,
-    projects?.assetUi, projects?.assetRecovery,
+    projects?.assetUi,
+    projects?.assetRecovery,
     projects?.textRecovery,
     projects?.conversations,
     projects?.textPlans,
     projects?.generationReadUi,
     projects?.selectionUi,
+    projects?.foundation?.pluginUi,
+    projects?.foundation === undefined
+      ? undefined
+      : "uploadUi" in projects.foundation
+        ? projects.foundation.uploadUi
+        : "uploads" in projects.foundation
+          ? projects.foundation.uploads.pluginUi
+          : undefined,
   ];
   for (const grant of grants)
     assertCreativeProjectPluginPublications(grant, approved);

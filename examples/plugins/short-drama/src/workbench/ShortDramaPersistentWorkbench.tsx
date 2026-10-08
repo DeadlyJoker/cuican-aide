@@ -3,22 +3,28 @@ import { ProjectMediaOutputWorkbench } from "./ProjectMediaOutputWorkbench";
 import type { ProjectMediaResultController } from "./ProjectMediaResultController";
 import { ProjectMediaResultWorkbench } from "./ProjectMediaResultWorkbench";
 import type { ProjectMediaGenerationController } from "./ProjectMediaGenerationController";
-import { usePluginDialog } from "./usePluginDialog";
+import { LegacyProjectDialog } from "./LegacyProjectDialog";
+import { ProjectFoundationController } from "./ProjectFoundationController";
+import { ProjectFoundationWorkbench } from "./ProjectFoundationWorkbench";
+import {
+  ProjectFoundationCreateDialog,
+  emptyCreationDraft,
+} from "./ProjectFoundationCreateDialog";
+import type { ProjectSourceUploadUiPort } from "./ProjectSourceUploadUiPort";
 import { ShortDramaProjectHome } from "./ShortDramaProjectHome";
 import {
   ShortDramaProjectNavigation,
-  projectPages,
+  projectPagesFor,
   type ShortDramaProjectPage,
 } from "./ShortDramaProjectNavigation";
 import { ProjectMediaInputController } from "./ProjectMediaInputController";
 import { ProjectMediaInputWorkbench } from "./ProjectMediaInputWorkbench";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronRight, Clock3, FolderOpen, Layers3, X } from "lucide-react";
+import { ChevronRight, Clock3, FolderOpen, Layers3 } from "lucide-react";
 import {
   CreativeProjectController,
   briefBytes,
   validBrief,
-  validTitle,
   type ProjectSnapshot,
 } from "./creative-project-controller";
 import { ConceptWorkbench } from "./ConceptWorkbench";
@@ -110,6 +116,8 @@ export function ShortDramaPersistentWorkbench({
   mediaOutputs,
   mediaInputs,
   mediaGenerations,
+  foundations,
+  sourceUpload,
   planningDraft = null,
   association,
   associationReady = false,
@@ -124,6 +132,8 @@ export function ShortDramaPersistentWorkbench({
   mediaOutputs?: ProjectMediaOutputController;
   mediaInputs?: ProjectMediaInputController;
   mediaGenerations?: ProjectMediaGenerationController;
+  foundations?: ProjectFoundationController;
+  sourceUpload?: ProjectSourceUploadUiPort;
   planningDraft?: ProjectPlanningProposal | null;
   association?: ProjectConversationAssociationController;
   associationReady?: boolean;
@@ -170,6 +180,18 @@ export function ShortDramaPersistentWorkbench({
     mediaOutputs?.getSnapshot ?? noAssetSnapshot,
     mediaOutputs?.getSnapshot ?? noAssetSnapshot,
   );
+  const foundationSnapshot = useSyncExternalStore(
+    foundations?.subscribe ?? emptySubscribe,
+    foundations?.getSnapshot ?? noAssetSnapshot,
+    foundations?.getSnapshot ?? noAssetSnapshot,
+  );
+  const [newOrigin, setNewOrigin] = useState<"creative" | "novel" | null>(null);
+  const [creativeDraft, setCreativeDraft] = useState(() =>
+    emptyCreationDraft("creative"),
+  );
+  const [novelDraft, setNovelDraft] = useState(() =>
+    emptyCreationDraft("novel"),
+  );
   const generationReceipt = mediaGenerations?.getSnapshot().receipt ?? null;
   const [page, setPage] = useState<ShortDramaProjectPage>("overview");
   const [search, setSearch] = useState("");
@@ -178,7 +200,6 @@ export function ShortDramaPersistentWorkbench({
   const [dialog, setDialog] = useState<"new" | "history" | null>(null);
   const [title, setTitle] = useState("");
   const [brief, setBrief] = useState("");
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const submittedDraft = useRef<ProjectPlanningProposal | null>(null);
   const reviewedDraft = useRef<ProjectPlanningProposal | null>(null);
   const [projectDraft, setProjectDraft] = useState<Readonly<{
@@ -187,7 +208,26 @@ export function ShortDramaPersistentWorkbench({
   }> | null>(null);
   const [showProject, setShowProject] = useState(false);
   const details = showProject ? snapshot.details : null;
-  const projectLocked = snapshot.saving || snapshot.pendingKind !== null;
+  const origin =
+    foundationSnapshot?.foundation?.projectId === details?.project.projectId
+      ? (foundationSnapshot?.foundation?.origin ?? null)
+      : null;
+  const foundation = foundationSnapshot?.foundation;
+  const downstreamBlocked =
+    origin === "novel" && !foundation?.confirmedProposal;
+  const foundationPending = Boolean(
+    details &&
+      foundationSnapshot?.available &&
+      (foundationSnapshot.projectId !== details.project.projectId ||
+        !foundationSnapshot.origins.has(details.project.projectId) ||
+        (foundationSnapshot.origins.get(details.project.projectId) !== null &&
+          !foundationSnapshot.foundation)),
+  );
+  const projectLocked =
+    snapshot.saving ||
+    snapshot.pendingKind !== null ||
+    foundationPending ||
+    foundations?.locked === true;
   const otherLocked =
     projectLocked ||
     snapshot.conceptLocked ||
@@ -208,6 +248,7 @@ export function ShortDramaPersistentWorkbench({
     });
   }, [association, associationReady, associationThreadId, details]);
   useEffect(() => {
+    foundations?.setProject(details);
     texts.setProject(details);
     conversations.setProject(details);
     plans.setProject(details);
@@ -223,6 +264,7 @@ export function ShortDramaPersistentWorkbench({
     mediaResults,
     mediaInputs,
     mediaGenerations,
+    foundations,
     details,
   ]);
   useEffect(() => {
@@ -232,13 +274,19 @@ export function ShortDramaPersistentWorkbench({
     );
   }, [mediaOutputs, details?.project.projectId, generationReceipt]);
   useEffect(() => {
+    if (foundationSnapshot?.available)
+      void foundations?.readOrigins(snapshot.projects);
+  }, [foundations, foundationSnapshot?.available, snapshot.projects]);
+  useEffect(() => {
+    if (origin === "creative" && page === "outline") setPage("script");
+  }, [origin, page]);
+  useEffect(() => {
     setPage("overview");
   }, [details?.project.projectId]);
   useEffect(() => {
     if (textSnapshot.recovery.intent) setPage(textSnapshot.target.kind);
   }, [textSnapshot.recovery.intent?.intentId, textSnapshot.target.kind]);
 
-  usePluginDialog(dialogRef, dialog !== null);
   useEffect(() => {
     if (snapshot.notice === "项目已保存") {
       setShowProject(true);
@@ -257,7 +305,7 @@ export function ShortDramaPersistentWorkbench({
 
   return (
     <section className="drama-workbench" aria-label="AI 短剧工作台">
-      <div className="drama-main" inert={dialog !== null}>
+      <div className="drama-main" inert={dialog !== null || newOrigin !== null}>
         <header className="drama-topbar" data-plugin-header-insets="inline">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
             <button
@@ -323,6 +371,16 @@ export function ShortDramaPersistentWorkbench({
               locked={locked || dialog !== null}
               idea={homeIdea}
               search={search}
+              creativeDraft={
+                foundationSnapshot?.available ? creativeDraft : undefined
+              }
+              onCreativeDraftChange={
+                foundationSnapshot?.available ? setCreativeDraft : undefined
+              }
+              onCreateNovel={
+                foundations ? () => setNewOrigin("novel") : undefined
+              }
+              origins={foundationSnapshot?.origins}
               onIdeaChange={setHomeIdea}
               onSearchChange={setSearch}
               feedback={
@@ -337,6 +395,10 @@ export function ShortDramaPersistentWorkbench({
                   void controller.openProject(projectId);
               }}
               onReviewIdea={(value) => {
+                if (foundationSnapshot?.available) {
+                  setNewOrigin("creative");
+                  return;
+                }
                 reviewedDraft.current = null;
                 setTitle(
                   Array.from(value.trim().split(/\r?\n/u)[0] ?? "")
@@ -349,245 +411,283 @@ export function ShortDramaPersistentWorkbench({
             />
           ) : (
             <div className="drama-project-focus">
-              <div className="page-heading">
+              <div className="drama-project-heading">
                 <h1>{details.project.title}</h1>
+                <ProjectConversationActions controller={conversations} />
               </div>
-              <ProjectConversationActions controller={conversations} />
-              <details
-                className="drama-process-disclosure"
-                key={details.project.projectId}
+              <div
+                className="drama-project-layout"
+                data-navigation-expanded={navigationExpanded}
               >
-                <summary>
-                  查看流程与产物 <ChevronRight size={16} />
-                </summary>
-                <div
-                  className="drama-project-layout"
-                  data-navigation-expanded={navigationExpanded}
-                >
-                  <ShortDramaProjectNavigation
-                    page={page}
-                    assetsAvailable={Boolean(assets)}
-                    referencesAvailable={Boolean(mediaInputs)}
-                    locked={locked}
-                    expanded={navigationExpanded}
-                    onExpandedChange={setNavigationExpanded}
-                    onSelect={(next) => {
-                      if (next === "characters" || next === "art")
-                        assets?.activate();
-                      if (next === "references") mediaInputs?.activate();
-                      setPage(next);
-                    }}
-                  />
-                  <div className="drama-project-editor">
-                    <div className="panel-heading">
-                      <h2>
-                        {projectPages.find((item) => item.id === page)?.title}
-                      </h2>
-                    </div>
-                    {page === "overview" && (
-                      <details className="drama-secondary-disclosure">
-                        <summary>关联已有对话</summary>
-                        {association && (
-                          <ProjectConversationAssociationActions
-                            controller={association}
-                            blocked={otherLocked}
-                            onAttached={() => {
-                              void conversations.refresh();
-                            }}
-                          />
-                        )}
-                      </details>
-                    )}
-                    {page === "overview" && (
-                      <ProjectPlanDisclosure
-                        key={details.project.projectId}
-                        controller={plans}
-                        hasDraft={
-                          projectDraft?.projectId === details.project.projectId
-                        }
-                      >
-                        <ProjectTextPlanActions
-                          initialDraft={
-                            projectDraft &&
-                            projectDraft.projectId === details.project.projectId
-                              ? projectDraft.proposal
-                              : null
-                          }
-                          controller={plans}
-                          conversations={conversations}
-                          texts={texts}
-                          details={details}
-                          openText={(step) => {
-                            setPage(
-                              step.kind === "script" ? "script" : "outline",
-                            );
-                            void texts.open(
-                              step.kind === "script" && step.episodeId !== null
-                                ? {
-                                    kind: "script",
-                                    episodeId: step.episodeId,
-                                    title: "分集剧本",
-                                  }
-                                : { kind: "outline" },
-                            );
-                          }}
-                        />
-                      </ProjectPlanDisclosure>
-                    )}
-                    <SaveFeedback controller={controller} snapshot={snapshot} />
-                    {archived && (
-                      <p className="detail-note" role="status">
-                        项目已归档。需求历史仍可查看，恢复项目后继续编辑。
+                <ShortDramaProjectNavigation
+                  page={page}
+                  origin={origin}
+                  sourceAvailable={Boolean(foundation?.source)}
+                  assetsAvailable={Boolean(assets)}
+                  referencesAvailable={Boolean(mediaInputs)}
+                  locked={locked}
+                  expanded={navigationExpanded}
+                  onExpandedChange={setNavigationExpanded}
+                  onSelect={(next) => {
+                    if (next === "characters" || next === "art")
+                      assets?.activate();
+                    if (next === "references") mediaInputs?.activate();
+                    setPage(next);
+                  }}
+                />
+                <div className="drama-project-editor">
+                  <div className="panel-heading">
+                    <h2>
+                      {
+                        projectPagesFor(origin).find((item) => item.id === page)
+                          ?.title
+                      }
+                    </h2>
+                  </div>
+                  <SaveFeedback controller={controller} snapshot={snapshot} />
+                  {archived && (
+                    <p className="detail-note" role="status">
+                      项目已归档。需求历史仍可查看，恢复项目后继续编辑。
+                    </p>
+                  )}
+                  {downstreamBlocked &&
+                    page !== "overview" &&
+                    page !== "source" && (
+                      <p className="detail-note">
+                        先在改编概览确认方案，再开展后续制作。已有成果仍可查看。
                       </p>
                     )}
-                    {page === "references" && mediaInputs ? (
-                      <>
-                        <ProjectMediaInputWorkbench
-                          controller={mediaInputs}
-                          generations={mediaGenerations}
+                  {foundationPending ? (
+                    <div className="detail-note" role="status">
+                      {foundationSnapshot?.error ?? "正在读取项目创作资料…"}
+                      {foundationSnapshot?.error && (
+                        <button
+                          className="button secondary"
+                          type="button"
+                          onClick={() => void foundations?.refresh()}
+                        >
+                          重新读取创作资料
+                        </button>
+                      )}
+                    </div>
+                  ) : foundations &&
+                    origin &&
+                    (page === "overview" || page === "source") ? (
+                    <ProjectFoundationWorkbench
+                      key={`${details.project.projectId}:${page}`}
+                      controller={foundations}
+                      details={details}
+                      sourcePage={page === "source"}
+                      onContinue={() =>
+                        setPage(origin === "novel" ? "outline" : "script")
+                      }
+                    />
+                  ) : page === "references" && mediaInputs ? (
+                    <>
+                      <ProjectMediaInputWorkbench
+                        controller={mediaInputs}
+                        generations={mediaGenerations}
+                        blocked={
+                          downstreamBlocked ||
+                          mediaOutputs?.locked === true ||
+                          projectLocked ||
+                          snapshot.conceptLocked ||
+                          texts.locked ||
+                          conversations.locked ||
+                          plans.locked ||
+                          assets?.locked === true ||
+                          association?.locked === true
+                        }
+                      />
+                      {mediaOutputs && (
+                        <ProjectMediaOutputWorkbench
+                          controller={mediaOutputs}
+                          results={mediaResults}
                           blocked={
-                            mediaOutputs?.locked === true ||
+                            downstreamBlocked ||
+                            archived === true ||
                             projectLocked ||
                             snapshot.conceptLocked ||
                             texts.locked ||
                             conversations.locked ||
                             plans.locked ||
                             assets?.locked === true ||
-                            association?.locked === true
+                            association?.locked === true ||
+                            mediaInputs.locked ||
+                            mediaGenerations?.locked === true
                           }
                         />
-                        {mediaOutputs && (
-                          <ProjectMediaOutputWorkbench
-                            controller={mediaOutputs}
-                            results={mediaResults}
-                            blocked={
-                              archived === true ||
-                              projectLocked ||
-                              snapshot.conceptLocked ||
-                              texts.locked ||
-                              conversations.locked ||
-                              plans.locked ||
-                              assets?.locked === true ||
-                              association?.locked === true ||
-                              mediaInputs.locked ||
-                              mediaGenerations?.locked === true
+                      )}
+                      {mediaResults && (
+                        <ProjectMediaResultWorkbench
+                          controller={mediaResults}
+                          assets={assets}
+                          blocked={
+                            downstreamBlocked || locked || archived === true
+                          }
+                          onAdopted={(projectId) => {
+                            if (
+                              controller.getSnapshot().details?.project
+                                .projectId === projectId
+                            )
+                              void mediaInputs.refresh();
+                          }}
+                        />
+                      )}
+                    </>
+                  ) : (page === "characters" || page === "art") && assets ? (
+                    <ProjectAssetWorkbench
+                      controller={assets}
+                      page={page === "art" ? "art" : "characters"}
+                      onPageChange={setPage}
+                      images={controller.concepts.images}
+                      concepts={controller.concepts}
+                      details={details}
+                      onOpenConcept={() => setPage("overview")}
+                      blocked={
+                        downstreamBlocked ||
+                        projectLocked ||
+                        snapshot.conceptLocked ||
+                        texts.locked ||
+                        conversations.locked ||
+                        plans.locked
+                      }
+                    />
+                  ) : page === "outline" || page === "script" ? (
+                    <StoryScriptWorkbench
+                      controller={texts}
+                      page={page === "script" ? "script" : "outline"}
+                      onPageChange={setPage}
+                      details={details}
+                      blocked={
+                        downstreamBlocked ||
+                        projectLocked ||
+                        snapshot.conceptLocked
+                      }
+                    />
+                  ) : (
+                    <div className="concept-grid">
+                      <section className="brief-panel">
+                        <div className="panel-heading">
+                          <h2>
+                            <Layers3 size={17} />
+                            创作需求
+                          </h2>
+                          <button
+                            className="text-button"
+                            onClick={() => {
+                              setDialog("history");
+                              void controller.loadBriefs();
+                            }}
+                          >
+                            v{details.brief.briefRevision} · 查看历史
+                          </button>
+                        </div>
+                        <p className="drama-readable-text">
+                          {details.brief.text}
+                        </p>
+                        <details className="drama-secondary-disclosure">
+                          <summary>修改创作需求</summary>
+                          <label
+                            className="visually-hidden"
+                            htmlFor="creative-brief"
+                          >
+                            创作需求
+                          </label>
+                          <textarea
+                            id="creative-brief"
+                            className="description-input"
+                            value={snapshot.draft}
+                            disabled={archived || locked || snapshot.opening}
+                            onChange={(event) =>
+                              controller.setDraft(event.target.value)
                             }
                           />
-                        )}
-                        {mediaResults && (
-                          <ProjectMediaResultWorkbench
-                            controller={mediaResults}
-                            assets={assets}
-                            blocked={locked || archived === true}
-                            onAdopted={(projectId) => {
-                              if (
-                                controller.getSnapshot().details?.project
-                                  .projectId === projectId
-                              )
-                                void mediaInputs.refresh();
-                            }}
-                          />
-                        )}
-                      </>
-                    ) : (page === "characters" || page === "art") && assets ? (
-                      <ProjectAssetWorkbench
-                        controller={assets}
-                        page={page === "art" ? "art" : "characters"}
-                        onPageChange={setPage}
-                        images={controller.concepts.images}
-                        concepts={controller.concepts}
-                        details={details}
-                        onOpenConcept={() => setPage("overview")}
-                        blocked={
-                          projectLocked ||
-                          snapshot.conceptLocked ||
-                          texts.locked ||
-                          conversations.locked ||
-                          plans.locked
-                        }
-                      />
-                    ) : page === "outline" || page === "script" ? (
-                      <StoryScriptWorkbench
-                        controller={texts}
-                        page={page === "script" ? "script" : "outline"}
-                        onPageChange={setPage}
-                        details={details}
-                        blocked={projectLocked || snapshot.conceptLocked}
-                      />
-                    ) : (
-                      <div className="concept-grid">
-                        <section className="brief-panel">
-                          <div className="panel-heading">
-                            <h2>
-                              <Layers3 size={17} />
-                              创作需求
-                            </h2>
+                          <div className="brief-footer">
+                            <span>
+                              <Clock3 size={13} />
+                              {briefBytes(snapshot.draft)} / 8,192 字节
+                            </span>
                             <button
-                              className="text-button"
-                              onClick={() => {
-                                setDialog("history");
-                                void controller.loadBriefs();
-                              }}
+                              className="button secondary"
+                              disabled={
+                                archived ||
+                                locked ||
+                                snapshot.opening ||
+                                !validBrief(snapshot.draft) ||
+                                snapshot.draft === details.brief.text
+                              }
+                              onClick={() => void controller.saveBrief()}
                             >
-                              v{details.brief.briefRevision} · 查看历史
+                              {snapshot.saving ? "正在保存…" : "保存为新版本"}
                             </button>
                           </div>
-                          <p className="drama-readable-text">
-                            {details.brief.text}
-                          </p>
-                          <details className="drama-secondary-disclosure">
-                            <summary>修改创作需求</summary>
-                            <label
-                              className="visually-hidden"
-                              htmlFor="creative-brief"
-                            >
-                              创作需求
-                            </label>
-                            <textarea
-                              id="creative-brief"
-                              className="description-input"
-                              value={snapshot.draft}
-                              disabled={archived || locked || snapshot.opening}
-                              onChange={(event) =>
-                                controller.setDraft(event.target.value)
-                              }
-                            />
-                            <div className="brief-footer">
-                              <span>
-                                <Clock3 size={13} />
-                                {briefBytes(snapshot.draft)} / 8,192 字节
-                              </span>
-                              <button
-                                className="button secondary"
-                                disabled={
-                                  archived ||
-                                  locked ||
-                                  snapshot.opening ||
-                                  !validBrief(snapshot.draft) ||
-                                  snapshot.draft === details.brief.text
-                                }
-                                onClick={() => void controller.saveBrief()}
-                              >
-                                {snapshot.saving ? "正在保存…" : "保存为新版本"}
-                              </button>
-                            </div>
-                            {briefBytes(snapshot.draft) > 8192 && (
-                              <p className="detail-note" role="alert">
-                                需求超过 8,192 字节，请缩短后保存。
-                              </p>
-                            )}
-                          </details>
-                        </section>
-                        <ConceptWorkbench
-                          controller={controller.concepts}
-                          details={details}
-                          blocked={projectLocked || snapshot.opening}
+                          {briefBytes(snapshot.draft) > 8192 && (
+                            <p className="detail-note" role="alert">
+                              需求超过 8,192 字节，请缩短后保存。
+                            </p>
+                          )}
+                        </details>
+                      </section>
+                      <ConceptWorkbench
+                        controller={controller.concepts}
+                        details={details}
+                        blocked={projectLocked || snapshot.opening}
+                      />
+                    </div>
+                  )}
+                  {page === "overview" && (
+                    <details className="drama-secondary-disclosure">
+                      <summary>关联已有对话</summary>
+                      {association && (
+                        <ProjectConversationAssociationActions
+                          controller={association}
+                          blocked={otherLocked}
+                          onAttached={() => {
+                            void conversations.refresh();
+                          }}
                         />
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </details>
+                  )}
+                  {page === "overview" && origin === null && (
+                    <ProjectPlanDisclosure
+                      key={details.project.projectId}
+                      controller={plans}
+                      hasDraft={
+                        projectDraft?.projectId === details.project.projectId
+                      }
+                    >
+                      <ProjectTextPlanActions
+                        initialDraft={
+                          projectDraft &&
+                          projectDraft.projectId === details.project.projectId
+                            ? projectDraft.proposal
+                            : null
+                        }
+                        controller={plans}
+                        conversations={conversations}
+                        texts={texts}
+                        details={details}
+                        openText={(step) => {
+                          setPage(
+                            step.kind === "script" ? "script" : "outline",
+                          );
+                          void texts.open(
+                            step.kind === "script" && step.episodeId !== null
+                              ? {
+                                  kind: "script",
+                                  episodeId: step.episodeId,
+                                  title: "分集剧本",
+                                }
+                              : { kind: "outline" },
+                          );
+                        }}
+                      />
+                    </ProjectPlanDisclosure>
+                  )}
                 </div>
-              </details>
+              </div>
               <details className="drama-secondary-disclosure">
                 <summary>项目管理与待处理记录</summary>
                 <button
@@ -639,138 +739,47 @@ export function ShortDramaPersistentWorkbench({
           )}
         </div>
       </div>
-      <div className="drama-dialog-layer" hidden={dialog === null}>
-        <dialog
-          ref={dialogRef}
-          className="modal"
-          aria-labelledby="drama-persistent-modal-title"
-          onCancel={(event) => {
-            event.preventDefault();
-            if (!locked) setDialog(null);
+      {newOrigin && foundations && (
+        <ProjectFoundationCreateDialog
+          key={newOrigin}
+          controller={foundations}
+          origin={newOrigin}
+          idea={newOrigin === "creative" ? homeIdea : ""}
+          upload={sourceUpload}
+          initialDraft={newOrigin === "creative" ? creativeDraft : novelDraft}
+          onDraftChange={
+            newOrigin === "creative" ? setCreativeDraft : setNovelDraft
+          }
+          onClose={() => setNewOrigin(null)}
+          onCreated={() => {
+            setNewOrigin(null);
+            setShowProject(true);
+            setPage("overview");
+            setHomeIdea("");
+            if (newOrigin === "creative")
+              setCreativeDraft(emptyCreationDraft("creative"));
+            else setNovelDraft(emptyCreationDraft("novel"));
           }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget && !locked)
-              setDialog(null);
-          }}
-        >
-          <div className="modal-header">
-            <h2 id="drama-persistent-modal-title">
-              {dialog === "new" ? "新的创作项目" : "需求版本"}
-            </h2>
-            <button
-              className="button icon"
-              aria-label="关闭弹窗"
-              disabled={locked}
-              onClick={() => setDialog(null)}
-            >
-              <X size={18} />
-            </button>
-          </div>
-          {dialog === "new" ? (
-            <form
-              className="modal-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submittedDraft.current = reviewedDraft.current;
-                void controller.createProject(title, brief);
-              }}
-            >
-              <p className="subtle">先留住故事，再慢慢找到它的画面。</p>
-              <label className="form-field">
-                项目名称
-                <input
-                  data-dialog-autofocus
-                  required
-                  value={title}
-                  disabled={locked}
-                  onChange={(event) => setTitle(event.target.value)}
-                  placeholder="给这个故事起个名字"
-                />
-              </label>
-              <label className="form-field">
-                创作需求
-                <textarea
-                  required
-                  value={brief}
-                  disabled={locked}
-                  onChange={(event) => setBrief(event.target.value)}
-                  placeholder="故事讲什么？想让观众感受到什么？"
-                />
-              </label>
-              <p className="subtle">需求 {briefBytes(brief)} / 8,192 字节</p>
-              {!validTitle(title) && Boolean(title.trim()) && (
-                <p className="detail-note" role="alert">
-                  项目名称最多 160 个字符。
-                </p>
-              )}
-              {briefBytes(brief) > 8192 && (
-                <p className="detail-note" role="alert">
-                  需求超过 8,192 字节，请缩短后保存。
-                </p>
-              )}
-              <SaveFeedback controller={controller} snapshot={snapshot} />
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={locked}
-                  onClick={() => setDialog(null)}
-                >
-                  取消
-                </button>
-                <button
-                  className="button primary"
-                  disabled={locked || !validTitle(title) || !validBrief(brief)}
-                >
-                  {snapshot.saving ? "正在保存…" : "创建项目"}
-                </button>
-              </div>
-            </form>
-          ) : dialog === "history" ? (
-            <div className="modal-form">
-              {snapshot.loadingBriefs && (
-                <p className="subtle" role="status">
-                  正在读取需求历史…
-                </p>
-              )}
-              {snapshot.error && (
-                <p className="detail-note" role="alert">
-                  {snapshot.error}
-                </p>
-              )}
-              {snapshot.briefs.map((record) => (
-                <div className="version-card" key={record.briefRevision}>
-                  <strong>
-                    需求 v{record.briefRevision}
-                    {record.briefRevision ===
-                      details?.project.latestBriefRevision && (
-                      <span>当前版本</span>
-                    )}
-                  </strong>
-                  <p style={{ whiteSpace: "pre-wrap" }}>{record.text}</p>
-                </div>
-              ))}
-              {snapshot.nextBriefRevision !== null && (
-                <button
-                  className="button secondary"
-                  disabled={snapshot.loadingBriefs}
-                  onClick={() => void controller.loadBriefs(true)}
-                >
-                  加载更多需求版本
-                </button>
-              )}
-              {!snapshot.loadingBriefs && snapshot.error && (
-                <button
-                  className="button secondary"
-                  onClick={() => void controller.loadBriefs()}
-                >
-                  重新读取需求历史
-                </button>
-              )}
-            </div>
-          ) : null}
-        </dialog>
-      </div>
+        />
+      )}
+
+      <LegacyProjectDialog
+        dialog={dialog}
+        locked={locked}
+        title={title}
+        brief={brief}
+        snapshot={snapshot}
+        controller={controller}
+        details={details}
+        feedback={<SaveFeedback controller={controller} snapshot={snapshot} />}
+        onClose={() => setDialog(null)}
+        onTitleChange={setTitle}
+        onBriefChange={setBrief}
+        onCreate={() => {
+          submittedDraft.current = reviewedDraft.current;
+          void controller.createProject(title, brief);
+        }}
+      />
     </section>
   );
 }

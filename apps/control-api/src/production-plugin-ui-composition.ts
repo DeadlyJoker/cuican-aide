@@ -26,6 +26,10 @@ import {
   type PluginProjectTextPlanActionOwner,
   isPluginCreativeProjectActionOwner,
   type PluginCreativeProjectActionOwner,
+  isPluginProjectSourceUploadActionOwner,
+  type PluginProjectSourceUploadActionOwner,
+  isPluginProjectFoundationActionOwner,
+  type PluginProjectFoundationActionOwner,
   type ApplicationClock,
   type PluginInstallationStore,
   type PluginUiActionPort,
@@ -80,6 +84,8 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedTaskActions?: InstalledPluginTaskActionOwner;
   /** Actual metadata dispatcher; task receipt ownership remains an independent capability. */
   ownedCreativeProjectActions?: PluginCreativeProjectActionOwner;
+  ownedProjectFoundationActions?: PluginProjectFoundationActionOwner;
+  ownedProjectSourceUploadActions?: PluginProjectSourceUploadActionOwner;
   ownedProjectConversationActions?: ProjectConversationControlOwner;
   ownedProjectTextPlanActions?: PluginProjectTextPlanActionOwner;
   ownedProjectAssetStageActions?: ProjectAssetStageControlOwner;
@@ -114,6 +120,18 @@ export function createProductionPluginUiRuntime(
   const { actions, committedTasks, owner } =
     captureProductionPluginUiActions(input);
   const metadataOwner = input.ownedCreativeProjectActions;
+  const foundationOwner = input.ownedProjectFoundationActions;
+  const uploadOwner = input.ownedProjectSourceUploadActions;
+  if (
+    uploadOwner !== undefined &&
+    !isPluginProjectSourceUploadActionOwner(uploadOwner)
+  )
+    throw new Error("production_plugin_ui_source_upload_owner_invalid");
+  if (
+    foundationOwner !== undefined &&
+    !isPluginProjectFoundationActionOwner(foundationOwner)
+  )
+    throw new Error("production_plugin_ui_foundation_owner_invalid");
   const assetStageOwner = input.ownedProjectAssetStageActions;
   const assetOwner = input.ownedProjectAssetActions;
   const assetRecoveryOwner = input.ownedProjectAssetRecoveryActions;
@@ -199,12 +217,26 @@ export function createProductionPluginUiRuntime(
   const planOwner = input.ownedProjectTextPlanActions;
   if (planOwner !== undefined && !isPluginProjectTextPlanActionOwner(planOwner))
     throw new Error("production_plugin_ui_plan_owner_invalid");
-  const committedMetadata =
+  const planMetadata =
     planOwner === undefined
       ? conversationMetadata
       : combineSelectionCommittedMetadata(
           planOwner.committedMetadata,
           conversationMetadata,
+        );
+  const foundationMetadata =
+    foundationOwner === undefined
+      ? planMetadata
+      : combineSelectionCommittedMetadata(
+          foundationOwner.committedMetadata,
+          planMetadata,
+        );
+  const committedMetadata =
+    uploadOwner === undefined
+      ? foundationMetadata
+      : combineSelectionCommittedMetadata(
+          uploadOwner.committedMetadata,
+          foundationMetadata,
         );
   if (
     queryOwner !== undefined &&
@@ -315,6 +347,34 @@ export function createProductionPluginUiRuntime(
       actions: {
         invoke: async (request) => {
           available();
+          if (
+            request.action === "crewon.project-source-uploads" ||
+            request.action.startsWith("crewon.project-source-uploads.")
+          ) {
+            if (
+              uploadOwner === undefined ||
+              !uploadOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "project_source_upload_unavailable",
+              );
+            return uploadOwner.actions.invoke(request);
+          }
+          if (
+            request.action === "crewon.project-foundation" ||
+            request.action.startsWith("crewon.project-foundation.")
+          ) {
+            if (
+              foundationOwner === undefined ||
+              !foundationOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "project_foundation_unavailable",
+              );
+            return foundationOwner.actions.invoke(request);
+          }
           if (
             request.action === "crewon.project-asset-stages" ||
             request.action.startsWith("crewon.project-asset-stages.")
@@ -481,6 +541,7 @@ export function createProductionPluginUiRuntime(
         : { committedTasks: committedSnapshot }),
       ...(committedMetadata === undefined ? {} : { committedMetadata }),
       ...(recovery === undefined ? {} : { recovery }),
+      ...(uploadOwner === undefined ? {} : { sourceUploads: uploadOwner }),
     });
   const call = async <T>(
     work: (service: PluginUiApplicationService) => Promise<T>,
@@ -526,6 +587,20 @@ export function createProductionPluginUiRuntime(
       // still run its policy fence, whose requests are cancelled by this runtime's lifetime.
       return current.invoke(...args);
     },
+    ...(uploadOwner === undefined
+      ? {}
+      : {
+          invokeProjectSourceUploadPart: (
+            ...args: Parameters<
+              PluginUiApplicationService["invokeProjectSourceUploadPart"]
+            >
+          ) => {
+            available();
+            const current = application;
+            if (current === null) unavailable();
+            return current.invokeProjectSourceUploadPart(...args);
+          },
+        }),
     ...(recovery === undefined
       ? {}
       : {
@@ -550,6 +625,8 @@ export function createProductionPluginUiRuntime(
         generationReadOwner?.close(),
         owner?.close(),
         metadataOwner?.close(),
+        foundationOwner?.close(),
+        uploadOwner?.close(),
         assetStageOwner?.close(),
         assetOwner?.close(),
         assetRecoveryOwner?.close(),
@@ -579,6 +656,31 @@ export function captureProductionPluginUiActions(
   committedTasks: PluginUiCommittedTaskPort | undefined;
   owner: InstalledPluginTaskActionOwner | undefined;
 }> {
+  const sourceUpload = Object.getOwnPropertyDescriptor(
+    input,
+    "ownedProjectSourceUploadActions",
+  );
+  if (
+    (sourceUpload !== undefined &&
+      (!sourceUpload.enumerable || !Object.hasOwn(sourceUpload, "value"))) ||
+    (sourceUpload === undefined &&
+      "ownedProjectSourceUploadActions" in input) ||
+    (sourceUpload?.value !== undefined &&
+      !isPluginProjectSourceUploadActionOwner(sourceUpload.value))
+  )
+    throw new Error("production_plugin_ui_source_upload_owner_invalid");
+  const foundation = Object.getOwnPropertyDescriptor(
+    input,
+    "ownedProjectFoundationActions",
+  );
+  if (
+    (foundation !== undefined &&
+      (!foundation.enumerable || !Object.hasOwn(foundation, "value"))) ||
+    (foundation === undefined && "ownedProjectFoundationActions" in input) ||
+    (foundation?.value !== undefined &&
+      !isPluginProjectFoundationActionOwner(foundation.value))
+  )
+    throw new Error("production_plugin_ui_foundation_owner_invalid");
   for (const field of [
     "ownedProjectAssetActions",
     "ownedProjectAssetRecoveryActions",

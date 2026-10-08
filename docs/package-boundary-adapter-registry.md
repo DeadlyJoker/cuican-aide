@@ -32,6 +32,12 @@ Plugin Host 仅给已有任务、生成、上下文、查询和历史业务桥�
 
 `packages/test-contracts/src/app-boundary-policy.ts` 分别登记 Control 与 Worker 的实际安装组合和媒体适配文件。Control 的文件系统、路径、Proxy 检测和请求异步上下文能力仅登记在对应宿主配置/组合文件；媒体包与 Plugin Host 也按完整入口登记，未增加 app 级默认通配依赖。Worker 的 SDK Node/Contracts 导入是既有媒体适配器的类型引用，不据此添加 SDK 运行时依赖。原 CLI 的 `process-lifecycle` 和 `node:net` 许可与新登记合并保留。
 
+项目基础信息与原文准备沿上述组合边界新增四条精确登记。`plugin-project-foundation-host-service-availability.ts` 只读取 `@crewon/contracts/project-foundation` 的公开服务名称和版本；`project-foundation-plugin-ui-composition.ts` 与 `production-project-foundation-plugin-runtime.ts` 各自允许 `@crewon/plugin-host`，分别组合真实 Application 服务的安装发布可用性、原 HTTP 身份和请求生命周期。`project-foundation-composition.ts` 允许 `@crewon/media-runtime`，仅用其中的 `ProjectSourceUploadPreparationAdapter` 适配已有上传准备端口，实际 Store 仍借用原父数据库。生产配置显式启用并分别提供项目与上传策略，不映射原创意项目授权，也不允许测试种材料使用的信任选项进入正式配置。
+
+上述登记没有赋予其他文件、嵌套路径或包私有子路径同等许可；Foundation 可用性也不意味着取得 Run、原始字节传输或调用资格。独立 SDK `project-foundation-ui` 入口仅含可移植 DTO 校验与原 `services.invoke` 客户端；渲染端对 Application、Store、媒体包、Plugin Host 和 SDK Node 的禁止规则保持。真实安装的 HTTP 测试辅助文件 `project-foundation-plugin-ui.integration.test-support.ts` 已由原 `.test-support.ts` 识别规则排除，不需要新增产品导入例外，且仍不能从 renderer 生产入口引用。
+
+独立上传 UI 发布再登记三条精确依赖：两种可用性组合共用 `plugin-project-foundation-host-service-availability.ts`，因此该文件另外允许公开 `@crewon/contracts/project-source-uploads`；`project-source-upload-plugin-ui-composition.ts` 与 `production-project-source-upload-plugin-runtime.ts` 各自仅额外允许 `@crewon/plugin-host`，分别组合品牌上传服务和原 HTTP 请求身份/生命周期。正式配置以 `foundation.uploads.pluginUi` 单独批准上传服务，不继承 Foundation 发布。SDK `project-source-uploads` 入口复用四个严格 JSON 动作，分片字节通过另行提供的原生传输端口，每片不超过 65,536 字节，不注入 JSON/base64，也不创建 Run 或授予上传权限。上述登记及 SDK 传输测试不表示正式安装 UI 的原文上传已完成验收。
+
 ## Store 的物理适配例外
 
 `project-media-generation-turn.ts` 的 `node:util` 用于拒绝 Proxy，`project-text-store-support.ts` 的 `node:util` 用于核对重建值与实际持久值。它们属于既有存储记录核验，未给予整个 Store `node:util` 许可。

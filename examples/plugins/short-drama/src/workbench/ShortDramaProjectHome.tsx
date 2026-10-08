@@ -1,5 +1,14 @@
 import type { ReactNode } from "react";
-import { ArrowRight, Film, FolderOpen, Plus, Search } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  Film,
+  FolderOpen,
+  Plus,
+  Search,
+} from "lucide-react";
+import { ProjectCreationParametersFields } from "./ProjectCreationParametersFields";
+import type { CreativeCreationDraft } from "./ProjectFoundationCreateDialog";
 import {
   briefBytes,
   validBrief,
@@ -18,6 +27,10 @@ export function ShortDramaProjectHome({
   onReviewIdea,
   onLoadProjects,
   onOpenProject,
+  creativeDraft,
+  onCreativeDraftChange,
+  onCreateNovel,
+  origins,
 }: {
   snapshot: ProjectSnapshot;
   locked: boolean;
@@ -29,6 +42,10 @@ export function ShortDramaProjectHome({
   onReviewIdea(value: string): void;
   onLoadProjects(state: "active" | "archived", more?: boolean): void;
   onOpenProject(projectId: string): void;
+  creativeDraft?: CreativeCreationDraft;
+  onCreativeDraftChange?(draft: CreativeCreationDraft): void;
+  onCreateNovel?(): void;
+  origins?: ReadonlyMap<string, "creative" | "novel" | null>;
 }) {
   const visibleProjects = snapshot.projects.filter(
     (project) =>
@@ -43,7 +60,9 @@ export function ShortDramaProjectHome({
           <Film size={17} /> AI 短剧工作台
         </span>
         <h1>从一个想法，开始你的短剧</h1>
-        <p>告诉 Agent 你想拍什么。一起完成创作，随时查看各阶段产物。</p>
+        <p>
+          写下创作想法，确认后建立项目。进入项目，与 Agent 创作或逐项编辑成果。
+        </p>
         <form
           className="drama-idea-composer"
           onSubmit={(event) => {
@@ -72,6 +91,47 @@ export function ShortDramaProjectHome({
             placeholder="例如：一名修复师收到一封来自未来的信。做成三集悬疑短剧，先帮我梳理人物和故事。"
             aria-describedby="drama-idea-help"
           />
+          {creativeDraft && onCreativeDraftChange && (
+            <div className="drama-home-creation-fields">
+              <label className="form-field">
+                参考文字（可选）
+                <textarea
+                  className="drama-short-input"
+                  value={creativeDraft.reference}
+                  disabled={!canCreate}
+                  onChange={(event) =>
+                    onCreativeDraftChange({
+                      ...creativeDraft,
+                      reference: event.target.value,
+                    })
+                  }
+                  placeholder="补充参考故事、风格或画面要求"
+                />
+              </label>
+              <ProjectCreationParametersFields
+                origin="creative"
+                value={creativeDraft.parameters}
+                disabled={!canCreate}
+                onChange={(parameters) =>
+                  onCreativeDraftChange({ ...creativeDraft, parameters })
+                }
+              />
+              <label className="drama-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={creativeDraft.direct}
+                  disabled={!canCreate}
+                  onChange={(event) =>
+                    onCreativeDraftChange({
+                      ...creativeDraft,
+                      direct: event.target.checked,
+                    })
+                  }
+                />
+                跳过方案确认，直接写剧本
+              </label>
+            </div>
+          )}
           <div className="drama-idea-actions">
             <span id="drama-idea-help">先确认需求，再开始制作</span>
             <button
@@ -83,6 +143,27 @@ export function ShortDramaProjectHome({
             </button>
           </div>
         </form>
+        {onCreateNovel && (
+          <div className="detail-actions drama-home-secondary-entry">
+            <button
+              type="button"
+              className="button secondary"
+              disabled={locked}
+              onClick={onCreateNovel}
+            >
+              <BookOpen size={16} />
+              从小说创建短剧
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              disabled
+              title="模板暂未开放"
+            >
+              模板暂未开放
+            </button>
+          </div>
+        )}
         {briefBytes(idea) > 8192 && (
           <p className="detail-note" role="alert">
             需求超过 8,192 字节，请缩短后继续。
@@ -149,7 +230,15 @@ export function ShortDramaProjectHome({
             >
               <div className="drama-project-card-heading">
                 <Film size={20} />
-                <span>创作项目</span>
+                <span>
+                  {origins?.get(project.projectId) === "creative"
+                    ? "创意项目"
+                    : origins?.get(project.projectId) === "novel"
+                      ? "小说项目"
+                      : origins?.has(project.projectId)
+                        ? "来源未标记"
+                        : "创作项目"}
+                </span>
                 <ArrowRight size={16} />
               </div>
               <div className="project-card-text">

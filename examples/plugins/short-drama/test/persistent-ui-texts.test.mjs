@@ -15,6 +15,16 @@ const { default: definition } = await import(
 after(async () => browser.happyDOM.close());
 const field = (f, label) =>
   f.container.querySelector(`[aria-label="${label}"]`);
+async function edit(f) {
+  const button = [
+    ...f.container.querySelectorAll(".story-script-workbench button"),
+  ].find((item) => item.textContent.trim() === "编辑");
+  if (button) await f.click(button);
+}
+async function inputText(f, label, value) {
+  if (!field(f, label)) await edit(f);
+  await f.input(field(f, label), value);
+}
 const stage = (f) => f.container.querySelector('[data-project-page="outline"]');
 const episodeButton = (f) =>
   [...f.container.querySelectorAll(".story-script-workbench button")].find(
@@ -30,18 +40,17 @@ async function open(service) {
   return f;
 }
 async function fillOutline(f) {
-  await f.input(
-    field(f, "一句话故事"),
-    "失去记忆的快递员送出一封改变自己的信。",
-  );
-  await f.input(
-    field(f, "故事梗概"),
+  await inputText(f, "一句话故事", "失去记忆的快递员送出一封改变自己的信。");
+  await inputText(
+    f,
+    "故事梗概",
     " 保留换行\n快递员追查旧信，发现收件人是十年前的自己。 ",
   );
   await f.click(f.button("添加一集"));
-  await f.input(field(f, "第 1 集标题"), "迟到的来信");
-  await f.input(
-    field(f, "第 1 集故事"),
+  await inputText(f, "第 1 集标题", "迟到的来信");
+  await inputText(
+    f,
+    "第 1 集故事",
     "他收到一封署名为自己的来信，决定追查寄件人。",
   );
 }
@@ -80,6 +89,30 @@ test("same installable UI edits outline and episode scenes, separates candidate/
     assert.match(output.textContent, /待确认/);
     assert.ok(output.textContent.includes(content));
     assert.equal(output.querySelector("textarea"), null);
+    assert.doesNotMatch(output.textContent, /v\d+/u);
+    assert.equal(field(f, "故事梗概"), null);
+    assert.equal(f.button("编辑").closest(".drama-secondary-disclosure"), null);
+    assert.equal(
+      f.button("采用此版本").closest(".drama-secondary-disclosure"),
+      null,
+    );
+    assert.equal(
+      f.container.querySelector(".story-script-workbench details").open,
+      false,
+    );
+    const savedRequests = service.calls.filter(
+      (call) => call.method === "saveOutlineCandidate",
+    ).length;
+    await f.click(f.button("编辑"));
+    assert.equal(field(f, "故事梗概").value, content);
+    assert.equal(f.button("保存候选版本").disabled, true);
+    await f.click(f.button("完成编辑"));
+    assert.equal(field(f, "故事梗概"), null);
+    assert.equal(
+      service.calls.filter((call) => call.method === "saveOutlineCandidate")
+        .length,
+      savedRequests,
+    );
     assert.equal(
       episodeButton(f),
       undefined,
@@ -87,7 +120,11 @@ test("same installable UI edits outline and episode scenes, separates candidate/
     );
     await f.click(f.button("采用此版本"));
     await f.click(f.button("锁定采用版本"));
-    await f.input(field(f, "故事梗概"), "锁定后仍然可以继续创作新候选。");
+    await inputText(f, "故事梗概", "锁定后仍然可以继续创作新候选。");
+    assert.equal(
+      f.button("保存候选版本").closest(".drama-secondary-disclosure"),
+      null,
+    );
     await f.click(f.button("保存候选版本"));
     assert.equal(outline.revisions.length, 2);
     assert.equal(outline.artifact.selectedContentRevision, 1);
@@ -96,12 +133,12 @@ test("same installable UI edits outline and episode scenes, separates candidate/
     await f.click(f.button("采用此版本"));
     await f.click(episodeButton(f));
     await f.click(f.button("添加场次"));
-    await f.input(field(f, "第 1 场地点"), "快递站");
-    await f.input(field(f, "第 1 场时间"), "夜");
-    await f.input(field(f, "第 1 场动作"), "他拆开信封。");
+    await inputText(f, "第 1 场地点", "快递站");
+    await inputText(f, "第 1 场时间", "夜");
+    await inputText(f, "第 1 场动作", "他拆开信封。");
     await f.click(f.button("第 1 场添加对白"));
-    await f.input(field(f, "第 1 场对白 1 角色"), "快递员");
-    await f.input(field(f, "第 1 场对白 1 内容"), " 这明明是我的笔迹。\n ");
+    await inputText(f, "第 1 场对白 1 角色", "快递员");
+    await inputText(f, "第 1 场对白 1 内容", " 这明明是我的笔迹。\n ");
     await f.click(f.button("保存候选版本"));
     const script = [...service.artifacts.values()].find(
       (item) => item.artifact.kind === "script",
@@ -125,6 +162,11 @@ test("same installable UI edits outline and episode scenes, separates candidate/
     f = await open(service);
     await f.click(stage(f));
     await f.click(episodeButton(f));
+    assert.match(
+      f.container.querySelector('[aria-label="产物正文"]').textContent,
+      /快递员：.*这明明是我的笔迹/u,
+    );
+    await edit(f);
     assert.equal(
       field(f, "第 1 场对白 1 内容").value,
       " 这明明是我的笔迹。\n ",
@@ -163,7 +205,7 @@ test("unknown ACK retries exact original key once; true conflict refresh preserv
     assert.deepEqual(writes[1].input, original);
     const item = [...service.artifacts.values()][0];
     assert.equal(item.revisions.length, 1);
-    await f.input(field(f, "故事梗概"), "冲突前尚未保存的手动改写。");
+    await inputText(f, "故事梗概", "冲突前尚未保存的手动改写。");
     item.artifact = { ...item.artifact, revision: item.artifact.revision + 1 };
     await f.click(f.button("保存候选版本"));
     assert.match(f.container.textContent, /版本已改变/u);
@@ -190,7 +232,7 @@ test("immutable source provenance stays explicit when requirements change; dirty
   try {
     await savedOutline(f);
     await f.click(f.button("查看内容历史"));
-    await f.input(field(f, "故事梗概"), "在原来源上继续编辑。");
+    await inputText(f, "故事梗概", "在原来源上继续编辑。");
     assert.equal(f.button("打开内容 v1").disabled, true);
     await f.click(f.container.querySelector('[data-project-page="overview"]'));
     await f.input(f.container.querySelector("#creative-brief"), "第二版需求。");
@@ -259,9 +301,9 @@ test("manual script larger than legacy invoke budget reaches strict independent 
     await f.click(episodeButton(f));
     for (let index = 1; index <= 3; ++index) {
       await f.click(f.button("添加场次"));
-      await f.input(field(f, `第 ${index} 场地点`), "信件档案室");
-      await f.input(field(f, `第 ${index} 场时间`), "夜");
-      await f.input(field(f, `第 ${index} 场动作`), "x".repeat(8192));
+      await inputText(f, `第 ${index} 场地点`, "信件档案室");
+      await inputText(f, `第 ${index} 场时间`, "夜");
+      await inputText(f, `第 ${index} 场动作`, "x".repeat(8192));
     }
     assert.equal(f.button("保存候选版本").disabled, false);
     await f.click(f.button("保存候选版本"));
@@ -332,7 +374,7 @@ test("late post-commit projection cannot replace a fresh manual read of the same
     await settle();
     await f.click(f.container.querySelector(".project-card"));
     await savedOutline(f);
-    await f.input(field(f, "故事梗概"), "继续制作第二个候选。");
+    await inputText(f, "故事梗概", "继续制作第二个候选。");
     delay = true;
     await f.click(f.button("保存候选版本"));
     const item = [...service.artifacts.values()][0];
@@ -361,9 +403,9 @@ test("manual refresh reads actual new outline and brief without silently changin
     await savedOutline(f);
     await f.click(episodeButton(f));
     await f.click(f.button("添加场次"));
-    await f.input(field(f, "第 1 场地点"), "办公室");
-    await f.input(field(f, "第 1 场时间"), "夜");
-    await f.input(field(f, "第 1 场动作"), "他读取邮件。");
+    await inputText(f, "第 1 场地点", "办公室");
+    await inputText(f, "第 1 场时间", "夜");
+    await inputText(f, "第 1 场动作", "他读取邮件。");
     await f.click(f.button("保存候选版本"));
     await f.click(f.button("采用此版本"));
     const outline = [...service.artifacts.values()].find(
@@ -397,7 +439,7 @@ test("manual refresh reads actual new outline and brief without silently changin
         contentRevision: 2,
       },
     });
-    await f.input(field(f, "第 1 场动作"), "用户未保存的现场改写。");
+    await inputText(f, "第 1 场动作", "用户未保存的现场改写。");
     await f.click(f.button("刷新内容"));
     assert.equal(field(f, "第 1 场动作").value, "用户未保存的现场改写。");
     assert.match(

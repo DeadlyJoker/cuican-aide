@@ -1,4 +1,10 @@
-import { useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ProjectAssetController } from "./ProjectAssetController";
 import type { ConceptImageSelectionController } from "./ConceptImageSelectionController";
 import type { ProjectDetails } from "./creative-project-controller";
@@ -44,6 +50,32 @@ export function ProjectAssetWorkbench({
   const editable = controller.canEdit && !blocked;
   const readable = controller.canRead && !blocked;
   const { draft, view, content } = state;
+  const [editing, setEditing] = useState(false);
+  const editorId = useId();
+  const nameInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    setEditing(false);
+  }, [details.project.projectId, view?.asset.assetId]);
+  const editorVisible = editing || state.dirty || !content;
+  useEffect(() => {
+    if (editing) nameInput.current?.focus();
+  }, [editing]);
+  const knownRevisions = [
+    content,
+    view?.selectedContentRevision,
+    ...state.history,
+  ].filter((revision) => revision !== null && revision !== undefined);
+  const knownNames = new Map(
+    state.assets.map((asset) => [
+      asset.assetId,
+      knownRevisions.find(
+        (revision) =>
+          revision.assetId === asset.assetId &&
+          revision.contentRevision ===
+            (asset.selectedContentRevision ?? asset.latestContentRevision),
+      )?.content.name,
+    ]),
+  );
   const matchesPage = (kind: ProjectAssetKind) =>
     page === "characters" ? kind === "character" : kind !== "character";
   const visibleAssets = state.assets.filter((asset) => matchesPage(asset.kind));
@@ -119,7 +151,9 @@ export function ProjectAssetWorkbench({
             aria-pressed={view?.asset.assetId === asset.assetId}
             onClick={() => void controller.open(asset.assetId)}
           >
-            {labels[asset.kind]} {index + 1} ·{" "}
+            {knownNames.get(asset.assetId) ??
+              `${labels[asset.kind]} ${index + 1}`}{" "}
+            ·{" "}
             {asset.selectedContentRevision
               ? `选用 v${asset.selectedContentRevision}`
               : "未选用"}
@@ -167,90 +201,107 @@ export function ProjectAssetWorkbench({
                 : "待确认"}{" "}
               · v{content.contentRevision}
             </span>
+            <button
+              className="button secondary"
+              disabled={!editable || editorVisible}
+              aria-expanded={editorVisible}
+              aria-controls={editorId}
+              onClick={() => {
+                setEditing(true);
+              }}
+            >
+              编辑设定
+            </button>
           </div>
           <p className="drama-readable-text">{content.content.setting}</p>
-          <details className="drama-secondary-disclosure">
-            <summary>画面描述</summary>
-            <p className="drama-readable-text">
-              {content.content.visualPrompt}
-            </p>
-          </details>
+          {content.content.visualPrompt && (
+            <>
+              <h4>画面描述</h4>
+              <p className="drama-readable-text">
+                {content.content.visualPrompt}
+              </p>
+            </>
+          )}
         </article>
       )}
       {draft && matchesPage(draft.kind) && (
-        <details
-          className="drama-secondary-disclosure"
-          open={state.dirty || !content}
-        >
-          <summary>编辑设定与参考图</summary>
-          <div className="concept-grid">
-            <section className="brief-panel text-editor" aria-label="资产设定">
-              <div className="panel-heading">
-                <h3>{labels[draft.kind]}设定</h3>
-                <span className="version-chip">
-                  {content ? `候选 v${content.contentRevision}` : "新资产"}
-                </span>
-              </div>
-              <label className="form-field">
-                名称
-                <input
-                  aria-label="资产名称"
-                  value={draft.content.name}
-                  disabled={!editable}
-                  onChange={(event) =>
-                    controller.setDraft({
-                      ...draft.content,
-                      name: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <label className="form-field">
-                设定
-                <textarea
-                  aria-label="资产设定"
-                  value={draft.content.setting}
-                  disabled={!editable}
-                  placeholder="角色的外貌、性格与关系；场景的环境与光线；道具的外形与用途。"
-                  onChange={(event) =>
-                    controller.setDraft({
-                      ...draft.content,
-                      setting: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <label className="form-field">
-                画面描述
-                <textarea
-                  aria-label="资产画面描述"
-                  value={draft.content.visualPrompt}
-                  disabled={!editable}
-                  onChange={(event) =>
-                    controller.setDraft({
-                      ...draft.content,
-                      visualPrompt: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <p className="detail-note">
-                画面描述{" "}
-                {
-                  new TextEncoder().encode(draft.content.visualPrompt)
-                    .byteLength
-                }{" "}
-                / 2,000 字节
-              </p>
+        <>
+          <section
+            id={editorId}
+            className="brief-panel text-editor"
+            aria-label="资产设定"
+            hidden={!editorVisible}
+            style={{ display: editorVisible ? undefined : "none" }}
+          >
+            <div className="panel-heading">
+              <h3>{labels[draft.kind]}设定</h3>
+              <span className="version-chip">
+                {content ? `候选 v${content.contentRevision}` : "新资产"}
+              </span>
+            </div>
+            <label className="form-field">
+              名称
+              <input
+                ref={nameInput}
+                aria-label="资产名称"
+                value={draft.content.name}
+                disabled={!editable}
+                onChange={(event) =>
+                  controller.setDraft({
+                    ...draft.content,
+                    name: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label className="form-field">
+              设定
+              <textarea
+                aria-label="资产设定"
+                value={draft.content.setting}
+                disabled={!editable}
+                placeholder="角色的外貌、性格与关系；场景的环境与光线；道具的外形与用途。"
+                onChange={(event) =>
+                  controller.setDraft({
+                    ...draft.content,
+                    setting: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label className="form-field">
+              画面描述
+              <textarea
+                aria-label="资产画面描述"
+                value={draft.content.visualPrompt}
+                disabled={!editable}
+                onChange={(event) =>
+                  controller.setDraft({
+                    ...draft.content,
+                    visualPrompt: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <p className="detail-note">
+              画面描述{" "}
+              {new TextEncoder().encode(draft.content.visualPrompt).byteLength}{" "}
+              / 2,000 字节
+            </p>
+            <div className="detail-actions">
+              <button
+                className="button primary"
+                disabled={!editable || !controller.canSave}
+                onClick={() => void controller.save()}
+              >
+                {state.saving ? "正在保存…" : "保存设定候选"}
+              </button>
+            </div>
+          </section>
+          {view && (
+            <section className="detail-panel" aria-label="设定与参考图采用">
               <div className="detail-actions">
-                <button
-                  className="button primary"
-                  disabled={!editable || !controller.canSave}
-                  onClick={() => void controller.save()}
-                >
-                  {state.saving ? "正在保存…" : "保存设定候选"}
-                </button>
-                {view && content && (
+                {content && (
                   <button
                     className="button secondary"
                     disabled={
@@ -265,15 +316,13 @@ export function ProjectAssetWorkbench({
                     选用这版设定
                   </button>
                 )}
-                {view && (
-                  <button
-                    className="button secondary"
-                    disabled={!editable}
-                    onClick={() => void controller.setLocked()}
-                  >
-                    {view.asset.locked ? "解除资产锁定" : "锁定选用版本"}
-                  </button>
-                )}
+                <button
+                  className="button secondary"
+                  disabled={!editable}
+                  onClick={() => void controller.setLocked()}
+                >
+                  {view.asset.locked ? "解除资产锁定" : "锁定选用版本"}
+                </button>
               </div>
               <ProjectAssetConceptActions
                 assets={controller}
@@ -282,12 +331,73 @@ export function ProjectAssetWorkbench({
                 blocked={blocked}
                 onOpen={onOpenConcept}
               />
+              <h3>参考图</h3>
+              <p className="detail-note">
+                设定：
+                {view.asset.selectedContentRevision
+                  ? `选用 v${view.asset.selectedContentRevision}`
+                  : "未选用"}
+                {view.dependencyState === "stale" &&
+                  " · 来源已改变，请重新确认"}
+                {view.asset.locked && " · 已锁定"}
+              </p>
+              <p className="detail-note">
+                参考图：
+                {view.asset.selectedReferenceRevision
+                  ? `选用 v${view.asset.selectedReferenceRevision}`
+                  : "未选用"}
+                {view.referenceState === "stale" && " · 设定已改变，请重新确认"}
+              </p>
+              {view.selectedReferenceRevision && (
+                <p className="detail-note">
+                  {view.selectedReferenceRevision.source.kind === "media-result"
+                    ? "角色四视图"
+                    : "概念图"}
+                  {" · "}结果{" "}
+                  {view.selectedReferenceRevision.source.resultIndex + 1}
+                  {" · "}设定 v
+                  {view.selectedReferenceRevision.assetContentRevision}
+                </p>
+              )}
+              {sameProjectImage && reference && choice && (
+                <div className="version-card">
+                  <strong>
+                    当前概念图选用 · 结果 {reference.resultIndex + 1}
+                  </strong>
+                  <p className="detail-note">
+                    此图将关联到已选用设定 v
+                    {view.asset.selectedContentRevision ?? "—"}。
+                  </p>
+                  <button
+                    className="button secondary"
+                    disabled={
+                      !editable || state.dirty || !view.selectedContentRevision
+                    }
+                    onClick={() =>
+                      void controller.attachReference({
+                        conceptAssetId: reference.reference.assetId,
+                        selectionRevision: choice.selectionRevision,
+                      })
+                    }
+                  >
+                    保存为参考图候选
+                  </button>
+                </div>
+              )}
+              {!sameProjectImage && !view.selectedReferenceRevision && (
+                <p className="detail-note">
+                  先探索并选用一张概念图，再关联为这项设定的参考图。
+                </p>
+              )}
             </section>
+          )}
+          <details className="drama-secondary-disclosure">
+            <summary>来源与输入</summary>
             <section
               className="detail-panel text-editor"
               aria-label="资产来源与参考图"
             >
-              <h3>来源与选用</h3>
+              <h3>来源</h3>
               <p className="detail-note">
                 需求 v{draft.briefRevision}
                 {draft.briefRevision !== details.brief.briefRevision &&
@@ -344,72 +454,20 @@ export function ProjectAssetWorkbench({
                   读取更多剧本
                 </button>
               )}
-              {view && (
-                <>
-                  <p className="detail-note">
-                    设定：
-                    {view.asset.selectedContentRevision
-                      ? `选用 v${view.asset.selectedContentRevision}`
-                      : "未选用"}
-                    {view.dependencyState === "stale" &&
-                      " · 来源已改变，请重新确认"}
-                    {view.asset.locked && " · 已锁定"}
-                  </p>
-                  <p className="detail-note">
-                    参考图：
-                    {view.asset.selectedReferenceRevision
-                      ? `选用 v${view.asset.selectedReferenceRevision}`
-                      : "未选用"}
-                    {view.referenceState === "stale" &&
-                      " · 设定已改变，请重新确认"}
-                  </p>
-                  {sameProjectImage && reference && choice && (
-                    <div className="version-card">
-                      <strong>
-                        当前概念图选用 · 结果 {reference.resultIndex + 1}
-                      </strong>
-                      <p className="detail-note">
-                        此图将关联到已选用设定 v
-                        {view.asset.selectedContentRevision ?? "—"}。
-                      </p>
-                      <button
-                        className="button secondary"
-                        disabled={
-                          !editable ||
-                          state.dirty ||
-                          !view.selectedContentRevision
-                        }
-                        onClick={() =>
-                          void controller.attachReference({
-                            conceptAssetId: reference.reference.assetId,
-                            selectionRevision: choice.selectionRevision,
-                          })
-                        }
-                      >
-                        保存为参考图候选
-                      </button>
-                    </div>
-                  )}
-                  {!sameProjectImage && (
-                    <p className="detail-note">
-                      先在“项目与概念图”中选用一张项目图片，再回来关联参考图。
-                    </p>
-                  )}
-                  <button
-                    className="text-button"
-                    disabled={!readable}
-                    onClick={() => void controller.loadHistory()}
-                  >
-                    读取设定与参考图历史
-                  </button>
-                </>
-              )}
             </section>
-          </div>
-        </details>
+          </details>
+        </>
       )}
-      {draft && matchesPage(draft.kind) && (
-        <>
+      {draft && matchesPage(draft.kind) && view && (
+        <details className="drama-secondary-disclosure">
+          <summary>设定与参考图历史</summary>
+          <button
+            className="text-button"
+            disabled={!readable}
+            onClick={() => void controller.loadHistory()}
+          >
+            读取设定与参考图历史
+          </button>
           <div className="detail-actions" aria-label="资产设定历史">
             {state.history.map((revision) => (
               <button
@@ -469,7 +527,7 @@ export function ProjectAssetWorkbench({
               更多历史版本
             </button>
           )}
-        </>
+        </details>
       )}
     </section>
   );

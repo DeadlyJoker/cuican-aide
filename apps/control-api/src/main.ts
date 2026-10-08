@@ -16,6 +16,7 @@ import {
   loadProductionProjectEnvironment,
   composeProductionProjectStartup,
 } from "./production-project-environment.ts";
+import { ProductionProjectSourceUploadAuthorization } from "./production-project-source-upload-authorization.ts";
 import { loadInstalledPluginConfigurationEnvironment } from "./installed-plugin-configuration-environment.ts";
 import { loadInstalledPluginTaskEnvironment } from "./installed-plugin-task-environment.ts";
 import {
@@ -277,6 +278,9 @@ const sharedConfig = {
   ),
 };
 let runtime;
+let projectSourceUploadAuthorization:
+  | ProductionProjectSourceUploadAuthorization
+  | undefined;
 try {
   if (securityMode === "production") {
     const productionConnectionString = requiredEnvironment(
@@ -319,13 +323,24 @@ try {
       }),
       timeoutMs: authorityTimeoutMs,
     });
+    if (projectStartup?.foundation !== undefined)
+      projectSourceUploadAuthorization =
+        new ProductionProjectSourceUploadAuthorization({
+          url: requiredEnvironment("CREWON_POLICY_DECISION_URL"),
+          serviceToken: requiredEnvironment("CREWON_POLICY_SERVICE_TOKEN"),
+          timeoutMs: authorityTimeoutMs,
+        });
     runtime = await createProductionPostgresControlApi({
       ...sharedConfig,
       connectionString: productionConnectionString,
       identity,
       authorization,
       pluginCreditAuthorization: authorization,
-      ...composeProductionProjectStartup(projectStartup, authorization),
+      ...composeProductionProjectStartup(
+        projectStartup,
+        authorization,
+        projectSourceUploadAuthorization,
+      ),
       ...(maximumDatabasePoolSize === undefined
         ? {}
         : { maxPoolSize: maximumDatabasePoolSize }),
@@ -460,6 +475,7 @@ try {
     }
   }
 } catch (error) {
+  projectSourceUploadAuthorization?.close();
   await artifactStore.close();
   throw error;
 }
@@ -470,11 +486,18 @@ const port = parsePort(
 );
 const shutdown = installProcessShutdown({
   host: process,
-  close: () => runtime.app.close(),
+  close: () => {
+    projectSourceUploadAuthorization?.close();
+    return runtime.app.close();
+  },
   reportFailure: () => {
     process.stderr.write("CrewON Control API shutdown failed\n");
   },
 });
+if (projectSourceUploadAuthorization !== undefined)
+  runtime.app.addHook("onClose", async () =>
+    projectSourceUploadAuthorization?.close(),
+  );
 const activationInput =
   activationGate === null
     ? null

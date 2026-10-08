@@ -1,3 +1,9 @@
+import type { ProjectSourceUploadPartLocator } from "@crewon/contracts/project-source-uploads";
+import {
+  captureSourceUploadBytes,
+  sourceUploadByteLength,
+  writeLocatedProjectSourceUploadPart,
+} from "./project-source-upload-part-application.ts";
 import {
   creativeProjectDigest,
   creativeProjectOpaqueId,
@@ -7,6 +13,8 @@ import {
   validateCreativeProjectActor,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { projectSourceUploadBusinessAuthority } from "./project-source-upload-application-authority.ts";
+import { captureProjectSourceUploadExecutionAuthority } from "./project-source-upload-plugin-commit-authority.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import { capturePreparedProjectSource } from "./project-source-preparation-port.ts";
 import {
@@ -15,6 +23,8 @@ import {
   type ProjectSourceUploadAction,
   type ProjectSourceUploadApplicationDependencies,
   type ProjectSourceUploadCommitAuthority,
+  type ProjectSourceUploadExecutionAuthority,
+  type ProjectSourceUploadExecutionOptions,
   type ProjectSourceUploadInitial,
   type ProjectSourceUploadMutationResult,
   type ProjectSourceUploadParsedFile,
@@ -23,11 +33,9 @@ import {
 import {
   assertSourceUploadActive,
   assertSourceUploadCurrent,
-  captureSourceUploadAuthority,
   captureSourceUploadClaim,
   captureSourceUploadInitial,
   captureSourceUploadPart,
-  captureSourceUploadPermission,
   captureSourceUploadPrepared,
   captureSourceUploadState,
   sourceUploadFields,
@@ -56,10 +64,6 @@ export type ProjectSourceUploadPreparationResult = Readonly<{
   disposition: "ready" | "pending" | "rejected";
   state: ProjectSourceUploadState;
 }>;
-const byteLengthGetter = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype),
-  "byteLength",
-)!.get!;
 const parsedFields = [
   "fileName",
   "format",
@@ -86,6 +90,17 @@ const contentFailures = new Set([
   "project_source_import_html_depth_limit",
   "project_source_import_html_node_limit",
 ]);
+
+const actualSourceUploadServices = new WeakSet<object>();
+export function isProjectSourceUploadApplicationService(
+  input: unknown,
+): input is ProjectSourceUploadApplicationService {
+  return (
+    input !== null &&
+    typeof input === "object" &&
+    actualSourceUploadServices.has(input)
+  );
+}
 
 /** Scope-owned uploads only. No product registration, project creation, model call or supplier dispatch. */
 export class ProjectSourceUploadApplicationService {
@@ -146,11 +161,14 @@ export class ProjectSourceUploadApplicationService {
       }),
       preparationClaimTtlMs: ttl,
     });
+    actualSourceUploadServices.add(this);
   }
   async begin(
     actorInput: ActorContext,
     input: BeginProjectSourceUploadCommand,
+    options?: ProjectSourceUploadExecutionOptions,
   ): Promise<ProjectSourceUploadMutationResult> {
+    const execution = captureProjectSourceUploadExecutionAuthority(options);
     const actor = validateCreativeProjectActor(actorInput),
       v = sourceUploadFields(input, [
         "idempotencyKey",
@@ -199,7 +217,13 @@ export class ProjectSourceUploadApplicationService {
         ),
       ),
     });
-    const authority = this.#authority(actor, "projectSourceUpload:begin", null);
+    const authority = this.#authority(
+      actor,
+      "projectSourceUpload:begin",
+      null,
+      null,
+      execution,
+    );
     await assertSourceUploadCurrent(authority);
     const previous = await this.#d.store.loadBeginReceipt(
       { actor, receipt },
@@ -236,11 +260,19 @@ export class ProjectSourceUploadApplicationService {
   async getStatus(
     actorInput: ActorContext,
     input: Readonly<{ uploadId: string }>,
+    options?: ProjectSourceUploadExecutionOptions,
   ): Promise<ProjectSourceUploadState> {
+    const execution = captureProjectSourceUploadExecutionAuthority(options);
     const actor = validateCreativeProjectActor(actorInput),
       v = sourceUploadFields(input, ["uploadId"]),
       uploadId = creativeProjectOpaqueId(v.uploadId),
-      a = this.#authority(actor, "projectSourceUpload:status", uploadId);
+      a = this.#authority(
+        actor,
+        "projectSourceUpload:status",
+        uploadId,
+        null,
+        execution,
+      );
     await assertSourceUploadCurrent(a);
     const state = await this.#load(actor, uploadId, a);
     await assertSourceUploadCurrent(a);
@@ -249,7 +281,9 @@ export class ProjectSourceUploadApplicationService {
   async writePart(
     actorInput: ActorContext,
     input: WriteProjectSourceUploadPartCommand,
+    options?: ProjectSourceUploadExecutionOptions,
   ): Promise<ProjectSourceUploadMutationResult> {
+    const execution = captureProjectSourceUploadExecutionAuthority(options);
     const actor = validateCreativeProjectActor(actorInput),
       v = sourceUploadFields(input, [
         "uploadId",
@@ -267,7 +301,13 @@ export class ProjectSourceUploadApplicationService {
         PROJECT_SOURCE_UPLOAD_PART_BYTES,
         null,
       ),
-      a = this.#authority(actor, "projectSourceUpload:write", uploadId);
+      a = this.#authority(
+        actor,
+        "projectSourceUpload:write",
+        uploadId,
+        null,
+        execution,
+      );
     await assertSourceUploadCurrent(a);
     const state = await this.#load(actor, uploadId, a);
     const part = captureSourceUploadPart(
@@ -297,13 +337,49 @@ export class ProjectSourceUploadApplicationService {
       fail("internal", "project_source_upload_store_result_invalid");
     return result;
   }
+  /** Native owned snapshot for the dedicated mounted raw transport, before any asynchronous work. */
+  capturePartBytes(bytes: Uint8Array): Uint8Array {
+    return this.#capture(bytes, PROJECT_SOURCE_UPLOAD_PART_BYTES, null);
+  }
+  writeLocatedPart(
+    actor: ActorContext,
+    locator: ProjectSourceUploadPartLocator,
+    bytes: Uint8Array,
+    options?: ProjectSourceUploadExecutionOptions,
+  ): Promise<ProjectSourceUploadMutationResult> {
+    return writeLocatedProjectSourceUploadPart(actor, locator, bytes, options, {
+      bytes: this.#d.bytes,
+      store: this.#d.store,
+      authority: (currentActor, uploadId, execution) =>
+        this.#authority(
+          currentActor,
+          "projectSourceUpload:write",
+          uploadId,
+          null,
+          execution,
+        ),
+      load: (currentActor, uploadId, authority) =>
+        this.#load(currentActor, uploadId, authority),
+      result: (input, currentActor, uploadId) =>
+        this.#result(input, currentActor, uploadId),
+      now: () => this.#now(),
+    });
+  }
   async cancel(
     actorInput: ActorContext,
     input: ProjectSourceUploadCommand,
+    options?: ProjectSourceUploadExecutionOptions,
   ): Promise<ProjectSourceUploadMutationResult> {
+    const execution = captureProjectSourceUploadExecutionAuthority(options);
     const actor = validateCreativeProjectActor(actorInput),
       { uploadId, expectedRevision } = change(input),
-      a = this.#authority(actor, "projectSourceUpload:cancel", uploadId);
+      a = this.#authority(
+        actor,
+        "projectSourceUpload:cancel",
+        uploadId,
+        null,
+        execution,
+      );
     await assertSourceUploadCurrent(a);
     const result = this.#result(
       await this.#d.store.cancel(
@@ -320,11 +396,21 @@ export class ProjectSourceUploadApplicationService {
   async prepare(
     actorInput: ActorContext,
     input: ProjectSourceUploadCommand,
-    options: Readonly<{ signal?: AbortSignal }> = {},
+    options: ProjectSourceUploadExecutionOptions &
+      Readonly<{ signal?: AbortSignal }> = {},
   ): Promise<ProjectSourceUploadPreparationResult> {
+    const execution = captureProjectSourceUploadExecutionAuthority(options, [
+      "signal",
+    ]);
     const actor = validateCreativeProjectActor(actorInput),
       { uploadId, expectedRevision } = change(input),
-      a = this.#authority(actor, "projectSourceUpload:prepare", uploadId);
+      a = this.#authority(
+        actor,
+        "projectSourceUpload:prepare",
+        uploadId,
+        null,
+        execution,
+      );
     options.signal?.throwIfAborted();
     await assertSourceUploadCurrent(a);
     let state = await this.#load(actor, uploadId, a);
@@ -535,75 +621,32 @@ export class ProjectSourceUploadApplicationService {
     action: ProjectSourceUploadAction,
     uploadId: string | null,
     projectId: string | null = null,
+    execution?: ProjectSourceUploadExecutionAuthority,
   ): ProjectSourceUploadCommitAuthority {
-    const permission = captureSourceUploadPermission({
+    return projectSourceUploadBusinessAuthority({
+      authorization: this.#d.authorization,
       actor,
       action,
-      resource: {
-        kind: "projectSourceUpload",
-        owner: owner(actor),
-        uploadId,
-        projectId,
-      },
-    });
-    const active = () => {
-      const result: unknown = this.#d.authorization.assertActive(permission);
-      if (result !== undefined) {
-        try {
-          void Promise.prototype.then.call(
-            result,
-            () => undefined,
-            () => undefined,
-          );
-        } catch {
-          /* An arbitrary thenable establishes no synchronous authority. */
-        }
-        fail("internal", "project_source_upload_authority_invalid");
-      }
-    };
-    return captureSourceUploadAuthority({
-      version: "crewon.project-source-upload-commit.v1",
-      permission,
-      assertCurrent: async () => {
-        const decision = await this.#d.authorization.authorize(permission);
-        if (decision.outcome !== "allow")
-          fail("authorization", "project_source_upload_permission_denied");
-        active();
-      },
-      assertActive: active,
+      uploadId,
+      projectId,
+      execution,
     });
   }
+
   #capture(
     raw: unknown,
     maximumBytes: number,
     expectedBytes: number | null,
   ): Uint8Array {
-    let result: Uint8Array;
-    try {
-      result = this.#d.bytes.capture(raw, { maximumBytes, expectedBytes });
-      const length = this.#byteLength(result);
-      if (
-        result === raw ||
-        length < 1 ||
-        length > maximumBytes ||
-        (expectedBytes !== null && length !== expectedBytes)
-      )
-        throw new Error("bad_snapshot");
-    } catch (error) {
-      throw new ApplicationError(
-        "validation",
-        "project_source_upload_bytes_invalid",
-        { cause: error },
-      );
-    }
-    return result;
+    return captureSourceUploadBytes(
+      this.#d.bytes,
+      raw,
+      maximumBytes,
+      expectedBytes,
+    );
   }
   #byteLength(bytes: Uint8Array): number {
-    try {
-      return byteLengthGetter.call(bytes) as number;
-    } catch {
-      return fail("validation", "project_source_upload_bytes_invalid");
-    }
+    return sourceUploadByteLength(bytes);
   }
   #now() {
     return creativeProjectTimestamp(this.#d.clock.now());

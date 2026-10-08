@@ -5,19 +5,18 @@ export function ProjectTextDocument({
   revision,
   selected,
   stale,
+  locked,
 }: {
   revision: PublicProjectTextRevision | null;
   selected: boolean;
   stale: boolean;
+  locked: boolean;
 }) {
   if (!revision)
     return (
       <div className="drama-output-empty">
         <h3>还没有产物</h3>
-        <p>
-          在项目对话中让 Agent
-          创作，保存后会显示在这里。也可以展开下方编辑器手动填写。
-        </p>
+        <p>在项目对话中让 Agent 创作，保存后会显示在这里。也可以手动填写。</p>
       </div>
     );
   return (
@@ -25,7 +24,8 @@ export function ProjectTextDocument({
       <div className="panel-heading">
         <h3>{revision.content.title}</h3>
         <span className="version-chip">
-          {selected ? "已采用" : "待确认"} · v{revision.contentRevision}
+          {selected ? "已采用" : "待确认"}
+          {selected && locked ? " · 已锁定" : ""}
         </span>
       </div>
       {stale && (

@@ -104,11 +104,16 @@ export async function uploadSchemaFixture(
       ? new SqliteCreativeProjectStore({ database, assertOpen })
       : new PostgresCreativeProjectStore({ pool: pool!, schema, assertOpen });
     const uploads: UploadSchemaStore = database
-      ? new SqliteProjectSourceUploadStore({ database, assertOpen })
+      ? new SqliteProjectSourceUploadStore({
+          database,
+          assertOpen,
+          installationAdmission: "trusted-internal-authority",
+        })
       : new PostgresProjectSourceUploadStore({
           pool: pool!,
           schema,
           assertOpen,
+          installationAdmission: "trusted-internal-authority",
         });
     return { projects, uploads };
   }

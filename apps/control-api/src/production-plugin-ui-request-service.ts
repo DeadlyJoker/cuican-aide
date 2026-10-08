@@ -1,3 +1,4 @@
+import type { ProductionProjectSourceUploadPluginRuntime } from "./production-project-source-upload-plugin-runtime.ts";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import type { ProductionProjectAssetPluginRuntime } from "./production-project-asset-plugin-runtime.ts";
@@ -13,6 +14,7 @@ import type { PluginUiControlService } from "./plugin-control-route.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import type { ProductionProjectTextPluginRuntime } from "./production-project-text-plugin-runtime.ts";
 import type { ProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
+import type { ProductionProjectFoundationPluginRuntime } from "./production-project-foundation-plugin-runtime.ts";
 import type { ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import type { ProductionProjectGenerationSelectionPluginRuntime } from "./production-project-generation-selection-plugin-runtime.ts";
 import { parseProjectGenerationUiActionRequest } from "@crewon/contracts/plugins";
@@ -33,6 +35,8 @@ export function createProductionPluginUiRequestService({
   ui,
   taskRequests,
   projects,
+  foundations,
+  sourceUploads,
   texts,
   assets,
   assetStages,
@@ -48,6 +52,8 @@ export function createProductionPluginUiRequestService({
   ui: PluginUiControlService;
   taskRequests?: InstalledPluginRequestOwner;
   projects?: ProductionCreativeProjectPluginRuntime;
+  foundations?: ProductionProjectFoundationPluginRuntime;
+  sourceUploads?: ProductionProjectSourceUploadPluginRuntime;
   texts?: ProductionProjectTextPluginRuntime;
   assets?: ProductionProjectAssetPluginRuntime;
   assetStages?: ProjectAssetStageControlOwner;
@@ -83,6 +89,8 @@ export function createProductionPluginUiRequestService({
   if (
     taskRequests === undefined &&
     projects === undefined &&
+    foundations === undefined &&
+    sourceUploads === undefined &&
     texts === undefined &&
     assets === undefined &&
     assetStages === undefined &&
@@ -98,6 +106,40 @@ export function createProductionPluginUiRequestService({
     return ui;
   return Object.freeze({
     ...ui,
+    ...(sourceUploads === undefined ||
+    ui.invokeProjectSourceUploadPart === undefined
+      ? {}
+      : {
+          invokeProjectSourceUploadPartAuthenticatedRequest: (
+            request: Parameters<
+              NonNullable<
+                PluginUiControlService["invokeProjectSourceUploadPartAuthenticatedRequest"]
+              >
+            >[0],
+            actor: Parameters<
+              NonNullable<
+                PluginUiControlService["invokeProjectSourceUploadPartAuthenticatedRequest"]
+              >
+            >[1],
+            command: Parameters<
+              NonNullable<
+                PluginUiControlService["invokeProjectSourceUploadPartAuthenticatedRequest"]
+              >
+            >[2],
+            bytes: Uint8Array,
+            signal: AbortSignal,
+          ) =>
+            sourceUploads.invokeAuthenticatedPartRequest(
+              request,
+              actor,
+              command.locator,
+              signal,
+              () =>
+                ui.invokeProjectSourceUploadPart!(actor, command, bytes, {
+                  signal,
+                }),
+            ),
+        }),
     ...(recovery === undefined
       ? {}
       : { recoveryAuthenticatedRequest: recovery.run }),
@@ -108,6 +150,40 @@ export function createProductionPluginUiRequestService({
           : recovery.run(request, actor, signal, () =>
               ui.invoke(actor, command),
             );
+      if (
+        command.action === "crewon.project-source-uploads" ||
+        command.action.startsWith("crewon.project-source-uploads.")
+      ) {
+        if (sourceUploads === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "project_source_upload_unavailable",
+          );
+        return sourceUploads.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
+      if (
+        command.action === "crewon.project-foundation" ||
+        command.action.startsWith("crewon.project-foundation.")
+      ) {
+        if (foundations === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "project_foundation_unavailable",
+          );
+        return foundations.invokeAuthenticatedRequest(
+          request,
+          actor,
+          command,
+          signal,
+          invoke,
+        );
+      }
       if (
         command.action === "crewon.project-asset-stages" ||
         command.action.startsWith("crewon.project-asset-stages.")

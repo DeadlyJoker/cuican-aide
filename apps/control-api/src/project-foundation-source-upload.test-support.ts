@@ -226,11 +226,16 @@ export async function sourceAdoptionFixture(
       ? new SqliteCreativeProjectStore({ database, assertOpen })
       : new PostgresCreativeProjectStore({ pool: pool!, schema, assertOpen });
     const uploads = database
-      ? new SqliteProjectSourceUploadStore({ database, assertOpen })
+      ? new SqliteProjectSourceUploadStore({
+          database,
+          assertOpen,
+          installationAdmission: "trusted-internal-authority",
+        })
       : new PostgresProjectSourceUploadStore({
           pool: pool!,
           schema,
           assertOpen,
+          installationAdmission: "trusted-internal-authority",
         });
     const foundations = database
       ? new SqliteProjectFoundationStore({ database, assertOpen })

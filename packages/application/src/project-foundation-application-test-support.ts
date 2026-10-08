@@ -94,6 +94,7 @@ export class MemoryProjectFoundations implements ProjectFoundationStore {
   before: ((method: Method) => Promise<void>) | null = null;
   override: ((method: Method, raw: unknown) => unknown) | null = null;
   afterCommit: (() => void) | null = null;
+  beforePublish: (() => void) | null = null;
   async #read<T>(method: Method, execute: () => T): Promise<T> {
     this.calls.push(method);
     await this.before?.(method);
@@ -250,6 +251,7 @@ export class MemoryProjectFoundations implements ProjectFoundationStore {
       sourceUpload?: ProjectSourceUploadPreparedPointer;
     },
   ) {
+    this.beforePublish?.();
     options?.authority?.assertActive();
     this.projects.set(key(result.project), result.project);
     this.foundations.set(key(result.foundation), result.foundation);

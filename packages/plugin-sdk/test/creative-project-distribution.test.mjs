@@ -16,6 +16,9 @@ import test from "node:test";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const repositoryRoot = resolve(packageRoot, "../..");
+const packageManager = JSON.parse(
+  await readFile(join(repositoryRoot, "package.json"), "utf8"),
+).packageManager;
 const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url));
 const require = createRequire(import.meta.url);
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -40,6 +43,7 @@ test("creative project declarations and UI methods work from a real offline tarb
       JSON.stringify({
         name: "external-creative-project-fixture",
         private: true,
+        packageManager,
         type: "module",
         dependencies: { "@crewon/plugin-sdk": `file:./${tarball}` },
       }),
@@ -63,6 +67,8 @@ test("creative project declarations and UI methods work from a real offline tarb
     assert.deepEqual(Object.keys(manifest.exports).sort(), [
       "./contracts",
       "./node",
+      "./project-foundation-ui",
+      "./project-source-uploads",
       "./ui",
     ]);
     assert.equal(
@@ -103,6 +109,14 @@ test("creative project declarations and UI methods work from a real offline tarb
       }
     }
     for (const name of [
+      "external-project-source-uploads.ts",
+      "external-project-source-uploads-ui.ts",
+      "project-source-upload-responses.mjs",
+      "project-source-uploads-distribution-runner.mjs",
+      "external-project-foundation.ts",
+      "external-project-foundation-ui.ts",
+      "project-foundation-responses.mjs",
+      "project-foundation-distribution-runner.mjs",
       "external-creative-project-contracts.ts",
       "external-creative-project-ui.ts",
       "external-project-generation-contracts.ts",
@@ -132,6 +146,8 @@ test("creative project declarations and UI methods work from a real offline tarb
         "pure",
         ["ES2022"],
         [
+          "external-project-source-uploads.ts",
+          "external-project-foundation.ts",
           "external-creative-project-contracts.ts",
           "external-project-generation-contracts.ts",
           "external-project-generation-read-contracts.ts",
@@ -143,6 +159,10 @@ test("creative project declarations and UI methods work from a real offline tarb
         "ui",
         ["ES2022", "DOM"],
         [
+          "external-project-source-uploads.ts",
+          "external-project-source-uploads-ui.ts",
+          "external-project-foundation.ts",
+          "external-project-foundation-ui.ts",
           "external-creative-project-contracts.ts",
           "external-creative-project-ui.ts",
           "external-project-generation-contracts.ts",
@@ -195,6 +215,14 @@ test("creative project declarations and UI methods work from a real offline tarb
     assert.match(
       executed,
       /Independent readiness helper returned a bounded hint without submitting a task/u,
+    );
+    assert.match(
+      executed,
+      /Independent foundation client compiled without DOM and with original UI services, invoked twelve bounded actions and enforced native cancellation/u,
+    );
+    assert.match(
+      executed,
+      /Independent upload client compiled without DOM and with original UI services, invoked four JSON actions and a separate bounded native byte port/u,
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

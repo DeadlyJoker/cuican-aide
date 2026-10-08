@@ -47,9 +47,14 @@ test("home reviews an exact idea before a single original project write and reta
   const service = metadataService(),
     f = await ready(service);
   try {
-    await snapshot("project-topbar", f.container.querySelector(".drama-topbar").outerHTML);
-    assert.equal(f.container.querySelector(".drama-main").firstElementChild,
-      f.container.querySelector('[data-plugin-header-insets="inline"]'));
+    await snapshot(
+      "project-topbar",
+      f.container.querySelector(".drama-topbar").outerHTML,
+    );
+    assert.equal(
+      f.container.querySelector(".drama-main").firstElementChild,
+      f.container.querySelector('[data-plugin-header-insets="inline"]'),
+    );
     await snapshot(
       "project-home",
       f.container.querySelector(".drama-project-home").outerHTML,
@@ -177,9 +182,7 @@ test("internal navigation can collapse without replacing the project, losing dra
       "true",
     );
     assert.equal(
-      nav
-        .querySelector('[aria-label="需求与概念图"]')
-        .getAttribute("aria-current"),
+      nav.querySelector('[aria-label="概览"]').getAttribute("aria-current"),
       "page",
     );
     assert.equal(nav.querySelector('[aria-label="视频与成片"]'), null);

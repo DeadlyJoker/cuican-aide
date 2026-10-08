@@ -1,36 +1,28 @@
-import { isProjectAssetRecoveryV2Action } from "@crewon/contracts/project-asset-recovery-v2";
-import { PROJECT_MEDIA_RESULT_WRITE_ACTIONS } from "@crewon/contracts/project-media-results-ui";
-import { registerPluginProjectMediaResultInvocation } from "./plugin-project-media-result-invocation.ts";
-import { PROJECT_MEDIA_INPUT_UI_ACTIONS } from "@crewon/contracts/project-media-inputs-ui";
-import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
-import { registerPluginProjectMediaInputInvocation } from "./plugin-project-media-input-invocation.ts";
-import { isProjectAssetRecoveryAction } from "@crewon/contracts/project-asset-recovery";
-import { registerPluginProjectAssetRecoveryInvocation } from "./plugin-project-asset-recovery-invocation.ts";
-import { registerPluginHistoricalQueryInvocation } from "./plugin-project-historical-query-invocation.ts";
-import { registerPluginProjectAssetInvocation } from "./plugin-project-asset-invocation.ts";
-import { isProjectAssetUiAction } from "@crewon/contracts/project-assets";
-import { isProjectAssetV2Action } from "@crewon/contracts/project-assets-v2";
-import { registerPluginProjectAssetV2Invocation } from "./plugin-project-asset-v2-invocation.ts";
+import {
+  capturePluginUiApplicationLimits,
+  type PluginUiApplicationLimits,
+  type PluginUiApplicationDependencies,
+} from "./plugin-ui-application-dependencies.ts";
+import {
+  capturePluginUiSourceUploadOwner,
+  invokePluginUiSourceUploadPart,
+  type InvokePluginUiSourceUploadPartCommand,
+  type InvokePluginUiSourceUploadPartOptions,
+} from "./plugin-ui-source-upload-part-invocation.ts";
+import { registerPluginUiActionInvocation } from "./plugin-ui-action-invocation-registration.ts";
 import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type { PluginProfileScope } from "@crewon/domain";
-import { isProjectTextUiMutationAction } from "@crewon/contracts/project-texts-ui";
-import { isProjectTextRecoveryAction } from "@crewon/contracts/project-text-recovery";
-import { isProjectTextPlanAction } from "./plugin-project-text-plan-action-context.ts";
 import { ApplicationError } from "./application-error.ts";
 import {
   PluginUiMountBinding,
   PluginUiMountRegistry,
   renewPluginUiMount,
 } from "./plugin-ui-mount-lifecycle.ts";
-import { registerPluginUiInvocation } from "./plugin-ui-invocation-authority.ts";
-import type { ApplicationClock } from "./application-runtime-ports.ts";
 import type { ActorContext } from "./authorization-port.ts";
-import type { PluginInstallationHostProfilePort } from "./plugin-installation-host-port.ts";
-import type { PluginInstallationStore } from "./plugin-installation-store-port.ts";
 import type { PluginUiRecoveryPort } from "./plugin-ui-recovery-ports.ts";
 import {
   capturePluginUiRecoveryDispatch,
@@ -58,29 +50,19 @@ import type {
   RenewPluginUiMountCommand,
 } from "./plugin-ui-commands.ts";
 import type {
-  PluginUiActionPort,
   PluginUiActionContext,
-  PluginUiCommittedTaskPort,
-  PluginUiCommittedMetadataPort,
   PluginUiAuthorizationAction,
-  PluginUiAuthorizationPort,
   PluginUiAuthorizationResource,
-  PluginUiOpaqueIdPort,
   PluginUiPackageContext,
-  PluginUiPackagePort,
   PluginUiVerifiedPackage,
 } from "./plugin-ui-ports.ts";
 import {
-  PLUGIN_UI_MAX_ASSET_BYTES,
-  PLUGIN_UI_MAX_MOUNTS,
-  PLUGIN_UI_MAX_TTL_MS,
   uiActor,
   uiAssetQuery,
   uiAssetResult,
   uiCatalogQuery,
   uiEpoch,
   uiInvokeCommand,
-  uiLimit,
   uiMountQuery,
   uiNow,
   uiOpenCommand,
@@ -97,28 +79,14 @@ import {
   uiSelection,
 } from "./plugin-ui-application-support.ts";
 
-export type PluginUiApplicationLimits = Readonly<{
-  mounts: number;
-  ttlMs: number;
-  assetBytes: number;
-}>;
-export type PluginUiApplicationDependencies = Readonly<{
-  store: PluginInstallationStore;
-  profiles: PluginInstallationHostProfilePort;
-  authorization: PluginUiAuthorizationPort;
-  packages: PluginUiPackagePort;
-  actions: PluginUiActionPort;
-  /** Trusted host receipt authority only; never supplied by a plugin or inferred from its JSON. */
-  committedTasks?: PluginUiCommittedTaskPort;
-  /** Separate trusted metadata receipt owner; does not authorize task/Run admission. */
-  committedMetadata?: PluginUiCommittedMetadataPort;
-  /** Explicit durable request staging; absent for existing packages and deployments. */
-  recovery?: PluginUiRecoveryPort;
-  ids: PluginUiOpaqueIdPort;
-  clock: ApplicationClock;
-  /** Only lower limits are accepted; there is no unbounded lease or byte configuration. */
-  limits?: PluginUiApplicationLimits;
-}>;
+export type {
+  PluginUiApplicationLimits,
+  PluginUiApplicationDependencies,
+} from "./plugin-ui-application-dependencies.ts";
+export type {
+  InvokePluginUiSourceUploadPartCommand,
+  InvokePluginUiSourceUploadPartOptions,
+} from "./plugin-ui-source-upload-part-invocation.ts";
 /** Internal process-local UI admission; this is neither browser isolation nor production HTTP wiring. */
 export class PluginUiApplicationService {
   /** Internal composition evidence only; never projected as a user capability. */
@@ -127,12 +95,25 @@ export class PluginUiApplicationService {
   }
   readonly #dependencies: PluginUiApplicationDependencies;
   readonly #limits: PluginUiApplicationLimits;
+  readonly #sourceUploads: ReturnType<typeof capturePluginUiSourceUploadOwner>;
   readonly #recovery: PluginUiRecoveryPort | undefined;
   readonly #mounts = new PluginUiMountRegistry(() => this.#now());
   #pending = 0;
   #referenceSequence = 0;
 
   constructor(dependencies: PluginUiApplicationDependencies) {
+    const sourceUploads = Object.getOwnPropertyDescriptor(
+      dependencies,
+      "sourceUploads",
+    );
+    if (sourceUploads !== undefined && !Object.hasOwn(sourceUploads, "value"))
+      throw new ApplicationError(
+        "internal",
+        "plugin_project_source_upload_owner_invalid",
+      );
+    this.#sourceUploads = capturePluginUiSourceUploadOwner(
+      sourceUploads?.value,
+    );
     const recovery = Object.getOwnPropertyDescriptor(dependencies, "recovery");
     if (recovery !== undefined && !Object.hasOwn(recovery, "value"))
       throw new ApplicationError("internal", "plugin_ui_recovery_port_invalid");
@@ -163,21 +144,7 @@ export class PluginUiApplicationService {
       for (const method of ["isOutcome", "verify"] as const)
         if (typeof dependencies.committedMetadata?.[method] !== "function")
           throw new ApplicationError("internal", "plugin_ui_port_missing");
-    this.#limits = uiOutput(() => {
-      const value =
-        dependencies.limits === undefined
-          ? {
-              mounts: PLUGIN_UI_MAX_MOUNTS,
-              ttlMs: PLUGIN_UI_MAX_TTL_MS,
-              assetBytes: PLUGIN_UI_MAX_ASSET_BYTES,
-            }
-          : uiRecord(dependencies.limits, ["mounts", "ttlMs", "assetBytes"]);
-      return Object.freeze({
-        mounts: uiLimit(value.mounts, PLUGIN_UI_MAX_MOUNTS),
-        ttlMs: uiLimit(value.ttlMs, PLUGIN_UI_MAX_TTL_MS),
-        assetBytes: uiLimit(value.assetBytes, PLUGIN_UI_MAX_ASSET_BYTES),
-      });
-    });
+    this.#limits = capturePluginUiApplicationLimits(dependencies.limits);
   }
 
   openMount(
@@ -385,88 +352,13 @@ export class PluginUiApplicationService {
         action: command.action,
         input: command.input,
       });
-      const unregister = registerPluginUiInvocation(
-        context,
-        () => this.#fence(actor, binding, "invoke"),
-        () => this.#mounts.alive(binding),
-        command.action.startsWith("crewon.creative-projects.") ||
-          command.action === PROJECT_MEDIA_GENERATE_UI_ACTION ||
-          usesRecovery ||
-          command.action ===
-            "crewon.project-generation-selections.v1.selectConceptImage"
-          ? Object.freeze({
-              assertCurrent: () => this.#transactionFence(actor, binding),
-            })
-          : undefined,
-        isProjectTextUiMutationAction(command.action)
-          ? Object.freeze({
-              assertCurrent: () => this.#transactionFence(actor, binding),
-            })
-          : undefined,
-        isProjectTextRecoveryAction(command.action)
-          ? Object.freeze({
-              assertCurrent: () => this.#transactionFence(actor, binding),
-            })
-          : undefined,
-        isProjectTextPlanAction(command.action)
-          ? Object.freeze({
-              assertCurrent: () => this.#transactionFence(actor, binding),
-            })
-          : undefined,
-      );
-      let unregisterHistorical: (() => void) | undefined;
-      let unregisterAsset: (() => void) | undefined;
-      let unregisterAssetV2: (() => void) | undefined;
-      let unregisterAssetRecovery: (() => void) | undefined;
-      let unregisterMediaResults: (() => void) | undefined;
-      let unregisterMediaInputs: (() => void) | undefined;
+      const unregister = registerPluginUiActionInvocation(context, {
+        assertCurrent: () => this.#fence(actor, binding, "invoke"),
+        assertTransactionCurrent: () => this.#transactionFence(actor, binding),
+        assertActive: () => this.#mounts.alive(binding),
+        usesRecovery,
+      });
       try {
-        unregisterAssetV2 =
-          isProjectAssetV2Action(command.action) ||
-          isProjectAssetRecoveryV2Action(command.action)
-            ? registerPluginProjectAssetV2Invocation(context, () =>
-                this.#transactionFence(actor, binding),
-              )
-            : undefined;
-        unregisterMediaResults =
-          command.action === PROJECT_MEDIA_RESULT_WRITE_ACTIONS.saveCandidate
-            ? registerPluginProjectMediaResultInvocation(context, () =>
-                this.#transactionFence(actor, binding),
-              )
-            : undefined;
-        unregisterMediaInputs = Object.values(
-          PROJECT_MEDIA_INPUT_UI_ACTIONS,
-        ).some((a) => a === command.action)
-          ? registerPluginProjectMediaInputInvocation(context, () =>
-              this.#transactionFence(actor, binding),
-            )
-          : undefined;
-        unregisterAssetRecovery = isProjectAssetRecoveryAction(command.action)
-          ? registerPluginProjectAssetRecoveryInvocation(
-              context,
-              () => this.#fence(actor, binding, "invoke"),
-              () => this.#transactionFence(actor, binding),
-              () => this.#mounts.alive(binding),
-            )
-          : undefined;
-        unregisterAsset = isProjectAssetUiAction(command.action)
-          ? registerPluginProjectAssetInvocation(
-              context,
-              () => this.#fence(actor, binding, "invoke"),
-              () => this.#transactionFence(actor, binding),
-              () => this.#mounts.alive(binding),
-            )
-          : undefined;
-        unregisterHistorical =
-          command.action ===
-          "crewon.project-historical-queries.v1.queryConceptGeneration"
-            ? registerPluginHistoricalQueryInvocation(
-                context,
-                () => this.#fence(actor, binding, "invoke"),
-                () => this.#transactionFence(actor, binding),
-                () => this.#mounts.alive(binding),
-              )
-            : undefined;
         const dispatch =
           recovery === undefined
             ? undefined
@@ -503,14 +395,26 @@ export class PluginUiApplicationService {
         await this.#fence(actor, binding, "invoke");
         return result;
       } finally {
-        unregisterHistorical?.();
-        unregisterAsset?.();
-        unregisterAssetV2?.();
-        unregisterMediaInputs?.();
-        unregisterMediaResults?.();
-        unregisterAssetRecovery?.();
         unregister();
       }
+    });
+  }
+
+  invokeProjectSourceUploadPart(
+    actor: ActorContext,
+    input: InvokePluginUiSourceUploadPartCommand,
+    bytes: Uint8Array,
+    options?: InvokePluginUiSourceUploadPartOptions,
+  ) {
+    return invokePluginUiSourceUploadPart(actor, input, bytes, options, {
+      owner: this.#sourceUploads,
+      binding: (currentActor, mountRef) =>
+        this.#mounts.binding(currentActor, mountRef),
+      assertCurrent: (currentActor, binding) =>
+        this.#fence(currentActor, binding, "invoke"),
+      assertTransactionCurrent: (currentActor, binding) =>
+        this.#transactionFence(currentActor, binding),
+      assertActive: (binding) => this.#mounts.alive(binding),
     });
   }
 

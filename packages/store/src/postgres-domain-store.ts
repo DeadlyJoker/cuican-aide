@@ -16,6 +16,7 @@ import { PostgresPluginCreditSettlementStore } from "./postgres-plugin-credit-se
 import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
 import { PostgresProjectFoundationStore } from "./project-foundation-postgres-store.ts";
+import { PostgresProjectSourceUploadStore } from "./project-source-upload-postgres-store.ts";
 import { PostgresProjectTextStore } from "./project-text-postgres-store.ts";
 import { PostgresExternalOperationStore } from "./postgres-external-operation-store.ts";
 import {
@@ -249,6 +250,19 @@ export class PostgresDomainStore
   ): PostgresProjectFoundationStore {
     this.assertOpen();
     return new PostgresProjectFoundationStore({
+      ...input,
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+  }
+
+  /** Uses the existing pool without migration; production callers retain strict installation qualification. */
+  projectSourceUploadStore(
+    input: { installationAdmission?: "trusted-internal-authority" } = {},
+  ): PostgresProjectSourceUploadStore {
+    this.assertOpen();
+    return new PostgresProjectSourceUploadStore({
       ...input,
       pool: this.pool,
       schema: this.schema,

@@ -1,5 +1,5 @@
 import { ProjectTextDocument } from "./ProjectTextDocument";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ProjectDetails } from "./creative-project-controller";
 import { ProjectTextController } from "./ProjectTextController";
 import type { TextSnapshot } from "./ProjectTextController";
@@ -366,6 +366,7 @@ export function StoryScriptWorkbench({
     controller.getSnapshot,
     controller.getSnapshot,
   );
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
   useEffect(() => {
     controller.setProject(details);
     const current = controller.getSnapshot();
@@ -395,6 +396,18 @@ export function StoryScriptWorkbench({
     if (artifact.kind === "script" && !episodes.has(artifact.episodeId))
       episodes.set(artifact.episodeId, "独立分集剧本");
   const artifact = snapshot.view?.artifact;
+  const targetKey = `${details.project.projectId}:${snapshot.target.kind}:${snapshot.target.kind === "script" ? snapshot.target.episodeId : "outline"}`;
+  const editing =
+    !snapshot.content || snapshot.dirty || editingTarget === targetKey;
+  const sourceChanged =
+    snapshot.sourceBriefRevision !== snapshot.currentBriefRevision ||
+    (snapshot.target.kind === "script" &&
+      snapshot.sourceOutline?.contentRevision !== outline?.contentRevision);
+  const save = async () => {
+    await controller.save();
+    const current = controller.getSnapshot();
+    if (!current.dirty && !current.failure) setEditingTarget(null);
+  };
   return (
     <section
       className="story-script-workbench"
@@ -475,57 +488,56 @@ export function StoryScriptWorkbench({
         snapshot.draft &&
         snapshot.target.kind === page && (
           <>
-            <ProjectTextDocument
-              revision={snapshot.content}
-              selected={
-                artifact?.selectedContentRevision ===
-                snapshot.content?.contentRevision
-              }
-              stale={snapshot.view?.dependencyState === "stale"}
-            />
-            <details className="drama-secondary-disclosure">
-              <summary>
-                编辑与版本管理{snapshot.dirty ? " · 有未保存修改" : ""}
-              </summary>
-              <div className="detail-layout">
-                <section className="detail-panel">
-                  <div className="panel-heading">
-                    <h2>
-                      {snapshot.target.kind === "outline"
-                        ? "故事大纲"
-                        : "分集剧本"}
-                    </h2>
-                    <span className="detail-note">
-                      {snapshot.content
-                        ? `正在编辑内容 v${snapshot.content.contentRevision}`
-                        : "尚未保存"}
-                    </span>
-                  </div>
-                  <p className="detail-note">
-                    新候选来源：已保存需求 v{snapshot.sourceBriefRevision}
-                    {snapshot.target.kind === "script"
-                      ? snapshot.sourceOutline
-                        ? ` · 大纲 v${snapshot.sourceOutline.contentRevision}`
-                        : " · 独立剧本，无来源大纲"
-                      : ""}
-                  </p>
-                  {(snapshot.sourceBriefRevision !==
-                    snapshot.currentBriefRevision ||
-                    (snapshot.target.kind === "script" &&
-                      snapshot.sourceOutline?.contentRevision !==
-                        outline?.contentRevision)) && (
-                    <div className="detail-actions">
-                      <span className="detail-note">
-                        当前来源有更新，原来源与内容保留。
-                      </span>
+            <section className="detail-panel">
+              <div className="panel-heading">
+                <h2>
+                  {editing ? "编辑" : ""}
+                  {snapshot.target.kind === "outline" ? "故事大纲" : "分集剧本"}
+                </h2>
+                <div className="detail-actions">
+                  {snapshot.content &&
+                    (editing ? (
                       <button
                         className="text-button"
-                        disabled={disabled}
-                        onClick={() => controller.useCurrentSource()}
+                        disabled={disabled || snapshot.dirty}
+                        onClick={() => setEditingTarget(null)}
                       >
-                        使用当前来源
+                        完成编辑
                       </button>
-                    </div>
+                    ) : (
+                      <button
+                        className="button secondary"
+                        disabled={disabled}
+                        onClick={() => setEditingTarget(targetKey)}
+                      >
+                        编辑
+                      </button>
+                    ))}
+                  {snapshot.content && (
+                    <button
+                      className="button secondary"
+                      disabled={
+                        disabled ||
+                        controller.recovery.blocksWrites ||
+                        !artifact ||
+                        artifact.locked ||
+                        snapshot.dirty ||
+                        artifact.selectedContentRevision ===
+                          snapshot.content.contentRevision
+                      }
+                      onClick={() => void controller.select()}
+                    >
+                      采用此版本
+                    </button>
+                  )}
+                </div>
+              </div>
+              {editing ? (
+                <>
+                  {sourceChanged && (
+                    <p className="detail-note" role="status">
+                      需求或大纲已更新，原内容保留。可在“历史与来源”中确认来源。
+                    </p>
                   )}
                   {snapshot.target.kind === "outline" ? (
                     <OutlineEditor
@@ -544,152 +556,172 @@ export function StoryScriptWorkbench({
                     <button
                       className="button primary"
                       disabled={blocked || !controller.canSave}
-                      onClick={() => void controller.save()}
+                      onClick={() => void save()}
                     >
                       {snapshot.saving ? "正在保存…" : "保存候选版本"}
                     </button>
-                    <span className="detail-note">
-                      {textBytes(snapshot.draft).toLocaleString()} /{" "}
-                      {snapshot.target.kind === "outline" ? "16,384" : "32,768"}{" "}
-                      字节
-                    </span>
-                  </div>
-                  <p className="detail-note">
-                    填写完整内容后保存。候选不会自动替换已采用版本。
-                  </p>
-                </section>
-                <section className="detail-panel">
-                  <div className="panel-heading">
-                    <h2>版本与来源</h2>
-                    {artifact && (
-                      <button
-                        className="text-button"
-                        disabled={snapshot.saving || snapshot.loadingHistory}
-                        onClick={() => void controller.loadHistory()}
-                      >
-                        查看内容历史
-                      </button>
+                    {snapshot.dirty && (
+                      <span className="detail-note">有未保存修改</span>
                     )}
                   </div>
                   <p className="detail-note">
-                    {artifact?.selectedContentRevision
-                      ? `已采用 v${artifact.selectedContentRevision}${artifact.locked ? " · 已锁定" : ""}`
-                      : "尚未采用内容版本"}
+                    保存后可查看正文，再确认是否采用。
                   </p>
-                  {snapshot.view?.dependencyState === "stale" && (
-                    <p className="detail-note" role="status">
-                      来源已变化：
-                      {snapshot.view.staleReasons
-                        .map((reason) =>
-                          reason === "brief-changed"
-                            ? "创作需求有新版本"
-                            : "采用的大纲有变化",
-                        )
-                        .join("；")}
-                      。请检查内容后再继续制作。
-                    </p>
-                  )}
-                  {snapshot.content && (
-                    <div className="version-card">
-                      <strong>
-                        打开的内容 v{snapshot.content.contentRevision}
-                      </strong>
-                      <p>
-                        来源需求 v{snapshot.content.brief.briefRevision}
-                        {snapshot.content.outline
-                          ? ` · 大纲 v${snapshot.content.outline.contentRevision}`
-                          : snapshot.content.kind === "script"
-                            ? " · 无来源大纲"
-                            : ""}
-                      </p>
-                      <button
-                        className="button secondary"
-                        disabled={
-                          disabled ||
-                          controller.recovery.blocksWrites ||
-                          !artifact ||
-                          artifact.locked ||
-                          snapshot.dirty ||
-                          artifact.selectedContentRevision ===
-                            snapshot.content.contentRevision
-                        }
-                        onClick={() => void controller.select()}
-                      >
-                        采用此版本
-                      </button>
-                    </div>
-                  )}
-                  {artifact?.selectedContentRevision && (
-                    <button
-                      className="button secondary"
-                      disabled={disabled || controller.recovery.blocksWrites}
-                      onClick={() => void controller.setLocked()}
-                    >
-                      {artifact.locked ? "解锁采用版本" : "锁定采用版本"}
-                    </button>
-                  )}
-                  {artifact?.locked && (
-                    <p className="detail-note">
-                      锁定后仍可保存新候选；解锁后才能采用其他版本。
-                    </p>
-                  )}
-                  {snapshot.dirty && snapshot.history.length > 0 && (
-                    <p className="detail-note">
-                      当前有未保存的修改，保存候选后可打开历史内容。
-                    </p>
-                  )}
-                  {snapshot.history.map((revision) => (
-                    <div
-                      className="version-card"
-                      key={revision.contentRevision}
-                    >
-                      <strong>
-                        内容 v{revision.contentRevision}
-                        <span>
-                          {artifact?.selectedContentRevision ===
-                          revision.contentRevision
-                            ? "已采用"
-                            : "候选"}
-                        </span>
-                      </strong>
-                      <p>
-                        {revision.content.title} · 来源需求 v
-                        {revision.brief.briefRevision}
-                      </p>
-                      <button
-                        className="text-button"
-                        disabled={
-                          controller.locked ||
-                          snapshot.opening ||
-                          snapshot.dirty
-                        }
-                        onClick={() => controller.editRevision(revision)}
-                      >
-                        打开内容 v{revision.contentRevision}
-                      </button>
-                    </div>
-                  ))}
-                  {snapshot.nextContentRevision !== null && (
+                </>
+              ) : (
+                <ProjectTextDocument
+                  revision={snapshot.content}
+                  selected={
+                    artifact?.selectedContentRevision ===
+                    snapshot.content?.contentRevision
+                  }
+                  stale={snapshot.view?.dependencyState === "stale"}
+                  locked={artifact?.locked ?? false}
+                />
+              )}
+            </section>
+            <details className="drama-secondary-disclosure">
+              <summary>历史与来源</summary>
+              <section className="detail-panel">
+                <div className="panel-heading">
+                  <h2>内容历史</h2>
+                  {artifact && (
                     <button
                       className="text-button"
-                      disabled={snapshot.loadingHistory}
-                      onClick={() => void controller.loadHistory(true)}
+                      disabled={snapshot.saving || snapshot.loadingHistory}
+                      onClick={() => void controller.loadHistory()}
                     >
-                      更多内容历史
+                      查看内容历史
                     </button>
                   )}
-                  {snapshot.loadingHistory && (
-                    <p className="detail-note" role="status">
-                      正在读取历史…
+                </div>
+                <p className="detail-note">
+                  新候选来源：已保存需求 v{snapshot.sourceBriefRevision}
+                  {snapshot.target.kind === "script"
+                    ? snapshot.sourceOutline
+                      ? ` · 大纲 v${snapshot.sourceOutline.contentRevision}`
+                      : " · 独立剧本，无来源大纲"
+                    : ""}
+                </p>
+                {sourceChanged && (
+                  <div className="detail-actions">
+                    <span className="detail-note">
+                      当前来源有更新，原来源与内容保留。
+                    </span>
+                    <button
+                      className="text-button"
+                      disabled={disabled}
+                      onClick={() => controller.useCurrentSource()}
+                    >
+                      使用当前来源
+                    </button>
+                  </div>
+                )}
+                {editing && (
+                  <p className="detail-note">
+                    {textBytes(snapshot.draft).toLocaleString()} /{" "}
+                    {snapshot.target.kind === "outline" ? "16,384" : "32,768"}{" "}
+                    字节
+                  </p>
+                )}
+                <p className="detail-note">
+                  {artifact?.selectedContentRevision
+                    ? `已采用 v${artifact.selectedContentRevision}${artifact.locked ? " · 已锁定" : ""}`
+                    : "尚未采用内容版本"}
+                </p>
+                {snapshot.view?.dependencyState === "stale" && (
+                  <p className="detail-note" role="status">
+                    来源已变化：
+                    {snapshot.view.staleReasons
+                      .map((reason) =>
+                        reason === "brief-changed"
+                          ? "创作需求有新版本"
+                          : "采用的大纲有变化",
+                      )
+                      .join("；")}
+                    。请检查内容后再继续制作。
+                  </p>
+                )}
+                {snapshot.content && (
+                  <div className="version-card">
+                    <strong>
+                      打开的内容 v{snapshot.content.contentRevision}
+                    </strong>
+                    <p>
+                      来源需求 v{snapshot.content.brief.briefRevision}
+                      {snapshot.content.outline
+                        ? ` · 大纲 v${snapshot.content.outline.contentRevision}`
+                        : snapshot.content.kind === "script"
+                          ? " · 无来源大纲"
+                          : ""}
                     </p>
-                  )}
-                  {!outline && episodes.size === 0 && (
-                    <p className="detail-note">
-                      采用故事大纲后，分集剧本会出现在上方。
+                  </div>
+                )}
+                {artifact?.selectedContentRevision && (
+                  <button
+                    className="button secondary"
+                    disabled={disabled || controller.recovery.blocksWrites}
+                    onClick={() => void controller.setLocked()}
+                  >
+                    {artifact.locked ? "解锁采用版本" : "锁定采用版本"}
+                  </button>
+                )}
+                {artifact?.locked && (
+                  <p className="detail-note">
+                    锁定后仍可保存新候选；解锁后才能采用其他版本。
+                  </p>
+                )}
+                {snapshot.dirty && snapshot.history.length > 0 && (
+                  <p className="detail-note">
+                    当前有未保存的修改，保存候选后可打开历史内容。
+                  </p>
+                )}
+                {snapshot.history.map((revision) => (
+                  <div className="version-card" key={revision.contentRevision}>
+                    <strong>
+                      内容 v{revision.contentRevision}
+                      <span>
+                        {artifact?.selectedContentRevision ===
+                        revision.contentRevision
+                          ? "已采用"
+                          : "候选"}
+                      </span>
+                    </strong>
+                    <p>
+                      {revision.content.title} · 来源需求 v
+                      {revision.brief.briefRevision}
                     </p>
-                  )}
-                </section>
-              </div>
+                    <button
+                      className="text-button"
+                      disabled={
+                        controller.locked || snapshot.opening || snapshot.dirty
+                      }
+                      onClick={() => controller.editRevision(revision)}
+                    >
+                      打开内容 v{revision.contentRevision}
+                    </button>
+                  </div>
+                ))}
+                {snapshot.nextContentRevision !== null && (
+                  <button
+                    className="text-button"
+                    disabled={snapshot.loadingHistory}
+                    onClick={() => void controller.loadHistory(true)}
+                  >
+                    更多内容历史
+                  </button>
+                )}
+                {snapshot.loadingHistory && (
+                  <p className="detail-note" role="status">
+                    正在读取历史…
+                  </p>
+                )}
+                {!outline && episodes.size === 0 && (
+                  <p className="detail-note">
+                    采用故事大纲后，分集剧本会出现在上方。
+                  </p>
+                )}
+              </section>
             </details>
           </>
         )}

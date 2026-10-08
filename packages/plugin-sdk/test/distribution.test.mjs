@@ -16,6 +16,9 @@ import test from "node:test";
 
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const repositoryRoot = resolve(packageRoot, "../..");
+const packageManager = JSON.parse(
+  await readFile(join(repositoryRoot, "package.json"), "utf8"),
+).packageManager;
 const fixtures = fileURLToPath(new URL("./fixtures/", import.meta.url));
 const require = createRequire(import.meta.url);
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -45,6 +48,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
         {
           name: "external-crewon-plugin-fixture",
           private: true,
+          packageManager,
           type: "module",
           dependencies: { "@crewon/plugin-sdk": `file:./${tarball}` },
         },
@@ -72,12 +76,14 @@ test("the real tarball installs offline outside the workspace, compiles independ
       await readFile(join(sdk, "package.json"), "utf8"),
     );
     assert.equal(manifest.private, false);
-    assert.equal(manifest.version, "0.1.0");
+    assert.equal(manifest.version, "0.1.1");
     assert.deepEqual(manifest.dependencies ?? {}, {});
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
     assert.deepEqual(Object.keys(manifest.exports).sort(), [
       "./contracts",
       "./node",
+      "./project-foundation-ui",
+      "./project-source-uploads",
       "./ui",
     ]);
     assert.equal((await readdir(sdk)).includes("src"), false);
@@ -129,6 +135,14 @@ test("the real tarball installs offline outside the workspace, compiles independ
       }
     }
     for (const name of [
+      "external-project-source-uploads.ts",
+      "external-project-source-uploads-ui.ts",
+      "project-source-upload-responses.mjs",
+      "project-source-uploads-distribution-runner.mjs",
+      "external-project-foundation.ts",
+      "external-project-foundation-ui.ts",
+      "project-foundation-responses.mjs",
+      "project-foundation-distribution-runner.mjs",
       "external-node.ts",
       "external-task-node.ts",
       "external-execution-node.ts",
@@ -158,6 +172,8 @@ test("the real tarball installs offline outside the workspace, compiles independ
             rootDir: ".",
           },
           files: [
+            "external-project-source-uploads.ts",
+            "external-project-foundation.ts",
             "external-node.ts",
             "external-task-node.ts",
             "external-execution-node.ts",
@@ -243,6 +259,14 @@ test("the real tarball installs offline outside the workspace, compiles independ
     );
     console.log(installed.trim());
     console.log(executed.trim());
+    assert.match(
+      executed,
+      /Independent foundation client compiled without DOM and with original UI services, invoked twelve bounded actions and enforced native cancellation/u,
+    );
+    assert.match(
+      executed,
+      /Independent upload client compiled without DOM and with original UI services, invoked four JSON actions and a separate bounded native byte port/u,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

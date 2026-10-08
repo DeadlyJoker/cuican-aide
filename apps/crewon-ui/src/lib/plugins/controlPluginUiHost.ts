@@ -1,3 +1,4 @@
+import { createInstalledPluginSourceUploadPartTransport } from "./installedPluginSourceUploadTransport";
 import { createInstalledPluginMediaResultTransport } from "./installedPluginMediaResultTransport";
 import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
 import { PROJECT_MEDIA_GENERATE_UI_ACTION } from "@crewon/contracts/project-media-generations";
@@ -127,6 +128,10 @@ export function createControlPluginUiHost(
         uiFailure("plugin_ui_lease_identity_mismatch");
       return checked;
     });
+  const sourceUploadParts = createInstalledPluginSourceUploadPartTransport({
+    client,
+    assertCurrent,
+  });
   const mediaResults = createInstalledPluginMediaResultTransport({
     client,
     assertCurrent,
@@ -142,6 +147,10 @@ export function createControlPluginUiHost(
     routeStyle: "control-mount-assets",
     importer: options.importer,
     ports: {
+      writeProjectSourceUploadPart: (lease, locator, bytes, signal) =>
+        leases.run(lease, signal, (current) =>
+          sourceUploadParts(current, locator, bytes, signal),
+        ),
       async validateMount(lease, signal) {
         await validateLease(lease, signal);
       },

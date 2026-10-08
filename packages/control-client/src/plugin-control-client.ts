@@ -42,6 +42,10 @@ import {
   type SelectPluginPackageRequest,
 } from "@crewon/contracts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
+import {
+  writePluginSourceUploadPart,
+  type PluginSourceUploadPartTransport,
+} from "./project-source-upload-control-client.ts";
 
 export type PluginControlRequestOptions = Readonly<{ signal?: AbortSignal }>;
 export type PluginPackageQuery = Readonly<{
@@ -66,15 +70,16 @@ type JsonOptions = PluginControlRequestOptions &
     idempotencyKey?: string;
     redirect?: "manual";
   }>;
-export type PluginControlTransport = Readonly<{
-  json(
-    method: "GET" | "PUT" | "POST" | "DELETE",
-    path: string,
-    body: unknown,
-    options: JsonOptions,
-  ): Promise<unknown>;
-  protocolError(code: string): Error;
-}>;
+export type PluginControlTransport = PluginSourceUploadPartTransport &
+  Readonly<{
+    json(
+      method: "GET" | "PUT" | "POST" | "DELETE",
+      path: string,
+      body: unknown,
+      options: JsonOptions,
+    ): Promise<unknown>;
+    protocolError(code: string): Error;
+  }>;
 
 const PREFIX = "/api/v1/plugins";
 
@@ -299,6 +304,17 @@ export class PluginControlClient {
       options,
     );
     return this.#output(() => parseInvokePluginUiActionResponse(result));
+  }
+
+  writeSourceUploadPart(
+    ...args: Parameters<typeof writePluginSourceUploadPart> extends [
+      unknown,
+      ...infer A,
+    ]
+      ? A
+      : never
+  ) {
+    return writePluginSourceUploadPart(this.#transport, ...args);
   }
 
   /** Read-only account recovery hints; the current mount still owns authorization. */

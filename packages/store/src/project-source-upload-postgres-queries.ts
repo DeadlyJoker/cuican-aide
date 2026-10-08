@@ -4,6 +4,7 @@ import type {
   ProjectSourceUploadRead,
   ProjectSourceUploadState,
 } from "@crewon/application";
+import { assertProjectSourceUploadTransactionCurrent } from "@crewon/application";
 import { projectSourceScalarLength } from "@crewon/domain";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
@@ -33,6 +34,12 @@ import {
   uploadPostgresNumber,
   type UploadPostgresRow,
 } from "./project-source-upload-postgres-records.ts";
+import {
+  admitPostgresSourceUploadInstallation,
+  captureSourceUploadInstallationAdmission,
+  qualifySourceUploadInstallation,
+  type SourceUploadInstallationAdmission,
+} from "./project-source-upload-plugin-installation.ts";
 
 type Authority = ProjectSourceUploadCommitAuthority;
 type Scope = ProjectSourceUploadRead;
@@ -47,12 +54,23 @@ export class ProjectSourceUploadPostgresQueries {
   readonly #schema: string;
   readonly #prefix: string;
   readonly #assertOpen: () => void;
+  readonly #installationAdmission:
+    | SourceUploadInstallationAdmission
+    | undefined;
   #realm: string | undefined;
-  constructor(input: { pool: Pool; schema: string; assertOpen(): void }) {
+  constructor(input: {
+    pool: Pool;
+    schema: string;
+    assertOpen(): void;
+    installationAdmission?: SourceUploadInstallationAdmission;
+  }) {
     this.#pool = input.pool;
     this.#schema = input.schema;
     this.#prefix = `${creativeProjectSchemaName(input.schema)}.`;
     this.#assertOpen = input.assertOpen;
+    this.#installationAdmission = captureSourceUploadInstallationAdmission(
+      input.installationAdmission,
+    );
   }
   get prefix(): string {
     return this.#prefix;
@@ -378,17 +396,33 @@ export class ProjectSourceUploadPostgresQueries {
   async read<T>(
     body: (client: PoolClient) => Promise<T>,
     authority: Authority,
+    mutation = false,
   ): Promise<T> {
     this.#assertOpen();
+    const qualification = qualifySourceUploadInstallation(
+      authority,
+      this.#installationAdmission,
+      mutation,
+    );
     await assertSourceUploadCurrent(authority);
     const client = await this.#pool.connect();
     try {
       await this.query(
         client,
-        "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+        qualification === undefined
+          ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"
+          : "BEGIN",
       );
       await this.requireSchema(client);
+      await admitPostgresSourceUploadInstallation(
+        client,
+        this.#schema,
+        authority,
+        this.#installationAdmission,
+        mutation,
+      );
       const value = await body(client);
+      await assertProjectSourceUploadTransactionCurrent(authority);
       assertSourceUploadActive(authority);
       this.#assertOpen();
       await client.query("COMMIT");
@@ -405,11 +439,27 @@ export class ProjectSourceUploadPostgresQueries {
     authority?: Authority,
   ): Promise<T> {
     this.#assertOpen();
+    if (authority !== undefined)
+      qualifySourceUploadInstallation(
+        authority,
+        this.#installationAdmission,
+        true,
+      );
     if (authority !== undefined) await assertSourceUploadCurrent(authority);
     const client = await this.#pool.connect();
     try {
       await this.query(client, "BEGIN");
+      if (authority !== undefined)
+        await admitPostgresSourceUploadInstallation(
+          client,
+          this.#schema,
+          authority,
+          this.#installationAdmission,
+          true,
+        );
       const result = await body(client);
+      if (authority !== undefined)
+        await assertProjectSourceUploadTransactionCurrent(authority);
       if (authority !== undefined) assertSourceUploadActive(authority);
       this.#assertOpen();
       // Only pre-COMMIT checks: a confirmed durable result remains a success after withdrawal.

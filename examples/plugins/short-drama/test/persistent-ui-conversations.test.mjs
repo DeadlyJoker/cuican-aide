@@ -151,7 +151,7 @@ test("project conversation is created explicitly in the selected workspace and o
       service.calls.map((call) => call.action),
       ["crewon.project-conversations.v1.listConversations"],
     );
-    assert.match(f.container.textContent, /和 Agent 一起完成短剧/u);
+    assert.ok(f.button("开始与 Agent 对话"));
     await f.click(f.button("新建项目对话"));
     assert.equal(service.bindings.size, 1);
     assert.deepEqual(
@@ -182,7 +182,10 @@ test("project conversation is created explicitly in the selected workspace and o
       false,
     );
     await f.click(f.container.querySelector('[data-project-page="outline"]'));
-    assert.ok(f.container.querySelector('[aria-label="项目 Agent 对话"]'), "chat remains reachable while reading output");
+    assert.ok(
+      f.container.querySelector('[aria-label="项目 Agent 对话"]'),
+      "chat remains reachable while reading output",
+    );
     await f.click(f.button("继续与 Agent 对话"));
     assert.equal(service.calls.at(-1).input.threadId, "project-thread-1");
   } finally {
@@ -272,6 +275,7 @@ test("built plugin offers source update only after stale open, snapshots its sco
     const original = structuredClone([...service.bindings.values()][0]);
     service.expireSource();
     await f.click(f.button("进入对话"));
+    assert.equal(f.button("更新关联并进入").closest("details"), null);
     assert.equal(
       service.calls.some((c) => c.action.endsWith(".refreshSource")),
       false,
@@ -321,18 +325,46 @@ test("built plugin offers source update only after stale open, snapshots its sco
   }
 });
 
-test("primary chat entry creates and opens once, with details closed and no automatic generation", async () => {
-  const service = conversations(), f = await open(service);
+test("project outputs stay directly accessible while shared chat creates and opens once without automatic generation", async () => {
+  const service = conversations(),
+    f = await open(service);
   try {
-    assert.equal(f.container.querySelector(".drama-process-disclosure").open, false);
+    assert.equal(f.container.querySelector(".drama-process-disclosure"), null);
+    const navigation = f.container.querySelector('[aria-label="创作阶段"]');
+    assert.ok(navigation);
+    assert.equal(navigation.closest("details"), null);
+    assert.equal(
+      f.container.querySelector(".brief-panel").closest("details"),
+      null,
+    );
+    assert.equal(f.container.querySelector(".drama-agent-entry h2"), null);
     await f.click(f.button("开始与 Agent 对话"));
     assert.equal(service.bindings.size, 1);
-    assert.equal(service.calls.filter(c => c.action.endsWith(".createConversation")).length, 1);
-    assert.equal(service.calls.filter(c => c.action.endsWith(".openConversation")).length, 1);
+    assert.equal(
+      service.calls.filter((c) => c.action.endsWith(".createConversation"))
+        .length,
+      1,
+    );
+    assert.equal(
+      service.calls.filter((c) => c.action.endsWith(".openConversation"))
+        .length,
+      1,
+    );
     assert.equal(service.calls.at(-1).input.threadId, "project-thread-1");
     await f.click(f.button("继续与 Agent 对话"));
     assert.equal(service.bindings.size, 1);
-    assert.equal(service.calls.filter(c => c.action.endsWith(".openConversation")).length, 2);
-    assert.equal(service.calls.some(c => /startStage|createPlan|generate/.test(c.action)), false);
-  } finally { await f.dispose(); }
+    assert.equal(
+      service.calls.filter((c) => c.action.endsWith(".openConversation"))
+        .length,
+      2,
+    );
+    assert.equal(
+      service.calls.some((c) =>
+        /startStage|createPlan|generate/.test(c.action),
+      ),
+      false,
+    );
+  } finally {
+    await f.dispose();
+  }
 });

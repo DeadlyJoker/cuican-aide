@@ -277,6 +277,94 @@ test("merging precise adapter declarations preserves the old CLI imports without
   );
 });
 
+test("foundation publication and source preparation allow only their named host compositions", () => {
+  const host = boundaries.find(
+    (boundary) => boundary.packageName === "plugin-host",
+  )!;
+  const availability = "plugin-project-foundation-host-service-availability.ts";
+  assert.equal(
+    boundaryAllowsImport(
+      host,
+      availability,
+      "@crewon/contracts/project-foundation",
+    ),
+    true,
+  );
+  for (const file of [availability, `nested/${availability}`, "loader.ts"]) {
+    for (const specifier of [
+      "@crewon/contracts",
+      "@crewon/contracts/project-foundation/internal",
+      "@crewon/application",
+      "@crewon/store",
+      "@crewon/media-runtime",
+    ]) {
+      assert.equal(
+        boundaryAllowsImport(host, file, specifier),
+        false,
+        `${file} -> ${specifier}`,
+      );
+    }
+  }
+  for (const file of [
+    `nested/${availability}`,
+    "plugin-project-foundation-loader.ts",
+    "loader.ts",
+  ]) {
+    assert.equal(
+      boundaryAllowsImport(host, file, "@crewon/contracts/project-foundation"),
+      false,
+      file,
+    );
+  }
+  const compositions = [
+    ["production-project-foundation-plugin-runtime.ts", "@crewon/plugin-host"],
+    ["project-foundation-plugin-ui-composition.ts", "@crewon/plugin-host"],
+    ["project-foundation-composition.ts", "@crewon/media-runtime"],
+  ] as const;
+  for (const [file, approved] of compositions) {
+    assert.equal(
+      boundaryAllowsImport(controlApiBoundary, file, approved),
+      true,
+      file,
+    );
+    assert.equal(
+      boundaryAllowsImport(controlApiBoundary, `nested/${file}`, approved),
+      false,
+      `nested/${file}`,
+    );
+    for (const specifier of [
+      `${approved}/internal`,
+      approved === "@crewon/plugin-host"
+        ? "@crewon/media-runtime"
+        : "@crewon/plugin-host",
+      "@crewon/plugin-sdk/node",
+      "node:fs",
+      "parse5",
+    ]) {
+      assert.equal(
+        boundaryAllowsImport(controlApiBoundary, file, specifier),
+        false,
+        `${file} -> ${specifier}`,
+      );
+    }
+  }
+  for (const specifier of ["@crewon/plugin-host", "@crewon/media-runtime"]) {
+    assert.equal(
+      boundaryAllowsImport(
+        controlApiBoundary,
+        "project-foundation-controller.ts",
+        specifier,
+      ),
+      false,
+      specifier,
+    );
+  }
+  assert.equal(
+    isTestSource("project-foundation-plugin-ui.integration.test-support.ts"),
+    true,
+  );
+});
+
 test("TSX test helpers are recognized exactly and remain unreachable from production renderers", () => {
   for (const file of [
     "fixture.test.ts",
@@ -325,6 +413,86 @@ test("TSX test helpers are recognized exactly and remain unreachable from produc
   assert.deepEqual(rendererTestSourceDependencies(entry, sources), []);
 });
 
+test("upload publication composes one exact host entry and exposes no raw byte or parser capability", () => {
+  const host = boundaries.find(
+    (boundary) => boundary.packageName === "plugin-host",
+  )!;
+  const availability = "plugin-project-foundation-host-service-availability.ts";
+  assert.equal(
+    boundaryAllowsImport(
+      host,
+      availability,
+      "@crewon/contracts/project-source-uploads",
+    ),
+    true,
+  );
+  for (const file of [availability, `nested/${availability}`, "loader.ts"]) {
+    for (const specifier of [
+      "@crewon/contracts",
+      "@crewon/contracts/project-source-uploads/internal",
+      "@crewon/application",
+      "@crewon/store",
+      "@crewon/media-runtime",
+    ])
+      assert.equal(
+        boundaryAllowsImport(host, file, specifier),
+        false,
+        `${file} -> ${specifier}`,
+      );
+  }
+  for (const file of [`nested/${availability}`, "loader.ts"]) {
+    assert.equal(
+      boundaryAllowsImport(
+        host,
+        file,
+        "@crewon/contracts/project-source-uploads",
+      ),
+      false,
+      file,
+    );
+  }
+  for (const composition of [
+    "project-source-upload-plugin-ui-composition.ts",
+    "production-project-source-upload-plugin-runtime.ts",
+  ]) {
+    assert.equal(
+      boundaryAllowsImport(
+        controlApiBoundary,
+        composition,
+        "@crewon/plugin-host",
+      ),
+      true,
+    );
+    for (const file of [
+      `nested/${composition}`,
+      "project-source-upload-controller.ts",
+    ]) {
+      assert.equal(
+        boundaryAllowsImport(controlApiBoundary, file, "@crewon/plugin-host"),
+        false,
+        file,
+      );
+    }
+    for (const specifier of [
+      "@crewon/plugin-host/internal",
+      "@crewon/media-runtime",
+      "@crewon/plugin-sdk/node",
+      "parse5",
+      "node:fs",
+    ]) {
+      assert.equal(
+        boundaryAllowsImport(controlApiBoundary, composition, specifier),
+        false,
+        specifier,
+      );
+    }
+  }
+  assert.equal(
+    isForbiddenRendererImport("@crewon/plugin-sdk/project-source-uploads"),
+    false,
+  );
+});
+
 test("host Run authority and shared media remain forbidden in the renderer", () => {
   for (const specifier of [
     "@crewon/application",
@@ -338,6 +506,10 @@ test("host Run authority and shared media remain forbidden in the renderer", () 
     assert.equal(isForbiddenRendererImport(specifier), true, specifier);
   }
   assert.equal(isForbiddenRendererImport("@crewon/plugin-sdk/ui"), false);
+  assert.equal(
+    isForbiddenRendererImport("@crewon/plugin-sdk/project-foundation-ui"),
+    false,
+  );
   assert.equal(
     isForbiddenRendererImport("@crewon/plugin-sdk/contracts"),
     false,

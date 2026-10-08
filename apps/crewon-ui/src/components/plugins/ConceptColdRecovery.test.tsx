@@ -28,6 +28,10 @@ import type {
   ProjectGenerationSelectionUiInput,
 } from "@crewon/plugin-sdk/contracts";
 import { coldRecoveryService } from "../../../../../examples/plugins/short-drama/test/cold-recovery.test-support.mjs";
+import {
+  shortDramaWorkbenchDependencies,
+  type ShortDramaWorkbenchDependencies,
+} from "./ShortDramaWorkbenchControllers.test-support";
 import { flush } from "../../lib/plugins/pluginUiLoader.test-support";
 type Contexts = {
   generation: ProjectGenerationHostContext | null;
@@ -76,7 +80,9 @@ const { CreativeProjectController } = await vi.importActual<{
   ).pathname,
 );
 const { ShortDramaPersistentWorkbench } = await vi.importActual<{
-  ShortDramaPersistentWorkbench: ComponentType<{ controller: Controller }>;
+  ShortDramaPersistentWorkbench: ComponentType<
+    { controller: Controller } & ShortDramaWorkbenchDependencies
+  >;
 }>(
   new URL(
     "../../../../../examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx",
@@ -89,15 +95,17 @@ const { ShortDramaPersistentWorkbench } = await vi.importActual<{
 const mounted: {
   root: Root;
   controller: Controller;
+  dependencies: ReturnType<typeof shortDramaWorkbenchDependencies>;
   service: ReturnType<typeof coldRecoveryService>;
 }[] = [];
 async function settle() {
   for (let i = 0; i < 8; i++) await flush();
 }
 afterEach(async () => {
-  for (const { root, controller, service } of mounted.splice(0)) {
+  for (const { root, controller, dependencies, service } of mounted.splice(0)) {
     service.watch(() => {});
     controller.dispose();
+    dependencies.dispose();
     await act(async () => {
       root.unmount();
       await settle();
@@ -114,6 +122,7 @@ async function fixture(service: ReturnType<typeof coldRecoveryService>) {
     queries: createPluginProjectGenerationQueryClient(service.services),
     selections: createPluginProjectGenerationSelectionClient(service.services),
   });
+  const dependencies = shortDramaWorkbenchDependencies(service.services);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -125,12 +134,27 @@ async function fixture(service: ReturnType<typeof coldRecoveryService>) {
       selection: parseProjectGenerationSelectionHostContext(values.selection),
     };
   };
-  mounted.push({ root, controller, service });
+  mounted.push({ root, controller, dependencies, service });
   service.watch(() => controller.setRecoveryContexts(contexts()));
   await act(async () => {
-    root.render(<ShortDramaPersistentWorkbench controller={controller} />);
+    root.render(
+      <ShortDramaPersistentWorkbench
+        controller={controller}
+        {...dependencies}
+      />,
+    );
     controller.setRecoveryContexts(contexts());
+    dependencies.setReady(true);
     controller.setReady(true);
+    await settle();
+  });
+  await act(async () => {
+    const recovery = container.querySelector<HTMLDetailsElement>(
+      ".drama-recovery-disclosure",
+    );
+    expect(recovery).not.toBeNull();
+    recovery!.querySelector("summary")!.click();
+    expect(recovery!.open).toBe(true);
     await settle();
   });
   const button = (label: string) => {
@@ -281,7 +305,11 @@ describe("fresh controller captures all recovery lanes before readonly source ad
       "新画面",
     );
     s.service.externalBrief(s.b.project.projectId, "新需求");
-    s.service.records.get(s.b.project.projectId)!.project.state = "archived";
+    const record = s.service.records.get(s.b.project.projectId)!;
+    s.service.records.set(s.b.project.projectId, {
+      ...record,
+      project: { ...record.project, state: "archived" },
+    });
     await f.click("重新读取原查询输入");
     expect(f.controller.concepts.getSnapshot().selection?.asset.assetId).toBe(
       s.b.asset.assetId,
@@ -337,6 +365,8 @@ describe("fresh controller captures all recovery lanes before readonly source ad
         body,
       );
       expect(f.controller.concepts.queries.getSnapshot().request).toEqual(old);
+      // Background restoration retains the homepage; viewing the recovered project is explicit.
+      await f.click("查看待处理项目");
       expect(f.container.textContent).toContain("未确认画面 B");
       assertNoWrites(s.service);
       await f.click("重试原生成请求");

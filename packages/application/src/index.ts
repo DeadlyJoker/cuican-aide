@@ -304,3 +304,6 @@ export * from "./project-source-upload-port.ts";
 export * from "./project-source-upload-validation.ts";
 export * from "./project-source-upload-application-service.ts";
 export * from "./project-source-upload-foundation-adapter.ts";
+export * from "./plugin-project-foundation-action-owner.ts";
+export * from "./project-source-upload-plugin-commit-authority.ts";
+export * from "./plugin-project-source-upload-action-owner.ts";

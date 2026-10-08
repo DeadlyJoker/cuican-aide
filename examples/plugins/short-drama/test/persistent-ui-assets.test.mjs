@@ -84,6 +84,31 @@ test("the actual installed module exposes manual shared assets inside the origin
     assert.ok(
       f.container.querySelector('.detail-panel[aria-label="资产来源与参考图"]'),
     );
+    const panel = f.container.querySelector('[aria-label="共享资产"]');
+    const adoption = panel.querySelector('[aria-label="设定与参考图采用"]');
+    assert.ok(adoption);
+    assert.match(
+      panel.querySelector('[aria-label="资产正文"]').textContent,
+      /女主 · 修复师/u,
+    );
+    assert.equal(panel.querySelector('[aria-label="资产设定"]').hidden, true);
+    for (const summary of panel.querySelectorAll("details > summary"))
+      assert.equal(summary.parentElement.open, false);
+    for (const label of ["选用这版设定", "锁定选用版本"]) {
+      const button = [...adoption.querySelectorAll("button")].find(
+        (element) => element.textContent.trim() === label,
+      );
+      assert.ok(button, `${label} remains a direct action`);
+      for (
+        let parent = button.parentElement;
+        parent !== panel;
+        parent = parent.parentElement
+      )
+        assert.notEqual(parent.tagName, "DETAILS");
+    }
+    f.button("编辑设定").click();
+    await settle();
+    assert.equal(panel.querySelector('[aria-label="资产设定"]').hidden, false);
     assert.equal(
       f.container.querySelector('[aria-label="资产名称"]').disabled,
       false,

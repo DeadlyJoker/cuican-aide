@@ -1,4 +1,11 @@
 import {
+  captureProjectFoundationCompositionConfig,
+  prepareProjectFoundation,
+  type ProjectFoundationCompositionConfig,
+  type PreparedProjectFoundation,
+  type ProjectFoundationStoreOwner,
+} from "./project-foundation-composition.ts";
+import {
   captureProjectMediaInputStageConfiguration,
   prepareProjectMediaInputStages,
   type ProjectMediaInputStageConfiguration,
@@ -93,6 +100,7 @@ import {
 export type CreativeProjectCompositionConfig = ProjectAssetCompositionConfig &
   Readonly<{
     authorization: CreativeProjectAuthorizationPort;
+    foundation?: ProjectFoundationCompositionConfig;
     textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
     textUi?: ProjectTextPluginUiConfig;
     textRecovery?: ProjectTextPluginUiConfig;
@@ -112,6 +120,7 @@ export type CreativeProjectCompositionConfig = ProjectAssetCompositionConfig &
 export type PreparedCreativeProjects = ProjectAssetCompositionConfig &
   Partial<PreparedProjectAssets> & {
     readonly service: CreativeProjectApplicationService;
+    readonly foundation?: PreparedProjectFoundation;
     readonly textService?: ProjectTextApplicationService;
     readonly textUi?: ProjectTextPluginUiConfig;
     readonly textRecovery?: ProjectTextPluginUiConfig;
@@ -154,7 +163,8 @@ export type PreparedCreativeProjects = ProjectAssetCompositionConfig &
     failureCleanup?: Promise<void>;
   };
 
-type CreativeProjectStoreOwner = ProjectTextRecoveryStoreOwner &
+type CreativeProjectStoreOwner = ProjectFoundationStoreOwner &
+  ProjectTextRecoveryStoreOwner &
   ProjectAssetStoreOwner &
   Readonly<{
     creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
@@ -184,6 +194,7 @@ export function captureCreativeProjectCompositionConfig(
     Reflect.ownKeys(input).some(
       (key) =>
         key !== "authorization" &&
+        key !== "foundation" &&
         key !== "textArtifacts" &&
         key !== "assetArtifacts" &&
         key !== "assetUi" &&
@@ -209,6 +220,15 @@ export function captureCreativeProjectCompositionConfig(
     !Object.hasOwn(fields.authorization!, "value")
   )
     throw new Error("creative_project_configuration_invalid");
+  const foundationField = fields.foundation;
+  if (
+    foundationField !== undefined &&
+    (!Object.hasOwn(foundationField, "value") || !foundationField.enumerable)
+  )
+    throw new Error("creative_project_configuration_invalid");
+  const foundation = captureProjectFoundationCompositionConfig(
+    foundationField?.value,
+  );
   let textArtifacts: CreativeProjectCompositionConfig["textArtifacts"];
   const textField = fields.textArtifacts;
   if (textField !== undefined) {
@@ -400,6 +420,7 @@ export function captureCreativeProjectCompositionConfig(
         throw new Error("creative_project_authorization_required");
       return Object.freeze({
         ...assets,
+        ...(foundation === undefined ? {} : { foundation }),
         ...(mediaInputStages === undefined ? {} : { mediaInputStages }),
         authorization: Object.freeze({
           authorize: descriptor.value.bind(port),
@@ -460,6 +481,11 @@ export async function prepareCreativeProjects(
       : undefined;
   const store = owner.creativeProjectStore();
   await store.migrate();
+  const foundation = await prepareProjectFoundation(owner, {
+    configuration: configuration.foundation,
+    projects: store,
+    authorization: configuration.authorization,
+  });
   let textService: ProjectTextApplicationService | undefined;
   let textStore: ProjectTextStore | undefined;
   if (configuration.textArtifacts !== undefined) {
@@ -554,6 +580,7 @@ export async function prepareCreativeProjects(
         );
   return {
     ...assets,
+    ...(foundation === undefined ? {} : { foundation }),
     ...(mediaInputStageFoundation === undefined
       ? {}
       : { mediaInputStageFoundation }),

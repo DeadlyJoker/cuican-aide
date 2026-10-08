@@ -17,6 +17,7 @@ import {
 } from "./extension-proxy-policy.ts";
 import {
   boundedPluginProxyRequest,
+  boundedPluginSourceUploadPartRequest,
   boundedPluginProxyResponse,
   pluginProxyPolicy,
   PLUGIN_PROXY_DEADLINE_MS,
@@ -209,7 +210,13 @@ export function createWebBff(config: {
                 )
               : pluginPolicy === null
                 ? await boundedRequestBody(request)
-                : await boundedPluginProxyRequest(request, upstreamSignal);
+                : pluginPolicy.outcome === "allow" &&
+                    pluginPolicy.requestKind === "sourceUploadPart"
+                  ? await boundedPluginSourceUploadPartRequest(
+                      request,
+                      upstreamSignal,
+                    )
+                  : await boundedPluginProxyRequest(request, upstreamSignal);
       } catch (error) {
         return errorResponse(
           error instanceof Error &&

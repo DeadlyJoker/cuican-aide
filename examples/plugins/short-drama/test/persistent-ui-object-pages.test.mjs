@@ -45,6 +45,18 @@ function assetPageService() {
         calls.push({ action, input });
         if (action.startsWith("crewon.project-asset-recovery.v2."))
           return recovery[action.split(".").at(-1)](input, options);
+        if (action === "crewon.project-assets.v2.getRevision") {
+          const { view } = await media.services.invoke(
+            "crewon.project-assets.v2.getAsset",
+            { projectId: input.projectId, assetId: input.assetId },
+            options,
+          );
+          assert.equal(
+            input.contentRevision,
+            view.selectedContentRevision.contentRevision,
+          );
+          return { contentRevision: view.selectedContentRevision };
+        }
         return media.services.invoke(action, input, options);
       },
     },
@@ -76,6 +88,7 @@ test("outline and script are separate pages over the same adopted sources and pr
     await f.click(f.button("添加场次"));
     await f.input(field(f, "第 1 场动作"), " 未保存的动作\n保留换行 ");
     await f.click(page(f, "outline"));
+    await f.click(f.button("编辑"));
     await f.input(field(f, "故事梗概"), "未保存的新大纲");
     await f.click(page(f, "script"));
     await f.click(episode(f));
@@ -139,6 +152,63 @@ test("character and art pages filter shared assets while keeping an unsaved sett
     assert.equal(
       service.calls.some((c) => /save|submit|createPlan/.test(c.action)),
       false,
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("opening an asset directly reveals its saved setting, adopted reference and edit action without opening history", async () => {
+  const service = assetPageService();
+  const f = await open(service.services);
+  try {
+    await f.click(page(f, "characters"));
+    const directory = f.container.querySelector('[aria-label="资产列表"]');
+    assert.match(directory.textContent, /角色 1/u);
+    assert.equal(
+      service.calls.filter((call) => call.action.endsWith(".getAsset")).length,
+      0,
+      "nameless summaries do not trigger extra asset reads",
+    );
+    await f.click(directory.querySelector("button"));
+    const panel = f.container.querySelector('[aria-label="共享资产"]');
+    const output = panel.querySelector('[aria-label="资产正文"]');
+    assert.match(output.textContent, /林予/u);
+    assert.match(output.textContent, /悬疑短剧设定/u);
+    assert.match(output.textContent, /雨夜、柔和灯光/u);
+    const adopted = panel.querySelector('[aria-label="设定与参考图采用"]');
+    assert.match(adopted.textContent, /参考图：选用 v1/u);
+    assert.match(adopted.textContent, /概念图 · 结果 1 · 设定 v1/u);
+    assert.match(directory.textContent, /林予/u);
+    assert.match(directory.textContent, /角色 2/u);
+    assert.equal(
+      service.calls.filter((call) => call.action.endsWith(".getAsset")).length,
+      1,
+      "only the explicitly opened asset is read for its real name",
+    );
+    for (const details of panel.querySelectorAll("details"))
+      assert.equal(details.open, false);
+    assert.equal(panel.querySelector('[aria-label="资产设定"]').hidden, true);
+    const edit = [...panel.querySelectorAll("button")].find(
+      (button) => button.textContent.trim() === "编辑设定",
+    );
+    assert.ok(edit);
+    assert.equal(edit.disabled, false);
+    edit.click();
+    await settle();
+    assert.equal(panel.querySelector('[aria-label="资产设定"]').hidden, false);
+    assert.equal(field(f, "资产名称").value, "林予");
+    assert.equal(browser.document.activeElement, field(f, "资产名称"));
+    await f.input(field(f, "资产名称"), "未保存的改名");
+    assert.match(directory.textContent, /林予/u);
+    assert.ok(!directory.textContent.includes("未保存的改名"));
+    assert.equal(f.button("选用这版设定").disabled, true);
+    assert.equal(
+      service.calls.some((call) =>
+        /save|submit|selectRevision/.test(call.action),
+      ),
+      false,
+      "reading and opening the editor does not adopt or save a candidate",
     );
   } finally {
     await f.dispose();

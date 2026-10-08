@@ -1,6 +1,6 @@
 {
   "name": "crewon-short-drama-example",
-  "version": "36.0.0",
+  "version": "39.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "node test/run-tests.mjs"
   },
   "dependencies": {
-    "@crewon/plugin-sdk": "0.1.0",
+    "@crewon/plugin-sdk": "file:./.sdk/crewon-plugin-sdk.tgz",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "lucide-react": "0.468.0"

@@ -22,6 +22,8 @@ export function productionPluginUiOwnerConfiguration(
         }>
       | undefined;
     projects: ProductionPluginUiConfig["ownedCreativeProjectActions"];
+    foundations?: ProductionPluginUiConfig["ownedProjectFoundationActions"];
+    sourceUploads?: ProductionPluginUiConfig["ownedProjectSourceUploadActions"];
     generationReads: ProductionPluginUiConfig["ownedProjectGenerationReadActions"];
   }>,
 ): ProductionPluginUiConfig {
@@ -57,6 +59,12 @@ export function productionPluginUiOwnerConfiguration(
     ...(input.projects === undefined
       ? {}
       : { ownedCreativeProjectActions: input.projects }),
+    ...(input.foundations === undefined
+      ? {}
+      : { ownedProjectFoundationActions: input.foundations }),
+    ...(input.sourceUploads === undefined
+      ? {}
+      : { ownedProjectSourceUploadActions: input.sourceUploads }),
     ...(input.generationReads === undefined
       ? {}
       : { ownedProjectGenerationReadActions: input.generationReads }),

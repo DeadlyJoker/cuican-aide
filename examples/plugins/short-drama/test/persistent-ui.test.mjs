@@ -79,7 +79,7 @@ test("creates and saves exact briefs with real CAS, preserves drafts on theme up
     await f.input(f.container.querySelector("dialog textarea"), firstText);
     await f.click(f.button("创建项目"));
     assert.equal(
-      f.container.querySelector(".page-heading h1").textContent,
+      f.container.querySelector(".drama-project-heading h1").textContent,
       "独立故事",
     );
     assert.equal(f.container.querySelector("#creative-brief").value, firstText);

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import "./project-foundation-distribution-runner.mjs";
+import "./project-source-uploads-distribution-runner.mjs";
 import { createContextClient } from "./dist/external-project-generation-context-ui.js";
 import {
   input as contextInput,

@@ -1,6 +1,19 @@
 # ReelBench 复刻 P1：两类项目、原文与方案的兼容扩展
 
-2026-10-08。依据[产品拆解](./reelbench-product-replication-analysis.md)和[验收清单](./reelbench-replication-acceptance.md)。两类项目的领域、双库持久化、真实文件解析、业务服务与独立UI合同已实现。可恢复上传及原项目事务内采用已实现，新的采用集成已在真实双库通过。真实插件调用注册、Agent 与页面接线仍待完成，尚不能通过已安装桌面插件调用新服务。
+2026-10-08。依据[产品拆解](./reelbench-product-replication-analysis.md)和[验收清单](./reelbench-replication-acceptance.md)。两类项目、真实文件解析和双库持久化已实现；正式已安装插件的 HTTP 创建、方案确认、分片上传、原文解析和小说项目关联已在真实双库通过。SDK 0.1.1 与插件 39.0.0 为未公开发布、未安装候选；创意/小说页面与桌面原生服务组合已有定向验证，Agent 阶段执行仍待完成。用户已安装的桌面插件尚不能调用新服务，完整产品验收没有完成。
+
+## 2026-10-08 正式上传与候选页面进度
+
+- [原安装 HTTP 集成](../apps/control-api/src/project-foundation-plugin-ui.integration.test.ts)和[原始分片集成](../apps/control-api/src/project-source-upload-plugin-ui.integration.test.ts)合计 **12 项通过、0 跳过**，覆盖真实 SQLite 与 PostgreSQL、HTTPS profile/policy、已安装字节和实际启用记录。小说链路为 begin → 两片原字节写入/精确重放 → prepare → 两个项目复用同一 ready 上传 → 真实章节/Unicode 正文读取。没有创建 Run，也没有替代 Agent 执行验收。
+- 原上传 JSON 动作与独立 raw writePart 共用真实挂载、安装事务和原账户；业务 write 权限独立于 status/prepare/adopt。应用层新增 **12 项 raw 专项测试**，验证首个 await 前复制、原生取消、CAS 竞态及真实 COMMIT 后返回事实。Control-client 实际原生 HTTP **13 项通过**，原插件/恢复/Origin 回归 **24 项通过**。
+- 网页 BFF 实际 HTTP 与原身份/CSRF、响应限额、断连路径已验证，全套 **85 项通过**。SDK 候选 **83 项通过**，包含真实 tarball 仓外 ES2022/DOM 编译、原 UI ABI 兼容及分片回执丢失后的显式重放。SDK 未上传公共 registry；[准备脚本](../scripts/prepare-short-drama-sdk.ts)可在 clone 后生成独立插件所需 tarball。
+- 原网页与桌面 UI loader 均沿原 Control 客户端提供可选原生字节方法；只有真实挂载声明 SourceUploads v1 时才提供该传输方法；每次请求还需实际后端 owner 与独立权限。两项新增元数据依赖保持 optional，避免整个安装包的依赖声明阻断尚未提供这些 Node 服务的原执行工厂。连接就绪提示不代表服务可用或授权。插件 39 使用模块内原主题，首页区分创意与小说，编辑参数、保存/确认方案及按需读取原文/章节；候选页面和 File 编排测试仍与实际桌面、供应商、Agent 端到端验收分开记录。
+- 插件候选双入口构建与独立 UI/File 编排行为 **385 项通过**；原宿主挂载和 raw 传输 **24 项通过**，原 UI source/preview 回归 **32 项通过**。这些覆盖与全 UI 初次运行仍有的其他失败分开记录；全 UI 尚未宣告通过。
+- [桌面正式组合](../apps/control-api/src/desktop-project-foundation.test.ts) **10 项通过**，原 Native startup、运行、恢复、计划、会话及媒体工厂回归 **76 项通过、0 跳过**。原 v3 私有配置新增可选 Foundation 声明，旧配置保持；真实 SQLite 上验证上传、解析、小说创建、方案确认、冷重开、提交前撤权回滚及 COMMIT 后返回事实。Foundation 新增可选同步外部授权钩子，最终提交仍核对原私有配置、scope 和实际 profile；Application 对应 **16 项通过**。没有修改用户 profile，也没有更新已安装 App。
+- 当前全部 packages 类型检查、UI/桌面 host lint、TypeScript boundary 与仓库格式检查通过。Control 全量启用真实 PG 后执行 1454 项：1413 通过、1 失败、7 取消、33 跳过；8 个失败/取消用例均记录执行或供应商请求超时，正在按原时限、较低文件并发复核。没有提高时限、修改生产执行或删减断言，尚不能报告 Control 全量通过。
+- 后续阶段仍需在实际提交事务内执行来源/方案确认门禁，接入原 Run/Tool 与 shuohao skills，完成对象成果关系、媒体生成、手动/Agent 接力、冷恢复和桌面更新。HTML 快照、测试数量与 HTTP 成功不能代替这份完整产品验收。
+
+日志位于 `output/extensions/checks/reelbench-p1-import-20261008/`，包括 `source-upload-formal-http-tests.log`、`upload-raw-control-client*.log`、`source-upload-bff-test-final.log` 和 `sdk-source-upload-0.1.1-final-tests.log`。下列“本轮实施记录”保留底层阶段的原证据；其中“尚未接线”仅描述当时阶段，最新状态以上述记录为准。
 
 ## 本轮实施记录
 

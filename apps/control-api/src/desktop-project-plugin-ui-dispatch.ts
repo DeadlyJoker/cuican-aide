@@ -21,6 +21,8 @@ import type { ProjectConversationControlOwner } from "./project-conversation-con
 import type { ProjectTextPlanPluginUiRuntime } from "./project-text-plan-plugin-ui-composition.ts";
 import type { ProjectAssetPluginUiRuntime } from "./project-asset-plugin-ui-composition.ts";
 import { isProjectAssetUiNamespaceAction } from "@crewon/contracts/project-assets";
+import type { ProjectFoundationPluginUiRuntime } from "./project-foundation-plugin-ui-composition.ts";
+import type { ProjectSourceUploadPluginUiRuntime } from "./project-source-upload-plugin-ui-composition.ts";
 
 /** Metadata namespaces are dispatched before the independent execution owner. */
 export function composeDesktopProjectPluginUiDispatch(
@@ -28,6 +30,8 @@ export function composeDesktopProjectPluginUiDispatch(
     mediaResults?: ProjectMediaResultPluginUiOwner;
     mediaInputs?: ProjectMediaInputPluginUiOwner;
     mediaGenerations?: ProjectMediaGenerationPluginUiOwner;
+    foundations?: ProjectFoundationPluginUiRuntime;
+    sourceUploads?: ProjectSourceUploadPluginUiRuntime;
     projects: CreativeProjectPluginUiRuntime | undefined;
     texts: ProjectTextPluginUiRuntime | undefined;
     assets?: ProjectAssetPluginUiRuntime;
@@ -42,6 +46,28 @@ export function composeDesktopProjectPluginUiDispatch(
   const { projects, texts, history, tasks } = input;
   const actions: PluginUiActionPort = {
     invoke: async (context) => {
+      if (
+        context.action === "crewon.project-foundation" ||
+        context.action.startsWith("crewon.project-foundation.")
+      ) {
+        if (!input.foundations?.owner.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_foundation_unavailable",
+          );
+        return input.foundations.owner.actions.invoke(context);
+      }
+      if (
+        context.action === "crewon.project-source-uploads" ||
+        context.action.startsWith("crewon.project-source-uploads.")
+      ) {
+        if (!input.sourceUploads?.owner.supportsAction(context.action))
+          throw new ApplicationError(
+            "conflict",
+            "project_source_upload_unavailable",
+          );
+        return input.sourceUploads.owner.actions.invoke(context);
+      }
       if (isProjectMediaResultUiNamespaceAction(context.action)) {
         if (!input.mediaResults?.supportsAction(context.action))
           throw new ApplicationError(
@@ -178,12 +204,22 @@ export function composeDesktopProjectPluginUiDispatch(
       throw new ApplicationError("conflict", "plugin_ui_actions_unavailable");
     },
   };
-  const metadata = committedDesktopProjectMetadata(
+  const originalMetadata = committedDesktopProjectMetadata(
     projects,
     history,
     texts,
     input.conversations,
   );
+  let metadata = originalMetadata;
+  for (const owner of [input.foundations?.owner, input.sourceUploads?.owner]) {
+    if (owner !== undefined)
+      metadata = {
+        committedMetadata: combineSelectionCommittedMetadata(
+          owner.committedMetadata,
+          metadata.committedMetadata,
+        ),
+      };
+  }
   const assetMetadata =
     input.assets === undefined
       ? metadata

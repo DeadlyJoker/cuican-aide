@@ -22,6 +22,7 @@ import {
   type DesktopNativePluginControlConfig,
 } from "./desktop-native-plugin-control-environment.ts";
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
+import { assertDesktopProjectFoundationStartupBinding } from "./desktop-project-foundation-startup.ts";
 
 type ExecutionInput = Readonly<{
   configuration: DesktopPluginConfiguration;
@@ -100,6 +101,10 @@ export function issueDesktopProjectExecutionConfiguration(
 export function captureDesktopProjectCompositionConfig(
   input: ExecutionInput,
 ): CreativeProjectCompositionConfig | undefined {
+  assertDesktopProjectFoundationStartupBinding(
+    input.configuration,
+    input.projects,
+  );
   const projects = captureCreativeProjectCompositionConfig(input.projects);
   if (!hasExecution(projects))
     return captureStandaloneCreativeProjectCompositionConfig(projects);

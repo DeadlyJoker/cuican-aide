@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   sourceUploadFields,
   captureSourceUploadClaim,
+  assertProjectSourceUploadTransactionCurrent,
   type ProjectSourceUploadStore,
   type ProjectSourceUploadCommitAuthority,
   type ProjectSourceUploadState,
@@ -49,6 +50,12 @@ import {
   sourceUploadSqliteFilter,
   sourceUploadSqliteValues,
 } from "./project-source-upload-sqlite-records.ts";
+import {
+  admitSqliteSourceUploadInstallation,
+  captureSourceUploadInstallationAdmission,
+  qualifySourceUploadInstallation,
+  type SourceUploadInstallationAdmission,
+} from "./project-source-upload-plugin-installation.ts";
 
 type Input<M extends keyof ProjectSourceUploadStore> =
   ProjectSourceUploadStore[M] extends (...args: infer A) => unknown
@@ -60,10 +67,20 @@ export class SqliteProjectSourceUploadStore
 {
   readonly #database: DatabaseSync;
   readonly #assertOpen: () => void;
+  readonly #installationAdmission:
+    | SourceUploadInstallationAdmission
+    | undefined;
   #realmId: string | null = null;
-  constructor(input: { database: DatabaseSync; assertOpen(): void }) {
+  constructor(input: {
+    database: DatabaseSync;
+    assertOpen(): void;
+    installationAdmission?: SourceUploadInstallationAdmission;
+  }) {
     this.#database = input.database;
     this.#assertOpen = input.assertOpen;
+    this.#installationAdmission = captureSourceUploadInstallationAdmission(
+      input.installationAdmission,
+    );
   }
   get storageRealmId(): string {
     this.#assertOpen();
@@ -92,7 +109,7 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:begin"],
         q.actor,
       );
-    return this.#read(authority, () => this.#beginReceipt(q));
+    return this.#read(authority, () => this.#beginReceipt(q), true);
   }
   async begin(
     input: Input<"begin">,
@@ -577,10 +594,24 @@ export class SqliteProjectSourceUploadStore
   async #read<T>(
     authority: ProjectSourceUploadCommitAuthority,
     work: () => T,
+    mutation = false,
   ): Promise<T> {
+    qualifySourceUploadInstallation(
+      authority,
+      this.#installationAdmission,
+      mutation,
+    );
     await assertSourceUploadCurrent(authority);
+    await assertProjectSourceUploadTransactionCurrent(authority);
     return this.#transaction("read", () => {
       this.#schema();
+      admitSqliteSourceUploadInstallation(
+        this.#database,
+        authority,
+        this.#installationAdmission,
+        mutation,
+      );
+      assertSourceUploadActive(authority);
       const result = work();
       assertSourceUploadActive(authority);
       return result;
@@ -590,9 +621,22 @@ export class SqliteProjectSourceUploadStore
     authority: ProjectSourceUploadCommitAuthority,
     work: () => T,
   ): Promise<T> {
+    qualifySourceUploadInstallation(
+      authority,
+      this.#installationAdmission,
+      true,
+    );
     await assertSourceUploadCurrent(authority);
+    await assertProjectSourceUploadTransactionCurrent(authority);
     return this.#transaction("write", () => {
       this.#schema();
+      admitSqliteSourceUploadInstallation(
+        this.#database,
+        authority,
+        this.#installationAdmission,
+        true,
+      );
+      assertSourceUploadActive(authority);
       const result = work();
       assertSourceUploadActive(authority);
       return result;

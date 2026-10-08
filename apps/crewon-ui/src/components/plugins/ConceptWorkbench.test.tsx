@@ -20,6 +20,10 @@ import {
   deferred,
   metadataService,
 } from "../../../../../examples/plugins/short-drama/test/persistent-ui.test-support.mjs";
+import {
+  shortDramaWorkbenchDependencies,
+  type ShortDramaWorkbenchDependencies,
+} from "./ShortDramaWorkbenchControllers.test-support";
 import { flush } from "../../lib/plugins/pluginUiLoader.test-support";
 
 // The installed module is an independent TS project, checked against the public SDK separately.
@@ -40,7 +44,9 @@ const { CreativeProjectController } = await vi.importActual<{
   ).pathname,
 );
 const { ShortDramaPersistentWorkbench } = await vi.importActual<{
-  ShortDramaPersistentWorkbench: ComponentType<{ controller: Controller }>;
+  ShortDramaPersistentWorkbench: ComponentType<
+    { controller: Controller } & ShortDramaWorkbenchDependencies
+  >;
 }>(
   new URL(
     "../../../../../examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx",
@@ -50,13 +56,18 @@ const { ShortDramaPersistentWorkbench } = await vi.importActual<{
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-const mounted: { root: Root; controller: Controller }[] = [];
+const mounted: {
+  root: Root;
+  controller: Controller;
+  dependencies: ReturnType<typeof shortDramaWorkbenchDependencies>;
+}[] = [];
 async function settle() {
   for (let count = 0; count < 6; count++) await flush();
 }
 afterEach(async () => {
-  for (const { root, controller } of mounted.splice(0)) {
+  for (const { root, controller, dependencies } of mounted.splice(0)) {
     controller.dispose();
+    dependencies.dispose();
     await act(async () => {
       root.unmount();
       await settle();
@@ -73,18 +84,25 @@ async function fixture(service: ReturnType<typeof metadataService>) {
     queries: createPluginProjectGenerationQueryClient(service.services),
     selections: createPluginProjectGenerationSelectionClient(service.services),
   });
+  const dependencies = shortDramaWorkbenchDependencies(service.services);
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  mounted.push({ root, controller });
+  mounted.push({ root, controller, dependencies });
   const render = async () => {
     await act(async () => {
-      root.render(<ShortDramaPersistentWorkbench controller={controller} />);
+      root.render(
+        <ShortDramaPersistentWorkbench
+          controller={controller}
+          {...dependencies}
+        />,
+      );
       await settle();
     });
   };
   await render();
   await act(async () => {
+    dependencies.setReady(true);
     controller.setReady(true);
     await settle();
   });

@@ -1,5 +1,15 @@
 import { pluginUiActionInputMaximumBytes } from "@crewon/contracts/project-texts-ui";
 import {
+  parseProjectSourceUploadPartLocator,
+  parseProjectSourceUploadPartResponse,
+  type ProjectSourceUploadPartLocator,
+  type ProjectSourceUploadMutationResponse,
+} from "@crewon/contracts/project-source-uploads";
+import {
+  capturePluginSourceUploadPartBytes,
+  sourceUploadPartDeclared,
+} from "./installedPluginSourceUploadTransport";
+import {
   parsePluginUiLease,
   parseRenewPluginUiMountResponse,
   type PluginUiLease,
@@ -40,6 +50,12 @@ export type PluginUiHostPorts = Readonly<{
     }>,
   ): Promise<PluginJsonValue>;
   closeMount(lease: PluginUiLease): Promise<void>;
+  writeProjectSourceUploadPart?(
+    lease: PluginUiLease,
+    locator: ProjectSourceUploadPartLocator,
+    bytes: Uint8Array,
+    signal: AbortSignal,
+  ): Promise<ProjectSourceUploadMutationResponse>;
   onDiagnostic(error: unknown): void;
 }>;
 
@@ -126,6 +142,12 @@ export class TrustedPluginUiLoader {
       invoke: options.ports.invoke.bind(options.ports),
       closeMount: options.ports.closeMount.bind(options.ports),
       onDiagnostic: options.ports.onDiagnostic.bind(options.ports),
+      ...(options.ports.writeProjectSourceUploadPart === undefined
+        ? {}
+        : {
+            writeProjectSourceUploadPart:
+              options.ports.writeProjectSourceUploadPart.bind(options.ports),
+          }),
     });
     this.#assetBasePath = checkedPluginUiAssetBase(options.assetBasePath);
     this.#routeStyle =
@@ -271,6 +293,24 @@ export class TrustedPluginUiLoader {
       const services: PluginUiServices = Object.freeze({
         invoke: (action, value, options) =>
           this.#invoke(candidate, action, value, options),
+        ...(this.#ports.writeProjectSourceUploadPart === undefined ||
+        !sourceUploadPartDeclared(candidate.lease)
+          ? {}
+          : {
+              projectSourceUploads: Object.freeze({
+                writePart: (
+                  locator: ProjectSourceUploadPartLocator,
+                  bytes: Uint8Array,
+                  options?: unknown,
+                ) =>
+                  this.#writeSourceUploadPart(
+                    candidate,
+                    locator,
+                    bytes,
+                    options ?? {},
+                  ),
+              }),
+            }),
       });
       candidate.instanceTask = Promise.resolve()
         .then(() => {
@@ -355,6 +395,50 @@ export class TrustedPluginUiLoader {
       rawInput,
       pluginUiActionInputMaximumBytes(action),
     );
+    return this.#mountedAction(candidate, rawOptions, async (signal) => {
+      const result = await this.#ports.invoke(candidate.lease, {
+        action,
+        input,
+        signal,
+      });
+      return copyPluginUiJson(result, 64 * 1024);
+    });
+  }
+
+  async #writeSourceUploadPart(
+    candidate: Candidate,
+    rawLocator: ProjectSourceUploadPartLocator,
+    rawBytes: Uint8Array,
+    rawOptions: unknown,
+  ): Promise<ProjectSourceUploadMutationResponse> {
+    this.#current(candidate, true);
+    if (
+      !sourceUploadPartDeclared(candidate.lease) ||
+      this.#ports.writeProjectSourceUploadPart === undefined
+    )
+      uiFailure("plugin_ui_source_upload_unavailable");
+    const locator = parseProjectSourceUploadPartLocator(rawLocator);
+    const bytes = capturePluginSourceUploadPartBytes(rawBytes);
+    return this.#mountedAction(candidate, rawOptions, async (signal) => {
+      const result = await this.#ports.writeProjectSourceUploadPart!(
+        candidate.lease,
+        locator,
+        bytes,
+        signal,
+      );
+      return parseProjectSourceUploadPartResponse(
+        result,
+        locator,
+        bytes.byteLength,
+      );
+    });
+  }
+
+  async #mountedAction<T>(
+    candidate: Candidate,
+    rawOptions: unknown,
+    invoke: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
     const options = uiRecord(rawOptions);
     if (Object.keys(options).some((key) => key !== "signal"))
       uiFailure("plugin_ui_invocation_options_invalid");
@@ -371,22 +455,18 @@ export class TrustedPluginUiLoader {
     external?.addEventListener("abort", abort, { once: true });
     candidate.actions.add(controller);
     this.#inflight.add(controller);
-    let work: Promise<PluginJsonValue> | null = null;
+    let work: Promise<T> | null = null;
     try {
       await this.#fence(candidate, controller.signal);
       this.#current(candidate, true);
       work = Promise.resolve().then(() => {
         this.#current(candidate, true);
-        return this.#ports.invoke(candidate.lease, {
-          action,
-          input,
-          signal: controller.signal,
-        });
+        return invoke(controller.signal);
       });
       const result = await awaitPluginUiOperation(work, controller.signal);
       await this.#fence(candidate, controller.signal);
       this.#current(candidate, true);
-      return copyPluginUiJson(result, 64 * 1024);
+      return result;
     } catch (error) {
       // A rejected late fence must release host-owned transient resources from this invocation.
       controller.abort();

@@ -298,6 +298,13 @@ export function InstalledPluginModule({
         pluginUiReady: ready === context,
         ...(module.plugin.descriptor.requires.some(
           (requirement) =>
+            requirement.service === "crewon.project-foundation" &&
+            requirement.apiVersion === "1",
+        )
+          ? { projectFoundationConnected: ready === context }
+          : {}),
+        ...(module.plugin.descriptor.requires.some(
+          (requirement) =>
             requirement.service === "crewon.project-conversation-association" &&
             requirement.apiVersion === "1",
         )

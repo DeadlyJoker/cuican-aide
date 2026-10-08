@@ -2,7 +2,14 @@ import {
   captureProjectHistoricalQueryPluginConfiguration,
   type ProjectHistoricalQueryPluginConfiguration,
 } from "./project-historical-query-plugin-configuration.ts";
-import type { CreativeProjectAuthorizationPort } from "@crewon/application";
+import type {
+  CreativeProjectAuthorizationPort,
+  ProjectSourceUploadAuthorizationPort,
+} from "@crewon/application";
+import {
+  captureProjectFoundationStartupConfiguration,
+  type ProjectFoundationStartupConfiguration,
+} from "./project-foundation-composition.ts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
   captureCreativeProjectCompositionConfig,
@@ -53,6 +60,7 @@ export type ProductionProjectResultSelectionConfiguration = Readonly<{
 /** Deployment data only. Authorization and provider endpoints are never accepted here. */
 export type ProductionProjectStartupConfiguration = Readonly<{
   schemaVersion: typeof PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA;
+  foundation?: ProjectFoundationStartupConfiguration;
   pluginUi?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
@@ -66,6 +74,7 @@ export type ProductionProjectStartupConfiguration = Readonly<{
 const snapshots = new WeakSet<object>();
 const allowedFields = [
   "schemaVersion",
+  "foundation",
   "pluginUi",
   "pluginGenerations",
   "pluginQueries",
@@ -96,6 +105,9 @@ export function parseProductionProjectStartupConfiguration(
       value.schemaVersion !== PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA
     )
       invalid();
+    const foundation = captureProjectFoundationStartupConfiguration(
+      value.foundation,
+    );
     const pluginUi = captureCreativeProjectPluginUiConfig(value.pluginUi);
     const pluginGenerations = captureProjectGenerationPluginConfiguration(
       value.pluginGenerations,
@@ -125,6 +137,7 @@ export function parseProductionProjectStartupConfiguration(
       invalid();
     const snapshot: ProductionProjectStartupConfiguration = Object.freeze({
       schemaVersion: PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA,
+      ...(foundation === undefined ? {} : { foundation }),
       ...(pluginUi === undefined ? {} : { pluginUi }),
       ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
       ...(pluginQueries === undefined ? {} : { pluginQueries }),
@@ -167,6 +180,7 @@ export async function loadProductionProjectEnvironment(
 export function composeProductionProjectStartup(
   snapshot: ProductionProjectStartupConfiguration | undefined,
   authorization: CreativeProjectAuthorizationPort,
+  uploadAuthorization?: ProjectSourceUploadAuthorizationPort,
 ): Readonly<{
   creativeProjects?: CreativeProjectCompositionConfig;
   uiRecovery?: PluginUiRecoveryConfiguration;
@@ -182,6 +196,7 @@ export function composeProductionProjectStartup(
     schemaVersion: _schemaVersion,
     uiRecovery,
     resultSelections,
+    foundation,
     ...data
   } = snapshot;
   const selections =
@@ -193,9 +208,21 @@ export function composeProductionProjectStartup(
             identities: resultSelections.identities,
           }),
         });
+  if (foundation !== undefined && uploadAuthorization === undefined) invalid();
   const creativeProjects = captureCreativeProjectCompositionConfig({
     ...data,
     authorization,
+    ...(foundation === undefined
+      ? {}
+      : {
+          foundation: {
+            ...foundation,
+            uploads: {
+              ...foundation.uploads,
+              authorization: uploadAuthorization,
+            },
+          },
+        }),
     ...(selections === undefined ? {} : { resultSelections: selections }),
   })!;
   return Object.freeze({

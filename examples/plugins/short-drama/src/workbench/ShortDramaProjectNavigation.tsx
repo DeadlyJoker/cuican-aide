@@ -1,6 +1,7 @@
 import { useId } from "react";
 import {
   FileText,
+  BookOpen,
   Palette,
   Image,
   Layers3,
@@ -11,6 +12,7 @@ import {
 
 export type ShortDramaProjectPage =
   | "overview"
+  | "source"
   | "outline"
   | "script"
   | "characters"
@@ -19,7 +21,7 @@ export type ShortDramaProjectPage =
 export const projectPages = [
   {
     id: "overview",
-    title: "需求与概念图",
+    title: "概览",
     description: "创作需求与画面",
     icon: Layers3,
   },
@@ -27,7 +29,7 @@ export const projectPages = [
     id: "outline",
     title: "故事大纲",
     description: "主线 · 人物关系 · 分集",
-    icon: FileText,
+    icon: BookOpen,
   },
   {
     id: "script",
@@ -49,15 +51,43 @@ export const projectPages = [
   },
   {
     id: "references",
-    title: "参考与分镜探索",
+    title: "画面探索",
     description: "画面描述 · 参考素材",
     icon: Image,
   },
 ] as const;
 
+export function projectPagesFor(origin: "creative" | "novel" | null) {
+  if (origin === null) return projectPages;
+  const overview = {
+    ...projectPages[0],
+    title: origin === "novel" ? "改编概览" : "创作方案",
+    description: origin === "novel" ? "改编目标 · 方案确认" : "想法 · 制作范围",
+  };
+  const remaining =
+    origin === "novel"
+      ? [
+          {
+            id: "source" as const,
+            title: "小说原文",
+            description: "章节 · 原文阅读",
+            icon: BookOpen,
+          },
+          { ...projectPages[1], title: "改编大纲" },
+          projectPages[3],
+          projectPages[4],
+          projectPages[2],
+          projectPages[5],
+        ]
+      : projectPages.slice(2);
+  return [overview, ...remaining];
+}
+
 /** Navigation changes only the plugin content; it never overlays the host canvas. */
 export function ShortDramaProjectNavigation({
   page,
+  origin = null,
+  sourceAvailable = false,
   assetsAvailable,
   referencesAvailable,
   locked,
@@ -66,6 +96,8 @@ export function ShortDramaProjectNavigation({
   onSelect,
 }: {
   page: ShortDramaProjectPage;
+  origin?: "creative" | "novel" | null;
+  sourceAvailable?: boolean;
   assetsAvailable: boolean;
   referencesAvailable: boolean;
   locked: boolean;
@@ -94,32 +126,35 @@ export function ShortDramaProjectNavigation({
         </button>
       </div>
       <div className="drama-navigation-items" id={id}>
-        {projectPages.map(({ id, title, description, icon: Icon }) => {
-          const available =
-            (id !== "references" || referencesAvailable) &&
-            (!["characters", "art"].includes(id) || assetsAvailable);
-          return (
-            <button
-              type="button"
-              key={id}
-              data-project-page={id}
-              className={`stage-item ${page === id ? "active" : available ? "" : "later"}`}
-              aria-label={title}
-              title={title}
-              aria-current={page === id ? "page" : undefined}
-              disabled={locked || !available}
-              onClick={() => {
-                if (available) onSelect(id as ShortDramaProjectPage);
-              }}
-            >
-              <Icon size={18} />
-              <span className="drama-navigation-label">
-                {title}
-                <small>{description}</small>
-              </span>
-            </button>
-          );
-        })}
+        {projectPagesFor(origin).map(
+          ({ id, title, description, icon: Icon }) => {
+            const available =
+              (id !== "references" || referencesAvailable) &&
+              (id !== "source" || sourceAvailable) &&
+              (!["characters", "art"].includes(id) || assetsAvailable);
+            return (
+              <button
+                type="button"
+                key={id}
+                data-project-page={id}
+                className={`stage-item ${page === id ? "active" : available ? "" : "later"}`}
+                aria-label={title}
+                title={title}
+                aria-current={page === id ? "page" : undefined}
+                disabled={locked || !available}
+                onClick={() => {
+                  if (available) onSelect(id as ShortDramaProjectPage);
+                }}
+              >
+                <Icon size={18} />
+                <span className="drama-navigation-label">
+                  {title}
+                  <small>{description}</small>
+                </span>
+              </button>
+            );
+          },
+        )}
       </div>
     </nav>
   );

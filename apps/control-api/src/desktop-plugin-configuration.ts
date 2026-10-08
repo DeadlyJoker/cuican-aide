@@ -1,5 +1,10 @@
 import { checkNativeOwnershipFile } from "./desktop-native-ownership-check.ts";
 import {
+  captureProjectFoundationStartupConfiguration,
+  type ProjectFoundationStartupConfiguration,
+} from "./project-foundation-composition.ts";
+import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
+import {
   closeSync,
   constants,
   fstatSync,
@@ -65,6 +70,8 @@ export type DesktopPluginConfiguration = DesktopPluginConfigurationBase &
     | Readonly<{
         schemaVersion: "crewon.desktop-plugin-bootstrap.v3";
         projects: DesktopProjectExecutionConfiguration;
+        /** Explicit new host capability; legacy project/history DTOs retain their exact shape. */
+        projectFoundation?: ProjectFoundationStartupConfiguration;
       }>
   );
 const parsed = new WeakSet<object>();
@@ -92,6 +99,8 @@ export function parseDesktopPluginConfiguration(
     if (!schema?.enumerable || !Object.hasOwn(schema, "value")) invalid();
     const v2 = schema.value === "crewon.desktop-plugin-bootstrap.v2";
     const v3 = schema.value === "crewon.desktop-plugin-bootstrap.v3";
+    const hasFoundation =
+      v3 && Object.hasOwn(input as object, "projectFoundation");
     const value = pluginSecurityRecord(input, [
       "schemaVersion",
       "actor",
@@ -101,6 +110,7 @@ export function parseDesktopPluginConfiguration(
       "sources",
       "publications",
       ...(v2 || v3 ? ["projects"] : []),
+      ...(hasFoundation ? ["projectFoundation"] : []),
     ]);
     if (
       (!v2 &&
@@ -208,6 +218,20 @@ export function parseDesktopPluginConfiguration(
       sources: Object.freeze(sources),
       publications: Object.freeze(publications),
     };
+    const foundation = hasFoundation
+      ? captureProjectFoundationStartupConfiguration(value.projectFoundation)
+      : undefined;
+    if (hasFoundation && foundation === undefined) invalid();
+    if (foundation !== undefined) {
+      assertCreativeProjectPluginPublications(
+        foundation.pluginUi,
+        publications,
+      );
+      assertCreativeProjectPluginPublications(
+        foundation.uploads.pluginUi,
+        publications,
+      );
+    }
     const configuration = Object.freeze(
       v3
         ? {
@@ -219,6 +243,9 @@ export function parseDesktopPluginConfiguration(
                 publications,
               },
             ),
+            ...(foundation === undefined
+              ? {}
+              : { projectFoundation: foundation }),
           }
         : v2
           ? {

@@ -1,3 +1,7 @@
+import { createPluginProjectSourceUploadsClient } from "@crewon/plugin-sdk/project-source-uploads";
+import { ProjectSourceFileUpload } from "./workbench/ProjectSourceFileUpload";
+import { createPluginProjectFoundationClient } from "@crewon/plugin-sdk/project-foundation-ui";
+import { ProjectFoundationController } from "./workbench/ProjectFoundationController";
 import { ProjectMediaOutputController } from "./workbench/ProjectMediaOutputController";
 import {
   createPluginMediaResultClient,
@@ -218,6 +222,7 @@ export default defineUiPlugin({
     const preview = dataFlag(props.data, "shortDramaPreview");
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
+    let foundations: ProjectFoundationController | null = null;
     let conversations: ProjectConversationController | null = null;
     let association: ProjectConversationAssociationController | null = null;
     let plans: ProjectTextPlanController | null = null;
@@ -229,6 +234,7 @@ export default defineUiPlugin({
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
+      foundations?.refreshWriteActivity();
       conversations?.refreshWriteActivity();
       association?.refreshWriteActivity();
       plans?.refreshWriteActivity();
@@ -238,6 +244,14 @@ export default defineUiPlugin({
       mediaOutputs?.refreshWriteActivity();
     });
     const clients = writes.services;
+    const sourceUpload =
+      !preview && clients.projectSourceUploads
+        ? new ProjectSourceFileUpload(
+            createPluginProjectSourceUploadsClient(clients, {
+              raw: clients.projectSourceUploads,
+            }),
+          )
+        : undefined;
     controller = preview
       ? null
       : new CreativeProjectController({
@@ -253,6 +267,19 @@ export default defineUiPlugin({
           sourcePluginId: "crewon.short-drama",
           selections: createPluginProjectGenerationSelectionClient(clients),
           physicalWritesPending: () => writes.pending,
+        });
+    foundations = preview
+      ? null
+      : new ProjectFoundationController({
+          client: createPluginProjectFoundationClient(clients),
+          physicalWritesPending: () => writes.pending,
+          committed: async (result) => {
+            if (
+              controller?.getSnapshot().details?.project.projectId !==
+              result.project.projectId
+            )
+              await controller?.openProject(result.project.projectId);
+          },
         });
     texts = preview
       ? null
@@ -376,6 +403,9 @@ export default defineUiPlugin({
       conversations?.setWorkspace(creationWorkspace(next.data));
       conversations?.setReady(ready);
       texts?.setReady(ready);
+      foundations?.setReady(
+        ready && dataFlag(next.data, "projectFoundationConnected"),
+      );
       plans?.setReady(ready);
       assets?.setReady(ready);
       mediaResults?.setReady(ready);
@@ -397,6 +427,8 @@ export default defineUiPlugin({
             <ShortDramaPersistentWorkbench
               controller={controller}
               texts={texts}
+              foundations={foundations ?? undefined}
+              sourceUpload={sourceUpload}
               conversations={conversations}
               plans={plans}
               assets={assets ?? undefined}
@@ -426,8 +458,10 @@ export default defineUiPlugin({
       update(props);
     } catch (error) {
       writes.dispose();
+      sourceUpload?.dispose();
       controller?.dispose();
       texts?.dispose();
+      foundations?.dispose();
       conversations?.dispose();
       association?.dispose();
       plans?.dispose();
@@ -449,8 +483,10 @@ export default defineUiPlugin({
         if (disposed) return;
         disposed = true;
         writes.dispose();
+        sourceUpload?.dispose();
         controller?.dispose();
         texts?.dispose();
+        foundations?.dispose();
         conversations?.dispose();
         association?.dispose();
         plans?.dispose();

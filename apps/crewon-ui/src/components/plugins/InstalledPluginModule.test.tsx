@@ -56,26 +56,43 @@ afterEach(async () => {
 
 function fixture(
   selectionEnabled = false,
-  options = { associationEnabled: false },
+  options: Readonly<{
+    associationEnabled?: boolean;
+    foundation?: "required" | "optional";
+  }> = {},
 ) {
   const h = uiHarness();
   const originalLease = selectionEnabled ? selectionJournalLease() : uiLease();
-  const lease = options.associationEnabled
-    ? {
-        ...originalLease,
-        descriptor: {
-          ...originalLease.descriptor,
-          requires: [
-            ...originalLease.descriptor.requires,
-            {
-              service: "crewon.project-conversation-association",
-              apiVersion: "1",
-              optional: true,
-            },
-          ],
-        },
-      }
-    : originalLease;
+  const lease =
+    options.associationEnabled || options.foundation
+      ? {
+          ...originalLease,
+          descriptor: {
+            ...originalLease.descriptor,
+            requires: [
+              ...originalLease.descriptor.requires,
+              ...(options.associationEnabled
+                ? [
+                    {
+                      service: "crewon.project-conversation-association",
+                      apiVersion: "1",
+                      optional: true,
+                    },
+                  ]
+                : []),
+              ...(options.foundation
+                ? [
+                    {
+                      service: "crewon.project-foundation",
+                      apiVersion: "1",
+                      optional: options.foundation === "optional",
+                    },
+                  ]
+                : []),
+            ],
+          },
+        }
+      : originalLease;
   const leases = new Map<string, PluginUiLease>();
   let serial = 0;
   let revoked = false;
@@ -305,6 +322,37 @@ describe("installed module composition (real authenticated host, explicit import
     expect(
       f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
     ).toHaveLength(1);
+  });
+
+  it("projects the Foundation connection only after the verified module is active", async () => {
+    const f = fixture(false, { foundation: "required" });
+    await f.render(true);
+    const instance = f.h.instances[0]!;
+    expect(instance.props.data).toEqual({
+      locale: "zh",
+      pluginUiReady: false,
+      projectFoundationConnected: false,
+    });
+    expect(instance.update.mock.calls.at(-1)?.[0].data).toEqual({
+      locale: "zh",
+      pluginUiReady: true,
+      projectFoundationConnected: true,
+    });
+    expect(
+      f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+    ).toHaveLength(0);
+    await f.render(false);
+    expect(instance.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps optional Foundation connection separate from service authorization", async () => {
+    const f = fixture(false, { foundation: "optional" });
+    await f.render(true);
+    expect(f.h.instances[0]!.update.mock.calls.at(-1)?.[0].data).toEqual({
+      locale: "zh",
+      pluginUiReady: true,
+      projectFoundationConnected: true,
+    });
   });
 
   it("loads only an active module, updates host props, and closes every lease when leaving", async () => {

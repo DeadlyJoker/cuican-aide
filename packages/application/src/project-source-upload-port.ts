@@ -1,4 +1,9 @@
-import type { ProjectSourceFormat } from "@crewon/domain";
+import type {
+  InstalledPluginPackage,
+  PluginSelection,
+  PluginTaskAdmissionPin,
+  ProjectSourceFormat,
+} from "@crewon/domain";
 import type {
   ActorContext,
   AuthorizationDecision,
@@ -54,6 +59,25 @@ export type ProjectSourceUploadCommitAuthority = Readonly<{
   /** External host policy only; must not borrow the committing Store's connection or pool. */
   assertCurrent(): Promise<void>;
   assertActive(): void;
+  transaction?: ProjectSourceUploadPluginCommitTransactionAuthority;
+}>;
+/** Independent installation commit protocol; neither a creative-project grant nor ownership qualifies it. */
+export type ProjectSourceUploadPluginCommitTransactionAuthority = Readonly<{
+  version: "crewon.project-source-upload-plugin-commit.v1";
+  pin: PluginTaskAdmissionPin;
+  selection: PluginSelection;
+  package: InstalledPluginPackage;
+  /** External live policy only, without borrowing the committing Store's connection. */
+  assertCurrent(): Promise<void>;
+}>;
+/** Private invocation callbacks supplied by a genuine host lifecycle, separate from business PDP. */
+export type ProjectSourceUploadExecutionAuthority = Readonly<{
+  assertCurrent(): Promise<void>;
+  assertActive(): void;
+  transaction?: ProjectSourceUploadPluginCommitTransactionAuthority;
+}>;
+export type ProjectSourceUploadExecutionOptions = Readonly<{
+  authority?: ProjectSourceUploadExecutionAuthority;
 }>;
 export type ProjectSourceUploadInitial = Readonly<{
   schemaVersion: "crewon.project-source-upload.v1";

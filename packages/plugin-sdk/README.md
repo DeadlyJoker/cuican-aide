@@ -1,6 +1,6 @@
 # @crewon/plugin-sdk
 
-CrewON 插件开发接口，当前版本为 `0.1.0`。插件可以在 CrewON 源码仓库外开发；SDK 的分发包包含 ESM JavaScript、TypeScript 声明、LICENSE 和 NOTICE，不依赖宿主源码、私有运行时包或 React。
+CrewON 插件开发接口，当前源码候选版本为 `0.1.1`，尚未发布到公共 registry。插件可以在 CrewON 源码仓库外开发；SDK 的分发包包含 ESM JavaScript、TypeScript 声明、LICENSE 和 NOTICE，不依赖宿主源码、私有运行时包或 React。原 `0.1.0` 分发包保持独立。
 
 SDK 可打包为本地 `.tgz`，供独立开发项目安装，尚未发布到 npm registry。业务插件的安装器目前接收预构建目录；SDK 的安装命令不表示业务插件已支持压缩包输入或正式页面安装。
 
@@ -27,10 +27,10 @@ mkdir -p ../../output/extensions/installable-plugins/sdk
 pnpm pack --pack-destination ../../output/extensions/installable-plugins/sdk
 ```
 
-`pack` 会通过 `prepack` 重新构建。将生成的 `crewon-plugin-sdk-0.1.0.tgz` 交给独立插件项目，再在该项目中执行：
+`pack` 会通过 `prepack` 重新构建。将生成的 `crewon-plugin-sdk-0.1.1.tgz` 交给独立插件项目，再在该项目中执行：
 
 ```sh
-pnpm add /absolute/path/crewon-plugin-sdk-0.1.0.tgz
+pnpm add /absolute/path/crewon-plugin-sdk-0.1.1.tgz
 pnpm add -D typescript@5.9.3 esbuild@0.27.7
 ```
 

@@ -8,6 +8,10 @@ import {
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import {
+  captureProjectSourceUploadPluginCommitTransaction,
+  qualifyProjectSourceUploadPluginCommit,
+} from "./project-source-upload-plugin-commit-authority.ts";
+import {
   capturePreparedProjectSource,
   type ProjectSourcePreparationRequest,
 } from "./project-source-preparation-port.ts";
@@ -400,11 +404,16 @@ export function captureSourceUploadAuthority(
   input: unknown,
 ): ProjectSourceUploadCommitAuthority {
   return checked(() => {
+    const hasTransaction =
+      input !== null &&
+      typeof input === "object" &&
+      Object.hasOwn(input, "transaction");
     const v = sourceUploadFields(input, [
       "version",
       "permission",
       "assertCurrent",
       "assertActive",
+      ...(hasTransaction ? ["transaction"] : []),
     ]);
     if (
       v.version !== "crewon.project-source-upload-commit.v1" ||
@@ -412,12 +421,21 @@ export function captureSourceUploadAuthority(
       typeof v.assertActive !== "function"
     )
       invalid();
-    return Object.freeze({
+    const authority: ProjectSourceUploadCommitAuthority = Object.freeze({
       version: "crewon.project-source-upload-commit.v1",
       permission: captureSourceUploadPermission(v.permission),
       assertCurrent: v.assertCurrent.bind(input),
       assertActive: v.assertActive.bind(input),
+      ...(v.transaction === undefined
+        ? {}
+        : {
+            transaction: captureProjectSourceUploadPluginCommitTransaction(
+              v.transaction,
+            ),
+          }),
     });
+    qualifyProjectSourceUploadPluginCommit(authority);
+    return authority;
   });
 }
 export async function assertSourceUploadCurrent(
@@ -427,7 +445,7 @@ export async function assertSourceUploadCurrent(
   assertSourceUploadActive(authority);
 }
 export function assertSourceUploadActive(
-  authority: ProjectSourceUploadCommitAuthority,
+  authority: Pick<ProjectSourceUploadCommitAuthority, "assertActive">,
 ): void {
   const result: unknown = authority.assertActive();
   if (result === undefined) return;

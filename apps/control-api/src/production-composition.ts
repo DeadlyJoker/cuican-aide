@@ -1,9 +1,11 @@
+import { composeProductionProjectMetadataPlugins } from "./production-project-metadata-plugin-composition.ts";
+import type { ProductionProjectSourceUploadPluginRuntime } from "./production-project-source-upload-plugin-runtime.ts";
 import {
-  createProductionProjectAssetPluginRuntime,
   captureProductionProjectAssetOwnerCleanup,
   type ProductionProjectAssetPluginRuntime,
 } from "./production-project-asset-plugin-runtime.ts";
 import { productionPluginUiOwnerConfiguration } from "./production-plugin-ui-owner-configuration.ts";
+import { type ProductionProjectFoundationPluginRuntime } from "./production-project-foundation-plugin-runtime.ts";
 import { createProductionProjectConversationRuntime } from "./production-project-conversation-runtime.ts";
 import { closeResources } from "./production-control-resource-cleanup.ts";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
@@ -30,6 +32,8 @@ import {
   OfficeApplicationService,
   WorkflowVersionApplicationService,
   isPluginCreativeProjectActionOwner,
+  isPluginProjectSourceUploadActionOwner,
+  isPluginProjectFoundationActionOwner,
   type ArtifactStorePort,
   type AutomationAuthorizationPort,
   type AutomationStore,
@@ -116,14 +120,10 @@ import {
 } from "./creative-project-composition.ts";
 import { assertProductionProjectPluginUiComposition } from "./production-project-plugin-ui-configuration.ts";
 import {
-  createProductionProjectTextPluginRuntime,
   captureProductionProjectTextOwnerCleanup,
   type ProductionProjectTextPluginRuntime,
 } from "./production-project-text-plugin-runtime.ts";
-import {
-  createProductionCreativeProjectPluginRuntime,
-  type ProductionCreativeProjectPluginRuntime,
-} from "./production-creative-project-plugin-runtime.ts";
+import { type ProductionCreativeProjectPluginRuntime } from "./production-creative-project-plugin-runtime.ts";
 import { type ProductionProjectGenerationReadPluginRuntime } from "./production-project-generation-read-plugin-runtime.ts";
 import {
   closeProductionProjectSelectionOwner,
@@ -187,6 +187,10 @@ export async function createProductionPostgresControlApi(
     config.pluginUi?.ownedProjectGenerationActions;
   const ownedCreativeProjectActions =
     config.pluginUi?.ownedCreativeProjectActions;
+  const ownedProjectSourceUploadActions =
+    config.pluginUi?.ownedProjectSourceUploadActions;
+  const ownedProjectFoundationActions =
+    config.pluginUi?.ownedProjectFoundationActions;
   const ownedProjectGenerationReadActions =
     config.pluginUi?.ownedProjectGenerationReadActions;
   let store: PostgresDomainStore | undefined;
@@ -296,6 +300,18 @@ export async function createProductionPostgresControlApi(
       } catch (failure) {
         failures.push(failure);
       }
+    if (isPluginProjectSourceUploadActionOwner(ownedProjectSourceUploadActions))
+      try {
+        await ownedProjectSourceUploadActions.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
+    if (isPluginProjectFoundationActionOwner(ownedProjectFoundationActions))
+      try {
+        await ownedProjectFoundationActions.close();
+      } catch (failure) {
+        failures.push(failure);
+      }
     try {
       await closeOwnedProjectAssets();
     } catch (failure) {
@@ -365,6 +381,12 @@ async function composeProductionControlApi(
     | ProductionProjectAssetPluginRuntime
     | undefined;
   let projectTextPluginRuntime: ProductionProjectTextPluginRuntime | undefined;
+  let projectSourceUploadPluginRuntime:
+    | ProductionProjectSourceUploadPluginRuntime
+    | undefined;
+  let projectFoundationPluginRuntime:
+    | ProductionProjectFoundationPluginRuntime
+    | undefined;
   let projectGenerationReadPluginRuntime:
     | ProductionProjectGenerationReadPluginRuntime
     | undefined;
@@ -387,40 +409,17 @@ async function composeProductionControlApi(
       store,
       config.creativeProjects,
     );
-    if (
-      creativeProjects?.pluginUi !== undefined &&
-      config.pluginUi !== undefined
-    )
-      projectPluginRuntime = createProductionCreativeProjectPluginRuntime({
-        projects: creativeProjects,
-        ui: config.pluginUi.configuration,
-        identity: config.identity as ProductionControlApiIdentity,
-      });
-    if (creativeProjects?.textUi !== undefined && config.pluginUi !== undefined)
-      projectTextPluginRuntime = createProductionProjectTextPluginRuntime({
-        projects: creativeProjects,
-        ui: config.pluginUi.configuration,
-        identity: config.identity as ProductionControlApiIdentity,
-        ...(projectPluginRuntime === undefined
-          ? {}
-          : { hostUiServices: projectPluginRuntime.hostUiServices }),
-      });
-    if (
-      creativeProjects?.assetUi !== undefined &&
-      config.pluginUi !== undefined
-    )
-      projectAssetPluginRuntime = createProductionProjectAssetPluginRuntime({
-        projects: creativeProjects,
-        ui: config.pluginUi.configuration,
-        identity: config.identity as ProductionControlApiIdentity,
-        ...((projectTextPluginRuntime?.hostUiServices ??
-          projectPluginRuntime?.hostUiServices) === undefined
-          ? {}
-          : {
-              hostUiServices: (projectTextPluginRuntime?.hostUiServices ??
-                projectPluginRuntime?.hostUiServices)!,
-            }),
-      });
+    const metadataPlugins = await composeProductionProjectMetadataPlugins({
+      projects: creativeProjects,
+      ui: config.pluginUi?.configuration,
+      identity: config.identity,
+    });
+    projectPluginRuntime = metadataPlugins.projects;
+    projectTextPluginRuntime = metadataPlugins.texts;
+    projectAssetPluginRuntime = metadataPlugins.assets;
+    projectFoundationPluginRuntime = metadataPlugins.foundations;
+    projectSourceUploadPluginRuntime = metadataPlugins.sourceUploads;
+    const projectMetadataHostUiServices = metadataPlugins.hostUiServices;
     if (
       config.pluginUi !== undefined ||
       config.pluginInstallation !== undefined
@@ -443,15 +442,10 @@ async function composeProductionControlApi(
             ids,
             digester,
             ...(creativeProjects === undefined ? {} : { creativeProjects }),
-            ...((projectAssetPluginRuntime?.hostUiServices ??
-              projectTextPluginRuntime?.hostUiServices ??
-              projectPluginRuntime?.hostUiServices) === undefined
+            ...(projectMetadataHostUiServices === undefined
               ? {}
               : {
-                  metadataHostUiServices:
-                    (projectAssetPluginRuntime?.hostUiServices ??
-                      projectTextPluginRuntime?.hostUiServices ??
-                      projectPluginRuntime?.hostUiServices)!,
+                  metadataHostUiServices: projectMetadataHostUiServices,
                 }),
           },
         );
@@ -472,18 +466,14 @@ async function composeProductionControlApi(
           ...((pluginTaskRuntime?.historicalQueries?.hostUiServices ??
             pluginTaskRuntime?.projectQueries?.hostUiServices ??
             pluginTaskRuntime?.projectGenerations?.hostUiServices ??
-            projectAssetPluginRuntime?.hostUiServices ??
-            projectTextPluginRuntime?.hostUiServices ??
-            projectPluginRuntime?.hostUiServices) === undefined
+            projectMetadataHostUiServices) === undefined
             ? {}
             : {
                 fallback: (pluginTaskRuntime?.historicalQueries
                   ?.hostUiServices ??
                   pluginTaskRuntime?.projectQueries?.hostUiServices ??
                   pluginTaskRuntime?.projectGenerations?.hostUiServices ??
-                  projectAssetPluginRuntime?.hostUiServices ??
-                  projectTextPluginRuntime?.hostUiServices ??
-                  projectPluginRuntime?.hostUiServices)!,
+                  projectMetadataHostUiServices)!,
               }),
         });
       const existingHostUiServices =
@@ -491,9 +481,7 @@ async function composeProductionControlApi(
         pluginTaskRuntime?.historicalQueries?.hostUiServices ??
         pluginTaskRuntime?.projectQueries?.hostUiServices ??
         pluginTaskRuntime?.projectGenerations?.hostUiServices ??
-        projectAssetPluginRuntime?.hostUiServices ??
-        projectTextPluginRuntime?.hostUiServices ??
-        projectPluginRuntime?.hostUiServices;
+        projectMetadataHostUiServices;
       const history = await composeProductionPluginUiRecoveryHistory({
         config,
         store,
@@ -545,6 +533,8 @@ async function composeProductionControlApi(
               selection: projectSelectionPluginRuntime?.owner,
               tasks: pluginTaskRuntime,
               projects: projectPluginRuntime?.owner,
+              foundations: projectFoundationPluginRuntime?.owner,
+              sourceUploads: projectSourceUploadPluginRuntime?.owner,
               generationReads: projectGenerationReadPluginRuntime?.owner,
             }),
             {
@@ -710,6 +700,8 @@ async function composeProductionControlApi(
             ui: pluginUiRuntime.service,
             taskRequests: pluginTaskRuntime?.requests,
             projects: projectPluginRuntime,
+            foundations: projectFoundationPluginRuntime,
+            sourceUploads: projectSourceUploadPluginRuntime,
             texts: projectTextPluginRuntime,
             assets: projectAssetPluginRuntime,
             assetStages: conversations?.assetStages(),
@@ -817,6 +809,8 @@ async function composeProductionControlApi(
       await closeResources([
         () => conversations?.close(),
         () => projectPluginRuntime?.close(),
+        () => projectSourceUploadPluginRuntime?.close(),
+        () => projectFoundationPluginRuntime?.close(),
         () => projectAssetPluginRuntime?.close(),
         () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),
@@ -850,6 +844,8 @@ async function composeProductionControlApi(
       await closeResources([
         () => conversations?.close(),
         () => projectPluginRuntime?.close(),
+        () => projectSourceUploadPluginRuntime?.close(),
+        () => projectFoundationPluginRuntime?.close(),
         () => projectAssetPluginRuntime?.close(),
         () => projectTextPluginRuntime?.close(),
         () => projectSelectionPluginRuntime?.close(),

@@ -164,11 +164,16 @@ export async function sourceUploadFixture(
       : new PostgresCreativeProjectStore({ pool: pool!, schema, assertOpen });
     await projects.migrate();
     const uploads = database
-      ? new SqliteProjectSourceUploadStore({ database, assertOpen })
+      ? new SqliteProjectSourceUploadStore({
+          database,
+          assertOpen,
+          installationAdmission: "trusted-internal-authority",
+        })
       : new PostgresProjectSourceUploadStore({
           pool: pool!,
           schema,
           assertOpen,
+          installationAdmission: "trusted-internal-authority",
         });
     await uploads.migrate();
     const adapter = new ProjectSourceUploadPreparationAdapter();

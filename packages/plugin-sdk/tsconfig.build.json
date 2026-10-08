@@ -9,6 +9,12 @@
     "outDir": "dist/types",
     "rewriteRelativeImportExtensions": true
   },
-  "files": ["src/contracts.ts", "src/node.ts", "src/ui.ts"],
+  "files": [
+    "src/contracts.ts",
+    "src/node.ts",
+    "src/ui.ts",
+    "src/project-foundation-ui.ts",
+    "src/project-source-uploads.ts"
+  ],
   "include": []
 }

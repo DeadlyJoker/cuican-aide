@@ -120,6 +120,7 @@ test("lost business ACK is restored as accepted after cold mount without another
     assert.equal(f.button("确认已保存结果").disabled, false);
     await f.click(f.button("确认已保存结果"));
     assert.equal(service.intents.size, 0);
+    await f.click(f.button("编辑"));
     await f.input(field(f, "故事梗概"), "在确认结果后继续修改。");
     await f.click(f.button("保存候选版本"));
     assert.equal([...service.artifacts.values()][0].revisions.length, 2);
@@ -140,6 +141,7 @@ test("cold deterministic conflict keeps original draft and requires terminal ack
     await outline(f);
     await f.click(f.button("保存候选版本"));
     const item = [...service.artifacts.values()][0];
+    await f.click(f.button("编辑"));
     await f.input(field(f, "故事梗概"), "不可丢失的现场修改。");
     item.artifact = { ...item.artifact, revision: item.artifact.revision + 1 };
     await f.click(f.button("保存候选版本"));
@@ -210,9 +212,11 @@ test("lost journal ACK does not turn a confirmed business commit into unknown or
     assert.doesNotMatch(f.container.textContent, /尚未确认这次操作/u);
     assert.equal(service.writeCalls.length, 1);
     assert.equal(service.acknowledgements.size, 1);
-    assert.equal(f.button("保存候选版本").disabled, true);
+    assert.equal(f.button("编辑").disabled, true);
+    assert.equal(field(f, "故事梗概"), null);
     await f.click(f.button("读取已保存结果"));
     assert.equal(service.writeCalls.length, 1);
+    await f.click(f.button("编辑"));
     await f.input(field(f, "故事梗概"), "明确的新候选。");
     await f.click(f.button("保存候选版本"));
     assert.equal([...service.artifacts.values()][0].revisions.length, 2);

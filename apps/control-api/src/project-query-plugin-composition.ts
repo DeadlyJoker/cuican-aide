@@ -66,6 +66,15 @@ export function captureProductionPluginUiOwnerConfiguration(
     ...(input.ownedCreativeProjectActions === undefined
       ? {}
       : { ownedCreativeProjectActions: input.ownedCreativeProjectActions }),
+    ...(input.ownedProjectFoundationActions === undefined
+      ? {}
+      : { ownedProjectFoundationActions: input.ownedProjectFoundationActions }),
+    ...(input.ownedProjectSourceUploadActions === undefined
+      ? {}
+      : {
+          ownedProjectSourceUploadActions:
+            input.ownedProjectSourceUploadActions,
+        }),
     ...(input.ownedProjectHistoricalQueryActions === undefined
       ? {}
       : {

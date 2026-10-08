@@ -43,6 +43,7 @@ import {
   ProjectSourceUploadPostgresQueries,
   uploadPostgresOwnerValues as values,
 } from "./project-source-upload-postgres-queries.ts";
+import type { SourceUploadInstallationAdmission } from "./project-source-upload-plugin-installation.ts";
 
 type Method = Exclude<keyof ProjectSourceUploadStore, "storageRealmId">;
 type Input<K extends Method> = Parameters<ProjectSourceUploadStore[K]>[0];
@@ -63,7 +64,12 @@ export class PostgresProjectSourceUploadStore
   implements ProjectSourceUploadStore
 {
   readonly #io: ProjectSourceUploadPostgresQueries;
-  constructor(input: { pool: Pool; schema: string; assertOpen(): void }) {
+  constructor(input: {
+    pool: Pool;
+    schema: string;
+    assertOpen(): void;
+    installationAdmission?: SourceUploadInstallationAdmission;
+  }) {
     this.#io = new ProjectSourceUploadPostgresQueries(input);
   }
   get storageRealmId(): string {
@@ -85,18 +91,22 @@ export class PostgresProjectSourceUploadStore
       ["projectSourceUpload:begin"],
       identity.actor,
     );
-    return this.#io.read(async (client) => {
-      const row = await this.#io.beginReceipt(client, identity);
-      if (row === undefined) return null;
-      this.#io.assertReceipt(row, identity);
-      return result(
-        await this.#io.requireState(client, {
-          owner: identity.owner,
-          uploadId: String(row.upload_id),
-        }),
-        "replayed",
-      );
-    }, authority);
+    return this.#io.read(
+      async (client) => {
+        const row = await this.#io.beginReceipt(client, identity);
+        if (row === undefined) return null;
+        this.#io.assertReceipt(row, identity);
+        return result(
+          await this.#io.requireState(client, {
+            owner: identity.owner,
+            uploadId: String(row.upload_id),
+          }),
+          "replayed",
+        );
+      },
+      authority,
+      true,
+    );
   }
   async begin(input: Input<"begin">, supplied: Authority) {
     const identity = sourceUploadBeginIdentity(input, true),

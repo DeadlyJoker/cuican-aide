@@ -795,94 +795,56 @@
   max-width: none;
   padding: var(--space-4);
 }
+/* Project stages stay visible above the output, inside the plugin canvas. */
 .drama-workbench .drama-project-layout {
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
-  align-items: start;
   min-width: 0;
-}
-.drama-workbench .drama-project-layout[data-navigation-expanded="false"] {
-  grid-template-columns: 48px minmax(0, 1fr);
 }
 .drama-workbench .drama-project-navigation {
-  position: sticky;
-  top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
   min-width: 0;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-2);
 }
 .drama-workbench .drama-navigation-heading {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  margin-bottom: var(--space-3);
+  flex: 0 0 auto;
   color: var(--text-muted);
+}
+.drama-workbench .drama-navigation-heading > span {
+  display: none;
 }
 .drama-workbench .drama-navigation-items {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  min-width: 0;
+  overflow-x: auto;
 }
 .drama-workbench .drama-project-navigation .stage-item {
-  width: 100%;
-  min-height: 36px;
-  padding: var(--space-2);
+  flex: 0 0 auto;
+  width: auto;
+  min-height: var(--control-h-md);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
   color: var(--text-muted);
 }
 .drama-workbench .drama-project-navigation .stage-item.active {
   color: var(--text);
+  background: var(--control-surface-active);
 }
-.drama-workbench [data-navigation-expanded="false"] .drama-navigation-label,
 .drama-workbench
   [data-navigation-expanded="false"]
-  .drama-navigation-heading
-  > span {
+  .stage-item:not(.active)
+  .drama-navigation-label {
   display: none;
 }
-.drama-workbench [data-navigation-expanded="false"] .drama-navigation-heading,
-.drama-workbench
-  [data-navigation-expanded="false"]
-  .drama-project-navigation
-  .stage-item {
-  justify-content: center;
-}
 @container drama-workbench (max-width: 980px) {
-  .drama-workbench .drama-project-layout,
-  .drama-workbench .drama-project-layout[data-navigation-expanded="false"] {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-4);
-  }
-  .drama-workbench .drama-project-navigation {
-    position: static;
-  }
-  .drama-workbench .drama-navigation-items {
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: var(--space-2);
-  }
-  .drama-workbench .drama-project-navigation .stage-item {
-    flex: 0 0 auto;
-    width: auto;
-    min-height: var(--control-h-md);
-    white-space: nowrap;
-  }
-  .drama-workbench .drama-navigation-label small {
-    display: none;
-  }
-  .drama-workbench [data-navigation-expanded="false"] .drama-navigation-items {
-    display: none;
-  }
-  .drama-workbench
-    [data-navigation-expanded="false"]
-    .drama-navigation-heading
-    > span {
-    display: inline;
-  }
-  .drama-workbench
-    [data-navigation-expanded="false"]
-    .drama-navigation-heading {
-    justify-content: space-between;
-  }
   .drama-workbench .drama-project-editor :is(.concept-grid, .detail-layout) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -984,42 +946,45 @@
   }
 }
 
-/* Conversation first; details stay within the installed plugin's content. */
+/* The current creative output is primary; shared Agent chat is a toolbar action. */
 .drama-workbench .drama-project-focus {
   max-width: 1180px;
   margin: 0 auto;
   display: grid;
-  gap: 24px;
+  gap: var(--space-4);
+}
+.drama-workbench .drama-project-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.drama-workbench .drama-project-heading > h1 {
+  font-size: 1.5em;
+  font-weight: 600;
 }
 .drama-workbench .drama-agent-entry {
-  padding: 32px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  display: grid;
-  gap: 18px;
-}
-.drama-workbench .drama-agent-entry h2 {
-  font-size: 22px;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  max-width: 100%;
 }
 .drama-workbench .drama-agent-entry > .detail-actions {
-  margin-top: 4px;
+  margin: 0;
 }
-.drama-workbench .drama-process-disclosure {
-  border-top: 1px solid var(--border);
+.drama-workbench .drama-agent-entry > [role] {
+  flex-basis: 100%;
+  order: 3;
 }
-.drama-workbench .drama-process-disclosure > summary {
-  padding: 20px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  font-weight: 600;
-  list-style: none;
+.drama-workbench .drama-agent-entry > details {
+  position: relative;
 }
-.drama-workbench .drama-process-disclosure[open] > summary svg {
-  transform: rotate(90deg);
+.drama-workbench .drama-agent-entry > details[open] {
+  flex-basis: 100%;
 }
 .drama-workbench .drama-secondary-disclosure {
   color: var(--text-muted);
@@ -1060,4 +1025,97 @@
   display: grid;
   gap: 12px;
   color: var(--text-muted);
+}
+
+/* Foundation forms and source reading use the same Host tokens, inside this plugin only. */
+.drama-workbench .drama-creation-parameters,
+.drama-workbench .drama-start-choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.drama-workbench .drama-creation-parameters {
+  margin-block: var(--space-4);
+}
+.drama-workbench .drama-form-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.drama-workbench .drama-checkbox-row,
+.drama-workbench .drama-checkbox-row label,
+.drama-workbench .drama-start-choice label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.drama-workbench .drama-checkbox-row {
+  gap: var(--space-4);
+}
+.drama-workbench input:is([type="checkbox"], [type="radio"]) {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+.drama-workbench .drama-home-parameters {
+  margin-top: var(--space-4);
+}
+.drama-workbench .drama-idea-composer .form-field textarea.drama-short-input,
+.drama-workbench .form-field textarea.drama-short-input {
+  min-height: 70px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: var(--control-surface);
+}
+.drama-workbench .drama-home-secondary-entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.drama-workbench .drama-creation-modal {
+  max-width: 760px;
+}
+.drama-workbench .drama-foundation-workbench {
+  display: grid;
+  gap: var(--space-4);
+}
+.drama-workbench .drama-foundation-workbench .brief-tags {
+  margin-block: var(--space-3);
+}
+.drama-workbench .drama-foundation-workbench .panel-heading h3 {
+  font-size: 1em;
+}
+.drama-workbench .drama-source-reader {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.drama-workbench .drama-source-columns {
+  display: grid;
+  grid-template-columns: minmax(130px, 200px) minmax(0, 1fr);
+  gap: var(--space-5);
+}
+.drama-workbench .drama-chapter-list {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+}
+.drama-workbench .drama-source-body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+@container drama-workbench (max-width: 600px) {
+  .drama-workbench .drama-form-columns,
+  .drama-workbench .drama-source-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

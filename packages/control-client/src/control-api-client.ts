@@ -1,6 +1,7 @@
 import { ProjectMediaResultControlClient } from "./project-media-result-control-client.ts";
 import { ProjectMediaGenerationControlClient } from "./project-media-generation-control-client.ts";
 import { ProjectMediaInputStageControlClient } from "./project-media-input-stage-control-client.ts";
+import { requestPluginSourceUploadPart } from "./project-source-upload-control-client.ts";
 import {
   parseThreadWorkspaceId,
   normalizeThreadViewWorkspace,
@@ -1628,6 +1629,21 @@ export class ControlApiClient {
     return (this.#pluginClient ??= new PluginControlClient({
       json: (method, path, body, options) =>
         this.#json(method, path, body, options),
+      rawPart: (path, bytes, signal) =>
+        requestPluginSourceUploadPart(
+          {
+            fetch: this.#fetch,
+            baseUrl: this.#baseUrl,
+            headers: this.#authenticatedHeaders("application/json"),
+            csrfToken: this.#csrfToken,
+            protocolError: (code) => new ControlApiProtocolError(code),
+            readError: controlApiError,
+            readJson: responseJson,
+          },
+          path,
+          bytes,
+          signal,
+        ),
       protocolError: (code) => new ControlApiProtocolError(code),
     }));
   }

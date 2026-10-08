@@ -1,6 +1,15 @@
 import type { PluginUiServices } from "@crewon/plugin-sdk/ui";
 
 const writes = new Set([
+  "crewon.project-source-uploads.v1.begin",
+  "crewon.project-source-uploads.v1.prepare",
+  "crewon.project-source-uploads.v1.cancel",
+  "crewon.project-foundation.v1.createProject",
+  "crewon.project-foundation.v1.updateParameters",
+  "crewon.project-foundation.v1.appendSource",
+  "crewon.project-foundation.v1.saveProposal",
+  "crewon.project-foundation.v1.confirmProposal",
+  "crewon.project-foundation.v1.chooseDirectScript",
   "crewon.project-media-result-actions.v1.saveCandidate",
   "crewon.project-media-generations.v1.generate",
   "crewon.project-media-inputs.v1.saveInput",
@@ -53,7 +62,25 @@ export class PluginWriteActivity {
   constructor(services: PluginUiServices, changed: () => void) {
     this.#changed = changed;
     const invoke = services.invoke.bind(services);
+    const raw = services.projectSourceUploads;
+    const writePart = raw?.writePart.bind(raw);
     this.services = Object.freeze({
+      ...(writePart
+        ? {
+            projectSourceUploads: Object.freeze({
+              writePart: async (locator, bytes, options) => {
+                ++this.#pending;
+                try {
+                  this.#notify();
+                  return await writePart(locator, bytes, options);
+                } finally {
+                  --this.#pending;
+                  this.#notify();
+                }
+              },
+            } satisfies NonNullable<PluginUiServices["projectSourceUploads"]>),
+          }
+        : {}),
       invoke: async (action, input, options) => {
         if (!writes.has(action)) return invoke(action, input, options);
         ++this.#pending;

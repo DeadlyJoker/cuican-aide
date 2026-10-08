@@ -15,15 +15,12 @@ export function ProjectConversationActions({
   const active = snapshot.bindings.find(
     (binding) => binding.state === "active",
   );
+  const activeSourceExpired =
+    active !== undefined &&
+    snapshot.sourceRefreshThreadId === active.threadId &&
+    !snapshot.pendingSourceRefresh;
   return (
     <section className="drama-agent-entry" aria-label="项目 Agent 对话">
-      <div className="panel-heading">
-        <h2>和 Agent 一起完成短剧</h2>
-      </div>
-      <p className="detail-note">
-        告诉 Agent
-        你的想法、想改的地方或下一步。需要检查内容时，展开下方流程查看产物。
-      </p>
       {snapshot.phase === "waiting" && (
         <p className="detail-note" role="status">
           正在等待模块就绪…
@@ -48,21 +45,27 @@ export function ProjectConversationActions({
         <button
           className="button primary"
           disabled={
-            active
-              ? controller.locked || snapshot.phase !== "ready"
-              : !controller.canCreate
+            activeSourceExpired
+              ? !controller.canRefreshSource
+              : active
+                ? controller.locked || snapshot.phase !== "ready"
+                : !controller.canCreate
           }
           onClick={() =>
-            void (active
-              ? controller.open(active.threadId)
-              : controller.begin())
+            void (activeSourceExpired && active
+              ? controller.refreshSourceAndOpen(active.threadId)
+              : active
+                ? controller.open(active.threadId)
+                : controller.begin())
           }
         >
           {snapshot.creating || snapshot.openingThreadId
             ? "正在打开…"
-            : active
-              ? "继续与 Agent 对话"
-              : "开始与 Agent 对话"}
+            : activeSourceExpired
+              ? "更新关联并进入"
+              : active
+                ? "继续与 Agent 对话"
+                : "开始与 Agent 对话"}
         </button>
         {snapshot.phase === "unavailable" && (
           <button
@@ -128,6 +131,7 @@ export function ProjectConversationActions({
               </button>
             </div>
             {snapshot.sourceRefreshThreadId === binding.threadId &&
+              !activeSourceExpired &&
               !snapshot.pendingSourceRefresh && (
                 <button
                   className="button secondary"

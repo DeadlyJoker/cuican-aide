@@ -18,6 +18,7 @@ import { SqlitePluginCreditSettlementStore } from "./sqlite-plugin-credit-settle
 import { capturePluginCreditSettlementOwnerFence } from "./plugin-credit-settlement-owner.ts";
 import type { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
 import type { SqliteProjectFoundationStore } from "./project-foundation-sqlite-store.ts";
+import type { SqliteProjectSourceUploadStore } from "./project-source-upload-sqlite-store.ts";
 import { SqliteProjectTextStore } from "./project-text-sqlite-store.ts";
 import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
 import { captureSqliteInstallationDatabase } from "./sqlite-plugin-installation-profile-lock.ts";
@@ -28,6 +29,7 @@ import {
   createSqlitePluginCreditStore,
   createSqliteCreativeProjectStore,
   createSqliteProjectFoundationStore,
+  createSqliteProjectSourceUploadStore,
 } from "./sqlite-extension-composition.ts";
 import { SqliteModelPricingStore } from "./sqlite-model-pricing-store.ts";
 import {
@@ -756,6 +758,17 @@ export class SqliteRunStore implements DomainStore {
     input: { sourceAdmission?: "trusted-internal-recipe" } = {},
   ): SqliteProjectFoundationStore {
     return createSqliteProjectFoundationStore({
+      ...input,
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** The parent's connection and lifetime; production callers retain strict installation qualification. */
+  projectSourceUploadStore(
+    input: { installationAdmission?: "trusted-internal-authority" } = {},
+  ): SqliteProjectSourceUploadStore {
+    return createSqliteProjectSourceUploadStore({
       ...input,
       database: this.#database,
       assertOpen: () => this.#assertOpen(),

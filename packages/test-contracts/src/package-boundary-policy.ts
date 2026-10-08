@@ -311,6 +311,10 @@ const approvedAdapterImports: Readonly<
       "@crewon/application",
       "@crewon/domain",
     ],
+    "plugin-project-foundation-host-service-availability.ts": [
+      "@crewon/contracts/project-foundation",
+      "@crewon/contracts/project-source-uploads",
+    ],
     "plugin-project-generation-action-bridge-support.ts": [
       "@crewon/application",
       "@crewon/domain",

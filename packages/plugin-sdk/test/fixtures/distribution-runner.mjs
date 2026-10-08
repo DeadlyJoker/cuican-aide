@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import "./project-foundation-distribution-runner.mjs";
+import "./project-source-uploads-distribution-runner.mjs";
 import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { parsePluginNodeDefinition } from "@crewon/plugin-sdk/node";
 import { parsePluginUiDefinition } from "@crewon/plugin-sdk/ui";

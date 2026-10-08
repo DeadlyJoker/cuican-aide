@@ -14,6 +14,7 @@ import {
 } from "./plugin-ui-host-service-availability.ts";
 import { registerProjectGenerationHostAvailability } from "./plugin-project-generation-host-availability.ts";
 import { appendProjectTextPlanUiServiceAvailability } from "./plugin-project-text-plan-ui-service-availability.ts";
+import { appendProjectFoundationUiServiceAvailability } from "./plugin-project-foundation-host-service-availability.ts";
 import { scope } from "./plugin-installation-local-host.test-support.ts";
 
 const requirement = Object.freeze({
@@ -56,6 +57,74 @@ function candidate(input: Parameters<typeof descriptor>[0] = {}) {
 }
 const rejectsUnavailable = (work: () => unknown) =>
   assert.throws(work, { code: "plugin_dependency_unavailable" });
+
+test("Foundation UI declarations require their independent live owner and preserve the original text availability", () => {
+  const required = {
+    service: "crewon.project-foundation",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [required] });
+  assert.throws(() => assertUiOnlyServiceDeclarations(actual.descriptor), {
+    code: "plugin_ui_only_services_unsupported",
+  });
+  assertUiOnlyServiceDeclarations(
+    descriptor({ requires: [{ ...required, optional: true }] }),
+  );
+  let live = true;
+  const port = appendProjectFoundationUiServiceAvailability({
+    foundations: { isAvailable: () => live },
+    fallback: appendProjectTextUiServiceAvailability({
+      texts: { isAvailable: () => true },
+    }),
+  });
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: actual,
+    hostUiServices: port,
+  });
+  assert.equal(
+    port.isAvailable({
+      scope,
+      candidate: actual,
+      requirement: { ...required, apiVersion: "2" },
+    }),
+    false,
+  );
+  assert.equal(
+    port.isAvailable({
+      scope,
+      candidate: actual,
+      requirement: { ...required, service: "crewon.project-source-uploads" },
+    }),
+    false,
+  );
+  live = false;
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: port,
+    }),
+  );
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: candidate({
+      requires: [
+        { service: "crewon.project-texts", apiVersion: "1", optional: false },
+      ],
+    }),
+    hostUiServices: port,
+  });
+  assert.throws(
+    () =>
+      assertUiOnlyServiceDeclarations(
+        descriptor({ requires: [{ ...required, apiVersion: "2" }] }),
+        port,
+      ),
+    { code: "plugin_ui_only_services_unsupported" },
+  );
+});
 
 test("plan UI availability is independent, versioned and withdrawn with its live owner", () => {
   const requirement = {

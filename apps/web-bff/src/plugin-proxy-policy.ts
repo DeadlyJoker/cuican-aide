@@ -3,6 +3,11 @@ import {
   parsePluginCreditAccountsQuery,
   parsePluginCreditEntriesQuery,
 } from "@crewon/contracts";
+import {
+  MAX_PROJECT_SOURCE_UPLOAD_RESPONSE_BYTES,
+  PROJECT_SOURCE_UPLOAD_PART_BYTES,
+  parseProjectSourceUploadPartPath,
+} from "@crewon/contracts/project-source-uploads";
 
 const PREFIX = "/api/v1/plugins";
 export const PLUGIN_PROXY_DEADLINE_MS = 10_000;
@@ -18,6 +23,7 @@ export type PluginProxyPolicy =
       outcome: "allow";
       responseKind: "json" | "asset";
       responseMaxBytes: number;
+      requestKind?: "sourceUploadPart";
     }>
   | Readonly<{
       outcome: "deny";
@@ -73,6 +79,7 @@ export function pluginProxyPolicy(input: {
     | "empty" = "empty";
   let responseKind: "json" | "asset" = "json";
   let responseMaxBytes = PLUGIN_JSON_RESPONSE_MAX_BYTES;
+  let requestKind: "sourceUploadPart" | undefined;
   if (suffix === "/credits/accounts" || suffix === "/credits/entries") {
     methods = ["GET"];
     query = suffix === "/credits/accounts" ? "creditAccounts" : "creditEntries";
@@ -127,6 +134,15 @@ export function pluginProxyPolicy(input: {
       } else if (parts.length === 4 && parts[3] === "recovery") {
         methods = ["GET", "POST"];
         responseMaxBytes = PLUGIN_RECOVERY_RESPONSE_MAX_BYTES;
+      } else if (parts[3] === "source-uploads") {
+        try {
+          parseProjectSourceUploadPartPath(input.pathname);
+        } catch {
+          return denied(404, "route_not_found");
+        }
+        methods = ["PUT"];
+        requestKind = "sourceUploadPart";
+        responseMaxBytes = MAX_PROJECT_SOURCE_UPLOAD_RESPONSE_BYTES;
       } else if (
         parts.length >= 5 &&
         parts[3] === "assets" &&
@@ -141,7 +157,12 @@ export function pluginProxyPolicy(input: {
   if (!methods.includes(input.method)) return denied(405, "method_not_allowed");
   if (!validQuery(input.search, query))
     return denied(400, "plugin_query_invalid");
-  return Object.freeze({ outcome: "allow", responseKind, responseMaxBytes });
+  return Object.freeze({
+    outcome: "allow",
+    responseKind,
+    responseMaxBytes,
+    ...(requestKind === undefined ? {} : { requestKind }),
+  });
 }
 
 function segment(value: string): string {
@@ -287,11 +308,14 @@ export async function boundedPluginProxyResponse(input: {
     throw new Error("plugin_response_invalid");
   }
   const asset = success && policy.responseKind === "asset";
-  const maximumBytes = asset
-    ? policy.responseMaxBytes
-    : success
+  const maximumBytes =
+    policy.requestKind === "sourceUploadPart"
       ? policy.responseMaxBytes
-      : PLUGIN_JSON_RESPONSE_MAX_BYTES;
+      : asset
+        ? policy.responseMaxBytes
+        : success
+          ? policy.responseMaxBytes
+          : PLUGIN_JSON_RESPONSE_MAX_BYTES;
   const contentType = upstream.headers.get("content-type") ?? "";
   if (
     asset
@@ -356,6 +380,36 @@ export async function boundedPluginProxyRequest(
     options.maximumBytes,
     signal,
   );
+}
+
+/** Only a canonical mounted upload part may use this separate native byte path. */
+export async function boundedPluginSourceUploadPartRequest(
+  request: Request,
+  signal: AbortSignal,
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (
+    request.method !== "PUT" ||
+    !/^application\/octet-stream$/iu.test(
+      request.headers.get("content-type") ?? "",
+    ) ||
+    request.headers.has("content-encoding")
+  ) {
+    void request.body?.cancel().catch(() => undefined);
+    throw new Error("plugin_request_invalid");
+  }
+  const declared = request.headers.get("content-length");
+  const bytes = await readFiniteBody(
+    request.body,
+    declared,
+    PROJECT_SOURCE_UPLOAD_PART_BYTES,
+    signal,
+  );
+  if (
+    bytes.byteLength === 0 ||
+    (declared !== null && Number(declared) !== bytes.byteLength)
+  )
+    throw new Error("plugin_request_invalid");
+  return bytes;
 }
 
 function cancelBody(response: Response): void {

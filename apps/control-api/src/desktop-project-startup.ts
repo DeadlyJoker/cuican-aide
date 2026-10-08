@@ -22,6 +22,10 @@ import type { DesktopInstalledPluginTaskConfig } from "./desktop-installed-plugi
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
 import type { DesktopNativePluginControlConfig } from "./desktop-native-plugin-control-environment.ts";
 import { issueDesktopProjectExecutionConfiguration } from "./desktop-project-execution-startup.ts";
+import {
+  composeDesktopProjectFoundationStartup,
+  issueDesktopProjectFoundationStartup,
+} from "./desktop-project-foundation-startup.ts";
 
 /** Issued private bootstrap data selects existing local capabilities; no supplier, quote or cloud policy is created. */
 export function composeDesktopProjectStartup(
@@ -43,6 +47,10 @@ export function composeDesktopProjectStartup(
     throw new Error("desktop_plugin_owner_mismatch");
   if (configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v1")
     return Object.freeze({});
+  const foundation = composeDesktopProjectFoundationStartup(
+    configuration,
+    actor,
+  );
   const {
     version: _version,
     resultSelections,
@@ -64,6 +72,13 @@ export function composeDesktopProjectStartup(
   const permitted = new Set<CreativeProjectAuthorizationAction>([
     "creativeProject:read",
     ...(data.pluginUi === undefined
+      ? []
+      : ([
+          "creativeProject:create",
+          "creativeProject:list",
+          "creativeProject:write",
+        ] as const)),
+    ...(foundation?.pluginUi === undefined
       ? []
       : ([
           "creativeProject:create",
@@ -112,6 +127,7 @@ export function composeDesktopProjectStartup(
   const captured = capture({
     ...data,
     authorization,
+    ...(foundation === undefined ? {} : { foundation }),
     ...(resultSelections === undefined
       ? {}
       : {
@@ -132,6 +148,7 @@ export function composeDesktopProjectStartup(
       ? {}
       : { nativeControl: input.nativeControl }),
   })!;
+  issueDesktopProjectFoundationStartup(configuration, creativeProjects);
   const recovery = capturePluginUiRecoveryConfiguration(uiRecovery, {
     publicationMode: "metadata-read",
   });

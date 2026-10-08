@@ -16,9 +16,14 @@ await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 await build({
   entryPoints: {
-    contracts: join(packageRoot, "src/contracts.ts"),
-    node: join(packageRoot, "src/node.ts"),
-    ui: join(packageRoot, "src/ui.ts"),
+    "contracts": join(packageRoot, "src/contracts.ts"),
+    "node": join(packageRoot, "src/node.ts"),
+    "ui": join(packageRoot, "src/ui.ts"),
+    "project-foundation-ui": join(packageRoot, "src/project-foundation-ui.ts"),
+    "project-source-uploads": join(
+      packageRoot,
+      "src/project-source-uploads.ts",
+    ),
   },
   outdir: output,
   bundle: true,
@@ -105,5 +110,5 @@ await writeFile(
   await readFile(join(repositoryRoot, "NOTICE")),
 );
 console.log(
-  `Built three portable SDK entries and ${declarations} self-contained declarations.`,
+  `Built five portable SDK entries and ${declarations} self-contained declarations.`,
 );

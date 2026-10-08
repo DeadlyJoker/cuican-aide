@@ -45,6 +45,7 @@ import type {
 import { requestContext } from "./request-context.ts";
 import { registerPluginUiRecoveryRoutes } from "./plugin-ui-recovery-route.ts";
 import { runPluginGenerationDiagnostics } from "./installed-plugin-invocation-diagnostics.ts";
+import { registerProjectSourceUploadPartRoute } from "./project-source-upload-part-route.ts";
 
 export type PluginControlRouteDependencies = Readonly<{
   identity: ControlApiIdentityPort;
@@ -89,6 +90,16 @@ export type PluginUiControlService = Pick<
     ): ReturnType<PluginUiApplicationService["invoke"]>;
     getRecovery?: PluginUiApplicationService["getRecovery"];
     stageRecovery?: PluginUiApplicationService["stageRecovery"];
+    invokeProjectSourceUploadPart?: PluginUiApplicationService["invokeProjectSourceUploadPart"];
+    invokeProjectSourceUploadPartAuthenticatedRequest?(
+      request: ControlApiRequestContext,
+      actor: ActorContext,
+      input: Parameters<
+        PluginUiApplicationService["invokeProjectSourceUploadPart"]
+      >[1],
+      bytes: Uint8Array,
+      signal: AbortSignal,
+    ): ReturnType<PluginUiApplicationService["invokeProjectSourceUploadPart"]>;
     recoveryAuthenticatedRequest?<T>(
       request: ControlApiRequestContext,
       actor: ActorContext,
@@ -131,6 +142,11 @@ export function registerPluginControlRoutes(
     });
   if (dependencies.pluginUi != null)
     registerPluginUiRecoveryRoutes(app, {
+      identity: dependencies.identity,
+      service: dependencies.pluginUi,
+    });
+  if (dependencies.pluginUi != null)
+    registerProjectSourceUploadPartRoute(app, {
       identity: dependencies.identity,
       service: dependencies.pluginUi,
     });

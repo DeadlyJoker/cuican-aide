@@ -88,8 +88,14 @@ type Prepared = Readonly<{
   commit(): Promise<ProjectFoundationMutationResult>;
 }>;
 const actualFoundationServices = new WeakSet<object>();
-export function isProjectFoundationApplicationService(input: unknown): input is ProjectFoundationApplicationService {
-  return input !== null && typeof input === "object" && actualFoundationServices.has(input);
+export function isProjectFoundationApplicationService(
+  input: unknown,
+): input is ProjectFoundationApplicationService {
+  return (
+    input !== null &&
+    typeof input === "object" &&
+    actualFoundationServices.has(input)
+  );
 }
 /** Metadata/source/proposal use cases over the original project identity. No upload endpoint,
  * supplier execution, second project/thread store, or permission grant is introduced here. */
