@@ -22,6 +22,8 @@ import { createNativeProjectMediaRuntime } from "./native-project-media-runtime.
 import { desktopProjectMaterialStorageFromEnvironment } from "@crewon/media-runtime/desktop-project-material-archive";
 import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-project-media-composition.ts";
 import { createNativeProjectFoundationTools } from "./native-project-foundation-runtime.ts";
+import { createDesktopNativeNetworkDnsResolver } from "@crewon/media-runtime/desktop-native-network-dns";
+import type { NetworkDnsResolver } from "@crewon/media-runtime/network-egress";
 export function createInstalledPluginNativeWorkerAuthority(
   config: InstalledPluginNativeWorkerConfig,
 ): InstalledPluginWorkerAuthority {
@@ -33,7 +35,7 @@ export function createInstalledPluginNativeWorkerAuthority(
     void owner.close();
     throw new Error("native_project_media_async_preparation_required");
   }
-  return composeNativeWorkerAuthority(owner);
+  return composeNativeWorkerAuthority(owner, nativeNetworkDns(owner));
 }
 
 /** Main waits for installed graph verification before publishing a media-capable Worker. */
@@ -43,6 +45,7 @@ export async function prepareInstalledPluginNativeWorkerAuthority(
 ): Promise<InstalledPluginWorkerAuthority> {
   const owner = new NativeAuthorityOwner(config);
   try {
+    const dns = nativeNetworkDns(owner);
     const projectMedia =
       owner.projects?.version === "crewon.desktop-project-execution.v1" &&
       owner.projects.mediaGenerations !== undefined
@@ -54,10 +57,11 @@ export async function prepareInstalledPluginNativeWorkerAuthority(
               actor: owner.actor.bind(owner),
             },
             desktopProjectMaterialStorageFromEnvironment(environment),
+            dns,
           )
         : undefined;
     owner.current();
-    return composeNativeWorkerAuthority(owner, projectMedia);
+    return composeNativeWorkerAuthority(owner, dns, projectMedia);
   } catch (error) {
     try {
       await owner.close();
@@ -72,6 +76,7 @@ export async function prepareInstalledPluginNativeWorkerAuthority(
 }
 function composeNativeWorkerAuthority(
   owner: NativeAuthorityOwner,
+  dns: NetworkDnsResolver,
   projectMedia?: InstalledPluginProjectMediaConfig,
 ): InstalledPluginWorkerAuthority {
   const config = owner.config;
@@ -294,6 +299,7 @@ function composeNativeWorkerAuthority(
             : ("deny" as const);
         }, signal),
       executionIo: Object.freeze({
+        dns,
         resolveNetwork: (
           context: PluginToolRuntimeContext,
           signal: AbortSignal,
@@ -327,5 +333,13 @@ function composeNativeWorkerAuthority(
           }),
     }),
     close: () => owner.close(),
+  });
+}
+function nativeNetworkDns(owner: NativeAuthorityOwner): NetworkDnsResolver {
+  return createDesktopNativeNetworkDnsResolver({
+    hostnames: owner.files.authority.networkGrants.map(
+      (grant) => new URL(grant.baseUrl).hostname,
+    ),
+    assertCurrent: owner.current.bind(owner),
   });
 }

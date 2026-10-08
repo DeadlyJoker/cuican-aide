@@ -14,6 +14,49 @@ import {
 } from "./package-boundary-imports.ts";
 import { boundaries } from "./package-boundary-policy.ts";
 
+test("Native DNS resolution stays in its adapter and the two original Native compositions", () => {
+  const media = boundaries.find(
+    (entry) => entry.packageName === "media-runtime",
+  )!;
+  const specifier = "@crewon/media-runtime/desktop-native-network-dns";
+  for (const intrinsic of ["node:dns/promises", "node:net"]) {
+    assert.equal(
+      boundaryAllowsImport(media, "desktop-native-network-dns.ts", intrinsic),
+      true,
+    );
+    assert.equal(
+      boundaryAllowsImport(
+        media,
+        "project-media-generation-commands.ts",
+        intrinsic,
+      ),
+      false,
+    );
+  }
+  assert.equal(
+    boundaryAllowsImport(
+      controlApiBoundary,
+      "desktop-native-project-media-generation-composition.ts",
+      specifier,
+    ),
+    true,
+  );
+  assert.equal(
+    boundaryAllowsImport(
+      runtimeWorkerBoundary,
+      "plugins/installed-plugin-native-worker-composition.ts",
+      specifier,
+    ),
+    true,
+  );
+  for (const [boundary, file] of [
+    [controlApiBoundary, "project-foundation-composition.ts"],
+    [runtimeWorkerBoundary, "plugins/installed-plugin-runtime-resolver.ts"],
+  ] as const)
+    assert.equal(boundaryAllowsImport(boundary, file, specifier), false);
+  assert.equal(isForbiddenRendererImport(specifier), true);
+});
+
 test("host qualification intrinsics do not grant I/O to Application ports or records", () => {
   const application = boundaries.find(
     (boundary) => boundary.packageName === "application",

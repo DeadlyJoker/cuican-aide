@@ -121,6 +121,7 @@ const controlAdapterImports = {
   "desktop-native-project-media-generation-composition.ts": [
     "@crewon/media-runtime/comfyui-project-reference-material-adapter",
     "@crewon/media-runtime/desktop-adopted-media-reader",
+    "@crewon/media-runtime/desktop-native-network-dns",
     "@crewon/media-runtime/desktop-project-material-archive",
     "@crewon/media-runtime/project-media-material-runtime",
   ],
@@ -296,6 +297,7 @@ const workerAdapterImports = {
   "plugins/installed-plugin-native-candidate-state.ts": ["@crewon/plugin-host"],
   "plugins/installed-plugin-native-worker-composition.ts": [
     "@crewon/media-runtime/desktop-project-material-archive",
+    "@crewon/media-runtime/desktop-native-network-dns",
     "@crewon/plugin-sdk/node",
   ],
   "plugins/installed-plugin-project-services.ts": ["@crewon/plugin-host"],

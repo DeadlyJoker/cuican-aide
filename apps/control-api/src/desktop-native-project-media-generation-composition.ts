@@ -18,6 +18,7 @@ import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.
 import type { DesktopNativePluginControlConfig } from "./desktop-native-plugin-control-environment.ts";
 import { assertDesktopNativeProjectMediaInputDeclaration } from "./desktop-native-project-media-input-composition.ts";
 import type { InstalledProjectMediaGenerationConfiguration } from "./installed-project-media-generation-configuration.ts";
+import { createDesktopNativeNetworkDnsResolver } from "@crewon/media-runtime/desktop-native-network-dns";
 
 /** Original Native request/commit authority supplies these hooks; plugin JSON supplies none. */
 export function composeDesktopNativeProjectMediaGenerationConfiguration(
@@ -59,6 +60,12 @@ export function composeDesktopNativeProjectMediaGenerationConfiguration(
     await input.assertRequestCurrent(actor);
     active(actor);
   };
+  const dns = createDesktopNativeNetworkDnsResolver({
+    hostnames: input.nativeControl.authority.networkGrants.map(
+      (grant) => new URL(grant.baseUrl).hostname,
+    ),
+    assertCurrent: () => active(input.nativeControl.authority.actor),
+  });
   const metadataActive = (p: ProjectMediaInputPermission) => {
     active(p.actor);
     if (
@@ -142,6 +149,7 @@ export function composeDesktopNativeProjectMediaGenerationConfiguration(
           });
         }
         const runtime = await createProjectMediaMaterialRuntime({
+          network: { dns },
           ...(adopted ? { adoptedMedia: adopted.config } : {}),
           store: materialScope.store,
           configurations: input.configurations,

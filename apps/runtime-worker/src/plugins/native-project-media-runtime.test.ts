@@ -17,6 +17,8 @@ test("actual Native startup awaits both installed graphs and prepares real media
     /async_preparation_required/,
   );
   const worker = await f.open();
+  const dns = worker.installedPluginExecution.executionIo?.dns;
+  assert.ok(dns);
   const media = worker.installedPluginExecution.projectMedia;
   assert.ok(media);
   assert.deepEqual(
@@ -38,6 +40,7 @@ test("actual Native startup awaits both installed graphs and prepares real media
   }
   await prepared.close();
   await worker.close();
+  await assert.rejects(() => dns.resolveAll("localhost"));
   const reopened = await f.open();
   await f.prepare(reopened);
   // Closing the media runtime never closes or replaces the original borrowed parent.
@@ -58,6 +61,7 @@ test("old Native metadata keeps its original synchronous and async path without 
   const old = createInstalledPluginWorkerAuthority(f.config);
   try {
     assert.equal(old.installedPluginExecution.projectMedia, undefined);
+    assert.ok(old.installedPluginExecution.executionIo?.dns);
   } finally {
     await old.close();
   }

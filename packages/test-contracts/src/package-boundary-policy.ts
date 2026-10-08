@@ -243,6 +243,7 @@ const packageBoundaries: readonly Boundary[] = [
     allowedFileImports: {
       "comfyui-material-upload.ts": ["node:crypto", "node:util"],
       "comfyui-project-reference-material-adapter.ts": ["node:util"],
+      "desktop-native-network-dns.ts": ["node:dns/promises", "node:net"],
       "desktop-project-material-archive.ts": ["node:crypto", "node:path"],
       "desktop-project-result-archive.ts": ["node:crypto", "node:path"],
       "material-byte-snapshot.ts": ["node:util"],

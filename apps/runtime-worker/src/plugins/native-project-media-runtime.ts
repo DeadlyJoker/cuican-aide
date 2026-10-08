@@ -22,6 +22,7 @@ import {
 } from "../standalone-adapters.ts";
 import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-project-media-composition.ts";
 import { loadNativeProjectMediaReviews } from "./native-project-media-reviews.ts";
+import type { NetworkDnsResolver } from "@crewon/media-runtime/network-egress";
 
 type Owner = Readonly<{
   projects: DesktopProjectExecutionConfiguration;
@@ -33,6 +34,7 @@ type Owner = Readonly<{
 export async function createNativeProjectMediaRuntime(
   owner: Owner,
   storage: DesktopProjectMaterialStorage,
+  dns: NetworkDnsResolver,
 ): Promise<InstalledPluginProjectMediaConfig | undefined> {
   const reviews = await loadNativeProjectMediaReviews(owner);
   if (!reviews) return undefined;
@@ -161,6 +163,7 @@ export async function createNativeProjectMediaRuntime(
           });
         }
         const runtime = await createProjectMediaMaterialRuntime({
+          network: { dns },
           ...(adopted ? { adoptedMedia: adopted.config } : {}),
           store,
           configurations,
