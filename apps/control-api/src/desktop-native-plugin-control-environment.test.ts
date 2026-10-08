@@ -16,7 +16,10 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test, { type TestContext } from "node:test";
-import { createExtensionConfiguration } from "@crewon/domain";
+import {
+  createExtensionConfiguration,
+  extensionCanonicalJson,
+} from "@crewon/domain";
 import {
   loadDesktopNativePluginControlEnvironment,
   assertDesktopNativePluginControlConfigCurrent,
@@ -28,6 +31,9 @@ import { assertDesktopNativeProjectHistoricalQueryPreparedTarget } from "./deskt
 import { assertDesktopNativePluginTaskComposition } from "./desktop-native-plugin-task-runtime.ts";
 import { prepareCreativeProjects } from "./creative-project-composition.ts";
 import { SqliteRunStore } from "@crewon/store";
+import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
+import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
+import { captureDesktopProjectCompositionConfig } from "./desktop-project-execution-startup.ts";
 
 const actor = {
   principalId: "standalone-principal",
@@ -46,6 +52,8 @@ async function fixture(
     historical?: boolean;
     historicalTarget?: Record<string, unknown>;
     preparedHistoricalTarget?: false;
+    retainedSourceCount?: number;
+    sourceDirectoryPadding?: number;
   }> = {},
 ) {
   const directory = mkdtempSync(
@@ -82,7 +90,17 @@ async function fixture(
   const identities =
     options.preparedHistoricalTarget === false
       ? [identity, preparedIdentity]
-      : [identity];
+      : Array.from(
+          { length: options.retainedSourceCount ?? 1 },
+          (_, index) => ({
+            ...identity,
+            version: `${index + 1}.0.0`,
+            packageDigest:
+              index === 0
+                ? identity.packageDigest
+                : digest(`retained-${index}`),
+          }),
+        );
   const sources = identities.map((value, index) => ({
     ...source,
     ...value,
@@ -90,6 +108,12 @@ async function fixture(
     directory:
       index === 0 ? source.directory : join(directory, `source-${index}`),
   }));
+  if (options.sourceDirectoryPadding !== undefined)
+    for (const source of sources)
+      source.directory = join(
+        source.directory,
+        "x".repeat(options.sourceDirectoryPadding),
+      );
   const publications =
     options.historical === true
       ? [
@@ -295,6 +319,66 @@ async function fixture(
     bootstrap: await loadDesktopPluginConfiguration(bootstrapPath, { actor }),
   };
 }
+test(
+  "Native startup retains exact authority for approved bootstraps above 64 KiB",
+  nativeOnly,
+  async (t) => {
+    const f = await fixture(t, {
+      historical: true,
+      retainedSourceCount: 32,
+      sourceDirectoryPadding: 2_200,
+    });
+    assert.ok(Buffer.byteLength(JSON.stringify(f.bootstrap)) > 65_536);
+    assert.throws(
+      () => extensionCanonicalJson(f.bootstrap),
+      /extension_json_limit/u,
+    );
+    const nativeControl = f.load();
+    assert.doesNotThrow(() =>
+      assertDesktopNativePluginControlComposition({
+        configuration: f.bootstrap,
+        nativeControl,
+      }),
+    );
+    const startup = composeDesktopProjectStartup({
+      configuration: f.bootstrap,
+      actor,
+      nativeControl,
+    });
+    assert.ok(startup.creativeProjects?.historicalQueries);
+    assert.doesNotThrow(() =>
+      captureDesktopProjectCompositionConfig({
+        configuration: f.bootstrap,
+        projects: startup.creativeProjects,
+        tasks: undefined,
+        activation: undefined,
+        nativeControl,
+      }),
+    );
+    assert.throws(
+      () =>
+        assertDesktopNativePluginControlComposition({
+          configuration: {
+            ...f.bootstrap,
+            authorityEpoch: "native-control-altered-epoch-00000001",
+          },
+          nativeControl,
+        }),
+      /desktop_native_plugin_control_configuration_invalid/u,
+    );
+  },
+);
+test(
+  "Native bootstrap canonicalization preserves existing digest bytes",
+  nativeOnly,
+  async (t) => {
+    const f = await fixture(t, { historical: true });
+    assert.equal(
+      canonicalDesktopPluginConfiguration(f.bootstrap),
+      extensionCanonicalJson(f.bootstrap),
+    );
+  },
+);
 test(
   "Native task startup accepts prepared historical query ports but rejects declaration drift",
   nativeOnly,

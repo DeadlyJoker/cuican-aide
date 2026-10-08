@@ -27,6 +27,7 @@ import {
 } from "./desktop-plugin-configuration.ts";
 import { pluginSecurityRecord } from "./plugin-security-validation.ts";
 import { assertDesktopNativeProjectHistoricalQueryDeclaredApproval } from "./desktop-native-project-historical-query-composition.ts";
+import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
 
 export const DESKTOP_NATIVE_PLUGIN_CONTROL_CONFIG_ENV =
   "CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH";
@@ -282,8 +283,10 @@ export function assertDesktopNativePluginControlComposition(
   const configuration = parseDesktopPluginConfiguration(input.configuration),
     authority = input.nativeControl.authority;
   if (
-    extensionCanonicalJson(configuration) !==
-      extensionCanonicalJson(issued.get(input.nativeControl)!.bootstrap) ||
+    canonicalDesktopPluginConfiguration(configuration) !==
+      canonicalDesktopPluginConfiguration(
+        issued.get(input.nativeControl)!.bootstrap,
+      ) ||
     extensionCanonicalJson(configuration.actor) !==
       extensionCanonicalJson(authority.actor) ||
     extensionCanonicalJson(configuration.scope) !==

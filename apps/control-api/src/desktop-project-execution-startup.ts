@@ -23,6 +23,7 @@ import {
 } from "./desktop-native-plugin-control-environment.ts";
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 import { assertDesktopProjectFoundationStartupBinding } from "./desktop-project-foundation-startup.ts";
+import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
 
 type ExecutionInput = Readonly<{
   configuration: DesktopPluginConfiguration;
@@ -147,9 +148,7 @@ function digest(
   configuration: DesktopPluginConfiguration,
   digester: ContentDigester,
 ) {
-  return digester.sha256(
-    extensionCanonicalJson(parseDesktopPluginConfiguration(configuration)),
-  );
+  return digester.sha256(canonicalDesktopPluginConfiguration(configuration));
 }
 function unavailable(): never {
   throw new Error("desktop_project_execution_authority_required");
