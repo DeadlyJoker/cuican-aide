@@ -1,3 +1,4 @@
+import { repositoryFrozenPackageDirectory } from "./repository-frozen-package-directory.test-support.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { chmod, cp, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -95,11 +96,17 @@ export async function desktopNativeMediaInputFixture(
   let sourceDirectory = resolve(
     options.packageDirectory ??
       (options.mediaGenerations
-        ? "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0"
+        ? repositoryFrozenPackageDirectory(
+            "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0",
+          )
         : options.mediaInputStages
-          ? "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0"
+          ? repositoryFrozenPackageDirectory(
+              "output/extensions/installable-plugins/short-drama-media-input-agent-20261006/short-drama/23.0.0",
+            )
           : (process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
-            "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1")),
+            repositoryFrozenPackageDirectory(
+              "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1",
+            ))),
   );
   // Test-only descriptor upgrade: preserve frozen Node/UI/workflow bytes and
   // install the new digest normally. This is not a shipped plugin release.

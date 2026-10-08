@@ -35,6 +35,8 @@ import {
 
 import styles from "./InstalledPluginModule.module.css";
 import { InstalledPluginUnavailable } from "./InstalledPluginUnavailable";
+import { InstalledPluginLegacyTaskControls } from "./InstalledPluginLegacyTaskControls";
+import { needsInstalledPluginLegacyTaskNavigation } from "./installedPluginLegacyTaskNavigation";
 
 const LEASE_CHECK_INTERVAL_MS = 1_000;
 // Keep the original short request budget well inside the remaining finite authority window.
@@ -61,6 +63,7 @@ export function InstalledPluginModule({
   runIds = [],
   projectConversationContext,
   projectPlanningDraft,
+  onOpenTask,
 }: Readonly<{
   host: ControlPluginUiHost;
   module: ControlPluginUiModule;
@@ -365,6 +368,15 @@ export function InstalledPluginModule({
         <p role="status">
           {locale === "zh" ? "正在加载模块…" : "Loading module…"}
         </p>
+      ) : null}
+      {ready === context &&
+      taskPorts &&
+      needsInstalledPluginLegacyTaskNavigation(module.plugin.descriptor) ? (
+        <InstalledPluginLegacyTaskControls
+          state={tasks}
+          locale={locale}
+          onOpenTask={onOpenTask}
+        />
       ) : null}
       <PluginModuleMount
         className={styles.content}

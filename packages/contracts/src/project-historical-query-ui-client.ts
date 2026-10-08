@@ -1,6 +1,7 @@
 import {
   PROJECT_HISTORICAL_QUERY_UI_ACTIONS,
   type PluginProjectHistoricalQueryClient,
+  type ProjectHistoricalQueryAbortSignal,
   type ProjectHistoricalQueryUiActionRequest,
   type ProjectHistoricalQueryUiReceipt,
 } from "./plugin-project-historical-queries-service.ts";
@@ -8,7 +9,7 @@ export type ProjectHistoricalQueryUiServices = Readonly<{
   invoke(
     action: string,
     input: ProjectHistoricalQueryUiActionRequest["input"],
-    options?: Readonly<{ signal?: AbortSignal }>,
+    options?: Readonly<{ signal?: ProjectHistoricalQueryAbortSignal }>,
   ): Promise<unknown>;
 }>;
 export type ProjectHistoricalQueryUiCodec = Readonly<{

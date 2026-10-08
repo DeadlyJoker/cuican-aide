@@ -343,9 +343,12 @@ test(
       "default-enable-metadata",
     );
     assert.equal(defaultEnable.statusCode, 409, defaultEnable.body);
+    // Native's captured Host dispatcher recognizes this protocol; without an
+    // approved project owner it remains unavailable. Unknown services below
+    // still fail declaration validation as unsupported.
     assert.equal(
       defaultEnable.json().error.code,
-      "plugin_ui_only_services_unsupported",
+      "plugin_dependency_unavailable",
     );
     await runtime.app.close();
     runtime = await createStandaloneControlApiWithPlugins({

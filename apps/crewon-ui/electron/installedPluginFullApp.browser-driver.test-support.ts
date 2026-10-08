@@ -212,6 +212,20 @@ async function readSettings() {
 }
 async function openModule() {
   const selector = `[data-host-module-target=${JSON.stringify(moduleKey)}]`;
+  // The original shell groups installed modules in a collapsible plugin directory.
+  // Use its visible control before selecting a module, as a user does.
+  const directory = 'button[aria-label="插件"][aria-expanded]';
+  await waitFor(
+    `document.querySelector(${JSON.stringify(directory)})?.checkVisibility()===true`,
+    "original plugin directory control",
+  );
+  if (
+    await evaluate<boolean>(
+      `document.querySelector(${JSON.stringify(directory)}).getAttribute('aria-expanded')==='false'`,
+    )
+  ) {
+    await clickSelector(directory);
+  }
   await clickSelector(selector);
   await waitFor(
     `document.querySelector(${JSON.stringify(moduleRootSelector)})?.dataset.independentPluginVersion===${JSON.stringify(input.packageIdentity.version)}`,
@@ -219,7 +233,7 @@ async function openModule() {
   );
   await waitFor(
     `document.querySelector(${JSON.stringify(taskSelector)})?.checkVisibility()===true`,
-    "formal App generic task controls",
+    "formal App legacy task navigation",
   );
   return evaluate<Record<string, string>>(`(()=>{
     const controls=document.querySelector(${JSON.stringify(taskSelector)});
@@ -263,6 +277,11 @@ async function readTranscript(threadId: string) {
   await waitFor(
     `document.querySelector('[data-od-id="command-thread-room"]')?.textContent.includes(${JSON.stringify(input.expectedTranscriptText)})`,
     "actual Worker output in the original task transcript",
+    90_000,
+  );
+  await waitFor(
+    `Array.from(document.querySelectorAll('[data-od-id="command-thread-room"] .turn-group[data-status="completed"]')).some(turn=>turn.textContent.includes(${JSON.stringify(input.expectedTranscriptText)}))`,
+    "original task transcript reaches its completed Turn with the actual Worker output",
     90_000,
   );
   await waitForThreadStream(threadId);
@@ -334,7 +353,7 @@ void app.whenReady().then(async () => {
       await checkpoint("module-open");
       await click("创建任务", taskSelector);
       await waitFor(
-        `document.querySelector(${JSON.stringify(taskSelector)})?.textContent.includes('任务会话已就绪')`,
+        `Array.from(document.querySelector(${JSON.stringify(taskSelector)})?.querySelectorAll('button')??[]).some(button=>button.textContent.trim()==='打开任务'&&!button.disabled)`,
         "explicit host createThread completed",
       );
       await capture("full-app-thread-ready.png");
@@ -376,10 +395,9 @@ void app.whenReady().then(async () => {
       moduleStyles = await openModule();
     }
     await openModule();
-    await click("刷新任务状态", taskSelector);
     await waitFor(
-      `document.querySelector(${JSON.stringify(taskSelector)})?.textContent.includes('已完成')`,
-      "original generic task list reads persisted completed Run",
+      `Array.from(document.querySelector(${JSON.stringify(taskSelector)})?.querySelectorAll('button')??[]).some(button=>button.textContent.trim()==='打开任务'&&!button.disabled)`,
+      "legacy navigation retains the original confirmed task after completion",
     );
     await capture("full-app-" + input.phase + "-completed-module.png");
     assert.ok([...requests.values()].some((request) => request.eventStream));

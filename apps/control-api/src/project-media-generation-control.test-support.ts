@@ -1,3 +1,4 @@
+import { repositoryFrozenPackageDirectory } from "./repository-frozen-package-directory.test-support.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, chmod, readdir, stat } from "node:fs/promises";
@@ -44,7 +45,9 @@ export async function mediaGenerationControlFixture(
   });
   const pkg = await installLocalPluginPackage({
     directory: resolve(
-      "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1",
+      repositoryFrozenPackageDirectory(
+        "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1",
+      ),
     ),
     installRoot,
     authorization: async () => ({ outcome: "allow" }),

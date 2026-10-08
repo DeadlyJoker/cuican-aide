@@ -1,0 +1,7 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`keeps crewon.project-conversation-association project modules as content-only surfaces 1`] = `"<div class="_module_61a1d0"><div class="_content_61a1d0" data-plugin-content-slot="main.content">Plugin-owned project content</div></div>"`;
+
+exports[`keeps crewon.project-conversations project modules as content-only surfaces 1`] = `"<div class="_module_61a1d0"><div class="_content_61a1d0" data-plugin-content-slot="main.content">Plugin-owned project content</div></div>"`;
+
+exports[`keeps crewon.project-generation-contexts project modules as content-only surfaces 1`] = `"<div class="_module_61a1d0"><div class="_content_61a1d0" data-plugin-content-slot="main.content">Plugin-owned project content</div></div>"`;

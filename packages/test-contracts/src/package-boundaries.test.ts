@@ -9,336 +9,20 @@ const repositoryRoot = path.resolve(
   "../../..",
 );
 
-type Boundary = Readonly<{
-  packageName: string;
-  allowedBareImports: readonly string[];
-  allowedExactBareImports?: readonly string[];
-  allowedFileImports?: Readonly<Record<string, readonly string[]>>;
-  allowedRuntimeDependencies: readonly string[];
-}>;
-
-type ImportBoundary = Pick<
-  Boundary,
-  "allowedBareImports" | "allowedExactBareImports" | "allowedFileImports"
->;
-
-const boundaries: readonly Boundary[] = [
-  {
-    packageName: "capability-packs",
-    allowedBareImports: [],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    packageName: "artifacts",
-    allowedBareImports: ["node:", "@crewon/application", "@crewon/domain"],
-    allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain"],
-  },
-  {
-    packageName: "agent-kernel",
-    allowedBareImports: [
-      "@crewon/contracts",
-      "@crewon/domain",
-      "@crewon/tool-broker",
-    ],
-    // Durable accounting and continuation limits are core domain values.
-    allowedRuntimeDependencies: [
-      "@crewon/contracts",
-      "@crewon/domain",
-      "@crewon/tool-broker",
-    ],
-    allowedFileImports: {
-      "model-call-observer.ts": ["node:crypto"],
-      "model-usage-observer.ts": ["node:crypto"],
-    },
-  },
-  {
-    packageName: "agent-responses",
-    allowedBareImports: [
-      "node:http",
-      "@crewon/agent-kernel",
-      "@crewon/contracts",
-      "ws",
-    ],
-    allowedRuntimeDependencies: [
-      "@crewon/agent-kernel",
-      "@crewon/contracts",
-      "ws",
-    ],
-  },
-  {
-    packageName: "agent-version",
-    allowedBareImports: ["@crewon/application", "@crewon/tool-broker"],
-    // Build retention and recovery are explicit Node subpaths, not compiler dependencies.
-    allowedFileImports: {
-      "extension-build.ts": ["node:crypto", "node:fs", "node:path", "node:url"],
-      "extension-build-archive.ts": [
-        "node:crypto",
-        "node:fs",
-        "node:fs/promises",
-        "node:path",
-      ],
-      "extension-recovery.ts": [
-        "node:crypto",
-        "node:fs",
-        "node:fs/promises",
-        "node:path",
-        "@crewon/contracts",
-        "@crewon/domain",
-      ],
-      "extension-recovery-inputs.ts": [
-        "node:crypto",
-        "node:fs",
-        "node:path",
-        "@crewon/contracts",
-        "@crewon/domain",
-      ],
-      "extension-recovery-startup.ts": [
-        "node:fs",
-        "node:fs/promises",
-        "node:path",
-      ],
-    },
-    allowedRuntimeDependencies: [
-      "@crewon/application",
-      "@crewon/contracts",
-      "@crewon/domain",
-      "@crewon/tool-broker",
-    ],
-  },
-  {
-    packageName: "app-server-protocol",
-    allowedBareImports: [],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    packageName: "contracts",
-    allowedBareImports: [],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    packageName: "control-client",
-    allowedBareImports: ["@crewon/contracts"],
-    allowedRuntimeDependencies: ["@crewon/contracts"],
-  },
-  {
-    packageName: "context",
-    allowedBareImports: ["@crewon/domain"],
-    allowedRuntimeDependencies: ["@crewon/domain"],
-  },
-  {
-    packageName: "domain",
-    allowedBareImports: [],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    packageName: "eval-harness",
-    allowedBareImports: ["node:fs"],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    packageName: "device-dispatch",
-    allowedBareImports: [
-      "node:crypto",
-      "node:https",
-      "@crewon/contracts",
-      "@crewon/tool-broker",
-    ],
-    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/tool-broker"],
-  },
-  {
-    packageName: "mcp-runtime",
-    // Stable remote mutation identity is computed at the transport adapter.
-    allowedFileImports: {
-      "crewon-remote-mutation-provider.ts": ["node:crypto"],
-    },
-    allowedBareImports: [
-      "node:path",
-      "@crewon/tool-broker",
-      "@modelcontextprotocol/sdk",
-    ],
-    allowedRuntimeDependencies: [
-      "@crewon/tool-broker",
-      "@modelcontextprotocol/sdk",
-    ],
-  },
-  {
-    packageName: "application",
-    allowedBareImports: ["@crewon/contracts", "@crewon/domain"],
-    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/domain"],
-  },
-  {
-    // The coordinator takes an explicit host port and has no Node or outward imports.
-    packageName: "process-lifecycle",
-    allowedBareImports: [],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    // Published bundles contain their contract source; consumers need no private workspace packages.
-    packageName: "plugin-sdk",
-    allowedBareImports: [],
-    allowedExactBareImports: ["@crewon/contracts/plugins"],
-    allowedRuntimeDependencies: [],
-  },
-  {
-    // Installation and loading stay in a private Node adapter, never in the public SDK or renderer.
-    packageName: "plugin-host",
-    allowedBareImports: ["node:"],
-    allowedExactBareImports: [
-      "@crewon/contracts/plugins",
-      "@crewon/plugin-sdk/node",
-      "@crewon/plugin-sdk/contracts",
-    ],
-    allowedFileImports: {
-      "plugin-installation-local-host.ts": [
-        "@crewon/application",
-        "@crewon/domain",
-      ],
-      "plugin-installation-recovery.ts": [
-        "@crewon/application",
-        "@crewon/domain",
-      ],
-      "plugin-installation-recovery-support.ts": [
-        "@crewon/application",
-        "@crewon/domain",
-      ],
-      "plugin-ui-package-reader.ts": ["@crewon/application", "@crewon/domain"],
-      "plugin-ui-package-reader-support.ts": [
-        "@crewon/application",
-        "@crewon/domain",
-      ],
-    },
-    allowedRuntimeDependencies: [
-      "@crewon/application",
-      "@crewon/contracts",
-      "@crewon/domain",
-      "@crewon/plugin-sdk",
-    ],
-  },
-  {
-    packageName: "store",
-    allowedBareImports: [
-      "node:crypto",
-      "node:sqlite",
-      "@crewon/application",
-      "@crewon/contracts",
-      "@crewon/domain",
-      "pg",
-    ],
-    allowedRuntimeDependencies: [
-      "@crewon/application",
-      "@crewon/contracts",
-      "@crewon/domain",
-      "pg",
-    ],
-    // Storage owns protocol validation, bounded disk probes and physical codecs.
-    allowedFileImports: {
-      "assistant-sample-continuation.ts": ["node:util"],
-      "filesystem-storage-admission.ts": ["node:fs/promises", "node:path"],
-      "extension-recovery-reader.ts": ["node:fs", "node:path"],
-      "in-memory-thread-message-window.ts": ["node:buffer"],
-      "model-accounting-reader.ts": ["node:timers/promises"],
-      "sqlite-canonical-tool-output-codec.ts": ["node:zlib"],
-      "sqlite-execution-receipt-codec.ts": ["node:zlib"],
-      "sqlite-tool-result-codec.ts": ["node:zlib"],
-    },
-  },
-  {
-    packageName: "tool-broker",
-    allowedBareImports: ["node:crypto", "@crewon/contracts"],
-    allowedRuntimeDependencies: ["@crewon/contracts"],
-  },
-  {
-    packageName: "test-contracts",
-    allowedBareImports: ["node:", "@crewon/contracts"],
-    allowedRuntimeDependencies: [],
-  },
-];
-
-const controlApiBoundary = {
-  // Native activation types and sandbox path normalization stay in adapters.
-  allowedFileImports: {
-    "main.ts": ["node:net", "@crewon/process-lifecycle"],
-    // Diagnostic projections redact private peer tokens rather than logging their config.
-    "extension-host-router.ts": ["node:util"],
-    "extension-worker-environment.ts": ["node:util"],
-    "paused-admission.ts": ["node:stream"],
-    "pim-sandbox-client.ts": ["node:path"],
-  },
-  allowedBareImports: [
-    "node:crypto",
-    "node:http",
-    "@crewon/agent-version",
-    "@crewon/application",
-    "@crewon/artifacts",
-    "@crewon/contracts",
-    "@crewon/domain",
-    "@crewon/store",
-    "fastify",
-    "uuid",
-  ],
-  allowedRuntimeDependencies: [
-    "@crewon/agent-version",
-    "@crewon/application",
-    "@crewon/artifacts",
-    "@crewon/contracts",
-    "@crewon/domain",
-    "@crewon/process-lifecycle",
-    "@crewon/store",
-    "fastify",
-    "uuid",
-  ],
-} as const;
-
-const runtimeWorkerBoundary = {
-  allowedFileImports: {
-    "runtime-process-shutdown.ts": ["@crewon/process-lifecycle"],
-  },
-  allowedBareImports: [
-    "node:",
-    "@crewon/agent-kernel",
-    "@crewon/agent-responses",
-    "@crewon/agent-version",
-    "@crewon/application",
-    "@crewon/artifacts",
-    "@crewon/contracts",
-    "@crewon/context",
-    "@crewon/domain",
-    "@crewon/device-dispatch",
-    "@crewon/mcp-runtime",
-    "@crewon/store",
-    "@crewon/tool-broker",
-    "uuid",
-  ],
-  allowedRuntimeDependencies: [
-    "@crewon/agent-kernel",
-    "@crewon/agent-responses",
-    "@crewon/agent-version",
-    "@crewon/application",
-    "@crewon/artifacts",
-    "@crewon/contracts",
-    "@crewon/context",
-    "@crewon/domain",
-    "@crewon/device-dispatch",
-    "@crewon/mcp-runtime",
-    "@crewon/process-lifecycle",
-    "@crewon/store",
-    "@crewon/tool-broker",
-    "uuid",
-  ],
-} as const;
-
-const deviceGatewayBoundary = {
-  allowedFileImports: {
-    "main.ts": ["@crewon/process-lifecycle"],
-  },
-  allowedBareImports: ["node:", "@crewon/contracts", "pg", "ws"],
-  allowedRuntimeDependencies: [
-    "@crewon/contracts",
-    "@crewon/process-lifecycle",
-    "pg",
-    "ws",
-  ],
-} as const;
+import { boundaries } from "./package-boundary-policy.ts";
+import {
+  controlApiBoundary,
+  runtimeWorkerBoundary,
+  deviceGatewayBoundary,
+} from "./app-boundary-policy.ts";
+import type { ImportBoundary } from "./package-boundary-types.ts";
+import {
+  boundaryAllowsImport,
+  importSpecifiers,
+  isForbiddenRendererImport,
+  isTestSource,
+  rendererTestSourceDependencies,
+} from "./package-boundary-imports.ts";
 
 test("every architecture package has an explicit dependency boundary", () => {
   const packageNames = readdirSync(path.join(repositoryRoot, "packages"), {
@@ -371,7 +55,7 @@ test("new architecture packages respect dependency direction", () => {
       "src",
     );
     for (const file of sourceFiles(sourceDirectory)) {
-      if (file.endsWith(".test.ts") || file.endsWith(".test-support.ts")) {
+      if (isTestSource(file)) {
         continue;
       }
       const source = readFileSync(file, "utf8");
@@ -511,7 +195,7 @@ test("plugin host only imports the exact approved SDK and plugin contract entryp
     );
 });
 
-test("only the installation, recovery and UI asset adapters bridge Application and Domain ports", () => {
+test("the existing installation, recovery and UI asset adapters retain their explicit Application and Domain bridges", () => {
   const host = boundaries.find((value) => value.packageName === "plugin-host")!;
   for (const specifier of ["@crewon/application", "@crewon/domain"]) {
     for (const file of [
@@ -820,12 +504,28 @@ test("React renderer cannot import server, store or Node runtime modules", () =>
   assert.deepEqual(violations, []);
 });
 
+test("production renderer entrypoint cannot reach Node-enabled test fixtures", () => {
+  const directory = path.join(repositoryRoot, "apps", "crewon-ui", "src");
+  const sources = new Map(
+    sourceFiles(directory).map((file) => [file, readFileSync(file, "utf8")]),
+  );
+  assert.equal(sources.has(path.join(directory, "main.tsx")), true);
+  assert.deepEqual(
+    rendererTestSourceDependencies(path.join(directory, "main.tsx"), sources),
+    [],
+  );
+});
+
 test("renderer plugin entrypoints exclude Node lifecycle and private host imports", () => {
   for (const specifier of [
     "@crewon/plugin-sdk/node",
     "@crewon/plugin-sdk/node/unapproved",
     "@crewon/plugin-host",
     "@crewon/plugin-host/loader",
+    "@crewon/application",
+    "@crewon/application/project-text-plan-authority",
+    "@crewon/media-runtime",
+    "@crewon/media-runtime/project-source-import",
   ])
     assert.equal(isForbiddenRendererImport(specifier), true, specifier);
   for (const specifier of [
@@ -834,19 +534,6 @@ test("renderer plugin entrypoints exclude Node lifecycle and private host import
   ])
     assert.equal(isForbiddenRendererImport(specifier), false, specifier);
 });
-
-function isForbiddenRendererImport(specifier: string): boolean {
-  return [
-    "node:",
-    "@crewon/application",
-    "@crewon/control-api",
-    "@crewon/store",
-    "@crewon/plugin-sdk/node",
-    "@crewon/plugin-host",
-    "fastify",
-    "uuid",
-  ].some((prefix) => specifier.startsWith(prefix));
-}
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -883,31 +570,6 @@ function importViolations(
       return [`${path.relative(repositoryRoot, file)} -> ${specifier}`];
     });
   });
-}
-
-function boundaryAllowsImport(
-  boundary: ImportBoundary,
-  relativeFile: string,
-  specifier: string,
-): boolean {
-  return (
-    (boundary.allowedExactBareImports ?? []).includes(specifier) ||
-    boundary.allowedBareImports.some((allowed) =>
-      matchesAllowedImport(specifier, allowed),
-    ) ||
-    (
-      boundary.allowedFileImports?.[relativeFile.split(path.sep).join("/")] ??
-      []
-    ).includes(specifier)
-  );
-}
-
-function isTestSource(file: string): boolean {
-  return (
-    file.endsWith(".test.ts") ||
-    file.endsWith(".test.tsx") ||
-    file.endsWith(".test-support.ts")
-  );
 }
 
 function existsPackageManifest(directory: string): boolean {
@@ -958,28 +620,4 @@ function visit(
   }
   visiting.delete(packageName);
   visited.add(packageName);
-}
-
-function matchesAllowedImport(specifier: string, allowed: string): boolean {
-  return (
-    specifier === allowed ||
-    (allowed.endsWith(":") && specifier.startsWith(allowed)) ||
-    specifier.startsWith(`${allowed}/`)
-  );
-}
-
-function importSpecifiers(source: string): string[] {
-  const patterns = [
-    /\bfrom\s+["']([^"']+)["']/g,
-    /\bimport\s+["']([^"']+)["']/g,
-    /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g,
-    /\bexport\s+(?:\*|\{[^}]*\})\s+from\s+["']([^"']+)["']/g,
-  ];
-  return [
-    ...new Set(
-      patterns.flatMap((pattern) =>
-        [...source.matchAll(pattern)].map((match) => match[1]),
-      ),
-    ),
-  ];
 }

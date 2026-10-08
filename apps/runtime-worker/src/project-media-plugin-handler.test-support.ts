@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   installLocalPluginPackage,
   loadInstalledPluginBusinessRegistration,
@@ -50,7 +51,12 @@ export async function mediaPluginFixture(
   const pkg = await installLocalPluginPackage({
     directory: resolve(
       process.env.CREWON_MEDIA_HANDLER_PACKAGE_DIR ??
-        "output/extensions/installable-plugins/short-drama-media-handler-20261006/short-drama/21.0.0",
+        fileURLToPath(
+          new URL(
+            "../../../output/extensions/installable-plugins/short-drama-media-handler-20261006/short-drama/21.0.0",
+            import.meta.url,
+          ),
+        ),
     ),
     installRoot: root,
     authorization: async () => ({ outcome: "allow" }),

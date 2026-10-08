@@ -30,10 +30,22 @@ export type ProjectHistoricalQueryUiReceipt = Readonly<{
   messageId: string;
   configurationRevision: number;
 }>;
+/** Portable declaration shape; the mounted UI client still requires a native AbortSignal. */
+export type ProjectHistoricalQueryAbortSignal = Readonly<{
+  aborted: boolean;
+  reason: unknown;
+  throwIfAborted(): void;
+  addEventListener(
+    type: "abort",
+    listener: () => void,
+    options?: Readonly<{ once?: boolean }>,
+  ): void;
+  removeEventListener(type: "abort", listener: () => void): void;
+}>;
 export type PluginProjectHistoricalQueryClient = Readonly<{
   queryConceptGeneration(
     input: ProjectHistoricalQueryUiInput,
-    options?: Readonly<{ signal?: AbortSignal }>,
+    options?: Readonly<{ signal?: ProjectHistoricalQueryAbortSignal }>,
   ): Promise<ProjectHistoricalQueryUiReceipt>;
 }>;
 

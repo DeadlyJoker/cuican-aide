@@ -1,3 +1,4 @@
+import { repositoryFrozenPackageDirectory } from "./repository-frozen-package-directory.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolve } from "node:path";
@@ -15,7 +16,9 @@ test(
     const f = await nativeMediaFlowFixture(t, {
       kind: "T10",
       packageDirectory: resolve(
-        "output/extensions/installable-plugins/short-drama-media-refusal-20261007/short-drama/28.0.0",
+        repositoryFrozenPackageDirectory(
+          "output/extensions/installable-plugins/short-drama-media-refusal-20261007/short-drama/28.0.0",
+        ),
       ),
     });
     const catalog = await f.app.inject({

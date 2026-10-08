@@ -7,6 +7,7 @@ import { mkdtempSync, rmSync, chmodSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { ModelTransportPort, ModelRequest } from "@crewon/agent-kernel";
 import { RunExecutionService } from "@crewon/application";
 import { InMemoryToolBroker } from "@crewon/tool-broker";
@@ -76,7 +77,12 @@ export async function mediaWorkerFixture(
   const pkg = await installLocalPluginPackage({
     directory: resolve(
       process.env.CREWON_MEDIA_WORKER_PACKAGE_DIR ??
-        "output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1",
+        fileURLToPath(
+          new URL(
+            "../../../output/extensions/installable-plugins/short-drama-media-worker-20261006/short-drama/21.0.1",
+            import.meta.url,
+          ),
+        ),
     ),
     installRoot: root,
     authorization: async () => ({ outcome: "allow" }),

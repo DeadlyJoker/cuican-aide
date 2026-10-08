@@ -1,3 +1,4 @@
+import { repositoryFrozenPackageDirectory } from "./repository-frozen-package-directory.test-support.ts";
 import { activateNativeProjectUi } from "./desktop-native-project-ui.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -127,7 +128,9 @@ test(
     const f = await fixture(t, ["read", "write"], {
       packageDirectory:
         process.env.CREWON_RESULT_UI_PACKAGE_DIR ??
-        "output/extensions/installable-plugins/short-drama-media-results-20261007/short-drama/29.0.0",
+        repositoryFrozenPackageDirectory(
+          "output/extensions/installable-plugins/short-drama-media-results-20261007/short-drama/29.0.0",
+        ),
       mediaGenerations: true,
       generationFlow: true,
       mediaResults: ["read", "publish"],

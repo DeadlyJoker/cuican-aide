@@ -102,7 +102,9 @@ async function fixture(t: TestContext) {
     requests: native.owner.requests,
     installRoot: native.binding.configuration.installRoot,
     maximumPackages: native.binding.tasks.publication.maximumPackages,
-    publications: native.binding.tasks.publication.uiPublications,
+    publications: native.binding.tasks.publication.uiPublications.map(
+      ({ pluginId, packageDigest }) => ({ pluginId, packageDigest }),
+    ),
     profiles: native.owner.profiles,
     businessAuthorization: native.owner.businessAuthorization,
     uiAuthorization: native.owner.uiAuthorization,

@@ -1,3 +1,4 @@
+import { repositoryFrozenPackageDirectory } from "./repository-frozen-package-directory.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolve } from "node:path";
@@ -18,7 +19,9 @@ for (const kind of ["T10", "D18"] as const)
         kind,
         packageDirectory: resolve(
           process.env.CREWON_SHORT27_PACKAGE_DIRECTORY ??
-            "output/extensions/installable-plugins/short-drama-media-generation-ui-20261007/short-drama/27.0.0",
+            repositoryFrozenPackageDirectory(
+              "output/extensions/installable-plugins/short-drama-media-generation-ui-20261007/short-drama/27.0.0",
+            ),
         ),
       });
       const command = {

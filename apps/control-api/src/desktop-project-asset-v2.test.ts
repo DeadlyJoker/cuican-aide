@@ -1,3 +1,4 @@
+import { repositoryFrozenPackageDirectory } from "./repository-frozen-package-directory.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile, rename, writeFile } from "node:fs/promises";
@@ -18,8 +19,9 @@ import {
 } from "./desktop-native-project-ui.test-support.ts";
 const options = { skip: process.platform === "win32", timeout: 30_000 };
 const config = {
-  packageDirectory:
+  packageDirectory: repositoryFrozenPackageDirectory(
     "output/extensions/installable-plugins/short-drama-media-output-ui-20261007/short-drama/30.0.0",
+  ),
   assetProtocol: "2" as const,
   assetV2: true,
   mediaGenerations: true,

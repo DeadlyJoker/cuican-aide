@@ -1,0 +1,21 @@
+.navigation {
+  display: grid;
+  gap: 12px;
+  margin: 8px 24px 0;
+  padding-bottom: 8px;
+  min-width: 0;
+  color: var(--text);
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.navigation p {
+  margin: 0;
+  color: var(--text-muted);
+}

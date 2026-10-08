@@ -5,6 +5,8 @@ import { parsePluginUiDefinition } from "@crewon/plugin-sdk/ui";
 import plugin, { events } from "./dist/external-node.js";
 import ui from "./dist/external-ui.js";
 import taskPlugin from "./dist/external-task-node.js";
+import { createHistoricalQueryClient } from "./dist/external-project-historical-query-node.js";
+import { createNativeHistoricalQueryClient } from "./dist/external-project-historical-query-ui.js";
 import "./execution-distribution-runner.mjs";
 import "./optional-distribution-runner.mjs";
 import {
@@ -136,4 +138,56 @@ for (const callback of taskCallbacks.reverse()) await callback();
 assert.equal(taskServices.size, 0);
 console.log(
   "Task and action ABI compiled and invoked through the isolated installed SDK contract fixture.",
+);
+
+const historicalInput = {
+  reference: { projectId: "project", assetId: "asset", assetRevision: 1 },
+  operationId: "4263a1da-d6fe-eac4-aaec-f05a1e4f7485",
+  threadId: "fixture-thread",
+  expectedThreadRevision: 1,
+  idempotencyKey: "fixture-historical-query",
+};
+for (const createClient of [
+  createHistoricalQueryClient,
+  createNativeHistoricalQueryClient,
+]) {
+  const controller = new AbortController();
+  let calls = 0;
+  const client = createClient({
+    async invoke(action, input, options) {
+      calls++;
+      assert.equal(
+        action,
+        "crewon.project-historical-queries.v1.queryConceptGeneration",
+      );
+      assert.deepEqual(input, historicalInput);
+      assert.equal(options.signal, controller.signal);
+      return receipt;
+    },
+  });
+  assert.equal(Object.isFrozen(client), true);
+  assert.deepEqual(
+    await client.queryConceptGeneration(historicalInput, {
+      signal: controller.signal,
+    }),
+    receipt,
+  );
+  const reason = new Error("external_historical_query_cancelled");
+  controller.abort(reason);
+  await assert.rejects(
+    client.queryConceptGeneration(historicalInput, {
+      signal: controller.signal,
+    }),
+    (error) => error === reason,
+  );
+  await assert.rejects(
+    client.queryConceptGeneration(historicalInput, {
+      signal: { aborted: false, reason: undefined, throwIfAborted() {} },
+    }),
+    { message: "plugin_project_historical_query_client_invalid" },
+  );
+  assert.equal(calls, 1);
+}
+console.log(
+  "Historical query client compiled Node-only and with the actual SDK UI service; native cancellation remained enforced.",
 );

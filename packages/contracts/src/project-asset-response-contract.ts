@@ -320,7 +320,7 @@ function utf8Order(left: string, right: string): number {
   const a = new TextEncoder().encode(left),
     b = new TextEncoder().encode(right);
   for (let index = 0; index < Math.min(a.length, b.length); index++)
-    if (a[index] !== b[index]) return a[index] - b[index];
+    if (a[index] !== b[index]) return a[index]! - b[index]!;
   return a.length - b.length;
 }
 function list<T>(
