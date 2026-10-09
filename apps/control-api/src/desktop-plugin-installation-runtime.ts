@@ -32,6 +32,7 @@ import { installationSame } from "./production-plugin-installation-runtime-suppo
 import { DesktopInstallationProfile } from "./desktop-plugin-installation-profile.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
+import type { DesktopPluginCompositionMetadataState } from "./desktop-plugin-composition-metadata-owner.ts";
 import {
   capturePluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
@@ -59,6 +60,7 @@ export type DesktopPluginInstallationRuntime = Readonly<{
   assertProfileOwnership(actor: ActorContext): void;
   assertProfileOwnershipForSelectionCommit(actor: ActorContext): void;
   bindActivation(owner: DesktopInstalledPluginActivationOwner): void;
+  compositionState(actor: ActorContext): DesktopPluginCompositionMetadataState;
   close(): Promise<void>;
 }>;
 const runtimes = new WeakMap<
@@ -321,6 +323,10 @@ export async function createDesktopPluginInstallationRuntime(
   });
   const runtime = Object.freeze({
     service,
+    compositionState: (actorInput: ActorContext) => {
+      available();
+      return initialProfile.compositionState(pluginSecurityActor(actorInput));
+    },
     assertProfileOwnership: (actorInput: ActorContext) => {
       available();
       const actor = pluginSecurityActor(actorInput);

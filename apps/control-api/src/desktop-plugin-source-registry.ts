@@ -171,12 +171,23 @@ export class DesktopPluginSourceRegistry {
   ): "allow" | "deny" {
     const descriptor = parsePluginPackageDescriptor(input.descriptor);
     const digest = pluginInstallationDigest(input.packageDigest);
+    return this.authorizeIdentity({ ...descriptor, packageDigest: digest });
+  }
+  /** Exact Native-approved tuple only; does not verify files or authorize an operation. */
+  authorizeIdentity(
+    input: Readonly<{
+      pluginId: string;
+      publisherId: string;
+      version: string;
+      packageDigest: string;
+    }>,
+  ): "allow" | "deny" {
     return this.#entries.some(
       ({ source }) =>
-        source.pluginId === descriptor.pluginId &&
-        source.publisherId === descriptor.publisherId &&
-        source.version === descriptor.version &&
-        source.packageDigest === digest,
+        source.pluginId === input.pluginId &&
+        source.publisherId === input.publisherId &&
+        source.version === input.version &&
+        source.packageDigest === input.packageDigest,
     )
       ? "allow"
       : "deny";

@@ -88,6 +88,7 @@ import type { InstalledProjectMediaGenerationRuntime } from "./installed-project
 
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
+  compositionState: DesktopPluginInstallationRuntime["compositionState"];
   sources: PluginSourceControlService;
   ui: PluginUiControlService;
   configuration: DesktopPluginConfigurationRuntime;
@@ -284,6 +285,7 @@ export async function createDesktopPluginRuntime(
   });
   try {
     await ledger.migrate();
+    await ledger.compositionStore().migrate();
     if (projectConfiguration !== undefined) {
       projectUi = createCreativeProjectPluginUiRuntime({
         projects: dependencies.creativeProjects!.service,
@@ -652,6 +654,7 @@ export async function createDesktopPluginRuntime(
     const ownedActivation = activation;
     return Object.freeze({
       installation: ownedInstallation.service,
+      compositionState: ownedInstallation.compositionState,
       sources: ownedInstallation.service,
       ui,
       configuration: ownedConfiguration,

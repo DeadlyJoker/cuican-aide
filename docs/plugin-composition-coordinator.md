@@ -1,6 +1,6 @@
 # Profile Node 插件协调核心
 
-`PluginCompositionCoordinator` 从原 `@crewon/plugin-host` 公开入口导出，复用真实包核验、NodeHost、prepare/commit/abort、资源归属与借用，不增加运行时或构建系统。它执行已验证的组合变更规划；生产选择监听及正式桌面批准适配尚未接入；历史 Run 装配现已由显式 RuntimeWorker 入口复用，不能把这个类视作桌面已启用自动协调。
+`PluginCompositionCoordinator` 从原 `@crewon/plugin-host` 公开入口导出，复用真实包核验、NodeHost、prepare/commit/abort、资源归属与借用，不增加运行时或构建系统。它执行已验证的组合变更规划；Native 选择提交后的元数据图更新已接入，运行实例的自动重协调及正式桌面批准适配尚未接入；历史 Run 装配现已由显式 RuntimeWorker 入口复用，不能把这个类视作桌面已启用自动协调。
 
 ## 归属与输入
 
@@ -50,3 +50,17 @@
 专项采用真实 SQLite 安装账本、实际不可变 ESM 包与原 Node 协调器，覆盖精确节点/边、入口未导入、升级后新旧借用、卸载后空图及历史保留、选择竞争、同图重放、异图 CAS、必需依赖缺失、策略拒绝/取消、文件篡改、跨租户 actor 与非法分页。生产 Native 选择监听、权限适配及用户失败状态仍未接入；不能据此声称正式 App 已自动协调。
 
 2026-10-10 新专项 10/10、PluginHost 全量 377/377 通过，零跳过；类型检查、仓库边界与格式检查通过。测试未调用外部模型或 Comfy 服务，未改变用户插件选择，桌面候选与正式 App 未在本轮替换。
+
+## Native 选择提交后的元数据同步
+
+`DesktopPluginCompositionMetadataOwner` 属于实际 Native 安装 profile，与原 SQLite profile claim、来源批准、Native actor/epoch 和取消信号共用生命周期。`DesktopInstallationProfile.run` 在 `select` 确认 Store committed 且原投影 applied 后调用它；仍位于原每 profile 的串行队列中，关闭等待这项物理工作。安装包但不切换选择、选择提交失败和旧回执重放都不会生成新图。原 Native 插件工厂在取得 profile claim 前显式迁移组合元数据表；无插件批准的基础 Control 路径不新增这些表。
+
+图节点逐项匹配原 Native 来源批准的 plugin/publisher/version/digest，文件仍由原包核验器检查。批准前后检查真实 profile claim、Native scope/actor、批准文件当前性和 epoch。内部 `compositionState(actor)` 只向当前 Native owner 返回 `unknown`、`published` 或带固定错误码的 `unavailable`；它不是公开 HTTP/event 或 UI 协议，也不借出 Node、任务或供应商执行权限。
+
+图发布失败不改变已确认的选择回执或原运行投影，不能伪装成选择回滚。新元数据状态明确记为 unavailable；后续真实选择变更可重新发布，旧回执重放不恢复图或重新激活实例。图 published 仅表示元数据事务已完成，不能解释为 Node/UI 运行就绪。
+
+安装 profile 的 NodeHost 当前没有宿主 Node 服务，因此这里明确使用空宿主服务表。UI availability 只证明 UI port 可用，缺少稳定 Node 实现身份，不能凭接口同名伪造为 Node 服务。包含这些必需服务的图仍拒绝并报告不可用；原 UI/业务激活协议保持。这一限制需在后续宿主服务身份协议和实例协调接入中解决，不能靠删掉包的 requires 获得成功。
+
+实际 `createDesktopPluginRuntime` 专项覆盖安装、启用、升级、停用、卸载、回执重放、历史图/包保留和跨 actor 状态拒绝。另通过真实 SQLite 写入失败触发器验证：选择已 committed/applied，图事务回滚、状态 unavailable，原回执可重放且没有生成新图。这仍使用临时目录与测试 ESM，没有更改用户 profile 或正式 App；生产实例自动重协调和 UI 状态展示仍未完成。
+
+兼容性检查：原 v1–v3 批准解析、安装/选择 HTTP 响应和持久回执形状不变，原 Node/UI 激活路径继续使用原发布栅栏；仅有 Native 插件初始化新增元数据表迁移和内部状态读取方法。元数据 owner 已抽为独立模块，profile 中只保留生命周期与串行选择提交的适配。专项 2/2 通过、零跳过；Control 全量 1477 项中 1175 通过、302 项既有环境条件跳过、零失败。类型、入口边界及格式检查通过。跳过项不作为 PostgreSQL、浏览器或外部供应商验收证据。

@@ -7,6 +7,7 @@ import {
   type PluginInstallationAuthorizationAction,
   type PluginInstallationPrepareSelectionInput,
   type PluginPreparedSelection,
+  type SelectPluginPackageResult,
 } from "@crewon/application";
 import {
   parsePluginProfileScope,
@@ -37,6 +38,7 @@ import {
 } from "./production-plugin-installation-runtime-support.ts";
 import { verifyDesktopInstalledPackage } from "./desktop-plugin-runtime-support.ts";
 import type { DesktopPreparedBusinessCandidate } from "./desktop-installed-plugin-activation-owner.ts";
+import { DesktopPluginCompositionMetadataOwner } from "./desktop-plugin-composition-metadata-owner.ts";
 type Method =
   | "install"
   | "select"
@@ -87,6 +89,7 @@ export class DesktopInstallationProfile {
   #owner!: SqlitePluginInstallationProfileOwner;
   #local!: LocalPluginInstallationHost;
   #application!: PluginInstallationApplicationService;
+  #compositionMetadata!: DesktopPluginCompositionMetadataOwner;
   #operation: Operation | null = null;
   #tail: Promise<void> = Promise.resolve();
   #pending = 0;
@@ -133,6 +136,13 @@ export class DesktopInstallationProfile {
 
   #initialize(): void {
     const dependencies = this.#dependencies;
+    this.#compositionMetadata = new DesktopPluginCompositionMetadataOwner({
+      configuration: dependencies.configuration,
+      registry: dependencies.registry,
+      authority: dependencies.authority,
+      owner: this.#owner,
+      signal: this.#lifetime.signal,
+    });
     this.#local = new LocalPluginInstallationHost({
       profile: dependencies.scope,
       installRoot: dependencies.configuration.installRoot,
@@ -266,7 +276,13 @@ export class DesktopInstallationProfile {
           actor: ActorContext,
           input: unknown,
         ) => Promise<unknown>;
-        return await call.call(this.#application, actor, input);
+        const result = await call.call(this.#application, actor, input);
+        if (method === "select")
+          await this.#compositionMetadata.observeSelection(
+            actor,
+            result as SelectPluginPackageResult,
+          );
+        return result;
       } finally {
         operation.stamp = null;
         this.#operation = null;
@@ -279,6 +295,12 @@ export class DesktopInstallationProfile {
     return work.finally(() => {
       this.#pending--;
     });
+  }
+
+  /** Metadata publication is separate from active Node/UI readiness. */
+  compositionState(actor: ActorContext) {
+    this.#available();
+    return this.#compositionMetadata.state(actor);
   }
 
   /** Observe the actual held SQLite claim, including its file and directory pins. */
