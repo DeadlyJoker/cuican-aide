@@ -12,6 +12,7 @@ export {
   type InstalledLocalPluginPackage,
 } from "./local-plugin-package-types.ts";
 export { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
+export { publishInstalledPluginComposition, InstalledPluginCompositionPublisherError } from "./installed-plugin-composition-publisher.ts";
 export { installLocalPluginPackage } from "./local-plugin-package-installer.ts";
 export {
   readInstalledPluginBusinessManifest,
