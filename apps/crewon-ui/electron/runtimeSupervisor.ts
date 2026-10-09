@@ -4,6 +4,7 @@ import {
 } from "./desktopGatewayModelCatalog.ts";
 import { desktopRuntimeProviderModel } from "./desktopRuntimeProviderModel.ts";
 import { prepareNativeDesktopInstalledPluginRuntime } from "./desktopNativeInstalledPluginRuntime.ts";
+import { prepareOptionalDesktopPluginBootstrap } from "./desktopOptionalPluginBootstrap.ts";
 import { ControlApiClient } from "@crewon/control-client";
 import type { PluginSelectionResponse } from "@crewon/contracts";
 import {
@@ -264,9 +265,26 @@ export class RuntimeSupervisor {
         sessionEntropy: `${this.#sessionToken}:${this.#sessionGeneration}`,
       });
       this.#pluginBootstrap = bootstrapOwner;
-      const bootstrap = await bootstrapOwner.prepared();
+      const preparation = await prepareOptionalDesktopPluginBootstrap(
+        bootstrapOwner,
+        startup.signal,
+      );
+      const { bootstrap } = preparation;
+      if (preparation.state === "quarantined") {
+        if (this.#pluginBootstrap === bootstrapOwner)
+          this.#pluginBootstrap = null;
+        this.#logs.write(
+          "stderr",
+          "Native plugin preparation",
+          "desktop_plugin_bootstrap_quarantined\n",
+        );
+      }
       startup.signal.throwIfAborted();
-      if (provider === null && bootstrap === null) {
+      if (
+        provider === null &&
+        bootstrap === null &&
+        preparation.state === "prepared"
+      ) {
         await bootstrapOwner.close();
         startup.signal.throwIfAborted();
         if (this.#pluginBootstrap === bootstrapOwner)
@@ -310,7 +328,10 @@ export class RuntimeSupervisor {
       let { sharedEnvironment, workerEnvironment } =
         agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
       let assertPreparedDefaultCurrent: (() => void) | undefined;
-      const installedConfiguration = this.#installedRuntime?.();
+      const installedConfiguration =
+        preparation.state === "quarantined"
+          ? undefined
+          : this.#installedRuntime?.();
       let nativeInstalled: AutomaticDesktopInstalledPluginRuntime | null = null;
       if (!installedConfiguration?.enabled && bootstrap !== null) {
         try {

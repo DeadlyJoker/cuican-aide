@@ -29,7 +29,7 @@ export function desktopPluginManagementFixture(input: {
     "manifest:bootstrap?JSON.parse(readFileSync(bootstrap,'utf8')):null,",
     "modelApiKey:env.CREWON_MODEL_API_KEY??null,modelId:env.CREWON_MODEL_ID??null,agentVersionId:env.CREWON_AGENT_VERSION_ID,",
     "artifactDb:env.CREWON_ARTIFACT_DB_PATH,artifactKey:env.CREWON_ARTIFACT_ENCRYPTION_KEY_ID,",
-    "ambientPluginKeys:Object.keys(env).filter(k=>k.startsWith('CREWON_PLUGIN_')),",
+    "ambientPluginKeys:Object.keys(env).filter(k=>k.startsWith('CREWON_PLUGIN_')||k.startsWith('CREWON_DESKTOP_NATIVE_PLUGIN_')||k.startsWith('CREWON_DESKTOP_INSTALLED_PLUGIN_')),",
     "actor:{principalId:env.CREWON_PRINCIPAL_ID,actorId:env.CREWON_ACTOR_ID,tenantId:env.CREWON_TENANT_ID,spaceId:env.CREWON_SPACE_ID}",
     "})+'\\n');",
   ].join("\n");

@@ -52,6 +52,9 @@ describe("Native-owned plugin bootstrap lifetime", () => {
       CREWON_PLUGIN_UI_CONFIGURATION_PATH: "/unapproved/ui.json",
       CREWON_PLUGIN_INSTALLATION_CONFIGURATION_PATH: "/unapproved/install.json",
       CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH: "/unapproved/bootstrap.json",
+      CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH: "/unapproved/control.json",
+      CREWON_DESKTOP_NATIVE_PLUGIN_AUTHORITY_PATH: "/unapproved/authority.json",
+      CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN: "unapproved-native-peer",
       CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH: "/unapproved/execute.json",
       CREWON_INSTALLED_PLUGIN_TASK_CONFIG_PATH: "/unapproved/tasks.json",
       CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH:

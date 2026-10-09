@@ -17,6 +17,8 @@ export function clearDesktopPluginEnvironment(
       name.startsWith("CREWON_PLUGIN_UI_") ||
       name.startsWith("CREWON_PLUGIN_INSTALLATION_") ||
       name.startsWith("CREWON_DESKTOP_PLUGIN_") ||
+      name.startsWith("CREWON_DESKTOP_NATIVE_PLUGIN_") ||
+      name.startsWith("CREWON_DESKTOP_INSTALLED_PLUGIN_") ||
       name.startsWith("CREWON_INSTALLED_PLUGIN_PEER_") ||
       name === "CREWON_INSTALLED_PLUGIN_CONFIGURATION_CONFIG_PATH" ||
       name === "CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH" ||
