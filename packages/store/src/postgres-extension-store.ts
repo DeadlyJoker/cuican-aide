@@ -1,3 +1,4 @@
+import type { PreparedPluginTaskModelSelection } from "@crewon/application";
 import { loadPostgresMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { PostgresProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { PostgresProjectMediaResultStore } from "./project-media-result-store.ts";
@@ -679,8 +680,8 @@ export class PostgresExtensionStore implements ExtensionStore {
           this.#saveReceipt(client, scope, kind, receipt, result),
         assertCreditLink: (client, admission) =>
           this.#assertCreditLink(client, admission),
-        admit: (client, binding, revision) =>
-          this.#admit(client, binding, revision),
+        admit: (client, binding, revision, selection) =>
+          this.#admit(client, binding, revision, selection),
         commitTurn: (client, turn) =>
           this.#host.commitTurnWithinTransaction(client, turn),
       },
@@ -736,12 +737,14 @@ export class PostgresExtensionStore implements ExtensionStore {
     client: PoolClient,
     binding: ExtensionRunBinding,
     expectedActivationRevision: number,
+    selection?: PreparedPluginTaskModelSelection,
   ) {
     assertExtensionAdmission(
       binding,
       await this.#activation(client, binding),
       expectedActivationRevision,
       await this.#configuration(client, binding, binding.configurationRevision),
+      selection,
     );
     await this.#assertDeployment(client, binding.tenantId, binding.target);
     if (binding.source !== null) {

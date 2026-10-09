@@ -1,3 +1,4 @@
+import { prepareDesktopNativePluginModel } from "./desktop-native-plugin-model-selection.ts";
 import { composeDesktopNativeProjectMediaResultConfiguration } from "./desktop-native-project-media-result-composition.ts";
 import { validateNativeOwnership } from "./desktop-native-ownership-check.ts";
 import {
@@ -357,6 +358,22 @@ export class DesktopNativePluginTaskAuthority {
         });
       }),
   });
+  readonly modelSelection: import("@crewon/application").PluginTaskModelSelectionPort =
+    Object.freeze({
+      prepareModel: (
+        input: Parameters<
+          import("@crewon/application").PluginTaskModelSelectionPort["prepareModel"]
+        >[0],
+      ) =>
+        this.#operation(() =>
+          prepareDesktopNativePluginModel({
+            binding: this.#binding,
+            input,
+            assertRequestCurrent: (actor) => this.#request(actor),
+            assertCommitCurrent: (actor) => this.#commitOwner(actor),
+          }),
+        ),
+    });
   close(): Promise<void> {
     this.#lifetime.abort();
     return (this.#closing ??= Promise.allSettled([...this.#physical]).then(

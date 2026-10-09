@@ -1,3 +1,4 @@
+import { startExternalOperationFixtureRun } from "../../../packages/store/src/external-operation-run.test-support.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import type { TestContext } from "node:test";
@@ -63,9 +64,13 @@ export async function peerFixture(
   options: Readonly<{
     activate?: boolean;
     selectionState?: "enabled" | "disabled";
+    modelSiblings?: boolean;
   }> = {},
 ) {
-  const f = await installedReleaseFixture(t, backend, { versions });
+  const f = await installedReleaseFixture(t, backend, {
+    versions,
+    modelSiblings: options.modelSiblings,
+  });
   const extensions = f.store.extensionStore();
   await extensions.migratePluginAdmissions();
   await extensions.migrateCredits();
@@ -388,6 +393,11 @@ export async function peerFixture(
     const admission = await extensions.loadPluginTaskAdmission(result.binding);
     assert.ok(admission);
     const operationId = randomUUID();
+    await startExternalOperationFixtureRun(f.store, {
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      runId: result.binding.runId,
+    });
     await operations.reserveExternalOperation({
       tenantId: actor.tenantId,
       runId: result.binding.runId,

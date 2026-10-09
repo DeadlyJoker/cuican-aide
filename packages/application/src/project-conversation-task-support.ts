@@ -1,3 +1,4 @@
+import { pluginTaskModelId } from "./plugin-task-model-selection.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 import {
   extensionCanonicalJson,
@@ -25,6 +26,7 @@ export type ProjectConversationTask = Readonly<{
   stage: ProjectConversationStage;
   sources: ProjectStageSources;
   content: string;
+  modelId?: string;
   authority: ProjectConversationCommitAuthority;
   conversations: Pick<
     ProjectConversationStore,
@@ -42,6 +44,7 @@ export function captureProjectConversationTask(
     "content",
     "authority",
     "conversations",
+    ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
   ]) as unknown as ProjectConversationTask;
   const binding = parseProjectConversationBinding(input.binding, digester),
     authority = captureProjectConversationAuthority(input.authority),
@@ -66,6 +69,9 @@ export function captureProjectConversationTask(
     sources,
     content,
     conversations: captureConversationReads(input.conversations),
+    ...(Object.hasOwn(input, "modelId")
+      ? { modelId: pluginTaskModelId(input.modelId) }
+      : {}),
   });
 }
 export function projectConversationTaskReceipt(
@@ -77,7 +83,11 @@ export function projectConversationTaskReceipt(
     ...base,
     requestDigest: digester.sha256(
       extensionCanonicalJson({
-        version: "crewon.project-stage-task-command.v1",
+        version:
+          task.modelId === undefined
+            ? "crewon.project-stage-task-command.v1"
+            : "crewon.project-stage-task-command.v2",
+        ...(task.modelId === undefined ? {} : { modelId: task.modelId }),
         baseRequestDigest: base.requestDigest,
         bindingId: task.binding.bindingId,
         bindingRevision: task.binding.revision,
@@ -213,6 +223,7 @@ export async function prepareProjectConversationTask(
       "content",
       "authority",
       "conversations",
+      ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
     ]) as unknown as ProjectConversationTaskPreparation,
     binding = parseProjectConversationBinding(task.binding, digester),
     authority = captureProjectConversationAuthority(task.authority),
@@ -281,6 +292,9 @@ export async function prepareProjectConversationTask(
       sources,
       content: task.content,
       conversations: task.conversations,
+      ...(Object.hasOwn(task, "modelId")
+        ? { modelId: pluginTaskModelId(task.modelId) }
+        : {}),
     },
     digester,
   );

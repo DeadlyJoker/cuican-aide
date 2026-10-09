@@ -37,6 +37,7 @@ export class ControlProjectConversationTurn {
     input: Readonly<{
       threadId: string;
       content: string;
+      modelId?: string;
       expectedThreadRevision: number;
       selection: ProjectConversationComposerSelection;
     }>,
@@ -47,6 +48,7 @@ export class ControlProjectConversationTurn {
       const original = pending.request;
       if (
         original.content !== input.content ||
+        original.modelId !== input.modelId ||
         original.projectId !== input.selection.binding.projectId ||
         original.stage.kind !== input.selection.stage.kind ||
         (original.stage.kind === "script" &&
@@ -69,6 +71,7 @@ export class ControlProjectConversationTurn {
           expectedThreadRevision: input.expectedThreadRevision,
           expectedBindingRevision: input.selection.binding.revision,
           content: input.content,
+          ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
           idempotencyKey: this.#key("project-conversation.start-stage"),
           stage: input.selection.stage,
         },

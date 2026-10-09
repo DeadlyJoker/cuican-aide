@@ -257,7 +257,9 @@ export class InstalledPluginPeerService {
           activatedRow !== undefined &&
           isDeepStrictEqual(activatedRow.identity, row.identity) &&
           (configuration === null ||
-            !isDeepStrictEqual(activation!.target, row.entry.target) ||
+            (!isDeepStrictEqual(activation!.target, row.entry.target) &&
+              activatedRow.entry.version.model.modelId ===
+                row.entry.version.model.modelId) ||
             !isDeepStrictEqual(configuration, row.entry.configuration) ||
             activation!.configurationDigest !== configuration.contentDigest)
         )

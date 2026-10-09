@@ -1365,6 +1365,7 @@ export class ControlThreadRuntime {
         content: text,
         expectedThreadRevision: current.thread.revision,
         selection: settings.projectConversation,
+        ...(settings.model == null ? {} : { modelId: settings.model }),
       });
       this.#callbacks.onProjectConversationRequestChanged?.(threadId);
       try {

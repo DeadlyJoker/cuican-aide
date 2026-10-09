@@ -96,6 +96,7 @@ export type ExtensionTaskApplicationDependencies = Readonly<{
   digester: ContentDigester;
   creditQuotes?: ExtensionCreditQuotePort;
   unmeteredTasks?: PluginTaskUnmeteredAuthorityPort;
+  modelSelection?: import("./plugin-task-model-selection.ts").PluginTaskModelSelectionPort;
   /** Explicit project generation integration; ordinary tasks never read project metadata. */
   creativeProjects?: ProjectGenerationApplicationPorts;
   projectGenerationReads?: ProjectGenerationReadApplicationService;

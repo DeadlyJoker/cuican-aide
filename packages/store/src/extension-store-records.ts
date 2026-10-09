@@ -31,6 +31,10 @@ import type {
   SaveExtensionConfigurationInput,
 } from "@crewon/application";
 import { validateTurnStartInput } from "./store-invariants.ts";
+import {
+  assertPluginTaskModelSelectionAdmission,
+  type PreparedPluginTaskModelSelection,
+} from "@crewon/application";
 
 export const extensionStoreDigester = {
   sha256: (value: string) =>
@@ -138,19 +142,23 @@ export function assertExtensionAdmission(
   activation: ExtensionActivation | null,
   expectedRevision: number,
   configuration: ExtensionConfiguration | null,
+  modelSelection?: PreparedPluginTaskModelSelection,
 ) {
   if (activation === null || activation.state === "revoked")
     throw new Error("extension_access_revoked");
   if (activation.revision !== expectedRevision)
     throw new Error("extension_activation_revision_conflict");
   assertExtensionConfigurationReference(configuration, binding);
+  if (modelSelection !== undefined)
+    assertPluginTaskModelSelectionAdmission(modelSelection, binding);
   if (
     binding.source === null &&
     (activation.state !== "enabled" ||
       activation.configurationRevision !== binding.configurationRevision ||
       activation.configurationDigest !== binding.configurationDigest ||
-      extensionCanonicalJson(activation.target) !==
-        extensionCanonicalJson(binding.target))
+      (modelSelection === undefined &&
+        extensionCanonicalJson(activation.target) !==
+          extensionCanonicalJson(binding.target)))
   )
     throw new Error("extension_generation_disabled");
 }

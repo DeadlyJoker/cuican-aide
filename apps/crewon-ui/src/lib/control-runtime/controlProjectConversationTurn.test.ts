@@ -22,6 +22,7 @@ const binding = {
 const input = {
   threadId: "thread",
   content: " 原聊天\n保留原话 ",
+  modelId: "gpt-5.6-sol",
   expectedThreadRevision: 3,
   selection: { binding, stage: { kind: "outline" as const, briefRevision: 1 } },
 };
@@ -70,7 +71,11 @@ describe("original project Turn key and physical lifetime", () => {
         },
       }),
     ).toEqual({ threadId: "thread", runId: "actual-run" });
+    expect(() => owner.start({ ...input, modelId: "gpt-5.6-luna" })).toThrow(
+      "original_request_pending",
+    );
     expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toMatchObject({ modelId: input.modelId });
     expect(bodies[0]).toEqual(bodies[1]);
     expect(key).toHaveBeenCalledTimes(1);
     expect(owner.retainedSelection("thread")).toEqual(input.selection);

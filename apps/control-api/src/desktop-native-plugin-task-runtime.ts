@@ -110,6 +110,7 @@ export async function createDesktopNativePluginTaskRuntime(
       uiAuthorization: authority.uiAuthorization,
       authorizePackage: authority.authorizePackage,
       unmeteredTasks: authority.unmeteredTasks,
+      modelSelection: authority.modelSelection,
       clock: dependencies.clock,
       ids: createPluginTaskApplicationIds(),
       digester: dependencies.digester,

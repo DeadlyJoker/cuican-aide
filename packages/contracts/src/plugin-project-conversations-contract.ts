@@ -132,6 +132,9 @@ export function parseProjectConversationsActionRequest(
                       "content",
                       "idempotencyKey",
                       "stage",
+                      ...(Object.hasOwn(v.input as object, "modelId")
+                        ? ["modelId"]
+                        : []),
                     ];
     const b = pluginUiFields(v.input, fields),
       out: Record<string, unknown> = {};
@@ -163,6 +166,17 @@ export function parseProjectConversationsActionRequest(
             !x.length ||
             [...x].length > 160 ||
             x.length > 320
+          )
+            fail();
+          out[k] = x;
+          break;
+        case "modelId":
+          if (
+            typeof x !== "string" ||
+            !x ||
+            x.trim() !== x ||
+            new TextEncoder().encode(x).length > 256 ||
+            /[\u0000-\u001f\u007f]/u.test(x)
           )
             fail();
           out[k] = x;

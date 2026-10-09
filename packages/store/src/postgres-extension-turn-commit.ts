@@ -1,3 +1,13 @@
+import type { PostgresExtensionTurnHost } from "./postgres-extension-turn-host.ts";
+import { assertProjectStageTurnCurrent } from "./project-stage-turn-current.ts";
+import {
+  capturePluginTaskModelSelectionOption,
+  assertPluginTaskModelSelectionTurn,
+} from "./plugin-task-model-selection-commit.ts";
+import {
+  assertPluginTaskModelSelectionAdmission,
+  type PreparedPluginTaskModelSelection,
+} from "@crewon/application";
 import {
   attachPostgresFoundationRun,
   assertPostgresFoundationTurnCurrent,
@@ -152,53 +162,14 @@ import {
   assertPostgresHistoricalQueryMarker,
 } from "./project-historical-query-marker.ts";
 
-type PostgresExtensionTurnHost = Readonly<{
-  projectMediaGenerationsEnabled: boolean;
-  schema: string;
-  unmeteredEnabled: boolean;
-  projectGenerationsEnabled: boolean;
-  projectQueriesEnabled: boolean;
-  projectHistoricalQueriesEnabled: boolean;
-  assertOpen(): void;
-  transaction(
-    scope: ExtensionScope,
-    body: (client: PoolClient) => Promise<CommitExtensionTurnResult>,
-    options: { beforeCommit(): void },
-  ): Promise<CommitExtensionTurnResult>;
-  receipt(
-    client: PoolClient,
-    scope: ExtensionScope,
-    kind: string,
-    receipt: ExtensionMutationReceipt,
-  ): Promise<unknown | null>;
-  saveReceipt(
-    client: PoolClient,
-    scope: ExtensionScope,
-    kind: string,
-    receipt: ExtensionMutationReceipt,
-    result: unknown,
-  ): Promise<void>;
-  assertCreditLink(
-    client: PoolClient,
-    admission: ExtensionCreditAdmission | undefined,
-  ): Promise<void>;
-  admit(
-    client: PoolClient,
-    scope: CommitExtensionTurnInput["binding"],
-    expectedRevision: number,
-  ): Promise<void>;
-  commitTurn(
-    client: PoolClient,
-    input: CommitTurnStartInput,
-  ): Promise<CommitTurnStartResult>;
-}>;
-
 /** Keeps optional metadata association inside the original Turn/Run/hold transaction. */
 export async function commitPostgresExtensionTurn(
   host: PostgresExtensionTurnHost,
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ) {
+  const selectedModel = capturePluginTaskModelSelectionOption(options);
+  options = selectedModel.options;
   const media = captureProjectMediaGenerationTurn(
     input,
     checkedPluginTaskAdmission(input),
@@ -272,19 +243,17 @@ export async function commitPostgresExtensionTurn(
     pluginAdmission === undefined
       ? structuredClone(input)
       : capturePluginTaskTurnInput(input, pluginAdmission);
-  if (mediaInputStage !== null) {
-    await mediaInputStage.authority.assertCurrent();
-    mediaInputStage.authority.assertActive();
-  }
-  if (assetStage !== null) {
-    await assetStage.authority.assertCurrent();
-    assetStage.authority.assertActive();
-  }
-  if (stage !== null) {
-    await stage.authority.assertCurrent();
-    stage.authority.assertActive();
-  }
+  await assertProjectStageTurnCurrent(
+    [mediaInputStage, assetStage, stage],
+    "before",
+  );
   const binding = validateExtensionTurnCommit(frozenInput);
+  await assertPluginTaskModelSelectionTurn(
+    selectedModel.selection,
+    frozenInput,
+    binding,
+    pluginAdmission,
+  );
   if (unmetered.authority !== undefined) {
     await unmetered.authority.assertCurrent();
     unmetered.authority.assertActive();
@@ -571,7 +540,12 @@ export async function commitPostgresExtensionTurn(
               frozenInput,
               pluginQuery!,
             );
-      await host.admit(client, binding, frozenInput.expectedActivationRevision);
+      await host.admit(
+        client,
+        binding,
+        frozenInput.expectedActivationRevision,
+        selectedModel.selection,
+      );
       const mediaLink =
         media === null
           ? null
@@ -788,6 +762,12 @@ export async function commitPostgresExtensionTurn(
           host.assertOpen();
           assertProjectMediaGenerationActive(media.authority);
         }
+        if (selectedModel.selection !== undefined)
+          assertPluginTaskModelSelectionAdmission(
+            selectedModel.selection,
+            binding,
+            pluginAdmission,
+          );
         stage?.authority.assertActive();
         assetStage?.authority.assertActive();
         mediaInputStage?.authority.assertActive();

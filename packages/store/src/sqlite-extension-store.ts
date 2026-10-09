@@ -1,3 +1,4 @@
+import type { PreparedPluginTaskModelSelection } from "@crewon/application";
 import { loadSqliteMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { SqliteProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { SqliteProjectMediaResultStore } from "./project-media-result-store.ts";
@@ -599,7 +600,8 @@ export class SqliteExtensionStore implements ExtensionStore {
         transaction: (body, hooks) => this.#transaction(body, hooks),
         receipt: (scope, kind, receipt) => this.#receipt(scope, kind, receipt),
         verifyCreditReceipt: (result) => this.#verifyCreditReceipt(result),
-        admit: (binding, revision) => this.#admit(binding, revision),
+        admit: (binding, revision, selection) =>
+          this.#admit(binding, revision, selection),
         commitTurn: (recipe) => this.#host.commitTurnWithinTransaction(recipe),
         saveCreditAdmission: (admission) =>
           this.#saveCreditAdmission(admission),
@@ -670,12 +672,17 @@ export class SqliteExtensionStore implements ExtensionStore {
     assertCreditReservationReplay(reservation, admission.reservation);
   }
 
-  #admit(binding: ExtensionRunBinding, expectedActivationRevision: number) {
+  #admit(
+    binding: ExtensionRunBinding,
+    expectedActivationRevision: number,
+    selection?: PreparedPluginTaskModelSelection,
+  ) {
     assertExtensionAdmission(
       binding,
       this.#activation(binding),
       expectedActivationRevision,
       this.#configuration(binding, binding.configurationRevision),
+      selection,
     );
     this.#assertDeployment(binding.tenantId, binding.target);
     if (binding.source !== null) {

@@ -57,7 +57,7 @@ async function removeTree(path: string): Promise<void> {
 export async function installedReleaseFixture(
   t: TestContext,
   backend: "sqlite" | "postgres" = "sqlite",
-  options: { versions?: 1 | 2 } = {},
+  options: { versions?: 1 | 2; modelSiblings?: boolean } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), "crewon-release-loader-"));
   const installRoot = join(directory, "installed");
@@ -283,6 +283,90 @@ export async function installedReleaseFixture(
       target,
     });
   }
+  if (options.modelSiblings) {
+    const original = entries[0]!;
+    const registration = await loadInstalledPluginBusinessRegistration({
+      installRoot,
+      expectedPluginId: original.packageIdentity.pluginId,
+      expectedPublisherId: original.packageIdentity.publisherId,
+      expectedVersion: original.packageIdentity.version,
+      expectedPackageDigest: original.packageIdentity.packageDigest,
+      authorizeRead: async () => "allow",
+      signal: new AbortController().signal,
+    });
+    for (const [suffix, modelId] of [
+      ["alternate", "fixture-alternate-model"],
+      ["stale", "fixture-existing-model"],
+    ]) {
+      const { contentDigest: _digest, ...definition } = baseVersion;
+      const modelVersion = compileAgentVersion(
+        {
+          ...definition,
+          schemaVersion: "crewon.agent-version-source.v0",
+          agentVersionId: `fixture-base-${suffix}`,
+          model: { ...baseVersion.model, modelId: modelId! },
+        },
+        digester,
+      );
+      const modelBinding = {
+        ...runtimeBinding,
+        agentVersionId: modelVersion.agentVersionId,
+        contentDigest: modelVersion.contentDigest,
+      };
+      const modelBase = createAgentVersionRuntimeBindings({
+        config: {
+          schemaVersion: "crewon.agent-version-runtime-bindings.v0",
+          bindings: [modelBinding],
+        },
+        environment: {},
+      })[0]!;
+      const deployment = {
+        ...baseDeployment,
+        agentVersionId: modelBase.agentVersionId,
+        contentDigest: modelBase.contentDigest,
+        materializationDigest: modelBase.materializationDigest,
+      };
+      const version = compileInstalledPluginAgentVersion({
+        base: { executionAuthority: "crewonKernel", version: modelVersion },
+        registration,
+        agentVersionId: `fixture-derived-${suffix}`,
+        runtimeGeneration: `fixture-generation-${suffix}`,
+        policySnapshotId: "installed-policy",
+        digester,
+      });
+      const target = installedPluginAgentRuntimeTarget({
+        defaultAgentVersionId: baseVersion.agentVersionId,
+        entry: {
+          scope,
+          registration,
+          configuration: original.configuration,
+          approvalRequirement: "none",
+          base: {
+            executionAuthority: "crewonKernel",
+            version: modelVersion,
+            deployment,
+          },
+          version,
+          authorityId: modelBase.authorityId,
+          workspaceBindingId: modelBase.workspaceBindingId,
+          transportOwnership: modelBase.transportOwnership,
+          createTransport: modelBase.createTransport,
+          createBaseToolRuntime: modelBase.createToolRuntime,
+        },
+      });
+      entries.push({
+        ...original,
+        modelSource: {
+          executionAuthority: "crewonKernel",
+          runtimeBinding: modelBinding,
+          version: modelVersion,
+          deployment,
+        },
+        version,
+        target,
+      });
+    }
+  }
   const document: InstalledPluginReleaseDocument = {
     schemaVersion: "crewon.installed-plugin-release.v1",
     tenantId: scope.tenantId,
@@ -309,7 +393,7 @@ export async function installedReleaseFixture(
   ) {
     for (const version of [
       baseVersion,
-      ...entries.map((entry) => entry.version),
+      ...entries.flatMap((entry) => [entry.modelSource.version, entry.version]),
     ])
       await store.registerAgentVersion(
         createAgentVersionAsset({
@@ -326,6 +410,13 @@ export async function installedReleaseFixture(
         defaultAgentVersionId: baseVersion.agentVersionId,
         deployments: [
           options.baseDeployment ?? baseDeployment,
+          ...entries
+            .filter(
+              (entry) =>
+                entry.modelSource.version.agentVersionId !==
+                baseVersion.agentVersionId,
+            )
+            .map((entry) => entry.modelSource.deployment),
           ...loaded.deployments,
         ],
       },

@@ -8,6 +8,7 @@ export * from "./model-spending-application-service.ts";
 export * from "./model-pricing-application-service.ts";
 export * from "./model-call-store-port.ts";
 export * from "./application-error.ts";
+export * from "./plugin-task-model-selection.ts";
 export * from "./artifact-store-port.ts";
 export * from "./artifact-application-service.ts";
 export * from "./agent-version-store-port.ts";

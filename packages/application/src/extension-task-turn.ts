@@ -1,3 +1,4 @@
+import { preparePluginTaskModelSelection } from "./plugin-task-model-selection.ts";
 import {
   assertExtensionContentStages,
   extensionContentStageReceipt,
@@ -402,13 +403,28 @@ export async function createExtensionTaskTurn(
       (activation.state !== "enabled" || activation.target === null)
     )
       throw new ApplicationError("conflict", "extension_generation_disabled");
-    const { target, frozen } = await loadExtensionTaskConfiguration({
+    const configured = await loadExtensionTaskConfiguration({
       extensions: context.dependencies.extensions,
       digester: context.dependencies.digester,
       scope,
       activation,
       source,
     });
+    const { frozen } = configured;
+    const selectedModel =
+      conversation?.modelId === undefined
+        ? undefined
+        : await preparePluginTaskModelSelection(
+            context.dependencies.modelSelection,
+            {
+              actor,
+              pin: pin!,
+              configuration: frozen,
+              modelId: conversation.modelId,
+            },
+            context.dependencies.digester,
+          );
+    const target = selectedModel?.target ?? configured.target;
     const identity = Object.freeze({
       pluginId: frozen.pluginId,
       pluginVersion: frozen.pluginVersion,
@@ -658,10 +674,14 @@ export async function createExtensionTaskTurn(
       unmeteredAuthority,
       media?.commitOptions ?? generation?.commitOptions,
     );
-    const commitOptions = extensionContentStageCommitOptions(
+    const contentOptions = extensionContentStageCommitOptions(
       request,
       financialOptions,
     );
+    const commitOptions =
+      selectedModel === undefined
+        ? contentOptions
+        : { ...contentOptions, pluginModelSelection: selectedModel };
     const commitInput = {
       turn,
       binding,
@@ -697,22 +717,7 @@ export async function createExtensionTaskTurn(
       await commitAuthority.assertCurrent({ actor, pin });
     if (generation !== null) await generation.assertDispatchCurrent();
     if (media !== null) await media.assertDispatchCurrent();
-    if (projectTextPlan !== null) {
-      await projectTextPlan.authority.assertCurrent();
-      projectTextPlan.authority.assertActive();
-    }
-    if (conversation !== null) {
-      await conversation.authority.assertCurrent();
-      conversation.authority.assertActive();
-    }
-    if (assetStage !== null) {
-      await assetStage.task.authority.assertCurrent();
-      assetStage.task.authority.assertActive();
-    }
-    if (mediaInputStage !== null) {
-      await mediaInputStage.task.authority.assertCurrent();
-      mediaInputStage.task.authority.assertActive();
-    }
+    await assertExtensionContentStages(request);
     const result = await (pin === null
       ? context.dependencies.extensions.commitExtensionTurn(commitInput)
       : generation === null

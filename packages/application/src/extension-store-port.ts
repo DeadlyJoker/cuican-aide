@@ -129,6 +129,8 @@ export type CommitExtensionTurnInput = Readonly<{
   }>;
 }>;
 export type CommitExtensionTurnOptions = Readonly<{
+  /** Opaque host-discovered model grant; changes only this qualified project's immutable Run target. */
+  pluginModelSelection?: import("./plugin-task-model-selection.ts").PreparedPluginTaskModelSelection;
   unmeteredAuthority?: PluginTaskUnmeteredPreparedAuthority;
   projectStageAuthority?: ProjectConversationCommitAuthority;
   projectAssetStageAuthority?: ProjectAssetStageCommitAuthority;

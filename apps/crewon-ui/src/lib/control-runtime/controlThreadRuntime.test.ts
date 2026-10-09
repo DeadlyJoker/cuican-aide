@@ -2276,6 +2276,7 @@ describe("Control thread runtime", () => {
       await expect(
         runtime.startTurn("thread-1", "写第一集", [], {
           projectConversation: selection,
+          model: "gpt-5.6-sol",
         }),
       ).rejects.toThrow("lost ACK");
       expect(runtime.retainedProjectConversationSelection("thread-1")).toEqual(
@@ -2285,7 +2286,9 @@ describe("Control thread runtime", () => {
       await runtime.startTurn("thread-1", "写第一集", [], {
         projectConversation:
           runtime.retainedProjectConversationSelection("thread-1")!,
+        model: "gpt-5.6-sol",
       });
+      expect(start.mock.calls[0]![1]).toMatchObject({ modelId: "gpt-5.6-sol" });
       expect(start.mock.calls[0]![1]).toEqual(start.mock.calls[1]![1]);
       expect(
         runtime.retainedProjectConversationSelection("thread-1"),
@@ -2369,6 +2372,7 @@ describe("Control thread runtime", () => {
     );
     try {
       const textSettings = {
+        model: "gpt-5.6-sol",
         executionIntent: "none",
         projectConversation: {
           binding: {
@@ -2424,6 +2428,7 @@ describe("Control thread runtime", () => {
           executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
         });
         expect(result.turn.id).toBe("run-1");
+        if (kind === "text") expect(start.mock.calls[0]![1]).toMatchObject({ modelId: "gpt-5.6-sol" });
       }
       await settled.promise;
       if (kind !== "media-generation") {

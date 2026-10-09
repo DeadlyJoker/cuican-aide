@@ -564,3 +564,25 @@ test(
     );
   },
 );
+
+test("actual published model siblings remain selectable while stale targets for the same model stay hidden", async (t) => {
+  const f = await peerFixture(t, "sqlite", 1, { modelSiblings: true });
+  assert.equal(f.entries.length, 3);
+  const catalog = await f.invoke(f.common("catalog"));
+  if (catalog.operation !== "catalog") throw new Error("unexpected_response");
+  assert.deepEqual(
+    catalog.entries.map((row) => row.configuredTarget.agentVersionId),
+    [f.entries[0]!.target.agentVersionId, f.entries[1]!.target.agentVersionId],
+  );
+  const ready = await f.invoke(f.request("readiness", 1));
+  if (ready.operation !== "readiness") throw new Error("unexpected_response");
+  assert.deepEqual(ready.result, {
+    outcome: "ready",
+    target: f.entries[1]!.target,
+  });
+  assert.equal(f.state.http, 0);
+  await f.select("disabled");
+  const hidden = await f.invoke(f.common("catalog"));
+  if (hidden.operation !== "catalog") throw new Error("unexpected_response");
+  assert.equal(hidden.entries.length, 0);
+});

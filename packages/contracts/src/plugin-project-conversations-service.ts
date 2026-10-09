@@ -74,6 +74,8 @@ export type ProjectConversationsRequests = {
     content: string;
     idempotencyKey: string;
     stage: ProjectConversationStage;
+    /** Optional per-turn model; absence preserves the original request contract. */
+    modelId?: string;
   }>;
 };
 export type ProjectConversationMutationResponse = Readonly<{

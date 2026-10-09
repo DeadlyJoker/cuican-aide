@@ -1,3 +1,12 @@
+import { assertProjectStageTurnCurrent } from "./project-stage-turn-current.ts";
+import {
+  capturePluginTaskModelSelectionOption,
+  assertPluginTaskModelSelectionTurn,
+} from "./plugin-task-model-selection-commit.ts";
+import {
+  assertPluginTaskModelSelectionAdmission,
+  type PreparedPluginTaskModelSelection,
+} from "@crewon/application";
 import {
   attachSqliteFoundationRun,
   assertSqliteFoundationTurnCurrent,
@@ -168,7 +177,11 @@ type SqliteExtensionTurnHost = Readonly<{
   verifyCreditReceipt(
     result: CommitExtensionTurnResult,
   ): CommitExtensionTurnResult;
-  admit(binding: ExtensionRunBinding, expectedRevision: number): void;
+  admit(
+    binding: ExtensionRunBinding,
+    expectedRevision: number,
+    selection?: PreparedPluginTaskModelSelection,
+  ): void;
   commitTurn(input: CommitTurnStartInput): CommitTurnStartResult;
   saveCreditAdmission(admission: ExtensionCreditAdmission): void;
   saveReceipt(
@@ -185,6 +198,8 @@ export async function commitSqliteExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const selectedModel = capturePluginTaskModelSelectionOption(options);
+  options = selectedModel.options;
   const media = captureProjectMediaGenerationTurn(
     input,
     checkedPluginTaskAdmission(input),
@@ -258,22 +273,17 @@ export async function commitSqliteExtensionTurn(
     });
   if (pluginAdmission !== undefined)
     input = capturePluginTaskTurnInput(input, pluginAdmission);
-  if (mediaInputStage !== null) {
-    await mediaInputStage.authority.assertCurrent();
-    await mediaInputStage.authority.assertTransactionCurrent();
-    mediaInputStage.authority.assertActive();
-  }
-  if (assetStage !== null) {
-    await assetStage.authority.assertCurrent();
-    await assetStage.authority.assertTransactionCurrent();
-    assetStage.authority.assertActive();
-  }
-  if (stage !== null) {
-    await stage.authority.assertCurrent();
-    await stage.authority.assertTransactionCurrent();
-    stage.authority.assertActive();
-  }
+  await assertProjectStageTurnCurrent(
+    [mediaInputStage, assetStage, stage],
+    "before-sqlite-transaction",
+  );
   const binding = validateExtensionTurnCommit(input);
+  await assertPluginTaskModelSelectionTurn(
+    selectedModel.selection,
+    input,
+    binding,
+    pluginAdmission,
+  );
   const creditAdmission = checkedExtensionCreditAdmission({
     admission: input.creditAdmission,
     binding,
@@ -478,7 +488,11 @@ export async function commitSqliteExtensionTurn(
               input,
               pluginQuery!,
             );
-      host.admit(binding, input.expectedActivationRevision);
+      host.admit(
+        binding,
+        input.expectedActivationRevision,
+        selectedModel.selection,
+      );
       const mediaLink =
         media === null
           ? null
@@ -622,6 +636,12 @@ export async function commitSqliteExtensionTurn(
           host.assertOpen();
           assertProjectMediaGenerationActive(media.authority);
         }
+        if (selectedModel.selection !== undefined)
+          assertPluginTaskModelSelectionAdmission(
+            selectedModel.selection,
+            binding,
+            pluginAdmission,
+          );
         stage?.authority.assertActive();
         assetStage?.authority.assertActive();
         mediaInputStage?.authority.assertActive();

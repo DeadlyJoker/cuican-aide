@@ -459,6 +459,9 @@ export class ProjectConversationApplicationService {
             stage: request.stage,
             prepareSources: () => this.#sources(q, request),
             content: request.content,
+            ...(request.modelId === undefined
+              ? {}
+              : { modelId: request.modelId }),
             authority: q,
             conversations: this.#d.conversations,
           },

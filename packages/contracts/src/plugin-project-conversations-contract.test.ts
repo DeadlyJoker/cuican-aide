@@ -271,3 +271,51 @@ test("conversation pages preserve ordered whole records and reject backwards cur
     }),
   );
 });
+
+test("optional model selection preserves legacy bodies and rejects target injection and invalid model IDs", () => {
+  const legacy = {
+    projectId: "project",
+    threadId: "thread",
+    expectedThreadRevision: 1,
+    expectedBindingRevision: 1,
+    content: "创作",
+    stage: { kind: "discussion" },
+    idempotencyKey: "model-turn",
+  };
+  assert.deepEqual(
+    request({ action: A.startStage, input: legacy }).input,
+    legacy,
+  );
+  assert.deepEqual(
+    request({
+      action: A.startStage,
+      input: { ...legacy, modelId: "gpt-5.6-sol" },
+    }).input,
+    { ...legacy, modelId: "gpt-5.6-sol" },
+  );
+  for (const modelId of [
+    undefined,
+    null,
+    "",
+    " sol",
+    "sol\n",
+    "x".repeat(257),
+    "\ud800",
+    { agentVersionId: "forged" },
+  ])
+    assert.throws(() =>
+      request({ action: A.startStage, input: { ...legacy, modelId } }),
+    );
+  assert.throws(() =>
+    request({
+      action: A.startStage,
+      input: { ...legacy, modelId: "sol", target: {} },
+    }),
+  );
+  assert.throws(() =>
+    request({
+      action: A.openConversation,
+      input: { projectId: "project", threadId: "thread", modelId: "sol" },
+    }),
+  );
+});

@@ -1,3 +1,4 @@
+import { method, closeAll } from "./installed-plugin-task-runtime-support.ts";
 import { prepareProjectHistoricalQueryResolver } from "@crewon/application";
 import type { ProjectHistoricalQueryPublication } from "@crewon/domain";
 import {
@@ -77,6 +78,7 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   authorizePackage: InstalledPluginTaskActionOwnerDependencies["authorizePackage"];
   creditQuotes?: ExtensionCreditQuotePort;
   unmeteredTasks?: PluginTaskUnmeteredAuthorityPort;
+  modelSelection?: import("@crewon/application").PluginTaskModelSelectionPort;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
@@ -226,6 +228,7 @@ export async function createInstalledPluginTaskRuntimeCore(
     "authorizePackage",
     ...(Object.hasOwn(provided, "creditQuotes") ? ["creditQuotes"] : []),
     ...(Object.hasOwn(provided, "unmeteredTasks") ? ["unmeteredTasks"] : []),
+    ...(Object.hasOwn(provided, "modelSelection") ? ["modelSelection"] : []),
     "clock",
     "ids",
     "digester",
@@ -530,6 +533,9 @@ export async function createInstalledPluginTaskRuntimeCore(
       digester,
       ...(creditQuotes === undefined ? {} : { creditQuotes }),
       ...(unmeteredTasks === undefined ? {} : { unmeteredTasks }),
+      ...(input.modelSelection === undefined
+        ? {}
+        : { modelSelection: input.modelSelection }),
       ...(projectGenerationReads === undefined
         ? {}
         : { projectGenerationReads }),
@@ -774,31 +780,6 @@ export async function createInstalledPluginTaskRuntimeCore(
     }
     throw error;
   }
-}
-
-function method<T extends object, K extends keyof T>(input: T, key: K): T[K] {
-  const value = input?.[key];
-  if (typeof value !== "function") invalid();
-  return value.bind(input) as T[K];
-}
-
-async function closeAll(
-  actions: readonly (() => Promise<unknown> | undefined)[],
-): Promise<void> {
-  const results = await Promise.allSettled(
-    actions.map((action) => {
-      try {
-        return Promise.resolve(action());
-      } catch (error) {
-        return Promise.reject(error);
-      }
-    }),
-  );
-  const failures = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason] : [],
-  );
-  if (failures.length)
-    throw new AggregateError(failures, "installed_plugin_task_cleanup_failed");
 }
 
 function invalid(): never {
