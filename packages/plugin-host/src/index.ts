@@ -118,6 +118,7 @@ export {
   type PluginExecutionPackageBorrow,
   type PluginExecutionPackageFailureOwner,
 } from "./plugin-execution-package.ts";
+export { PluginExecutionComposition, PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE } from "./plugin-execution-composition.ts";
 
 export {
   PluginProjectGenerationQueryActionBridge,

@@ -15,6 +15,7 @@ import {
   type PluginActivationCandidate,
   type PluginNodeCommitCandidate,
   type PluginNodeLease,
+  type PluginNodePreparedActivation,
 } from "./plugin-node-host.ts";
 
 const digester = {
@@ -54,6 +55,15 @@ export type PluginCompositionAuthority = Readonly<{
       candidate: PluginActivationCandidate;
     }>,
   ): Promise<"allow" | "deny"> | "allow" | "deny";
+  /** Optional on existing coordinators; execution owners require this post-setup refresh. */
+  beforePublication?(
+    input: Readonly<{
+      lock: PluginCompositionLock;
+      node: PluginCompositionNode;
+      identity: PluginNodePreparedActivation["identity"];
+      dependencyIdentities: PluginNodePreparedActivation["dependencyIdentities"];
+    }>,
+  ): Promise<void>;
   /** Synchronous host-owned fence; must check current durable selection and approval. */
   authorizePublication(
     input: Readonly<{
@@ -92,6 +102,8 @@ export class PluginCompositionCoordinator {
       }>[];
     }>,
   ) {
+    if (!Array.isArray(input.services) || input.services.length > 1024)
+      fail("plugin_composition_host_service_limit");
     const captured = createPluginCompositionLock(
       {
         schemaVersion: "crewon.plugin-composition-lock.v1",
@@ -133,14 +145,24 @@ export class PluginCompositionCoordinator {
         fail("plugin_composition_host_service_conflict");
       if (this.#requested)
         planPluginCompositionTransition(this.#requested, lock, digester);
-      const prepare = input.authority.authorizePreparation;
-      const publish = input.authority.authorizePublication;
+      const authorityInput = input.authority;
+      const prepare = authorityInput.authorizePreparation;
+      const publish = authorityInput.authorizePublication;
+      const beforePublication = authorityInput.beforePublication;
       if (typeof prepare !== "function" || typeof publish !== "function")
+        fail("plugin_composition_authority_missing");
+      if (
+        beforePublication !== undefined &&
+        typeof beforePublication !== "function"
+      )
         fail("plugin_composition_authority_missing");
       if (this.#pending >= 64) fail("plugin_composition_pending_limit");
       const authority = Object.freeze({
-        authorizePreparation: prepare.bind(input.authority),
-        authorizePublication: publish.bind(input.authority),
+        authorizePreparation: prepare.bind(authorityInput),
+        authorizePublication: publish.bind(authorityInput),
+        ...(beforePublication === undefined
+          ? {}
+          : { beforePublication: beforePublication.bind(authorityInput) }),
       });
       const generation = ++this.#generation;
       this.#requested = lock;
@@ -326,6 +348,15 @@ export class PluginCompositionCoordinator {
           code = "plugin_composition_dependency_conflict";
           fail(code);
         }
+        await authority.beforePublication?.(
+          Object.freeze({
+            lock,
+            node,
+            identity: prepared.identity,
+            dependencyIdentities: prepared.dependencyIdentities,
+          }),
+        );
+        this.#check(generation);
         prepared.commit({
           authorizeCommit: (candidate) => {
             this.#check(generation);

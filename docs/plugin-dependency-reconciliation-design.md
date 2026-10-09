@@ -6,6 +6,7 @@
 
 - `PluginNodeHost` 捕获提供者身份和精确服务版本。撤下提供者时会撤下当前消费者；已有借用保留原消费者及其提供者。升级存在当前消费者时拒绝，避免隐式改绑。
 - `PluginExecutionPackage.open` 为一个精确包创建私有 NodeHost。原注释明确要求跨包依赖有单独持久锁，不能从今天的安装选择解析历史 Run。生产执行不是一个全局 NodeHost。
+- 新增 `PluginExecutionComposition.open`，从严格原锁和独立原 Run scope 装配根插件及其原提供者，排除无关模块；要求 setup 后刷新与同步发布授权。该核心尚未接入生产 Run/当前 PDP，旧执行入口仍不接受 v1 图，详见[执行装配](./plugin-execution-composition.md)。
 - `PluginNodePreparedActivation` 的 commit 再检查当前性、依赖和宿主授权。重新执行 setup 不构成重新授权，也不保证可发布。
 - 原 NodeHost 不会因为提供者回来而自动恢复消费者；新增协调核心在显式同步后重新准备缺失实例，仍要求新的准备和发布授权。公开组合锁、原 Store 保存接口及纯变更规划已有，生产自动监听与事务化的多插件选择更新尚未接入。
 

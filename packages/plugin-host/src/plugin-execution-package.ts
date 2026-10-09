@@ -10,6 +10,11 @@ import {
   type PluginHostService,
 } from "./plugin-node-host.ts";
 import { PluginExecutionRegistry } from "./plugin-execution-registry.ts";
+import { retainPluginExecutionFailureOwner } from "./plugin-execution-failure-owner.ts";
+export {
+  pluginExecutionPackageFailureOwner,
+  type PluginExecutionPackageFailureOwner,
+} from "./plugin-execution-failure-owner.ts";
 
 export type PluginExecutionPackageBorrow = Readonly<{
   identity: PluginIdentity;
@@ -17,22 +22,6 @@ export type PluginExecutionPackageBorrow = Readonly<{
   /** Keep the borrow until every created runtime and physical call has finished. */
   release(): void;
 }>;
-
-export type PluginExecutionPackageFailureOwner = Readonly<{
-  /** Failed cleanup is still owned; closing never invents physical disposal. */
-  close(): Promise<void>;
-}>;
-
-const failureOwners = new WeakMap<object, PluginExecutionPackageFailureOwner>();
-
-/** Only the actual startup error carries ownership; matching error text grants nothing. */
-export function pluginExecutionPackageFailureOwner(
-  error: unknown,
-): PluginExecutionPackageFailureOwner | null {
-  return error !== null && typeof error === "object"
-    ? (failureOwners.get(error) ?? null)
-    : null;
-}
 
 /**
  * A private Node host for one exact installed package, including cold historical loads.
@@ -117,7 +106,7 @@ export class PluginExecutionPackage {
           [error, ...failures],
           "plugin_execution_package_start_failed",
         );
-        failureOwners.set(
+        retainPluginExecutionFailureOwner(
           failed,
           Object.freeze({
             close: async () => {
