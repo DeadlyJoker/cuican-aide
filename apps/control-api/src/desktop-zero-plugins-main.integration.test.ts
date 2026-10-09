@@ -5,6 +5,54 @@ import {
   ControlApiClientError,
 } from "@crewon/control-client";
 import { nativeProjectMainFixture } from "./desktop-project-startup-main.integration.test-support.ts";
+import {
+  startFullAppProcess,
+  stopFullAppProcess,
+} from "./installed-plugin-full-app-process.test-support.ts";
+import { waitTaskProcess } from "./installed-plugin-tasks-process.test-support.ts";
+
+test(
+  "actual base Main preserves authenticated history without plugin approval or a model provider",
+  { timeout: 90_000 },
+  async (t) => {
+    const f = await nativeProjectMainFixture(t);
+    const approved = await f.start();
+    const threads = await approved.client.listThreads();
+    const effects = await f.effects();
+    await approved.stop();
+    const environment = { ...approved.environment };
+    delete environment.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH;
+    assert.equal(
+      Object.keys(environment).some((key) => key.startsWith("CREWON_MODEL_")),
+      false,
+    );
+    const child = startFullAppProcess("control", environment);
+    t.after(() => stopFullAppProcess(child));
+    await waitTaskProcess(
+      "actual base Main without Native plugin approval",
+      async () => child.stdout().includes("CrewON Control API listening"),
+      [child],
+    );
+    assert.deepEqual(await approved.client.listThreads(), threads);
+    const unauthorized = new ControlApiClient({
+      baseUrl: `http://127.0.0.1:${approved.port}`,
+      accessToken: "unauthorized-base-session",
+      csrfToken: approved.csrfToken,
+      origin: approved.origin,
+    });
+    await assert.rejects(
+      unauthorized.listThreads(),
+      (error: unknown) =>
+        error instanceof ControlApiClientError && error.status === 401,
+    );
+    await assert.rejects(
+      approved.client.plugins.uiCatalog(),
+      (error: unknown) =>
+        error instanceof ControlApiClientError && error.status === 404,
+    );
+    assert.deepEqual(await f.effects(), effects);
+  },
+);
 
 test(
   "actual Main keeps authenticated base reads and original business history after all profile plugins are uninstalled and the process restarts",

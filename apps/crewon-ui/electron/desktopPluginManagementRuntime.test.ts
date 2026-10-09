@@ -184,16 +184,29 @@ describe("Native-owned plugin bootstrap lifetime", () => {
 });
 
 describe("actual managed child orchestration with explicit HTTP child fixtures", () => {
-  it("retains the original no-provider/no-approval idle behavior", async () => {
+  it("keeps authenticated base Control available without a provider or plugin approval", async () => {
     const f = desktopPluginManagementFixture({
       provider: "absent",
       approval: "absent",
     });
     try {
       await f.owner.start();
-      expect(f.records()).toEqual([]);
-      expect(readdirSync(f.dataDirectory)).toEqual([]);
+      expect(f.records().map((record) => record.kind)).toEqual(["control"]);
+      expect(f.records()[0]?.actor).toEqual(DESKTOP_RUNTIME_OWNER);
+      expect(f.records()[0]?.modelApiKey).toBeNull();
+      expect(f.records()[0]?.bootstrapPath).toBeNull();
+      expect(f.bootstrapFiles()).toEqual([]);
+      expect(f.owner.session().sessionToken).toBeTruthy();
+      expect(f.owner.localManagementAccess()).toBeNull();
+      const oldSession = f.owner.session();
+      await f.owner.stop();
       expect(() => f.owner.session()).toThrow("control_runtime_unavailable");
+      await f.owner.start();
+      expect(f.records().map((record) => record.kind)).toEqual([
+        "control",
+        "control",
+      ]);
+      expect(f.owner.session().sessionToken).toBe(oldSession.sessionToken);
       expect(f.owner.localManagementAccess()).toBeNull();
     } finally {
       await f.close();

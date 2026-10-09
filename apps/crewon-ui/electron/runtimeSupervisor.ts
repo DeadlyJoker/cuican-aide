@@ -280,21 +280,6 @@ export class RuntimeSupervisor {
         );
       }
       startup.signal.throwIfAborted();
-      if (
-        provider === null &&
-        bootstrap === null &&
-        preparation.state === "prepared"
-      ) {
-        await bootstrapOwner.close();
-        startup.signal.throwIfAborted();
-        if (this.#pluginBootstrap === bootstrapOwner)
-          this.#pluginBootstrap = null;
-        if (this.#runtimeAbort === startup) this.#runtimeAbort = null;
-        this.#financialEnvironment.close();
-        this.#financialEnvironment = null;
-        this.#ready = false;
-        return;
-      }
       this.#controlPort ||= await freePort();
       startup.signal.throwIfAborted();
       ensureStorage(this.#dataDirectory);
