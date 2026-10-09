@@ -1,3 +1,4 @@
+import { pluginTaskModelId } from "./plugin-task-model-selection.ts";
 import {
   createProjectMediaInputStageRunAdmission,
   extensionCanonicalJson,
@@ -34,6 +35,7 @@ export type ProjectMediaInputConversationTask = Readonly<{
   stage: ProjectMediaInputStage;
   sources: ProjectMediaInputStageSources;
   content: string;
+  modelId?: string;
   authority: ProjectMediaInputStageCommitAuthority;
   conversations: Pick<ProjectConversationStore, "loadBinding">;
   stages: Pick<
@@ -58,6 +60,7 @@ export function captureProjectMediaInputConversationTask(
     "authority",
     "conversations",
     "stages",
+    ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
   ]);
   const binding = parseProjectConversationBinding(v.binding, digester),
     authority = captureProjectMediaInputStageAuthority(v.authority);
@@ -86,6 +89,9 @@ export function captureProjectMediaInputConversationTask(
     stage,
     sources,
     content,
+    ...(Object.hasOwn(v, "modelId")
+      ? { modelId: pluginTaskModelId(v.modelId) }
+      : {}),
     conversations: Object.freeze({
       loadBinding: method(input.conversations, "loadBinding"),
     }),
@@ -110,7 +116,11 @@ export function projectMediaInputConversationTaskReceipt(
     ...base,
     requestDigest: digester.sha256(
       extensionCanonicalJson({
-        version: "crewon.project-media-input-stage-task-command.v1",
+        version:
+          task.modelId === undefined
+            ? "crewon.project-media-input-stage-task-command.v1"
+            : "crewon.project-media-input-stage-task-command.v2",
+        ...(task.modelId === undefined ? {} : { modelId: task.modelId }),
         baseRequestDigest: base.requestDigest,
         bindingId: task.binding.bindingId,
         bindingRevision: task.binding.revision,
@@ -221,6 +231,7 @@ export async function prepareProjectMediaInputConversationTask(
     "authority",
     "conversations",
     "stages",
+    ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
   ]);
   const binding = parseProjectConversationBinding(v.binding, digester),
     authority = captureProjectMediaInputStageAuthority(v.authority),
@@ -309,6 +320,9 @@ export async function prepareProjectMediaInputConversationTask(
       stage,
       sources: parseProjectMediaInputStageSources(sources, stage),
       content: v.content as string,
+      ...(Object.hasOwn(v, "modelId")
+        ? { modelId: pluginTaskModelId(v.modelId) }
+        : {}),
       conversations,
       stages,
     },

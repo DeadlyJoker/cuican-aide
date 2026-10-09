@@ -41,6 +41,7 @@ export class ControlProjectMediaInputStageTurn {
     input: Readonly<{
       threadId: string;
       content: string;
+      modelId?: string;
       expectedThreadRevision: number;
       selection: ProjectMediaInputStageComposerSelection;
     }>,
@@ -56,6 +57,7 @@ export class ControlProjectMediaInputStageTurn {
       const original = pending.request;
       if (
         original.content !== input.content ||
+        original.modelId !== input.modelId ||
         original.projectId !== input.selection.binding.projectId ||
         original.stage.workflowId !== input.selection.stage.workflowId ||
         original.stage.configurationRevision !==
@@ -81,6 +83,7 @@ export class ControlProjectMediaInputStageTurn {
           expectedThreadRevision: input.expectedThreadRevision,
           expectedBindingRevision: binding.revision,
           content: input.content,
+          ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
           idempotencyKey: this.#key("project-media-input-stage.start-stage"),
           stage: input.selection.stage,
         },

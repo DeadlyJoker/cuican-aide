@@ -1,3 +1,4 @@
+import { parseProjectStageModelId } from "./project-stage-model-contract.ts";
 import { ContractValidationError } from "./contract-validation-error.ts";
 import {
   assetContractCopy as copy,
@@ -36,7 +37,8 @@ export function parseProjectMediaInputStageRequest(
   input: unknown,
 ): ProjectMediaInputStageRequest {
   return checked(() => {
-    const value = record(copy(input, MAX_PROJECT_MEDIA_INPUT_STAGES_BYTES), [
+    const copied = copy(input, MAX_PROJECT_MEDIA_INPUT_STAGES_BYTES);
+    const value = record(copied, [
         "projectId",
         "threadId",
         "expectedThreadRevision",
@@ -44,6 +46,7 @@ export function parseProjectMediaInputStageRequest(
         "stage",
         "content",
         "idempotencyKey",
+        ...(Object.hasOwn(copied as object, "modelId") ? ["modelId"] : []),
       ]),
       stage = record(value.stage, [
         "kind",
@@ -87,6 +90,9 @@ export function parseProjectMediaInputStageRequest(
                 contentRevision: revision(script.contentRevision),
               }),
       }),
+      ...(Object.hasOwn(value, "modelId")
+        ? { modelId: parseProjectStageModelId(value.modelId) }
+        : {}),
       content: text(value.content, MAX_PROJECT_MEDIA_INPUT_STAGE_CONTENT_BYTES),
       idempotencyKey: id(
         parseCreativeProjectIdempotencyKey(value.idempotencyKey),

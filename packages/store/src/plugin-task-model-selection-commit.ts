@@ -12,6 +12,12 @@ export function capturePluginTaskModelSelectionOption(
 ) {
   if (options === undefined || !Object.hasOwn(options, "pluginModelSelection"))
     return { selection: undefined, options };
+  if (
+    Array.isArray(options) ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(options)) ||
+    Object.getOwnPropertySymbols(options).length > 0
+  )
+    invalid();
   const field = Object.getOwnPropertyDescriptor(
     options,
     "pluginModelSelection",
@@ -37,8 +43,12 @@ export async function assertPluginTaskModelSelectionTurn(
   admission: PluginTaskAdmission | undefined,
 ): Promise<void> {
   if (selection === undefined) return;
-  if (input.projectStageAdmission === undefined || admission === undefined)
-    invalid();
+  const stages = [
+    input.projectStageAdmission,
+    input.projectAssetStageAdmission,
+    input.projectMediaInputStageAdmission,
+  ].filter((stage) => stage !== undefined);
+  if (stages.length !== 1 || admission === undefined) invalid();
   assertPluginTaskModelSelectionAdmission(selection, binding, admission);
   await selection.assertCurrent();
   assertPluginTaskModelSelectionAdmission(selection, binding, admission);

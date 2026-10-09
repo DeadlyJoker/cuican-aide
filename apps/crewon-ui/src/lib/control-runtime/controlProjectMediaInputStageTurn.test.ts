@@ -9,6 +9,7 @@ import {
   deferred,
 } from "./controlProjectMediaInputStage.test-support";
 it("unknown retries preserve original body/key and revisions while current Thread and binding revisions change", async () => {
+  const selected = { ...input, modelId: "gpt-5.6-sol" };
   const bodies: unknown[] = [];
   const key = vi.fn(() => "original-key");
   const fetch = vi.fn(
@@ -19,10 +20,10 @@ it("unknown retries preserve original body/key and revisions while current Threa
     },
   );
   const owner = new ControlProjectMediaInputStageTurn(api(fetch), key);
-  await expect(owner.start(input)).rejects.toThrow("lost ACK");
+  await expect(owner.start(selected)).rejects.toThrow("lost ACK");
   await expect(
     owner.start({
-      ...input,
+      ...selected,
       expectedThreadRevision: 4,
       selection: {
         binding: { ...binding, revision: 2 },
@@ -30,6 +31,10 @@ it("unknown retries preserve original body/key and revisions while current Threa
       },
     }),
   ).resolves.toEqual({ threadId: "thread", runId: "actual-run" });
+  expect(() => owner.start({ ...selected, modelId: "gpt-5.6-luna" })).toThrow(
+    "original_request_pending",
+  );
+  expect(bodies[0]).toMatchObject({ modelId: selected.modelId });
   expect(bodies[0]).toEqual(bodies[1]);
   expect(key).toHaveBeenCalledTimes(1);
   expect(owner.retainedSelection("thread")).toEqual(input.selection);

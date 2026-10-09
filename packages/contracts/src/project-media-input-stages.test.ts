@@ -212,3 +212,31 @@ test("HTTP availability is only an exact bounded boolean and never imports autho
   assert.throws(() => parse(getter));
   assert.equal(calls, 0);
 });
+
+test("selected model is bounded and optional; the original request and execution authority remain separate", () => {
+  assert.deepEqual(parseProjectMediaInputStageRequest(input), input);
+  assert.deepEqual(
+    parseProjectMediaInputStageRequest({ ...input, modelId: "gpt-5.6-sol" }),
+    { ...input, modelId: "gpt-5.6-sol" },
+  );
+  for (const modelId of [
+    undefined,
+    null,
+    "",
+    " sol",
+    "sol\n",
+    "x".repeat(257),
+    "\ud800",
+    { target: "forged" },
+  ])
+    assert.throws(() =>
+      parseProjectMediaInputStageRequest({ ...input, modelId }),
+    );
+  assert.throws(() =>
+    parseProjectMediaInputStageRequest({
+      ...input,
+      modelId: "sol",
+      target: {},
+    }),
+  );
+});

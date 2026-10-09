@@ -221,6 +221,7 @@ export class ProjectMediaInputStageApplicationService {
           binding,
           stage: r.stage,
           content: r.content,
+          ...(r.modelId === undefined ? {} : { modelId: r.modelId }),
           authority: liveProjectAuthority,
           conversations: this.#d.conversations,
           stages: this.#d.stages,

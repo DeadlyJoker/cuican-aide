@@ -1,3 +1,4 @@
+import { pluginTaskModelId } from "./plugin-task-model-selection.ts";
 import {
   createProjectAssetStageRunAdmission,
   extensionCanonicalJson,
@@ -34,6 +35,7 @@ export type ProjectAssetConversationTask = Readonly<{
   stage: ProjectAssetStage;
   sources: ProjectAssetStageSources;
   content: string;
+  modelId?: string;
   authority: ProjectAssetStageCommitAuthority;
   conversations: Pick<ProjectConversationStore, "loadBinding">;
   stages: Pick<
@@ -58,6 +60,7 @@ export function captureProjectAssetConversationTask(
     "authority",
     "conversations",
     "stages",
+    ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
   ]);
   const binding = parseProjectConversationBinding(v.binding, digester),
     authority = captureProjectAssetStageAuthority(v.authority);
@@ -86,6 +89,9 @@ export function captureProjectAssetConversationTask(
     stage,
     sources,
     content,
+    ...(Object.hasOwn(v, "modelId")
+      ? { modelId: pluginTaskModelId(v.modelId) }
+      : {}),
     conversations: Object.freeze({
       loadBinding: method(input.conversations, "loadBinding"),
     }),
@@ -107,7 +113,11 @@ export function projectAssetConversationTaskReceipt(
     ...base,
     requestDigest: digester.sha256(
       extensionCanonicalJson({
-        version: "crewon.project-asset-stage-task-command.v1",
+        version:
+          task.modelId === undefined
+            ? "crewon.project-asset-stage-task-command.v1"
+            : "crewon.project-asset-stage-task-command.v2",
+        ...(task.modelId === undefined ? {} : { modelId: task.modelId }),
         baseRequestDigest: base.requestDigest,
         bindingId: task.binding.bindingId,
         bindingRevision: task.binding.revision,
@@ -210,6 +220,7 @@ export async function prepareProjectAssetConversationTask(
     "authority",
     "conversations",
     "stages",
+    ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
   ]);
   const binding = parseProjectConversationBinding(v.binding, digester),
     authority = captureProjectAssetStageAuthority(v.authority),
@@ -293,6 +304,9 @@ export async function prepareProjectAssetConversationTask(
       stage,
       sources: parseProjectAssetStageSources(sources, stage),
       content: v.content as string,
+      ...(Object.hasOwn(v, "modelId")
+        ? { modelId: pluginTaskModelId(v.modelId) }
+        : {}),
       conversations,
       stages,
     },

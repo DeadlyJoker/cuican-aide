@@ -411,8 +411,12 @@ export async function createExtensionTaskTurn(
       source,
     });
     const { frozen } = configured;
+    const selectedModelId =
+      conversation?.modelId ??
+      assetStage?.task.modelId ??
+      mediaInputStage?.task.modelId;
     const selectedModel =
-      conversation?.modelId === undefined
+      selectedModelId === undefined
         ? undefined
         : await preparePluginTaskModelSelection(
             context.dependencies.modelSelection,
@@ -420,7 +424,7 @@ export async function createExtensionTaskTurn(
               actor,
               pin: pin!,
               configuration: frozen,
-              modelId: conversation.modelId,
+              modelId: selectedModelId,
             },
             context.dependencies.digester,
           );

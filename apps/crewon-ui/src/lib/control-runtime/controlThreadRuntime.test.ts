@@ -2301,7 +2301,7 @@ describe("Control thread runtime", () => {
     }
   });
 
-  it.each(["text", "media-input", "media-generation"] as const)("starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn", async (kind) => {
+  it.each(["text", "asset", "media-input", "media-generation"] as const)("starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn", async (kind) => {
     let submitted = false,
       terminal = false,
       attempt = 0;
@@ -2323,7 +2323,7 @@ describe("Control thread runtime", () => {
           : [],
     });
     const start = vi
-      .spyOn(kind === "text" ? client.projectConversations : client.projectMediaInputStages, "startStage")
+      .spyOn(kind === "text" ? client.projectConversations : kind === "asset" ? client.projectAssetStages : client.projectMediaInputStages, "startStage")
       .mockImplementation(async (_threadId: string, request: { expectedThreadRevision: number; expectedBindingRevision: number }) => {
         submitted = true;
         return {
@@ -2424,11 +2424,13 @@ describe("Control thread runtime", () => {
           expect(start).not.toHaveBeenCalled();
         } finally { generation.dispose(); }
       } else {
-        const result = await runtime.startTurn("thread-1", "写第一集", [], kind === "text" ? textSettings : {
-          executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
+        const result = await runtime.startTurn("thread-1", "写第一集", [], kind === "text" ? textSettings : kind === "asset" ? {
+          model: "gpt-5.6-sol", executionIntent: "none", projectAssetStage: { binding: textSettings.projectConversation.binding, stage: { kind: "assets", assetKind: "character", briefRevision: 1, script: null } },
+        } : {
+          model: "gpt-5.6-sol", executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
         });
         expect(result.turn.id).toBe("run-1");
-        if (kind === "text") expect(start.mock.calls[0]![1]).toMatchObject({ modelId: "gpt-5.6-sol" });
+        expect(start.mock.calls[0]![1]).toMatchObject({ modelId: "gpt-5.6-sol" });
       }
       await settled.promise;
       if (kind !== "media-generation") {
@@ -2439,7 +2441,7 @@ describe("Control thread runtime", () => {
         content: "写第一集",
         expectedThreadRevision: 1,
         expectedBindingRevision: 2,
-        stage: kind === "text" ? { kind: "script", episodeId: "episode-1", outline: null } : mediaStage,
+        stage: kind === "text" ? { kind: "script", episodeId: "episode-1", outline: null } : kind === "asset" ? { kind: "assets", assetKind: "character", briefRevision: 1, script: null } : mediaStage,
       });
       }
       expect(client.startTurn).not.toHaveBeenCalled();

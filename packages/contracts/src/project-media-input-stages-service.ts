@@ -41,6 +41,7 @@ export type ProjectMediaInputStageRequest = Readonly<{
   expectedBindingRevision: number;
   stage: PublicProjectMediaInputStage;
   content: string;
+  modelId?: string;
   idempotencyKey: string;
 }>;
 export type ProjectMediaInputStageResponse = Readonly<{

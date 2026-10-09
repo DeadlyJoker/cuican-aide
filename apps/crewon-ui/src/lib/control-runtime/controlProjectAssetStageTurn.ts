@@ -41,6 +41,7 @@ export class ControlProjectAssetStageTurn {
     input: Readonly<{
       threadId: string;
       content: string;
+      modelId?: string;
       expectedThreadRevision: number;
       selection: ProjectAssetStageComposerSelection;
     }>,
@@ -56,6 +57,7 @@ export class ControlProjectAssetStageTurn {
       const original = pending.request;
       if (
         original.content !== input.content ||
+        original.modelId !== input.modelId ||
         original.projectId !== input.selection.binding.projectId ||
         original.stage.assetKind !== input.selection.stage.assetKind ||
         !sameBindingOwner(pending.selection.binding, binding) ||
@@ -76,6 +78,7 @@ export class ControlProjectAssetStageTurn {
           expectedThreadRevision: input.expectedThreadRevision,
           expectedBindingRevision: binding.revision,
           content: input.content,
+          ...(input.modelId === undefined ? {} : { modelId: input.modelId }),
           idempotencyKey: this.#key("project-asset-stage.start-stage"),
           stage: input.selection.stage,
         },

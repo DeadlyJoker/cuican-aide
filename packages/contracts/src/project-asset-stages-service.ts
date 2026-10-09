@@ -38,6 +38,7 @@ export type ProjectAssetStageRequest = Readonly<{
   expectedBindingRevision: number;
   stage: PublicProjectAssetStage;
   content: string;
+  modelId?: string;
   idempotencyKey: string;
 }>;
 export type ProjectAssetStageResponse = Readonly<{

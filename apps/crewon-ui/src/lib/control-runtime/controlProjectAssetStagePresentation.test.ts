@@ -16,7 +16,7 @@ function fixture() {
   const options = {
     threadId: "thread",
     text: input.content,
-    settings: { projectAssetStage: input.selection },
+    settings: { projectAssetStage: input.selection, model: "gpt-5.6-sol" },
     hasAttachments: false,
     closed: () => closed,
     turns,

@@ -37,6 +37,7 @@ export async function startPresentedProjectAssetStageTurn(
   const pending = input.turns.start({
     threadId: input.threadId,
     content: input.text,
+    ...(input.settings.model == null ? {} : { modelId: input.settings.model }),
     expectedThreadRevision: current.thread.revision,
     selection,
   });
