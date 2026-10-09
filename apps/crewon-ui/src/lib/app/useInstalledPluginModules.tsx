@@ -60,6 +60,8 @@ export function useInstalledPluginModules({
   projectConversationContext?: Readonly<{
     creationWorkspaceId: string | null;
     creationWorkspaceName?: string | null;
+    /** Read-only shared composer selection; never an execution grant. */
+    modelId?: string | null;
   }>;
   /** Formal host composition; portable modules never receive these ports. */
   taskContext?: Readonly<{

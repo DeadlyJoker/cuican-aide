@@ -81,6 +81,8 @@ export function InstalledPluginModule({
   projectConversationContext?: Readonly<{
     creationWorkspaceId: string | null;
     creationWorkspaceName?: string | null;
+    /** Read-only shared composer selection; never an execution grant. */
+    modelId?: string | null;
   }>;
   projectPlanningDraft?: ProjectPlanningProposal;
   onOpenTask?(threadId: string): void;

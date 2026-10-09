@@ -620,3 +620,25 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(container!.querySelectorAll(".command-sidebar")).toHaveLength(1);
   });
 });
+
+it("publishes the shared composer model and clears it when the available catalog disappears without replacing the shell", async () => {
+  const publish = vi.fn();
+  const options = [
+    { value: "gpt-5.6-sol", label: "GPT 5.6 Sol" },
+    { value: "gpt-5.6-terra", label: "GPT 5.6 Terra" },
+  ];
+  await render({
+    modelOptions: options,
+    onComposerModelSelectionChange: publish,
+  });
+  expect(publish).toHaveBeenLastCalledWith("gpt-5.6-sol");
+  const shell = container!.querySelector(".command-window");
+  await render({
+    modelOptions: [options[1]!],
+    onComposerModelSelectionChange: publish,
+  });
+  expect(publish).toHaveBeenLastCalledWith("gpt-5.6-terra");
+  await render({ modelOptions: [], onComposerModelSelectionChange: publish });
+  expect(publish).toHaveBeenLastCalledWith(null);
+  expect(container!.querySelector(".command-window")).toBe(shell);
+});

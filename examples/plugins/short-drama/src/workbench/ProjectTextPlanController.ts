@@ -36,6 +36,7 @@ export class ProjectTextPlanController {
   readonly #client: PluginProjectTextPlansClient;
   readonly #physicalWritesPending: () => boolean;
   readonly #listeners = new Set<() => void>();
+  #modelId: string | null = null;
   #ready = false;
   #disposed = false;
   #epoch = 0;
@@ -91,6 +92,19 @@ export class ProjectTextPlanController {
     this.#read = null;
     this.#write?.abort();
     this.#write = null;
+  }
+  /** Shared homepage selection is captured only for a new request, never an unknown receipt retry. */
+  setModelSelection(modelId: string | null) {
+    if (
+      modelId !== null &&
+      (typeof modelId !== "string" ||
+        !modelId ||
+        modelId.trim() !== modelId ||
+        new TextEncoder().encode(modelId).byteLength > 256 ||
+        /[\u0000-\u001f\u007f\ud800-\udfff]/u.test(modelId))
+    )
+      throw new Error("short_drama_model_context_invalid");
+    this.#modelId = modelId;
   }
   setReady(ready: boolean) {
     if (this.#disposed || ready === this.#ready) return;
@@ -313,6 +327,9 @@ export class ProjectTextPlanController {
     }
     const input: ProjectTextPlansRequests["start"] = {
       ...definition,
+      ...(!Object.hasOwn(definition, "modelId") && this.#modelId !== null
+        ? { modelId: this.#modelId }
+        : {}),
       projectId: binding.projectId,
       threadId: binding.threadId,
       expectedBindingRevision: binding.revision,

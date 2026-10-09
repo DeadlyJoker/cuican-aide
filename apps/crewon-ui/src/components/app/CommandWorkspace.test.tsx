@@ -10,6 +10,7 @@ import {
   cleanSlotTitle,
   commandComposerModelDisabledForTarget,
   commandComposerModelForTarget,
+  commandComposerPublishedModel,
   commandComposerModelLabelForTarget,
   commandWorkspaceComposerRuntimeSettings,
   commandComposerResourceSelection,
@@ -2579,3 +2580,22 @@ function providerSnapshot(): ProviderResourceSnapshot {
     error: null,
   };
 }
+
+describe("shared composer plugin model hint", () => {
+  const options = [{ value: "gpt-5.6-sol", label: "GPT 5.6 Sol" }];
+  it("publishes only an actual available model, never the visual empty-catalog fallback", () => {
+    expect(commandComposerPublishedModel("gpt-5.6-sol", options)).toBe(
+      "gpt-5.6-sol",
+    );
+    expect(commandComposerPublishedModel("gpt-5.6-sol", [])).toBeNull();
+    expect(commandComposerPublishedModel("gpt-5.5", options)).toBeNull();
+  });
+  it.each(["", " spaced ", "bad\nmodel", "x".repeat(257), "\ud800"])(
+    "rejects an invalid hint even if advertised (%s)",
+    (value) => {
+      expect(
+        commandComposerPublishedModel(value, [{ value, label: value }]),
+      ).toBeNull();
+    },
+  );
+});

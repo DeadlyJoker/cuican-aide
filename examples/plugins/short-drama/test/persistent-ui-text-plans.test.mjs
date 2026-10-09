@@ -21,9 +21,9 @@ async function select(f, label, value) {
   e.dispatchEvent(new browser.Event("change", { bubbles: true }));
   await settle();
 }
-async function open(service) {
+async function open(service, props = persistentProps(true)) {
   const f = fixture(definition, {
-    props: persistentProps(true),
+    props,
     services: service.services,
   });
   await settle();
@@ -152,6 +152,40 @@ test("cold mount displays stored plans and waits for explicit opening without re
     assert.equal(s.calls.filter((x) => x.action.endsWith(".resume")).length, 0);
     assert.equal(field(f, "计划使用的项目对话").value, s.binding.threadId);
     assert.equal(field(f, "计划创作要求").value, s.view.definition.instruction);
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("actual module reads updated shared composer model without adding a selector or changing its mounted form", async () => {
+  const s = textPlanUiService();
+  const props = {
+    ...persistentProps(true),
+    data: {
+      ...persistentProps(true).data,
+      projectConversationContext: { modelId: "gpt-5.6-sol" },
+    },
+  };
+  const f = await open(s, props);
+  try {
+    await prepare(f);
+    const form = field(f, "计划创作要求");
+    await f.instance.update({
+      ...props,
+      data: {
+        ...props.data,
+        projectConversationContext: { modelId: "gpt-5.6-terra" },
+      },
+    });
+    await settle();
+    assert.equal(field(f, "计划创作要求"), form);
+    assert.equal(form.value, "保留角色动机，生成两集大纲和剧本。");
+    assert.equal(f.container.querySelector("[data-model-select]"), null);
+    await f.click(f.button("开始文字计划"));
+    assert.equal(
+      s.calls.find((x) => x.action.endsWith(".start")).input.modelId,
+      "gpt-5.6-terra",
+    );
   } finally {
     await f.dispose();
   }

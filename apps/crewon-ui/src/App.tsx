@@ -420,6 +420,7 @@ export function App({
     connected: controlRuntimeConnected,
   });
   const commandModelOptions = controlCommandModelOptions;
+  const [commandPluginModelId, setCommandPluginModelId] = useState<string | null>(null);
   const providerResourceComposer = useProviderResourceComposer({
     client: clientRef.current,
     connectionAttempt,
@@ -483,6 +484,7 @@ export function App({
       : {
           projectConversationContext: {
             creationWorkspaceId,
+            modelId: controlRuntimeConnected && commandModelOptions.some((option) => option.value === commandPluginModelId) ? commandPluginModelId : null,
             creationWorkspaceName:
               controlWorkspace.nativeWorkspace?.displayName ?? null,
           },
@@ -1427,6 +1429,7 @@ export function App({
             threadGoalBusy={threadGoalBusy}
             workMode={workMode}
             modelOptions={commandModelOptions}
+            onComposerModelSelectionChange={setCommandPluginModelId}
             runPlan={commandRunPlan}
             toolApproval={
               commandShellRuntime.selectedThread?.id

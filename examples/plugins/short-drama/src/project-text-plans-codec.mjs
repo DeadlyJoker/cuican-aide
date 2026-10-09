@@ -1,3 +1,10 @@
+// packages/contracts/src/project-stage-model-contract.ts
+function parseProjectStageModelId(value) {
+  if (typeof value !== "string" || !value || value.trim() !== value || new TextEncoder().encode(value).byteLength > 256 || /[\u0000-\u001f\u007f\ud800-\udfff]/u.test(value))
+    throw new Error("project_stage_model_invalid");
+  return value;
+}
+
 // packages/contracts/src/contract-validation-error.ts
 var ContractValidationError = class extends Error {
   code;
@@ -290,7 +297,8 @@ function parseProjectTextPlansActionRequest(input) {
       "start",
       "target",
       "episodes",
-      "adoption"
+      "adoption",
+      ...v.input !== null && typeof v.input === "object" && Object.hasOwn(v.input, "modelId") ? ["modelId"] : []
     ];
     const controlFields = [
       "projectId",
@@ -309,6 +317,9 @@ function parseProjectTextPlansActionRequest(input) {
     const out = {};
     for (const key of fields) {
       switch (key) {
+        case "modelId":
+          out[key] = parseProjectStageModelId(r[key]);
+          break;
         case "projectId":
         case "planId":
         case "threadId":

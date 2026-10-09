@@ -149,8 +149,10 @@ test("uncertain start captures original body/key and does not silently rebase af
     },
   });
   t.after(() => f.controller.dispose());
+  f.controller.setModelSelection("gpt-5.6-sol");
   const form = structuredClone(definition);
   await f.controller.start(binding, form);
+  f.controller.setModelSelection("gpt-5.6-terra");
   form.instruction = "later edits";
   form.episodes.episodeCount = 9;
   f.controller.setProject({
@@ -159,6 +161,7 @@ test("uncertain start captures original body/key and does not silently rebase af
   });
   await f.controller.retryOriginal();
   assert.deepEqual(calls[0], calls[1]);
+  assert.equal(calls[1].modelId, "gpt-5.6-sol");
   assert.equal(calls[1].expectedBriefRevision, 2);
   assert.equal(calls[1].expectedBindingRevision, 3);
   assert.equal(calls[1].episodes.episodeCount, 2);
@@ -372,4 +375,57 @@ test("owner withdrawal ignores late write completion and never dispatches automa
   assert.equal(calls, 1);
   assert.ok(f.controller.getSnapshot().pending);
   assert.equal(f.controller.getSnapshot().view, null);
+});
+
+test("absent shared selection retains legacy request and explicit definition keeps its own model", async (t) => {
+  const calls = [];
+  const f = await fixture({
+    start: async (q) => {
+      calls.push(structuredClone(q));
+      throw { code: "project_text_plan_revision_conflict" };
+    },
+  });
+  t.after(() => f.controller.dispose());
+  await f.controller.start(binding, definition);
+  assert.equal(Object.hasOwn(calls[0], "modelId"), false);
+  f.controller.setModelSelection("gpt-5.6-sol");
+  await f.controller.start(binding, {
+    ...definition,
+    modelId: "gpt-5.6-terra",
+  });
+  assert.equal(calls[1].modelId, "gpt-5.6-terra");
+  f.controller.setModelSelection(null);
+  await f.controller.start(binding, definition);
+  assert.equal(Object.hasOwn(calls[2], "modelId"), false);
+});
+test("changing composer selection does not change a remaining-plan revision or control request", async (t) => {
+  const calls = [];
+  const f = await fixture({
+    reviseRemaining: async (q) => {
+      calls.push(q);
+      return { disposition: "applied", view: view() };
+    },
+    pause: async (q) => {
+      calls.push(q);
+      return { disposition: "applied", view: view() };
+    },
+  });
+  t.after(() => f.controller.dispose());
+  await f.controller.open("plan");
+  f.controller.setModelSelection("gpt-5.6-sol");
+  await f.controller.reviseRemaining(definition);
+  await f.controller.control("pause");
+  for (const q of calls) assert.equal(Object.hasOwn(q, "modelId"), false);
+  assert.equal(calls.length, 2);
+});
+test("invalid shared model context fails before a plan write", async (t) => {
+  const f = await fixture({
+    start: () => assert.fail("invalid context cannot write"),
+  });
+  t.after(() => f.controller.dispose());
+  for (const model of ["", " spaced ", "bad\nmodel", "x".repeat(257), "\ud800"])
+    assert.throws(
+      () => f.controller.setModelSelection(model),
+      /short_drama_model_context_invalid/u,
+    );
 });

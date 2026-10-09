@@ -149,6 +149,23 @@ function assertContribution(props: PluginUiProps) {
     throw new Error("short_drama_ui_contribution_invalid");
 }
 
+function projectConversationModel(data: PluginUiProps["data"]): string | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const context = Object.getOwnPropertyDescriptor(
+    data,
+    "projectConversationContext",
+  )?.value;
+  if (!context || typeof context !== "object" || Array.isArray(context))
+    return null;
+  const field = Object.getOwnPropertyDescriptor(context, "modelId");
+  if (field === undefined) return null;
+  if (!Object.hasOwn(field, "value") || !field.enumerable)
+    throw new Error("short_drama_model_context_invalid");
+  if (field.value !== null && typeof field.value !== "string")
+    throw new Error("short_drama_model_context_invalid");
+  return field.value;
+}
+
 function dataFlag(data: PluginUiProps["data"], name: string): boolean {
   return (
     data !== null &&
@@ -433,6 +450,7 @@ export default defineUiPlugin({
       foundations?.setReady(
         ready && dataFlag(next.data, "projectFoundationConnected"),
       );
+      plans?.setModelSelection(projectConversationModel(next.data));
       plans?.setReady(ready);
       assets?.setReady(ready);
       mediaResults?.setReady(ready);

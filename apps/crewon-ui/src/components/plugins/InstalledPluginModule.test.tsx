@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginUiLease } from "@crewon/contracts/plugins";
@@ -174,6 +174,9 @@ function fixture(
     onDiagnostic: (error: unknown) => void = diagnostic,
     currentModule = module,
     selectedThreadId: string | null = null,
+    projectConversationContext?: ComponentProps<
+      typeof InstalledPluginModule
+    >["projectConversationContext"],
   ) => {
     await act(async () => {
       root.render(
@@ -185,6 +188,7 @@ function fixture(
           locale={locale}
           onDiagnostic={onDiagnostic}
           selectedThreadId={selectedThreadId}
+          projectConversationContext={projectConversationContext}
           {...(selectionEnabled ? { selectionPorts } : {})}
         />,
       );
@@ -666,4 +670,28 @@ describe("installed module composition (real authenticated host, explicit import
     expect(document.documentElement.getAttribute("style")).toBe(style);
     expect(document.documentElement.dataset.theme).toBe(theme);
   });
+});
+
+it("updates the read-only shared model hint in the same installed module without a host action", async () => {
+  const f = fixture();
+  await f.render(true, light, "zh", f.diagnostic, f.module, null, {
+    creationWorkspaceId: null,
+    modelId: "gpt-5.6-sol",
+  });
+  const instance = f.h.instances[0]!;
+  const hint = (props: typeof instance.props) =>
+    (props.data as { projectConversationContext: { modelId: string } })
+      .projectConversationContext.modelId;
+  expect(hint(instance.update.mock.calls.at(-1)?.[0] ?? instance.props)).toBe(
+    "gpt-5.6-sol",
+  );
+  await f.render(true, light, "zh", f.diagnostic, f.module, null, {
+    creationWorkspaceId: null,
+    modelId: "gpt-5.6-terra",
+  });
+  expect(f.h.instances).toHaveLength(1);
+  expect(hint(instance.update.mock.calls.at(-1)![0])).toBe("gpt-5.6-terra");
+  expect(
+    f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+  ).toHaveLength(0);
 });

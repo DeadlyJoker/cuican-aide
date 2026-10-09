@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "45.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "46.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -149,11 +149,11 @@ for (const [file, expected] of [
   ],
   [
     "project-text-plans-service.ts",
-    "54c3ce5c9b3a75e20de0e935754a50e1c65b820b17b6a7d50acc6814407a7d0e",
+    "3be924d60520ad37ec24c2010b3fefddbac860130e9e090467932eeb13c3f4d2",
   ],
   [
     "project-text-plans-codec.mjs",
-    "593250f1443e1c1b87708caf724e4df177945f99cc1df670a9161f357cc64ca5",
+    "2afc79a1f01693c10e28697e03868f82dacfb7d4c2d4a01dd8d86d4f237573f0",
   ],
   [
     "project-texts-ui-service.ts",

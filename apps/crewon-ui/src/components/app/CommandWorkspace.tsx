@@ -403,6 +403,7 @@ type CommandWorkspaceProps = {
   locale?: Locale;
   platform?: PlatformKind;
   modelOptions?: CommandModelOption[];
+  onComposerModelSelectionChange?(modelId: string | null): void;
   officeRoomAdapter?: CommandOfficeRoomAdapter | null;
   pendingComposerMentions?: PendingComposerMention[];
   selectedThread?: Thread | null;
@@ -561,6 +562,20 @@ export function shouldCreateCommandThread({
     !selectedThread ||
     (hasProviderAgentTarget && !isProviderAgentBoundToSelectedThread)
   );
+}
+
+/** This is a UI selection hint only; the installed host still qualifies the immutable execution version. */
+export function commandComposerPublishedModel(
+  modelId: string,
+  options: readonly CommandModelOption[],
+): string | null {
+  return modelId.trim() === modelId &&
+    modelId.length > 0 &&
+    new TextEncoder().encode(modelId).byteLength <= 256 &&
+    !/[\u0000-\u001f\u007f\ud800-\udfff]/u.test(modelId) &&
+    options.some((option) => option.value === modelId)
+    ? modelId
+    : null;
 }
 
 export function commandComposerModelForTarget(input: {
@@ -850,6 +865,7 @@ export function CommandWorkspace({
   locale = "zh",
   platform = "web",
   modelOptions = fallbackCommandModelOptions,
+  onComposerModelSelectionChange,
   officeRoomAdapter = null,
   pendingComposerMentions = [],
   selectedThread = null,
@@ -1726,6 +1742,12 @@ export function CommandWorkspace({
       setModel(defaultModel);
     }
   }, [effectiveModelOptions, model, modelSelectionTouched]);
+
+  useEffect(() => {
+    onComposerModelSelectionChange?.(
+      commandComposerPublishedModel(model, modelOptions),
+    );
+  }, [model, modelOptions, onComposerModelSelectionChange]);
 
   // Derived rather than synced through an effect: an unsupported effort after a
   // model swap resolves to that model's catalog default on the same render, so
