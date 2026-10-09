@@ -60,6 +60,7 @@ const request = () => ({
 async function fixture(
   t: TestContext,
   retainedApproval?: "approved" | "unapproved",
+  options: Readonly<{ modelSiblings?: boolean }> = {},
 ) {
   let runtime:
       | Awaited<ReturnType<typeof createDesktopPluginRuntime>>
@@ -408,13 +409,26 @@ async function fixture(
   await writeFile(
     controlPath,
     JSON.stringify({
-      schemaVersion: "crewon.desktop-native-plugin-control.v1",
+      schemaVersion: options.modelSiblings
+        ? "crewon.desktop-native-plugin-control.v2"
+        : "crewon.desktop-native-plugin-control.v1",
       authorityPath,
       peer: {
         origin: "http://127.0.0.1:3299",
         tokenEnvironmentVariable: "CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN",
       },
-      entries: [entry],
+      entries: options.modelSiblings
+        ? [
+            entry,
+            {
+              ...entry,
+              configuredTarget: {
+                ...target,
+                agentVersionId: "named-second-published-model",
+              },
+            },
+          ]
+        : [entry],
     }),
     { mode: 0o600 },
   );
@@ -602,6 +616,30 @@ async function fixture(
     command,
   };
 }
+test(
+  "Native multi-model publication activates its prepared default and retains sibling targets without duplicate plugin authority",
+  { skip: process.platform === "win32", timeout: 20000 },
+  async (t) => {
+    const f = await fixture(t, undefined, { modelSiblings: true });
+    assert.equal(f.nativeControl.publication.entries.length, 2);
+    assert.equal(
+      f.nativeControl.publication.entries[0]!.target.agentVersionId,
+      target.agentVersionId,
+    );
+    assert.equal(
+      f.nativeControl.publication.entries[1]!.target.agentVersionId,
+      "named-second-published-model",
+    );
+    const first = (await f.invoke()) as Record<string, unknown>;
+    assert.equal(first.disposition, "committed");
+    assert.deepEqual(await f.invoke(), { ...first, disposition: "replayed" });
+    assert.equal(f.facts().runs, 1);
+    await writeFile(f.policyPath, "{}");
+    await assert.rejects(async () => f.invoke());
+    assert.equal(f.facts().runs, 1);
+  },
+);
+
 test(
   "actual local Native task owner commits and replays one original installed task with explicit unmetered provenance and no financial schema",
   { skip: process.platform === "win32", timeout: 20000 },

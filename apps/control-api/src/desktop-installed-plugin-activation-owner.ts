@@ -371,6 +371,14 @@ export class DesktopInstalledPluginActivationOwner {
     const found = this.#entries.filter(
       (entry) => entry.identity.pluginId === pluginId,
     );
+    // Native v2 publications validate sibling identity/configuration equality and
+    // unique targets. The first sibling is the prepared business default; other
+    // siblings remain per-turn model choices in the independent task authority.
+    if (
+      found.length > 1 &&
+      isDesktopNativePluginControlConfig(this.#dependencies.activation)
+    )
+      return found[0]!;
     if (found.length !== 1) denied();
     return found[0]!;
   }
