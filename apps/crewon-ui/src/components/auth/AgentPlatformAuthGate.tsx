@@ -3,6 +3,7 @@ import {
   useEffect,
   useContext,
   useState,
+  useRef,
   type FormEvent,
   type InputHTMLAttributes,
   type ReactNode,
@@ -36,6 +37,8 @@ import {
 import {
   assertAgentPlatformSessionCurrent,
   captureAgentPlatformSession,
+  AGENT_PLATFORM_TOKEN_STORAGE_KEY,
+  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
 } from "../../lib/agent-platform/agentPlatformClient";
 import {
   clearPimLaunchToken,
@@ -169,6 +172,7 @@ export function AgentPlatformAuthScreen({
   onSubmit,
   onWeComLogin,
   onReturnToLocalManagement,
+  onRetryAccount,
   wecomConfig,
 }: {
   busy: boolean;
@@ -179,6 +183,7 @@ export function AgentPlatformAuthScreen({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onWeComLogin: () => void;
   onReturnToLocalManagement?: () => void;
+  onRetryAccount?: () => void;
   wecomConfig: WeComLoginConfig;
 }) {
   return (
@@ -330,6 +335,16 @@ export function AgentPlatformAuthScreen({
             </button>
           </form>
 
+          {onRetryAccount ? (
+            <button
+              className="crewon-auth-sso"
+              type="button"
+              onClick={onRetryAccount}
+              disabled={busy}
+            >
+              重新连接账号
+            </button>
+          ) : null}
           {onReturnToLocalManagement ? (
             <button
               className="crewon-auth-sso"
@@ -350,6 +365,12 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   const localManagementAccess = useNativeLocalManagementAccess();
   const [enterpriseLoginRequested, setEnterpriseLoginRequested] =
     useState(false);
+  const [localManagementRequested, setLocalManagementRequested] =
+    useState(false);
+  const [accountRetry, setAccountRetry] = useState(0);
+  const accountReadEpoch = useRef(0);
+  const storedAccountSession = hasStoredAccountSession();
+  const hadStoredAccountSession = useRef(storedAccountSession).current;
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<AuthMode>("login");
@@ -366,6 +387,7 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const readEpoch = ++accountReadEpoch.current;
     async function initializeAccount() {
       const configPromise = withAgentPlatformAuthBootstrapDeadline(
         readWeComLoginConfig(),
@@ -432,10 +454,23 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
           }
           return;
         }
-        const currentUser = await withAgentPlatformAuthBootstrapDeadline(
-          readAgentPlatformCurrentUser(),
+        // A slow, authenticated reply remains usable after the shell deadline.
+        // The session reader fences changed accounts; explicit UI account actions
+        // additionally withdraw this bootstrap consumer before changing credentials.
+        const pendingUser = readAgentPlatformCurrentUser();
+        void pendingUser.then(
+          (currentUser) => {
+            if (!cancelled && accountReadEpoch.current === readEpoch) {
+              setUser(currentUser);
+              setError(null);
+            }
+          },
+          () => undefined,
         );
-        if (!cancelled) setUser(currentUser);
+        const currentUser =
+          await withAgentPlatformAuthBootstrapDeadline(pendingUser);
+        if (!cancelled && accountReadEpoch.current === readEpoch)
+          setUser(currentUser);
       } catch (reason) {
         if (!cancelled) {
           setError(
@@ -456,10 +491,11 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accountRetry]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    ++accountReadEpoch.current;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -496,6 +532,7 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   }
 
   async function loginWithWeCom() {
+    ++accountReadEpoch.current;
     setBusy(true);
     setError(null);
     try {
@@ -528,11 +565,21 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     }
   }
 
-  if (!user && localManagementAccess && !enterpriseLoginRequested) {
+  if (
+    !user &&
+    !checking &&
+    localManagementAccess &&
+    !enterpriseLoginRequested &&
+    ((!hadStoredAccountSession && !storedAccountSession) ||
+      localManagementRequested)
+  ) {
     return (
       <DesktopLocalManagementAccessProvider
         access={localManagementAccess}
-        onLoginAccount={() => setEnterpriseLoginRequested(true)}
+        onLoginAccount={() => {
+          setEnterpriseLoginRequested(true);
+          setLocalManagementRequested(false);
+        }}
       >
         <AgentPlatformAccountContext.Provider value={null}>
           {children}
@@ -565,11 +612,22 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         }}
         onSubmit={submit}
         onWeComLogin={() => void loginWithWeCom()}
+        onRetryAccount={
+          storedAccountSession
+            ? () => {
+                setChecking(true);
+                setError(null);
+                setLocalManagementRequested(false);
+                setAccountRetry((value) => value + 1);
+              }
+            : undefined
+        }
         onReturnToLocalManagement={
           localManagementAccess
             ? () => {
                 if (isDesktopLocalManagementAccess(localManagementAccess)) {
                   setEnterpriseLoginRequested(false);
+                  setLocalManagementRequested(true);
                 }
               }
             : undefined
@@ -582,6 +640,7 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   const wecomLinked = user.linked_providers?.includes("wecom") ?? false;
   const needsPassword = user.password_login_enabled === false;
   const logout = () => {
+    ++accountReadEpoch.current;
     setBusy(true);
     // When in a PIM launch session, clearing the token is sufficient —
     // there is no server-side session to destroy.
@@ -642,4 +701,16 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
       ) : null}
     </AgentPlatformAccountContext.Provider>
   );
+}
+
+function hasStoredAccountSession(): boolean {
+  try {
+    return Boolean(
+      localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY) ||
+        localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY),
+    );
+  } catch {
+    // An unavailable credential store must not silently authorize a different mode.
+    return true;
+  }
 }

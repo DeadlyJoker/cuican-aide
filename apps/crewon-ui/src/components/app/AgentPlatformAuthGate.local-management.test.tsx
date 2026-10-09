@@ -76,6 +76,7 @@ function approveLocal(generation = 7) {
   };
 }
 beforeEach(() => {
+  localStorage.clear();
   readUser.mockReset().mockRejectedValue(new Error("企业登录不可用"));
   login.mockReset();
   onSettings.mockClear();
@@ -107,9 +108,103 @@ afterEach(async () => {
   container.remove();
   delete (window as unknown as Record<string, unknown>).crewonDesktop;
   vi.restoreAllMocks();
+  vi.useRealTimers();
+  localStorage.clear();
 });
 
 describe("enterprise gate Native management branch", () => {
+  it("does not automatically enter local management when an existing session is withdrawn", async () => {
+    localStorage.setItem(
+      "crewon-agent-platform-token",
+      "existing-session-fixture",
+    );
+    approveLocal();
+    readUser.mockImplementation(async () => {
+      localStorage.clear();
+      return null;
+    });
+    await render();
+    expect(container.querySelector("[data-workspace]")).toBeNull();
+    expect(container.querySelector(".crewon-auth-shell")).not.toBeNull();
+    expect(login).not.toHaveBeenCalled();
+  });
+
+  it("keeps an existing session behind authentication while slow restoration settles after the bootstrap deadline", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      "crewon-agent-platform-token",
+      "named-existing-session-fixture",
+    );
+    approveLocal();
+    let complete!: (value: unknown) => void;
+    readUser.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    await render();
+    expect(container.querySelector("[data-workspace]")).toBeNull();
+    expect(container.textContent).not.toContain("未登录");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_001);
+    });
+    expect(container.querySelector("[data-local='true']")).toBeNull();
+    expect(container.textContent).toContain("重新连接账号");
+    expect(localStorage.getItem("crewon-agent-platform-token")).toBe(
+      "named-existing-session-fixture",
+    );
+    await act(async () => {
+      complete({
+        id: 43,
+        username: "real-user",
+        role: "user",
+        password_login_enabled: true,
+      });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(container.querySelector(".crewon-auth-shell")).toBeNull();
+    expect(container.textContent).toContain("real-user");
+    expect(actualAccount).toMatchObject({ user: { id: 43 } });
+    expect(login).not.toHaveBeenCalled();
+  });
+  it("retry withdraws the old bootstrap consumer and restores the original session without password login", async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(
+      "crewon-agent-platform-refresh-token",
+      "named-existing-refresh-fixture",
+    );
+    approveLocal();
+    let late!: (value: unknown) => void;
+    readUser.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          late = resolve;
+        }),
+    );
+    await render();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_001);
+    });
+    readUser.mockResolvedValue({
+      id: 43,
+      username: "restored",
+      role: "user",
+      password_login_enabled: true,
+    });
+    await act(async () => {
+      button("重新连接账号").click();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(actualAccount).toMatchObject({ user: { id: 43 } });
+    await act(async () => {
+      late({ id: 99, username: "stale", role: "admin" });
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(actualAccount).toMatchObject({ user: { id: 43 } });
+    expect(container.textContent).not.toContain("stale");
+    expect(login).not.toHaveBeenCalled();
+  });
   it("keeps Web, unapproved Native and older preloads behind the original login gate", async () => {
     for (const bridge of [
       undefined,

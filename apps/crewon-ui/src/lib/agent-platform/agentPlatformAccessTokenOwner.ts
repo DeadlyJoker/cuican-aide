@@ -304,6 +304,11 @@ export class AgentPlatformAccessTokenOwner {
     if (!response.ok) {
       await response.body?.cancel();
       this.assertCurrent(session);
+      if (response.status === 429 || response.status >= 500) {
+        throw this.#dependencies.unavailableError(
+          "账号服务暂时不可用，请稍后重试。",
+        );
+      }
       return this.#access(null, this.clear());
     }
     const body = (await response.json()) as {

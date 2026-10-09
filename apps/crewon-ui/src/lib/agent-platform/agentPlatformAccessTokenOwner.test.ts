@@ -325,6 +325,34 @@ describe("Agent Platform automatic token ownership", () => {
     expect(() => owner.assertCurrent(access.session)).not.toThrow();
   });
 
+  it.each([429, 500, 502, 503, 504])(
+    "a transient refresh failure (%i) retains credentials for an authenticated retry",
+    async (status) => {
+      const { owner, values } = fixture("refresh");
+      const previous = owner.capture();
+      const persisted = new Map(values);
+      const refreshed = jwt("fresh-A");
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status }))
+        .mockResolvedValueOnce(Response.json({ access_token: refreshed }));
+      vi.stubGlobal("fetch", fetchMock);
+      await expect(owner.accessToken()).rejects.toThrow("账号服务暂时不可用");
+      expect(values).toEqual(persisted);
+      expect(previous.signal.aborted).toBe(false);
+      expect(() => owner.assertCurrent(previous)).not.toThrow();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await expect(owner.accessToken()).resolves.toBe(refreshed);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(
+        fetchMock.mock.calls.every(([url]) => url.endsWith("/auth/refresh")),
+      ).toBe(true);
+      expect(values.get(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)).toBe(
+        "refresh-A",
+      );
+    },
+  );
+
   it("an invalid current refresh withdraws the account without falling back to a development login", async () => {
     const { owner, values } = fixture("refresh");
     const fetchMock = vi
