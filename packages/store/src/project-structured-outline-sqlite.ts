@@ -1,7 +1,13 @@
+import {
+  projectOutlineRunCommitQualification,
+  assertProjectOutlineRunPrepared,
+  assertSqliteProjectOutlineRunCommit,
+} from "./project-outline-run-qualification.ts";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
+  assertCreativeProjectCommitTransactionCurrent,
   type CreativeProjectCommitOptions,
   type CreativeProjectOwnerScope,
   type StoredProjectTextMutationResult,
@@ -102,9 +108,22 @@ export class SqliteStructuredOutlineStorage {
       identity.kind as "save-outline" | "select-revision",
       identity.receipt,
     );
+    const rq = projectOutlineRunCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind as "save-outline" | "select-revision",
+      identity.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
+    if (authority?.outlineRunTransaction)
+      await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     assertSqliteProjectTextUiCommit(this.#database, q);
+    assertSqliteProjectOutlineRunCommit(
+      this.#database,
+      rq,
+      "receipt-publication",
+    );
     return this.#receipt(identity);
   }
   async candidate(
@@ -133,11 +152,25 @@ export class SqliteStructuredOutlineStorage {
       prepared.kind,
       prepared.receipt,
     );
+    const rq = projectOutlineRunCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
+    const qualifiedCommand = q?.command ?? rq?.command;
     await assertCreativeProjectCommitCurrent(authority);
+    if (authority?.outlineRunTransaction)
+      await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       assertSqliteProjectTextUiCommit(this.#database, q);
+      assertSqliteProjectOutlineRunCommit(
+        this.#database,
+        rq,
+        "receipt-publication",
+      );
       const identity = textIdentity({
         actor: prepared.actor,
         receipt: prepared.receipt,
@@ -146,6 +179,11 @@ export class SqliteStructuredOutlineStorage {
       const replay = this.#receipt(identity);
       if (replay !== null) {
         this.#active(authority);
+        assertSqliteProjectOutlineRunCommit(
+          this.#database,
+          rq,
+          "receipt-publication",
+        );
         this.#database.exec("COMMIT");
         return replay;
       }
@@ -165,15 +203,19 @@ export class SqliteStructuredOutlineStorage {
         { actor: prepared.actor, projectId: id },
       );
       const base =
-        q && "base" in q.command && q.command.base !== null
+        qualifiedCommand &&
+        "base" in qualifiedCommand &&
+        qualifiedCommand.base !== null
           ? this.#revision(
               owner,
               id,
               prepared.artifact.artifactId,
-              q.command.base.contentRevision,
+              qualifiedCommand.base.contentRevision,
             )
           : null;
       assertProjectOutlineUiPrepared(q, prepared, base);
+      assertProjectOutlineRunPrepared(rq, prepared, base);
+      assertSqliteProjectOutlineRunCommit(this.#database, rq);
       const candidate = prepared.kind === "save-outline";
       const revision = candidate
         ? null
@@ -257,6 +299,7 @@ export class SqliteStructuredOutlineStorage {
       );
       this.#assertOpen();
       assertSqliteProjectTextUiCommit(this.#database, q);
+      assertSqliteProjectOutlineRunCommit(this.#database, rq);
       this.#database.exec("COMMIT");
       return result;
     } catch (error) {

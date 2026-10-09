@@ -178,6 +178,14 @@ export * from "./creative-project-run-commit-authority.ts";
 export * from "./creative-project-run-command.ts";
 export * from "./creative-project-commit-authority.ts";
 export {
+  captureProjectOutlineRunCommitTransaction,
+  deriveProjectOutlineToolMutationIdempotencyKey,
+  projectOutlineRunMutationCommand,
+  projectOutlineRunMutation,
+  qualifyProjectOutlineRunCommand,
+  type ProjectOutlineRunCommitTransactionAuthority,
+} from "./project-outline-run-commit-authority.ts";
+export {
   projectOutlineUiMutationCommand,
   type ProjectOutlineUiCommitTransactionAuthority,
 } from "./project-outline-ui-commit-authority.ts";

@@ -1,3 +1,4 @@
+import { assertProjectOutlinePreparedCommand } from "./project-outline-prepared-command.ts";
 import {
   projectOutlineUiMutationCommand,
   type ActorContext,
@@ -6,7 +7,6 @@ import {
   type ProjectStructuredOutlineMutationKind,
 } from "@crewon/application";
 import {
-  changeProjectOutlineDocument,
   extensionCanonicalJson,
   type StoredProjectTextArtifactRevision,
 } from "@crewon/domain";
@@ -40,49 +40,7 @@ export function assertProjectOutlineUiPrepared(
   prepared: StructuredTextPrepared,
   base: StoredProjectTextArtifactRevision | null,
 ): void {
-  if (!q) return;
-  const command = q.command;
-  if (
-    prepared.project.projectId !== command.projectId ||
-    prepared.expectedArtifactRevision !== command.expectedArtifactRevision
-  )
-    denied();
-  if (prepared.kind === "select-revision") {
-    if (
-      !("artifactId" in command) ||
-      prepared.artifact.artifactId !== command.artifactId ||
-      prepared.contentRevision.contentRevision !== command.contentRevision
-    )
-      denied();
-    return;
-  }
-  if (
-    !("change" in command) ||
-    prepared.contentRevision.brief.briefRevision !== command.briefRevision
-  )
-    denied();
-  if (
-    command.base === null
-      ? base !== null
-      : base === null ||
-        base.schemaVersion !== "crewon.project-text-revision.v2" ||
-        base.artifactId !== prepared.artifact.artifactId ||
-        base.projectId !== command.projectId ||
-        base.contentRevision !== command.base.contentRevision ||
-        base.contentDigest !== command.base.contentDigest
-  )
-    denied();
-  const expected = changeProjectOutlineDocument(
-    base?.schemaVersion === "crewon.project-text-revision.v2"
-      ? base.content
-      : null,
-    command.change,
-  );
-  if (
-    extensionCanonicalJson(expected) !==
-    extensionCanonicalJson(prepared.contentRevision.content)
-  )
-    denied();
+  if (q) assertProjectOutlinePreparedCommand(q.command, prepared, base, denied);
 }
 function denied(): never {
   throw new Error("project_outline_ui_commit_command_mismatch");

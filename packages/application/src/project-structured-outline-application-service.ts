@@ -1,3 +1,5 @@
+import { structuredOutlineCommitOptions } from "./project-structured-outline-commit-options.ts";
+import { qualifyProjectOutlineRunCommand } from "./project-outline-run-commit-authority.ts";
 import {
   optionsOf,
   method,
@@ -329,6 +331,7 @@ export class ProjectStructuredOutlineApplicationService {
         allowTextUiTransaction: true,
         allowPlanTransaction: true,
         allowOutlineUiTransaction: true,
+        allowOutlineRunTransaction: true,
       });
       // Neither legacy UI metadata, text v1, a plan locator nor Run-only callbacks qualify a new content protocol.
       if (
@@ -342,6 +345,13 @@ export class ProjectStructuredOutlineApplicationService {
           "project_outline_commit_authority_unsupported",
         );
       assertProjectOutlineUiMutationCommand(
+        authority,
+        actor,
+        kind,
+        command,
+        this.#d.digester,
+      );
+      qualifyProjectOutlineRunCommand(
         authority,
         actor,
         kind,
@@ -363,36 +373,9 @@ export class ProjectStructuredOutlineApplicationService {
       const project = await this.#project(actor, command.projectId);
       if (existing !== null)
         return this.#replay(existing, actor, project, kind, command, authority);
-      const commitOptions = {
-        authority: Object.freeze({
-          assertCurrent: async () => {
-            await this.#authorize(
-              actor,
-              "creativeProject:write",
-              command.projectId,
-            );
-            if (authority?.outlineUiTransaction)
-              await authority.outlineUiTransaction.assertCurrent();
-            else await assertCreativeProjectCommitCurrent(authority);
-          },
-          assertActive: () => assertCreativeProjectCommitActive(authority),
-          ...(authority?.outlineUiTransaction === undefined
-            ? {}
-            : {
-                outlineUiTransaction: Object.freeze({
-                  ...authority.outlineUiTransaction,
-                  assertCurrent: async () => {
-                    await this.#authorize(
-                      actor,
-                      "creativeProject:write",
-                      command.projectId,
-                    );
-                    await authority.outlineUiTransaction!.assertCurrent();
-                  },
-                }),
-              }),
-        }),
-      };
+      const commitOptions = structuredOutlineCommitOptions(authority, () =>
+        this.#authorize(actor, "creativeProject:write", command.projectId),
+      );
       let prepared: Readonly<{
         artifact: ProjectTextArtifact;
         contentRevision: ProjectStructuredOutlineRevision;

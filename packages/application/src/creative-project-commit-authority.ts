@@ -1,5 +1,6 @@
 import { captureProjectTextUiCommitTransaction } from "./project-text-ui-commit-authority.ts";
 import { captureProjectOutlineUiCommitTransaction } from "./project-outline-ui-commit-authority.ts";
+import { captureProjectOutlineRunCommitTransaction } from "./project-outline-run-commit-authority.ts";
 import { captureProjectTextPlanSelectionCommitAuthority } from "./project-text-plan-authority.ts";
 import type {
   CreativeProjectCommitAuthority,
@@ -55,6 +56,7 @@ export function captureCreativeProjectCommitAuthority(
     allowTextUiTransaction: boolean;
     allowPlanTransaction?: boolean;
     allowOutlineUiTransaction?: boolean;
+    allowOutlineRunTransaction?: boolean;
   }> = {
     allowTextUiTransaction: false,
   },
@@ -71,6 +73,7 @@ export function captureCreativeProjectCommitAuthority(
     "textUiTransaction",
     "planTransaction",
     "outlineUiTransaction",
+    "outlineRunTransaction",
   ]);
   if (
     typeof methods.assertCurrent !== "function" ||
@@ -84,17 +87,27 @@ export function captureCreativeProjectCommitAuthority(
       methods.textUiTransaction,
       methods.planTransaction,
       methods.outlineUiTransaction,
+      methods.outlineRunTransaction,
     ].filter((value) => value !== undefined).length > 1 ||
     (methods.textUiTransaction !== undefined && !mode.allowTextUiTransaction) ||
     (methods.planTransaction !== undefined &&
       mode.allowPlanTransaction !== true) ||
     (methods.outlineUiTransaction !== undefined &&
-      mode.allowOutlineUiTransaction !== true)
+      mode.allowOutlineUiTransaction !== true) ||
+    (methods.outlineRunTransaction !== undefined &&
+      mode.allowOutlineRunTransaction !== true)
   )
     invalid();
   return Object.freeze({
     assertCurrent: methods.assertCurrent.bind(authority),
     assertActive: methods.assertActive.bind(authority),
+    ...(methods.outlineRunTransaction === undefined
+      ? {}
+      : {
+          outlineRunTransaction: captureProjectOutlineRunCommitTransaction(
+            methods.outlineRunTransaction,
+          ),
+        }),
     ...(methods.outlineUiTransaction === undefined
       ? {}
       : {
@@ -219,6 +232,10 @@ export async function assertCreativeProjectCommitCurrent(
 export async function assertCreativeProjectCommitTransactionCurrent(
   authority: CreativeProjectCommitAuthority | undefined,
 ): Promise<void> {
+  if (authority?.outlineRunTransaction !== undefined) {
+    await authority.outlineRunTransaction.assertCurrent();
+    return;
+  }
   if (authority?.planTransaction !== undefined) {
     await authority.planTransaction.assertCurrent();
     return;

@@ -238,6 +238,7 @@ export function structuredTextAuthority(
     allowTextUiTransaction: true,
     allowPlanTransaction: true,
     allowOutlineUiTransaction: true,
+    allowOutlineRunTransaction: true,
   });
   if (
     authority?.transaction !== undefined ||

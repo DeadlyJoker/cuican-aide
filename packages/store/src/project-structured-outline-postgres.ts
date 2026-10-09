@@ -1,7 +1,13 @@
+import {
+  projectOutlineRunCommitQualification,
+  assertProjectOutlineRunPrepared,
+  assertPostgresProjectOutlineRunCommit,
+} from "./project-outline-run-qualification.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
+  assertCreativeProjectCommitTransactionCurrent,
   type CreativeProjectCommitOptions,
   type CreativeProjectOwnerScope,
   type StoredProjectTextMutationResult,
@@ -111,10 +117,52 @@ export class PostgresStructuredOutlineStorage {
       identity.kind as "save-outline" | "select-revision",
       identity.receipt,
     );
+    const rq = projectOutlineRunCommitQualification(
+      authority,
+      identity.actor,
+      identity.kind as "save-outline" | "select-revision",
+      identity.receipt,
+    );
     await assertCreativeProjectCommitCurrent(authority);
+    if (authority?.outlineRunTransaction)
+      await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
+    if (rq) {
+      const client = await this.#pool.connect();
+      try {
+        await client.query("BEGIN");
+        await assertPostgresProjectOutlineRunCommit(
+          client,
+          this.#schema,
+          rq,
+          "receipt-publication",
+        );
+        const result = await this.#receipt(client, identity);
+        await assertCreativeProjectCommitTransactionCurrent(authority);
+        this.#active(authority);
+        await assertPostgresProjectOutlineRunCommit(
+          client,
+          this.#schema,
+          rq,
+          "receipt-publication",
+        );
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {
+          /* Preserve original failure. */
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
     const result = await this.#receipt(this.#pool, identity);
     await assertCreativeProjectCommitCurrent(authority);
+    if (authority?.outlineRunTransaction)
+      await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     return result;
   }
@@ -144,7 +192,16 @@ export class PostgresStructuredOutlineStorage {
       prepared.kind,
       prepared.receipt,
     );
+    const rq = projectOutlineRunCommitQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+    );
+    const qualifiedCommand = q?.command ?? rq?.command;
     await assertCreativeProjectCommitCurrent(authority);
+    if (authority?.outlineRunTransaction)
+      await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     const client = await this.#pool.connect();
     let foundation: ProjectFoundationDownstreamSnapshot | undefined;
@@ -155,6 +212,12 @@ export class PostgresStructuredOutlineStorage {
     try {
       await client.query("BEGIN");
       await assertPostgresProjectTextUiCommit(client, this.#schema, q);
+      await assertPostgresProjectOutlineRunCommit(
+        client,
+        this.#schema,
+        rq,
+        "receipt-publication",
+      );
       const identity = textIdentity({
         actor: prepared.actor,
         receipt: prepared.receipt,
@@ -199,16 +262,20 @@ export class PostgresStructuredOutlineStorage {
           locator,
         );
         const base =
-          q && "base" in q.command && q.command.base !== null
+          qualifiedCommand &&
+          "base" in qualifiedCommand &&
+          qualifiedCommand.base !== null
             ? await this.#revision(
                 client,
                 owner,
                 id,
                 prepared.artifact.artifactId,
-                q.command.base.contentRevision,
+                qualifiedCommand.base.contentRevision,
               )
             : null;
         assertProjectOutlineUiPrepared(q, prepared, base);
+        assertProjectOutlineRunPrepared(rq, prepared, base);
+        await assertPostgresProjectOutlineRunCommit(client, this.#schema, rq);
         const candidate = prepared.kind === "save-outline";
         const revision = candidate
           ? null
@@ -305,6 +372,8 @@ export class PostgresStructuredOutlineStorage {
       }
       // This callback is policy-only, matching the original store; it must not borrow this pool.
       await assertCreativeProjectCommitCurrent(authority);
+      if (authority?.outlineRunTransaction)
+        await assertCreativeProjectCommitTransactionCurrent(authority);
       this.#active(authority);
       if (foundation !== undefined)
         await assertPostgresProjectFoundationDownstreamUnchanged(
@@ -315,6 +384,14 @@ export class PostgresStructuredOutlineStorage {
         );
       this.#assertOpen();
       await assertPostgresProjectTextUiCommit(client, this.#schema, q);
+      await assertPostgresProjectOutlineRunCommit(
+        client,
+        this.#schema,
+        rq,
+        result.disposition === "replayed"
+          ? "receipt-publication"
+          : "fresh-candidate",
+      );
       await client.query("COMMIT");
       return result;
     } catch (error) {
