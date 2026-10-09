@@ -1,4 +1,3 @@
-import { isDeepStrictEqual } from "node:util";
 import { captureCreativeProjectCommitAuthority } from "@crewon/application";
 import type {
   CreativeProjectCommitOptions,
@@ -310,8 +309,7 @@ export function verifyStructuredText(
           creativeStoreDigester,
         );
   textEqual(prepared.artifact, next.artifact);
-  if (!isDeepStrictEqual(prepared.contentRevision, next.contentRevision))
-    projectTextFailure("project_text_store_recipe_invalid");
+  textEqual(prepared.contentRevision, next.contentRevision);
   return Object.freeze({
     kind: prepared.kind,
     disposition: "committed",

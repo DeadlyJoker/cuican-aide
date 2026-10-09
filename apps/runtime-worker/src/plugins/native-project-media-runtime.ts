@@ -22,7 +22,7 @@ import {
 } from "../standalone-adapters.ts";
 import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-project-media-composition.ts";
 import { loadNativeProjectMediaReviews } from "./native-project-media-reviews.ts";
-import type { NetworkDnsResolver } from "@crewon/media-runtime/network-egress";
+import type { NetworkDnsResolver } from "../network-egress.ts";
 
 type Owner = Readonly<{
   projects: DesktopProjectExecutionConfiguration;

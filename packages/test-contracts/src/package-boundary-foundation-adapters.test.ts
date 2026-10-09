@@ -1,3 +1,4 @@
+import { boundaries } from "./package-boundary-policy.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -119,6 +120,73 @@ test("original Foundation Node compositions use precise host and SDK context typ
   assert.equal(
     runtimeWorkerBoundary.allowedRuntimeDependencies.includes(
       "@crewon/plugin-sdk" as never,
+    ),
+    false,
+  );
+});
+
+test("structured outline host adapters permit only their public host/context types", () => {
+  for (const file of [
+    "plugins/installed-plugin-project-outline-tools.ts",
+    "plugins/project-outline-tools-service-owner.ts",
+  ]) {
+    for (const approved of ["@crewon/plugin-host", "@crewon/plugin-sdk/node"]) {
+      assert.equal(
+        boundaryAllowsImport(runtimeWorkerBoundary, file, approved),
+        true,
+      );
+      for (const adjacent of [
+        "plugins/new-outline-service.ts",
+        `nested/${file}`,
+        "plugins/outline-reader.ts",
+      ])
+        assert.equal(
+          boundaryAllowsImport(runtimeWorkerBoundary, adjacent, approved),
+          false,
+        );
+    }
+    for (const forbidden of [
+      "@crewon/plugin-host/loader",
+      "@crewon/plugin-host/package-snapshot",
+      "@crewon/plugin-sdk",
+      "@crewon/plugin-sdk/ui",
+      "@crewon/media-runtime",
+    ])
+      assert.equal(
+        boundaryAllowsImport(runtimeWorkerBoundary, file, forbidden),
+        false,
+      );
+    assert.equal(isForbiddenRendererImport("@crewon/plugin-host"), true);
+    assert.equal(isForbiddenRendererImport("@crewon/plugin-sdk/node"), true);
+  }
+});
+
+test("outline availability exposes only its named public protocol constants", () => {
+  const boundary = boundaries.find((b) => b.packageName === "plugin-host")!;
+  for (const approved of [
+    "@crewon/contracts/project-outlines",
+    "@crewon/contracts/project-outline-edits",
+  ]) {
+    assert.equal(
+      boundaryAllowsImport(
+        boundary,
+        "plugin-ui-host-service-availability.ts",
+        approved,
+      ),
+      true,
+    );
+    for (const adjacent of [
+      "plugin-outline-reader.ts",
+      "nested/plugin-ui-host-service-availability.ts",
+    ])
+      assert.equal(boundaryAllowsImport(boundary, adjacent, approved), false);
+  }
+  const store = boundaries.find((b) => b.packageName === "store")!;
+  assert.equal(
+    boundaryAllowsImport(
+      store,
+      "project-structured-outline-store-support.ts",
+      "node:util",
     ),
     false,
   );

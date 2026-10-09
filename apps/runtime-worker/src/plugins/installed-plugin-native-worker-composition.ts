@@ -24,7 +24,7 @@ import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-proje
 import { createNativeProjectFoundationTools } from "./native-project-foundation-runtime.ts";
 import { createNativeProjectOutlineTools } from "./native-project-outline-runtime.ts";
 import { createDesktopNativeNetworkDnsResolver } from "@crewon/media-runtime/desktop-native-network-dns";
-import type { NetworkDnsResolver } from "@crewon/media-runtime/network-egress";
+import type { NetworkDnsResolver } from "../network-egress.ts";
 export function createInstalledPluginNativeWorkerAuthority(
   config: InstalledPluginNativeWorkerConfig,
 ): InstalledPluginWorkerAuthority {

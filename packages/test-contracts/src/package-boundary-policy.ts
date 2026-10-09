@@ -388,6 +388,8 @@ const approvedAdapterImports: Readonly<
     "plugin-task-action-bridge.ts": ["@crewon/application", "@crewon/domain"],
     "plugin-ui-deferred-host-service-availability.ts": ["@crewon/application"],
     "plugin-ui-host-service-availability.ts": [
+      "@crewon/contracts/project-outlines",
+      "@crewon/contracts/project-outline-edits",
       "@crewon/application",
       "@crewon/contracts/project-texts-ui",
       "@crewon/domain",

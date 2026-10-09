@@ -305,6 +305,14 @@ const workerAdapterImports = {
     "@crewon/plugin-host",
     "@crewon/plugin-sdk/node",
   ],
+  "plugins/installed-plugin-project-outline-tools.ts": [
+    "@crewon/plugin-host",
+    "@crewon/plugin-sdk/node",
+  ],
+  "plugins/project-outline-tools-service-owner.ts": [
+    "@crewon/plugin-host",
+    "@crewon/plugin-sdk/node",
+  ],
   "plugins/installed-plugin-runtime-project-services.ts": [
     "@crewon/plugin-host",
   ],

@@ -59,3 +59,11 @@ Foundation Node 工具沿[原 Native 执行](./native-local-plugin-execution.md)
 原包/应用源文件扫描、完整依赖表及环检测继续运行。新增反向行为测试验证精确文件、邻近文件、嵌套路径、未登记子路径及无关能力的拒绝；另覆盖 parser 只能在单个模块使用、旧 CLI 例外没有被合并覆盖、测试辅助文件不能进入生产依赖图。这些是静态架构规则与规则行为验证，不是实时生图、原文导入或正式 App 可用性验收。
 
 后续新增适配文件或外部依赖需要给出归属证据，再补明确登记与反向拒绝测试；不得根据当前扫描结果自动生成运行时 allowlist，也不得通过删除有效测试使违规导入通过。
+
+## 基础回归发现的类型适配遗漏（2026-10-09）
+
+完整源扫描发现先前结构化大纲提交 `0a961a67b` 的两个文件未登记。逐项核对后，`plugins/installed-plugin-project-outline-tools.ts` 只从公开 Host 入口获取安装候选类型，`plugins/project-outline-tools-service-owner.ts` 只获取 Host 服务类型；两者都仅从 SDK Node 获取原 `PluginToolRuntimeContext` 类型。服务执行仍通过既有 Application、原 Run/Tool 资格和父 Store，不引入插件执行器、文件装载器或新权限。因此按既有 Foundation 适配模式登记这两个精确文件的四条类型边，不向整个 Worker 开放 Host/SDK。
+
+反向测试继续拒绝相邻文件、嵌套路径、私有 Host 子路径、SDK 根/UI 及无关媒体能力；渲染端禁止规则不变。另两处 Native DNS 类型导入改为原 Worker `network-egress.ts` 稳定入口，没有扩大共享媒体的许可范围。该修复补齐静态边界登记，不重新启用业务插件，也不证明结构化大纲产品已验收。
+
+同一提交的 `plugin-ui-host-service-availability.ts` 使用两个独立公开契约的服务名/版本常量，核对实际 Host 可用性，不提供服务对象或调用权限。因此仅该可用性适配文件额外登记 `@crewon/contracts/project-outlines` 与 `@crewon/contracts/project-outline-edits`，相邻模块仍禁止这些子路径。Store 的结构化大纲比较则直接复用原 `textEqual`，它保留相同的严格比较和错误码，删除重复 `node:util` 导入，没有新增 Store 例外。
