@@ -14,6 +14,7 @@ export function desktopPluginManagementFixture(input: {
   provider: "absent" | "configured";
   approval: "absent" | "present";
   controlHealth?: "live" | "unavailable";
+  modelCatalog?: readonly string[];
 }) {
   const files = desktopPluginBootstrapFixture();
   if (input.approval === "present") files.writeApproval();
@@ -26,7 +27,7 @@ export function desktopPluginManagementFixture(input: {
       ",JSON.stringify({",
     "kind,pid:process.pid,bootstrapPath:bootstrap??null,",
     "manifest:bootstrap?JSON.parse(readFileSync(bootstrap,'utf8')):null,",
-    "modelApiKey:env.CREWON_MODEL_API_KEY??null,agentVersionId:env.CREWON_AGENT_VERSION_ID,",
+    "modelApiKey:env.CREWON_MODEL_API_KEY??null,modelId:env.CREWON_MODEL_ID??null,agentVersionId:env.CREWON_AGENT_VERSION_ID,",
     "artifactDb:env.CREWON_ARTIFACT_DB_PATH,artifactKey:env.CREWON_ARTIFACT_ENCRYPTION_KEY_ID,",
     "ambientPluginKeys:Object.keys(env).filter(k=>k.startsWith('CREWON_PLUGIN_')),",
     "actor:{principalId:env.CREWON_PRINCIPAL_ID,actorId:env.CREWON_ACTOR_ID,tenantId:env.CREWON_TENANT_ID,spaceId:env.CREWON_SPACE_ID}",
@@ -86,7 +87,7 @@ export function desktopPluginManagementFixture(input: {
             modelId: "fixture-model",
             apiKey: "fixture-model-secret",
           },
-    providerModelCatalog: async () => ["fixture-model"],
+    providerModelCatalog: async () => input.modelCatalog ?? ["fixture-model"],
     agentPlatformApiKeyForOrigin: () => null,
     workspaceRoot: () => null,
     logOutputs: { stdout, stderr },
@@ -96,6 +97,7 @@ export function desktopPluginManagementFixture(input: {
     owner,
     logs,
     records: (): Array<{
+      modelId: string | null;
       kind: string;
       pid: number;
       bootstrapPath: string | null;

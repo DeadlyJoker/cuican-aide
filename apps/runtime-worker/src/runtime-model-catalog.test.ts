@@ -84,3 +84,21 @@ test("authoritative catalogs never reinsert defaults and filter non-agent models
       /runtime_model_catalog_invalid/,
     );
 });
+
+test("a valid declared catalog never restores an unavailable default model", () => {
+  for (const catalog of [[], ["gpt-5.6-sol"], ["gpt-image-2", "gpt-5.6-sol"]])
+    assert.throws(
+      () => runtimeModelCatalog(JSON.stringify(catalog), "gpt-5.5"),
+      /runtime_model_catalog_default_unavailable/,
+    );
+  assert.deepEqual(
+    runtimeModelCatalog(
+      JSON.stringify(["gpt-5.6-sol", "gpt-5.6-luna"]),
+      "gpt-5.6-sol",
+    ),
+    ["gpt-5.6-sol", "gpt-5.6-luna"],
+  );
+  assert.deepEqual(runtimeModelCatalog(undefined, "legacy-explicit-model"), [
+    "legacy-explicit-model",
+  ]);
+});

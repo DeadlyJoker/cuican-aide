@@ -32,6 +32,9 @@ export function runtimeModelCatalog(
     return [defaultModel];
   }
   if (!Array.isArray(value) || value.length > 100) return [defaultModel];
+  // A valid declared directory is authoritative about the default. Never silently restore a removed model.
+  if (!value.some((candidate) => optionalModelId(candidate) === defaultModel))
+    throw new Error("runtime_model_catalog_default_unavailable");
   const seen = new Set([defaultModel]);
   const models = [defaultModel];
   for (const candidate of value) {

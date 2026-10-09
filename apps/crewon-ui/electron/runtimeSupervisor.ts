@@ -1,3 +1,4 @@
+import { desktopRuntimeProviderModel } from "./desktopRuntimeProviderModel.ts";
 import { prepareNativeDesktopInstalledPluginRuntime } from "./desktopNativeInstalledPluginRuntime.ts";
 import { ControlApiClient } from "@crewon/control-client";
 import type { PluginSelectionResponse } from "@crewon/contracts";
@@ -279,33 +280,21 @@ export class RuntimeSupervisor {
       startup.signal.throwIfAborted();
       ensureStorage(this.#dataDirectory);
       if (provider === null) {
-        const control = this.#spawnControl(
-          desktopPluginManagementEnvironment({
-            ambient: process.env,
-            dataDirectory: this.#dataDirectory,
-            controlPort: this.#controlPort,
-            origin: this.#origin,
-            csrfToken: this.#csrfToken,
-            sessionToken: this.#sessionToken,
-          }),
-        );
-        this.#children.push(control);
-        this.#managementControl = control;
-        await waitForReady(
-          `http://127.0.0.1:${this.#controlPort}/api/v1/health/live`,
-          [control],
-          startup.signal,
-        );
-        startup.signal.throwIfAborted();
-        this.#ready = true;
-        this.#localManagementEvents.notify();
-        this.#watchCurrentChildren();
+        await this.#startManagementControl(startup.signal);
         return;
       }
       this.#probePort ||= await freePort();
       startup.signal.throwIfAborted();
       const modelCatalog = await this.#resolveModelCatalog(provider);
       startup.signal.throwIfAborted();
+      const runtimeProvider = desktopRuntimeProviderModel(
+        provider,
+        modelCatalog,
+      );
+      if (runtimeProvider === null) {
+        await this.#startManagementControl(startup.signal);
+        return;
+      }
       const agentPlatformApiKey =
         this.#cloudAgentProfiles.length === 0
           ? null
@@ -313,7 +302,7 @@ export class RuntimeSupervisor {
               cloudAgentProfilesOrigin(this.#cloudAgentProfiles),
             );
       const environment = this.#environment(
-        provider,
+        runtimeProvider,
         modelCatalog,
         agentPlatformApiKey === null ? [] : this.#cloudAgentProfiles,
       );
@@ -327,7 +316,7 @@ export class RuntimeSupervisor {
           nativeInstalled = prepareNativeDesktopInstalledPluginRuntime({
             dataDirectory: this.#dataDirectory,
             bootstrap,
-            provider,
+            provider: runtimeProvider,
             sharedEnvironment,
             workerEnvironment,
             signal: startup.signal,
@@ -362,7 +351,7 @@ export class RuntimeSupervisor {
         const installedInputs = {
           dataDirectory: this.#dataDirectory,
           bootstrap,
-          provider,
+          provider: runtimeProvider,
           sharedEnvironment: {
             ...sharedEnvironment,
             CREWON_MODEL_CREDENTIAL_REQUIRED:
@@ -552,7 +541,7 @@ export class RuntimeSupervisor {
       }
       const recovery = desktopExtensionRecoveryAttempt({
         dataRoot: this.#dataDirectory,
-        provider,
+        provider: runtimeProvider,
         source: this.#paths.source,
         environments: currentEnvironments,
       });
@@ -1065,6 +1054,30 @@ export class RuntimeSupervisor {
 
   logStatus() {
     return this.#logs.status();
+  }
+
+  async #startManagementControl(signal: AbortSignal): Promise<void> {
+    const control = this.#spawnControl(
+      desktopPluginManagementEnvironment({
+        ambient: process.env,
+        dataDirectory: this.#dataDirectory,
+        controlPort: this.#controlPort,
+        origin: this.#origin,
+        csrfToken: this.#csrfToken,
+        sessionToken: this.#sessionToken,
+      }),
+    );
+    this.#children.push(control);
+    this.#managementControl = control;
+    await waitForReady(
+      `http://127.0.0.1:${this.#controlPort}/api/v1/health/live`,
+      [control],
+      signal,
+    );
+    signal.throwIfAborted();
+    this.#ready = true;
+    this.#localManagementEvents.notify();
+    this.#watchCurrentChildren();
   }
 
   async #resolveModelCatalog(

@@ -284,7 +284,7 @@ test("replay removes ambient compiler, catalog, profile, and tool drift before r
     CREWON_RUNTIME_GENERATION: "old-generation",
     CREWON_AGENT_VERSION_ID: "old-agent",
     CREWON_POLICY_SNAPSHOT_ID: "old-policy",
-    CREWON_MODEL_CATALOG_JSON: '["model-new","model-third"]',
+    CREWON_MODEL_CATALOG_JSON: '["model-old","model-new","model-third"]',
     CREWON_DEV_AGENT_PROFILES_JSON:
       '[{"agentVersionId":"old-planner","instructions":"  Exact profile instructions.  "}]',
   };
@@ -645,3 +645,15 @@ async function compileReleaseFixture(environment: RuntimeEnvironment) {
     await transport.close?.();
   }
 }
+
+test("bootstrap refuses an advertised directory that no longer contains its configured default", () => {
+  const result = captureRuntimeBootstrapInputs({
+    ...BASE,
+    CREWON_MODEL_CATALOG_JSON: JSON.stringify(["model-new"]),
+  });
+  assert.equal(result.outcome, "unsupported");
+  assert.equal(
+    result.reasonCode,
+    "runtime_bootstrap_configuration_unsupported",
+  );
+});
