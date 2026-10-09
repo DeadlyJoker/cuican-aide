@@ -1,0 +1,29 @@
+{
+  "name": "@crewon/plugin-tools",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone CrewON package preflight using the authoritative host verifier",
+  "type": "module",
+  "license": "Apache-2.0",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "crewon-plugin": "./dist/cli.mjs"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "pnpm build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test --test-concurrency=1 test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@crewon/plugin-host": "workspace:*",
+    "@types/node": "^24.10.1",
+    "esbuild": "0.27.7",
+    "typescript": "^5.9.3"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

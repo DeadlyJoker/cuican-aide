@@ -41,6 +41,10 @@ pnpm add -D typescript@5.9.3 esbuild@0.27.7
 
 独立项目使用 `"type": "module"`。TypeScript 可使用 `module` / `moduleResolution: "NodeNext"`、`strict: true`、`skipLibCheck: false`；Node 专用代码可设置 `lib: ["ES2022"]`，UI 代码加入 `"DOM"`。本仓库的分发测试实际执行了仓外离线安装、独立编译和编译后 Node 入口调用。
 
+## 安装前独立检查
+
+宿主仓库的 `@crewon/plugin-tools` 可单独打包并安装到独立开发项目。使用 `pnpm exec crewon-plugin check ./dist/1.0.0` 检查真实文件字节及包协议；工具复用宿主校验器，不导入插件入口，也不授予权限。它与 SDK 分开分发，不增加 SDK 的运行依赖。构建、安装和报告边界见[工具说明](../plugin-tools/README.md)。检查通过后仍需宿主安装批准；服务声明不表示实际依赖已经可用。
+
 ## Node 入口示例
 
 独立项目的 `src/node.ts`：

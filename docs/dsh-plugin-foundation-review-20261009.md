@@ -151,3 +151,11 @@ Native Supervisor 的基础身份本来就来自独立的 `DESKTOP_RUNTIME_OWNER
 正式 Main 原来把所有非 `ok` 的目录探测结果折叠为 `null`。Supervisor 对 `null` 使用同 endpoint/API Key 的原缓存，明确凭据拒绝或绑定失效也可能启动旧模型 Worker。现 Main 区分失败类型：`credentialMissing`、`authenticationFailed`、`bindingMismatch` 转为已知不可执行的空目录，覆盖该 Key 的旧缓存；Supervisor 沿用原空目录路径，只启动基础 Control。临时网络、限流和供应商响应故障仍保留同 Key 缓存，不跨 endpoint 或 Key 使用。成功探测恢复后按返回目录启动原运行器。没有改 HTTP、探测输出、缓存 schema、模型筛选或 UI 样式。
 
 新增真实子进程编排回归验证同一 Supervisor 从成功目录、凭据拒绝、再次离线重启到成功恢复；拒绝后没有 release/Worker 子进程。目录、凭据解析、Supervisor、可选插件隔离和基础管理相关 48/48 通过，零跳过；桌面 Host 类型、边界和格式检查通过。子进程入口是审计/HTTP 测试夹具，不等于正式 App 或真实外部模型验收。Mac 锁屏已重新检查并请求解锁；正式 App 未替换，用户插件保持卸载，F1 仍未完成。
+
+## 独立开发工具：复用宿主包校验
+
+F4 增量加入私有工作空间包 `@crewon/plugin-tools`，本地 tarball 分发给仓外开发项目；不发布注册表，不更改 SDK ABI、插件包协议或产品运行时。架构决定是沿用 Node 24、pnpm 10 和现有 esbuild，将 `@crewon/plugin-host/package-snapshot` 的权威文件校验器及纯契约闭包打入命令。独立项目不依赖宿主源码、workspace 链接或运行时包，不引入另一套文件校验规则。构建白名单阻止误打包 Application、Store、执行器及插件加载器，外部导入只允许 Node 标准模块。
+
+`crewon-plugin check <package-directory>` 按原默认限制检查描述符和真实产物字节，输出版本化 JSON、原包摘要及声明的服务/贡献点；不安装、不执行入口、不授权、不解析实际服务依赖。校验快照不是签名或持续可信证明，安装器仍须重新捕获并授权。报告协议与退出码见 [工具说明](../packages/plugin-tools/README.md)。
+
+真实 tarball 在仓外离线安装和实际 bin 调用通过。单个分发集成用例覆盖与宿主摘要一致、入口未执行、原文件未改、篡改、缺失、未声明文件、符号/硬链接拒绝、不支持的宿主 API、非法参数和错误信息不暴露绝对路径。工具类型检查通过；该测试不是插件安装/升级/回滚闭环，F4/F5 仍未完成。临时独立项目由 finally 删除。用户业务插件保持卸载，正式 App 未更新。

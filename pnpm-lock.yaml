@@ -650,6 +650,21 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
+  packages/plugin-tools:
+    devDependencies:
+      '@crewon/plugin-host':
+        specifier: workspace:*
+        version: link:../plugin-host
+      '@types/node':
+        specifier: ^24.10.1
+        version: 24.13.3
+      esbuild:
+        specifier: 0.27.7
+        version: 0.27.7
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/store:
     dependencies:
       '@crewon/application':
