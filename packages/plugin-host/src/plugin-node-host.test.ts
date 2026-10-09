@@ -111,6 +111,100 @@ const borrow = (pluginId: string, packageDigest: string) => ({
   authorizeBorrow: () => "allow" as const,
 });
 
+test("actual ESM runtime resources reject new acquisition after withdrawal and preserve borrowed resources until release", async (t) => {
+  const pkg = await fixture(t, {
+    provides: [{ service: "story.result", apiVersion: "1" }],
+    setup:
+      "ctx.services.provide('story.result','1',{open:()=>ctx.resources.acquire(()=>({value:'runtime-resource',dispose(){record('resource-dispose')}}))});",
+  });
+  const host = new PluginNodeHost({ services: [] });
+  const identity = await host.activate(pkg);
+  const lease = host.acquire(borrow(identity.pluginId, identity.packageDigest));
+  const service = lease.getService<{
+    open(): Promise<{ value: string; dispose(): Promise<void> }>;
+  }>("story.result", "1");
+  const resource = await service.open();
+  assert.equal(resource.value, "runtime-resource");
+  host.deactivate(identity.pluginId);
+  await host.drain();
+  assert.equal((await pkg.records()).includes("resource-dispose"), false);
+  await assert.rejects(service.open(), /plugin_resource_unavailable/);
+  lease.release();
+  await host.drain();
+  assert.deepEqual(await pkg.records(), [
+    "load",
+    "setup",
+    "resource-dispose",
+    "dispose",
+  ]);
+  await host.close();
+});
+
+test("withdrawal during actual ESM setup aborts acquisition and cleans a late resource before rollback completes", async (t) => {
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const pkg = await fixture(t, {
+    requires: [{ service: "host.gate", apiVersion: "1", optional: false }],
+    setup:
+      "return ctx.resources.acquire(async({signal})=>{await ctx.services.get('host.gate','1').wait(signal);return {value:1,dispose(){record('late-resource-dispose')}}}).then(()=>undefined);",
+  });
+  const host = new PluginNodeHost({
+    services: [
+      {
+        service: "host.gate",
+        apiVersion: "1",
+        value: {
+          wait(signal: AbortSignal) {
+            entered();
+            return new Promise<void>((resolve) => {
+              signal.addEventListener("abort", () => resolve(), { once: true });
+            });
+          },
+        },
+      },
+    ],
+  });
+  const activation = host.activate(pkg);
+  const rejected = assert.rejects(activation, /plugin_resource_withdrawn/);
+  await started;
+  host.deactivate(pkg.expectedPluginId);
+  await rejected;
+  assert.deepEqual(await pkg.records(), [
+    "load",
+    "setup",
+    "late-resource-dispose",
+  ]);
+  assert.deepEqual(host.snapshot(), []);
+  await host.close();
+});
+
+test("actual ESM resource cleanup failure retains the instance diagnostic fence", async (t) => {
+  const pkg = await fixture(t, {
+    provides: [{ service: "story.result", apiVersion: "1" }],
+    setup:
+      "ctx.services.provide('story.result','1',{open:()=>ctx.resources.acquire(()=>({value:1,dispose(){record('failed-resource-dispose');throw new Error('resource-close-failed')}}))});",
+  });
+  const host = new PluginNodeHost({ services: [] });
+  const identity = await host.activate(pkg);
+  const lease = host.acquire(borrow(identity.pluginId, identity.packageDigest));
+  await lease
+    .getService<{ open(): Promise<unknown> }>("story.result", "1")
+    .open();
+  host.deactivate(identity.pluginId);
+  lease.release();
+  await assert.rejects(host.drain(), /plugin_cleanup_failed/);
+  assert.equal(host.snapshot()[0]?.phase, "cleanupFailed");
+  await assert.rejects(host.close(), /plugin_cleanup_failed/);
+  assert.equal(
+    (await pkg.records()).filter(
+      (record) => record === "failed-resource-dispose",
+    ).length,
+    1,
+  );
+});
+
 test("activation denies missing dependencies and authority before evaluating entry code", async (t) => {
   const pkg = await fixture(t, {
     requires: [{ service: "host.config", apiVersion: "1", optional: false }],

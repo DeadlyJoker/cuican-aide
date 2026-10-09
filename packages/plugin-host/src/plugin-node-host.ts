@@ -20,6 +20,10 @@ import type {
 import type { PluginHostService } from "./plugin-host-service.ts";
 import { registerPluginNodeLease } from "./plugin-node-lease-authority.ts";
 import { createPluginNodeServiceAccess } from "./plugin-node-service-access.ts";
+import {
+  PluginRuntimeResourceOwner,
+  collectPluginCleanupFailures,
+} from "./plugin-runtime-resources.ts";
 export type {
   PluginHostService,
   PluginHostServiceLifetime,
@@ -97,6 +101,7 @@ type Instance = {
   setupOpen: boolean;
   failure: unknown;
   cleanupTask: Promise<void> | null;
+  runtimeResources: PluginRuntimeResourceOwner | null;
 };
 
 /**
@@ -178,6 +183,9 @@ export class PluginNodeHost {
 
   /** Revokes new admission and service discovery synchronously; existing leases remain. */
   deactivate(pluginId: string): void {
+    for (const instance of this.#instances)
+      if (instance.identity.pluginId === pluginId)
+        instance.runtimeResources?.withdraw();
     for (const token of this.#pending.get(pluginId) ?? [])
       token.invalidated = true;
     for (const preparation of [...this.#prepared])
@@ -306,6 +314,8 @@ export class PluginNodeHost {
 
   async close(): Promise<void> {
     this.#closed = true;
+    for (const instance of this.#instances)
+      instance.runtimeResources?.withdraw();
     for (const pending of this.#pending.values())
       for (const token of pending) token.invalidated = true;
     for (const preparation of [...this.#prepared])
@@ -393,7 +403,11 @@ export class PluginNodeHost {
       setupOpen: true,
       failure: null,
       cleanupTask: null,
+      runtimeResources: null,
     };
+    instance.runtimeResources = new PluginRuntimeResourceOwner(() =>
+      ["starting", "prepared", "accepting"].includes(instance.phase),
+    );
     for (const service of dependencies.values())
       if (service.owner) service.owner.borrowers += 1;
     this.#instances.add(instance);
@@ -652,6 +666,7 @@ export class PluginNodeHost {
         },
       }),
       onDispose: lifetime.onDispose,
+      resources: instance.runtimeResources!.api,
     });
   }
 
@@ -717,6 +732,7 @@ export class PluginNodeHost {
   #withdraw(instance: Instance): void {
     if (instance.phase !== "accepting") return;
     instance.phase = "retained";
+    instance.runtimeResources?.withdraw();
     if (this.#current.get(instance.identity.pluginId) === instance)
       this.#current.delete(instance.identity.pluginId);
     for (const service of instance.provisions.values())
@@ -741,14 +757,10 @@ export class PluginNodeHost {
     void task.finally(() => this.#cleanupTasks.delete(task));
   }
   async #cleanup(instance: Instance): Promise<void> {
-    const failures: unknown[] = [];
-    for (const cleanup of instance.cleanup.reverse()) {
-      try {
-        await cleanup();
-      } catch (error) {
-        failures.push(error);
-      }
-    }
+    const failures = await collectPluginCleanupFailures(
+      instance.runtimeResources,
+      instance.cleanup,
+    );
     if (failures.length) {
       instance.phase = "cleanupFailed";
       instance.failure = new AggregateError(failures, "plugin_cleanup_failed");

@@ -8,6 +8,8 @@ import type { PluginNodeDefinition } from "./sdk-types.js";
 export { PluginSdkContractError } from "./definition-validation.js";
 export type {
   PluginDisposable,
+  PluginOwnedResource,
+  PluginRuntimeResources,
   PluginIdentity,
   PluginNodeContext,
   PluginNodeServices,
