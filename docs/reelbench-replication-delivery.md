@@ -8,7 +8,7 @@
 | AI 短剧插件 44.0.0  | 原设置页已安装、选中、准备并启用，配置版本 10。407 项插件检查通过；正式 App 实际保存、修改并重新读回三集结构化大纲，候选 v6 和旧 v1 均保留。       |
 | Native 配置容量修复 | 修复后运行包基于 `30728cdb6`；完整配置沿用既有 256 KiB 限制，扩展载荷保留 64 KiB 限制；42 项相关检查通过，隔离服务启动通过。                       |
 
-清理本任务的过期构建副本后曾恢复约 2.2 GiB 空间，并完成正式桌面的手动保存验证。随后磁盘再次跌至约 150 MiB，下一版包构建遭遇 `ENOSPC`。Agent 将改编方案当作大纲的读取问题已在源码修复，尚待安装包集成及正式桌面验证；见 [Agent 大纲读取连接](short-drama-agent-outline-read.md)。结构化 Agent 写入、采用、专业生成及完整制作流程仍待完成。详情和边界见[产物编辑交付](./reelbench-outline-edit-delivery.md)。本轮完整资料与 App 备份保存在 `short16-desktop-verification` 工作树的 `output/extensions/desktop44-delivery/host-repair/`。
+清理本任务的过期构建副本后曾恢复约 2.2 GiB 空间，并完成正式桌面的手动保存验证。随后磁盘再次跌至约 150 MiB，下一版包构建遭遇 `ENOSPC`。10 月 9 日按用户要求清理过期中间产物后，容量阻塞已解除，见[清理记录](plugin-build-storage-cleanup-20261009.md)。Agent 将改编方案当作大纲的读取问题已在源码修复，尚待安装包集成及正式桌面验证；见 [Agent 大纲读取连接](short-drama-agent-outline-read.md)。结构化 Agent 写入、采用、专业生成及完整制作流程仍待完成。详情和边界见[产物编辑交付](./reelbench-outline-edit-delivery.md)。本轮完整资料与 App 备份保存在 `short16-desktop-verification` 工作树的 `output/extensions/desktop44-delivery/host-repair/`。
 
 ## 前期已完成
 
