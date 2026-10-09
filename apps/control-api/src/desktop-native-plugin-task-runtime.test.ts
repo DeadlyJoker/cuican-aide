@@ -630,6 +630,23 @@ test(
       f.nativeControl.publication.entries[1]!.target.agentVersionId,
       "named-second-published-model",
     );
+    await assert.rejects(
+      () =>
+        f.actual.configuration.requests.run(
+          { request: request(), actor, preparation: "configuration" },
+          () =>
+            f.actual.configuration.extensions.setActivation(actor, {
+              pluginId: f.source.pluginId,
+              configurationRevision:
+                f.nativeControl.publication.entries[0]!.configuration.revision,
+              expectedRevision: 1,
+              idempotencyKey: "cannot-replace-prepared-default-with-sibling",
+              state: "enabled",
+              agentVersionId: "named-second-published-model",
+            }),
+        ),
+      { code: "extension_execution_target_mismatch" },
+    );
     const first = (await f.invoke()) as Record<string, unknown>;
     assert.equal(first.disposition, "committed");
     assert.deepEqual(await f.invoke(), { ...first, disposition: "replayed" });
