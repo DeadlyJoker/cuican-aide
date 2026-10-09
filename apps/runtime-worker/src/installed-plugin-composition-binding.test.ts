@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { composedTurnFixture } from "../../../packages/store/src/plugin-run-composition.test-support.ts";
-import { InstalledPluginRunContext } from "./plugins/installed-plugin-run-context.ts";
-import { selectionRecipe } from "../../../packages/store/src/plugin-installation-store.test-support.ts";
+import {
+  InstalledPluginRunContext,
+  type InstalledPluginRunContextDependencies,
+} from "./plugins/installed-plugin-run-context.ts";
+import {
+  installationRecipe,
+  selectionRecipe,
+} from "../../../packages/store/src/plugin-installation-store.test-support.ts";
 
 function compositionReader(
   f: Awaited<ReturnType<typeof composedTurnFixture>>,
@@ -10,6 +16,7 @@ function compositionReader(
     loadLock?: typeof f.composition.loadLock;
     deny?: boolean;
     onAuthorize?: () => void;
+    authorize?: InstalledPluginRunContextDependencies["authorization"]["authorize"];
   } = {},
 ) {
   return new InstalledPluginRunContext({
@@ -20,8 +27,9 @@ function compositionReader(
       loadLock: options.loadLock ?? f.composition.loadLock.bind(f.composition),
     },
     authorization: {
-      async authorize() {
+      async authorize(request) {
         options.onAuthorize?.();
+        if (options.authorize) return options.authorize(request);
         return options.deny
           ? { outcome: "deny", reasonCode: "test_denied" }
           : { outcome: "allow" };
@@ -155,6 +163,272 @@ test("persisted composition metadata never bypasses current root Run authorizati
   await assert.rejects(reader.load(readInput(f)), /denied/);
   assert.equal(await f.count("plugin_credit_reservations"), 1);
 });
+test("captured provider authorization checks its own resource and preserves original bytes after upgrade", async (t) => {
+  const f = await composedTurnFixture(t, "sqlite");
+  await f.first.store.commitExtensionTurn(f.input);
+  const requests: string[] = [];
+  const reader = compositionReader(f, {
+    authorize: async (request) => {
+      if (request.resource.kind === "extension")
+        requests.push(`${request.action}:${request.resource.pluginId}`);
+      return { outcome: "allow" };
+    },
+  });
+  const snapshot = await reader.load(readInput(f));
+  assert.ok(snapshot);
+  const original = await reader.assertCompositionNodeCurrent(
+    snapshot,
+    f.provider.package.pluginId,
+    "submit",
+    new AbortController().signal,
+  );
+  assert.deepEqual(original, f.provider.package);
+  assert.ok(requests.includes(`extension:run:${f.provider.package.pluginId}`));
+  const upgraded = await f.installations.recordInstalledPackage(
+    installationRecipe("reader-provider-v2", {
+      scope: f.scope,
+      actor: f.actor,
+      pluginId: f.provider.package.pluginId,
+      version: "2.0.0",
+      expectedSelectionRevision: f.enabled.selection.revision,
+    }),
+  );
+  await f.installations.commitSelection(
+    selectionRecipe(upgraded.selection, "reader-select-provider-v2", {
+      actor: f.actor,
+      packageDigest: upgraded.package.packageDigest,
+    }),
+  );
+  assert.deepEqual(
+    await reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "submit",
+      new AbortController().signal,
+    ),
+    original,
+  );
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      "example.unrelated",
+      "observe",
+      new AbortController().signal,
+    ),
+    /composition_node_unavailable/,
+  );
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      { ...snapshot },
+      f.provider.package.pluginId,
+      "observe",
+      new AbortController().signal,
+    ),
+    /snapshot_invalid/,
+  );
+  assert.equal(await f.count("plugin_credit_reservations"), 1);
+});
+
+test("a root grant cannot authorize a denied provider, and warm rechecks see provider permission revocation", async (t) => {
+  const f = await composedTurnFixture(t, "sqlite");
+  await f.first.store.commitExtensionTurn(f.input);
+  let denied = false;
+  const reader = compositionReader(f, {
+    authorize: async (request) =>
+      request.resource.kind === "extension" &&
+      request.resource.pluginId === f.provider.package.pluginId &&
+      denied
+        ? { outcome: "deny", reasonCode: "provider_revoked" }
+        : { outcome: "allow" },
+  });
+  const snapshot = await reader.load(readInput(f));
+  assert.ok(snapshot);
+  await reader.assertCompositionNodeCurrent(
+    snapshot,
+    f.provider.package.pluginId,
+    "submit",
+    new AbortController().signal,
+  );
+  denied = true;
+  for (const purpose of ["submit", "observe"] as const)
+    await assert.rejects(
+      reader.assertCompositionNodeCurrent(
+        snapshot,
+        f.provider.package.pluginId,
+        purpose,
+        new AbortController().signal,
+      ),
+      /execution_access_denied/,
+    );
+  assert.equal(await f.count("messages"), 1);
+});
+
+test("provider disable during policy evaluation invalidates the grant while authorized historical observation remains possible", async (t) => {
+  const f = await composedTurnFixture(t, "sqlite");
+  await f.first.store.commitExtensionTurn(f.input);
+  let changed = false;
+  const reader = compositionReader(f, {
+    authorize: async (request) => {
+      if (
+        !changed &&
+        request.resource.kind === "extension" &&
+        request.resource.pluginId === f.provider.package.pluginId
+      ) {
+        changed = true;
+        await f.installations.commitSelection(
+          selectionRecipe(f.enabled.selection, "reader-policy-disable", {
+            actor: f.actor,
+            state: "disabled",
+          }),
+        );
+      }
+      return { outcome: "allow" };
+    },
+  });
+  const snapshot = await reader.load(readInput(f));
+  assert.ok(snapshot);
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "observe",
+      new AbortController().signal,
+    ),
+    /selection_changed/,
+  );
+  await reader.assertCompositionNodeCurrent(
+    snapshot,
+    f.provider.package.pluginId,
+    "observe",
+    new AbortController().signal,
+  );
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "submit",
+      new AbortController().signal,
+    ),
+    /generation_disabled/,
+  );
+  const disabled = await f.installations.loadSelection({
+    scope: f.scope,
+    pluginId: f.provider.package.pluginId,
+  });
+  assert.ok(disabled);
+  await f.installations.commitSelection(
+    selectionRecipe(disabled, "reader-provider-uninstall", {
+      actor: f.actor,
+      state: "uninstalled",
+    }),
+  );
+  assert.deepEqual(
+    await reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "observe",
+      new AbortController().signal,
+    ),
+    f.provider.package,
+  );
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "submit",
+      new AbortController().signal,
+    ),
+    /generation_disabled/,
+  );
+  assert.equal(await f.count("plugin_credit_reservations"), 1);
+});
+
+test("provider changes while refreshing root authority invalidate the earlier provider grant", async (t) => {
+  const f = await composedTurnFixture(t, "sqlite");
+  await f.first.store.commitExtensionTurn(f.input);
+  let granted = false,
+    changed = false;
+  const reader = compositionReader(f, {
+    authorize: async (request) => {
+      if (request.resource.kind === "extension") {
+        if (request.resource.pluginId === f.provider.package.pluginId)
+          granted = true;
+        else if (granted && !changed) {
+          changed = true;
+          await f.installations.commitSelection(
+            selectionRecipe(f.enabled.selection, "reader-root-policy-disable", {
+              actor: f.actor,
+              state: "disabled",
+            }),
+          );
+        }
+      }
+      return { outcome: "allow" };
+    },
+  });
+  const snapshot = await reader.load(readInput(f));
+  assert.ok(snapshot);
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "observe",
+      new AbortController().signal,
+    ),
+    /selection_changed/,
+  );
+  assert.equal(changed, true);
+});
+
+test("provider policy accessors and cancellation cannot create a usable grant", async (t) => {
+  const f = await composedTurnFixture(t, "sqlite");
+  await f.first.store.commitExtensionTurn(f.input);
+  const abort = new AbortController();
+  let mode = "getter",
+    getters = 0;
+  const reader = compositionReader(f, {
+    authorize: async (request) => {
+      if (
+        request.resource.kind === "extension" &&
+        request.resource.pluginId === f.provider.package.pluginId
+      ) {
+        if (mode === "getter")
+          return {
+            get outcome() {
+              getters++;
+              return "allow" as const;
+            },
+          };
+        abort.abort(new Error("provider_check_aborted"));
+      }
+      return { outcome: "allow" };
+    },
+  });
+  const snapshot = await reader.load(readInput(f));
+  assert.ok(snapshot);
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "observe",
+      new AbortController().signal,
+    ),
+    /execution_access_denied/,
+  );
+  assert.equal(getters, 0);
+  mode = "abort";
+  await assert.rejects(
+    reader.assertCompositionNodeCurrent(
+      snapshot,
+      f.provider.package.pluginId,
+      "observe",
+      abort.signal,
+    ),
+    /provider_check_aborted/,
+  );
+  assert.equal(await f.count("plugin_credit_reservations"), 1);
+});
+
 /** A persisted graph must never be treated as the current private, single-package execution host. */
 test("installed Run context refuses composed execution until a real original-lock assembly is supported", async (t) => {
   const f = await composedTurnFixture(t, "sqlite");

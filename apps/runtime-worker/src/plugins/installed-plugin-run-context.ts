@@ -31,9 +31,9 @@ import {
   parseExtensionRunBinding,
   parseInstalledPluginPackage,
   parsePluginProfileScope,
-  parsePluginSelection,
   parsePluginTaskAdmission,
   pluginInstallationOpaqueId,
+  type InstalledPluginPackage,
   type ExtensionRunBinding,
   type ExtensionExecutionTarget,
   type PluginTaskAdmission,
@@ -54,7 +54,12 @@ import type { ProjectFoundationRunAdmissionStore } from "@crewon/application";
 import type { ProjectFoundationRunAdmission } from "@crewon/domain";
 import type { PluginCompositionStore } from "@crewon/application";
 import type { PluginCompositionLock } from "@crewon/contracts/plugins";
+import { readInstalledPluginRunSelection } from "./installed-plugin-run-selection.ts";
+import { authorizeInstalledPluginCompositionNode } from "./installed-plugin-composition-node-authority.ts";
 import { readInstalledPluginRunComposition } from "./installed-plugin-run-composition.ts";
+
+import { InstalledPluginRunContextError } from "./installed-plugin-run-context-error.ts";
+export { InstalledPluginRunContextError } from "./installed-plugin-run-context-error.ts";
 
 export type InstalledPluginRunPurpose = "submit" | "observe";
 export type InstalledPluginRunSnapshot = Readonly<{
@@ -108,14 +113,6 @@ const digester = {
     `sha256:${createHash("sha256").update(input).digest("hex")}`,
 };
 
-export class InstalledPluginRunContextError extends Error {
-  readonly code: string;
-  constructor(code: string) {
-    super(code);
-    this.name = "InstalledPluginRunContextError";
-    this.code = code;
-  }
-}
 function fail(code: string): never {
   throw new InstalledPluginRunContextError(code);
 }
@@ -233,6 +230,31 @@ export class InstalledPluginRunContext {
     const saved = this.#snapshots.get(snapshot);
     if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
     return saved.composition;
+  }
+  /** Current policy for one actual captured root/provider, never an arbitrary node DTO. */
+  async assertCompositionNodeCurrent(
+    snapshot: InstalledPluginRunSnapshot,
+    pluginId: string,
+    purposeInput: InstalledPluginRunPurpose,
+    signalInput: AbortSignal,
+  ): Promise<InstalledPluginPackage> {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    if (saved.composition === null)
+      fail("installed_plugin_composition_missing");
+    const purpose = checkedPurpose(purposeInput),
+      signal = checkedSignal(signalInput);
+    return authorizeInstalledPluginCompositionNode({
+      lock: saved.composition,
+      rootPluginId: saved.admission.pluginId,
+      pluginId,
+      installations: this.#dependencies.installations,
+      authorization: this.#dependencies.authorization,
+      purpose,
+      signal,
+      assertRun: () => this.assertCurrent(snapshot, purpose, signal),
+      resolveActor: () => this.#actor(saved.admission, signal),
+    });
   }
   verifiedProjectStage(
     snapshot: InstalledPluginRunSnapshot,
@@ -624,46 +646,17 @@ export class InstalledPluginRunContext {
       fail("installed_plugin_execution_identity_unavailable");
   }
 
-  async #selection(
+  #selection(
     admission: PluginTaskAdmissionPin,
     purpose: InstalledPluginRunPurpose,
     signal: AbortSignal,
   ) {
-    signal.throwIfAborted();
-    const scope = parsePluginProfileScope({
-      tenantId: admission.tenantId,
-      spaceId: admission.spaceId,
-      profileId: admission.profileId,
-    });
-    const raw = await this.#dependencies.installations.loadSelection({
-      scope,
-      pluginId: admission.pluginId,
-    });
-    signal.throwIfAborted();
-    if (raw === null) fail("installed_plugin_selection_missing");
-    const selection = parsePluginSelection(raw);
-    for (const field of [
-      "tenantId",
-      "spaceId",
-      "profileId",
-      "pluginId",
-      "publisherId",
-    ] as const)
-      if (selection[field] !== admission[field])
-        fail("installed_plugin_selection_scope_mismatch");
-    if (selection.revision < admission.selectionRevision)
-      fail("installed_plugin_selection_revision_invalid");
-    if (
-      selection.revision === admission.selectionRevision &&
-      (selection.state !== "enabled" ||
-        selection.selectedPackageDigest !== admission.packageDigest)
-    )
-      fail("installed_plugin_selection_admission_mismatch");
-    // Selection gates new operations, while the immutable admission still selects
-    // the original package for recovery after upgrade or logical uninstall.
-    if (purpose === "submit" && selection.state !== "enabled")
-      fail("installed_plugin_generation_disabled");
-    return selection;
+    return readInstalledPluginRunSelection(
+      this.#dependencies.installations,
+      admission,
+      purpose,
+      signal,
+    );
   }
 
   async #activation(
