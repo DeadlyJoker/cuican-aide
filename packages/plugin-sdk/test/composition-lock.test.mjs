@@ -5,6 +5,7 @@ import {
   createPluginCompositionLock,
   parsePluginCompositionLock,
   pluginCompositionActivationOrder,
+  planPluginCompositionTransition,
   PLUGIN_COMPOSITION_LOCK_SCHEMA,
 } from "../dist/contracts.js";
 
@@ -46,4 +47,56 @@ test("compiled public SDK composition protocol creates and parses a bounded zero
       digester,
     ),
   );
+});
+
+test("compiled SDK exposes precise transition planning without access to host internals", () => {
+  const specification = {
+    schemaVersion: PLUGIN_COMPOSITION_LOCK_SCHEMA,
+    scope: {
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      profileId: "profile-1",
+      authorityEpoch: "epoch-1",
+    },
+    revision: 1,
+    hostServices: [],
+    nodes: [
+      {
+        pluginId: "example.provider",
+        publisherId: "example",
+        version: "1.0.0",
+        packageDigest: `sha256:${"a".repeat(64)}`,
+        hostApi: "crewon.plugin-host.v1",
+        selectionRevision: 1,
+        requires: [],
+        provides: [{ service: "example.source", apiVersion: "1" }],
+      },
+      {
+        pluginId: "example.consumer",
+        publisherId: "example",
+        version: "1.0.0",
+        packageDigest: `sha256:${"b".repeat(64)}`,
+        hostApi: "crewon.plugin-host.v1",
+        selectionRevision: 1,
+        requires: [
+          { service: "example.source", apiVersion: "1", optional: false },
+        ],
+        provides: [],
+      },
+    ],
+  };
+  const original = createPluginCompositionLock(specification, digester);
+  specification.revision++;
+  specification.nodes[0].selectionRevision++;
+  const plan = planPluginCompositionTransition(
+    original,
+    createPluginCompositionLock(specification, digester),
+    digester,
+  );
+  assert.deepEqual(plan.withdrawOrder, [
+    "example.consumer",
+    "example.provider",
+  ]);
+  assert.deepEqual(plan.prepareOrder, ["example.provider", "example.consumer"]);
+  assert.ok(Object.isFrozen(plan.prepareOrder));
 });

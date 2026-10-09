@@ -13,6 +13,7 @@ export {
   type PluginPackageFile,
 } from "./plugin-package-contract.ts";
 export * from "./plugin-composition-lock.ts";
+export * from "./plugin-composition-transition.ts";
 export {
   PluginUiContractError,
   parsePluginUiJsonValue,
