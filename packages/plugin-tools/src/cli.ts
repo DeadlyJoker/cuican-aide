@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 import { verifyLocalPluginPackage } from "@crewon/plugin-host/package-snapshot";
 
+import { scaffoldMinimalPlugin } from "./scaffold.ts";
+
 const args = process.argv.slice(2);
 if (args.length === 1 && args[0] === "--help") {
   process.stdout.write(
-    "Usage: crewon-plugin check <package-directory>\nChecks descriptor and actual file bytes. Does not install, import, authorize or resolve services.\n",
+    "Usage: crewon-plugin check <package-directory>\n       crewon-plugin init <new-directory>\nChecks descriptor and actual file bytes. Does not install, import, authorize or resolve services.\n",
   );
 } else if (
   args.length !== 2 ||
-  args[0] !== "check" ||
+  !["check", "init"].includes(args[0]!) ||
   !args[1] ||
   args[1].startsWith("--")
 ) {
@@ -20,6 +22,31 @@ if (args.length === 1 && args[0] === "--help") {
     }) + "\n",
   );
   process.exitCode = 2;
+} else if (args[0] === "init") {
+  try {
+    const files = await scaffoldMinimalPlugin(args[1]!);
+    process.stdout.write(
+      JSON.stringify({
+        schemaVersion: "crewon.plugin-scaffold.v1",
+        outcome: "created",
+        pluginId: "example.minimal",
+        files,
+      }) + "\n",
+    );
+  } catch (error) {
+    const code =
+      error instanceof Error && "code" in error && error.code === "EEXIST"
+        ? "plugin_scaffold_target_exists"
+        : "plugin_scaffold_failed";
+    process.stderr.write(
+      JSON.stringify({
+        schemaVersion: "crewon.plugin-scaffold.v1",
+        outcome: "rejected",
+        code,
+      }) + "\n",
+    );
+    process.exitCode = 1;
+  }
 } else {
   const controller = new AbortController();
   const interrupt = () => controller.abort("SIGINT");

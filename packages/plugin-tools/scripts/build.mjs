@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join, relative, resolve } from "node:path";
 import { build } from "esbuild";
@@ -28,6 +28,7 @@ for (const name of Object.keys(result.metafile.inputs)) {
     !path.startsWith("packages/contracts/src/") &&
     ![
       "packages/plugin-tools/src/cli.ts",
+      "packages/plugin-tools/src/scaffold.ts",
       "packages/plugin-host/src/local-plugin-package-verifier.ts",
       "packages/plugin-host/src/local-plugin-package-files.ts",
       "packages/plugin-host/src/local-plugin-package-types.ts",
@@ -48,3 +49,17 @@ for (const name of ["LICENSE", "NOTICE"])
 console.log(
   "Built standalone check command from the original package verifier.",
 );
+
+const templateRoot = join(repository, "examples/plugins/minimal");
+for (const path of [
+  "package.json",
+  "tsconfig.json",
+  "build.mjs",
+  "README.md",
+  "src/metadata.ts",
+  "src/node.ts",
+]) {
+  const target = join(output, "templates/minimal", path);
+  await mkdir(resolve(target, ".."), { recursive: true });
+  await cp(join(templateRoot, path), target);
+}

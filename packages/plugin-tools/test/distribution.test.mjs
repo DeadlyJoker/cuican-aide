@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmod,
   mkdtemp,
   mkdir,
   readFile,
@@ -52,6 +53,7 @@ test("packed tool installs outside the workspace and checks the original host pa
         "--offline",
         "--ignore-scripts",
         "--config.minimumReleaseAge=0",
+        "--registry=https://registry.npmjs.org",
       ],
       { cwd: directory, timeout: 60000, stdio: "pipe" },
     );
@@ -189,3 +191,168 @@ test("packed tool installs outside the workspace and checks the original host pa
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("init from the packed tool builds a standalone SDK plugin, refuses existing targets and runs on the real host", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-plugin-template-"));
+  const installRoot = join(directory, "installed");
+  let host;
+  let lease;
+  try {
+    const artifacts = join(directory, "artifacts");
+    await mkdir(artifacts);
+    execFileSync(pnpm, ["pack", "--pack-destination", artifacts, "--json"], {
+      cwd: root,
+      timeout: 60000,
+      stdio: "pipe",
+    });
+    execFileSync(pnpm, ["pack", "--pack-destination", artifacts, "--json"], {
+      cwd: join(repository, "packages/plugin-sdk"),
+      timeout: 60000,
+      stdio: "pipe",
+    });
+    const tarballs = await readdir(artifacts);
+    const tools = tarballs.find((name) =>
+      name.startsWith("crewon-plugin-tools-"),
+    );
+    const sdk = tarballs.find((name) => name.startsWith("crewon-plugin-sdk-"));
+    assert.ok(tools && sdk);
+    const developer = join(directory, "developer");
+    await mkdir(developer);
+    await writeFile(
+      join(developer, "package.json"),
+      JSON.stringify({
+        private: true,
+        type: "module",
+        devDependencies: {
+          "@crewon/plugin-tools": `file:${join(artifacts, tools)}`,
+        },
+      }),
+    );
+    execFileSync(
+      pnpm,
+      [
+        "install",
+        "--offline",
+        "--ignore-scripts",
+        "--config.minimumReleaseAge=0",
+        "--registry=https://registry.npmjs.org",
+      ],
+      { cwd: developer, timeout: 60000, stdio: "pipe" },
+    );
+    const init = (target) =>
+      spawnSync(pnpm, ["exec", "crewon-plugin", "init", target], {
+        cwd: developer,
+        encoding: "utf8",
+        timeout: 10000,
+      });
+    const source = join(directory, "plugin");
+    const created = init(source);
+    assert.equal(created.status, 0, created.stderr);
+    assert.equal(
+      JSON.parse(created.stdout).schemaVersion,
+      "crewon.plugin-scaffold.v1",
+    );
+    const original = await readFile(join(source, "src/node.ts"));
+    const refused = init(source);
+    assert.equal(refused.status, 1);
+    assert.equal(
+      JSON.parse(refused.stderr).code,
+      "plugin_scaffold_target_exists",
+    );
+    assert.deepEqual(await readFile(join(source, "src/node.ts")), original);
+    const existingEmpty = join(directory, "empty-user-directory");
+    await mkdir(existingEmpty);
+    assert.equal(init(existingEmpty).status, 1);
+    assert.deepEqual(await readdir(existingEmpty), []);
+    const alias = join(directory, "directory-link");
+    await symlink(existingEmpty, alias, "dir");
+    assert.equal(init(alias).status, 1);
+    assert.deepEqual(await readdir(existingEmpty), []);
+    const packagePath = join(source, "package.json");
+    const manifest = JSON.parse(await readFile(packagePath, "utf8"));
+    manifest.devDependencies["@crewon/plugin-sdk"] =
+      `file:${join(artifacts, sdk)}`;
+    await writeFile(packagePath, JSON.stringify(manifest));
+    execFileSync(
+      pnpm,
+      [
+        "install",
+        "--offline",
+        "--ignore-scripts",
+        "--config.minimumReleaseAge=0",
+        "--registry=https://registry.npmjs.org",
+      ],
+      { cwd: source, timeout: 60000, stdio: "pipe" },
+    );
+    execFileSync(pnpm, ["build"], {
+      cwd: source,
+      timeout: 60000,
+      stdio: "pipe",
+    });
+    const candidate = join(source, "dist/1.0.0");
+    const check = spawnSync(
+      pnpm,
+      ["exec", "crewon-plugin", "check", candidate],
+      { cwd: developer, encoding: "utf8", timeout: 10000 },
+    );
+    assert.equal(check.status, 0, check.stderr);
+    const report = JSON.parse(check.stdout);
+    const { installLocalPluginPackage, PluginNodeHost } = await import(
+      "@crewon/plugin-host"
+    );
+    await mkdir(installRoot, { mode: 0o700 });
+    const installed = await installLocalPluginPackage({
+      directory: candidate,
+      installRoot,
+      authorization: async () => ({ outcome: "allow" }),
+    });
+    assert.equal(installed.packageDigest, report.packageDigest);
+    // Native import happens only after the actual immutable installation, with all authoring inputs removed.
+    await rm(source, { recursive: true, force: true });
+    await rm(developer, { recursive: true, force: true });
+    await rm(artifacts, { recursive: true, force: true });
+    host = new PluginNodeHost({ services: [] });
+    const identity = await host.activate({
+      installRoot,
+      expectedPluginId: "example.minimal",
+      expectedPackageDigest: installed.packageDigest,
+      authorizeActivation: () => "allow",
+    });
+    lease = host.acquire({
+      pluginId: identity.pluginId,
+      packageDigest: identity.packageDigest,
+      purpose: "newOperation",
+      authorizeBorrow: () => "allow",
+    });
+    const service = lease.getService("example.minimal.echo", "1");
+    assert.equal(service.echo("independent template"), "independent template");
+    assert.throws(() => service.echo("a".repeat(2049)), /echo_input_invalid/);
+    host.deactivate(identity.pluginId);
+    assert.throws(
+      () =>
+        host.acquire({
+          pluginId: identity.pluginId,
+          packageDigest: identity.packageDigest,
+          purpose: "newOperation",
+          authorizeBorrow: () => "allow",
+        }),
+      { code: "plugin_instance_unavailable" },
+    );
+    assert.equal(service.echo("held original lease"), "held original lease");
+    lease.release();
+    lease = undefined;
+    await host.close();
+    host = undefined;
+  } finally {
+    lease?.release();
+    if (host) await host.close();
+    await makeWritable(directory);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+async function makeWritable(directory) {
+  await chmod(directory, 0o700);
+  for (const entry of await readdir(directory, { withFileTypes: true }))
+    if (entry.isDirectory()) await makeWritable(join(directory, entry.name));
+}
