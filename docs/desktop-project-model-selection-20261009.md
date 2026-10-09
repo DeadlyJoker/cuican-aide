@@ -105,3 +105,13 @@ SQL 原事务同时检查阶段、插件安装、当前配置和宿主签发的�
 技能要求的 `pnpm --filter @crewon/ui test -- CommandWorkspace` 实际展开为整个 UI 集合，4775 项通过、19 项失败、52 项跳过，包括既有 Office 工作树快照、TranscriptWindow 历史快照及旧测试夹具断言等。未改写这些快照或放宽检查；单独使用 Vitest 文件过滤的相关 174 项全部通过。全量集合不能记为验收通过。
 
 正式 App 仍为 0.1.45，下一步使用干净构建工作树更新 renderer/Main/runtime 并验证原账号地址、主题与会话，再安装短剧 46 和核验真实模型请求。不得将本批离线检查记为外部模型或 ComfyUI 生成成功。
+
+## 桌面 46 候选包准备完成（未替换正式 App）
+
+实现提交为 `055e55ad8`。干净的桌面构建工作树已切到该提交，团队及旅行插件未提交内容没有进入候选包；旧桌面代码 `fa180176d` 保留在 `codex/desktop45-baseline`。使用原账号服务地址 `https://pim.aicuican.com` 构建 renderer、Main 和七个 runtime 文件，准备 `/Users/cheneywang/.codex/worktrees/short16-desktop-verification/cuican-aide/output/extensions/desktop46-delivery/CrewON.app`（0.1.46）。四份 CSS、preload 与日志模块逐字节保持，原窗口组件和账号地址保持；Main 和 renderer 更新模型链路，签名严格验证通过。包摘要、runtime 身份和旧资源摘要记录在同目录 `package-proof.json`；原业务数据库只读备份为 `control-before-update.sqlite`。
+
+独立短剧 46.0.0 验证摘要为 `sha256:1e722e5edb4f72d076bc4b1f2de85b57132e6711b9fe34af0ab59135e8338ef7`，18 文件、3,517,291 字节。相对 45 只变化业务版本与 `ui.mjs`；Node、声明和能力范围相同，45 摘要保持原值，证据为 `output/extensions/checks/short46-package-verification.json`。未直接写入正式安装目录或数据库。
+
+干净构建工作树全量 UI 检查为 4746 通过、26 失败、52 跳过，另有四个套件缺少该工作树的独立 SDK 等历史夹具。旧已安装版代码的八个失败文件定向复查也失败：12 失败、29 通过；包括恢复工具链不支持、历史网络插桩文本、TranscriptWindow 快照、架构既有约束、旧品牌和 Office 控件预期。历史 24/26 安装包目录已清理所产生的夹具缺失不能视为产品功能故障或通过；没有为检查恢复无用的大量旧包，没有改写断言或快照。候选包仍需要正式桌面真实执行验收。
+
+桌面操作工具报告 Mac 锁屏且无法自动解锁，因此暂未退出或替换正在运行的 0.1.45，也未安装短剧 46。已请求用户解锁；解锁后依序替换 App、通过原设置安装/选择/准备插件、核验原工作空间和会话、读取实时 API Key 模型目录、发送所选非 5.5 模型的只读请求并测试流式与冷恢复。外部模型和 ComfyUI 生成仍未验收。
