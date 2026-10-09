@@ -1,4 +1,14 @@
 import {
+  beginPostgresPlanResult,
+  finishPostgresPlanResult,
+} from "./project-text-plan-tool.ts";
+import {
+  planSelectionQualification,
+  beginPostgresPlanSelection,
+  finishPostgresPlanSelection,
+} from "./project-text-plan-selection.ts";
+import { observePostgresPlanManualSelection } from "./project-text-plan-manual-selection.ts";
+import {
   projectOutlineRunCommitQualification,
   assertProjectOutlineRunPrepared,
   assertPostgresProjectOutlineRunCommit,
@@ -124,10 +134,10 @@ export class PostgresStructuredOutlineStorage {
       identity.receipt,
     );
     await assertCreativeProjectCommitCurrent(authority);
-    if (authority?.outlineRunTransaction)
+    if (authority?.outlineRunTransaction || authority?.planTransaction)
       await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
-    if (rq) {
+    if (rq || authority?.planTransaction) {
       const client = await this.#pool.connect();
       try {
         await client.query("BEGIN");
@@ -137,6 +147,15 @@ export class PostgresStructuredOutlineStorage {
           rq,
           "receipt-publication",
         );
+        await beginPostgresPlanResult(client, this.#schema, rq);
+        const pq = planSelectionQualification(
+          authority,
+          identity.actor,
+          identity.kind,
+          identity.receipt,
+          "structured-outline",
+        );
+        await beginPostgresPlanSelection(client, this.#schema, pq);
         const result = await this.#receipt(client, identity);
         await assertCreativeProjectCommitTransactionCurrent(authority);
         this.#active(authority);
@@ -161,7 +180,7 @@ export class PostgresStructuredOutlineStorage {
     }
     const result = await this.#receipt(this.#pool, identity);
     await assertCreativeProjectCommitCurrent(authority);
-    if (authority?.outlineRunTransaction)
+    if (authority?.outlineRunTransaction || authority?.planTransaction)
       await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     return result;
@@ -198,9 +217,16 @@ export class PostgresStructuredOutlineStorage {
       prepared.kind,
       prepared.receipt,
     );
+    const planSelection = planSelectionQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+      "structured-outline",
+    );
     const qualifiedCommand = q?.command ?? rq?.command;
     await assertCreativeProjectCommitCurrent(authority);
-    if (authority?.outlineRunTransaction)
+    if (authority?.outlineRunTransaction || authority?.planTransaction)
       await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     const client = await this.#pool.connect();
@@ -233,6 +259,16 @@ export class PostgresStructuredOutlineStorage {
         identity.kind,
         identity.receipt.idempotencyKey,
       ]);
+      const planResult = await beginPostgresPlanResult(
+        client,
+        this.#schema,
+        rq,
+      );
+      const selectionCheckpoint = await beginPostgresPlanSelection(
+        client,
+        this.#schema,
+        planSelection,
+      );
       const replay = await this.#receipt(client, identity);
       let result: StoredProjectTextMutationResult;
       if (replay !== null) result = replay;
@@ -370,9 +406,24 @@ export class PostgresStructuredOutlineStorage {
           ],
         );
       }
+      await finishPostgresPlanResult(client, this.#schema, planResult, result);
+      await finishPostgresPlanSelection(
+        client,
+        this.#schema,
+        selectionCheckpoint,
+        result,
+      );
+      if (planSelection === undefined)
+        await observePostgresPlanManualSelection(
+          client,
+          this.#schema,
+          prepared.actor,
+          prepared.receipt,
+          result,
+        );
       // This callback is policy-only, matching the original store; it must not borrow this pool.
       await assertCreativeProjectCommitCurrent(authority);
-      if (authority?.outlineRunTransaction)
+      if (authority?.outlineRunTransaction || authority?.planTransaction)
         await assertCreativeProjectCommitTransactionCurrent(authority);
       this.#active(authority);
       if (foundation !== undefined)

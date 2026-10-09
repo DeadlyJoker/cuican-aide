@@ -97,6 +97,9 @@ export function captureProjectTextPlanCoordinatorDependencies(
     "runs",
     "tasks",
     "textCommands",
+    ...(Object.hasOwn(input, "structuredOutlines")
+      ? ["structuredOutlines"]
+      : []),
     "clock",
     "digester",
   ]) as unknown as typeof input;
@@ -150,6 +153,13 @@ export function captureProjectTextPlanCoordinatorDependencies(
         "createProjectTextPlanTurnFromHost",
       ),
     }),
+    ...(d.structuredOutlines === undefined
+      ? {}
+      : {
+          structuredOutlines: Object.freeze({
+            selectRevision: method(d.structuredOutlines, "selectRevision"),
+          }),
+        }),
     textCommands: Object.freeze({
       selectRevision: method(d.textCommands, "selectRevision"),
     }),

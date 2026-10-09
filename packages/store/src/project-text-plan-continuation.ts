@@ -19,7 +19,7 @@ import {
   decodeCreativeBrief,
   creativeStoreDigester,
 } from "./creative-project-store-records.ts";
-import { decodeTextReceipt } from "./project-text-store-support.ts";
+import { decodeStoredTextReceipt } from "./project-structured-outline-store-support.ts";
 import { planJson, planStoreFail } from "./project-text-plan-records.ts";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 import {
@@ -95,7 +95,7 @@ function checked(
       planStoreFail("project_text_plan_source_changed");
     outlineSource = v;
   }
-  const receipt = decodeTextReceipt(rows.selected, {
+  const receipt = decodeStoredTextReceipt(rows.selected, {
     actor: plan.owner,
     owner: {
       tenantId: plan.owner.tenantId,
@@ -116,6 +116,8 @@ function checked(
     receipt.contentRevision?.contentDigest !== r.contentDigest
   )
     planStoreFail("project_text_plan_selection_changed");
+  if (r.kind === "outline" && receipt.contentRevision?.kind === "outline")
+    outlineSource = receipt.contentRevision;
   return outlineSource;
 }
 function queries(plan: ProjectTextPlan, step: ProjectTextPlanStep, p: string) {

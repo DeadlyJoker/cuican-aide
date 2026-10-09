@@ -1,6 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
-import { projectToolRunMutationCommand } from "@crewon/application";
+import {
+  projectToolRunMutationCommand,
+  projectStructuredOutlineCommandReceipt,
+} from "@crewon/application";
 import {
   extensionCanonicalJson,
   checkpointProjectTextPlanResult,
@@ -9,6 +12,10 @@ import {
   type ProjectTextPlan,
   type ProjectTextPlanStep,
 } from "@crewon/domain";
+import type { projectOutlineRunCommitQualification } from "./project-outline-run-qualification.ts";
+type PlanResultQualification =
+  | ProjectRunQualification
+  | NonNullable<ReturnType<typeof projectOutlineRunCommitQualification>>;
 import type { ProjectRunQualification } from "./creative-project-run-commit-support.ts";
 import {
   loadSqlitePlanAdmission,
@@ -30,15 +37,16 @@ import {
   type PlanCheckpoint,
 } from "./project-text-plan-checkpoints.ts";
 import type {
-  ProjectTextMutationResult,
+  StoredProjectTextMutationResult,
   CreativeProjectMutationResult,
 } from "@crewon/application";
 
 function assertImmutable(
-  q: ProjectRunQualification,
+  q: PlanResultQualification,
   a: ProjectTextPlanRunAdmission | null,
 ): void {
-  const requested = q.projectTextPlanAdmission;
+  const structured = q.operationId === "outline_change";
+  const requested = structured ? (a ?? undefined) : q.projectTextPlanAdmission;
   if (a === null && requested === undefined) return;
   if (a === null || requested === undefined)
     planStoreFail("project_text_plan_tool_qualification_denied");
@@ -62,8 +70,12 @@ function assertImmutable(
       : a.kind === "outline"
         ? "outline_save"
         : "script_save";
-  if (q.operationId !== expected)
+  if (
+    q.operationId !==
+    (structured && a.kind === "outline" ? "outline_change" : expected)
+  )
     planStoreFail("project_text_plan_tool_qualification_denied");
+  if (structured) return;
   const command = projectToolRunMutationCommand(
     q,
     creativeStoreDigester,
@@ -80,7 +92,7 @@ function assertImmutable(
 /** Immutable admission only: no mutable plan lock before the original receipt/project lock. */
 export function assertSqliteProjectTextPlanTool(
   db: DatabaseSync,
-  q: ProjectRunQualification,
+  q: PlanResultQualification,
 ): void {
   assertImmutable(
     q,
@@ -93,7 +105,7 @@ export function assertSqliteProjectTextPlanTool(
 export async function assertPostgresProjectTextPlanTool(
   c: PoolClient,
   schema: string,
-  q: ProjectRunQualification,
+  q: PlanResultQualification,
 ): Promise<void> {
   assertImmutable(
     q,
@@ -106,11 +118,11 @@ export async function assertPostgresProjectTextPlanTool(
 export type PlanToolCheckpoint = Readonly<
   PlanCheckpoint & {
     admission: ProjectTextPlanRunAdmission;
-    qualification: ProjectRunQualification;
+    qualification: PlanResultQualification;
   }
 >;
 function checkMutable(
-  q: ProjectRunQualification,
+  q: PlanResultQualification,
   a: ProjectTextPlanRunAdmission,
   plan: ProjectTextPlan | null,
   step: ProjectTextPlanStep | null,
@@ -136,7 +148,7 @@ function checkMutable(
 }
 export function beginSqlitePlanResult(
   db: DatabaseSync,
-  q: ProjectRunQualification | undefined,
+  q: PlanResultQualification | undefined,
 ): PlanToolCheckpoint | null {
   if (q === undefined) return null;
   const a = loadSqlitePlanAdmission(db, {
@@ -168,7 +180,7 @@ export function beginSqlitePlanResult(
 export async function beginPostgresPlanResult(
   c: PoolClient,
   schema: string,
-  q: ProjectRunQualification | undefined,
+  q: PlanResultQualification | undefined,
 ): Promise<PlanToolCheckpoint | null> {
   if (q === undefined) return null;
   const a = await loadPostgresPlanAdmission(c, schema, {
@@ -223,11 +235,21 @@ export async function beginPostgresPlanResult(
 }
 function resultCheckpoint(
   p: PlanToolCheckpoint,
-  result: ProjectTextMutationResult | CreativeProjectMutationResult,
+  result: StoredProjectTextMutationResult | CreativeProjectMutationResult,
 ): PlanCheckpoint {
   const a = p.admission,
     q = p.qualification,
-    identity = projectToolRunMutationCommand(q, creativeStoreDigester),
+    identity =
+      q.operationId === "outline_change"
+        ? {
+            receipt: projectStructuredOutlineCommandReceipt(
+              q.actor,
+              "save-outline",
+              q.command,
+              creativeStoreDigester,
+            ),
+          }
+        : projectToolRunMutationCommand(q, creativeStoreDigester),
     base = {
       kind: a.kind,
       idempotencyKey: identity.receipt.idempotencyKey,
@@ -268,6 +290,14 @@ function resultCheckpoint(
     result.artifact.episodeId !== a.episodeId
   )
     planStoreFail("project_text_plan_result_invalid");
+  if (a.kind === "outline") {
+    if (result.contentRevision.kind !== "outline")
+      planStoreFail("project_text_plan_result_invalid");
+    assertProjectTextPlanOutlineEpisodes(
+      a,
+      result.contentRevision.content.episodes.map((e) => e.episodeId),
+    );
+  }
   return checkpointProjectTextPlanResult(
     p.plan,
     p.step,
@@ -287,7 +317,7 @@ function resultCheckpoint(
 export function finishSqlitePlanResult(
   db: DatabaseSync,
   p: PlanToolCheckpoint | null,
-  result: ProjectTextMutationResult | CreativeProjectMutationResult,
+  result: StoredProjectTextMutationResult | CreativeProjectMutationResult,
 ): void {
   if (p !== null) writeSqlitePlanCheckpoint(db, p, resultCheckpoint(p, result));
 }
@@ -295,7 +325,7 @@ export async function finishPostgresPlanResult(
   c: PoolClient,
   schema: string,
   p: PlanToolCheckpoint | null,
-  result: ProjectTextMutationResult | CreativeProjectMutationResult,
+  result: StoredProjectTextMutationResult | CreativeProjectMutationResult,
 ): Promise<void> {
   if (p !== null)
     await writePostgresPlanCheckpoint(

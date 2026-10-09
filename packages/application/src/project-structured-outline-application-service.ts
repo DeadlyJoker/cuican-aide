@@ -1,3 +1,4 @@
+import { assertProjectOutlinePlanSelectionCommand } from "./project-outline-plan-selection-authority.ts";
 import { structuredOutlineCommitOptions } from "./project-structured-outline-commit-options.ts";
 import { qualifyProjectOutlineRunCommand } from "./project-outline-run-commit-authority.ts";
 import {
@@ -333,17 +334,17 @@ export class ProjectStructuredOutlineApplicationService {
         allowOutlineUiTransaction: true,
         allowOutlineRunTransaction: true,
       });
-      // Neither legacy UI metadata, text v1, a plan locator nor Run-only callbacks qualify a new content protocol.
+      // Legacy editing metadata and Run-only callbacks cannot qualify v2 content. A completed-plan selection is checked separately.
       if (
         authority?.transaction !== undefined ||
         authority?.textUiTransaction !== undefined ||
-        authority?.planTransaction !== undefined ||
         authority?.runTransaction !== undefined
       )
         throw new ApplicationError(
           "authorization",
           "project_outline_commit_authority_unsupported",
         );
+      assertProjectOutlinePlanSelectionCommand(authority, actor, kind, command);
       assertProjectOutlineUiMutationCommand(
         authority,
         actor,

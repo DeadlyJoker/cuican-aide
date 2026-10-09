@@ -314,6 +314,9 @@ export function createDesktopProjectConversationRuntime(
           store: input.store,
           tasks: () => input.tasks()?.core,
           textCommands: input.projects.textService,
+          ...(input.projects.structuredOutlineService === undefined
+            ? {}
+            : { structuredOutlines: input.projects.structuredOutlineService }),
           scope: input.configuration.scope,
           clock: input.clock,
           digester: input.digester,

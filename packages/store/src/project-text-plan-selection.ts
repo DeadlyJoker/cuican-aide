@@ -2,6 +2,7 @@ import {
   assertSqlitePlanResultFacts,
   assertPostgresPlanResultFacts,
 } from "./project-text-plan-result-facts.ts";
+import { projectStructuredOutlineCommandReceipt } from "@crewon/application";
 import { decodeConversation } from "./project-conversation-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
@@ -10,7 +11,7 @@ import type {
   ProjectTextPlanSelectionCommitAuthority,
   ProjectTextMutationKind,
   CreativeProjectMutationReceipt,
-  ProjectTextMutationResult,
+  StoredProjectTextMutationResult,
   ActorContext,
 } from "@crewon/application";
 import {
@@ -42,13 +43,14 @@ import {
 } from "./project-text-plan-checkpoints.ts";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
-import { decodeTextReceipt } from "./project-text-store-support.ts";
+import { decodeStoredTextReceipt } from "./project-structured-outline-store-support.ts";
 
 export function planSelectionQualification(
   authority: CreativeProjectCommitAuthority | undefined,
   actor: ActorContext,
   kind: ProjectTextMutationKind,
   receipt: CreativeProjectMutationReceipt,
+  dialect: "legacy-text" | "structured-outline" = "legacy-text",
 ) {
   const q = authority?.planTransaction;
   if (q === undefined) return undefined;
@@ -60,15 +62,26 @@ export function planSelectionQualification(
   if (
     kind !== "select-revision" ||
     receipt.idempotencyKey !== q.input.idempotencyKey ||
+    (dialect === "structured-outline" &&
+      (q.result.kind !== "outline" ||
+        q.step.kind !== "outline" ||
+        q.admission.kind !== "outline")) ||
     receipt.requestDigest !==
-      creativeStoreDigester.sha256(
-        extensionCanonicalJson({
-          schemaVersion: "crewon.project-text-command.v1",
-          actor,
-          kind,
-          command: q.input,
-        }),
-      )
+      (dialect === "structured-outline"
+        ? projectStructuredOutlineCommandReceipt(
+            actor,
+            "select-revision",
+            q.input,
+            creativeStoreDigester,
+          ).requestDigest
+        : creativeStoreDigester.sha256(
+            extensionCanonicalJson({
+              schemaVersion: "crewon.project-text-command.v1",
+              actor,
+              kind,
+              command: q.input,
+            }),
+          ))
   )
     planStoreFail("project_text_plan_selection_not_authorized");
   return q;
@@ -107,7 +120,7 @@ function checked(
     "project_text_plan_selection_not_authorized",
   );
   const expectedResult = q.result,
-    r = decodeTextReceipt(rows.receipt, {
+    r = decodeStoredTextReceipt(rows.receipt, {
       actor: q.authority.actor,
       owner: {
         tenantId: q.authority.actor.tenantId,
@@ -310,7 +323,7 @@ export async function beginPostgresPlanSelection(
 }
 function afterSelection(
   p: SelectionCheckpoint,
-  result: ProjectTextMutationResult,
+  result: StoredProjectTextMutationResult,
   steps: readonly import("@crewon/domain").ProjectTextPlanStep[],
 ): PlanCheckpoint {
   const q = p.qualification;
@@ -323,14 +336,22 @@ function afterSelection(
   )
     planStoreFail("project_text_plan_selection_not_authorized");
   if (p.step.selection !== null) return p;
-  const receiptDigest = creativeStoreDigester.sha256(
-    extensionCanonicalJson({
-      schemaVersion: "crewon.project-text-command.v1",
-      actor: q.authority.actor,
-      kind: "select-revision",
-      command: q.input,
-    }),
-  );
+  const receiptDigest =
+    result.contentRevision.schemaVersion === "crewon.project-text-revision.v2"
+      ? projectStructuredOutlineCommandReceipt(
+          q.authority.actor,
+          "select-revision",
+          q.input,
+          creativeStoreDigester,
+        ).requestDigest
+      : creativeStoreDigester.sha256(
+          extensionCanonicalJson({
+            schemaVersion: "crewon.project-text-command.v1",
+            actor: q.authority.actor,
+            kind: "select-revision",
+            command: q.input,
+          }),
+        );
   return advanceProjectTextPlanSelection(
     p.plan,
     p.step,
@@ -351,7 +372,7 @@ function afterSelection(
 export function finishSqlitePlanSelection(
   db: DatabaseSync,
   p: SelectionCheckpoint | null,
-  result: ProjectTextMutationResult,
+  result: StoredProjectTextMutationResult,
 ): void {
   if (p === null) return;
   const a = p.qualification.admission,
@@ -368,7 +389,7 @@ export async function finishPostgresPlanSelection(
   c: PoolClient,
   schema: string,
   p: SelectionCheckpoint | null,
-  result: ProjectTextMutationResult,
+  result: StoredProjectTextMutationResult,
 ): Promise<void> {
   if (p === null) return;
   const a = p.qualification.admission,

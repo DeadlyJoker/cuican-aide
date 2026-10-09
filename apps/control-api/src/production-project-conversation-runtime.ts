@@ -330,6 +330,9 @@ export function createProductionProjectConversationRuntime(
           store: input.store,
           tasks: input.tasks,
           textCommands: input.projects.textService,
+          ...(input.projects.structuredOutlineService === undefined
+            ? {}
+            : { structuredOutlines: input.projects.structuredOutlineService }),
           clock: input.clock,
           digester: input.digester,
         });

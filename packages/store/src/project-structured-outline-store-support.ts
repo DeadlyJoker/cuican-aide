@@ -230,7 +230,7 @@ export function prepareStructuredText(
     contentRevision: revision,
   });
 }
-/** Original v1 UI/Run/plan qualifications cannot authorize this new command shape. */
+/** Legacy edit qualifications cannot authorize v2 content. Exact completed-plan selection is separately checked. */
 export function structuredTextAuthority(
   options: CreativeProjectCommitOptions | undefined,
 ) {
@@ -243,8 +243,7 @@ export function structuredTextAuthority(
   if (
     authority?.transaction !== undefined ||
     authority?.runTransaction !== undefined ||
-    authority?.textUiTransaction !== undefined ||
-    authority?.planTransaction !== undefined
+    authority?.textUiTransaction !== undefined
   )
     projectTextFailure("project_outline_commit_authority_unsupported");
   return authority;

@@ -1,7 +1,10 @@
+import type { ActorContext } from "./authorization-port.ts";
+import type { ProjectStructuredOutlineApplicationService } from "./project-structured-outline-application-service.ts";
 import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { captureProjectTextPlanCoordinatorDependencies } from "./project-text-plan-dependencies.ts";
 import {
   extensionCanonicalJson,
+  validateCreativeProject,
   parseProjectTextPlan,
   parseProjectTextPlanRevision,
   parseProjectTextPlanStep,
@@ -57,6 +60,10 @@ export type ProjectTextPlanCoordinatorDependencies = Readonly<{
     "createProjectTextPlanTurnFromHost"
   >;
   textCommands: Pick<ProjectTextApplicationService, "selectRevision">;
+  structuredOutlines?: Pick<
+    ProjectStructuredOutlineApplicationService,
+    "selectRevision"
+  >;
   clock: ApplicationClock;
   digester: ContentDigester;
 }>;
@@ -276,8 +283,33 @@ export class ProjectTextPlanCoordinator {
         signal.throwIfAborted();
       },
     };
+    let selectRevision: (
+      actor: ActorContext,
+      input: Parameters<ProjectTextApplicationService["selectRevision"]>[1],
+      options?: Parameters<ProjectTextApplicationService["selectRevision"]>[2],
+    ) => Promise<unknown> = this.#d.textCommands.selectRevision;
+    if (step.kind === "outline") {
+      const rawProject = await this.#d.projects.loadProject(scope);
+      if (rawProject === null) invalid();
+      const source = await readProjectOutlineSourceRevision({
+        store: this.#d.texts,
+        scope,
+        project: validateCreativeProject(rawProject),
+        artifact: parseProjectTextArtifact(rawHead),
+        contentRevision: input.contentRevision,
+        digester: this.#d.digester,
+      });
+      if (source.schemaVersion === "crewon.project-text-revision.v2") {
+        if (this.#d.structuredOutlines === undefined)
+          throw new ApplicationError(
+            "conflict",
+            "project_text_plan_execution_unavailable",
+          );
+        selectRevision = this.#d.structuredOutlines.selectRevision;
+      }
+    }
     signal.throwIfAborted();
-    await this.#d.textCommands.selectRevision(plan.owner, input, {
+    await selectRevision(plan.owner, input, {
       authority: {
         assertCurrent: q.plan.assertCurrent,
         assertActive: q.plan.assertActive,
@@ -533,6 +565,8 @@ function projectTextPlanDeterministicPauseReason(
     case "project_text_plan_source_changed":
     case "project_outline_inputs_stale":
       return "source_changed";
+    case "project_outline_quality_failed":
+      return "result_invalid";
     case "project_text_plan_selection_changed":
       return "selection_changed";
     case "project_text_plan_locked":

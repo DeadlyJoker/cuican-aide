@@ -18,7 +18,11 @@ export function structuredOutlineCommitOptions(
       await authority.outlineUiTransaction.assertCurrent();
     else if (authority?.outlineRunTransaction)
       await authority.outlineRunTransaction.assertCurrent();
-    else await assertCreativeProjectCommitCurrent(authority);
+    else if (authority?.planTransaction) {
+      await authority.planTransaction.assertCurrent();
+      await authority.planTransaction.authority.assertTransactionCurrent();
+      authority.planTransaction.authority.assertActive();
+    } else await assertCreativeProjectCommitCurrent(authority);
   };
   return {
     authority: Object.freeze({
@@ -29,6 +33,14 @@ export function structuredOutlineCommitOptions(
         : {
             outlineUiTransaction: Object.freeze({
               ...authority.outlineUiTransaction,
+              assertCurrent: current,
+            }),
+          }),
+      ...(authority?.planTransaction === undefined
+        ? {}
+        : {
+            planTransaction: Object.freeze({
+              ...authority.planTransaction,
               assertCurrent: current,
             }),
           }),

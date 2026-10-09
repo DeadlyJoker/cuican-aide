@@ -6,7 +6,7 @@ import type {
   ToolExecutionReceiptState,
 } from "@crewon/domain";
 import { decodeCreativeReceipt } from "./creative-project-store-records.ts";
-import { decodeTextReceipt } from "./project-text-store-support.ts";
+import { decodeStoredTextReceipt } from "./project-structured-outline-store-support.ts";
 import { loadSqliteToolExecutionReceipt } from "./sqlite-tool-execution-receipts.ts";
 import { loadPostgresToolExecutionReceipt } from "./postgres-tool-execution.ts";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
@@ -53,7 +53,7 @@ function facts(
     )
       planStoreFail("project_text_plan_result_invalid");
   } else {
-    const value = decodeTextReceipt(row, {
+    const value = decodeStoredTextReceipt(row, {
       actor: plan.owner,
       owner,
       kind: r.kind === "outline" ? "save-outline" : "save-script",

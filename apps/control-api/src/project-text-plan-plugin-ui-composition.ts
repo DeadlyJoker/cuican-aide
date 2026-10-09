@@ -5,6 +5,7 @@ import {
   type ApplicationClock,
   type ContentDigester,
   type ProjectTextApplicationService,
+  type ProjectStructuredOutlineApplicationService,
   type ActorContext,
   type InvokePluginUiActionCommand,
   type PluginUiJsonValue,
@@ -43,6 +44,7 @@ export function createProjectTextPlanPluginUiRuntime(
     store: SqliteRunStore | PostgresDomainStore;
     tasks: () => InstalledPluginTaskRuntimeCore | undefined;
     textCommands: ProjectTextApplicationService;
+    structuredOutlines?: ProjectStructuredOutlineApplicationService;
     /** Only a deployment-issued fixed profile can own a durable scanner. */
     scope?: PluginProfileScope;
     clock: ApplicationClock;
@@ -85,6 +87,9 @@ export function createProjectTextPlanPluginUiRuntime(
       },
     },
     textCommands: input.textCommands,
+    ...(input.structuredOutlines === undefined
+      ? {}
+      : { structuredOutlines: input.structuredOutlines }),
     clock: input.clock,
     digester: input.digester,
   });

@@ -3,7 +3,7 @@ import type { PoolClient } from "pg";
 import type {
   ActorContext,
   CreativeProjectMutationReceipt,
-  ProjectTextMutationResult,
+  StoredProjectTextMutationResult,
   ProjectTextUiCommitTransactionAuthority,
 } from "@crewon/application";
 import {
@@ -34,7 +34,7 @@ import { advisoryLock } from "./postgres-thread-lock.ts";
 function checked(
   plan: ProjectTextPlan,
   step: ProjectTextPlanStep,
-  result: ProjectTextMutationResult,
+  result: StoredProjectTextMutationResult,
   receipt: CreativeProjectMutationReceipt,
 ): PlanCheckpoint | null {
   const r = step.result;
@@ -69,7 +69,7 @@ export function observeSqlitePlanManualSelection(
   db: DatabaseSync,
   actor: ActorContext,
   receipt: CreativeProjectMutationReceipt,
-  result: ProjectTextMutationResult,
+  result: StoredProjectTextMutationResult,
   qualification?: ProjectTextUiCommitTransactionAuthority,
 ): void {
   if (
@@ -131,7 +131,7 @@ export async function observePostgresPlanManualSelection(
   schema: string,
   actor: ActorContext,
   receipt: CreativeProjectMutationReceipt,
-  result: ProjectTextMutationResult,
+  result: StoredProjectTextMutationResult,
   qualification?: ProjectTextUiCommitTransactionAuthority,
 ): Promise<void> {
   if (

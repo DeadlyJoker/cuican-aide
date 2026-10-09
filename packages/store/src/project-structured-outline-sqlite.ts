@@ -1,4 +1,14 @@
 import {
+  beginSqlitePlanResult,
+  finishSqlitePlanResult,
+} from "./project-text-plan-tool.ts";
+import {
+  planSelectionQualification,
+  beginSqlitePlanSelection,
+  finishSqlitePlanSelection,
+} from "./project-text-plan-selection.ts";
+import { observeSqlitePlanManualSelection } from "./project-text-plan-manual-selection.ts";
+import {
   projectOutlineRunCommitQualification,
   assertProjectOutlineRunPrepared,
   assertSqliteProjectOutlineRunCommit,
@@ -115,7 +125,7 @@ export class SqliteStructuredOutlineStorage {
       identity.receipt,
     );
     await assertCreativeProjectCommitCurrent(authority);
-    if (authority?.outlineRunTransaction)
+    if (authority?.outlineRunTransaction || authority?.planTransaction)
       await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     assertSqliteProjectTextUiCommit(this.#database, q);
@@ -124,6 +134,15 @@ export class SqliteStructuredOutlineStorage {
       rq,
       "receipt-publication",
     );
+    beginSqlitePlanResult(this.#database, rq);
+    const pq = planSelectionQualification(
+      authority,
+      identity.actor,
+      identity.kind,
+      identity.receipt,
+      "structured-outline",
+    );
+    beginSqlitePlanSelection(this.#database, pq);
     return this.#receipt(identity);
   }
   async candidate(
@@ -158,9 +177,16 @@ export class SqliteStructuredOutlineStorage {
       prepared.kind,
       prepared.receipt,
     );
+    const planSelection = planSelectionQualification(
+      authority,
+      prepared.actor,
+      prepared.kind,
+      prepared.receipt,
+      "structured-outline",
+    );
     const qualifiedCommand = q?.command ?? rq?.command;
     await assertCreativeProjectCommitCurrent(authority);
-    if (authority?.outlineRunTransaction)
+    if (authority?.outlineRunTransaction || authority?.planTransaction)
       await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
@@ -176,8 +202,15 @@ export class SqliteStructuredOutlineStorage {
         receipt: prepared.receipt,
         kind: prepared.kind,
       });
+      const planResult = beginSqlitePlanResult(this.#database, rq);
+      const selectionCheckpoint = beginSqlitePlanSelection(
+        this.#database,
+        planSelection,
+      );
       const replay = this.#receipt(identity);
       if (replay !== null) {
+        finishSqlitePlanResult(this.#database, planResult, replay);
+        finishSqlitePlanSelection(this.#database, selectionCheckpoint, replay);
         this.#active(authority);
         assertSqliteProjectOutlineRunCommit(
           this.#database,
@@ -291,6 +324,15 @@ export class SqliteStructuredOutlineStorage {
           textJson(result),
         ],
       );
+      finishSqlitePlanResult(this.#database, planResult, result);
+      finishSqlitePlanSelection(this.#database, selectionCheckpoint, result);
+      if (planSelection === undefined)
+        observeSqlitePlanManualSelection(
+          this.#database,
+          prepared.actor,
+          prepared.receipt,
+          result,
+        );
       this.#active(authority);
       assertSqliteProjectFoundationDownstreamUnchanged(
         this.#database,
