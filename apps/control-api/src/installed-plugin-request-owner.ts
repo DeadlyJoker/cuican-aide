@@ -56,6 +56,7 @@ type State = {
   actor: ActorContext;
   scope: PluginProfileScope | null;
   prepared: InstalledPluginPeerPrepared | null;
+  preparedPurpose: "activation" | "task" | null;
   metadata: InstalledPluginMetadataPrepared | null;
   preparation: "execution" | "configuration";
   controller: AbortController;
@@ -75,6 +76,7 @@ export class InstalledPluginRequestOwner {
   readonly #identity: ProductionControlApiIdentity["resolveCurrentActor"];
   readonly #profile: PluginInstallationHostProfilePort["resolve"];
   readonly #prepare: InstalledPluginPeerClient["prepare"] | undefined;
+  readonly #prepareTask: InstalledPluginPeerClient["prepare"] | undefined;
   readonly #metadata:
     | InstalledPluginConfigurationMetadataPort["prepare"]
     | undefined;
@@ -88,6 +90,7 @@ export class InstalledPluginRequestOwner {
       identity: Pick<ProductionControlApiIdentity, "resolveCurrentActor">;
       profiles: PluginInstallationHostProfilePort;
       peer?: Pick<InstalledPluginPeerClient, "prepare">;
+      taskPeer?: Pick<InstalledPluginPeerClient, "prepare">;
       metadata?: InstalledPluginConfigurationMetadataPort;
       delegatedIdentity?: InstalledPluginDelegatedIdentityPort;
     }>,
@@ -99,6 +102,8 @@ export class InstalledPluginRequestOwner {
     );
     this.#profile = input.profiles.resolve.bind(input.profiles);
     this.#prepare = input.peer?.prepare.bind(input.peer);
+    this.#prepareTask =
+      input.taskPeer?.prepare.bind(input.taskPeer) ?? this.#prepare;
     this.#metadata = input.metadata?.prepare.bind(input.metadata);
     this.catalog = Object.freeze({
       prepare: async (
@@ -139,7 +144,9 @@ export class InstalledPluginRequestOwner {
         ),
       evaluate: (input: Parameters<ExtensionHostPort["evaluate"]>[0]) =>
         this.#configurationCall(input.actor, async () => {
-          const prepared = await this.#executionPrepared();
+          const prepared = await this.#executionPrepared(
+            this.#current().preparation === "execution" ? "task" : "activation",
+          );
           return prepared === null
             ? {
                 outcome: "unavailable" as const,
@@ -230,6 +237,7 @@ export class InstalledPluginRequestOwner {
       actor,
       scope: null,
       prepared: null,
+      preparedPurpose: null,
       metadata: null,
       preparation,
       controller,
@@ -247,11 +255,12 @@ export class InstalledPluginRequestOwner {
         try {
           await this.assertCurrent();
           if (state.preparation === "execution") {
-            if (this.#prepare === undefined) denied();
-            state.prepared = await this.#prepare(
+            if (this.#prepareTask === undefined) denied();
+            state.prepared = await this.#prepareTask(
               { actor: state.actor, scope: state.scope! },
               { signal: state.signal },
             );
+            state.preparedPurpose = "task";
           }
           await this.assertCurrent();
           // A committed original receipt may return after withdrawal. Admission and plain JSON
@@ -275,7 +284,7 @@ export class InstalledPluginRequestOwner {
   async prepareDelegatedExecution(): Promise<void> {
     const state = this.#current();
     if (state.source.kind !== "delegated") denied();
-    const prepared = await this.#executionPrepared();
+    const prepared = await this.#executionPrepared("task");
     if (prepared === null) denied();
     this.#sameState(state);
     await this.assertCurrent();
@@ -383,17 +392,22 @@ export class InstalledPluginRequestOwner {
     if (state.metadata === null) denied();
     return state.metadata;
   }
-  async #executionPrepared(): Promise<InstalledPluginPeerPrepared | null> {
+  async #executionPrepared(
+    purpose: "activation" | "task",
+  ): Promise<InstalledPluginPeerPrepared | null> {
     const state = this.#current();
-    if (state.prepared !== null) return state.prepared;
-    if (this.#prepare === undefined) return null;
-    const prepared = await this.#prepare(
+    if (state.prepared !== null && state.preparedPurpose === purpose)
+      return state.prepared;
+    const prepare = purpose === "task" ? this.#prepareTask : this.#prepare;
+    if (prepare === undefined) return null;
+    const prepared = await prepare(
       { actor: state.actor, scope: state.scope! },
       { signal: state.signal },
     );
     this.#sameState(state);
     await this.assertCurrent();
     state.prepared = prepared;
+    state.preparedPurpose = purpose;
     return prepared;
   }
   async #call<T>(

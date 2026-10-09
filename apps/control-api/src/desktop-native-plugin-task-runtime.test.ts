@@ -272,19 +272,25 @@ async function fixture(
       }),
   );
   const configuration = saved.configuration;
-  await originalStore.registerAgentVersion({
-    schemaVersion: "crewon.agent-version-asset.v0",
-    tenantId: actor.tenantId,
-    agentVersionId: target.agentVersionId,
-    contentDigest: target.agentVersionContentDigest,
-    createdAt: clock.now(),
-    definitionJson: JSON.stringify({
-      schemaVersion: "crewon.agent-version.v0",
-      agentVersionId: target.agentVersionId,
-      runtimeGeneration: target.runtimeGeneration,
-      policySnapshotId: target.policySnapshotId,
-    }),
-  });
+  const siblingTarget = {
+    ...target,
+    agentVersionId: "named-second-published-model",
+  };
+  const targets = options.modelSiblings ? [target, siblingTarget] : [target];
+  for (const currentTarget of targets)
+    await originalStore.registerAgentVersion({
+      schemaVersion: "crewon.agent-version-asset.v0",
+      tenantId: actor.tenantId,
+      agentVersionId: currentTarget.agentVersionId,
+      contentDigest: currentTarget.agentVersionContentDigest,
+      createdAt: clock.now(),
+      definitionJson: JSON.stringify({
+        schemaVersion: "crewon.agent-version.v0",
+        agentVersionId: currentTarget.agentVersionId,
+        runtimeGeneration: currentTarget.runtimeGeneration,
+        policySnapshotId: currentTarget.policySnapshotId,
+      }),
+    });
   const releaseId = sha.sha256("named-native-unmetered-release");
   await originalStore.activateAgentVersionRelease({
     bundle: {
@@ -293,17 +299,15 @@ async function fixture(
       releaseId,
       manifestDigest: releaseId,
       defaultAgentVersionId: target.agentVersionId,
-      deployments: [
-        {
-          schemaVersion: "crewon.agent-version-deployment.v0",
-          tenantId: actor.tenantId,
-          agentVersionId: target.agentVersionId,
-          contentDigest: target.agentVersionContentDigest,
-          materializationDigest: target.materializationDigest,
-          authorityId: target.authorityId,
-          workspaceBindingId: target.workspaceBindingId,
-        },
-      ],
+      deployments: targets.map((currentTarget) => ({
+        schemaVersion: "crewon.agent-version-deployment.v0",
+        tenantId: actor.tenantId,
+        agentVersionId: currentTarget.agentVersionId,
+        contentDigest: currentTarget.agentVersionContentDigest,
+        materializationDigest: currentTarget.materializationDigest,
+        authorityId: currentTarget.authorityId,
+        workspaceBindingId: currentTarget.workspaceBindingId,
+      })),
     },
     activation: {
       schemaVersion: "crewon.agent-version-release-activation.v0",
@@ -422,10 +426,7 @@ async function fixture(
             entry,
             {
               ...entry,
-              configuredTarget: {
-                ...target,
-                agentVersionId: "named-second-published-model",
-              },
+              configuredTarget: siblingTarget,
             },
           ]
         : [entry],
@@ -471,7 +472,14 @@ async function fixture(
       scope,
     };
     if (input.operation === "catalog")
-      return Response.json({ ...common, entries: [{ ...entry, manifest }] });
+      return Response.json({
+        ...common,
+        entries: targets.map((configuredTarget) => ({
+          ...entry,
+          configuredTarget,
+          manifest,
+        })),
+      });
     if (
       input.operation === "prepareCandidate" ||
       input.operation === "readiness"
@@ -484,7 +492,13 @@ async function fixture(
         ...(input.operation === "prepareCandidate"
           ? { expectedSelectionRevision: input.expectedSelectionRevision }
           : {}),
-        result: { outcome: "ready", target },
+        result: {
+          outcome: "ready",
+          target: targets.find(
+            (candidate) =>
+              candidate.agentVersionId === input.expectedTarget.agentVersionId,
+          )!,
+        },
       });
     throw new Error("named_native_peer_operation_unexpected");
   };
@@ -647,6 +661,74 @@ test(
         ),
       { code: "extension_execution_target_mismatch" },
     );
+    // The same genuine request owner must allow the selected sibling for task
+    // readiness, while the activation path above remains pinned to the default.
+    await f.actual.configuration.requests.run(
+      { request: request(), actor },
+      async () => {
+        const registration = f.actual.configuration.requests.catalog.resolve({
+          pluginId: f.source.pluginId,
+          pluginVersion: f.source.version,
+        });
+        assert.ok(registration);
+        for (const entry of f.nativeControl.publication.entries) {
+          const result = await f.actual.configuration.requests.host.evaluate({
+            actor,
+            registration,
+            configuration: entry.configuration,
+            agentVersionId: entry.target.agentVersionId,
+          });
+          assert.deepEqual(result, { outcome: "ready", target: entry.target });
+        }
+        await assert.rejects(
+          () =>
+            f.actual.configuration.requests.host.evaluate({
+              actor,
+              registration,
+              configuration:
+                f.nativeControl.publication.entries[0]!.configuration,
+              agentVersionId: "unpublished-model",
+            }),
+          { code: "extension_execution_target_mismatch" },
+        );
+      },
+    );
+    const originalDeployment = f.originalStore.currentAgentVersionDeployment;
+    const withdrawn = t.mock.method(
+      f.originalStore,
+      "currentAgentVersionDeployment",
+      function (
+        this: SqliteRunStore,
+        locator: Parameters<SqliteRunStore["currentAgentVersionDeployment"]>[0],
+      ) {
+        return locator.agentVersionId === "named-second-published-model"
+          ? null
+          : originalDeployment.call(this, locator);
+      },
+    );
+    await assert.rejects(
+      () =>
+        f.actual.configuration.requests.run(
+          { request: request(), actor },
+          async () => {
+            const entry = f.nativeControl.publication.entries[1]!;
+            const registration =
+              f.actual.configuration.requests.catalog.resolve({
+                pluginId: f.source.pluginId,
+                pluginVersion: f.source.version,
+              });
+            assert.ok(registration);
+            return f.actual.configuration.requests.host.evaluate({
+              actor,
+              registration,
+              configuration: entry.configuration,
+              agentVersionId: entry.target.agentVersionId,
+            });
+          },
+        ),
+      { code: "extension_execution_target_mismatch" },
+    );
+    withdrawn.mock.restore();
     const first = (await f.invoke()) as Record<string, unknown>;
     assert.equal(first.disposition, "committed");
     assert.deepEqual(await f.invoke(), { ...first, disposition: "replayed" });

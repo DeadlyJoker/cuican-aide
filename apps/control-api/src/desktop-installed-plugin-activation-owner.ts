@@ -201,15 +201,29 @@ export class DesktopInstalledPluginActivationOwner {
       input: Parameters<InstalledPluginPeerClient["prepare"]>[0],
       options: Parameters<InstalledPluginPeerClient["prepare"]>[1] = {},
     ): Promise<InstalledPluginPeerPrepared> =>
-      this.#operation(options.signal, async (signal) => {
-        this.#assertOwner(input.actor);
-        if (!same(input.scope, this.#dependencies.configuration.scope))
-          denied();
-        const result = await this.#peer.prepare(input, { signal });
-        this.#assertOwner(input.actor);
-        return this.#prepared(result, signal);
-      }),
+      this.#preparePeer(input, options, "activation"),
   });
+  /** Task readiness accepts exact Native-published siblings; activation still pins the default. */
+  readonly taskPeer = Object.freeze({
+    prepare: (
+      input: Parameters<InstalledPluginPeerClient["prepare"]>[0],
+      options: Parameters<InstalledPluginPeerClient["prepare"]>[1] = {},
+    ): Promise<InstalledPluginPeerPrepared> =>
+      this.#preparePeer(input, options, "task"),
+  });
+  #preparePeer(
+    input: Parameters<InstalledPluginPeerClient["prepare"]>[0],
+    options: NonNullable<Parameters<InstalledPluginPeerClient["prepare"]>[1]>,
+    purpose: "activation" | "task",
+  ): Promise<InstalledPluginPeerPrepared> {
+    return this.#operation(options.signal, async (signal) => {
+      this.#assertOwner(input.actor);
+      if (!same(input.scope, this.#dependencies.configuration.scope)) denied();
+      const result = await this.#peer.prepare(input, { signal });
+      this.#assertOwner(input.actor);
+      return this.#prepared(result, signal, purpose);
+    });
+  }
   /** Borrowing the peer requires this exact issued activation configuration; it lends no task permission. */
   assertTaskPeerBorrow(
     input: Pick<
@@ -385,6 +399,7 @@ export class DesktopInstalledPluginActivationOwner {
   #prepared(
     prepared: InstalledPluginPeerPrepared,
     signal: AbortSignal,
+    purpose: "activation" | "task",
   ): InstalledPluginPeerPrepared {
     return Object.freeze({
       ...prepared,
@@ -403,7 +418,11 @@ export class DesktopInstalledPluginActivationOwner {
               parsePluginUiJsonValue(fields.configuration),
               digester,
             );
-            const entry = this.#entry(configuration.pluginId);
+            const entry =
+              purpose === "task" &&
+              isDesktopNativePluginControlConfig(this.#dependencies.activation)
+                ? this.#taskEntry(configuration.pluginId, fields.agentVersionId)
+                : this.#entry(configuration.pluginId);
             await this.#facts(actor, entry, current);
             if (!same(configuration, entry.configuration))
               conflict("desktop_plugin_candidate_configuration_changed");
@@ -413,8 +432,8 @@ export class DesktopInstalledPluginActivationOwner {
               !same(parsePluginUiJsonValue(fields.registration), registration)
             )
               conflict("extension_implementation_unavailable");
-            // This is an authorized Native activation of a real published release,
-            // so another valid Agent version is a business conflict, not bad wire.
+            // Activation pins its prepared default. Task readiness must match the
+            // exact published sibling and its actual immutable deployment instead.
             if (fields.agentVersionId !== entry.target.agentVersionId)
               conflict("extension_execution_target_mismatch");
             const result = await prepared.host.evaluate(input);
@@ -423,6 +442,15 @@ export class DesktopInstalledPluginActivationOwner {
           }),
       }),
     });
+  }
+  #taskEntry(pluginId: string, agentVersionId: unknown): Entry {
+    const found = this.#entries.filter(
+      (entry) =>
+        entry.identity.pluginId === pluginId &&
+        entry.target.agentVersionId === agentVersionId,
+    );
+    if (found.length !== 1) conflict("extension_execution_target_mismatch");
+    return found[0]!;
   }
   #assertOwner(actorInput: ActorContext): void {
     validateNativeOwnership(() => {

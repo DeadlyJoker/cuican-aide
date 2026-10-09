@@ -239,7 +239,9 @@ export async function createDesktopPluginConfigurationRuntime(
         authority,
         assertCurrent: () => assertOwner(configuration.actor),
       }),
-      ...(activation === undefined ? {} : { peer: activation.peer }),
+      ...(activation === undefined
+        ? {}
+        : { peer: activation.peer, taskPeer: activation.taskPeer }),
     });
     const historyAuthorization =
       history === undefined
