@@ -652,6 +652,15 @@ importers:
 
   packages/plugin-tools:
     devDependencies:
+      '@crewon/application':
+        specifier: workspace:*
+        version: link:../application
+      '@crewon/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@crewon/store':
+        specifier: workspace:*
+        version: link:../store
       '@crewon/plugin-host':
         specifier: workspace:*
         version: link:../plugin-host

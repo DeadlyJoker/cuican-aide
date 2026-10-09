@@ -18,7 +18,10 @@
     "test": "pnpm build && node --test --test-concurrency=1 test/*.test.mjs"
   },
   "devDependencies": {
+    "@crewon/application": "workspace:*",
+    "@crewon/domain": "workspace:*",
     "@crewon/plugin-host": "workspace:*",
+    "@crewon/store": "workspace:*",
     "@types/node": "^24.10.1",
     "esbuild": "0.27.7",
     "typescript": "^5.9.3"

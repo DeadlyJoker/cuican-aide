@@ -192,11 +192,9 @@ test("packed tool installs outside the workspace and checks the original host pa
   }
 });
 
-test("init from the packed tool builds a standalone SDK plugin, refuses existing targets and runs on the real host", async () => {
+test("init from the packed tool builds a standalone SDK plugin, refuses existing targets and completes durable upgrade, rollback, withdrawal and cold recovery", async () => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-plugin-template-"));
   const installRoot = join(directory, "installed");
-  let host;
-  let lease;
   try {
     const artifacts = join(directory, "artifacts");
     await mkdir(artifacts);
@@ -297,55 +295,47 @@ test("init from the packed tool builds a standalone SDK plugin, refuses existing
     );
     assert.equal(check.status, 0, check.stderr);
     const report = JSON.parse(check.stdout);
-    const { installLocalPluginPackage, PluginNodeHost } = await import(
-      "@crewon/plugin-host"
+    const metadataPath = join(source, "src/metadata.ts");
+    await writeFile(
+      metadataPath,
+      (await readFile(metadataPath, "utf8")).replace(
+        'version: "1.0.0"',
+        'version: "2.0.0"',
+      ),
     );
-    await mkdir(installRoot, { mode: 0o700 });
-    const installed = await installLocalPluginPackage({
-      directory: candidate,
-      installRoot,
-      authorization: async () => ({ outcome: "allow" }),
-    });
-    assert.equal(installed.packageDigest, report.packageDigest);
-    // Native import happens only after the actual immutable installation, with all authoring inputs removed.
-    await rm(source, { recursive: true, force: true });
-    await rm(developer, { recursive: true, force: true });
-    await rm(artifacts, { recursive: true, force: true });
-    host = new PluginNodeHost({ services: [] });
-    const identity = await host.activate({
-      installRoot,
-      expectedPluginId: "example.minimal",
-      expectedPackageDigest: installed.packageDigest,
-      authorizeActivation: () => "allow",
-    });
-    lease = host.acquire({
-      pluginId: identity.pluginId,
-      packageDigest: identity.packageDigest,
-      purpose: "newOperation",
-      authorizeBorrow: () => "allow",
-    });
-    const service = lease.getService("example.minimal.echo", "1");
-    assert.equal(service.echo("independent template"), "independent template");
-    assert.throws(() => service.echo("a".repeat(2049)), /echo_input_invalid/);
-    host.deactivate(identity.pluginId);
-    assert.throws(
-      () =>
-        host.acquire({
-          pluginId: identity.pluginId,
-          packageDigest: identity.packageDigest,
-          purpose: "newOperation",
-          authorizeBorrow: () => "allow",
-        }),
-      { code: "plugin_instance_unavailable" },
+    const entryPath = join(source, "src/node.ts");
+    await writeFile(
+      entryPath,
+      (await readFile(entryPath, "utf8")).replace(
+        "return text;",
+        "return metadata.version + ':' + text;",
+      ),
     );
-    assert.equal(service.echo("held original lease"), "held original lease");
-    lease.release();
-    lease = undefined;
-    await host.close();
-    host = undefined;
+    execFileSync(pnpm, ["build"], {
+      cwd: source,
+      timeout: 60000,
+      stdio: "pipe",
+    });
+    const second = await verifyLocalPluginPackage({
+      directory: join(source, "dist/2.0.0"),
+    });
+    const { exerciseInstalledTemplateLifecycle } = await import(
+      "./installed-template-lifecycle.mjs"
+    );
+    await exerciseInstalledTemplateLifecycle({
+      directory,
+      installRoot,
+      packages: [
+        { directory: candidate, packageDigest: report.packageDigest },
+        second,
+      ],
+      removeAuthoring: async () => {
+        await rm(source, { recursive: true, force: true });
+        await rm(developer, { recursive: true, force: true });
+        await rm(artifacts, { recursive: true, force: true });
+      },
+    });
   } finally {
-    lease?.release();
-    if (host) await host.close();
     await makeWritable(directory);
     await rm(directory, { recursive: true, force: true });
   }
