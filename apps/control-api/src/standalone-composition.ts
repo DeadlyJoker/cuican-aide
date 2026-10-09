@@ -778,6 +778,7 @@ function composeControlApi(
       ),
       creativeProjects: preparedProjects?.service,
       projectTexts: preparedProjects?.textService,
+      projectOutlines: preparedProjects?.structuredOutlineService,
       projectAssets: preparedProjects?.assetService,
       projectMediaInputs: preparedPlugins?.runtime.tasks?.projectMediaInputs,
       projectMediaGenerations: preparedPlugins?.runtime.projectMediaGenerations,

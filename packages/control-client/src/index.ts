@@ -6,6 +6,7 @@ export * from "./plugin-control-client.ts";
 export * from "./plugin-credit-control-client.ts";
 export * from "./creative-project-control-client.ts";
 export * from "./project-text-control-client.ts";
+export * from "./project-outline-control-client.ts";
 export * from "./project-conversation-control-client.ts";
 export * from "./project-asset-stage-control-client.ts";
 export * from "./project-media-input-control-client.ts";

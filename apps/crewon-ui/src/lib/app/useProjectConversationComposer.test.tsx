@@ -96,7 +96,10 @@ function deferred<T>() {
     resolve,
   };
 }
-async function fixture(fetch: typeof globalThis.fetch) {
+async function fixture(
+  fetch: typeof globalThis.fetch,
+  outlineProtocol: "legacy" | "v2" = "legacy",
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -104,7 +107,23 @@ async function fixture(fetch: typeof globalThis.fetch) {
     baseUrl: "https://control.test",
     accessToken: "user-token",
     csrfToken: "csrf",
-    fetch,
+    fetch: (url, options) =>
+      outlineProtocol === "legacy" &&
+      new URL(String(url)).pathname.startsWith("/api/v2/")
+        ? Promise.resolve(
+            Response.json(
+              {
+                error: {
+                  category: "notFound",
+                  code: "route_not_found",
+                  message: "Older Control fixture",
+                  requestId: "older-control",
+                },
+              },
+              { status: 404 },
+            ),
+          )
+        : fetch(url, options),
   });
   let latest!: ReturnType<typeof useProjectConversationComposer>;
   function View({
@@ -149,6 +168,96 @@ async function fixture(fetch: typeof globalThis.fetch) {
   await render();
   return { client, container, render, current: () => latest };
 }
+it("mixed outline history reads every adopted episode page without promoting the latest structured candidate", async () => {
+  const episodes = Array.from({ length: 23 }, (_, i) => ({
+    episodeId: "episode-" + i,
+    title: "第" + (i + 1) + "集",
+  }));
+  const selected = {
+    projectId,
+    artifactId: "outline",
+    contentRevision: 1,
+    contentDigest: digest,
+    brief: { briefRevision: 1, contentDigest: digest },
+    format: "legacy-v1",
+    title: "已采用",
+    createdAt: at,
+    counts: { episodes: 23, characters: 0, scenes: 0, props: 0, beats: 0 },
+    quality: null,
+  };
+  const view = {
+    artifact: { ...publicTextView.artifact, latestContentRevision: 6 },
+    selectedRevision: selected,
+    latestRevision: {
+      ...selected,
+      contentRevision: 6,
+      format: "structured-v2",
+      title: "尚未采用",
+      quality: { passed: true, problemCount: 0, failedGateCount: 0 },
+    },
+    staleReasons: [],
+  };
+  const pages: number[] = [];
+  let legacyReads = 0;
+  const f = await fixture(async (url) => {
+    const u = new URL(String(url)),
+      path = u.pathname;
+    if (path.endsWith("project-conversation"))
+      return Response.json({ binding });
+    if (path.includes("/api/v2/") && path.endsWith("outline"))
+      return Response.json({ view });
+    if (path.endsWith("sections")) {
+      const start = Number(u.searchParams.get("afterIndex"));
+      pages.push(start);
+      expect(u.searchParams.get("contentRevision")).toBe("1");
+      expect(u.searchParams.get("contentDigest")).toBe(digest);
+      const end = Math.min(start + 10, episodes.length);
+      return Response.json({
+        revision: selected,
+        section: "episodes",
+        startIndex: start,
+        totalItems: episodes.length,
+        items: episodes.slice(start, end),
+        nextIndex: end < episodes.length ? end : null,
+      });
+    }
+    if (path.endsWith("outline")) ++legacyReads;
+    return Response.json({ project });
+  }, "v2");
+  expect(pages).toEqual([0, 10, 20]);
+  expect(legacyReads).toBe(0);
+  expect(f.current().blocked).toBe(false);
+  const stage = f.container.querySelector("select")!;
+  await act(async () => {
+    stage.value = "script";
+    stage.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  const episodeSelect = f.container.querySelectorAll("select")[1]!;
+  expect(Array.from(episodeSelect.options).map((o) => o.value)).toEqual(
+    episodes.map((e) => e.episodeId),
+  );
+  expect(f.current().selection?.stage).toMatchObject({
+    kind: "script",
+    outline: { artifactId: "outline", contentRevision: 1 },
+  });
+});
+it("a v2 authorization failure blocks the original project composer without silently falling back", async () => {
+  let legacyReads = 0;
+  const f = await fixture(async (url) => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith("project-conversation"))
+      return Response.json({ binding });
+    if (path.includes("/api/v2/"))
+      return Response.json(
+        { error: { code: "access_denied", message: "denied" } },
+        { status: 403 },
+      );
+    if (path.endsWith("outline")) ++legacyReads;
+    return Response.json({ project });
+  }, "v2");
+  expect(f.current().blocked).toBe(true);
+  expect(legacyReads).toBe(0);
+});
 it("rereads an association made by the installed module on the same original Thread and ignores other client/Thread notifications", async () => {
   let attached = false,
     reads = 0;

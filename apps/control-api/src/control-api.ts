@@ -23,11 +23,13 @@ import { registerExtensionConfigurationRoutes } from "./extension-configuration-
 import { registerExtensionTaskRoutes } from "./extension-task-route.ts";
 import { registerExtensionReadRoutes } from "./extension-read-route.ts";
 import { registerProjectTextRoutes } from "./project-text-route.ts";
+import { registerProjectOutlineReadRoutes } from "./project-outline-read-route.ts";
 import { registerProjectAssetRoutes } from "./project-asset-route.ts";
 import { registerProjectMediaInputRoutes } from "./project-media-input-route.ts";
 import type { InstalledProjectMediaInputRuntime } from "./installed-project-media-input-runtime.ts";
 import type { ProjectAssetApplicationService } from "@crewon/application";
 import type { ProjectTextApplicationService } from "@crewon/application";
+import type { ProjectStructuredOutlineApplicationService } from "@crewon/application";
 import { registerCreativeProjectRoutes } from "./creative-project-route.ts";
 import { registerProjectGenerationReadRoutes } from "./project-generation-read-route.ts";
 import { registerProjectGenerationSelectionRoutes } from "./project-generation-selection-route.ts";
@@ -269,6 +271,7 @@ export type ControlApiDependencies = Readonly<{
   extensionReads?: ExtensionReadApplicationService | null;
   creativeProjects?: CreativeProjectApplicationService | null;
   projectTexts?: ProjectTextApplicationService | null;
+  projectOutlines?: ProjectStructuredOutlineApplicationService | null;
   projectAssets?: ProjectAssetApplicationService | null;
   projectMediaInputs?: InstalledProjectMediaInputRuntime | null;
   projectMediaGenerations?: InstalledProjectMediaGenerationRuntime | null;
@@ -424,6 +427,10 @@ export function buildControlApi(
       projectTexts: dependencies.projectTexts,
     });
   }
+  if (dependencies.projectOutlines != null) registerProjectOutlineReadRoutes(app, {
+    identity: dependencies.identity,
+    outlines: dependencies.projectOutlines,
+  });
   if (dependencies.projectAssets != null) registerProjectAssetRoutes(app, { identity: dependencies.identity, assets: dependencies.projectAssets });
   if (dependencies.projectMediaResults != null) {
     if (dependencies.projectMediaResultCatalog != null) throw new Error("project_media_result_route_conflict");

@@ -128,6 +128,7 @@ import {
 import { PluginControlClient } from "./plugin-control-client.ts";
 import { PluginCreditControlClient } from "./plugin-credit-control-client.ts";
 import { ProjectTextControlClient } from "./project-text-control-client.ts";
+import { createProjectOutlineControlClient } from "./project-outline-control-client.ts";
 import { ProjectConversationControlClient } from "./project-conversation-control-client.ts";
 import { ProjectAssetStageControlClient } from "./project-asset-stage-control-client.ts";
 import { ProjectMediaInputControlClient } from "./project-media-input-control-client.ts";
@@ -234,6 +235,7 @@ export class ControlApiClient {
   #pluginCreditClient: PluginCreditControlClient | null = null;
   #creativeProjectClient: CreativeProjectControlClient | null = null;
   #projectTextClient: ProjectTextControlClient | null = null;
+  #projectOutlineClient: ReturnType<typeof createProjectOutlineControlClient> | null = null;
   #projectConversationClient: ProjectConversationControlClient | null = null;
   #projectMediaInputStageClient: ProjectMediaInputStageControlClient | null =
     null;
@@ -1668,6 +1670,13 @@ export class ControlApiClient {
     return (this.#projectTextClient ??= new ProjectTextControlClient({
       json: (method, path, body, options) =>
         this.#json(method, path, body, options),
+      protocolError: (code) => new ControlApiProtocolError(code),
+    }));
+  }
+
+  get projectOutlines(): ReturnType<typeof createProjectOutlineControlClient> {
+    return (this.#projectOutlineClient ??= createProjectOutlineControlClient({
+      json: (method, path, body, options) => this.#json(method, path, body, options),
       protocolError: (code) => new ControlApiProtocolError(code),
     }));
   }
