@@ -15,6 +15,7 @@ export function createInstalledPluginRuntimeProjectServices(
       | "projectTools"
       | "projectMediaInputs"
       | "projectFoundationTools"
+      | "projectOutlineTools"
       | "authorizePackage"
     >;
     prepared: InstalledPluginRuntimePrepared;
@@ -32,6 +33,7 @@ export function createInstalledPluginRuntimeProjectServices(
     mediaInputDependencies: d.projectMediaInputs,
     mediaInputStage: c.verifiedProjectMediaInputStage(p.snapshot),
     foundationDependencies: d.projectFoundationTools,
+    outlineDependencies: d.projectOutlineTools,
     foundationAdmission: c.verifiedProjectFoundation(p.snapshot),
     dependencies: d.projectTools,
     context: p.snapshot.context,

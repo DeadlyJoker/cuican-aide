@@ -13,6 +13,7 @@
     "./project-texts-ui": "./src/project-texts-ui.ts",
     "./project-outlines": "./src/plugin-project-outlines-service.ts",
     "./project-outline-edits": "./src/plugin-project-outline-edits-service.ts",
+    "./project-outline-tools": "./src/plugin-project-outline-tools-service.ts",
     "./project-assets": "./src/project-assets.ts",
     "./project-assets-v2": "./src/project-assets-v2.ts",
     "./project-asset-recovery": "./src/project-asset-recovery.ts",

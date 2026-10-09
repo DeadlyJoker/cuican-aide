@@ -20,6 +20,11 @@ import {
   createInstalledPluginProjectFoundationToolsOwner,
   type InstalledPluginProjectFoundationToolsDependencies,
 } from "./installed-plugin-project-foundation-tools.ts";
+import {
+  createInstalledPluginProjectOutlineToolsOwner,
+  type InstalledPluginProjectOutlineToolsDependencies,
+} from "./installed-plugin-project-outline-tools.ts";
+import { CREWON_PROJECT_OUTLINE_TOOLS_SERVICE } from "@crewon/contracts/project-outline-tools";
 
 export type InstalledPluginProjectServices = Readonly<{
   hostServices(): readonly PluginHostService[];
@@ -41,6 +46,7 @@ export function createInstalledPluginProjectServices(
       mediaInputStage: ProjectMediaInputStageRunAdmission | null;
       foundationDependencies?: InstalledPluginProjectFoundationToolsDependencies;
       foundationAdmission?: ProjectFoundationRunAdmission | null;
+      outlineDependencies?: InstalledPluginProjectOutlineToolsDependencies;
     }>,
 ): InstalledPluginProjectServices | null {
   const declared = input.tools.some(
@@ -50,10 +56,22 @@ export function createInstalledPluginProjectServices(
         (operation) => operation === tool.operationId,
       ),
   );
-  if (!declared) return createLegacyProjectServices(input);
+  const outlineDeclared = input.tools.some(
+    (tool) =>
+      tool.adapterId === CREWON_PROJECT_OUTLINE_TOOLS_SERVICE &&
+      tool.operationId === "outline_change",
+  );
+  if (!declared && !outlineDeclared) return createLegacyProjectServices(input);
+  const outline = outlineDeclared
+    ? createInstalledPluginProjectOutlineToolsOwner({
+        ...input,
+        dependencies: input.outlineDependencies,
+        stageAdmission: input.stageAdmission ?? null,
+      })
+    : null;
   const foundationAdmission = input.foundationAdmission ?? null;
   const foundation =
-    foundationAdmission === null
+    !declared || foundationAdmission === null
       ? null
       : createInstalledPluginProjectFoundationToolsOwner({
           ...input,
@@ -62,18 +80,31 @@ export function createInstalledPluginProjectServices(
           foundationAdmission,
         });
   const legacy =
-    input.dependencies === undefined && foundation !== null
+    input.dependencies === undefined &&
+    (foundation !== null || outline !== null)
       ? null
       : createLegacyProjectServices(input);
   return Object.freeze({
     hostServices: () => [
       ...(legacy?.hostServices() ?? []),
       ...(foundation === null ? [] : [foundation.hostService()]),
+      ...(outline === null ? [] : [outline.hostService()]),
     ],
     withInvocation: <T>(
       invocation: ProjectToolsDispatchInvocation,
       delegate: () => Promise<T>,
     ) => {
+      if (
+        outlineDeclared &&
+        invocation.command.name ===
+          extensionToolName(input.admission.pluginId, "outline_change")
+      ) {
+        if (outline === null)
+          throw new Error(
+            "installed_plugin_project_outline_services_unavailable",
+          );
+        return outline.withInvocation(invocation, delegate);
+      }
       const isFoundation = PROJECT_FOUNDATION_TOOL_OPERATION_IDS.some(
         (operation) =>
           invocation.command.name ===
@@ -91,10 +122,13 @@ export function createInstalledPluginProjectServices(
         : legacy.withInvocation(invocation, delegate);
     },
     canRetire: () =>
-      (foundation?.canRetire() ?? true) && (legacy?.canRetire() ?? true),
+      (outline?.canRetire() ?? true) &&
+      (foundation?.canRetire() ?? true) &&
+      (legacy?.canRetire() ?? true),
     close: async () => {
       const settled = await Promise.allSettled([
         foundation?.close(),
+        outline?.close(),
         legacy?.close(),
       ]);
       const failures = settled.filter(

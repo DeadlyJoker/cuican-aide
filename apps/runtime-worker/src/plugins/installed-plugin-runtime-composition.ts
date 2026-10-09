@@ -57,6 +57,12 @@ import {
   prepareInstalledPluginProjectFoundationStores,
   type InstalledPluginProjectFoundationToolsConfig,
 } from "./installed-plugin-project-foundation-tools.ts";
+import {
+  captureInstalledPluginProjectOutlineToolsConfig,
+  composeInstalledPluginProjectOutlineToolsDependencies,
+  prepareInstalledPluginProjectOutlineStores,
+  type InstalledPluginProjectOutlineToolsConfig,
+} from "./installed-plugin-project-outline-tools.ts";
 
 /** Host deployment authority, never supplied by a plugin or inferred from an installation receipt. */
 export type InstalledPluginExecutionConfig = Readonly<{
@@ -69,6 +75,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   executionIo?: InstalledPluginExecutionIoConfig;
   projectTools?: InstalledPluginProjectToolsConfig;
   projectFoundationTools?: InstalledPluginProjectFoundationToolsConfig;
+  projectOutlineTools?: InstalledPluginProjectOutlineToolsConfig;
   projectAssetTools?: InstalledPluginProjectAssetToolsConfig;
   projectMedia?: InstalledPluginProjectMediaConfig;
   projectMediaInputs?: InstalledPluginProjectMediaInputToolsConfig;
@@ -84,6 +91,18 @@ export type InstalledPluginHistoricalQueryConfig = Readonly<{
 export function captureInstalledPluginExecutionConfig(
   config: InstalledPluginExecutionConfig,
 ): InstalledPluginExecutionConfig {
+  const outlineField = Object.getOwnPropertyDescriptor(
+    config,
+    "projectOutlineTools",
+  );
+  if (
+    outlineField !== undefined &&
+    (!outlineField.enumerable || !("value" in outlineField))
+  )
+    throw new Error("installed_plugin_execution_configuration_invalid");
+  const outlineTools = outlineField?.value as
+    | InstalledPluginProjectOutlineToolsConfig
+    | undefined;
   const foundationField = Object.getOwnPropertyDescriptor(
     config,
     "projectFoundationTools",
@@ -118,6 +137,12 @@ export function captureInstalledPluginExecutionConfig(
   if (config.projectMedia !== undefined && config.executionIo === undefined)
     throw new Error("installed_plugin_media_io_unavailable");
   return Object.freeze({
+    ...(outlineTools === undefined
+      ? {}
+      : {
+          projectOutlineTools:
+            captureInstalledPluginProjectOutlineToolsConfig(outlineTools),
+        }),
     ...(foundationTools === undefined
       ? {}
       : {
@@ -292,6 +317,16 @@ export function composeInstalledPluginRuntimeResolver(input: {
     resolveActor: config.resolveActor,
   });
   return new InstalledPluginRuntimeResolver({
+    ...(config.projectOutlineTools === undefined
+      ? {}
+      : {
+          projectOutlineTools:
+            composeInstalledPluginProjectOutlineToolsDependencies({
+              store,
+              config: config.projectOutlineTools,
+              resolveActor: config.resolveActor,
+            }),
+        }),
     ...(config.projectFoundationTools === undefined
       ? {}
       : {
@@ -380,6 +415,10 @@ export async function prepareInstalledPluginRuntimeResolver(input: {
   signal?: AbortSignal;
 }): Promise<InstalledPluginRunRuntimeResolverPort> {
   const config = captureInstalledPluginExecutionConfig(input.config);
+  await prepareInstalledPluginProjectOutlineStores({
+    store: input.store,
+    config: config.projectOutlineTools,
+  });
   await prepareInstalledPluginProjectFoundationStores({
     store: input.store,
     config: config.projectFoundationTools,

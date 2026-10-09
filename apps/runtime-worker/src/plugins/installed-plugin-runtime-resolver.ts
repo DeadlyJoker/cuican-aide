@@ -70,6 +70,8 @@ import {
   type InstalledPluginRuntimeResidentLifetime,
 } from "./installed-plugin-runtime-resident.ts";
 
+import type { InstalledPluginProjectOutlineToolsDependencies } from "./installed-plugin-project-outline-tools.ts";
+
 export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   contexts: InstalledPluginRunContext;
   admissions: Required<
@@ -96,6 +98,7 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   executionIo?: InstalledPluginExecutionIoDependencies;
   projectTools?: InstalledPluginProjectToolsDependencies;
   projectFoundationTools?: InstalledPluginProjectFoundationToolsDependencies;
+  projectOutlineTools?: InstalledPluginProjectOutlineToolsDependencies;
   projectMedia?: InstalledPluginMediaExecutionDependencies;
   projectMediaInputs?: InstalledPluginProjectMediaInputToolsDependencies;
 }>;
