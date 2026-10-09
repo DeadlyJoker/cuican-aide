@@ -289,6 +289,42 @@ test("fails over between policy-approved DNS addresses without resolving again",
   assert.equal(result.status, "ok");
 });
 
+test("does not discard a healthy first address merely because TLS exceeds 250 ms", async () => {
+  const attempts: string[] = [];
+  const result = await new ResponsesProviderConnectivityProbe(
+    { ...providerConfig("https://provider.example/v1"), deadlineMs: 2000 },
+    {
+      egress: resolver(
+        [address("93.184.216.34"), address("93.184.216.35")],
+        new DesktopProviderProbeEgressPolicy(),
+      ),
+      http: {
+        request: ({ target }, signal) => {
+          attempts.push(target.address);
+          if (target.address.endsWith("35"))
+            return Promise.reject(new Error("last_address_unreachable"));
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(
+              () => resolve(jsonResponse({ data: [{ id: "gateway-model" }] })),
+              350,
+            );
+            signal.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+                reject(signal.reason);
+              },
+              { once: true },
+            );
+          });
+        },
+      },
+    },
+  ).probe(new AbortController().signal);
+  assert.equal(result.status, "ok");
+  assert.deepEqual(attempts, ["93.184.216.34"]);
+});
+
 test("performs a real loopback request and projects bounded model metadata", async (t) => {
   const requests: Array<{
     authorization: string | undefined;

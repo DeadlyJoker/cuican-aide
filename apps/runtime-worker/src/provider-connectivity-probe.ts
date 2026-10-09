@@ -214,9 +214,12 @@ export class ResponsesProviderConnectivityProbe {
     targets: readonly PinnedProviderProbeEndpoint[],
     signal: AbortSignal,
   ): Promise<ProviderProbeHttpResponse> {
-    const failoverDelayMs = Math.min(
-      250,
-      Math.max(1, Math.floor(this.#deadlineMs / targets.length)),
+    // Give each approved address its share of the same overall deadline.
+    // A fixed 250 ms cut-off can abort a healthy remote TLS connection and
+    // leave only an unreachable final address for the rest of the budget.
+    const failoverDelayMs = Math.max(
+      1,
+      Math.floor(this.#deadlineMs / targets.length),
     );
     let lastError: unknown = new ProviderProbeTransportError();
     for (const [index, target] of targets.entries()) {
