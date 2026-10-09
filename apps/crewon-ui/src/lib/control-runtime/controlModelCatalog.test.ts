@@ -20,6 +20,19 @@ const catalog: ActiveAgentVersionCatalogResponse = {
 };
 
 describe("Control model catalog", () => {
+  it("offers and routes every gateway model beyond the old 24-model cutoff", () => {
+    const siblings = Array.from({ length: 39 }, (_, index) =>
+      version(
+        `agent-default:model-${index.toString(16).padStart(24, "0")}`,
+        `gateway-model-${index}`,
+      ),
+    );
+    const directory = { ...catalog, data: [catalog.data[1]!, ...siblings] };
+    expect(controlDefaultModelVersions(directory)).toHaveLength(40);
+    expect(controlAgentVersionForModel(directory, "gateway-model-38")).toEqual(
+      siblings[38],
+    );
+  });
   it("keeps only structurally pinned variants in provider order", () => {
     expect(
       controlDefaultModelVersions(catalog).map(({ agentVersionId, model }) => [

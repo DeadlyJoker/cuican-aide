@@ -1,3 +1,7 @@
+import {
+  gatewayModelCatalogKey,
+  writeGatewayModelCatalog,
+} from "./desktopGatewayModelCatalog.ts";
 import { discardInterruptedDesktopConfigWrites } from "./desktopConfigFile.ts";
 import { ControlApiClientError } from "@crewon/control-client";
 import { dirname, join, resolve } from "node:path";
@@ -238,6 +242,7 @@ async function launch(): Promise<void> {
     },
   );
   registerIpc({
+    runtimeDataDirectory,
     agentPlatformCredentials,
     authority,
     browserViews,
@@ -345,6 +350,7 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 }
 
 function registerIpc(options: {
+  runtimeDataDirectory: string;
   agentPlatformCredentials: AgentPlatformCredentialStore;
   authority: LocalWorkspaceAuthority;
   browserViews: BrowserViewManager;
@@ -356,6 +362,7 @@ function registerIpc(options: {
   window: BrowserWindow;
 }): void {
   const {
+    runtimeDataDirectory,
     agentPlatformCredentials,
     authority,
     browserViews,
@@ -501,7 +508,19 @@ function registerIpc(options: {
     providers.upsert(request),
   );
   handle("crewon:providers:model-catalog", (request: unknown) =>
-    providerModelCatalogForForm(request, { paths, providers }),
+    providerModelCatalogForForm(request, {
+      paths,
+      providers,
+      onDiscovered: (discovered, models) => {
+        const active = providers.active();
+        if (
+          active !== null &&
+          gatewayModelCatalogKey(active) ===
+            gatewayModelCatalogKey({ ...discovered, modelId: active.modelId })
+        )
+          writeGatewayModelCatalog(runtimeDataDirectory, active, models);
+      },
+    }),
   );
   handle("crewon:window:close", () => window.close());
   handle("crewon:window:minimize", () => window.minimize());

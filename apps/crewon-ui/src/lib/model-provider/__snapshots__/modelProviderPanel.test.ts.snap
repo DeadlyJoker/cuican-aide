@@ -22,9 +22,9 @@ exports[`applyModelOptionsToPanel > converts the model text field into a select 
     },
   ],
   "modelField": {
-    "description": "2 models currently available from this provider.",
+    "description": "2 chat models available from this gateway; choose the default here and switch models in chat.",
     "id": "model-provider-model-id",
-    "label": "Model ID / LiteLLM model alias",
+    "label": "Default model",
     "options": [
       {
         "label": "gpt-5.6-sol",

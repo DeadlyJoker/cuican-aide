@@ -41,7 +41,7 @@ export function desktopInstalledPluginModelCatalog(
       ].some((marker) => id.toLowerCase().includes(marker))
     )
       continue;
-    if (models.length < 24) models.push(id);
+    models.push(id);
   }
   return Object.freeze(models);
 }

@@ -69,7 +69,7 @@ test("authoritative catalogs never reinsert defaults and filter non-agent models
         ...Array.from({ length: 30 }, (_, i) => `model-${i}`),
       ]),
     ).length,
-    24,
+    30,
   );
   for (const malformed of [
     "not-json",
@@ -101,4 +101,12 @@ test("a valid declared catalog never restores an unavailable default model", () 
   assert.deepEqual(runtimeModelCatalog(undefined, "legacy-explicit-model"), [
     "legacy-explicit-model",
   ]);
+});
+
+test("retains every model in a valid gateway directory through the final variant", () => {
+  const models = Array.from({ length: 100 }, (_, index) => `model-${index}`);
+  assert.deepEqual(
+    runtimeModelCatalog(JSON.stringify(models), models[0]),
+    models,
+  );
 });

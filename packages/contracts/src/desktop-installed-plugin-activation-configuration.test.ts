@@ -192,7 +192,7 @@ test("complete package and target identities are required", () => {
 test("entry list is bounded, dense and cannot repeat the same semantic publication", () => {
   const input = fixture();
   rejects({ ...input, entries: [] });
-  rejects({ ...input, entries: Array(33).fill(input.entries[0]) });
+  rejects({ ...input, entries: Array(101).fill(input.entries[0]) });
   rejects({ ...input, entries: Array(1) });
   rejects({
     ...input,

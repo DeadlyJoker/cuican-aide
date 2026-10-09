@@ -291,8 +291,8 @@ export const settingsCatalog = [
         icon: "cable",
         mode: "action",
         description: {
-          zh: "任务模型与模型服务",
-          en: "Task models and model services",
+          zh: "配置网关，一次接入多个模型",
+          en: "Configure a gateway to access multiple models",
         },
         backend: {
           refreshTarget: "model-providers",

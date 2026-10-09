@@ -43,6 +43,43 @@ async function fixture(t: TestContext) {
   };
 }
 
+test("a gateway above the old 24/32 limits loads its final immutable plugin model", async (t) => {
+  const { input, compile } = await fixture(t);
+  const models = Array.from(
+    { length: 40 },
+    (_, index) => `gateway-model-${index.toString().padStart(2, "0")}`,
+  );
+  const environment = {
+    ...input.environment,
+    CREWON_MODEL_CATALOG_JSON: JSON.stringify(models),
+  };
+  const entries = compileNativeInstalledPluginModelVariants({
+    ...compile,
+    environment,
+  });
+  assert.deepEqual(
+    entries.map((entry) => entry.version.model.modelId),
+    models,
+  );
+  const document = parseInstalledPluginReleaseDocument({
+    schemaVersion: INSTALLED_PLUGIN_RELEASE_SCHEMA,
+    tenantId: scope.tenantId,
+    defaultAgentVersionId: input.defaultAgentVersionId,
+    entries,
+  });
+  const release = await loadInstalledPluginRelease({
+    document,
+    installRoot: input.worker.installRoot,
+    environment,
+    authorizeRead: async () => "allow",
+  });
+  t.after(() => release.close());
+  assert.deepEqual(
+    release.versions.map((entry) => entry.model.modelId),
+    models,
+  );
+});
+
 test("one real installed package compiles independent advertised model siblings without importing Node or expanding tools", async (t) => {
   const { f, input, compile } = await fixture(t);
   const environment = {

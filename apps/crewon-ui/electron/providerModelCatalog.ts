@@ -17,8 +17,8 @@ import { processRuntimeLogs } from "./processRuntimeLogs.ts";
 import { desktopPluginCreditSettlementSharedEnvironment } from "./desktopPluginCreditSettlementEnvironment.ts";
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
-const MAX_MODELS = 32;
-const DEADLINE_MS = 10_000;
+const MAX_MODELS = 100;
+const DEADLINE_MS = 25_000;
 const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,127}$/u;
 const ENVIRONMENT_VARIABLE_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u;
 const PROBE_STATUSES = new Set([
@@ -53,6 +53,14 @@ export async function providerModelCatalogForForm(
   options: {
     providers: ProviderCredentialStore;
     paths: RuntimePaths;
+    onDiscovered?: (
+      provider: Readonly<{
+        apiKey: string | null;
+        endpoint: string;
+        providerId: string;
+      }>,
+      models: readonly string[],
+    ) => void;
   },
 ): Promise<ProviderModelCatalogOutcome> {
   const request = parseRequest(value);
@@ -80,6 +88,15 @@ export async function providerModelCatalogForForm(
     endpoint: request.endpoint,
     providerId: request.providerId,
   });
+  if (result.status === "ok")
+    options.onDiscovered?.(
+      {
+        apiKey: secret,
+        endpoint: request.endpoint,
+        providerId: request.providerId,
+      },
+      result.models,
+    );
   return {
     models: result.models.filter((id) => id !== SENTINEL_MODEL_ID),
     status: result.status,

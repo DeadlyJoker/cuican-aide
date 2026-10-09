@@ -55,7 +55,7 @@ export function captureDesktopInstalledPluginRelease(
     value.defaultAgentVersionId !== environment.CREWON_AGENT_VERSION_ID ||
     !Array.isArray(value.entries) ||
     value.entries.length < 1 ||
-    value.entries.length > 32
+    value.entries.length > 100
   )
     invalid("release");
   const versions = new Set<string>();

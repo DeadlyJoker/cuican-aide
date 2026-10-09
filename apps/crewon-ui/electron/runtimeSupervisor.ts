@@ -1,3 +1,7 @@
+import {
+  readGatewayModelCatalog as readModelCatalogCache,
+  writeGatewayModelCatalog as writeModelCatalogCache,
+} from "./desktopGatewayModelCatalog.ts";
 import { desktopRuntimeProviderModel } from "./desktopRuntimeProviderModel.ts";
 import { prepareNativeDesktopInstalledPluginRuntime } from "./desktopNativeInstalledPluginRuntime.ts";
 import { ControlApiClient } from "@crewon/control-client";
@@ -7,7 +11,6 @@ import {
   restoreDesktopNativePluginBusinessActivations,
   setDesktopPluginSelectionWithNativeBusinessActivation,
 } from "./desktopNativePluginBusinessActivation.ts";
-import { writeDesktopConfigAtomically } from "./desktopConfigFile.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -92,10 +95,8 @@ import type { DesktopPluginBootstrap } from "./desktopPluginBootstrap.ts";
 import type { DesktopLocalPluginExecutionResult } from "../src/lib/desktop/desktopLocalPluginExecutionSetupProtocol.ts";
 import { withDesktopProviderProbeEnvironment } from "./desktopProviderProbeEnvironment.ts";
 
-const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
-const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
-const MAX_CACHED_MODELS = 32;
-const MAX_RUNTIME_MODELS = 24;
+const MAX_CACHED_MODELS = 100;
+const MAX_RUNTIME_MODELS = 100;
 const MAX_MODEL_ID_BYTES = 256;
 const RUNTIME_CHILD_GRACEFUL_EXIT_MS = 2_000;
 const RUNTIME_CHILD_FORCED_EXIT_MS = 1_000;
@@ -1591,58 +1592,6 @@ export function selectDesktopRuntimeModelCatalog(input: {
     return fallback;
   }
   return discovered;
-}
-
-function readModelCatalogCache(
-  dataDirectory: string,
-  provider: ActiveProvider,
-): readonly string[] | null {
-  const path = join(dataDirectory, MODEL_CATALOG_CACHE_FILE);
-  if (!existsSync(path)) return null;
-  try {
-    const metadata = statSync(path);
-    if (!metadata.isFile() || metadata.size > 32 * 1024) return null;
-    const value = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    if (
-      !isPlainObject(value) ||
-      value.schemaVersion !== MODEL_CATALOG_CACHE_SCHEMA ||
-      value.providerKey !== modelCatalogProviderKey(provider) ||
-      !Array.isArray(value.models)
-    ) {
-      return null;
-    }
-    return validatedModelCatalog(value.models, provider.modelId);
-  } catch {
-    return null;
-  }
-}
-
-function writeModelCatalogCache(
-  dataDirectory: string,
-  provider: ActiveProvider,
-  models: readonly string[],
-): void {
-  const path = join(dataDirectory, MODEL_CATALOG_CACHE_FILE);
-  writeDesktopConfigAtomically(
-    path,
-    `${JSON.stringify({
-      schemaVersion: MODEL_CATALOG_CACHE_SCHEMA,
-      providerKey: modelCatalogProviderKey(provider),
-      models,
-    })}\n`,
-  );
-}
-
-function modelCatalogProviderKey(provider: ActiveProvider): string {
-  return createHash("sha256")
-    .update(
-      JSON.stringify({
-        providerId: provider.providerId,
-        endpoint: provider.endpoint,
-        modelId: provider.modelId,
-      }),
-    )
-    .digest("hex");
 }
 
 function validatedModelCatalog(

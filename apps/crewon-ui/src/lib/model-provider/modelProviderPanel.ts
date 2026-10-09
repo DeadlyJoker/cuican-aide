@@ -292,8 +292,8 @@ export function modelProviderListPanel(params: {
             vendor?.name ?? null,
             entry.modelId
               ? locale === "zh"
-                ? `模型 ${entry.modelId}`
-                : `model ${entry.modelId}`
+                ? `默认模型 ${entry.modelId}`
+                : `default model ${entry.modelId}`
               : null,
             credentialKindLabel(entry, locale),
           ].filter((fact): fact is string => fact !== null),
@@ -372,8 +372,8 @@ function credentialKindOptions(locale: Locale) {
 
 function modelListDescription(count: number, locale: Locale): string {
   return locale === "zh"
-    ? `该模型服务当前返回 ${count} 个可用模型。`
-    : `${count} models currently available from this provider.`;
+    ? `网关当前提供 ${count} 个聊天模型，均可在聊天框选择；这里只设置默认模型。`
+    : `${count} chat models available from this gateway; choose the default here and switch models in chat.`;
 }
 
 /** Select options for the model field, keeping the current value selectable. */
@@ -505,10 +505,7 @@ export function modelProviderFormPanel(params: {
       },
       {
         id: MODEL_PROVIDER_FIELD_IDS.modelId,
-        label:
-          locale === "zh"
-            ? "模型 ID / LiteLLM 模型别名"
-            : "Model ID / LiteLLM model alias",
+        label: locale === "zh" ? "默认模型" : "Default model",
         description:
           modelOptions.length > 0
             ? modelListDescription(modelOptions.length, locale)

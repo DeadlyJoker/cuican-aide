@@ -32,7 +32,7 @@ Wait for running tasks to finish before saving or switching model sources.",
       "badge": "In use",
       "id": "gateway",
       "meta": [
-        "model gateway-model",
+        "default model gateway-model",
         "key stored",
       ],
       "subtitle": "https://api.example.com/v1",

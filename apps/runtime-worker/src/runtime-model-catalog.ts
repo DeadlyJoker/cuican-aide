@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 const MAX_CATALOG_BYTES = 32 * 1024;
-const MAX_MODELS = 24;
+const MAX_MODELS = 100;
 const MAX_MODEL_ID_BYTES = 256;
 const MAX_VARIANT_BASE_ID_BYTES = 480;
 const NON_AGENT_MODEL_MARKERS = [

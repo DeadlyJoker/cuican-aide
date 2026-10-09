@@ -181,7 +181,7 @@ export function parseDesktopInstalledPluginActivationConfiguration(
       value.timeoutMs > 30000 ||
       !Array.isArray(value.entries) ||
       value.entries.length < 1 ||
-      value.entries.length > 32
+      value.entries.length > 100
     )
       fail();
     const actor = peerActor(value.actor);

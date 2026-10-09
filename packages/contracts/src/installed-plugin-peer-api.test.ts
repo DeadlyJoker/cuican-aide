@@ -144,7 +144,7 @@ test("publishes a separate private v1 entrypoint and fixed wire bounds", () => {
   );
   assert.equal(limits.messageBytes, 512 * 1024);
   assert.equal(limits.configurationBytes, 16 * 1024);
-  assert.equal(limits.entries, 32);
+  assert.equal(limits.entries, 100);
   assert.ok(Object.isFrozen(limits));
 });
 for (const request of requests)
@@ -445,7 +445,7 @@ test("bounds the catalog count and complete message independently", () => {
   }));
   const parsed = parseInstalledPluginPeerResponse({ ...responses[0], entries });
   assert.equal(parsed.operation, "catalog");
-  if (parsed.operation === "catalog") assert.equal(parsed.entries.length, 32);
+  if (parsed.operation === "catalog") assert.equal(parsed.entries.length, 100);
   invalid(() =>
     parseInstalledPluginPeerResponse({
       ...responses[0],

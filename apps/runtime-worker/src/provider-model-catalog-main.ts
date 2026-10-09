@@ -54,7 +54,7 @@ function modelProbe(input: ProviderModelCatalogInput): Probe {
     runtimeBindingId: "desktop-model-catalog",
     endpoint: input.endpoint,
     secret: input.apiKey,
-    deadlineMs: 3_000,
+    deadlineMs: 10_000,
   };
   const dependencies = {
     egress: new ProviderProbeEgressResolver({

@@ -37,7 +37,7 @@ export type ProviderCredentialUpsert = Readonly<{
 export type ProviderModelCatalogRequest = Readonly<{
   /** Raw key typed in the form; the host falls back to stored credentials. */
   apiKey: string | null;
-  /** Current model field value, kept as the first choice when non-null. */
+  /** Default model preference; never limits the discovered gateway directory. */
   defaultModelId: string | null;
   endpoint: string;
   environmentVariable: string | null;
@@ -201,7 +201,7 @@ function parseModelCatalogResult(value: unknown): ProviderModelCatalogResult {
   exactObject(value, ["models", "status"]);
   if (
     !Array.isArray(value.models) ||
-    value.models.length > 32 ||
+    value.models.length > 100 ||
     !value.models.every((id) => parseModelCatalogText(id, 256) !== null) ||
     typeof value.status !== "string" ||
     value.status.length === 0 ||

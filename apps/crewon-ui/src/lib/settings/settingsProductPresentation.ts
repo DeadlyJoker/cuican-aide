@@ -64,7 +64,7 @@ const fieldCopy: Record<Locale, Record<string, FieldCopy>> = {
       label: "服务地址",
     },
     "model-provider-credential-kind": {
-      description: "选择这个模型需要的登录方式",
+      description: "选择这个网关需要的鉴权方式",
       label: "登录方式",
     },
     "model-provider-env-key": {
@@ -76,14 +76,14 @@ const fieldCopy: Record<Locale, Record<string, FieldCopy>> = {
       label: "简称",
     },
     "model-provider-model-id": {
-      description: "填写要在任务中使用的具体模型",
-      label: "模型名称",
+      description: "网关模型会自动同步到聊天框；这里仅选择新任务的默认模型",
+      label: "默认模型",
     },
     "model-provider-name": {
       description: "显示在模型选择列表中的名称",
       label: "显示名称",
     },
-    "model-provider-selected": { label: "设为默认模型" },
+    "model-provider-selected": { label: "设为默认网关" },
     "model-provider-vendor": {
       description: "选择常用模型来源，也可以添加其他来源",
       label: "模型来源",
@@ -156,7 +156,7 @@ const fieldCopy: Record<Locale, Record<string, FieldCopy>> = {
       label: "Service address",
     },
     "model-provider-credential-kind": {
-      description: "Choose how this model is accessed",
+      description: "Choose how this gateway is authenticated",
       label: "Sign-in method",
     },
     "model-provider-env-key": {
@@ -168,14 +168,15 @@ const fieldCopy: Record<Locale, Record<string, FieldCopy>> = {
       label: "Short name",
     },
     "model-provider-model-id": {
-      description: "The specific model to use for tasks",
-      label: "Model name",
+      description:
+        "Gateway models are available in chat; this is only the default for new tasks",
+      label: "Default model",
     },
     "model-provider-name": {
       description: "The name shown in model pickers",
       label: "Display name",
     },
-    "model-provider-selected": { label: "Make this the default model" },
+    "model-provider-selected": { label: "Make this the default gateway" },
     "model-provider-vendor": {
       description: "Choose a common model source or add another one",
       label: "Model source",
@@ -243,8 +244,14 @@ function presentField(
     ...field,
     label: copy?.label ?? productText(field.label, locale),
     description:
-      copy?.description ??
-      (field.description ? productText(field.description, locale) : undefined),
+      field.id === "model-provider-model-id" && field.options?.length
+        ? locale === "zh"
+          ? `已获取 ${field.options.length} 个聊天模型，可在聊天框切换；这里仅选择默认项`
+          : `${field.options.length} chat models available in the composer; choose the default here`
+        : (copy?.description ??
+          (field.description
+            ? productText(field.description, locale)
+            : undefined)),
     options: field.options?.map((option) => ({
       ...option,
       label: optionLabel(field.id, option.label, option.value, locale),
@@ -358,7 +365,7 @@ function presentAction(
     if (/:(?:delete)$|delete|remove|revoke/iu.test(id))
       return locale === "zh" ? "移除" : "Remove";
     if (/model-provider-add/iu.test(id))
-      return locale === "zh" ? "添加模型" : "Add model";
+      return locale === "zh" ? "添加网关" : "Add gateway";
     if (/start-remote-pairing/iu.test(id))
       return locale === "zh" ? "添加设备" : "Add device";
     if (/enable-remote-control/iu.test(id))

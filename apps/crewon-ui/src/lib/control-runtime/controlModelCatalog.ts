@@ -4,7 +4,7 @@ import type {
 } from "@crewon/contracts";
 
 const MODEL_VARIANT_HASH = /^[a-f0-9]{24}$/u;
-const MAX_CONTROL_MODELS = 24;
+const MAX_CONTROL_MODELS = 100;
 
 /** Returns the exact active AgentVersions generated for CrewON's model control. */
 export function controlDefaultModelVersions(

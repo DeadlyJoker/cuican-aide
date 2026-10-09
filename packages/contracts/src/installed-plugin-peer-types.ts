@@ -11,7 +11,7 @@ export const INSTALLED_PLUGIN_PEER_WIRE_LIMITS = Object.freeze({
   manifestBytes: 64 * 1024,
   sourceBytes: 64 * 1024,
   targetBytes: 4 * 1024,
-  entries: 32,
+  entries: 100,
   jsonNodes: 16384,
   jsonDepth: 24,
 });

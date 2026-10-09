@@ -153,7 +153,7 @@ describe("SettingsContent", () => {
     );
 
     expect(markup).toContain("模型来源状态");
-    expect(markup).toContain("任务模型与模型服务");
+    expect(markup).toContain("配置网关，一次接入多个模型");
     expect(markup).not.toContain("选择任务默认使用的模型");
     expect(markup).toContain("不可用");
     expect(markup).toContain("settings-row");
@@ -192,7 +192,7 @@ describe("SettingsContent", () => {
         expect(markup).not.toContain('aria-label="General"');
         expect(
           markup.includes(
-            `aria-label="${locale === "zh" ? "添加模型" : "Add model"}"`,
+            `aria-label="${locale === "zh" ? "添加网关" : "Add gateway"}"`,
           ),
         ).toBe(mutationAvailable);
         expect(markup).toMatchSnapshot();
@@ -216,7 +216,7 @@ describe("SettingsContent", () => {
         onSectionChange={vi.fn()}
       />,
     );
-    for (const label of ["服务地址", "访问密钥", "模型名称", "保存", "取消"]) {
+    for (const label of ["服务地址", "访问密钥", "默认模型", "保存", "取消"]) {
       expect(markup).toContain(label);
     }
     expect(markup).toContain('type="password"');
@@ -272,7 +272,7 @@ describe("SettingsContent", () => {
       />,
     );
 
-    expect(markup).toContain("添加模型");
+    expect(markup).toContain("添加网关");
     expect(markup).toContain("settings-row-badge-icon");
     expect(markup).toContain("当前使用");
     expect(markup).toContain('aria-label="检查连接"');

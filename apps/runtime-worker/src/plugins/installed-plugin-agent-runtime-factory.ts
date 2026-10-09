@@ -140,7 +140,7 @@ export function createInstalledPluginAgentVersionRuntimeFactory(input: {
   if (
     !Array.isArray(input.entries) ||
     input.entries.length < 1 ||
-    input.entries.length > 32
+    input.entries.length > 100
   )
     fail("installed_plugin_agent_runtime_entries_invalid");
   const prepared = input.entries.map((entry) =>

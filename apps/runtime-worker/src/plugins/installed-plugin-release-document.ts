@@ -140,7 +140,7 @@ export function parseInstalledPluginReleaseDocument(
     document.schemaVersion !== INSTALLED_PLUGIN_RELEASE_SCHEMA ||
     !Array.isArray(document.entries) ||
     document.entries.length < 1 ||
-    document.entries.length > 32
+    document.entries.length > 100
   )
     installedPluginReleaseFailure("document_invalid");
   const tenantId = extensionOpaqueId(document.tenantId);
