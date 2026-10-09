@@ -22,7 +22,13 @@ export async function buildInstalledBusinessPluginExamples(
     name.endsWith(".tgz"),
   );
   assert.equal(tarballs.length, 1);
-  async function buildExample({ name, outputRoot, sourceDirectory }) {
+  async function buildExample({
+    name,
+    outputRoot,
+    sourceDirectory,
+    versions = ["1.0.0", "2.0.0"],
+    fixtureProfile,
+  }) {
     const development = join(ownedRoot, "development", name);
     await mkdir(development, { recursive: true, mode: 0o700 });
     await cp(sourceDirectory, development, {
@@ -48,12 +54,18 @@ export async function buildInstalledBusinessPluginExamples(
       },
     );
     const packages = [];
-    for (const version of ["1.0.0", "2.0.0"]) {
+    for (const version of versions) {
       execFileSync("pnpm", ["build"], {
         cwd: development,
         stdio: "inherit",
         timeout: 60000,
-        env: { ...process.env, CREWON_EXAMPLE_PLUGIN_VERSION: version },
+        env: {
+          ...process.env,
+          CREWON_EXAMPLE_PLUGIN_VERSION: version,
+          ...(fixtureProfile === undefined
+            ? {}
+            : { CREWON_UI_FIXTURE_PROFILE: fixtureProfile }),
+        },
       });
       const directory = join(ownedRoot, outputRoot, version);
       await cp(join(development, "dist", version), directory, {
@@ -85,6 +97,18 @@ export async function buildInstalledBusinessPluginExamples(
         ),
       })
     : null;
+  const projectUi = includeShortDrama
+    ? await buildExample({
+        name: "ui-project-bridge-compatibility",
+        outputRoot: "project-ui-packages",
+        sourceDirectory: join(
+          repository,
+          "apps/runtime-worker/test-fixtures/ui-workbench-v1",
+        ),
+        versions: ["3.0.0"],
+        fixtureProfile: "projects",
+      })
+    : null;
   // Deleting the actual development projects proves consumers cannot borrow their dependencies.
   await rm(join(ownedRoot, "development"), { recursive: true });
   await rm(sdkOutput, { recursive: true });
@@ -99,6 +123,7 @@ export async function buildInstalledBusinessPluginExamples(
       : {
           shortDramaV1Directory: shortDrama[0],
           shortDramaV2Directory: shortDrama[1],
+          projectUiDirectory: projectUi[0],
         }),
     developmentRemoved: true,
   });

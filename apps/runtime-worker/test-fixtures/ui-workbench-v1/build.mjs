@@ -7,6 +7,12 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "1.0.0";
+const fixtureProfile = process.env.CREWON_UI_FIXTURE_PROFILE ?? "preview";
+if (
+  !["preview", "projects"].includes(fixtureProfile) ||
+  (fixtureProfile === "projects" && version !== "3.0.0")
+)
+  throw new Error("fixture_profile_invalid");
 if (version.length > 64 || !/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(version))
   throw new Error("example_version_invalid");
 const output = join(root, "dist", version);
@@ -81,7 +87,18 @@ const descriptor = parsePluginPackageDescriptor({
     ui: { path: "ui.mjs", mode: "trustedModule" },
   },
   businessManifestPath: null,
-  requires: [],
+  requires:
+    fixtureProfile === "projects"
+      ? [
+          "crewon.creative-projects",
+          "crewon.plugin-ui-recovery",
+          "crewon.project-generation-reads",
+          "crewon.project-generations",
+          "crewon.project-generation-queries",
+          "crewon.project-generation-selections",
+          "crewon.project-generation-contexts",
+        ].map((service) => ({ service, apiVersion: "1", optional: false }))
+      : [],
   provides: [],
   contributions: [
     { id: "workbench", kind: "module", slot: "main.content", title: "AI 短剧" },

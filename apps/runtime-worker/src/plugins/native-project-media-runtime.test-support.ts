@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+import { extensionCanonicalJson } from "@crewon/domain";
 import type { TestContext } from "node:test";
 import { captureLocalPluginPackage } from "@crewon/plugin-host/package-snapshot";
 import { captureDesktopLocalShortDramaMediaInputs } from "../../../crewon-ui/electron/desktopLocalShortDramaMediaInputs.ts";
@@ -22,7 +25,7 @@ import {
 import { prepareInstalledPluginProjectMediaInputStores } from "./installed-plugin-project-media-input-tools.ts";
 import { prepareInstalledPluginProjectMedia } from "./installed-plugin-project-media-composition.ts";
 
-/** Original Main approval/file producers and installed Short26 bytes. No Node/model/provider execution is claimed. */
+/** Original Main approval/file producers and an installed metadata-only media contract fixture. Its Node entry throws if imported. */
 export async function nativeMediaFixture(
   t: TestContext,
   options: {
@@ -33,13 +36,62 @@ export async function nativeMediaFixture(
     reviewMismatch?: "graph" | "manifest";
   } = {},
 ) {
+  const workflows = [
+    { workflowId: "krea2-reference-four-view", nodeId: "129" },
+    { workflowId: "flux2-three-reference-storyboard", nodeId: "17" },
+  ].map(({ workflowId, nodeId }) => {
+    const bytes = readFileSync(
+      fileURLToPath(
+        new URL(
+          `../../test-fixtures/native-media-v1/${workflowId}.api.json`,
+          import.meta.url,
+        ),
+      ),
+    );
+    const graph = JSON.parse(bytes.toString("utf8"));
+    assert.equal(graph[nodeId]?.class_type, "SaveImage");
+    return {
+      bytes,
+      declaration: {
+        workflowId,
+        file: `workflows/${workflowId}.api.json`,
+        workflowDigest: `sha256:${createHash("sha256").update(extensionCanonicalJson(graph)).digest("hex")}`,
+        output: { kind: "image", nodeId, dimensions: "workflow-native" },
+      },
+    };
+  });
   const f = await executionSetupFixture({
     version: "26.0.0",
     contract: "assets",
     projectContext: true,
-    packageDirectory: resolve(
-      "output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0",
-    ),
+    requirements: [
+      {
+        service: "crewon.project-media-inputs",
+        apiVersion: "1",
+        optional: true,
+      },
+      {
+        service: "crewon.project-media-input-tools",
+        apiVersion: "1",
+        optional: true,
+      },
+    ],
+    packageDataFiles: [
+      ...workflows.map((workflow) => ({
+        path: workflow.declaration.file,
+        bytes: workflow.bytes,
+      })),
+      {
+        path: "media-input-profile.json",
+        bytes: Buffer.from(
+          JSON.stringify({
+            schemaVersion: "crewon.short-drama-media-input-profile.v1",
+            pluginId: "crewon.short-drama",
+            workflows: workflows.map((workflow) => workflow.declaration),
+          }),
+        ),
+      },
+    ],
   });
   const workers: InstalledPluginWorkerAuthority[] = [];
   const materialOwners: { close(): Promise<void> }[] = [];

@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createExtensionConfiguration } from "@crewon/domain";
 import { SqliteRunStore } from "@crewon/store";
@@ -31,6 +31,8 @@ export async function executionSetupFixture(
     version?: string;
     /** Copied into the owned fixture source; the supplied package is never mutated. */
     packageDirectory?: string;
+    /** Test-only immutable package data; cannot replace the original entrypoints or business manifest. */
+    packageDataFiles?: readonly Readonly<{ path: string; bytes: Buffer }>[];
     /** Test-only descriptor upgrade; original frozen package bytes stay untouched. */
     assetUiProtocol?: "2";
     projectContext?: boolean;
@@ -109,7 +111,23 @@ export async function executionSetupFixture(
       ),
     ],
   ]);
-  for (const [path, bytes] of files) writeFileSync(join(source, path), bytes);
+  for (const item of options.packageDataFiles ?? []) {
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(item.path) ||
+      item.path
+        .split("/")
+        .some(
+          (segment) => segment === ".." || segment === "." || segment === "",
+        ) ||
+      files.has(item.path)
+    )
+      throw new Error("fixture_package_data_path_invalid");
+    files.set(item.path, Buffer.from(item.bytes));
+  }
+  for (const [path, bytes] of files) {
+    mkdirSync(dirname(join(source, path)), { recursive: true });
+    writeFileSync(join(source, path), bytes);
+  }
   const descriptor = {
     schemaVersion: "crewon.plugin-package.v1",
     hostApi: "crewon.plugin-host.v1",
