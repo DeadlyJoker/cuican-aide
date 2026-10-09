@@ -10,7 +10,7 @@ import {
   DesktopModelCatalogEgressPolicy,
   ProviderProbeEgressResolver,
 } from "./provider-probe-egress.ts";
-import { runtimeModelCatalog } from "./runtime-model-catalog.ts";
+import { advertisedRuntimeModelCatalog } from "./runtime-model-catalog.ts";
 
 const MAX_INPUT_BYTES = 40 * 1024;
 
@@ -38,14 +38,9 @@ export async function providerModelCatalog(
       ? result.models.map(({ id }) => id)
       : [];
   return {
-    // Successful discovery is evidence of availability. The runtime fallback
-    // parser keeps a configured default, so filter that synthetic entry here.
     models:
       result.status === "ok"
-        ? runtimeModelCatalog(
-            JSON.stringify(advertised),
-            parsed.defaultModelId,
-          ).filter((model) => advertised.includes(model))
+        ? advertisedRuntimeModelCatalog(JSON.stringify(advertised))
         : [],
     status: result.status,
   };

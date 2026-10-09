@@ -27,6 +27,7 @@ import {
 } from "./desktopNativePluginAuthority.ts";
 import { createDesktopInstalledPluginPreparationFiles } from "./desktopInstalledPluginPreparationFiles.ts";
 import { captureDesktopInstalledPluginRelease } from "./desktopInstalledPluginReleaseCapture.ts";
+import { desktopInstalledPluginModelCatalog } from "./desktopInstalledPluginModelCatalog.ts";
 import {
   withoutDesktopInstalledPluginEnvironment,
   type DesktopInstalledPluginRuntime,
@@ -71,6 +72,10 @@ export function prepareNativeDesktopInstalledPluginRuntime(
     modelId: provider.modelId,
     credentialRequired: provider.apiKey !== null,
   };
+  const modelCatalog = desktopInstalledPluginModelCatalog(
+    shared,
+    provider.modelId,
+  );
   if (
     shared.CREWON_CONTROL_DB_PATH !==
       join(input.dataDirectory, "control.sqlite") ||
@@ -91,7 +96,8 @@ export function prepareNativeDesktopInstalledPluginRuntime(
             manifest.actor.spaceId,
           ][index] || worker[key] !== shared[key],
     ) ||
-    worker.CREWON_MODEL_API_KEY !== (provider.apiKey ?? "")
+    worker.CREWON_MODEL_API_KEY !== (provider.apiKey ?? "") ||
+    worker.CREWON_MODEL_CATALOG_JSON !== shared.CREWON_MODEL_CATALOG_JSON
   )
     invalid("native_environment");
   const deadlineMs = input.deadlineMs ?? 20000;
@@ -223,11 +229,13 @@ export function prepareNativeDesktopInstalledPluginRuntime(
         release.value,
         manifest,
         shared,
-        { providerBinding },
+        { providerBinding, modelCatalog },
         {},
         snapshots,
       );
       const doc = record(release.value);
+      const seenPlugins = new Set<string>();
+      const defaultTargets = new Set<string>();
       for (const raw of doc.entries as unknown[]) {
         const entry = record(raw),
           identity = record(entry.packageIdentity),
@@ -242,13 +250,22 @@ export function prepareNativeDesktopInstalledPluginRuntime(
             revision: config.revision,
             contentDigest: config.contentDigest,
           }) ||
-          status.approvalRequirement !== entry.approvalRequirement ||
+          status.approvalRequirement !== entry.approvalRequirement
+        )
+          invalid("preparation_output");
+        // The first published sibling is the prepared default. Other targets were
+        // independently checked against Main's model catalog above.
+        if (
+          !seenPlugins.has(status.pluginId) &&
           !isDeepStrictEqual(status.target, entry.target)
         )
           invalid("preparation_output");
+        seenPlugins.add(status.pluginId);
+        if (isDeepStrictEqual(status.target, entry.target))
+          defaultTargets.add(status.pluginId);
       }
       if (
-        (doc.entries as unknown[]).length !==
+        defaultTargets.size !==
         result.plugins.filter((status) => status.state === "prepared").length
       )
         invalid("preparation_output");
@@ -284,7 +301,7 @@ export function prepareNativeDesktopInstalledPluginRuntime(
             writeFileSync(
               path,
               JSON.stringify({
-                schemaVersion: "crewon.desktop-native-plugin-control.v1",
+                schemaVersion: "crewon.desktop-native-plugin-control.v2",
                 authorityPath: authority.path,
                 peer: {
                   origin,

@@ -324,6 +324,33 @@ describe("desktop runtime identity", () => {
     ).toEqual(["gpt-5.5"]);
   });
 
+  it("does not restore a removed default from a stale cache after successful discovery", () => {
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: ["gpt-5.5", "gpt-5.6-sol"],
+        defaultModelId: "gpt-5.5",
+        discovered: ["gpt-5.6-sol", "gpt-5.6-terra"],
+      }),
+    ).toEqual(["gpt-5.6-sol", "gpt-5.6-terra"]);
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: ["gpt-5.6-sol"],
+        defaultModelId: "gpt-5.5",
+        discovered: null,
+      }),
+    ).toEqual(["gpt-5.6-sol"]);
+  });
+
+  it("distinguishes a successful empty catalog from failed discovery", () => {
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: ["gpt-5.5", "gpt-5.6-sol"],
+        defaultModelId: "gpt-5.5",
+        discovered: [],
+      }),
+    ).toEqual([]);
+  });
+
   it("reports only the first unexpected runtime child exit", () => {
     const control = new EventEmitter() as ChildProcess;
     const worker = new EventEmitter() as ChildProcess;

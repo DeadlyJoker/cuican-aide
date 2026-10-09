@@ -36,6 +36,8 @@ export function captureDesktopInstalledPluginRelease(
   environment: NodeJS.ProcessEnv,
   configuration: Readonly<{
     providerBinding: DesktopInstalledPluginProviderBinding;
+    /** Only Native Main supplies its captured Key-discovered model set. Remote release validation remains single-model. */
+    modelCatalog?: readonly string[];
   }>,
   authorityTokens: Readonly<Record<string, string>>,
   snapshots: Snapshot[],
@@ -58,6 +60,7 @@ export function captureDesktopInstalledPluginRelease(
     invalid("release");
   const versions = new Set<string>();
   const capturedPackages = new Set<string>();
+  const packageModels = new Set<string>();
   const entries = value.entries.map(
     (raw): DesktopInstalledPluginExpectedCatalogEntry => {
       const entry = record(raw);
@@ -132,7 +135,9 @@ export function captureDesktopInstalledPluginRelease(
         binding.contentDigest !== base.contentDigest ||
         binding.agentVersionId === value.defaultAgentVersionId ||
         binding.provider.endpoint !== provider.responsesEndpoint ||
-        base.model.modelId !== provider.modelId ||
+        !(configuration.modelCatalog ?? [provider.modelId]).includes(
+          base.model.modelId,
+        ) ||
         (binding.provider.apiKeyEnvironment !== null) !==
           provider.credentialRequired
       )
@@ -161,7 +166,11 @@ export function captureDesktopInstalledPluginRelease(
         versions.has(version.agentVersionId) ||
         version.agentVersionId === value.defaultAgentVersionId ||
         version.agentVersionId === base.agentVersionId ||
-        version.model.modelId !== provider.modelId ||
+        version.model.modelId !== base.model.modelId ||
+        (configuration.modelCatalog !== undefined &&
+          packageModels.has(
+            JSON.stringify([identity.pluginId, version.model.modelId]),
+          )) ||
         target.executionAuthority !== "crewonKernel" ||
         target.agentVersionId !== version.agentVersionId ||
         target.agentVersionContentDigest !== version.contentDigest ||
@@ -170,6 +179,9 @@ export function captureDesktopInstalledPluginRelease(
       )
         invalid("release_target");
       versions.add(version.agentVersionId);
+      packageModels.add(
+        JSON.stringify([identity.pluginId, version.model.modelId]),
+      );
       if (!capturedPackages.has(source.packageDigest)) {
         capturePackage(
           join(

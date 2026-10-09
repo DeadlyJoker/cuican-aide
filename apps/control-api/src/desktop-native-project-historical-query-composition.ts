@@ -116,11 +116,13 @@ export function assertDesktopNativeProjectHistoricalQueryPreparedTarget(
         input.target[key as keyof typeof input.target],
     ),
   );
-  if (entries.length !== 1)
+  if (entries.length === 0)
     throw new Error(
       "desktop_native_project_historical_query_target_unavailable",
     );
   assertDesktopNativePluginControlConfigCurrent(input.nativeControl);
+  // A query checks package provenance rather than choosing a new execution model.
+  // Main publishes the prepared default first; model siblings have identical identity/configuration.
   return entries[0]!;
 }
 function invalid(): never {

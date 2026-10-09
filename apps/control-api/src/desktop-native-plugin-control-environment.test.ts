@@ -594,6 +594,74 @@ test(
   },
 );
 test(
+  "Native Control V2 admits distinct model targets only for the same exact package and configuration, preserving strict V1",
+  nativeOnly,
+  async (t) => {
+    const f = await fixture(t, { historical: true });
+    const entry = f.document.entries[0]!;
+    const sibling = {
+      ...entry,
+      configuredTarget: {
+        ...entry.configuredTarget,
+        agentVersionId: "named-second-model-version",
+        agentVersionContentDigest: digest("named-second-model-content"),
+        materializationDigest: digest("named-second-model-materialization"),
+        runtimeGeneration: "named-second-model-runtime",
+        policySnapshotId: "named-second-model-policy",
+      },
+    };
+    const write = (schemaVersion: string, second: unknown) =>
+      writeFileSync(
+        f.controlPath,
+        JSON.stringify({
+          ...f.document,
+          schemaVersion,
+          entries: [entry, second],
+        }),
+        { mode: 0o600 },
+      );
+    write("crewon.desktop-native-plugin-control.v1", sibling);
+    assert.throws(f.load, /configuration_invalid/);
+    write("crewon.desktop-native-plugin-control.v2", sibling);
+    const loaded = f.load();
+    assert.equal(loaded.publication.entries.length, 2);
+    assert.deepEqual(
+      loaded.publication.entries[0]!.target,
+      entry.configuredTarget,
+    );
+    assert.deepEqual(
+      loaded.publication.entries[1]!.target,
+      sibling.configuredTarget,
+    );
+    if (f.bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3")
+      assert.fail("expected-v3");
+    assert.equal(
+      assertDesktopNativeProjectHistoricalQueryPreparedTarget({
+        configuration: f.bootstrap,
+        nativeControl: loaded,
+        ...f.bootstrap.projects.historicalQueries!.publications[0]!,
+      }),
+      loaded.publication.entries[0],
+    );
+    for (const invalid of [
+      entry,
+      {
+        ...sibling,
+        identity: {
+          ...sibling.identity,
+          manifestDigest: digest("foreign-manifest"),
+        },
+      },
+      { ...sibling, configuration: { ...sibling.configuration, revision: 2 } },
+    ]) {
+      write("crewon.desktop-native-plugin-control.v2", invalid);
+      assert.throws(f.load, /configuration_invalid/);
+    }
+    assert.throws(() => assertDesktopNativePluginControlConfigCurrent(loaded));
+  },
+);
+
+test(
   "explicit Native Control source pins the original owner, database, configuration, peer and policy, without remote credentials",
   nativeOnly,
   async (t) => {

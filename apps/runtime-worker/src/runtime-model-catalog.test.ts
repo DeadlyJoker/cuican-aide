@@ -50,3 +50,37 @@ test("derives stable bounded model variant identities", () => {
   );
   assert.equal(modelVariantAgentVersionId("a".repeat(481), "model"), null);
 });
+
+test("authoritative catalogs never reinsert defaults and filter non-agent models without consuming the bound", async () => {
+  const { advertisedRuntimeModelCatalog } = await import(
+    "./runtime-model-catalog.ts"
+  );
+  assert.deepEqual(
+    advertisedRuntimeModelCatalog(
+      JSON.stringify(["gpt-image-2", "gpt-5.6-sol"]),
+    ),
+    ["gpt-5.6-sol"],
+  );
+  assert.deepEqual(advertisedRuntimeModelCatalog("[]"), []);
+  assert.equal(
+    advertisedRuntimeModelCatalog(
+      JSON.stringify([
+        "gpt-image-2",
+        ...Array.from({ length: 30 }, (_, i) => `model-${i}`),
+      ]),
+    ).length,
+    24,
+  );
+  for (const malformed of [
+    "not-json",
+    "{}",
+    JSON.stringify(["m", "m"]),
+    JSON.stringify([""]),
+    JSON.stringify([null]),
+    JSON.stringify(new Array(101).fill("m")),
+  ])
+    assert.throws(
+      () => advertisedRuntimeModelCatalog(malformed),
+      /runtime_model_catalog_invalid/,
+    );
+});

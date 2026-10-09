@@ -8,11 +8,74 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import {
+  compileAgentVersion,
+  type CompiledAgentVersion,
+} from "@crewon/agent-version";
 import { desktopInstalledPluginRuntimeFixture } from "./desktopInstalledPluginRuntime.test-support.ts";
 import { prepareNativeDesktopInstalledPluginRuntime } from "./desktopNativeInstalledPluginRuntime.ts";
 import { prepareDesktopPluginBootstrap } from "./desktopPluginBootstrap.ts";
 import { parseNativeInstalledPluginPreparationConfiguration } from "../../runtime-worker/src/plugins/installed-plugin-native-preparation-config.ts";
 import { DESKTOP_NATIVE_PLUGIN_POLICY_FILE } from "./desktopNativePluginAuthority.ts";
+import { desktopInstalledPluginModelCatalog } from "./desktopInstalledPluginModelCatalog.ts";
+
+const modelDigester = {
+  sha256: (value: string) =>
+    `sha256:${createHash("sha256").update(value).digest("hex")}`,
+};
+function recompileModel(
+  base: CompiledAgentVersion,
+  modelId: string,
+): CompiledAgentVersion {
+  return compileAgentVersion(
+    {
+      schemaVersion: "crewon.agent-version-source.v0",
+      agentVersionId: `${base.agentVersionId}-${modelId}`,
+      runtimeGeneration: `${base.runtimeGeneration}-${modelId}`,
+      policySnapshotId: `${base.policySnapshotId}-${modelId}`,
+      instructions: base.instructions,
+      model: { ...base.model, modelId },
+      execution: base.execution,
+      resources: base.resources,
+      tools: base.tools,
+    },
+    modelDigester,
+  );
+}
+
+function addModel(f: Awaited<ReturnType<typeof fixture>>, modelId: string) {
+  const entry = f.release.entries[0]!,
+    source = recompileModel(entry.modelSource.version, modelId),
+    version = recompileModel(entry.version, modelId);
+  const sibling = {
+    ...entry,
+    modelSource: {
+      ...entry.modelSource,
+      version: source,
+      runtimeBinding: {
+        ...entry.modelSource.runtimeBinding,
+        agentVersionId: source.agentVersionId,
+        contentDigest: source.contentDigest,
+      },
+      deployment: {
+        ...entry.modelSource.deployment,
+        agentVersionId: source.agentVersionId,
+        contentDigest: source.contentDigest,
+      },
+    },
+    version,
+    target: {
+      ...entry.target,
+      agentVersionId: version.agentVersionId,
+      agentVersionContentDigest: version.contentDigest,
+      runtimeGeneration: version.runtimeGeneration,
+      policySnapshotId: version.policySnapshotId,
+    },
+  };
+  f.release.entries.push(sibling);
+  return sibling;
+}
 
 async function fixture() {
   const f = await desktopInstalledPluginRuntimeFixture();
@@ -107,6 +170,126 @@ async function fixture() {
 }
 
 describe("explicit Main Native installed plugin execution", () => {
+  it("captures model siblings from Main's Key catalog while publishing one prepared default", async () => {
+    const f = await fixture();
+    let owner: ReturnType<typeof f.prepare> = null;
+    try {
+      f.writePolicy();
+      const sibling = addModel(f, "gpt-5.6-sol");
+      owner = prepareNativeDesktopInstalledPluginRuntime({
+        ...f.input,
+        sharedEnvironment: {
+          ...f.input.sharedEnvironment,
+          CREWON_MODEL_CATALOG_JSON: '["native-model","gpt-5.6-sol"]',
+        },
+        workerEnvironment: {
+          ...f.input.workerEnvironment,
+          CREWON_MODEL_CATALOG_JSON: '["native-model","gpt-5.6-sol"]',
+        },
+      })!;
+      f.result(owner, true);
+      const completed = owner.complete();
+      expect(completed.kind).toBe("installed");
+      if (completed.kind !== "installed") throw new Error("expected installed");
+      expect(completed.statuses).toHaveLength(1);
+      expect(completed.runtime.expectedCatalogEntries).toHaveLength(2);
+      expect(
+        completed.runtime.expectedCatalogEntries[1]!.configuredTarget,
+      ).toEqual(sibling.target);
+      const env = completed.runtime.controlAfterPeer({
+        origin: "http://127.0.0.1:39431",
+      });
+      const control = JSON.parse(
+        readFileSync(env.CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH!, "utf8"),
+      );
+      expect(control.schemaVersion).toBe(
+        "crewon.desktop-native-plugin-control.v2",
+      );
+      expect(control.entries).toHaveLength(2);
+      expect(JSON.stringify(control)).not.toContain(f.input.provider.apiKey);
+    } finally {
+      await owner?.close();
+      await f.close();
+    }
+  });
+
+  it.each(["unadvertised", "duplicate-model", "default-target-missing"])(
+    "rejects %s sibling outputs before lending Control access",
+    async (kind) => {
+      const f = await fixture();
+      let owner: ReturnType<typeof f.prepare> = null;
+      try {
+        f.writePolicy();
+        addModel(
+          f,
+          kind === "duplicate-model" ? "native-model" : "gpt-5.6-sol",
+        );
+        const catalog =
+          kind === "unadvertised"
+            ? '["native-model"]'
+            : '["native-model","gpt-5.6-sol"]';
+        owner = prepareNativeDesktopInstalledPluginRuntime({
+          ...f.input,
+          sharedEnvironment: {
+            ...f.input.sharedEnvironment,
+            CREWON_MODEL_CATALOG_JSON: catalog,
+          },
+          workerEnvironment: {
+            ...f.input.workerEnvironment,
+            CREWON_MODEL_CATALOG_JSON: catalog,
+          },
+        })!;
+        const p = f.result(owner, true);
+        if (kind === "default-target-missing") {
+          const doc = JSON.parse(readFileSync(p.result, "utf8"));
+          doc.plugins[0].target = {
+            ...doc.plugins[0].target,
+            agentVersionId: "foreign-default-version",
+          };
+          writeFileSync(p.result, JSON.stringify(doc), { mode: 0o600 });
+        }
+        expect(() => owner!.complete()).toThrow();
+        expect(() =>
+          readFileSync(join(p.directory, "native-control.json")),
+        ).toThrow();
+      } finally {
+        await owner?.close();
+        await f.close();
+      }
+    },
+  );
+
+  it("does not restore an omitted default and rejects malformed Key catalogs", () => {
+    expect(
+      desktopInstalledPluginModelCatalog(
+        { CREWON_MODEL_CATALOG_JSON: '["gpt-5.6-sol","gpt-image-2"]' },
+        "gpt-5.5",
+      ),
+    ).toEqual(["gpt-5.6-sol"]);
+    expect(
+      desktopInstalledPluginModelCatalog(
+        { CREWON_MODEL_CATALOG_JSON: "[]" },
+        "gpt-5.5",
+      ),
+    ).toEqual([]);
+    expect(desktopInstalledPluginModelCatalog({}, "legacy")).toEqual([
+      "legacy",
+    ]);
+    for (const value of [
+      "bad",
+      "{}",
+      '["sol","sol"]',
+      "[null]",
+      '[" bad "]',
+      " ".repeat(32769),
+    ])
+      expect(() =>
+        desktopInstalledPluginModelCatalog(
+          { CREWON_MODEL_CATALOG_JSON: value },
+          "legacy",
+        ),
+      ).toThrow("model_catalog");
+  });
   it.each([
     [false, "none"],
     [true, "none"],

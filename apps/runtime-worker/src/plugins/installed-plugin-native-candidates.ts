@@ -25,6 +25,7 @@ import { nativePreparationFailure as fail } from "./installed-plugin-native-prep
 import {
   assertNativeInstalledPluginModelPreparation,
   compileNativeInstalledPluginReleaseEntry,
+  compileNativeInstalledPluginModelVariants,
 } from "./installed-plugin-native-preparation-source.ts";
 import {
   INSTALLED_PLUGIN_RELEASE_SCHEMA,
@@ -133,7 +134,7 @@ export async function prepareNativeInstalledPluginCandidates(
               schemaVersion: INSTALLED_PLUGIN_RELEASE_SCHEMA,
               tenantId: loaded.configuration.scope.tenantId,
               defaultAgentVersionId,
-              entries: [...prepared.values()].map((row) => row.entry),
+              entries: [...prepared.values()].flatMap((row) => row.entries),
             });
       const result = parseNativeInstalledPluginPreparationResult({
         schemaVersion: NATIVE_INSTALLED_PLUGIN_PREPARATION_RESULT_SCHEMA,
@@ -210,7 +211,7 @@ async function prepareCandidate(
   const facts = await owner.facts(input.plugin.pluginId);
   const registration = await owner.registration(facts);
   const configuration = owner.validate(registration, facts);
-  const entry = compileNativeInstalledPluginReleaseEntry({
+  const compilation = {
     bootstrapVersion: input.bootstrapVersion,
     defaultAgentVersionId: input.defaultAgentVersionId,
     environment: loaded.environment,
@@ -218,12 +219,17 @@ async function prepareCandidate(
     registration,
     configuration,
     approvalRequirement: input.plugin.approvalRequirement,
-  });
+  };
+  const entries =
+    "nativeAuthorityPath" in loaded.worker
+      ? compileNativeInstalledPluginModelVariants(compilation)
+      : [compileNativeInstalledPluginReleaseEntry(compilation)];
+  const entry = entries[0]!;
   const document = parseInstalledPluginReleaseDocument({
     schemaVersion: INSTALLED_PLUGIN_RELEASE_SCHEMA,
     tenantId: loaded.configuration.scope.tenantId,
     defaultAgentVersionId: input.defaultAgentVersionId,
-    entries: [entry],
+    entries,
   });
   let release: LoadedInstalledPluginRelease | null = null;
   try {
@@ -267,6 +273,7 @@ async function prepareCandidate(
       facts: Object.freeze({ ...facts, configuration }),
       registration,
       entry,
+      entries,
     });
     await owner.recheck(row);
     return row;

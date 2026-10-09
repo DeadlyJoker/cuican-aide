@@ -7,6 +7,7 @@ import type {
   ExtensionConfiguration,
   PluginProfileScope,
 } from "@crewon/domain";
+import { advertisedRuntimeModelCatalog } from "../runtime-model-catalog.ts";
 import { resolveResponsesRuntimeConfiguration } from "../responses-runtime-configuration.ts";
 import { resolveRuntimeBootstrapRoute } from "../runtime-bootstrap-defaults.ts";
 import {
@@ -71,6 +72,8 @@ export function compileNativeInstalledPluginReleaseEntry(
     registration: InstalledPluginBusinessRegistration;
     configuration: ExtensionConfiguration;
     approvalRequirement: "none" | "perAction";
+    /** Host-discovered model only; never an arbitrary transport override. */
+    modelId?: string;
   }>,
 ): InstalledPluginReleaseEntry {
   const bootstrap = parseCompiledAgentVersion(
@@ -82,6 +85,15 @@ export function compileNativeInstalledPluginReleaseEntry(
     input.defaultAgentVersionId,
     input.environment,
   );
+  const modelId = input.modelId ?? bootstrap.model.modelId;
+  if (
+    input.modelId !== undefined &&
+    !nativeInstalledPluginModelCatalog(
+      input.environment,
+      bootstrap.model.modelId,
+    ).includes(modelId)
+  )
+    fail("model_not_advertised");
   const provider = Object.freeze({
     kind: "directResponses" as const,
     endpoint: resolved.config.endpoint,
@@ -93,7 +105,7 @@ export function compileNativeInstalledPluginReleaseEntry(
   });
   const base = {
     instructions: bootstrap.instructions,
-    model: bootstrap.model,
+    model: { ...bootstrap.model, modelId },
     execution: bootstrap.execution,
     resources: { workspaceRequired: false, governedContextDigest: null },
     tools: [],
@@ -200,4 +212,53 @@ export function compileNativeInstalledPluginReleaseEntry(
     version,
     target,
   });
+}
+
+/** Bounded model siblings of one installed package, each with a real immutable model source/deployment. */
+export function compileNativeInstalledPluginModelVariants(
+  input: Omit<
+    Parameters<typeof compileNativeInstalledPluginReleaseEntry>[0],
+    "modelId"
+  >,
+): readonly InstalledPluginReleaseEntry[] {
+  const models = nativeInstalledPluginModelCatalog(
+    input.environment,
+    input.bootstrapVersion.model.modelId,
+  );
+  if (models.length === 0) fail("model_catalog_empty");
+  return Object.freeze(
+    models.map((modelId) =>
+      compileNativeInstalledPluginReleaseEntry({ ...input, modelId }),
+    ),
+  );
+}
+
+function nativeInstalledPluginModelCatalog(
+  environment: Readonly<Record<string, string | undefined>>,
+  defaultModelId: string,
+): readonly string[] {
+  const input = environment.CREWON_MODEL_CATALOG_JSON;
+  if (input === undefined) return [defaultModelId];
+  let models: readonly string[];
+  try {
+    models = advertisedRuntimeModelCatalog(input);
+  } catch {
+    return fail("model_catalog_invalid");
+  }
+  // Catalog order is not identity. Preserve the default first only when it remains advertised.
+  return Object.freeze(
+    [...models].sort((a, b) =>
+      a === b
+        ? 0
+        : a === defaultModelId
+          ? -1
+          : b === defaultModelId
+            ? 1
+            : a < b
+              ? -1
+              : a > b
+                ? 1
+                : 0,
+    ),
+  );
 }

@@ -52,6 +52,38 @@ export function runtimeModelCatalog(
   return models;
 }
 
+/** Successful discovery is authoritative; no configured or cached default is injected. */
+export function advertisedRuntimeModelCatalog(
+  input: string,
+): readonly string[] {
+  if (new TextEncoder().encode(input).byteLength > MAX_CATALOG_BYTES)
+    throw new Error("runtime_model_catalog_invalid");
+  let value: unknown;
+  try {
+    value = JSON.parse(input);
+  } catch {
+    throw new Error("runtime_model_catalog_invalid");
+  }
+  if (!Array.isArray(value) || value.length > 100)
+    throw new Error("runtime_model_catalog_invalid");
+  const seen = new Set<string>();
+  const selected: string[] = [];
+  for (const candidate of value) {
+    const id = optionalModelId(candidate);
+    if (id === null || seen.has(id))
+      throw new Error("runtime_model_catalog_invalid");
+    seen.add(id);
+    if (
+      NON_AGENT_MODEL_MARKERS.some((marker) =>
+        id.toLowerCase().includes(marker),
+      )
+    )
+      continue;
+    if (selected.length < MAX_MODELS) selected.push(id);
+  }
+  return Object.freeze(selected);
+}
+
 /** Stable child identity for a model variant of the default CrewON Agent. */
 export function modelVariantAgentVersionId(
   defaultAgentVersionId: string,

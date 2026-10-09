@@ -1640,9 +1640,9 @@ function validatedModelCatalog(
   if (value.length > MAX_CACHED_MODELS) {
     throw new Error("desktop_model_catalog_invalid");
   }
-  const defaultModel = validatedModelId(defaultModelId);
-  const seen = new Set([defaultModel]);
-  const models = [defaultModel];
+  validatedModelId(defaultModelId);
+  const seen = new Set<string>();
+  const models: string[] = [];
   for (const candidate of value) {
     const model = validatedModelId(candidate);
     if (!seen.has(model)) {
@@ -1657,18 +1657,17 @@ function runnableModelSet(
   models: readonly string[],
   defaultModelId: string,
 ): string {
-  const defaultModel = validatedModelId(defaultModelId);
+  validatedModelId(defaultModelId);
   const runnable = models
     .filter(
       (model) =>
-        model !== defaultModel &&
         !NON_AGENT_MODEL_MARKERS.some((marker) =>
           model.toLowerCase().includes(marker),
         ),
     )
-    .slice(0, MAX_RUNTIME_MODELS - 1)
+    .slice(0, MAX_RUNTIME_MODELS)
     .sort();
-  return JSON.stringify([defaultModel, ...runnable]);
+  return JSON.stringify(runnable);
 }
 
 function validatedModelId(value: unknown): string {

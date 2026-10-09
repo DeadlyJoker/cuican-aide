@@ -62,6 +62,7 @@ export type NativePreparedCandidate = Readonly<{
   facts: Facts;
   registration: InstalledPluginBusinessRegistration;
   entry: InstalledPluginReleaseEntry;
+  entries: readonly InstalledPluginReleaseEntry[];
 }>;
 
 const packageUnavailableCodes = new Set([

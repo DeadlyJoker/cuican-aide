@@ -156,3 +156,84 @@ for (const reviewMismatch of ["graph", "manifest"] as const)
     assert.deepEqual(f.counts(), before);
     assert.equal(f.fetches(), 0);
   });
+
+test("Native V2 startup publishes three Key-advertised model siblings with the real installed media graphs and no provider calls", async (t) => {
+  const f = await fixture(t, "v2"),
+    before = f.counts();
+  const input = {
+    ...f.input,
+    environment: {
+      ...f.input.environment,
+      CREWON_MODEL_CATALOG_JSON: JSON.stringify([
+        "gpt-5.6-terra",
+        "gpt-5.6-sol",
+        "gpt-5.6-luna",
+      ]),
+    },
+  };
+  const prepared = await prepareNativeInstalledPluginCandidates(input);
+  assert.deepEqual(
+    prepared.document!.entries.map((entry) => entry.version.model.modelId),
+    ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
+  );
+  assert.equal(prepared.result.plugins.length, 1);
+  const status = prepared.result.plugins[0]!;
+  assert.equal(status.state, "prepared");
+  if (status.state !== "prepared") assert.fail("expected prepared");
+  assert.deepEqual(status.target, prepared.document!.entries[0]!.target);
+  const cli = await loadInstalledPluginReleaseCliInput(input);
+  assert.ok(cli);
+  try {
+    assert.equal(cli.release.versions.length, 3);
+    assert.equal(
+      new Set(cli.release.versions.map((version) => version.agentVersionId))
+        .size,
+      3,
+    );
+    assert.ok(
+      cli.release.versions.every(
+        (version) =>
+          version.model.modelId !== f.input.environment.CREWON_MODEL_ID,
+      ),
+    );
+    for (const entry of prepared.document!.entries) {
+      assert.equal(
+        entry.packageIdentity.packageDigest,
+        f.media.f.identity.packageDigest,
+      );
+      assert.deepEqual(
+        entry.configuration,
+        prepared.document!.entries[0]!.configuration,
+      );
+      assert.deepEqual(
+        entry.version.tools,
+        prepared.document!.entries[0]!.version.tools,
+      );
+    }
+    assert.deepEqual(f.counts(), before);
+    assert.equal(f.fetches(), 0);
+  } finally {
+    await cli.release.close();
+    await cli.authority.close();
+  }
+});
+
+for (const catalog of ["[]", "not-json", '["sol","sol"]'])
+  test(`Native V2 startup fails closed for an unusable captured model catalog: ${catalog}`, async (t) => {
+    const f = await fixture(t, "v2"),
+      before = f.counts();
+    await assert.rejects(
+      () =>
+        prepareNativeInstalledPluginCandidates({
+          ...f.input,
+          environment: {
+            ...f.input.environment,
+            CREWON_MODEL_CATALOG_JSON: catalog,
+          },
+        }),
+      /model_catalog/,
+    );
+    await assert.rejects(() => readFile(f.documentPath), { code: "ENOENT" });
+    assert.deepEqual(f.counts(), before);
+    assert.equal(f.fetches(), 0);
+  });

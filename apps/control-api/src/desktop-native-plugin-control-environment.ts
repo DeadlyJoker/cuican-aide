@@ -100,7 +100,10 @@ export function loadDesktopNativePluginControlEnvironment(
       "peer",
       "entries",
     ]);
-    if (value.schemaVersion !== "crewon.desktop-native-plugin-control.v1")
+    if (
+      value.schemaVersion !== "crewon.desktop-native-plugin-control.v1" &&
+      value.schemaVersion !== "crewon.desktop-native-plugin-control.v2"
+    )
       invalid();
     const authorityPath = desktopPluginPrivatePath(value.authorityPath),
       authorityField = Object.getOwnPropertyDescriptor(
@@ -228,11 +231,24 @@ export function loadDesktopNativePluginControlEnvironment(
         target: Object.freeze({ ...target }),
       });
     });
-    if (
-      new Set(entries.map((entry) => entry.identity.pluginId)).size !==
-      entries.length
-    )
-      invalid();
+    const plugins = new Map<string, (typeof entries)[number]>();
+    const targets = new Set<string>();
+    for (const entry of entries) {
+      const previous = plugins.get(entry.identity.pluginId);
+      const targetId = entry.target.agentVersionId;
+      if (
+        targets.has(targetId) ||
+        (previous !== undefined &&
+          (value.schemaVersion === "crewon.desktop-native-plugin-control.v1" ||
+            extensionCanonicalJson(previous.identity) !==
+              extensionCanonicalJson(entry.identity) ||
+            extensionCanonicalJson(previous.configuration) !==
+              extensionCanonicalJson(entry.configuration)))
+      )
+        invalid();
+      targets.add(targetId);
+      plugins.set(entry.identity.pluginId, entry);
+    }
     const publication = Object.freeze({
       actor: authority.actor,
       scope: authority.scope,
