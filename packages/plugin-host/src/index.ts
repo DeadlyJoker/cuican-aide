@@ -103,6 +103,12 @@ export {
   type DeferredPluginUiHostServiceAvailability,
 } from "./plugin-ui-deferred-host-service-availability.ts";
 export {
+  PluginCompositionCoordinator,
+  PluginCompositionCoordinatorError,
+  type PluginCompositionAuthority,
+  type PluginCompositionResult,
+} from "./plugin-composition-coordinator.ts";
+export {
   PluginExecutionRegistry,
   PluginExecutionRegistryError,
 } from "./plugin-execution-registry.ts";
