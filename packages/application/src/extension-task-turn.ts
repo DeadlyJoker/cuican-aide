@@ -1,4 +1,5 @@
 import { prepareExtensionTaskModel } from "./extension-task-model-selection.ts";
+import { prepareExtensionTaskComposition } from "./extension-task-composition.ts";
 import {
   assertExtensionContentStages,
   extensionContentStageReceipt,
@@ -530,6 +531,10 @@ export async function createExtensionTaskTurn(
       extensionCanonicalJson(taskInput);
     if (new TextEncoder().encode(content).length > 16 * 1024)
       throw new ApplicationError("validation", "extension_task_input_invalid");
+    const composition = await prepareExtensionTaskComposition(
+      context.dependencies,
+      pin,
+    );
     const turn = await context.turns.prepareTurn(actor, {
       kind: "turn.start",
       threadId,
@@ -552,7 +557,12 @@ export async function createExtensionTaskTurn(
       throw new ApplicationError("conflict", "extension_thread_goal_active");
     const binding = createExtensionRunBinding(
       {
-        schemaVersion: "crewon.extension-run-binding.v0",
+        ...(composition === null
+          ? { schemaVersion: "crewon.extension-run-binding.v0" as const }
+          : {
+              schemaVersion: "crewon.extension-run-binding.v1" as const,
+              composition,
+            }),
         ...scope,
         actorId: actor.actorId,
         threadId,

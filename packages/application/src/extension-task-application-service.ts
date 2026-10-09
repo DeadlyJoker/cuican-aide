@@ -97,6 +97,11 @@ export type ExtensionTaskApplicationDependencies = Readonly<{
   creditQuotes?: ExtensionCreditQuotePort;
   unmeteredTasks?: PluginTaskUnmeteredAuthorityPort;
   modelSelection?: import("./plugin-task-model-selection.ts").PluginTaskModelSelectionPort;
+  /** Explicit same-profile original composition issuer. Omission preserves v0 bindings. */
+  pluginCompositions?: Pick<
+    import("./plugin-composition-store-port.ts").PluginCompositionStore,
+    "loadCurrent"
+  >;
   /** Explicit project generation integration; ordinary tasks never read project metadata. */
   creativeProjects?: ProjectGenerationApplicationPorts;
   projectGenerationReads?: ProjectGenerationReadApplicationService;

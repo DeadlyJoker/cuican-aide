@@ -1,3 +1,4 @@
+import { captureInstalledPluginCompositionExecution } from "./installed-plugin-composition-runtime-owner.ts";
 import {
   captureInstalledPluginProjectMediaInputToolsConfig,
   composeInstalledPluginProjectMediaInputTools,
@@ -72,6 +73,7 @@ export type InstalledPluginExecutionConfig = Readonly<{
   authorizePackage: InstalledPluginRuntimeResolverDependencies["authorizePackage"];
   authorizeCandidatePackage?: InstalledPluginExtensionHostDependencies["authorizeCandidatePackage"];
   maximumRuntimes?: number;
+  compositionExecution?: InstalledPluginRuntimeResolverDependencies["compositionExecution"];
   executionIo?: InstalledPluginExecutionIoConfig;
   projectTools?: InstalledPluginProjectToolsConfig;
   projectFoundationTools?: InstalledPluginProjectFoundationToolsConfig;
@@ -172,6 +174,13 @@ export function captureInstalledPluginExecutionConfig(
           ),
         }),
     installRoot: config.installRoot,
+    ...(config.compositionExecution === undefined
+      ? {}
+      : {
+          compositionExecution: captureInstalledPluginCompositionExecution(
+            config.compositionExecution,
+          ),
+        }),
     authorization: Object.freeze({
       authorize: config.authorization.authorize.bind(config.authorization),
     }),
@@ -306,6 +315,9 @@ export function composeInstalledPluginRuntimeResolver(input: {
     runs: store,
     installations,
     authorization: config.authorization,
+    ...(config.compositionExecution === undefined
+      ? {}
+      : { compositions: installations.compositionStore!() }),
     operations,
     conversations: store.projectConversationStore(),
     foundationRuns: store.projectFoundationRunStore(),
@@ -355,6 +367,9 @@ export function composeInstalledPluginRuntimeResolver(input: {
           }),
         }),
     contexts,
+    ...(config.compositionExecution === undefined
+      ? {}
+      : { compositionExecution: config.compositionExecution }),
     admissions: {
       pluginAdmissionVersion: extensions.pluginAdmissionVersion,
       loadPluginTaskAdmission:

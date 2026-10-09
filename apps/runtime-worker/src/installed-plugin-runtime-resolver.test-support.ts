@@ -14,7 +14,11 @@ import {
   extensionToolName,
   parsePluginTaskAdmissionPin,
 } from "@crewon/domain";
-import { installLocalPluginPackage } from "@crewon/plugin-host";
+import {
+  installLocalPluginPackage,
+  PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE,
+} from "@crewon/plugin-host";
+import { createPluginCompositionLock } from "@crewon/contracts/plugins";
 import {
   InMemoryToolBroker,
   ToolResultCapacity,
@@ -45,7 +49,10 @@ import {
 import type { AgentVersionRuntime } from "./agent-version-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InstalledPluginRunContext } from "./plugins/installed-plugin-run-context.ts";
-import { InstalledPluginRuntimeResolver } from "./plugins/installed-plugin-runtime-resolver.ts";
+import {
+  InstalledPluginRuntimeResolver,
+  type InstalledPluginRuntimeResolverDependencies,
+} from "./plugins/installed-plugin-runtime-resolver.ts";
 import { composeInstalledPluginRuntimeResolver } from "./plugins/installed-plugin-runtime-composition.ts";
 import {
   command as makeCommand,
@@ -101,6 +108,7 @@ export async function installedResolverFixture(
     backend?: "sqlite" | "postgres";
     registerFactory?: boolean;
     nodeDisposerFails?: boolean;
+    composition?: boolean;
   } = {},
 ) {
   const f = await configurationServiceFixture(t, options.backend ?? "sqlite");
@@ -119,6 +127,7 @@ export async function installedResolverFixture(
     onSetup: null as (() => Promise<void>) | null,
     onFactory: null as (() => Promise<void>) | null,
     publisherAllowed: true,
+    deniedPublisherPluginId: null as string | null,
     publisherHook: null as (() => Promise<void>) | null,
     authorizations: 0,
     retireProof: options.proof ?? false,
@@ -143,6 +152,7 @@ export async function installedResolverFixture(
   let entrySource = `const f=globalThis[${JSON.stringify(key)}];
 export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(scope.pluginId)},async setup(host){
 f.records.push('setup');await f.onSetup?.();
+${options.composition ? "const source=host.services.get('story.source','1');" : ""}
 host.services.get('crewon.execution','1').register({async create(context){
 f.records.push('factory');f.contexts.push(context);await f.factoryGate;await f.onFactory?.();let saved=null;
 return {definitions(){return ${JSON.stringify(declared)}},executionPolicy(){return ${JSON.stringify(toolPolicy)}},
@@ -165,6 +175,11 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
     entrySource = entrySource.replace(
       "f.records.push('node-dispose')",
       "f.records.push('node-dispose');throw new Error('fixture Node disposer failed')",
+    );
+  if (options.composition)
+    entrySource = entrySource.replace(
+      "output:'installed:'+context.identity.version",
+      "output:'installed:'+context.identity.version+':'+source.read()",
     );
   const entry = Buffer.from(entrySource);
   const manifest = Buffer.from(
@@ -190,6 +205,9 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
       businessManifestPath: "business.json",
       requires: [
         { service: "crewon.execution", apiVersion: "1", optional: false },
+        ...(options.composition
+          ? [{ service: "story.source", apiVersion: "1", optional: false }]
+          : []),
       ],
       provides: [],
       contributions: [],
@@ -315,6 +333,103 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
   const enabled = await installations.commitSelection(
     selectionRecipe(pkg.selection, "resolver-enable", { actor }),
   );
+  const compositions = options.composition
+    ? installations.compositionStore!()
+    : undefined;
+  let originalComposition = null;
+  let providerPackage = null;
+  if (compositions) {
+    const providerSource = await mkdtemp(join(source, "provider-"));
+    const providerBytes = Buffer.from(
+      `const f=globalThis[${JSON.stringify(key)}];export default {apiVersion:'crewon.plugin-host.v1',pluginId:'example.resolver-provider',setup(ctx){f.records.push('provider-setup');ctx.services.provide('story.source','1',{read(){f.records.push('provider-read');return 'original-provider'}});return {dispose(){f.records.push('provider-dispose')}}}};`,
+    );
+    await writeFile(join(providerSource, "entry.mjs"), providerBytes);
+    await writeFile(
+      join(providerSource, "crewon.plugin.json"),
+      JSON.stringify({
+        schemaVersion: "crewon.plugin-package.v1",
+        hostApi: "crewon.plugin-host.v1",
+        pluginId: "example.resolver-provider",
+        version: "1.0.0",
+        publisherId: "example.publisher",
+        title: "Captured provider",
+        description: "Independent fixture service",
+        entrypoints: { node: "entry.mjs", ui: null },
+        businessManifestPath: null,
+        requires: [],
+        provides: [{ service: "story.source", apiVersion: "1" }],
+        contributions: [],
+        files: [
+          {
+            path: "entry.mjs",
+            byteLength: providerBytes.byteLength,
+            sha256: createHash("sha256").update(providerBytes).digest("hex"),
+          },
+        ],
+      }),
+    );
+    const providerInstalled = await installLocalPluginPackage({
+      directory: providerSource,
+      installRoot,
+      authorization: async () => ({ outcome: "allow" }),
+    });
+    const providerRecord = await installations.recordInstalledPackage(
+      installationRecipe("resolver-provider-install", {
+        scope: profile,
+        actor,
+        pluginId: "example.resolver-provider",
+        version: "1.0.0",
+        packageDigest: providerInstalled.packageDigest,
+      }),
+    );
+    const providerEnabled = await installations.commitSelection(
+      selectionRecipe(providerRecord.selection, "resolver-provider-enable", {
+        actor,
+      }),
+    );
+    providerPackage = providerRecord.package;
+    originalComposition = createPluginCompositionLock(
+      {
+        schemaVersion: "crewon.plugin-composition-lock.v1",
+        scope: { ...profile, authorityEpoch: "resolver-epoch" },
+        revision: 1,
+        nodes: [
+          {
+            pluginId: scope.pluginId,
+            publisherId: recipe.package.publisherId,
+            version: packageVersion,
+            packageDigest: installed.packageDigest,
+            selectionRevision: enabled.selection.revision,
+            hostApi: "crewon.plugin-host.v1",
+            requires: [
+              { service: "crewon.execution", apiVersion: "1", optional: false },
+              { service: "story.source", apiVersion: "1", optional: false },
+            ],
+            provides: [],
+          },
+          {
+            pluginId: providerPackage.pluginId,
+            publisherId: providerPackage.publisherId,
+            version: providerPackage.version,
+            packageDigest: providerPackage.packageDigest,
+            selectionRevision: providerEnabled.selection.revision,
+            hostApi: "crewon.plugin-host.v1",
+            requires: [],
+            provides: [{ service: "story.source", apiVersion: "1" }],
+          },
+        ],
+        hostServices: [PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE],
+      },
+      digester,
+    );
+    await compositions.migrate();
+    await compositions.commit({
+      scope: originalComposition.scope,
+      actor,
+      lock: originalComposition,
+      expectedRevision: null,
+    });
+  }
   const creditScope = {
     tenantId: actor.tenantId,
     principalId: actor.principalId,
@@ -329,6 +444,7 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
     extensions: f.first.store,
     operations: f.operations,
     ids: { nextId: () => randomUUID() },
+    ...(compositions ? { pluginCompositions: compositions } : {}),
     creditQuotes: {
       quoteGeneration: async () => ({
         poolId: creditScope.poolId,
@@ -398,36 +514,56 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
     installations,
     authorization: f.dependencies.authorization,
     resolveActor: async () => actor,
+    ...(compositions ? { compositions } : {}),
   });
   const resolvers: InstalledPluginRuntimeResolver[] = [];
-  const resolver = (maximumRuntimes = 32) => {
+  const resolver = (
+    maximumRuntimes = 32,
+    execution: Pick<
+      InstalledPluginRuntimeResolverDependencies,
+      "compositionExecution"
+    > = {},
+  ) => {
     const value = new InstalledPluginRuntimeResolver({
       contexts,
       admissions: f.first.store,
       installations,
       installRoot,
       maximumRuntimes,
-      authorizePackage: async () => {
+      ...execution,
+      authorizePackage: async ({ candidate }) => {
         controls.authorizations++;
         await controls.publisherHook?.();
-        return controls.publisherAllowed ? "allow" : "deny";
+        return controls.publisherAllowed &&
+          controls.deniedPublisherPluginId !== candidate.descriptor.pluginId
+          ? "allow"
+          : "deny";
       },
     });
     resolvers.push(value);
     return value;
   };
-  const compositionResolver = () => {
+  const compositionResolver = (
+    execution: Pick<
+      InstalledPluginRuntimeResolverDependencies,
+      "compositionExecution"
+    > = {},
+  ) => {
     const value = composeInstalledPluginRuntimeResolver({
       store: f.first.parent,
       extensions: f.first.store,
       config: {
         installRoot,
+        ...execution,
         authorization: f.dependencies.authorization,
         resolveActor: async () => actor,
-        authorizePackage: async () => {
+        authorizePackage: async ({ candidate }) => {
           controls.authorizations++;
           await controls.publisherHook?.();
-          return controls.publisherAllowed ? "allow" : "deny";
+          return controls.publisherAllowed &&
+            controls.deniedPublisherPluginId !== candidate.descriptor.pluginId
+            ? "allow"
+            : "deny";
         },
       },
     });
@@ -479,6 +615,9 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
     installRoot,
     source,
     installed,
+    compositions,
+    originalComposition,
+    providerPackage,
     task,
     run,
     base,

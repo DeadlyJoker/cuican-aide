@@ -28,7 +28,7 @@ export type InstalledPluginRuntimePrepared = Readonly<{
   key: string;
 }>;
 export type InstalledPluginRuntimeResidentLifetime = {
-  package: PluginExecutionPackage;
+  package: InstalledPluginRuntimePackageOwner;
   borrow: PluginExecutionPackageBorrow | null;
   hasRuntime: boolean;
   cleanup: ReturnType<typeof cleanupMethods>;
@@ -37,6 +37,11 @@ export type InstalledPluginRuntimeResidentLifetime = {
   io: ServiceLifetime | null;
   projectTools: ServiceLifetime | null;
 };
+/** Exact host-owned lifetime shared by single-package and captured graph owners. */
+export type InstalledPluginRuntimePackageOwner = Pick<
+  PluginExecutionPackage,
+  "identity" | "acquire" | "close"
+>;
 
 /** Retirement requires positive evidence from the runtime and every independent service owner. */
 export function canRetireInstalledPluginRuntimeResident(

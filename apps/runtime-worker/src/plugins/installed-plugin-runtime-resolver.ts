@@ -71,6 +71,11 @@ import {
 } from "./installed-plugin-runtime-resident.ts";
 
 import type { InstalledPluginProjectOutlineToolsDependencies } from "./installed-plugin-project-outline-tools.ts";
+import type { PluginCompositionHostService } from "@crewon/contracts/plugins";
+import {
+  captureInstalledPluginCompositionExecution,
+  openInstalledPluginCompositionRuntime,
+} from "./installed-plugin-composition-runtime-owner.ts";
 
 export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   contexts: InstalledPluginRunContext;
@@ -95,6 +100,10 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
     signal: AbortSignal,
   ): Promise<"allow" | "deny">;
   maximumRuntimes?: number;
+  /** Explicit host implementation versions; missing support keeps composed execution closed. */
+  compositionExecution?: Readonly<{
+    hostServiceMetadata: readonly PluginCompositionHostService[];
+  }>;
   executionIo?: InstalledPluginExecutionIoDependencies;
   projectTools?: InstalledPluginProjectToolsDependencies;
   projectFoundationTools?: InstalledPluginProjectFoundationToolsDependencies;
@@ -104,6 +113,9 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
 }>;
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
 type Resident = InstalledPluginRuntimeResidentLifetime & {
+  compositionAuthorization:
+    | ((purpose: "submit" | "observe", signal: AbortSignal) => Promise<void>)
+    | null;
   candidate: PluginActivationCandidate;
   prepared: Prepared;
   projectTools: InstalledPluginProjectServices | null;
@@ -160,6 +172,13 @@ export class InstalledPluginRuntimeResolver
       fail("installed_plugin_media_operation_owner_mismatch");
     this.#dependencies = Object.freeze({
       ...dependencies,
+      ...(dependencies.compositionExecution === undefined
+        ? {}
+        : {
+            compositionExecution: captureInstalledPluginCompositionExecution(
+              dependencies.compositionExecution,
+            ),
+          }),
       ...(dependencies.projectMedia === undefined
         ? {}
         : {
@@ -250,7 +269,10 @@ export class InstalledPluginRuntimeResolver
     input.signal.throwIfAborted();
     if (snapshot === null) fail("installed_plugin_runtime_context_missing");
     // A readable historical graph cannot silently fall through this single-package path.
-    if (this.#dependencies.contexts.verifiedComposition(snapshot) !== null)
+    if (
+      this.#dependencies.contexts.verifiedComposition(snapshot) !== null &&
+      this.#dependencies.compositionExecution === undefined
+    )
       fail("installed_plugin_composition_execution_unavailable");
     const context = snapshot.context;
     const scope = parsePluginProfileScope(context.scope);
@@ -427,6 +449,7 @@ export class InstalledPluginRuntimeResolver
     let committedAuthority = false;
     let projectTools: InstalledPluginProjectServices | null = null;
     let mediaIo: PluginExecutionIoOwner | null = null;
+    let compositionAuthorization: Resident["compositionAuthorization"] = null;
     try {
       const media = createInstalledPluginMediaBoundary({
         dependencies: this.#dependencies.projectMedia,
@@ -449,6 +472,13 @@ export class InstalledPluginRuntimeResolver
         dependencies: this.#dependencies,
         prepared,
         authorizeCurrent: async (operation) => {
+          if (compositionAuthorization !== null) {
+            await compositionAuthorization(
+              installedPluginToolOperationPurpose(operation),
+              operation.signal,
+            );
+            return;
+          }
           if (candidate === null)
             fail("installed_plugin_runtime_candidate_missing");
           await this.#authorizeCandidate(
@@ -549,13 +579,34 @@ export class InstalledPluginRuntimeResolver
           },
         },
       };
-      const pkg = await PluginExecutionPackage.open(openInput);
+      const composition =
+        this.#dependencies.contexts.verifiedComposition(prepared.snapshot) ===
+        null
+          ? null
+          : await openInstalledPluginCompositionRuntime({
+              contexts: this.#dependencies.contexts,
+              installations: this.#dependencies.installations,
+              prepared,
+              installRoot: this.#dependencies.installRoot,
+              hostServices: openInput.hostServices ?? [],
+              hostServiceMetadata:
+                this.#dependencies.compositionExecution!.hostServiceMetadata,
+              authorizePackage: this.#dependencies.authorizePackage,
+              purpose: input.purpose,
+              signal: input.signal,
+              assertOpen: (signal) => this.#assertOpen(signal),
+            });
+      const pkg =
+        composition?.package ?? (await PluginExecutionPackage.open(openInput));
+      if (composition) candidate = composition.candidate;
+      compositionAuthorization = composition?.authorize ?? null;
       if (candidate === null) {
         await pkg.close();
         fail("installed_plugin_runtime_candidate_missing");
       }
       const resident: Resident = {
         package: pkg,
+        compositionAuthorization: composition?.authorize ?? null,
         borrow: null,
         candidate,
         hasRuntime: false,
@@ -689,6 +740,10 @@ export class InstalledPluginRuntimeResolver
     purpose: "submit" | "observe",
     signal: AbortSignal,
   ): Promise<void> {
+    if (resident.compositionAuthorization !== null) {
+      await resident.compositionAuthorization(purpose, signal);
+      return;
+    }
     await this.#authorizeCandidate(
       resident.prepared,
       resident.candidate,
