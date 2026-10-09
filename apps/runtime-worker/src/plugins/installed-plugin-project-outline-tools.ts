@@ -40,6 +40,7 @@ export type InstalledPluginProjectOutlineToolsConfig = Readonly<{
 export type InstalledPluginProjectOutlineToolsDependencies = Pick<
   ProjectOutlineToolsServiceOwnerDependencies,
   | "outlines"
+  | "foundations"
   | "conversations"
   | "runs"
   | "installations"
@@ -92,6 +93,7 @@ export function composeInstalledPluginProjectOutlineToolsDependencies(
     denied();
   return Object.freeze({
     outlines,
+    foundations: input.store.projectFoundationStore(),
     conversations: input.store.projectConversationStore(),
     runs: input.store,
     installations: input.store.pluginInstallationStore(),

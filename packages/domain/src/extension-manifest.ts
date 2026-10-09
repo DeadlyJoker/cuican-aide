@@ -81,7 +81,7 @@ export function parseExtensionManifest(input: unknown): ExtensionManifest {
   const tools = extensionArray(
     value.tools,
     1,
-    legacy ? 16 : expanded ? 32 : 24,
+    legacy ? 16 : expanded ? 64 : 24,
     parseTool,
   );
   extensionUnique(

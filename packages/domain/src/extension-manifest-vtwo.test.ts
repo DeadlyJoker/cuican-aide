@@ -41,8 +41,10 @@ test("business manifest v2 preserves all 32 tools through immutable JSON roundtr
 });
 
 test("v2 is explicitly bounded and does not change v0 or v1 limits", () => {
+  assert.equal(parseExtensionManifest(manifest(34)).tools.length, 34);
+  assert.equal(parseExtensionManifest(manifest(64)).tools.length, 64);
   assert.throws(
-    () => parseExtensionManifest(manifest(33)),
+    () => parseExtensionManifest(manifest(65)),
     hasCode("extension_collection_invalid"),
   );
   assert.throws(

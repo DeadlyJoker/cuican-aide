@@ -48,7 +48,7 @@
       "required": [],
       "additionalProperties": false
     },
-    "instructions": "宿主明确限定为 media-input 的生成输入准备任务时，先调用 media_input，method=getContext、requestJson=\"{}\"，从真实结果获得项目、会话、工作流、配置与需求/剧本版本，不调用 asset_context_read 或 project_context_read 代替。用同一工具的方法读取已有输入与分段提示词；从实际已采用素材取得参考 ID 和修订，缺少参考时说明缺口而不是编造。整理提示词后 saveInput 保存逻辑输入，已有输入必须带当前 expectedInputRevision；确认保存只代表准备输入，不能宣称生成或选用了图片，不调用 media_submit、submit、上传或其他阶段写入。恢复使用原工具身份，新手动修订不得覆盖；用户后续明确执行时转交独立生成任务。其他原任务遵守后续规则。对于宿主已确认的 crewon.short-drama.reference-generation.v1 任务，只调用 media_submit 和 media_observe，输入为空对象。提示词、参考与工作流从原宿主服务读取；未知请求只查询原记录。工具返回实际供应商状态，submitted不表示图片成功，成功也不表示项目已采用。不得调用其他创作/编辑或原自由生图工具。用户查询大纲、分集标题或剧本时，先读project_context_read并遵守其allowedOperations；outline_read返回的artifact.latestContentRevision才是大纲候选版本，按artifactId和该版本用content_read分页读齐同摘要内容。foundation_proposal是改编方案，不能冒充大纲；Foundation只约束方案工具，不代替项目只读范围。结构化大纲写入仍未接通，不能调用旧outline_save覆盖它。其他原非媒体任务先尝试foundation_scope；真正获得非空独立范围后，用foundation_read按parametersPage.nextOffset读齐同摘要参数，遵守scope.allowedOperations与guidance；resultJsonParts按顺序拼接只代表当前有界模型页，章节沿nextStartOffset续读，不能把片段当全文。只保存8KiB内的可读方案候选，不自动确认或执行下游。只有明确缺少独立服务/准入时才遵守后续旧阶段规则；其他冲突、撤权或失败先报告，不借旧项目写权限保存Foundation。原无Foundation范围任务遵守后续阶段规则：每轮先调用 asset_context_read，读取真实资产阶段范围。其scope非空时，只处理该项目、assetKind和冻结的需求/剧本来源；只调用allowedOperations中的工具。asset_save仅保存候选，不能自动采用、锁定、选参考图或执行媒体。使用原实际来源，不猜测最新版本；asset_content_read逐段读取至nextOffset=null，并核对同一contentDigest。资产scope为null时，调用project_context_read读取原项目执行范围：讨论只读和建议，需求追加需求修订，大纲/剧本仅保存当前获准阶段及分集的候选，不能跨项目、跨集、自动采用/锁定或执行媒体。两种scope均为null的原独立任务沿原行为：先读取或创建项目，再读取需求和阶段元数据。每个resultJson是实际宿主结果，ID、版本和摘要从真实结果取得。旧content_read沿nextOffset读至null，不把片段当全文，不一次注入全项目与历史。文字创作由当前Agent模型完成；保存候选不代表选用。版本冲突先读取并说明差异，不能盲目覆盖。原媒体任务仅在用户授权且Krea2配置完整时提交一次，再观察原operation；unknownOutcome只查询，不能重新提交。缺少服务、权限或来源时说明缺口，不绕过宿主协议。视频、声音和合成尚未接通，不能假称完成。 阶段上下文工具返回 guidance 时，按其中固定版本 shuohao Skill 的方法完成当前阶段。guidance 是创作指导，不扩展 scope 权限。缺项一次问清；读取上游已采用产物后创作，保存候选并在回复里简明说明产物和待确认项。只有真实生成成功才展示图片结果。"
+    "instructions": "每轮先识别宿主已限定的任务和阶段，遵守真实 scope、allowedOperations、固定版本 shuohao Skill guidance。指导不授予权限。已有信息不重复询问；关键缺项一次问清。只处理当前项目、阶段和指定集，保留工作空间、原会话、稳定实体 ID 与来源版本。创作由当前 Agent 模型完成，保存候选不等于采用、锁定或生成。只有工具成功才说已保存；回复简明展示产物与待确认决定。\n宿主限定 media-input 时，只调用 media_input，先 method=getContext、requestJson=\"{}\"；从结果取得原项目、工作流、配置、需求/剧本版本，读取当前输入及分段提示词，引用实际已采用参考 ID 与修订，saveInput 带当前 expectedInputRevision。不调用自由生图、media_submit、上传或其他阶段写入，缺少参考先说明。宿主限定 crewon.short-drama.reference-generation.v1 时，只调用 media_submit、media_observe，输入为空对象；输入与参考由宿主提供。submitted 不代表成功，成功不代表采用；unknownOutcome 只查原 operation，绝不重提。\n查询故事大纲或分集时，project_context_read 确认范围，outline_read 读取候选头；按 artifactId、latestContentRevision 用 content_read 分页读至 nextOffset=null，核对同摘要。foundation_proposal 是改编方案，不能代替大纲，Foundation 范围也不代替原项目只读范围。\nv2 大纲写入仅用 outline_change。先 outline_context（expectedFoundationRevision=0、offset=0）取得真实 Foundation/brief 版本和参数；后续页带返回版本和 nextOffset。再 outline_read/content_read 读齐原正文和摘要。expectedArtifactRevision 取 artifact.revision，baseContentRevision、baseContentDigest 取正文版本与摘要，expectedFoundationRevision、briefRevision 取 outline_context。changeJsonParts 拼成一个变更 JSON，每段最多9999字符，总48KiB。overview 要保留 title、logline、synopsis、source、lang、params；adaptation 保留完整对象；upsert 每批最多10个完整记录，沿用 episodeId 和 C/S/P/B ID。只修改所需集合，保留其他字段；不自动采用或锁定，不用旧 outline_save 覆盖 v2。initialize 仅用于确无大纲的项目，提交完整 crewon.project-outline-document.v2；小说改编必须有实际原文和已确认方案。冲突重新读取并说明，不盲目重复。\n其他非媒体任务尝试 foundation_scope；真实非空独立范围下只用其 allowedOperations，foundation_read 按 parametersPage.nextOffset 读齐同摘要参数。resultJsonParts 依次拼接仅是当前有界页，原文/章节继续翻页，不能当全文。只保存8KiB内的可读方案候选，不自动确认或执行下游。仅明确缺少独立服务/准入才转原阶段规则；撤权、冲突或失败不得借旧写权限保存 Foundation。\n原阶段规则：先 asset_context_read，非空 scope 只处理指定 assetKind 和冻结需求/剧本来源，asset_save 只保存候选，不采用、不锁定、不选参考或生成。asset_content_read 翻页读齐同摘要。资产 scope 为空再 project_context_read：讨论只读建议，需求追加修订，大纲/剧本只保存获准阶段和指定集候选。均为空的原独立任务先读取或创建项目，再读取需求与阶段元数据。每个 resultJson 是宿主实际结果，ID/版本/摘要不得编造；上游使用已采用产物，不注入全项目或无限历史。旧 v1 大纲遵守 outline_save 协议。\n原自由媒体任务仅在用户授权且 Krea2 配置完整时提交一次，再观察原操作；未知结果不得重新提交。服务、权限或来源缺失如实说明，不绕过协议。视频、声音与合成尚未接通，不能假称完成。当前只适配 Skill 的阶段方法，不声称执行了上游 CLI 全部质量门。"
   },
   "configurationSchema": {
     "type": "object",
@@ -1732,6 +1732,124 @@
           }
         },
         "required": ["resultJsonParts"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "mutation",
+      "recovery": "reconcilable",
+      "capability": "project.write"
+    },
+    {
+      "operationId": "outline_context",
+      "adapterId": "crewon.project-outline-tools",
+      "description": "Read actual creation parameters and Foundation revision for the current outline stage. Begin with expectedFoundationRevision=0,offset=0; continue pages with the returned revision and nextOffset. Read only; no save or adoption. New novel v2 skeleton: {schemaVersion:\"crewon.project-outline-document.v2\",title,logline,synopsis,source,lang:\"zh\",params:{episodes,minutesPerEpisode,genre,adaptMode:\"忠实\"|\"抽核\"|\"借壳\"},adaptation:{core,keep:[],cut:[],merge:[],risks:[]},characters:[],scenes:[],props:[],beats:[],episodes:[{episodeId,ep,title,summary,hook,suspense,sceneIds:[],characterIds:[]}]}. Match actual episodeCount, genre and duration; faithful=忠实, core=抽核, reimagined=借壳. For existing v2 edits preserve full records and references. Creative projects keep the existing v1 outline_save path.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedFoundationRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          }
+        },
+        "required": ["projectId", "expectedFoundationRevision", "offset"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 9999,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
+        "additionalProperties": false
+      },
+      "execution": "serial",
+      "effect": "readOnly",
+      "recovery": "replaySafe",
+      "capability": "project.read"
+    },
+    {
+      "operationId": "outline_change",
+      "adapterId": "crewon.project-outline-tools",
+      "description": "Save a structured outline candidate to the original project. Read outline_context and outline_read/content_read first. Concatenate bounded changeJsonParts into JSON: {kind:\"overview\",value:{title,logline,synopsis,source,lang,params}} or {kind:\"adaptation\",value:existingAdaptation} or {kind:\"upsert\",collection:\"episodes\"|\"characters\"|\"scenes\"|\"props\"|\"beats\",items:[up to 10 complete records],removeIds:[]}. Keep stable IDs and exact observed base version/digest. initialize requires no current outline and a complete crewon.project-outline-document.v2. Never auto-adopt or lock.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "maxLength": 128,
+            "enum": null
+          },
+          "expectedFoundationRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "expectedArtifactRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "briefRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": null
+          },
+          "baseContentRevision": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": null
+          },
+          "baseContentDigest": {
+            "type": "string",
+            "maxLength": 71,
+            "enum": null
+          },
+          "changeJsonParts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 9999,
+              "enum": null
+            },
+            "maxItems": 8
+          }
+        },
+        "required": [
+          "projectId",
+          "expectedFoundationRevision",
+          "expectedArtifactRevision",
+          "briefRevision",
+          "baseContentRevision",
+          "baseContentDigest",
+          "changeJsonParts"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "resultJson": {
+            "type": "string",
+            "maxLength": 9999,
+            "enum": null
+          }
+        },
+        "required": ["resultJson"],
         "additionalProperties": false
       },
       "execution": "serial",

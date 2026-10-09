@@ -90,6 +90,7 @@ export function fixture({
   missing = false,
   overrides = {},
   approval = "none",
+  outlineHost,
 } = {}) {
   let factory,
     oldCalls = 0;
@@ -174,6 +175,7 @@ export function fixture({
     },
     services: {
       getOptional(name, apiVersion) {
+        if (name === "crewon.project-outline-tools") return outlineHost;
         if (name === "crewon.project-foundation-tools") {
           assert.equal(apiVersion, "1");
           return missing ? undefined : tracked;
@@ -252,7 +254,8 @@ export function fixture({
   function command(method, request, owner = runtime) {
     index++;
     const name =
-        "crewon_short_drama__" + PROJECT_FOUNDATION_TOOL_OPERATIONS[method],
+        "crewon_short_drama__" +
+        (PROJECT_FOUNDATION_TOOL_OPERATIONS[method] ?? method),
       input = JSON.stringify(request),
       policy = owner.executionPolicy("function", name) ?? {
         effect: "readOnly",

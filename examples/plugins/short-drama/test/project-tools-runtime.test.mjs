@@ -212,7 +212,7 @@ test("Short13 catalog includes stage and original media tools with model schemas
   assert.equal(
     f.runtime.definitions().length,
     Number(version.split(".")[0]) >= 40
-      ? 32
+      ? 34
       : Number(version.split(".")[0]) >= 23
         ? 24
         : Number(version.split(".")[0]) >= 21

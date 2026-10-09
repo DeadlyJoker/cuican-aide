@@ -4,6 +4,9 @@ import {
   createProjectOutlineToolsClient,
   parseProjectOutlineToolRequest,
   parseProjectOutlineToolResult,
+  parseProjectOutlineToolCommand,
+  parseProjectOutlineToolContext,
+  parseProjectOutlineToolContextRequest,
 } from "./plugin-project-outline-tools-service.ts";
 
 const digest = `sha256:${"a".repeat(64)}`;
@@ -29,6 +32,28 @@ const result = {
   contentRevision: 7,
   contentDigest: digest,
 };
+
+test("outline model transport joins only bounded parts and preserves the exact observed base", () => {
+  const text = JSON.stringify(request.change),
+    command = {
+      projectId: request.projectId,
+      expectedFoundationRevision: request.expectedFoundationRevision,
+      expectedArtifactRevision: request.expectedArtifactRevision,
+      briefRevision: request.briefRevision,
+      baseContentRevision: 6,
+      baseContentDigest: digest,
+      changeJsonParts: [text.slice(0, 10), text.slice(10)],
+    };
+  assert.deepEqual(parseProjectOutlineToolCommand(command), request);
+  for (const invalid of [
+    { ...command, idempotencyKey: "plugin-chosen" },
+    { ...command, baseContentRevision: 0 },
+    { ...command, changeJsonParts: ["x".repeat(10000)] },
+    { ...command, changeJsonParts: Array.from({ length: 9 }, () => "") },
+    { ...command, changeJsonParts: ["{}"] },
+  ])
+    assert.throws(() => parseProjectOutlineToolCommand(invalid));
+});
 
 test("outline tool transport detaches a bounded batch and retains stable identities", () => {
   const parsed = parseProjectOutlineToolRequest(request);
@@ -115,6 +140,9 @@ test("outline tool transport rejects hooks, cycles, sparse arrays and excessive 
 test("outline client forwards the genuine command object unchanged and validates acknowledgements", async () => {
   const command = Object.freeze({ executionId: "actual-execution" });
   const client = createProjectOutlineToolsClient({
+    async getContext() {
+      throw new Error("unused");
+    },
     async saveCandidate(input) {
       assert.equal(input.command, command);
       assert.notEqual(input.request, request);
@@ -127,6 +155,9 @@ test("outline client forwards the genuine command object unchanged and validates
     7,
   );
   const invalid = createProjectOutlineToolsClient({
+    async getContext() {
+      throw new Error("unused");
+    },
     async saveCandidate() {
       return { ...result, projectId: "other" } as never;
     },
@@ -134,4 +165,56 @@ test("outline client forwards the genuine command object unchanged and validates
   await assert.rejects(
     invalid.saveCandidate({ command, request: request as never }),
   );
+});
+
+test("outline context correlates project, observed Foundation revision and bounded Unicode pages", async () => {
+  const request = {
+    projectId: "original-project",
+    expectedFoundationRevision: 0,
+    offset: 0,
+  };
+  const result = {
+    context: {
+      projectId: request.projectId,
+      briefRevision: 1,
+      foundationRevision: 2,
+      parametersRevision: 1,
+      origin: "novel",
+      parametersDigest: digest,
+      source: { revision: 1, digest },
+      confirmedProposal: null,
+    },
+    page: { text: "雨😀夜", offset: 0, nextOffset: null, totalCodePoints: 3 },
+  };
+  assert.deepEqual(parseProjectOutlineToolContext(request, result), result);
+  for (const wrong of [
+    { ...result, context: { ...result.context, projectId: "other" } },
+    { ...result, context: { ...result.context, source: null } },
+    { ...result, page: { ...result.page, nextOffset: 3 } },
+    {
+      ...result,
+      page: { ...result.page, text: "x".repeat(1025), totalCodePoints: 1025 },
+    },
+  ])
+    assert.throws(() => parseProjectOutlineToolContext(request, wrong));
+  assert.throws(() =>
+    parseProjectOutlineToolContext(
+      { ...request, expectedFoundationRevision: 3 },
+      result,
+    ),
+  );
+  assert.throws(() =>
+    parseProjectOutlineToolContextRequest({ ...request, offset: 1 }),
+  );
+  const command = Object.freeze({ executionId: "context-execution" });
+  const client = createProjectOutlineToolsClient({
+    async getContext(input) {
+      assert.equal(input.command, command);
+      return result as never;
+    },
+    async saveCandidate() {
+      throw new Error("unused");
+    },
+  });
+  assert.deepEqual(await client.getContext({ command, request }), result);
 });

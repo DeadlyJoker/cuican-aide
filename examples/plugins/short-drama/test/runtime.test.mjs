@@ -377,7 +377,7 @@ test("requires explicit host IO and applies perAction only to submit", async () 
     assert.equal(
       noIo.definitions().length,
       Number(version.split(".")[0]) >= 40
-        ? 32
+        ? 34
         : Number(version.split(".")[0]) >= 23
           ? 24
           : Number(version.split(".")[0]) >= 21

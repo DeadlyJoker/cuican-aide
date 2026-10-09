@@ -34,6 +34,13 @@ import {
   foundationPolicy,
 } from "./project-foundation-tools-catalog.js";
 import { createProjectFoundationToolsRuntime } from "./project-foundation-tools-runtime.js";
+import { createProjectOutlineToolsRuntime } from "./project-outline-tools-runtime.js";
+import {
+  isOutlineTool,
+  outlineDefinitions,
+  outlinePolicy,
+} from "./project-outline-tools-catalog.js";
+import type { PluginProjectOutlineToolsService } from "./project-outline-tools-service.js";
 import { createKreaRuntime } from "./runtime.js";
 import {
   createProjectMediaRuntime,
@@ -79,11 +86,15 @@ export function createShortDramaRuntime(
     mediaExecution?: PluginProjectMediaExecutionService | null;
     mediaInputs?: PluginProjectMediaInputToolsService | null;
     foundations?: PluginProjectFoundationToolsService | null;
+    outlines?: PluginProjectOutlineToolsService | null;
   } = {
     projectContext: null,
   },
 ): PluginToolRuntime {
   const approval = services?.approvalRequirement ?? "none",
+    outline = options.outlines
+      ? createProjectOutlineToolsRuntime(context, options.outlines, approval)
+      : null,
     foundation = options.foundations
       ? createProjectFoundationToolsRuntime(
           context,
@@ -120,6 +131,10 @@ export function createShortDramaRuntime(
       if (!foundation)
         throw new Error("short_drama_foundation_tools_unavailable");
       return foundation[method](command, signal);
+    }
+    if (isOutlineTool(command.name)) {
+      if (!outline) throw new Error("short_drama_outline_tools_unavailable");
+      return outline[method](command, signal);
     }
     if (options.mediaExecution) {
       if (!mediaDefinitions.some((d) => d.name === command.name))
@@ -339,8 +354,10 @@ export function createShortDramaRuntime(
         ...projectDefinitions,
         ...mediaDefinitions,
         ...foundationDefinitions,
+        ...outlineDefinitions,
       ]),
     executionPolicy: (kind, name) =>
+      outlinePolicy(context, approval, kind, name) ??
       foundationPolicy(context, approval, kind, name) ??
       mediaPolicy(context, approval, kind, name) ??
       projectPolicy(context, approval, kind, name) ??
@@ -351,16 +368,19 @@ export function createShortDramaRuntime(
     acknowledgeExecutionResult: (ack) =>
       activeExecutionId !== ack.executionId &&
       (retained.acknowledge(ack) ||
+        (outline?.acknowledgeExecutionResult?.(ack) ?? false) ||
         (foundation?.acknowledgeExecutionResult?.(ack) ?? false) ||
         (media?.acknowledgeExecutionResult?.(ack) ?? false)),
     readRetainedExecutionResult: (lookup) =>
       retained.read(lookup) ??
+      outline?.readRetainedExecutionResult?.(lookup) ??
       foundation?.readRetainedExecutionResult?.(lookup) ??
       media?.readRetainedExecutionResult?.(lookup) ??
       null,
     retainedExecutionResults: (query) =>
       [
         ...retained.query(query.runId, query.limit),
+        ...(outline?.retainedExecutionResults?.(query) ?? []),
         ...(foundation?.retainedExecutionResults?.(query) ?? []),
         ...(media?.retainedExecutionResults?.(query) ?? []),
       ].slice(0, query.limit),
@@ -369,10 +389,11 @@ export function createShortDramaRuntime(
       const mediaPage = media?.scanRetainedExecutionResults?.(query) ?? [];
       const foundationPage =
         foundation?.scanRetainedExecutionResults?.(query) ?? [];
+      const outlinePage = outline?.scanRetainedExecutionResults?.(query) ?? [];
       const result = (
         scanProjectFirst
-          ? [...projectPage, ...foundationPage, ...mediaPage]
-          : [...mediaPage, ...foundationPage, ...projectPage]
+          ? [...projectPage, ...outlinePage, ...foundationPage, ...mediaPage]
+          : [...mediaPage, ...foundationPage, ...outlinePage, ...projectPage]
       ).slice(0, query.limit);
       scanProjectFirst = !scanProjectFirst;
       return result;
@@ -380,13 +401,16 @@ export function createShortDramaRuntime(
     canRetire: () =>
       pending.size === 0 &&
       retained.size === 0 &&
+      (outline?.canRetire?.() ?? true) &&
       (foundation?.canRetire?.() ?? true) &&
       (media?.canRetire?.() ?? true),
     async close() {
       closed = true;
       const closingFoundation = foundation?.close?.();
+      const closingOutline = outline?.close?.();
       await Promise.allSettled([...pending]);
       await closingFoundation;
+      await closingOutline;
       await media?.close?.();
       retained.clear();
     },

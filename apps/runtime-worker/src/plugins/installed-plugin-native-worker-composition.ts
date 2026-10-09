@@ -22,6 +22,7 @@ import { createNativeProjectMediaRuntime } from "./native-project-media-runtime.
 import { desktopProjectMaterialStorageFromEnvironment } from "@crewon/media-runtime/desktop-project-material-archive";
 import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-project-media-composition.ts";
 import { createNativeProjectFoundationTools } from "./native-project-foundation-runtime.ts";
+import { createNativeProjectOutlineTools } from "./native-project-outline-runtime.ts";
 import { createDesktopNativeNetworkDnsResolver } from "@crewon/media-runtime/desktop-native-network-dns";
 import type { NetworkDnsResolver } from "@crewon/media-runtime/network-egress";
 export function createInstalledPluginNativeWorkerAuthority(
@@ -119,6 +120,14 @@ function composeNativeWorkerAuthority(
     actor: owner.actor.bind(owner),
     operate: owner.operate.bind(owner),
   });
+  const projectOutlineTools = createNativeProjectOutlineTools({
+    declaration: owner.outlineTools,
+    scope: owner.files.authority.scope,
+    packages: owner.files.authority.packages,
+    current: owner.current.bind(owner),
+    actor: owner.actor.bind(owner),
+    operate: owner.operate.bind(owner),
+  });
   return Object.freeze({
     installRoot: config.installRoot,
     releaseDocumentPath: config.releaseDocumentPath,
@@ -146,6 +155,7 @@ function composeNativeWorkerAuthority(
       ...(projectFoundationTools === undefined
         ? {}
         : { projectFoundationTools }),
+      ...(projectOutlineTools === undefined ? {} : { projectOutlineTools }),
       ...(owner.projects?.conversations === undefined
         ? {}
         : {

@@ -86,6 +86,7 @@ export * from "./project-generation-selection-host-context-contract.ts";
 export * from "./plugin-ui-recovery-contract.ts";
 export * from "./desktop-project-execution-contract.ts";
 export * from "./desktop-project-foundation-tools.ts";
+export * from "./desktop-project-outline-tools.ts";
 export type {
   ConceptGenerationLocator,
   ConceptGenerationImage,

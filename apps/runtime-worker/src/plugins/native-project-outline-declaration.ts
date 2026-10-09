@@ -1,0 +1,78 @@
+import {
+  parseDesktopProjectOutlineToolsConfiguration,
+  type DesktopNativePluginPackageIdentity,
+  type DesktopProjectOutlineToolsConfiguration,
+  type DesktopProjectOutlineToolsPublication,
+} from "@crewon/contracts/plugins";
+import {
+  captureNativeAuthorityFile,
+  nativeAuthorityFailure,
+} from "./installed-plugin-native-authority-files.ts";
+
+/** Import approval is not execution approval. Validate all declarations against
+ * pinned Main sources, then expose only packages in the current Native policy. */
+export function captureNativeProjectOutlineDeclaration(
+  input: Readonly<{
+    bootstrap: Record<string, unknown>;
+    approvalPath: string;
+    packages: readonly DesktopNativePluginPackageIdentity[];
+    metadataPublications: readonly DesktopProjectOutlineToolsPublication[];
+  }>,
+): DesktopProjectOutlineToolsConfiguration | undefined {
+  if (!Object.hasOwn(input.bootstrap, "projectOutlineTools")) return undefined;
+  const approval = record(
+    captureNativeAuthorityFile(input.approvalPath, 128 * 1024).value,
+  );
+  const sources = list(input.bootstrap.sources),
+    approved = list(approval.sources);
+  const publications = sources.map((source) => {
+    const identity = record(source);
+    if (
+      !approved.some((candidate) => {
+        const current = record(candidate);
+        return ["pluginId", "publisherId", "version", "packageDigest"].every(
+          (key) => current[key] === identity[key],
+        );
+      })
+    )
+      fail();
+    return {
+      pluginId: identity.pluginId,
+      packageDigest: identity.packageDigest,
+    };
+  });
+  const declaration = parseDesktopProjectOutlineToolsConfiguration(
+    input.bootstrap.projectOutlineTools,
+    {
+      publications: publications as readonly Readonly<{
+        pluginId: string;
+        packageDigest: string;
+      }>[],
+      metadataPublications: input.metadataPublications,
+    },
+  );
+  const active = declaration.publications.filter((publication) =>
+    input.packages.some(
+      (pkg) =>
+        pkg.pluginId === publication.pluginId &&
+        pkg.packageDigest === publication.packageDigest,
+    ),
+  );
+  return active.length === 0
+    ? undefined
+    : Object.freeze({
+        version: declaration.version,
+        publications: Object.freeze(active),
+      });
+}
+function record(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail();
+  return value as Record<string, unknown>;
+}
+function list(value: unknown): readonly unknown[] {
+  if (!Array.isArray(value) || value.length > 32) fail();
+  return value;
+}
+function fail(): never {
+  return nativeAuthorityFailure("project_outline_source_unapproved");
+}

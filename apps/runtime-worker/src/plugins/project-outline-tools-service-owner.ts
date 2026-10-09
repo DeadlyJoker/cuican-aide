@@ -8,6 +8,7 @@ import {
   type CreativeProjectCommitAuthority,
   type PluginInstallationStore,
   type ProjectConversationStore,
+  type ProjectFoundationStore,
   type RunStore,
 } from "@crewon/application";
 import {
@@ -18,6 +19,7 @@ import {
   parseProjectConversationBinding,
   parseProjectStageRunAdmission,
   validateCreativeProjectActor,
+  validateProjectFoundation,
   type ExtensionManifest,
   type PluginTaskAdmission,
   type ProjectStageRunAdmission,
@@ -28,6 +30,13 @@ import {
   MAX_PROJECT_OUTLINE_TOOL_INPUT_BYTES,
   MAX_PROJECT_OUTLINE_TOOL_OUTPUT_BYTES,
   parseProjectOutlineToolRequest,
+  parseProjectOutlineToolCommand,
+  parseProjectOutlineToolContextRequest,
+  parseProjectOutlineToolContext,
+  MAX_PROJECT_OUTLINE_CONTEXT_OUTPUT_BYTES,
+  type ProjectOutlineToolContextRequest,
+  type ProjectOutlineToolContext,
+  type ProjectOutlineToolResult,
   parseProjectOutlineToolResult,
   type PluginProjectOutlineToolsService,
   type ProjectOutlineToolRequest,
@@ -53,6 +62,7 @@ export type ProjectOutlineToolsServiceOwnerDependencies = Readonly<{
   stageAdmission: ProjectStageRunAdmission;
   tools: ExtensionManifest["tools"];
   outlines: ProjectStructuredOutlineApplicationService;
+  foundations: Pick<ProjectFoundationStore, "loadFoundation">;
   conversations: Pick<
     ProjectConversationStore,
     "loadBinding" | "loadStageAdmission" | "readRequiredStageDigest"
@@ -180,9 +190,16 @@ export class ProjectOutlineToolsServiceOwner {
           "authorize",
         ),
       }),
+      foundations: Object.freeze({
+        loadFoundation: bound<ProjectFoundationStore["loadFoundation"]>(
+          input.foundations,
+          "loadFoundation",
+        ),
+      }),
     });
     this.#service = Object.freeze({
-      saveCandidate: (input) => this.#call(input),
+      saveCandidate: (input) => this.#call("outline_change", input),
+      getContext: (input) => this.#call("outline_context", input),
     });
   }
   hostService(): PluginHostService {
@@ -268,36 +285,61 @@ export class ProjectOutlineToolsServiceOwner {
       denied();
     return evidence;
   }
-  #dispatch(command: ToolExecutionCommand): ProjectOutlineToolRequest {
+  #dispatch(command: ToolExecutionCommand) {
+    const read =
+        command.name ===
+        extensionToolName(this.#d.admission.pluginId, "outline_context"),
+      operationId = read ? "outline_context" : "outline_change";
     const definition = this.#d.tools.find(
-        (tool) => tool.operationId === "outline_change",
+        (tool) => tool.operationId === operationId,
       ),
       action = command.actionIntent;
     if (
       definition === undefined ||
       command.name !==
-        extensionToolName(this.#d.admission.pluginId, "outline_change") ||
+        extensionToolName(this.#d.admission.pluginId, operationId) ||
       definition.adapterId !== CREWON_PROJECT_OUTLINE_TOOLS_SERVICE ||
-      definition.capability !== "project.write" ||
-      definition.effect !== "mutation" ||
-      definition.recovery !== "reconcilable" ||
+      definition.capability !== (read ? "project.read" : "project.write") ||
+      definition.effect !== (read ? "readOnly" : "mutation") ||
+      definition.recovery !== (read ? "replaySafe" : "reconcilable") ||
       action.capability !== definition.capability ||
       action.effect !== definition.effect ||
       action.recovery !== definition.recovery ||
       action.executionTarget.kind !== "control" ||
       action.policySnapshotId !== this.#d.context.target.policySnapshotId ||
       action.workspaceBindingId !== this.#d.context.target.workspaceBindingId ||
-      action.limits.maxOutputBytes < MAX_PROJECT_OUTLINE_TOOL_OUTPUT_BYTES ||
+      action.limits.maxOutputBytes <
+        (read
+          ? MAX_PROJECT_OUTLINE_CONTEXT_OUTPUT_BYTES
+          : MAX_PROJECT_OUTLINE_TOOL_OUTPUT_BYTES) ||
       Buffer.byteLength(command.input, "utf8") >
         MAX_PROJECT_OUTLINE_TOOL_INPUT_BYTES
     )
       denied();
-    const parsed = parseProjectOutlineToolRequest(JSON.parse(command.input));
+    if (read) {
+      const request = parseProjectOutlineToolContextRequest(
+        JSON.parse(command.input),
+      );
+      if (request.projectId !== this.#stage.projectId) denied();
+      return { operation: "outline_context" as const, request };
+    }
+    const parsed = parseProjectOutlineToolCommand(JSON.parse(command.input));
     const { expectedFoundationRevision: _foundation, ...mutation } = parsed;
     assertProjectStageToolRequest(this.#stage, "outline_save", mutation);
-    return parsed;
+    return { operation: "outline_change" as const, request: parsed };
   }
-  #call(input: unknown) {
+  #call(
+    operation: "outline_change",
+    input: unknown,
+  ): Promise<ProjectOutlineToolResult>;
+  #call(
+    operation: "outline_context",
+    input: unknown,
+  ): Promise<ProjectOutlineToolContext>;
+  #call(
+    operation: "outline_change" | "outline_context",
+    input: unknown,
+  ): Promise<ProjectOutlineToolResult | ProjectOutlineToolContext> {
     try {
       const v = data(input, ["command", "request"]),
         command = v.command;
@@ -306,13 +348,21 @@ export class ProjectOutlineToolsServiceOwner {
       if (!i || i.method === "cancel" || i.pending.size >= 64) denied();
       this.#check(i);
       foundationOwnerNativeRecord(v.request);
-      const request = parseProjectOutlineToolRequest(v.request);
+      const parsed = this.#dispatch(i.command),
+        request =
+          operation === "outline_change"
+            ? parseProjectOutlineToolRequest(v.request)
+            : parseProjectOutlineToolContextRequest(v.request);
       if (
+        parsed.operation !== operation ||
         extensionCanonicalJson(request) !==
-        extensionCanonicalJson(this.#dispatch(i.command))
+          extensionCanonicalJson(parsed.request)
       )
         denied();
-      const task = this.#execute(request, i);
+      const task =
+        parsed.operation === "outline_change"
+          ? this.#execute(parsed.request, i)
+          : this.#readContext(parsed.request, i);
       i.pending.add(task);
       this.#pending.add(task);
       void task
@@ -325,6 +375,91 @@ export class ProjectOutlineToolsServiceOwner {
     } catch (error) {
       return Promise.reject(error);
     }
+  }
+  async #readContext(request: ProjectOutlineToolContextRequest, i: Invocation) {
+    const signal = AbortSignal.any([i.signal, this.#abort.signal]),
+      operation = {
+        ...i,
+        signal,
+        operationId: "outline_context",
+        projectId: this.#stage.projectId,
+      };
+    await this.#authorizeCurrent(operation);
+    const actor = await this.#actor(signal);
+    await this.#run(i);
+    await this.#identity(actor, i);
+    await this.#policy(actor, false);
+    const raw = await this.#d.foundations.loadFoundation({
+      owner: {
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        principalId: actor.principalId,
+      },
+      projectId: request.projectId,
+    });
+    if (raw === null)
+      throw new Error("plugin_project_outline_foundation_missing");
+    const foundation = validateProjectFoundation(raw);
+    if (
+      foundation.projectId !== request.projectId ||
+      foundation.tenantId !== actor.tenantId ||
+      foundation.spaceId !== actor.spaceId ||
+      foundation.ownerPrincipalId !== actor.principalId ||
+      (request.expectedFoundationRevision !== 0 &&
+        foundation.revision !== request.expectedFoundationRevision)
+    )
+      denied();
+    // Existing Application authorizes and validates the original project/outline identity. No write is performed.
+    await ProjectStructuredOutlineApplicationService.prototype.getOutline.call(
+      this.#d.outlines,
+      actor,
+      { projectId: request.projectId },
+    );
+    const parameters = extensionCanonicalJson(foundation.parameters),
+      points = Array.from(parameters),
+      end = Math.min(request.offset + 1024, points.length);
+    if (request.offset > points.length) denied();
+    const stage = this.#stage.stage;
+    if (stage.kind !== "outline") denied();
+    const result = parseProjectOutlineToolContext(request, {
+      context: {
+        projectId: request.projectId,
+        briefRevision: stage.briefRevision,
+        foundationRevision: foundation.revision,
+        parametersRevision: foundation.parametersRevision,
+        parametersDigest: sha.sha256(parameters),
+        origin: foundation.origin,
+        source: foundation.source,
+        confirmedProposal: foundation.confirmedProposal,
+      },
+      page: {
+        text: points.slice(request.offset, end).join(""),
+        offset: request.offset,
+        nextOffset: end < points.length ? end : null,
+        totalCodePoints: points.length,
+      },
+    });
+    await this.#authorizeCurrent(operation);
+    await this.#actor(signal);
+    await this.#run(i);
+    await this.#identity(actor, i);
+    await this.#policy(actor, false);
+    const latest = await this.#d.foundations.loadFoundation({
+      owner: {
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        principalId: actor.principalId,
+      },
+      projectId: request.projectId,
+    });
+    if (
+      latest === null ||
+      extensionCanonicalJson(validateProjectFoundation(latest)) !==
+        extensionCanonicalJson(foundation)
+    )
+      denied();
+    this.#check(i);
+    return result;
   }
   async #authorizeCurrent(operation: ProjectToolsAuthorizationInvocation) {
     if (
@@ -475,10 +610,10 @@ export class ProjectOutlineToolsServiceOwner {
       denied();
     return actor;
   }
-  async #policy(actor: ActorContext) {
+  async #policy(actor: ActorContext, write = true) {
     const result = await this.#d.authorization.authorize({
       actor,
-      action: "creativeProject:write",
+      action: write ? "creativeProject:write" : "creativeProject:read",
       resource: {
         kind: "creativeProject",
         tenantId: actor.tenantId,

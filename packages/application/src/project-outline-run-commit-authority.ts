@@ -1,4 +1,5 @@
 import { canonicalActionIntent } from "@crewon/contracts";
+import { parseProjectOutlineToolCommand } from "@crewon/contracts/project-outline-tools";
 import {
   assertProjectStageToolRequest,
   creativeProjectOpaqueId,
@@ -237,18 +238,8 @@ export function projectOutlineRunMutation(
   q: ProjectOutlineRunCommitTransactionAuthority,
   digester: ContentDigester,
 ) {
-  const input: unknown = JSON.parse(q.commandInput);
-  if (
-    input === null ||
-    typeof input !== "object" ||
-    Array.isArray(input) ||
-    Object.hasOwn(input, "idempotencyKey")
-  )
-    denied();
-  const { expectedFoundationRevision, ...mutation } = input as Record<
-    string,
-    unknown
-  >;
+  const { expectedFoundationRevision, ...mutation } =
+    parseProjectOutlineToolCommand(JSON.parse(q.commandInput));
   const foundationRevision = creativeProjectRevision(
     expectedFoundationRevision,
   );

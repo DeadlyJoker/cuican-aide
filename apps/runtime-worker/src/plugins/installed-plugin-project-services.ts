@@ -96,8 +96,11 @@ export function createInstalledPluginProjectServices(
     ) => {
       if (
         outlineDeclared &&
-        invocation.command.name ===
-          extensionToolName(input.admission.pluginId, "outline_change")
+        ["outline_change", "outline_context"].some(
+          (operation) =>
+            invocation.command.name ===
+            extensionToolName(input.admission.pluginId, operation),
+        )
       ) {
         if (outline === null)
           throw new Error(

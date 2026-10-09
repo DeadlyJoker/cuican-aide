@@ -258,3 +258,85 @@ function deferred() {
   });
   return { promise, resolve };
 }
+
+test("outline context reads the original Foundation parameters through a genuine read receipt without saving", async (t) => {
+  const f = await outlineToolsOwnerFixture(t),
+    owner = f.owner(),
+    read = await f.contextInvocation();
+  const result = await read.invoke(owner, () =>
+    f
+      .service(owner)
+      .getContext({ command: read.command, request: read.request }),
+  );
+  assert.equal(
+    result.context.foundationRevision,
+    f.foundation.foundation.revision,
+  );
+  assert.equal(result.context.briefRevision, f.brief.briefRevision);
+  assert.deepEqual(
+    JSON.parse(result.page.text),
+    f.foundation.foundation.parameters,
+  );
+  assert.equal(result.page.nextOffset, null);
+  assert.equal(await f.count("project_text_revisions"), 0);
+  assert.equal(await f.count("project_text_mutation_receipts"), 0);
+  await assert.rejects(
+    read.invoke(owner, () =>
+      f
+        .service(owner)
+        .getContext({
+          command: structuredClone(read.command),
+          request: read.request,
+        }),
+    ),
+  );
+  await assert.rejects(
+    read.invoke(owner, () =>
+      f
+        .service(owner)
+        .getContext({
+          command: read.command,
+          request: { ...read.request, projectId: "other-project" },
+        }),
+    ),
+  );
+  const stale = await f.contextInvocation({
+    ...read.request,
+    expectedFoundationRevision: result.context.foundationRevision + 1,
+  });
+  await assert.rejects(
+    stale.invoke(owner, () =>
+      f
+        .service(owner)
+        .getContext({ command: stale.command, request: stale.request }),
+    ),
+  );
+});
+
+test("outline context refuses a Foundation revision that changes while the read is in flight", async (t) => {
+  const f = await outlineToolsOwnerFixture(t),
+    read = await f.contextInvocation();
+  let loads = 0;
+  const original = f.dependencies.foundations.loadFoundation.bind(
+    f.dependencies.foundations,
+  );
+  const owner = f.owner({
+    foundations: {
+      async loadFoundation(input) {
+        const result = await original(input);
+        assert.ok(result);
+        return ++loads === 1
+          ? result
+          : { ...result, revision: result.revision + 1 };
+      },
+    },
+  });
+  await assert.rejects(
+    read.invoke(owner, () =>
+      f
+        .service(owner)
+        .getContext({ command: read.command, request: read.request }),
+    ),
+  );
+  assert.equal(await f.count("project_text_revisions"), 0);
+});

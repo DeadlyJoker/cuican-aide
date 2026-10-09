@@ -46,7 +46,7 @@ export function projectCreationSkill(scope: PublicProjectContextScope | null) {
           "按确认集数写分集梗概，每集包含推进、冲突与结尾悬念；梗概写叙事，不混入长段台词或镜头提示词。",
           "原创故事以用户需求为依据；改编只使用实际提供的原文，不凭书名补剧情。逐集检查因果和人物延续性。",
         ],
-        "outline_save：title、logline、synopsis、episodes[{episodeId,title,summary}]。沿用已有 episodeId，只保存候选，用户确认后采用。",
+        "v2 大纲使用 outline_context 读取创作参数与 Foundation/brief 版本；outline_read 与 content_read 读取原候选和摘要。outline_change 按 overview、adaptation 或 upsert 分批修改完整记录，保留原 episodeId、C/S/P/B 实体 ID 和未修改字段，保存候选。旧 v1 大纲仍遵守原 outline_save 协议，不能覆盖 v2。候选由用户确认后采用。",
       );
     case "script":
       return guide(

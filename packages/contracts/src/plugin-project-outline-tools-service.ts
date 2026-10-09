@@ -3,6 +3,31 @@ export const CREWON_PROJECT_OUTLINE_TOOLS_SERVICE =
   "crewon.project-outline-tools";
 export const CREWON_PROJECT_OUTLINE_TOOLS_API_VERSION = "1";
 export const PROJECT_OUTLINE_CHANGE_OPERATION = "outline_change";
+export const PROJECT_OUTLINE_CONTEXT_OPERATION = "outline_context";
+export const MAX_PROJECT_OUTLINE_CONTEXT_OUTPUT_BYTES = 8192;
+export type ProjectOutlineToolContextRequest = Readonly<{
+  projectId: string;
+  expectedFoundationRevision: number;
+  offset: number;
+}>;
+export type ProjectOutlineToolContext = Readonly<{
+  context: Readonly<{
+    projectId: string;
+    briefRevision: number;
+    foundationRevision: number;
+    parametersRevision: number;
+    origin: "creative" | "novel";
+    parametersDigest: string;
+    source: Readonly<{ revision: number; digest: string }> | null;
+    confirmedProposal: Readonly<{ revision: number; digest: string }> | null;
+  }>;
+  page: Readonly<{
+    text: string;
+    offset: number;
+    nextOffset: number | null;
+    totalCodePoints: number;
+  }>;
+}>;
 export const MAX_PROJECT_OUTLINE_TOOL_INPUT_BYTES = 60 * 1024;
 export const MAX_PROJECT_OUTLINE_TOOL_OUTPUT_BYTES = 2048;
 export type ProjectOutlineToolJson =
@@ -30,6 +55,12 @@ export type ProjectOutlineToolResult = Readonly<{
   contentDigest: string;
 }>;
 export type PluginProjectOutlineToolsService = Readonly<{
+  getContext(
+    input: Readonly<{
+      command: unknown;
+      request: ProjectOutlineToolContextRequest;
+    }>,
+  ): Promise<ProjectOutlineToolContext>;
   saveCandidate(
     input: Readonly<{
       /** Must be the genuine execution object forwarded unchanged by the installed Node runtime. */
@@ -38,6 +69,129 @@ export type PluginProjectOutlineToolsService = Readonly<{
     }>,
   ): Promise<ProjectOutlineToolResult>;
 }>;
+
+export function parseProjectOutlineToolContextRequest(
+  raw: unknown,
+): ProjectOutlineToolContextRequest {
+  const value = fields(copy(raw, 1024), [
+    "projectId",
+    "expectedFoundationRevision",
+    "offset",
+  ]);
+  id(value.projectId);
+  revision(value.expectedFoundationRevision, 0);
+  revision(value.offset, 0);
+  if (value.expectedFoundationRevision === 0 && value.offset !== 0) invalid();
+  return value as ProjectOutlineToolContextRequest;
+}
+export function parseProjectOutlineToolContext(
+  request: ProjectOutlineToolContextRequest,
+  raw: unknown,
+): ProjectOutlineToolContext {
+  const checked = parseProjectOutlineToolContextRequest(request),
+    value = fields(copy(raw, MAX_PROJECT_OUTLINE_CONTEXT_OUTPUT_BYTES), [
+      "context",
+      "page",
+    ]),
+    context = fields(value.context, [
+      "projectId",
+      "briefRevision",
+      "foundationRevision",
+      "parametersRevision",
+      "origin",
+      "parametersDigest",
+      "source",
+      "confirmedProposal",
+    ]),
+    page = fields(value.page, [
+      "text",
+      "offset",
+      "nextOffset",
+      "totalCodePoints",
+    ]);
+  if (
+    context.projectId !== checked.projectId ||
+    !["creative", "novel"].includes(context.origin as string) ||
+    (checked.expectedFoundationRevision !== 0 &&
+      context.foundationRevision !== checked.expectedFoundationRevision)
+  )
+    invalid();
+  revision(context.briefRevision, 1);
+  revision(context.foundationRevision, 1);
+  revision(context.parametersRevision, 1);
+  digest(context.parametersDigest);
+  for (const pointer of [context.source, context.confirmedProposal])
+    if (pointer !== null) {
+      const ref = fields(pointer, ["revision", "digest"]);
+      revision(ref.revision, 1);
+      digest(ref.digest);
+    }
+  if (context.origin === "novel" && context.source === null) invalid();
+  revision(page.offset, 0);
+  revision(page.totalCodePoints, 1);
+  if (typeof page.text !== "string" || page.offset !== checked.offset)
+    invalid();
+  const length = Array.from(page.text).length,
+    end = (page.offset as number) + length;
+  if (
+    length > 1024 ||
+    end > (page.totalCodePoints as number) ||
+    (page.nextOffset === null
+      ? end !== page.totalCodePoints
+      : page.nextOffset !== end ||
+        length === 0 ||
+        end >= (page.totalCodePoints as number))
+  )
+    invalid();
+  return value as ProjectOutlineToolContext;
+}
+
+/** Manifest transport has no nullable/union schemas. Bounded JSON parts carry the change,
+ * while the original command bytes still qualify the exact Worker receipt. */
+export function parseProjectOutlineToolCommand(
+  raw: unknown,
+): ProjectOutlineToolRequest {
+  const value = record(copy(raw, MAX_PROJECT_OUTLINE_TOOL_INPUT_BYTES));
+  if (!Object.hasOwn(value, "changeJsonParts"))
+    return parseProjectOutlineToolRequest(value);
+  fields(value, [
+    "projectId",
+    "expectedFoundationRevision",
+    "expectedArtifactRevision",
+    "briefRevision",
+    "baseContentRevision",
+    "baseContentDigest",
+    "changeJsonParts",
+  ]);
+  revision(value.baseContentRevision, 0);
+  if (typeof value.baseContentDigest !== "string") invalid();
+  const parts = value.changeJsonParts;
+  if (
+    !Array.isArray(parts) ||
+    parts.length < 1 ||
+    parts.length > 8 ||
+    parts.some((part) => typeof part !== "string" || part.length > 9999)
+  )
+    invalid();
+  const text = parts.join("");
+  if (new TextEncoder().encode(text).byteLength > 48 * 1024) invalid();
+  const base =
+    value.baseContentRevision === 0
+      ? null
+      : {
+          contentRevision: value.baseContentRevision,
+          contentDigest: value.baseContentDigest,
+        };
+  if (base === null && value.baseContentDigest !== "") invalid();
+  return parseProjectOutlineToolRequest({
+    projectId: value.projectId,
+    expectedFoundationRevision: value.expectedFoundationRevision,
+    expectedArtifactRevision: value.expectedArtifactRevision,
+    briefRevision: value.briefRevision,
+    base,
+    change: JSON.parse(text),
+  });
+}
 
 export function parseProjectOutlineToolRequest(
   raw: unknown,
@@ -127,9 +281,26 @@ export function parseProjectOutlineToolResult(
 export function createProjectOutlineToolsClient(
   service: PluginProjectOutlineToolsService,
 ) {
-  if (typeof service.saveCandidate !== "function") invalid();
+  if (
+    typeof service.saveCandidate !== "function" ||
+    typeof service.getContext !== "function"
+  )
+    invalid();
   const invoke = service.saveCandidate.bind(service);
+  const context = service.getContext.bind(service);
   return Object.freeze({
+    async getContext(
+      input: Readonly<{
+        command: unknown;
+        request: ProjectOutlineToolContextRequest;
+      }>,
+    ) {
+      const request = parseProjectOutlineToolContextRequest(input.request);
+      return parseProjectOutlineToolContext(
+        request,
+        await context({ command: input.command, request }),
+      );
+    },
     async saveCandidate(
       input: Readonly<{ command: unknown; request: ProjectOutlineToolRequest }>,
     ) {

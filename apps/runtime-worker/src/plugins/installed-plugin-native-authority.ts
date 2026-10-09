@@ -16,6 +16,8 @@ import {
 import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
 import type { DesktopProjectFoundationToolsConfiguration } from "@crewon/contracts/plugins";
 import { captureNativeProjectFoundationDeclaration } from "./native-project-foundation-declaration.ts";
+import { captureNativeProjectOutlineDeclaration } from "./native-project-outline-declaration.ts";
+import type { DesktopProjectOutlineToolsConfiguration } from "@crewon/contracts/plugins";
 import {
   parseExtensionConfiguration,
   parseExtensionExecutionTarget,
@@ -77,6 +79,7 @@ export class NativeAuthorityOwner {
   readonly foundationTools:
     | DesktopProjectFoundationToolsConfiguration
     | undefined;
+  readonly outlineTools: DesktopProjectOutlineToolsConfiguration | undefined;
   readonly projects:
     | DesktopProjectHistoryConfiguration
     | DesktopProjectExecutionConfiguration
@@ -131,6 +134,17 @@ export class NativeAuthorityOwner {
     )
       fail("project_foundation_tools_configuration_invalid");
     this.foundationTools = captureNativeProjectFoundationDeclaration({
+      bootstrap,
+      approvalPath: this.files.authority.approvalPath,
+      packages: this.files.authority.packages,
+      metadataPublications: this.projects?.pluginUi?.publications ?? [],
+    });
+    if (
+      bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3" &&
+      Object.hasOwn(bootstrap, "projectOutlineTools")
+    )
+      fail("project_outline_tools_configuration_invalid");
+    this.outlineTools = captureNativeProjectOutlineDeclaration({
       bootstrap,
       approvalPath: this.files.authority.approvalPath,
       packages: this.files.authority.packages,

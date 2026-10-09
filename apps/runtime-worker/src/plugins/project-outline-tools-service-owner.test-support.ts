@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
-import type { ExtensionManifest } from "@crewon/domain";
+import {
+  prepareToolExecutionReceipt,
+  extensionToolName,
+  type ExtensionManifest,
+  type ToolActionIntentState,
+} from "@crewon/domain";
+import { canonicalActionIntent } from "@crewon/contracts";
+import { randomUUID } from "node:crypto";
+import { creativeStoreDigester } from "../../../../packages/store/src/creative-project-store-records.ts";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import {
   parseProjectOutlineToolRequest,
@@ -52,7 +60,7 @@ export async function outlineToolsOwnerFixture(t: TestContext) {
     },
     target: binding.target,
   };
-  const tools: ExtensionManifest["tools"] = [
+  const tools: ExtensionManifest["tools"][number][] = [
     {
       operationId: "outline_change",
       adapterId: "crewon.project-outline-tools",
@@ -75,6 +83,13 @@ export async function outlineToolsOwnerFixture(t: TestContext) {
       capability: "project.write",
     },
   ];
+  tools.push({
+    ...tools[0]!,
+    operationId: "outline_context",
+    effect: "readOnly",
+    recovery: "replaySafe",
+    capability: "project.read",
+  });
   const controls = {
     service: true,
     policy: true,
@@ -87,6 +102,7 @@ export async function outlineToolsOwnerFixture(t: TestContext) {
     stageAdmission: q.projectStageAdmission,
     tools,
     outlines: f.application(),
+    foundations: f.parent.projectFoundationStore(),
     conversations: f.parent.projectConversationStore(),
     runs: f.parent,
     installations: f.parent.pluginInstallationStore(),
@@ -169,8 +185,106 @@ export async function outlineToolsOwnerFixture(t: TestContext) {
       () => value.withInvocation(current, delegate),
     );
   };
+  async function contextInvocation(
+    request = {
+      projectId: f.reference.projectId,
+      expectedFoundationRevision: 0,
+      offset: 0,
+    },
+  ) {
+    const run = await f.parent.loadRun(f.locator);
+    assert.ok(run);
+    const input = JSON.stringify(request),
+      segmentId = randomUUID(),
+      callId = randomUUID();
+    const intent: ToolActionIntentState = {
+      ...q.receipt.actionIntent!,
+      segmentId,
+      callId,
+      tool: {
+        kind: "function",
+        name: extensionToolName(q.admission.pluginId, "outline_context"),
+        inputDigest: creativeStoreDigester.sha256(input),
+      },
+      effect: "readOnly",
+      recovery: "replaySafe",
+      capability: "project.read",
+    };
+    const actionDigest = creativeStoreDigester.sha256(
+      canonicalActionIntent(intent),
+    );
+    const base = prepareToolExecutionReceipt({
+      receiptId: randomUUID(),
+      tenantId: run.tenantId,
+      runId: run.runId,
+      stepId: `tool:${actionDigest.slice(7)}`,
+      attemptId: randomUUID(),
+      workItemId: f.claim.workItem.workItemId,
+      executionId: randomUUID(),
+      idempotencyKey: `${run.runId}/tool/${actionDigest.slice(7)}`,
+      actionDigest,
+      actionIntent: intent,
+      call: { segmentId, callId, ...intent.tool },
+      effect: "readOnly",
+      recovery: "replaySafe",
+      preparedAt: new Date().toISOString(),
+    });
+    await f.parent.beginRunAttempt({
+      tenantId: run.tenantId,
+      runId: run.runId,
+      lease: f.lease,
+      stepId: base.stepId,
+      attemptId: base.attemptId,
+      kind: "tool",
+      startedAt: base.preparedAt,
+    });
+    await f.parent.prepareToolExecution({ lease: f.lease, receipt: base });
+    const receipt = await f.parent.transitionToolExecution({
+      tenantId: run.tenantId,
+      runId: run.runId,
+      receiptId: base.receiptId,
+      lease: f.lease,
+      expectedRevision: base.revision,
+      transition: { kind: "dispatch", occurredAt: new Date().toISOString() },
+    });
+    const readCommand = {
+      ...command,
+      input,
+      name: receipt.call.name,
+      segmentId,
+      callId,
+      idempotencyKey: receipt.idempotencyKey,
+      executionId: receipt.executionId,
+      actionIntent: intent,
+      actionDigest,
+      executionLease: {
+        ...command.executionLease,
+        stepId: receipt.stepId,
+        attemptId: receipt.attemptId,
+      },
+    };
+    return {
+      request,
+      command: readCommand,
+      invoke: <T>(
+        value: ProjectOutlineToolsServiceOwner,
+        delegate: () => Promise<T>,
+      ) => {
+        const current = {
+          command: readCommand,
+          method: "execute" as const,
+          signal: signal.signal,
+        };
+        return withWorkerToolDispatch(
+          { ...current, receipt, assertCurrent: () => f.claim },
+          () => value.withInvocation(current, delegate),
+        );
+      },
+    };
+  }
   return {
     ...f,
+    contextInvocation,
     prepared,
     portableRequest: parseProjectOutlineToolRequest(prepared.request),
     dependencies,

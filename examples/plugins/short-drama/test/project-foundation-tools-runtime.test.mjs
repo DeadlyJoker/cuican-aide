@@ -39,7 +39,7 @@ test("Short40 actual installed factory publishes the original24 and eight indepe
     defs.some((d) => d.name.includes("confirm")),
     false,
   );
-  assert.equal(defs.length, 32);
+  assert.equal(defs.length, 34);
   const chapters = defs.find((d) => d.name.endsWith("foundation_chapters"));
   assert.equal(
     chapters.inputSchema.required.includes("afterStartOffset"),

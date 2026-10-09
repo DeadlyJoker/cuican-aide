@@ -16,6 +16,10 @@ import {
   requestsDesktopLocalShortDramaFoundationTools,
 } from "./desktopLocalShortDramaFoundationToolsApproval.ts";
 import {
+  composeDesktopLocalShortDramaOutlineToolsApproval,
+  requestsDesktopLocalShortDramaOutlineTools,
+} from "./desktopLocalShortDramaOutlineToolsApproval.ts";
+import {
   DESKTOP_PLUGIN_APPROVAL_FILE,
   DESKTOP_PLUGIN_APPROVAL_SCHEMA,
   parseDesktopPluginApproval,
@@ -378,7 +382,8 @@ class LocalSourceImporter {
         bytes = Buffer.from(JSON.stringify(next));
         if (bytes.byteLength > MAX_APPROVAL_BYTES) invalid("approval_size");
         if (
-          requestsDesktopLocalShortDramaFoundationTools(installed.descriptor)
+          requestsDesktopLocalShortDramaFoundationTools(installed.descriptor) ||
+          requestsDesktopLocalShortDramaOutlineTools(installed.descriptor)
         ) {
           const registration = await loadInstalledPluginBusinessRegistration({
             installRoot: sourceRoot,
@@ -406,6 +411,12 @@ class LocalSourceImporter {
           this.#approvalCurrent(ticket);
           assertParents(ownedSourcePins);
           next = composeDesktopLocalShortDramaFoundationToolsApproval({
+            approval: next,
+            descriptor: installed.descriptor,
+            registration,
+            trustNodeExecution: confirmation.trustNodeExecution,
+          });
+          next = composeDesktopLocalShortDramaOutlineToolsApproval({
             approval: next,
             descriptor: installed.descriptor,
             registration,

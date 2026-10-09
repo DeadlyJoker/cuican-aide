@@ -146,6 +146,9 @@ export async function businessExecutionFixture(
     projectTools?: NonNullable<
       RuntimeWorkerCompositionConfig["installedPluginExecution"]
     >["projectTools"];
+    projectOutlineTools?: NonNullable<
+      RuntimeWorkerCompositionConfig["installedPluginExecution"]
+    >["projectOutlineTools"];
     projectFoundationTools?: NonNullable<
       RuntimeWorkerCompositionConfig["installedPluginExecution"]
     >["projectFoundationTools"];
@@ -449,6 +452,9 @@ export async function businessExecutionFixture(
       ...(options.projectTools === undefined
         ? {}
         : { projectTools: options.projectTools }),
+      ...(options.projectOutlineTools === undefined
+        ? {}
+        : { projectOutlineTools: options.projectOutlineTools }),
       ...(options.projectFoundationTools === undefined
         ? {}
         : { projectFoundationTools: options.projectFoundationTools }),

@@ -7,7 +7,7 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "46.0.0";
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "47.0.0";
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -25,6 +25,10 @@ if (
   throw new Error("example_project_tools_protocol_drift");
 // Independently published text UI protocol and its self-contained strict public codec.
 for (const [file, expected] of [
+  [
+    "project-outline-tools-service.ts",
+    "a320656acedb37e7855edc62c5baa7e55e1fce471569847a42bc48691ffd1d8f",
+  ],
   [
     "project-outline-edits-service.ts",
     "6c0e6826c7c8bbf540a94914a6a98f8698bf15669eea2440c97befc012c133a5",
@@ -400,6 +404,11 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
+    {
+      service: "crewon.project-outline-tools",
+      apiVersion: "1",
+      optional: true,
+    },
     {
       service: "crewon.project-foundation-tools",
       apiVersion: "1",

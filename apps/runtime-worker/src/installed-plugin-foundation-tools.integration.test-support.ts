@@ -5,6 +5,7 @@ import {
   ProjectConversationApplicationService,
   CreativeProjectApplicationService,
   ProjectFoundationApplicationService,
+  ProjectStructuredOutlineApplicationService,
   ThreadApplicationService,
   type CreativeProjectAuthorizationPort,
   type ProjectConversationCommitAuthority,
@@ -144,6 +145,8 @@ function nodeSource() {
 
 export type FoundationWorkerFixtureOptions = Readonly<{
   configured?: boolean;
+  outlineStage?: boolean;
+  outlineEpisodeCount?: number;
   backend?: "sqlite" | "postgres";
   packageDirectory?: string;
   configurationParameters?: Readonly<Record<string, WorkflowSchemaValue>>;
@@ -196,6 +199,24 @@ export async function foundationWorkerFixture(
     maxToolRounds: options.maxToolRounds ?? 16,
     taskClock: common.clock,
     projectTools: { version: "crewon.project-tools.v1", authorization },
+    ...(options.outlineStage
+      ? {
+          projectOutlineTools: {
+            version: "crewon.project-outline-tools.v2" as const,
+            authorization,
+            async authorizeService(_admission, signal) {
+              signal.throwIfAborted();
+            },
+            createOutlines: ({ store }) =>
+              new ProjectStructuredOutlineApplicationService({
+                ...common,
+                projects: store.creativeProjectStore(),
+                foundations: store.projectFoundationStore(),
+                store: store.projectTextStore(),
+              }),
+          },
+        }
+      : {}),
     ...(options.configured === false
       ? {}
       : {
@@ -245,7 +266,7 @@ export async function foundationWorkerFixture(
   });
   const command = createCommand("novel");
   const labels = Array.from(
-    { length: 48 },
+    { length: options.outlineStage ? 1 : 48 },
     (_, i) => `${i}:` + "a".repeat(156),
   );
   const created =
@@ -263,6 +284,8 @@ export async function foundationWorkerFixture(
           ...command,
           parameters: {
             ...command.parameters,
+            episodeCount:
+              options.outlineEpisodeCount ?? command.parameters.episodeCount,
             adaptation: {
               strategy: "core",
               retainedCharacters: labels,
@@ -352,7 +375,12 @@ export async function foundationWorkerFixture(
         expectedBindingRevision: bound.binding.revision,
         content: "Read the source and save a candidate for my confirmation.",
         idempotencyKey: key,
-        stage: { kind: "discussion" },
+        stage: options.outlineStage
+          ? {
+              kind: "outline",
+              briefRevision: created.project.latestBriefRevision,
+            }
+          : { kind: "discussion" },
       },
       authority,
     );

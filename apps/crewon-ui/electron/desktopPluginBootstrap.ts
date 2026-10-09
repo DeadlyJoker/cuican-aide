@@ -26,6 +26,8 @@ import {
   type DesktopProjectExecutionConfiguration,
   parseDesktopProjectFoundationToolsConfiguration,
   type DesktopProjectFoundationToolsConfiguration,
+  parseDesktopProjectOutlineToolsConfiguration,
+  type DesktopProjectOutlineToolsConfiguration,
   parseDesktopProjectFoundationConfiguration,
   type DesktopProjectFoundationConfiguration,
 } from "@crewon/contracts/plugins";
@@ -86,6 +88,7 @@ export type DesktopPluginBootstrapManifest = BootstrapManifestFields &
         projects: DesktopProjectExecutionConfiguration;
         projectFoundation?: DesktopProjectFoundationConfiguration;
         projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
+        projectOutlineTools?: DesktopProjectOutlineToolsConfiguration;
       }>
   );
 export type DesktopPluginApprovalSettings = Readonly<{
@@ -103,6 +106,7 @@ export type DesktopPluginApprovalSettings = Readonly<{
         projects: DesktopProjectExecutionConfiguration;
         projectFoundation?: DesktopProjectFoundationConfiguration;
         projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
+        projectOutlineTools?: DesktopProjectOutlineToolsConfiguration;
       }>
   );
 export type DesktopPluginBootstrap = Readonly<{
@@ -230,6 +234,9 @@ export async function prepareDesktopPluginBootstrap(
           ...(settings.projectFoundationTools === undefined
             ? {}
             : { projectFoundationTools: settings.projectFoundationTools }),
+          ...(settings.projectOutlineTools === undefined
+            ? {}
+            : { projectOutlineTools: settings.projectOutlineTools }),
         })
       : settings.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
         ? Object.freeze({
@@ -321,6 +328,10 @@ export function parseDesktopPluginApproval(
           ...(schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 &&
           Object.hasOwn(input, "projectFoundationTools")
             ? ["projectFoundationTools"]
+            : []),
+          ...(schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V3 &&
+          Object.hasOwn(input, "projectOutlineTools")
+            ? ["projectOutlineTools"]
             : []),
         ]
       : ["schemaVersion", "sources", "publications"],
@@ -445,6 +456,15 @@ export function parseDesktopPluginApproval(
         },
       )
     : undefined;
+  const outlineTools = Object.hasOwn(value, "projectOutlineTools")
+    ? parseDesktopProjectOutlineToolsConfiguration(value.projectOutlineTools, {
+        publications: settings.sources.map(({ pluginId, packageDigest }) => ({
+          pluginId,
+          packageDigest,
+        })),
+        metadataPublications: projects?.pluginUi?.publications ?? [],
+      })
+    : undefined;
   const foundation = Object.hasOwn(value, "projectFoundation")
     ? parseDesktopProjectFoundationConfiguration(value.projectFoundation, {
         publications: settings.publications.map(
@@ -462,6 +482,9 @@ export function parseDesktopPluginApproval(
         ...(foundationTools === undefined
           ? {}
           : { projectFoundationTools: foundationTools }),
+        ...(outlineTools === undefined
+          ? {}
+          : { projectOutlineTools: outlineTools }),
       })
     : value.schemaVersion === DESKTOP_PLUGIN_APPROVAL_SCHEMA_V2
       ? Object.freeze({
