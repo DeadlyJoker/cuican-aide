@@ -247,6 +247,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         maxOutputTokens: this.maxOutputTokens,
         signal: idle.signal,
       });
+      call?.httpPhase("dispatchedMs");
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
         redirect: "manual",
@@ -267,6 +268,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         ),
         signal: idle.signal,
       });
+      call?.httpPhase("headersMs");
       idle.touch();
       if (!response.ok) {
         const rateLimit = parseResponsesRateLimitHeaders(response.headers);
@@ -328,7 +330,11 @@ export class DirectResponsesTransport implements ModelTransportPort {
           this.#requestProfile === "responsesLite"
             ? "streamAuthoritativeWhenEmpty"
             : "strict",
-        onActivity: () => idle.touch(),
+        onActivity: () => {
+          call?.httpPhase("firstByteMs");
+          call?.httpPhase("lastByteMs");
+          idle.touch();
+        },
         ...(this.#outputDeltaFlushBytes === undefined
           ? {}
           : { outputDeltaFlushBytes: this.#outputDeltaFlushBytes }),
@@ -355,6 +361,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
           yield call?.event(event) ?? event;
         }
       }
+      call?.httpPhase("streamEndMs");
       outcome = "completed";
     } catch (error) {
       outcome = signal.aborted ? "canceled" : "failed";

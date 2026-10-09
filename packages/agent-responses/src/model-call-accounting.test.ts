@@ -375,3 +375,56 @@ for (const status of ["completed", "failed"] as const)
     assert.equal(l.writes.at(-1)?.usageEventObserved, status === "completed");
     assert.equal(l.writes.at(-1)?.outcome, status);
   });
+
+test("HTTP diagnostics distinguish admission, body arrival, validated terminal and stream EOF", async () => {
+  const l = ledger();
+  let bodyController!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      bodyController = c;
+    },
+  });
+  const transport = new DirectResponsesTransport(
+    { endpoint: "https://provider.test/responses", model: "model" },
+    {
+      fetch: async () =>
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+        }),
+    },
+  );
+  const stream = transport
+    .stream(request, new AbortController().signal, l.options)
+    [Symbol.asyncIterator]();
+  const next = stream.next();
+  bodyController.enqueue(
+    new TextEncoder().encode(
+      events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""),
+    ),
+  );
+  assert.equal((await next).value?.type, "output.delta");
+  assert.equal((await stream.next()).value?.type, "usage");
+  assert.equal((await stream.next()).value?.type, "completed");
+  // Terminal is already validated, but this adapter still awaits the HTTP EOF.
+  assert.equal(l.writes.at(-1)?.outcome, "unknown");
+  bodyController.close();
+  assert.equal((await stream.next()).done, true);
+  const timing = l.writes.at(-1)?.httpTiming;
+  assert.ok(timing);
+  for (const key of [
+    "admittedMs",
+    "dispatchedMs",
+    "headersMs",
+    "firstByteMs",
+    "lastByteMs",
+    "terminalMs",
+    "streamEndMs",
+  ] as const) {
+    assert.ok(Number.isSafeInteger(timing[key]), key);
+  }
+  assert.ok(timing.admittedMs! <= timing.dispatchedMs!);
+  assert.ok(timing.dispatchedMs! <= timing.headersMs!);
+  assert.ok(timing.headersMs! <= timing.firstByteMs!);
+  assert.ok(timing.firstByteMs! <= timing.terminalMs!);
+  assert.ok(timing.terminalMs! <= timing.streamEndMs!);
+});

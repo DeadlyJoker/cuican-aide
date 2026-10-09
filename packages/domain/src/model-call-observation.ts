@@ -16,6 +16,23 @@ export type ModelCallGoalAttribution = Readonly<{
   policy: typeof THREAD_GOAL_ACCOUNTING_POLICY;
 }>;
 
+/** Millisecond offsets from client admission, never provider compute time. */
+export type ModelHttpTiming = Readonly<
+  Partial<
+    Record<
+      | "admittedMs"
+      | "dispatchedMs"
+      | "headersMs"
+      | "firstByteMs"
+      | "lastByteMs"
+      | "firstCompletedItemMs"
+      | "terminalMs"
+      | "streamEndMs",
+      number
+    >
+  >
+>;
+
 /** Accounting evidence for a provider request, not authority to retry its effects. */
 export type ModelCallObservation = Readonly<{
   schemaVersion: "crewon.model-call-observation.v0";
@@ -37,6 +54,8 @@ export type ModelCallObservation = Readonly<{
   firstOutputLatencyMs: number | null;
   /** A validated transport usage event was seen; persistence is a separate fact. */
   usageEventObserved: boolean;
+  /** Additive diagnostics; absent on historical records and non-HTTP adapters. */
+  httpTiming?: ModelHttpTiming;
 }>;
 export type ModelCallRecord = Readonly<{
   tenantId: string;
@@ -107,6 +126,31 @@ export function validateModelCallRecord(record: ModelCallRecord): void {
     (o.outcome === "unknown" && o.usageEventObserved)
   )
     throw new Error("model_call_usage_marker_invalid");
+  if (o.httpTiming !== undefined) {
+    if (
+      o.transport !== "http" ||
+      o.operation !== "generate" ||
+      o.outcome === "unknown" ||
+      o.httpTiming === null ||
+      typeof o.httpTiming !== "object" ||
+      Array.isArray(o.httpTiming)
+    )
+      throw new Error("model_call_http_timing_invalid");
+    const keys = [
+      "admittedMs",
+      "dispatchedMs",
+      "headersMs",
+      "firstByteMs",
+      "lastByteMs",
+      "firstCompletedItemMs",
+      "terminalMs",
+      "streamEndMs",
+    ];
+    for (const [key, value] of Object.entries(o.httpTiming)) {
+      if (!keys.includes(key) || !Number.isSafeInteger(value) || value < 0)
+        throw new Error("model_call_http_timing_invalid");
+    }
+  }
   timestamp(o.startedAt);
   if (o.finishedAt !== null) timestamp(o.finishedAt);
   if (

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ModelCallObservation } from "@crewon/domain";
+import type { ModelCallObservation, ModelHttpTiming } from "@crewon/domain";
 import { MODEL_SPENDING_ADMISSION_CODES } from "@crewon/domain";
 import {
   ModelTransportError,
@@ -64,6 +64,13 @@ export async function beginModelCall(input: {
     }
   };
   await record(initial);
+  const httpTiming: Partial<Record<keyof ModelHttpTiming, number>> = {};
+  const httpPhase = (phase: keyof ModelHttpTiming) => {
+    if (input.transport !== "http" || input.operation !== "generate") return;
+    if (httpTiming[phase] === undefined || phase === "lastByteMs")
+      httpTiming[phase] = Math.max(0, Math.round(performance.now() - started));
+  };
+  httpPhase("admittedMs");
   // Cancellation during the durable admission must prevent the subsequent I/O.
   if (input.signal.aborted) {
     await record({
@@ -84,6 +91,7 @@ export async function beginModelCall(input: {
   };
   return {
     responseIdentity,
+    httpPhase,
     event(event: ModelTransportEvent): ModelTransportEvent {
       if (
         event.type === "output.delta" &&
@@ -94,8 +102,12 @@ export async function beginModelCall(input: {
           0,
           Math.round(performance.now() - started),
         );
-      if (event.type === "completed" || event.type === "failed")
+      if (event.type === "output.item.completed")
+        httpPhase("firstCompletedItemMs");
+      if (event.type === "completed" || event.type === "failed") {
         terminal = event.type;
+        httpPhase("terminalMs");
+      }
       if (event.type === "response.created") {
         const payload = event.checkpoint.opaquePayload;
         if (
@@ -131,6 +143,7 @@ export async function beginModelCall(input: {
         providerResponseId: responseId,
         firstOutputLatencyMs,
         usageEventObserved,
+        ...(Object.keys(httpTiming).length === 0 ? {} : { httpTiming }),
       });
     },
   };
