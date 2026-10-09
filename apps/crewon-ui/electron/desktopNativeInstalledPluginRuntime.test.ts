@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ControlApiClient } from "@crewon/control-client";
 import { createHash } from "node:crypto";
 import {
   compileAgentVersion,
@@ -19,6 +20,7 @@ import { prepareDesktopPluginBootstrap } from "./desktopPluginBootstrap.ts";
 import { parseNativeInstalledPluginPreparationConfiguration } from "../../runtime-worker/src/plugins/installed-plugin-native-preparation-config.ts";
 import { DESKTOP_NATIVE_PLUGIN_POLICY_FILE } from "./desktopNativePluginAuthority.ts";
 import { desktopInstalledPluginModelCatalog } from "./desktopInstalledPluginModelCatalog.ts";
+import { restoreDesktopNativePluginBusinessActivations } from "./desktopNativePluginBusinessActivation.ts";
 
 const modelDigester = {
   sha256: (value: string) =>
@@ -170,6 +172,102 @@ async function fixture() {
 }
 
 describe("explicit Main Native installed plugin execution", () => {
+  it.each(["enabled", "disabled", "revoked"] as const)(
+    "restores one %s business activation for a plugin with multiple published models without replacing its prepared default or re-enabling it",
+    async (state) => {
+      const f = await fixture();
+      let owner: ReturnType<typeof f.prepare> = null;
+      try {
+        f.writePolicy();
+        addModel(f, "gpt-5.6-sol");
+        owner = prepareNativeDesktopInstalledPluginRuntime({
+          ...f.input,
+          sharedEnvironment: {
+            ...f.input.sharedEnvironment,
+            CREWON_MODEL_CATALOG_JSON: '["native-model","gpt-5.6-sol"]',
+          },
+          workerEnvironment: {
+            ...f.input.workerEnvironment,
+            CREWON_MODEL_CATALOG_JSON: '["native-model","gpt-5.6-sol"]',
+          },
+        })!;
+        f.result(owner, true);
+        const completed = owner.complete();
+        if (completed.kind !== "installed")
+          throw new Error("expected installed");
+        const entry = completed.runtime.expectedCatalogEntries[0]!;
+        const selection = {
+          pluginId: entry.identity.pluginId,
+          publisherId: entry.identity.publisherId,
+          revision: 3,
+          state: "enabled",
+          selectedPackageDigest: entry.identity.packageDigest,
+          updatedAt: "2026-10-09T00:00:00.000Z",
+        };
+        const activation = {
+          schemaVersion: "crewon.extension-activation.v0",
+          tenantId: completed.runtime.scope.tenantId,
+          spaceId: completed.runtime.scope.spaceId,
+          pluginId: entry.identity.pluginId,
+          revision: 2,
+          configurationRevision: entry.configuration.revision,
+          configurationDigest: entry.configuration.contentDigest,
+          state,
+          target: state === "enabled" ? entry.configuredTarget : null,
+          updatedByActorId: "named-actor",
+          updatedAt: "2026-10-09T00:00:00.000Z",
+        };
+        const writes: string[] = [];
+        const client = new ControlApiClient({
+          baseUrl: "https://named-model-restore-control.test",
+          origin: "https://named-model-restore-ui.test",
+          accessToken: "named-token",
+          csrfToken: "named-csrf",
+          fetch: async (input, init = {}) => {
+            const path = new URL(String(input)).pathname;
+            if ((init.method ?? "GET") !== "GET") {
+              writes.push(path);
+              throw new Error("restoration must retain the prepared default");
+            }
+            if (path.endsWith("/activation"))
+              return Response.json({ activation });
+            if (path.includes("/plugins/selections/"))
+              return Response.json({ selection });
+            if (path.includes("/plugins/packages/"))
+              return Response.json({
+                package: {
+                  pluginId: entry.identity.pluginId,
+                  publisherId: entry.identity.publisherId,
+                  version: entry.identity.version,
+                  packageDigest: entry.identity.packageDigest,
+                  installedAt: "2026-10-09T00:00:00.000Z",
+                },
+              });
+            if (path.endsWith("/configuration"))
+              return Response.json({ configuration: entry.configuration });
+            throw new Error(`Unexpected restoration read: ${path}`);
+          },
+        });
+        const issues = await restoreDesktopNativePluginBusinessActivations({
+          runtime: completed.runtime,
+          client,
+          signal: f.controller.signal,
+        });
+        expect(issues).toEqual([]);
+        expect(writes).toEqual([]);
+        expect(completed.runtime.expectedCatalogEntries).toHaveLength(2);
+        expect(
+          completed.runtime.expectedCatalogEntries.map(
+            (value) => value.configuredTarget,
+          ),
+        ).toEqual(f.release.entries.map((value) => value.target));
+      } finally {
+        await owner?.close();
+        await f.close();
+      }
+    },
+  );
+
   it("captures model siblings from Main's Key catalog while publishing one prepared default", async () => {
     const f = await fixture();
     let owner: ReturnType<typeof f.prepare> = null;

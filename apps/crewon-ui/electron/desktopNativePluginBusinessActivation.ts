@@ -264,8 +264,17 @@ export async function restoreDesktopNativePluginBusinessActivations(
   const binding = nativeBindings.get(input.runtime);
   if (binding === undefined) return [];
   active(binding, input.signal);
+  // Native preparation validates the first sibling as the plugin's prepared
+  // default. Model siblings are per-turn choices, not separate activations.
+  const seenPluginIds = new Set<string>();
+  const defaults = binding.entries.filter((entry) => {
+    const pluginId = entry.identity.pluginId;
+    if (seenPluginIds.has(pluginId)) return false;
+    seenPluginIds.add(pluginId);
+    return true;
+  });
   const results = await Promise.allSettled(
-    binding.entries.map((entry) =>
+    defaults.map((entry) =>
       serialized(binding, entry.identity.pluginId, async () => {
         active(binding, input.signal);
         const { selection } = await input.client.plugins.getSelection(
@@ -291,7 +300,7 @@ export async function restoreDesktopNativePluginBusinessActivations(
         ? []
         : [
             Object.freeze({
-              pluginId: binding.entries[index]!.identity.pluginId,
+              pluginId: defaults[index]!.identity.pluginId,
               reasonCode: "desktop_native_plugin_business_activation_failed",
             }),
           ],
