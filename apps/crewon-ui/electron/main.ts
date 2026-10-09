@@ -48,6 +48,7 @@ import {
 import { loadLocalEnvironment } from "./localEnvironment.ts";
 import { bindDesktopWindowActivation } from "./desktopWindowActivation.ts";
 import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
+import { desktopRuntimeModelDiscovery } from "./desktopRuntimeModelDiscovery.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
 import { loadDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 import { RuntimeSupervisor, runtimePaths } from "./runtimeSupervisor.ts";
@@ -179,7 +180,7 @@ async function launch(): Promise<void> {
         },
         { paths, providers },
       );
-      return result.status === "ok" ? result.models : null;
+      return desktopRuntimeModelDiscovery(result);
     },
   });
   desktopLog(`provider=${providers.active()?.providerId ?? "unconfigured"}`);

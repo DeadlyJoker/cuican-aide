@@ -8,6 +8,8 @@ import {
 import { join } from "node:path";
 import { Writable } from "node:stream";
 import { RuntimeSupervisor } from "./runtimeSupervisor.ts";
+import { desktopRuntimeModelDiscovery } from "./desktopRuntimeModelDiscovery.ts";
+import type { ProviderModelCatalogOutcome } from "./providerModelCatalog.ts";
 import { desktopPluginBootstrapFixture } from "./desktopPluginBootstrap.test-support.ts";
 
 export function desktopPluginManagementFixture(input: {
@@ -15,6 +17,7 @@ export function desktopPluginManagementFixture(input: {
   approval: "absent" | "present";
   controlHealth?: "live" | "unavailable";
   modelCatalog?: readonly string[];
+  modelDiscoveryOutcome?: () => ProviderModelCatalogOutcome;
 }) {
   const files = desktopPluginBootstrapFixture();
   if (input.approval === "present") files.writeApproval();
@@ -87,7 +90,10 @@ export function desktopPluginManagementFixture(input: {
             modelId: "fixture-model",
             apiKey: "fixture-model-secret",
           },
-    providerModelCatalog: async () => input.modelCatalog ?? ["fixture-model"],
+    providerModelCatalog: async () =>
+      input.modelDiscoveryOutcome
+        ? desktopRuntimeModelDiscovery(input.modelDiscoveryOutcome())
+        : (input.modelCatalog ?? ["fixture-model"]),
     agentPlatformApiKeyForOrigin: () => null,
     workspaceRoot: () => null,
     logOutputs: { stdout, stderr },
