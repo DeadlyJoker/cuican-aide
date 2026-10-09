@@ -1,3 +1,4 @@
+import { PostgresPluginCompositionStore } from "./postgres-plugin-composition-store.ts";
 import type { Client as PgClient, Pool, PoolClient } from "pg";
 import type {
   PluginInstallationStore,
@@ -48,7 +49,7 @@ import {
 } from "./postgres-plugin-installation-profile-owner.ts";
 
 type Input<M extends keyof PluginInstallationStore> = Parameters<
-  PluginInstallationStore[M]
+  NonNullable<PluginInstallationStore[M]>
 >[0];
 type Client = Pool | PoolClient | PgClient;
 type TransactionClient = PoolClient | PgClient;
@@ -95,6 +96,15 @@ export class PostgresPluginInstallationStore
       schema: this.#schema,
       assertHostOpen: this.#assertOpen,
       registerOwner: this.#registerOwner,
+    });
+  }
+  compositionStore() {
+    this.#assertOpen();
+    return new PostgresPluginCompositionStore({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#assertOpen,
+      binding: this.#binding,
     });
   }
   async migrate(): Promise<void> {

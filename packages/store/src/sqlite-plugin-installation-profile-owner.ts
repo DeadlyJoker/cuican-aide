@@ -106,6 +106,7 @@ export class SqlitePluginInstallationProfileOwner {
       binding,
     });
     this.store = Object.freeze({
+      compositionStore: bound.compositionStore.bind(bound),
       loadPackage: bound.loadPackage.bind(bound),
       loadSelection: bound.loadSelection.bind(bound),
       listPackages: bound.listPackages.bind(bound),

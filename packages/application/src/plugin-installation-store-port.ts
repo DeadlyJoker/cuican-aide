@@ -4,6 +4,7 @@ import type {
   PluginSelection,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
+import type { PluginCompositionStore } from "./plugin-composition-store-port.ts";
 
 export type PluginInstallationReceipt = Readonly<{
   idempotencyKey: string;
@@ -56,6 +57,8 @@ export type CommitPluginSelectionInput = MutationIdentity &
  * that snapshot, even if the current selection has since changed. Installed package audits never change.
  */
 export interface PluginInstallationStore {
+  /** Feature-detect on legacy stores. Shares this exact host connection and profile ownership. */
+  compositionStore?(): PluginCompositionStore;
   loadPackage(
     input: Readonly<{
       scope: PluginProfileScope;

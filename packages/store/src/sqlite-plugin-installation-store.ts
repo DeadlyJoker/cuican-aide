@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { SqlitePluginCompositionStore } from "./sqlite-plugin-composition-store.ts";
 import type {
   PluginInstallationStore,
   PluginInstallationMutationResult,
@@ -47,7 +48,7 @@ import {
 } from "./sqlite-plugin-installation-profile-owner.ts";
 
 type Input<M extends keyof PluginInstallationStore> = Parameters<
-  PluginInstallationStore[M]
+  NonNullable<PluginInstallationStore[M]>
 >[0];
 const scopeFilter = "tenant_id=? AND space_id=? AND profile_id=?";
 
@@ -90,6 +91,14 @@ export class SqlitePluginInstallationStore implements PluginInstallationStore {
       database: this.#database,
       assertHostOpen: this.#assertOpen,
       registerOwner: this.#registerOwner,
+    });
+  }
+  compositionStore(): SqlitePluginCompositionStore {
+    this.#assertOpen();
+    return new SqlitePluginCompositionStore({
+      database: this.#database,
+      assertOpen: this.#assertOpen,
+      binding: this.#binding,
     });
   }
   async migrate(): Promise<void> {
