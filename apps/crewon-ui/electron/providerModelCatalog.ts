@@ -56,12 +56,24 @@ export async function providerModelCatalogForForm(
   },
 ): Promise<ProviderModelCatalogOutcome> {
   const request = parseRequest(value);
+  const saved =
+    request.apiKey === null && request.environmentVariable === null
+      ? options.providers
+          .catalog()
+          .bindings.find((binding) => binding.providerId === request.providerId)
+      : undefined;
+  const canReuseStoredKey =
+    saved !== undefined &&
+    new URL(saved.endpoint).href.replace(/\/+$/u, "") ===
+      new URL(request.endpoint).href.replace(/\/+$/u, "");
   const secret =
     request.apiKey ??
-    options.providers.secretFor(
-      request.providerId,
-      request.environmentVariable,
-    );
+    (request.environmentVariable !== null || canReuseStoredKey
+      ? options.providers.secretFor(
+          request.providerId,
+          request.environmentVariable,
+        )
+      : null);
   const result = await runCatalogProbe(options.paths, {
     apiKey: secret,
     defaultModelId: request.defaultModelId ?? SENTINEL_MODEL_ID,

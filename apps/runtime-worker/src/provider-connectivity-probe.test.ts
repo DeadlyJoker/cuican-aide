@@ -628,3 +628,71 @@ function origin(server: Server): string {
   }
   return `http://127.0.0.1:${address.port}`;
 }
+
+test("aicuican metadata uses only the same origin API Key and bounded enabled names", async () => {
+  const requests: string[] = [];
+  const config = {
+    ...providerConfig("https://api.aicuican.com/v1"),
+    catalogResource: "aicuicanEnabledModels" as const,
+  };
+  const http: ProviderProbeHttpPort = {
+    request: async (input) => {
+      requests.push(input.target.endpoint.href);
+      assert.equal(input.authorization, `Bearer ${config.secret}`);
+      return jsonResponse({
+        success: true,
+        data: [{ model_name: "gpt-5.6-sol", tags: ["Tools"] }],
+      });
+    },
+  };
+  const result = await new ResponsesProviderConnectivityProbe(config, {
+    egress: resolver(
+      [address("93.184.216.34")],
+      new DesktopModelCatalogEgressPolicy(),
+    ),
+    http,
+  }).probe(new AbortController().signal);
+  assert.deepEqual(requests, ["https://api.aicuican.com/api/pricing"]);
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.models, [{ id: "gpt-5.6-sol", displayName: null }]);
+  assert.throws(
+    () =>
+      new ResponsesProviderConnectivityProbe(
+        { ...config, endpoint: "https://other.example/v1" },
+        {
+          egress: resolver(
+            [address("93.184.216.34")],
+            new DesktopModelCatalogEgressPolicy(),
+          ),
+        },
+      ),
+    /model_provider_metadata_endpoint_invalid/,
+  );
+});
+
+test("aicuican metadata rejects business failures, duplicates and secret echoes", async () => {
+  const config = {
+    ...providerConfig("https://api.aicuican.com/v1"),
+    catalogResource: "aicuicanEnabledModels" as const,
+  };
+  for (const payload of [
+    { success: false, data: [{ model_name: "gpt-5.5" }] },
+    {
+      success: true,
+      data: [{ model_name: "gpt-5.6-sol" }, { model_name: "gpt-5.6-sol" }],
+    },
+    { success: true, data: [{ model_name: config.secret }] },
+    { success: true, data: [{ id: "gpt-5.6-sol" }] },
+    { success: true, data: new Array(101).fill({ model_name: "model" }) },
+  ]) {
+    const result = await new ResponsesProviderConnectivityProbe(config, {
+      egress: resolver(
+        [address("93.184.216.34")],
+        new DesktopModelCatalogEgressPolicy(),
+      ),
+      http: { request: async () => jsonResponse(payload) },
+    }).probe(new AbortController().signal);
+    assert.equal(result.status, "invalidResponse");
+    assert.equal(result.models, null);
+  }
+});

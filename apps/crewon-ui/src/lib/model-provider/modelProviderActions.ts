@@ -121,7 +121,21 @@ async function readProviderState(
     }),
     store?.catalog() ?? Promise.resolve(null),
   ]);
-  if (response !== null) return { catalog, settings: response.settings };
+  if (response !== null) {
+    // A Native bootstrap can run from the existing OS credential catalog before
+    // a managed Provider has been registered with Control. An empty successful
+    // Control read must not hide that configured source or ask for its key again.
+    const settings = response.settings;
+    if (
+      settings.runtimeAvailability === "unconfigured" &&
+      settings.activeProviderId === null &&
+      settings.providers.length === 0 &&
+      catalog !== null &&
+      catalog.bindings.length > 0
+    )
+      return { catalog, settings: settingsFromCredentialCatalog(catalog) };
+    return { catalog, settings };
+  }
   if (catalog !== null) {
     return { catalog, settings: settingsFromCredentialCatalog(catalog) };
   }

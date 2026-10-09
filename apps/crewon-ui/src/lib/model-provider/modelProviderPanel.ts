@@ -372,8 +372,8 @@ function credentialKindOptions(locale: Locale) {
 
 function modelListDescription(count: number, locale: Locale): string {
   return locale === "zh"
-    ? `来自该 Provider /models 接口的 ${count} 个可用模型。列表之外的名字仍可手动保留。`
-    : `${count} models advertised by this provider's /models API. Names outside the list can still be kept.`;
+    ? `该模型服务当前返回 ${count} 个可用模型。`
+    : `${count} models currently available from this provider.`;
 }
 
 /** Select options for the model field, keeping the current value selectable. */
@@ -407,11 +407,8 @@ export function applyModelOptionsToPanel(
         ? {
             ...field,
             description: modelListDescription(models.length, locale),
-            options: modelFieldOptions(
-              models,
-              field.value.trim().length > 0 ? field.value : models[0],
-            ),
-            value: field.value.trim().length > 0 ? field.value : models[0],
+            options: models.map((value) => ({ label: value, value })),
+            value: models.includes(field.value) ? field.value : models[0],
           }
         : field,
     ),

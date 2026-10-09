@@ -14,6 +14,8 @@ import {
   PinnedNodeHttpTransport,
 } from "./pinned-node-http.ts";
 
+type CatalogResource = "models" | "aicuicanEnabledModels";
+
 const MAX_BODY_BYTES = 64 * 1024;
 const MAX_MODELS = 100;
 const MAX_MODEL_FIELD_BYTES = 256;
@@ -87,6 +89,7 @@ export class ResponsesProviderConnectivityProbe {
   readonly #catalogRevision: number;
   readonly #runtimeBindingId: string;
   readonly #endpoint: URL;
+  readonly #catalogResource: CatalogResource;
   readonly #secret: string | null;
   readonly #deadlineMs: number;
   readonly #egress: ProviderProbeEgressResolver;
@@ -103,6 +106,7 @@ export class ResponsesProviderConnectivityProbe {
       endpoint: string;
       secret: string | null;
       deadlineMs?: number;
+      catalogResource?: CatalogResource;
     },
     dependencies: {
       egress: ProviderProbeEgressResolver;
@@ -127,7 +131,8 @@ export class ResponsesProviderConnectivityProbe {
       512,
       "provider_probe_runtime_binding_invalid",
     );
-    this.#endpoint = modelsEndpoint(config.endpoint);
+    this.#catalogResource = config.catalogResource ?? "models";
+    this.#endpoint = modelsEndpoint(config.endpoint, this.#catalogResource);
     this.#secret = secret(config.secret);
     this.#deadlineMs = deadline(config.deadlineMs ?? MAX_DEADLINE_MS);
     this.#egress = dependencies.egress;
@@ -158,12 +163,16 @@ export class ResponsesProviderConnectivityProbe {
         },
         combined,
       );
-      const response = await this.#requestWithAddressFailover(targets, combined);
+      const response = await this.#requestWithAddressFailover(
+        targets,
+        combined,
+      );
       return projectResponse(
         this.#providerId,
         this.#catalogRevision,
         this.#runtimeBindingId,
         this.#secret,
+        this.#catalogResource,
         response,
         latency(readNow(this.#now) - startedAt, this.#deadlineMs),
       );
@@ -249,6 +258,7 @@ function projectResponse(
   catalogRevision: number,
   runtimeBindingId: string,
   secretValue: string | null,
+  catalogResource: CatalogResource,
   response: ProviderProbeHttpResponse,
   latencyMs: number,
 ): ModelProviderProbeResult {
@@ -300,7 +310,7 @@ function projectResponse(
       latencyMs,
     );
   }
-  const models = parseModels(response.body, secretValue);
+  const models = parseModels(response.body, secretValue, catalogResource);
   if (models === null) {
     return emptyResult(
       providerId,
@@ -326,6 +336,7 @@ function projectResponse(
 function parseModels(
   body: Uint8Array,
   secretValue: string | null,
+  catalogResource: CatalogResource,
 ): readonly ModelProviderProbeModel[] | null {
   let value: unknown;
   try {
@@ -333,21 +344,30 @@ function parseModels(
   } catch {
     return null;
   }
-  if (!object(value)) return null;
+  if (
+    !object(value) ||
+    (catalogResource === "aicuicanEnabledModels" && value.success !== true)
+  )
+    return null;
   const items = Array.isArray(value.data)
     ? value.data
-    : Array.isArray(value.models)
+    : catalogResource === "models" && Array.isArray(value.models)
       ? value.models
       : null;
   if (items === null || items.length > MAX_MODELS) return null;
   const seen = new Set<string>();
   const models: ModelProviderProbeModel[] = [];
   for (const item of items) {
+    const id = object(item)
+      ? catalogResource === "aicuicanEnabledModels"
+        ? item.model_name
+        : item.id
+      : null;
     if (
       !object(item) ||
-      !boundedModelField(item.id) ||
-      containsSecret(item.id, secretValue) ||
-      seen.has(item.id)
+      !boundedModelField(id) ||
+      containsSecret(id, secretValue) ||
+      seen.has(id)
     ) {
       return null;
     }
@@ -358,8 +378,8 @@ function parseModels(
     ) {
       return null;
     }
-    seen.add(item.id);
-    models.push({ id: item.id, displayName: display });
+    seen.add(id);
+    models.push({ id, displayName: display });
   }
   return models;
 }
@@ -384,7 +404,7 @@ function emptyResult(
   };
 }
 
-function modelsEndpoint(value: string): URL {
+function modelsEndpoint(value: string, resource: CatalogResource): URL {
   const endpoint = new URL(value);
   if (
     (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") ||
@@ -395,7 +415,16 @@ function modelsEndpoint(value: string): URL {
   ) {
     throw new Error("model_provider_endpoint_invalid");
   }
-  endpoint.pathname = `${endpoint.pathname.replace(/\/+$/u, "")}/models`;
+  if (resource === "aicuicanEnabledModels") {
+    if (
+      endpoint.origin !== "https://api.aicuican.com" ||
+      endpoint.pathname.replace(/\/+$/u, "") !== "/v1"
+    )
+      throw new Error("model_provider_metadata_endpoint_invalid");
+    endpoint.pathname = "/api/pricing";
+  } else {
+    endpoint.pathname = `${endpoint.pathname.replace(/\/+$/u, "")}/models`;
+  }
   return endpoint;
 }
 

@@ -38,31 +38,67 @@ export async function providerModelCatalog(
       ? result.models.map(({ id }) => id)
       : [];
   return {
-    models: runtimeModelCatalog(
-      JSON.stringify(advertised),
-      parsed.defaultModelId,
-    ),
+    // Successful discovery is evidence of availability. The runtime fallback
+    // parser keeps a configured default, so filter that synthetic entry here.
+    models:
+      result.status === "ok"
+        ? runtimeModelCatalog(
+            JSON.stringify(advertised),
+            parsed.defaultModelId,
+          ).filter((model) => advertised.includes(model))
+        : [],
     status: result.status,
   };
 }
 
 function modelProbe(input: ProviderModelCatalogInput): Probe {
-  return new ResponsesProviderConnectivityProbe(
-    {
-      tenantId: "standalone-tenant",
-      providerId: input.providerId,
-      catalogRevision: 1,
-      runtimeBindingId: "desktop-model-catalog",
-      endpoint: input.endpoint,
-      secret: input.apiKey,
-      deadlineMs: 3_000,
-    },
-    {
-      egress: new ProviderProbeEgressResolver({
-        policy: new DesktopModelCatalogEgressPolicy(),
-      }),
-    },
+  const config = {
+    tenantId: "standalone-tenant",
+    providerId: input.providerId,
+    catalogRevision: 1,
+    runtimeBindingId: "desktop-model-catalog",
+    endpoint: input.endpoint,
+    secret: input.apiKey,
+    deadlineMs: 3_000,
+  };
+  const dependencies = {
+    egress: new ProviderProbeEgressResolver({
+      policy: new DesktopModelCatalogEgressPolicy(),
+    }),
+  };
+  const models = new ResponsesProviderConnectivityProbe(config, dependencies);
+  const endpoint = new URL(input.endpoint);
+  if (
+    endpoint.origin !== "https://api.aicuican.com" ||
+    endpoint.pathname.replace(/\/+$/u, "") !== "/v1"
+  )
+    return models;
+  const enabled = new ResponsesProviderConnectivityProbe(
+    { ...config, catalogResource: "aicuicanEnabledModels" },
+    dependencies,
   );
+  return intersectProviderCatalogs(models, enabled);
+}
+
+/** Key access and enabled metadata are separate authorities; neither can widen the other. */
+export function intersectProviderCatalogs(
+  models: Probe,
+  enabled: Probe,
+): Probe {
+  return {
+    async probe(signal) {
+      const accessible = await models.probe(signal);
+      if (accessible.status !== "ok" || accessible.models === null)
+        return accessible;
+      const metadata = await enabled.probe(signal);
+      if (metadata.status !== "ok" || metadata.models === null) return metadata;
+      const active = new Set(metadata.models.map((model) => model.id));
+      const selected = accessible.models.filter((model) =>
+        active.has(model.id),
+      );
+      return { ...accessible, models: selected, modelCount: selected.length };
+    },
+  };
 }
 
 function parseInput(value: unknown): ProviderModelCatalogInput {

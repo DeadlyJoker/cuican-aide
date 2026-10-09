@@ -139,6 +139,29 @@ function fixture(
 }
 
 describe("final Provider control actions", () => {
+  it("keeps the Native configured source visible when Control has no managed provider", async () => {
+    const test = fixture();
+    test.controlClient.getModelProviderSettings.mockResolvedValue({
+      settings: {
+        ...settings,
+        activeProviderId: null,
+        providers: [],
+        runtimeAvailability: "unconfigured",
+      },
+    });
+
+    await refreshModelProvidersPanelAction(test.params);
+
+    expect(test.panel()?.rows?.some((row) => row.id === "gateway")).toBe(true);
+    expect(test.panel()?.body).not.toContain("No model service added yet");
+    expect(
+      test
+        .panel()
+        ?.rows?.find((row) => row.id === "gateway")
+        ?.actions?.map(({ id }) => id),
+    ).toContain("model-provider-edit:gateway");
+  });
+
   it("keeps native model setup available before the Control runtime starts", async () => {
     const test = fixture();
     test.params.controlClient = null;
@@ -540,10 +563,10 @@ describe("fetch-models action", () => {
       .panel()
       ?.fields?.find((f) => f.id === MODEL_PROVIDER_FIELD_IDS.modelId);
     expect(modelField?.options?.map((o) => o.value)).toEqual([
-      "gateway-model",
       "gpt-5.6-sol",
       "claude-sonnet-4",
     ]);
+    expect(modelField?.value).toBe("gpt-5.6-sol");
     expect(test.panel()?.body).toBeUndefined();
     expect(test.panel()?.error).toBeUndefined();
   });

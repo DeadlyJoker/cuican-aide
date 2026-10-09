@@ -302,6 +302,35 @@ describe("applyModelOptionsToPanel", () => {
     expect({ modelField, actions: result?.actions }).toMatchSnapshot();
   });
 
+  it("does not revive an unavailable configured model after successful discovery", () => {
+    const panel = modelProviderFormPanel({
+      entry: null,
+      isSelected: false,
+      locale: "en",
+    });
+    const withOldModel = {
+      ...panel,
+      fields: panel.fields?.map((field) =>
+        field.id === MODEL_PROVIDER_FIELD_IDS.modelId
+          ? { ...field, value: "gpt-5.5" }
+          : field,
+      ),
+    };
+    const result = applyModelOptionsToPanel(
+      withOldModel,
+      ["gpt-5.6-sol", "gpt-5.6-terra"],
+      "en",
+    );
+    const field = result?.fields?.find(
+      (field) => field.id === MODEL_PROVIDER_FIELD_IDS.modelId,
+    );
+    expect(field?.options?.map((option) => option.value)).toEqual([
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+    ]);
+    expect(field?.value).toBe("gpt-5.6-sol");
+  });
+
   it("returns the panel unchanged when the model list is empty", () => {
     const panel = modelProviderFormPanel({
       entry: null,

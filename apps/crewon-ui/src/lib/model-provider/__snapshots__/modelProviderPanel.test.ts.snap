@@ -22,7 +22,7 @@ exports[`applyModelOptionsToPanel > converts the model text field into a select 
     },
   ],
   "modelField": {
-    "description": "2 models advertised by this provider's /models API. Names outside the list can still be kept.",
+    "description": "2 models currently available from this provider.",
     "id": "model-provider-model-id",
     "label": "Model ID / LiteLLM model alias",
     "options": [
