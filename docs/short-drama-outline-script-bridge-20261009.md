@@ -23,8 +23,14 @@
 
 日志位于 `/tmp/crewon-outline-script-regression.log`、`/tmp/crewon-outline-script-final-new-tests.log`、`/tmp/crewon-outline-script-final-types.log`。PostgreSQL 未配置，不能记为真实数据库通过。
 
+## 桌面候选
+
+干净验收工作树提交 `cf7f43de7` 已从源码提交 `a2aa98ee0` 同步本次实现。0.1.55 候选的深度严格签名核验通过；原 15 个 renderer 文件、4 个 CSS、preload、日志写入器和 `https://pim.aicuican.com` 账号地址保持。7 个运行时文件摘要逐一核验，Control/Worker 均包含新来源读取和提交检查。
+
+候选位于桌面验收工作树 `output/extensions/desktop55-delivery/CrewON.app`，证明为同目录 `package-proof.json`。保留短剧 47 原冻结目录，不重建；0.1.54 候选也未覆盖。打包完成后只删除本次生成的 ASAR 解包中间目录。
+
 ## 尚未完成
 
-正式 App 仍为 0.1.53、选中短剧 45、原管理员登录保持。0.1.54 与短剧 47 候选已准备；本次新增剧本连接还需要配套桌面运行时更新。用户回复已解锁后，工具仍报告 Mac 锁屏，因此没有退出、替换 App、安装插件或发送外部模型保存请求。
+正式 App 仍为 0.1.53、选中短剧 45、原管理员登录保持。0.1.55 与短剧 47 候选已准备，包含本次新增剧本连接。用户回复已解锁后，工具仍报告 Mac 锁屏，因此没有退出、替换 App、安装插件或发送外部模型保存请求。
 
 本次只连接单次 script Stage 与原剧本服务。执行计划读取仍需逐项检查 v2 来源；剧本页面的依赖状态仍沿旧 brief/大纲采用版本比较，不宣称覆盖新的 Foundation 变更提示。专业剧本结构、角色场景、分镜视频音频、时间线与成片及完整创意/小说项目逐项验收仍按原清单继续。未知 Comfy 操作没有重提。
