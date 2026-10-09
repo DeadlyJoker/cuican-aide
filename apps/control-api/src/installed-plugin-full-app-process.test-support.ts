@@ -7,19 +7,21 @@ import type { InstalledProcessChild } from "../../runtime-worker/src/installed-p
 
 const repository = fileURLToPath(new URL("../../..", import.meta.url));
 
-/** Actual source entrypoints; neither the production HTTP handlers nor application services are replaced. */
+/** Actual source or explicitly supplied packaged entrypoints; production handlers are not replaced. */
 export function startFullAppProcess(
   entry: "control" | "bff",
   environment: NodeJS.ProcessEnv,
+  options: Readonly<{ entrypointPath?: string }> = {},
 ): InstalledProcessChild {
   const child = spawn(
     process.execPath,
     [
       "--experimental-strip-types",
-      join(
-        repository,
-        `apps/${entry === "control" ? "control-api" : "web-bff"}/src/main.ts`,
-      ),
+      options.entrypointPath ??
+        join(
+          repository,
+          `apps/${entry === "control" ? "control-api" : "web-bff"}/src/main.ts`,
+        ),
     ],
     {
       cwd: repository,
