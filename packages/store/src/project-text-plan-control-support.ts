@@ -4,11 +4,12 @@ import {
   parseExtensionConfiguration,
   parseExtensionActivation,
   parseProjectTextArtifact,
-  parseProjectTextArtifactRevision,
+  parseProjectOutlineSourceRevision,
   extensionCanonicalJson,
   type ProjectTextPlan,
   type ProjectTextPlanRevision,
   type ProjectTextPlanStep,
+  type ProjectOutlineSourceRevision,
 } from "@crewon/domain";
 import {
   creativeStoreDigester,
@@ -81,7 +82,7 @@ export function checkPlanControlRows(
   p: PlanControlPrepared,
   rows: PlanControlRows,
   newRevision: boolean,
-): void {
+): ProjectOutlineSourceRevision | null {
   const r = p.revision,
     b = decodeConversation(rows.binding),
     project = decodeCreativeProject(rows.project, r.actor, r.projectId);
@@ -93,7 +94,8 @@ export function checkPlanControlRows(
   )
     planStoreFail("project_text_plan_binding_changed");
   planEqual(b, p.q.binding, "project_text_plan_binding_changed");
-  if (!newRevision) return;
+  if (!newRevision) return null;
+  let outlineSource: ProjectOutlineSourceRevision | null = null;
   const cfg = parseExtensionConfiguration(
       planJson(rows.configuration?.configuration_json) as Parameters<
         typeof parseExtensionConfiguration
@@ -137,7 +139,7 @@ export function checkPlanControlRows(
     if (rows.outline === undefined)
       planStoreFail("project_text_plan_source_changed");
     const h = parseProjectTextArtifact(planJson(rows.outline.head_json)),
-      v = parseProjectTextArtifactRevision(
+      v = parseProjectOutlineSourceRevision(
         planJson(rows.outline.revision_json),
         creativeStoreDigester,
       );
@@ -153,6 +155,7 @@ export function checkPlanControlRows(
       v.artifactId !== h.artifactId
     )
       planStoreFail("project_text_plan_source_changed");
+    outlineSource = v;
     if (
       r.start === "script" &&
       r.episodeIds.some(
@@ -209,6 +212,7 @@ export function checkPlanControlRows(
     )
   )
     planStoreFail();
+  return outlineSource;
 }
 export function verifyPlanControl(
   p: PlanControlPrepared,

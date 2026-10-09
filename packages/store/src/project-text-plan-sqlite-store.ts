@@ -1,3 +1,4 @@
+import { assertPlanOutlineInputsCurrent } from "./project-text-plan-outline-source.ts";
 import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
   captureSqliteProjectFoundationDownstream,
@@ -194,7 +195,7 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
           installation: p.q.binding.currentInstallation,
         });
         const replay = this.#receipt(o, p.receipt);
-        this.#checkRows(
+        const outlineSource = this.#checkRows(
           p,
           replay === null &&
             (p.kind === "start" ||
@@ -223,6 +224,18 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
           assertSqlitePlanContinuation(this.#db, previous, steps);
         verifyPlanControl(p, previous, revision, steps);
         if (
+          p.kind === "start" ||
+          p.kind === "resume" ||
+          p.kind === "reviseRemaining" ||
+          p.kind === "continue"
+        ) {
+          downstream = captureSqliteProjectFoundationDownstream(
+            this.#db,
+            downstreamLocator,
+          );
+          assertPlanOutlineInputsCurrent(outlineSource, downstream);
+        }
+        if (
           p.kind === "start" &&
           this.#get(
             "SELECT plan_id FROM project_text_plans WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND project_id=? AND thread_id=? AND state NOT IN ('completed','revoked') LIMIT 1",
@@ -230,16 +243,6 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
           )
         )
           planStoreFail("project_text_plan_active_conflict");
-        if (
-          p.kind === "start" ||
-          p.kind === "resume" ||
-          p.kind === "reviseRemaining" ||
-          p.kind === "continue"
-        )
-          downstream = captureSqliteProjectFoundationDownstream(
-            this.#db,
-            downstreamLocator,
-          );
         this.#writePlan(p.plan, previous);
         if (
           previous === null ||
@@ -462,7 +465,7 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
       read = (
         q: { sql: string; values: readonly (string | number)[] } | null,
       ) => (q === null ? undefined : this.#get(q.sql, q.values));
-    checkPlanControlRows(
+    return checkPlanControlRows(
       p,
       {
         binding: read(qs.binding),

@@ -1,3 +1,4 @@
+import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { captureProjectTextPlanCoordinatorDependencies } from "./project-text-plan-dependencies.ts";
 import {
   extensionCanonicalJson,
@@ -6,7 +7,6 @@ import {
   parseProjectTextPlanStep,
   parseProjectTextPlanRunAdmission,
   parseProjectTextArtifact,
-  parseProjectTextArtifactRevision,
   parseProjectBriefRevision,
   type ProjectTextPlan,
   type ProjectTextPlanRevision,
@@ -42,7 +42,10 @@ export type ProjectTextPlanCoordinatorDependencies = Readonly<{
   plans: ProjectTextPlanStore;
   continuation: ProjectTextPlanContinuationPort;
   projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief">;
-  texts: Pick<ProjectTextStore, "loadOutline" | "loadScript" | "loadRevision">;
+  texts: Pick<
+    ProjectTextStore,
+    "loadOutline" | "loadScript" | "loadRevision" | "loadOutlineSourceRevision"
+  >;
   conversations: Pick<
     ProjectConversationStore,
     "loadBinding" | "loadStageAdmission"
@@ -466,13 +469,14 @@ export class ProjectTextPlanCoordinator {
       head.selectedContentRevision !== ref.contentRevision
     )
       changed();
-    const raw = await this.#d.texts.loadRevision({
-      ...scope,
-      artifactId: ref.artifactId,
+    const revision = await readProjectOutlineSourceRevision({
+      store: this.#d.texts,
+      scope,
+      project,
+      artifact: head,
       contentRevision: ref.contentRevision,
+      digester: this.#d.digester,
     });
-    if (raw === null) invalid();
-    const revision = parseProjectTextArtifactRevision(raw, this.#d.digester);
     if (
       revision.kind !== "outline" ||
       revision.contentDigest !== ref.contentDigest ||
@@ -527,6 +531,7 @@ function projectTextPlanDeterministicPauseReason(
         : null;
   switch (code) {
     case "project_text_plan_source_changed":
+    case "project_outline_inputs_stale":
       return "source_changed";
     case "project_text_plan_selection_changed":
       return "selection_changed";
@@ -541,6 +546,22 @@ function projectTextPlanDeterministicPauseReason(
     case "project_text_plan_authorization_unavailable":
       return "authorization_unavailable";
     default:
+      // A failed committing task may wrap the same deterministic v2 source conflict.
+      // Inspect bounded data properties only; never reinterpret arbitrary internal errors.
+      for (
+        let current = error, depth = 0;
+        current instanceof Error && depth < 8;
+        depth++
+      ) {
+        if (
+          Object.getOwnPropertyDescriptor(current, "message")?.value ===
+          "project_outline_inputs_stale"
+        )
+          return "source_changed";
+        const cause = Object.getOwnPropertyDescriptor(current, "cause");
+        if (cause === undefined || !Object.hasOwn(cause, "value")) break;
+        current = cause.value;
+      }
       return null;
   }
 }

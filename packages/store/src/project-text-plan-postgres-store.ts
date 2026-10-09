@@ -1,3 +1,4 @@
+import { assertPlanOutlineInputsCurrent } from "./project-text-plan-outline-source.ts";
 import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
   capturePostgresProjectFoundationDownstream,
@@ -219,7 +220,7 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
         await this.#projectLock(c, p.plan);
         await this.#planLock(c, p.plan);
         const replay = await this.#receipt(c, o, p.receipt);
-        await this.#checkRows(
+        const outlineSource = await this.#checkRows(
           c,
           p,
           replay === null &&
@@ -259,6 +260,19 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
           );
         verifyPlanControl(p, previous, revision, steps);
         if (
+          p.kind === "start" ||
+          p.kind === "resume" ||
+          p.kind === "reviseRemaining" ||
+          p.kind === "continue"
+        ) {
+          downstream = await capturePostgresProjectFoundationDownstream(
+            c,
+            this.#schema,
+            downstreamLocator,
+          );
+          assertPlanOutlineInputsCurrent(outlineSource, downstream);
+        }
+        if (
           p.kind === "start" &&
           (await this.#get(
             c,
@@ -267,17 +281,6 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
           ))
         )
           planStoreFail("project_text_plan_active_conflict");
-        if (
-          p.kind === "start" ||
-          p.kind === "resume" ||
-          p.kind === "reviseRemaining" ||
-          p.kind === "continue"
-        )
-          downstream = await capturePostgresProjectFoundationDownstream(
-            c,
-            this.#schema,
-            downstreamLocator,
-          );
         await this.#writePlan(c, p.plan, previous);
         if (
           previous === null ||
@@ -534,7 +537,7 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
         q: { sql: string; values: readonly (string | number)[] } | null,
       ) =>
         q === null ? Promise.resolve(undefined) : this.#get(c, q.sql, q.values);
-    checkPlanControlRows(
+    return checkPlanControlRows(
       p,
       {
         binding: await read(qs.binding),

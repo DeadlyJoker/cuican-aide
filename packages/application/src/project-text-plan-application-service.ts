@@ -1,3 +1,4 @@
+import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { prepareProjectTextPlanModel } from "./project-text-plan-model-selection.ts";
 import type { PreparedPluginTaskModelSelection } from "./plugin-task-model-selection.ts";
 import {
@@ -15,7 +16,6 @@ import {
   validateCreativeProject,
   parseProjectBriefRevision,
   parseProjectTextArtifact,
-  parseProjectTextArtifactRevision,
   parseProjectConversationBinding,
   parseExtensionConfiguration,
   parseExtensionActivation,
@@ -69,7 +69,10 @@ export type ProjectTextPlanApplicationDependencies = Readonly<{
   plans: ProjectTextPlanStore;
   conversations: Pick<ProjectConversationStore, "loadBinding">;
   projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief">;
-  texts: Pick<ProjectTextStore, "loadOutline" | "loadScript" | "loadRevision">;
+  texts: Pick<
+    ProjectTextStore,
+    "loadOutline" | "loadScript" | "loadRevision" | "loadOutlineSourceRevision"
+  >;
   extensions: Pick<
     ExtensionStore,
     "loadLatestExtensionConfiguration" | "loadExtensionActivation"
@@ -435,16 +438,14 @@ export class ProjectTextPlanApplicationService {
         const head = parseProjectTextArtifact(raw);
         if (head.selectedContentRevision === null)
           conflict("project_text_plan_outline_required");
-        const content = await this.#d.texts.loadRevision({
-          ...scope,
-          artifactId: head.artifactId,
+        const revision = await readProjectOutlineSourceRevision({
+          store: this.#d.texts,
+          scope,
+          project,
+          artifact: head,
           contentRevision: head.selectedContentRevision,
+          digester: this.#d.digester,
         });
-        if (content === null) invalid();
-        const revision = parseProjectTextArtifactRevision(
-          content,
-          this.#d.digester,
-        );
         if (
           revision.kind !== "outline" ||
           revision.brief.briefRevision !== brief.briefRevision ||

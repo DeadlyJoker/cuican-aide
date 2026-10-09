@@ -1,3 +1,4 @@
+import { captureProjectOutlineSourceReader } from "./project-outline-source-reader.ts";
 import type { ProjectTextPlanApplicationDependencies } from "./project-text-plan-application-service.ts";
 import { ApplicationError } from "./application-error.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
@@ -45,6 +46,7 @@ export function captureProjectTextPlanDependencies(
       loadBrief: method(d.projects, "loadBrief"),
     }),
     texts: Object.freeze({
+      ...captureProjectOutlineSourceReader(d.texts),
       loadOutline: method(d.texts, "loadOutline"),
       loadScript: method(d.texts, "loadScript"),
       loadRevision: method(d.texts, "loadRevision"),
@@ -126,6 +128,7 @@ export function captureProjectTextPlanCoordinatorDependencies(
       loadBrief: method(d.projects, "loadBrief"),
     }),
     texts: Object.freeze({
+      ...captureProjectOutlineSourceReader(d.texts),
       loadOutline: method(d.texts, "loadOutline"),
       loadScript: method(d.texts, "loadScript"),
       loadRevision: method(d.texts, "loadRevision"),

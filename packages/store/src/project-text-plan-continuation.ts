@@ -1,9 +1,18 @@
+import { assertPlanOutlineInputsCurrent } from "./project-text-plan-outline-source.ts";
+import {
+  captureSqliteProjectFoundationDownstream,
+  capturePostgresProjectFoundationDownstream,
+} from "./project-foundation-downstream-guard.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
-import type { ProjectTextPlan, ProjectTextPlanStep } from "@crewon/domain";
+import type {
+  ProjectTextPlan,
+  ProjectTextPlanStep,
+  ProjectOutlineSourceRevision,
+} from "@crewon/domain";
 import {
   parseProjectTextArtifact,
-  parseProjectTextArtifactRevision,
+  parseProjectOutlineSourceRevision,
 } from "@crewon/domain";
 import {
   decodeCreativeProject,
@@ -29,7 +38,8 @@ function checked(
   plan: ProjectTextPlan,
   step: ProjectTextPlanStep,
   rows: Rows,
-): void {
+): ProjectOutlineSourceRevision | null {
+  let outlineSource: ProjectOutlineSourceRevision | null = null;
   const r = step.result,
     s = step.selection;
   if (
@@ -71,7 +81,7 @@ function checked(
     if (rows.outline === undefined)
       planStoreFail("project_text_plan_source_changed");
     const h = parseProjectTextArtifact(planJson(rows.outline.head_json)),
-      v = parseProjectTextArtifactRevision(
+      v = parseProjectOutlineSourceRevision(
         planJson(rows.outline.revision_json),
         creativeStoreDigester,
       ),
@@ -83,6 +93,7 @@ function checked(
       v.contentDigest !== source.contentDigest
     )
       planStoreFail("project_text_plan_source_changed");
+    outlineSource = v;
   }
   const receipt = decodeTextReceipt(rows.selected, {
     actor: plan.owner,
@@ -105,6 +116,7 @@ function checked(
     receipt.contentRevision?.contentDigest !== r.contentDigest
   )
     planStoreFail("project_text_plan_selection_changed");
+  return outlineSource;
 }
 function queries(plan: ProjectTextPlan, step: ProjectTextPlanStep, p: string) {
   const scope = [plan.owner.tenantId, plan.owner.spaceId, plan.projectId],
@@ -167,13 +179,21 @@ export function assertSqlitePlanContinuation(
       x === null
         ? undefined
         : db.prepare(x.sql.replaceAll(/\$[1-5]/gu, "?")).get(...x.values);
-  checked(plan, step, {
+  const outlineSource = checked(plan, step, {
     project: read(q.project),
     brief: read(q.brief),
     head: read(q.head),
     outline: read(q.outline),
     selected: read(q.selected),
   });
+  if (outlineSource?.schemaVersion === "crewon.project-text-revision.v2")
+    assertPlanOutlineInputsCurrent(
+      outlineSource,
+      captureSqliteProjectFoundationDownstream(db, {
+        actor: plan.owner,
+        projectId: plan.projectId,
+      }),
+    );
 }
 export async function assertPostgresPlanContinuation(
   c: PoolClient,
@@ -188,11 +208,19 @@ export async function assertPostgresPlanContinuation(
       x: { sql: string; values: readonly (string | number)[] } | null,
     ) =>
       x === null ? undefined : (await c.query(x.sql, [...x.values])).rows[0];
-  checked(plan, step, {
+  const outlineSource = checked(plan, step, {
     project: await read(q.project),
     brief: await read(q.brief),
     head: await read(q.head),
     outline: await read(q.outline),
     selected: await read(q.selected),
   });
+  if (outlineSource?.schemaVersion === "crewon.project-text-revision.v2")
+    assertPlanOutlineInputsCurrent(
+      outlineSource,
+      await capturePostgresProjectFoundationDownstream(c, schema, {
+        actor: plan.owner,
+        projectId: plan.projectId,
+      }),
+    );
 }
