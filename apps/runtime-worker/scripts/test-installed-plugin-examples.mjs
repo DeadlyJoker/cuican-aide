@@ -28,14 +28,12 @@ try {
     .filter((name) => name.endsWith(".test.ts"))
     .sort()
     .map((name) => join(app, "src", name));
+  const testArguments = process.argv.slice(2);
+  // Both `pnpm test --flag` and `pnpm test -- --flag` reach this producer.
+  if (testArguments[0] === "--") testArguments.shift();
   child = spawn(
     process.execPath,
-    [
-      "--experimental-strip-types",
-      "--test",
-      ...process.argv.slice(2),
-      ...tests,
-    ],
+    ["--experimental-strip-types", "--test", ...testArguments, ...tests],
     {
       cwd: app,
       stdio: "inherit",

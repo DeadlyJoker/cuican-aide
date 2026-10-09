@@ -22,10 +22,10 @@ export async function buildInstalledBusinessPluginExamples(
     name.endsWith(".tgz"),
   );
   assert.equal(tarballs.length, 1);
-  async function buildExample(name, outputRoot) {
+  async function buildExample({ name, outputRoot, sourceDirectory }) {
     const development = join(ownedRoot, "development", name);
     await mkdir(development, { recursive: true, mode: 0o700 });
-    await cp(join(repository, "examples/plugins", name), development, {
+    await cp(sourceDirectory, development, {
       recursive: true,
     });
     const packagePath = join(development, "package.json");
@@ -64,12 +64,26 @@ export async function buildInstalledBusinessPluginExamples(
     await rm(development, { recursive: true });
     return packages;
   }
-  const packages = await buildExample("professional-report", "packages");
+  const example = (name, outputRoot) => ({
+    name,
+    outputRoot,
+    sourceDirectory: join(repository, "examples/plugins", name),
+  });
+  const packages = await buildExample(
+    example("professional-report", "packages"),
+  );
   const krea = includeKrea
-    ? await buildExample("comfyui-krea2", "krea-packages")
+    ? await buildExample(example("comfyui-krea2", "krea-packages"))
     : null;
   const shortDrama = includeShortDrama
-    ? await buildExample("short-drama", "short-drama-packages")
+    ? await buildExample({
+        name: "ui-workbench-v1-compatibility",
+        outputRoot: "short-drama-packages",
+        sourceDirectory: join(
+          repository,
+          "apps/runtime-worker/test-fixtures/ui-workbench-v1",
+        ),
+      })
     : null;
   // Deleting the actual development projects proves consumers cannot borrow their dependencies.
   await rm(join(ownedRoot, "development"), { recursive: true });

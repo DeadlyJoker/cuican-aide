@@ -118,17 +118,17 @@ export async function settleShortDrama() {
   await setImmediate();
 }
 
-/** Real installed UI and two real database connections; no Node Host, task authority or provider. */
+/** Frozen UI-only protocol fixture and two real database connections; never the current business plugin. */
 export async function shortDramaUiFixture(t: TestContext, backend: Backend) {
   const source = process.env.CREWON_TEST_SHORT_DRAMA_PLUGIN_V1_DIR;
   const upgradeSource = process.env.CREWON_TEST_SHORT_DRAMA_PLUGIN_V2_DIR;
   assert.ok(
     source,
-    "official producer must provide the externally built short-drama v1 package",
+    "official producer must provide the externally built UI-only compatibility v1 package",
   );
   assert.ok(
     upgradeSource,
-    "official producer must provide the externally built short-drama v2 package",
+    "official producer must provide the externally built UI-only compatibility v2 package",
   );
   let cleanup: () => Promise<void> = async () => {};
   t.after(() => cleanup());

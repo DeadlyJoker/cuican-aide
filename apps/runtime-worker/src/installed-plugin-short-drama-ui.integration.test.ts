@@ -22,7 +22,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
   };
 
   test(
-    `${backend}: actual installed UI-only short-drama package loads its PNG and preserves concept/history/settings interactions without executing tasks`,
+    `${backend}: frozen UI-v1 compatibility: actual installed UI-only short-drama package loads its PNG and preserves concept/history/settings interactions without executing tasks`,
     options,
     async (t) => {
       const f = await shortDramaUiFixture(t, backend);
@@ -117,7 +117,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
   );
 
   test(
-    `${backend}: installed short-drama project creation/filtering retains brief revisions and archived editing boundaries only in its mounted DOM`,
+    `${backend}: frozen UI-v1 compatibility: installed short-drama project creation/filtering retains brief revisions and archived editing boundaries only in its mounted DOM`,
     options,
     async (t) => {
       const f = await shortDramaUiFixture(t, backend);
@@ -179,7 +179,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
   );
 
   test(
-    `${backend}: actual trusted loader theme update preserves edits and account/root, and stop closes dialogs/timers before reset remount`,
+    `${backend}: frozen UI-v1 compatibility: actual trusted loader theme update preserves edits and account/root, and stop closes dialogs/timers before reset remount`,
     options,
     async (t) => {
       const f = await shortDramaUiFixture(t, backend);
@@ -246,7 +246,7 @@ for (const backend of ["sqlite", "postgres"] as const) {
   );
 
   test(
-    `${backend}: installed short-drama upgrade and disable invalidate actual active leases and refuse new mounts without hiding host identity`,
+    `${backend}: frozen UI-v1 compatibility: installed short-drama upgrade and disable invalidate actual active leases and refuse new mounts without hiding host identity`,
     options,
     async (t) => {
       const f = await shortDramaUiFixture(t, backend);
