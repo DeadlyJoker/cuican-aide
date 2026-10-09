@@ -27,6 +27,8 @@ import {
   type DesktopProjectExecutionConfiguration,
   parseDesktopProjectFoundationToolsConfiguration,
   type DesktopProjectFoundationToolsConfiguration,
+  parseDesktopProjectOutlineToolsConfiguration,
+  type DesktopProjectOutlineToolsConfiguration,
 } from "@crewon/contracts/plugins";
 import {
   parsePluginProfileScope,
@@ -76,6 +78,8 @@ export type DesktopPluginConfiguration = DesktopPluginConfigurationBase &
         projectFoundation?: ProjectFoundationStartupConfiguration;
         /** Independent Node declaration; the sibling Foundation UI grant does not imply it. */
         projectFoundationTools?: DesktopProjectFoundationToolsConfiguration;
+        /** Explicit Node outline protocol declaration; no inference from Foundation or UI grants. */
+        projectOutlineTools?: DesktopProjectOutlineToolsConfiguration;
       }>
   );
 const parsed = new WeakSet<object>();
@@ -107,6 +111,8 @@ export function parseDesktopPluginConfiguration(
       v3 && Object.hasOwn(input as object, "projectFoundation");
     const hasFoundationTools =
       v3 && Object.hasOwn(input as object, "projectFoundationTools");
+    const hasOutlineTools =
+      v3 && Object.hasOwn(input as object, "projectOutlineTools");
     const value = pluginSecurityRecord(input, [
       "schemaVersion",
       "actor",
@@ -118,6 +124,7 @@ export function parseDesktopPluginConfiguration(
       ...(v2 || v3 ? ["projects"] : []),
       ...(hasFoundation ? ["projectFoundation"] : []),
       ...(hasFoundationTools ? ["projectFoundationTools"] : []),
+      ...(hasOutlineTools ? ["projectOutlineTools"] : []),
     ]);
     if (
       (!v2 &&
@@ -256,6 +263,18 @@ export function parseDesktopPluginConfiguration(
           },
         )
       : undefined;
+    const outlineTools = hasOutlineTools
+      ? parseDesktopProjectOutlineToolsConfiguration(
+          value.projectOutlineTools,
+          {
+            publications: sources.map(({ pluginId, packageDigest }) => ({
+              pluginId,
+              packageDigest,
+            })),
+            metadataPublications: projects?.pluginUi?.publications ?? [],
+          },
+        )
+      : undefined;
     const configuration = Object.freeze(
       v3
         ? {
@@ -268,6 +287,9 @@ export function parseDesktopPluginConfiguration(
             ...(foundationTools === undefined
               ? {}
               : { projectFoundationTools: foundationTools }),
+            ...(outlineTools === undefined
+              ? {}
+              : { projectOutlineTools: outlineTools }),
           }
         : v2
           ? {
