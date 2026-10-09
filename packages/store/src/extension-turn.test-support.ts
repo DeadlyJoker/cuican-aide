@@ -1,12 +1,15 @@
 import type { CommitExtensionTurnInput } from "@crewon/application";
-import { createExtensionRunBinding } from "@crewon/domain";
+import {
+  createExtensionRunBinding,
+  type ExtensionRunBindingV0,
+} from "@crewon/domain";
 import { runInput, timestamp } from "./extension-store.test-support.ts";
 import { extensionStoreDigester } from "./extension-store-records.ts";
 import { turnStartCommit } from "./turn-start-store-conformance.test-support.ts";
 
 export function extensionTurnInput(
   id = "run-1",
-  patch: Partial<CommitExtensionTurnInput["binding"]> = {},
+  patch: Partial<ExtensionRunBindingV0> = {},
 ): CommitExtensionTurnInput {
   const content = JSON.stringify({
     prompt: "A ceramic teapot by a sunlit window.",

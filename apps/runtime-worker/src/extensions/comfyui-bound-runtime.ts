@@ -293,6 +293,8 @@ export class BoundComfyToolRuntime implements ToolRuntimePort {
     });
     if (stored === null) throw new Error("extension_run_binding_not_found");
     const binding = parseExtensionRunBinding(stored, digester);
+    if (binding.schemaVersion === "crewon.extension-run-binding.v1")
+      throw new Error("extension_composition_execution_unavailable");
     if (
       binding.runId !== runId ||
       binding.tenantId !== this.#configuration.tenantId ||

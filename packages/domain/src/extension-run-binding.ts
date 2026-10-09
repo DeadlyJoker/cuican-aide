@@ -15,9 +15,8 @@ import {
   extensionRecord,
 } from "./extension-validation.ts";
 
-export type ExtensionRunBinding = ExtensionScope &
+type ExtensionRunBindingFields = ExtensionScope &
   Readonly<{
-    schemaVersion: "crewon.extension-run-binding.v0";
     runId: string;
     threadId: string;
     actorId: string;
@@ -34,8 +33,26 @@ export type ExtensionRunBinding = ExtensionScope &
     bindingDigest: string;
   }>;
 
+export type ExtensionRunBindingV0 = ExtensionRunBindingFields &
+  Readonly<{ schemaVersion: "crewon.extension-run-binding.v0" }>;
+export type ExtensionRunCompositionReference = Readonly<{
+  profileId: string;
+  authorityEpoch: string;
+  revision: number;
+  lockDigest: string;
+}>;
+export type ExtensionRunBindingV1 = ExtensionRunBindingFields &
+  Readonly<{
+    schemaVersion: "crewon.extension-run-binding.v1";
+    composition: ExtensionRunCompositionReference;
+  }>;
+export type ExtensionRunBinding = ExtensionRunBindingV0 | ExtensionRunBindingV1;
+export type ExtensionRunBindingInput =
+  | Omit<ExtensionRunBindingV0, "bindingDigest">
+  | Omit<ExtensionRunBindingV1, "bindingDigest">;
+
 export function createExtensionRunBinding(
-  input: Omit<ExtensionRunBinding, "bindingDigest">,
+  input: ExtensionRunBindingInput,
   digester: ExtensionContentDigester,
 ): ExtensionRunBinding {
   const parsed = parseBinding({
@@ -61,7 +78,16 @@ export function parseExtensionRunBinding(
 }
 
 function parseBinding(input: unknown): ExtensionRunBinding {
-  const value = extensionRecord(copyExtensionJson(input, 8_192), [
+  const copied = copyExtensionJson(input, 8_192);
+  if (!copied || typeof copied !== "object" || Array.isArray(copied))
+    extensionFailure("extension_object_invalid");
+  const schemaVersion = (copied as Record<string, unknown>).schemaVersion;
+  if (
+    schemaVersion !== "crewon.extension-run-binding.v0" &&
+    schemaVersion !== "crewon.extension-run-binding.v1"
+  )
+    extensionFailure("extension_run_binding_version_unsupported");
+  const value = extensionRecord(copied, [
     "schemaVersion",
     "tenantId",
     "spaceId",
@@ -75,9 +101,10 @@ function parseBinding(input: unknown): ExtensionRunBinding {
     "inputDigest",
     "source",
     "bindingDigest",
+    ...(schemaVersion === "crewon.extension-run-binding.v1"
+      ? ["composition"]
+      : []),
   ]);
-  if (value.schemaVersion !== "crewon.extension-run-binding.v0")
-    extensionFailure("extension_run_binding_version_unsupported");
   const source =
     value.source === null
       ? null
@@ -89,8 +116,7 @@ function parseBinding(input: unknown): ExtensionRunBinding {
   const runId = extensionOpaqueId(value.runId);
   if (source !== null && source.runId === runId)
     extensionFailure("extension_query_source_invalid");
-  return Object.freeze({
-    schemaVersion: value.schemaVersion,
+  const fields: ExtensionRunBindingFields = Object.freeze({
     ...parseExtensionScope(value as unknown as ExtensionScope),
     runId,
     threadId: extensionOpaqueId(value.threadId),
@@ -108,5 +134,23 @@ function parseBinding(input: unknown): ExtensionRunBinding {
             bindingDigest: extensionDigest(source.bindingDigest),
           }),
     bindingDigest: extensionDigest(value.bindingDigest),
+  });
+  if (schemaVersion === "crewon.extension-run-binding.v0")
+    return Object.freeze({ ...fields, schemaVersion });
+  const composition = extensionRecord(value.composition, [
+    "profileId",
+    "authorityEpoch",
+    "revision",
+    "lockDigest",
+  ]);
+  return Object.freeze({
+    ...fields,
+    schemaVersion,
+    composition: Object.freeze({
+      profileId: extensionOpaqueId(composition.profileId),
+      authorityEpoch: extensionOpaqueId(composition.authorityEpoch),
+      revision: extensionRevision(composition.revision),
+      lockDigest: extensionDigest(composition.lockDigest),
+    }),
   });
 }

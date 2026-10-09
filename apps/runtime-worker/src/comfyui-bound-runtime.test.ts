@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createExtensionConfiguration } from "@crewon/domain";
+import {
+  createExtensionConfiguration,
+  createExtensionRunBinding,
+} from "@crewon/domain";
 import { extensionStoreDigester } from "../../../packages/store/src/extension-store-records.ts";
 import { receipt } from "../../../packages/store/src/extension-store.test-support.ts";
 import { BoundComfyToolRuntime } from "./extensions/comfyui-bound-runtime.ts";
@@ -368,3 +371,36 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+test("legacy bound Comfy runtime rejects a composition binding before any external dispatch", async (t) => {
+  const f = await boundComfyFixture(t);
+  const original = await f.addRun();
+  const binding = createExtensionRunBinding(
+    {
+      ...original,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition: {
+        profileId: "profile-1",
+        authorityEpoch: "epoch-1",
+        revision: 1,
+        lockDigest: `sha256:${"a".repeat(64)}`,
+      },
+    },
+    extensionStoreDigester,
+  );
+  const extensions = new Proxy(f.first.store, {
+    get(target, property) {
+      if (property === "loadExtensionRunBinding") return async () => binding;
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const runtime = f.runtime({ extensions });
+  await assert.rejects(
+    runtime.execute(comfyCommand(runtime), signal()),
+    /extension_composition_execution_unavailable/,
+  );
+  assert.equal(f.requests.length, 0);
+  assert.equal(await f.count("extension_external_operations"), 0);
+  await runtime.close();
+});

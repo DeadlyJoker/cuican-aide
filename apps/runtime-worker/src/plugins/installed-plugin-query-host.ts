@@ -177,6 +177,8 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
       binding: parseExtensionRunBinding(rawSource.binding, digester),
       operationId: rawSource.operationId,
     });
+    if (source.binding.schemaVersion === "crewon.extension-run-binding.v1")
+      throw new Error("installed_plugin_composition_query_unavailable");
     return Object.freeze({ actor, source });
   }
   #run<T>(operation: () => Promise<T>): Promise<T> {

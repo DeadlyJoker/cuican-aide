@@ -165,6 +165,8 @@ export type CommitExtensionTurnResult = CommitExtensionRunResult &
  * Ordinary RunStore writes cannot attach a plugin after dispatch.
  */
 export interface ExtensionStore {
+  /** Persistence/admission only; not proof that a Worker can assemble or execute a composition. Explicit composition migration is required. */
+  readonly compositionBindingVersion?: "crewon.extension-run-binding.v1";
   readonly projectMediaGenerationVersion?: "crewon.project-media-generation-link.v1";
   loadProjectMediaGenerationLink?(
     input: ExtensionRunLocator,

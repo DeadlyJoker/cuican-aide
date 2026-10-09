@@ -1,3 +1,4 @@
+import { createExtensionRunBinding } from "@crewon/domain";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test, { type TestContext } from "node:test";
@@ -159,4 +160,44 @@ test("actual query package cleanup failure retains its owner and rejected slot a
   assert.equal(f.control.setups, f.before + 1);
   assert.equal(f.f.controls.quotes, 1);
   assert.equal(await f.f.count("run_snapshots"), 1);
+});
+
+test("query readiness refuses composed sources before loading or executing a private package", async (t) => {
+  const f = await lifecycleFixture(t);
+  t.after(() => f.host.close());
+  const admission = await f.f.extensions.loadPluginTaskAdmission(
+    f.original.binding,
+  );
+  assert.ok(admission);
+  const binding = createExtensionRunBinding(
+    {
+      ...f.original.binding,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition: {
+        profileId: admission.profileId,
+        authorityEpoch: admission.authorityEpoch,
+        revision: 1,
+        lockDigest: digester.sha256("composition"),
+      },
+    },
+    digester,
+  );
+  const before = f.control.setups;
+  assert.throws(
+    () =>
+      f.host.resolveRegistration({
+        actor,
+        source: {
+          admission: {
+            ...admission,
+            extensionBindingDigest: binding.bindingDigest,
+          },
+          binding,
+          operationId: randomUUID(),
+        },
+      }),
+    /installed_plugin_composition_query_unavailable/,
+  );
+  assert.equal(f.control.setups, before);
+  assert.equal(f.control.creates, 0);
 });

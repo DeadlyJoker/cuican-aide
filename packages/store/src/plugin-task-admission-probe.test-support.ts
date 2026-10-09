@@ -12,7 +12,7 @@ import {
 } from "./plugin-installation-store.test-support.ts";
 
 /** Real persisted Turn and personal hold; the fixed amount and package identity are test fixtures. */
-export async function seedProbeAdmission(
+export async function prepareProbeAdmission(
   f: Awaited<ReturnType<typeof extensionFixture>>,
 ): Promise<CommitExtensionTurnInput> {
   await f.seed();
@@ -90,6 +90,13 @@ export async function seedProbeAdmission(
       extensionStoreDigester,
     ),
   };
+  return input;
+}
+
+export async function seedProbeAdmission(
+  f: Awaited<ReturnType<typeof extensionFixture>>,
+): Promise<CommitExtensionTurnInput> {
+  const input = await prepareProbeAdmission(f);
   await f.first.store.commitExtensionTurn(input);
   return input;
 }

@@ -1,3 +1,8 @@
+import {
+  admitSqliteRunComposition,
+  readSqliteRunComposition,
+  assertRunCompositionConfiguration,
+} from "./plugin-run-composition-store-support.ts";
 import type { PreparedPluginTaskModelSelection } from "@crewon/application";
 import { loadSqliteMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { SqliteProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
@@ -118,6 +123,8 @@ type SqliteExtensionStoreHost = Readonly<{
 }>;
 
 export class SqliteExtensionStore implements ExtensionStore {
+  readonly compositionBindingVersion =
+    "crewon.extension-run-binding.v1" as const;
   projectMediaResults() {
     return new SqliteProjectMediaResultStore(this.#db, () =>
       this.#host.assertOpen(),
@@ -644,6 +651,7 @@ export class SqliteExtensionStore implements ExtensionStore {
   }
 
   #verifyCreditReceipt<T extends CommitExtensionRunResult>(result: T): T {
+    readSqliteRunComposition(this.#db, result.binding);
     verifySqliteUnmeteredReceipt(this.#db, result);
     if (result.creditAdmission !== undefined)
       this.#verifyCreditAdmission(result.creditAdmission);
@@ -677,11 +685,17 @@ export class SqliteExtensionStore implements ExtensionStore {
     expectedActivationRevision: number,
     selection?: PreparedPluginTaskModelSelection,
   ) {
+    const composition = admitSqliteRunComposition(this.#db, binding);
+    const configuration = this.#configuration(
+      binding,
+      binding.configurationRevision,
+    );
+    assertRunCompositionConfiguration(composition, binding, configuration);
     assertExtensionAdmission(
       binding,
       this.#activation(binding),
       expectedActivationRevision,
-      this.#configuration(binding, binding.configurationRevision),
+      configuration,
       selection,
     );
     this.#assertDeployment(binding.tenantId, binding.target);
@@ -758,12 +772,13 @@ export class SqliteExtensionStore implements ExtensionStore {
       .get(input.tenantId, input.spaceId, input.runId) as
       | { binding_json: string }
       | undefined;
-    return row === undefined
-      ? null
-      : parseExtensionRunBinding(
-          JSON.parse(row.binding_json),
-          extensionStoreDigester,
-        );
+    if (row === undefined) return null;
+    const binding = parseExtensionRunBinding(
+      JSON.parse(row.binding_json),
+      extensionStoreDigester,
+    );
+    readSqliteRunComposition(this.#db, binding);
+    return binding;
   }
   #assertDeployment(tenantId: string, target: ExtensionExecutionTarget) {
     const asset = this.#db

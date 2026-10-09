@@ -1,3 +1,7 @@
+import {
+  lockPostgresRunComposition,
+  readPostgresRunComposition,
+} from "./plugin-run-composition-store-support.ts";
 import type { PostgresExtensionTurnHost } from "./postgres-extension-turn-host.ts";
 import { assertProjectStageTurnCurrent } from "./project-stage-turn-current.ts";
 import {
@@ -278,6 +282,7 @@ export async function commitPostgresExtensionTurn(
   return host.transaction(
     binding,
     async (client) => {
+      await lockPostgresRunComposition(client, host.schema, binding);
       const executeMedia = <T>(plan: ProjectMediaInputPlan<T>) =>
         executePostgresMediaGenerationPlan(
           client,
@@ -374,6 +379,7 @@ export async function commitPostgresExtensionTurn(
           requested: frozenInput.creditAdmission,
         });
         creditPath = result.creditAdmission !== undefined;
+        await readPostgresRunComposition(client, host.schema, result.binding);
         await host.assertCreditLink(client, result.creditAdmission);
         if (pluginAdmission !== undefined)
           assertPluginTaskAdmissionReplay({

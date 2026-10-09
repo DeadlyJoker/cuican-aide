@@ -12,7 +12,7 @@ import {
   type ExtensionActivation,
   type ExtensionConfiguration,
   type ExtensionExecutionTarget,
-  type ExtensionRunBinding,
+  type ExtensionRunBindingV0,
 } from "@crewon/domain";
 import type {
   CommitExtensionRunInput,
@@ -92,7 +92,7 @@ export function activation(
 }
 export function runInput(
   id = "run-1",
-  patch: Partial<Omit<ExtensionRunBinding, "bindingDigest">> = {},
+  patch: Partial<Omit<ExtensionRunBindingV0, "bindingDigest">> = {},
 ): CommitExtensionRunInput {
   const config = configuration();
   const binding = createExtensionRunBinding(

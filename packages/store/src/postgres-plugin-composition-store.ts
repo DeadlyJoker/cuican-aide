@@ -1,3 +1,7 @@
+import {
+  lockPostgresCompositionSnapshot,
+  assertPostgresCompositionSnapshotSchema,
+} from "./plugin-composition-snapshot-lock.ts";
 import type { Client, Pool, PoolClient } from "pg";
 import type {
   PluginCompositionStore,
@@ -111,12 +115,19 @@ export class PostgresPluginCompositionStore implements PluginCompositionStore {
       this.#transaction(async (client) => {
         const { scope, lock, expectedRevision, actor } = captured;
         await lockPluginInstallationProfile(client, this.#schema, scope);
+        await lockPostgresCompositionSnapshot({
+          client,
+          schema: this.#schema,
+          scope: compositionProfile(scope),
+          mode: "write",
+        });
         const existing = await this.#row(client, scope, lock.lockDigest);
         if (existing)
           return Object.freeze({
             disposition: "replayed" as const,
             lock: decodeCompositionRow(existing, scope),
           });
+        await assertPostgresCompositionSnapshotSchema(client, this.#schema);
         const heads = await this.#query(
           client,
           `SELECT revision FROM ${this.#prefix}plugin_composition_heads WHERE ${where} FOR UPDATE`,

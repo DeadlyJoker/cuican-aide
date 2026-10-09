@@ -284,6 +284,9 @@ export class InstalledPluginRunContext {
     signal.throwIfAborted();
     if (rawBinding === null) fail("installed_plugin_binding_missing");
     const binding = parseExtensionRunBinding(rawBinding, digester);
+    // A private single-package NodeHost cannot implement a persisted multi-package composition.
+    if (binding.schemaVersion === "crewon.extension-run-binding.v1")
+      fail("installed_plugin_composition_execution_unavailable");
     if (binding.source !== null && query === null)
       fail("installed_plugin_query_source_unsupported");
     const receipt = Object.freeze({

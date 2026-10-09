@@ -112,6 +112,11 @@ export function assertPluginQueryTaskAdmission(
   const admission = parsePluginQueryTaskAdmission(input.admission);
   const binding = parseExtensionRunBinding(input.binding, digester);
   const source = parseExtensionRunBinding(input.sourceBinding, digester);
+  if (
+    binding.schemaVersion === "crewon.extension-run-binding.v1" ||
+    source.schemaVersion === "crewon.extension-run-binding.v1"
+  )
+    throw new Error("plugin_query_composition_unsupported");
   assertPluginTaskAdmission(
     {
       admission: admission.source,

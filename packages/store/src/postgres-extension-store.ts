@@ -1,3 +1,8 @@
+import {
+  admitPostgresRunComposition,
+  readPostgresRunComposition,
+  assertRunCompositionConfiguration,
+} from "./plugin-run-composition-store-support.ts";
 import type { PreparedPluginTaskModelSelection } from "@crewon/application";
 import { loadPostgresMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { PostgresProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
@@ -93,6 +98,8 @@ type PostgresExtensionStoreHost = Readonly<{
 }>;
 
 export class PostgresExtensionStore implements ExtensionStore {
+  readonly compositionBindingVersion =
+    "crewon.extension-run-binding.v1" as const;
   projectMediaResults() {
     return new PostgresProjectMediaResultStore(
       this.#pool,
@@ -526,6 +533,11 @@ export class PostgresExtensionStore implements ExtensionStore {
     const value = await this.#receipt(this.#pool, input, "task", input.receipt);
     if (value === null) return null;
     const result = parseExtensionTaskReceipt(value, input, input.receipt);
+    await readPostgresRunComposition(
+      this.#pool,
+      this.#schemaName,
+      result.binding,
+    );
     await this.#assertCreditLink(this.#pool, result.creditAdmission);
     await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
     const client = await this.#pool.connect();
@@ -579,6 +591,11 @@ export class PostgresExtensionStore implements ExtensionStore {
           binding,
           input.receipt,
         );
+        await readPostgresRunComposition(
+          client,
+          this.#schemaName,
+          result.binding,
+        );
         await this.#assertCreditLink(client, result.creditAdmission);
         await verifyPostgresUnmeteredReceipt(client, this.#schemaName, result);
         this.#host.assertOpen();
@@ -613,6 +630,11 @@ export class PostgresExtensionStore implements ExtensionStore {
     const value = await this.#receipt(this.#pool, input, "task", input.receipt);
     if (value === null) return null;
     const result = parseExtensionTurnReceipt(value, input, input.receipt);
+    await readPostgresRunComposition(
+      this.#pool,
+      this.#schemaName,
+      result.binding,
+    );
     await this.#assertCreditLink(this.#pool, result.creditAdmission);
     await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
     const client = await this.#pool.connect();
@@ -739,11 +761,22 @@ export class PostgresExtensionStore implements ExtensionStore {
     expectedActivationRevision: number,
     selection?: PreparedPluginTaskModelSelection,
   ) {
+    const composition = await admitPostgresRunComposition(
+      client,
+      this.#schemaName,
+      binding,
+    );
+    const configuration = await this.#configuration(
+      client,
+      binding,
+      binding.configurationRevision,
+    );
+    assertRunCompositionConfiguration(composition, binding, configuration);
     assertExtensionAdmission(
       binding,
       await this.#activation(client, binding),
       expectedActivationRevision,
-      await this.#configuration(client, binding, binding.configurationRevision),
+      configuration,
       selection,
     );
     await this.#assertDeployment(client, binding.tenantId, binding.target);
@@ -811,12 +844,13 @@ export class PostgresExtensionStore implements ExtensionStore {
       `SELECT binding_json FROM ${this.#schema}.extension_run_bindings WHERE tenant_id = $1 AND space_id = $2 AND run_id = $3`,
       [input.tenantId, input.spaceId, input.runId],
     );
-    return result.rows[0] === undefined
-      ? null
-      : parseExtensionRunBinding(
-          result.rows[0].binding_json,
-          extensionStoreDigester,
-        );
+    if (result.rows[0] === undefined) return null;
+    const binding = parseExtensionRunBinding(
+      result.rows[0].binding_json,
+      extensionStoreDigester,
+    );
+    await readPostgresRunComposition(client, this.#schemaName, binding);
+    return binding;
   }
   async #assertDeployment(
     client: PoolClient,

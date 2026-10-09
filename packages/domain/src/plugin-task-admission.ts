@@ -152,7 +152,7 @@ export function parsePluginTaskAdmission(input: unknown): PluginTaskAdmission {
   });
 }
 
-/** Verifies persisted links against the real v0 binding and receipt; this is not selection authorization. */
+/** Verifies persisted links against the original versioned binding and receipt; this is not selection authorization. */
 export function assertPluginTaskAdmission(
   input: Readonly<{
     admission: PluginTaskAdmission;
@@ -166,6 +166,9 @@ export function assertPluginTaskAdmission(
     parseExtensionRunBinding(input.binding, digester),
   );
   if (
+    (binding.schemaVersion === "crewon.extension-run-binding.v1" &&
+      (binding.composition.profileId !== admission.profileId ||
+        binding.composition.authorityEpoch !== admission.authorityEpoch)) ||
     binding.source !== null ||
     admission.tenantId !== binding.tenantId ||
     admission.spaceId !== binding.spaceId ||

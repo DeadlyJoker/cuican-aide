@@ -193,3 +193,46 @@ test("requires the actual generation Run and exact binding/receipt relationship"
     /binding_mismatch/u,
   );
 });
+
+test("composed task admission uses the Run's exact profile and authority epoch", () => {
+  const composed = createExtensionRunBinding(
+    {
+      ...binding,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition: {
+        profileId: pin.profileId,
+        authorityEpoch: pin.authorityEpoch,
+        revision: 1,
+        lockDigest: digest,
+      },
+    },
+    digester,
+  );
+  const value = parsePluginTaskAdmission({
+    ...admission,
+    extensionBindingDigest: composed.bindingDigest,
+  });
+  assert.deepEqual(
+    assertPluginTaskAdmission(
+      { admission: value, binding: composed, receipt },
+      digester,
+    ),
+    value,
+  );
+  for (const patch of [
+    { profileId: "foreign-profile" },
+    { authorityEpoch: "foreign-epoch" },
+  ])
+    assert.throws(
+      () =>
+        assertPluginTaskAdmission(
+          {
+            admission: parsePluginTaskAdmission({ ...value, ...patch }),
+            binding: composed,
+            receipt,
+          },
+          digester,
+        ),
+      /plugin_task_admission_binding_mismatch/,
+    );
+});

@@ -1,6 +1,13 @@
 import { PLUGIN_COMPOSITION_LOCK_LIMITS } from "@crewon/contracts/plugins";
 import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
 
+export const PLUGIN_COMPOSITION_ENABLED_ENTRY_FUNCTION_BODY = `BEGIN
+ IF NEW.state='enabled' AND (TG_OP='INSERT' OR OLD.state<>'enabled' OR (OLD.tenant_id,OLD.space_id,OLD.profile_id) IS DISTINCT FROM (NEW.tenant_id,NEW.space_id,NEW.profile_id)) THEN
+  PERFORM pg_advisory_xact_lock(hashtextextended(jsonb_build_array('plugin-composition-snapshot.v1',TG_TABLE_SCHEMA,NEW.tenant_id,NEW.space_id,NEW.profile_id)::text,0));
+ END IF;
+ RETURN NEW;
+END;`;
+
 export function pluginCompositionSchemaSql(
   input: { dialect: "sqlite" } | { dialect: "postgres"; schema: string },
 ): string {
@@ -45,7 +52,10 @@ ${
   pg
     ? `CREATE OR REPLACE FUNCTION ${prefix}reject_composition_lock_change() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'plugin_composition_lock_immutable'; END $$;
 DROP TRIGGER IF EXISTS plugin_composition_lock_immutable ON ${prefix}plugin_composition_locks;
-CREATE TRIGGER plugin_composition_lock_immutable BEFORE UPDATE OR DELETE ON ${prefix}plugin_composition_locks FOR EACH ROW EXECUTE FUNCTION ${prefix}reject_composition_lock_change();`
+CREATE TRIGGER plugin_composition_lock_immutable BEFORE UPDATE OR DELETE ON ${prefix}plugin_composition_locks FOR EACH ROW EXECUTE FUNCTION ${prefix}reject_composition_lock_change();
+CREATE OR REPLACE FUNCTION ${prefix}reserve_composition_enabled_entry() RETURNS trigger LANGUAGE plpgsql AS $$${PLUGIN_COMPOSITION_ENABLED_ENTRY_FUNCTION_BODY}$$;
+DROP TRIGGER IF EXISTS plugin_composition_enabled_entry ON ${prefix}plugin_profile_selections;
+CREATE TRIGGER plugin_composition_enabled_entry BEFORE INSERT OR UPDATE ON ${prefix}plugin_profile_selections FOR EACH ROW EXECUTE FUNCTION ${prefix}reserve_composition_enabled_entry();`
     : `CREATE TRIGGER IF NOT EXISTS plugin_composition_lock_no_update BEFORE UPDATE ON plugin_composition_locks BEGIN SELECT RAISE(ABORT,'plugin_composition_lock_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS plugin_composition_lock_no_delete BEFORE DELETE ON plugin_composition_locks BEGIN SELECT RAISE(ABORT,'plugin_composition_lock_immutable'); END;`
 }

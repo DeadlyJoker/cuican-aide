@@ -205,3 +205,58 @@ test("query matches exact original scope, pointer, configuration, complete targe
     );
   }
 });
+
+test("legacy query admissions cannot downgrade an original composed Run into a private single-package query", () => {
+  const composed = createExtensionRunBinding(
+    {
+      ...original,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition: {
+        profileId: pin.profileId,
+        authorityEpoch: pin.authorityEpoch,
+        revision: 1,
+        lockDigest: digest,
+      },
+    },
+    digester,
+  );
+  assert.throws(
+    () =>
+      assertPluginQueryTaskAdmission(
+        {
+          admission: parsePluginQueryTaskAdmission(input),
+          binding,
+          sourceBinding: composed,
+          receipt,
+        },
+        digester,
+      ),
+    /plugin_query_composition_unsupported/,
+  );
+  const query = createExtensionRunBinding(
+    {
+      ...binding,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition: {
+        profileId: pin.profileId,
+        authorityEpoch: "current-epoch",
+        revision: 2,
+        lockDigest: digest,
+      },
+    },
+    digester,
+  );
+  assert.throws(
+    () =>
+      assertPluginQueryTaskAdmission(
+        {
+          admission: parsePluginQueryTaskAdmission(input),
+          binding: query,
+          sourceBinding: original,
+          receipt,
+        },
+        digester,
+      ),
+    /plugin_query_composition_unsupported/,
+  );
+});

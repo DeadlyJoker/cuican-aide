@@ -1,3 +1,4 @@
+import { lockPostgresCompositionSnapshot } from "./plugin-composition-snapshot-lock.ts";
 import { PostgresPluginCompositionStore } from "./postgres-plugin-composition-store.ts";
 import type { Client as PgClient, Pool, PoolClient } from "pg";
 import type {
@@ -247,6 +248,12 @@ export class PostgresPluginInstallationStore
           this.#schema,
           prepared.scope,
         );
+        await lockPostgresCompositionSnapshot({
+          client,
+          schema: this.#schema,
+          scope: prepared.scope,
+          mode: "write",
+        });
         this.#assertOpen();
         const project = async (result: PluginInstallationMutationResult) => {
           if (this.#binding) {
