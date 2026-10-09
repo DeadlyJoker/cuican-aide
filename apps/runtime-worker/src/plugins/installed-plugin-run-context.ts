@@ -52,6 +52,9 @@ import { readProjectStageRuntimeScope } from "./project-stage-runtime-scope.ts";
 import { readProjectFoundationRuntimeScope } from "./project-foundation-runtime-scope.ts";
 import type { ProjectFoundationRunAdmissionStore } from "@crewon/application";
 import type { ProjectFoundationRunAdmission } from "@crewon/domain";
+import type { PluginCompositionStore } from "@crewon/application";
+import type { PluginCompositionLock } from "@crewon/contracts/plugins";
+import { readInstalledPluginRunComposition } from "./installed-plugin-run-composition.ts";
 
 export type InstalledPluginRunPurpose = "submit" | "observe";
 export type InstalledPluginRunSnapshot = Readonly<{
@@ -62,6 +65,8 @@ export type InstalledPluginRunContextDependencies = Readonly<{
   runs: Pick<RunStore, "loadRunInSpace">;
   installations: PluginInstallationStore;
   authorization: AuthorizationPort;
+  /** Explicit original-lock reader; omission preserves rejection of composed Runs. No migration/write capability. */
+  compositions?: Pick<PluginCompositionStore, "loadLock">;
   operations?: Pick<ExternalOperationStore, "loadExternalOperation">;
   conversations?: Pick<
     ProjectConversationStore,
@@ -96,6 +101,7 @@ type SavedContext = Readonly<{
   projectAssetStage: ProjectAssetStageRunAdmission | null;
   projectMediaInputStage: ProjectMediaInputStageRunAdmission | null;
   projectFoundation: ProjectFoundationRunAdmission | null;
+  composition: PluginCompositionLock | null;
 }>;
 const digester = {
   sha256: (input: string) =>
@@ -130,6 +136,10 @@ export class InstalledPluginRunContext {
       typeof dependencies.installations.loadSelection !== "function" ||
       typeof dependencies.authorization.authorize !== "function" ||
       typeof dependencies.resolveActor !== "function" ||
+      (dependencies.compositions !== undefined &&
+        (dependencies.extensions.compositionBindingVersion !==
+          "crewon.extension-run-binding.v1" ||
+          typeof dependencies.compositions.loadLock !== "function")) ||
       (dependencies.extensions.loadPluginQueryTaskAdmission !== undefined &&
         dependencies.extensions.pluginQueryAdmissionVersion !==
           "crewon.plugin-query-task-admission.v1")
@@ -187,7 +197,14 @@ export class InstalledPluginRunContext {
     );
     if (
       current === null ||
-      extensionCanonicalJson(current) !== extensionCanonicalJson(previous)
+      extensionCanonicalJson({
+        ...current,
+        composition: current.composition?.lockDigest ?? null,
+      }) !==
+        extensionCanonicalJson({
+          ...previous,
+          composition: previous.composition?.lockDigest ?? null,
+        })
     )
       fail("installed_plugin_context_changed");
     await this.#authorize(current, purpose, signal);
@@ -208,6 +225,14 @@ export class InstalledPluginRunContext {
     const saved = this.#snapshots.get(snapshot);
     if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
     return saved.admission;
+  }
+  /** Validated original metadata from a genuine, root-authorized snapshot; not provider execution approval. */
+  verifiedComposition(
+    snapshot: InstalledPluginRunSnapshot,
+  ): PluginCompositionLock | null {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    return saved.composition;
   }
   verifiedProjectStage(
     snapshot: InstalledPluginRunSnapshot,
@@ -284,8 +309,11 @@ export class InstalledPluginRunContext {
     signal.throwIfAborted();
     if (rawBinding === null) fail("installed_plugin_binding_missing");
     const binding = parseExtensionRunBinding(rawBinding, digester);
-    // A private single-package NodeHost cannot implement a persisted multi-package composition.
-    if (binding.schemaVersion === "crewon.extension-run-binding.v1")
+    // Reading the original graph is explicit; it never enables a single-package executor.
+    if (
+      binding.schemaVersion === "crewon.extension-run-binding.v1" &&
+      this.#dependencies.compositions === undefined
+    )
       fail("installed_plugin_composition_execution_unavailable");
     if (binding.source !== null && query === null)
       fail("installed_plugin_query_source_unsupported");
@@ -504,6 +532,13 @@ export class InstalledPluginRunContext {
       }),
       target: binding.target,
     });
+    const composition = await readInstalledPluginRunComposition({
+      binding,
+      admission,
+      compositions: this.#dependencies.compositions,
+      signal,
+      fail,
+    });
     return Object.freeze({
       admission,
       binding,
@@ -515,6 +550,7 @@ export class InstalledPluginRunContext {
       projectAssetStage,
       projectMediaInputStage,
       projectFoundation,
+      composition,
     });
   }
 

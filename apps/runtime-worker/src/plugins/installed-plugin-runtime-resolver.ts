@@ -249,6 +249,9 @@ export class InstalledPluginRuntimeResolver
     });
     input.signal.throwIfAborted();
     if (snapshot === null) fail("installed_plugin_runtime_context_missing");
+    // A readable historical graph cannot silently fall through this single-package path.
+    if (this.#dependencies.contexts.verifiedComposition(snapshot) !== null)
+      fail("installed_plugin_composition_execution_unavailable");
     const context = snapshot.context;
     const scope = parsePluginProfileScope(context.scope);
     for (const field of ["tenantId", "spaceId", "profileId"] as const)
