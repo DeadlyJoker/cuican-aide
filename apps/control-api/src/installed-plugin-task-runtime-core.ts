@@ -59,6 +59,7 @@ export type InstalledPluginTaskRuntimeCore = Readonly<{
   requests: InstalledPluginRequestOwner;
   extensions: ExtensionConfigurationApplicationService;
   extensionTasks: ExtensionTaskApplicationService;
+  modelSelection?: import("@crewon/application").PluginTaskModelSelectionPort;
   extensionReads: ExtensionReadApplicationService;
   close(): Promise<void>;
 }>;
@@ -136,7 +137,8 @@ export function inheritInstalledPluginTaskRuntimeCoreBinding(
     binding === undefined ||
     alias.requests !== original.requests ||
     alias.owner !== original.owner ||
-    alias.extensionTasks !== original.extensionTasks
+    alias.extensionTasks !== original.extensionTasks ||
+    alias.modelSelection !== original.modelSelection
   )
     invalid();
   binding.assertActive();
@@ -718,6 +720,9 @@ export async function createInstalledPluginTaskRuntimeCore(
       requests,
       extensions: configurationService,
       extensionTasks: tasks,
+      ...(input.modelSelection === undefined
+        ? {}
+        : { modelSelection: input.modelSelection }),
       extensionReads: reads,
       close: () => {
         lifetime.abort();

@@ -116,6 +116,7 @@ export type PublicProjectTextPlanView = Readonly<{
   steps: readonly PublicProjectTextPlanStep[];
 }>;
 export type ProjectTextPlanDefinitionInput = Readonly<{
+  modelId?: string;
   expectedBriefRevision: number;
   instruction: string;
   start: PublicProjectTextPlanStage;

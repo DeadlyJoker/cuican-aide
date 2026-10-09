@@ -9,6 +9,7 @@ import {
   type ExtensionRunBinding,
   type PluginTaskAdmission,
   type PluginTaskAdmissionPin,
+  type ProjectTextPlanRevision,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
@@ -29,6 +30,15 @@ export interface PluginTaskModelSelectionPort {
       pin: PluginTaskAdmissionPin;
       configuration: ExtensionConfiguration;
       modelId: string;
+    }>,
+  ): Promise<PluginTaskModelSelectionCandidate>;
+  /** Host-only lookup of an already persisted plan target. Not accepted from a public task body. */
+  prepareTarget?(
+    input: Readonly<{
+      actor: ActorContext;
+      pin: PluginTaskAdmissionPin;
+      configuration: ExtensionConfiguration;
+      target: ExtensionExecutionTarget;
     }>,
   ): Promise<PluginTaskModelSelectionCandidate>;
 }
@@ -60,24 +70,43 @@ export async function preparePluginTaskModelSelection(
   provided: Parameters<PluginTaskModelSelectionPort["prepareModel"]>[0],
   digester: ContentDigester,
 ): Promise<PreparedPluginTaskModelSelection> {
+  return prepareSelection(port, "prepareModel", provided, digester);
+}
+export async function preparePluginTaskTargetSelection(
+  port: PluginTaskModelSelectionPort | undefined,
+  provided: Parameters<
+    NonNullable<PluginTaskModelSelectionPort["prepareTarget"]>
+  >[0],
+  digester: ContentDigester,
+): Promise<PreparedPluginTaskModelSelection> {
+  return prepareSelection(port, "prepareTarget", provided, digester);
+}
+async function prepareSelection(
+  port: PluginTaskModelSelectionPort | undefined,
+  key: "prepareModel" | "prepareTarget",
+  provided: unknown,
+  digester: ContentDigester,
+): Promise<PreparedPluginTaskModelSelection> {
   if (port === undefined) unavailable();
-  const method = Object.getOwnPropertyDescriptor(port, "prepareModel");
+  const method = Object.getOwnPropertyDescriptor(port, key);
+  if (method === undefined && key === "prepareTarget") unavailable();
   if (
     !method?.enumerable ||
     !("value" in method) ||
     typeof method.value !== "function"
   )
     denied();
-  const input = uiRecord(provided, [
-    "actor",
-    "pin",
-    "configuration",
-    "modelId",
-  ]);
+  const field = key === "prepareModel" ? "modelId" : "target";
+  const input = uiRecord(provided, ["actor", "pin", "configuration", field]);
   const actor = validateCreativeProjectActor(input.actor),
     pin = parsePluginTaskAdmissionPin(input.pin),
     configuration = parseExtensionConfiguration(input.configuration, digester),
-    modelId = pluginTaskModelId(input.modelId);
+    requestedModel =
+      key === "prepareModel" ? pluginTaskModelId(input.modelId) : undefined,
+    requestedTarget =
+      key === "prepareTarget"
+        ? parseExtensionExecutionTarget(input.target)
+        : undefined;
   if (
     pin.action !== "project.execute" ||
     pin.contributionId !== "workbench" ||
@@ -92,7 +121,14 @@ export async function preparePluginTaskModelSelection(
     denied();
   const raw = await method.value.call(
     port,
-    Object.freeze({ actor, pin, configuration, modelId }),
+    Object.freeze({
+      actor,
+      pin,
+      configuration,
+      ...(key === "prepareModel"
+        ? { modelId: requestedModel }
+        : { target: requestedTarget }),
+    }),
   );
   const candidate = uiRecord(raw, [
     "modelId",
@@ -100,13 +136,17 @@ export async function preparePluginTaskModelSelection(
     "assertCurrent",
     "assertActive",
   ]);
+  const modelId = pluginTaskModelId(candidate.modelId),
+    target = parseExtensionExecutionTarget(candidate.target);
   if (
-    candidate.modelId !== modelId ||
+    (requestedModel !== undefined && modelId !== requestedModel) ||
+    (requestedTarget !== undefined &&
+      extensionCanonicalJson(target) !==
+        extensionCanonicalJson(requestedTarget)) ||
     typeof candidate.assertCurrent !== "function" ||
     typeof candidate.assertActive !== "function"
   )
     denied();
-  const target = parseExtensionExecutionTarget(candidate.target);
   const current = candidate.assertCurrent,
     active = candidate.assertActive;
   const result = Object.freeze({
@@ -162,6 +202,32 @@ export function assertPluginTaskModelSelectionAdmission(
     denied();
   provided.assertActive();
 }
+/** A genuine plan revision can use a sibling only with the same non-copyable host grant. */
+export function assertPluginTaskModelSelectionPlan(
+  provided: PreparedPluginTaskModelSelection,
+  revision: ProjectTextPlanRevision,
+): void {
+  if (
+    provided === null ||
+    typeof provided !== "object" ||
+    !issued.has(provided) ||
+    extensionCanonicalJson(provided.actor) !==
+      extensionCanonicalJson(revision.actor) ||
+    Object.keys(revision.installation).some(
+      (key) =>
+        revision.installation[key as keyof typeof revision.installation] !==
+        provided.pin[key as keyof PluginTaskAdmissionPin],
+    ) ||
+    provided.configurationRevision !== revision.configurationRevision ||
+    provided.configurationDigest !== revision.configurationDigest ||
+    extensionCanonicalJson(provided.target) !==
+      extensionCanonicalJson(revision.target) ||
+    provided.pin.contributionId !== revision.delegation.contributionId
+  )
+    denied();
+  provided.assertActive();
+}
+
 function denied(): never {
   throw new ApplicationError(
     "authorization",

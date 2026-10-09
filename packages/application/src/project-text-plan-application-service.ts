@@ -1,3 +1,5 @@
+import { prepareProjectTextPlanModel } from "./project-text-plan-model-selection.ts";
+import type { PreparedPluginTaskModelSelection } from "./plugin-task-model-selection.ts";
 import {
   PROJECT_TEXT_PLANS_METHOD_ACTIONS,
   parseProjectTextPlansActionRequest,
@@ -27,6 +29,7 @@ import {
   type ProjectTextPlanRevision,
   type ProjectTextPlanStep,
   type ProjectTextPlanHeadBaseline,
+  type ExtensionExecutionTarget,
   type ProjectStageSources,
 } from "@crewon/domain";
 import type {
@@ -238,7 +241,8 @@ export class ProjectTextPlanApplicationService {
       let previous: ProjectTextPlan | null = null,
         previousRevision: ProjectTextPlanRevision | null = null,
         previousSteps: readonly ProjectTextPlanStep[] = [],
-        definition: ProjectTextPlanRevision;
+        definition: ProjectTextPlanRevision,
+        modelSelection: PreparedPluginTaskModelSelection | undefined;
       const at = this.#d.clock.now();
       if (method === "start") {
         const value = request as ProjectTextPlansRequests["start"];
@@ -248,13 +252,13 @@ export class ProjectTextPlanApplicationService {
           q.binding.revision !== value.expectedBindingRevision
         )
           conflict("project_conversation_revision_conflict");
-        definition = await this.#definition(
+        ({ definition, modelSelection } = await this.#definition(
           q,
           value,
           `plan-${this.#d.ids.nextId("artifact")}`,
           1,
           at,
-        );
+        ));
       } else {
         const value = request as ProjectTextPlansRequests["pause"];
         previous = await this.#load(q.actor, q.binding.profileId, value.planId);
@@ -271,13 +275,14 @@ export class ProjectTextPlanApplicationService {
         previousRevision = record.definition;
         previousSteps = record.steps;
         if (method === "reviseRemaining")
-          definition = await this.#definition(
+          ({ definition, modelSelection } = await this.#definition(
             q,
             request as ProjectTextPlansRequests["reviseRemaining"],
             previous.planId,
             previous.currentPlanRevision + 1,
             at,
-          );
+            { target: previousRevision.target },
+          ));
         else if (method === "resume") {
           const project = await this.#project(
               q.actor,
@@ -305,7 +310,7 @@ export class ProjectTextPlanApplicationService {
                     ? "independentScripts"
                     : "selectedOutline"
                   : "newOutline";
-          definition = await this.#definition(
+          ({ definition, modelSelection } = await this.#definition(
             q,
             {
               expectedBriefRevision: project.latestBriefRevision,
@@ -323,8 +328,8 @@ export class ProjectTextPlanApplicationService {
             previous.planId,
             previous.currentPlanRevision + 1,
             at,
-            ids,
-          );
+            { episodeIds: ids, target: old.target },
+          ));
           assertProjectTextPlanResumeSources(old, previousSteps, definition);
         } else definition = previousRevision;
       }
@@ -362,7 +367,12 @@ export class ProjectTextPlanApplicationService {
           steps: prepared.steps,
           receipt,
         },
-        { authority: q },
+        {
+          authority: q,
+          ...(modelSelection === undefined
+            ? {}
+            : { pluginModelSelection: modelSelection }),
+        },
       );
       return this.#mutation(method, request, result);
     });
@@ -373,8 +383,12 @@ export class ProjectTextPlanApplicationService {
     planId: string,
     planRevision: number,
     at: string,
-    preservedIds?: readonly string[],
-  ): Promise<ProjectTextPlanRevision> {
+    previous?: Readonly<{
+      episodeIds?: readonly string[];
+      target: ExtensionExecutionTarget;
+    }>,
+  ) {
+    const preservedIds = previous?.episodeIds;
     const project = await this.#project(
       q.actor,
       q.binding.projectId,
@@ -513,7 +527,14 @@ export class ProjectTextPlanApplicationService {
     if (q.delegation === null) denied();
     await q.assertCurrent();
     q.assertActive();
-    return createProjectTextPlanRevision(
+    const model = await prepareProjectTextPlanModel({
+      authority: q,
+      configuration,
+      defaultTarget: activation.target,
+      previousTarget: previous?.target,
+      modelId: input.modelId,
+    });
+    const definition = createProjectTextPlanRevision(
       {
         planId,
         planRevision,
@@ -526,7 +547,7 @@ export class ProjectTextPlanApplicationService {
         workspaceId: q.binding.workspaceId,
         configurationRevision: configuration.revision,
         configurationDigest: configuration.contentDigest,
-        target: activation.target,
+        target: model.target,
         start: input.start,
         targetStage: input.target,
         episodeMode,
@@ -543,6 +564,7 @@ export class ProjectTextPlanApplicationService {
       },
       this.#d.digester,
     );
+    return { definition, modelSelection: model.selection };
   }
   #delegation(
     method: string,

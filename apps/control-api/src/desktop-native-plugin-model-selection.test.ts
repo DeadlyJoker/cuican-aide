@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { prepareDesktopNativePluginModel } from "./desktop-native-plugin-model-selection.ts";
+import {
+  prepareDesktopNativePluginModel,
+  prepareDesktopNativePluginTarget,
+} from "./desktop-native-plugin-model-selection.ts";
 import type { DesktopNativePluginTaskBinding } from "./desktop-native-plugin-task-authority.ts";
 import {
   peerFixture,
@@ -107,6 +110,36 @@ test("unpublished, duplicate, forged deployment and withdrawn installation canno
   await f.select("disabled");
   await assert.rejects(
     prepareDesktopNativePluginModel(f.context),
+    /model_selection_invalid/,
+  );
+});
+
+test("Native saved-plan target resolves its exact immutable model and cannot substitute another published target", async (t) => {
+  const f = await fixture(t);
+  const { modelId: _model, ...input } = f.context.input;
+  const context = {
+    ...f.context,
+    input: { ...input, target: f.entries[1]!.target },
+  };
+  const selected = await prepareDesktopNativePluginTarget(context);
+  assert.equal(selected.modelId, "fixture-alternate-model");
+  assert.deepEqual(selected.target, f.entries[1]!.target);
+  await assert.rejects(
+    prepareDesktopNativePluginTarget({
+      ...context,
+      input: {
+        ...context.input,
+        target: {
+          ...context.input.target,
+          agentVersionId: "unpublished-plan-target",
+        },
+      },
+    }),
+    /model_selection_unavailable/,
+  );
+  await f.select("disabled");
+  await assert.rejects(
+    prepareDesktopNativePluginTarget(context),
     /model_selection_invalid/,
   );
 });

@@ -1,3 +1,4 @@
+import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
   applyProjectTextPlanControl,
   parseExtensionConfiguration,
@@ -116,11 +117,13 @@ export function checkPlanControlRows(
     activation.configurationDigest !== cfg.contentDigest
   )
     planStoreFail("project_text_plan_configuration_changed");
-  planEqual(
-    activation.target,
-    r.target,
-    "project_text_plan_configuration_changed",
-  );
+  if (p.selection === undefined)
+    planEqual(
+      activation.target,
+      r.target,
+      "project_text_plan_configuration_changed",
+    );
+  else assertPluginTaskModelSelectionPlan(p.selection, r);
   if (r.sources.brief !== null) {
     const brief = decodeCreativeBrief(rows.brief, r.actor, r.projectId);
     if (

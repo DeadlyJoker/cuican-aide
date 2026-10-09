@@ -1,5 +1,8 @@
 import {
   ApplicationError,
+  preparePluginTaskModelSelection,
+  preparePluginTaskTargetSelection,
+  type PluginTaskModelSelectionPort,
   type ActorContext,
   type ProjectTextPlanCommitAuthority,
   type ProjectTextPlanStore,
@@ -29,6 +32,7 @@ export type ProjectTextPlanControlDependencies = Readonly<{
   requests: InstalledPluginRequestOwner;
   authorization: CreativeProjectAuthorizationPort;
   digester: ContentDigester;
+  modelSelection?(): PluginTaskModelSelectionPort | undefined;
 }>;
 /** Genuine mounted UI and genuine deployment identity share current fences, never their identity provenance. */
 export class ProjectTextPlanControlOwner {
@@ -247,6 +251,41 @@ export class ProjectTextPlanControlOwner {
       selection: q.selection,
       package: q.package,
       delegation,
+      ...(this.#d.modelSelection === undefined
+        ? {}
+        : {
+            prepareModelSelection: async (
+              input: Parameters<
+                NonNullable<
+                  ProjectTextPlanCommitAuthority["prepareModelSelection"]
+                >
+              >[0],
+            ) => {
+              await q.assertCurrent();
+              q.assertActive();
+              const common = {
+                actor: q.actor,
+                pin: q.pin,
+                configuration: input.configuration,
+              };
+              const selection =
+                input.selection.kind === "model"
+                  ? await preparePluginTaskModelSelection(
+                      this.#d.modelSelection!(),
+                      { ...common, modelId: input.selection.modelId },
+                      this.#d.digester,
+                    )
+                  : await preparePluginTaskTargetSelection(
+                      this.#d.modelSelection!(),
+                      { ...common, target: input.selection.target },
+                      this.#d.digester,
+                    );
+              await q.assertCurrent();
+              q.assertActive();
+              active();
+              return selection;
+            },
+          }),
       backgroundAuthorization: this.#d.requests.supportsDelegatedIdentity()
         ? "available"
         : "unavailable",

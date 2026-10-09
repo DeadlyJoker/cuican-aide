@@ -1,3 +1,4 @@
+import { parseProjectStageModelId } from "./project-stage-model-contract.ts";
 import { parsePluginUiJsonValue, pluginUiFields } from "./plugin-ui-json.ts";
 import {
   parseProjectTextId,
@@ -135,6 +136,11 @@ export function parseProjectTextPlansActionRequest(
       "target",
       "episodes",
       "adoption",
+      ...(v.input !== null &&
+      typeof v.input === "object" &&
+      Object.hasOwn(v.input, "modelId")
+        ? ["modelId"]
+        : []),
     ];
     const controlFields = [
       "projectId",
@@ -162,6 +168,9 @@ export function parseProjectTextPlansActionRequest(
     const out: Record<string, unknown> = {};
     for (const key of fields) {
       switch (key) {
+        case "modelId":
+          out[key] = parseProjectStageModelId(r[key]);
+          break;
         case "projectId":
         case "planId":
         case "threadId":

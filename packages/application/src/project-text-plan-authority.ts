@@ -39,6 +39,11 @@ export function captureProjectTextPlanCommitAuthority(
     "assertCurrent",
     "assertTransactionCurrent",
     "assertActive",
+    ...(input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "prepareModelSelection")
+      ? ["prepareModelSelection"]
+      : []),
   ]);
   if (
     v.version !== "crewon.project-text-plan-commit.v1" ||
@@ -84,6 +89,15 @@ export function captureProjectTextPlanCommitAuthority(
     package: pkg,
     delegation,
     backgroundAuthorization: v.backgroundAuthorization,
+    ...(Object.hasOwn(v, "prepareModelSelection")
+      ? {
+          prepareModelSelection: method(v.prepareModelSelection).bind(
+            input,
+          ) as NonNullable<
+            ProjectTextPlanCommitAuthority["prepareModelSelection"]
+          >,
+        }
+      : {}),
     assertCurrent: async () => {
       if ((await current.call(input)) !== undefined) denied();
     },

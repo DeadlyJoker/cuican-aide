@@ -1,4 +1,4 @@
-import { preparePluginTaskModelSelection } from "./plugin-task-model-selection.ts";
+import { prepareExtensionTaskModel } from "./extension-task-model-selection.ts";
 import {
   assertExtensionContentStages,
   extensionContentStageReceipt,
@@ -411,23 +411,19 @@ export async function createExtensionTaskTurn(
       source,
     });
     const { frozen } = configured;
-    const selectedModelId =
-      conversation?.modelId ??
-      assetStage?.task.modelId ??
-      mediaInputStage?.task.modelId;
-    const selectedModel =
-      selectedModelId === undefined
-        ? undefined
-        : await preparePluginTaskModelSelection(
-            context.dependencies.modelSelection,
-            {
-              actor,
-              pin: pin!,
-              configuration: frozen,
-              modelId: selectedModelId,
-            },
-            context.dependencies.digester,
-          );
+    const selectedModel = await prepareExtensionTaskModel({
+      port: context.dependencies.modelSelection,
+      actor,
+      pin,
+      configuration: frozen,
+      defaultTarget: configured.target,
+      modelId:
+        conversation?.modelId ??
+        assetStage?.task.modelId ??
+        mediaInputStage?.task.modelId,
+      plan: projectTextPlan,
+      digester: context.dependencies.digester,
+    });
     const target = selectedModel?.target ?? configured.target;
     const identity = Object.freeze({
       pluginId: frozen.pluginId,

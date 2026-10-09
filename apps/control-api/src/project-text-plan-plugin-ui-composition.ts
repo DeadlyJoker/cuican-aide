@@ -58,6 +58,7 @@ export function createProjectTextPlanPluginUiRuntime(
     requests: input.requests,
     authorization: foundation.authorization,
     digester: input.digester,
+    modelSelection: () => input.tasks()?.modelSelection,
   });
   const owner = new PluginProjectTextPlanActionOwner({
     plans: foundation.service,

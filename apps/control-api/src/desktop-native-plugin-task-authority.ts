@@ -1,4 +1,7 @@
-import { prepareDesktopNativePluginModel } from "./desktop-native-plugin-model-selection.ts";
+import {
+  prepareDesktopNativePluginModel,
+  prepareDesktopNativePluginTarget,
+} from "./desktop-native-plugin-model-selection.ts";
 import { composeDesktopNativeProjectMediaResultConfiguration } from "./desktop-native-project-media-result-composition.ts";
 import { validateNativeOwnership } from "./desktop-native-ownership-check.ts";
 import {
@@ -367,6 +370,21 @@ export class DesktopNativePluginTaskAuthority {
       ) =>
         this.#operation(() =>
           prepareDesktopNativePluginModel({
+            binding: this.#binding,
+            input,
+            assertRequestCurrent: (actor) => this.#request(actor),
+            assertCommitCurrent: (actor) => this.#commitOwner(actor),
+          }),
+        ),
+      prepareTarget: (
+        input: Parameters<
+          NonNullable<
+            import("@crewon/application").PluginTaskModelSelectionPort["prepareTarget"]
+          >
+        >[0],
+      ) =>
+        this.#operation(() =>
+          prepareDesktopNativePluginTarget({
             binding: this.#binding,
             input,
             assertRequestCurrent: (actor) => this.#request(actor),

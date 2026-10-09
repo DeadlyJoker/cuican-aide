@@ -1,3 +1,4 @@
+import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
   captureSqliteProjectFoundationDownstream,
   assertSqliteProjectFoundationDownstreamUnchanged,
@@ -175,6 +176,9 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     const p = capturePlanControl(input, options),
       o = { actor: p.plan.owner, profileId: p.plan.profileId };
     await p.q.assertCurrent();
+    await p.selection?.assertCurrent();
+    if (p.selection !== undefined)
+      assertPluginTaskModelSelectionPlan(p.selection, p.revision);
     await p.q.assertTransactionCurrent();
     p.q.assertActive();
     let downstream: ProjectFoundationDownstreamSnapshot | undefined;
@@ -282,7 +286,11 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
           );
         return result;
       },
-      p.q.assertActive,
+      () => {
+        p.q.assertActive();
+        if (p.selection !== undefined)
+          assertPluginTaskModelSelectionPlan(p.selection, p.revision);
+      },
       () => {
         if (downstream !== undefined)
           assertSqliteProjectFoundationDownstreamUnchanged(

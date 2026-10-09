@@ -2,13 +2,12 @@ import {
   assertPluginTaskModelSelectionAdmission,
   type PreparedPluginTaskModelSelection,
   type CommitExtensionTurnInput,
-  type CommitExtensionTurnOptions,
 } from "@crewon/application";
 import type { ExtensionRunBinding, PluginTaskAdmission } from "@crewon/domain";
 
 /** Remove the independent opaque option before the original finite project option parsers. */
-export function capturePluginTaskModelSelectionOption(
-  options: CommitExtensionTurnOptions | undefined,
+export function capturePluginTaskModelSelectionOption<T extends object>(
+  options: T | undefined,
 ) {
   if (options === undefined || !Object.hasOwn(options, "pluginModelSelection"))
     return { selection: undefined, options };
@@ -27,10 +26,7 @@ export function capturePluginTaskModelSelectionOption(
   const rest: Record<string, PropertyDescriptor> =
     Object.getOwnPropertyDescriptors(options);
   delete rest.pluginModelSelection;
-  const remaining = Object.defineProperties(
-    {},
-    rest,
-  ) as CommitExtensionTurnOptions;
+  const remaining = Object.defineProperties({}, rest) as T;
   return {
     selection: field.value as PreparedPluginTaskModelSelection,
     options: remaining,

@@ -1,4 +1,8 @@
-import { captureProjectTextPlanCommitAuthority } from "@crewon/application";
+import { capturePluginTaskModelSelectionOption } from "./plugin-task-model-selection-commit.ts";
+import {
+  captureProjectTextPlanCommitAuthority,
+  assertPluginTaskModelSelectionPlan,
+} from "@crewon/application";
 import type {
   ProjectTextPlanStore,
   ProjectTextPlanCommitAuthority,
@@ -262,6 +266,8 @@ export function capturePlanControl(
   input: Parameters<ProjectTextPlanStore["commitControl"]>[0],
   options: Parameters<ProjectTextPlanStore["commitControl"]>[1],
 ) {
+  const captured = capturePluginTaskModelSelectionOption(options),
+    selection = captured.selection;
   const v = projectTextPlanEnvelopeRecord(input, [
       "kind",
       "plan",
@@ -270,7 +276,7 @@ export function capturePlanControl(
       "steps",
       "receipt",
     ]),
-    q = capturePlanAuthority(planAuthorityOption(options)),
+    q = capturePlanAuthority(planAuthorityOption(captured.options)),
     plan = parseProjectTextPlan(v.plan, creativeStoreDigester),
     revision = parseProjectTextPlanRevision(
       v.planRevision,
@@ -317,7 +323,13 @@ export function capturePlanControl(
       planStoreFail("project_text_plan_delegation_required");
     planEqual(q.delegation, revision.delegation);
   } else if (q.delegation !== null) planStoreFail();
+  if (selection !== undefined) {
+    if (!["start", "resume", "reviseRemaining"].includes(v.kind as string))
+      planStoreFail();
+    assertPluginTaskModelSelectionPlan(selection, revision);
+  }
   return Object.freeze({
+    selection,
     kind: v.kind as ProjectTextPlanMutation["kind"],
     plan,
     revision,

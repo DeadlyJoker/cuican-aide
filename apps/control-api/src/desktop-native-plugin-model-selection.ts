@@ -10,6 +10,7 @@ import {
   extensionCanonicalJson,
   parseExtensionConfiguration,
   parsePluginTaskAdmissionPin,
+  parseExtensionExecutionTarget,
 } from "@crewon/domain";
 import {
   pluginSecurityActor,
@@ -21,24 +22,56 @@ const digester = {
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
 /** Selects only Main-published installed siblings backed by actual immutable Store assets/deployments. */
+type NativeModelContext = Readonly<{
+  binding: DesktopNativePluginTaskBinding;
+  assertRequestCurrent(actor: ActorContext): Promise<void>;
+  assertCommitCurrent(actor: ActorContext): void;
+}>;
 export async function prepareDesktopNativePluginModel(
-  context: Readonly<{
-    binding: DesktopNativePluginTaskBinding;
-    input: Parameters<PluginTaskModelSelectionPort["prepareModel"]>[0];
-    assertRequestCurrent(actor: ActorContext): Promise<void>;
-    assertCommitCurrent(actor: ActorContext): void;
-  }>,
+  context: NativeModelContext &
+    Readonly<{
+      input: Parameters<PluginTaskModelSelectionPort["prepareModel"]>[0];
+    }>,
+) {
+  return prepare(context, "modelId");
+}
+/** Private persisted-plan lookup; HTTP and plugin task bodies never expose this entry point. */
+export async function prepareDesktopNativePluginTarget(
+  context: NativeModelContext &
+    Readonly<{
+      input: Parameters<
+        NonNullable<PluginTaskModelSelectionPort["prepareTarget"]>
+      >[0];
+    }>,
+) {
+  return prepare(context, "target");
+}
+async function prepare(
+  context: NativeModelContext &
+    Readonly<{
+      input:
+        | Parameters<PluginTaskModelSelectionPort["prepareModel"]>[0]
+        | Parameters<
+            NonNullable<PluginTaskModelSelectionPort["prepareTarget"]>
+          >[0];
+    }>,
+  field: "modelId" | "target",
 ) {
   const value = pluginSecurityRecord(context.input, [
       "actor",
       "pin",
       "configuration",
-      "modelId",
+      field,
     ]),
     actor = pluginSecurityActor(value.actor),
     pin = parsePluginTaskAdmissionPin(value.pin),
     configuration = parseExtensionConfiguration(value.configuration, digester),
-    modelId = pluginTaskModelId(value.modelId),
+    modelId =
+      field === "modelId" ? pluginTaskModelId(value.modelId) : undefined,
+    requestedTarget =
+      field === "target"
+        ? parseExtensionExecutionTarget(value.target)
+        : undefined,
     { binding } = context,
     scope = binding.configuration.scope;
   await context.assertRequestCurrent(actor);
@@ -116,7 +149,14 @@ export async function prepareDesktopNativePluginModel(
         deployment.workspaceBindingId !== target.workspaceBindingId
       )
         denied();
-      return version.model.modelId === modelId ? entry : null;
+      const matches =
+        field === "modelId"
+          ? version.model.modelId === modelId
+          : extensionCanonicalJson(target) ===
+            extensionCanonicalJson(requestedTarget);
+      return matches
+        ? { entry, modelId: pluginTaskModelId(version.model.modelId) }
+        : null;
     }),
   );
   await context.assertRequestCurrent(actor);
@@ -128,8 +168,8 @@ export async function prepareDesktopNativePluginModel(
       "plugin_task_model_selection_unavailable",
     );
   return Object.freeze({
-    modelId,
-    target: matches[0]!.target,
+    modelId: matches[0]!.modelId,
+    target: matches[0]!.entry.target,
     assertActive,
     assertCurrent: async () => {
       assertActive();

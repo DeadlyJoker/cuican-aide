@@ -11,6 +11,7 @@ import {
   target as originalTarget,
   timestamp,
 } from "../../store/src/extension-store.test-support.ts";
+import type { PluginTaskModelSelectionPort } from "./plugin-task-model-selection.ts";
 import type { ExtensionStore } from "./extension-store-port.ts";
 
 /** Real SQL Turn/Run transaction; model readiness and selection policy are named offline boundaries. */
@@ -54,6 +55,35 @@ export async function projectModelSelectionFixture(
   const model = { live: true, preparations: 0 };
   const assertActive = () => {
     if (!model.live) throw new Error("named_model_owner_withdrawn");
+  };
+  const modelPort: PluginTaskModelSelectionPort = {
+    async prepareTarget(input) {
+      model.preparations++;
+      assert.deepEqual(input.target, modelTarget);
+      assert.deepEqual(input.pin, f.authority.pin);
+      assertActive();
+      return {
+        modelId: "gpt-5.6-sol",
+        target: modelTarget,
+        assertActive,
+        async assertCurrent() {
+          assertActive();
+        },
+      };
+    },
+    async prepareModel(input) {
+      model.preparations++;
+      assert.equal(input.modelId, "gpt-5.6-sol");
+      assert.deepEqual(input.pin, f.authority.pin);
+      return {
+        modelId: input.modelId,
+        target: modelTarget,
+        assertActive,
+        async assertCurrent() {
+          assertActive();
+        },
+      };
+    },
   };
   const services = (
     options: {
@@ -131,21 +161,7 @@ export async function projectModelSelectionFixture(
       ...(options.unavailable
         ? {}
         : {
-            modelSelection: {
-              async prepareModel(input) {
-                model.preparations++;
-                assert.equal(input.modelId, "gpt-5.6-sol");
-                assert.deepEqual(input.pin, f.authority.pin);
-                return {
-                  modelId: input.modelId,
-                  target: modelTarget,
-                  assertActive,
-                  async assertCurrent() {
-                    assertActive();
-                  },
-                };
-              },
-            },
+            modelSelection: modelPort,
           }),
     });
     return {
@@ -194,5 +210,14 @@ export async function projectModelSelectionFixture(
     idempotencyKey: "selected-model-turn",
     modelId: "gpt-5.6-sol",
   };
-  return { ...f, app, create, createTasks, model, modelTarget, input };
+  return {
+    ...f,
+    app,
+    create,
+    createTasks,
+    model,
+    modelPort,
+    modelTarget,
+    input,
+  };
 }

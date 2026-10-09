@@ -12,7 +12,10 @@ import type {
   ProjectStageRunAdmission,
   ExtensionRunBinding,
   RunState,
+  ExtensionConfiguration,
+  ExtensionExecutionTarget,
 } from "@crewon/domain";
+import type { PreparedPluginTaskModelSelection } from "./plugin-task-model-selection.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
 
@@ -48,6 +51,15 @@ export type ProjectTextPlanCommitAuthority = Readonly<{
   /** Only explicit start/resume/reviseRemaining may supply a newly captured UI delegation. */
   delegation: ProjectTextPlanDelegation | null;
   backgroundAuthorization: "available" | "unavailable";
+  /** Current installed host only. A model name or an already persisted target, never a public execution override. */
+  prepareModelSelection?(
+    input: Readonly<{
+      configuration: ExtensionConfiguration;
+      selection:
+        | Readonly<{ kind: "model"; modelId: string }>
+        | Readonly<{ kind: "target"; target: ExtensionExecutionTarget }>;
+    }>,
+  ): Promise<PreparedPluginTaskModelSelection>;
   assertCurrent(): Promise<void>;
   /** External identity/profile/PDP/delegation fence only: no reborrowing the committing pool. */
   assertTransactionCurrent(): Promise<void>;
@@ -117,7 +129,10 @@ export interface ProjectTextPlanStore {
       steps: readonly ProjectTextPlanStep[];
       receipt: ProjectTextPlanReceipt;
     }>,
-    options: Readonly<{ authority: ProjectTextPlanCommitAuthority }>,
+    options: Readonly<{
+      authority: ProjectTextPlanCommitAuthority;
+      pluginModelSelection?: PreparedPluginTaskModelSelection;
+    }>,
   ): Promise<ProjectTextPlanMutation>;
   /** Strictly re-read the actual terminal Run/event and exact saved result before checkpointing. */
   commitObservation(

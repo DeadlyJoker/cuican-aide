@@ -446,3 +446,57 @@ test("portable dispatcher rejects accessor options and already aborted calls wit
   assert.equal(calls, 0);
   assert.equal(reads, 0);
 });
+
+test("only start and explicit remaining-plan revision accept a bounded model name; legacy requests and public targets remain unchanged", () => {
+  assert.deepEqual(request({ action: A.start, input }).input, input);
+  for (const [action, body] of [
+    [A.start, input],
+    [
+      A.reviseRemaining,
+      {
+        ...input,
+        ...control,
+        threadId: undefined,
+        expectedBindingRevision: undefined,
+      },
+    ],
+  ] as const) {
+    const {
+      threadId: _thread,
+      expectedBindingRevision: _binding,
+      ...revision
+    } = input;
+    const value = action === A.start ? body : { ...revision, ...control };
+    assert.equal(
+      (
+        request({ action, input: { ...value, modelId: "gpt-5.6-sol" } })
+          .input as { modelId?: string }
+      ).modelId,
+      "gpt-5.6-sol",
+    );
+    for (const modelId of [
+      undefined,
+      null,
+      "",
+      " gpt-5.6-sol",
+      "x\u0000",
+      "x".repeat(257),
+      "\ud800",
+      { agentVersionId: "caller-target" },
+    ])
+      assert.throws(() => request({ action, input: { ...value, modelId } }));
+    assert.throws(() =>
+      request({
+        action,
+        input: {
+          ...value,
+          executionTarget: { agentVersionId: "caller-target" },
+        },
+      }),
+    );
+  }
+  for (const action of [A.pause, A.resume, A.revoke, A.continue])
+    assert.throws(() =>
+      request({ action, input: { ...control, modelId: "gpt-5.6-sol" } }),
+    );
+});

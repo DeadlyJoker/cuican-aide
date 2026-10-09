@@ -1,3 +1,4 @@
+import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
   capturePostgresProjectFoundationDownstream,
   assertPostgresProjectFoundationDownstreamUnchanged,
@@ -190,6 +191,9 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     const p = capturePlanControl(input, options),
       o = { actor: p.plan.owner, profileId: p.plan.profileId };
     await p.q.assertCurrent();
+    await p.selection?.assertCurrent();
+    if (p.selection !== undefined)
+      assertPluginTaskModelSelectionPlan(p.selection, p.revision);
     p.q.assertActive();
     let downstream: ProjectFoundationDownstreamSnapshot | undefined;
     const downstreamLocator = {
@@ -320,7 +324,14 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
         );
         return result;
       },
-      p.q,
+      {
+        ...p.q,
+        assertActive: () => {
+          p.q.assertActive();
+          if (p.selection !== undefined)
+            assertPluginTaskModelSelectionPlan(p.selection, p.revision);
+        },
+      },
       async (c) => {
         if (downstream !== undefined)
           await assertPostgresProjectFoundationDownstreamUnchanged(
