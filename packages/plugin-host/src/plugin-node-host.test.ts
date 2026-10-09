@@ -596,3 +596,92 @@ test("loading is restricted to installed content-addressed versions and the expe
   assert.deepEqual(await pkg.records(), []);
   await host.close();
 });
+
+test("dependency reconciliation with fresh commit authority preserves old borrowed values and does not restart unrelated plugins", async (t) => {
+  const provider1 = await fixture(t, {
+    pluginId: "example.provider",
+    version: "1.0.0",
+    provides: [{ service: "story.source", apiVersion: "1" }],
+    setup: "ctx.services.provide('story.source','1',{read:()=>1});",
+  });
+  const provider2 = await fixture(t, {
+    pluginId: "example.provider",
+    version: "2.0.0",
+    provides: [{ service: "story.source", apiVersion: "1" }],
+    setup: "ctx.services.provide('story.source','1',{read:()=>2});",
+  });
+  const consumer = await fixture(t, {
+    pluginId: "example.consumer",
+    requires: [{ service: "story.source", apiVersion: "1", optional: false }],
+    provides: [{ service: "story.result", apiVersion: "1" }],
+    setup:
+      "const source=ctx.services.get('story.source','1');ctx.services.provide('story.result','1',{read:()=>source.read()});",
+  });
+  const unrelated = await fixture(t, { pluginId: "example.unrelated" });
+  const host = new PluginNodeHost({ services: [] });
+  const p1 = await host.activate(provider1);
+  const c1 = await host.activate(consumer);
+  await host.activate(unrelated);
+  const original = host.acquire(borrow(c1.pluginId, c1.packageDigest));
+  const old = original.getService<{ read(): number }>("story.result", "1");
+  assert.equal(old.read(), 1);
+  host.deactivate(c1.pluginId);
+  const replacement = await host.prepare(provider2);
+  replacement.commit({
+    authorizeCommit: (candidate) =>
+      candidate.previousIdentity?.packageDigest === p1.packageDigest
+        ? "allow"
+        : "deny",
+  });
+  assert.equal(old.read(), 1);
+  assert.equal(
+    host
+      .snapshot()
+      .find((entry) => entry.identity.packageDigest === p1.packageDigest)
+      ?.phase,
+    "retained",
+  );
+  const denied = await host.prepare(consumer);
+  assert.throws(() => denied.commit({ authorizeCommit: () => "deny" }), {
+    code: "plugin_commit_denied",
+  });
+  await denied.abort();
+  assert.throws(() => host.acquire(borrow(c1.pluginId, c1.packageDigest)), {
+    code: "plugin_instance_unavailable",
+  });
+  const restored = await host.prepare(consumer);
+  assert.equal(
+    restored.dependencyIdentities[0]?.provider?.packageDigest,
+    replacement.identity.packageDigest,
+  );
+  restored.commit({
+    authorizeCommit: (candidate) =>
+      candidate.dependencyIdentities[0]?.provider?.packageDigest ===
+      replacement.identity.packageDigest
+        ? "allow"
+        : "deny",
+  });
+  const current = host.acquire(
+    borrow(restored.identity.pluginId, restored.identity.packageDigest),
+  );
+  assert.equal(
+    current.getService<{ read(): number }>("story.result", "1").read(),
+    2,
+  );
+  assert.equal(old.read(), 1);
+  assert.deepEqual(await unrelated.records(), ["load", "setup"]);
+  original.release();
+  await host.drain();
+  assert.equal(
+    host
+      .snapshot()
+      .some((entry) => entry.identity.packageDigest === p1.packageDigest),
+    false,
+  );
+  assert.equal(
+    current.getService<{ read(): number }>("story.result", "1").read(),
+    2,
+  );
+  current.release();
+  await host.close();
+});
