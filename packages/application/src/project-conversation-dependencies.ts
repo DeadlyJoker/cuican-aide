@@ -1,3 +1,4 @@
+import { captureProjectOutlineSourceReader } from "./project-outline-source-reader.ts";
 import type { ProjectConversationApplicationDependencies } from "./project-conversation-application-service.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 import { ApplicationError } from "./application-error.ts";
@@ -47,6 +48,7 @@ export function captureProjectConversationDependencies(
       loadBrief: method(d.projects, "loadBrief"),
     }),
     texts: Object.freeze({
+      ...captureProjectOutlineSourceReader(d.texts),
       loadOutline: method(d.texts, "loadOutline"),
       loadRevision: method(d.texts, "loadRevision"),
     }),

@@ -1,3 +1,7 @@
+import {
+  decodeOutlineSourceRevision,
+  assertOutlineSourceInputsCurrent,
+} from "./project-outline-source-store-support.ts";
 import { PostgresStructuredOutlineStorage } from "./project-structured-outline-postgres.ts";
 import {
   legacyTextRevision as decodeTextRevision,
@@ -149,6 +153,18 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
   async loadRevision(input: TextInput<"loadRevision">) {
     const q = textRead("loadRevision", input);
     return this.#revision(
+      this.#pool,
+      q.owner,
+      q.projectId,
+      q.artifactId,
+      q.contentRevision,
+    );
+  }
+  async loadOutlineSourceRevision(
+    input: TextInput<"loadOutlineSourceRevision">,
+  ) {
+    const q = textRead("loadRevision", input);
+    return this.#outlineSourceRevision(
       this.#pool,
       q.owner,
       q.projectId,
@@ -433,7 +449,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
             : null;
         const outline =
           candidate && saved?.outline
-            ? await this.#revision(
+            ? await this.#outlineSourceRevision(
                 client,
                 owner,
                 id,
@@ -466,7 +482,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
               )
             : null;
         const selectedOutline = outlineHead?.selectedContentRevision
-          ? await this.#revision(
+          ? await this.#outlineSourceRevision(
               client,
               owner,
               id,
@@ -483,12 +499,24 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           latestBrief,
           selectedOutline,
         });
-        if (candidate)
+        const structuredSource =
+          prepared.kind === "save-script"
+            ? outline
+            : prepared.kind === "select-revision" &&
+                prepared.artifact.kind === "script"
+              ? selectedOutline
+              : null;
+        if (
+          candidate ||
+          structuredSource?.schemaVersion === "crewon.project-text-revision.v2"
+        ) {
           downstream = await capturePostgresProjectFoundationDownstream(
             client,
             this.#schema,
             downstreamLocator,
           );
+          assertOutlineSourceInputsCurrent(structuredSource, downstream);
+        }
         this.#active(authority);
         const a = result.artifact;
         if (prepared.expectedArtifactRevision === 0)
@@ -638,6 +666,22 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
       )
     ).rows[0];
     return decodeTextRevision(row, owner, id, artifactId);
+  }
+  async #outlineSourceRevision(
+    client: QueryClient,
+    owner: CreativeProjectOwnerScope,
+    id: string,
+    artifactId: string,
+    revision: number,
+  ) {
+    const row = (
+      await this.#query(
+        client,
+        `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${childJoin} WHERE ${filter} AND c.artifact_id=? AND c.content_revision=?`,
+        [...creativeOwnerValues(owner), id, artifactId, revision],
+      )
+    ).rows[0];
+    return decodeOutlineSourceRevision(row, owner, id, artifactId);
   }
   async #receipt(client: QueryClient, identity: TextIdentity) {
     const row = (

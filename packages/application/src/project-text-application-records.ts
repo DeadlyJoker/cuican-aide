@@ -1,3 +1,4 @@
+import { captureProjectOutlineSourceReader } from "./project-outline-source-reader.ts";
 import { compareCreativeIds } from "./creative-project-application-support.ts";
 import {
   assertCreativeProjectScope,
@@ -235,18 +236,21 @@ export function captureProjectTextDependencies(
     "digester",
   ]);
   return Object.freeze({
-    store: methods(raw.store as ProjectTextStore, [
-      "loadOutline",
-      "loadScript",
-      "loadArtifact",
-      "loadRevision",
-      "listArtifacts",
-      "listRevisions",
-      "loadMutationReceipt",
-      "commitCandidate",
-      "commitSelection",
-      "commitLock",
-    ]),
+    store: Object.freeze({
+      ...captureProjectOutlineSourceReader(raw.store as ProjectTextStore),
+      ...methods(raw.store as ProjectTextStore, [
+        "loadOutline",
+        "loadScript",
+        "loadArtifact",
+        "loadRevision",
+        "listArtifacts",
+        "listRevisions",
+        "loadMutationReceipt",
+        "commitCandidate",
+        "commitSelection",
+        "commitLock",
+      ]),
+    }),
     projects: methods(
       raw.projects as ProjectTextApplicationDependencies["projects"],
       ["loadProject", "loadBrief"],

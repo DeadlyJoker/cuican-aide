@@ -2,6 +2,7 @@ import type {
   CreativeProject,
   ProjectTextArtifact,
   ProjectTextArtifactRevision,
+  ProjectOutlineSourceRevision,
   ProjectTextDependencyStatus,
 } from "@crewon/domain";
 import type { ActorContext } from "./authorization-port.ts";
@@ -57,6 +58,11 @@ export interface ProjectTextStore {
     input: ProjectTextReadScope &
       Readonly<{ artifactId: string; contentRevision: number }>,
   ): Promise<ProjectTextArtifactRevision | null>;
+  /** Explicit downstream read; legacy loadRevision stays v1-only. No write or adoption authority. */
+  loadOutlineSourceRevision?(
+    input: ProjectTextReadScope &
+      Readonly<{ artifactId: string; contentRevision: number }>,
+  ): Promise<ProjectOutlineSourceRevision | null>;
   listArtifacts(
     input: ProjectTextReadScope &
       Readonly<{ afterArtifactId: string | null; limit: number }>,

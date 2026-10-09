@@ -1,3 +1,7 @@
+import {
+  decodeOutlineSourceRevision,
+  assertOutlineSourceInputsCurrent,
+} from "./project-outline-source-store-support.ts";
 import { SqliteStructuredOutlineStorage } from "./project-structured-outline-sqlite.ts";
 import {
   legacyTextRevision as decodeTextRevision,
@@ -137,6 +141,17 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
   async loadRevision(input: TextInput<"loadRevision">) {
     const q = textRead("loadRevision", input);
     return this.#revision(
+      q.owner,
+      q.projectId,
+      q.artifactId,
+      q.contentRevision,
+    );
+  }
+  async loadOutlineSourceRevision(
+    input: TextInput<"loadOutlineSourceRevision">,
+  ) {
+    const q = textRead("loadRevision", input);
+    return this.#outlineSourceRevision(
       q.owner,
       q.projectId,
       q.artifactId,
@@ -392,7 +407,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
             : null;
         const outline =
           candidate && saved?.outline
-            ? this.#revision(
+            ? this.#outlineSourceRevision(
                 owner,
                 id,
                 saved.outline.artifactId,
@@ -422,7 +437,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
               )
             : null;
         const selectedOutline = outlineHead?.selectedContentRevision
-          ? this.#revision(
+          ? this.#outlineSourceRevision(
               owner,
               id,
               outlineHead.artifactId,
@@ -438,11 +453,23 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           latestBrief,
           selectedOutline,
         });
-        if (candidate)
+        const structuredSource =
+          prepared.kind === "save-script"
+            ? outline
+            : prepared.kind === "select-revision" &&
+                prepared.artifact.kind === "script"
+              ? selectedOutline
+              : null;
+        if (
+          candidate ||
+          structuredSource?.schemaVersion === "crewon.project-text-revision.v2"
+        ) {
           downstream = captureSqliteProjectFoundationDownstream(
             this.#database,
             downstreamLocator,
           );
+          assertOutlineSourceInputsCurrent(structuredSource, downstream);
+        }
         this.#active(authority);
         const a = result.artifact;
         if (prepared.expectedArtifactRevision === 0)
@@ -558,6 +585,22 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
     revision: number,
   ) {
     return decodeTextRevision(
+      this.#get(
+        `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision=?`,
+        [...creativeOwnerValues(owner), id, artifactId, revision],
+      ),
+      owner,
+      id,
+      artifactId,
+    );
+  }
+  #outlineSourceRevision(
+    owner: CreativeProjectOwnerScope,
+    id: string,
+    artifactId: string,
+    revision: number,
+  ) {
+    return decodeOutlineSourceRevision(
       this.#get(
         `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision=?`,
         [...creativeOwnerValues(owner), id, artifactId, revision],

@@ -1,4 +1,8 @@
 import {
+  parseProjectOutlineSourceRevision,
+  type ProjectOutlineSourceRevision,
+} from "./project-outline-source.ts";
+import {
   validateCreativeProject,
   type CreativeProject,
   type CreativeProjectActor,
@@ -29,7 +33,6 @@ import {
 } from "./project-text-revision.ts";
 import type {
   ProjectOutlineContent,
-  ProjectOutlineRevision,
   ProjectScriptContent,
   ProjectTextArtifact,
   ProjectTextArtifactRevision,
@@ -51,7 +54,7 @@ export type SaveProjectOutlineCandidateInput = CandidateInput &
 export type SaveProjectScriptCandidateInput = CandidateInput &
   Readonly<{
     episodeId: string;
-    outline: ProjectOutlineRevision | null;
+    outline: ProjectOutlineSourceRevision | null;
     content: ProjectScriptContent;
   }>;
 export type ProjectTextCandidateMutation = Readonly<{
@@ -176,9 +179,9 @@ export function saveProjectScriptCandidate(
     episodeId,
     digester,
   );
-  let outline: ProjectOutlineRevision | null = null;
+  let outline: ProjectOutlineSourceRevision | null = null;
   if (input.outline !== null) {
-    const parsed = parseProjectTextArtifactRevision(input.outline, digester);
+    const parsed = parseProjectOutlineSourceRevision(input.outline, digester);
     assertCreativeProjectScope(checked.project, parsed);
     if (
       parsed.kind !== "outline" ||
@@ -238,7 +241,7 @@ export function assertProjectTextRevisionIdentity(
 export function projectTextDependencyStatus(
   selected: ProjectTextArtifactRevision | null,
   latestBrief: ProjectBriefRevision,
-  selectedOutline: ProjectOutlineRevision | null,
+  selectedOutline: ProjectOutlineSourceRevision | null,
 ): ProjectTextDependencyStatus {
   if (selected === null)
     return Object.freeze({
@@ -271,7 +274,7 @@ export function selectProjectTextRevision(
       artifact: ProjectTextArtifact;
       contentRevision: ProjectTextArtifactRevision;
       latestBrief: ProjectBriefRevision;
-      selectedOutline: ProjectOutlineRevision | null;
+      selectedOutline: ProjectOutlineSourceRevision | null;
     }>,
   digester: ProjectTextDigester,
 ): ProjectTextCandidateMutation {
@@ -287,9 +290,9 @@ export function selectProjectTextRevision(
   assertCreativeProjectScope(checked.project, latestBrief);
   if (latestBrief.briefRevision !== checked.project.latestBriefRevision)
     projectTextFailure("project_text_brief_reference_invalid");
-  let selectedOutline: ProjectOutlineRevision | null = null;
+  let selectedOutline: ProjectOutlineSourceRevision | null = null;
   if (input.selectedOutline !== null) {
-    const parsed = parseProjectTextArtifactRevision(
+    const parsed = parseProjectOutlineSourceRevision(
       input.selectedOutline,
       digester,
     );

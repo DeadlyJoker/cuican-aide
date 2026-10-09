@@ -1,3 +1,4 @@
+import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { prepareProjectTextMutationAuthority } from "./project-text-mutation-authority.ts";
 import {
   checkedProjectTextArtifactPage,
@@ -27,7 +28,8 @@ import {
   ProjectTextError,
   type CreativeProject,
   type ProjectBriefRevision,
-  type ProjectOutlineRevision,
+  type ProjectOutlineSourceRevision,
+  type StoredProjectTextArtifactRevision,
   type ProjectTextArtifact,
   type ProjectTextArtifactRevision,
 } from "@crewon/domain";
@@ -660,25 +662,21 @@ export class ProjectTextApplicationService {
     project: CreativeProject,
     artifactId: string,
     contentRevision: number,
-  ): Promise<ProjectOutlineRevision> {
+  ): Promise<ProjectOutlineSourceRevision> {
     const artifact = await this.#requiredArtifact(actor, project, artifactId);
-    const revision = await this.#revision(
-      actor,
+    return readProjectOutlineSourceRevision({
+      store: this.#dependencies.store,
+      scope: this.#scope(actor, project.projectId),
       project,
       artifact,
       contentRevision,
-    );
-    if (revision.kind !== "outline")
-      throw new ApplicationError(
-        "conflict",
-        "project_text_outline_reference_invalid",
-      );
-    return revision;
+      digester: this.#dependencies.digester,
+    });
   }
   async #selectedOutline(
     actor: ActorContext,
     project: CreativeProject,
-  ): Promise<ProjectOutlineRevision | null> {
+  ): Promise<ProjectOutlineSourceRevision | null> {
     const raw = await this.#dependencies.store.loadOutline(
       this.#scope(actor, project.projectId),
     );
@@ -698,7 +696,7 @@ export class ProjectTextApplicationService {
   async #validateDependencies(
     actor: ActorContext,
     project: CreativeProject,
-    revision: ProjectTextArtifactRevision,
+    revision: StoredProjectTextArtifactRevision,
   ) {
     const brief = await this.#brief(
       actor,

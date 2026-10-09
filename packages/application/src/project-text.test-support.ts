@@ -52,7 +52,7 @@ export const scriptContent = {
   ],
 };
 type Input<M extends keyof ProjectTextStore> = Parameters<
-  ProjectTextStore[M]
+  NonNullable<ProjectTextStore[M]>
 >[0];
 type Commit =
   | Input<"commitCandidate">

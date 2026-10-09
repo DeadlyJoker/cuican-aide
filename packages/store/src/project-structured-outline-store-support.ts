@@ -39,7 +39,7 @@ import {
 import type { ProjectFoundationDownstreamSnapshot } from "./project-foundation-downstream-guard.ts";
 
 export type StructuredTextInput<M extends keyof ProjectStructuredOutlineStore> =
-  Parameters<ProjectStructuredOutlineStore[M]>[0];
+  Parameters<NonNullable<ProjectStructuredOutlineStore[M]>>[0];
 export type StructuredTextPrepared = (
   | StructuredTextInput<"commitStructuredOutlineCandidate">
   | StructuredTextInput<"commitStructuredOutlineSelection">

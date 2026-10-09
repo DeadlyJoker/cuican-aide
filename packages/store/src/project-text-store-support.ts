@@ -26,7 +26,7 @@ import {
   validateCreativeProjectActor,
   type CreativeProject,
   type ProjectBriefRevision,
-  type ProjectOutlineRevision,
+  type ProjectOutlineSourceRevision,
   type ProjectTextArtifact,
   type ProjectTextArtifactRevision,
 } from "@crewon/domain";
@@ -36,7 +36,7 @@ import {
 } from "./creative-project-store-records.ts";
 
 export type TextInput<M extends keyof ProjectTextStore> = Parameters<
-  ProjectTextStore[M]
+  NonNullable<ProjectTextStore[M]>
 >[0];
 export type TextPrepared =
   | TextInput<"commitCandidate">
@@ -368,10 +368,10 @@ export type TextStored = {
   project: CreativeProject | null;
   artifact: ProjectTextArtifact | null;
   brief: ProjectBriefRevision | null;
-  outline: ProjectTextArtifactRevision | null;
+  outline: ProjectOutlineSourceRevision | null;
   revision: ProjectTextArtifactRevision | null;
   latestBrief: ProjectBriefRevision | null;
-  selectedOutline: ProjectTextArtifactRevision | null;
+  selectedOutline: ProjectOutlineSourceRevision | null;
 };
 export function verifyText(
   prepared: TextPrepared,
@@ -411,7 +411,7 @@ export function verifyText(
     } else {
       if (prepared.contentRevision.kind !== "script")
         projectTextFailure("project_text_store_recipe_invalid");
-      let outline: ProjectOutlineRevision | null = null;
+      let outline: ProjectOutlineSourceRevision | null = null;
       if (prepared.contentRevision.outline !== null) {
         const actual = textRequired(
           stored.outline,
@@ -469,7 +469,7 @@ export function verifyText(
             "creative_project_brief_not_found",
           ),
           selectedOutline:
-            stored.selectedOutline as ProjectOutlineRevision | null,
+            stored.selectedOutline as ProjectOutlineSourceRevision | null,
         },
         creativeStoreDigester,
       );

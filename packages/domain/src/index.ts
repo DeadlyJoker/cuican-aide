@@ -80,6 +80,7 @@ export * from "./project-asset-ui-intent-transitions.ts";
 export * from "./project-text-content.ts";
 export * from "./project-text-artifact.ts";
 export * from "./project-text-revision.ts";
+export * from "./project-outline-source.ts";
 export * from "./project-text-mutations.ts";
 export * from "./project-generation-link.ts";
 export * from "./project-generation-publication.ts";

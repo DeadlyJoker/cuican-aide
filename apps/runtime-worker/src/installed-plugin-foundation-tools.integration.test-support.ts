@@ -390,6 +390,8 @@ export async function foundationWorkerFixture(
     created,
     app,
     bound,
+    conversationApp,
+    authority,
     start,
     get checks() {
       return checks;

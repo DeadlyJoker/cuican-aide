@@ -1,3 +1,4 @@
+import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { captureProjectConversationDependencies } from "./project-conversation-dependencies.ts";
 import {
   PROJECT_CONVERSATION_ASSOCIATION_ACTIONS as associationActions,
@@ -22,7 +23,6 @@ import {
   validateCreativeProject,
   parseProjectBriefRevision,
   parseProjectTextArtifact,
-  parseProjectTextArtifactRevision,
   type ProjectConversationBinding,
   type ProjectStageSources,
 } from "@crewon/domain";
@@ -54,7 +54,10 @@ export type ProjectConversationApplicationDependencies = Readonly<{
   threads: Pick<ThreadApplicationService, "prepareCreateThread">;
   threadStore: Pick<ThreadStore, "loadThreadInSpace">;
   projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief">;
-  texts: Pick<ProjectTextStore, "loadOutline" | "loadRevision">;
+  texts: Pick<
+    ProjectTextStore,
+    "loadOutline" | "loadRevision" | "loadOutlineSourceRevision"
+  >;
   tasks: Pick<
     ExtensionTaskApplicationService,
     "createProjectConversationTurnFromHost"
@@ -517,20 +520,14 @@ export class ProjectConversationApplicationService {
           "conflict",
           "project_text_dependencies_stale",
         );
-      const rawRevision = await this.#d.texts.loadRevision({
-        owner,
-        projectId: request.projectId,
-        ...stage.outline,
+      const revision = await readProjectOutlineSourceRevision({
+        store: this.#d.texts,
+        scope: { owner, projectId: request.projectId },
+        project,
+        artifact: head,
+        contentRevision: stage.outline.contentRevision,
+        digester: this.#d.digester,
       });
-      if (rawRevision === null)
-        throw new ApplicationError(
-          "notFound",
-          "project_text_revision_not_found",
-        );
-      const revision = parseProjectTextArtifactRevision(
-        rawRevision,
-        this.#d.digester,
-      );
       if (
         revision.kind !== "outline" ||
         !revision.content.episodes.some(
@@ -746,7 +743,9 @@ export class ProjectConversationApplicationService {
       throw new ApplicationError(
         code.includes("not_found")
           ? "notFound"
-          : code.includes("conflict") || code.includes("mismatch")
+          : code.includes("conflict") ||
+              code.includes("mismatch") ||
+              code === "project_outline_inputs_stale"
             ? "conflict"
             : code.includes("authority")
               ? "authorization"

@@ -1,3 +1,8 @@
+import { assertOutlineSourceInputsCurrent } from "./project-outline-source-store-support.ts";
+import {
+  captureSqliteProjectFoundationDownstream,
+  capturePostgresProjectFoundationDownstream,
+} from "./project-foundation-downstream-guard.ts";
 import {
   sqliteRequiredStageDigest,
   postgresRequiredStageDigest,
@@ -17,11 +22,12 @@ import {
   extensionCanonicalJson,
   parseProjectStageRunAdmission,
   parseProjectTextArtifact,
-  parseProjectTextArtifactRevision,
+  parseProjectOutlineSourceRevision,
   validateThreadState,
   type ProjectStageRunAdmission,
   type PluginTaskAdmission,
   type ThreadState,
+  type ProjectOutlineSourceRevision,
 } from "@crewon/domain";
 import {
   creativeStoreDigester,
@@ -184,7 +190,7 @@ function checkStageRows(
     brief: Record<string, unknown> | undefined;
     outline: Record<string, unknown> | undefined;
   },
-): void {
+): ProjectOutlineSourceRevision | null {
   const s = p.admission,
     b = decodeConversation(rows.binding),
     project = decodeCreativeProject(rows.project, s.actor, s.projectId);
@@ -257,7 +263,7 @@ function checkStageRows(
     if (rows.outline === undefined)
       conversationFail("project_stage_sources_stale");
     const h = parseProjectTextArtifact(json(rows.outline.head_json)),
-      r = parseProjectTextArtifactRevision(
+      r = parseProjectOutlineSourceRevision(
         json(rows.outline.revision_json),
         creativeStoreDigester,
       );
@@ -285,7 +291,9 @@ function checkStageRows(
         ))
     )
       conversationFail("project_stage_sources_stale");
+    return r;
   }
+  return null;
 }
 export function assertSqliteProjectStage(
   db: DatabaseSync,
@@ -318,13 +326,29 @@ export function assertSqliteProjectStage(
     q === null
       ? undefined
       : db.prepare(q.sql.replaceAll(/\$[1-5]/gu, "?")).get(...q.values);
-  checkStageRows(p, input.pluginAdmission!, requireCurrentSources, {
-    binding: read(qs.binding),
-    thread: read(qs.thread),
-    project: read(qs.project),
-    brief: read(qs.brief),
-    outline: read(qs.outline),
-  });
+  const outline = checkStageRows(
+    p,
+    input.pluginAdmission!,
+    requireCurrentSources,
+    {
+      binding: read(qs.binding),
+      thread: read(qs.thread),
+      project: read(qs.project),
+      brief: read(qs.brief),
+      outline: read(qs.outline),
+    },
+  );
+  if (
+    requireCurrentSources &&
+    outline?.schemaVersion === "crewon.project-text-revision.v2"
+  )
+    assertOutlineSourceInputsCurrent(
+      outline,
+      captureSqliteProjectFoundationDownstream(db, {
+        actor: p.admission.actor,
+        projectId: p.admission.projectId,
+      }),
+    );
 }
 export async function assertPostgresProjectStage(
   c: PoolClient,
@@ -379,13 +403,29 @@ export async function assertPostgresProjectStage(
       ? undefined
       : (await c.query<Record<string, unknown>>(q.sql + " FOR SHARE", q.values))
           .rows[0];
-  checkStageRows(p, input.pluginAdmission!, requireCurrentSources, {
-    binding: await read(qs.binding),
-    thread: await read(qs.thread),
-    project: await read(qs.project),
-    brief: await read(qs.brief),
-    outline: await read(qs.outline),
-  });
+  const outline = checkStageRows(
+    p,
+    input.pluginAdmission!,
+    requireCurrentSources,
+    {
+      binding: await read(qs.binding),
+      thread: await read(qs.thread),
+      project: await read(qs.project),
+      brief: await read(qs.brief),
+      outline: await read(qs.outline),
+    },
+  );
+  if (
+    requireCurrentSources &&
+    outline?.schemaVersion === "crewon.project-text-revision.v2"
+  )
+    assertOutlineSourceInputsCurrent(
+      outline,
+      await capturePostgresProjectFoundationDownstream(c, schema, {
+        actor: p.admission.actor,
+        projectId: p.admission.projectId,
+      }),
+    );
 }
 export function assertStageReplay(
   p: PreparedStage | null,
