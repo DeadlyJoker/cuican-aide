@@ -602,6 +602,11 @@ export async function getAgentPlatformAccessToken(): Promise<string | null> {
   return accessTokenOwner.accessToken();
 }
 
+/** Presence is only an input to account verification, never identity authority. */
+export function hasAgentPlatformAccountCredentials(): boolean {
+  return accessTokenOwner.hasCredentials();
+}
+
 /** Internal account lifetime evidence; it never supplies actor or billing authority. */
 export function captureAgentPlatformSession(): AgentPlatformSessionSnapshot {
   return accessTokenOwner.capture();

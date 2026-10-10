@@ -94,6 +94,48 @@ describe("Agent Platform automatic token ownership", () => {
     vi.unstubAllEnvs();
   });
 
+  it("credential presence observes stored tokens without fetching or activating development login", () => {
+    const { owner, values } = fixture("dev");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    expect(owner.hasCredentials()).toBe(false);
+    values.set(
+      AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
+      "fixture-stored-refresh",
+    );
+    expect(owner.hasCredentials()).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("credential presence retains the memory session when persistence is unavailable", () => {
+    const { owner } = fixture("dev");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new Error("fixture storage denied");
+      },
+    });
+    expect(owner.hasCredentials()).toBe(false);
+    owner.store("fixture-memory-access", "fixture-memory-refresh");
+    expect(owner.hasCredentials()).toBe(true);
+    owner.clear();
+    expect(owner.hasCredentials()).toBe(false);
+  });
+
+  it("credential presence gives explicit logout precedence over stale persisted tokens", () => {
+    const { owner, values } = fixture("refresh");
+    const persisted = new Map(values);
+    vi.stubGlobal("localStorage", {
+      ...storage(values),
+      removeItem: () => {
+        throw new Error("fixture removal denied");
+      },
+    });
+    owner.clear();
+    expect(values).toEqual(persisted);
+    expect(owner.hasCredentials()).toBe(false);
+  });
+
   for (const mode of ["refresh", "sso", "dev"] as const) {
     it(`${mode} owns a shared fetch deadline and releases only after abort settles`, async () => {
       vi.useFakeTimers();

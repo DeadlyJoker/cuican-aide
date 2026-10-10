@@ -88,6 +88,19 @@ export class AgentPlatformAccessTokenOwner {
     return this.#dependencies.unifiedSsoEnabled() ? this.#cachedBffUser : null;
   }
 
+  /** Credential presence starts verification; it never authorizes a user. */
+  hasCredentials(): boolean {
+    if (this.#dependencies.pimToken() !== null) return true;
+    if (this.#automaticRestoreBlocked) return false;
+    if (this.#cachedToken || this.#cachedRefreshToken) return true;
+    if (this.#credentialsLoaded || this.#dependencies.unifiedSsoEnabled())
+      return false;
+    return Boolean(
+      readStoredCredential(AGENT_PLATFORM_TOKEN_STORAGE_KEY) ||
+        readStoredCredential(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY),
+    );
+  }
+
   /** Explicit login replaces the whole account, including any previous refresh credential. */
   store(accessToken: string, refreshToken?: string | null): void {
     this.#store(accessToken, refreshToken);

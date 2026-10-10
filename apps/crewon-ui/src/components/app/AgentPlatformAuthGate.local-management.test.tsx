@@ -8,7 +8,10 @@ import {
 } from "../auth/AgentPlatformAuthGate";
 import { useDesktopLocalManagementAccess } from "../../lib/desktop/DesktopLocalManagementContext";
 import { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
-import { storeAgentPlatformSession } from "../../lib/agent-platform/agentPlatformClient";
+import {
+  clearAgentPlatformSession,
+  storeAgentPlatformSession,
+} from "../../lib/agent-platform/agentPlatformClient";
 
 const { readUser, login } = vi.hoisted(() => ({
   readUser: vi.fn(),
@@ -77,6 +80,7 @@ function approveLocal(generation = 7) {
   };
 }
 beforeEach(() => {
+  clearAgentPlatformSession();
   localStorage.clear();
   readUser.mockReset().mockRejectedValue(new Error("企业登录不可用"));
   login.mockReset();
@@ -110,18 +114,16 @@ afterEach(async () => {
   delete (window as unknown as Record<string, unknown>).crewonDesktop;
   vi.restoreAllMocks();
   vi.useRealTimers();
+  clearAgentPlatformSession();
   localStorage.clear();
 });
 
 describe("enterprise gate Native management branch", () => {
   it("does not automatically enter local management when an existing session is withdrawn", async () => {
-    localStorage.setItem(
-      "crewon-agent-platform-token",
-      "existing-session-fixture",
-    );
+    storeAgentPlatformSession("existing-session-fixture");
     approveLocal();
-    readUser.mockImplementation(async () => {
-      localStorage.clear();
+    readUser.mockResolvedValue(null).mockImplementationOnce(async () => {
+      clearAgentPlatformSession();
       return null;
     });
     await render();
@@ -132,10 +134,7 @@ describe("enterprise gate Native management branch", () => {
 
   it("keeps an existing session behind authentication while slow restoration settles after the bootstrap deadline", async () => {
     vi.useFakeTimers();
-    localStorage.setItem(
-      "crewon-agent-platform-token",
-      "named-existing-session-fixture",
-    );
+    storeAgentPlatformSession("named-existing-session-fixture");
     approveLocal();
     let complete!: (value: unknown) => void;
     readUser.mockImplementation(
@@ -153,7 +152,8 @@ describe("enterprise gate Native management branch", () => {
     expect(container.querySelector("[data-local='true']")).toBeNull();
     expect(container.querySelectorAll("button")).toHaveLength(0);
     expect(container.querySelector("form")).toBeNull();
-    expect(container.textContent).toContain("正在自动重连");
+    expect(container.textContent).toContain("正在恢复登录状态");
+    expect(container.textContent).not.toContain("暂不可用");
     expect(localStorage.getItem("crewon-agent-platform-token")).toBe(
       "named-existing-session-fixture",
     );
@@ -173,10 +173,7 @@ describe("enterprise gate Native management branch", () => {
   });
   it("account replacement withdraws a slow saved-session restoration before its late reply", async () => {
     vi.useFakeTimers();
-    localStorage.setItem(
-      "crewon-agent-platform-refresh-token",
-      "existing-refresh-fixture",
-    );
+    storeAgentPlatformSession("", "existing-refresh-fixture");
     approveLocal();
     let late!: (value: unknown) => void;
     readUser
@@ -262,7 +259,7 @@ describe("enterprise gate Native management branch", () => {
     expect(
       container.querySelector("input[name='password']")?.getAttribute("type"),
     ).toBe("password");
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.querySelectorAll("button")).toHaveLength(3);
     expect(container.textContent).not.toContain("返回本机管理");
     expect(actualAccount).toBeNull();
     expect(login).not.toHaveBeenCalled();

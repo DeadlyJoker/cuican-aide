@@ -51,38 +51,33 @@ function outcome<T>(pending: Promise<T>) {
 function delayedBody(status = 200, cancellable = false) {
   const body = deferred<unknown>();
   const entered = deferred<void>();
-  if (cancellable) {
-    let cancelled = false;
-    const stream = new ReadableStream<Uint8Array>(
-      {
-        async pull(controller) {
-          entered.resolve();
-          try {
-            const value = await body.promise;
-            if (!cancelled) {
-              controller.enqueue(
-                new TextEncoder().encode(JSON.stringify(value)),
-              );
-              controller.close();
-            }
-          } catch (error) {
-            if (!cancelled) controller.error(error);
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        entered.resolve();
+        try {
+          const value = await body.promise;
+          if (!cancelled) {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(value)));
+            controller.close();
           }
-        },
-        cancel() {
-          cancelled = true;
-        },
+        } catch (error) {
+          if (!cancelled) controller.error(error);
+        }
       },
-      { highWaterMark: 0 },
-    );
-    return { response: new Response(stream, { status }), body, entered };
-  }
-  const response = Response.json({}, { status });
-  vi.spyOn(response, "json").mockImplementation(() => {
-    entered.resolve();
-    return body.promise;
-  });
-  return { response, body, entered };
+      cancel() {
+        cancelled = true;
+        if (!cancellable)
+          return body.promise.then(
+            () => {},
+            () => {},
+          );
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { response: new Response(stream, { status }), body, entered };
 }
 
 const userA = {
@@ -249,7 +244,8 @@ describe("interactive account session withdrawal", () => {
     const rejection = outcome(pending);
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(vi.getTimerCount()).toBe(1);
+    // The confirmed HTTP retry delay and the enclosing token request deadline.
+    expect(vi.getTimerCount()).toBe(2);
     storeAgentPlatformSession("access-b", "refresh-b");
     expect(await rejection).toMatchObject({ status: "rejected" });
     await vi.advanceTimersByTimeAsync(1_000);

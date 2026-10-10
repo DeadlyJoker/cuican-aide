@@ -1,6 +1,4 @@
 import {
-  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
-  AGENT_PLATFORM_TOKEN_STORAGE_KEY,
   agentPlatformAuthorizedSessionFetch,
   agentPlatformBaseUrl,
   assertAgentPlatformSessionCurrent,
@@ -11,6 +9,7 @@ import {
   crewonUnifiedSsoEnabled,
   getAgentPlatformAccessSession,
   getAgentPlatformBffUserSnapshot,
+  hasAgentPlatformAccountCredentials,
   publishAgentPlatformSession,
   type AgentPlatformSessionSnapshot,
 } from "./agentPlatformClient";
@@ -18,6 +17,7 @@ import { isPimLaunchSession } from "./pimLaunchBridge";
 import { waitForAgentPlatformRequest } from "./agentPlatformRequestWait";
 import { isAgentPlatformAuthTransientError } from "./agentPlatformAuthBootstrap";
 import { readAgentPlatformResponseBody } from "./agentPlatformResponseBody";
+import { withAgentPlatformInteractiveRequest } from "./agentPlatformInteractiveRequest";
 
 export type AgentPlatformUser = {
   id: number;
@@ -209,9 +209,11 @@ async function loginRetryDelay(
 async function loginRequest(
   form: URLSearchParams,
   session: AgentPlatformSessionSnapshot,
+  signal: AbortSignal,
 ): Promise<Response> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     assertAgentPlatformSessionCurrent(session);
+    signal.throwIfAborted();
     try {
       const response = await sessionFetch(
         "/api/v1/auth/login",
@@ -219,6 +221,7 @@ async function loginRequest(
           method: "POST",
           body: form,
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          signal,
         },
         session,
       );
@@ -232,11 +235,12 @@ async function loginRequest(
       assertAgentPlatformSessionCurrent(session);
     } catch (error) {
       assertAgentPlatformSessionCurrent(session);
-      if (attempt === 1) {
-        throw new Error(AUTH_UNAVAILABLE_MESSAGE, { cause: error });
-      }
+      signal.throwIfAborted();
+      // A failed connection may already have delivered the POST. Only a
+      // confirmed temporary HTTP response permits the bounded retry above.
+      throw new Error(AUTH_UNAVAILABLE_MESSAGE, { cause: error });
     }
-    await loginRetryDelay(session);
+    await loginRetryDelay(session, signal);
   }
   throw new Error(AUTH_UNAVAILABLE_MESSAGE);
 }
@@ -271,8 +275,7 @@ async function readAgentPlatformCurrentUserOnce(
   if (
     !isPimLaunchSession() &&
     !crewonUnifiedSsoEnabled() &&
-    !localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY) &&
-    !localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)
+    !hasAgentPlatformAccountCredentials()
   ) {
     return null;
   }
@@ -328,20 +331,26 @@ export async function loginAgentPlatform(
 ): Promise<AgentPlatformUser> {
   const current = beginAgentPlatformInteractiveSession();
   const form = new URLSearchParams({ username, password });
-  const response = await loginRequest(form, current);
-  if (!response.ok) {
-    const error = await responseError(
-      response,
-      "登录失败，请检查账号和密码",
-      current,
-    );
-    assertAgentPlatformSessionCurrent(current);
-    throw error;
-  }
-  const credentials = await sessionBody<{
-    access_token: string;
-    refresh_token?: string;
-  }>(response, current);
+  const credentials = await withAgentPlatformInteractiveRequest({
+    session: current,
+    execute: async (signal) => {
+      const response = await loginRequest(form, current, signal);
+      if (!response.ok) {
+        const error = await responseError(
+          response,
+          "登录失败，请检查账号和密码",
+          current,
+          signal,
+        );
+        assertAgentPlatformSessionCurrent(current);
+        throw error;
+      }
+      return sessionBody<{
+        access_token: string;
+        refresh_token?: string;
+      }>(response, current, signal);
+    },
+  });
   const session = publishAgentPlatformSession({
     session: current,
     accessToken: credentials.access_token,
@@ -361,28 +370,32 @@ export async function registerAgentPlatform(input: {
   password: string;
 }): Promise<AgentPlatformRegistration> {
   const current = beginAgentPlatformInteractiveSession();
-  const response = await sessionFetch(
-    "/api/v1/auth/register",
-    {
-      method: "POST",
-      body: JSON.stringify(input),
-      headers: { "Content-Type": "application/json" },
+  const registration = await withAgentPlatformInteractiveRequest({
+    session: current,
+    execute: async (signal) => {
+      const response = await sessionFetch(
+        "/api/v1/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify(input),
+          headers: { "Content-Type": "application/json" },
+          signal,
+        },
+        current,
+      );
+      if (!response.ok) {
+        const error = await responseError(
+          response,
+          "注册失败，请稍后重试",
+          current,
+          signal,
+        );
+        assertAgentPlatformSessionCurrent(current);
+        throw error;
+      }
+      return sessionBody<AgentPlatformRegistration>(response, current, signal);
     },
-    current,
-  );
-  if (!response.ok) {
-    const error = await responseError(
-      response,
-      "注册失败，请稍后重试",
-      current,
-    );
-    assertAgentPlatformSessionCurrent(current);
-    throw error;
-  }
-  const registration = await sessionBody<AgentPlatformRegistration>(
-    response,
-    current,
-  );
+  });
   assertAgentPlatformSessionCurrent(current);
   if (registration.access_token) {
     publishAgentPlatformSession({
@@ -447,24 +460,35 @@ export async function completeWeComLogin(
   ticket: string,
 ): Promise<AgentPlatformUser> {
   const current = beginAgentPlatformInteractiveSession();
-  const response = await sessionFetch(
-    "/api/v1/auth/wecom/exchange",
-    {
-      method: "POST",
-      body: JSON.stringify({ ticket }),
-      headers: { "Content-Type": "application/json" },
+  const credentials = await withAgentPlatformInteractiveRequest({
+    session: current,
+    execute: async (signal) => {
+      const response = await sessionFetch(
+        "/api/v1/auth/wecom/exchange",
+        {
+          method: "POST",
+          body: JSON.stringify({ ticket }),
+          headers: { "Content-Type": "application/json" },
+          signal,
+        },
+        current,
+      );
+      if (!response.ok) {
+        const error = await responseError(
+          response,
+          "企业微信登录失败",
+          current,
+          signal,
+        );
+        assertAgentPlatformSessionCurrent(current);
+        throw error;
+      }
+      return sessionBody<{
+        access_token: string;
+        refresh_token?: string;
+      }>(response, current, signal);
     },
-    current,
-  );
-  if (!response.ok) {
-    const error = await responseError(response, "企业微信登录失败", current);
-    assertAgentPlatformSessionCurrent(current);
-    throw error;
-  }
-  const credentials = await sessionBody<{
-    access_token: string;
-    refresh_token?: string;
-  }>(response, current);
+  });
   const session = publishAgentPlatformSession({
     session: current,
     accessToken: credentials.access_token,

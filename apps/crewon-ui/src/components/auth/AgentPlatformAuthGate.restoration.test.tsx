@@ -179,9 +179,9 @@ describe("saved account restoration through the real session reader", () => {
     );
     await render();
     expect(container.querySelector("form")).not.toBeNull();
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.querySelectorAll("button")).toHaveLength(3);
     await advance(6_000);
-    expect(container.querySelectorAll("button")).toHaveLength(2);
+    expect(container.querySelectorAll("button")).toHaveLength(4);
     expect(container.textContent).toContain("使用企业微信登录");
   });
 
@@ -472,7 +472,7 @@ describe("saved account restoration through the real session reader", () => {
     expect(localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBeNull();
     expect(container.querySelector("[data-workspace]")).toBeNull();
     expect(container.querySelector("input[name=username]")).not.toBeNull();
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.querySelectorAll("button")).toHaveLength(3);
     await advance(60_000);
     expect(reads).toBe(1);
   });

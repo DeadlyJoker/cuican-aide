@@ -35,9 +35,8 @@ import {
   crewonUnifiedSsoEnabled,
   captureAgentPlatformSession,
   assertAgentPlatformSessionCurrent,
+  hasAgentPlatformAccountCredentials,
   type AgentPlatformSessionSnapshot,
-  AGENT_PLATFORM_TOKEN_STORAGE_KEY,
-  AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
 } from "../../lib/agent-platform/agentPlatformClient";
 import {
   clearPimLaunchToken,
@@ -170,6 +169,7 @@ export function AgentPlatformAuthScreen({
   error,
   mode,
   notice,
+  onModeChange,
   onSubmit,
   onWeComLogin,
   wecomConfig,
@@ -205,13 +205,38 @@ export function AgentPlatformAuthScreen({
         <div className="crewon-auth-card">
           <header>
             <span className="crewon-auth-mobile-brand">CrewON</span>
-            <h2>{mode === "login" ? "进入 CrewON" : "创建企业账号"}</h2>
+            <h2>{mode === "login" ? "进入 CrewON" : "创建账号"}</h2>
             <p>
               {mode === "login"
                 ? "登录后继续进入智能体工作台"
-                : "注册信息将写入 agent-platform user 表"}
+                : "使用企业邮箱注册 CrewON 账号"}
             </p>
           </header>
+
+          <div
+            className="crewon-auth-tabs"
+            role="group"
+            aria-label="账号登录与注册"
+          >
+            <button
+              className={mode === "login" ? "active" : undefined}
+              aria-pressed={mode === "login"}
+              disabled={busy}
+              type="button"
+              onClick={() => onModeChange("login")}
+            >
+              登录
+            </button>
+            <button
+              className={mode === "register" ? "active" : undefined}
+              aria-pressed={mode === "register"}
+              disabled={busy}
+              type="button"
+              onClick={() => onModeChange("register")}
+            >
+              注册
+            </button>
+          </div>
 
           {wecomConfig.enabled === true && wecomConfig.provider === "wecom" ? (
             <>
@@ -272,6 +297,7 @@ export function AgentPlatformAuthScreen({
                 <PasswordInput
                   name="confirmPassword"
                   autoComplete="new-password"
+                  minLength={8}
                   required
                 />
               </label>
@@ -707,13 +733,5 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
 }
 
 function hasStoredAccountSession(): boolean {
-  try {
-    return Boolean(
-      localStorage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY) ||
-        localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY),
-    );
-  } catch {
-    // An unavailable credential store must not silently authorize a different mode.
-    return true;
-  }
+  return hasAgentPlatformAccountCredentials();
 }
