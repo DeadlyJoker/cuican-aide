@@ -18,6 +18,7 @@ import {
 const MAX_FRAME_BYTES = 128 * 1024;
 const MAX_BUFFER_BYTES = 256 * 1024;
 const MAX_TOOL_PREVIEW_BYTES = 16 * 1024;
+const MAX_OUTPUT_DELTA_BYTES = 16 * 1024;
 const RUN_EVENT_TYPES = {
   "context.compacted": true,
   "message.completed": true,
@@ -351,8 +352,7 @@ function isRunEventData(
       return (
         hasExactKeys(data, ["delta", "segmentId"]) &&
         isBoundedText(data.segmentId, 128) &&
-        isBoundedText(data.delta, 16_384) &&
-        new TextEncoder().encode(data.delta).byteLength <= 16_384
+        isBoundedOutputDelta(data.delta)
       );
     case "tool.requested":
       if (view !== "transcript") {
@@ -543,6 +543,16 @@ function exactBoundedText(
   maximum: number,
 ): boolean {
   return hasExactKeys(data, keys) && isBoundedText(data[key], maximum);
+}
+
+function isBoundedOutputDelta(value: unknown): value is string {
+  // Whitespace is model output, while identifiers still require non-blank text.
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_OUTPUT_DELTA_BYTES &&
+    byteLength(value) <= MAX_OUTPUT_DELTA_BYTES
+  );
 }
 
 function isBoundedText(value: unknown, maximum: number): value is string {
