@@ -178,6 +178,29 @@ async function loginRequest(
 }
 
 export async function readAgentPlatformCurrentUser(): Promise<AgentPlatformUser | null> {
+  const session = captureAgentPlatformSession();
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await readAgentPlatformCurrentUserOnce();
+    } catch (error) {
+      assertAgentPlatformSessionCurrent(session);
+      const transient =
+        error instanceof TypeError ||
+        (error instanceof Error &&
+          (error.name === "TimeoutError" ||
+            error.message === AUTH_UNAVAILABLE_MESSAGE ||
+            /^desktop_http_(?:transport_failed|response_timeout)$/u.test(
+              error.message,
+            )));
+      if (!transient || attempt >= 2) throw error;
+      // Only retry this authenticated read. Account changes withdraw the wait;
+      // unauthorized responses still follow the established refresh/logout path.
+      await loginRetryDelay(session);
+    }
+  }
+}
+
+async function readAgentPlatformCurrentUserOnce(): Promise<AgentPlatformUser | null> {
   // When launched from PIM, the launch token IS the credential — don't
   // require a locally stored access token.
   if (
@@ -297,13 +320,6 @@ export async function registerAgentPlatform(input: {
 
 export async function readWeComLoginConfig(): Promise<WeComLoginConfig> {
   const session = captureAgentPlatformSession();
-  if (crewonUnifiedSsoEnabled()) {
-    return {
-      enabled: true,
-      provider: "wecom",
-      label: "企业统一登录",
-    };
-  }
   const response = await sessionFetch("/api/v1/auth/wecom/config", {}, session);
   if (!response.ok) {
     await response.body?.cancel().catch(() => {});
@@ -315,9 +331,22 @@ export async function readWeComLoginConfig(): Promise<WeComLoginConfig> {
       reason: "企业微信登录服务不可用",
     };
   }
-  const config = await sessionBody<WeComLoginConfig>(response, session);
+  const config = await sessionBody<Partial<WeComLoginConfig> | null>(
+    response,
+    session,
+  );
   assertAgentPlatformSessionCurrent(session);
-  return config;
+  const enabled = config?.enabled === true && config.provider === "wecom";
+  return {
+    enabled,
+    provider: "wecom",
+    label: crewonUnifiedSsoEnabled() ? "企业统一登录" : "企业微信",
+    reason: enabled
+      ? undefined
+      : typeof config?.reason === "string"
+        ? config.reason
+        : "企业微信登录服务不可用",
+  };
 }
 
 export async function beginWeComLogin(): Promise<string> {

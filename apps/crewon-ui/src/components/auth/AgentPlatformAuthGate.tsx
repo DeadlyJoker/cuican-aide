@@ -168,11 +168,8 @@ export function AgentPlatformAuthScreen({
   error,
   mode,
   notice,
-  onModeChange,
   onSubmit,
   onWeComLogin,
-  onReturnToLocalManagement,
-  onRetryAccount,
   wecomConfig,
 }: {
   busy: boolean;
@@ -214,52 +211,22 @@ export function AgentPlatformAuthScreen({
             </p>
           </header>
 
-          <button
-            className="crewon-auth-sso"
-            disabled={busy || !wecomConfig.enabled}
-            title={wecomConfig.reason || undefined}
-            type="button"
-            onClick={onWeComLogin}
-          >
-            <Building2 aria-hidden="true" />
-            {busy
-              ? `正在连接${wecomConfig.label}…`
-              : wecomConfig.enabled
-                ? `使用${wecomConfig.label}登录`
-                : "企业微信（配置后启用）"}
-          </button>
-          {!wecomConfig.enabled && wecomConfig.reason ? (
-            <p className="crewon-auth-sso-note">{wecomConfig.reason}</p>
+          {wecomConfig.enabled === true && wecomConfig.provider === "wecom" ? (
+            <>
+              <button
+                className="crewon-auth-sso"
+                disabled={busy}
+                type="button"
+                onClick={onWeComLogin}
+              >
+                <Building2 aria-hidden="true" />
+                使用{wecomConfig.label}登录
+              </button>
+              <div className="crewon-auth-divider">
+                <span>或使用账号密码</span>
+              </div>
+            </>
           ) : null}
-
-          <div className="crewon-auth-divider">
-            <span>或使用账号密码</span>
-          </div>
-
-          <div
-            className="crewon-auth-tabs"
-            role="tablist"
-            aria-label="登录或注册"
-          >
-            <button
-              aria-selected={mode === "login"}
-              className={mode === "login" ? "active" : undefined}
-              role="tab"
-              type="button"
-              onClick={() => onModeChange("login")}
-            >
-              登录
-            </button>
-            <button
-              aria-selected={mode === "register"}
-              className={mode === "register" ? "active" : undefined}
-              role="tab"
-              type="button"
-              onClick={() => onModeChange("register")}
-            >
-              注册
-            </button>
-          </div>
 
           <form className="crewon-auth-form" onSubmit={onSubmit}>
             <label>
@@ -284,7 +251,8 @@ export function AgentPlatformAuthScreen({
             ) : null}
             <label>
               <span>密码</span>
-              <PasswordInput
+              <input
+                type="password"
                 name="password"
                 autoComplete={
                   mode === "login" ? "current-password" : "new-password"
@@ -335,25 +303,6 @@ export function AgentPlatformAuthScreen({
             </button>
           </form>
 
-          {onRetryAccount ? (
-            <button
-              className="crewon-auth-sso"
-              type="button"
-              onClick={onRetryAccount}
-              disabled={busy}
-            >
-              重新连接账号
-            </button>
-          ) : null}
-          {onReturnToLocalManagement ? (
-            <button
-              className="crewon-auth-sso"
-              type="button"
-              onClick={onReturnToLocalManagement}
-            >
-              返回本机管理
-            </button>
-          ) : null}
           <footer>登录即表示同意企业账号与资源访问策略</footer>
         </div>
       </section>

@@ -150,7 +150,7 @@ describe("enterprise gate Native management branch", () => {
       await vi.advanceTimersByTimeAsync(5_001);
     });
     expect(container.querySelector("[data-local='true']")).toBeNull();
-    expect(container.textContent).toContain("重新连接账号");
+    expect(container.querySelectorAll("button")).toHaveLength(1);
     expect(localStorage.getItem("crewon-agent-platform-token")).toBe(
       "named-existing-session-fixture",
     );
@@ -168,11 +168,11 @@ describe("enterprise gate Native management branch", () => {
     expect(actualAccount).toMatchObject({ user: { id: 43 } });
     expect(login).not.toHaveBeenCalled();
   });
-  it("retry withdraws the old bootstrap consumer and restores the original session without password login", async () => {
+  it("password login withdraws the old bootstrap consumer before its late reply", async () => {
     vi.useFakeTimers();
     localStorage.setItem(
       "crewon-agent-platform-refresh-token",
-      "named-existing-refresh-fixture",
+      "existing-refresh-fixture",
     );
     approveLocal();
     let late!: (value: unknown) => void;
@@ -186,15 +186,22 @@ describe("enterprise gate Native management branch", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_001);
     });
-    readUser.mockResolvedValue({
+    login.mockResolvedValue({
       id: 43,
       username: "restored",
       role: "user",
       password_login_enabled: true,
     });
+    container.querySelector<HTMLInputElement>("input[name='username']")!.value =
+      "restored";
+    container.querySelector<HTMLInputElement>("input[name='password']")!.value =
+      "fixture-password";
     await act(async () => {
-      button("重新连接账号").click();
-      for (let i = 0; i < 10; i++) await Promise.resolve();
+      container
+        .querySelector("form")!
+        .dispatchEvent(
+          new Event("submit", { bubbles: true, cancelable: true }),
+        );
     });
     expect(actualAccount).toMatchObject({ user: { id: 43 } });
     await act(async () => {
@@ -203,7 +210,10 @@ describe("enterprise gate Native management branch", () => {
     });
     expect(actualAccount).toMatchObject({ user: { id: 43 } });
     expect(container.textContent).not.toContain("stale");
-    expect(login).not.toHaveBeenCalled();
+    expect(login).toHaveBeenCalledExactlyOnceWith(
+      "restored",
+      "fixture-password",
+    );
   });
   it("keeps Web, unapproved Native and older preloads behind the original login gate", async () => {
     for (const bridge of [
@@ -247,57 +257,44 @@ describe("enterprise gate Native management branch", () => {
     expect(onSettings).toHaveBeenCalledOnce();
   });
 
-  it("opens the original enterprise login form from the local account menu and can return without fabricating an account", async () => {
+  it("opens enterprise login without a local bypass button", async () => {
     approveLocal();
     await render();
     const menu = container.querySelector("details")!;
     menu.open = true;
-    expect(button("登录企业账号").getAttribute("role")).toBe("menuitem");
     await act(async () => {
       button("登录企业账号").click();
     });
     expect(menu.open).toBe(false);
     expect(container.querySelector("[data-workspace]")).toBeNull();
-    expect(container.querySelector(".crewon-auth-shell")).not.toBeNull();
     expect(container.querySelector("input[name='username']")).not.toBeNull();
-    expect(container.querySelector("input[name='password']")).not.toBeNull();
+    expect(
+      container.querySelector("input[name='password']")?.getAttribute("type"),
+    ).toBe("password");
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.textContent).not.toContain("返回本机管理");
     expect(actualAccount).toBeNull();
     expect(login).not.toHaveBeenCalled();
-    expect(button("返回本机管理").className).toBe("crewon-auth-sso");
-    await act(async () => {
-      button("返回本机管理").click();
-    });
-    expect(container.querySelector("[data-local='true']")).not.toBeNull();
-    expect(container.querySelector(".crewon-auth-shell")).toBeNull();
-    expect(actualAccount).toBeNull();
-    expect(container.textContent).toContain("登录企业账号");
-    expect(container.textContent).not.toContain("退出登录");
   });
 
-  it("removes local return after Native withdrawal and rejects the prior callback before a fresh generation arrives", async () => {
+  it("keeps the login gate when Native management is withdrawn or restored", async () => {
     approveLocal();
     await render();
     await act(async () => {
       button("登录企业账号").click();
     });
-    const oldReturn = button("返回本机管理");
     await act(async () => {
       localValue = null;
       nativeChanged?.();
-      oldReturn.click();
     });
     expect(container.querySelector("[data-workspace]")).toBeNull();
-    expect(container.textContent).not.toContain("返回本机管理");
     approveLocal(8);
     await act(async () => {
       nativeChanged?.();
     });
     expect(container.querySelector("[data-workspace]")).toBeNull();
     expect(container.querySelector(".crewon-auth-shell")).not.toBeNull();
-    await act(async () => {
-      button("返回本机管理").click();
-    });
-    expect(container.querySelector("[data-local='true']")).not.toBeNull();
+    expect(container.textContent).not.toContain("返回本机管理");
     expect(actualAccount).toBeNull();
   });
 
