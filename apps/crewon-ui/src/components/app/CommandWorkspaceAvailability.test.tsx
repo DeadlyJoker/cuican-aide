@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -11,11 +14,13 @@ import {
   selectCommandHomeSlots,
 } from "./commandWorkspaceState";
 
-function renderWorkspace(
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
+function workspaceElement(
   controlWorkspace: CommandControlWorkspaceNav,
   linkedThreads: CommandLinkedThread[] = [],
 ) {
-  return renderToStaticMarkup(
+  return (
     <CommandSidebar
       activeView="command"
       controlWorkspace={controlWorkspace}
@@ -34,11 +39,69 @@ function renderWorkspace(
       onSwitchView={vi.fn()}
       onToggleCollapse={vi.fn()}
       onToggleSearch={vi.fn()}
-    />,
+    />
+  );
+}
+
+function renderWorkspace(
+  controlWorkspace: CommandControlWorkspaceNav,
+  linkedThreads: CommandLinkedThread[] = [],
+) {
+  return renderToStaticMarkup(
+    workspaceElement(controlWorkspace, linkedThreads),
   );
 }
 
 describe("workspace availability in the sidebar", () => {
+  it("dispatches the recheck button while normal native mutation callbacks are absent", async () => {
+    const onRecheck = vi.fn();
+    const native = {
+      name: null,
+      busy: false,
+      mutationAuthority: "unavailable" as const,
+      error: "工作空间目录已被删除或移动。",
+      onRecheck,
+    };
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      await act(async () => root.render(workspaceElement(native)));
+      const retry = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "重新检查",
+      );
+      expect(retry).toBeDefined();
+      await act(async () => retry!.click());
+      expect(onRecheck).toHaveBeenCalledOnce();
+      await act(async () =>
+        root.render(workspaceElement({ ...native, busy: true })),
+      );
+      const busyRetry = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "正在检查…",
+      );
+      expect(busyRetry?.disabled).toBe(true);
+      await act(async () => busyRetry!.click());
+      expect(onRecheck).toHaveBeenCalledOnce();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+  it("offers a status recheck while directory mutations are fenced and disables it during confirmation", () => {
+    const workspace = {
+      name: "Project A",
+      workspaceId: "workspace-a",
+      workspaces: [{ workspaceId: "workspace-a", displayName: "Project A" }],
+      busy: false,
+      mutationAuthority: "unavailable" as const,
+      error: "工作空间目录已被删除或移动。",
+      onRecheck: vi.fn(),
+    };
+    const markup = renderWorkspace(workspace);
+    expect(markup).toContain("已被删除或移动");
+    expect(markup).toContain(">重新检查</button>");
+    expect(markup).not.toContain('aria-label="新增空间"');
+    const busyMarkup = renderWorkspace({ ...workspace, busy: true });
+    expect(busyMarkup).toContain('disabled="">正在检查…</button>');
+  });
   it("explains the Web boundary without offering an unusable folder picker", () => {
     const markup = renderWorkspace({
       name: null,

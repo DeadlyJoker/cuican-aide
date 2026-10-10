@@ -134,6 +134,38 @@ export class DesktopWorkspaceUnknownOutcomeError extends Error {
   }
 }
 
+/** A redacted directory hint does not settle whether the native mutation committed. */
+export class DesktopWorkspaceDirectoryUnavailableError extends DesktopWorkspaceUnknownOutcomeError {
+  readonly reason: "missing" | "permissionDenied" | "invalid";
+
+  constructor(reason: DesktopWorkspaceDirectoryUnavailableError["reason"]) {
+    super();
+    this.name = "DesktopWorkspaceDirectoryUnavailableError";
+    this.reason = reason;
+  }
+}
+
+function directoryFailureReason(
+  error: unknown,
+): DesktopWorkspaceDirectoryUnavailableError["reason"] | null {
+  if (!(error instanceof Error)) return null;
+  const code = (error as Error & { code?: unknown }).code;
+  if (code === "ENOENT" || /\bENOENT:/u.test(error.message)) return "missing";
+  if (
+    code === "EACCES" ||
+    code === "EPERM" ||
+    /\b(?:EACCES|EPERM):/u.test(error.message)
+  )
+    return "permissionDenied";
+  if (
+    code === "ENOTDIR" ||
+    /\bENOTDIR:/u.test(error.message) ||
+    /\bdesktop_workspace_path_(?:invalid|changed)\b/u.test(error.message)
+  )
+    return "invalid";
+  return null;
+}
+
 export function createDesktopWorkspaceAuthorityAdapter(
   invoke: DesktopInvoke,
 ): DesktopWorkspaceAuthorityPort {
@@ -167,10 +199,14 @@ export function createDesktopWorkspaceAuthorityAdapter(
     arguments_: Record<string, unknown> = {},
   ): Promise<Result> => {
     let outcomeUnknown = false;
+    let directoryFailure:
+      | DesktopWorkspaceDirectoryUnavailableError["reason"]
+      | null = null;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         return parseResult(await invoke(command, { ...arguments_, request }));
       } catch (error) {
+        directoryFailure ??= directoryFailureReason(error);
         /*
          * The retry uses the exact same parsed command and idempotency key. Once
          * the first invocation may have crossed the native admission boundary,
@@ -180,6 +216,10 @@ export function createDesktopWorkspaceAuthorityAdapter(
          * the original uncertainty.
          */
         if (outcomeUnknown) {
+          if (directoryFailure !== null)
+            throw new DesktopWorkspaceDirectoryUnavailableError(
+              directoryFailure,
+            );
           throw new DesktopWorkspaceUnknownOutcomeError();
         }
         const nativeError = parseNativeError(error);

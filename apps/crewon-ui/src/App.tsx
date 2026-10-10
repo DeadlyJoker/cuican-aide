@@ -119,7 +119,10 @@ import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadR
 import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
 import { selectThreadRunPlanProjection } from "./lib/control-runtime/controlRunPlanProjection";
 import type { ControlToolApprovalRequest } from "./lib/control-runtime/controlToolApprovalPresentation";
-import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
+import {
+  controlWorkspaceSafeErrorMessage,
+  useControlWorkspaceRuntime,
+} from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { useControlSandboxCapabilities } from "./lib/control-runtime/useControlSandboxCapabilities";
 import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
@@ -403,7 +406,8 @@ export function App({
   const threadRuntimeClient = threadAuthority.client;
   const selectedWorkspaceReady =
     controlWorkspace.nativeWorkspace === null ||
-    (!controlWorkspace.nativeBusy &&
+    (controlWorkspace.mutationAuthority === "desktop" &&
+      !controlWorkspace.nativeBusy &&
       controlWorkspace.nativeWorkspace.availability === "available" &&
       (!selectedThread ||
         controlThreadWorkspaceId(selectedThread) ===
@@ -1496,7 +1500,18 @@ export function App({
                     busy: controlWorkspace.nativeBusy,
                     threadWorkspaceReady: selectedWorkspaceReady,
                     revisionKey: controlWorkspace.nativeWorkspaceRevision,
-                    error: workspaceSelectError,
+                    error:
+                      controlWorkspaceSafeErrorMessage(controlWorkspace.safeError) ??
+                      workspaceSelectError,
+                    onRecheck:
+                      controlWorkspace.nativeWorkspace !== null
+                        ? () => {
+                            void controlWorkspace
+                              .refreshNativeAuthority()
+                              .then(() => setWorkspaceSelectError(null))
+                              .catch(() => undefined);
+                          }
+                        : undefined,
                     onSelect:
                       controlWorkspace.mutationAuthority === "desktop"
                         ? () => {
@@ -1511,9 +1526,6 @@ export function App({
                                 setWorkspaceSelectError(
                                   "添加工作空间失败，请检查目录后重试。",
                                 );
-                                void controlWorkspace
-                                  .refreshNativeAuthority()
-                                  .catch(() => undefined);
                               });
                           }
                         : undefined,
@@ -1528,9 +1540,6 @@ export function App({
                                 setWorkspaceSelectError(
                                   "切换工作空间失败，请检查目录后重试。",
                                 );
-                                void controlWorkspace
-                                  .refreshNativeAuthority()
-                                  .catch(() => undefined);
                               });
                           }
                         : undefined,
@@ -1549,9 +1558,6 @@ export function App({
                                   setWorkspaceSelectError(
                                     "取消工作空间选择失败，请重试。",
                                   );
-                                  void controlWorkspace
-                                    .refreshNativeAuthority()
-                                    .catch(() => undefined);
                                 });
                             }
                           }

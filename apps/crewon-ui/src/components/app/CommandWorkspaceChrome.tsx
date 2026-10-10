@@ -93,6 +93,8 @@ export type CommandControlWorkspaceNav = {
   onClear?: () => void;
   onSelect?: () => void;
   onActivate?: (workspaceId: string) => void;
+  /** Status recheck remains available while native mutations are fenced. */
+  onRecheck?: () => void;
 };
 
 export function readCommandSidebarWorkspaceRoster(
@@ -245,6 +247,8 @@ export function CommandSidebar({
             "只从侧栏移除这个文件夹，磁盘上的文件和已有会话都不会被删除。",
           removeWorkspaceTitle: (name: string) => `移出空间「${name}」`,
           replaceWorkspace: "更换工作空间",
+          recheckWorkspace: "重新检查",
+          recheckingWorkspace: "正在检查…",
           search: "搜索",
           searchLabel: "搜索对话和能力",
           searchResults: "搜索结果",
@@ -292,6 +296,8 @@ export function CommandSidebar({
             "Removes the folder from the sidebar only. Files on disk and existing conversations are kept.",
           removeWorkspaceTitle: (name: string) => `Remove workspace ${name}`,
           replaceWorkspace: "Change workspace",
+          recheckWorkspace: "Check again",
+          recheckingWorkspace: "Checking…",
           search: "Search",
           searchLabel: "Search conversations and capabilities",
           searchResults: "Search results",

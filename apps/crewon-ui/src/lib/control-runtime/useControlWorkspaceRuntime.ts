@@ -14,6 +14,7 @@ import type {
 } from "../desktop/desktopWorkspaceAuthorityAdapter";
 import {
   DesktopWorkspaceAuthorityConflictError,
+  DesktopWorkspaceDirectoryUnavailableError,
   DesktopWorkspaceNativeMutationError,
   DesktopWorkspaceTransitioningError,
   DesktopWorkspaceUnavailableError,
@@ -41,7 +42,34 @@ export type ControlWorkspaceSafeError =
   | "nativeConflict"
   | "nativeUnavailable"
   | "nativeUnknown"
+  | "nativeDirectoryMissing"
+  | "nativeDirectoryPermissionDenied"
+  | "nativeDirectoryUnavailable"
   | "rehydrationFailed";
+
+export function controlWorkspaceSafeErrorMessage(
+  error: ControlWorkspaceSafeError | null,
+): string | null {
+  switch (error) {
+    case null:
+      return null;
+    case "nativeDirectoryMissing":
+      return "工作空间目录已被删除或移动。请恢复原目录后重新检查，或选择其他工作空间；历史会话仍保留原归属。";
+    case "nativeDirectoryPermissionDenied":
+      return "没有权限访问工作空间目录。请检查系统权限后重新检查。";
+    case "nativeDirectoryUnavailable":
+      return "原工作空间路径已改变，或不再是文件夹。请恢复原目录后重新检查。";
+    case "nativeUnavailable":
+    case "nativeUnknown":
+      return "工作空间状态暂时无法确认，请重新检查后再试。";
+    case "nativeConflict":
+      return "工作空间选择已发生变化，请重新检查后再试。";
+    case "nativeActiveAuthority":
+      return "工作空间正在执行任务，请等待任务结束后再切换。";
+    case "rehydrationFailed":
+      return "工作空间已确认，但会话暂时无法恢复，请重新打开会话。";
+  }
+}
 
 export type ControlWorkspaceCompositionSnapshot = Readonly<{
   control: ControlWorkspaceState;
@@ -86,6 +114,7 @@ export class ControlWorkspaceRuntimeComposition {
   #authorityGeneration = 0;
   #closed = false;
   #nativeBusy = false;
+  #nativeRefreshing = false;
   #nativeMutationGeneration: number | null = null;
   #nativeStatus: DesktopWorkspaceStatus | null = null;
   #safeError: ControlWorkspaceSafeError | null = null;
@@ -121,7 +150,11 @@ export class ControlWorkspaceRuntimeComposition {
 
   async refreshNativeAuthority(): Promise<void> {
     if (this.#nativeAuthority === null || this.#closed) return;
+    if (this.#nativeBusy)
+      throw new Error("control_workspace_native_mutation_in_progress");
     const generation = ++this.#authorityGeneration;
+    this.#nativeRefreshing = true;
+    this.#publish();
     try {
       const status = await this.#nativeAuthority.status();
       if (this.#isAuthorityCurrent(generation)) {
@@ -133,6 +166,11 @@ export class ControlWorkspaceRuntimeComposition {
       if (this.#isAuthorityCurrent(generation)) {
         this.#nativeStatus = null;
         this.#safeError = "nativeUnavailable";
+        this.#publish();
+      }
+    } finally {
+      if (this.#isAuthorityCurrent(generation)) {
+        this.#nativeRefreshing = false;
         this.#publish();
       }
     }
@@ -206,7 +244,6 @@ export class ControlWorkspaceRuntimeComposition {
   async activateNativeWorkspace(workspaceId: string): Promise<void> {
     const authority = this.#requireNativeAuthority();
     const before = this.#requireAvailableNativeStatus();
-    if (before.current?.workspaceId === workspaceId) return;
     const generation = this.#beginNativeMutation();
     try {
       const response = await authority.activate(workspaceId, {
@@ -293,7 +330,7 @@ export class ControlWorkspaceRuntimeComposition {
   }
 
   #beginNativeMutation(): number {
-    if (this.#nativeBusy) {
+    if (this.#nativeBusy || this.#nativeRefreshing) {
       throw new Error("control_workspace_native_mutation_in_progress");
     }
     const generation = ++this.#authorityGeneration;
@@ -312,14 +349,17 @@ export class ControlWorkspaceRuntimeComposition {
   }
 
   #requireNativeAuthority(): DesktopWorkspaceAuthorityPort {
-    if (this.#nativeAuthority === null) {
+    if (this.#nativeAuthority === null || this.#closed) {
       throw new Error("control_workspace_native_authority_unavailable");
     }
     return this.#nativeAuthority;
   }
 
   #requireAvailableNativeStatus(): DesktopWorkspaceStatus {
-    if (this.#nativeStatus?.availability !== "available") {
+    if (
+      this.#nativeStatus?.availability !== "available" ||
+      this.#snapshot.mutationAuthority !== "desktop"
+    ) {
       throw new Error("control_workspace_native_authority_unavailable");
     }
     return this.#nativeStatus;
@@ -338,7 +378,14 @@ export class ControlWorkspaceRuntimeComposition {
 
   #recordNativeError(error: unknown, generation: number): void {
     if (!this.#isAuthorityCurrent(generation)) return;
-    if (error instanceof DesktopWorkspaceAuthorityConflictError) {
+    if (error instanceof DesktopWorkspaceDirectoryUnavailableError) {
+      this.#safeError =
+        error.reason === "missing"
+          ? "nativeDirectoryMissing"
+          : error.reason === "permissionDenied"
+            ? "nativeDirectoryPermissionDenied"
+            : "nativeDirectoryUnavailable";
+    } else if (error instanceof DesktopWorkspaceAuthorityConflictError) {
       this.#nativeStatus = error.snapshot;
       this.#safeError = "nativeConflict";
     } else if (
@@ -366,18 +413,26 @@ export class ControlWorkspaceRuntimeComposition {
   }
 
   #projectSnapshot(): ControlWorkspaceCompositionSnapshot {
+    // Directory hints and uncertain outcomes never grant native authority.
+    // A separate native status read must confirm it before actions can resume.
+    const unsafeOutcome =
+      this.#nativeRefreshing ||
+      this.#safeError === "nativeUnavailable" ||
+      this.#safeError === "nativeUnknown" ||
+      this.#safeError === "nativeDirectoryMissing" ||
+      this.#safeError === "nativeDirectoryPermissionDenied" ||
+      this.#safeError === "nativeDirectoryUnavailable";
     const nativeWorkspace =
       this.#nativeAuthority === null
         ? null
         : {
-            availability: this.#nativeStatus?.availability ?? "unavailable",
+            availability: unsafeOutcome
+              ? "unavailable"
+              : (this.#nativeStatus?.availability ?? "unavailable"),
             workspaceId: this.#nativeStatus?.current?.workspaceId ?? null,
             displayName: this.#nativeStatus?.current?.displayName ?? null,
           };
     // Thread refresh errors do not revoke independently confirmed native scope.
-    const unsafeOutcome =
-      this.#safeError === "nativeUnavailable" ||
-      this.#safeError === "nativeUnknown";
     const mutationAuthority =
       !this.#controlConfigured || unsafeOutcome
         ? "unavailable"
@@ -393,7 +448,7 @@ export class ControlWorkspaceRuntimeComposition {
           ? { ...control, status: "error" }
           : control,
       mutationAuthority,
-      nativeBusy: this.#nativeBusy,
+      nativeBusy: this.#nativeBusy || this.#nativeRefreshing,
       safeError: this.#safeError,
       nativeWorkspace,
       nativeWorkspaces: this.#nativeStatus?.workspaces ?? [],

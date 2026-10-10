@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDesktopWorkspaceAuthorityAdapter,
   DesktopWorkspaceAuthorityConflictError,
+  DesktopWorkspaceDirectoryUnavailableError,
   DesktopWorkspaceNativeMutationError,
   DesktopWorkspaceProtocolError,
   DesktopWorkspaceTransitioningError,
@@ -22,6 +23,35 @@ const request = {
 } as const;
 
 describe("desktopWorkspaceAuthorityAdapter", () => {
+  it("keeps missing-folder IPC failures uncertain while exposing only a safe directory hint", async () => {
+    const workspaces = [
+      { workspaceId: "workspace-a", displayName: "Project A" },
+      { workspaceId: "workspace-b", displayName: "Project B" },
+    ];
+    const snapshot = status({ current: workspaces[0]!, workspaces });
+    const failure = new Error(
+      "Error invoking remote method 'crewon:workspace:activate': Error: ENOENT: no such file or directory, lstat '/private/project-b'",
+    );
+    const invoke = vi
+      .fn<Invoke>()
+      .mockResolvedValueOnce(snapshot)
+      .mockRejectedValue(failure);
+    const adapter = createDesktopWorkspaceAuthorityAdapter(invoke);
+    let error: unknown;
+    try {
+      await adapter.activate("workspace-b", request);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(DesktopWorkspaceUnknownOutcomeError);
+    expect(error).toBeInstanceOf(DesktopWorkspaceDirectoryUnavailableError);
+    expect(error).toMatchObject({ reason: "missing" });
+    expect(String(error)).not.toContain("/private/project-b");
+    expect(invoke.mock.calls.slice(1)).toEqual([
+      ["desktop_workspace_activate", { workspaceId: "workspace-b", request }],
+      ["desktop_workspace_activate", { workspaceId: "workspace-b", request }],
+    ]);
+  });
   it("activates an existing stable workspace without sending its private path", async () => {
     const first = { workspaceId: "workspace-first", displayName: "project" };
     const second = { workspaceId: "workspace-second", displayName: "project" };

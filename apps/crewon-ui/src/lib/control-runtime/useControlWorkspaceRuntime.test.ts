@@ -6,15 +6,157 @@ import type {
 } from "../desktop/desktopWorkspaceAuthorityAdapter";
 import {
   DesktopWorkspaceAuthorityConflictError,
+  DesktopWorkspaceDirectoryUnavailableError,
   DesktopWorkspaceNativeMutationError,
 } from "../desktop/desktopWorkspaceAuthorityAdapter";
 import type { ControlWorkspaceState } from "./controlWorkspaceRuntime";
 import {
   ControlWorkspaceRuntimeComposition,
+  controlWorkspaceSafeErrorMessage,
   type ControlWorkspaceRuntimePort,
 } from "./useControlWorkspaceRuntime";
 
 describe("ControlWorkspaceRuntimeComposition", () => {
+  it("does not let a status recheck supersede an admitted native mutation", async () => {
+    const native = authority();
+    const initial = status({
+      current: null,
+      workspaces: [{ workspaceId: "workspace-a", displayName: "Project A" }],
+    });
+    native.status.mockResolvedValue(initial);
+    const test = composition({
+      controlConfigured: true,
+      nativeAuthority: native.port,
+    });
+    await test.value.refreshNativeAuthority();
+    const selected = status({
+      ...initial,
+      revision: 5,
+      current: initial.workspaces![0]!,
+    });
+    const response = deferred<{
+      outcome: "committed";
+      snapshot: DesktopWorkspaceStatus;
+    }>();
+    native.activate.mockReturnValueOnce(response.promise);
+    const activation = test.value.activateNativeWorkspace("workspace-a");
+    await expect(test.value.refreshNativeAuthority()).rejects.toThrow(
+      "control_workspace_native_mutation_in_progress",
+    );
+    expect(native.status).toHaveBeenCalledOnce();
+    native.status.mockResolvedValue(selected);
+    response.resolve({ outcome: "committed", snapshot: selected });
+    await activation;
+    expect(test.value.getSnapshot()).toMatchObject({
+      nativeBusy: false,
+      mutationAuthority: "desktop",
+      nativeWorkspace: { workspaceId: "workspace-a" },
+    });
+    test.value.close();
+  });
+  it("fences a missing directory until a fresh native status is confirmed, then permits another workspace", async () => {
+    const native = authority();
+    const workspaces = [
+      { workspaceId: "workspace-a", displayName: "Project A" },
+      { workspaceId: "workspace-b", displayName: "Project B" },
+      { workspaceId: "workspace-c", displayName: "Project C" },
+    ];
+    const original = status({ current: workspaces[0]!, workspaces });
+    native.status.mockResolvedValue(original);
+    const test = composition({
+      controlConfigured: true,
+      nativeAuthority: native.port,
+    });
+    await test.value.selectThread("original-thread");
+    await test.value.refreshNativeAuthority();
+    native.activate.mockRejectedValueOnce(
+      new DesktopWorkspaceDirectoryUnavailableError("missing"),
+    );
+    await expect(
+      test.value.activateNativeWorkspace("workspace-b"),
+    ).rejects.toBeInstanceOf(DesktopWorkspaceDirectoryUnavailableError);
+    expect(test.value.getSnapshot()).toMatchObject({
+      mutationAuthority: "unavailable",
+      safeError: "nativeDirectoryMissing",
+      nativeWorkspace: {
+        workspaceId: "workspace-a",
+        availability: "unavailable",
+      },
+      nativeWorkspaces: workspaces,
+    });
+    expect(
+      controlWorkspaceSafeErrorMessage(test.value.getSnapshot().safeError),
+    ).toContain("已被删除或移动");
+    await expect(
+      test.value.activateNativeWorkspace("workspace-c"),
+    ).rejects.toThrow("control_workspace_native_authority_unavailable");
+    expect(native.activate).toHaveBeenCalledOnce();
+    const recheck = deferred<DesktopWorkspaceStatus>();
+    native.status.mockReturnValueOnce(recheck.promise);
+    const pending = test.value.refreshNativeAuthority();
+    expect(test.value.getSnapshot()).toMatchObject({
+      mutationAuthority: "unavailable",
+      nativeBusy: true,
+    });
+    recheck.resolve(original);
+    await pending;
+    expect(test.value.getSnapshot()).toMatchObject({
+      mutationAuthority: "desktop",
+      nativeBusy: false,
+      safeError: null,
+    });
+    const selected = status({
+      current: workspaces[2]!,
+      workspaces,
+      revision: 5,
+    });
+    native.activate.mockResolvedValueOnce({
+      outcome: "committed",
+      snapshot: selected,
+    });
+    native.status.mockResolvedValue(selected);
+    await test.value.activateNativeWorkspace("workspace-c");
+    expect(test.value.getSnapshot().nativeWorkspace?.workspaceId).toBe(
+      "workspace-c",
+    );
+    expect(test.runtime.selectThread).toHaveBeenLastCalledWith(
+      "original-thread",
+    );
+    test.value.close();
+  });
+
+  it("does not recover a failed native status recheck or skip verification of an already active ID", async () => {
+    const native = authority();
+    const original = status({
+      current: { workspaceId: "workspace-a", displayName: "Project A" },
+      workspaces: [{ workspaceId: "workspace-a", displayName: "Project A" }],
+    });
+    native.status.mockResolvedValue(original);
+    const test = composition({
+      controlConfigured: true,
+      nativeAuthority: native.port,
+    });
+    await test.value.refreshNativeAuthority();
+    native.activate.mockRejectedValue(
+      new DesktopWorkspaceDirectoryUnavailableError("missing"),
+    );
+    await expect(
+      test.value.activateNativeWorkspace("workspace-a"),
+    ).rejects.toBeInstanceOf(DesktopWorkspaceDirectoryUnavailableError);
+    expect(native.activate).toHaveBeenCalledOnce();
+    native.status.mockRejectedValueOnce(new Error("native disconnected"));
+    await test.value.refreshNativeAuthority();
+    expect(test.value.getSnapshot()).toMatchObject({
+      mutationAuthority: "unavailable",
+      nativeBusy: false,
+      safeError: "nativeUnavailable",
+    });
+    await expect(
+      test.value.activateNativeWorkspace("workspace-a"),
+    ).rejects.toThrow("control_workspace_native_authority_unavailable");
+    expect(native.activate).toHaveBeenCalledOnce();
+    test.value.close();
+  });
   it("activates a registered workspace without replacing the runtime or losing the roster on clear", async () => {
     const native = authority();
     const workspaces = [

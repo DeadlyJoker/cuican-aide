@@ -37,6 +37,8 @@ type Copy = {
   removeWorkspaceHint: string;
   removeWorkspaceTitle: (name: string) => string;
   replaceWorkspace: string;
+  recheckWorkspace: string;
+  recheckingWorkspace: string;
   selectWorkspace: string;
   switchWorkspace: (name: string) => string;
   threadInWorkspace: (name: string) => string;
@@ -329,6 +331,21 @@ export function CommandSidebarWorkspaceTree(props: {
               <p className="sidebar-error-hint" role="alert">
                 {copy.workspaceSelectFailed(controlWorkspace.error)}
               </p>
+            ) : null}
+            {controlWorkspace?.onRecheck &&
+            (controlWorkspace.error ||
+              controlWorkspace.mutationAuthority === "unavailable") ? (
+              <div className="sidebar-workspace-form-actions workspace-recovery-actions">
+                <button
+                  type="button"
+                  disabled={controlWorkspace.busy}
+                  onClick={() => controlWorkspace.onRecheck?.()}
+                >
+                  {controlWorkspace.busy
+                    ? copy.recheckingWorkspace
+                    : copy.recheckWorkspace}
+                </button>
+              </div>
             ) : null}
           </>
         ) : (
