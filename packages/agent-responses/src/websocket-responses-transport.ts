@@ -475,6 +475,8 @@ export class ResilientResponsesTransport implements ModelTransportPort {
   #websocketFailures = 0;
   #httpOnly = false;
   #pendingFallbackCode: string | null = null;
+  #websocketActive = false;
+  #activeWebsocketRunId: string | null = null;
 
   constructor(
     config: WebSocketResponsesTransportConfig & {
@@ -535,6 +537,24 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       yield* this.#http.stream(request, signal, options);
       return;
     }
+    // One socket cannot carry interleaved response streams. A parallel Run uses
+    // the existing HTTP adapter without closing its sibling's socket or making
+    // the entire transport permanently HTTP-only.
+    if (this.#websocketActive) {
+      if (this.#activeWebsocketRunId === request.runId)
+        throw protocolError("responses_websocket_concurrent_stream");
+      yield {
+        type: "transport.fallback",
+        fromTransport: "websocket",
+        toTransport: "http",
+        code: "responses_websocket_busy",
+        discardedOutput: false,
+      };
+      yield* this.#http.stream(request, signal, options);
+      return;
+    }
+    this.#websocketActive = true;
+    this.#activeWebsocketRunId = request.runId;
     let emittedObservation = false;
     try {
       for await (const event of this.#websocket.stream(
@@ -593,6 +613,9 @@ export class ResilientResponsesTransport implements ModelTransportPort {
         emittedObservation,
         options,
       );
+    } finally {
+      this.#websocketActive = false;
+      this.#activeWebsocketRunId = null;
     }
   }
 

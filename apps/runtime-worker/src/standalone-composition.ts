@@ -133,6 +133,10 @@ import {
 } from "./extensions/extension-work-item-scope.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
+import {
+  createRuntimeWorkerPool,
+  runtimeWorkerConcurrency,
+} from "./runtime-worker-pool.ts";
 
 /** Supplied closable resources transfer to this composition, including failed startup. */
 export type RuntimeWorkerCompositionConfig = Readonly<{
@@ -148,6 +152,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   artifactStore?: ArtifactStorePort;
   artifactEncryptionKeyId?: string;
   ownerId?: string;
+  /** Independent Run execution lanes; library callers retain one lane by default. */
+  workerConcurrency?: number;
   leaseDurationMs?: number;
   streamMaxRetries?: number;
   retryAfterMs?: number;
@@ -221,6 +227,8 @@ export type PostgresRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
 
 export type StandaloneRuntimeWorker = Readonly<{
   worker: RuntimeWorker;
+  workers: readonly RuntimeWorker[];
+  start(): void;
   agentVersion: CompiledAgentVersion;
   agentVersionRegistry: InMemoryAgentVersionRuntimeRegistry;
   providerProbeOrigin: string | null;
@@ -320,6 +328,7 @@ function prepareComposition(
   // Capture scheduling and plugin materialization inputs before storage can yield.
   const config = Object.freeze({
     ...input,
+    workerConcurrency: runtimeWorkerConcurrency(input.workerConcurrency),
     route: Object.freeze({ ...input.route }),
     ...(input.projectPlanning === undefined
       ? {}
@@ -699,8 +708,12 @@ async function composeRuntimeWorker(
         });
   if (pluginCreditSettlement !== undefined)
     lifetime.own(pluginCreditSettlement, { phase: "stop" });
-  const worker = new RuntimeWorker(
-    {
+  const pool = createRuntimeWorkerPool({
+    concurrency: config.workerConcurrency ?? 1,
+    own: (worker) => {
+      lifetime.own(worker, { phase: "stop" });
+    },
+    dependencies: {
       store,
       execution,
       kernel,
@@ -718,8 +731,11 @@ async function composeRuntimeWorker(
       projectPlanning: config.projectPlanning,
       policy,
     },
-    {
-      ownerId: config.ownerId ?? `runtime-worker:${ids.nextId("outboxLease")}`,
+    config: (index) => ({
+      ownerId:
+        index === 0 && config.ownerId !== undefined
+          ? config.ownerId
+          : `runtime-worker:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
       workItemExecutionScope,
       leaseDurationMs: config.leaseDurationMs,
@@ -736,9 +752,8 @@ async function composeRuntimeWorker(
       afterToolDispatched: config.afterToolDispatched,
       afterToolProviderResolved: config.afterToolProviderResolved,
       afterToolReceiptCommitted: config.afterToolReceiptCommitted,
-    },
-  );
-  lifetime.own(worker, { phase: "stop" });
+    }),
+  });
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
   let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
   let extensionHostServer: RuntimeExtensionHostServer | null = null;
@@ -815,7 +830,9 @@ async function composeRuntimeWorker(
   if (workspacePrivateServer !== null)
     lifetime.own(workspacePrivateServer, { phase: "stop" });
   return {
-    worker,
+    worker: pool.workers[0]!,
+    workers: pool.workers,
+    start: pool.start,
     agentVersion,
     agentVersionRegistry,
     providerProbeOrigin: providerProbeServer?.origin ?? null,

@@ -902,6 +902,72 @@ test("classifies a blocked WebSocket deterministically on abort and idle expiry"
   );
 });
 
+test("parallel Runs use HTTP while a sibling owns the socket without interrupting it or disabling future WebSocket calls", async (context) => {
+  let httpRequests = 0,
+    websocketRequests = 0;
+  let releaseFirst!: () => void, started!: () => void;
+  const firstStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const fixture = await websocketFixture(context, async (request, response) => {
+    assert.equal(request.method, "POST");
+    const body = JSON.parse(await requestBody(request));
+    assert.equal(body.input[0].content, "second");
+    httpRequests++;
+    sendHttpCompleted(response, "resp-parallel-http", "second done");
+  });
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.on("message", () => {
+      websocketRequests++;
+      if (websocketRequests === 1) {
+        releaseFirst = () =>
+          sendCompleted(socket, "resp-parallel-ws", "first done");
+        started();
+      } else sendCompleted(socket, "resp-later-ws", "later done");
+    });
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+  const kernel = new CrewONAgentKernel({ transport, streamMaxRetries: 0 });
+  let firstFinished = false;
+  const first = collect(
+    kernel.runSegment(segmentContract("parallel-first", "first"), signal()),
+  ).then((events) => {
+    firstFinished = true;
+    return events;
+  });
+  await firstStarted;
+  const second = await collect(
+    kernel.runSegment(segmentContract("parallel-second", "second"), signal()),
+  );
+  assert.equal(firstFinished, false);
+  assert.equal(httpRequests, 1);
+  assert.ok(
+    second.some(
+      (event) =>
+        event.type === "model.transport.fallback" &&
+        event.data.code === "responses_websocket_busy",
+    ),
+  );
+  releaseFirst();
+  assert.equal(
+    (await first).some((event) => event.type === "model.transport.fallback"),
+    false,
+  );
+  const later = await collect(
+    kernel.runSegment(segmentContract("parallel-later", "later"), signal()),
+  );
+  assert.equal(
+    later.some((event) => event.type === "model.transport.fallback"),
+    false,
+  );
+  assert.equal(websocketRequests, 2);
+  assert.equal(httpRequests, 1);
+});
+
 async function websocketFixture(
   context: TestContext,
   handler?: RequestListener,

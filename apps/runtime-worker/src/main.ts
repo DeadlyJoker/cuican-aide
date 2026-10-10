@@ -375,6 +375,13 @@ try {
           artifactEncryptionKeyId: artifactAuthority.keyId,
         }),
     ownerId: environment.CREWON_WORKER_OWNER_ID?.trim() || undefined,
+    workerConcurrency:
+      environment.CREWON_WORKER_ONCE === "1"
+        ? 1
+        : parsePositiveInteger(
+            environment.CREWON_WORKER_CONCURRENCY ?? "2",
+            "CREWON_WORKER_CONCURRENCY_invalid",
+          ),
     streamMaxRetries: bootstrapAgent.streamMaxRetries,
     maxToolRounds: bootstrapAgent.maxToolRounds,
     leaseDurationMs: parsePositiveInteger(
@@ -586,7 +593,7 @@ if (environment.CREWON_WORKER_ONCE === "1") {
       process.stderr.write("CrewON Runtime Worker shutdown failed\n");
     },
   });
-  runtime.worker.start();
+  runtime.start();
   process.stdout.write("CrewON Runtime Worker started\n");
   if (runtime.extensionHostOrigin !== null) {
     process.stdout.write(
