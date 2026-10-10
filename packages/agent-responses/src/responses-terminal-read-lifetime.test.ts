@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 import test, { type TestContext } from "node:test";
 
@@ -6,10 +7,12 @@ import {
   CrewONAgentKernel,
   ModelTransportError,
   type ModelRequest,
+  type ModelTransportEvent,
 } from "@crewon/agent-kernel";
 
 import {
   DirectResponsesTransport,
+  type ResponsesSequencePolicy,
   type ResponsesTimerScheduler,
 } from "./direct-responses-transport.ts";
 
@@ -196,6 +199,53 @@ for (const terminal of [completed, failed]) {
     assert.equal(lifetime.signal?.aborted, true);
     assert.equal(lifetime.body?.locked, false);
   });
+}
+
+for (const fixtureName of [
+  "responses-generic-terminal.reference.json",
+  "responses-top-level-error-payload.reference.json",
+]) {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(`../../test-contracts/fixtures/${fixtureName}`, import.meta.url),
+      "utf8",
+    ),
+  ) as Readonly<{
+    caseId: string;
+    cases: readonly Readonly<{
+      name: string;
+      events: readonly Readonly<Record<string, unknown>>[];
+      postTerminalEvents: readonly Readonly<Record<string, unknown>>[];
+    }>[];
+  }>;
+  for (const sequencePolicy of ["required", "whenPresent"] as const) {
+    for (const fixtureCase of reference.cases) {
+      test(`${reference.caseId}: ${sequencePolicy} rejects the same-chunk tail after ${fixtureCase.name}`, async () => {
+        assert.ok(fixtureCase.postTerminalEvents.length > 0);
+        const { transport, lifetime } = openBodyTransport(
+          frames([...fixtureCase.events, ...fixtureCase.postTerminalEvents]),
+          { sequencePolicy },
+        );
+        const observed: ModelTransportEvent[] = [];
+        await assert.rejects(
+          (async () => {
+            for await (const event of transport.stream(
+              request,
+              new AbortController().signal,
+            ))
+              observed.push(event);
+          })(),
+          hasCode("responses_event_after_terminal"),
+        );
+        // These fixtures have no valid pre-terminal output. Poison output,
+        // usage, history and completion must not escape the received tail.
+        assert.deepEqual(observed, []);
+        assert.equal(lifetime.signal?.aborted, true);
+        assert.equal(lifetime.body?.locked, false);
+        assert.equal(lifetime.scheduler.active, 0);
+      });
+    }
+  }
 }
 
 for (const [tail, code] of [
@@ -542,7 +592,10 @@ function frames(events: readonly unknown[]): string {
   return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
 }
 
-function openBodyTransport(bytes: string) {
+function openBodyTransport(
+  bytes: string,
+  options: Readonly<{ sequencePolicy?: ResponsesSequencePolicy }> = {},
+) {
   const lifetime: {
     signal: AbortSignal | null;
     body: ReadableStream<Uint8Array> | null;
@@ -556,6 +609,7 @@ function openBodyTransport(bytes: string) {
     {
       endpoint: "https://read-lifetime.example/v1/responses",
       model: "read-lifetime-model",
+      ...options,
     },
     {
       scheduler: lifetime.scheduler,

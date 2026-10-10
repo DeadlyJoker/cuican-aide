@@ -11,6 +11,8 @@ const controlApiBaseBoundary = {
     "extension-worker-environment.ts": ["node:util"],
     "paused-admission.ts": ["node:stream"],
     "pim-sandbox-client.ts": ["node:path"],
+    // SQLite delivery hints observe file metadata without opening the database.
+    "sqlite-outbox-wakeup.ts": ["node:fs", "node:path"],
   },
   allowedBareImports: [
     "node:crypto",

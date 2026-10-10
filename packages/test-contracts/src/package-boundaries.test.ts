@@ -139,6 +139,47 @@ test("adapter import exceptions do not authorize neighboring files, nested files
   }
 });
 
+test("SQLite Outbox metadata hints permit only the exact file watcher adapter imports", () => {
+  const adapter = "sqlite-outbox-wakeup.ts";
+  const imports = ["node:fs", "node:path"];
+  assert.deepEqual(controlApiBoundary.allowedFileImports[adapter], imports);
+  for (const specifier of imports) {
+    assert.equal(
+      boundaryAllowsImport(controlApiBoundary, adapter, specifier),
+      true,
+    );
+    for (const file of [
+      "sqlite-outbox-wakeup-support.ts",
+      "sqlite-outbox-writer.ts",
+      "outbox-dispatcher.ts",
+      "nested/sqlite-outbox-wakeup.ts",
+      "nested/deeper/sqlite-outbox-wakeup.ts",
+    ])
+      assert.equal(
+        boundaryAllowsImport(controlApiBoundary, file, specifier),
+        false,
+        `${file} -> ${specifier}`,
+      );
+  }
+  for (const specifier of [
+    "node:fs/promises",
+    "node:fs/unapproved",
+    "node:path/posix",
+    "node:path/win32",
+    "node:sqlite",
+    "node:child_process",
+    "node:worker_threads",
+    "node:net",
+    "node:stream",
+    "node:util",
+  ])
+    assert.equal(
+      boundaryAllowsImport(controlApiBoundary, adapter, specifier),
+      false,
+      `${adapter} -> ${specifier}`,
+    );
+});
+
 test("public plugin SDK cannot acquire Node, host, application or private package subtrees", () => {
   const sdk = boundaries.find((value) => value.packageName === "plugin-sdk")!;
   assert.deepEqual(sdk.allowedRuntimeDependencies, []);

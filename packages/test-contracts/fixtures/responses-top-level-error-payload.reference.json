@@ -14,7 +14,9 @@
     {
       "name": "missing error payload",
       "events": [
-        { "type": "error", "sequence_number": 0 },
+        { "type": "error", "sequence_number": 0 }
+      ],
+      "postTerminalEvents": [
         { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed" } }
       ],
       "expected": {
@@ -27,7 +29,9 @@
     {
       "name": "malformed nested payload wins over flat fields",
       "events": [
-        { "type": "error", "sequence_number": 0, "error": { "code": 429, "message": ["secret"] }, "code": "invalid_prompt", "message": "poison" },
+        { "type": "error", "sequence_number": 0, "error": { "code": 429, "message": ["secret"] }, "code": "invalid_prompt", "message": "poison" }
+      ],
+      "postTerminalEvents": [
         { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
       ],
       "expected": {
@@ -40,7 +44,9 @@
     {
       "name": "nested object missing code wins over fatal flat code",
       "events": [
-        { "type": "error", "sequence_number": 0, "error": { "message": "secret" }, "code": "invalid_prompt", "message": "poison" },
+        { "type": "error", "sequence_number": 0, "error": { "message": "secret" }, "code": "invalid_prompt", "message": "poison" }
+      ],
+      "postTerminalEvents": [
         { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" },
         { "type": "response.completed", "sequence_number": 2, "response": { "id": "resp-poison", "status": "completed", "usage": { "input_tokens": 2, "output_tokens": 3, "total_tokens": 5 } } }
       ],
@@ -54,7 +60,9 @@
     {
       "name": "malformed non-object nested and flat payload",
       "events": [
-        { "type": "error", "sequence_number": 0, "error": "broken", "code": ["server_error"], "message": { "secret": "provider copy" } },
+        { "type": "error", "sequence_number": 0, "error": "broken", "code": ["server_error"], "message": { "secret": "provider copy" } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" }
       ],
       "expected": {
@@ -67,7 +75,9 @@
     {
       "name": "future provider code is retryable",
       "events": [
-        { "type": "error", "sequence_number": 0, "error": { "code": "provider_future_terminal_v2", "message": "sensitive provider message" } },
+        { "type": "error", "sequence_number": 0, "error": { "code": "provider_future_terminal_v2", "message": "sensitive provider message" } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed", "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 } } }
       ],
       "expected": {
@@ -80,7 +90,9 @@
     {
       "name": "fatal provider code does not sample retry",
       "events": [
-        { "type": "error", "sequence_number": 0, "code": "invalid_prompt", "message": "sensitive rejection" },
+        { "type": "error", "sequence_number": 0, "code": "invalid_prompt", "message": "sensitive rejection" }
+      ],
+      "postTerminalEvents": [
         { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
       ],
       "expected": {

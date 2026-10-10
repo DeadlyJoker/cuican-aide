@@ -3403,6 +3403,171 @@ test("projects AR-040 top-level error payloads through the durable retry boundar
   }
 });
 
+test("rejects AR-039/040 same-chunk post-terminal events without retry or durable output", async (context) => {
+  for (const fixtureName of [
+    "responses-generic-terminal.reference.json",
+    "responses-top-level-error-payload.reference.json",
+  ]) {
+    const reference = JSON.parse(
+      readFileSync(
+        new URL(
+          `../../../packages/test-contracts/fixtures/${fixtureName}`,
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as Readonly<{
+      caseId: string;
+      cases: readonly Readonly<{
+        name: string;
+        events: readonly Readonly<Record<string, unknown>>[];
+        postTerminalEvents: readonly Readonly<Record<string, unknown>>[];
+      }>[];
+    }>;
+    for (const fixtureCase of reference.cases) {
+      await context.test(
+        `${reference.caseId}: ${fixtureCase.name}`,
+        async (caseContext) => {
+          assert.ok(fixtureCase.postTerminalEvents.length > 0);
+          const fixture = await createFixture(
+            caseContext,
+            (clock) => new InMemoryRunStore({ clock }),
+          );
+          const initialHistory = await fixture.store.listModelHistoryItems(
+            { tenantId: actor().tenantId, threadId: fixture.threadId },
+            0,
+            100,
+          );
+          const initialUsage = (await fixture.loadRun()).usage;
+          const received = [
+            ...fixtureCase.events,
+            ...fixtureCase.postTerminalEvents,
+          ]
+            .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+            .join("");
+          let requestCount = 0;
+          let samplingRetries = 0;
+          const transport = new DirectResponsesTransport(
+            {
+              endpoint: "https://provider.example/v1/responses",
+              model: "provider-model",
+              storeResponses: true,
+            },
+            {
+              fetch: async () => {
+                requestCount += 1;
+                return new Response(
+                  new ReadableStream<Uint8Array>({
+                    start(controller) {
+                      // A single received chunk includes the original illegal tail.
+                      controller.enqueue(new TextEncoder().encode(received));
+                      controller.close();
+                    },
+                  }),
+                  { headers: { "content-type": "text/event-stream" } },
+                );
+              },
+            },
+          );
+          const worker = fixture.worker({
+            transport,
+            streamMaxRetries: 2,
+            retryScheduler: {
+              wait: async () => {
+                samplingRetries += 1;
+              },
+            },
+          });
+          caseContext.after(() => worker.close());
+          const failure = {
+            code: "responses_event_after_terminal",
+            retryable: false,
+          };
+          assert.deepEqual(await worker.wake(), {
+            kind: "failed",
+            runId: fixture.runId,
+            code: failure.code,
+          });
+          assert.equal(requestCount, 1);
+          assert.equal(samplingRetries, 0);
+          assert.deepEqual((await fixture.attempts()).map(attemptSummary), [
+            {
+              attemptNumber: 1,
+              retryOfAttemptId: null,
+              status: "failed",
+              failure,
+            },
+          ]);
+          const run = await fixture.loadRun();
+          assert.deepEqual(run.failure, failure);
+          assert.deepEqual(run.usage, initialUsage);
+          assert.equal(run.outputRef, null);
+          assert.equal((await fixture.step())?.status, "failed");
+          assert.deepEqual(
+            (await fixture.events()).filter((event) =>
+              [
+                "model.output.delta",
+                "model.sampling.retry",
+                "usage.recorded",
+                "segment.checkpointed",
+                "segment.completed",
+                "message.completed",
+                "run.completed",
+              ].includes(event.type),
+            ),
+            [],
+          );
+          assert.deepEqual(
+            await fixture.store.listModelUsage({
+              tenantId: actor().tenantId,
+              runId: fixture.runId,
+              afterOrder: 0,
+              limit: 100,
+            }),
+            [],
+          );
+          assert.deepEqual(
+            await fixture.store.listModelHistoryItems(
+              { tenantId: actor().tenantId, threadId: fixture.threadId },
+              0,
+              100,
+            ),
+            initialHistory,
+          );
+          assert.equal(
+            await fixture.store.loadThreadContinuation({
+              tenantId: actor().tenantId,
+              threadId: fixture.threadId,
+              agentVersionId: ROUTE.agentVersionId,
+              adapterName: transport.adapterName,
+              adapterVersion: transport.adapterVersion,
+              modelId: transport.modelId,
+            }),
+            null,
+          );
+          assert.equal(
+            (await fixture.messages()).some(
+              (message) => message.role === "assistant",
+            ),
+            false,
+          );
+          assert.equal(
+            await fixture.store.claimNextWorkItem({
+              ownerId: "after-post-terminal",
+              leaseId: "after-post-terminal",
+              leaseDurationMs: 1_000,
+            }),
+            null,
+          );
+          assert.deepEqual(await worker.wake(), { kind: "idle" });
+          assert.equal(requestCount, 1);
+          await worker.close();
+        },
+      );
+    }
+  }
+});
+
 test("commits AR-041 unknown-event streams as durable successful Runs", async (context) => {
   const reference = JSON.parse(
     readFileSync(

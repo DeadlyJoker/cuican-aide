@@ -5,7 +5,9 @@
       "name": "failed without error",
       "events": [
         { "type": "response.created", "sequence_number": 0, "response": { "id": "resp-generic-failed" } },
-        { "type": "response.failed", "sequence_number": 1, "response": { "id": "resp-generic-failed", "status": "failed" } },
+        { "type": "response.failed", "sequence_number": 1, "response": { "id": "resp-generic-failed", "status": "failed" } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.output_text.delta", "sequence_number": 2, "delta": "poison" },
         { "type": "response.completed", "sequence_number": 3, "response": { "id": "resp-generic-failed", "status": "completed" } }
       ],
@@ -25,7 +27,9 @@
     {
       "name": "failed with unclassifiable error",
       "events": [
-        { "type": "response.failed", "sequence_number": 0, "response": { "error": null } },
+        { "type": "response.failed", "sequence_number": 0, "response": { "error": null } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
       ],
       "expected": {
@@ -44,7 +48,9 @@
     {
       "name": "failed with unknown provider code",
       "events": [
-        { "type": "response.failed", "sequence_number": 0, "response": { "error": { "code": "provider_failed" } } },
+        { "type": "response.failed", "sequence_number": 0, "response": { "error": { "code": "provider_failed" } } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed" } }
       ],
       "expected": {
@@ -63,7 +69,9 @@
     {
       "name": "failed without response object",
       "events": [
-        { "type": "response.failed", "sequence_number": 0 },
+        { "type": "response.failed", "sequence_number": 0 }
+      ],
+      "postTerminalEvents": [
         { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
       ],
       "expected": {
@@ -83,7 +91,9 @@
       "name": "incomplete without details",
       "events": [
         { "type": "response.created", "sequence_number": 0, "response": { "id": "resp-generic-incomplete" } },
-        { "type": "response.incomplete", "sequence_number": 1, "response": { "id": "resp-generic-incomplete", "status": "incomplete" } },
+        { "type": "response.incomplete", "sequence_number": 1, "response": { "id": "resp-generic-incomplete", "status": "incomplete" } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.completed", "sequence_number": 2, "response": { "id": "resp-generic-incomplete", "status": "completed" } }
       ],
       "expected": {
@@ -102,7 +112,9 @@
     {
       "name": "incomplete with unclassifiable details",
       "events": [
-        { "type": "response.incomplete", "sequence_number": 0, "response": { "incomplete_details": "unknown" } },
+        { "type": "response.incomplete", "sequence_number": 0, "response": { "incomplete_details": "unknown" } }
+      ],
+      "postTerminalEvents": [
         { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" }
       ],
       "expected": {
@@ -121,7 +133,9 @@
     {
       "name": "incomplete without response object",
       "events": [
-        { "type": "response.incomplete", "sequence_number": 0 },
+        { "type": "response.incomplete", "sequence_number": 0 }
+      ],
+      "postTerminalEvents": [
         { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" }
       ],
       "expected": {

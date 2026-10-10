@@ -218,6 +218,7 @@ type TopLevelErrorPayloadFixture = Readonly<{
     Readonly<{
       name: string;
       events: readonly Readonly<Record<string, unknown>>[];
+      postTerminalEvents: readonly Readonly<Record<string, unknown>>[];
       expected: Readonly<{
         stableEvents: readonly string[];
         terminal: "failed";
@@ -243,6 +244,7 @@ type GenericTerminalFixture = Readonly<{
     Readonly<{
       name: string;
       events: readonly Readonly<Record<string, unknown>>[];
+      postTerminalEvents: readonly Readonly<Record<string, unknown>>[];
       expected: Readonly<{
         stableEvents: readonly string[];
         terminal: "failed";
@@ -719,7 +721,6 @@ for (const sequencePolicy of ["required", "whenPresent"] as const) {
       const events = [];
       for (const event of fixtureCase.events) {
         events.push(...decoder.accept(event));
-        if (decoder.terminal) break;
       }
       decoder.finish();
       const failure = events.find((event) => event.type === "failed");
@@ -772,7 +773,6 @@ for (const sequencePolicy of ["required", "whenPresent"] as const) {
       const events = [];
       for (const event of fixtureCase.events) {
         events.push(...decoder.accept(event));
-        if (decoder.terminal) break;
       }
       decoder.finish();
       const failure = events.find((event) => event.type === "failed");
