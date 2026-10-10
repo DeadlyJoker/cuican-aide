@@ -15,6 +15,7 @@ import {
 } from "../thread/threadDetailCache";
 
 import { useStreamingTextState } from "../thread/useStreamingTextState";
+import { usePendingThreadSubmissions } from "../thread/usePendingThreadSubmissions";
 
 export function useAppThreadState() {
   const [showArchivedThreads, setShowArchivedThreads] = useState(false);
@@ -34,6 +35,9 @@ export function useAppThreadState() {
   );
   const threads = useMemo(() => materializeThreads(collection), [collection]);
   const { selectedThreadId, activeTurnByThread } = collection;
+  const selectedThreadIdRef = useRef<string | null>(null);
+  const selectionEpochRef = useRef(0);
+  selectedThreadIdRef.current = selectedThreadId;
   const setThreads: Dispatch<SetStateAction<Thread[]>> = useCallback(
     (update) => {
       dispatch({ type: "threads", update });
@@ -45,6 +49,11 @@ export function useAppThreadState() {
   }, []);
   const setSelectedThreadId: Dispatch<SetStateAction<string | null>> =
     useCallback((update) => {
+      selectedThreadIdRef.current =
+        typeof update === "function"
+          ? update(selectedThreadIdRef.current)
+          : update;
+      selectionEpochRef.current += 1;
       dispatch({ type: "selection", update });
     }, []);
   const setActiveTurnByThread: Dispatch<
@@ -53,19 +62,21 @@ export function useAppThreadState() {
     dispatch({ type: "activeTurns", update });
   }, []);
   const threadsRef = useRef<Thread[]>([]);
-  const selectedThreadIdRef = useRef<string | null>(null);
   const activeTurnByThreadRef = useRef<Record<string, string>>({});
   activeTurnByThreadRef.current = activeTurnByThread;
   const streamingState = useStreamingTextState(selectedThreadId);
+  const pendingSubmissionState = usePendingThreadSubmissions(selectionEpochRef);
 
   return {
     ...streamingState,
+    ...pendingSubmissionState,
     activeTurnByThread,
     activeTurnByThreadRef,
     isSearchingThreads,
     loadedThreadIds,
     selectedThreadId,
     selectedThreadIdRef,
+    selectionEpochRef,
     setActiveTurnByThread,
     setIsSearchingThreads,
     setLoadedThreadIds,

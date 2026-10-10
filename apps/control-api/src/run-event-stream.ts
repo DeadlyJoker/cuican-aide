@@ -42,17 +42,20 @@ export async function streamRunEvents(input: {
   response.flushHeaders();
 
   let closed = false;
+  const streaming = new AbortController();
   const close = () => {
     if (closed) {
       return;
     }
     closed = true;
+    streaming.abort();
     subscription.close();
     if (!response.writableEnded) {
       response.end();
     }
   };
   response.once("close", close);
+  response.once("error", close);
   const heartbeat = startHeartbeat(response, input.heartbeatIntervalMs, close);
 
   try {
@@ -72,7 +75,15 @@ export async function streamRunEvents(input: {
         if (event.sequence <= cursor) {
           continue;
         }
-        if (!writeEvent(response, event, input.view, input.extensions)) {
+        if (
+          !(await writeRunSseEvent({
+            response,
+            event,
+            view: input.view,
+            extensions: input.extensions,
+            signal: streaming.signal,
+          }))
+        ) {
           close();
           break;
         }
@@ -101,7 +112,15 @@ export async function streamRunEvents(input: {
       } else {
         await input.application.getRun(input.actor, input.runId);
       }
-      if (!writeEvent(response, event, input.view, input.extensions)) {
+      if (
+        !(await writeRunSseEvent({
+          response,
+          event,
+          view: input.view,
+          extensions: input.extensions,
+          signal: streaming.signal,
+        }))
+      ) {
         close();
         break;
       }
@@ -118,23 +137,54 @@ export async function streamRunEvents(input: {
       clearInterval(heartbeat);
     }
     response.off("close", close);
+    response.off("error", close);
     close();
   }
 }
 
-function writeEvent(
-  response: ServerResponse,
-  event: RunLifecycleEvent,
-  view: RunEventViewMode,
-  extensions: readonly RunEventExtension[],
-): boolean {
+export async function writeRunSseEvent(input: {
+  response: ServerResponse;
+  event: RunLifecycleEvent;
+  view: RunEventViewMode;
+  extensions: readonly RunEventExtension[];
+  signal: AbortSignal;
+}): Promise<boolean> {
+  const { response, event, view, extensions, signal } = input;
+  if (signal.aborted || response.destroyed || response.writableEnded) {
+    return false;
+  }
   const projected = projectRunEventForView(event, view, extensions);
   if (projected === null) {
     return true;
   }
-  return response.write(
+  const accepted = response.write(
     `id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(projected)}\n\n`,
   );
+  if (accepted) return true;
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (drained: boolean) => {
+      if (settled) return;
+      settled = true;
+      response.off("drain", onDrain);
+      response.off("close", onClose);
+      response.off("error", onError);
+      signal.removeEventListener("abort", onAbort);
+      resolve(drained);
+    };
+    const onDrain = () =>
+      finish(!response.destroyed && !response.writableEnded);
+    const onClose = () => finish(false);
+    const onError = () => finish(false);
+    const onAbort = () => finish(false);
+    response.once("drain", onDrain);
+    response.once("close", onClose);
+    response.once("error", onError);
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted || response.destroyed || response.writableEnded) {
+      finish(false);
+    }
+  });
 }
 
 function startHeartbeat(
@@ -149,7 +199,16 @@ function startHeartbeat(
     throw new Error("heartbeat_interval_invalid");
   }
   const timer = setInterval(() => {
-    if (!response.write(": heartbeat\n\n")) {
+    if (
+      response.destroyed ||
+      response.writableEnded ||
+      response.writableNeedDrain
+    ) {
+      return;
+    }
+    try {
+      response.write(": heartbeat\n\n");
+    } catch {
       close();
     }
   }, intervalMs);

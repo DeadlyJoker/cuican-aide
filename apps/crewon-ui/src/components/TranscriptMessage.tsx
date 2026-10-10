@@ -14,6 +14,7 @@ import type { Turn } from "@crewon/app-server-protocol/v2/Turn";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
 
 import type { Locale } from "../lib/i18n";
+import { threadFailurePresentation } from "../lib/thread/threadFailurePresentation";
 import { itemPreview, userInputToText } from "../lib/shared/text";
 import { renderMarkdown } from "./TranscriptMarkdown";
 import { EditableMessageContent } from "./messages/MessageInlineEditor";
@@ -434,11 +435,10 @@ export function TranscriptFailureMessage({
   error: Turn["error"];
   locale: Locale;
 }) {
-  const message =
-    error?.message ||
-    (locale === "zh"
-      ? "模型连接失败，当前任务没有完成。"
-      : "Model connection failed, so this turn did not complete.");
+  const { title, message, diagnostic } = threadFailurePresentation(
+    error,
+    locale,
+  );
   const details = error?.additionalDetails ?? null;
 
   return (
@@ -457,10 +457,20 @@ export function TranscriptFailureMessage({
         >
           <span className="process-card-status">
             <AlertTriangle size={14} aria-hidden="true" />
-            {locale === "zh" ? "模型连接失败" : "Model connection failed"}
+            {title}
           </span>
           <p>{message}</p>
-          {details ? <code>{details}</code> : null}
+          {diagnostic ? (
+            <details>
+              <summary>
+                {locale === "zh" ? "错误详情" : "Error details"}
+              </summary>
+              <code>{diagnostic}</code>
+              {details ? <code>{details}</code> : null}
+            </details>
+          ) : details ? (
+            <code>{details}</code>
+          ) : null}
         </div>
       </div>
     </article>

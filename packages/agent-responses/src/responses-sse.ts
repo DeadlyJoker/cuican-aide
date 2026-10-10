@@ -11,6 +11,11 @@ export async function* parseResponsesSse(
   options: {
     maxEventBytes?: number;
     onActivity?: () => void;
+    signal?: AbortSignal;
+    /** Drain the received chunk, then stop future reads after a trusted protocol terminal. */
+    stopAfterBufferedFrames?: () => boolean;
+    /** Release HTTP ownership without waiting for an untrusted cancellation promise. */
+    onReadClosed?: (state: Readonly<{ endOfBody: boolean }>) => void;
   } = {},
 ): AsyncIterable<ResponsesSseItem> {
   const maxEventBytes = positiveInteger(
@@ -18,6 +23,19 @@ export async function* parseResponsesSse(
     "responses_event_limit_invalid",
   );
   const reader = body.getReader();
+  const readLifetime = { endOfBody: false, cancelRequested: false };
+  void reader.closed.then(
+    () => {
+      if (!readLifetime.cancelRequested) readLifetime.endOfBody = true;
+    },
+    () => {},
+  );
+  const cancelRead = () => {
+    readLifetime.cancelRequested = true;
+    void reader.cancel().catch(() => {});
+  };
+  options.signal?.addEventListener("abort", cancelRead, { once: true });
+  if (options.signal?.aborted) cancelRead();
   const decoder = new TextDecoder("utf-8", { fatal: true });
   let buffer = "";
   try {
@@ -37,6 +55,7 @@ export async function* parseResponsesSse(
         });
       }
       if (result.done) {
+        if (!readLifetime.cancelRequested) readLifetime.endOfBody = true;
         break;
       }
       options.onActivity?.();
@@ -54,6 +73,15 @@ export async function* parseResponsesSse(
         }
       }
       assertBounded(buffer, maxEventBytes);
+      if (options.stopAfterBufferedFrames?.() === true) {
+        buffer += decoder.decode();
+        // [DONE] is an optional trailer. Its received prefix cannot delay a trusted terminal.
+        if (buffer.trim().length > 0 && !isOptionalDonePrefix(buffer)) {
+          const parsed = parseFrame(buffer, maxEventBytes);
+          if (parsed !== null) yield parsed;
+        }
+        return;
+      }
     }
     buffer += decoder.decode();
     if (buffer.trim().length > 0) {
@@ -68,13 +96,30 @@ export async function* parseResponsesSse(
     }
     throw protocolError("responses_stream_decode_failed", error);
   } finally {
+    options.signal?.removeEventListener("abort", cancelRead);
+    options.onReadClosed?.({ endOfBody: readLifetime.endOfBody });
     try {
-      await reader.cancel();
+      // Cancel makes the read side closed immediately. An upstream tee or custom cancel
+      // promise can remain pending forever and cannot own delivery of a trusted terminal.
+      void reader.cancel().catch(() => {});
     } catch {
       // The fetch signal may already have errored the stream.
     }
     reader.releaseLock();
   }
+}
+
+function isOptionalDonePrefix(frame: string): boolean {
+  const lines = frame
+    .split(/\r\n|\r|\n/)
+    .filter((line) => line.length > 0 && !line.startsWith(":"));
+  if (lines.length !== 1) return false;
+  const prefix = /^data: ?(.*)$/u.exec(lines[0]!)?.[1];
+  return (
+    prefix !== undefined &&
+    prefix.startsWith("[") &&
+    "[DONE]".startsWith(prefix)
+  );
 }
 
 function parseFrame(

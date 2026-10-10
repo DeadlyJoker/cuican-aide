@@ -188,3 +188,51 @@ export function CommandThreadRoom({
     </MessageReplayScope>
   );
 }
+
+/** A conversation surface before a real thread exists; it cannot dispatch tools. */
+export function PendingCommandThreadRoom({
+  locale,
+  workMode,
+  onModeChange,
+  variant = "default",
+}: {
+  locale: Locale;
+  workMode: WorkMode;
+  onModeChange: (mode: WorkMode) => void;
+  variant?: "assistant" | "default";
+}) {
+  const labels = transcriptLabels(locale);
+  return (
+    <>
+      {variant === "default" ? (
+        <header
+          className="home-title thread-home-title"
+          data-od-id="desktop-command-header"
+        >
+          <p>{locale === "zh" ? "Agent 对话" : "Agent conversation"}</p>
+          <h1>
+            <span>{locale === "zh" ? "新建对话" : "New conversation"}</span>
+          </h1>
+        </header>
+      ) : null}
+      <section
+        className={
+          variant === "assistant"
+            ? "command-thread-room assistant-thread-room"
+            : "command-thread-room"
+        }
+        data-od-id="command-thread-room"
+      >
+        <Transcript
+          {...labels}
+          locale={locale}
+          mode={workMode}
+          onModeChange={onModeChange}
+          onStop={() => {}}
+          streamingText=""
+          thread={null}
+        />
+      </section>
+    </>
+  );
+}

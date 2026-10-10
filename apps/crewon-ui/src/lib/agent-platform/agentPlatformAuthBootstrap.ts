@@ -5,7 +5,7 @@ export const AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE =
 /**
  * A remote account probe must never hold the whole desktop shell hostage.
  * Bootstrap only observes account readiness, so the UI can stop waiting and
- * expose the login/retry surface without changing any PIM resource.
+ * expose an honest restoration status without changing any PIM resource.
  */
 export async function withAgentPlatformAuthBootstrapDeadline<T>(
   pending: Promise<T>,
@@ -27,4 +27,16 @@ export async function withAgentPlatformAuthBootstrapDeadline<T>(
   } finally {
     clearTimeout(timer);
   }
+}
+
+export function isAgentPlatformAuthTransientError(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error &&
+      (error.name === "TimeoutError" ||
+        error.message === AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE ||
+        /^desktop_http_(?:transport_failed|response_timeout)$/u.test(
+          error.message,
+        )))
+  );
 }

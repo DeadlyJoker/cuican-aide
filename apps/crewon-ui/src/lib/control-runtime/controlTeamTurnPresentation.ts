@@ -13,6 +13,7 @@ export async function startPresentedControlTeamTurn(
   input: StartControlTeamTurnInput,
   presentation: {
     client: ControlApiClient;
+    clientSubmissionId?: string;
     eventStream: ControlRunEventStream;
     signal: AbortSignal;
     visibleContent: string;

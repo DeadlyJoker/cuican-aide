@@ -15,6 +15,9 @@ import {
   type AgentPlatformSessionSnapshot,
 } from "./agentPlatformClient";
 import { isPimLaunchSession } from "./pimLaunchBridge";
+import { waitForAgentPlatformRequest } from "./agentPlatformRequestWait";
+import { isAgentPlatformAuthTransientError } from "./agentPlatformAuthBootstrap";
+import { readAgentPlatformResponseBody } from "./agentPlatformResponseBody";
 
 export type AgentPlatformUser = {
   id: number;
@@ -44,21 +47,61 @@ export type WeComLoginConfig = {
 
 const AUTH_UNAVAILABLE_MESSAGE = "账号服务暂时不可用，请稍后重试。";
 const AUTH_TRANSIENT_RETRY_DELAY_MS = 250;
-const AUTH_TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const AUTH_LOGIN_TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const AUTH_READ_TIMEOUT_MS = 10_000;
+
+function isTransientAuthStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+export type AgentPlatformAccountReadOptions = Readonly<{
+  signal?: AbortSignal;
+}>;
+
+async function accountRead<T>(
+  options: AgentPlatformAccountReadOptions,
+  read: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () =>
+      deadline.abort(
+        new DOMException(AUTH_UNAVAILABLE_MESSAGE, "TimeoutError"),
+      ),
+    AUTH_READ_TIMEOUT_MS,
+  );
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, deadline.signal])
+    : deadline.signal;
+  try {
+    signal.throwIfAborted();
+    const value = await read(signal);
+    signal.throwIfAborted();
+    return value;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 async function responseError(
   response: Response,
   fallback: string,
   session: AgentPlatformSessionSnapshot,
+  signal?: AbortSignal,
 ): Promise<Error> {
-  await assertResponseSessionCurrent(response, session);
-  if (AUTH_TRANSIENT_STATUSES.has(response.status)) {
+  await assertResponseSessionCurrent(response, session, signal);
+  if (isTransientAuthStatus(response.status)) {
     await response.body?.cancel().catch(() => {});
     assertAgentPlatformSessionCurrent(session);
     return new Error(AUTH_UNAVAILABLE_MESSAGE);
   }
   try {
-    const body = (await response.json()) as {
+    const body = (await (signal
+      ? readAgentPlatformResponseBody(
+          response,
+          AbortSignal.any([session.signal, signal]),
+        )
+      : response.json())) as {
       detail?: string | Array<{ msg?: string }>;
       message?: string;
     };
@@ -71,6 +114,7 @@ async function responseError(
     return new Error(detail || body.message || fallback);
   } catch {
     assertAgentPlatformSessionCurrent(session);
+    signal?.throwIfAborted();
     return new Error(fallback);
   }
 }
@@ -105,10 +149,17 @@ async function sessionFetch(
 async function sessionBody<T>(
   response: Response,
   session: AgentPlatformSessionSnapshot,
+  signal?: AbortSignal,
 ): Promise<T> {
-  await assertResponseSessionCurrent(response, session);
+  await assertResponseSessionCurrent(response, session, signal);
   try {
-    const value = (await response.json()) as T;
+    const value = (await (signal
+      ? readAgentPlatformResponseBody(
+          response,
+          AbortSignal.any([session.signal, signal]),
+        )
+      : response.json())) as T;
+    signal?.throwIfAborted();
     assertAgentPlatformSessionCurrent(session);
     return value;
   } catch (error) {
@@ -120,8 +171,10 @@ async function sessionBody<T>(
 async function assertResponseSessionCurrent(
   response: Response,
   session: AgentPlatformSessionSnapshot,
+  signal?: AbortSignal,
 ): Promise<void> {
   try {
+    signal?.throwIfAborted();
     assertAgentPlatformSessionCurrent(session);
   } catch (error) {
     await response.body?.cancel().catch(() => {});
@@ -129,18 +182,26 @@ async function assertResponseSessionCurrent(
   }
 }
 
-async function loginRetryDelay(session: AgentPlatformSessionSnapshot) {
+async function loginRetryDelay(
+  session: AgentPlatformSessionSnapshot,
+  callerSignal?: AbortSignal,
+) {
+  const signal = callerSignal
+    ? AbortSignal.any([session.signal, callerSignal])
+    : session.signal;
+  signal.throwIfAborted();
   assertAgentPlatformSessionCurrent(session);
   await new Promise<void>((resolve, reject) => {
     const abort = () => {
       clearTimeout(timer);
-      reject(session.signal.reason);
+      signal.removeEventListener("abort", abort);
+      reject(signal.reason);
     };
     const timer = setTimeout(() => {
-      session.signal.removeEventListener("abort", abort);
+      signal.removeEventListener("abort", abort);
       resolve();
     }, AUTH_TRANSIENT_RETRY_DELAY_MS);
-    session.signal.addEventListener("abort", abort, { once: true });
+    signal.addEventListener("abort", abort, { once: true });
   });
   assertAgentPlatformSessionCurrent(session);
 }
@@ -161,7 +222,10 @@ async function loginRequest(
         },
         session,
       );
-      if (!AUTH_TRANSIENT_STATUSES.has(response.status) || attempt === 1) {
+      if (
+        !AUTH_LOGIN_TRANSIENT_STATUSES.has(response.status) ||
+        attempt === 1
+      ) {
         return response;
       }
       await response.body?.cancel();
@@ -177,30 +241,31 @@ async function loginRequest(
   throw new Error(AUTH_UNAVAILABLE_MESSAGE);
 }
 
-export async function readAgentPlatformCurrentUser(): Promise<AgentPlatformUser | null> {
-  const session = captureAgentPlatformSession();
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      return await readAgentPlatformCurrentUserOnce();
-    } catch (error) {
-      assertAgentPlatformSessionCurrent(session);
-      const transient =
-        error instanceof TypeError ||
-        (error instanceof Error &&
-          (error.name === "TimeoutError" ||
-            error.message === AUTH_UNAVAILABLE_MESSAGE ||
-            /^desktop_http_(?:transport_failed|response_timeout)$/u.test(
-              error.message,
-            )));
-      if (!transient || attempt >= 2) throw error;
-      // Only retry this authenticated read. Account changes withdraw the wait;
-      // unauthorized responses still follow the established refresh/logout path.
-      await loginRetryDelay(session);
+export function readAgentPlatformCurrentUser(
+  options: AgentPlatformAccountReadOptions = {},
+): Promise<AgentPlatformUser | null> {
+  return accountRead(options, async (signal) => {
+    const session = captureAgentPlatformSession();
+    for (let attempt = 0; ; attempt += 1) {
+      signal.throwIfAborted();
+      try {
+        return await readAgentPlatformCurrentUserOnce(signal);
+      } catch (error) {
+        signal.throwIfAborted();
+        assertAgentPlatformSessionCurrent(session);
+        if (!isAgentPlatformAuthTransientError(error) || attempt >= 2)
+          throw error;
+        // This authenticated read retries within one physical lifetime. It cannot
+        // turn a network failure into logout or outlive a withdrawn consumer.
+        await loginRetryDelay(session, signal);
+      }
     }
-  }
+  });
 }
 
-async function readAgentPlatformCurrentUserOnce(): Promise<AgentPlatformUser | null> {
+async function readAgentPlatformCurrentUserOnce(
+  signal: AbortSignal,
+): Promise<AgentPlatformUser | null> {
   // When launched from PIM, the launch token IS the credential — don't
   // require a locally stored access token.
   if (
@@ -212,7 +277,11 @@ async function readAgentPlatformCurrentUserOnce(): Promise<AgentPlatformUser | n
     return null;
   }
   if (!isPimLaunchSession() && crewonUnifiedSsoEnabled()) {
-    const access = await getAgentPlatformAccessSession();
+    const access = await waitForAgentPlatformRequest({
+      pending: getAgentPlatformAccessSession(),
+      signal,
+    });
+    signal.throwIfAborted();
     assertAgentPlatformSessionCurrent(access.session);
     if (!access.accessToken) return null;
     const snapshot = getAgentPlatformBffUserSnapshot();
@@ -228,8 +297,9 @@ async function readAgentPlatformCurrentUserOnce(): Promise<AgentPlatformUser | n
   }
   const { response, session } = await agentPlatformAuthorizedSessionFetch({
     path: "/api/v1/auth/me",
+    init: { signal },
   });
-  assertAgentPlatformSessionCurrent(session);
+  await assertResponseSessionCurrent(response, session, signal);
   if (response.status === 401) {
     await response.body?.cancel().catch(() => {});
     assertAgentPlatformSessionCurrent(session);
@@ -237,11 +307,17 @@ async function readAgentPlatformCurrentUserOnce(): Promise<AgentPlatformUser | n
     return null;
   }
   if (!response.ok) {
-    const error = await responseError(response, "无法读取账号信息", session);
+    const error = await responseError(
+      response,
+      "无法读取账号信息",
+      session,
+      signal,
+    );
     assertAgentPlatformSessionCurrent(session);
     throw error;
   }
-  const user = await sessionBody<AgentPlatformUser>(response, session);
+  const user = await sessionBody<AgentPlatformUser>(response, session, signal);
+  signal.throwIfAborted();
   assertAgentPlatformSessionCurrent(session);
   return user;
 }
@@ -318,35 +394,45 @@ export async function registerAgentPlatform(input: {
   return registration;
 }
 
-export async function readWeComLoginConfig(): Promise<WeComLoginConfig> {
-  const session = captureAgentPlatformSession();
-  const response = await sessionFetch("/api/v1/auth/wecom/config", {}, session);
-  if (!response.ok) {
-    await response.body?.cancel().catch(() => {});
+export function readWeComLoginConfig(
+  options: AgentPlatformAccountReadOptions = {},
+): Promise<WeComLoginConfig> {
+  return accountRead(options, async (signal) => {
+    const session = captureAgentPlatformSession();
+    const response = await sessionFetch(
+      "/api/v1/auth/wecom/config",
+      { signal },
+      session,
+    );
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      assertAgentPlatformSessionCurrent(session);
+      return {
+        enabled: false,
+        provider: "wecom",
+        label: "企业微信",
+        reason: "企业微信登录服务不可用",
+      };
+    }
+    const config = await sessionBody<Partial<WeComLoginConfig> | null>(
+      response,
+      session,
+      signal,
+    );
     assertAgentPlatformSessionCurrent(session);
+    signal.throwIfAborted();
+    const enabled = config?.enabled === true && config.provider === "wecom";
     return {
-      enabled: false,
+      enabled,
       provider: "wecom",
-      label: "企业微信",
-      reason: "企业微信登录服务不可用",
+      label: crewonUnifiedSsoEnabled() ? "企业统一登录" : "企业微信",
+      reason: enabled
+        ? undefined
+        : typeof config?.reason === "string"
+          ? config.reason
+          : "企业微信登录服务不可用",
     };
-  }
-  const config = await sessionBody<Partial<WeComLoginConfig> | null>(
-    response,
-    session,
-  );
-  assertAgentPlatformSessionCurrent(session);
-  const enabled = config?.enabled === true && config.provider === "wecom";
-  return {
-    enabled,
-    provider: "wecom",
-    label: crewonUnifiedSsoEnabled() ? "企业统一登录" : "企业微信",
-    reason: enabled
-      ? undefined
-      : typeof config?.reason === "string"
-        ? config.reason
-        : "企业微信登录服务不可用",
-  };
+  });
 }
 
 export async function beginWeComLogin(): Promise<string> {

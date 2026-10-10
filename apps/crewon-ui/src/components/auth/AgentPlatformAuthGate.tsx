@@ -30,27 +30,29 @@ import {
   type AgentPlatformUser,
   type WeComLoginConfig,
 } from "../../lib/agent-platform/agentPlatformSession";
+import { isAgentPlatformAuthTransientError } from "../../lib/agent-platform/agentPlatformAuthBootstrap";
 import {
-  AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE,
-  withAgentPlatformAuthBootstrapDeadline,
-} from "../../lib/agent-platform/agentPlatformAuthBootstrap";
-import {
-  assertAgentPlatformSessionCurrent,
+  crewonUnifiedSsoEnabled,
   captureAgentPlatformSession,
+  assertAgentPlatformSessionCurrent,
+  type AgentPlatformSessionSnapshot,
   AGENT_PLATFORM_TOKEN_STORAGE_KEY,
   AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
 } from "../../lib/agent-platform/agentPlatformClient";
 import {
   clearPimLaunchToken,
-  getPimLaunchToken,
   isPimLaunchSession,
-  setPimLaunchToken,
 } from "../../lib/agent-platform/pimLaunchBridge";
 import {
   DesktopLocalManagementAccessProvider,
   useNativeLocalManagementAccess,
 } from "../../lib/desktop/DesktopLocalManagementContext";
 import { isDesktopLocalManagementAccess } from "../../lib/desktop/desktopLocalManagementAccess";
+
+import {
+  AgentPlatformAccountRestoration,
+  type AgentPlatformAccountState,
+} from "../../lib/agent-platform/agentPlatformAccountRestoration";
 
 type AuthMode = "login" | "register";
 
@@ -316,14 +318,77 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     useState(false);
   const [localManagementRequested, setLocalManagementRequested] =
     useState(false);
-  const [accountRetry, setAccountRetry] = useState(0);
-  const accountReadEpoch = useRef(0);
+  const restorationRef = useRef<AgentPlatformAccountRestoration | null>(null);
+  if (!restorationRef.current) {
+    restorationRef.current = new AgentPlatformAccountRestoration({
+      read: (signal) => readAgentPlatformCurrentUser({ signal }),
+      hasCredentials: () =>
+        hasStoredAccountSession() ||
+        isPimLaunchSession() ||
+        crewonUnifiedSsoEnabled(),
+      isTransient: isAgentPlatformAuthTransientError,
+      events: window,
+    });
+  }
+  const restoration = restorationRef.current;
+  const interactionEpoch = useRef(0);
+  const actionCurrent = (
+    epoch: number,
+    session?: AgentPlatformSessionSnapshot,
+  ) => {
+    if (interactionEpoch.current !== epoch) return false;
+    if (session) {
+      try {
+        assertAgentPlatformSessionCurrent(session);
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  };
+  const recoverAccountAction = (reason: unknown) => {
+    // A late failed account action has no authority over a newly verified user.
+    if (restoration.state.status === "authenticated") return;
+    if (
+      hasStoredAccountSession() ||
+      isPimLaunchSession() ||
+      crewonUnifiedSsoEnabled() ||
+      (reason instanceof Error &&
+        reason.message === "agent_platform_session_changed")
+    ) {
+      setError(null);
+      restoration.resume();
+      return;
+    }
+    restoration.accept(null);
+    setError(reason instanceof Error ? reason.message : "请求失败，请稍后重试");
+  };
+  const callbackOperation = useRef<{
+    ticket: string;
+    pending: Promise<AgentPlatformUser>;
+  } | null>(null);
+  const [accountState, setAccountState] = useState<AgentPlatformAccountState>(
+    restoration.state,
+  );
+  const user =
+    accountState.status === "authenticated" ? accountState.user : null;
+  const checking = accountState.status === "restoring";
+  const setUser = (
+    next:
+      | AgentPlatformUser
+      | null
+      | ((current: AgentPlatformUser | null) => AgentPlatformUser | null),
+  ) => {
+    const current =
+      restoration.state.status === "authenticated"
+        ? restoration.state.user
+        : null;
+    restoration.accept(typeof next === "function" ? next(current) : next);
+  };
   const storedAccountSession = hasStoredAccountSession();
   const hadStoredAccountSession = useRef(storedAccountSession).current;
-  const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<AuthMode>("login");
-  const [user, setUser] = useState<AgentPlatformUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -336,115 +401,89 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    const readEpoch = ++accountReadEpoch.current;
-    async function initializeAccount() {
-      const configPromise = withAgentPlatformAuthBootstrapDeadline(
-        readWeComLoginConfig(),
-      ).catch(
-        (): WeComLoginConfig => ({
-          enabled: false,
-          provider: "wecom",
-          label: "企业微信",
-          reason: "企业微信登录服务不可用",
-        }),
-      );
-      try {
-        const params = new URLSearchParams(window.location.search);
-
-        // --- PIM launch token path ---
-        // When the user enters from a PIM showcase page, the launch token
-        // anchors the session. Use it to fetch the current user and skip
-        // the login screen entirely.
-        if (isPimLaunchSession()) {
-          const session = captureAgentPlatformSession();
-          try {
-            const currentUser = await withAgentPlatformAuthBootstrapDeadline(
-              readAgentPlatformCurrentUser(),
-            );
-            assertAgentPlatformSessionCurrent(session);
-            if (!cancelled) setUser(currentUser);
-          } catch {
+    const configController = new AbortController();
+    const unsubscribe = restoration.subscribe((state) => {
+      setAccountState(state);
+      if (state.status === "authenticated") {
+        setBusy(false);
+        setError(null);
+      }
+      if (state.status === "restoring") {
+        setPasswordDialogOpen(false);
+        setPasswordError(null);
+      }
+    });
+    const configSession = captureAgentPlatformSession();
+    void Promise.resolve()
+      .then(() => {
+        configController.signal.throwIfAborted();
+        return readWeComLoginConfig({ signal: configController.signal });
+      })
+      .then(
+        (config) => {
+          if (!cancelled) {
             try {
-              assertAgentPlatformSessionCurrent(session);
+              assertAgentPlatformSessionCurrent(configSession);
             } catch {
               return;
             }
-            // Token is invalid or expired — clear it and let the user
-            // re-enter from PIM.
-            if (!cancelled) {
-              clearPimLaunchToken();
-              setError("演示访问会话已过期，请从 PIM 样例展示页重新进入。");
-            }
-          } finally {
-            if (!cancelled) setChecking(false);
+            setWeComConfig(config);
           }
-          return;
-        }
+        },
+        () => undefined,
+      );
 
-        const ssoError = params.get("sso_error");
-        if (ssoError) {
-          setError(
-            ssoError === "access_denied"
-              ? "企业账号暂时无法进入 CrewON，请重试；如仍失败请联系管理员。"
-              : ssoError === "temporarily_unavailable"
-                ? "企业登录服务暂时不可用，请稍后重试。"
-                : "企业登录未完成，请重新扫码登录。",
-          );
-          clearWeComCallbackParams(params);
-          return;
-        }
-        const ticket = params.get("wecom_ticket");
-        if (ticket) {
-          try {
-            const currentUser = await completeWeComLogin(ticket);
-            if (!cancelled) setUser(currentUser);
-          } finally {
-            clearWeComCallbackParams(params);
-          }
-          return;
-        }
-        // A slow, authenticated reply remains usable after the shell deadline.
-        // The session reader fences changed accounts; explicit UI account actions
-        // additionally withdraw this bootstrap consumer before changing credentials.
-        const pendingUser = readAgentPlatformCurrentUser();
-        void pendingUser.then(
-          (currentUser) => {
-            if (!cancelled && accountReadEpoch.current === readEpoch) {
-              setUser(currentUser);
-              setError(null);
-            }
-          },
-          () => undefined,
+    const params = new URLSearchParams(window.location.search);
+    const ssoError = params.get("sso_error");
+    const ticket = params.get("wecom_ticket");
+    if (ssoError || ticket) {
+      restoration.suspend();
+      if (ssoError) {
+        restoration.accept(
+          null,
+          ssoError === "access_denied"
+            ? "企业账号暂时无法进入 CrewON，请重试；如仍失败请联系管理员。"
+            : ssoError === "temporarily_unavailable"
+              ? "企业登录服务暂时不可用，请稍后重试。"
+              : "企业登录未完成，请重新扫码登录。",
         );
-        const currentUser =
-          await withAgentPlatformAuthBootstrapDeadline(pendingUser);
-        if (!cancelled && accountReadEpoch.current === readEpoch)
-          setUser(currentUser);
-      } catch (reason) {
-        if (!cancelled) {
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE,
-          );
+        clearWeComCallbackParams(params);
+      } else if (ticket) {
+        if (callbackOperation.current?.ticket !== ticket) {
+          callbackOperation.current = {
+            ticket,
+            pending: completeWeComLogin(ticket),
+          };
         }
-      } finally {
-        const config = await configPromise;
-        if (!cancelled) {
-          setWeComConfig(config);
-          setChecking(false);
-        }
+        const callbackEpoch = interactionEpoch.current;
+        void callbackOperation.current.pending
+          .then(
+            (currentUser) => {
+              if (!cancelled && actionCurrent(callbackEpoch))
+                restoration.accept(currentUser);
+            },
+            (reason) => {
+              if (!cancelled && actionCurrent(callbackEpoch))
+                recoverAccountAction(reason);
+            },
+          )
+          .finally(() => {
+            if (!cancelled) clearWeComCallbackParams(params);
+          });
       }
     }
-    void initializeAccount();
     return () => {
       cancelled = true;
+      ++interactionEpoch.current;
+      configController.abort();
+      unsubscribe();
     };
-  }, [accountRetry]);
+  }, [restoration]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    ++accountReadEpoch.current;
+    const actionEpoch = ++interactionEpoch.current;
+    restoration.suspend();
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -453,7 +492,8 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     const password = String(data.get("password") ?? "");
     try {
       if (mode === "login") {
-        setUser(await loginAgentPlatform(username, password));
+        const currentUser = await loginAgentPlatform(username, password);
+        if (actionCurrent(actionEpoch)) setUser(currentUser);
         return;
       }
       const confirmPassword = String(data.get("confirmPassword") ?? "");
@@ -465,30 +505,38 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         email: String(data.get("email") ?? "").trim(),
         password,
       });
+      if (!actionCurrent(actionEpoch)) return;
       if (registration.access_token) {
-        setUser(await readAgentPlatformCurrentUser());
+        const currentUser = await readAgentPlatformCurrentUser();
+        if (actionCurrent(actionEpoch)) setUser(currentUser);
       } else {
+        restoration.accept(null);
         setMode("login");
         setNotice("注册申请已提交，请完成邮箱验证或等待管理员审批后登录。");
       }
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "请求失败，请稍后重试",
-      );
+      if (actionCurrent(actionEpoch)) recoverAccountAction(reason);
     } finally {
-      setBusy(false);
+      if (actionCurrent(actionEpoch)) setBusy(false);
     }
   }
 
   async function loginWithWeCom() {
-    ++accountReadEpoch.current;
+    const actionEpoch = ++interactionEpoch.current;
+    const actionSession = captureAgentPlatformSession();
+    restoration.suspend();
     setBusy(true);
     setError(null);
     try {
-      window.location.assign(await beginWeComLogin());
+      const loginUrl = await beginWeComLogin();
+      if (actionCurrent(actionEpoch, actionSession))
+        window.location.assign(loginUrl);
+      else if (actionCurrent(actionEpoch)) restoration.resume();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "企业微信登录失败");
-      setBusy(false);
+      if (actionCurrent(actionEpoch)) {
+        recoverAccountAction(reason);
+        setBusy(false);
+      }
     }
   }
 
@@ -497,20 +545,24 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
       setPasswordError("两次输入的密码不一致");
       return;
     }
+    const actionEpoch = ++interactionEpoch.current;
+    const actionSession = captureAgentPlatformSession();
     setBusy(true);
     setPasswordError(null);
     try {
       await setAgentPlatformPassword(password);
+      if (!actionCurrent(actionEpoch, actionSession)) return;
       setUser((current) =>
         current ? { ...current, password_login_enabled: true } : current,
       );
       setPasswordDialogOpen(false);
     } catch (reason) {
-      setPasswordError(
-        reason instanceof Error ? reason.message : "设置登录密码失败",
-      );
+      if (actionCurrent(actionEpoch, actionSession))
+        setPasswordError(
+          reason instanceof Error ? reason.message : "设置登录密码失败",
+        );
     } finally {
-      setBusy(false);
+      if (actionCurrent(actionEpoch, actionSession)) setBusy(false);
     }
   }
 
@@ -539,10 +591,18 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
 
   if (checking) {
     return (
-      <div className="crewon-auth-checking">
+      <div
+        className="crewon-auth-checking"
+        role="status"
+        data-account-state="restoring"
+      >
         <span className="crewon-auth-brand-mark">C</span>
         <LoaderCircle className="spin" aria-hidden="true" />
-        <p>正在连接企业账号与资源目录…</p>
+        <p>
+          {accountState.status === "restoring" && accountState.unavailable
+            ? "账号连接暂不可用，正在自动重连…"
+            : "正在恢复登录状态…"}
+        </p>
       </div>
     );
   }
@@ -551,7 +611,10 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
     return (
       <AgentPlatformAuthScreen
         busy={busy}
-        error={error}
+        error={
+          error ??
+          (accountState.status === "anonymous" ? accountState.error : null)
+        }
         mode={mode}
         notice={notice}
         onModeChange={(nextMode) => {
@@ -561,16 +624,6 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         }}
         onSubmit={submit}
         onWeComLogin={() => void loginWithWeCom()}
-        onRetryAccount={
-          storedAccountSession
-            ? () => {
-                setChecking(true);
-                setError(null);
-                setLocalManagementRequested(false);
-                setAccountRetry((value) => value + 1);
-              }
-            : undefined
-        }
         onReturnToLocalManagement={
           localManagementAccess
             ? () => {
@@ -589,19 +642,20 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   const wecomLinked = user.linked_providers?.includes("wecom") ?? false;
   const needsPassword = user.password_login_enabled === false;
   const logout = () => {
-    ++accountReadEpoch.current;
+    const actionEpoch = ++interactionEpoch.current;
+    restoration.suspend();
     setBusy(true);
-    // When in a PIM launch session, clearing the token is sufficient —
-    // there is no server-side session to destroy.
-    if (isPimLaunchSession()) {
-      clearPimLaunchToken();
-      setUser(null);
-      setBusy(false);
-      return;
-    }
-    void logoutAgentPlatform()
+    setUser(null);
+    // The account function withdraws credentials synchronously. Capture its
+    // resulting session so a later account B supersedes this logout's cleanup.
+    const pendingLogout = isPimLaunchSession()
+      ? Promise.resolve(clearPimLaunchToken())
+      : logoutAgentPlatform();
+    const actionSession = captureAgentPlatformSession();
+    void pendingLogout
       .catch(() => undefined)
       .finally(() => {
+        if (!actionCurrent(actionEpoch, actionSession)) return;
         setUser(null);
         setBusy(false);
       });

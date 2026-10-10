@@ -114,7 +114,7 @@ describe("initial PIM account consumer generation", () => {
 
   for (const result of ["success", "error"] as const) {
     it(`a late account-A ${result} body cannot publish A or clear the replacement PIM token`, async () => {
-      const late = delayedResponse(result === "success" ? 200 : 500);
+      const late = delayedResponse(result === "success" ? 200 : 400);
       let requestSignal: AbortSignal | null | undefined;
       const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
         const path = new URL(

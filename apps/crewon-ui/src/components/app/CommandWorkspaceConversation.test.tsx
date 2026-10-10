@@ -9,6 +9,10 @@ import {
 } from "../../lib/thread/threadStreamingTextBuffer";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 import { createDemoTurn, createDraftDemoThread } from "../../lib/demo/demoData";
+import {
+  presentControlRunTerminal,
+  clearControlRunSynchronization,
+} from "../../lib/control-runtime/controlRunTerminalPresentation";
 
 function manualFrameScheduler() {
   const callbacks = new Map<number, () => void>();
@@ -38,6 +42,108 @@ function manualFrameScheduler() {
 }
 
 describe("CommandThreadRoom", () => {
+  it("stops thinking on a trusted terminal receipt while retaining output and blocking replay until canonical sync", () => {
+    const thread = createDraftDemoThread({
+      locale: "zh",
+      newDraftPreview: "",
+      newDraftThread: "即时完成",
+    });
+    thread.turns = [
+      createDemoTurn({
+        text: "写一个故事",
+        responseText: "",
+        nowMs: Date.parse("2026-10-10T00:00:00Z"),
+      }),
+    ];
+    thread.turns[0]!.status = "inProgress";
+    const completed = presentControlRunTerminal(thread, thread.turns[0]!.id, {
+      status: "completed",
+      lastSequence: 2,
+      terminalAt: "2026-10-10T00:00:03Z",
+      draftPreview: {
+        localId: "pending-reply:original-run",
+        text: "已收到的真实输出",
+        partial: false,
+      },
+    });
+    const room = (selectedThread: Thread) =>
+      renderToStaticMarkup(
+        <CommandThreadRoom
+          activeTurnId={null}
+          cwd=""
+          locale="zh"
+          selectedThread={selectedThread}
+          streamingText="已收到的真实输出"
+          workMode="office"
+          onModeChange={() => {}}
+          onReplayMessage={async () => {}}
+        />,
+      );
+    const pending = room(completed);
+    expect(pending).toContain("已收到的真实输出");
+    expect(pending.match(/已收到的真实输出/g)).toHaveLength(1);
+    expect(pending).toContain('aria-busy="false"');
+    expect(pending).not.toContain("正在思考");
+    expect(pending).not.toContain("Agent 正在执行");
+    expect(
+      pending.match(/<button[^>]*aria-label="编辑消息"[^>]*>/)?.[0],
+    ).toContain('disabled=""');
+    expect(pending).toMatchSnapshot();
+    const synced = room(
+      clearControlRunSynchronization(completed, thread.turns[0]!.id),
+    );
+    expect(
+      synced.match(/<button[^>]*aria-label="编辑消息"[^>]*>/)?.[0],
+    ).not.toContain('disabled=""');
+  });
+
+  it("retains an unsynchronized terminal reply when the next Run owns the live stream", () => {
+    const value = createDraftDemoThread({
+      locale: "zh",
+      newDraftPreview: "",
+      newDraftThread: "连续对话",
+    });
+    value.turns = [
+      createDemoTurn({ text: "第一轮", responseText: "", nowMs: 1000 }),
+    ];
+    value.turns[0]!.id = "older";
+    const thread = presentControlRunTerminal(value, "older", {
+      status: "completed",
+      lastSequence: 3,
+      terminalAt: "2026-10-10T00:00:03Z",
+      draftPreview: {
+        localId: "pending-reply:older",
+        text: "上一轮已收到的回复",
+        partial: false,
+      },
+    });
+    const next = createDemoTurn({
+      text: "下一轮",
+      responseText: "",
+      nowMs: 2000,
+    });
+    next.id = "newer";
+    next.status = "inProgress";
+    thread.turns.push(next);
+    const markup = renderToStaticMarkup(
+      <CommandThreadRoom
+        activeTurnId="newer"
+        cwd=""
+        locale="zh"
+        selectedThread={thread}
+        streamingText="新一轮实时输出"
+        workMode="office"
+        onModeChange={() => {}}
+        onReplayMessage={async () => {}}
+      />,
+    );
+    expect(markup.match(/上一轮已收到的回复/g)).toHaveLength(1);
+    expect(markup.match(/新一轮实时输出/g)).toHaveLength(1);
+    expect(markup).toContain('data-local-preview="pending-reply:older"');
+    expect(markup).not.toContain("message-edit-pending-reply:older");
+    expect(markup).toMatchSnapshot();
+  });
+
   it.each([false, true])(
     "allows editing a completed message unless another send is pending (%s)",
     (isSending) => {
@@ -146,7 +252,7 @@ describe("CommandThreadRoom", () => {
     expect(other).not.toContain("不能串到当前会话");
   });
 
-  it("renders a bursty control reply as partial streaming text before the final frame", () => {
+  it("renders all received control output in the first streaming frame", () => {
     const thread = {
       id: "control-thread-streaming",
       cwd: "/repo/frontend",
@@ -182,9 +288,9 @@ describe("CommandThreadRoom", () => {
     );
 
     expect(markup).toMatchSnapshot();
-    expect(streamingText).toBe("答".repeat(12));
-    expect(markup).toContain("答".repeat(12));
-    expect(markup).not.toContain("VISIBLE-END");
+    expect(streamingText).toBe(burst);
+    expect(markup).toContain("VISIBLE-END");
+    expect(frames.callbacks.size).toBe(0);
 
     while (frames.callbacks.size > 0) frames.flushNext();
     expect(streamingTextByThread[thread.id]).toBe(burst);

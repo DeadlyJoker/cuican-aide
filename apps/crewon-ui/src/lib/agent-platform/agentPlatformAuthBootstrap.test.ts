@@ -18,7 +18,7 @@ describe("agent-platform auth bootstrap deadline", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("fails a stalled read-only probe so the shell can render login and retry", async () => {
+  it("fails a stalled read-only probe so the shell can show the restoration status", async () => {
     vi.useFakeTimers();
     const result = withAgentPlatformAuthBootstrapDeadline(
       new Promise<never>(() => undefined),

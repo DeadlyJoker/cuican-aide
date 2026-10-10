@@ -31,6 +31,10 @@ import type { ThreadExecutionContext } from "@crewon/app-server-protocol/platfor
 import { promptPreview } from "../shared/text";
 import { AppServerRpcError } from "../app-server/appServer";
 import type { ComposerImageInput } from "../shared/composerImages";
+import type {
+  ThreadSubmissionObserver,
+  ThreadTurnPresentation,
+} from "./threadPendingSubmission";
 
 type ThreadSource = string;
 type ActiveTurnByThreadSetter = (
@@ -65,6 +69,7 @@ type ThreadMessageClient = {
     mentions?: PendingComposerMention[],
     settings?: ThreadRuntimeSettings,
     images?: ComposerImageInput[],
+    presentation?: ThreadTurnPresentation,
   ): Promise<TurnStartResponse>;
   startReview?(
     threadId: string,
@@ -111,6 +116,7 @@ export type CreateThreadActionParams = {
     | undefined;
   createDemoThread: (initialPrompt?: string) => Thread;
   initialPrompt?: string;
+  onThreadReady?: (thread: Thread) => void;
   isConnected: boolean;
   locale: Locale;
   preserveThreadsAfterConnectionLoss: () => void;
@@ -142,7 +148,12 @@ export type SendMessageActionParams = {
       >
     | null
     | undefined;
-  createThread: (initialPrompt?: string) => Promise<Thread | null>;
+  createThread: (
+    initialPrompt?: string,
+    presentation?: {
+      onThreadReady: (thread: Thread) => void;
+    },
+  ) => Promise<Thread | null>;
   demoResponse: string;
   isConnected: boolean;
   isDemoPreview: boolean;
@@ -153,6 +164,8 @@ export type SendMessageActionParams = {
    * App wiring should compare-and-clear the matching visible composer choice.
    */
   onExecutionIntentCommitted?: (intent: "goal" | "plan") => void;
+  onSubmission?: () => ThreadSubmissionObserver;
+  isSubmissionSelectionCurrent?: () => boolean;
   pendingComposerMentions: PendingComposerMention[];
   preserveThreadsAfterConnectionLoss: () => void;
   selectedThread: Thread | null;
@@ -233,6 +246,7 @@ export async function createThreadAction({
   client,
   createDemoThread,
   initialPrompt,
+  onThreadReady,
   isConnected,
   locale,
   preserveThreadsAfterConnectionLoss,
@@ -287,6 +301,7 @@ export async function createThreadAction({
       );
     }
     if (thread) {
+      onThreadReady?.(thread);
       setThreads((current) => upsertThread(current, thread));
       setSelectedThreadId(thread.id);
       if (shouldAutoCloseSidebar()) {
@@ -315,6 +330,8 @@ export async function sendMessageAction({
   isSending,
   locale,
   onExecutionIntentCommitted,
+  onSubmission,
+  isSubmissionSelectionCurrent,
   pendingComposerMentions,
   preserveThreadsAfterConnectionLoss,
   selectedThread,
@@ -340,11 +357,14 @@ export async function sendMessageAction({
     pendingComposerMentions,
   );
   setIsSending(true);
+  let submission: ThreadSubmissionObserver | undefined;
   let thread = isDemoPreview ? null : selectedThread;
   let failedThreadId = selectedThreadId;
   let createdThreadForMessage = false;
 
   try {
+    // Commit the visible user bubble before the first network await.
+    submission = onSubmission?.();
     if (activeTurnId && selectedThreadId && isConnected) {
       if (hasExecutionIntent(threadSettings)) {
         throw new Error("control_active_turn_execution_intent_unsupported");
@@ -354,8 +374,10 @@ export async function sendMessageAction({
         text,
         visibleMentions,
       );
+      if (!response) throw new Error("Unable to send conversation guidance");
       setPendingComposerMentions([]);
       if (response?.turnId) {
+        submission?.accepted(selectedThreadId, response.turnId);
         setActiveTurnByThread((current) =>
           activeTurnByThreadAfterTurnId(
             current,
@@ -377,13 +399,19 @@ export async function sendMessageAction({
     }
 
     if (!thread) {
-      thread = await createThread(text);
+      thread = submission
+        ? await createThread(text, {
+            onThreadReady: (created) => submission?.bindThread(created.id),
+          })
+        : await createThread(text);
       createdThreadForMessage = true;
     }
 
     if (!thread) {
-      return;
+      throw new Error("Unable to create conversation");
     }
+
+    submission?.bindThread(thread.id);
 
     const activeThread = thread;
 
@@ -399,6 +427,7 @@ export async function sendMessageAction({
           now,
         ),
       );
+      submission?.accepted(activeThread.id, turn.id);
       return;
     }
 
@@ -434,6 +463,7 @@ export async function sendMessageAction({
         upsertTurnInThread(current, response.reviewThreadId, response.turn),
       );
       setSelectedThreadId(response.reviewThreadId);
+      submission?.accepted(response.reviewThreadId, response.turn.id);
       setActiveTurnByThread((current) =>
         activeTurnByThreadAfterTurn(
           current,
@@ -449,8 +479,12 @@ export async function sendMessageAction({
       visibleMentions,
       threadSettings,
       images,
+      ...(submission?.submissionId === undefined
+        ? []
+        : [{ submissionId: submission.submissionId }]),
     );
     if (response) {
+      submission?.accepted(turnThreadId, response.turn.id);
       const committedIntent = threadSettings?.executionIntent;
       if (committedIntent === "goal" || committedIntent === "plan") {
         onExecutionIntentCommitted?.(committedIntent);
@@ -471,16 +505,21 @@ export async function sendMessageAction({
           turnId: response.turn.id,
         });
       }
+    } else {
+      throw new Error("Unable to start conversation turn");
     }
   } catch (error) {
+    submission?.failed(error);
     setPendingComposerMentions([]);
     if (isConnected && isAppServerConnectionLoss(error)) {
       preserveThreadsAfterConnectionLoss();
     }
-    setComposerValue(text);
-    setComposerFocusSignal((signal) => signal + 1);
+    if (isSubmissionSelectionCurrent?.() !== false) {
+      setComposerValue(text);
+      setComposerFocusSignal((signal) => signal + 1);
+    }
     const targetThreadId = failedThreadId;
-    if (!activeTurnId && targetThreadId) {
+    if (!submission && !activeTurnId && targetThreadId) {
       const now = Math.floor(Date.now() / 1000);
       const errorMessage =
         error instanceof Error

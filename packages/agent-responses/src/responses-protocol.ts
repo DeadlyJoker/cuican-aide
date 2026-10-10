@@ -3,6 +3,7 @@ import type { ProviderCheckpoint } from "@crewon/contracts";
 
 import { protocolError, transportError } from "./responses-errors.ts";
 import { parseResponsesSse } from "./responses-sse.ts";
+import { coalesceResponsesOutputDeltas } from "./responses-output-delta-buffer.ts";
 import {
   isPreviousResponseRejected,
   PREVIOUS_RESPONSE_REJECTED,
@@ -383,16 +384,41 @@ export async function* responsesProtocolEvents(
     finalOutputPolicy?: ResponsesFinalOutputPolicy;
     outputDeltaFlushBytes?: number;
     onActivity: () => void;
+    /** Ends HTTP ownership once the received tail is checked; never waits for future EOF. */
+    onReadClosed?: (state: Readonly<{ endOfBody: boolean }>) => void;
     completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
     createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
     onResponseIdentity?: (responseId: string) => void;
   },
 ): AsyncIterable<ModelTransportEvent> {
+  if (options.outputDeltaFlushBytes !== undefined) {
+    const sourceLifetime = new AbortController();
+    yield* coalesceResponsesOutputDeltas(
+      decodeResponsesProtocolEvents(body, options, sourceLifetime.signal),
+      {
+        flushBytes: options.outputDeltaFlushBytes,
+        closeSource: () => sourceLifetime.abort(),
+      },
+    );
+    return;
+  }
+  yield* decodeResponsesProtocolEvents(body, options);
+}
+
+async function* decodeResponsesProtocolEvents(
+  body: ReadableStream<Uint8Array>,
+  options: Parameters<typeof responsesProtocolEvents>[1],
+  signal?: AbortSignal,
+): AsyncIterable<ModelTransportEvent> {
   const decoder = new ResponsesProtocolDecoder(options);
-  const outputDeltaFlushBytes = options.outputDeltaFlushBytes;
-  let pendingOutputDelta = "";
+  let terminalEvents: readonly ModelTransportEvent[] = [];
   for await (const item of parseResponsesSse(body, {
     onActivity: options.onActivity,
+    stopAfterBufferedFrames: () => decoder.terminal,
+    ...(options.onReadClosed === undefined
+      ? {}
+      : { onReadClosed: options.onReadClosed }),
+    ...(signal === undefined ? {} : { signal }),
   })) {
     if (item.kind === "done") {
       if (!decoder.terminal) {
@@ -400,41 +426,14 @@ export async function* responsesProtocolEvents(
       }
       continue;
     }
-    for (const event of decoder.accept(item.value)) {
-      if (
-        outputDeltaFlushBytes !== undefined &&
-        event.type === "output.delta"
-      ) {
-        if (
-          pendingOutputDelta.length > 0 &&
-          byteLength(`${pendingOutputDelta}${event.delta}`) >
-            outputDeltaFlushBytes
-        ) {
-          yield { type: "output.delta", delta: pendingOutputDelta };
-          pendingOutputDelta = "";
-        }
-        pendingOutputDelta += event.delta;
-        if (byteLength(pendingOutputDelta) >= outputDeltaFlushBytes) {
-          yield { type: "output.delta", delta: pendingOutputDelta };
-          pendingOutputDelta = "";
-        }
-        continue;
-      }
-      if (pendingOutputDelta.length > 0) {
-        yield { type: "output.delta", delta: pendingOutputDelta };
-        pendingOutputDelta = "";
-      }
-      yield event;
-    }
-  }
-  if (pendingOutputDelta.length > 0) {
-    yield { type: "output.delta", delta: pendingOutputDelta };
+    const events = decoder.accept(item.value);
+    // Withhold terminal/usage until all frames in this received chunk pass validation.
+    // A same-chunk post-terminal event is still rejected by decoder.accept().
+    if (decoder.terminal) terminalEvents = events;
+    else for (const event of events) yield event;
   }
   decoder.finish();
-}
-
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
+  for (const event of terminalEvents) yield event;
 }
 
 function validateSequence(

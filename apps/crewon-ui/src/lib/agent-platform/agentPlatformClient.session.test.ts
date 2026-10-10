@@ -58,8 +58,148 @@ describe("Agent Platform request account fences", () => {
     vi.stubGlobal("sessionStorage", storage(new Map()));
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+  });
+
+  it.each(["before request", "after 401"] as const)(
+    "a caller can cancel token waiting %s without canceling shared refresh or issuing late HTTP",
+    async (phase) => {
+      const client = await import("./agentPlatformClient");
+      const original =
+        phase === "before request"
+          ? `header.${btoa(JSON.stringify({ sub: "A", exp: 1 }))}.signature`
+          : jwt("A");
+      const refreshed = jwt("A-fresh");
+      client.storeAgentPlatformSession(original, "refresh-A");
+      const refreshEntered = deferred<AbortSignal>();
+      const refreshResponse = deferred<Response>();
+      let directoryCalls = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+          if (String(url).endsWith("/api/v1/auth/refresh")) {
+            refreshEntered.resolve(init!.signal as AbortSignal);
+            return refreshResponse.promise;
+          }
+          directoryCalls++;
+          return new Response(null, { status: 401 });
+        }),
+      );
+      const caller = new AbortController();
+      const pending = client.agentPlatformAuthorizedFetch("/api/v1/mcp/tools", {
+        signal: caller.signal,
+      });
+      const rejected = expect(pending).rejects.toThrow("directory canceled");
+      const sharedRefreshSignal = await refreshEntered.promise;
+      caller.abort(new Error("directory canceled"));
+      await rejected;
+      expect(sharedRefreshSignal.aborted).toBe(false);
+      expect(
+        localStorage.getItem(client.AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY),
+      ).toBe("refresh-A");
+      refreshResponse.resolve(
+        Response.json({ access_token: refreshed, refresh_token: "refresh-A" }),
+      );
+      await expect(client.getAgentPlatformAccessToken()).resolves.toBe(
+        refreshed,
+      );
+      expect(directoryCalls).toBe(phase === "before request" ? 0 : 1);
+    },
+  );
+
+  it("cancels a snapshot's health wait without publishing data or issuing account/directory HTTP", async () => {
+    const client = await import("./agentPlatformClient");
+    const token = jwt("A");
+    client.storeAgentPlatformSession(token);
+    const healthEntered = deferred<void>();
+    const healthResponse = deferred<Response>();
+    const fetchMock = vi.fn(async () => {
+      healthEntered.resolve();
+      return healthResponse.promise;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const owner = new AbortController();
+    const pending = client.readAgentPlatformSnapshot({ signal: owner.signal });
+    const rejected = expect(pending).rejects.toThrow("view closed");
+    await healthEntered.promise;
+    owner.abort(new Error("view closed"));
+    await rejected;
+    healthResponse.resolve(Response.json({ status: "ok" }));
+    await expect(client.getAgentPlatformAccessToken()).resolves.toBe(token);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("bounds the snapshot auth check and aborts its HTTP without revoking the account or dispatching catalogs", async () => {
+    vi.useFakeTimers();
+    const client = await import("./agentPlatformClient");
+    const token = jwt("A");
+    client.storeAgentPlatformSession(token, "refresh-A");
+    const meEntered = deferred<AbortSignal>();
+    const meResponse = deferred<Response>();
+    const fetchMock = vi.fn(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (String(url).endsWith("/api/v1/health"))
+          return Response.json({ status: "ok" });
+        const signal = init!.signal as AbortSignal;
+        meEntered.resolve(signal);
+        signal.addEventListener(
+          "abort",
+          () => meResponse.reject(signal.reason),
+          {
+            once: true,
+          },
+        );
+        return meResponse.promise;
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = client.readAgentPlatformSnapshot();
+    const rejected = expect(pending).rejects.toThrow(
+      "agent_platform_catalog_snapshot_timeout",
+    );
+    const meSignal = await meEntered.promise;
+    await vi.advanceTimersByTimeAsync(45_000);
+    await rejected;
+    expect(meSignal.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(client.captureAgentPlatformSession().signal.aborted).toBe(false);
+    await expect(client.getAgentPlatformAccessToken()).resolves.toBe(token);
+    expect(
+      localStorage.getItem(client.AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY),
+    ).toBe("refresh-A");
+  });
+
+  it("withdraws running and queued snapshot directories on view exit while preserving the authenticated account", async () => {
+    const client = await import("./agentPlatformClient");
+    const token = jwt("A");
+    client.storeAgentPlatformSession(token);
+    const entered = deferred<void>();
+    const release = deferred<Response>();
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (String(url).endsWith("/api/v1/health"))
+          return Response.json({ status: "ok" });
+        if (String(url).endsWith("/api/v1/auth/me"))
+          return Response.json({ id: 1, username: "A", role: "user" });
+        signals.push(init!.signal as AbortSignal);
+        if (signals.length === 2) entered.resolve();
+        return (await release.promise).clone();
+      }),
+    );
+    const owner = new AbortController();
+    const pending = client.readAgentPlatformSnapshot({ signal: owner.signal });
+    const rejected = expect(pending).rejects.toThrow("view closed");
+    await entered.promise;
+    owner.abort(new Error("view closed"));
+    await rejected;
+    expect(signals).toHaveLength(2);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
+    await expect(client.getAgentPlatformAccessToken()).resolves.toBe(token);
+    release.resolve(Response.json({ items: [], resources: {} }));
   });
 
   for (const outcome of ["401", "network rejection"] as const) {
@@ -308,7 +448,7 @@ describe("Agent Platform request account fences", () => {
         if (path.endsWith("/api/v1/auth/me"))
           return Response.json({ id: 1, username: "A", role: "user" });
         signals.push(init!.signal as AbortSignal);
-        if (++directoryCalls === 7) directoriesEntered.resolve();
+        if (++directoryCalls === 2) directoriesEntered.resolve();
         const original = await directories.promise;
         return original.clone();
       },
@@ -317,7 +457,7 @@ describe("Agent Platform request account fences", () => {
     const pending = client.readAgentPlatformSnapshot();
     await directoriesEntered.promise;
     client.storeAgentPlatformSession(tokenB);
-    expect(signals).toHaveLength(7);
+    expect(signals).toHaveLength(2);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
     directories.resolve(
       Response.json({
@@ -327,7 +467,8 @@ describe("Agent Platform request account fences", () => {
     );
     await expect(pending).rejects.toThrow("agent_platform_session_changed");
     await expect(client.getAgentPlatformAccessToken()).resolves.toBe(tokenB);
-    expect(fetchMock).toHaveBeenCalledTimes(9);
+    // The five queued A reads never cross the account-change boundary.
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     for (const [url, init] of fetchMock.mock.calls) {
       if (!String(url).endsWith("/api/v1/health")) {
         expect(new Headers(init?.headers).get("Authorization")).toBe(

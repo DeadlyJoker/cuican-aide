@@ -11,6 +11,12 @@ import {
   ControlTranscriptReads,
   waitForControlTranscriptRead,
 } from "./controlTranscriptReads";
+import {
+  ControlRunPendingReplyDrafts,
+  type ControlPendingReplyDraft,
+} from "./controlRunPendingReplyDraft";
+import { readControlRunCanonicalOutput } from "./controlRunCanonicalOutputRead";
+import { transcriptWindow } from "./controlTranscriptWindow";
 import { readControlTranscript } from "./controlTranscriptRead";
 import { projectControlTranscriptWindow } from "./controlTranscriptWindow";
 import { findControlAssistantThread } from "./controlAssistantThreadLookup";
@@ -27,6 +33,13 @@ import {
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import { waitForControlRuntimeDelay } from "./controlRuntimeDelay";
 import { ControlRunStatusMonitor } from "./controlRunStatusMonitor";
+import {
+  canonicalControlToolItems,
+  controlRunTerminal,
+  synchronizeControlRun,
+  type ControlCanonicalSyncRetryDelay,
+  type ControlRunTerminal,
+} from "./controlRunSettlement";
 import {
   assertRunPresentationReadCurrent,
   retireOtherRunPresentations,
@@ -62,6 +75,7 @@ import {
 } from "@crewon/control-client";
 
 import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
+import type { ThreadTurnPresentation } from "../thread/threadPendingSubmission";
 import { ASSISTANT_THREAD_SOURCE } from "../thread/assistantThread";
 import type { PendingComposerMention } from "../shared/composerMentions";
 import type { ComposerImageInput } from "../shared/composerImages";
@@ -78,14 +92,12 @@ import { ControlToolHistoryReaders } from "./controlToolHistoryReaders";
 import {
   applyControlTaskChangeEvent,
   applyControlToolEvent,
-  backfillControlToolProjection,
   controlTaskChangeProjectionComplete,
   controlToolItemsWithTaskChanges,
   controlToolProjectionComplete,
   createControlTaskChangeProjectionState,
   createControlToolProjectionState,
   hydrateControlToolHistories,
-  settleControlToolProjection,
   type ControlRunEventStream,
   type ControlTaskChangeProjectionState,
   type ControlToolHistoryLoad,
@@ -150,7 +162,9 @@ type ActiveRunEventStream = {
   threadId: string;
   presentsThread: boolean;
   controller: AbortController;
+  readerController: AbortController;
   afterSequence: number;
+  terminal: ControlRunTerminal | null;
   settlement: Promise<void> | null;
   statusMonitor: ControlRunStatusMonitor;
 };
@@ -187,6 +201,21 @@ export type ControlThreadRuntimeCallbacks = Readonly<{
     runId: string,
     coverage: ControlToolHistoryCoverage,
   ) => void;
+  onRunTerminal?: (
+    threadId: string,
+    runId: string,
+    terminal: ControlRunTerminal,
+  ) => void;
+  onRunPendingDraft?: (
+    threadId: string,
+    runId: string,
+    preview: ControlPendingReplyDraft | null,
+  ) => void;
+  onRunSyncError?: (
+    threadId: string,
+    runId: string,
+    error: unknown,
+  ) => void;
   onRunSettled: (threadId: string, runId: string) => void;
   onTeamRunAccepted?: (
     threadId: string,
@@ -212,6 +241,7 @@ export type ControlThreadRuntimeConfig = Readonly<{
   reconnectDelay?: (attempt: number, signal: AbortSignal) => Promise<void>;
   runStatusPollDelay?: (signal: AbortSignal) => Promise<void>;
   toolHistoryTimeoutMs?: number;
+  canonicalSyncRetryDelay?: ControlCanonicalSyncRetryDelay;
 }>;
 
 export type ControlProjectedThread = Thread &
@@ -250,8 +280,10 @@ export class ControlThreadRuntime {
   readonly #teamProgressController = new AbortController();
   readonly #toolHistoryLoadsByRun = new Map<string, ControlToolHistoryLoad>();
   readonly #toolHistoryTimeoutMs: number;
+  readonly #canonicalSyncRetryDelay: ControlCanonicalSyncRetryDelay | undefined;
   readonly #toolStatesByRun = new Map<string, ControlToolProjectionState>();
   readonly #toolCoverageByRun = new Map<string, ControlToolHistoryCoverage>();
+  readonly #pendingReplyDrafts = new ControlRunPendingReplyDrafts();
   readonly #draftStatesByRun = new Map<
     string,
     ControlRunDraftProjectionState
@@ -301,6 +333,7 @@ export class ControlThreadRuntime {
     );
     this.#reconnectDelay = config.reconnectDelay ?? defaultReconnectDelay;
     this.#runStatusPollDelay = config.runStatusPollDelay;
+    this.#canonicalSyncRetryDelay = config.canonicalSyncRetryDelay;
     this.#toolHistoryTimeoutMs =
       config.toolHistoryTimeoutMs ?? DEFAULT_CONTROL_TOOL_HISTORY_TIMEOUT_MS;
     if (
@@ -384,6 +417,7 @@ export class ControlThreadRuntime {
     this.#readControllers.clear();
     for (const stream of this.#runStreams.values()) {
       stream.controller.abort();
+      stream.readerController.abort();
     }
     this.#runStreams.clear();
     for (const stream of this.#threadStreams.values()) {
@@ -393,6 +427,7 @@ export class ControlThreadRuntime {
     this.#threadEventCursorByThread.clear();
     this.#toolHistoryLoadsByRun.clear();
     this.#draftStatesByRun.clear();
+    this.#pendingReplyDrafts.clear();
     this.#toolStatesByRun.clear();
     this.#toolCoverageByRun.clear();
     this.#taskChangeStatesByRun.clear();
@@ -600,6 +635,7 @@ export class ControlThreadRuntime {
       throw new Error("control_thread_delete_response_invalid");
     }
     this.#callbacks.onRunPlanReset?.(threadId);
+    this.#stopRunStreamsForThread(threadId);
     this.#stopThreadEventStream(threadId);
     this.#threadEventCursorByThread.delete(threadId);
     if (this.#threadEventStreamFocus === threadId) {
@@ -690,6 +726,9 @@ export class ControlThreadRuntime {
   }
 
   async replayMessage(request: MessageReplayRequest): Promise<void> {
+    if ([...this.#runStreams.values()].some((stream) =>
+      stream.threadId === request.threadId && stream.terminal !== null,
+    )) throw new Error("message_replay_sync_pending");
     if (this.#messageReplays.has(request.threadId))
       throw new Error("message_replay_busy");
     this.#messageReplays.add(request.threadId);
@@ -885,6 +924,7 @@ export class ControlThreadRuntime {
       toolHistoryMode?: ControlToolHistoryMode;
       transcriptCursor?: string | null;
       includeTaskChanges?: boolean;
+      projectionDetail?: "full" | "canonical";
     }> = {},
   ): Promise<Thread> {
     // Retain shared history before superseding a same-Thread read. The next
@@ -893,7 +933,7 @@ export class ControlThreadRuntime {
       this.#transcriptReads.run({
         threadId,
         cursor: options.transcriptCursor,
-        mode: `${options.toolHistoryMode ?? "hydrate"}:${options.includeTaskChanges === true}`,
+        mode: `${options.toolHistoryMode ?? "hydrate"}:${options.includeTaskChanges === true}:${options.projectionDetail ?? "full"}`,
         signal: options.signal,
         read: (cursor, signal) =>
           this.#readThreadWindow(threadId, {
@@ -927,6 +967,7 @@ export class ControlThreadRuntime {
       toolHistoryMode?: ControlToolHistoryMode;
       transcriptCursor: string | null;
       includeTaskChanges?: boolean;
+      projectionDetail?: "full" | "canonical";
     },
   ): Promise<Thread> {
     const controller = new AbortController();
@@ -947,6 +988,7 @@ export class ControlThreadRuntime {
         options.publishBase ?? true,
         options.transcriptCursor,
         options.includeTaskChanges ?? false,
+        options.projectionDetail ?? "full",
       );
       controller.signal.throwIfAborted();
       this.#ensureThreadEventStream(threadId, snapshot.eventSequence);
@@ -964,6 +1006,7 @@ export class ControlThreadRuntime {
     publishBase = true,
     transcriptCursor: string | null = null,
     includeTaskChanges = false,
+    projectionDetail: "full" | "canonical" = "full",
   ): Promise<{
     thread: Thread;
     eventSequence: number;
@@ -980,6 +1023,7 @@ export class ControlThreadRuntime {
             transcriptCursor,
             includeTaskChanges,
             historySignal,
+            projectionDetail,
           ),
           signal,
         ),
@@ -996,6 +1040,7 @@ export class ControlThreadRuntime {
     transcriptCursor: string | null,
     includeTaskChanges: boolean,
     historySignal: AbortSignal,
+    projectionDetail: "full" | "canonical",
   ): Promise<{ thread: Thread; eventSequence: number }> {
     signal?.throwIfAborted();
     const priorStreams = new Map(
@@ -1069,8 +1114,10 @@ export class ControlThreadRuntime {
       )
         continue;
       stream.controller.abort();
+      stream.readerController.abort();
       this.#runStreams.delete(runId);
       this.#draftStatesByRun.delete(runId);
+      this.#pendingReplyDrafts.delete(runId);
       if (stream.presentsThread) this.#callbacks.onTextReset?.(threadId);
       this.#callbacks.onRunSettled(threadId, runId);
     }
@@ -1122,10 +1169,16 @@ export class ControlThreadRuntime {
             user,
             assistants,
             run,
-            controlToolItemsWithTaskChanges(
-              this.#toolStatesByRun.get(run.runId),
-              this.#taskChangeStatesByRun.get(run.runId),
-            ),
+            projectionDetail === "canonical"
+              ? canonicalControlToolItems(
+                  this.#toolStatesByRun.get(run.runId),
+                  this.#taskChangeStatesByRun.get(run.runId),
+                  run,
+                )
+              : controlToolItemsWithTaskChanges(
+                  this.#toolStatesByRun.get(run.runId),
+                  this.#taskChangeStatesByRun.get(run.runId),
+                ),
             this.#toolCoverageByRun.get(run.runId)?.complete === true &&
               this.#toolCoverageByRun.get(run.runId)!.throughSequence >=
                 run.lastSequence,
@@ -1204,15 +1257,15 @@ export class ControlThreadRuntime {
             timeoutMs: this.#toolHistoryTimeoutMs,
           })
         : Promise.resolve(),
-      visiblePlanRun
+      visiblePlanRun && projectionDetail === "full"
         ? this.#loadRunPlan(visiblePlanRun.runId, signal)
         : Promise.resolve(null),
     ]);
     read.assertCurrent();
-    const postHydrationSnapshot = await this.#getThreadSnapshot(
-      threadId,
-      signal,
-    );
+    const postHydrationSnapshot =
+      projectionDetail === "canonical"
+        ? finalSnapshot
+        : await this.#getThreadSnapshot(threadId, signal);
     read.assertCurrent();
     if (
       postHydrationSnapshot.thread.revision !== thread.revision ||
@@ -1335,6 +1388,7 @@ export class ControlThreadRuntime {
     mentions: PendingComposerMention[] = [],
     settings?: ThreadRuntimeSettings,
     images: ComposerImageInput[] = [],
+    presentation?: ThreadTurnPresentation,
   ): Promise<TurnStartResponse> {
     validateSupportedTurnInput(mentions, settings, images);
     if (settings?.projectMediaInputStage !== undefined)
@@ -1587,6 +1641,9 @@ export class ControlThreadRuntime {
             client: this.#client,
             eventStream: this.#eventStream,
             signal: this.#teamProgressController.signal,
+            ...(presentation === undefined
+              ? {}
+              : { clientSubmissionId: presentation.submissionId }),
             visibleContent: visibleControlUserContent(content),
             onChange: this.#callbacks.onTeamProgress
               ? (progress) =>
@@ -1795,6 +1852,12 @@ export class ControlThreadRuntime {
     }
     if (options.adoptPlan !== false) this.#adoptRunPlan(threadId, runId);
     const controller = new AbortController();
+    const readerController = new AbortController();
+    controller.signal.addEventListener(
+      "abort",
+      () => readerController.abort(),
+      { once: true },
+    );
     const presentationChanged = retireOtherRunPresentations(
       this.#runStreams,
       threadId,
@@ -1804,18 +1867,20 @@ export class ControlThreadRuntime {
       threadId,
       presentsThread: true,
       controller,
+      readerController,
       afterSequence: 0,
+      terminal: null,
       settlement: null,
       statusMonitor: new ControlRunStatusMonitor({
         client: this.#client,
         runId,
         threadId,
-        signal: controller.signal,
+        signal: readerController.signal,
         pollDelay: this.#runStatusPollDelay,
       }),
     });
     if (presentationChanged) this.#callbacks.onTextReset?.(threadId);
-    void Promise.race([
+    void Promise.allSettled([
       this.#consumeEventStream(threadId, runId, collaborationMode, controller),
       this.#pollRunUntilSettled(threadId, runId, collaborationMode, controller),
     ]).finally(() => {
@@ -1832,8 +1897,10 @@ export class ControlThreadRuntime {
         continue;
       }
       stream.controller.abort();
+      stream.readerController.abort();
       this.#runStreams.delete(runId);
       this.#draftStatesByRun.delete(runId);
+      this.#pendingReplyDrafts.delete(runId);
       if (stream.presentsThread) this.#callbacks.onTextReset?.(threadId);
       this.#callbacks.onRunSettled(threadId, runId);
     }
@@ -1973,10 +2040,12 @@ export class ControlThreadRuntime {
     this.#taskChangeStatesByRun.set(runId, taskChangeState);
     let reconnectAttempt = 0;
     while (!controller.signal.aborted && !this.#closed) {
-      let terminal: Pick<
-        RunView,
-        "lastSequence" | "status" | "terminalAt"
-      > | null = null;
+      let terminal:
+        | (Pick<RunView, "lastSequence" | "status" | "terminalAt"> & {
+            failure?: RunView["failure"];
+            outputRef?: RunView["outputRef"];
+          })
+        | null = null;
       let streamFailure: Readonly<{ error: unknown }> | null = null;
       try {
         for await (const event of this.#eventStream(this.#client, {
@@ -1984,7 +2053,7 @@ export class ControlThreadRuntime {
           afterSequence: active.afterSequence,
           extensions: ["run-plan-v1"],
           view: "transcript",
-          signal: controller.signal,
+          signal: active.readerController.signal,
         })) {
           if (
             controller.signal.aborted ||
@@ -2077,6 +2146,10 @@ export class ControlThreadRuntime {
                     ? "failed"
                     : "completed",
               terminalAt: event.occurredAt,
+              ...(event.type === "run.failed" ? { failure: event.data } : {}),
+              ...(event.type === "run.completed"
+                ? { outputRef: event.data.outputRef }
+                : {}),
             };
             break;
           }
@@ -2121,6 +2194,10 @@ export class ControlThreadRuntime {
         this.#recordLiveToolCoverage(threadId, runId, coverage);
         this.#recordLiveTaskChangeCoverage(threadId, runId, coverage);
         streamFailure = { error };
+      }
+      if (active.settlement !== null) {
+        await active.settlement;
+        return;
       }
       active.statusMonitor.observeStreamDisconnected();
       try {
@@ -2171,7 +2248,15 @@ export class ControlThreadRuntime {
     const active = this.#runStreams.get(runId);
     if (active?.controller !== controller) return;
     while (!controller.signal.aborted && !this.#closed) {
-      await active.statusMonitor.waitForPoll();
+      try {
+        await active.statusMonitor.waitForPoll();
+      } catch {
+        return;
+      }
+      if (active.settlement !== null) {
+        await active.settlement;
+        return;
+      }
       if (!this.#isCurrentRunStream(threadId, runId, controller)) {
         return;
       }
@@ -2198,6 +2283,10 @@ export class ControlThreadRuntime {
         }
       } catch (error) {
         if (!this.#isCurrentRunStream(threadId, runId, controller)) {
+          return;
+        }
+        if (active.settlement !== null) {
+          await active.settlement;
           return;
         }
         this.#callbacks.onStreamError(threadId, runId, error);
@@ -2247,163 +2336,188 @@ export class ControlThreadRuntime {
     threadId: string,
     runId: string,
     collaborationMode: RunView["collaborationMode"],
-    terminal: Pick<RunView, "lastSequence" | "status" | "terminalAt">,
+    receipt: Pick<RunView, "lastSequence" | "status" | "terminalAt"> & {
+      failure?: RunView["failure"];
+      outputRef?: RunView["outputRef"];
+    },
     controller: AbortController,
   ): Promise<void> {
     const active = this.#runStreams.get(runId);
-    if (
-      active?.controller !== controller ||
-      active.threadId !== threadId ||
-      controller.signal.aborted ||
-      this.#closed
-    ) {
+    if (!active || !this.#isCurrentRunStream(threadId, runId, controller))
       return;
-    }
     if (active.settlement === null) {
-      const settlement = Promise.resolve().then(async () => {
-        if (!this.#isCurrentRunStream(threadId, runId, controller)) {
-          return;
-        }
-        const toolState = this.#toolStatesByRun.get(runId);
-        const taskChangeState = this.#taskChangeStatesByRun.get(runId);
-        const taskChangeBackfillItems = new Map<string, ControlToolItem>();
-        let toolHistoryReachedTerminal =
-          toolState !== undefined &&
-          active.afterSequence >= terminal.lastSequence;
-        let taskChangeHistoryReachedTerminal =
-          taskChangeState !== undefined &&
-          active.afterSequence >= terminal.lastSequence;
-        if (toolState && active.afterSequence < terminal.lastSequence) {
-          try {
-            const backfill = await backfillControlToolProjection({
-              client: this.#client,
-              eventStream: this.#eventStream,
-              runId,
-              afterSequence: active.afterSequence,
-              throughSequence: terminal.lastSequence,
-              state: toolState,
+      const terminal = {
+        ...controlRunTerminal(receipt),
+        draftPreview: this.#pendingReplyDrafts.get(runId),
+      };
+      active.terminal = terminal;
+      active.readerController.abort();
+      this.#callbacks.onRunTerminal?.(threadId, runId, terminal);
+      const isCurrent = () =>
+        this.#isCurrentRunStream(threadId, runId, controller);
+      active.settlement = Promise.resolve().then(() =>
+        synchronizeControlRun({
+          client: this.#client,
+          eventStream: this.#eventStream,
+          threadId,
+          runId,
+          terminal,
+          signal: controller.signal,
+          toolHistoryTimeoutMs: this.#toolHistoryTimeoutMs,
+          toolState: this.#toolStatesByRun.get(runId),
+          taskChangeState: this.#taskChangeStatesByRun.get(runId),
+          sequence: () => active.afterSequence,
+          advanceSequence: (sequence) => {
+            active.afterSequence = Math.max(active.afterSequence, sequence);
+          },
+          isCurrent,
+          presentsThread: () => active.presentsThread,
+          onDraftEvent: (event) => {
+            if (collaborationMode !== "plan")
+              this.#applyDraftEvent(threadId, runId, event);
+          },
+          onToolItem: (item) =>
+            this.#callbacks.onToolItem(threadId, runId, item),
+          onCoverage: (tools, changes) => {
+            this.#toolCoverageByRun.set(runId, tools);
+            if (changes) this.#taskChangeCoverageByRun.set(runId, changes);
+          },
+          currentToolItems: (id) =>
+            controlToolItemsWithTaskChanges(
+              this.#toolStatesByRun.get(id),
+              this.#taskChangeStatesByRun.get(id),
+            ),
+          readCanonical: async () => {
+            const thread = await this.readThread(threadId, {
+              publishBase: false,
               signal: controller.signal,
-              timeoutMs: this.#toolHistoryTimeoutMs,
-              onEvent: (event) => {
-                if (
-                  controller.signal.aborted ||
-                  this.#closed ||
-                  this.#runStreams.get(runId)?.controller !== controller
-                ) {
-                  throw new Error("control_run_stream_superseded");
-                }
-                if (taskChangeState) {
-                  const item = applyControlTaskChangeEvent(
-                    taskChangeState,
-                    event,
-                  );
-                  if (item) taskChangeBackfillItems.set(item.id, item);
-                }
-                active.afterSequence = Math.max(
-                  active.afterSequence,
-                  event.sequence,
-                );
-                if (collaborationMode !== "plan") {
-                  this.#applyDraftEvent(threadId, runId, event);
-                }
-              },
+              toolHistoryMode: "skip",
+              projectionDetail: "canonical",
             });
+            const outputId =
+              terminal.status === "completed" &&
+              terminal.outputRef?.startsWith("message:")
+                ? terminal.outputRef.slice("message:".length)
+                : null;
+            const turn = thread.turns.find((item) => item.id === runId) as
+              | ControlProjectedTurn
+              | undefined;
             if (
-              controller.signal.aborted ||
-              this.#closed ||
-              this.#runStreams.get(runId)?.controller !== controller
+              outputId === null ||
+              turn?.controlAssistantMessageIds?.includes(outputId)
+            )
+              return thread;
+            const window = transcriptWindow(thread);
+            // A genuinely missing latest output is retried, while older/browsing
+            // windows are located independently without moving the selected page.
+            if (
+              window &&
+              (window.olderCursor !== null || window.cursor !== null)
             ) {
-              return;
+              const message = await readControlRunCanonicalOutput({
+                client: this.#client,
+                threadId,
+                runId,
+                outputId,
+                threadRevision: window.threadRevision,
+                signal: controller.signal,
+              });
+              const { run } = await this.#client.getRunInThread(
+                threadId,
+                runId,
+                { signal: controller.signal },
+              );
+              if (
+                run.runId !== runId ||
+                run.threadId !== threadId ||
+                run.status !== terminal.status ||
+                run.outputRef !== terminal.outputRef ||
+                run.lastSequence < terminal.lastSequence
+              )
+                throw new Error("control_run_canonical_terminal_not_observed");
+              const head = await this.#getThreadSnapshot(
+                threadId,
+                controller.signal,
+              );
+              if (head.thread.revision !== window.threadRevision)
+                throw new Error("control_thread_projection_snapshot_changed");
+              const canonicalTurn = projectedTurnWithAssistants(
+                null,
+                [message],
+                run,
+                canonicalControlToolItems(
+                  this.#toolStatesByRun.get(runId),
+                  this.#taskChangeStatesByRun.get(runId),
+                  run,
+                ),
+                this.#toolCoverageByRun.get(runId)?.complete === true,
+                this.#taskChangeCoverageByRun.get(runId)?.complete === true,
+                true,
+              );
+              // Keep the current window, adding only the proved target Run output.
+              return {
+                ...thread,
+                turns: turn
+                  ? thread.turns.map((item) =>
+                      item.id === runId
+                        ? {
+                            ...canonicalTurn,
+                            items: [
+                              ...item.items.filter(
+                                (entry) => entry.type === "userMessage",
+                              ),
+                              ...canonicalTurn.items,
+                            ],
+                          }
+                        : item,
+                    )
+                  : [...thread.turns, canonicalTurn],
+              };
             }
-            active.afterSequence = Math.max(
-              active.afterSequence,
-              backfill.lastSequence,
-            );
-            toolHistoryReachedTerminal =
-              backfill.lastSequence >= terminal.lastSequence;
-            taskChangeHistoryReachedTerminal =
-              taskChangeState !== undefined && toolHistoryReachedTerminal;
-            const generalItemIds = new Set(
-              backfill.items.map((item) => item.id),
-            );
-            for (const item of backfill.items) {
-              this.#callbacks.onToolItem(threadId, runId, item);
+            return thread;
+          },
+          beforePublish: async () => {
+            await this.#callbacks.onBeforeRunSettled?.(threadId, runId);
+          },
+          publish: (thread) => {
+            if (active.presentsThread && !transcriptWindow(thread)?.cursor) {
+              this.#callbacks.onThread(thread);
+            } else {
+              const turn = thread.turns.find((item) => item.id === runId);
+              if (turn) this.#callbacks.onTurnSettled?.(threadId, turn);
             }
-            for (const item of taskChangeBackfillItems.values()) {
-              if (!generalItemIds.has(item.id)) {
-                this.#callbacks.onToolItem(threadId, runId, item);
-              }
-            }
-          } catch {
-            if (!this.#isCurrentRunStream(threadId, runId, controller)) {
-              return;
-            }
-          }
-        }
-        if (!this.#isCurrentRunStream(threadId, runId, controller)) {
-          return;
-        }
-        if (toolState && toolHistoryReachedTerminal) {
-          this.#toolCoverageByRun.set(runId, {
-            throughSequence: terminal.lastSequence,
-            complete: controlToolProjectionComplete(toolState),
-          });
-        }
-        if (taskChangeState && taskChangeHistoryReachedTerminal) {
-          this.#taskChangeCoverageByRun.set(runId, {
-            throughSequence: terminal.lastSequence,
-            complete: controlTaskChangeProjectionComplete(taskChangeState),
-          });
-        }
-        for (const item of toolState
-          ? settleControlToolProjection(toolState, terminal)
-          : []) {
-          this.#callbacks.onToolItem(threadId, runId, item);
-        }
-        const thread = await this.readThread(threadId, {
-          publishBase: false,
-          toolHistoryMode: toolHistoryReachedTerminal ? "hydrate" : "skip",
-        });
-        if (!this.#isCurrentRunStream(threadId, runId, controller)) {
-          return;
-        }
-        if (active.presentsThread) {
-          await this.#callbacks.onBeforeRunSettled?.(threadId, runId);
-        }
-        if (!this.#isCurrentRunStream(threadId, runId, controller)) {
-          return;
-        }
-        if (active.presentsThread) {
-          this.#callbacks.onThread(thread);
-          this.#callbacks.onTextReset?.(threadId);
-        } else {
-          const turn = thread.turns.find((item) => item.id === runId);
-          if (turn) this.#callbacks.onTurnSettled?.(threadId, turn);
-        }
-        this.#callbacks.onRunSettled(threadId, runId);
-        this.#draftStatesByRun.delete(runId);
-      });
-      active.settlement = settlement;
-      try {
-        await settlement;
-      } catch (error) {
-        if (active.settlement === settlement) {
-          active.settlement = null;
-        }
-        throw error;
-      }
-      return;
+            if (active.presentsThread) this.#callbacks.onTextReset?.(threadId);
+          },
+          onSynchronized: () => {
+            this.#callbacks.onRunSettled(threadId, runId);
+            this.#draftStatesByRun.delete(runId);
+            this.#pendingReplyDrafts.delete(runId);
+            controller.abort(new Error("control_run_canonical_synchronized"));
+          },
+          onSyncError: (error) =>
+            this.#callbacks.onRunSyncError?.(threadId, runId, error),
+          retryDelay: this.#canonicalSyncRetryDelay,
+        }),
+      );
     }
     await active.settlement;
   }
-
   #applyDraftEvent(threadId: string, runId: string, event: RunEventView): void {
-    if (this.#runStreams.get(runId)?.presentsThread !== true) return;
+    const stream = this.#runStreams.get(runId);
+    if (!stream) return;
     const current =
       this.#draftStatesByRun.get(runId) ??
       createControlRunDraftProjectionState();
     const projected = applyControlRunDraftEvent(current, event);
     this.#draftStatesByRun.set(runId, projected.state);
+    this.#pendingReplyDrafts.apply(runId, projected);
+    if (stream.terminal)
+      this.#callbacks.onRunPendingDraft?.(
+        threadId,
+        runId,
+        this.#pendingReplyDrafts.get(runId),
+      );
+    if (!stream.presentsThread) return;
     if (projected.reset) {
       this.#callbacks.onTextReset?.(threadId);
     }
@@ -2572,7 +2686,10 @@ function projectedTurn(
 }
 
 export type ControlProjectedTurn = Turn &
-  Readonly<{ taskChangesView: "full" | "summary" }>;
+  Readonly<{
+    taskChangesView: "full" | "summary";
+    controlAssistantMessageIds?: readonly string[];
+  }>;
 
 function projectedTurnWithAssistants(
   user: MessageView | null,
@@ -2607,6 +2724,13 @@ function projectedTurnWithAssistants(
   }
   return {
     id: run?.runId ?? `orphan:${user!.messageId}`,
+    ...(partialMessages
+      ? {
+          controlAssistantMessageIds: assistants.map(
+            (message) => message.messageId,
+          ),
+        }
+      : {}),
     items: [
       ...(user === null
         ? []

@@ -48,9 +48,35 @@ function outcome<T>(pending: Promise<T>) {
   );
 }
 
-function delayedBody(status = 200) {
+function delayedBody(status = 200, cancellable = false) {
   const body = deferred<unknown>();
   const entered = deferred<void>();
+  if (cancellable) {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          entered.resolve();
+          try {
+            const value = await body.promise;
+            if (!cancelled) {
+              controller.enqueue(
+                new TextEncoder().encode(JSON.stringify(value)),
+              );
+              controller.close();
+            }
+          } catch (error) {
+            if (!cancelled) controller.error(error);
+          }
+        },
+        cancel() {
+          cancelled = true;
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    return { response: new Response(stream, { status }), body, entered };
+  }
   const response = Response.json({}, { status });
   vi.spyOn(response, "json").mockImplementation(() => {
     entered.resolve();
@@ -260,7 +286,7 @@ describe("interactive account session withdrawal", () => {
 
   it("a late current-user body cannot return the previous account", async () => {
     storeAgentPlatformSession("access-a");
-    const delayed = delayedBody();
+    const delayed = delayedBody(200, true);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => delayed.response),
@@ -303,7 +329,7 @@ describe("interactive account session withdrawal", () => {
   ]) {
     it(`a delayed ${action.name} error body cannot fall back after withdrawal`, async () => {
       storeAgentPlatformSession("access-a");
-      const delayed = delayedBody(400);
+      const delayed = delayedBody(400, action.name === "current-user read");
       vi.stubGlobal(
         "fetch",
         vi.fn(async () => delayed.response),

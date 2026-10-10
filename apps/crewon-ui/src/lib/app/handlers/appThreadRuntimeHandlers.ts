@@ -40,6 +40,7 @@ import {
   type SendMessageActionParams,
 } from "../../thread/threadMessageActions";
 import type { ThreadExecutionContextPreparation } from "../../thread/threadMessageActions";
+import type { BeginThreadSubmission } from "../../thread/threadPendingSubmission";
 import {
   startReviewAction,
   startSideChatAction,
@@ -168,6 +169,9 @@ export type AppThreadRuntimeHandlersParams = {
   prepareThreadExecutionContext?: () => ThreadExecutionContextPreparation | null;
   creationWorkspaceId?: string | null;
   isCreationWorkspaceCurrent?: () => boolean;
+  beginMessageSubmission?: BeginThreadSubmission;
+  selectedThreadIdRef?: { current: string | null };
+  selectionEpochRef?: { current: number };
 };
 
 export function createAppThreadRuntimeHandlers(
@@ -192,11 +196,15 @@ export function createAppThreadRuntimeHandlers(
     threadSource = "app_server",
     threadSettings?: ThreadRuntimeSettings,
     workspaceCwd?: string | null,
+    isSelectionCurrent?: () => boolean,
+    onThreadSelected?: () => void,
+    onThreadReady?: (thread: Thread) => void,
   ) =>
     createThreadAction({
       client: params.client,
       createDemoThread,
       initialPrompt,
+      onThreadReady,
       isConnected: params.isConnected,
       locale: params.locale,
       preserveThreadsAfterConnectionLoss:
@@ -204,8 +212,13 @@ export function createAppThreadRuntimeHandlers(
       resolveBackendCwd: params.resolveBackendCwd,
       setNotice: params.setNotice,
       setSelectedThreadId: (threadId) => {
-        if (params.isCreationWorkspaceCurrent?.() !== false)
+        if (
+          params.isCreationWorkspaceCurrent?.() !== false &&
+          isSelectionCurrent?.() !== false
+        ) {
           params.setSelectedThreadId(threadId);
+          onThreadSelected?.();
+        }
       },
       setSidebarOpen: params.setSidebarOpen,
       setThreads: params.setThreads,
@@ -228,16 +241,32 @@ export function createAppThreadRuntimeHandlers(
     },
     workspaceCwd?: string | null,
     images?: ComposerImageInput[],
-  ) =>
-    sendMessageAction({
+  ) => {
+    let expectedSelectionId =
+      params.selectedThreadIdRef?.current ?? threadContext.selectedThreadId;
+    let expectedSelectionEpoch = params.selectionEpochRef?.current;
+    const recordOwnSelection = () => {
+      expectedSelectionId =
+        params.selectedThreadIdRef?.current ?? expectedSelectionId;
+      expectedSelectionEpoch = params.selectionEpochRef?.current;
+    };
+    const isSelectionCurrent = () =>
+      params.isCreationWorkspaceCurrent?.() !== false &&
+      (!params.selectedThreadIdRef ||
+        params.selectedThreadIdRef.current === expectedSelectionId) &&
+      params.selectionEpochRef?.current === expectedSelectionEpoch;
+    return sendMessageAction({
       activeTurnId: threadContext.activeTurnId,
       client: params.client,
-      createThread: (initialPrompt) =>
+      createThread: (initialPrompt, presentation) =>
         createThread(
           initialPrompt,
           threadSettings?.threadSource ?? "app_server",
           threadSettings,
           workspaceCwd,
+          isSelectionCurrent,
+          recordOwnSelection,
+          presentation?.onThreadReady,
         ),
       demoResponse: params.demoResponse,
       isConnected: params.isConnected,
@@ -245,6 +274,20 @@ export function createAppThreadRuntimeHandlers(
       isSending: params.isSending,
       locale: params.locale,
       onExecutionIntentCommitted: params.onExecutionIntentCommitted,
+      onSubmission: params.beginMessageSubmission
+        ? () => {
+            const observer = params.beginMessageSubmission!({
+              text,
+              images: images ?? [],
+              thread: threadContext.selectedThread,
+              threadId: threadContext.selectedThreadId,
+              isWorkspaceCurrent: () =>
+                params.isCreationWorkspaceCurrent?.() !== false,
+            });
+            return observer;
+          }
+        : undefined,
+      isSubmissionSelectionCurrent: isSelectionCurrent,
       pendingComposerMentions: params.pendingComposerMentions,
       preserveThreadsAfterConnectionLoss:
         params.preserveThreadsAfterConnectionLoss,
@@ -257,17 +300,17 @@ export function createAppThreadRuntimeHandlers(
       setNotice: params.setNotice,
       setPendingComposerMentions: params.setPendingComposerMentions,
       setSelectedThreadId: (threadId) => {
-        if (
-          threadContext.selectedThread !== null ||
-          params.isCreationWorkspaceCurrent?.() !== false
-        )
+        if (isSelectionCurrent()) {
           params.setSelectedThreadId(threadId);
+          recordOwnSelection();
+        }
       },
       setThreads: params.setThreads,
       text,
       images,
       threadSettings,
     });
+  };
 
   return {
     archiveThread: (thread) =>
@@ -403,8 +446,10 @@ export function createAppThreadRuntimeHandlers(
         images,
       );
     },
-    sendMessageInNewThread: (text, threadSettings, workspaceCwd, images) =>
-      sendMessageWithThreadContext(
+    sendMessageInNewThread: (text, threadSettings, workspaceCwd, images) => {
+      if (params.isSending) return Promise.resolve();
+      params.setSelectedThreadId(null);
+      return sendMessageWithThreadContext(
         text,
         threadSettings,
         {
@@ -414,7 +459,8 @@ export function createAppThreadRuntimeHandlers(
         },
         workspaceCwd,
         images,
-      ),
+      );
+    },
     startDraftThread: () => {
       startDraftThreadAction({
         setAppView: params.setAppView,

@@ -48,6 +48,8 @@ import {
   type CommandWorkspacePlatformSnapshotLoader,
 } from "./CommandWorkspaceHostModule";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
+import { useCommandPlatformSnapshot } from "./useCommandPlatformSnapshot";
+import { commandNewTaskDraftRoute } from "./commandNewTaskDraftRoute";
 import {
   assistantAutomationDraft,
   assistantScheduleRequest,
@@ -62,7 +64,11 @@ import {
   commandSidebarViewedThreadId,
   useCommandSidebarSeenThreadEvents,
 } from "./commandSidebarThreadPresentation";
-import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import {
+  CommandThreadRoom,
+  PendingCommandThreadRoom,
+} from "./CommandWorkspaceConversation";
+import { usePendingThreadSubmissionsPresentation } from "../messages/PendingThreadSubmissionScope";
 import type { ReplayMessage } from "../messages/MessageReplayScope";
 import type { ControlTeamProgress } from "../../lib/control-runtime/controlTeamProgress";
 import {
@@ -99,7 +105,6 @@ import { classNames } from "./commandWorkspaceUtils";
 type ThreadGoalStatus = ThreadGoalView["status"];
 import {
   agentPlatformResourceStates as selectAgentPlatformResourceStates,
-  emptyAgentPlatformSnapshot,
   executionTargetCatalogStatus,
   insertTokenIntoComposerValue,
   readThreadExecutionTarget,
@@ -123,7 +128,6 @@ import {
   agentPlatformInvocationUrl,
   platformAgentToConfig,
   readAgentPlatformSnapshot,
-  type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
 import { agentPlatformControlAgentCatalogAdapter } from "../../lib/agent-platform/agentPlatformControlAgentCatalog";
 import {
@@ -655,7 +659,6 @@ export type CommandOfficeComposerCapabilities = {
   slashItems: PaletteItemWithCommand[];
 };
 
-type PlatformLoadState = "loading" | "ready" | "fallback";
 type PendingAgentPlatformCredential = Readonly<{
   agentId: number | null;
   origin: string;
@@ -1065,10 +1068,8 @@ export function CommandWorkspace({
     "add" | "context" | "provider" | "slash" | null
   >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [platformState, setPlatformState] =
-    useState<PlatformLoadState>("loading");
-  const [platformSnapshot, setPlatformSnapshot] =
-    useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
+  const { platformState, platformSnapshot, reloadPlatformResources } =
+    useCommandPlatformSnapshot(platformSnapshotLoader);
   const platformControlAgentCatalogAdapter = useMemo(
     () => agentPlatformControlAgentCatalogAdapter(platformSnapshot.agents),
     [platformSnapshot.agents],
@@ -1659,29 +1660,6 @@ export function CommandWorkspace({
   }, [cwd, executionTargetClient, workspaceAuthority]);
 
   useEffect(() => {
-    let cancelled = false;
-    setPlatformState("loading");
-    platformSnapshotLoader()
-      .then((snapshot) => {
-        if (cancelled) {
-          return;
-        }
-        setPlatformSnapshot(snapshot);
-        setPlatformState("ready");
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-        setPlatformSnapshot(emptyAgentPlatformSnapshot);
-        setPlatformState("fallback");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [platformSnapshotLoader]);
-
-  useEffect(() => {
     setActiveLinkedThreadId(selectedThreadId);
   }, [selectedThreadId]);
 
@@ -2059,7 +2037,7 @@ export function CommandWorkspace({
     ) {
       const expertTarget = `experts:${legacyExpertId}`;
       setExecutionTarget(expertTarget);
-      if (selectedThreadId !== null) {
+      if (!composerShouldCreateNewThread && selectedThreadId !== null) {
         persistThreadExecutionTarget(selectedThreadId, expertTarget);
       }
       return;
@@ -2090,12 +2068,13 @@ export function CommandWorkspace({
       })
     ) {
       setExecutionTarget("crewon");
-      if (selectedThreadId !== null) {
+      if (!composerShouldCreateNewThread && selectedThreadId !== null) {
         persistThreadExecutionTarget(selectedThreadId, "crewon");
       }
       providerResource?.onExecutionAgentSelect?.(null);
     }
   }, [
+    composerShouldCreateNewThread,
     executionTarget,
     executionTargetCatalog.status,
     executionTargets,
@@ -2145,7 +2124,7 @@ export function CommandWorkspace({
       providerResource.onExecutionAgentSelect?.(null);
     }
     setExecutionTarget(nextTarget);
-    if (selectedThreadId !== null) {
+    if (!composerShouldCreateNewThread && selectedThreadId !== null) {
       persistThreadExecutionTarget(selectedThreadId, nextTarget);
     }
   }
@@ -2240,22 +2219,26 @@ export function CommandWorkspace({
           ? "Agent-platform 资源已同步。"
           : "当前账号暂无已创建或已授权的资源。";
 
-  async function reloadPlatformResources() {
-    setPlatformState("loading");
-    try {
-      setPlatformSnapshot(await platformSnapshotLoader());
-      setPlatformState("ready");
-    } catch {
-      setPlatformSnapshot(emptyAgentPlatformSnapshot);
-      setPlatformState("fallback");
-    }
-  }
-
   function openLinkedThread(threadId: string) {
     setActiveLinkedThreadId(threadId);
     setNewTaskDraft(false);
     switchView("command");
     onSelectLinkedThread?.(threadId);
+  }
+
+  function beginNewTaskDraft() {
+    setActiveLinkedThreadId(null);
+    setNewTaskDraft(true);
+    onSelectLinkedThread?.(null);
+    try {
+      window.history.replaceState(
+        null,
+        "",
+        commandNewTaskDraftRoute(window.location),
+      );
+    } catch {
+      // The independent in-memory draft remains usable without route persistence.
+    }
   }
 
   async function reloadWorkflowDefinitions() {
@@ -2769,8 +2752,7 @@ export function CommandWorkspace({
     setExecutionTarget(`experts:${record.config.expertsId}`);
     setScene("office");
     setSceneMode("coordinate");
-    setActiveLinkedThreadId(null);
-    setNewTaskDraft(true);
+    beginNewTaskDraft();
     onChangeComposerValue(record.config.goal);
     switchView("command");
     textareaRef.current?.focus();
@@ -3114,15 +3096,23 @@ export function CommandWorkspace({
           onRetry: () => setTeamRefreshNonce((current) => current + 1),
         }
       : null;
+  const pendingNewThread = usePendingThreadSubmissionsPresentation().some(
+    (pending) =>
+      pending.threadId === null || pending.threadId === selectedThreadId,
+  );
   const showCommandThread =
-    activeView === "command" && Boolean(selectedThread) && !newTaskDraft;
+    activeView === "command" &&
+    (Boolean(selectedThread) || pendingNewThread) &&
+    !newTaskDraft;
+  const taskDetailAvailable = showCommandThread && Boolean(selectedThread);
   useEffect(() => {
-    onTaskDetailAvailabilityChange?.(showCommandThread);
+    onTaskDetailAvailabilityChange?.(taskDetailAvailable);
     return () => onTaskDetailAvailabilityChange?.(false);
-  }, [onTaskDetailAvailabilityChange, showCommandThread]);
+  }, [onTaskDetailAvailabilityChange, taskDetailAvailable]);
   const commandThreadRunning =
-    Boolean(activeTurnId) ||
-    Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
+    !composerShouldCreateNewThread &&
+    (Boolean(activeTurnId) ||
+      Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress")));
   const connectionStatusLabel =
     connectionState === "connected"
       ? locale === "zh"
@@ -3168,12 +3158,14 @@ export function CommandWorkspace({
     showCommandThread ? selectedThread : null,
     { runId: progressRunId, runPlan: scopedRunPlan },
   );
-  const showProgressPill = Boolean(
-    threadProgress.runPlan ||
-      threadProgress.hasProposedPlan ||
-      threadProgress.plan ||
-      taskChanges,
-  );
+  const showProgressPill =
+    !composerShouldCreateNewThread &&
+    Boolean(
+      threadProgress.runPlan ||
+        threadProgress.hasProposedPlan ||
+        threadProgress.plan ||
+        taskChanges,
+    );
   const goalBar = showCommandThread
     ? composerGoalBarState(threadGoal, locale)
     : null;
@@ -3268,6 +3260,12 @@ export function CommandWorkspace({
         onModeChange={onModeChange}
         onStop={onStop}
       />
+    ) : showCommandThread && pendingNewThread ? (
+      <PendingCommandThreadRoom
+        locale={locale}
+        workMode={workMode}
+        onModeChange={onModeChange}
+      />
     ) : null;
 
   return (
@@ -3338,8 +3336,7 @@ export function CommandWorkspace({
             workspaceAuthority === "legacy" ? onChangeWorkspaceCwd : undefined
           }
           onNewThread={(workspaceCwd) => {
-            setActiveLinkedThreadId(null);
-            setNewTaskDraft(true);
+            beginNewTaskDraft();
             if (workspaceAuthority === "legacy") {
               onChangeWorkspaceCwd?.(workspaceCwd);
             }
@@ -3449,7 +3446,9 @@ export function CommandWorkspace({
                     taskChanges={taskChanges}
                   />
                 ) : null}
-                {toolApproval && onToolApprovalDecision ? (
+                {!composerShouldCreateNewThread &&
+                toolApproval &&
+                onToolApprovalDecision ? (
                   <ComposerToolApprovalBar
                     approval={toolApproval}
                     locale={locale}
@@ -4058,8 +4057,7 @@ export function CommandWorkspace({
             locale={locale}
             tasks={commandLinkedThreads}
             onNewTask={() => {
-              setActiveLinkedThreadId(null);
-              setNewTaskDraft(true);
+              beginNewTaskDraft();
               onChangeComposerValue("");
               switchView("command");
               textareaRef.current?.focus();

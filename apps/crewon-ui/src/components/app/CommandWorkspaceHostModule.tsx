@@ -10,8 +10,9 @@ import { classNames } from "./commandWorkspaceUtils";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 
 /** Host reader injection; business modules receive no authentication or client authority. */
-export type CommandWorkspacePlatformSnapshotLoader =
-  () => Promise<AgentPlatformSnapshot>;
+export type CommandWorkspacePlatformSnapshotLoader = (
+  options?: Readonly<{ signal?: AbortSignal }>,
+) => Promise<AgentPlatformSnapshot>;
 
 /** Trusted host composition only; this slot is not a plugin loader or a runtime permission API. */
 export type CommandWorkspaceHostModule = Readonly<{

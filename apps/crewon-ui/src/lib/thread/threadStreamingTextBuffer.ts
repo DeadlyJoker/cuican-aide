@@ -49,8 +49,6 @@ type Entry = {
   text: string;
   received: boolean;
   pending: StreamingTextChunks;
-  pendingCharacters: number;
-  chunkSize: number;
   partial: boolean;
   drain?: {
     promise: Promise<void>;
@@ -58,12 +56,6 @@ type Entry = {
     timer: ReturnType<typeof setTimeout>;
   };
 };
-function characterCount(value: string): number {
-  let count = 0;
-  for (const _character of value) count++;
-  return count;
-}
-
 export function createStreamingTextBuffer(
   setText: StreamingTextSetter,
   scheduler: StreamingTextFrameScheduler = browserStreamingTextFrameScheduler(),
@@ -111,8 +103,6 @@ export function createStreamingTextBuffer(
   };
   const clearQueue = (entry: Entry) => {
     entry.pending.clear();
-    entry.pendingCharacters = 0;
-    entry.chunkSize = 8;
     resolveDrain(entry);
   };
   const remove = (id: string) => {
@@ -198,17 +188,10 @@ export function createStreamingTextBuffer(
     cancelFrame();
     if (disposed || !shown) return;
     for (const entry of entries.values()) {
-      if (!entry.pending.length) continue;
-      const chunk = entry.pending.take(entry.chunkSize);
-      entry.pendingCharacters = Math.max(
-        0,
-        entry.pendingCharacters - characterCount(chunk),
-      );
-      const next = appendStreamingTail(entry.text, chunk, visibleUnits);
-      entry.text = next.text;
-      entry.partial ||= next.truncated;
-      dirty = true;
-      if (!entry.pending.length) clearQueue(entry);
+      // Coalesce the current frame's received output without inventing a
+      // second typing queue. Gateway bursts are already streamed content and
+      // must not hold back completion or another task's live preview.
+      fastForward(entry);
     }
     enforceBudget();
     publish();
@@ -218,8 +201,6 @@ export function createStreamingTextBuffer(
     text: "",
     received: false,
     pending: new StreamingTextChunks(),
-    pendingCharacters: 0,
-    chunkSize: 8,
     partial: reclaimed,
   });
   // Protocol IDs are already bounded. Do not retain an unbounded malformed key.
@@ -261,11 +242,6 @@ export function createStreamingTextBuffer(
           }
         }
         entry.pending.append(delta);
-        entry.pendingCharacters += characterCount(delta);
-        entry.chunkSize = Math.max(
-          entry.chunkSize,
-          Math.ceil(entry.pendingCharacters / 36),
-        );
       }
       dirty = true;
       enforceBudget(threadId);

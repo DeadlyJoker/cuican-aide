@@ -99,6 +99,63 @@ describe("agent-platform client mapping", () => {
     vi.unstubAllEnvs();
   });
 
+  it("shares the catalog HTTP budget across snapshots while authenticated writes remain independent", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+    storeAgentPlatformSession("catalog-owner-token");
+    let active = 0,
+      maximum = 0,
+      writes = 0;
+    const releases: (() => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/v1/health"))
+          return Response.json({ status: "ok" });
+        expect(new Headers(init?.headers).get("Authorization")).toBe(
+          "Bearer catalog-owner-token",
+        );
+        if (url.endsWith("/api/v1/auth/me"))
+          return Response.json({ id: 1, username: "tester", role: "user" });
+        if (init?.method === "POST") {
+          writes++;
+          return Response.json({ accepted: true });
+        }
+        maximum = Math.max(maximum, ++active);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        active--;
+        return Response.json({ items: [], resources: {} });
+      }),
+    );
+    const snapshots = Promise.all([
+      readAgentPlatformSnapshot(),
+      readAgentPlatformSnapshot(),
+    ]);
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    const write = await agentPlatformAuthorizedFetch("/api/v1/workflows", {
+      method: "POST",
+    });
+    expect(write.status).toBe(200);
+    expect(writes).toBe(1);
+    expect(active).toBe(2);
+    // Both page consumers borrow one account-scoped read in progress.
+    for (let index = 0; index < 7; index++) {
+      await vi.waitFor(() => expect(releases.length).toBeGreaterThan(0));
+      releases.shift()!();
+    }
+    const results = await snapshots;
+    expect(maximum).toBe(2);
+    expect(active).toBe(0);
+    expect(results.every((result) => result.agents.length === 0)).toBe(true);
+    await expect(getAgentPlatformAccessToken()).resolves.toBe(
+      "catalog-owner-token",
+    );
+  });
+
   it("drops stale auth-session tokens when Principal Session is enabled", async () => {
     // A token from a server that does emit session claims, but whose scoping no
     // longer satisfies the requirements, is genuinely stale.

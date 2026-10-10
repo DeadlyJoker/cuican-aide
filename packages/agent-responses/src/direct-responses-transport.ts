@@ -335,6 +335,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
           call?.httpPhase("lastByteMs");
           idle.touch();
         },
+        onReadClosed: (state) => idle.releaseRead(state),
         ...(this.#outputDeltaFlushBytes === undefined
           ? {}
           : { outputDeltaFlushBytes: this.#outputDeltaFlushBytes }),
@@ -539,6 +540,13 @@ class IdleWatch {
   close(): void {
     this.#cancelTimer?.();
     this.#cancelTimer = null;
+  }
+
+  releaseRead(state: Readonly<{ endOfBody: boolean }>): void {
+    this.close();
+    // A validated terminal owns completion; the HTTP tail must not restart that call.
+    // Preserve a reusable connection when the HTTP body has already reached EOF.
+    if (!state.endOfBody) this.#controller.abort("responses_read_closed");
   }
 }
 

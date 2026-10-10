@@ -1,8 +1,10 @@
+import { controlPendingReplyDraft } from "../lib/control-runtime/controlRunTerminalPresentation";
 import { useStreamingTextPreview } from "./StreamingTextScope";
 import { ProjectPlanningRunScope } from "./project-planning/ProjectPlanningScope";
 import { useHasTaskWorkbench } from "./workbench/TaskWorkbenchContext";
 import { useMessageReplay } from "./messages/MessageReplayScope";
 import { MessageActions } from "./messages/MessageActions";
+import { usePendingThreadSubmissionsPresentation } from "./messages/PendingThreadSubmissionScope";
 import {
   transcriptWindow,
   transcriptRowTurn,
@@ -29,6 +31,7 @@ import {
   TranscriptStreamingMessage,
   TranscriptMessage,
   TranscriptThinkingMessage,
+  TranscriptFailureMessage,
   type TranscriptItemLabels,
 } from "./TranscriptMessage";
 import {
@@ -206,6 +209,7 @@ export function Transcript({
   streamingText,
   youLabel,
 }: TranscriptProps) {
+  const pendingSubmissions = usePendingThreadSubmissionsPresentation({ thread });
   const streamingPreview = useStreamingTextPreview(thread?.id ?? null);
   const hasWorkbench = useHasTaskWorkbench();
   const pendingTeam = teamProgressForThread(thread, teamProgress);
@@ -242,7 +246,7 @@ export function Transcript({
     () => new Map(thread?.turns.map((turn) => [turn.id, turn]) ?? []),
     [thread],
   );
-  const hasItems = rows.length > 0;
+  const hasItems = rows.length > 0 || pendingSubmissions.length > 0;
   const lastTurn = thread?.turns[thread.turns.length - 1] ?? null;
   const hasVisibleProcessActivity = Boolean(
     lastTurn?.items.some((item) => {
@@ -257,6 +261,12 @@ export function Transcript({
       return hasDisplayableReasoning(item);
     }),
   );
+  const streamOwnedByPendingReply =
+    !activeTurnId &&
+    lastTurn !== null &&
+    lastTurn.status !== "inProgress" &&
+    controlPendingReplyDraft(lastTurn) !== null;
+  const showsLiveStream = Boolean(streamingText) && !streamOwnedByPendingReply;
   const latestResponseTurnId = thread?.turns.findLast(
     (turn) => turn.status !== "inProgress" && hasFinalAgentResponse(turn),
   )?.id;
@@ -292,8 +302,9 @@ export function Transcript({
     ],
   );
   const activityKey = useMemo(
-    () => transcriptActivityKey(thread, "", shouldShowThinking),
-    [shouldShowThinking, thread],
+    () =>
+      `${transcriptActivityKey(thread, "", shouldShowThinking)}|${pendingSubmissions.map((pending) => pending.id).join(",")}`,
+    [shouldShowThinking, thread, pendingSubmissions],
   );
   const observerStructureKey = transcriptObserverStructureKey(
     thread,
@@ -322,13 +333,13 @@ export function Transcript({
 
   useEffect(() => {
     const anchor = followAnchorRef.current;
-    if (!thread || !anchor) {
+    if ((!thread && pendingSubmissions.length === 0) || !anchor) {
       return;
     }
 
     const previousThreadId = previousThreadIdRef.current;
-    const isThreadChange = previousThreadId !== thread.id;
-    previousThreadIdRef.current = thread.id;
+    const isThreadChange = previousThreadId !== (thread?.id ?? null);
+    previousThreadIdRef.current = thread?.id ?? null;
     if (isThreadChange) {
       setIsScrolledUp(false);
     }
@@ -368,7 +379,7 @@ export function Transcript({
 
   useEffect(() => {
     const anchor = followAnchorRef.current;
-    if (!thread || !anchor) {
+    if ((!thread && pendingSubmissions.length === 0) || !anchor) {
       return;
     }
 
@@ -434,9 +445,10 @@ export function Transcript({
     browsingHistory,
     pageKey,
     rows.length,
+    pendingSubmissions.length,
   ]);
 
-  if (!thread) {
+  if (!thread && pendingSubmissions.length === 0) {
     return (
       <main className="empty-state">
         <div className="empty-hero">
@@ -477,7 +489,8 @@ export function Transcript({
         role="log"
         aria-busy={
           shouldShowLoading ||
-          Boolean(streamingText) ||
+          (showsLiveStream &&
+            Boolean(activeTurnId || lastTurn?.status === "inProgress")) ||
           shouldShowThinking ||
           Boolean(pendingTeam && pendingTeam.phase !== "failed")
         }
@@ -560,12 +573,54 @@ export function Transcript({
                 }
                 isLatestResponse={turn.id === latestResponseTurnId}
               />
+              {row.firstFragment && controlPendingReplyDraft(sourceTurn) ? (
+                <section
+                  data-pending-reply-run={sourceTurn.id}
+                  data-local-preview={controlPendingReplyDraft(sourceTurn)!.localId}
+                >
+                  <TranscriptStreamingMessage
+                    crewonLabel={crewonLabel}
+                    locale={locale}
+                    streamingText={controlPendingReplyDraft(sourceTurn)!.text}
+                    partial={controlPendingReplyDraft(sourceTurn)!.partial}
+                  />
+                </section>
+              ) : null}
             </ProjectPlanningRunScope>
           );
         })}
+        {pendingSubmissions.map((pending) => (
+          <section key={pending.id} data-pending-user-message={pending.phase}>
+            <TranscriptMessage
+              item={pending.item}
+              itemLabels={itemLabels}
+              locale={locale}
+            />
+            {pending.phase === "failed" ? (
+              <TranscriptFailureMessage
+                crewonLabel={crewonLabel}
+                locale={locale}
+                error={{
+                  message: pending.error ?? "Unable to send message",
+                  codexErrorInfo: null,
+                  additionalDetails: null,
+                }}
+              />
+            ) : pending.phase === "sending" ? (
+              <p className="message-loading-state" role="status">
+                {locale === "zh" ? "发送中" : "Sending"}
+              </p>
+            ) : null}
+          </section>
+        ))}
         {pendingTeam ? (
           <TranscriptTeamProgress
             progress={pendingTeam}
+            showUserMessage={
+              !pendingSubmissions.some(
+                (pending) => pending.id === pendingTeam.clientSubmissionId,
+              )
+            }
             locale={locale}
             itemLabels={itemLabels}
           />
@@ -579,7 +634,7 @@ export function Transcript({
               : "Live preview is not retained. The task is still running; saved content is available in conversation history."}
           </p>
         ) : null}
-        {streamingText ? (
+        {showsLiveStream ? (
           <TranscriptStreamingMessage
             crewonLabel={crewonLabel}
             locale={locale}

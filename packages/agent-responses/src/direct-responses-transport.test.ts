@@ -144,6 +144,173 @@ test("coalesces small portable gateway deltas before the durable Kernel boundary
   ]);
 });
 
+test(
+  "flushes a short gateway reply before completion and releases a waiting body on return",
+  { timeout: 2000 },
+  async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    let canceled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+      },
+      cancel() {
+        canceled += 1;
+      },
+    });
+    const transport = new DirectResponsesTransport(
+      {
+        endpoint: "https://gateway.example/v1/responses",
+        model: "gateway-model",
+        requestProfile: "responsesLite",
+        sequencePolicy: "whenPresent",
+        outputDeltaFlushBytes: 1024,
+      },
+      {
+        fetch: async () =>
+          new Response(body, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+      },
+    );
+    const events = transport
+      .stream(manualRequest(), signal())
+      [Symbol.asyncIterator]();
+    const first = events.next();
+    controller.enqueue(
+      new TextEncoder().encode(
+        'data: {"type":"response.created","response":{"id":"resp-early"}}\n\n' +
+          'data: {"type":"response.output_text.delta","delta":"short reply"}\n\n',
+      ),
+    );
+    assert.deepEqual((await first).value, {
+      type: "output.delta",
+      delta: "short reply",
+    });
+    // The provider remains open and has not sent a completion event.
+    assert.equal(body.locked, true);
+    await events.return?.();
+    assert.equal(body.locked, false);
+    assert.equal(canceled, 1);
+  },
+);
+
+test(
+  "timed gateway deltas and the final tail preserve completed output",
+  { timeout: 2000 },
+  async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+      },
+    });
+    const transport = new DirectResponsesTransport(
+      {
+        endpoint: "https://gateway.example/v1/responses",
+        model: "gateway-model",
+        requestProfile: "responsesLite",
+        sequencePolicy: "whenPresent",
+        outputDeltaFlushBytes: 1024,
+      },
+      {
+        fetch: async () =>
+          new Response(body, {
+            headers: { "content-type": "text/event-stream" },
+          }),
+      },
+    );
+    const events = transport
+      .stream(manualRequest(), signal())
+      [Symbol.asyncIterator]();
+    const first = events.next();
+    controller.enqueue(
+      new TextEncoder().encode(
+        'data: {"type":"response.created","response":{"id":"resp-timed"}}\n\n' +
+          'data: {"type":"response.output_text.delta","delta":"first"}\n\n',
+      ),
+    );
+    assert.deepEqual((await first).value, {
+      type: "output.delta",
+      delta: "first",
+    });
+    controller.enqueue(
+      new TextEncoder().encode(
+        'data: {"type":"response.output_text.delta","delta":" tail"}\n\n' +
+          'data: {"type":"response.completed","response":{"id":"resp-timed","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"first tail"}]}]}}\n\n',
+      ),
+    );
+    controller.close();
+    assert.deepEqual((await events.next()).value, {
+      type: "output.delta",
+      delta: " tail",
+    });
+    assert.deepEqual((await events.next()).value, {
+      type: "completed",
+      checkpoint: null,
+    });
+    assert.equal((await events.next()).done, true);
+    assert.equal(body.locked, false);
+  },
+);
+
+test(
+  "caller cancellation closes a timed gateway stream after visible output",
+  { timeout: 2000 },
+  async () => {
+    let body!: ReadableStream<Uint8Array>;
+    const transport = new DirectResponsesTransport(
+      {
+        endpoint: "https://gateway.example/v1/responses",
+        model: "gateway-model",
+        requestProfile: "responsesLite",
+        sequencePolicy: "whenPresent",
+        outputDeltaFlushBytes: 1024,
+      },
+      {
+        fetch: async (_input, init) => {
+          const activeSignal = init?.signal;
+          assert.ok(activeSignal);
+          body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  'data: {"type":"response.created","response":{"id":"resp-cancel"}}\n\n' +
+                    'data: {"type":"response.output_text.delta","delta":"visible"}\n\n',
+                ),
+              );
+              activeSignal.addEventListener(
+                "abort",
+                () => controller.error(activeSignal.reason),
+                { once: true },
+              );
+            },
+          });
+          return new Response(body, {
+            headers: { "content-type": "text/event-stream" },
+          });
+        },
+      },
+    );
+    const cancellation = new AbortController();
+    const events = transport
+      .stream(manualRequest(), cancellation.signal)
+      [Symbol.asyncIterator]();
+    assert.deepEqual((await events.next()).value, {
+      type: "output.delta",
+      delta: "visible",
+    });
+    const pending = events.next();
+    const rejected = assert.rejects(
+      pending,
+      hasTransportError("canceled", "segment_canceled", false),
+    );
+    cancellation.abort("user_requested");
+    await rejected;
+    assert.equal(body.locked, false);
+  },
+);
+
 test("ignores shared AR-041 unknown events and completes the HTTP stream", async () => {
   const reference = JSON.parse(
     readFileSync(
@@ -222,7 +389,11 @@ test("projects shared AR-042 reasoning through the real Direct transport boundar
     await collect(transport.stream(manualRequest(), signal())),
     reference.expected.transportEvents.map((event) =>
       event.type === "usage"
-        ? { ...event, cachedInputTokensReported: false, providerResponseId: "resp-ar-042" }
+        ? {
+            ...event,
+            cachedInputTokensReported: false,
+            providerResponseId: "resp-ar-042",
+          }
         : event,
     ),
   );

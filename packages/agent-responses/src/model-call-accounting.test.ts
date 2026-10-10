@@ -376,12 +376,16 @@ for (const status of ["completed", "failed"] as const)
     assert.equal(l.writes.at(-1)?.outcome, status);
   });
 
-test("HTTP diagnostics distinguish admission, body arrival, validated terminal and stream EOF", async () => {
+test("HTTP diagnostics distinguish admission, body arrival, validated terminal and owned read completion", async () => {
   const l = ledger();
   let bodyController!: ReadableStreamDefaultController<Uint8Array>;
+  let bodyCanceled = 0;
   const body = new ReadableStream<Uint8Array>({
     start(c) {
       bodyController = c;
+    },
+    cancel() {
+      bodyCanceled += 1;
     },
   });
   const transport = new DirectResponsesTransport(
@@ -405,10 +409,12 @@ test("HTTP diagnostics distinguish admission, body arrival, validated terminal a
   assert.equal((await next).value?.type, "output.delta");
   assert.equal((await stream.next()).value?.type, "usage");
   assert.equal((await stream.next()).value?.type, "completed");
-  // Terminal is already validated, but this adapter still awaits the HTTP EOF.
+  // HTTP ownership has ended. Final accounting still awaits consumer settlement.
   assert.equal(l.writes.at(-1)?.outcome, "unknown");
-  bodyController.close();
+  assert.equal(bodyCanceled, 1);
+  assert.equal(body.locked, false);
   assert.equal((await stream.next()).done, true);
+  assert.equal(l.writes.at(-1)?.outcome, "completed");
   const timing = l.writes.at(-1)?.httpTiming;
   assert.ok(timing);
   for (const key of [

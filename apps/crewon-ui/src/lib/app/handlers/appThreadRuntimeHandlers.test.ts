@@ -264,12 +264,89 @@ describe("app thread runtime handlers", () => {
       }),
     );
     await handlers.sendMessageInNewThread("Build report");
+    expect(setSelectedThreadId).toHaveBeenCalledWith(null);
+    setSelectedThreadId.mockClear();
     await threadMessageSpy.sendParams?.createThread("Build report");
     expect(threadMessageSpy.createParams?.workspaceId).toBe("workspace-a");
     current = false;
     threadMessageSpy.createParams?.setSelectedThreadId("late-thread-a");
     threadMessageSpy.sendParams?.setSelectedThreadId("late-thread-a");
     expect(setSelectedThreadId).not.toHaveBeenCalled();
+  });
+
+  it("selects an explicitly requested new conversation while an old conversation is selected", async () => {
+    const selection = { current: "old-thread" as string | null };
+    const epoch = { current: 3 };
+    const select = vi.fn((id: string | null | ((current: string | null) => string | null)) => {
+      selection.current = typeof id === "function" ? id(selection.current) : id;
+      epoch.current++;
+    });
+    const handlers = createAppThreadRuntimeHandlers(
+      createParams({
+        selectedThreadId: "old-thread",
+        selectedThreadIdRef: selection,
+        selectionEpochRef: epoch,
+        setSelectedThreadId: select,
+      }),
+    );
+    await handlers.sendMessageInNewThread("New request");
+    expect(selection.current).toBeNull();
+    expect(threadMessageSpy.sendParams?.isSubmissionSelectionCurrent?.()).toBe(
+      true,
+    );
+    await threadMessageSpy.sendParams?.createThread("New request");
+    threadMessageSpy.createParams?.setSelectedThreadId("created-thread");
+    expect(selection.current).toBe("created-thread");
+    threadMessageSpy.sendParams?.setSelectedThreadId("created-thread");
+    expect(select).toHaveBeenCalledTimes(3);
+    expect(threadMessageSpy.sendParams?.isSubmissionSelectionCurrent?.()).toBe(
+      true,
+    );
+  });
+
+  it("does not restore a delayed submission draft after leaving and returning to its conversation", async () => {
+    const selection = { current: "selected-thread" as string | null };
+    const epoch = { current: 1 };
+    const handlers = createAppThreadRuntimeHandlers(
+      createParams({
+        selectedThreadIdRef: selection,
+        selectionEpochRef: epoch,
+      }),
+    );
+    await handlers.sendMessage("Submitted draft");
+    expect(threadMessageSpy.sendParams?.isSubmissionSelectionCurrent?.()).toBe(
+      true,
+    );
+    selection.current = "other-thread";
+    epoch.current++;
+    selection.current = "selected-thread";
+    epoch.current++;
+    expect(threadMessageSpy.sendParams?.isSubmissionSelectionCurrent?.()).toBe(
+      false,
+    );
+  });
+
+  it("keeps another selected conversation when new-thread creation returns late", async () => {
+    const selection = { current: null as string | null };
+    const epoch = { current: 1 };
+    const select = vi.fn();
+    const handlers = createAppThreadRuntimeHandlers(
+      createParams({
+        selectedThreadId: null,
+        selectedThread: null,
+        selectedThreadIdRef: selection,
+        selectionEpochRef: epoch,
+        setSelectedThreadId: select,
+      }),
+    );
+    await handlers.sendMessageInNewThread("New request");
+    select.mockClear();
+    await threadMessageSpy.sendParams?.createThread("New request");
+    selection.current = "other-thread";
+    epoch.current++;
+    threadMessageSpy.createParams?.setSelectedThreadId("late-created-thread");
+    threadMessageSpy.sendParams?.setSelectedThreadId("late-created-thread");
+    expect(select).not.toHaveBeenCalled();
   });
 
   it("passes Provider execution preparation into the standard thread creator", async () => {

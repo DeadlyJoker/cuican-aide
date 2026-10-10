@@ -26,10 +26,12 @@ export function TranscriptTeamProgress({
   progress,
   locale,
   itemLabels,
+  showUserMessage = true,
 }: {
   progress: ControlTeamProgress;
   locale: Locale;
   itemLabels: TranscriptItemLabels;
+  showUserMessage?: boolean;
 }) {
   const zh = locale === "zh";
   const phase =
@@ -66,18 +68,20 @@ export function TranscriptTeamProgress({
       className="turn-group team-progress-turn"
       aria-label={zh ? "团队任务进度" : "Team task progress"}
     >
-      <TranscriptMessage
-        item={{
-          type: "userMessage",
-          clientId: null,
-          id: progress.messageId ?? `team-pending:${progress.threadId}`,
-          content: [
-            { type: "text", text: progress.content, text_elements: [] },
-          ],
-        }}
-        itemLabels={itemLabels}
-        locale={locale}
-      />
+      {showUserMessage ? (
+        <TranscriptMessage
+          item={{
+            type: "userMessage",
+            clientId: null,
+            id: progress.messageId ?? `team-pending:${progress.threadId}`,
+            content: [
+              { type: "text", text: progress.content, text_elements: [] },
+            ],
+          }}
+          itemLabels={itemLabels}
+          locale={locale}
+        />
+      ) : null}
       <div
         className="team-progress-status"
         role="status"

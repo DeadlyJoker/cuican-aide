@@ -11,6 +11,7 @@ import type { ConnectionState } from "../../lib/shared/connectionState";
 import { translate, type Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
 import type { WorkMode } from "../../lib/workMode";
+import { usePendingThreadSubmissionsPresentation } from "../messages/PendingThreadSubmissionScope";
 
 export function AppWorkspaceConversationContent({
   activeTurnId,
@@ -62,14 +63,18 @@ export function AppWorkspaceConversationContent({
   onThreadSettings: () => void;
 }) {
   const t = translate(locale);
+  const hasPendingMessage = usePendingThreadSubmissionsPresentation().some(
+    (pending) => pending.threadId === selectedThreadId,
+  );
   const sendShortcutLabel = platform === "mac" ? "⌘ Enter" : "Ctrl Enter";
 
   const streamingText = selectedThreadId
     ? (streamingTextByThread[selectedThreadId] ?? "")
     : "";
   const hasConversation =
-    Boolean(selectedThread) &&
-    ((selectedThread?.turns.length ?? 0) > 0 || streamingText.length > 0);
+    hasPendingMessage ||
+    (Boolean(selectedThread) &&
+      ((selectedThread?.turns.length ?? 0) > 0 || streamingText.length > 0));
 
   if (!hasConversation) {
     return (

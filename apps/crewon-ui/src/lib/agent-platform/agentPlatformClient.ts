@@ -34,6 +34,9 @@ import type {
 import { hasDesktopBridge, hasDevServerProxy } from "../platform";
 import { promptPreview } from "../shared/text";
 import { resolveAgentPlatformRuntimeBaseUrl } from "./agentPlatformRuntimeBaseUrl";
+import { agentPlatformCatalogReads } from "./agentPlatformCatalogReadQueue";
+import { waitForAgentPlatformRequest } from "./agentPlatformRequestWait";
+import { AgentPlatformSnapshotReads } from "./agentPlatformSnapshotReads";
 
 type PageResponse<T> = {
   items?: T[];
@@ -397,12 +400,14 @@ async function probeAgentPlatformAvailability(): Promise<void> {
         headers: {
           Accept: "application/json",
         },
+        signal: AbortSignal.timeout(10_000),
       },
     );
   } catch (error) {
     throw markAgentPlatformUnavailable(error);
   }
 
+  await response.body?.cancel();
   if (isUnavailableStatus(response.status)) {
     throw markAgentPlatformUnavailable(response.status);
   }
@@ -692,11 +697,17 @@ export async function agentPlatformAuthorizedSessionFetch(input: {
     if (input.session) assertAgentPlatformSessionCurrent(input.session);
   };
   assertRequestedSession();
-  const access = await getAgentPlatformAccessSession();
+  init.signal?.throwIfAborted();
+  const access = await waitForAgentPlatformRequest({
+    pending: getAgentPlatformAccessSession(),
+    signal: init.signal,
+  });
   assertRequestedSession();
+  init.signal?.throwIfAborted();
   const requestWithAccess = async (current: AgentPlatformAccessSession) => {
     assertRequestedSession();
     assertAgentPlatformSessionCurrent(current.session);
+    init.signal?.throwIfAborted();
     const headers = new Headers(init.headers);
     headers.set("Accept", headers.get("Accept") ?? "application/json");
     if (current.accessToken)
@@ -732,11 +743,22 @@ export async function agentPlatformAuthorizedSessionFetch(input: {
   const response = await requestWithAccess(access);
   if (response.status !== 401)
     return Object.freeze({ response, session: access.session });
-  const refreshed = await accessTokenOwner.retryRejectedToken(
-    access.session,
-    access.accessToken,
-  );
+  let refreshed: AgentPlatformAccessSession | null;
+  try {
+    refreshed = await waitForAgentPlatformRequest({
+      pending: accessTokenOwner.retryRejectedToken(
+        access.session,
+        access.accessToken,
+      ),
+      signal: init.signal,
+    });
+  } catch (error) {
+    await response.body?.cancel().catch(() => {});
+    assertRequestedSession();
+    throw error;
+  }
   assertRequestedSession();
+  init.signal?.throwIfAborted();
   if (!refreshed?.accessToken) {
     assertAgentPlatformSessionCurrent(access.session);
     return Object.freeze({ response, session: access.session });
@@ -770,51 +792,75 @@ function settledError(result: PromiseSettledResult<unknown>): string {
   return "agent-platform request failed";
 }
 
-export async function readAgentPlatformSnapshot(): Promise<AgentPlatformSnapshot> {
-  await ensureAgentPlatformAvailable();
+const catalogSnapshotReads =
+  new AgentPlatformSnapshotReads<AgentPlatformSnapshot>();
+
+export async function readAgentPlatformSnapshot(
+  options: { signal?: AbortSignal } = {},
+): Promise<AgentPlatformSnapshot> {
+  return catalogSnapshotReads.read({
+    session: captureAgentPlatformSession(),
+    signal: options.signal,
+    read: (signal) => readAgentPlatformSnapshotAggregate({ signal }),
+  });
+}
+
+async function readAgentPlatformSnapshotAggregate(options: {
+  signal: AbortSignal;
+}): Promise<AgentPlatformSnapshot> {
+  options.signal?.throwIfAborted();
+  await waitForAgentPlatformRequest({
+    pending: ensureAgentPlatformAvailable(),
+    signal: options.signal,
+  });
+  options.signal?.throwIfAborted();
 
   const { value: currentUser, session } =
-    await authenticatedRequest<AgentPlatformUser>("/api/v1/auth/me");
+    await authenticatedRequest<AgentPlatformUser>("/api/v1/auth/me", {
+      init: { signal: options.signal },
+    });
   assertAgentPlatformSessionCurrent(session);
+  const signal = options.signal
+    ? AbortSignal.any([session.signal, options.signal])
+    : session.signal;
+  signal.throwIfAborted();
 
+  // Catalog enrichment must leave HTTP connections available for live Runs.
+  // These seven directory GETs alone use the shared background read budget;
+  // account checks, conversation requests and writes retain their own owners.
+  const catalogPage = <T>(path: string) =>
+    agentPlatformCatalogReads.read({
+      signal,
+      read: (signal) =>
+        listPage<T>(path, { auth: true, session, init: { signal } }),
+    });
   const results = await Promise.allSettled([
-    listPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100", {
-      auth: true,
-      session,
+    catalogPage<PlatformAgent>("/api/v1/agents/?page=1&page_size=100"),
+    catalogPage<PlatformKnowledgeBase>(
+      "/api/v1/knowledge/?page=1&page_size=100",
+    ),
+    catalogPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100"),
+    catalogPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100"),
+    catalogPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100"),
+    catalogPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100"),
+    agentPlatformCatalogReads.read({
+      signal,
+      read: (signal) =>
+        request<{
+          source?: {
+            type?: string;
+          };
+          resources?: {
+            agents?: PlatformAgent[];
+            knowledge_bases?: PlatformKnowledgeBase[];
+            skills?: PlatformSkill[];
+            mcp_servers?: PlatformMcpServer[];
+          };
+        }>("/api/v1/crewon/catalog", { auth: true, session, init: { signal } }),
     }),
-    listPage<PlatformKnowledgeBase>("/api/v1/knowledge/?page=1&page_size=100", {
-      auth: true,
-      session,
-    }),
-    listPage<PlatformSkill>("/api/v1/skills?page=1&page_size=100", {
-      auth: true,
-      session,
-    }),
-    listPage<PlatformMcpServer>("/api/v1/mcp/servers?page=1&page_size=100", {
-      auth: true,
-      session,
-    }),
-    listPage<PlatformMcpTool>("/api/v1/mcp/tools?page=1&page_size=100", {
-      auth: true,
-      session,
-    }),
-    listPage<PlatformWorkflow>("/api/v1/workflows?page=1&page_size=100", {
-      auth: true,
-      session,
-    }),
-    request<{
-      source?: {
-        type?: string;
-      };
-      resources?: {
-        agents?: PlatformAgent[];
-        knowledge_bases?: PlatformKnowledgeBase[];
-        skills?: PlatformSkill[];
-        mcp_servers?: PlatformMcpServer[];
-      };
-    }>("/api/v1/crewon/catalog", { auth: true, session }),
   ] as const);
   assertAgentPlatformSessionCurrent(session);
+  signal.throwIfAborted();
 
   const settledItems = <T>(result: PromiseSettledResult<T[]>): T[] | null =>
     result.status === "fulfilled" ? result.value : null;

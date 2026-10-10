@@ -206,6 +206,98 @@ describe("agent-platform WeCom session", () => {
     );
   });
 
+  it("actually aborts a stalled account HTTP request at its deadline without deleting credentials", async () => {
+    vi.useFakeTimers();
+    const storage = memoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    storeAgentPlatformSession("named-existing-access-fixture");
+    let requestSignal: AbortSignal | null | undefined;
+    const fetchMock = vi.fn((_input: unknown, init?: RequestInit) => {
+      requestSignal = init?.signal;
+      return new Promise<Response>((_resolve, reject) =>
+        requestSignal?.addEventListener(
+          "abort",
+          () => reject(requestSignal?.reason),
+          { once: true },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = readAgentPlatformCurrentUser();
+    const rejection = expect(result).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+    expect(requestSignal?.aborted).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(
+      "named-existing-access-fixture",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels and releases a stalled account response body when the consumer is withdrawn", async () => {
+    const storage = memoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    storeAgentPlatformSession("named-existing-access-fixture");
+    const cancel = vi.fn();
+    let entered!: () => void;
+    const readStarted = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull() {
+          entered();
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body)),
+    );
+    const controller = new AbortController();
+    const result = readAgentPlatformCurrentUser({ signal: controller.signal });
+    const rejection = expect(result).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    await readStarted;
+    controller.abort();
+    await rejection;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+    expect(storage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(
+      "named-existing-access-fixture",
+    );
+  });
+
+  it("a body deadline cancels a hanging authenticated reply without converting it into logout", async () => {
+    vi.useFakeTimers();
+    const storage = memoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    storeAgentPlatformSession("named-existing-access-fixture");
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const fetchMock = vi.fn(async () => new Response(body));
+    vi.stubGlobal("fetch", fetchMock);
+    const result = readAgentPlatformCurrentUser();
+    const rejection = expect(result).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    await rejection;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(storage.getItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY)).toBe(
+      "named-existing-access-fixture",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("uses global logout so the next login requires a fresh enterprise sign-in", async () => {
     vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "true");
     vi.stubGlobal("localStorage", memoryStorage());

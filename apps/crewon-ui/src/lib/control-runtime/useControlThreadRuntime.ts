@@ -31,6 +31,12 @@ import { createControlTeamGuiObservationCollector } from "./controlTeamGuiObserv
 import type { ControlTeamProgress } from "./controlTeamProgress";
 import { mergeThreadMetadata } from "../thread/threadCatalogWorkingSet";
 import { transcriptWindow } from "./controlTranscriptWindow";
+import {
+  presentControlRunTerminal,
+  updateControlPendingReplyDraft,
+  preserveControlRunSynchronizations,
+  clearControlRunSynchronization,
+} from "./controlRunTerminalPresentation";
 
 type ThreadSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
@@ -99,6 +105,7 @@ export function useControlThreadRuntime(params: {
     const teamObservation = createControlTeamGuiObservationCollector({
       client: params.client,
     });
+    const synchronizingRuns = new Map<string, Set<string>>();
     let control: ControlThreadRuntime;
     control = new ControlThreadRuntime(
       { client: params.client },
@@ -120,9 +127,13 @@ export function useControlThreadRuntime(params: {
           params.setThreads((current) =>
             upsertThread(
               current,
-              mergeThreadMetadata(
+              preserveControlRunSynchronizations(
                 current.find((item) => item.id === thread.id),
-                thread,
+                mergeThreadMetadata(
+                  current.find((item) => item.id === thread.id),
+                  thread,
+                ),
+                synchronizingRuns.get(thread.id) ?? new Set(),
               ),
             ),
           );
@@ -143,13 +154,27 @@ export function useControlThreadRuntime(params: {
                 : {
                     ...thread,
                     turns: thread.turns.map((item) =>
-                      item.id === turn.id ? turn : item,
+                      item.id === turn.id
+                        ? {
+                            ...turn,
+                            items: [
+                              ...item.items.filter(
+                                (prior) =>
+                                  !turn.items.some(
+                                    (next) => next.id === prior.id,
+                                  ),
+                              ),
+                              ...turn.items,
+                            ],
+                          }
+                        : item,
                     ),
                   },
             ),
           );
         },
         onThreadDeleted: (threadId) => {
+          synchronizingRuns.delete(threadId);
           if (!manageThreadsRef.current) return;
           const nextPlans = removeThreadRunPlanProjections(
             runPlanByRunIdRef.current,
@@ -244,7 +269,56 @@ export function useControlThreadRuntime(params: {
             ),
           );
         },
+        onRunTerminal: (threadId, runId, terminal) => {
+          let runs = synchronizingRuns.get(threadId);
+          if (!runs) synchronizingRuns.set(threadId, (runs = new Set()));
+          runs.add(runId);
+          if (manageThreadsRef.current) {
+            params.setThreads((current) =>
+              current.map((thread) =>
+                thread.id === threadId
+                  ? presentControlRunTerminal(thread, runId, terminal)
+                  : thread,
+              ),
+            );
+          }
+          params.setActiveTurnByThread((current) => {
+            if (current[threadId] !== runId) return current;
+            const next = { ...current };
+            delete next[threadId];
+            return next;
+          });
+        },
+        onRunPendingDraft: (threadId, runId, preview) => {
+          if (!manageThreadsRef.current) return;
+          params.setThreads((current) =>
+            current.map((thread) =>
+              thread.id === threadId
+                ? updateControlPendingReplyDraft(thread, runId, preview)
+                : thread,
+            ),
+          );
+        },
+        onRunSyncError: (threadId) => {
+          if (params.selectedThreadIdRef.current !== threadId) return;
+          params.setNotice({
+            text: "执行已结束，记录同步暂时延迟，将自动重试。",
+            tone: "warning",
+          });
+        },
         onRunSettled: (threadId, runId) => {
+          const runs = synchronizingRuns.get(threadId);
+          runs?.delete(runId);
+          if (runs?.size === 0) synchronizingRuns.delete(threadId);
+          if (manageThreadsRef.current) {
+            params.setThreads((current) =>
+              current.map((thread) =>
+                thread.id === threadId
+                  ? clearControlRunSynchronization(thread, runId)
+                  : thread,
+              ),
+            );
+          }
           params.setActiveTurnByThread((current) => {
             if (current[threadId] !== runId) return current;
             const next = { ...current };
@@ -307,6 +381,16 @@ export function useControlThreadRuntime(params: {
           });
         },
         onThreadRolledBack: (threadId) => {
+          synchronizingRuns.delete(threadId);
+          if (manageThreadsRef.current) {
+            params.setThreads((current) =>
+              current.map((thread) =>
+                thread.id === threadId
+                  ? clearControlRunSynchronization(thread)
+                  : thread,
+              ),
+            );
+          }
           params.setActiveTurnByThread((current) => {
             const next = { ...current };
             delete next[threadId];

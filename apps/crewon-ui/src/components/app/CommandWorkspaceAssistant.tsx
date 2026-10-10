@@ -2,7 +2,11 @@ import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import { Bot, CalendarPlus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
-import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import {
+  CommandThreadRoom,
+  PendingCommandThreadRoom,
+} from "./CommandWorkspaceConversation";
+import { usePendingThreadSubmissionsPresentation } from "../messages/PendingThreadSubmissionScope";
 import type { ReplayMessage } from "../messages/MessageReplayScope";
 import { classNames } from "./commandWorkspaceUtils";
 import type { Locale } from "../../lib/i18n";
@@ -41,6 +45,10 @@ export function CommandWorkspaceAssistant({
 }) {
   const [clearing, setClearing] = useState(false);
   const [creatingSchedule, setCreatingSchedule] = useState(false);
+  const pendingSubmissions = usePendingThreadSubmissionsPresentation();
+  const pendingNewThread = active && pendingSubmissions.some(
+    (pending) => pending.threadId === null,
+  );
   const threadIsRunning =
     Boolean(activeTurnId) ||
     Boolean(thread?.turns.some((turn) => turn.status === "inProgress"));
@@ -158,6 +166,13 @@ export function CommandWorkspaceAssistant({
             workMode={workMode}
             onModeChange={onModeChange}
             onStop={onStop}
+          />
+        ) : pendingNewThread ? (
+          <PendingCommandThreadRoom
+            locale={locale}
+            workMode={workMode}
+            onModeChange={onModeChange}
+            variant="assistant"
           />
         ) : (
           <section

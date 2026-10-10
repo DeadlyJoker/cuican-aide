@@ -8,6 +8,8 @@ import type {
 
 export type ControlTeamProgress = Readonly<{
   threadId: string;
+  /** Local presentation identity; never sent to Control API or the model. */
+  clientSubmissionId?: string;
   content: string;
   messageId: string | null;
   phase: "preparing" | "working" | "failed";
@@ -29,6 +31,7 @@ export type ControlTeamProgress = Readonly<{
 /** Read-only presentation of accepted Runs; never exposes worker drafts as a final answer. */
 export function createControlTeamProgress(input: {
   threadId: string;
+  clientSubmissionId?: string;
   content: string;
   plan: ControlTeamPlan;
   client: ControlApiClient;
@@ -41,6 +44,9 @@ export function createControlTeamProgress(input: {
   let handedOff = false;
   let progress: ControlTeamProgress = {
     threadId: input.threadId,
+    ...(input.clientSubmissionId === undefined
+      ? {}
+      : { clientSubmissionId: input.clientSubmissionId }),
     content: input.content,
     messageId: null,
     phase: "preparing",

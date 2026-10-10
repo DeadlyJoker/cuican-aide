@@ -8,6 +8,7 @@ import {
 } from "../auth/AgentPlatformAuthGate";
 import { useDesktopLocalManagementAccess } from "../../lib/desktop/DesktopLocalManagementContext";
 import { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
+import { storeAgentPlatformSession } from "../../lib/agent-platform/agentPlatformClient";
 
 const { readUser, login } = vi.hoisted(() => ({
   readUser: vi.fn(),
@@ -150,7 +151,9 @@ describe("enterprise gate Native management branch", () => {
       await vi.advanceTimersByTimeAsync(5_001);
     });
     expect(container.querySelector("[data-local='true']")).toBeNull();
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.textContent).toContain("正在自动重连");
     expect(localStorage.getItem("crewon-agent-platform-token")).toBe(
       "named-existing-session-fixture",
     );
@@ -168,7 +171,7 @@ describe("enterprise gate Native management branch", () => {
     expect(actualAccount).toMatchObject({ user: { id: 43 } });
     expect(login).not.toHaveBeenCalled();
   });
-  it("password login withdraws the old bootstrap consumer before its late reply", async () => {
+  it("account replacement withdraws a slow saved-session restoration before its late reply", async () => {
     vi.useFakeTimers();
     localStorage.setItem(
       "crewon-agent-platform-refresh-token",
@@ -176,44 +179,32 @@ describe("enterprise gate Native management branch", () => {
     );
     approveLocal();
     let late!: (value: unknown) => void;
-    readUser.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          late = resolve;
-        }),
-    );
+    readUser
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            late = resolve;
+          }),
+      )
+      .mockResolvedValue({
+        id: 43,
+        username: "replacement",
+        role: "user",
+        password_login_enabled: true,
+      });
     await render();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_001);
     });
-    login.mockResolvedValue({
-      id: 43,
-      username: "restored",
-      role: "user",
-      password_login_enabled: true,
-    });
-    container.querySelector<HTMLInputElement>("input[name='username']")!.value =
-      "restored";
-    container.querySelector<HTMLInputElement>("input[name='password']")!.value =
-      "fixture-password";
+    expect(container.querySelector("form")).toBeNull();
     await act(async () => {
-      container
-        .querySelector("form")!
-        .dispatchEvent(
-          new Event("submit", { bubbles: true, cancelable: true }),
-        );
-    });
-    expect(actualAccount).toMatchObject({ user: { id: 43 } });
-    await act(async () => {
+      storeAgentPlatformSession("replacement-session-fixture");
       late({ id: 99, username: "stale", role: "admin" });
-      for (let i = 0; i < 10; i++) await Promise.resolve();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
     });
     expect(actualAccount).toMatchObject({ user: { id: 43 } });
     expect(container.textContent).not.toContain("stale");
-    expect(login).toHaveBeenCalledExactlyOnceWith(
-      "restored",
-      "fixture-password",
-    );
+    expect(login).not.toHaveBeenCalled();
   });
   it("keeps Web, unapproved Native and older preloads behind the original login gate", async () => {
     for (const bridge of [

@@ -67,6 +67,29 @@ const base = {
 };
 
 describe("Control Team progress", () => {
+  it("retains local submission identity through acceptance and failure without changing durable messages", () => {
+    const changes: Array<ControlTeamProgress | null> = [];
+    const tracker = createControlTeamProgress({
+      ...base,
+      clientSubmissionId: "local-submission",
+      signal: new AbortController().signal,
+      onChange: (progress) => changes.push(progress),
+    });
+    expect(changes[0]).toMatchObject({
+      clientSubmissionId: "local-submission",
+      messageId: null,
+    });
+    tracker.acceptedMessage(message);
+    tracker.fail();
+    expect(changes.at(-1)).toMatchObject({
+      clientSubmissionId: "local-submission",
+      messageId: message.messageId,
+      phase: "failed",
+    });
+    expect(message).not.toHaveProperty("clientSubmissionId");
+    tracker.close();
+  });
+
   it("shows preparation, durable acceptance, queue and execution without publishing worker text", async () => {
     const changes: Array<ControlTeamProgress | null> = [];
     const tracker = createControlTeamProgress({

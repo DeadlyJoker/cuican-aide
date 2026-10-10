@@ -1,4 +1,6 @@
 import { notifyAgentPlatformSessionChanged } from "./agentPlatformSessionEvents";
+import { createAgentPlatformTokenTransport } from "./agentPlatformTokenTransport";
+import { readAgentPlatformResponseBody } from "./agentPlatformResponseBody";
 
 export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
 export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
@@ -23,6 +25,7 @@ type Dependencies = Readonly<{
 type TokenOperation = {
   readonly session: AgentPlatformSessionSnapshot;
   readonly physical: Promise<AgentPlatformAccessSession>;
+  readonly waiting: Promise<AgentPlatformAccessSession>;
   accepted: AgentPlatformAccessSession | null;
 };
 
@@ -163,9 +166,16 @@ export class AgentPlatformAccessTokenOwner {
       this.#cachedTokenExpiresAt = 0;
       removeStoredCredential(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
     }
-    const access = await this.#token(session);
-    this.assertCurrent(access.session);
-    return access;
+    try {
+      const access = await this.#token(session);
+      this.assertCurrent(access.session);
+      return access;
+    } catch (error) {
+      // Account withdrawal is the authority boundary even if cancellation of
+      // the old transport happens to surface first as a generic AbortError.
+      this.assertCurrent(session);
+      throw error;
+    }
   }
 
   #isCurrent(session: AgentPlatformSessionSnapshot): boolean {
@@ -200,9 +210,11 @@ export class AgentPlatformAccessTokenOwner {
   async #assertResponseCurrent(
     session: AgentPlatformSessionSnapshot,
     response: Response,
+    signal: AbortSignal,
   ): Promise<void> {
     try {
       this.assertCurrent(session);
+      signal.throwIfAborted();
     } catch (error) {
       await response.body?.cancel().catch(() => {});
       throw error;
@@ -243,9 +255,13 @@ export class AgentPlatformAccessTokenOwner {
     if (this.#pending !== null) {
       const accepted = this.#pending.accepted;
       if (accepted && this.#isCurrent(accepted.session)) return accepted;
-      return this.#isCurrent(this.#pending.session)
-        ? this.#pending.physical
-        : this.#access(null, session);
+      if (this.#isCurrent(this.#pending.session)) return this.#pending.waiting;
+      // The previous account still owns the physical slot. The current account
+      // is unavailable until it retires, not anonymous: returning a null token
+      // would send an unauthenticated request and clear its valid credentials.
+      throw this.#dependencies.unavailableError(
+        "账号服务暂时不可用，请稍后重试。",
+      );
     }
     return this.#start(session);
   }
@@ -253,31 +269,41 @@ export class AgentPlatformAccessTokenOwner {
   #start(
     session: AgentPlatformSessionSnapshot,
   ): Promise<AgentPlatformAccessSession> {
+    const transport = createAgentPlatformTokenTransport(
+      session.signal,
+      this.#dependencies.unavailableError,
+    );
     const physical = Promise.resolve()
       .then(async () => {
         this.assertCurrent(session);
+        transport.signal.throwIfAborted();
         return this.#dependencies.unifiedSsoEnabled()
-          ? this.#obtainBff(session)
-          : this.#restore(session);
+          ? this.#obtainBff(session, transport.signal)
+          : this.#restore(session, transport.signal);
       })
       .finally(() => {
+        transport.close();
         if (this.#pending?.physical === physical) this.#pending = null;
       });
-    this.#pending = { session, physical, accepted: null };
-    return physical;
+    const waiting = Promise.race([physical, transport.deadline]);
+    this.#pending = { session, physical, waiting, accepted: null };
+    return waiting;
   }
 
   async #restore(
     session: AgentPlatformSessionSnapshot,
+    signal: AbortSignal,
   ): Promise<AgentPlatformAccessSession> {
-    const refreshed = await this.#refresh(session);
+    const refreshed = await this.#refresh(session, signal);
     if (refreshed !== null) return refreshed;
     this.assertCurrent(session);
-    return this.#devLogin(session);
+    signal.throwIfAborted();
+    return this.#devLogin(session, signal);
   }
 
   async #refresh(
     session: AgentPlatformSessionSnapshot,
+    signal: AbortSignal,
   ): Promise<AgentPlatformAccessSession | null> {
     const refreshToken = this.#cachedRefreshToken;
     if (!refreshToken) {
@@ -297,13 +323,14 @@ export class AgentPlatformAccessTokenOwner {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         credentials: "same-origin",
         cache: "no-store",
-        signal: session.signal,
+        signal,
       },
     );
-    await this.#assertResponseCurrent(session, response);
+    await this.#assertResponseCurrent(session, response, signal);
     if (!response.ok) {
       await response.body?.cancel();
       this.assertCurrent(session);
+      signal.throwIfAborted();
       if (response.status === 429 || response.status >= 500) {
         throw this.#dependencies.unavailableError(
           "账号服务暂时不可用，请稍后重试。",
@@ -311,11 +338,12 @@ export class AgentPlatformAccessTokenOwner {
       }
       return this.#access(null, this.clear());
     }
-    const body = (await response.json()) as {
+    const body = (await readAgentPlatformResponseBody(response, signal)) as {
       access_token?: string;
       refresh_token?: string;
     };
     this.assertCurrent(session);
+    signal.throwIfAborted();
     if (!body.access_token || !this.#matchesRequirements(body.access_token)) {
       return this.#access(null, this.clear());
     }
@@ -339,6 +367,7 @@ export class AgentPlatformAccessTokenOwner {
 
   async #devLogin(
     session: AgentPlatformSessionSnapshot,
+    signal: AbortSignal,
   ): Promise<AgentPlatformAccessSession> {
     this.assertCurrent(session);
     const username = this.#dependencies.envValue(
@@ -354,17 +383,21 @@ export class AgentPlatformAccessTokenOwner {
         method: "POST",
         body: new URLSearchParams({ username, password }),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        signal: session.signal,
+        signal,
       },
     );
-    await this.#assertResponseCurrent(session, response);
+    await this.#assertResponseCurrent(session, response, signal);
     if (!response.ok) {
       await response.body?.cancel();
       this.assertCurrent(session);
+      signal.throwIfAborted();
       return this.#access(null, session);
     }
-    const body = (await response.json()) as { access_token?: string };
+    const body = (await readAgentPlatformResponseBody(response, signal)) as {
+      access_token?: string;
+    };
     this.assertCurrent(session);
+    signal.throwIfAborted();
     if (!body.access_token || !this.#matchesRequirements(body.access_token))
       return this.#access(null, session);
     const publication = this.#publish(
@@ -382,6 +415,7 @@ export class AgentPlatformAccessTokenOwner {
 
   async #obtainBff(
     session: AgentPlatformSessionSnapshot,
+    signal: AbortSignal,
   ): Promise<AgentPlatformAccessSession> {
     removeStoredCredential(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
     removeStoredCredential(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
@@ -392,24 +426,26 @@ export class AgentPlatformAccessTokenOwner {
         headers: { Accept: "application/json" },
         credentials: "same-origin",
         cache: "no-store",
-        signal: session.signal,
+        signal,
       },
     );
-    await this.#assertResponseCurrent(session, response);
+    await this.#assertResponseCurrent(session, response, signal);
     if (!response.ok) {
       await response.body?.cancel();
       this.assertCurrent(session);
+      signal.throwIfAborted();
       if (response.status === 401) return this.#access(null, session);
       throw this.#dependencies.unavailableError(
         `SSO session token failed: ${response.status}`,
       );
     }
-    const body = (await response.json()) as {
+    const body = (await readAgentPlatformResponseBody(response, signal)) as {
       access_token?: string;
       expires_in?: number;
       user?: Record<string, unknown>;
     };
     this.assertCurrent(session);
+    signal.throwIfAborted();
     if (!body.access_token) return this.#access(null, session);
     const publication = this.#publish(
       session,

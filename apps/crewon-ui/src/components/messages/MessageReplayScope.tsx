@@ -14,6 +14,7 @@ import {
 } from "../../lib/control-runtime/controlMessageReplay";
 import { MessageInlineEditor } from "./MessageInlineEditor";
 import { transcriptWindow } from "../../lib/control-runtime/controlTranscriptWindow";
+import { controlThreadHasPendingCanonicalSync } from "../../lib/control-runtime/controlRunTerminalPresentation";
 
 type Selection = {
   userMessageId: string;
@@ -59,12 +60,13 @@ export function MessageReplayScope({
   const lock = useRef(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const zh = locale === "zh";
+  const replayBusy = busy || controlThreadHasPendingCanonicalSync(thread);
   async function submit() {
     if (
       !thread ||
       !selection ||
       !onReplay ||
-      busy ||
+      replayBusy ||
       lock.current ||
       historyChanged ||
       !selection.text.trim()
@@ -110,7 +112,7 @@ export function MessageReplayScope({
     <ReplayContext.Provider
       value={{
         available: Boolean(onReplay && thread),
-        busy: busy || submitting,
+        busy: replayBusy || submitting,
         selection,
         submitting,
         error,
@@ -118,7 +120,8 @@ export function MessageReplayScope({
         textOnly: (id) =>
           thread !== null && replaySource(thread, id)?.textOnly === true,
         open: (id) => {
-          if (!thread || !onReplay || busy || lock.current || selection) return;
+          if (!thread || !onReplay || replayBusy || lock.current || selection)
+            return;
           const source = replaySource(thread, id);
           if (!source?.textOnly) return;
           returnFocus.current =

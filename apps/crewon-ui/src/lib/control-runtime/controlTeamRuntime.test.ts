@@ -514,6 +514,7 @@ describe("Control TypeScript Team Runtime", () => {
         client: state.client as ControlApiClient,
         eventStream: stream,
         signal: new AbortController().signal,
+        clientSubmissionId: "local-team-submission",
         visibleContent: "核对预算",
         onChange: (p) => observed.push(p),
       },
@@ -524,6 +525,22 @@ describe("Control TypeScript Team Runtime", () => {
     expect(result.run.status).toBe("queued");
     expect(observed.at(-1)).toBeNull();
     expect(observed.some((p) => p?.runs.length === 2)).toBe(true);
+    expect(observed[0]).toMatchObject({
+      phase: "preparing",
+      clientSubmissionId: "local-team-submission",
+    });
+    expect(
+      observed
+        .filter((p) => p !== null)
+        .every((p) => p.clientSubmissionId === "local-team-submission"),
+    ).toBe(true);
+    expect(
+      JSON.stringify([
+        vi.mocked(state.client.appendThreadMessage).mock.calls,
+        vi.mocked(state.client.createRun).mock.calls,
+        vi.mocked(state.client.startTurn).mock.calls,
+      ]),
+    ).not.toContain("local-team-submission");
   });
 
   it("rejects Plan before any Team or Goal side effect", async () => {

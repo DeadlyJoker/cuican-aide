@@ -174,6 +174,44 @@ function baseSendParams(
 }
 
 describe("thread message actions", () => {
+  it.each([undefined, "local-submission"])(
+    "hands off local submission identity separately from execution settings: %s",
+    async (submissionId) => {
+      const startTurn = vi.fn(async () => turnStartResponse());
+      const settings = { model: "available-model" };
+      const params = baseSendParams({
+        client: {
+          async resumeThread() {
+            return thread();
+          },
+          startTurn,
+          async steerTurn() {
+            return { turnId: "turn-steered" };
+          },
+        },
+        onSubmission: () => ({
+          ...(submissionId === undefined ? {} : { submissionId }),
+          bindThread: vi.fn(),
+          accepted: vi.fn(),
+          failed: vi.fn(),
+        }),
+        threadSettings: settings,
+      });
+      await sendMessageAction(params);
+      expect(startTurn.mock.calls).toEqual([
+        [
+          "thread-1",
+          "Hello",
+          params.pendingComposerMentions,
+          settings,
+          [],
+          ...(submissionId === undefined ? [] : [{ submissionId }]),
+        ],
+      ]);
+      expect(settings).toEqual({ model: "available-model" });
+    },
+  );
+
   it("starts a newly created Control conversation on the first send while selection history refreshes", async () => {
     const f = transcriptFixture(0);
     f.runtime.setThreadEventStreamFocus(null);

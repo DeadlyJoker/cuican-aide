@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useProjectConversationComposer } from "./lib/app/useProjectConversationComposer";
 import { BusinessExtensionController } from "./components/extensions/BusinessExtensionController";
 import { StreamingTextScope } from "./components/StreamingTextScope";
+import { PendingThreadSubmissionScope } from "./components/messages/PendingThreadSubmissionScope";
 import { ProjectPlanningScope } from "./components/project-planning/ProjectPlanningScope";
 import { useControlThreadCatalog } from "./lib/control-runtime/useControlThreadCatalog";
 import { useThreadSelectionRead } from "./lib/thread/useThreadSelectionRead";
@@ -389,7 +390,11 @@ export function App({
     connected: controlRuntimeConnected,
     search: threadSearchTerm,
     archived: showArchivedThreads,
-    preserveEmptySelection: draftWorkspaceCwd !== undefined,
+    preserveEmptySelection:
+      draftWorkspaceCwd !== undefined ||
+      threadState.pendingThreadSubmissions.some(
+        (pending) => pending.threadId === null && pending.phase === "sending",
+      ),
     selectedThreadId,
     setSelectedThreadId,
     setThreadCatalogPage: threadState.setThreadCatalogPage,
@@ -1384,6 +1389,12 @@ export function App({
   }
   if (renderCommandShell)
     return (
+      <PendingThreadSubmissionScope
+        submissions={threadState.pendingThreadSubmissions}
+        selectedThreadId={selectedThreadId}
+        selectionEpoch={threadState.selectionEpochRef.current}
+        onPresented={threadState.acknowledgePresentedSubmissions}
+      >
       <StreamingTextScope presentation={threadState.streamingTextPresentation}>
         <ProjectPlanningScope value={installedPlugins.planningNavigation}>
         <TranscriptNavigationScope runtime={controlThreadRuntime}>
@@ -1768,8 +1779,15 @@ export function App({
         </TranscriptNavigationScope>
         </ProjectPlanningScope>
       </StreamingTextScope>
+      </PendingThreadSubmissionScope>
     );
   return (
+    <PendingThreadSubmissionScope
+        submissions={threadState.pendingThreadSubmissions}
+        selectedThreadId={selectedThreadId}
+        selectionEpoch={threadState.selectionEpochRef.current}
+        onPresented={threadState.acknowledgePresentedSubmissions}
+      >
     <StreamingTextScope presentation={threadState.streamingTextPresentation}>
       <TranscriptNavigationScope runtime={controlThreadRuntime}>
         <AppShellChromeFrame
@@ -1935,5 +1953,6 @@ export function App({
         </AppShellChromeFrame>
       </TranscriptNavigationScope>
     </StreamingTextScope>
+    </PendingThreadSubmissionScope>
   );
 }

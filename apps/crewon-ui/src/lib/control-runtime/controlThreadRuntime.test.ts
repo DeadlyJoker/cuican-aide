@@ -4529,7 +4529,7 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
-  it("settles a requested-only Tool when terminal backfill stays silent past its deadline", async () => {
+  it("settles a requested-only Tool without waiting for optional silent backfill", async () => {
     const terminalRun = runView({
       status: "completed",
       terminalAt: "2026-08-09T08:00:04.000Z",
@@ -4545,6 +4545,7 @@ describe("Control thread runtime", () => {
     vi.spyOn(client, "getRun").mockResolvedValue({ run: terminalRun });
     let streamAttempt = 0;
     let backfillAbortReason: unknown;
+    const backfillAborted = deferred<void>();
     const settled = deferred<string>();
     const runtimeCallbacks = callbacks(settled.resolve);
     const runtime = new ControlThreadRuntime(
@@ -4568,6 +4569,7 @@ describe("Control thread runtime", () => {
           }
           await waitForAbort(input.signal);
           backfillAbortReason = input.signal?.reason;
+          backfillAborted.resolve();
         },
         runStatusPollDelay: waitForAbort,
         toolHistoryTimeoutMs: 10,
@@ -4577,10 +4579,11 @@ describe("Control thread runtime", () => {
 
     await runtime.startTurn("thread-1", "Inspect the workspace");
     await settled.promise;
+    await backfillAborted.promise;
 
     expect(streamAttempt).toBe(2);
     expect(backfillAbortReason).toMatchObject({
-      message: "control_tool_history_timeout",
+      message: "control_run_canonical_synchronized",
     });
     expect(runtimeCallbacks.onToolItem).toHaveBeenLastCalledWith(
       "thread-1",
