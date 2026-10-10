@@ -2,13 +2,10 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { normalizePluginUiViteImportPath } from "./src/lib/plugins/pluginUiViteImportPath";
+import { createAgentPlatformDevProxy } from "./src/lib/dev/agentPlatformDevProxy";
 // @ts-expect-error Vite runs this file in Node while the browser tsconfig excludes Node globals.
 import { writeFile } from "node:fs/promises";
 
-const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
-  error: "agent-platform unavailable",
-  message: "账号服务暂时不可用，请稍后重试。",
-});
 const MERMAID_CHUNK_PACKAGES = new Set([
   "@braintree/sanitize-url",
   "@iconify/utils",
@@ -45,12 +42,6 @@ type WebSocketProxy = {
   ): void;
 };
 
-type HttpProxyResponse = {
-  end?: (body?: string) => void;
-  headersSent?: boolean;
-  writeHead?: (statusCode: number, headers?: Record<string, string>) => void;
-};
-
 type HttpProxy = {
   on(
     event: "proxyReq",
@@ -58,14 +49,6 @@ type HttpProxy = {
       removeHeader: (name: string) => void;
       setHeader: (name: string, value: string) => void;
     }) => void,
-  ): void;
-  on(
-    event: "error",
-    callback: (
-      error: Error,
-      request: unknown,
-      response: HttpProxyResponse,
-    ) => void,
   ): void;
 };
 
@@ -199,6 +182,7 @@ export default defineConfig(({ mode }) => {
   const appServerDisabled = env.CREWON_APP_SERVER_DISABLED === "1";
   const agentPlatformTarget =
     env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
+  const agentPlatformProxy = createAgentPlatformDevProxy(agentPlatformTarget);
   const agentPlatformRuntimeBaseUrl =
     env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL ?? agentPlatformTarget;
   const controlTarget = env.CREWON_CONTROL_TARGET ?? "http://127.0.0.1:3210";
@@ -225,6 +209,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      agentPlatformProxy.lifecycle,
       localBackendRecoveryPlugin(backendRestartRequestFile),
       controlSessionPlugin({
         csrfToken: controlCsrfToken,
@@ -267,25 +252,7 @@ export default defineConfig(({ mode }) => {
                 },
               },
             }),
-        "/agent-platform-api": {
-          target: agentPlatformTarget,
-          changeOrigin: true,
-          configure(proxy) {
-            (proxy as unknown as HttpProxy).on(
-              "error",
-              (_error, _request, response) => {
-                if (!response?.writeHead || response.headersSent) {
-                  return;
-                }
-                response.writeHead(503, {
-                  "Content-Type": "application/json",
-                });
-                response.end?.(AGENT_PLATFORM_UNAVAILABLE_BODY);
-              },
-            );
-          },
-          rewrite: (path) => path.replace(/^\/agent-platform-api/, ""),
-        },
+        "/agent-platform-api": agentPlatformProxy.proxy,
         "/api/v1": {
           target: controlTarget,
           changeOrigin: false,

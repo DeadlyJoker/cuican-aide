@@ -18,6 +18,10 @@ import { waitForAgentPlatformRequest } from "./agentPlatformRequestWait";
 import { isAgentPlatformAuthTransientError } from "./agentPlatformAuthBootstrap";
 import { readAgentPlatformResponseBody } from "./agentPlatformResponseBody";
 import { withAgentPlatformInteractiveRequest } from "./agentPlatformInteractiveRequest";
+import {
+  createAgentPlatformLoginDiagnostics,
+  type AgentPlatformLoginDiagnostics,
+} from "./agentPlatformLoginDiagnostics";
 
 export type AgentPlatformUser = {
   id: number;
@@ -210,21 +214,31 @@ async function loginRequest(
   form: URLSearchParams,
   session: AgentPlatformSessionSnapshot,
   signal: AbortSignal,
+  diagnostics: AgentPlatformLoginDiagnostics,
 ): Promise<Response> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     assertAgentPlatformSessionCurrent(session);
     signal.throwIfAborted();
     try {
-      const response = await sessionFetch(
-        "/api/v1/auth/login",
-        {
-          method: "POST",
-          body: form,
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          signal,
+      const response = await diagnostics.measure({
+        stage: "token_request",
+        requestAttempt: attempt + 1,
+        signal,
+        execute: async (observer) => {
+          const response = await sessionFetch(
+            "/api/v1/auth/login",
+            {
+              method: "POST",
+              body: form,
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              signal,
+            },
+            session,
+          );
+          observer.httpStatus(response.status);
+          return response;
         },
-        session,
-      );
+      });
       if (
         !AUTH_LOGIN_TRANSIENT_STATUSES.has(response.status) ||
         attempt === 1
@@ -248,27 +262,47 @@ async function loginRequest(
 export function readAgentPlatformCurrentUser(
   options: AgentPlatformAccountReadOptions = {},
 ): Promise<AgentPlatformUser | null> {
+  return currentUserRead(options);
+}
+
+function currentUserRead(
+  options: AgentPlatformAccountReadOptions,
+  diagnostics?: AgentPlatformLoginDiagnostics,
+): Promise<AgentPlatformUser | null> {
   return accountRead(options, async (signal) => {
-    const session = captureAgentPlatformSession();
-    for (let attempt = 0; ; attempt += 1) {
-      signal.throwIfAborted();
-      try {
-        return await readAgentPlatformCurrentUserOnce(signal);
-      } catch (error) {
+    const read = async (
+      observeStatus?: (status: number | undefined) => void,
+    ) => {
+      const session = captureAgentPlatformSession();
+      for (let attempt = 0; ; attempt += 1) {
         signal.throwIfAborted();
-        assertAgentPlatformSessionCurrent(session);
-        if (!isAgentPlatformAuthTransientError(error) || attempt >= 2)
-          throw error;
-        // This authenticated read retries within one physical lifetime. It cannot
-        // turn a network failure into logout or outlive a withdrawn consumer.
-        await loginRetryDelay(session, signal);
+        observeStatus?.(undefined);
+        try {
+          return await readAgentPlatformCurrentUserOnce(signal, observeStatus);
+        } catch (error) {
+          signal.throwIfAborted();
+          assertAgentPlatformSessionCurrent(session);
+          if (!isAgentPlatformAuthTransientError(error) || attempt >= 2)
+            throw error;
+          // This authenticated read retries within one physical lifetime. It cannot
+          // turn a network failure into logout or outlive a withdrawn consumer.
+          await loginRetryDelay(session, signal);
+        }
       }
-    }
+    };
+    return diagnostics
+      ? diagnostics.measure({
+          stage: "current_user",
+          signal,
+          execute: (observer) => read(observer.httpStatus),
+        })
+      : read();
   });
 }
 
 async function readAgentPlatformCurrentUserOnce(
   signal: AbortSignal,
+  observeStatus?: (status: number | undefined) => void,
 ): Promise<AgentPlatformUser | null> {
   // When launched from PIM, the launch token IS the credential — don't
   // require a locally stored access token.
@@ -302,6 +336,7 @@ async function readAgentPlatformCurrentUserOnce(
     path: "/api/v1/auth/me",
     init: { signal },
   });
+  observeStatus?.(response.status);
   await assertResponseSessionCurrent(response, session, signal);
   if (response.status === 401) {
     await response.body?.cancel().catch(() => {});
@@ -329,26 +364,34 @@ export async function loginAgentPlatform(
   username: string,
   password: string,
 ): Promise<AgentPlatformUser> {
+  const diagnostics = createAgentPlatformLoginDiagnostics();
   const current = beginAgentPlatformInteractiveSession();
   const form = new URLSearchParams({ username, password });
   const credentials = await withAgentPlatformInteractiveRequest({
     session: current,
     execute: async (signal) => {
-      const response = await loginRequest(form, current, signal);
-      if (!response.ok) {
-        const error = await responseError(
-          response,
-          "登录失败，请检查账号和密码",
-          current,
-          signal,
-        );
-        assertAgentPlatformSessionCurrent(current);
-        throw error;
-      }
-      return sessionBody<{
-        access_token: string;
-        refresh_token?: string;
-      }>(response, current, signal);
+      const response = await loginRequest(form, current, signal, diagnostics);
+      return diagnostics.measure({
+        stage: "token_response_body",
+        signal,
+        httpStatus: response.status,
+        execute: async () => {
+          if (!response.ok) {
+            const error = await responseError(
+              response,
+              "登录失败，请检查账号和密码",
+              current,
+              signal,
+            );
+            assertAgentPlatformSessionCurrent(current);
+            throw error;
+          }
+          return sessionBody<{
+            access_token: string;
+            refresh_token?: string;
+          }>(response, current, signal);
+        },
+      });
     },
   });
   const session = publishAgentPlatformSession({
@@ -356,7 +399,7 @@ export async function loginAgentPlatform(
     accessToken: credentials.access_token,
     refreshToken: credentials.refresh_token,
   });
-  const user = await readAgentPlatformCurrentUser();
+  const user = await currentUserRead({}, diagnostics);
   assertAgentPlatformSessionCurrent(session);
   if (!user) {
     throw new Error("登录成功，但未能读取账号信息");
