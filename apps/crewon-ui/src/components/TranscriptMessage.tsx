@@ -460,16 +460,14 @@ export function TranscriptFailureMessage({
             {title}
           </span>
           <p>{message}</p>
-          {diagnostic ? (
-            <details>
+          {diagnostic || details ? (
+            <details className="failure-details">
               <summary>
                 {locale === "zh" ? "错误详情" : "Error details"}
               </summary>
-              <code>{diagnostic}</code>
+              {diagnostic ? <code>{diagnostic}</code> : null}
               {details ? <code>{details}</code> : null}
             </details>
-          ) : details ? (
-            <code>{details}</code>
           ) : null}
         </div>
       </div>

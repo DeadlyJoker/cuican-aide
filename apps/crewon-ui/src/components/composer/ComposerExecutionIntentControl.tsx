@@ -66,7 +66,7 @@ export function ComposerExecutionIntentControl({
           }
           disabled={disabled}
           type="button"
-          onClick={onClear}
+          onClick={() => onClear()}
         >
           <X aria-hidden="true" />
         </button>

@@ -3,10 +3,16 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { catalogPage } from "./ControlOfficeThread.test-support";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import type { OfficeContract } from "@crewon/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ControlOfficeDefinitionRecordReference } from "../../lib/office/officePanelFromRecord";
+import { createDefaultAgentConfig } from "../../lib/agent-config/agentConfigDefaults";
+import {
+  officeMemberAgentProfileId,
+  type OfficeMemberAgentProfile,
+} from "../../lib/office/officeMemberAgentProfile";
 import { controlTeamDelegationMarker } from "../../lib/control-runtime/controlTeamDelegation";
 import {
   controlOfficeComposerRuntimeSettings,
@@ -70,7 +76,9 @@ async function renderBoundOfficeMarkup(
   const root = createRoot(container);
   document.body.append(container);
   try {
-    await act(async () => root.render(adapter.render(record, vi.fn(), vi.fn())));
+    await act(async () =>
+      root.render(adapter.render(record, vi.fn(), vi.fn())),
+    );
     return container.innerHTML;
   } finally {
     await act(async () => root.unmount());
@@ -586,13 +594,13 @@ describe("ControlCommandOfficeRoomAdapter", () => {
     expect(markup).toContain('aria-label="添加上下文"');
     expect(markup).toContain('aria-label="选择文件"');
     expect(markup).toContain('aria-label="选择文件夹"');
-    expect(markup).toContain('aria-label="权限选择"');
-    expect(markup).toContain("帮我批准");
+    expect(markup).not.toContain('aria-label="权限选择"');
+    expect(markup).not.toContain("帮我批准");
     expect(markup).not.toContain("只读工作区");
     expect(markup).not.toContain('data-workspace-permission="read-only"');
-    expect(markup).toContain('aria-label="模型"');
+    expect(markup).not.toContain('aria-label="模型"');
     expect(markup).not.toContain('aria-label="模型与推理档位"');
-    expect(markup).toContain(">GPT-5.6</span>");
+    expect(markup).not.toContain(">GPT-5.6</span>");
     expect(markup).not.toContain("GPT-5.6 中");
     expect(markup).not.toContain('class="execution-intent-segmented"');
     expect(markup).not.toContain("data-execution-intent=");
@@ -614,6 +622,196 @@ describe("ControlCommandOfficeRoomAdapter", () => {
     expect(markup).not.toContain("office-global-composer");
     expect(markup).not.toContain('data-control-office-definition=""');
     expect(markup).toMatchSnapshot();
+  });
+
+  it("opens the exact member settings and preserves its existing model and permissions when editing capabilities", async () => {
+    const runtime = createRuntime();
+    const boundThread = {
+      id: "thread-member-settings",
+      name: controlOfficeThreadTitle(record),
+      status: { type: "idle" },
+      turns: [],
+    } as unknown as Thread;
+    runtime.readThread.mockResolvedValue(boundThread);
+    const office: OfficeContract = {
+      schemaVersion: "crewon.office-definition.v0",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      title: record.config.title,
+      ...record.definition,
+      members: record.definition.members.map((member) => ({ ...member })),
+      executionTargets: record.definition.executionTargets.map((target) => ({
+        ...target,
+      })),
+      createdByActorId: "actor-1",
+      createdAt: "2026-08-30T00:00:00.000Z",
+    };
+    const profile: OfficeMemberAgentProfile = {
+      ...createDefaultAgentConfig("zh"),
+      agentId: officeMemberAgentProfileId("office-version-1", "member-lead"),
+      name: "交付组长",
+      model: "gpt-6.1-sol",
+      permission: "工作区写入",
+      skills: [
+        {
+          id: "review",
+          name: "交付审查",
+          glyph: "审",
+          accent: "violet",
+          description: "检查交付内容是否完整",
+          enabled: true,
+        },
+      ],
+      mcp: [],
+      knowledge: [],
+    };
+    const agentSettings = {
+      load: vi.fn(async () => profile),
+      save: vi.fn(async () => undefined),
+    };
+    const client = {
+      createOffice: vi.fn(),
+      createOfficeThread: vi.fn(),
+      bindOfficeThread: vi.fn(),
+      getOfficeThread: vi.fn(async () => ({
+        officeId: record.definition.officeId,
+        officeVersionId: record.definition.officeVersionId,
+        thread: catalogPage([boundThread]).data[0]!,
+      })),
+      getThreadCatalog: vi.fn(async () => catalogPage([boundThread])),
+      getActiveAgentVersionCatalog: vi.fn(),
+      getExecutionIntentCapability: vi.fn(),
+      getOffice: vi.fn(async () => ({ office })),
+      getThreadGoal: vi.fn(async () => ({ goal: null, eventSequence: 0 })),
+      listOffices: vi.fn(),
+    };
+    const adapter = createControlCommandOfficeRoomAdapter({
+      agentSettings,
+      client,
+      locale: "zh",
+      runtime,
+    });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    document.body.append(container);
+    try {
+      await act(async () =>
+        root.render(adapter.render(record, vi.fn(), vi.fn())),
+      );
+      expect(container.querySelector('[aria-label="模型"]')).toBeNull();
+      expect(container.querySelector('[aria-label="权限选择"]')).toBeNull();
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>('[aria-label="成员设置"]')!
+          .click(),
+      );
+      expect(
+        container.querySelector("[data-control-office-definition]"),
+      ).not.toBeNull();
+      expect(agentSettings.load).toHaveBeenCalledWith({
+        agentId: profile.agentId,
+        agentVersionId: "agent-version-lead",
+        displayName: "交付组长",
+      });
+      const capability = container.querySelector<HTMLButtonElement>(
+        ".control-office-agent-capability-list button",
+      )!;
+      expect(capability.textContent).toContain("交付审查");
+      expect(capability.getAttribute("aria-pressed")).toBe("true");
+      await act(async () => capability.click());
+      const save = [
+        ...container.querySelectorAll<HTMLButtonElement>("button"),
+      ].find((button) => button.textContent === "保存")!;
+      expect(save.disabled).toBe(false);
+      await act(async () => save.click());
+      expect(agentSettings.save).toHaveBeenCalledOnce();
+      expect(agentSettings.save).toHaveBeenCalledWith({
+        ...profile,
+        skills: [{ ...profile.skills[0]!, enabled: false }],
+      });
+      expect(client.createOffice).not.toHaveBeenCalled();
+      expect(runtime.startTurn).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("keeps unsupported multi-member Plan disabled when the menu is clicked or navigated by keyboard", async () => {
+    const runtime = createRuntime();
+    const boundThread = {
+      id: "thread-plan-disabled",
+      name: controlOfficeThreadTitle(record),
+      status: { type: "idle" },
+      turns: [],
+    } as unknown as Thread;
+    runtime.readThread.mockResolvedValue(boundThread);
+    const adapter = createControlCommandOfficeRoomAdapter({
+      client: {
+        createOffice: vi.fn(),
+        createOfficeThread: vi.fn(),
+        bindOfficeThread: vi.fn(),
+        getOfficeThread: vi.fn(async () => ({
+          officeId: record.definition.officeId,
+          officeVersionId: record.definition.officeVersionId,
+          thread: catalogPage([boundThread]).data[0]!,
+        })),
+        getThreadCatalog: vi.fn(async () => catalogPage([boundThread])),
+        getActiveAgentVersionCatalog: vi.fn(),
+        getExecutionIntentCapability: vi.fn(),
+        getOffice: vi.fn(async () => null as never),
+        getThreadGoal: vi.fn(async () => ({ goal: null, eventSequence: 0 })),
+        listOffices: vi.fn(),
+      },
+      locale: "zh",
+      runtime,
+    });
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    document.body.append(container);
+    try {
+      await act(async () =>
+        root.render(adapter.render(record, vi.fn(), vi.fn())),
+      );
+      const add = container.querySelector<HTMLButtonElement>(
+        '[aria-label="添加上下文"]',
+      )!;
+      await act(async () => add.click());
+      const plan = container.querySelector<HTMLButtonElement>(
+        '[data-kind="intent"][data-label="计划"]',
+      )!;
+      expect(plan.disabled).toBe(true);
+      expect(plan.textContent).toContain(
+        "多成员团队暂不支持计划，请选择单个成员",
+      );
+      await act(async () => {
+        plan.click();
+        plan.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        );
+      });
+      expect(plan.getAttribute("aria-pressed")).toBe("false");
+      expect(runtime.startTurn).not.toHaveBeenCalled();
+      const goal = container.querySelector<HTMLButtonElement>(
+        '[data-kind="intent"][data-label="目标"]',
+      )!;
+      expect(goal.disabled).toBe(false);
+      await act(async () => goal.click());
+      await act(async () => add.click());
+      expect(
+        container
+          .querySelector('[data-kind="intent"][data-label="目标"]')!
+          .getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(
+        container
+          .querySelector('[data-kind="intent"][data-label="计划"]')!
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 
   it("renders the existing Control Run stream inside the Office room", async () => {
@@ -640,7 +838,11 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         createOffice: vi.fn(),
         createOfficeThread: vi.fn(),
         bindOfficeThread: vi.fn(),
-        getOfficeThread: vi.fn(async () => ({ officeId: record.definition.officeId, officeVersionId: record.definition.officeVersionId, thread: catalogPage([liveThread]).data[0]! })),
+        getOfficeThread: vi.fn(async () => ({
+          officeId: record.definition.officeId,
+          officeVersionId: record.definition.officeVersionId,
+          thread: catalogPage([liveThread]).data[0]!,
+        })),
         getThreadCatalog: vi.fn(async () => catalogPage([liveThread])),
         getActiveAgentVersionCatalog: vi.fn(),
         getExecutionIntentCapability: vi.fn(),
@@ -650,7 +852,10 @@ describe("ControlCommandOfficeRoomAdapter", () => {
       },
       liveThreads: [liveThread],
       locale: "zh",
-      runtime: { ...createRuntime(), readThread: vi.fn(async () => liveThread) },
+      runtime: {
+        ...createRuntime(),
+        readThread: vi.fn(async () => liveThread),
+      },
       streamingTextByThread: {
         "thread-live": "正在流式检查第一项风险…",
       },
@@ -702,7 +907,11 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         createOffice: vi.fn(),
         createOfficeThread: vi.fn(),
         bindOfficeThread: vi.fn(),
-        getOfficeThread: vi.fn(async () => ({ officeId: record.definition.officeId, officeVersionId: record.definition.officeVersionId, thread: catalogPage([liveThread]).data[0]! })),
+        getOfficeThread: vi.fn(async () => ({
+          officeId: record.definition.officeId,
+          officeVersionId: record.definition.officeVersionId,
+          thread: catalogPage([liveThread]).data[0]!,
+        })),
         getThreadCatalog: vi.fn(async () => catalogPage([liveThread])),
         getActiveAgentVersionCatalog: vi.fn(),
         getExecutionIntentCapability: vi.fn(),
@@ -712,7 +921,10 @@ describe("ControlCommandOfficeRoomAdapter", () => {
       },
       liveThreads: [liveThread],
       locale: "zh",
-      runtime: { ...createRuntime(), readThread: vi.fn(async () => liveThread) },
+      runtime: {
+        ...createRuntime(),
+        readThread: vi.fn(async () => liveThread),
+      },
       streamingTextByThread: { "thread-live": "相同答复" },
     });
 
@@ -751,7 +963,11 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         createOffice: vi.fn(),
         createOfficeThread: vi.fn(),
         bindOfficeThread: vi.fn(),
-        getOfficeThread: vi.fn(async () => ({ officeId: record.definition.officeId, officeVersionId: record.definition.officeVersionId, thread: catalogPage([liveThread]).data[0]! })),
+        getOfficeThread: vi.fn(async () => ({
+          officeId: record.definition.officeId,
+          officeVersionId: record.definition.officeVersionId,
+          thread: catalogPage([liveThread]).data[0]!,
+        })),
         getThreadCatalog: vi.fn(async () => catalogPage([liveThread])),
         getActiveAgentVersionCatalog: vi.fn(),
         getExecutionIntentCapability: vi.fn(),
@@ -761,7 +977,10 @@ describe("ControlCommandOfficeRoomAdapter", () => {
       },
       liveThreads: [liveThread],
       locale: "zh",
-      runtime: { ...createRuntime(), readThread: vi.fn(async () => liveThread) },
+      runtime: {
+        ...createRuntime(),
+        readThread: vi.fn(async () => liveThread),
+      },
       streamingTextByThread: { "thread-live": "不再权威的部分草稿" },
     });
 

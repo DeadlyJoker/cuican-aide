@@ -32,9 +32,17 @@ import {
   workbenchTools,
   WorkbenchLauncher,
   WorkbenchSurface,
-  type WorkbenchTab,
+  type WorkbenchTab as BaseWorkbenchTab,
   type WorkbenchToolId,
 } from "./CommandWorkbenchTools";
+
+import { CommandWorkbenchReview } from "./CommandWorkbenchReview";
+import type { RecordedReviewRequest } from "./commandWorkbenchTabs";
+import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
+
+type WorkbenchTab = BaseWorkbenchTab & {
+  recordedChanges?: RecordedTaskChanges;
+};
 
 const DEFAULT_WORKBENCH_WIDTH = 480;
 const MIN_WORKBENCH_WIDTH = 360;
@@ -103,6 +111,7 @@ export type CommandWorkspaceCapabilityDrawerProps = {
   busyToolId: ToolId | null;
   commandValue: string;
   disabled: boolean;
+  recordedReviewRequest?: RecordedReviewRequest | null;
   interactionInactive?: boolean;
   locale: Locale;
   open: boolean;
@@ -135,6 +144,7 @@ export function CommandWorkspaceCapabilityDrawer({
   commandValue,
   disabled,
   interactionInactive = false,
+  recordedReviewRequest = null,
   locale,
   open,
   panel,
@@ -168,6 +178,29 @@ export function CommandWorkspaceCapabilityDrawer({
   const [activeTabId, setActiveTabId] = useState<string | null>(
     initialWorkbenchTabs[0]?.id ?? null,
   );
+  const lastRecordedReviewSequenceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!recordedReviewRequest) return;
+    const request = recordedReviewRequest;
+    const activate = lastRecordedReviewSequenceRef.current !== request.sequence;
+    lastRecordedReviewSequenceRef.current = request.sequence;
+    const id = `task-review:${request.details.threadId}`;
+    setTabs((current) => {
+      const exists = current.some((tab) => tab.id === id);
+      if (!activate && !exists) return current;
+      const recordedTab: WorkbenchTab = {
+        id,
+        toolId: "review",
+        panel: null,
+        title: locale === "zh" ? "任务改动" : "Task changes",
+        recordedChanges: request.details,
+      };
+      return exists
+        ? current.map((tab) => (tab.id === id ? recordedTab : tab))
+        : [...current, recordedTab];
+    });
+    if (activate) setActiveTabId(id);
+  }, [recordedReviewRequest, locale]);
   const activeTabIdRef = useRef(activeTabId);
   const browserTabSequenceRef = useRef(1);
   const dismissedToolIdsRef = useRef(new Set<WorkbenchToolId>());
@@ -484,8 +517,10 @@ export function CommandWorkspaceCapabilityDrawer({
       return;
     }
     const isLastTabForTool =
-      tabs.filter((tab) => tab.toolId === closingTab.toolId).length === 1;
-    if (isLastTabForTool) {
+      tabs.filter(
+        (tab) => tab.toolId === closingTab.toolId && !tab.recordedChanges,
+      ).length === 1;
+    if (isLastTabForTool && !closingTab.recordedChanges) {
       dismissedToolIdsRef.current.add(closingTab.toolId);
     }
     if (closingTab.toolId === "terminal") {
@@ -627,7 +662,10 @@ export function CommandWorkspaceCapabilityDrawer({
           />
         ) : null}
         {tabs.length > 0 ? (
-          <header className="command-workbench-tabbar">
+          <header
+            className="command-workbench-tabbar"
+            data-desktop-drag-region=""
+          >
             <div className="command-workbench-tabs" role="tablist">
               {tabs.map((tab) => (
                 <div
@@ -721,14 +759,19 @@ export function CommandWorkspaceCapabilityDrawer({
             </div>
           </header>
         ) : (
-          <button
-            aria-label={locale === "zh" ? "关闭工作台" : "Close workbench"}
-            className="command-workbench-close is-floating"
-            type="button"
-            onClick={onClose}
+          <header
+            className="command-workbench-tabbar is-empty"
+            data-desktop-drag-region=""
           >
-            <PanelRight aria-hidden="true" />
-          </button>
+            <button
+              aria-label={locale === "zh" ? "关闭工作台" : "Close workbench"}
+              className="command-workbench-close"
+              type="button"
+              onClick={onClose}
+            >
+              <PanelRight aria-hidden="true" />
+            </button>
+          </header>
         )}
         <div className="command-workbench-content">
           {activeTab ? (
@@ -738,32 +781,42 @@ export function CommandWorkspaceCapabilityDrawer({
                 hidden={activeTabId !== tab.id}
                 key={tab.id}
               >
-                <WorkbenchSurface
-                  taskSnapshot={taskSnapshot}
-                  active={open && activeTabId === tab.id}
-                  busyToolId={busyToolId}
-                  commandValue={commandValue}
-                  disabled={disabled}
-                  interactionInactive={interactionInactive}
-                  locale={locale}
-                  tab={tab}
-                  onCommandChange={onCommandChange}
-                  onCommandSubmit={onCommandSubmit}
-                  onPanelAction={onPanelAction}
-                  onPanelFieldChange={onPanelFieldChange}
-                  onPanelItem={onPanelItem}
-                  onBrowserNewTab={addBrowserTab}
-                  onBrowserTitleChange={updateBrowserTitle}
-                  workbenchOverlayOpen={launcherOpen}
-                  onReview={onReview}
-                  onTerminalResize={onTerminalResize}
-                  onTerminalStart={onTerminalStart}
-                  onTerminalStop={onTerminalStop}
-                  onTerminalWrite={onTerminalWrite}
-                  terminalCwd={terminalCwd}
-                  terminalOutput={terminalOutput}
-                  terminalProcessId={terminalProcessId}
-                />
+                {tab.recordedChanges ? (
+                  <CommandWorkbenchReview
+                    busyToolId={busyToolId}
+                    locale={locale}
+                    panel={tab.panel}
+                    recordedChanges={tab.recordedChanges}
+                    onRefresh={onReview}
+                  />
+                ) : (
+                  <WorkbenchSurface
+                    taskSnapshot={taskSnapshot}
+                    active={open && activeTabId === tab.id}
+                    busyToolId={busyToolId}
+                    commandValue={commandValue}
+                    disabled={disabled}
+                    interactionInactive={interactionInactive}
+                    locale={locale}
+                    tab={tab}
+                    onCommandChange={onCommandChange}
+                    onCommandSubmit={onCommandSubmit}
+                    onPanelAction={onPanelAction}
+                    onPanelFieldChange={onPanelFieldChange}
+                    onPanelItem={onPanelItem}
+                    onBrowserNewTab={addBrowserTab}
+                    onBrowserTitleChange={updateBrowserTitle}
+                    workbenchOverlayOpen={launcherOpen}
+                    onReview={onReview}
+                    onTerminalResize={onTerminalResize}
+                    onTerminalStart={onTerminalStart}
+                    onTerminalStop={onTerminalStop}
+                    onTerminalWrite={onTerminalWrite}
+                    terminalCwd={terminalCwd}
+                    terminalOutput={terminalOutput}
+                    terminalProcessId={terminalProcessId}
+                  />
+                )}
               </div>
             ))
           ) : (

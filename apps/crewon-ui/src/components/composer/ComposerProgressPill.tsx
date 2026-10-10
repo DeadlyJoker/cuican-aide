@@ -21,6 +21,9 @@ import {
   PopoverTrigger,
 } from "../ui/popover";
 
+import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
+import { ComposerTaskChanges } from "./ComposerTaskChanges";
+
 function progressLabels(
   locale: Locale,
   summary: ThreadProgressSummary,
@@ -215,23 +218,51 @@ export function ComposerProgressPill({
   running,
   summary,
   taskChanges = null,
+  changeDetails = null,
+  onOpenChanges,
 }: {
   locale: Locale;
   running: boolean;
   summary: ThreadProgressSummary;
   taskChanges?: ComposerTaskChangeSummary | null;
+  changeDetails?: RecordedTaskChanges | null;
+  onOpenChanges?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const contentId = useId();
   const titleId = useId();
   const descriptionId = useId();
-  const labels = progressLabels(locale, summary, taskChanges);
+  const interactiveChanges = changeDetails && taskChanges && onOpenChanges;
+  const labels = progressLabels(
+    locale,
+    summary,
+    interactiveChanges ? null : taskChanges,
+  );
+  const wrapChanges = (progress: ReactNode) =>
+    changeDetails && taskChanges && onOpenChanges ? (
+      <div className="composer-progress-summary">
+        {labels.step || running ? progress : null}
+        {labels.step ? (
+          <span aria-hidden="true" className="composer-progress-separator">
+            ·
+          </span>
+        ) : null}
+        <ComposerTaskChanges
+          details={changeDetails}
+          locale={locale}
+          summary={taskChanges}
+          onOpen={onOpenChanges}
+        />
+      </div>
+    ) : (
+      progress
+    );
   const identity = `${summary.runId ?? "none"}:${summary.runPlan?.planId ?? "none"}`;
 
   useEffect(() => setOpen(false), [identity]);
 
   if (!summary.runPlan || !summary.plan) {
-    return (
+    return wrapChanges(
       <div
         className="composer-progress-pill"
         data-od-id="composer-progress-pill"
@@ -244,7 +275,7 @@ export function ComposerProgressPill({
           running={running}
           stepLabel={labels.step}
         />
-      </div>
+      </div>,
     );
   }
 
@@ -254,7 +285,7 @@ export function ComposerProgressPill({
   ]
     .filter(Boolean)
     .join(" · ");
-  return (
+  return wrapChanges(
     <Popover modal={false} open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
@@ -301,6 +332,6 @@ export function ComposerProgressPill({
       <span aria-live="polite" className="visually-hidden" role="status">
         {liveLabel}
       </span>
-    </Popover>
+    </Popover>,
   );
 }

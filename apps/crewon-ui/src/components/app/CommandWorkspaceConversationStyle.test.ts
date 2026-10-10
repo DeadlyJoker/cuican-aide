@@ -4,6 +4,24 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("command workspace conversation style", () => {
+  it("keeps the duplicate mobile account pill away from the tiered header", () => {
+    const styles = readFileSync(
+      new URL("../../styles/command-navigation.css", import.meta.url),
+      "utf8",
+    );
+    const start = styles.indexOf("body:has(.command-navigation-rail)");
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(styles.slice(start, styles.indexOf("}", start) + 1)).toMatchSnapshot();
+  });
+
+  it("snapshots the lightweight home, sidebar, composer, and failure surfaces", () => {
+    const styles = readFileSync(
+      new URL("../../styles/command-lightweight.css", import.meta.url),
+      "utf8",
+    );
+    expect(styles).toMatchSnapshot();
+  });
+
   it("snapshots the centered transcript loading indicator", () => {
     const appStyles = readFileSync(
       new URL("../../styles/app.css", import.meta.url),

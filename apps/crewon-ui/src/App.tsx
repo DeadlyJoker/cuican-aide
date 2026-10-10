@@ -1489,6 +1489,7 @@ export function App({
                 ? null
                 : {
                     name: controlWorkspace.nativeWorkspace?.displayName ?? null,
+                    mutationAuthority: controlWorkspace.mutationAuthority,
                     workspaceId:
                       controlWorkspace.nativeWorkspace?.workspaceId ?? null,
                     workspaces: controlWorkspace.nativeWorkspaces,

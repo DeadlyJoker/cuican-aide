@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { renderExpandedTranscript } from "./transcript.test-support";
 import { describe, expect, it, vi } from "vitest";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import { TranscriptFailureMessage } from "./TranscriptMessage";
 
 import {
   Transcript,
@@ -1135,8 +1136,69 @@ describe("Transcript", () => {
     expect(markup).toContain("Model connection failed");
     expect(markup).toContain("stream disconnected after retries");
     expect(markup).toContain("HTTP fallback also timed out");
+    expect(markup).toContain('<details class="failure-details">');
+    expect(markup).toContain("Error details</summary>");
+    expect(markup).not.toContain('<details class="failure-details" open');
     expect(markup).toContain("Why is it stuck?");
     expect(markup).not.toContain("No messages");
+  });
+
+  it.each([
+    {
+      code: "responses_provider_server_is_overloaded",
+      title: "模型服务繁忙",
+      explanation: "当前模型服务暂时过载。请稍后重试，或选择其他模型。",
+      diagnostic: true,
+    },
+    {
+      code: "responses_provider_invalid_prompt",
+      title: "模型请求被拒绝",
+      explanation: "模型服务未能接受本次请求，请查看错误详情。",
+      diagnostic: true,
+    },
+    {
+      code: "responses_provider_unknown_error",
+      title: "模型连接失败",
+      explanation: "responses_provider_unknown_error",
+      diagnostic: false,
+    },
+  ])(
+    "preserves the existing $code classification and collapses available diagnostics",
+    ({ code, title, explanation, diagnostic }) => {
+      const markup = renderToStaticMarkup(
+        <TranscriptFailureMessage
+          crewonLabel="CrewON"
+          locale="zh"
+          error={{
+            message: code,
+            codexErrorInfo: null,
+            additionalDetails: null,
+          }}
+        />,
+      );
+      expect(markup).toContain(title);
+      expect(markup).toContain(`<p>${explanation}</p>`);
+      if (diagnostic) {
+        expect(markup).toContain(`<code>${code}</code>`);
+        expect(markup).toContain('<details class="failure-details">');
+        expect(markup).toContain("错误详情</summary>");
+      } else {
+        expect(markup).not.toContain("<details");
+      }
+      expect(markup).not.toContain('<details class="failure-details" open');
+    },
+  );
+
+  it("does not add an empty disclosure to a failure without diagnostics", () => {
+    const markup = renderToStaticMarkup(
+      <TranscriptFailureMessage
+        crewonLabel="CrewON"
+        locale="en"
+        error={null}
+      />,
+    );
+    expect(markup).toContain("this turn did not complete");
+    expect(markup).not.toContain("<details");
   });
 
   it("renders MCP, Skill, and Mermaid output as structured agent dialogue", () => {

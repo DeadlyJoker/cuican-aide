@@ -1,7 +1,12 @@
+// @vitest-environment happy-dom
 // @ts-expect-error Vitest runs this check in Node; the browser bundle omits Node types.
 import { readFileSync } from "node:fs";
+// @ts-expect-error Vitest reads local CSS through Node's file URL implementation.
+import { URL as NodeURL } from "node:url";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ComposerExecutionIntentControl,
@@ -11,7 +16,7 @@ import {
 describe("ComposerExecutionIntentControl", () => {
   it("preserves compact, theme-aware selected chips and visible keyboard focus", () => {
     const styles = readFileSync(
-      new URL("./ComposerExecutionIntentControl.css", import.meta.url),
+      new NodeURL("./ComposerExecutionIntentControl.css", import.meta.url),
       "utf8",
     );
     expect(styles).toContain("button:focus-visible");
@@ -80,6 +85,59 @@ describe("ComposerExecutionIntentControl", () => {
     expect(markup).toContain('data-blocked="true"');
     expect(markup).toContain('aria-label="取消计划"');
     expect(markup).not.toContain("disabled");
+  });
+
+  it.each(["goal", "plan"] as const)(
+    "clears the selected %s explicitly, including a blocked selection",
+    async (value) => {
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const onClear = vi.fn();
+      try {
+        await act(async () => {
+          root.render(
+            <ComposerExecutionIntentControl
+              locale="zh"
+              value={value}
+              blockedReason={value === "plan" ? "当前团队不支持计划" : null}
+              onClear={onClear}
+            />,
+          );
+        });
+        await act(async () => container.querySelector("button")!.click());
+        expect(onClear).toHaveBeenCalledOnce();
+        expect(onClear).toHaveBeenCalledWith();
+      } finally {
+        await act(async () => root.unmount());
+        container.remove();
+      }
+    },
+  );
+
+  it("keeps the removal control disabled while submission owns the intent", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const onClear = vi.fn();
+    try {
+      await act(async () => {
+        root.render(
+          <ComposerExecutionIntentControl
+            disabled
+            locale="zh"
+            value="plan"
+            onClear={onClear}
+          />,
+        );
+      });
+      expect(container.querySelector("button")!.disabled).toBe(true);
+      await act(async () => container.querySelector("button")!.click());
+      expect(onClear).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
   });
 
   it("renders Plan permission as a non-interactive forced read-only status", () => {

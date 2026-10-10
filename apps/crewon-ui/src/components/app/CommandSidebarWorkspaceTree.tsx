@@ -24,6 +24,8 @@ type Copy = {
   cancel: string;
   chooseFolder: string;
   controlWorkspaceEmpty: string;
+  controlWorkspaceReadOnly: string;
+  controlWorkspaceUnavailable: string;
   folderPath: string;
   folderPathHint: string;
   newStandaloneThread: string;
@@ -180,8 +182,8 @@ export function CommandSidebarWorkspaceTree(props: {
               const name =
                 group.displayName ??
                 (copy.workspace === "工作空间"
-                  ? "未注册工作空间"
-                  : "Unregistered workspace");
+                  ? "未连接的工作空间"
+                  : "Disconnected workspace");
               const current =
                 group.workspaceId === controlWorkspace?.workspaceId;
               return (
@@ -267,9 +269,13 @@ export function CommandSidebarWorkspaceTree(props: {
                 </div>
               );
             })}
-            {!controlWorkspace?.workspaces?.length ? (
+            {!controlGroups.groups.length ? (
               <p className="sidebar-empty-hint workspace-empty-hint">
-                {copy.controlWorkspaceEmpty}
+                {controlWorkspace?.mutationAuthority === "readOnly"
+                  ? copy.controlWorkspaceReadOnly
+                  : controlWorkspace?.mutationAuthority === "unavailable"
+                    ? copy.controlWorkspaceUnavailable
+                    : copy.controlWorkspaceEmpty}
               </p>
             ) : null}
             {controlGroups.unbound.length > 0 ? (

@@ -449,7 +449,7 @@ describe("Command shell submission through real Thread handlers", () => {
       state.setSelectedThreadId(old.id);
     });
     const oldEpoch = state.selectionEpochRef.current;
-    await click('[data-nav-key="command"]');
+    await click('[data-action="new-task"]');
     expect(state.selectedThreadId).toBeNull();
     expect(state.selectionEpochRef.current).toBeGreaterThan(oldEpoch);
     await submit();

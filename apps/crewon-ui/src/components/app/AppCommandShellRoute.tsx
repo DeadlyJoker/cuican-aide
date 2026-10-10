@@ -1,3 +1,4 @@
+import { recordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
 import { PanelRight, SlidersHorizontal } from "lucide-react";
 import {
   useCallback,
@@ -11,6 +12,7 @@ import {
 
 import { AppConfirmDialog } from "./AppConfirmDialog";
 import { CommandWorkspace } from "./CommandWorkspace";
+import { CommandPanelHeading } from "./CommandPanelHeading";
 import {
   CommandWorkspaceCapabilityDrawer,
   DEFAULT_COMMAND_WORKBENCH_ID,
@@ -100,6 +102,10 @@ export function AppCommandShellRoute({
   ...commandWorkspaceProps
 }: AppCommandShellRouteProps) {
   const compactWeb = commandWorkspaceProps.platform === "web";
+  const [recordedReview, setRecordedReview] = useState<{
+    sequence: number;
+    threadId: string;
+  } | null>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<CommandShellOverlay>(
     !compactWeb && capabilityDrawer.open ? "workbench" : null,
@@ -121,6 +127,8 @@ export function AppCommandShellRoute({
   taskDetailAvailabilityCallbackRef.current =
     commandWorkspaceProps.onTaskDetailAvailabilityChange;
   const selectedThread = commandWorkspaceProps.selectedThread ?? null;
+  const [panelHeaderTarget, setPanelHeaderTarget] =
+    useState<HTMLElement | null>(null);
   const linkedThreads = commandWorkspaceProps.linkedThreads ?? [];
   const locale = commandWorkspaceProps.locale ?? "zh";
   const authority = commandWorkspaceProps.workspaceAuthority ?? "legacy";
@@ -171,6 +179,15 @@ export function AppCommandShellRoute({
           })
         : null,
     [linkedThreads, locale, selectedThread],
+  );
+  const changeDetails = useMemo(
+    () =>
+      selectedThread &&
+      projection?.changes.complete &&
+      projection.changes.fileCount > 0
+        ? recordedTaskChanges(selectedThread, projection.changes)
+        : null,
+    [selectedThread, projection],
   );
   const presentation = useMemo(
     () =>
@@ -466,8 +483,27 @@ export function AppCommandShellRoute({
           activateOverlayFromTarget(event.target)
         }
       >
+        <header
+          ref={setPanelHeaderTarget}
+          aria-label={locale === "zh" ? "面板标题栏" : "Panel title bar"}
+          className="command-panel-header"
+          data-desktop-drag-region=""
+        >
+          {!panelHeaderTarget ? (
+            <CommandPanelHeading
+              title={
+                selectedThread?.name?.trim() ||
+                selectedThread?.preview?.trim() ||
+                (locale === "zh" ? "新建任务" : "New task")
+              }
+              actions={taskDetailTrigger}
+            />
+          ) : null}
+        </header>
         <CommandWorkspace
           {...commandWorkspaceProps}
+          panelHeaderTarget={panelHeaderTarget}
+          panelHeaderActions={taskDetailTrigger}
           onTaskDetailAvailabilityChange={
             compactWeb ? undefined : handleTaskDetailAvailabilityChange
           }
@@ -482,7 +518,16 @@ export function AppCommandShellRoute({
                 }
               : null
           }
-          taskDetailTrigger={taskDetailTrigger}
+          taskChangeDetails={changeDetails}
+          onOpenTaskChanges={() => {
+            if (compactWeb || !selectedThread || !changeDetails) return;
+            setRecordedReview((current) => ({
+              sequence: (current?.sequence ?? 0) + 1,
+              threadId: selectedThread.id,
+            }));
+            openCapability();
+          }}
+          taskDetailTrigger={null}
         />
         {!compactWeb && presentation ? (
           <TaskDetailPopover
@@ -543,6 +588,13 @@ export function AppCommandShellRoute({
           <CommandWorkspaceCapabilityDrawer
             {...capabilityDrawer}
             interactionInactive={workbenchInactive}
+            recordedReviewRequest={
+              recordedReview &&
+              recordedReview.threadId === selectedThread?.id &&
+              changeDetails
+                ? { sequence: recordedReview.sequence, details: changeDetails }
+                : null
+            }
             onClose={closeCapabilityAndRestoreFocus}
             onOpen={openCapability}
           />

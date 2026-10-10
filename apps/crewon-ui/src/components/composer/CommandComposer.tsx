@@ -193,6 +193,11 @@ export function CommandComposerSelect<TValue extends string>({
     >
       <SelectPrimitive.Trigger
         aria-label={ariaLabel}
+        title={
+          showChevron
+            ? undefined
+            : `${ariaLabel}：${triggerLabel ?? selectedOption?.triggerLabel ?? selectedOption?.label ?? value}`
+        }
         className={cn(selectTriggerClass, className)}
         data-selected-tone={selectedOption?.tone ?? "normal"}
       >
@@ -220,7 +225,9 @@ export function CommandComposerSelect<TValue extends string>({
       >
         {menuTitle ? (
           <div className="flex w-full min-w-0 items-start gap-4 border-b border-[var(--border)] px-3 py-2.5 text-[calc(12px_+_var(--user-ui-font-delta))] font-medium text-[var(--text-faint)]">
-            <span className="min-w-0 flex-1 whitespace-normal">{menuTitle}</span>
+            <span className="min-w-0 flex-1 whitespace-normal">
+              {menuTitle}
+            </span>
             {menuHelp ? (
               <a
                 className="shrink-0 underline underline-offset-2 hover:text-[var(--text-muted)]"
@@ -253,7 +260,9 @@ export function CommandComposerSelect<TValue extends string>({
                   {commandComposerSelectOptionIcon(option.icon)}
                   <SelectPrimitive.ItemText>
                     <span className="grid min-w-0">
-                      <strong className="truncate font-medium">{option.label}</strong>
+                      <strong className="truncate font-medium">
+                        {option.label}
+                      </strong>
                       {option.detail ? (
                         <em className="truncate text-[calc(11px_+_var(--user-ui-font-delta))] not-italic text-[var(--text-faint)] group-data-[tone=warning]:text-[var(--warning)] group-data-[tone=danger]:text-[var(--danger)]">
                           {option.detail}
@@ -262,7 +271,10 @@ export function CommandComposerSelect<TValue extends string>({
                     </span>
                   </SelectPrimitive.ItemText>
                   {selectedValues.includes(option.value) ? (
-                    <CheckIcon aria-hidden="true" className="ml-auto size-3.5 opacity-80" />
+                    <CheckIcon
+                      aria-hidden="true"
+                      className="ml-auto size-3.5 opacity-80"
+                    />
                   ) : null}
                 </SelectPrimitive.Item>
               ))}

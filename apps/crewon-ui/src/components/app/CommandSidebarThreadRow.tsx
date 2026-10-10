@@ -84,6 +84,7 @@ export function CommandSidebarThreadRow({
               "conversation-item linked-conversation-item recent-thread-item",
               selected && "active",
             )}
+            aria-current={selected ? "page" : undefined}
             data-linked-thread-id={thread.id}
             data-thread-state={state}
             type="button"

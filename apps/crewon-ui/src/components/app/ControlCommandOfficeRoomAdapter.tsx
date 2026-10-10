@@ -12,13 +12,7 @@ import {
 import { projectThreadWorkbench } from "../../lib/workbench/taskWorkbenchProjection";
 import type { ControlApiClient } from "@crewon/control-client";
 import { Plus, Settings2, ShieldCheck } from "lucide-react";
-import {
-  type ChangeEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Locale } from "../../lib/i18n";
 import {
@@ -117,7 +111,12 @@ export { readControlOfficeActiveGoal } from "./useControlOfficeThread";
 type ControlOfficeChatClient = ControlOfficeClient &
   Pick<
     ControlApiClient,
-    "createOfficeThread" | "bindOfficeThread" | "getOfficeThread" | "getExecutionIntentCapability" | "getThreadGoal" | "getThreadCatalog"
+    | "createOfficeThread"
+    | "bindOfficeThread"
+    | "getOfficeThread"
+    | "getExecutionIntentCapability"
+    | "getThreadGoal"
+    | "getThreadCatalog"
   >;
 type ControlOfficeThreadRuntime = Pick<
   ControlThreadRuntime,
@@ -462,7 +461,10 @@ function ControlOfficeChatRoom({
   async function submitMessage() {
     const text = draft.trim();
     if (
-      !text || submitting || loading || legacyCandidate !== null ||
+      !text ||
+      submitting ||
+      loading ||
+      legacyCandidate !== null ||
       executionIntentBlocked
     ) {
       return;
@@ -504,8 +506,12 @@ function ControlOfficeChatRoom({
           activeRecord.definition.officeVersionId,
           threadCreateKey,
         );
-        const associated = controlOfficeAssociatedThread(created, activeRecord.definition);
-        if (associated === null) throw new Error("control_office_binding_missing");
+        const associated = controlOfficeAssociatedThread(
+          created,
+          activeRecord.definition,
+        );
+        if (associated === null)
+          throw new Error("control_office_binding_missing");
         activeThreadId = associated.threadId;
         setThreadId(activeThreadId);
       }
@@ -559,24 +565,39 @@ function ControlOfficeChatRoom({
 
   async function chooseOfficeThread(kind: "existing" | "new") {
     if (
-      submitting || loading || !unbound || threadId !== null ||
+      submitting ||
+      loading ||
+      !unbound ||
+      threadId !== null ||
       (kind === "existing" && legacyCandidate === null)
-    ) return;
+    )
+      return;
     setSubmitting(true);
     setError(null);
     try {
-      const response = kind === "existing"
-        ? await client.bindOfficeThread(activeRecord.definition.officeVersionId, {
-            threadId: legacyCandidate!.threadId,
-            expectedRevision: legacyCandidate!.revision,
-          })
-        : await client.createOfficeThread(
-            activeRecord.definition.officeVersionId, threadCreateKey,
-          );
-      const associated = controlOfficeAssociatedThread(response, activeRecord.definition);
-      if (associated === null) throw new Error("control_office_binding_missing");
+      const response =
+        kind === "existing"
+          ? await client.bindOfficeThread(
+              activeRecord.definition.officeVersionId,
+              {
+                threadId: legacyCandidate!.threadId,
+                expectedRevision: legacyCandidate!.revision,
+              },
+            )
+          : await client.createOfficeThread(
+              activeRecord.definition.officeVersionId,
+              threadCreateKey,
+            );
+      const associated = controlOfficeAssociatedThread(
+        response,
+        activeRecord.definition,
+      );
+      if (associated === null)
+        throw new Error("control_office_binding_missing");
       setThreadId(associated.threadId);
-      await refreshAcceptedControlOfficeTurn(() => refreshThread(associated.threadId));
+      await refreshAcceptedControlOfficeTurn(() =>
+        refreshThread(associated.threadId),
+      );
     } catch (reason) {
       setError(controlOfficeChatErrorMessage(reason, locale));
     } finally {
@@ -974,7 +995,8 @@ function ControlOfficeChatRoom({
                         : "Loading the chat history."}
                     </p>
                   </div>
-                ) : threadId === null && (legacyCandidate !== null || error !== null) ? (
+                ) : threadId === null &&
+                  (legacyCandidate !== null || error !== null) ? (
                   <ControlOfficeThreadChoice
                     unbound={unbound}
                     candidate={legacyCandidate}

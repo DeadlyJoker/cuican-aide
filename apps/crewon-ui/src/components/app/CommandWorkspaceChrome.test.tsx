@@ -1,3 +1,6 @@
+// @vitest-environment happy-dom
+import { act, type ReactElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -90,6 +93,24 @@ function linkedThread(
   };
 }
 
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+async function withMountedSidebar(
+  element: ReactElement,
+  check: () => Promise<void>,
+) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(element));
+    await check();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    localStorage.clear();
+  }
+}
+
 describe("CommandSidebar", () => {
   it.each([
     ["zh", false, "折叠侧栏"],
@@ -100,15 +121,23 @@ describe("CommandSidebar", () => {
     "reflects the actual collapsed state in the %s toggle (%s)",
     (locale, sidebarCollapsed, label) => {
       const markup = renderSidebar({ locale, sidebarCollapsed });
-      expect(markup).toContain(
-        `aria-label="${label}" aria-pressed="${sidebarCollapsed}"`,
+      const container = document.createElement("div");
+      container.innerHTML = markup;
+      const toggle = container.querySelector("[data-sidebar-collapse]");
+      expect(toggle?.getAttribute("aria-label")).toBe(label);
+      expect(toggle?.getAttribute("aria-expanded")).toBe(
+        String(!sidebarCollapsed),
       );
+      expect(
+        container.querySelector<HTMLElement>("#command-sidebar-context")
+          ?.hidden,
+      ).toBe(sidebarCollapsed);
     },
   );
 
   it.each(["legacy", "control"] as const)(
     "limits each %s workspace to five without limiting search",
-    (authority) => {
+    async (authority) => {
       const threads = ["/repo/current", "/repo/other", null].flatMap(
         (cwd, groupIndex) =>
           Array.from({ length: 7 }, (_, index) => ({
@@ -120,7 +149,8 @@ describe("CommandSidebar", () => {
             updatedLabel: "刚刚",
           })),
       );
-      const markup = renderToStaticMarkup(
+      const onOpen = vi.fn();
+      const sidebar = (
         <CommandSidebar
           activeView="command"
           cwd="/repo/current"
@@ -134,13 +164,14 @@ describe("CommandSidebar", () => {
           workspaceAuthority={authority}
           onCloseSearch={vi.fn()}
           onNewThread={vi.fn()}
-          onOpenLinkedThread={vi.fn()}
+          onOpenLinkedThread={onOpen}
           onQueryChange={vi.fn()}
           onSwitchView={vi.fn()}
           onToggleCollapse={vi.fn()}
           onToggleSearch={vi.fn()}
-        />,
+        />
       );
+      const markup = renderToStaticMarkup(sidebar);
       const visibleIds = Array.from(
         markup.matchAll(/data-linked-thread-id="([^"]+)"/g),
         (match) => match[1],
@@ -158,7 +189,14 @@ describe("CommandSidebar", () => {
       expect(markup).toContain(
         authority === "control" ? "展开更多（16）" : "展开更多（2）",
       );
-      expect(markup).toContain('data-thread-id="group-0-thread-6"');
+      await withMountedSidebar(sidebar, async () => {
+        const result = document.querySelector<HTMLButtonElement>(
+          '[role="dialog"] [data-thread-id="group-0-thread-6"]',
+        );
+        expect(result).not.toBeNull();
+        await act(async () => result!.click());
+        expect(onOpen).toHaveBeenCalledExactlyOnceWith("group-0-thread-6");
+      });
     },
   );
 
@@ -323,6 +361,10 @@ describe("CommandSidebar", () => {
   it("cuts local storage, folder picker, and cwd markup out of Control authority", async () => {
     const getItem = vi.fn(() => null);
     const setItem = vi.fn();
+    const originalStorage = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    )!;
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: { getItem, setItem },
@@ -397,7 +439,7 @@ describe("CommandSidebar", () => {
       });
       expect(markup).toMatchSnapshot();
     } finally {
-      delete (globalThis as { localStorage?: unknown }).localStorage;
+      Object.defineProperty(globalThis, "localStorage", originalStorage);
     }
   });
 
@@ -528,6 +570,10 @@ describe("CommandSidebar", () => {
   it("keeps legacy local storage and folder picker authority", async () => {
     const getItem = vi.fn(() => "[]");
     const setItem = vi.fn();
+    const originalStorage = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "localStorage",
+    )!;
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
       value: { getItem, setItem },
@@ -561,7 +607,7 @@ describe("CommandSidebar", () => {
         pickFolderCalls: 1,
       });
     } finally {
-      delete (globalThis as { localStorage?: unknown }).localStorage;
+      Object.defineProperty(globalThis, "localStorage", originalStorage);
     }
   });
 });

@@ -1,5 +1,12 @@
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
+import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
+import { useCommandSidebarCollapse } from "./useCommandSidebarCollapse";
 import { Plus, ShieldCheck } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  CommandPanelHeading,
+  CommandPanelSceneControl,
+} from "./CommandPanelHeading";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import { controlThreadWorkspaceId } from "../../lib/control-runtime/controlThreadWorkspace";
@@ -313,6 +320,8 @@ type CommandWorkspaceProps = {
   threadCatalogSearch?: string;
   onThreadCatalogSearchChange?: (value: string) => void;
   teamProgress?: ControlTeamProgress | null;
+  panelHeaderTarget?: HTMLElement | null;
+  panelHeaderActions?: ReactNode;
   activeTurnId?: string | null;
   assistantActiveTurnId?: string | null;
   assistantStreamingText?: string;
@@ -417,6 +426,8 @@ type CommandWorkspaceProps = {
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
   taskChanges?: ComposerTaskChangeSummary | null;
+  taskChangeDetails?: RecordedTaskChanges | null;
+  onOpenTaskChanges?: () => void;
   taskDetailTrigger?: ReactNode;
   projectConversationComposer?: ReactNode;
   /**
@@ -843,6 +854,8 @@ export function CommandWorkspace({
   hostModuleRequest,
   platformSnapshotLoader = readAgentPlatformSnapshot,
   teamProgress = null,
+  panelHeaderTarget,
+  panelHeaderActions,
   activeTurnId = null,
   assistantActiveTurnId = null,
   assistantStreamingText = "",
@@ -878,6 +891,8 @@ export function CommandWorkspace({
   slashCommands = [],
   streamingText = "",
   taskChanges = null,
+  taskChangeDetails = null,
+  onOpenTaskChanges,
   taskDetailTrigger = null,
   projectConversationComposer = null,
   onTaskDetailAvailabilityChange,
@@ -947,7 +962,7 @@ export function CommandWorkspace({
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
     shellViewFromHash(),
   );
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse();
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [localSidebarSearchQuery, setLocalSidebarSearchQuery] = useState("");
   const sidebarSearchQuery = threadCatalogSearch ?? localSidebarSearchQuery;
@@ -3104,7 +3119,8 @@ export function CommandWorkspace({
     activeView === "command" &&
     (Boolean(selectedThread) || pendingNewThread) &&
     !newTaskDraft;
-  const taskDetailAvailable = showCommandThread && Boolean(selectedThread);
+  const taskDetailAvailable =
+    !hostModuleView.active && showCommandThread && Boolean(selectedThread);
   useEffect(() => {
     onTaskDetailAvailabilityChange?.(taskDetailAvailable);
     return () => onTaskDetailAvailabilityChange?.(false);
@@ -3112,7 +3128,9 @@ export function CommandWorkspace({
   const commandThreadRunning =
     !composerShouldCreateNewThread &&
     (Boolean(activeTurnId) ||
-      Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress")));
+      Boolean(
+        selectedThread?.turns.some((turn) => turn.status === "inProgress"),
+      ));
   const connectionStatusLabel =
     connectionState === "connected"
       ? locale === "zh"
@@ -3275,6 +3293,48 @@ export function CommandWorkspace({
       data-force-new-task={newTaskDraft ? "true" : "false"}
       data-locale={locale}
     >
+      {panelHeaderTarget
+        ? createPortal(
+            <CommandPanelHeading
+              title={
+                hostModuleView.active
+                  ? (modules.find(
+                      (module) => module.id === hostModuleView.selectedId,
+                    )?.label ?? (locale === "zh" ? "插件" : "Plugin"))
+                  : activeView === "command"
+                    ? showCommandThread && selectedThread
+                      ? sidebarThreadTitle(
+                          selectedThread,
+                          locale === "zh" ? "未命名会话" : "Untitled thread",
+                        )
+                      : locale === "zh"
+                        ? "新建任务"
+                        : "New task"
+                    : {
+                        assist: locale === "zh" ? "助手" : "Assistant",
+                        projects: locale === "zh" ? "任务" : "Tasks",
+                        agents: locale === "zh" ? "Agent" : "Agents",
+                        knowledge: locale === "zh" ? "知识库" : "Knowledge",
+                        schedule: locale === "zh" ? "日程" : "Schedule",
+                        team: locale === "zh" ? "Team" : "Teams",
+                      }[activeView]
+              }
+              actions={
+                !hostModuleView.active && showCommandThread ? (
+                  <>
+                    <CommandPanelSceneControl
+                      locale={locale}
+                      scene={scene}
+                      onSceneChange={switchScene}
+                    />
+                    {panelHeaderActions}
+                  </>
+                ) : null
+              }
+            />,
+            panelHeaderTarget,
+          )
+        : null}
       <input
         ref={fileInputRef}
         aria-label={locale === "zh" ? "从本地电脑选择文件" : "Choose files"}
@@ -3301,6 +3361,7 @@ export function CommandWorkspace({
         data-od-id="desktop-window"
       >
         <CommandSidebar
+          chromeTarget={panelHeaderTarget}
           activeView={activeView}
           hostModules={modules.map((module) => ({
             id: module.id,
@@ -3312,6 +3373,7 @@ export function CommandWorkspace({
               hostModuleView.open(module.id);
             },
           }))}
+          collapsed={sidebarCollapsed}
           controlWorkspace={
             workspaceAuthority === "control"
               ? (controlWorkspaceNav ?? undefined)
@@ -3367,7 +3429,7 @@ export function CommandWorkspace({
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
         />
 
-        <DesktopWindowDragRegion />
+        {panelHeaderTarget === undefined ? <DesktopWindowDragRegion /> : null}
 
         <section className="command-canvas" data-od-id="desktop-main-pane">
           <section
@@ -3388,7 +3450,9 @@ export function CommandWorkspace({
              * of it, so it can span the canvas and start flush left instead of
              * beginning mid-screen above the messages.
              */}
-            {showCommandThread && selectedThread ? (
+            {showCommandThread &&
+            selectedThread &&
+            panelHeaderTarget === undefined ? (
               <div className="command-thread-toolbar">
                 <div className="command-thread-identity">
                   <strong
@@ -3444,6 +3508,8 @@ export function CommandWorkspace({
                     running={commandThreadRunning}
                     summary={threadProgress}
                     taskChanges={taskChanges}
+                    changeDetails={taskChangeDetails}
+                    onOpenChanges={onOpenTaskChanges}
                   />
                 ) : null}
                 {!composerShouldCreateNewThread &&
@@ -3597,7 +3663,7 @@ export function CommandWorkspace({
                               ariaLabel={
                                 locale === "zh" ? "权限选择" : "Permissions"
                               }
-                              className="max-w-[180px]"
+                              className="composer-permission-select max-w-[180px]"
                               contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                               icon={<ShieldCheck aria-hidden="true" />}
                               menuHelp={{
@@ -3895,7 +3961,7 @@ export function CommandWorkspace({
                     {!compactWeb ? (
                       <CommandComposerSelect
                         ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                        className="max-w-[180px]"
+                        className="composer-permission-select max-w-[180px]"
                         contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                         icon={<ShieldCheck aria-hidden="true" />}
                         menuHelp={{

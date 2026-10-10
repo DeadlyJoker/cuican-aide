@@ -1,5 +1,11 @@
 import type { ControlApiClient } from "@crewon/control-client";
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type {
   DesktopWorkspaceAuthorityPort,
@@ -429,39 +435,93 @@ export function useControlWorkspaceRuntime(params: {
   clearNativeWorkspace: () => Promise<void>;
   activateNativeWorkspace: (workspaceId: string) => Promise<void>;
 }> {
-  const composition = useMemo(
-    () =>
-      new ControlWorkspaceRuntimeComposition({
-        controlConfigured: params.client !== null,
-        nativeAuthority: params.nativeAuthority,
-        runtime: new ControlWorkspaceRuntime({ client: params.client }),
-        rehydrateThreadAuthority: params.rehydrateThreadAuthority,
-      }),
-    [params.client, params.nativeAuthority, params.rehydrateThreadAuthority],
+  const [binding, setBinding] = useState<Readonly<{
+    client: ControlApiClient | null;
+    nativeAuthority: DesktopWorkspaceAuthorityPort | null;
+    rehydrateThreadAuthority: typeof params.rehydrateThreadAuthority;
+    composition: ControlWorkspaceRuntimeComposition;
+  }> | null>(null);
+
+  useEffect(() => {
+    // Each setup owns its composition. StrictMode cleanup permanently closes
+    // the first instance, so its replay must not reuse that closed authority.
+    const composition = new ControlWorkspaceRuntimeComposition({
+      controlConfigured: params.client !== null,
+      nativeAuthority: params.nativeAuthority,
+      runtime: new ControlWorkspaceRuntime({ client: params.client }),
+      rehydrateThreadAuthority: params.rehydrateThreadAuthority,
+    });
+    setBinding({
+      client: params.client,
+      nativeAuthority: params.nativeAuthority,
+      rehydrateThreadAuthority: params.rehydrateThreadAuthority,
+      composition,
+    });
+    void composition.refreshNativeAuthority();
+    return () => composition.close();
+  }, [params.client, params.nativeAuthority, params.rehydrateThreadAuthority]);
+
+  // A new connection must never render the previous connection's native grant
+  // while its effect is still preparing the replacement composition.
+  const composition =
+    binding?.client === params.client &&
+    binding.nativeAuthority === params.nativeAuthority &&
+    binding.rehydrateThreadAuthority === params.rehydrateThreadAuthority
+      ? binding.composition
+      : null;
+  const pendingSnapshot = useMemo<ControlWorkspaceCompositionSnapshot>(
+    () => ({
+      control: {
+        status: params.client === null ? "unavailable" : "available",
+        threadId: null,
+        threadRevision: null,
+        threadStatus: null,
+        operations: [],
+        eventSequences: {},
+      },
+      mutationAuthority:
+        params.client === null || params.nativeAuthority !== null
+          ? "unavailable"
+          : "readOnly",
+      nativeBusy: false,
+      safeError: null,
+      nativeWorkspace:
+        params.nativeAuthority === null
+          ? null
+          : {
+              availability: "unavailable",
+              workspaceId: null,
+              displayName: null,
+            },
+      nativeWorkspaces: [],
+      nativeWorkspaceRevision: null,
+    }),
+    [params.client, params.nativeAuthority],
   );
   const subscribe = useCallback(
-    (listener: () => void) => composition.subscribe(listener),
+    (listener: () => void) =>
+      composition?.subscribe(listener) ?? (() => undefined),
     [composition],
   );
   const getSnapshot = useCallback(
-    () => composition.getSnapshot(),
-    [composition],
+    () => composition?.getSnapshot() ?? pendingSnapshot,
+    [composition, pendingSnapshot],
   );
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-  useEffect(() => {
-    void composition.refreshNativeAuthority();
-    return () => composition.close();
+  const requireComposition = useCallback(() => {
+    if (composition === null) throw new Error("control_workspace_initializing");
+    return composition;
   }, [composition]);
 
   useEffect(() => {
+    if (composition === null) return;
     void composition
       .selectThread(params.client === null ? null : params.selectedThreadId)
       .catch(() => undefined);
     return () => {
       void composition.selectThread(null).catch(() => undefined);
     };
-  }, [composition, params.selectedThreadId]);
+  }, [composition, params.client, params.selectedThreadId]);
 
   return useMemo(
     () => ({
@@ -472,15 +532,20 @@ export function useControlWorkspaceRuntime(params: {
       nativeWorkspace: snapshot.nativeWorkspace,
       nativeWorkspaces: snapshot.nativeWorkspaces,
       nativeWorkspaceRevision: snapshot.nativeWorkspaceRevision,
-      create: () => composition.create(),
-      reconcile: (executionId: string) => composition.reconcile(executionId),
-      cancel: (executionId: string) => composition.cancel(executionId),
-      refreshNativeAuthority: () => composition.refreshNativeAuthority(),
-      selectNativeWorkspace: () => composition.selectNativeWorkspace(),
-      clearNativeWorkspace: () => composition.clearNativeWorkspace(),
-      activateNativeWorkspace: (workspaceId: string) =>
-        composition.activateNativeWorkspace(workspaceId),
+      create: async () => requireComposition().create(),
+      reconcile: async (executionId: string) =>
+        requireComposition().reconcile(executionId),
+      cancel: async (executionId: string) =>
+        requireComposition().cancel(executionId),
+      refreshNativeAuthority: async () =>
+        requireComposition().refreshNativeAuthority(),
+      selectNativeWorkspace: async () =>
+        requireComposition().selectNativeWorkspace(),
+      clearNativeWorkspace: async () =>
+        requireComposition().clearNativeWorkspace(),
+      activateNativeWorkspace: async (workspaceId: string) =>
+        requireComposition().activateNativeWorkspace(workspaceId),
     }),
-    [composition, snapshot],
+    [requireComposition, snapshot],
   );
 }

@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`task change surfaces > makes changes independent of the proposed Plan status 1`] = `"<div class="composer-progress-summary"><div class="composer-progress-pill" data-od-id="composer-progress-pill" role="status"><span class="composer-progress-step">计划已生成</span></div><span aria-hidden="true" class="composer-progress-separator">·</span><button aria-label="查看任务改动" class="composer-progress-pill composer-changes-trigger" type="button" data-state="closed"><span>2 个文件已更改</span><span class="composer-progress-additions">+4</span><span class="composer-progress-deletions">-2</span><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-up composer-progress-disclosure" aria-hidden="true"><path d="m18 15-6-6-6 6"></path></svg></button></div>"`;
+
+exports[`task change surfaces > renders per-file hover snippets and counts 1`] = `
+[
+  "<header><strong>任务改动</strong><button type="button">查看全部改动<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-up-right" aria-hidden="true"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg></button></header><div class="composer-changes-preview-files"><section><div class="composer-changes-preview-file"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-diff" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M9 10h6"></path><path d="M12 13V7"></path><path d="M9 17h6"></path></svg><span title="apps/crewon-ui/src/components/Transcript.tsx">apps/crewon-ui/src/components/Transcript.tsx</span><em class="composer-progress-additions">+2</em><em class="composer-progress-deletions">-1</em></div><pre aria-label="apps/crewon-ui/src/components/Transcript.tsx"><code data-kind="context">@@",
+  "</code><code data-kind="added">+function renderMessageContent(item) {",
+  "</code><code data-kind="added">+  return renderCard(item);",
+  "</code><code data-kind="removed">-  return renderItemText(item);",
+  "</code><code data-kind="context"> ",
+  "</code></pre></section><section><div class="composer-changes-preview-file"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-diff" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"></path><path d="M9 10h6"></path><path d="M12 13V7"></path><path d="M9 17h6"></path></svg><span title="apps/crewon-ui/src/styles/app.css">apps/crewon-ui/src/styles/app.css</span><em class="composer-progress-additions">+2</em><em class="composer-progress-deletions">-1</em></div><pre aria-label="apps/crewon-ui/src/styles/app.css"><code data-kind="context">@@",
+  "</code><code data-kind="added">+.command-card { display: grid; }",
+  "</code><code data-kind="added">+.file-change-card { display: grid; }",
+  "</code><code data-kind="removed">-.message-card { box-shadow: var(--shadow); }",
+  "</code><code data-kind="context"> ",
+  "</code></pre></section></div>",
+]
+`;
