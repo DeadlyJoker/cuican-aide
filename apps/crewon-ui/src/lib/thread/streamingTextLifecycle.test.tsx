@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, StrictMode } from "react";
+import { act, StrictMode, useLayoutEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,6 +27,7 @@ describe("App streaming preview lifecycle", () => {
   let root: Root | null;
   let visibility: DocumentVisibilityState;
   let renders: number;
+  let streamingCommits: Array<{ received: string; displayed: string }>;
   let authority: "control" | "legacy";
   let interruptTurn: ReturnType<
     typeof vi.fn<(threadId: string, turnId: string) => Promise<void>>
@@ -37,6 +38,14 @@ describe("App streaming preview lifecycle", () => {
     const thread =
       state.threads.find((thread) => thread.id === state.selectedThreadId) ??
       null;
+    useLayoutEffect(() => {
+      const received = state.streamingTextByThread[thread?.id ?? ""] ?? "";
+      if (received)
+        streamingCommits.push({
+          received,
+          displayed: container.textContent ?? "",
+        });
+    });
     useAppModelResponseTimeoutEffect({
       ...state,
       activeTurnId:
@@ -71,6 +80,7 @@ describe("App streaming preview lifecycle", () => {
       () => visibility,
     );
     renders = 0;
+    streamingCommits = [];
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -94,11 +104,6 @@ describe("App streaming preview lifecycle", () => {
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
-  const tick = () =>
-    act(async () => {
-      await vi.advanceTimersByTimeAsync(32);
-    });
-
   function beginWithoutOutput() {
     act(() => {
       const thread = detailThread("thread");
@@ -164,7 +169,24 @@ describe("App streaming preview lifecycle", () => {
     },
   );
 
-  it("preserves another task's pending output when a task finishes before the next frame", async () => {
+  it("renders each full visible delta in its first commit without waiting for a timer or deferred render", () => {
+    const first = "第一段实时输出😀";
+    const next = `${first}\n第二段已经到达。`;
+    act(() => state.appendStreamingTextDelta("thread", first));
+    expect(state.streamingTextByThread.thread).toBe(first);
+    expect(container.textContent).toContain(first);
+    act(() => state.appendStreamingTextDelta("thread", "\n第二段已经到达。"));
+    expect(state.streamingTextByThread.thread).toBe(next);
+    expect(container.textContent).toContain("第二段已经到达。");
+    const nextCommits = streamingCommits.filter(
+      ({ received }) => received === next,
+    );
+    expect(nextCommits.length).toBeGreaterThan(0);
+    for (const { displayed } of nextCommits)
+      expect(displayed).toContain("第二段已经到达。");
+  });
+
+  it("preserves another task's received output when a task finishes", () => {
     act(() => {
       state.appendStreamingTextDelta("finished", "discarded");
       state.appendStreamingTextDelta("thread", "keep😀");
@@ -173,7 +195,6 @@ describe("App streaming preview lifecycle", () => {
         finished: "",
       }));
     });
-    await tick();
     expect(state!.streamingTextByThread).toEqual({ thread: "keep😀" });
     expect(container.textContent).toContain("keep😀");
     expect(container.textContent).not.toContain("discarded");
@@ -210,7 +231,6 @@ describe("App streaming preview lifecycle", () => {
       });
       apply("model.output.delta", { segmentId: "segment", delta: "fresh😀" });
     });
-    await tick();
     expect(container.textContent).toContain("fresh😀");
     expect(container.textContent).not.toContain("discarded draft");
     await act(async () => {

@@ -23,13 +23,12 @@ export function useStreamingTextState(selectedThreadId: string | null) {
 
   useEffect(() => {
     // Effects can be disposed and replayed in StrictMode. Each lifetime owns
-    // its buffer, listener and timers; a closed lifetime cannot publish later.
+    // its preview and listener; a closed lifetime cannot publish later.
     const owner = createStreamingTextBuffer(
       (update) =>
         setText((current) =>
           ownerRef.current === owner ? update(current) : current,
         ),
-      undefined,
       {
         onPresentation: (next) =>
           setPresentation((current) =>

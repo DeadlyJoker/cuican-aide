@@ -67,6 +67,7 @@ test("shared replay projects only parsed nonsecret DTO values and preserves abse
   for (const name of [
     "CREWON_RESPONSES_MAX_OUTPUT_TOKENS",
     "CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS",
+    "CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES",
     "CREWON_MODEL_CATALOG_JSON",
     "CREWON_MODEL_API_KEY",
     "CREWON_CONTROL_SESSION_TOKEN",
@@ -203,7 +204,7 @@ test("enforces effective gateway profile and native WebSocket settings", () => {
     idleTimeoutMs: 1234,
     sequencePolicy: "whenPresent",
     identityPolicy: "terminalAuthoritative",
-    outputDeltaFlushBytes: 1024,
+    outputDeltaFlushBytes: null,
     websocket: null,
   };
   assert.equal(
@@ -211,12 +212,34 @@ test("enforces effective gateway profile and native WebSocket settings", () => {
       .identityPolicy,
     "terminalAuthoritative",
   );
+  assert.equal(
+    Object.hasOwn(
+      replayRuntimeBootstrapInputs({
+        ...input,
+        model: gateway,
+      } as RuntimeBootstrapInputs),
+      "CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES",
+    ),
+    false,
+  );
+  const legacy = parseRuntimeBootstrapInputs({
+    ...input,
+    model: { ...gateway, outputDeltaFlushBytes: 1024 },
+  });
+  assert.equal(legacy.model.outputDeltaFlushBytes, 1024);
+  assert.equal(
+    replayRuntimeBootstrapInputs(legacy)
+      .CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES,
+    "1024",
+  );
   for (const change of [
     { storeResponses: true },
     { requestProfile: "standard" },
     { sequencePolicy: "required" },
     { identityPolicy: "strict" },
-    { outputDeltaFlushBytes: null },
+    { outputDeltaFlushBytes: 0 },
+    { outputDeltaFlushBytes: 2048 },
+    { outputDeltaFlushBytes: "1024" },
     { websocket: { connectTimeoutMs: 100, maxRetries: 0 } },
   ])
     assert.throws(

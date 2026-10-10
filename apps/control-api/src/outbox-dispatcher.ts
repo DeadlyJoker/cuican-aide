@@ -18,9 +18,28 @@ const DEFAULT_SCAN_INTERVAL_MS = 1_000;
 const DEFAULT_MAX_BATCH_SIZE = 100;
 const CLOSE_GRACE_MS = 250;
 const MAX_ACTIVE_DRAINS = 4;
+// Overflow keeps the owner's dirty bit; its existing scan remains the backstop.
+const MAX_DEFERRED_AVAILABILITY_OWNERS = 64;
 const IDLE = Promise.resolve();
 let activeDrains = 0;
 const activeStores = new WeakSet<RunStore>();
+const deferredAvailability = new Map<
+  object,
+  Readonly<{ store: RunStore; ready(): void }>
+>();
+
+/** A slot release schedules eligible hinted owners, skipping physically busy Stores. */
+function wakeDeferredAvailability(): void {
+  const availableSlots = MAX_ACTIVE_DRAINS - activeDrains;
+  let scheduled = 0;
+  for (const [owner, waiting] of deferredAvailability) {
+    if (scheduled >= availableSlots) break;
+    if (activeStores.has(waiting.store)) continue;
+    deferredAvailability.delete(owner);
+    waiting.ready();
+    scheduled += 1;
+  }
+}
 
 export type OutboxDispatcherConfig = Readonly<{
   ownerId: string;
@@ -50,6 +69,8 @@ export class OutboxDispatcher {
   #closed = false;
   #lastFailureCode: string | null = null;
   #admissionDeferred = false;
+  #availabilityChanged = false;
+  #availabilityWake: NodeJS.Immediate | null = null;
   #closing: Promise<void> | null = null;
   #resolveClose: (() => void) | null = null;
   #closeTimer: NodeJS.Timeout | null = null;
@@ -121,9 +142,22 @@ export class OutboxDispatcher {
     // its slot until actual settlement, including across replacement objects.
     if (activeDrains >= MAX_ACTIVE_DRAINS || activeStores.has(this.#store)) {
       this.#admissionDeferred = true;
+      if (
+        this.#availabilityChanged &&
+        !deferredAvailability.has(this) &&
+        deferredAvailability.size < MAX_DEFERRED_AVAILABILITY_OWNERS
+      )
+        deferredAvailability.set(this, {
+          store: this.#store,
+          ready: () => this.#scheduleAvailabilityWake(),
+        });
       return IDLE;
     }
+    deferredAvailability.delete(this);
     this.#admissionDeferred = false;
+    this.#availabilityChanged = false;
+    if (this.#availabilityWake !== null) clearImmediate(this.#availabilityWake);
+    this.#availabilityWake = null;
     activeDrains += 1;
     activeStores.add(this.#store);
     let resolveDrain!: () => void;
@@ -140,6 +174,8 @@ export class OutboxDispatcher {
         this.#drain = null;
         activeDrains -= 1;
         activeStores.delete(this.#store);
+        wakeDeferredAvailability();
+        this.#scheduleAvailabilityWake();
       }
     };
     void this.#drainSafely().then(
@@ -153,6 +189,31 @@ export class OutboxDispatcher {
       },
     );
     return drain;
+  }
+
+  /** Coalesce commit hints, including a commit arriving during the last empty claim. */
+  notifyAvailability(): void {
+    if (this.#closed) return;
+    this.#availabilityChanged = true;
+    this.#scheduleAvailabilityWake();
+  }
+
+  #scheduleAvailabilityWake(): void {
+    if (
+      this.#closed ||
+      !this.#availabilityChanged ||
+      deferredAvailability.has(this) ||
+      this.#drain !== null ||
+      this.#availabilityWake !== null
+    )
+      return;
+    // Yield between bounded drains; a burst retains one dirty bit and one handle.
+    this.#availabilityWake = setImmediate(() => {
+      this.#availabilityWake = null;
+      if (this.#closed || !this.#availabilityChanged) return;
+      void this.wake();
+    });
+    this.#availabilityWake.unref();
   }
 
   lastFailureCode(): string | null {
@@ -180,6 +241,10 @@ export class OutboxDispatcher {
       this.#resolveClose = resolve;
     });
     this.#closed = true;
+    deferredAvailability.delete(this);
+    this.#availabilityChanged = false;
+    if (this.#availabilityWake !== null) clearImmediate(this.#availabilityWake);
+    this.#availabilityWake = null;
     if (this.#timer !== null) {
       clearInterval(this.#timer);
       this.#timer = null;
@@ -204,33 +269,33 @@ export class OutboxDispatcher {
 
   async #drainSafely(): Promise<void> {
     try {
-      await this.#drainBatch();
+      if (await this.#drainBatch()) this.#availabilityChanged = true;
       this.#lastFailureCode = null;
     } catch (error) {
       this.#lastFailureCode = failureCode(error);
     }
   }
 
-  async #drainBatch(): Promise<void> {
+  async #drainBatch(): Promise<boolean> {
     let publishedEvents = 0;
     for (let delivered = 0; delivered < this.#maxBatchSize; delivered += 1) {
-      if (this.#closed) return;
+      if (this.#closed) return false;
       const leaseId = requireString(
         this.#nextLeaseId(),
         "outbox_lease_id_invalid",
       );
-      if (this.#closed) return;
+      if (this.#closed) return false;
       const claim = await this.#store.claimNextOutbox({
         ownerId: this.#ownerId,
         leaseId,
         leaseDurationMs: this.#leaseDurationMs,
       });
       if (claim === null || this.#closed) {
-        return;
+        return false;
       }
       try {
         publishedEvents += await this.#publish(claim.message);
-        if (this.#closed) return;
+        if (this.#closed) return false;
         await this.#store.acknowledgeOutbox({
           messageId: claim.message.messageId,
           ownerId: claim.lease.ownerId,
@@ -239,7 +304,7 @@ export class OutboxDispatcher {
         });
         // A range is indivisible for acknowledgement. At most one bounded
         // range can cross this per-drain event budget.
-        if (publishedEvents >= this.#maxBatchSize) return;
+        if (publishedEvents >= this.#maxBatchSize) return true;
       } catch (error) {
         // Do not begin another Store call after shutdown. A claim that was not
         // acknowledged remains durable and can be reclaimed after lease expiry.
@@ -247,6 +312,7 @@ export class OutboxDispatcher {
         throw error;
       }
     }
+    return true;
   }
 
   async #publish(message: OutboxMessage): Promise<number> {

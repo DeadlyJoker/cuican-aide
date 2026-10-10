@@ -13,30 +13,16 @@ import {
 const budget: StreamingTextBudget = {
   maxStreams: 4,
   visibleBytesPerStream: 64,
-  pendingBytesPerStream: 16384,
   totalVisibleBytes: 128,
-  totalPendingBytes: 32768,
 };
 function harness(limits = budget) {
   let text: StreamingTextByThread = {};
   let presentation = EMPTY_STREAMING_PRESENTATION;
-  const frames = new Map<number, () => void>();
-  let next = 0,
-    updates = 0;
+  let updates = 0;
   const buffer = createStreamingTextBuffer(
     (update) => {
       text = update(text);
       updates++;
-    },
-    {
-      requestFrame: (callback) => {
-        const id = ++next;
-        frames.set(id, callback);
-        return id;
-      },
-      cancelFrame: (id) => {
-        frames.delete(id);
-      },
     },
     {
       budget: limits,
@@ -45,18 +31,10 @@ function harness(limits = budget) {
       },
     },
   );
-  function drainFrames() {
-    while (frames.size) {
-      const [id, callback] = frames.entries().next().value!;
-      frames.delete(id);
-      callback();
-    }
-  }
   function assertBounded() {
     const size = buffer.usage();
     expect(size.streams).toBeLessThanOrEqual(limits.maxStreams);
     expect(size.visibleBytes).toBeLessThanOrEqual(limits.totalVisibleBytes);
-    expect(size.pendingBytes).toBeLessThanOrEqual(limits.totalPendingBytes);
     expect(Object.keys(presentation.previews).length).toBeLessThanOrEqual(
       limits.maxStreams,
     );
@@ -70,8 +48,6 @@ function harness(limits = budget) {
   }
   return {
     buffer,
-    frames,
-    drainFrames,
     assertBounded,
     get text() {
       return text;
@@ -107,16 +83,14 @@ describe("streaming text resource budgets", () => {
     });
   });
 
-  it("clears only the finishing task, including text not painted yet", () => {
+  it("clears only the finishing task and retains concurrent output", () => {
     const h = harness();
     h.buffer.append("first", "discard");
     h.buffer.append("second", "keep😀");
     h.buffer.replace((current) => ({ ...current, first: "" }));
-    h.drainFrames();
     expect(h.text).toEqual({ second: "keep😀" });
     h.buffer.reset("second");
     expect(h.text).toEqual({});
-    expect(h.frames.size).toBe(0);
   });
 
   it("limits sustained deltas and marks contiguous trailing content as partial", () => {
@@ -126,28 +100,23 @@ describe("streaming text resource budgets", () => {
       const delta = `片段${index}😀`;
       source += delta;
       h.buffer.append("thread", delta);
-      if (index % 7 === 0) h.drainFrames();
       h.assertBounded();
     }
-    h.drainFrames();
     expect(source.endsWith(h.text.thread!)).toBe(true);
     expect(h.text.thread!.endsWith("片段999😀")).toBe(true);
     expect(h.presentation.previews.thread?.partial).toBe(true);
-    expect(h.buffer.usage().pendingBytes).toBe(0);
   });
 
-  it("clips an oversized delta before queue allocation", () => {
+  it("clips an oversized delta before retaining a bounded live preview", () => {
     const h = harness();
     h.buffer.append("thread", "old");
     h.buffer.append("thread", "大😀".repeat(1_000_000) + "latest😀");
-    expect(h.buffer.usage().pendingBytes).toBe(0);
-    h.drainFrames();
     h.assertBounded();
     expect(h.text.thread?.endsWith("latest😀")).toBe(true);
     expect(h.presentation.previews.thread?.partial).toBe(true);
   });
 
-  it("bounds queued bytes globally and reclaims nonfocused previews", async () => {
+  it("bounds visible bytes globally and reclaims nonfocused previews", async () => {
     const h = harness();
     h.buffer.setFocus("focus");
     h.buffer.append("focus", "f".repeat(5000));
@@ -155,8 +124,6 @@ describe("streaming text resource budgets", () => {
     const discardedDrain = h.buffer.whenDrained("old");
     h.buffer.append("new", "n".repeat(5000));
     await discardedDrain;
-    expect(h.buffer.usage().pendingBytes).toBe(32768);
-    h.drainFrames();
     expect(h.text.focus).toBe("f".repeat(32));
     expect(h.text.old).toBeUndefined();
     expect(h.text.new).toBe("n".repeat(32));
@@ -167,7 +134,6 @@ describe("streaming text resource budgets", () => {
   it("bounds retained identities across 20,000 background updates without rendering", () => {
     const h = harness();
     h.buffer.append("focus", "selected");
-    h.drainFrames();
     h.buffer.setFocus("focus");
     h.buffer.setVisible(false);
     const updates = h.updates;
@@ -176,7 +142,6 @@ describe("streaming text resource budgets", () => {
       if (index % 100 === 0) h.assertBounded();
     }
     expect(h.updates).toBe(updates);
-    expect(h.frames.size).toBe(0);
     h.buffer.setVisible(true);
     expect(h.updates).toBe(updates + 1);
     expect(h.text.focus).toBe("selected");
@@ -187,8 +152,6 @@ describe("streaming text resource budgets", () => {
     expect(h.buffer.usage()).toEqual({
       streams: 0,
       visibleBytes: 0,
-      pendingBytes: 0,
-      pendingUnits: 0,
     });
   });
 
@@ -201,37 +164,27 @@ describe("streaming text resource budgets", () => {
     h.buffer.setVisible(true);
     expect(h.text.thread).toBe("z");
     expect(h.presentation.previews.thread?.partial).toBe(true);
-    expect(h.frames.size).toBe(0);
   });
 
-  it("shares one drain waiter and completes settlement even when frames stop", async () => {
+  it("never makes settlement wait for a render timer", async () => {
     vi.useFakeTimers();
     const h = harness();
     h.buffer.append("thread", "x".repeat(1000) + "完成");
-    const drained = h.buffer.whenDrained("thread");
-    for (let index = 0; index < 1000; index++)
-      expect(h.buffer.whenDrained("thread")).toBe(drained);
-    expect(vi.getTimerCount()).toBe(1);
-    await vi.advanceTimersByTimeAsync(2000);
-    await drained;
+    await h.buffer.whenDrained("thread");
     expect(h.text.thread?.endsWith("完成")).toBe(true);
-    expect(h.frames.size).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("disposes pending work and rejects resurrection by late frames or producers", async () => {
+  it("disposes previews and rejects resurrection by late producers", async () => {
     vi.useFakeTimers();
     const h = harness();
     h.buffer.append("thread", "x".repeat(100));
-    const late = [...h.frames.values()][0]!;
     const drained = h.buffer.whenDrained("thread");
     h.buffer.dispose();
     h.buffer.append("thread", "late");
     h.buffer.replace({ thread: "late" });
-    late();
     await drained;
-    expect(h.updates).toBe(0);
-    expect(h.frames.size).toBe(0);
+    expect(h.updates).toBe(1);
     expect(vi.getTimerCount()).toBe(0);
     expect(h.buffer.usage().streams).toBe(0);
   });

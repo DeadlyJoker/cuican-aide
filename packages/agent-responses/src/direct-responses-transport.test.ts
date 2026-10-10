@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createServer, type IncomingMessage } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import test, { type TestContext } from "node:test";
 
 import {
@@ -60,6 +64,185 @@ test("streams through a real self-hosted Responses-compatible HTTP server withou
       tools: [],
     },
   });
+});
+
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(
+    `${sequencePolicy} emits each HTTP delta before the next provider event and completes with only an identity on an open body`,
+    { timeout: 2000 },
+    async (context) => {
+      let connect!: (response: ServerResponse) => void;
+      const connected = new Promise<ServerResponse>((resolve) => {
+        connect = resolve;
+      });
+      let close!: () => void;
+      const closed = new Promise<void>((resolve) => {
+        close = resolve;
+      });
+      const sequence = (value: number) =>
+        sequencePolicy === "required" ? { sequence_number: value } : {};
+      const writeEvent = (response: ServerResponse, event: unknown) =>
+        response.write(`data: ${JSON.stringify(event)}\n\n`);
+      const endpoint = await listen(
+        context,
+        createServer((_request, response) => {
+          response.writeHead(200, { "content-type": "text/event-stream" });
+          response.once("close", close);
+          writeEvent(response, {
+            type: "response.created",
+            ...sequence(0),
+            response: { id: "resp-live" },
+          });
+          connect(response);
+        }),
+      );
+      const transport = new DirectResponsesTransport({
+        endpoint,
+        model: "live-model",
+        sequencePolicy,
+      });
+      const iterator = transport
+        .stream(manualRequest(), signal())
+        [Symbol.asyncIterator]();
+      let next = iterator.next();
+      const response = await connected;
+      for (const [index, delta] of [
+        "\n",
+        "Hello",
+        " ",
+        "world",
+        "\n\t",
+      ].entries()) {
+        // The next delta and terminal cannot be sent until this one is delivered.
+        writeEvent(response, {
+          type: "response.output_text.delta",
+          ...sequence(index + 1),
+          delta,
+        });
+        assert.deepEqual(await next, {
+          done: false,
+          value: { type: "output.delta", delta },
+        });
+        assert.equal(response.writableEnded, false);
+        next = iterator.next();
+      }
+      writeEvent(response, {
+        type: "response.completed",
+        ...sequence(6),
+        response: { id: "resp-live" },
+      });
+      assert.deepEqual(await next, {
+        done: false,
+        value: { type: "completed", checkpoint: null },
+      });
+      assert.equal(response.writableEnded, false);
+      assert.equal((await iterator.next()).done, true);
+      await closed;
+    },
+  );
+
+  test(`${sequencePolicy} never treats visible output or a DONE trailer as a trusted terminal`, async () => {
+    const sequence = (value: number) =>
+      sequencePolicy === "required" ? { sequence_number: value } : {};
+    const events = [
+      {
+        type: "response.created",
+        ...sequence(0),
+        response: { id: "resp-open" },
+      },
+      {
+        type: "response.output_text.delta",
+        ...sequence(1),
+        delta: "\npartial\n",
+      },
+    ];
+    for (const [trailer, code] of [
+      ["", "responses_stream_incomplete"],
+      ["data: [DONE]\n\n", "responses_done_before_terminal"],
+    ] as const) {
+      const transport = new DirectResponsesTransport(
+        {
+          endpoint: "https://provider.example/responses",
+          model: "provider-model",
+          sequencePolicy,
+        },
+        {
+          fetch: async () =>
+            new Response(
+              byteStream([
+                ...events.map((event) => `data: ${JSON.stringify(event)}\n\n`),
+                trailer,
+              ]),
+              { headers: { "content-type": "text/event-stream" } },
+            ),
+        },
+      );
+      const iterator = transport
+        .stream(manualRequest(), signal())
+        [Symbol.asyncIterator]();
+      assert.deepEqual((await iterator.next()).value, {
+        type: "output.delta",
+        delta: "\npartial\n",
+      });
+      await assert.rejects(iterator.next(), hasTransportCode(code));
+    }
+  });
+}
+
+test("oversized whitespace still fails the SSE event byte bound", async () => {
+  const transport = createTransport([
+    createdEvent(0),
+    {
+      type: "response.output_text.delta",
+      sequence_number: 1,
+      delta: " ".repeat(256 * 1024),
+    },
+  ]);
+  await assert.rejects(
+    collect(transport.stream(manualRequest(), signal())),
+    hasTransportCode("responses_event_too_large"),
+  );
+});
+
+test("streamed whitespace remains subject to the Kernel's cumulative output budget", async () => {
+  const delta = " ".repeat(600);
+  const kernel = new CrewONAgentKernel({
+    transport: createTransport([
+      createdEvent(0),
+      { type: "response.output_text.delta", sequence_number: 1, delta },
+      { type: "response.output_text.delta", sequence_number: 2, delta },
+      {
+        type: "response.completed",
+        sequence_number: 3,
+        response: { id: "resp-1" },
+      },
+    ]),
+  });
+  const observed: string[] = [];
+  await assert.rejects(
+    (async () => {
+      for await (const event of kernel.runSegment(
+        {
+          schemaVersion: "crewon.agent-segment.v0",
+          purpose: "agent",
+          runId: "whitespace-run",
+          segmentId: "whitespace-segment",
+          attempt: 1,
+          agentVersionId: "agent-version-1",
+          policySnapshotId: "policy-1",
+          collaborationMode: "default",
+          allowedTools: null,
+          history: [{ type: "message", role: "user", content: "hello" }],
+          continuation: { kind: "manual" },
+          budget: { maxOutputBytes: 1024 },
+        },
+        signal(),
+      ))
+        observed.push(event.type);
+    })(),
+    { code: "model_output_budget_exceeded" },
+  );
+  assert.deepEqual(observed, ["segment.started", "model.output.delta"]);
 });
 
 test("accepts a bounded terminal identity from a portable Responses gateway", async () => {

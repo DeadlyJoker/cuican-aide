@@ -12,7 +12,7 @@ import {
 const MAX_RESPONSE_ID_LENGTH = 512;
 const MAX_REASONING_DELTA_BYTES = 16 * 1024;
 const MAX_REASONING_BYTES = 64 * 1024;
-const MAX_PENDING_OUTPUT_WHITESPACE_BYTES = 1024;
+const MAX_OUTPUT_DELTA_BYTES = 256 * 1024;
 
 export type ResponsesSequencePolicy = "required" | "whenPresent";
 export type ResponsesIdentityPolicy = "strict" | "terminalAuthoritative";
@@ -36,7 +36,6 @@ export class ResponsesProtocolDecoder {
   #created = false;
   #responseId: string | null = null;
   #output = "";
-  #pendingOutputWhitespace = "";
   #terminal = false;
   #completedHistoryItems: ModelInputItem[] = [];
   #reasoningBytes = 0;
@@ -91,28 +90,17 @@ export class ResponsesProtocolDecoder {
       }
       case "response.output_text.delta": {
         requireCreated(this.#created);
-        if (
-          typeof event.delta === "string" &&
-          event.delta.trim().length === 0
-        ) {
-          this.#pendingOutputWhitespace += event.delta;
-          if (
-            new TextEncoder().encode(this.#pendingOutputWhitespace).byteLength >
-            MAX_PENDING_OUTPUT_WHITESPACE_BYTES
-          ) {
-            throw protocolError("responses_delta_invalid");
-          }
-          return [];
-        }
-        const delta = requireString(event.delta, "responses_delta_invalid");
-        const combined = `${this.#pendingOutputWhitespace}${delta}`;
-        this.#pendingOutputWhitespace = "";
-        this.#output += combined;
-        return [{ type: "output.delta", delta: combined }];
+        const delta = boundedString(
+          event.delta,
+          MAX_OUTPUT_DELTA_BYTES,
+          "responses_delta_invalid",
+        );
+        if (delta.length === 0) return [];
+        this.#output += delta;
+        return [{ type: "output.delta", delta }];
       }
       case "response.completed": {
         requireCreated(this.#created);
-        this.#flushPendingOutputWhitespace();
         const response = terminalResponse(
           event.response,
           this.#responseId,
@@ -121,7 +109,9 @@ export class ResponsesProtocolDecoder {
         );
         this.#responseId = response.id;
         this.#options.onResponseIdentity?.(this.#responseId);
-        requireStatus(response, "completed");
+        // The typed terminal is authoritative when a compatible provider omits status.
+        // A present, contradictory status is still a protocol failure.
+        requireOptionalStatus(response, "completed");
         if (
           response.end_turn !== undefined &&
           typeof response.end_turn !== "boolean"
@@ -199,7 +189,6 @@ export class ResponsesProtocolDecoder {
           "responses_output_item_invalid",
         );
         if (outputItem.type === "message") {
-          this.#flushPendingOutputWhitespace();
           const content = completedAssistantMessageContent(outputItem);
           if (content !== this.#output) {
             throw protocolError("responses_final_output_mismatch");
@@ -314,13 +303,6 @@ export class ResponsesProtocolDecoder {
           },
           terminal,
         ];
-  }
-
-  #flushPendingOutputWhitespace(): void {
-    if (this.#output.length > 0) {
-      this.#output += this.#pendingOutputWhitespace;
-    }
-    this.#pendingOutputWhitespace = "";
   }
 
   finish(): void {

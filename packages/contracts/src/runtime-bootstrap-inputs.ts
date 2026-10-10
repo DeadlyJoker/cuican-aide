@@ -17,6 +17,7 @@ export type RuntimeBootstrapInputs = Readonly<{
     idleTimeoutMs: number;
     sequencePolicy: "required" | "whenPresent";
     identityPolicy: "strict" | "terminalAuthoritative";
+    /** Null forwards immediately; 1024 preserves already persisted legacy bootstraps. */
     outputDeltaFlushBytes: number | null;
     websocket: Readonly<{
       connectTimeoutMs: number;
@@ -138,7 +139,7 @@ export function parseRuntimeBootstrapInputs(
         model.requestProfile !== "responsesLite" ||
         model.sequencePolicy !== "whenPresent" ||
         model.identityPolicy !== "terminalAuthoritative" ||
-        outputDeltaFlushBytes !== 1024 ||
+        (outputDeltaFlushBytes !== null && outputDeltaFlushBytes !== 1024) ||
         websocket !== null
       : model.identityPolicy !== "strict" || outputDeltaFlushBytes !== null
   )

@@ -429,40 +429,135 @@ test(`${unknownEventFixture.caseId}: framing and fail-closed boundaries remain s
   );
 });
 
-test("ignores blank output deltas emitted by compatible Responses gateways", () => {
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${sequencePolicy} streams leading and trailing whitespace without waiting for another delta`, () => {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy,
+      completedCheckpoint: () => null,
+    });
+    const sequence = (value: number) =>
+      sequencePolicy === "required" ? { sequence_number: value } : {};
+    decoder.accept({
+      type: "response.created",
+      ...sequence(0),
+      response: { id: "response-1" },
+    });
+
+    for (const [index, delta] of ["", "\n", "  ", "done", "\t\r\n"].entries()) {
+      assert.deepEqual(
+        decoder.accept({
+          type: "response.output_text.delta",
+          ...sequence(index + 1),
+          delta,
+        }),
+        delta.length === 0 ? [] : [{ type: "output.delta", delta }],
+      );
+    }
+    const content = "\n  done\t\r\n";
+    assert.deepEqual(
+      decoder.accept({
+        type: "response.output_item.done",
+        ...sequence(6),
+        item: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: content }],
+        },
+      }),
+      [
+        {
+          type: "output.item.completed",
+          item: { type: "message", role: "assistant", content },
+        },
+      ],
+    );
+    assert.deepEqual(
+      decoder.accept({
+        type: "response.completed",
+        ...sequence(7),
+        response: {
+          id: "response-1",
+          output: [
+            {
+              type: "message",
+              content: [{ type: "output_text", text: content }],
+            },
+          ],
+        },
+      }),
+      [{ type: "completed", checkpoint: null }],
+    );
+    decoder.finish();
+    assert.deepEqual(decoder.completedHistoryItems, [
+      { type: "message", role: "assistant", content },
+    ]);
+  });
+}
+
+test("output delta types and UTF-8 byte limits fail closed for whitespace and visible text", () => {
+  for (const delta of [
+    undefined,
+    null,
+    1,
+    false,
+    [],
+    {},
+    " ".repeat(256 * 1024 + 1),
+    "界".repeat(Math.floor((256 * 1024) / 3) + 1),
+  ]) {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy: "required",
+      completedCheckpoint: () => null,
+    });
+    decoder.accept({
+      type: "response.created",
+      sequence_number: 0,
+      response: { id: "response-1" },
+    });
+    assert.throws(
+      () =>
+        decoder.accept({
+          type: "response.output_text.delta",
+          sequence_number: 1,
+          delta,
+        }),
+      (error: unknown) =>
+        error instanceof ModelTransportError &&
+        error.code === "responses_delta_invalid",
+    );
+    assert.equal(decoder.terminal, false);
+  }
+});
+
+test("whitespace beyond the former pending buffer limit is emitted and participates in final output validation", () => {
   const decoder = new ResponsesProtocolDecoder({
     sequencePolicy: "required",
     completedCheckpoint: () => null,
   });
+  const delta = "\n".repeat(1025);
   decoder.accept({
     type: "response.created",
     sequence_number: 0,
     response: { id: "response-1" },
   });
-
   assert.deepEqual(
     decoder.accept({
       type: "response.output_text.delta",
       sequence_number: 1,
-      delta: "",
+      delta,
     }),
-    [],
+    [{ type: "output.delta", delta }],
   );
-  assert.deepEqual(
-    decoder.accept({
-      type: "response.output_text.delta",
-      sequence_number: 2,
-      delta: "\n",
-    }),
-    [],
-  );
-  assert.deepEqual(
-    decoder.accept({
-      type: "response.output_text.delta",
-      sequence_number: 3,
-      delta: "done",
-    }),
-    [{ type: "output.delta", delta: "\ndone" }],
+  assert.throws(
+    () =>
+      decoder.accept({
+        type: "response.completed",
+        sequence_number: 2,
+        response: { id: "response-1", output: [] },
+      }),
+    (error: unknown) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_output_mismatch",
   );
 });
 
@@ -488,7 +583,11 @@ for (const sequencePolicy of ["required", "whenPresent"] as const) {
       events,
       reasoningFixture.expected.transportEvents.map((event) =>
         event.type === "usage"
-          ? { ...event, cachedInputTokensReported: false, providerResponseId: "resp-ar-042" }
+          ? {
+              ...event,
+              cachedInputTokensReported: false,
+              providerResponseId: "resp-ar-042",
+            }
           : event,
       ),
     );
@@ -1075,26 +1174,82 @@ test(`${terminalWithoutCreatedFixture.caseId}: present terminal fields remain st
   }
 });
 
-test("response.completed still requires its status field", () => {
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${sequencePolicy} accepts a typed response.completed with a valid identity and no optional status or output`, () => {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy,
+      completedCheckpoint: () => null,
+    });
+    const sequence = (value: number) =>
+      sequencePolicy === "required" ? { sequence_number: value } : {};
+    decoder.accept({
+      type: "response.created",
+      ...sequence(0),
+      response: { id: "resp-completed-status" },
+    });
+    assert.deepEqual(
+      decoder.accept({
+        type: "response.completed",
+        ...sequence(1),
+        response: { id: "resp-completed-status" },
+      }),
+      [{ type: "completed", checkpoint: null }],
+    );
+    decoder.finish();
+    assert.equal(decoder.completedResponseId, "resp-completed-status");
+  });
+}
+
+test("response.completed rejects contradictory or malformed present status fields", () => {
+  for (const status of [
+    "failed",
+    "incomplete",
+    "in_progress",
+    null,
+    false,
+    0,
+    {},
+    [],
+  ]) {
+    const decoder = new ResponsesProtocolDecoder({
+      sequencePolicy: "required",
+      completedCheckpoint: () => null,
+    });
+    decoder.accept({
+      type: "response.created",
+      sequence_number: 0,
+      response: { id: "resp-completed-status" },
+    });
+    assert.throws(
+      () =>
+        decoder.accept({
+          type: "response.completed",
+          sequence_number: 1,
+          response: { id: "resp-completed-status", status },
+        }),
+      (error: unknown) =>
+        error instanceof ModelTransportError &&
+        error.code === "responses_status_invalid",
+    );
+    assert.equal(decoder.terminal, false);
+  }
+});
+
+test("response.completed still requires creation before its typed terminal", () => {
   const decoder = new ResponsesProtocolDecoder({
     sequencePolicy: "required",
     completedCheckpoint: () => null,
-  });
-  decoder.accept({
-    type: "response.created",
-    sequence_number: 0,
-    response: { id: "resp-completed-status" },
   });
   assert.throws(
     () =>
       decoder.accept({
         type: "response.completed",
-        sequence_number: 1,
+        sequence_number: 0,
         response: { id: "resp-completed-status" },
       }),
     (error: unknown) =>
       error instanceof ModelTransportError &&
-      error.code === "responses_status_invalid",
+      error.code === "responses_created_missing",
   );
 });
 

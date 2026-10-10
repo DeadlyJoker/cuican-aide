@@ -239,6 +239,38 @@ test("bounds a dispatcher drain by events even when messages describe ranges", a
   assert.deepEqual(await fixture.store.listPendingOutbox(100), []);
 });
 
+test("commit availability promptly continues bounded range batches without waiting for a scan", async (context) => {
+  const fixture = await rangeFixture(context, [32, 32, 32], 3);
+  const active = fixture.eventHub.subscribe("run-range");
+  const received: RunLifecycleEvent[] = [];
+  const consumed = (async () => {
+    for (let index = 0; index < 96; index++) {
+      const next = await active.next();
+      assert.equal(next.done, false);
+      received.push(next.value!);
+    }
+  })();
+  fixture.dispatcher.notifyAvailability();
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      consumed,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("range_follow_up_deadline")),
+          2000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+  await fixture.dispatcher.wake();
+  assert.deepEqual(received, fixture.outputs);
+  assert.deepEqual(await fixture.store.listPendingOutbox(100), []);
+  active.close();
+});
+
 test("validates the whole durable range before publishing or acknowledging any of it", async (context) => {
   const fixture = await rangeFixture(context, [4]);
   const original = fixture.store.listRunEvents.bind(fixture.store);

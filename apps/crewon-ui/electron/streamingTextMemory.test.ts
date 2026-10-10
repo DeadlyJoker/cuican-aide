@@ -30,11 +30,8 @@ it("releases owned pages and bounds live heap across more than 100 million strea
         String.raw`
 const assert = require("node:assert/strict");
 const { createStreamingTextBuffer: create, DEFAULT_STREAMING_TEXT_BUDGET: budget } = module.exports;
-let visible = {}, scheduled = null, transferred = 0;
-const buffer = create((update) => { visible = update(visible); }, {
-  requestFrame(callback) { scheduled = callback; return 1; },
-  cancelFrame() { scheduled = null; },
-});
+let visible = {}, transferred = 0;
+const buffer = create((update) => { visible = update(visible); });
 function snapshot() { global.gc(); return process.memoryUsage(); }
 function run(count, offset) {
   buffer.setVisible(false);
@@ -44,11 +41,9 @@ function run(count, offset) {
     buffer.append("thread-" + (index % 32), delta);
     if (index % 97 === 0) {
       buffer.setVisible(true);
-      if (scheduled) scheduled();
       buffer.setVisible(false);
     }
     const size = buffer.usage();
-    assert(size.pendingBytes <= budget.totalPendingBytes);
     assert(size.visibleBytes <= budget.totalVisibleBytes);
     assert(size.streams <= budget.maxStreams);
   }
@@ -64,12 +59,10 @@ const after = snapshot();
 assert(transferred > 100_000_000);
 assert(after.heapUsed - warm.heapUsed < 8 * 1024 * 1024);
 assert(after.arrayBuffers - warm.arrayBuffers < 1024 * 1024);
-assert.equal(buffer.usage().pendingBytes, 0);
 assert(Object.values(visible).reduce((n, text) => n + text.length * 2, 0) <= budget.totalVisibleBytes);
 buffer.replace({});
 buffer.dispose();
 const released = snapshot();
-assert.equal(scheduled, null);
 assert.deepEqual(visible, {});
 assert.equal(buffer.usage().streams, 0);
 assert(released.arrayBuffers - empty.arrayBuffers < 1024 * 1024);

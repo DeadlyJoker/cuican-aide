@@ -162,7 +162,7 @@ test("the shared resolver preserves gateway overrides and ignores unused invalid
     requestProfile: "responsesLite",
     sequencePolicy: "whenPresent",
     identityPolicy: "terminalAuthoritative",
-    outputDeltaFlushBytes: 1024,
+    outputDeltaFlushBytes: null,
     idleTimeoutMs: 4321,
     websocket: null,
   });
@@ -176,8 +176,14 @@ test("the shared resolver preserves gateway overrides and ignores unused invalid
     assert.equal(transport.adapterVersion, "1+responses-lite");
     assert.equal(transport.maxOutputTokens, 256);
     assert.equal(transport.supportsResponseRetrieve, false);
-    const { modelId, websocket, credentialRequired, ...effective } =
-      inputs.model;
+    const {
+      modelId,
+      websocket,
+      credentialRequired,
+      outputDeltaFlushBytes,
+      ...effective
+    } = inputs.model;
+    assert.equal(outputDeltaFlushBytes, null);
     assert.deepEqual(resolveResponsesRuntimeConfiguration(environment).config, {
       ...effective,
       model: modelId,
@@ -185,6 +191,52 @@ test("the shared resolver preserves gateway overrides and ignores unused invalid
   } finally {
     await transport.close?.();
   }
+});
+
+test("gateway output is immediate by default and legacy bootstrap replay is exact", () => {
+  const environment = {
+    ...BASE,
+    CREWON_RESPONSES_ENDPOINT: "https://gateway.example/v1/responses",
+  };
+  const current = capture(environment);
+  assert.equal(current.model.outputDeltaFlushBytes, null);
+  assert.equal(
+    Object.hasOwn(
+      resolveResponsesRuntimeConfiguration(environment).config,
+      "outputDeltaFlushBytes",
+    ),
+    false,
+  );
+  const legacy = {
+    ...current,
+    model: { ...current.model, outputDeltaFlushBytes: 1024 },
+  };
+  const replay = replayRuntimeBootstrapInputs(legacy);
+  assert.equal(replay.CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES, "1024");
+  assert.deepEqual(capture(replay), legacy);
+  const restoredCurrent = applyReplay(current, replay);
+  assert.equal(
+    Object.hasOwn(restoredCurrent, "CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES"),
+    false,
+  );
+  assert.deepEqual(capture(restoredCurrent), current);
+  for (const value of ["0", "25", "2048", "invalid"])
+    assert.throws(
+      () =>
+        resolveResponsesRuntimeConfiguration({
+          ...environment,
+          CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES: value,
+        }),
+      /CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES_invalid/u,
+    );
+  assert.throws(
+    () =>
+      resolveResponsesRuntimeConfiguration({
+        ...BASE,
+        CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES: "1024",
+      }),
+    /CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES_invalid/u,
+  );
 });
 
 test("captures native WebSocket limits and recreates its distinct compiled model identity", async () => {

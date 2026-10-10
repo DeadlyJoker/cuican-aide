@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import {
   createStreamingTextBuffer,
   type StreamingTextByThread,
-  type StreamingTextFrameScheduler,
 } from "../../lib/thread/threadStreamingTextBuffer";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 import { createDemoTurn, createDraftDemoThread } from "../../lib/demo/demoData";
@@ -13,33 +12,6 @@ import {
   presentControlRunTerminal,
   clearControlRunSynchronization,
 } from "../../lib/control-runtime/controlRunTerminalPresentation";
-
-function manualFrameScheduler() {
-  const callbacks = new Map<number, () => void>();
-  let nextHandle = 1;
-  const scheduler: StreamingTextFrameScheduler = {
-    cancelFrame: (handle) => {
-      callbacks.delete(handle);
-    },
-    requestFrame: (callback) => {
-      const handle = nextHandle;
-      nextHandle += 1;
-      callbacks.set(handle, callback);
-      return handle;
-    },
-  };
-
-  return {
-    callbacks,
-    flushNext: () => {
-      const [handle, callback] = callbacks.entries().next().value ?? [];
-      if (!handle || !callback) return;
-      callbacks.delete(handle);
-      callback();
-    },
-    scheduler,
-  };
-}
 
 describe("CommandThreadRoom", () => {
   it("stops thinking on a trusted terminal receipt while retaining output and blocking replay until canonical sync", () => {
@@ -264,15 +236,13 @@ describe("CommandThreadRoom", () => {
         },
       ],
     } as unknown as Thread;
-    const frames = manualFrameScheduler();
     let streamingTextByThread: StreamingTextByThread = {};
     const buffer = createStreamingTextBuffer((updater) => {
       streamingTextByThread = updater(streamingTextByThread);
-    }, frames.scheduler);
+    });
     const burst = `${"答".repeat(395)}[VISIBLE-END]`;
 
     buffer.append(thread.id, burst);
-    frames.flushNext();
 
     const streamingText = streamingTextByThread[thread.id] ?? "";
     const markup = renderToStaticMarkup(
@@ -290,9 +260,6 @@ describe("CommandThreadRoom", () => {
     expect(markup).toMatchSnapshot();
     expect(streamingText).toBe(burst);
     expect(markup).toContain("VISIBLE-END");
-    expect(frames.callbacks.size).toBe(0);
-
-    while (frames.callbacks.size > 0) frames.flushNext();
     expect(streamingTextByThread[thread.id]).toBe(burst);
   });
 

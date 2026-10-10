@@ -14,6 +14,7 @@ export const RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES = Object.freeze([
   "CREWON_RESPONSES_REQUEST_PROFILE",
   "CREWON_RESPONSES_IDLE_TIMEOUT_MS",
   "CREWON_RESPONSES_SEQUENCE_POLICY",
+  "CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES",
   "CREWON_RESPONSES_WEBSOCKET_ENABLED",
   "CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS",
   "CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES",
@@ -56,6 +57,13 @@ export function replayRuntimeBootstrapInputs(
     CREWON_RESPONSES_REQUEST_PROFILE: model.requestProfile,
     CREWON_RESPONSES_IDLE_TIMEOUT_MS: String(model.idleTimeoutMs),
     CREWON_RESPONSES_SEQUENCE_POLICY: model.sequencePolicy,
+    ...(model.outputDeltaFlushBytes === null
+      ? {}
+      : {
+          CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES: String(
+            model.outputDeltaFlushBytes,
+          ),
+        }),
     CREWON_RESPONSES_WEBSOCKET_ENABLED: String(model.websocket !== null),
     ...(model.websocket === null
       ? {}

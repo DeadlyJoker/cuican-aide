@@ -53,6 +53,7 @@ import {
 } from "./paused-admission.ts";
 import { resolveStandaloneProviderProbeWorkers } from "./standalone-provider-probe-environment.ts";
 import { PimThreadSandbox } from "./pim-sandbox-client.ts";
+import { watchSqliteOutboxAvailability } from "./sqlite-outbox-wakeup.ts";
 
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
@@ -278,6 +279,7 @@ const sharedConfig = {
   ),
 };
 let runtime;
+let sqliteOutboxDatabasePath: string | null = null;
 let projectSourceUploadAuthorization:
   | ProductionProjectSourceUploadAuthorization
   | undefined;
@@ -472,6 +474,7 @@ try {
                 databasePath,
                 extensionWorker: extensionEnvironment.extensionWorker,
               });
+      sqliteOutboxDatabasePath = databasePath;
     }
   }
 } catch (error) {
@@ -484,9 +487,18 @@ const port = parsePort(
   process.env.CREWON_CONTROL_PORT ?? "3210",
   activationGate !== null,
 );
+const sqliteOutboxWakeup =
+  sqliteOutboxDatabasePath === null
+    ? null
+    : watchSqliteOutboxAvailability({
+        databasePath: sqliteOutboxDatabasePath,
+        outbox: runtime.outboxDispatcher,
+      });
+runtime.app.addHook("preClose", async () => sqliteOutboxWakeup?.close());
 const shutdown = installProcessShutdown({
   host: process,
   close: () => {
+    sqliteOutboxWakeup?.close();
     projectSourceUploadAuthorization?.close();
     return runtime.app.close();
   },
@@ -512,7 +524,13 @@ const activationInput =
 if (activationInput !== null) {
   runtime.app.addHook("onClose", async () => activationInput.close());
 }
-await runtime.app.listen({ host: "127.0.0.1", port });
+try {
+  await runtime.app.listen({ host: "127.0.0.1", port });
+} catch (error) {
+  sqliteOutboxWakeup?.close();
+  await runtime.app.close();
+  throw error;
+}
 const listeningPort = controlListeningPort(runtime.app.server.address());
 process.stdout.write(
   `${

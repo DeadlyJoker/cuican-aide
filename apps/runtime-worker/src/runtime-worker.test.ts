@@ -6599,6 +6599,7 @@ test("batches durable output without changing subsequent model input or source e
     receiptBytes: number;
     databasePagesBytes: number;
     walBytes: number;
+    executionMs: number;
   }> = [];
   for (const strategy of ["legacy", "batch"] as const) {
     const directory = mkdtempSync(join(tmpdir(), `crewon-output-${strategy}-`));
@@ -6633,7 +6634,9 @@ test("batches durable output without changing subsequent model input or source e
       },
     };
     const worker = fixture.worker({ transport });
+    const firstStartedAt = performance.now();
     assert.equal((await worker.wake()).kind, "completed");
+    let executionMs = performance.now() - firstStartedAt;
     const deltaEvents: Extract<
       import("@crewon/domain").RunLifecycleEvent,
       { type: "model.output.delta" }
@@ -6690,7 +6693,9 @@ test("batches durable output without changing subsequent model input or source e
       "batch-next",
     );
     fixture.leaseClock.advance(3_600_000);
+    const secondStartedAt = performance.now();
     assert.equal((await worker.wake()).kind, "completed");
+    executionMs += performance.now() - secondStartedAt;
     await worker.close();
     runs.push({
       requests,
@@ -6700,6 +6705,7 @@ test("batches durable output without changing subsequent model input or source e
       receiptBytes: Number(receipt.bytes) + Number(compact.bytes),
       databasePagesBytes,
       walBytes,
+      executionMs,
     });
     assert.equal(Number(compact.output_count), strategy === "batch" ? 1025 : 0);
   }
@@ -6708,7 +6714,9 @@ test("batches durable output without changing subsequent model input or source e
   assert.deepEqual(batch.requests, legacy.requests);
   assert.deepEqual(batch.deltas, legacy.deltas);
   assert.equal(legacy.receipts - batch.receipts, 1025);
-  assert.equal(legacy.notifications - batch.notifications, 1025 - 33);
+  // Flush only arrived output: exact batch count depends on persistence
+  // backpressure, while transaction amplification must stay bounded.
+  assert.ok(batch.notifications <= legacy.notifications / 2);
   assert.ok(batch.receiptBytes < legacy.receiptBytes / 4);
   context.diagnostic(
     JSON.stringify(

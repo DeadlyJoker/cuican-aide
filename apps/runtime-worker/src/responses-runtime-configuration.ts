@@ -31,6 +31,15 @@ export function resolveResponsesRuntimeConfiguration(
     environment,
   );
   const compatibility = responsesCompatibilityProfile(providerId, endpoint);
+  // Only replaying a persisted legacy bootstrap may opt into the old coalescer.
+  // Live gateway output is forwarded immediately by default.
+  const legacyFlushBytes =
+    environment.CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES;
+  if (
+    legacyFlushBytes !== undefined &&
+    (compatibility === null || legacyFlushBytes !== "1024")
+  )
+    throw new Error("CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES_invalid");
   const config = Object.freeze({
     endpoint,
     model: requiredEnvironment("CREWON_MODEL_ID", environment),
@@ -63,7 +72,7 @@ export function resolveResponsesRuntimeConfiguration(
         environment.CREWON_RESPONSES_SEQUENCE_POLICY ?? "required",
       ),
     identityPolicy: compatibility === null ? "strict" : "terminalAuthoritative",
-    ...(compatibility === null ? {} : { outputDeltaFlushBytes: 1024 }),
+    ...(legacyFlushBytes === undefined ? {} : { outputDeltaFlushBytes: 1024 }),
   } as const);
   const websocket =
     compatibility === null &&

@@ -1,4 +1,4 @@
-import { memo, useDeferredValue, type ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -356,8 +356,6 @@ export function TranscriptStreamingMessage({
   streamingText: string;
   partial?: boolean;
 }) {
-  const deferredStreamingText = useDeferredValue(streamingText);
-
   return (
     <article
       className="message"
@@ -381,11 +379,11 @@ export function TranscriptStreamingMessage({
                 : "Showing the latest live content only. Saved content is available in conversation history."}
             </p>
             <pre className="whitespace-pre-wrap break-words [font-family:inherit]">
-              {deferredStreamingText}
+              {streamingText}
             </pre>
           </>
         ) : (
-          <TranscriptStreamingMarkdown text={deferredStreamingText} />
+          <TranscriptStreamingMarkdown text={streamingText} />
         )}
       </div>
     </article>
