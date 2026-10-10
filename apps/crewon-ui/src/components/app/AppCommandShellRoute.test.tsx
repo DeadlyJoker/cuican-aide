@@ -119,7 +119,7 @@ describe("AppCommandShellRoute task detail integration", () => {
     ]).toEqual([true, false, false, false, false, false]);
   });
 
-  it("keeps the task trigger in the conversation shell and the workbench as a sibling", () => {
+  it("puts task controls in the panel header and keeps the workbench independent", () => {
     const markup = renderToStaticMarkup(
       <AppCommandShellRoute
         capabilityDrawer={{
@@ -176,6 +176,19 @@ describe("AppCommandShellRoute task detail integration", () => {
     expect(markup).toContain('data-active-overlay="workbench"');
     expect(markup).toContain('data-capability-sidebar-open="true"');
     expect(markup).toContain('aria-label="任务详细信息"');
+    const header = markup.match(
+      /<header[^>]*class="command-panel-header"[\s\S]*?<\/header>/,
+    )?.[0];
+    expect(header).toBeDefined();
+    expect(header).toContain('aria-label="面板标题栏"');
+    expect(header).toContain("任务详细信息回归");
+    expect(header).toContain('aria-label="任务详细信息"');
+    expect(header).toMatchSnapshot();
+    expect(markup.match(/aria-label="任务详细信息"/g)).toHaveLength(1);
+    expect(markup).not.toContain('class="command-thread-toolbar"');
+    expect(markup.indexOf('class="command-panel-header"')).toBeLessThan(
+      markup.indexOf("screen-shell command-screen"),
+    );
     expect(markup).toContain("1 个文件已更改");
     expect(markup).toContain("+2");
     expect(markup).toContain("-1");

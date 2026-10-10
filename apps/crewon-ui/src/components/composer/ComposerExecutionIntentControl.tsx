@@ -1,4 +1,4 @@
-import { ListChecks, ShieldCheck, Target } from "lucide-react";
+import { ListChecks, ShieldCheck, Target, X } from "lucide-react";
 import { useId } from "react";
 
 import type { Locale } from "../../lib/i18n";
@@ -38,6 +38,9 @@ export function ComposerExecutionIntentControl({
           plan: "Plan",
           planTitle: "Draft a read-only plan before execution",
         };
+  if (value === "none") return null;
+  const Icon = value === "goal" ? Target : ListChecks;
+  const label = value === "goal" ? copy.goal : copy.plan;
   return (
     <>
       <div
@@ -46,31 +49,21 @@ export function ComposerExecutionIntentControl({
         role="group"
       >
         <button
-          aria-pressed={value === "goal"}
-          className="execution-intent-option"
-          data-execution-intent="goal"
-          disabled={disabled}
-          title={copy.goalTitle}
-          type="button"
-          onClick={() => onSelect("goal")}
-        >
-          <Target aria-hidden="true" />
-          <span>{copy.goal}</span>
-        </button>
-        <button
           aria-describedby={
             hasActiveGoal && value === "plan" ? activeGoalNoticeId : undefined
           }
-          aria-pressed={value === "plan"}
+          aria-label={locale === "zh" ? `取消${label}` : `Remove ${label}`}
+          aria-pressed="true"
           className="execution-intent-option"
-          data-execution-intent="plan"
+          data-execution-intent={value}
           disabled={disabled}
-          title={copy.planTitle}
+          title={value === "goal" ? copy.goalTitle : copy.planTitle}
           type="button"
-          onClick={() => onSelect("plan")}
+          onClick={() => onSelect(value)}
         >
-          <ListChecks aria-hidden="true" />
-          <span>{copy.plan}</span>
+          <Icon aria-hidden="true" />
+          <span>{label}</span>
+          <X aria-hidden="true" />
         </button>
       </div>
       {hasActiveGoal && value === "plan" ? (

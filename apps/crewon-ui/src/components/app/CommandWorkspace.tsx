@@ -1,4 +1,12 @@
+import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
+import { useCommandSidebarCollapse } from "./useCommandSidebarCollapse";
+import { composerExecutionIntentPalette } from "../composer/composerExecutionIntentPalette";
 import { Plus, ShieldCheck } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  CommandPanelHeading,
+  CommandPanelSceneControl,
+} from "./CommandPanelHeading";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import type { WorkflowRunUpdatedNotification } from "@crewon/app-server-protocol/v2/WorkflowRunUpdatedNotification";
@@ -258,6 +266,8 @@ export type {
 export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 
 type CommandWorkspaceProps = {
+  panelHeaderTarget?: HTMLElement | null;
+  panelHeaderActions?: ReactNode;
   activeTurnId?: string | null;
   assistantActiveTurnId?: string | null;
   assistantStreamingText?: string;
@@ -361,6 +371,8 @@ type CommandWorkspaceProps = {
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
   taskChanges?: ComposerTaskChangeSummary | null;
+  taskChangeDetails?: RecordedTaskChanges | null;
+  onOpenTaskChanges?: () => void;
   taskDetailTrigger?: ReactNode;
   /**
    * Goal steering the selected thread, when the backend reports one. The
@@ -719,6 +731,8 @@ export function shouldCloseComposerPalette({
 }
 
 export function CommandWorkspace({
+  panelHeaderTarget,
+  panelHeaderActions,
   activeTurnId = null,
   assistantActiveTurnId = null,
   assistantStreamingText = "",
@@ -749,6 +763,8 @@ export function CommandWorkspace({
   slashCommands = [],
   streamingText = "",
   taskChanges = null,
+  taskChangeDetails = null,
+  onOpenTaskChanges,
   taskDetailTrigger = null,
   onTaskDetailAvailabilityChange,
   threadGoal = null,
@@ -792,7 +808,7 @@ export function CommandWorkspace({
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
     shellViewFromHash(),
   );
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse();
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
   const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<
@@ -1633,6 +1649,7 @@ export function CommandWorkspace({
   );
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
+      ...composerExecutionIntentPalette(locale),
       {
         action: "attach-files",
         detail: "从本地电脑选择一个或多个文件",
@@ -1663,7 +1680,7 @@ export function CommandWorkspace({
         (item) => item.kind === "skill" || item.kind === "mcp",
       ),
     ],
-    [contextPaletteItems, providerResourceAvailable, slashPaletteItems],
+    [contextPaletteItems, locale, providerResourceAvailable, slashPaletteItems],
   );
   const providerComposerTag =
     providerResourceAvailable && providerResource?.selectedResource
@@ -2393,6 +2410,13 @@ export function CommandWorkspace({
   }
 
   function insertAddItem(item: PaletteItemWithCommand) {
+    if (item.action === "intent-goal" || item.action === "intent-plan") {
+      if (isSending) return;
+      selectExecutionIntent(item.action === "intent-goal" ? "goal" : "plan");
+      closeComposerPalette();
+      focusActiveComposer();
+      return;
+    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -2914,6 +2938,44 @@ export function CommandWorkspace({
       data-force-new-task={newTaskDraft ? "true" : "false"}
       data-locale={locale}
     >
+      {panelHeaderTarget
+        ? createPortal(
+            <CommandPanelHeading
+              title={
+                activeView === "command"
+                  ? showCommandThread && selectedThread
+                    ? sidebarThreadTitle(
+                        selectedThread,
+                        locale === "zh" ? "未命名会话" : "Untitled thread",
+                      )
+                    : locale === "zh"
+                      ? "新建任务"
+                      : "New task"
+                  : {
+                      assist: locale === "zh" ? "助手" : "Assistant",
+                      projects: locale === "zh" ? "任务" : "Tasks",
+                      agents: locale === "zh" ? "Agent" : "Agents",
+                      knowledge: locale === "zh" ? "知识库" : "Knowledge",
+                      schedule: locale === "zh" ? "日程" : "Schedule",
+                      team: locale === "zh" ? "Team" : "Teams",
+                    }[activeView]
+              }
+              actions={
+                showCommandThread ? (
+                  <>
+                    <CommandPanelSceneControl
+                      locale={locale}
+                      scene={scene}
+                      onSceneChange={switchScene}
+                    />
+                    {panelHeaderActions}
+                  </>
+                ) : null
+              }
+            />,
+            panelHeaderTarget,
+          )
+        : null}
       <input
         ref={fileInputRef}
         aria-label={locale === "zh" ? "从本地电脑选择文件" : "Choose files"}
@@ -2940,7 +3002,9 @@ export function CommandWorkspace({
         data-od-id="desktop-window"
       >
         <CommandSidebar
+          chromeTarget={panelHeaderTarget}
           activeView={activeView}
+          collapsed={sidebarCollapsed}
           controlWorkspace={
             workspaceAuthority === "control"
               ? (controlWorkspaceNav ?? undefined)
@@ -2994,7 +3058,7 @@ export function CommandWorkspace({
           onToggleSearch={() => setSidebarSearchOpen((open) => !open)}
         />
 
-        <DesktopWindowDragRegion />
+        {panelHeaderTarget === undefined ? <DesktopWindowDragRegion /> : null}
 
         <section className="command-canvas" data-od-id="desktop-main-pane">
           <section
@@ -3015,7 +3079,9 @@ export function CommandWorkspace({
              * of it, so it can span the canvas and start flush left instead of
              * beginning mid-screen above the messages.
              */}
-            {showCommandThread && selectedThread ? (
+            {showCommandThread &&
+            selectedThread &&
+            panelHeaderTarget === undefined ? (
               <div className="command-thread-toolbar">
                 <div className="command-thread-identity">
                   <strong
@@ -3070,6 +3136,8 @@ export function CommandWorkspace({
                     running={commandThreadRunning}
                     summary={threadProgress}
                     taskChanges={taskChanges}
+                    changeDetails={taskChangeDetails}
+                    onOpenChanges={onOpenTaskChanges}
                   />
                 ) : null}
                 {toolApproval && onToolApprovalDecision ? (
@@ -3217,7 +3285,7 @@ export function CommandWorkspace({
                           ariaLabel={
                             locale === "zh" ? "权限选择" : "Permissions"
                           }
-                          className="max-w-[180px]"
+                          className="composer-permission-select max-w-[180px]"
                           contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                           icon={<ShieldCheck aria-hidden="true" />}
                           menuHelp={{
@@ -3489,7 +3557,7 @@ export function CommandWorkspace({
                     </button>
                     <CommandComposerSelect
                       ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                      className="max-w-[180px]"
+                      className="composer-permission-select max-w-[180px]"
                       contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                       icon={<ShieldCheck aria-hidden="true" />}
                       menuHelp={{
@@ -3512,7 +3580,9 @@ export function CommandWorkspace({
                     <Palette
                       id="assistant-add-search-panel"
                       inputId="assistant-add-search"
-                      items={visibleAddItems}
+                      items={visibleAddItems.filter(
+                        (item) => item.kind !== "intent",
+                      )}
                       kind="add"
                       open={openPalette === "add"}
                       placeholder={

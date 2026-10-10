@@ -99,6 +99,39 @@ describe("ComposerProgressPill", () => {
     expect(markup).toMatchSnapshot();
   });
 
+  it("keeps structured Plan and change viewing as separate buttons", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerProgressPill
+        locale="zh"
+        running
+        summary={summary({
+          plan: { completed: 1, current: 2, total: 5 },
+          runPlan: plan(),
+        })}
+        taskChanges={{ files: 1, additions: 1, deletions: 0 }}
+        changeDetails={{
+          threadId: "task-1",
+          complete: true,
+          files: [
+            {
+              path: "src/a.ts",
+              diff: "+a",
+              additions: 1,
+              deletions: 0,
+              truncated: false,
+            },
+          ],
+        }}
+        onOpenChanges={() => {}}
+      />,
+    );
+    expect(markup.match(/<button/g)).toHaveLength(2);
+    expect(markup).toContain('aria-label="第 2 / 5 步，查看执行计划"');
+    expect(markup).toContain('aria-label="查看任务改动"');
+    const buttons = markup.match(/<button\b[^]*?<\/button>/g) ?? [];
+    expect(buttons.every((button) => (button.match(/<button/g) ?? []).length === 1)).toBe(true);
+  });
+
   it("renders every status as text and escapes untrusted Plan titles", () => {
     const runPlan = plan();
     const markup = renderToStaticMarkup(

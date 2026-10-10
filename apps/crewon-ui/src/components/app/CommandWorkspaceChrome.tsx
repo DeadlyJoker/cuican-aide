@@ -1,25 +1,26 @@
 import {
-  BookOpen,
-  Bot,
-  CalendarDays,
+  commandSearchResults,
+  type CommandSearchResult,
+} from "./commandSearchResults";
+import { useCommandSidebarSearchShortcut } from "./useCommandSidebarSearchShortcut";
+import { CommandRailAccount } from "./CommandRailAccount";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { createPortal } from "react-dom";
+import {
   ChevronRight,
   ChevronUp,
   Cloud,
   Folder,
   KeyRound,
-  ListChecks,
   LogOut,
   Paperclip,
   PanelLeft,
   Plug,
-  Plus,
   SquarePen,
   Search,
   Settings2,
-  Sparkles,
   Target,
   Trash2,
-  Users,
 } from "lucide-react";
 import {
   type FormEvent,
@@ -29,7 +30,15 @@ import {
   useState,
 } from "react";
 
-import { shellNavItems } from "./commandWorkspaceData";
+import {
+  CommandNavigationRail,
+  CommandRailButton,
+} from "./CommandNavigationRail";
+import {
+  commandSidebarHasContext,
+  commandSidebarSection,
+} from "./commandSidebarSections";
+import { CommandSidebarNavigation } from "./CommandSidebarNavigation";
 import {
   commandSidebarThreadHasUnreadSignal,
   type CommandSidebarThreadScope,
@@ -137,49 +146,15 @@ export async function pickCommandSidebarWorkspaceFolder(
   return authority === "legacy" ? pick(title) : null;
 }
 
-type SidebarSearchResult =
-  | {
-      action: "thread";
-      detail: string;
-      key: string;
-      kind: string;
-      threadId: string;
-      title: string;
-    }
-  | {
-      action: "view";
-      detail: string;
-      key: string;
-      kind: string;
-      title: string;
-      view: CommandShellView;
-    };
-
-const viewIcons: Record<CommandShellView, ReactNode> = {
-  command: <Plus aria-hidden="true" />,
-  assist: <Sparkles aria-hidden="true" />,
-  projects: <ListChecks aria-hidden="true" />,
-  agents: <Bot aria-hidden="true" />,
-  knowledge: <BookOpen aria-hidden="true" />,
-  schedule: <CalendarDays aria-hidden="true" />,
-  team: <Users aria-hidden="true" />,
-};
-
 import { CommandSidebarSearchView } from "./CommandSidebarSearchView";
 import { CommandSidebarWorkspaceTree } from "./CommandSidebarWorkspaceTree";
-import { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
 import { useCommandSidebarWorkspaceController } from "./useCommandSidebarWorkspaceController";
 export { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
 
-function workspaceName(path: string, emptyLabel = "工作空间"): string {
-  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  return (
-    normalized.split("/").filter(Boolean).pop() || normalized || emptyLabel
-  );
-}
-
 export function CommandSidebar({
+  chromeTarget,
   activeView,
+  collapsed = false,
   controlWorkspace,
   cwd,
   isSearchOpen,
@@ -201,7 +176,9 @@ export function CommandSidebar({
   onToggleCollapse,
   onToggleSearch,
 }: {
+  chromeTarget?: HTMLElement | null;
   activeView: CommandShellView;
+  collapsed?: boolean;
   controlWorkspace?: CommandControlWorkspaceNav;
   cwd: string;
   isSearchOpen: boolean;
@@ -268,7 +245,7 @@ export function CommandSidebar({
             "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
           workspaceSelectFailed: (detail: string) =>
             `工作空间切换失败：${detail}`,
-          workspaceThreadsEmpty: "开始一次任务后，会话会出现在这个工作空间下。",
+          workspaceThreadsEmpty: "暂无任务",
           workspaceTree: "工作空间和对话",
         }
       : {
@@ -310,8 +287,7 @@ export function CommandSidebar({
             "No folder workspace is selected. Add one or start a conversation without a workspace.",
           workspaceSelectFailed: (detail: string) =>
             `Workspace switch failed: ${detail}`,
-          workspaceThreadsEmpty:
-            "Conversations will appear under this workspace after you start a task.",
+          workspaceThreadsEmpty: "No tasks yet",
           workspaceTree: "Workspaces and conversations",
         };
   const {
@@ -344,43 +320,21 @@ export function CommandSidebar({
     onCreateWorkspace,
     workspaceAuthority,
   });
-  const sidebarSearchResults: SidebarSearchResult[] = [
-    {
-      action: "view" as const,
-      detail: locale === "zh" ? "智能体配置" : "Agent configuration",
-      key: "agent-platform-slot",
-      kind: copy.feature,
-      title: slots.agent.title,
-      view: "agents" as const,
-    },
-    ...linkedThreads.map((thread) => ({
-      action: "thread" as const,
-      detail: [
-        ...(workspaceAuthority === "legacy"
-          ? [workspaceName(thread.cwd ?? "", copy.noWorkspace)]
-          : []),
-        thread.preview || thread.updatedLabel,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      key: `thread-${thread.id}`,
-      kind: copy.conversation,
-      threadId: thread.id,
-      title: thread.title,
-    })),
-  ].filter((item) =>
-    [item.kind, item.title, item.detail]
-      .join(" ")
-      .toLowerCase()
-      .includes(query.trim().toLowerCase()),
-  );
+  const sidebarSearchResults = commandSearchResults({
+    locale,
+    slots,
+    linkedThreads,
+    workspaceAuthority,
+    query,
+    copy,
+  });
   const taskAttentionCount = linkedThreads.filter(
     (thread) =>
       thread.state !== undefined &&
       commandSidebarThreadHasUnreadSignal(thread.state),
   ).length;
 
-  function activateSearchResult(item: SidebarSearchResult) {
+  function activateSearchResult(item: CommandSearchResult) {
     if (item.action === "thread") {
       onOpenLinkedThread(item.threadId);
     } else {
@@ -390,172 +344,189 @@ export function CommandSidebar({
     onCloseSearch();
   }
 
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
+  useCommandSidebarSearchShortcut({
+    available: commandSidebarHasContext(activeView),
+    isOpen: isSearchOpen,
+    onClose: onCloseSearch,
+    onOpen: onToggleSearch,
+  });
+  function toggleSearch() {
+    if (isSearchOpen) onCloseSearch();
+    else onToggleSearch();
+  }
+  const section = commandSidebarSection(activeView);
+  const contextVisible = !collapsed && commandSidebarHasContext(activeView);
+  const chrome = commandSidebarHasContext(activeView) ? (
+    <div className="command-sidebar-chrome">
+      <TooltipProvider delayDuration={250}>
+        <CommandRailButton
+          label={
+            locale === "zh"
+              ? collapsed
+                ? "展开侧栏"
+                : "折叠侧栏"
+              : collapsed
+                ? "Expand sidebar"
+                : "Collapse sidebar"
+          }
+          aria-expanded={!collapsed}
+          aria-controls="command-sidebar-context"
+          data-sidebar-collapse=""
+          onClick={onToggleCollapse}
+        >
+          <PanelLeft aria-hidden="true" />
+        </CommandRailButton>
+      </TooltipProvider>
+    </div>
+  ) : null;
+
   return (
     <aside
-      className="command-sidebar"
+      className="command-sidebar command-sidebar--tiered"
+      data-context-visible={contextVisible}
+      data-sidebar-section={section}
       data-od-id="desktop-sidebar"
       data-sidebar-current={activeView}
       data-sidebar-log="command-log"
       data-sidebar-prefix="desktop"
       data-sidebar-shell=""
       data-desktop-runtime={desktopRuntime ? "true" : undefined}
-    >
-      <div
-        className="sidebar-topbar"
-        data-od-id="desktop-sidebar-topbar"
-        data-desktop-drag-region={desktopRuntime ? "" : undefined}
-      >
-        {/*
-         * Window controls come from the global DesktopWindowFrame, which wraps
-         * every route. Mounting them here too would show two sets at once, and
-         * would leave any screen that forgets them frameless.
-         */}
-        <div className="sidebar-tools" aria-label={copy.sidebarTools}>
-          <button
-            aria-label={copy.collapseSidebar}
-            aria-pressed="false"
-            className="sidebar-tool"
-            data-od-id="sidebar-collapse-button"
-            data-sidebar-collapse=""
-            type="button"
-            onClick={onToggleCollapse}
-          >
-            <PanelLeft aria-hidden="true" />
-          </button>
-          <button
-            aria-controls="sidebar-search-panel"
-            aria-expanded={isSearchOpen}
-            aria-label={copy.search}
-            className="sidebar-tool"
-            data-od-id="sidebar-search-button"
-            data-sidebar-search-open=""
-            type="button"
-            onClick={onToggleSearch}
-          >
-            <Search aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
-      <CommandSidebarSearchView
-        isSearchOpen={isSearchOpen}
-        noMatches={copy.noMatches}
-        query={query}
-        results={sidebarSearchResults}
-        searchLabel={copy.searchLabel}
-        searchResultsLabel={copy.searchResults}
-        onActivate={activateSearchResult}
-        onClose={onCloseSearch}
-        onQueryChange={onQueryChange}
-      />
-
-      <a
-        className="sidebar-brand"
-        data-od-id="desktop-brand"
-        href="#view-command"
-        style={desktopRuntime ? { left: 76 } : undefined}
-        onClick={(event) => {
+      onKeyDown={(event) => {
+        if (
+          event.key === "Escape" &&
+          contextVisible &&
+          !isSearchOpen &&
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(max-width: 680px)").matches
+        ) {
           event.preventDefault();
-          onSwitchView("command");
-        }}
-      >
-        <span>Crewon</span>
-        <small>v0.2</small>
-      </a>
-
-      <nav className="sidebar-nav" data-od-id="desktop-nav">
-        {shellNavItems.map((item) => (
-          <button
-            aria-current={activeView === item.key ? "page" : undefined}
-            className={classNames(activeView === item.key && "active")}
-            data-nav-key={item.key}
-            data-shell-view-target={item.key}
-            key={item.key}
-            type="button"
-            onClick={() => {
-              if (item.key === "command") {
-                onNewThread(
-                  workspaceAuthority === "legacy" ? cwd || null : null,
-                );
-                return;
-              }
-              onSwitchView(item.key);
-            }}
-          >
-            <span className="nav-glyph" aria-hidden="true">
-              {viewIcons[item.key]}
-            </span>
-            <strong>{locale === "zh" ? item.label : item.en}</strong>
-            {item.key === "projects" && taskAttentionCount > 0 ? (
-              <span
-                aria-label={
-                  locale === "zh"
-                    ? `${taskAttentionCount} 个任务需要关注`
-                    : `${taskAttentionCount} tasks need attention`
-                }
-                className="sidebar-task-attention"
-                title={
-                  locale === "zh"
-                    ? `${taskAttentionCount} 个任务需要关注`
-                    : `${taskAttentionCount} tasks need attention`
-                }
-              />
-            ) : null}
-          </button>
-        ))}
-        <button
-          aria-current={activeView === "knowledge" ? "page" : undefined}
-          className={classNames(activeView === "knowledge" && "active")}
-          data-run-title-zh="知识库"
-          data-run-title-en="Knowledge base"
-          type="button"
-          onClick={() => onSwitchView("knowledge")}
-        >
-          <span className="nav-glyph" aria-hidden="true">
-            <BookOpen aria-hidden="true" />
-          </span>
-          <strong>{copy.knowledge}</strong>
-        </button>
-      </nav>
-
-      <CommandSidebarWorkspaceTree
-        workspaceAuthority={workspaceAuthority}
-        copy={copy}
-        onNewThread={onNewThread}
-        linkedThreads={linkedThreads}
-        selectedLinkedThreadId={selectedLinkedThreadId}
-        onArchiveThread={onArchiveThread}
-        onOpenLinkedThread={onOpenLinkedThread}
-        nativeFolderPicker={nativeFolderPicker}
-        workspaceFormOpen={workspaceFormOpen}
-        pickerBusy={pickerBusy}
-        onCreateWorkspace={onCreateWorkspace}
-        chooseWorkspaceFolder={chooseWorkspaceFolder}
-        setWorkspaceFormOpen={setWorkspaceFormOpen}
-        submitWorkspace={submitWorkspace}
-        workspaceDraft={workspaceDraft}
-        setWorkspaceDraft={setWorkspaceDraft}
-        cwd={cwd}
-        currentWorkspaceCollapsed={currentWorkspaceCollapsed}
-        toggleWorkspaceGroup={toggleWorkspaceGroup}
-        currentWorkspaceName={currentWorkspaceName}
-        setPendingRemoval={setPendingRemoval}
-        currentWorkspaceThreads={currentWorkspaceThreads}
-        standaloneThreads={standaloneThreads}
-        otherWorkspaceGroups={otherWorkspaceGroups}
-        standaloneWorkspaceCollapsed={standaloneWorkspaceCollapsed}
-        pendingRemoval={pendingRemoval}
-        removeWorkspace={removeWorkspace}
-        controlWorkspace={controlWorkspace}
+          onToggleCollapse();
+        }
+      }}
+    >
+      {chromeTarget ? createPortal(chrome, chromeTarget) : chrome}
+      <CommandNavigationRail
+        activeView={activeView}
+        collapsed={collapsed}
+        locale={locale}
+        taskAttentionCount={taskAttentionCount}
+        onSwitchView={onSwitchView}
+        onToggleCollapse={onToggleCollapse}
+        accountMenu={
+          <CommandRailAccount
+            account={account}
+            locale={locale}
+            onSettings={onOpenSettings}
+          />
+        }
       />
-
-      {account ? (
-        <SidebarAccount
-          account={account}
-          locale={locale}
-          onSettings={onOpenSettings}
+      {contextVisible ? (
+        <button
+          aria-label={locale === "zh" ? "关闭侧栏" : "Close sidebar"}
+          className="command-sidebar-backdrop"
+          type="button"
+          onClick={onToggleCollapse}
         />
       ) : null}
+      <div
+        className="command-sidebar-context"
+        hidden={!contextVisible}
+        id="command-sidebar-context"
+      >
+        <div
+          className="sidebar-topbar"
+          data-od-id="desktop-sidebar-topbar"
+          data-desktop-drag-region={desktopRuntime ? "" : undefined}
+        >
+          <a
+            className="sidebar-context-title"
+            data-od-id="desktop-brand"
+            href="#view-command"
+            onClick={(event) => {
+              event.preventDefault();
+              onSwitchView("command");
+            }}
+          >
+            {section === "resources"
+              ? locale === "zh"
+                ? "资源"
+                : "Resources"
+              : "CrewON"}
+          </a>
+          <div className="sidebar-tools" aria-label={copy.sidebarTools}>
+            <button
+              aria-controls="sidebar-search-panel"
+              aria-haspopup="dialog"
+              aria-expanded={isSearchOpen}
+              aria-label={copy.search}
+              className="sidebar-tool"
+              data-od-id="sidebar-search-button"
+              data-sidebar-search-open=""
+              type="button"
+              ref={searchTriggerRef}
+              onClick={toggleSearch}
+            >
+              <Search aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <CommandSidebarSearchView
+          locale={locale}
+          isSearchOpen={isSearchOpen}
+          noMatches={copy.noMatches}
+          query={query}
+          results={sidebarSearchResults}
+          searchLabel={copy.searchLabel}
+          searchResultsLabel={copy.searchResults}
+          shortcutLabel={platform === "windows" ? "Ctrl K" : "⌘K"}
+          triggerRef={searchTriggerRef}
+          onActivate={activateSearchResult}
+          onClose={onCloseSearch}
+          onQueryChange={onQueryChange}
+        />
+
+        <CommandSidebarNavigation
+          activeView={activeView}
+          locale={locale}
+          onNewThread={() => onNewThread(null)}
+          onSwitchView={onSwitchView}
+        />
+
+        <div className="command-sidebar-workspaces" hidden={section !== "work"}>
+          <CommandSidebarWorkspaceTree
+            workspaceAuthority={workspaceAuthority}
+            copy={copy}
+            onNewThread={onNewThread}
+            linkedThreads={linkedThreads}
+            selectedLinkedThreadId={selectedLinkedThreadId}
+            onArchiveThread={onArchiveThread}
+            onOpenLinkedThread={onOpenLinkedThread}
+            nativeFolderPicker={nativeFolderPicker}
+            workspaceFormOpen={workspaceFormOpen}
+            pickerBusy={pickerBusy}
+            onCreateWorkspace={onCreateWorkspace}
+            chooseWorkspaceFolder={chooseWorkspaceFolder}
+            setWorkspaceFormOpen={setWorkspaceFormOpen}
+            submitWorkspace={submitWorkspace}
+            workspaceDraft={workspaceDraft}
+            setWorkspaceDraft={setWorkspaceDraft}
+            cwd={cwd}
+            currentWorkspaceCollapsed={currentWorkspaceCollapsed}
+            toggleWorkspaceGroup={toggleWorkspaceGroup}
+            currentWorkspaceName={currentWorkspaceName}
+            setPendingRemoval={setPendingRemoval}
+            currentWorkspaceThreads={currentWorkspaceThreads}
+            standaloneThreads={standaloneThreads}
+            otherWorkspaceGroups={otherWorkspaceGroups}
+            standaloneWorkspaceCollapsed={standaloneWorkspaceCollapsed}
+            pendingRemoval={pendingRemoval}
+            removeWorkspace={removeWorkspace}
+            controlWorkspace={controlWorkspace}
+          />
+        </div>
+      </div>
     </aside>
   );
 }

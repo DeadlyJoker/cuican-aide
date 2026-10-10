@@ -10772,10 +10772,6 @@ body.modal-open {
   --workbench-syntax-red: #c2414b;
 }
 
-.command-workbench[data-empty="true"] {
-  grid-template-rows: minmax(0, 1fr);
-}
-
 .command-workbench[data-maximized="true"] {
   position: fixed;
   z-index: 90;
@@ -11003,10 +10999,6 @@ body.modal-open {
 .command-workbench .command-workbench-close {
   width: 32px;
   height: 32px;
-}
-
-.command-workbench .command-workbench-close svg {
-  transform: scaleX(-1);
 }
 
 /*

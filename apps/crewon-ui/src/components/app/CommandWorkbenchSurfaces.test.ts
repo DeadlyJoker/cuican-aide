@@ -57,7 +57,7 @@ describe("workbench tool launcher", () => {
       "utf8",
     );
     const tabbar = drawerSource.slice(
-      drawerSource.indexOf('<header className="command-workbench-tabbar">'),
+      drawerSource.indexOf('className="command-workbench-tabbar"'),
       drawerSource.indexOf(
         '<div className="command-workbench-window-actions">',
       ),

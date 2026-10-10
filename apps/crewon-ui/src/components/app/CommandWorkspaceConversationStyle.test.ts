@@ -4,6 +4,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("command workspace conversation style", () => {
+  it("snapshots the lightweight home, sidebar, composer, and failure surfaces", () => {
+    const styles = readFileSync(
+      new URL("../../styles/command-lightweight.css", import.meta.url),
+      "utf8",
+    );
+    expect(styles).toMatchSnapshot();
+  });
+
   it("snapshots the centered transcript loading indicator", () => {
     const appStyles = readFileSync(
       new URL("../../styles/app.css", import.meta.url),

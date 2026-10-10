@@ -1,3 +1,6 @@
+import { Dialog } from "radix-ui";
+import { CommandSearchContent } from "./CommandSidebarSearchView";
+import { commandSearchResults } from "./commandSearchResults";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -794,7 +797,7 @@ describe("CommandWorkspace", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain('class="desktop-window command-window"');
-    expect(markup).toContain('class="command-sidebar"');
+    expect(markup).toContain('class="command-sidebar command-sidebar--tiered"');
     expect(markup).toContain('class="command-canvas"');
     expect(markup).toContain('class="shell-view command-home-view active"');
     expect(markup).toContain("让 CrewON 完成你的工作");
@@ -1250,15 +1253,8 @@ describe("CommandWorkspace", () => {
     );
     expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
     expect(commandHomeMarkup).toContain('aria-label="权限选择"');
-    expect(commandHomeMarkup).toContain(
-      'class="execution-intent-segmented" role="group"',
-    );
-    expect(commandHomeMarkup).toContain(
-      'aria-pressed="false" class="execution-intent-option" data-execution-intent="goal"',
-    );
-    expect(commandHomeMarkup).toContain(
-      'aria-pressed="false" class="execution-intent-option" data-execution-intent="plan"',
-    );
+    expect(commandHomeMarkup).not.toContain('data-execution-intent="goal"');
+    expect(commandHomeMarkup).not.toContain('data-execution-intent="plan"');
     expect(commandHomeMarkup).toContain('placeholder="添加"');
     expect(commandHomeMarkup).toContain("选择文件");
     expect(commandHomeMarkup).toContain("选择文件夹");
@@ -1270,10 +1266,10 @@ describe("CommandWorkspace", () => {
     );
     expect(addPanelMarkup).toContain('class="add-palette-group"');
     expect(addPanelMarkup).toContain('class="add-palette-item"');
-    expect(addPanelMarkup).not.toContain("执行方式");
-    expect(addPanelMarkup).not.toContain('data-kind="intent"');
-    expect(addPanelMarkup).not.toContain('data-label="目标模式"');
-    expect(addPanelMarkup).not.toContain('data-label="计划模式"');
+    expect(addPanelMarkup).toContain("执行方式");
+    expect(addPanelMarkup).toContain('data-kind="intent"');
+    expect(addPanelMarkup).toContain('data-label="目标"');
+    expect(addPanelMarkup).toContain('data-label="计划"');
     expect(addPanelMarkup).toContain("文件");
     expect(addPanelMarkup).not.toContain(">工作空间<");
     expect(commandHomeMarkup).toContain('aria-label="执行主体"');
@@ -1532,7 +1528,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-shell-view="agents"');
     expect(markup).toContain('data-shell-view="schedule"');
     expect(markup).toContain('data-shell-view="team"');
-    expect(markup).toContain('data-run-title-zh="\u77e5\u8bc6\u5e93"');
+    expect(markup).toContain('data-nav-key="resources"');
   });
 
   it("keeps sidebar targets useful without exposing implementation language", () => {
@@ -1757,7 +1753,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("后端会话");
     expect(markup).toContain('data-linked-thread-id="thread-backend-1"');
     expect(markup).toContain("Backend agent conversation");
-    expect(markup).toContain("Tool and MCP run streamed from app-server");
+    expect(markup).not.toContain('data-sidebar-search=""');
   });
 
   it("keeps existing workspaces actionable for a workspace-less new task", () => {
@@ -1845,7 +1841,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('id="standalone-workspace-thread-list"');
     expect(markup).toContain('data-linked-thread-id="thread-standalone-1"');
     expect(markup).toContain("Standalone conversation");
-    expect(markup).toContain("No folder was attached to this chat");
+    expect(markup).not.toContain('data-sidebar-search=""');
   });
 
   it("renders selected real conversations inside the command shell instead of leaving the shell", () => {
@@ -2229,36 +2225,51 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("pnpm test");
   });
 
-  it("makes sidebar search results actionable for real conversations and views", () => {
-    const backendThread = {
-      id: "thread-search-1",
-      name: "Searchable conversation",
-      preview: "Open this real app-server transcript",
-      updatedAt: Math.floor(Date.now() / 1000),
-    } as unknown as Thread;
+  it("makes dialog search results actionable for real conversations and views", () => {
+    const results = commandSearchResults({
+      locale: "zh",
+      query: "",
+      workspaceAuthority: "legacy",
+      slots: selectCommandHomeSlots(snapshot()),
+      linkedThreads: [
+        {
+          id: "thread-search-1",
+          title: "Searchable conversation",
+          preview: "Open this real app-server transcript",
+          updatedLabel: "刚刚",
+          cwd: "/repo/frontend",
+        },
+      ],
+      copy: {
+        feature: "功能",
+        conversation: "对话",
+        noWorkspace: "无工作空间",
+      },
+    });
     const markup = renderToStaticMarkup(
-      <CommandWorkspace
-        composerValue=""
-        connectionState="connected"
-        cwd="/repo/frontend"
-        isSending={false}
-        linkedThreads={[backendThread]}
-        workMode="code"
-        onAttachContext={() => undefined}
-        onChangeComposerValue={() => undefined}
-        onModeChange={() => undefined}
-        onRetryConnection={() => undefined}
-        onSelectLinkedThread={() => undefined}
-        onSend={() => undefined}
-      />,
+      <Dialog.Root open>
+        <CommandSearchContent
+          locale="zh"
+          query=""
+          results={results}
+          noMatches="无结果"
+          searchLabel="搜索"
+          searchResultsLabel="搜索结果"
+          shortcutLabel="⌘K"
+          triggerRef={{ current: null }}
+          onActivate={vi.fn()}
+          onClose={vi.fn()}
+          onQueryChange={vi.fn()}
+        />
+      </Dialog.Root>,
     );
-
+    expect(markup).toContain('role="dialog"');
     expect(markup).not.toContain('data-search-action="conversation"');
     expect(markup).toContain('data-search-action="thread"');
     expect(markup).toContain('data-search-action="view"');
     expect(markup).toContain('data-thread-id="thread-search-1"');
     expect(markup).toContain("Searchable conversation");
-    expect(markup).toContain("Open this real app-server transcript");
+    expect(markup).toContain("frontend · Open this real app-server transcript");
   });
 
   it("filters schedule cards like the original design runtime", () => {

@@ -1,0 +1,274 @@
+/* Task-first hierarchy, scoped to the command shell and its shared transcript. */
+.screen-shell.command-screen .sidebar-nav {
+  gap: 10px;
+}
+
+.sidebar-nav-group {
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-nav-group-label {
+  padding: 2px 10px 4px;
+  color: var(--text-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 400;
+}
+
+.screen-shell.command-screen .sidebar-nav button {
+  min-height: var(--control-h-md);
+  padding-block: 5px;
+}
+
+.screen-shell.command-screen .sidebar-nav strong,
+.screen-shell.command-screen .workspace-title-toggle strong {
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .space-tree {
+  padding-top: 8px;
+}
+
+.screen-shell.command-screen .space-node {
+  margin-top: 6px;
+}
+
+.screen-shell.command-screen .sidebar-empty-hint {
+  margin: 2px 0;
+  padding: 3px 8px;
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.screen-shell.command-screen .home-title h1 {
+  font-family: var(--font-body);
+  font-size: calc(28px + var(--user-ui-font-delta));
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.screen-shell.command-screen .scene-subtitle {
+  margin-top: 8px;
+  font-size: calc(13px + var(--user-ui-font-delta));
+  color: var(--text-muted);
+}
+
+.screen-shell.command-screen .quick-scenarios > button {
+  min-height: 80px;
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.screen-shell.command-screen .quick-scenarios > button:hover {
+  border-color: var(--control-ring);
+  background: var(--control-surface);
+}
+
+.screen-shell.command-screen .command-input {
+  container: command-composer / inline-size;
+  --command-control-border: var(--border-strong);
+  border-color: var(--border-strong);
+  border-radius: 18px;
+  box-shadow: 0 2px 5px rgb(0 0 0 / 5%);
+}
+
+.screen-shell.command-screen .command-input:focus-within {
+  --command-control-border: var(--control-ring);
+  border-color: var(--control-ring);
+}
+
+.screen-shell.command-screen .input-tools button[role="combobox"],
+.screen-shell.command-screen .command-input .input-tools .composer-plus-action {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 500;
+}
+
+.screen-shell.command-screen .input-tools button[role="combobox"]:hover,
+.screen-shell.command-screen
+  .input-tools
+  button[role="combobox"][data-state="open"],
+.screen-shell.command-screen
+  .command-input
+  .input-tools
+  .composer-plus-action:hover {
+  background: var(--control-surface);
+}
+
+.screen-shell.command-screen .command-input .input-tools {
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 44px;
+  height: auto;
+  padding: 0 10px 8px 14px;
+  gap: 10px;
+}
+
+.screen-shell.command-screen .command-input .composer-controls,
+.screen-shell.command-screen .command-input .composer-actions {
+  gap: 12px;
+}
+
+.screen-shell.command-screen .command-input .composer-controls {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
+.screen-shell.command-screen .command-input .composer-actions {
+  min-width: 0;
+  justify-self: stretch;
+  justify-content: flex-end;
+}
+
+.screen-shell.command-screen
+  .command-input
+  .input-tools
+  button[role="combobox"] {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* Fit the actual composer width, including when the workbench claims the canvas. */
+@container command-canvas (max-width: 620px) {
+  .screen-shell.command-screen .command-home-view:not(.has-command-thread) {
+    padding-inline: 16px;
+  }
+
+  .screen-shell.command-screen .hero-center:not(.has-command-thread) {
+    width: 100%;
+  }
+}
+
+@container command-composer (max-width: 440px) {
+  .screen-shell.command-screen .command-input .input-tools {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  .screen-shell.command-screen .command-input .composer-controls,
+  .screen-shell.command-screen .command-input .composer-actions {
+    gap: 4px;
+  }
+
+  .screen-shell.command-screen
+    .command-input
+    .input-tools
+    button[role="combobox"] {
+    flex-shrink: 1;
+    gap: 4px;
+    padding-inline: 5px;
+  }
+}
+
+@container command-composer (max-width: 360px) {
+  .screen-shell.command-screen .command-input .composer-permission-select {
+    width: 32px;
+    flex: 0 0 32px;
+    justify-content: center;
+  }
+
+  .screen-shell.command-screen
+    .command-input
+    .composer-permission-select
+    > span,
+  .screen-shell.command-screen .command-input .plan-readonly-status > span {
+    display: none;
+  }
+}
+
+.screen-shell.command-screen .composer-state-row {
+  min-height: 30px;
+  border-top: 0;
+  background: transparent;
+}
+
+/* A connected indicator is already hidden; it must not leave an empty footer. */
+.screen-shell.command-screen .composer-state-row:empty,
+.screen-shell.command-screen
+  .composer-state-row:has(> .connection-indicator[data-state="connected"]):not(
+    :has(> :not(.connection-indicator))
+  ) {
+  display: none;
+}
+
+.screen-shell.command-screen .command-thread-room .message-list,
+.assistant-thread-room .message-list {
+  gap: 14px;
+  padding-block: 18px;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-group,
+.assistant-thread-room .turn-group {
+  gap: 8px;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-divider,
+.assistant-thread-room .turn-divider {
+  padding: 0;
+  gap: 6px;
+  font-weight: 400;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-divider::before,
+.assistant-thread-room .turn-divider::before {
+  content: none;
+}
+
+.screen-shell.command-screen .command-thread-room .turn-divider span,
+.assistant-thread-room .turn-divider span {
+  font-weight: 400;
+}
+
+.screen-shell.command-screen .command-thread-room .failure-card,
+.assistant-thread-room .failure-card {
+  width: 100%;
+  gap: 4px;
+  padding: 4px 0 4px 10px;
+  border: 0;
+  border-inline-start: 2px solid
+    color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.screen-shell.command-screen .failure-card p,
+.assistant-thread-room .failure-card p {
+  color: var(--text-muted);
+}
+
+.failure-details {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.failure-details summary {
+  width: fit-content;
+  cursor: pointer;
+  padding-block: 3px;
+}
+
+.failure-details summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.failure-details code {
+  display: block;
+  margin-top: 4px;
+}
+
+@container command-canvas (max-width: 520px) {
+  .screen-shell.command-screen .home-title h1 {
+    font-size: calc(24px + var(--user-ui-font-delta));
+  }
+}
+
+@media (max-width: 520px) {
+  .screen-shell.command-screen .home-title h1 {
+    font-size: calc(24px + var(--user-ui-font-delta));
+  }
+}

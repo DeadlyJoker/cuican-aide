@@ -18,8 +18,10 @@ import "./styles/tailwind.css";
 import "./styles/neutral-scale.css";
 import "./styles/app.css";
 import "./styles/original-shell-overrides.css";
-// Loaded last: settles the shared control surface and user appearance vars.
+// Settles the shared control surface and user appearance vars.
 import "./styles/appearance.css";
+import "./styles/command-lightweight.css";
+import "./styles/command-navigation.css";
 
 /*
  * The surface decides whether the shell rounds its own corners, and it is a

@@ -31,19 +31,12 @@ import type { Locale, ToolId } from "../../lib/i18n";
 import type { CommandScene } from "../../lib/scene/sceneCatalog";
 import type { TerminalOutputStream } from "../../lib/terminal/terminalOutputStream";
 
-/*
- * "panel" is workbench-only: it hosts capability panels that no dedicated tool
- * owns (approvals, thread settings, goals, account, providers, MCP details).
- */
-type WorkbenchToolId = Exclude<ToolId, "sidechat"> | "panel";
-
-type WorkbenchTab = {
-  explorerPanel?: CapabilityPanel | null;
-  id: string;
-  panel: CapabilityPanel | null;
-  title?: string;
-  toolId: WorkbenchToolId;
-};
+import {
+  useRecordedReviewTab,
+  type WorkbenchTab,
+  type WorkbenchToolId,
+  type RecordedReviewRequest,
+} from "./commandWorkbenchTabs";
 
 type WorkbenchTool = {
   id: WorkbenchToolId;
@@ -127,6 +120,7 @@ export type CommandWorkspaceCapabilityDrawerProps = {
   busyToolId: ToolId | null;
   commandValue: string;
   disabled: boolean;
+  recordedReviewRequest?: RecordedReviewRequest | null;
   interactionInactive?: boolean;
   locale: Locale;
   open: boolean;
@@ -415,6 +409,7 @@ function WorkbenchSurface({
         busyToolId={busyToolId}
         locale={locale}
         panel={tab.panel}
+        recordedChanges={tab.recordedChanges}
         onRefresh={onReview}
       />
     );
@@ -440,6 +435,7 @@ export function CommandWorkspaceCapabilityDrawer({
   commandValue,
   disabled,
   interactionInactive = false,
+  recordedReviewRequest = null,
   locale,
   open,
   panel,
@@ -470,6 +466,12 @@ export function CommandWorkspaceCapabilityDrawer({
   const [activeTabId, setActiveTabId] = useState<string | null>(
     initialWorkbenchTabs[0]?.id ?? null,
   );
+  useRecordedReviewTab({
+    request: recordedReviewRequest,
+    locale,
+    setTabs,
+    setActiveTabId,
+  });
   const activeTabIdRef = useRef(activeTabId);
   const browserTabSequenceRef = useRef(1);
   const dismissedToolIdsRef = useRef(new Set<WorkbenchToolId>());
@@ -765,8 +767,10 @@ export function CommandWorkspaceCapabilityDrawer({
       return;
     }
     const isLastTabForTool =
-      tabs.filter((tab) => tab.toolId === closingTab.toolId).length === 1;
-    if (isLastTabForTool) {
+      tabs.filter(
+        (tab) => tab.toolId === closingTab.toolId && !tab.recordedChanges,
+      ).length === 1;
+    if (isLastTabForTool && !closingTab.recordedChanges) {
       dismissedToolIdsRef.current.add(closingTab.toolId);
     }
     if (closingTab.toolId === "terminal") {
@@ -908,7 +912,10 @@ export function CommandWorkspaceCapabilityDrawer({
           />
         ) : null}
         {tabs.length > 0 ? (
-          <header className="command-workbench-tabbar">
+          <header
+            className="command-workbench-tabbar"
+            data-desktop-drag-region=""
+          >
             <div className="command-workbench-tabs" role="tablist">
               {tabs.map((tab) => (
                 <div
@@ -1002,14 +1009,19 @@ export function CommandWorkspaceCapabilityDrawer({
             </div>
           </header>
         ) : (
-          <button
-            aria-label={locale === "zh" ? "关闭工作台" : "Close workbench"}
-            className="command-workbench-close is-floating"
-            type="button"
-            onClick={onClose}
+          <header
+            className="command-workbench-tabbar is-empty"
+            data-desktop-drag-region=""
           >
-            <PanelRight aria-hidden="true" />
-          </button>
+            <button
+              aria-label={locale === "zh" ? "关闭工作台" : "Close workbench"}
+              className="command-workbench-close"
+              type="button"
+              onClick={onClose}
+            >
+              <PanelRight aria-hidden="true" />
+            </button>
+          </header>
         )}
         <div className="command-workbench-content">
           {activeTab ? (

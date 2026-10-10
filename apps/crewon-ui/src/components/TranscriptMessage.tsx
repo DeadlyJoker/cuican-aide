@@ -20,6 +20,7 @@ import {
   ComposerResourceTags,
   type ComposerResourceTag,
 } from "./composer/ComposerResourceTags";
+import { transcriptFailurePresentation } from "./transcriptFailurePresentation";
 import { transcriptToolRoleLabel } from "./transcriptToolPresentation";
 import {
   TranscriptImageGenerationCard,
@@ -407,12 +408,11 @@ export function TranscriptFailureMessage({
   error: Turn["error"];
   locale: Locale;
 }) {
-  const message =
-    error?.message ||
-    (locale === "zh"
-      ? "模型连接失败，当前任务没有完成。"
-      : "Model connection failed, so this turn did not complete.");
-  const details = error?.additionalDetails ?? null;
+  const { message, details } = transcriptFailurePresentation(
+    error?.message,
+    error?.additionalDetails,
+    locale,
+  );
 
   return (
     <article
@@ -433,7 +433,14 @@ export function TranscriptFailureMessage({
             {locale === "zh" ? "模型连接失败" : "Model connection failed"}
           </span>
           <p>{message}</p>
-          {details ? <code>{details}</code> : null}
+          {details ? (
+            <details className="failure-details">
+              <summary>
+                {locale === "zh" ? "错误详情" : "Error details"}
+              </summary>
+              <code>{details}</code>
+            </details>
+          ) : null}
         </div>
       </div>
     </article>

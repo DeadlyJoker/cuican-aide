@@ -1,3 +1,4 @@
+import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
 import { FileDiff, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -40,15 +41,23 @@ export function CommandWorkbenchReview({
   locale,
   panel,
   onRefresh,
+  recordedChanges,
 }: {
   busyToolId: ToolId | null;
   locale: Locale;
   panel: CapabilityPanel | null;
   onRefresh: () => void;
+  recordedChanges?: RecordedTaskChanges;
 }) {
   const files = useMemo(
-    () => parseWorkbenchDiff(panel?.body ?? ""),
-    [panel?.body],
+    () =>
+      recordedChanges
+        ? recordedChanges.files.map((file) => ({
+            path: file.path,
+            body: file.diff ?? "",
+          }))
+        : parseWorkbenchDiff(panel?.body ?? ""),
+    [panel?.body, recordedChanges],
   );
   const [activePath, setActivePath] = useState<string | null>(
     files[0]?.path ?? null,
@@ -62,23 +71,43 @@ export function CommandWorkbenchReview({
 
   const activeFile =
     files.find((file) => file.path === activePath) ?? files[0] ?? null;
-  const loading = busyToolId === "review";
+  const recordedFile = recordedChanges?.files.find(
+    (file) => file.path === activeFile?.path,
+  );
+  const loading = !recordedChanges && busyToolId === "review";
 
   return (
-    <div className="command-review-workbench">
+    <div
+      className="command-review-workbench"
+      data-recorded={recordedChanges ? "true" : undefined}
+    >
       <header className="command-review-header">
         <span>
           <FileDiff aria-hidden="true" />
-          <strong>{locale === "zh" ? "审查" : "Review"}</strong>
+          <strong>
+            {recordedChanges
+              ? locale === "zh"
+                ? "任务改动"
+                : "Task changes"
+              : locale === "zh"
+                ? "审查"
+                : "Review"}
+          </strong>
           <em>
-            {panel?.subtitle ??
-              (locale === "zh" ? "当前改动" : "Current changes")}
+            {recordedChanges
+              ? locale === "zh"
+                ? "此对话的变更记录"
+                : "Recorded changes in this conversation"
+              : (panel?.subtitle ??
+                (locale === "zh" ? "当前改动" : "Current changes"))}
           </em>
         </span>
-        <button disabled={loading} type="button" onClick={onRefresh}>
-          <RefreshCw aria-hidden="true" />
-          {locale === "zh" ? "刷新" : "Refresh"}
-        </button>
+        {!recordedChanges ? (
+          <button disabled={loading} type="button" onClick={onRefresh}>
+            <RefreshCw aria-hidden="true" />
+            {locale === "zh" ? "刷新" : "Refresh"}
+          </button>
+        ) : null}
       </header>
       <div className="command-review-layout">
         <aside className="command-review-files">
@@ -89,6 +118,7 @@ export function CommandWorkbenchReview({
           </strong>
           {files.map((file) => (
             <button
+              aria-label={recordedChanges ? file.path : undefined}
               data-active={activeFile?.path === file.path ? "true" : undefined}
               key={file.path}
               title={file.path}
@@ -96,17 +126,49 @@ export function CommandWorkbenchReview({
               onClick={() => setActivePath(file.path)}
             >
               <FileDiff aria-hidden="true" />
-              <span>{file.path}</span>
+              <span>
+                {recordedChanges ? file.path.split("/").at(-1) : file.path}
+              </span>
             </button>
           ))}
         </aside>
         <main className="command-review-diff">
+          {recordedFile ? (
+            <div className="command-review-recorded-path">
+              <span title={recordedFile.path}>
+                {recordedFile.path.split("/").at(-1)}
+              </span>
+              {recordedFile.diff ? (
+                <span>
+                  <em className="composer-progress-additions">
+                    +{recordedFile.additions}
+                  </em>{" "}
+                  <em className="composer-progress-deletions">
+                    -{recordedFile.deletions}
+                  </em>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+          {recordedChanges && !recordedChanges.complete ? (
+            <div className="command-review-recorded-note">
+              {locale === "zh"
+                ? "部分差异内容未载入；以下为已记录的片段。"
+                : "Some diff content is missing; showing recorded fragments."}
+            </div>
+          ) : null}
           {panel?.error ? <p role="alert">{panel.error}</p> : null}
           {loading && !activeFile ? (
             <div className="command-review-empty">
               {locale === "zh"
                 ? "正在读取当前改动…"
                 : "Reading current changes…"}
+            </div>
+          ) : activeFile && !activeFile.body ? (
+            <div className="command-review-empty">
+              {locale === "zh"
+                ? "当前记录只包含文件路径，未提供差异内容。"
+                : "Only the file path is recorded; diff content is unavailable."}
             </div>
           ) : activeFile ? (
             <div

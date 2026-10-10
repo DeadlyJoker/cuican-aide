@@ -357,10 +357,12 @@ describe("ControlCommandOfficeRoomAdapter", () => {
     expect(markup).not.toContain('data-workspace-permission="read-only"');
     expect(markup).toContain('aria-label="模型与推理档位"');
     expect(markup).toContain("GPT-5.6 中");
-    expect(markup).toContain('class="execution-intent-segmented" role="group"');
-    expect(markup).toContain('data-execution-intent="goal"');
-    expect(markup).toContain('data-execution-intent="plan"');
-    expect(markup).not.toContain('data-kind="intent"');
+    expect(markup).not.toContain(
+      'class="execution-intent-segmented" role="group"',
+    );
+    expect(markup).not.toContain('data-execution-intent="goal"');
+    expect(markup).not.toContain('data-execution-intent="plan"');
+    expect(markup).toContain('data-kind="intent"');
     expect(markup).toContain('placeholder="搜索办公室成员"');
     expect(markup).toContain('data-kind="agent"');
     expect(markup).toContain('data-label="交付组长"');

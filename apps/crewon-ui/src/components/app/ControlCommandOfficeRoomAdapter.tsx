@@ -1,3 +1,4 @@
+import { composerExecutionIntentPalette } from "../composer/composerExecutionIntentPalette";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ControlApiClient } from "@crewon/control-client";
 import { Plus, Settings2, ShieldCheck } from "lucide-react";
@@ -349,6 +350,7 @@ function ControlOfficeChatRoom({
   });
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
+      ...composerExecutionIntentPalette(locale),
       {
         action: "attach-files",
         detail:
@@ -726,6 +728,14 @@ function ControlOfficeChatRoom({
   }
 
   function selectAddItem(item: PaletteItemWithCommand) {
+    if (item.action === "intent-goal" || item.action === "intent-plan") {
+      if (loading || submitting) return;
+      const selected = item.action === "intent-goal" ? "goal" : "plan";
+      setExecutionIntent((current) => nextExecutionIntent(current, selected));
+      closeComposerPalette();
+      textareaRef.current?.focus();
+      return;
+    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -1089,7 +1099,7 @@ function ControlOfficeChatRoom({
                 ) : (
                   <CommandComposerSelect
                     ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                    className="max-w-[180px]"
+                    className="composer-permission-select max-w-[180px]"
                     contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                     icon={<ShieldCheck aria-hidden="true" />}
                     menuHelp={{
