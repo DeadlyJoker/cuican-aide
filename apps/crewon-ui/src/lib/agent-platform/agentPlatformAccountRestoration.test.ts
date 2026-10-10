@@ -128,6 +128,29 @@ describe("account restoration request owner", () => {
     await flush();
   });
 
+  it("a slow successful read stays connecting without announcing account unavailability", async () => {
+    const { owner, read, listen, states } = fixture();
+    const pending = deferred<AgentPlatformUser | null>();
+    read.mockReturnValueOnce(pending.promise);
+    const release = owner.subscribe(listen);
+    await flush();
+    await vi.advanceTimersByTimeAsync(9_000);
+    expect(owner.state).toEqual({ status: "restoring", unavailable: false });
+    expect(read.mock.calls[0]![0].aborted).toBe(false);
+    expect(read).toHaveBeenCalledTimes(1);
+    pending.resolve(USER_A);
+    await flush();
+    expect(states).toEqual([
+      { status: "restoring", unavailable: false },
+      { status: "authenticated", user: USER_A },
+    ]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    release();
+    await flush();
+  });
+
   it("aborts a stalled request after the deadline and retries only after it ends", async () => {
     const { owner, read, listen } = fixture();
     read
@@ -143,9 +166,13 @@ describe("account restoration request owner", () => {
     const release = owner.subscribe(listen);
     await flush();
     await vi.advanceTimersByTimeAsync(5_000);
-    expect(owner.state).toEqual({ status: "restoring", unavailable: true });
+    expect(owner.state).toEqual({ status: "restoring", unavailable: false });
     expect(read.mock.calls[0]![0].aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(owner.state).toEqual({ status: "restoring", unavailable: false });
+    expect(read.mock.calls[0]![0].aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(owner.state).toEqual({ status: "restoring", unavailable: true });
     expect(read.mock.calls[0]![0].aborted).toBe(true);
     expect(read).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1_000);

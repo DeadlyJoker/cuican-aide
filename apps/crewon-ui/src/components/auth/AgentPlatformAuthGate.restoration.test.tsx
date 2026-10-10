@@ -99,6 +99,70 @@ async function online() {
 }
 
 describe("saved account restoration through the real session reader", () => {
+  it("a slow verified account read stays connecting until it succeeds without a false unavailable warning", async () => {
+    storeAgentPlatformSession("named-slow-read-access-fixture");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        if (String(input).endsWith("/auth/wecom/config"))
+          return Response.json({ enabled: false, provider: "wecom" });
+        if (!String(input).endsWith("/auth/me"))
+          throw new Error("unexpected_slow_read_fixture_request");
+        reads++;
+        await new Promise((resolve) => setTimeout(resolve, 9_000));
+        return Response.json(USER);
+      }),
+    );
+    await render(true);
+    await advance(6_000);
+    expect(container.textContent).toContain("正在恢复登录状态");
+    expect(container.textContent).not.toContain("暂不可用");
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.querySelector("[data-workspace]")).toBeNull();
+    expect(container.innerHTML).toMatchSnapshot();
+    expect(reads).toBe(1);
+    await advance(3_000);
+    expect(container.textContent).toContain(USER.username);
+    expect(container.querySelector("[data-workspace]")).not.toBeNull();
+    expect(reads).toBe(1);
+  });
+
+  it("reconnects after an SSO token 503 through the real gate without focus or another login", async () => {
+    const token = (seconds: number) =>
+      `header.${btoa(JSON.stringify({ sub: "7", exp: Math.floor(Date.now() / 1_000) + seconds }))}.signature`;
+    const fresh = token(600);
+    vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "true");
+    storeAgentPlatformSession(token(-60));
+    let ssoReads = 0;
+    let ssoReady = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        if (String(input).endsWith("/auth/wecom/config"))
+          return Response.json({ enabled: false, provider: "wecom" });
+        if (!String(input).endsWith("/sso/client/crewon/token"))
+          throw new Error("unexpected_sso_restoration_fixture_request");
+        ssoReads++;
+        return !ssoReady
+          ? new Response(null, { status: 503 })
+          : Response.json({ access_token: fresh, expires_in: 600, user: USER });
+      }),
+    );
+    await render(true);
+    await advance(600);
+    expect(ssoReads).toBe(3);
+    expect(container.textContent).toContain("正在自动重连");
+    expect(container.querySelector("form")).toBeNull();
+    expect(container.querySelector("[data-workspace]")).toBeNull();
+    ssoReady = true;
+    await advance(1_000);
+    expect(ssoReads).toBe(4);
+    expect(container.textContent).toContain(USER.username);
+    expect(container.querySelector("[data-workspace]")).not.toBeNull();
+    await advance(30_000);
+    expect(ssoReads).toBe(4);
+  });
+
   it("a slow valid WeCom configuration does not block login and remains usable after five seconds", async () => {
     vi.stubGlobal(
       "fetch",

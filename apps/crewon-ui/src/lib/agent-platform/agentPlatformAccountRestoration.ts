@@ -15,7 +15,6 @@ type Dependencies = Readonly<{
 type Operation = {
   controller: AbortController;
   epoch: number;
-  slowTimer: ReturnType<typeof setTimeout>;
   deadlineTimer: ReturnType<typeof setTimeout>;
 };
 const RETRY_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 15_000] as const;
@@ -102,7 +101,6 @@ export class AgentPlatformAccountRestoration {
     clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
     if (this.#pending) {
-      clearTimeout(this.#pending.slowTimer);
       clearTimeout(this.#pending.deadlineTimer);
       this.#pending.controller.abort();
     }
@@ -134,10 +132,6 @@ export class AgentPlatformAccountRestoration {
     const operation: Operation = {
       controller,
       epoch: this.#epoch,
-      slowTimer: setTimeout(() => {
-        if (this.#pending === operation && !controller.signal.aborted)
-          this.#publish({ status: "restoring", unavailable: true });
-      }, 5_000),
       deadlineTimer: setTimeout(() => {
         if (this.#pending !== operation || operation.epoch !== this.#epoch)
           return;
@@ -185,7 +179,6 @@ export class AgentPlatformAccountRestoration {
         });
       }
     } finally {
-      clearTimeout(operation.slowTimer);
       clearTimeout(operation.deadlineTimer);
       if (this.#pending === operation) this.#pending = null;
       if (!this.#listeners.size || this.#paused) return;

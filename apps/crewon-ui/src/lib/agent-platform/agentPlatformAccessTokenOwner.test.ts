@@ -9,6 +9,7 @@ import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "./agentPlatformSessionEven
 import { AGENT_PLATFORM_TOKEN_TRANSPORT_TIMEOUT_MS } from "./agentPlatformTokenTransport";
 import { AGENT_PLATFORM_RESPONSE_BODY_MAX_BYTES } from "./agentPlatformResponseBody";
 import { waitForAgentPlatformRequest } from "./agentPlatformRequestWait";
+import { isAgentPlatformAuthTransientError } from "./agentPlatformAuthBootstrap";
 
 type Mode = "refresh" | "sso" | "dev";
 function deferred<T>() {
@@ -893,6 +894,59 @@ describe("Agent Platform automatic token ownership", () => {
     await expect(owner.accessToken()).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(values.size).toBe(0);
+  });
+
+  it.each([429, 500, 502, 503, 504])(
+    "a transient SSO failure (%i) is retryable without withdrawing the current account",
+    async (status) => {
+      const { owner } = fixture("sso");
+      const previous = owner.capture();
+      const token = jwt("SSO");
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status }))
+        .mockResolvedValueOnce(Response.json(result("sso", token)));
+      vi.stubGlobal("fetch", fetchMock);
+      const failure = await owner
+        .accessSession()
+        .catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(isAgentPlatformAuthTransientError(failure)).toBe(true);
+      expect(previous.signal.aborted).toBe(false);
+      expect(() => owner.assertCurrent(previous)).not.toThrow();
+      expect(owner.bffUser()).toBeNull();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const recovered = await owner.accessSession();
+      expect(recovered.accessToken).toBe(token);
+      expect(owner.bffUser()).toEqual({ id: 1 });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(
+        fetchMock.mock.calls.every(([url]) =>
+          url.endsWith("/sso/client/crewon/token"),
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it("an explicit SSO 403 remains non-transient and cannot schedule automatic token retries", async () => {
+    vi.useFakeTimers();
+    const { owner } = fixture("sso");
+    const previous = owner.capture();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const failure = await owner
+      .accessSession()
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe("SSO session token failed: 403");
+    expect(isAgentPlatformAuthTransientError(failure)).toBe(false);
+    expect(owner.bffUser()).toBeNull();
+    expect(() => owner.assertCurrent(previous)).not.toThrow();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("unchanged SSO credentials and user contents do not notify or replace the account epoch", async () => {

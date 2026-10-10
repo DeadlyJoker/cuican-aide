@@ -1,6 +1,7 @@
 import { notifyAgentPlatformSessionChanged } from "./agentPlatformSessionEvents";
 import { createAgentPlatformTokenTransport } from "./agentPlatformTokenTransport";
 import { readAgentPlatformResponseBody } from "./agentPlatformResponseBody";
+import { AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE } from "./agentPlatformAuthBootstrap";
 
 export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
 export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
@@ -435,6 +436,11 @@ export class AgentPlatformAccessTokenOwner {
       this.assertCurrent(session);
       signal.throwIfAborted();
       if (response.status === 401) return this.#access(null, session);
+      if (response.status === 429 || response.status >= 500) {
+        throw this.#dependencies.unavailableError(
+          AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE,
+        );
+      }
       throw this.#dependencies.unavailableError(
         `SSO session token failed: ${response.status}`,
       );
