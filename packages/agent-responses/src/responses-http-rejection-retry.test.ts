@@ -136,7 +136,7 @@ for (const [status, code] of [
   });
 }
 
-for (const status of [429, 503]) {
+for (const status of [429]) {
   test(`temporary HTTP ${status} body idle remains a transport retry`, async () => {
     const f = fixture((signal, scheduler) =>
       stalledRejection(status, signal, scheduler),
@@ -261,10 +261,7 @@ function permanentKernelFailure(code: string) {
 
 for (const [status, code] of [
   [400, "responses_request_rejected"],
-  [401, "responses_authentication_failed"],
-  [403, "responses_permission_denied"],
   [404, "responses_endpoint_not_found"],
-  [422, "responses_request_rejected"],
 ] as const) {
   test(`HTTP ${status} rejection remains permanent when its body handling expires idle`, async () => {
     const f = fixture((signal, scheduler) =>

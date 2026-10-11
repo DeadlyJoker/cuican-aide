@@ -3,6 +3,7 @@ import type {
   RateLimitSnapshot,
   RateLimitWindow,
 } from "@crewon/contracts";
+import { cancelResponsesBody } from "./responses-body-cleanup.ts";
 
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
 
@@ -49,7 +50,7 @@ export async function readBoundedErrorBody(
       }
       size += next.value.byteLength;
       if (size > MAX_ERROR_BODY_BYTES) {
-        await reader.cancel("responses_error_body_too_large");
+        cancelResponsesBody(reader, "responses_error_body_too_large");
         return null;
       }
       result += decoder.decode(next.value, { stream: true });

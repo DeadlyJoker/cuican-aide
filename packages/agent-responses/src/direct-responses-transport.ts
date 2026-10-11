@@ -40,6 +40,7 @@ import {
   readBoundedErrorBody,
 } from "./responses-rate-limits.ts";
 import { projectRetrievedResponse } from "./responses-retrieve.ts";
+import { cancelResponsesBody } from "./responses-body-cleanup.ts";
 import {
   ResponsesTurnStateAuthority,
   TURN_STATE_HEADER,
@@ -285,7 +286,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         ) {
           errorBody = await readBoundedErrorBody(response.body);
         } else {
-          await cancelBody(response.body);
+          cancelResponsesBody(response.body);
         }
         if (rateLimit !== null) {
           yield { type: "rate_limit", snapshot: rateLimit };
@@ -321,7 +322,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       );
       const contentType = response.headers.get("content-type");
       if (contentType?.toLowerCase().startsWith("text/event-stream") !== true) {
-        await cancelBody(response.body);
+        cancelResponsesBody(response.body);
         throw protocolError("responses_content_type_invalid");
       }
       if (response.body === null) {
@@ -493,7 +494,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       call?.httpResponse(response.status, response.headers);
       idle.touch();
       if (!response.ok) {
-        await cancelBody(response.body);
+        cancelResponsesBody(response.body);
         throw httpError(response.status, response.headers.get("retry-after"));
       }
       const value = await readBoundedJson(
@@ -958,16 +959,6 @@ function isJsonValue(
       );
   ancestors.delete(value);
   return valid;
-}
-
-async function cancelBody(
-  body: ReadableStream<Uint8Array> | null,
-): Promise<void> {
-  try {
-    await body?.cancel();
-  } catch {
-    // Preserve the classified HTTP/protocol error if body cancellation races.
-  }
 }
 
 export function parseResponsesEndpoint(value: unknown): URL {
