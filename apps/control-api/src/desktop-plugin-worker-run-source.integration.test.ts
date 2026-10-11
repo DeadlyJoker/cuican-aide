@@ -1,11 +1,61 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 import {
   nativeTaskRuntimeFixture,
   actor,
 } from "./desktop-native-plugin-task-runtime.test-support.ts";
 
 const signal = () => new AbortController().signal;
+
+for (const field of ["createdByActorId", "authorityId", "purpose"] as const) {
+  test(
+    `shared source rechecks actual stored Run ${field} before returning a previously captured reference`,
+    { skip: process.platform === "win32", timeout: 30000 },
+    async (t) => {
+      const f = await nativeTaskRuntimeFixture(t, undefined, {
+        composition: true,
+      });
+      const task = (await f.invoke()) as { runId: string };
+      const source = f.actual.workerRunSource!;
+      const reference = await source.capture(task.runId, signal());
+      const run = await f.originalStore.loadRunInSpace({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        runId: task.runId,
+      });
+      assert.ok(run);
+      const db = new DatabaseSync(f.databasePath);
+      try {
+        const changed = db
+          .prepare(
+            "UPDATE run_snapshots SET state_json = ? WHERE tenant_id = ? AND run_id = ?",
+          )
+          .run(
+            JSON.stringify({
+              ...run,
+              [field]:
+                field === "purpose" ? "manualCompaction" : "foreign-run-owner",
+            }),
+            actor.tenantId,
+            task.runId,
+          );
+        assert.equal(Number(changed.changes), 1);
+      } finally {
+        db.close();
+      }
+      await assert.rejects(
+        source.verify(reference, signal()),
+        /installed_plugin_run_authority_mismatch/,
+      );
+      await assert.rejects(
+        source.capture(task.runId, signal()),
+        /installed_plugin_run_authority_mismatch/,
+      );
+      assert.equal(f.facts().runs, 1);
+    },
+  );
+}
 
 test(
   "shared source bounds simultaneous storage work and retained references without creating more tasks",
