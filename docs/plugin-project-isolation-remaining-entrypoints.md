@@ -2,7 +2,7 @@
 
 本清单来自 `7069425e7` 的只读代码映射，记录普通 CreativeProject 下游的真实读取、提交和回执回放入口，供后续分组实施。它不构成生产接线、Host grant、全量隔离或 Web／桌面验收证明。行号以该映射基线为参考，后续修改应以函数名定位。
 
-约束与总体状态参见 [插件项目管理隔离](plugin-project-management-isolation.md)。2026-10-12 已提交核心项目 Store、Foundation、Asset 与 Text v1 公开 Store，以及 SourceUpload/保存来源/原 Foundation Run 冷恢复的局部接线及真实两数据库回归，范围见[原管理入口隔离](plugin-project-legacy-access.md)；下面尚未接线的共享生成器、独立 journal、其他关联读取和 Extension Turn 冷回放不能据此视为完成。不得把测试直接写入的 metadata fixture 当成真实 Host、SQL CRUD、UI 或 Agent 授权。
+约束与总体状态参见 [插件项目管理隔离](plugin-project-management-isolation.md)。2026-10-12 已提交核心项目 Store、Foundation、Asset/Text v1 公开 Store、SourceUpload/保存来源、独立 StructuredOutline v2、Text Plan/journal，以及共享 Asset/media-input/result/material 与两类 stage 记录。真实两数据库回归与具体范围见[原管理入口隔离](plugin-project-legacy-access.md)。以下保留原代码映射，并在已接线小节注明状态；外部 MediaOperation 生命周期、其他保存关联、concept selection 和 Conversation/stage 仍待处理。不得把测试直接写入的 metadata fixture 当成真实 Host、SQL CRUD、UI 或 Agent 授权。
 
 ## 所有分组共用的规则
 
@@ -17,7 +17,7 @@
 
 ## 文本与结构化大纲
 
-2026-10-12：文本 v1 公开 Store 已在 `bb9081d8d` 接入原事务隔离和真实保存回执检查，最终 380/380 原库回归通过、零跳过。下述 v1 段保留为原入口映射；独立结构化 v2、计划和 UI journal 仍未完成，不能由 v1 的通过推断。范围见[原管理入口隔离](plugin-project-legacy-access.md)。
+2026-10-12：文本 v1 公开 Store 已在 `bb9081d8d` 接入原事务隔离和真实保存回执检查，最终 380/380 原库回归通过、零跳过。独立结构化 v2 随后在 `991cac2ed` 接线，Store 80/80、Control 9/9 真实 SQLite/PG、零跳过，保留原 fresh/replay 最后资格和真实物理租约；修复实际 PG 单连接回执检查再借连接的问题。下述段落保留为原入口映射；计划和 UI journal 不由这些结果推断完成。范围见[原管理入口隔离](plugin-project-legacy-access.md)。
 
 实际 Store：
 
@@ -35,6 +35,8 @@
 保留 `project-outline-source-store-support.ts` 的来源语义：fresh write 校验实时输入，既有 receipt／历史 revision 使用原固定来源，不能因隔离改造重新解释旧内容。
 
 ## 计划、文本 UI journal 与结果事实
+
+2026-10-12：本节在 `29cfd7d98` 完成原负向隔离。Plan/journal 89/89、原任务聚合兼容 63/63、Control 11/11 均通过、零跳过；另两个缺安装目录的 fixture 明确跳过。Run/Turn 回执使用原同连接事务，保留真实 required digest；细节见[文本计划隔离](plugin-project-text-plan-isolation.md)。下述是保留的原入口映射，不代表 positive owner writer 或产品 Web 已接通。
 
 实际文件：
 
@@ -56,7 +58,9 @@
 
 ## Asset 生成器与独立 recovery
 
-Asset 本轮公开 Store 修改只覆盖 `SqliteProjectAssetStore`／`PostgresProjectAssetStore` 的入口，不代表所有共享计划已完成：
+2026-10-12：`1a4a6ca2c` 已接线本节共享 Asset generator、Asset V1/V2 journal/recovery 与实际 Asset/media-input stage 记录。Store 最终 141/141、Control 26/26，真实 SQLite/PG、零跳过；cold Run/Turn、required marker、saved receipt、单连接与末端原 qualification 均覆盖。共享 SQL 执行的是明确的内部负向指令，不能授予 protected 项目访问权。
+
+下述保留原入口映射：
 
 - `packages/store/src/project-asset-store-support.ts`：`assetProject`、`assetHead`、`assetContent`、`assetReference`、`assetReceipt`。
 - `packages/store/src/project-asset-store-reads.ts`：`assetPage`、`assetContentPage`、`assetReferencePage`。
@@ -75,6 +79,8 @@ Asset 本轮公开 Store 修改只覆盖 `SqliteProjectAssetStore`／`PostgresPr
 `stage`、`getPending`、`acknowledge`、`cancelPending` 和各 commit 的末端检查也要完整核对。保留原 UI／Run qualification、reference provenance、media adoption receipt 和 journal 终态证明。
 
 ## Media input、generation、result 与 material preparation
+
+2026-10-12：media input/result、material preparation 的原共享计划已在 `1a4a6ca2c` 接线，证据计入共享资产组。Generation/Operation executor 已能借原连接消费内部负向指令，但这不表示其所有原 plan 会发出该指令。`project-media-operation-plan.ts` 自己的 load/reserve/state/replay、`postgres-external-operation-store.ts` 的原隔离级别，以及 generation 原保存 link 的解码前检查仍待处理；保留为未完成范围。
 
 实际共享计划：
 

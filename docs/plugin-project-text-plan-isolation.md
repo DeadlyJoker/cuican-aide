@@ -33,4 +33,4 @@ SQLite 普通读取使用原数据库的 DEFERRED 快照；已有事务借用原
 - 原 Control conflict、resume、coordinator、drift 4 文件：11/11，通过，0 跳过。此前另运行的两个安装目录 fixture 显式跳过。
 - Store/Control typecheck、TypeScript boundary、19 文件 Prettier 和 `git diff --check` 通过。
 
-这些都是固定 Node.js 24 的 `node --experimental-strip-types --test --test-concurrency=1` 运行结果，不代表生产部署或模型供应商可用性。全部自有测试连接与 Pool 已关闭；共享 PostgreSQL fixture 保持运行。
+这些都是固定 Node.js 24 的 `node --experimental-strip-types --test --test-concurrency=1` 运行结果，不代表生产部署或模型供应商可用性。全部自有测试连接与 Pool 已关闭；本轮联合验收结束后，自有 PostgreSQL fixture 已停止并删除。

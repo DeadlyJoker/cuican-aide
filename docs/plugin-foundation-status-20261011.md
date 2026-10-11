@@ -86,6 +86,12 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 
 同日 `bb9081d8d`、`a7d8d2836` 继续复用原 Text v1、SourceUpload、Foundation 和 Run，覆盖公开文本读写/保存回执、实际上传关联、来源复制与保存指针、Run facts/admission/required digest 及冷恢复。原显式 DDL 迁移使用原锁与验证器；部分 owner 不阻止独立迁移，也不被修复，数据访问仍拒绝。所有新增 SQL 均置于最后原完整 qualification 与真实物理租约检查之前。最终 Text/Core 380/380、来源 Store 212/212、Control 56/56，root 另复跑受影响 Asset 64/64，实际 SQLite 与自有 PG 18.6、零跳过；组间有重叠，不相加。Store/Control 类型、boundary 与格式检查通过。Control 是临时原库 mounted 协议集成，不能代替产品 Web；未部署、更新正式桌面、恢复业务插件或开放 protected owner writer。结构化 v2、计划/journal、共享 generator、其他关联与冷回放继续按[剩余清单](./plugin-project-isolation-remaining-entrypoints.md)实施。
 
+随后 `991cac2ed`、`29cfd7d98`、`1a4a6ca2c` 继续在原管理器中完成独立大纲 v2、Text Plan/journal、共享 Asset、独立 recovery、media input/result/material 与真实 stage admission 的普通入口隔离。Store 分组 80/80、89/89、141/141，Control 分组 9/9、11/11、26/26，原任务聚合兼容 63/63，均使用真实 SQLite/PG、零跳过；组间重叠。还修复实际 PG 单连接回执授权再次借连接造成的死锁。原计划两个需要安装目录的额外 fixture 仍明确跳过。剩余外部 MediaOperation、generation/query/historical 保存关联、concept selection、Conversation 与 positive owner 创建接线仍未完成，不能宣称全量项目隔离。范围与本地 SQL 性能观察见[原管理入口隔离](./plugin-project-legacy-access.md)。
+
+`e92ef1900`、`d09b62bc0` 增加原 Task Core 在 COMMIT 前的同步负向检查，并让原 UI action bridge 借用同一真实组合实例。真正安装的 provider/consumer、原 UI Application/Task Application/ledger/计费链已验证 SQLite 与 PG 在实际 INSERT 之后撤下 provider 会整体回滚；确认 COMMIT 后仍保留原回执。Task Core 回归 207/207、Host 回归 63/63，零跳过，组间重叠。类型、边界和格式检查通过。它完成的是 Host API 与原服务链接线；正式 `InstalledPluginTaskActionOwner` 的单包实例仍需接入 Profile 唯一组合，并解决原 Task Core 启动依赖，不能当作产品 Web 或桌面验收。见[UI 借用共享组合](./plugin-ui-composition-borrow.md)。
+
+以上联合增量已通过最终 Store/Application/PluginHost/Control 类型检查、boundary、`pnpm format` 与 diff 检查。当前证据保存在 [共享管理隔离回归](../output/plugin-foundation/shared-management-isolation-20261012/shared-composition-host.log)及同目录分组日志，Task Core 与 v2 原始证据在 `output/plugin-foundation/structured-outline-v2-isolation-20261012/`。自有 PG fixture 已正常停止并删除，未操作产品数据库、Web 服务或正式 App。
+
 源码 `6246494ee` 增加[私有 Native 分配桥](./plugin-project-workspace-native-bridge.md)，继续调用同一个原 allocator 和 registry。真实 Native policy/owner、指定 IPC 子进程、epoch/generation 和一次性有界票据共同约束空目录分配，撤回及断开后停止，原活动工作空间保持；不接受 caller owner、路径或恢复动作。实际 Node IPC 测试子进程已验证，但生产 Main/Control 尚未启动该桥，也未把票据当作项目 metadata、SQL 或 Agent 授权。这一步只完成私有 transport，不能宣称项目创建闭环。
 
 本轮源码验证使用 Node 24.19.0，证据分别限定为：
