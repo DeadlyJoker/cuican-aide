@@ -1,4 +1,10 @@
 import {
+  projectExecutionHostAccess,
+  projectExecutionBorrowerAccess,
+  type ProjectExecutionLeaseSource,
+  type PluginProjectExecutionBorrower,
+} from "./plugin-project-execution-borrower.ts";
+import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
   parseProjectHistoricalQueryUiActionRequest,
@@ -233,7 +239,21 @@ export class PluginProjectHistoricalQueryExecutionBridge {
     nodeHost: PluginNodeHost,
     input: PluginProjectHistoricalQueryExecutionInput,
   ): Promise<PluginProjectHistoricalQueryExecutionResult> {
-    const pending = this.#execute(nodeHost, input);
+    return this.#run(projectExecutionHostAccess(nodeHost), input);
+  }
+
+  async executeFromBorrower(
+    borrower: PluginProjectExecutionBorrower,
+    input: PluginProjectHistoricalQueryExecutionInput,
+  ): Promise<PluginProjectHistoricalQueryExecutionResult> {
+    return this.#run(projectExecutionBorrowerAccess(borrower), input);
+  }
+
+  #run(
+    source: ProjectExecutionLeaseSource,
+    input: PluginProjectHistoricalQueryExecutionInput,
+  ): Promise<PluginProjectHistoricalQueryExecutionResult> {
+    const pending = this.#execute(source, input);
     this.#executions.add(pending);
     void pending.then(
       () => this.#executions.delete(pending),
@@ -242,7 +262,7 @@ export class PluginProjectHistoricalQueryExecutionBridge {
     return pending;
   }
   async #execute(
-    nodeHost: PluginNodeHost,
+    source: ProjectExecutionLeaseSource,
     input: PluginProjectHistoricalQueryExecutionInput,
   ): Promise<PluginProjectHistoricalQueryExecutionResult> {
     if (this.#closed)
@@ -367,9 +387,12 @@ export class PluginProjectHistoricalQueryExecutionBridge {
       pending: null,
       result: null,
     };
+    const access = source.prepare(context, pin);
     const assertActive = () => {
       this.#active(invocation);
       sourceCurrent.assertActive();
+      if (invocation.instance !== null)
+        access.assertCurrent?.(invocation.instance);
       const result: unknown = active();
       if (result !== undefined) {
         projectGenerationSynchronousAvailable(result);
@@ -406,7 +429,7 @@ export class PluginProjectHistoricalQueryExecutionBridge {
     let lease: ReturnType<PluginNodeHost["acquire"]> | undefined;
     try {
       await invocation.authority.assertCurrent();
-      lease = nodeHost.acquire({
+      lease = access.acquire({
         pluginId: pin.pluginId,
         packageDigest: pin.packageDigest,
         purpose: "newOperation",
@@ -472,7 +495,7 @@ export class PluginProjectHistoricalQueryExecutionBridge {
     } finally {
       invocation.open = false;
       this.#invocations.delete(ref);
-      lease?.release();
+      if (lease !== undefined) access.release(lease);
     }
   }
 }

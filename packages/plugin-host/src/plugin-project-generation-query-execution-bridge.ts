@@ -1,4 +1,10 @@
 import {
+  projectExecutionHostAccess,
+  projectExecutionBorrowerAccess,
+  type ProjectExecutionLeaseSource,
+  type PluginProjectExecutionBorrower,
+} from "./plugin-project-execution-borrower.ts";
+import {
   parsePluginPackageDescriptor,
   parsePluginUiJsonValue,
   parseProjectGenerationQueryUiActionRequest,
@@ -222,8 +228,22 @@ export class PluginProjectGenerationQueryExecutionBridge {
     return invocation.pending;
   }
 
-  async execute(
+  execute(
     nodeHost: PluginNodeHost,
+    input: PluginProjectGenerationQueryExecutionInput,
+  ): Promise<PluginProjectGenerationQueryExecutionResult> {
+    return this.#execute(projectExecutionHostAccess(nodeHost), input);
+  }
+
+  async executeFromBorrower(
+    borrower: PluginProjectExecutionBorrower,
+    input: PluginProjectGenerationQueryExecutionInput,
+  ): Promise<PluginProjectGenerationQueryExecutionResult> {
+    return this.#execute(projectExecutionBorrowerAccess(borrower), input);
+  }
+
+  async #execute(
+    source: ProjectExecutionLeaseSource,
     input: PluginProjectGenerationQueryExecutionInput,
   ): Promise<PluginProjectGenerationQueryExecutionResult> {
     if (this.#closed)
@@ -345,9 +365,12 @@ export class PluginProjectGenerationQueryExecutionBridge {
       pending: null,
       result: null,
     };
+    const access = source.prepare(context, pin);
     const assertActive = () => {
       this.#active(invocation);
       sourceCurrent.assertActive();
+      if (invocation.instance !== null)
+        access.assertCurrent?.(invocation.instance);
       const result: unknown = active();
       if (result !== undefined) {
         projectGenerationSynchronousAvailable(result);
@@ -383,7 +406,7 @@ export class PluginProjectGenerationQueryExecutionBridge {
     let lease: ReturnType<PluginNodeHost["acquire"]> | undefined;
     try {
       await invocation.authority.assertCurrent();
-      lease = nodeHost.acquire({
+      lease = access.acquire({
         pluginId: pin.pluginId,
         packageDigest: pin.packageDigest,
         purpose: "newOperation",
@@ -449,7 +472,7 @@ export class PluginProjectGenerationQueryExecutionBridge {
     } finally {
       invocation.open = false;
       this.#invocations.delete(ref);
-      lease?.release();
+      if (lease !== undefined) access.release(lease);
     }
   }
 }

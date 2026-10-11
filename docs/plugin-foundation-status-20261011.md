@@ -4,6 +4,8 @@
 
 2026-10-12 后续源码修正纯服务 provider 缺少 UI publication 时导致原插件目录整页拒绝的问题。仍复用原目录、安装和任务管理，只过滤经过真实字节/来源核验且没有 UI 的包，不给服务包授予 UI 权限。最终 UI/Host/Control 265/265、零跳过，类型与边界检查通过；未部署 Web 或正式桌面，详见[纯服务目录过滤](./plugin-node-catalog-exclusion.md)。
 
+随后原三个项目 ExecutionBridge 增加共享目标借用入口，保留各自原 source invocation、publication、事务提交和 durable result；真实 Host 生成包连续调用只 setup 一次，复制/释放/getter lease 与提交前撤回被拒绝。Host 32/32、原 Control SQLite 专项 31/31，正式项目 Owner 尚未接入，未运行 PG 或 Web/App。历史查询的旧包不能冒充当前 graph，仍需原历史锁证明。范围见[项目执行借用](./plugin-project-execution-borrower.md)。
+
 基础建设审计基线为 `53debe063`；下述本轮模型与会话修复在其后提交。正式 `/Applications/CrewON.app` 已更新为 `0.1.70`。它保留已核验 `0.1.69` 的生产闭包，仅同步 `8b7da48ed` 的 HTTP 拒绝分类修复与 UI 包版本；本轮新增插件目录库和可选状态路由未进入正式候选。22 个受审查源文件、21 个前端/宿主产物、八个运行时文件及 1818 个生产闭包文件均核验，五个已发行 Native 宿主源逐字保持；正式 ASAR 和运行时与候选一致。详见[候选核验](../output/plugin-foundation/gateway-root-cause-20261011/candidate-0.1.70-verification.json)、[正式安装核验](../output/plugin-foundation/gateway-root-cause-20261011/installed-0.1.70-verification.json)。当前正式 profile 有效业务插件为 0，历史包、任务和产物保留。这些已发行的基础文件并非干净 Git HEAD，候选身份按实际文件与摘要记录，不能只用源码 SHA 冒充完整构建身份，也不能把源码、临时数据库验收、真实 Web 与正式桌面四种证据互相替代。
 
 下述 F2/F3 的实际状态 owner、自动实例协调、插件右栏与项目 namespace 是当前权威源码工作区的后续增量。它们已有各自的源码、临时数据库和组件验证；未进入上述 `0.1.70` 正式 App。独立源码 Web 预览也不能替代正式包或真实插件全生命周期验收。

@@ -25,6 +25,7 @@ Node 24.19.0、真实文件型 SQLite、原生产构造函数及本地命名离�
 仍未完成的范围：
 
 1. 专用 project generation/query/historical-query owner 仍有自己的包 Host，需要接原项目能力与共享实例，同时保留独立项目批准。普通 TaskOwner 的完成不能替代这些入口。
+   原三个 ExecutionBridge 的 Host-only 借用通道现已有 32 项 Host 与 31 项原 SQLite Owner 回归；正式 Owner 尚未接入，尤其历史旧包仍须原 Run/composition 证明，见[项目执行借用](./plugin-project-execution-borrower.md)。
 2. 当前业务执行 registration 仍拒绝 execution 之外的 mandatory 服务，不能删除这一限制冒充执行 Host 已实现依赖。本次消费者保持已有 optional 声明；它在 setup 中读取真实已启用 provider。适配必需服务与 Worker 的真实服务目录、恢复和执行，仍需完整接线与行为验证。
 3. 没有原 Native Profile owner 的 generic/Standalone Task Core 保持原兼容路径，不能接受 JSON 伪造共享 binding 或自动获得 Native 借用权。
 4. 正式产品的安装、启用、UI/Agent 任务、升级/回滚、停用、恢复、卸载和完整执行先在 Web 验收，再更新桌面。当前业务插件保持卸载，本增量不改变宿主 UI。
