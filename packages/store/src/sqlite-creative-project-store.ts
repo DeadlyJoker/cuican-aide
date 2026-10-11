@@ -719,8 +719,9 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const result = body();
-      assertSqliteProjectRunCommit(this.#database, runQualification);
       assertLegacy?.();
+      // Negative schema inspection must finish before the original physical lease.
+      assertSqliteProjectRunCommit(this.#database, runQualification);
       this.#assertCommitActive(authority);
       this.#assertOpen();
       this.#database.exec("COMMIT");

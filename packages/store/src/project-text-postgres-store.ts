@@ -1,4 +1,16 @@
 import {
+  listPostgresTextArtifacts,
+  listPostgresTextRevisions,
+} from "./project-text-postgres-reads.ts";
+import { commitPostgresLegacyText } from "./project-text-postgres-transaction.ts";
+import { commitOriginalProjectMigration } from "./original-project-migration.ts";
+import {
+  assertPostgresLegacyTextReceipt,
+  readPostgresLegacyText,
+  textLegacyScope,
+} from "./project-text-legacy-access.ts";
+import type { PostgresCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import {
   decodeOutlineSourceRevision,
   assertOutlineSourceInputsCurrent,
 } from "./project-outline-source-store-support.ts";
@@ -28,10 +40,7 @@ import {
   assertPostgresProjectTextUiCommit,
   type ProjectTextUiQualification,
 } from "./project-text-ui-commit-support.ts";
-import {
-  assertPostgresProjectRunCommit,
-  assertPostgresProjectRunLease,
-} from "./creative-project-run-commit-postgres.ts";
+import { assertPostgresProjectRunCommit } from "./creative-project-run-commit-postgres.ts";
 import {
   projectRunCommitQualification,
   type ProjectRunQualification,
@@ -39,14 +48,13 @@ import {
 import type { Pool, PoolClient } from "pg";
 import {
   assertCreativeProjectCommitActive,
-  assertCreativeProjectCommitCurrent,
   type CreativeProjectCommitAuthority,
   type CreativeProjectCommitOptions,
   type CreativeProjectOwnerScope,
   type ProjectStructuredOutlineStore,
   type ProjectTextMutationResult,
 } from "@crewon/application";
-import { projectTextFailure } from "@crewon/domain";
+import { projectTextFailure, type CreativeProjectScope } from "@crewon/domain";
 import {
   creativeOwnerValues,
   decodeCreativeBrief,
@@ -120,102 +128,106 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
     return this.#structured.selection(input, options);
   }
   async migrate(): Promise<void> {
-    await this.#transaction((client) =>
-      migratePostgresProjectText(client, this.#schema),
-    );
+    await commitOriginalProjectMigration({
+      pool: this.#pool,
+      assertOpen: this.#assertOpen,
+      migrate: (client) => migratePostgresProjectText(client, this.#schema),
+    });
   }
   async loadOutline(input: TextInput<"loadOutline">) {
     const q = textRead("loadOutline", input);
-    return this.#artifact(
-      this.#pool,
-      q.owner,
-      q.projectId,
-      "c.kind='outline' AND c.episode_id=''",
-      [],
+    return this.#read(
+      q,
+      async (client) =>
+        this.#artifact(
+          client,
+          q.owner,
+          q.projectId,
+          "c.kind='outline' AND c.episode_id=''",
+          [],
+        ),
+      null,
     );
   }
   async loadScript(input: TextInput<"loadScript">) {
     const q = textRead("loadScript", input);
-    return this.#artifact(
-      this.#pool,
-      q.owner,
-      q.projectId,
-      "c.kind='script' AND c.episode_id=?",
-      [q.episodeId],
+    return this.#read(
+      q,
+      async (client) =>
+        this.#artifact(
+          client,
+          q.owner,
+          q.projectId,
+          "c.kind='script' AND c.episode_id=?",
+          [q.episodeId],
+        ),
+      null,
     );
   }
   async loadArtifact(input: TextInput<"loadArtifact">) {
     const q = textRead("loadArtifact", input);
-    return this.#artifact(this.#pool, q.owner, q.projectId, "c.artifact_id=?", [
-      q.artifactId,
-    ]);
+    return this.#read(
+      q,
+      async (client) =>
+        this.#artifact(client, q.owner, q.projectId, "c.artifact_id=?", [
+          q.artifactId,
+        ]),
+      null,
+    );
   }
   async loadRevision(input: TextInput<"loadRevision">) {
     const q = textRead("loadRevision", input);
-    return this.#revision(
-      this.#pool,
-      q.owner,
-      q.projectId,
-      q.artifactId,
-      q.contentRevision,
+    return this.#read(
+      q,
+      async (client) =>
+        this.#revision(
+          client,
+          q.owner,
+          q.projectId,
+          q.artifactId,
+          q.contentRevision,
+        ),
+      null,
     );
   }
   async loadOutlineSourceRevision(
     input: TextInput<"loadOutlineSourceRevision">,
   ) {
     const q = textRead("loadRevision", input);
-    return this.#outlineSourceRevision(
-      this.#pool,
-      q.owner,
-      q.projectId,
-      q.artifactId,
-      q.contentRevision,
+    return this.#read(
+      q,
+      async (client) =>
+        this.#outlineSourceRevision(
+          client,
+          q.owner,
+          q.projectId,
+          q.artifactId,
+          q.contentRevision,
+        ),
+      null,
     );
   }
   async listArtifacts(input: TextInput<"listArtifacts">) {
     const q = textRead("listArtifacts", input);
-    const rows = await this.#query(
-      this.#pool,
-      `SELECT c.* FROM project_text_artifacts c ${childJoin} WHERE ${filter}${q.afterArtifactId === null ? "" : ' AND c.artifact_id COLLATE "C" > ? COLLATE "C"'} ORDER BY c.artifact_id COLLATE "C" ASC LIMIT ?`,
-      [
-        ...creativeOwnerValues(q.owner),
-        q.projectId,
-        ...(q.afterArtifactId === null ? [] : [q.afterArtifactId]),
-        q.limit + 1,
-      ],
+    return this.#read(
+      q,
+      (client) =>
+        listPostgresTextArtifacts(q, (sql, values) =>
+          this.#query(client, sql, values),
+        ),
+      { artifacts: [], nextArtifactId: null },
     );
-    const items = rows.rows.map((row) =>
-      textRequired(decodeTextArtifact(row, q.owner, q.projectId)),
-    );
-    const artifacts = Object.freeze(items.slice(0, q.limit));
-    return Object.freeze({
-      artifacts,
-      nextArtifactId:
-        items.length > q.limit ? artifacts.at(-1)!.artifactId : null,
-    });
   }
   async listRevisions(input: TextInput<"listRevisions">) {
     const q = textRead("listRevisions", input);
-    const rows = await this.#query(
-      this.#pool,
-      `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${childJoin} WHERE ${filter} AND c.artifact_id=? AND c.content_revision>? ORDER BY c.content_revision ASC LIMIT ?`,
-      [
-        ...creativeOwnerValues(q.owner),
-        q.projectId,
-        q.artifactId,
-        q.afterContentRevision,
-        q.limit + 1,
-      ],
+    return this.#read(
+      q,
+      (client) =>
+        listPostgresTextRevisions(q, (sql, values) =>
+          this.#query(client, sql, values),
+        ),
+      { revisions: [], nextContentRevision: null },
     );
-    const items = rows.rows.map((row) =>
-      textRequired(decodeTextRevision(row, q.owner, q.projectId, q.artifactId)),
-    );
-    const revisions = Object.freeze(items.slice(0, q.limit));
-    return Object.freeze({
-      revisions,
-      nextContentRevision:
-        items.length > q.limit ? revisions.at(-1)!.contentRevision : null,
-    });
   }
   async loadMutationReceipt(
     input: TextInput<"loadMutationReceipt">,
@@ -243,7 +255,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
       identity.receipt,
     );
     return this.#transaction(
-      async (client) => {
+      async (client, access) => {
         await assertPostgresProjectRunCommit(client, this.#schema, q);
         await assertPostgresProjectTextUiCommit(client, this.#schema, textUi);
         const intent = await beginPostgresTextIntentCommit(
@@ -262,7 +274,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           this.#schema,
           planSelection,
         );
-        const result = await this.#receipt(client, identity);
+        const result = await this.#receipt(client, identity, access, "read");
         if (result !== null) {
           await finishPostgresPlanResult(
             client,
@@ -346,7 +358,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
       projectId: prepared.project.projectId,
     };
     return this.#transaction(
-      async (client) => {
+      async (client, access) => {
         await assertPostgresProjectRunCommit(
           client,
           this.#schema,
@@ -384,7 +396,12 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           this.#schema,
           planSelection,
         );
-        const replay = await this.#receipt(client, identity);
+        const replay = await this.#receipt(
+          client,
+          identity,
+          access,
+          "mutation",
+        );
         if (replay !== null) {
           await finishPostgresPlanResult(
             client,
@@ -604,6 +621,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
             downstream,
           );
       },
+      textLegacyScope(prepared.project, prepared.project.projectId),
     );
   }
   async #project(
@@ -683,7 +701,12 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
     ).rows[0];
     return decodeOutlineSourceRevision(row, owner, id, artifactId);
   }
-  async #receipt(client: QueryClient, identity: TextIdentity) {
+  async #receipt(
+    client: QueryClient,
+    identity: TextIdentity,
+    access: PostgresCreativeProjectLegacyAccess,
+    mode: "read" | "mutation",
+  ) {
     const row = (
       await this.#query(
         client,
@@ -696,6 +719,15 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
         ],
       )
     ).rows[0];
+    if (
+      !(await assertPostgresLegacyTextReceipt(
+        access,
+        identity.owner,
+        row,
+        mode,
+      ))
+    )
+      return null;
     const result = decodeTextReceipt(row, identity);
     if (
       result !== null &&
@@ -736,49 +768,39 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
     assertCreativeProjectCommitActive(authority);
     this.#assertOpen();
   }
-  async #transaction<T>(
-    body: (client: PoolClient) => Promise<T>,
+  #read<T>(
+    q: Readonly<{ owner: CreativeProjectOwnerScope; projectId: string }>,
+    read: (client: PoolClient) => Promise<T>,
+    absent: T,
+  ): Promise<T> {
+    return readPostgresLegacyText(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      textLegacyScope(q.owner, q.projectId),
+      read,
+      absent,
+    );
+  }
+  #transaction<T extends ProjectTextMutationResult | null | void>(
+    body: (
+      client: PoolClient,
+      access: PostgresCreativeProjectLegacyAccess,
+    ) => Promise<T>,
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
-    textUi?: ProjectTextUiQualification,
+    _textUi?: ProjectTextUiQualification,
     checkDownstream?: (client: PoolClient) => Promise<void>,
+    scope?: CreativeProjectScope,
   ): Promise<T> {
-    this.#assertOpen();
-    if (authority !== undefined)
-      await assertCreativeProjectCommitCurrent(authority);
-    this.#active(authority);
-    const client = await this.#pool.connect();
-    try {
-      await client.query("BEGIN");
-      const result = await body(client);
-      if (authority?.planTransaction !== undefined) {
-        await authority.planTransaction.assertCurrent();
-        await authority.planTransaction.authority.assertTransactionCurrent();
-      } else if (authority?.textUiTransaction !== undefined)
-        await authority.textUiTransaction.assertCurrent();
-      else if (authority?.runTransaction !== undefined)
-        await authority.runTransaction.assertCurrent();
-      else if (authority !== undefined)
-        await assertCreativeProjectCommitCurrent(authority);
-      await assertPostgresProjectRunLease(
-        client,
-        this.#schema,
-        runQualification,
-      );
-      await checkDownstream?.(client);
-      this.#active(authority);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      try {
-        await client.query("ROLLBACK");
-      } catch {
-        /* Preserve the original failure. */
-      }
-      throw error;
-    } finally {
-      client.release();
-    }
+    return commitPostgresLegacyText({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#assertOpen,
+      body,
+      authority,
+      runQualification,
+      checkDownstream,
+      scope,
+    });
   }
 }
 import {

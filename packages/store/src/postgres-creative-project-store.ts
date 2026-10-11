@@ -49,6 +49,7 @@ import {
   type PreparedCreativeMutation,
 } from "./creative-project-store-records.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
+import { commitOriginalProjectMigration } from "./original-project-migration.ts";
 import {
   admitPostgresPluginInstallationPin,
   assertPostgresPluginInstallationPinSchema,
@@ -95,10 +96,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
 
   /** Explicit and independent of the host's historical migration. */
   async migrate(): Promise<void> {
-    await this.#transaction(async (client) => {
-      await this.#lock(client, ["creative-project-migration", this.#schema]);
-      await migratePostgresCreativeProjects(client, this.#schema);
-      this.#assertOpen();
+    await commitOriginalProjectMigration({
+      pool: this.#pool,
+      assertOpen: this.#assertOpen,
+      migrate: async (client) => {
+        await this.#lock(client, ["creative-project-migration", this.#schema]);
+        await migratePostgresCreativeProjects(client, this.#schema);
+      },
     });
   }
 

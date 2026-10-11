@@ -1,4 +1,15 @@
 import {
+  assertSqliteLegacyTextReceipt,
+  readSqliteLegacyText,
+  textLegacyResultScope,
+  textLegacyScope,
+} from "./project-text-legacy-access.ts";
+import { commitOriginalSqliteProjectMigration } from "./original-project-migration.ts";
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  type CreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import {
   decodeOutlineSourceRevision,
   assertOutlineSourceInputsCurrent,
 } from "./project-outline-source-store-support.ts";
@@ -43,7 +54,7 @@ import {
   type ProjectStructuredOutlineStore,
   type ProjectTextMutationResult,
 } from "@crewon/application";
-import { projectTextFailure } from "@crewon/domain";
+import { projectTextFailure, type CreativeProjectScope } from "@crewon/domain";
 import {
   creativeOwnerValues,
   decodeCreativeBrief,
@@ -112,94 +123,130 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
     return this.#structured.selection(input, options);
   }
   async migrate(): Promise<void> {
-    this.#transaction(() => migrateSqliteProjectText(this.#database));
+    commitOriginalSqliteProjectMigration({
+      database: this.#database,
+      assertOpen: this.#assertOpen,
+      migrate: () => migrateSqliteProjectText(this.#database),
+    });
   }
   async loadOutline(input: TextInput<"loadOutline">) {
     const q = textRead("loadOutline", input);
-    return this.#artifact(
-      q.owner,
-      q.projectId,
-      "c.kind='outline' AND c.episode_id=''",
-      [],
+    return this.#read(
+      q,
+      () =>
+        this.#artifact(
+          q.owner,
+          q.projectId,
+          "c.kind='outline' AND c.episode_id=''",
+          [],
+        ),
+      null,
     );
   }
   async loadScript(input: TextInput<"loadScript">) {
     const q = textRead("loadScript", input);
-    return this.#artifact(
-      q.owner,
-      q.projectId,
-      "c.kind='script' AND c.episode_id=?",
-      [q.episodeId],
+    return this.#read(
+      q,
+      () =>
+        this.#artifact(
+          q.owner,
+          q.projectId,
+          "c.kind='script' AND c.episode_id=?",
+          [q.episodeId],
+        ),
+      null,
     );
   }
   async loadArtifact(input: TextInput<"loadArtifact">) {
     const q = textRead("loadArtifact", input);
-    return this.#artifact(q.owner, q.projectId, "c.artifact_id=?", [
-      q.artifactId,
-    ]);
+    return this.#read(
+      q,
+      () =>
+        this.#artifact(q.owner, q.projectId, "c.artifact_id=?", [q.artifactId]),
+      null,
+    );
   }
   async loadRevision(input: TextInput<"loadRevision">) {
     const q = textRead("loadRevision", input);
-    return this.#revision(
-      q.owner,
-      q.projectId,
-      q.artifactId,
-      q.contentRevision,
+    return this.#read(
+      q,
+      () =>
+        this.#revision(q.owner, q.projectId, q.artifactId, q.contentRevision),
+      null,
     );
   }
   async loadOutlineSourceRevision(
     input: TextInput<"loadOutlineSourceRevision">,
   ) {
     const q = textRead("loadRevision", input);
-    return this.#outlineSourceRevision(
-      q.owner,
-      q.projectId,
-      q.artifactId,
-      q.contentRevision,
+    return this.#read(
+      q,
+      () =>
+        this.#outlineSourceRevision(
+          q.owner,
+          q.projectId,
+          q.artifactId,
+          q.contentRevision,
+        ),
+      null,
     );
   }
   async listArtifacts(input: TextInput<"listArtifacts">) {
     const q = textRead("listArtifacts", input);
-    const rows = this.#all(
-      `SELECT c.* FROM project_text_artifacts c ${join} WHERE ${filter}${q.afterArtifactId === null ? "" : " AND c.artifact_id COLLATE BINARY > ? COLLATE BINARY"} ORDER BY c.artifact_id COLLATE BINARY ASC LIMIT ?`,
-      [
-        ...creativeOwnerValues(q.owner),
-        q.projectId,
-        ...(q.afterArtifactId === null ? [] : [q.afterArtifactId]),
-        q.limit + 1,
-      ],
+    return this.#read(
+      q,
+      () => {
+        const rows = this.#all(
+          `SELECT c.* FROM project_text_artifacts c ${join} WHERE ${filter}${q.afterArtifactId === null ? "" : " AND c.artifact_id COLLATE BINARY > ? COLLATE BINARY"} ORDER BY c.artifact_id COLLATE BINARY ASC LIMIT ?`,
+          [
+            ...creativeOwnerValues(q.owner),
+            q.projectId,
+            ...(q.afterArtifactId === null ? [] : [q.afterArtifactId]),
+            q.limit + 1,
+          ],
+        );
+        const items = rows.map((row) =>
+          textRequired(decodeTextArtifact(row, q.owner, q.projectId)),
+        );
+        const artifacts = Object.freeze(items.slice(0, q.limit));
+        return Object.freeze({
+          artifacts,
+          nextArtifactId:
+            items.length > q.limit ? artifacts.at(-1)!.artifactId : null,
+        });
+      },
+      { artifacts: [], nextArtifactId: null },
     );
-    const items = rows.map((row) =>
-      textRequired(decodeTextArtifact(row, q.owner, q.projectId)),
-    );
-    const artifacts = Object.freeze(items.slice(0, q.limit));
-    return Object.freeze({
-      artifacts,
-      nextArtifactId:
-        items.length > q.limit ? artifacts.at(-1)!.artifactId : null,
-    });
   }
   async listRevisions(input: TextInput<"listRevisions">) {
     const q = textRead("listRevisions", input);
-    const rows = this.#all(
-      `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision>? ORDER BY c.content_revision ASC LIMIT ?`,
-      [
-        ...creativeOwnerValues(q.owner),
-        q.projectId,
-        q.artifactId,
-        q.afterContentRevision,
-        q.limit + 1,
-      ],
+    return this.#read(
+      q,
+      () => {
+        const rows = this.#all(
+          `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision>? ORDER BY c.content_revision ASC LIMIT ?`,
+          [
+            ...creativeOwnerValues(q.owner),
+            q.projectId,
+            q.artifactId,
+            q.afterContentRevision,
+            q.limit + 1,
+          ],
+        );
+        const items = rows.map((row) =>
+          textRequired(
+            decodeTextRevision(row, q.owner, q.projectId, q.artifactId),
+          ),
+        );
+        const revisions = Object.freeze(items.slice(0, q.limit));
+        return Object.freeze({
+          revisions,
+          nextContentRevision:
+            items.length > q.limit ? revisions.at(-1)!.contentRevision : null,
+        });
+      },
+      { revisions: [], nextContentRevision: null },
     );
-    const items = rows.map((row) =>
-      textRequired(decodeTextRevision(row, q.owner, q.projectId, q.artifactId)),
-    );
-    const revisions = Object.freeze(items.slice(0, q.limit));
-    return Object.freeze({
-      revisions,
-      nextContentRevision:
-        items.length > q.limit ? revisions.at(-1)!.contentRevision : null,
-    });
   }
   async loadMutationReceipt(
     input: TextInput<"loadMutationReceipt">,
@@ -237,7 +284,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
       authority.planTransaction.authority.assertActive();
     }
     return this.#transaction(
-      () => {
+      (access) => {
         assertSqliteProjectRunCommit(this.#database, q);
         assertSqliteProjectTextUiCommit(this.#database, textUi);
         const intent = beginSqliteTextIntentCommit(
@@ -250,7 +297,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           this.#database,
           planSelection,
         );
-        const result = this.#receipt(identity);
+        const result = this.#receipt(identity, access, "read");
         if (result !== null) {
           finishSqlitePlanResult(this.#database, planResult, result);
           finishSqlitePlanSelection(
@@ -338,7 +385,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
       projectId: prepared.project.projectId,
     };
     return this.#transaction(
-      () => {
+      (access) => {
         assertSqliteProjectRunCommit(this.#database, runQualification);
         assertSqliteProjectTextUiCommit(this.#database, textUi);
         const identity = textIdentity({
@@ -359,7 +406,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           this.#database,
           planSelection,
         );
-        const replay = this.#receipt(identity);
+        const replay = this.#receipt(identity, access, "mutation");
         if (replay !== null) {
           finishSqlitePlanResult(this.#database, planResult, replay);
           finishSqlitePlanSelection(
@@ -541,6 +588,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
             downstream,
           );
       },
+      textLegacyScope(prepared.project, prepared.project.projectId),
     );
   }
   #project(owner: CreativeProjectOwnerScope, id: string) {
@@ -610,19 +658,23 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
       artifactId,
     );
   }
-  #receipt(identity: TextIdentity) {
-    const result = decodeTextReceipt(
-      this.#get(
-        "SELECT * FROM project_text_mutation_receipts WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND kind=? AND idempotency_key=?",
-        [
-          ...creativeOwnerValues(identity.owner),
-          identity.actor.actorId,
-          identity.kind,
-          identity.receipt.idempotencyKey,
-        ],
-      ),
-      identity,
+  #receipt(
+    identity: TextIdentity,
+    access: CreativeProjectLegacyAccess,
+    mode: "read" | "mutation",
+  ) {
+    const row = this.#get(
+      "SELECT * FROM project_text_mutation_receipts WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND kind=? AND idempotency_key=?",
+      [
+        ...creativeOwnerValues(identity.owner),
+        identity.actor.actorId,
+        identity.kind,
+        identity.receipt.idempotencyKey,
+      ],
     );
+    if (!assertSqliteLegacyTextReceipt(access, identity.owner, row, mode))
+      return null;
+    const result = decodeTextReceipt(row, identity);
     if (
       result !== null &&
       this.#project(identity.owner, result.artifact.projectId) === null
@@ -646,20 +698,41 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
     assertCreativeProjectCommitActive(authority);
     this.#assertOpen();
   }
-  #transaction<T>(
-    body: () => T,
+  #read<T>(
+    q: Readonly<{ owner: CreativeProjectOwnerScope; projectId: string }>,
+    read: () => T,
+    absent: T,
+  ): T {
+    this.#assertOpen();
+    return readSqliteLegacyText(
+      this.#database,
+      textLegacyScope(q.owner, q.projectId),
+      read,
+      absent,
+    );
+  }
+  #transaction<T extends ProjectTextMutationResult | null | void>(
+    body: (access: CreativeProjectLegacyAccess) => T,
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
     textUi?: ProjectTextUiQualification,
     checkDownstream?: () => void,
+    scope?: CreativeProjectScope,
   ): T {
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const result = body();
+      const access = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      if (scope !== undefined) access.assertProject(scope);
+      const result = body(access);
+      const current = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      if (scope !== undefined) current.assertProject(scope);
+      const resultScope = textLegacyResultScope(result);
+      if (resultScope !== undefined) current.assertProject(resultScope);
+      checkDownstream?.();
+      // The original physical lease and UI qualification follow every new SQL fence.
       assertSqliteProjectRunCommit(this.#database, runQualification);
       assertSqliteProjectTextUiCommit(this.#database, textUi);
-      checkDownstream?.();
       authority?.planTransaction?.authority.assertActive();
       this.#active(authority);
       this.#database.exec("COMMIT");
