@@ -6,6 +6,7 @@ import {
 import {
   qualifyPluginProjectReadScope,
   type PluginProjectReadScope,
+  type PluginProjectMutationScope,
 } from "@crewon/application";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
@@ -433,7 +434,7 @@ test("owned read references resist copies, other actors, other methods and targe
   const made = (await a.invoke("createProject", creativeCreateInput())) as {
     project: { projectId: string };
   };
-  let ref: PluginProjectReadScope | undefined;
+  let ref: PluginProjectReadScope | PluginProjectMutationScope | undefined;
   const bind = f.store.bindProjectReads.bind(f.store);
   f.store.bindProjectReads = (scope) => {
     ref = scope;
@@ -719,4 +720,150 @@ test("Host closure withdraws the bound read view before its original query", asy
     a.invoke("getProject", { projectId: made.project.projectId }),
   );
   assert.deepEqual(Object.values(f.counts()), [1, 1, 1, 1]);
+});
+
+test("owned metadata rename, archive and restore use original CAS and scoped replay", async (t) => {
+  const f = await fixture(t);
+  const a = await f.ui();
+  const made = (await a.invoke("createProject", creativeCreateInput())) as {
+    project: { projectId: string; revision: number };
+  };
+  const projectId = made.project.projectId;
+  const command = {
+    projectId,
+    idempotencyKey: "owned-rename",
+    request: {
+      title: "owned new title",
+      expectedProjectRevision: made.project.revision,
+    },
+  };
+  const renamed = (await a.invoke("renameProject", command)) as typeof made & {
+    disposition: string;
+  };
+  const replay = (await a.invoke("renameProject", command)) as typeof renamed;
+  assert.equal(replay.disposition, "replayed");
+  assert.deepEqual(replay.project, renamed.project);
+  await assert.rejects(
+    a.invoke("renameProject", {
+      ...command,
+      request: { ...command.request, title: "changed content" },
+    }),
+    /idempotency_conflict/,
+  );
+  await assert.rejects(
+    a.invoke("renameProject", { ...command, idempotencyKey: "stale-revision" }),
+    /revision_conflict/,
+  );
+  const archived = (await a.invoke("setProjectState", {
+    projectId,
+    idempotencyKey: "owned-archive",
+    request: {
+      state: "archived",
+      expectedProjectRevision: renamed.project.revision,
+    },
+  })) as typeof made;
+  const page = (await a.invoke("listProjects", {
+    query: { state: "archived" },
+  })) as { projects: unknown[] };
+  assert.equal(page.projects.length, 1);
+  await a.invoke("setProjectState", {
+    projectId,
+    idempotencyKey: "owned-restore",
+    request: {
+      state: "active",
+      expectedProjectRevision: archived.project.revision,
+    },
+  });
+  assert.deepEqual(Object.values(f.counts()), [1, 1, 1, 4]);
+});
+
+test("metadata write rejects another plugin and rolls back an original receipt failure", async (t) => {
+  const f = await fixture(t);
+  const a = await f.ui(),
+    b = await f.ui("example.other");
+  const made = (await a.invoke("createProject", creativeCreateInput())) as {
+    project: { projectId: string; revision: number };
+  };
+  const command = {
+    projectId: made.project.projectId,
+    idempotencyKey: "owned-write",
+    request: {
+      title: "should roll back",
+      expectedProjectRevision: made.project.revision,
+    },
+  };
+  await assert.rejects(
+    b.invoke("renameProject", command),
+    /creative_project_not_found/,
+  );
+  f.db.exec(
+    "CREATE TRIGGER fail_owned_metadata_receipt BEFORE INSERT ON creative_project_mutation_receipts BEGIN SELECT RAISE(ABORT,'named_metadata_failure'); END",
+  );
+  await assert.rejects(a.invoke("renameProject", command));
+  const current = (await a.invoke("getProject", {
+    projectId: made.project.projectId,
+  })) as typeof made;
+  assert.deepEqual(current.project, made.project);
+  assert.deepEqual(Object.values(f.counts()), [1, 1, 1, 1]);
+  f.db.exec("DROP TRIGGER fail_owned_metadata_receipt");
+  await a.invoke("renameProject", command);
+  assert.deepEqual(Object.values(f.counts()), [1, 1, 1, 2]);
+});
+
+test("write policy withdrawn after owned project preparation prevents metadata COMMIT", async (t) => {
+  const f = await fixture(t);
+  const a = await f.ui();
+  const made = (await a.invoke("createProject", creativeCreateInput())) as {
+    project: { projectId: string; revision: number };
+  };
+  const bind = f.store.bindProjectReads.bind(f.store);
+  f.store.bindProjectReads = (scope) => {
+    const view = bind(scope);
+    return {
+      ...view,
+      loadProject: async (input) => {
+        const project = await view.loadProject(input);
+        a.state.beforeHost = async () => {
+          f.policy.allowed = false;
+        };
+        return project;
+      },
+    };
+  };
+  await assert.rejects(
+    a.invoke("renameProject", {
+      projectId: made.project.projectId,
+      idempotencyKey: "late-write-deny",
+      request: {
+        title: "denied",
+        expectedProjectRevision: made.project.revision,
+      },
+    }),
+    /authorization_denied/,
+  );
+  assert.deepEqual(Object.values(f.counts()), [1, 1, 1, 1]);
+});
+
+test("confirmed owned metadata COMMIT is delivered after Host close without turning it into a retry", async (t) => {
+  const f = await fixture(t);
+  const a = await f.ui();
+  const made = (await a.invoke("createProject", creativeCreateInput())) as {
+    project: { projectId: string; revision: number };
+  };
+  const commit = f.store.commitProjectMetadata.bind(f.store);
+  f.store.commitProjectMetadata = async (input, options) => {
+    const result = await commit(input, options);
+    void a.owner.close();
+    return result;
+  };
+  const result = (await a.invoke("renameProject", {
+    projectId: made.project.projectId,
+    idempotencyKey: "acknowledged-rename",
+    request: {
+      title: "confirmed title",
+      expectedProjectRevision: made.project.revision,
+    },
+  })) as { disposition: string };
+  assert.equal(result.disposition, "committed");
+  assert.deepEqual(Object.values(f.counts()), [1, 1, 1, 2]);
 });

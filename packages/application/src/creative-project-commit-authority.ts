@@ -1,3 +1,4 @@
+import { qualifyPluginProjectMutationScope } from "./plugin-project-read-scope.ts";
 import { captureProjectTextUiCommitTransaction } from "./project-text-ui-commit-authority.ts";
 import { captureProjectOutlineUiCommitTransaction } from "./project-outline-ui-commit-authority.ts";
 import { captureProjectOutlineRunCommitTransaction } from "./project-outline-run-commit-authority.ts";
@@ -59,15 +60,25 @@ export function captureCreativeProjectCommitAuthority(
     allowOutlineUiTransaction?: boolean;
     allowOutlineRunTransaction?: boolean;
     allowCreationScope?: boolean;
+    allowMutationScope?: boolean;
   }> = {
     allowTextUiTransaction: false,
   },
 ): CreativeProjectCommitAuthority | undefined {
   if (options === undefined) return undefined;
-  const fields = ownDataFields(options, ["authority", "creationScope"]);
+  const fields = ownDataFields(options, [
+    "authority",
+    "creationScope",
+    "mutationScope",
+  ]);
   if (fields.creationScope !== undefined) {
     if (mode.allowCreationScope !== true) invalid();
     qualifyPluginProjectCreationScope(fields.creationScope as never);
+  }
+  if (fields.mutationScope !== undefined) {
+    if (mode.allowMutationScope !== true || fields.creationScope !== undefined)
+      invalid();
+    qualifyPluginProjectMutationScope(fields.mutationScope as never);
   }
   const authority = fields.authority;
   if (authority === undefined) return undefined;

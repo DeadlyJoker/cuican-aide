@@ -1,5 +1,7 @@
 import {
   capturePluginProjectReadScope,
+  capturePluginProjectMutationScope,
+  type PluginProjectMutationScope,
   type PluginProjectReadOptions,
 } from "./plugin-project-read-scope.ts";
 import {
@@ -263,6 +265,13 @@ export class PluginCreativeProjectActionOwner {
               readScope: capturePluginProjectReadScope(invocation, authority),
             })
           : undefined,
+        this.#ownsCreatedProjects &&
+          [
+            "crewon.creative-projects.v1.renameProject",
+            "crewon.creative-projects.v1.setProjectState",
+          ].includes(request.action)
+          ? capturePluginProjectMutationScope(invocation, authority)
+          : undefined,
       );
       if (dispatched.kind === "read") await authority.assertCurrent();
       // A mutation Service returns only after confirmed COMMIT (or a checked durable replay).
@@ -364,11 +373,13 @@ export class PluginCreativeProjectActionOwner {
     authority: CreativeProjectCommitAuthority,
     creationScope?: PluginProjectCreationScope,
     readOptions?: PluginProjectReadOptions,
+    mutationScope?: PluginProjectMutationScope,
   ): Promise<DispatchResult> {
     const actor = context.actor;
     const options = Object.freeze({
       authority,
       ...(creationScope === undefined ? {} : { creationScope }),
+      ...(mutationScope === undefined ? {} : { mutationScope }),
     });
     switch (request.action) {
       case "crewon.creative-projects.v1.createProject":

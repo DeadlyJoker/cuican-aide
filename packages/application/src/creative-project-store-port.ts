@@ -1,5 +1,6 @@
 import type {
   PluginProjectReadScope,
+  PluginProjectMutationScope,
   PluginProjectReadMethod,
 } from "./plugin-project-read-scope.ts";
 import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
@@ -103,6 +104,7 @@ export type CreativeProjectCommitOptions = Readonly<{
   authority?: CreativeProjectCommitAuthority;
   /** Separate qualified creation path; ordinary Store methods must reject this option. */
   creationScope?: PluginProjectCreationScope;
+  mutationScope?: PluginProjectMutationScope;
 }>;
 
 export type OwnedCreativeProjectCreationInput = MutationIdentity &
@@ -143,7 +145,9 @@ export type CreativeProjectReadStore = Pick<
   PluginProjectReadMethod
 >;
 export interface PluginProjectReadStoreBinding {
-  bindProjectReads(scope: PluginProjectReadScope): CreativeProjectReadStore;
+  bindProjectReads(
+    scope: PluginProjectReadScope | PluginProjectMutationScope,
+  ): CreativeProjectReadStore;
 }
 
 export interface CreativeProjectStore {

@@ -362,3 +362,10 @@ export {
   type PluginProjectReadOptions,
   type PluginProjectReadMethod,
 } from "./plugin-project-read-scope.ts";
+
+export {
+  qualifyPluginProjectMutationScope,
+  type PluginProjectMutationScope,
+} from "./plugin-project-read-scope.ts";
+
+export { scopedPluginMetadataReceipt } from "./plugin-project-mutation-scope-support.ts";

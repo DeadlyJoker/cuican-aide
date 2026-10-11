@@ -506,10 +506,17 @@ export class CreativeProjectApplicationService {
       CreativeProjectMutationCommand,
       CreateCreativeProjectCommand
     >;
+    const readStore =
+      options?.mutationScope === undefined
+        ? this.#dependencies.store
+        : pluginProjectReadStore(this.#dependencies.store, actor, {
+            readScope: options.mutationScope,
+          });
     const project = await this.#project(
       actor,
       checked.projectId,
       options?.authority,
+      readStore,
     );
     const at = creativeProjectTimestamp(this.#dependencies.clock.now());
     const common = {

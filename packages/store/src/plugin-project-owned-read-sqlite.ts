@@ -3,6 +3,7 @@ import {
   qualifyPluginProjectReadScope,
   PLUGIN_PROJECT_READ_METHODS,
   type PluginProjectReadScope,
+  type PluginProjectMutationScope,
   type PluginProjectReadMethod,
   type CreativeProjectReadStore,
   type CreativeProjectOwnerScope,
@@ -21,7 +22,7 @@ import { decodePluginProjectMetadataOwnerRecord } from "./plugin-project-metadat
 import type { CreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
 
 export type PluginProjectReadCall = Readonly<{
-  scope: PluginProjectReadScope;
+  scope: PluginProjectReadScope | PluginProjectMutationScope;
   method: PluginProjectReadMethod;
   query: Readonly<{
     owner: CreativeProjectOwnerScope;
@@ -36,10 +37,10 @@ export function bindSqliteCreativeProjectReadView(
   store: {
     [K in PluginProjectReadMethod]: (
       input: Parameters<CreativeProjectReadStore[K]>[0],
-      scope?: PluginProjectReadScope,
+      scope?: PluginProjectReadScope | PluginProjectMutationScope,
     ) => ReturnType<CreativeProjectReadStore[K]>;
   },
-  scope: PluginProjectReadScope,
+  scope: PluginProjectReadScope | PluginProjectMutationScope,
 ): CreativeProjectReadStore {
   qualifyPluginProjectReadScope(scope);
   return Object.freeze(
@@ -96,60 +97,9 @@ export async function readSqliteOwnedCreativeProject<T>(
       source.snapshot.context,
       installation,
     );
-    const columns = [
-      "tenant_id",
-      "space_id",
-      "principal_id",
-      "actor_id",
-      "profile_id",
-      "plugin_id",
-      "publisher_id",
-    ] as const;
-    const values = [
-      source.scope.tenantId,
-      source.scope.spaceId,
-      source.scope.principalId,
-      source.scope.actorId,
-      source.scope.profileId,
-      source.scope.pluginId,
-      source.scope.publisherId,
-    ];
-    // SQLite itself quotes the captured, validated values. Caller strings never become SQL syntax.
-    const literals = columns.map((_, i) =>
-      String(db.prepare("SELECT quote(?) AS v").get(values[i]!)!.v),
-    );
-    const predicate = (alias: string) => {
-      if (!/^[a-z][a-z0-9_]{0,62}$/u.test(alias))
-        throw new Error("plugin_project_read_alias_invalid");
-      return `EXISTS(SELECT 1 FROM ${PLUGIN_PROJECT_METADATA_OWNER_TABLE} owned_metadata WHERE owned_metadata.tenant_id=${alias}.tenant_id AND owned_metadata.space_id=${alias}.space_id AND owned_metadata.project_id=${alias}.project_id AND ${columns.map((column, i) => `owned_metadata.${column}=${literals[i]}`).join(" AND ")})`;
-    };
-    const checkProject = (projectId: string) => {
-      const scope = parsePluginProjectWorkspaceOwner({
-        ...source.scope,
-        projectId,
-      });
-      const row = db
-        .prepare(
-          `SELECT o.*,p.owner_principal_id AS stored_principal FROM ${PLUGIN_PROJECT_METADATA_OWNER_TABLE} o JOIN creative_projects p ON p.tenant_id=o.tenant_id AND p.space_id=o.space_id AND p.project_id=o.project_id WHERE o.tenant_id=? AND o.space_id=? AND o.project_id=?`,
-        )
-        .get(scope.tenantId, scope.spaceId, projectId);
-      if (!row || typeof row.stored_principal !== "string")
-        throw new Error("creative_project_not_found");
-      if (
-        decodePluginProjectMetadataOwnerRecord(row, {
-          expectedOwner: scope,
-          storedProjectPrincipalId: row.stored_principal,
-        }) === null
-      )
-        throw new Error("creative_project_not_found");
-    };
+    const access = captureSqliteOwnedProjectAccess(db, source);
     source.assertActive();
-    result = read(
-      Object.freeze({
-        predicate,
-        assertProject: (scope) => checkProject(scope.projectId),
-      }),
-    );
+    result = read(access);
     const items = Array.isArray(result)
       ? result
       : result && typeof result === "object" && "projects" in result
@@ -166,7 +116,11 @@ export async function readSqliteOwnedCreativeProject<T>(
         typeof item.projectId !== "string"
       )
         throw new Error("plugin_project_read_result_invalid");
-      checkProject(item.projectId);
+      access.assertProject({
+        tenantId: source.scope.tenantId,
+        spaceId: source.scope.spaceId,
+        projectId: item.projectId,
+      });
     }
     source.assertActive();
     assertOpen();
@@ -182,4 +136,64 @@ export async function readSqliteOwnedCreativeProject<T>(
   await source.assertCurrent();
   assertOpen();
   return result;
+}
+
+export function captureSqliteOwnedProjectAccess(
+  db: DatabaseSync,
+  source: ReturnType<typeof qualifyPluginProjectReadScope>,
+): CreativeProjectLegacyAccess {
+  if (!db.isTransaction || !hasSqlitePluginProjectMetadataOwnerSchema(db))
+    throw new Error("plugin_project_owned_access_schema_required");
+  const columns = [
+    "tenant_id",
+    "space_id",
+    "principal_id",
+    "actor_id",
+    "profile_id",
+    "plugin_id",
+    "publisher_id",
+  ] as const;
+  const values = [
+    source.scope.tenantId,
+    source.scope.spaceId,
+    source.scope.principalId,
+    source.scope.actorId,
+    source.scope.profileId,
+    source.scope.pluginId,
+    source.scope.publisherId,
+  ];
+  // SQLite itself quotes the captured, validated values. Caller strings never become SQL syntax.
+  const literals = columns.map((_, i) =>
+    String(db.prepare("SELECT quote(?) AS v").get(values[i]!)!.v),
+  );
+  const predicate = (alias: string) => {
+    if (!/^[a-z][a-z0-9_]{0,62}$/u.test(alias))
+      throw new Error("plugin_project_read_alias_invalid");
+    return `EXISTS(SELECT 1 FROM ${PLUGIN_PROJECT_METADATA_OWNER_TABLE} owned_metadata WHERE owned_metadata.tenant_id=${alias}.tenant_id AND owned_metadata.space_id=${alias}.space_id AND owned_metadata.project_id=${alias}.project_id AND ${columns.map((column, i) => `owned_metadata.${column}=${literals[i]}`).join(" AND ")})`;
+  };
+  const checkProject = (projectId: string) => {
+    const scope = parsePluginProjectWorkspaceOwner({
+      ...source.scope,
+      projectId,
+    });
+    const row = db
+      .prepare(
+        `SELECT o.*,p.owner_principal_id AS stored_principal FROM ${PLUGIN_PROJECT_METADATA_OWNER_TABLE} o JOIN creative_projects p ON p.tenant_id=o.tenant_id AND p.space_id=o.space_id AND p.project_id=o.project_id WHERE o.tenant_id=? AND o.space_id=? AND o.project_id=? AND ${predicate("p")}`,
+      )
+      .get(scope.tenantId, scope.spaceId, projectId);
+    if (!row || typeof row.stored_principal !== "string")
+      throw new Error("creative_project_not_found");
+    if (
+      decodePluginProjectMetadataOwnerRecord(row, {
+        expectedOwner: scope,
+        storedProjectPrincipalId: row.stored_principal,
+      }) === null
+    )
+      throw new Error("creative_project_not_found");
+  };
+
+  return Object.freeze({
+    predicate,
+    assertProject: (scope) => checkProject(scope.projectId),
+  });
 }

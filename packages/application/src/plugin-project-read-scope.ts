@@ -31,8 +31,11 @@ export type PluginProjectReadMethod =
 export type PluginProjectReadScope = Readonly<{
   version: "crewon.plugin-project-read-scope.v1";
 }>;
+export type PluginProjectMutationScope = Readonly<{
+  version: "crewon.plugin-project-mutation-scope.v1";
+}>;
 export type PluginProjectReadOptions = Readonly<{
-  readScope: PluginProjectReadScope;
+  readScope: PluginProjectReadScope | PluginProjectMutationScope;
 }>;
 const actionMethods = {
   getProject: ["loadProject"],
@@ -53,6 +56,7 @@ const actionMethods = {
   ],
 } as const;
 type Qualified = Readonly<{
+  purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
   snapshot: ReturnType<typeof committedTaskContext>;
   request: ReturnType<typeof parseCreativeProjectUiActionRequest>;
@@ -67,6 +71,24 @@ export function capturePluginProjectReadScope(
   context: PluginUiActionContext,
   hostAuthority: CreativeProjectCommitAuthority,
 ): PluginProjectReadScope {
+  return captureScope(context, hostAuthority, "read") as PluginProjectReadScope;
+}
+/** Private metadata mutation issuer; other write kinds are deliberately not supported yet. */
+export function capturePluginProjectMutationScope(
+  context: PluginUiActionContext,
+  hostAuthority: CreativeProjectCommitAuthority,
+): PluginProjectMutationScope {
+  return captureScope(
+    context,
+    hostAuthority,
+    "mutation",
+  ) as PluginProjectMutationScope;
+}
+function captureScope(
+  context: PluginUiActionContext,
+  hostAuthority: CreativeProjectCommitAuthority,
+  purpose: "read" | "mutation",
+) {
   const authority = capturePluginUiInvocationCommitAuthority(context);
   const host = captureCreativeProjectCommitAuthority({
     authority: hostAuthority,
@@ -89,12 +111,17 @@ export function capturePluginProjectReadScope(
   });
   const name = request.action.slice("crewon.creative-projects.v1.".length);
   if (
-    !Object.hasOwn(actionMethods, name) ||
+    (purpose === "read"
+      ? !Object.hasOwn(actionMethods, name)
+      : !["renameProject", "setProjectState"].includes(name)) ||
     authority.transaction === undefined ||
     authority.transaction.pin.action !== request.action
   )
     unavailable();
-  const methods = actionMethods[name as keyof typeof actionMethods];
+  const methods =
+    purpose === "read"
+      ? actionMethods[name as keyof typeof actionMethods]
+      : ["loadProject"];
   const active = () => {
     authority.assertActive();
     assertCreativeProjectCommitActive(host);
@@ -104,6 +131,7 @@ export function capturePluginProjectReadScope(
   active();
   const pin = snapshot.pin;
   const source: Qualified = Object.freeze({
+    purpose,
     scope: parsePluginProjectWorkspaceOwnerScope({
       tenantId: pin.tenantId,
       spaceId: pin.spaceId,
@@ -125,13 +153,16 @@ export function capturePluginProjectReadScope(
     },
   });
   const ref = Object.freeze({
-    version: "crewon.plugin-project-read-scope.v1" as const,
+    version:
+      purpose === "read"
+        ? ("crewon.plugin-project-read-scope.v1" as const)
+        : ("crewon.plugin-project-mutation-scope.v1" as const),
   });
   references.set(ref, source);
   return ref;
 }
 export function qualifyPluginProjectReadScope(
-  ref: PluginProjectReadScope,
+  ref: PluginProjectReadScope | PluginProjectMutationScope,
 ): Qualified {
   const source =
     ref !== null && typeof ref === "object" ? references.get(ref) : undefined;
@@ -144,4 +175,12 @@ function unavailable(): never {
     "authorization",
     "plugin_project_read_scope_unavailable",
   );
+}
+
+export function qualifyPluginProjectMutationScope(
+  ref: PluginProjectMutationScope,
+): Qualified {
+  const source = qualifyPluginProjectReadScope(ref);
+  if (source.purpose !== "mutation") unavailable();
+  return source;
 }

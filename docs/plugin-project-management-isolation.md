@@ -88,3 +88,5 @@ metadata 归属明确后，原 Native allocator 创建目录并非激活追加�
 - 至少真实 installed UI→metadata 与 Worker→产物两条路径做跨插件负例，再验证中央会话和右栏；不以 facade 或离线模型测试替代产品验收。
 
 当前实现和证据分别见[namespace 事务](./plugin-project-workspace-isolation.md)、[原 Native 分配](./plugin-project-workspace-native-allocation.md)、[右栏边界](./plugin-panel-host-boundary.md)、[整体状态](./plugin-foundation-status-20261011.md)。本页未开放新业务 capability、未迁移原项目或更新正式 App。
+
+原 SQLite 的受保护改名、归档与恢复已增量接通，具体边界见[metadata 修改](./plugin-project-owned-metadata-mutations.md)。其他写入与生产交付尚未完成。

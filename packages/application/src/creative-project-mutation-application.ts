@@ -1,3 +1,4 @@
+import { scopedPluginMetadataReceipt } from "./plugin-project-mutation-scope-support.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { CreativeProjectAuthorizationAction } from "./creative-project-authorization-port.ts";
@@ -62,8 +63,11 @@ export function executeCreativeProjectMutation(
     let authority = captureCreativeProjectCommitAuthority(options, {
       allowTextUiTransaction: false,
       allowCreationScope: kind === "create-project",
+      allowMutationScope:
+        kind === "rename-project" || kind === "set-project-state",
     });
     const creationScope = options?.creationScope;
+    const mutationScope = options?.mutationScope;
     if (
       creationScope !== undefined &&
       (typeof dependencies.store.loadOwnedCreationReceipt !== "function" ||
@@ -87,7 +91,10 @@ export function executeCreativeProjectMutation(
     authority = bindProjectRunCommitPolicy(authority, () =>
       dependencies.authorize(actor, action, projectId),
     );
-    if (creationScope !== undefined && authority?.transaction !== undefined) {
+    if (
+      (creationScope !== undefined || mutationScope !== undefined) &&
+      authority?.transaction !== undefined
+    ) {
       const sourceAuthority = authority;
       const transaction = sourceAuthority.transaction!;
       authority = Object.freeze({
@@ -106,18 +113,31 @@ export function executeCreativeProjectMutation(
       });
     }
     const commitOptions =
-      authority === undefined && creationScope === undefined
+      authority === undefined &&
+      creationScope === undefined &&
+      mutationScope === undefined
         ? undefined
         : Object.freeze({
             authority,
             ...(creationScope === undefined ? {} : { creationScope }),
+            ...(mutationScope === undefined ? {} : { mutationScope }),
           });
-    const receipt = creativeReceipt(
+    const externalReceipt = creativeReceipt(
       actor,
       kind,
       command,
       dependencies.digester,
     );
+    const receipt =
+      mutationScope === undefined
+        ? externalReceipt
+        : scopedPluginMetadataReceipt(
+            mutationScope,
+            actor,
+            command,
+            externalReceipt,
+            dependencies.digester,
+          );
     await dependencies.authorize(actor, action, projectId);
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);

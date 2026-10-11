@@ -13,3 +13,5 @@ Host 私有发行器先核对实际 UI invocation，再固定账号四字段、p
 当前读路径的原列表 SQL 和 Application 分页校验拆到专用模块，legacy 和绑定视图复用同一配方。原 HTTP/SDK 请求、响应 JSON、数据库项目记录和旧 legacy 行为保持；两个既有 Control 测试为 SQLite/PostgreSQL 方法联合类型补显式参数类型，未改运行断言。
 
 剩余：受保护修改/归档与产物写入、Foundation/PostgreSQL 对等接线、完整 Run/Tool 资格、工作空间与中央会话绑定，以及真实安装→Web 验收→桌面交付。业务插件仍保持卸载；这次读取接线不表示完整插件体系已完成。
+
+原 SQLite 的受保护改名、归档与恢复已增量接通，具体边界见[metadata 修改](./plugin-project-owned-metadata-mutations.md)。其他写入与生产交付尚未完成。

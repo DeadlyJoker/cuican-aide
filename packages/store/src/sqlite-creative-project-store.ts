@@ -1,4 +1,9 @@
 import {
+  prepareSqliteOwnedMetadataMutation,
+  readSqliteOwnedMetadataReceipt,
+  assertSqliteOwnedMetadataTarget,
+} from "./plugin-project-owned-mutation-sqlite.ts";
+import {
   listSqliteCreativeProjects,
   listSqliteCreativeBriefs,
   listSqliteCreativeAssets,
@@ -8,8 +13,12 @@ import {
   bindSqliteCreativeProjectReadView,
   readSqliteOwnedCreativeProject,
   type PluginProjectReadCall,
+  captureSqliteOwnedProjectAccess,
 } from "./plugin-project-owned-read-sqlite.ts";
-import type { PluginProjectReadScope } from "@crewon/application";
+import type {
+  PluginProjectReadScope,
+  PluginProjectMutationScope,
+} from "@crewon/application";
 import {
   beginSqlitePlanResult,
   finishSqlitePlanResult,
@@ -77,6 +86,10 @@ import {
 } from "./creative-project-legacy-access.ts";
 import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 
+type BoundProjectReadScope =
+  | PluginProjectReadScope
+  | PluginProjectMutationScope;
+
 type Input<Method extends keyof CreativeProjectStore> = Parameters<
   CreativeProjectStore[Method]
 >[0];
@@ -104,13 +117,13 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     this.#transaction(() => migrateSqliteCreativeProjects(this.#database));
   }
 
-  bindProjectReads(scope: PluginProjectReadScope) {
+  bindProjectReads(scope: BoundProjectReadScope) {
     return bindSqliteCreativeProjectReadView(this, scope);
   }
 
   async loadProject(
     input: Input<"loadProject">,
-    scope?: PluginProjectReadScope,
+    scope?: BoundProjectReadScope,
   ) {
     this.#assertOpen();
     const query = creativeReadInput("loadProject", input);
@@ -122,7 +135,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
 
   async listProjects(
     input: Input<"listProjects">,
-    scope?: PluginProjectReadScope,
+    scope?: BoundProjectReadScope,
   ) {
     this.#assertOpen();
     const query = creativeReadInput("listProjects", input);
@@ -134,7 +147,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     );
   }
 
-  async loadBrief(input: Input<"loadBrief">, scope?: PluginProjectReadScope) {
+  async loadBrief(input: Input<"loadBrief">, scope?: BoundProjectReadScope) {
     this.#assertOpen();
     const query = creativeReadInput("loadBrief", input);
     return this.#read(
@@ -144,7 +157,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     );
   }
 
-  async listBriefs(input: Input<"listBriefs">, scope?: PluginProjectReadScope) {
+  async listBriefs(input: Input<"listBriefs">, scope?: BoundProjectReadScope) {
     this.#assertOpen();
     const query = creativeReadInput("listBriefs", input);
     return this.#read(
@@ -155,7 +168,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
 
   async loadConceptAsset(
     input: Input<"loadConceptAsset">,
-    scope?: PluginProjectReadScope,
+    scope?: BoundProjectReadScope,
   ) {
     this.#assertOpen();
     const query = creativeReadInput("loadConceptAsset", input);
@@ -170,7 +183,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
 
   async listConceptAssets(
     input: Input<"listConceptAssets">,
-    scope?: PluginProjectReadScope,
+    scope?: BoundProjectReadScope,
   ) {
     this.#assertOpen();
     const query = creativeReadInput("listConceptAssets", input);
@@ -184,7 +197,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
 
   async loadConceptRevision(
     input: Input<"loadConceptRevision">,
-    scope?: PluginProjectReadScope,
+    scope?: BoundProjectReadScope,
   ) {
     this.#assertOpen();
     const query = creativeReadInput("loadConceptRevision", input);
@@ -215,7 +228,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
 
   async listConceptRevisions(
     input: Input<"listConceptRevisions">,
-    scope?: PluginProjectReadScope,
+    scope?: BoundProjectReadScope,
   ) {
     this.#assertOpen();
     const query = creativeReadInput("listConceptRevisions", input);
@@ -233,7 +246,27 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
   ) {
     this.#assertOpen();
     const identity = creativeMutationIdentity(input);
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
+    if (options?.mutationScope !== undefined) {
+      const source = await prepareSqliteOwnedMetadataMutation(
+        options.mutationScope,
+        authority,
+        identity,
+      );
+      await assertCreativeProjectCommitTransactionCurrent(authority);
+      return this.#transaction(
+        () =>
+          readSqliteOwnedMetadataReceipt(this.#database, source, (access) =>
+            this.#receipt(identity, access),
+          ),
+        authority,
+        undefined,
+        source.assertActive,
+      );
+    }
     const q = projectRunCommitQualification(
       authority,
       identity.actor,
@@ -319,13 +352,17 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     input: Input<"commitProjectMetadata">,
     options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitProjectMetadata">> {
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
     const kind = creativeMutationKind(creativeStoreRecord(input).kind);
     if (kind !== "rename-project" && kind !== "set-project-state")
       creativeStoreFailure("creative_project_mutation_kind_invalid");
     const result = await this.#commit(
       prepareCreativeMutation(kind, input),
       authority,
+      options?.mutationScope,
     );
     if (result.kind !== "rename-project" && result.kind !== "set-project-state")
       throw new Error("creative_project_receipt_invalid");
@@ -366,19 +403,36 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
   async #commit(
     prepared: PreparedCreativeMutation,
     authority: CreativeProjectCommitAuthority | undefined,
+    mutationScope?: PluginProjectMutationScope,
   ): Promise<CreativeProjectMutationResult> {
     const identity = creativeMutationIdentity({
       actor: prepared.actor,
       receipt: prepared.receipt,
       kind: prepared.kind,
     });
-    const assertLegacy = (access: CreativeProjectLegacyAccess) =>
-      assertSqliteCreativeProjectLegacyMutation(
-        this.#database,
-        access,
-        prepared.project,
-        identity,
-      );
+    const owned =
+      mutationScope === undefined
+        ? undefined
+        : await prepareSqliteOwnedMetadataMutation(
+            mutationScope,
+            authority,
+            identity,
+          );
+    const assertLegacy = (access: CreativeProjectLegacyAccess) => {
+      if (owned !== undefined) {
+        assertSqliteOwnedMetadataTarget(
+          this.#database,
+          owned,
+          prepared.project,
+        );
+      } else
+        assertSqliteCreativeProjectLegacyMutation(
+          this.#database,
+          access,
+          prepared.project,
+          identity,
+        );
+    };
     const qualification = creativeProjectPluginCommitQualification(
       authority,
       prepared.actor,
@@ -397,7 +451,10 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       await assertCreativeProjectCommitTransactionCurrent(authority);
     return this.#transaction(
       () => {
-        const access = this.#legacyAccess();
+        const access =
+          owned === undefined
+            ? this.#legacyAccess()
+            : captureSqliteOwnedProjectAccess(this.#database, owned);
         assertSqliteProjectRunCommit(this.#database, runQualification);
         if (qualification !== undefined) {
           assertSqlitePluginInstallationPinSchema(this.#database);
@@ -418,6 +475,11 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
         );
         const replay = this.#receipt(identity, access);
         if (replay !== null) {
+          if (
+            owned !== undefined &&
+            replay.project.projectId !== owned.projectId
+          )
+            throw new Error("plugin_project_mutation_receipt_target_mismatch");
           finishSqlitePlanResult(this.#database, planResult, replay);
           return replay;
         }
