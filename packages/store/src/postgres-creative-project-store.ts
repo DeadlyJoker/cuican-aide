@@ -44,7 +44,6 @@ import {
   decodeCreativeBrief,
   decodeCreativeAsset,
   decodeCreativeRevision,
-  decodeCreativeReceipt,
   prepareCreativeMutation,
   verifyCreativeMutation,
   type PreparedCreativeMutation,
@@ -58,12 +57,27 @@ import {
   creativeProjectPluginCommitQualification,
   assertCreativeProjectPluginCommitSelection,
 } from "./creative-project-plugin-commit-support.ts";
+import {
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+  type PostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import {
+  readPostgresLegacyCreativeProject,
+  readPostgresLegacyCreativeProjectReceipt,
+  type PostgresCreativeProjectLegacyRead,
+} from "./creative-project-postgres-legacy-read.ts";
+import {
+  postgresCreativeProjectLegacyMutationFence,
+  finishPostgresCreativeProjectLegacyMutation,
+  type PostgresCreativeProjectLegacyMutationFence,
+} from "./creative-project-legacy-mutation-access.ts";
 
 type ReadInput<Method extends keyof CreativeProjectStore> = Parameters<
   CreativeProjectStore[Method]
 >[0];
 type MutationIdentity = ReturnType<typeof creativeMutationIdentity>;
-type QueryClient = Pool | PoolClient;
+type QueryClient = PoolClient;
 
 /** Internal project persistence only; shares its host's pool, schema and lifetime. */
 export class PostgresCreativeProjectStore implements CreativeProjectStore {
@@ -90,155 +104,178 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
 
   async loadProject(input: ReadInput<"loadProject">) {
     const query = creativeReadInput("loadProject", input);
-    return this.#project(this.#pool, query.owner, query.projectId);
+    return this.#read((client, access) =>
+      this.#project(client, query.owner, query.projectId, access),
+    );
   }
 
   async listProjects(input: ReadInput<"listProjects">) {
     const query = creativeReadInput("listProjects", input);
-    const rows = await this.#query(
-      this.#pool,
-      `SELECT * FROM ${this.#prefix}creative_projects
-       WHERE tenant_id=$1 AND space_id=$2 AND owner_principal_id=$3
+    return this.#read(async (client, access) => {
+      const rows = await this.#query(
+        client,
+        `SELECT p.* FROM ${this.#prefix}creative_projects p
+       WHERE tenant_id=$1 AND space_id=$2 AND owner_principal_id=$3 AND ${access.predicate("p")}
        AND ($4::text='all' OR state=$4)
        AND ($5::text IS NULL OR updated_at<$5 OR
          (updated_at=$5 AND project_id COLLATE "C"<$6 COLLATE "C"))
        ORDER BY updated_at DESC,project_id COLLATE "C" DESC LIMIT $7`,
-      [
-        ...creativeOwnerValues(query.owner),
-        query.state,
-        query.after?.updatedAt ?? null,
-        query.after?.projectId ?? null,
-        query.limit + 1,
-      ],
-    );
-    const projects = Object.freeze(
-      rows.rows
-        .slice(0, query.limit)
-        .map((row) => this.#required(decodeCreativeProject(row, query.owner))),
-    );
-    const last = projects.at(-1);
-    return Object.freeze({
-      projects,
-      next:
-        rows.rows.length > query.limit && last !== undefined
-          ? Object.freeze({
-              updatedAt: last.updatedAt,
-              projectId: last.projectId,
-            })
-          : null,
+        [
+          ...creativeOwnerValues(query.owner),
+          query.state,
+          query.after?.updatedAt ?? null,
+          query.after?.projectId ?? null,
+          query.limit + 1,
+        ],
+      );
+      const projects = Object.freeze(
+        rows.rows
+          .slice(0, query.limit)
+          .map((row) =>
+            this.#required(decodeCreativeProject(row, query.owner)),
+          ),
+      );
+      const last = projects.at(-1);
+      return Object.freeze({
+        projects,
+        next:
+          rows.rows.length > query.limit && last !== undefined
+            ? Object.freeze({
+                updatedAt: last.updatedAt,
+                projectId: last.projectId,
+              })
+            : null,
+      });
     });
   }
 
   async loadBrief(input: ReadInput<"loadBrief">) {
     const query = creativeReadInput("loadBrief", input);
-    return this.#brief(
-      this.#pool,
-      query.owner,
-      query.projectId,
-      query.briefRevision,
+    return this.#read((client, access) =>
+      this.#brief(
+        client,
+        query.owner,
+        query.projectId,
+        query.briefRevision,
+        access,
+      ),
     );
   }
 
   async listBriefs(input: ReadInput<"listBriefs">) {
     const query = creativeReadInput("listBriefs", input);
-    const rows = await this.#query(
-      this.#pool,
-      `${this.#childSelect("creative_project_briefs", "b")}
+    return this.#read(async (client, access) => {
+      const rows = await this.#query(
+        client,
+        `${this.#childSelect("creative_project_briefs", "b")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND b.brief_revision>$5
+       AND p.project_id=$4 AND ${access.predicate("p")} AND b.brief_revision>$5
        ORDER BY b.brief_revision LIMIT $6`,
-      [
-        ...creativeOwnerValues(query.owner),
-        query.projectId,
-        query.afterBriefRevision,
-        query.limit,
-      ],
-    );
-    return Object.freeze(
-      rows.rows.map((row) =>
-        this.#required(decodeCreativeBrief(row, query.owner, query.projectId)),
-      ),
-    );
+        [
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.afterBriefRevision,
+          query.limit,
+        ],
+      );
+      return Object.freeze(
+        rows.rows.map((row) =>
+          this.#required(
+            decodeCreativeBrief(row, query.owner, query.projectId),
+          ),
+        ),
+      );
+    });
   }
 
   async loadConceptAsset(input: ReadInput<"loadConceptAsset">) {
     const query = creativeReadInput("loadConceptAsset", input);
-    return this.#asset(this.#pool, query.owner, query.projectId, query.assetId);
+    return this.#read((client, access) =>
+      this.#asset(client, query.owner, query.projectId, query.assetId, access),
+    );
   }
 
   async listConceptAssets(input: ReadInput<"listConceptAssets">) {
     const query = creativeReadInput("listConceptAssets", input);
-    const rows = await this.#query(
-      this.#pool,
-      `${this.#childSelect("creative_concept_assets", "a")}
+    return this.#read(async (client, access) => {
+      const rows = await this.#query(
+        client,
+        `${this.#childSelect("creative_concept_assets", "a")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4
+       AND p.project_id=$4 AND ${access.predicate("p")}
        AND ($5::text IS NULL OR a.asset_id COLLATE "C">$5 COLLATE "C")
        ORDER BY a.asset_id COLLATE "C" LIMIT $6`,
-      [
-        ...creativeOwnerValues(query.owner),
-        query.projectId,
-        query.afterAssetId,
-        query.limit,
-      ],
-    );
-    return Object.freeze(
-      rows.rows.map((row) =>
-        this.#required(decodeCreativeAsset(row, query.owner, query.projectId)),
-      ),
-    );
+        [
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.afterAssetId,
+          query.limit,
+        ],
+      );
+      return Object.freeze(
+        rows.rows.map((row) =>
+          this.#required(
+            decodeCreativeAsset(row, query.owner, query.projectId),
+          ),
+        ),
+      );
+    });
   }
 
   async loadConceptRevision(input: ReadInput<"loadConceptRevision">) {
     const query = creativeReadInput("loadConceptRevision", input);
-    const rows = await this.#query(
-      this.#pool,
-      `${this.#childSelect("creative_concept_revisions", "r")}
+    return this.#read(async (client, access) => {
+      const rows = await this.#query(
+        client,
+        `${this.#childSelect("creative_concept_revisions", "r")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND r.asset_id=$5 AND r.asset_revision=$6`,
-      [
-        ...creativeOwnerValues(query.owner),
+       AND p.project_id=$4 AND ${access.predicate("p")} AND r.asset_id=$5 AND r.asset_revision=$6`,
+        [
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.assetId,
+          query.assetRevision,
+        ],
+      );
+      return decodeCreativeRevision(
+        rows.rows[0],
+        query.owner,
         query.projectId,
         query.assetId,
-        query.assetRevision,
-      ],
-    );
-    return decodeCreativeRevision(
-      rows.rows[0],
-      query.owner,
-      query.projectId,
-      query.assetId,
-    );
+      );
+    });
   }
 
   async listConceptRevisions(input: ReadInput<"listConceptRevisions">) {
     const query = creativeReadInput("listConceptRevisions", input);
-    const rows = await this.#query(
-      this.#pool,
-      `${this.#childSelect("creative_concept_revisions", "r")}
+    return this.#read(async (client, access) => {
+      const rows = await this.#query(
+        client,
+        `${this.#childSelect("creative_concept_revisions", "r")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND r.asset_id=$5 AND r.asset_revision>$6
+       AND p.project_id=$4 AND ${access.predicate("p")} AND r.asset_id=$5 AND r.asset_revision>$6
        ORDER BY r.asset_revision LIMIT $7`,
-      [
-        ...creativeOwnerValues(query.owner),
-        query.projectId,
-        query.assetId,
-        query.afterAssetRevision,
-        query.limit,
-      ],
-    );
-    return Object.freeze(
-      rows.rows.map((row) =>
-        this.#required(
-          decodeCreativeRevision(
-            row,
-            query.owner,
-            query.projectId,
-            query.assetId,
+        [
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.assetId,
+          query.afterAssetRevision,
+          query.limit,
+        ],
+      );
+      return Object.freeze(
+        rows.rows.map((row) =>
+          this.#required(
+            decodeCreativeRevision(
+              row,
+              query.owner,
+              query.projectId,
+              query.assetId,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   async loadMutationReceipt(
@@ -253,16 +290,20 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       identity.kind,
       identity.receipt,
     );
-    if (q === undefined) return this.#receipt(this.#pool, identity);
+    if (q === undefined)
+      return this.#read((client, access) =>
+        this.#receipt(client, identity, access),
+      );
+    let result: CreativeProjectMutationResult | null = null;
     return this.#transaction(
-      async (client) => {
+      async (client, access) => {
         await assertPostgresProjectRunCommit(client, this.#schema, q);
         const planResult = await beginPostgresPlanResult(
           client,
           this.#schema,
           q,
         );
-        const result = await this.#receipt(client, identity);
+        result = await this.#receipt(client, identity, access);
         if (result !== null)
           await finishPostgresPlanResult(
             client,
@@ -274,6 +315,14 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       },
       authority,
       q,
+      async (_client, access) => {
+        if (result !== null)
+          await access.assertProject({
+            tenantId: result.project.tenantId,
+            spaceId: result.project.spaceId,
+            projectId: result.project.projectId,
+          });
+      },
     );
   }
 
@@ -361,8 +410,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       identity.kind,
       identity.receipt,
     );
+    const assertLegacy = postgresCreativeProjectLegacyMutationFence({
+      schema: this.#schema,
+      project: prepared.project,
+      identity,
+    });
     return this.#transaction(
-      async (client) => {
+      async (client, access) => {
         await assertPostgresProjectRunCommit(
           client,
           this.#schema,
@@ -392,12 +446,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
           identity.kind,
           identity.receipt.idempotencyKey,
         ]);
+        await assertLegacy(client, access);
         const planResult = await beginPostgresPlanResult(
           client,
           this.#schema,
           runQualification,
         );
-        const previous = await this.#receipt(client, identity);
+        const previous = await this.#receipt(client, identity, access);
         if (previous !== null) {
           await finishPostgresPlanResult(
             client,
@@ -418,6 +473,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
           client,
           identity.owner,
           prepared.project.projectId,
+          access,
         );
         const concept =
           prepared.kind === "create-concept" ||
@@ -428,6 +484,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
               identity.owner,
               prepared.project.projectId,
               prepared.assetRevision.briefRevision,
+              access,
             )
           : null;
         const asset = concept
@@ -436,6 +493,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
               identity.owner,
               prepared.project.projectId,
               prepared.asset.assetId,
+              access,
             )
           : null;
         const result = verifyCreativeMutation(prepared, {
@@ -443,14 +501,14 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
           brief,
           asset,
         });
-        await this.#writeProject(client, result.project, prepared);
+        await this.#writeProject(client, result.project, prepared, access);
         if (result.kind === "create-project" || result.kind === "append-brief")
           await this.#insertBrief(client, result.brief);
         if (
           result.kind === "create-concept" ||
           result.kind === "append-concept"
         ) {
-          await this.#writeAsset(client, result.asset, prepared);
+          await this.#writeAsset(client, result.asset, prepared, access);
           await this.#insertRevision(client, result.assetRevision);
         }
         await this.#query(
@@ -478,6 +536,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       },
       authority,
       runQualification,
+      assertLegacy,
     );
   }
 
@@ -485,11 +544,12 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     client: QueryClient,
     owner: CreativeProjectOwnerScope,
     projectId: string,
+    access: PostgresCreativeProjectLegacyAccess,
   ) {
     const rows = await this.#query(
       client,
-      `SELECT * FROM ${this.#prefix}creative_projects
-       WHERE tenant_id=$1 AND space_id=$2 AND owner_principal_id=$3 AND project_id=$4`,
+      `SELECT p.* FROM ${this.#prefix}creative_projects p
+       WHERE tenant_id=$1 AND space_id=$2 AND owner_principal_id=$3 AND project_id=$4 AND ${access.predicate("p")}`,
       [...creativeOwnerValues(owner), projectId],
     );
     return decodeCreativeProject(rows.rows[0], owner, projectId);
@@ -500,12 +560,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     owner: CreativeProjectOwnerScope,
     projectId: string,
     briefRevision: number,
+    access: PostgresCreativeProjectLegacyAccess,
   ) {
     const rows = await this.#query(
       client,
       `${this.#childSelect("creative_project_briefs", "b")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND b.brief_revision=$5`,
+       AND p.project_id=$4 AND ${access.predicate("p")} AND b.brief_revision=$5`,
       [...creativeOwnerValues(owner), projectId, briefRevision],
     );
     return decodeCreativeBrief(rows.rows[0], owner, projectId);
@@ -516,31 +577,30 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     owner: CreativeProjectOwnerScope,
     projectId: string,
     assetId: string,
+    access: PostgresCreativeProjectLegacyAccess,
   ) {
     const rows = await this.#query(
       client,
       `${this.#childSelect("creative_concept_assets", "a")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND a.asset_id=$5`,
+       AND p.project_id=$4 AND ${access.predicate("p")} AND a.asset_id=$5`,
       [...creativeOwnerValues(owner), projectId, assetId],
     );
     return decodeCreativeAsset(rows.rows[0], owner, projectId);
   }
 
-  async #receipt(client: QueryClient, identity: MutationIdentity) {
-    const rows = await this.#query(
+  async #receipt(
+    client: QueryClient,
+    identity: MutationIdentity,
+    access: PostgresCreativeProjectLegacyAccess,
+  ) {
+    return readPostgresLegacyCreativeProjectReceipt({
       client,
-      `SELECT * FROM ${this.#prefix}creative_project_mutation_receipts
-       WHERE tenant_id=$1 AND space_id=$2 AND principal_id=$3 AND actor_id=$4
-       AND kind=$5 AND idempotency_key=$6`,
-      [
-        ...creativeOwnerValues(identity.owner),
-        identity.actor.actorId,
-        identity.kind,
-        identity.receipt.idempotencyKey,
-      ],
-    );
-    return decodeCreativeReceipt(rows.rows[0], identity);
+      schema: this.#schema,
+      identity,
+      access,
+      assertOpen: this.#assertOpen,
+    });
   }
 
   #childSelect(
@@ -559,6 +619,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     client: PoolClient,
     project: CreativeProject,
     prepared: PreparedCreativeMutation,
+    access: PostgresCreativeProjectLegacyAccess,
   ) {
     const values = [
       project.tenantId,
@@ -583,9 +644,9 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     }
     const updated = await this.#query(
       client,
-      `UPDATE ${this.#prefix}creative_projects
+      `UPDATE ${this.#prefix}creative_projects AS p
        SET revision=$5,state=$6,latest_brief_revision=$7,updated_at=$8,record_json=$9
-       WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND owner_principal_id=$4 AND revision=$10`,
+       WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND owner_principal_id=$4 AND revision=$10 AND ${access.predicate("p")}`,
       [...values, prepared.expectedProjectRevision],
     );
     if (updated.rowCount !== 1)
@@ -613,6 +674,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     client: PoolClient,
     asset: ConceptAsset,
     prepared: PreparedCreativeMutation,
+    access: PostgresCreativeProjectLegacyAccess,
   ) {
     const values = [
       asset.tenantId,
@@ -637,9 +699,9 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       throw new Error("creative_project_mutation_invalid");
     const updated = await this.#query(
       client,
-      `UPDATE ${this.#prefix}creative_concept_assets
+      `UPDATE ${this.#prefix}creative_concept_assets AS a
        SET revision=$5,latest_asset_revision=$6,record_json=$7
-       WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND asset_id=$4 AND revision=$8`,
+       WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND asset_id=$4 AND revision=$8 AND ${access.predicate("a")}`,
       [...values, prepared.expectedAssetMetadataRevision],
     );
     if (updated.rowCount !== 1)
@@ -687,9 +749,10 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
   }
 
   async #transaction<T>(
-    body: (client: PoolClient) => Promise<T>,
+    body: PostgresCreativeProjectLegacyRead<T>,
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
+    assertLegacy?: PostgresCreativeProjectLegacyMutationFence,
   ): Promise<T> {
     this.#assertOpen();
     if (authority !== undefined) {
@@ -699,8 +762,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     }
     const client = await this.#pool.connect();
     try {
-      await this.#query(client, "BEGIN");
-      const result = await body(client);
+      await this.#query(client, "BEGIN ISOLATION LEVEL READ COMMITTED");
+      await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
+      const access = await capturePostgresCreativeProjectLegacyAccess(
+        client,
+        this.#schema,
+      );
+      const result = await body(client, access);
       // Revalidate after all SQL awaits, including lock waits and the final receipt INSERT.
       if (authority !== undefined)
         await assertCreativeProjectCommitTransactionCurrent(authority);
@@ -709,6 +777,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
         this.#schema,
         runQualification,
       );
+      await finishPostgresCreativeProjectLegacyMutation({
+        client,
+        schema: this.#schema,
+        assertLegacy,
+        authority,
+        runQualification,
+      });
       assertCreativeProjectCommitActive(authority);
       // A confirmed COMMIT remains successful even if the host closes while awaiting it.
       this.#assertOpen();
@@ -720,5 +795,12 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     } finally {
       client.release();
     }
+  }
+
+  #read<T>(read: PostgresCreativeProjectLegacyRead<T>): Promise<T> {
+    return readPostgresLegacyCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      read,
+    );
   }
 }

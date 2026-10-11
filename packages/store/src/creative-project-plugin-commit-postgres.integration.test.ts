@@ -100,7 +100,8 @@ for (const change of ["disabled", "uninstalled", "changed-package"] as const) {
           1,
           "transaction qualification cannot reread through the one-connection pool",
         );
-        assert.equal(g.state.transactionCalls, 2);
+        // Additional negative SQL also precedes the original current-policy fence.
+        assert.equal(g.state.transactionCalls, 3);
         assert.deepEqual(await f.counts(), {
           creative_projects: 1,
           creative_project_briefs: 1,
@@ -233,7 +234,8 @@ test(
     assert.equal(saved.disposition, "committed");
     assert.equal(saved.project.projectId, "committed");
     assert.equal(g.state.fullCalls, 1);
-    assert.equal(g.state.transactionCalls, 2);
+    // Additional negative SQL also precedes the original current-policy fence.
+    assert.equal(g.state.transactionCalls, 3);
     assert.deepEqual(await f.counts(), {
       creative_projects: 1,
       creative_project_briefs: 1,

@@ -51,6 +51,12 @@ import {
   creativeProjectPluginCommitQualification,
   assertCreativeProjectPluginCommitSelection,
 } from "./creative-project-plugin-commit-support.ts";
+import { assertSqliteCreativeProjectLegacyMutation } from "./creative-project-legacy-mutation-access.ts";
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  type CreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 
 type Input<Method extends keyof CreativeProjectStore> = Parameters<
   CreativeProjectStore[Method]
@@ -82,155 +88,176 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
   async loadProject(input: Input<"loadProject">) {
     this.#assertOpen();
     const query = creativeReadInput("loadProject", input);
-    return this.#project(query.owner, query.projectId);
+    return this.#read((access) =>
+      this.#project(query.owner, query.projectId, access),
+    );
   }
 
   async listProjects(input: Input<"listProjects">) {
     this.#assertOpen();
     const query = creativeReadInput("listProjects", input);
-    const conditions = [projectFilter];
-    const values: (string | number)[] = [...creativeOwnerValues(query.owner)];
-    if (query.state !== "all") {
-      conditions.push("p.state=?");
-      values.push(query.state);
-    }
-    if (query.after !== null) {
-      conditions.push(
-        "(p.updated_at<? OR (p.updated_at=? AND p.project_id COLLATE BINARY < ? COLLATE BINARY))",
-      );
-      values.push(
-        query.after.updatedAt,
-        query.after.updatedAt,
-        query.after.projectId,
-      );
-    }
-    const rows = this.#database
-      .prepare(
-        `SELECT p.* FROM creative_projects p WHERE ${conditions.join(" AND ")} ORDER BY p.updated_at DESC,p.project_id COLLATE BINARY DESC LIMIT ?`,
-      )
-      .all(...values, query.limit + 1);
-    const projects = rows.map((row) => {
-      const project = decodeCreativeProject(row, query.owner);
-      if (project === null) throw new Error("creative_project_record_invalid");
-      return project;
-    });
-    const page = Object.freeze(projects.slice(0, query.limit));
-    const last = page.at(-1);
-    return Object.freeze({
-      projects: page,
-      next:
-        projects.length > query.limit && last !== undefined
-          ? Object.freeze({
-              updatedAt: last.updatedAt,
-              projectId: last.projectId,
-            })
-          : null,
+    return this.#read((access) => {
+      const conditions = [projectFilter, access.predicate("p")];
+      const values: (string | number)[] = [...creativeOwnerValues(query.owner)];
+      if (query.state !== "all") {
+        conditions.push("p.state=?");
+        values.push(query.state);
+      }
+      if (query.after !== null) {
+        conditions.push(
+          "(p.updated_at<? OR (p.updated_at=? AND p.project_id COLLATE BINARY < ? COLLATE BINARY))",
+        );
+        values.push(
+          query.after.updatedAt,
+          query.after.updatedAt,
+          query.after.projectId,
+        );
+      }
+      const rows = this.#database
+        .prepare(
+          `SELECT p.* FROM creative_projects p WHERE ${conditions.join(" AND ")} ORDER BY p.updated_at DESC,p.project_id COLLATE BINARY DESC LIMIT ?`,
+        )
+        .all(...values, query.limit + 1);
+      const projects = rows.map((row) => {
+        const project = decodeCreativeProject(row, query.owner);
+        if (project === null)
+          throw new Error("creative_project_record_invalid");
+        return project;
+      });
+      const page = Object.freeze(projects.slice(0, query.limit));
+      const last = page.at(-1);
+      return Object.freeze({
+        projects: page,
+        next:
+          projects.length > query.limit && last !== undefined
+            ? Object.freeze({
+                updatedAt: last.updatedAt,
+                projectId: last.projectId,
+              })
+            : null,
+      });
     });
   }
 
   async loadBrief(input: Input<"loadBrief">) {
     this.#assertOpen();
     const query = creativeReadInput("loadBrief", input);
-    return this.#brief(query.owner, query.projectId, query.briefRevision);
+    return this.#read((access) =>
+      this.#brief(query.owner, query.projectId, query.briefRevision, access),
+    );
   }
 
   async listBriefs(input: Input<"listBriefs">) {
     this.#assertOpen();
     const query = creativeReadInput("listBriefs", input);
-    const rows = this.#database
-      .prepare(
-        `SELECT c.*,p.owner_principal_id FROM creative_project_briefs c ${childJoin} WHERE ${projectFilter} AND c.project_id=? AND c.brief_revision>? ORDER BY c.brief_revision ASC LIMIT ?`,
-      )
-      .all(
-        ...creativeOwnerValues(query.owner),
-        query.projectId,
-        query.afterBriefRevision,
-        query.limit,
+    return this.#read((access) => {
+      const rows = this.#database
+        .prepare(
+          `SELECT c.*,p.owner_principal_id FROM creative_project_briefs c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.brief_revision>? ORDER BY c.brief_revision ASC LIMIT ?`,
+        )
+        .all(
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.afterBriefRevision,
+          query.limit,
+        );
+      return Object.freeze(
+        rows.map((row) =>
+          requiredRecord(
+            decodeCreativeBrief(row, query.owner, query.projectId),
+          ),
+        ),
       );
-    return Object.freeze(
-      rows.map((row) =>
-        requiredRecord(decodeCreativeBrief(row, query.owner, query.projectId)),
-      ),
-    );
+    });
   }
 
   async loadConceptAsset(input: Input<"loadConceptAsset">) {
     this.#assertOpen();
     const query = creativeReadInput("loadConceptAsset", input);
-    return this.#asset(query.owner, query.projectId, query.assetId);
+    return this.#read((access) =>
+      this.#asset(query.owner, query.projectId, query.assetId, access),
+    );
   }
 
   async listConceptAssets(input: Input<"listConceptAssets">) {
     this.#assertOpen();
     const query = creativeReadInput("listConceptAssets", input);
-    const after =
-      query.afterAssetId === null
-        ? ""
-        : " AND c.asset_id COLLATE BINARY > ? COLLATE BINARY";
-    const values: (string | number)[] = [
-      ...creativeOwnerValues(query.owner),
-      query.projectId,
-    ];
-    if (query.afterAssetId !== null) values.push(query.afterAssetId);
-    const rows = this.#database
-      .prepare(
-        `SELECT c.*,p.owner_principal_id FROM creative_concept_assets c ${childJoin} WHERE ${projectFilter} AND c.project_id=?${after} ORDER BY c.asset_id COLLATE BINARY ASC LIMIT ?`,
-      )
-      .all(...values, query.limit);
-    return Object.freeze(
-      rows.map((row) =>
-        requiredRecord(decodeCreativeAsset(row, query.owner, query.projectId)),
-      ),
-    );
+    return this.#read((access) => {
+      const after =
+        query.afterAssetId === null
+          ? ""
+          : " AND c.asset_id COLLATE BINARY > ? COLLATE BINARY";
+      const values: (string | number)[] = [
+        ...creativeOwnerValues(query.owner),
+        query.projectId,
+      ];
+      if (query.afterAssetId !== null) values.push(query.afterAssetId);
+      const rows = this.#database
+        .prepare(
+          `SELECT c.*,p.owner_principal_id FROM creative_concept_assets c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=?${after} ORDER BY c.asset_id COLLATE BINARY ASC LIMIT ?`,
+        )
+        .all(...values, query.limit);
+      return Object.freeze(
+        rows.map((row) =>
+          requiredRecord(
+            decodeCreativeAsset(row, query.owner, query.projectId),
+          ),
+        ),
+      );
+    });
   }
 
   async loadConceptRevision(input: Input<"loadConceptRevision">) {
     this.#assertOpen();
     const query = creativeReadInput("loadConceptRevision", input);
-    const row = this.#database
-      .prepare(
-        `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND c.project_id=? AND c.asset_id=? AND c.asset_revision=?`,
-      )
-      .get(
-        ...creativeOwnerValues(query.owner),
+    return this.#read((access) => {
+      const row = this.#database
+        .prepare(
+          `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.asset_id=? AND c.asset_revision=?`,
+        )
+        .get(
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.assetId,
+          query.assetRevision,
+        );
+      return decodeCreativeRevision(
+        row,
+        query.owner,
         query.projectId,
         query.assetId,
-        query.assetRevision,
       );
-    return decodeCreativeRevision(
-      row,
-      query.owner,
-      query.projectId,
-      query.assetId,
-    );
+    });
   }
 
   async listConceptRevisions(input: Input<"listConceptRevisions">) {
     this.#assertOpen();
     const query = creativeReadInput("listConceptRevisions", input);
-    const rows = this.#database
-      .prepare(
-        `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND c.project_id=? AND c.asset_id=? AND c.asset_revision>? ORDER BY c.asset_revision ASC LIMIT ?`,
-      )
-      .all(
-        ...creativeOwnerValues(query.owner),
-        query.projectId,
-        query.assetId,
-        query.afterAssetRevision,
-        query.limit,
-      );
-    return Object.freeze(
-      rows.map((row) =>
-        requiredRecord(
-          decodeCreativeRevision(
-            row,
-            query.owner,
-            query.projectId,
-            query.assetId,
+    return this.#read((access) => {
+      const rows = this.#database
+        .prepare(
+          `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.asset_id=? AND c.asset_revision>? ORDER BY c.asset_revision ASC LIMIT ?`,
+        )
+        .all(
+          ...creativeOwnerValues(query.owner),
+          query.projectId,
+          query.assetId,
+          query.afterAssetRevision,
+          query.limit,
+        );
+      return Object.freeze(
+        rows.map((row) =>
+          requiredRecord(
+            decodeCreativeRevision(
+              row,
+              query.owner,
+              query.projectId,
+              query.assetId,
+            ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   async loadMutationReceipt(
@@ -246,20 +273,30 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       identity.kind,
       identity.receipt,
     );
-    if (q === undefined) return this.#receipt(identity);
+    if (q === undefined)
+      return this.#read((access) => this.#receipt(identity, access));
     await assertCreativeProjectCommitCurrent(authority);
     await assertCreativeProjectCommitTransactionCurrent(authority);
+    let result: CreativeProjectMutationResult | null = null;
     return this.#transaction(
       () => {
         assertSqliteProjectRunCommit(this.#database, q);
         const planResult = beginSqlitePlanResult(this.#database, q);
-        const result = this.#receipt(identity);
+        result = this.#receipt(identity);
         if (result !== null)
           finishSqlitePlanResult(this.#database, planResult, result);
         return result;
       },
       authority,
       q,
+      () => {
+        if (result !== null)
+          this.#legacyAccess().assertProject({
+            tenantId: result.project.tenantId,
+            spaceId: result.project.spaceId,
+            projectId: result.project.projectId,
+          });
+      },
     );
   }
 
@@ -329,6 +366,18 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     prepared: PreparedCreativeMutation,
     authority: CreativeProjectCommitAuthority | undefined,
   ): Promise<CreativeProjectMutationResult> {
+    const identity = creativeMutationIdentity({
+      actor: prepared.actor,
+      receipt: prepared.receipt,
+      kind: prepared.kind,
+    });
+    const assertLegacy = (access: CreativeProjectLegacyAccess) =>
+      assertSqliteCreativeProjectLegacyMutation(
+        this.#database,
+        access,
+        prepared.project,
+        identity,
+      );
     const qualification = creativeProjectPluginCommitQualification(
       authority,
       prepared.actor,
@@ -347,6 +396,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       await assertCreativeProjectCommitTransactionCurrent(authority);
     return this.#transaction(
       () => {
+        const access = this.#legacyAccess();
         assertSqliteProjectRunCommit(this.#database, runQualification);
         if (qualification !== undefined) {
           assertSqlitePluginInstallationPinSchema(this.#database);
@@ -360,16 +410,12 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
           );
           this.#assertCommitActive(authority);
         }
-        const identity = creativeMutationIdentity({
-          actor: prepared.actor,
-          receipt: prepared.receipt,
-          kind: prepared.kind,
-        });
+        assertLegacy(access);
         const planResult = beginSqlitePlanResult(
           this.#database,
           runQualification,
         );
-        const replay = this.#receipt(identity);
+        const replay = this.#receipt(identity, access);
         if (replay !== null) {
           finishSqlitePlanResult(this.#database, planResult, replay);
           return replay;
@@ -377,6 +423,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
         const current = this.#project(
           identity.owner,
           prepared.project.projectId,
+          access,
         );
         const isConcept =
           prepared.kind === "create-concept" ||
@@ -386,6 +433,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
               identity.owner,
               prepared.project.projectId,
               prepared.assetRevision.briefRevision,
+              access,
             )
           : null;
         const asset = isConcept
@@ -393,6 +441,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
               identity.owner,
               prepared.project.projectId,
               prepared.asset.assetId,
+              access,
             )
           : null;
         const result = verifyCreativeMutation(prepared, {
@@ -404,7 +453,11 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
         if (prepared.kind === "create-project")
           this.#insertProject(result.project);
         else
-          this.#updateProject(result.project, prepared.expectedProjectRevision);
+          this.#updateProject(
+            result.project,
+            prepared.expectedProjectRevision,
+            access,
+          );
         if (
           result.kind === "create-project" ||
           result.kind === "append-brief"
@@ -423,6 +476,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
             this.#updateAsset(
               result.asset,
               prepared.expectedAssetMetadataRevision,
+              access,
             );
           this.#assertCommitActive(authority);
           this.#insertRevision(result.assetRevision);
@@ -434,13 +488,22 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       },
       authority,
       runQualification,
+      () => assertLegacy(this.#legacyAccess()),
     );
   }
 
-  #project(owner: CreativeProjectOwnerScope, projectId: string) {
+  #legacyAccess() {
+    return captureSqliteCreativeProjectLegacyAccess(this.#database);
+  }
+
+  #project(
+    owner: CreativeProjectOwnerScope,
+    projectId: string,
+    access = this.#legacyAccess(),
+  ) {
     const row = this.#database
       .prepare(
-        `SELECT p.* FROM creative_projects p WHERE ${projectFilter} AND p.project_id=?`,
+        `SELECT p.* FROM creative_projects p WHERE ${projectFilter} AND ${access.predicate("p")} AND p.project_id=?`,
       )
       .get(...creativeOwnerValues(owner), projectId);
     return decodeCreativeProject(row, owner, projectId);
@@ -450,28 +513,34 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     owner: CreativeProjectOwnerScope,
     projectId: string,
     revision: number,
+    access = this.#legacyAccess(),
   ) {
     const row = this.#database
       .prepare(
-        `SELECT c.*,p.owner_principal_id FROM creative_project_briefs c ${childJoin} WHERE ${projectFilter} AND c.project_id=? AND c.brief_revision=?`,
+        `SELECT c.*,p.owner_principal_id FROM creative_project_briefs c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.brief_revision=?`,
       )
       .get(...creativeOwnerValues(owner), projectId, revision);
     return decodeCreativeBrief(row, owner, projectId);
   }
 
-  #asset(owner: CreativeProjectOwnerScope, projectId: string, assetId: string) {
+  #asset(
+    owner: CreativeProjectOwnerScope,
+    projectId: string,
+    assetId: string,
+    access = this.#legacyAccess(),
+  ) {
     const row = this.#database
       .prepare(
-        `SELECT c.*,p.owner_principal_id FROM creative_concept_assets c ${childJoin} WHERE ${projectFilter} AND c.project_id=? AND c.asset_id=?`,
+        `SELECT c.*,p.owner_principal_id FROM creative_concept_assets c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.asset_id=?`,
       )
       .get(...creativeOwnerValues(owner), projectId, assetId);
     return decodeCreativeAsset(row, owner, projectId);
   }
 
-  #receipt(identity: MutationIdentity) {
+  #receipt(identity: MutationIdentity, access = this.#legacyAccess()) {
     const row = this.#database
       .prepare(
-        "SELECT * FROM creative_project_mutation_receipts WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND kind=? AND idempotency_key=?",
+        `SELECT r.*,p.project_id AS legacy_parent_project_id,p.owner_principal_id AS legacy_parent_principal_id FROM creative_project_mutation_receipts r LEFT JOIN creative_projects p ON p.tenant_id=r.tenant_id AND p.space_id=r.space_id AND p.project_id=r.project_id WHERE r.tenant_id=? AND r.space_id=? AND r.principal_id=? AND r.actor_id=? AND r.kind=? AND r.idempotency_key=? AND ${access.predicate("r")}`,
       )
       .get(
         ...creativeOwnerValues(identity.owner),
@@ -479,6 +548,12 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
         identity.kind,
         identity.receipt.idempotencyKey,
       );
+    if (
+      row !== undefined &&
+      (row.legacy_parent_project_id !== row.project_id ||
+        row.legacy_parent_principal_id !== identity.owner.principalId)
+    )
+      throw new Error("creative_project_receipt_invalid");
     return decodeCreativeReceipt(row, identity);
   }
 
@@ -500,10 +575,14 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       );
   }
 
-  #updateProject(project: CreativeProject, expectedRevision: number): void {
+  #updateProject(
+    project: CreativeProject,
+    expectedRevision: number,
+    access: CreativeProjectLegacyAccess,
+  ): void {
     const changed = this.#database
       .prepare(
-        "UPDATE creative_projects SET revision=?,state=?,latest_brief_revision=?,updated_at=?,record_json=? WHERE tenant_id=? AND space_id=? AND project_id=? AND owner_principal_id=? AND revision=?",
+        `UPDATE creative_projects AS p SET revision=?,state=?,latest_brief_revision=?,updated_at=?,record_json=? WHERE tenant_id=? AND space_id=? AND project_id=? AND owner_principal_id=? AND revision=? AND ${access.predicate("p")}`,
       )
       .run(
         project.revision,
@@ -552,10 +631,14 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
       );
   }
 
-  #updateAsset(asset: ConceptAsset, expectedRevision: number): void {
+  #updateAsset(
+    asset: ConceptAsset,
+    expectedRevision: number,
+    access: CreativeProjectLegacyAccess,
+  ): void {
     const changed = this.#database
       .prepare(
-        "UPDATE creative_concept_assets SET revision=?,latest_asset_revision=?,record_json=? WHERE tenant_id=? AND space_id=? AND project_id=? AND asset_id=? AND revision=?",
+        `UPDATE creative_concept_assets AS a SET revision=?,latest_asset_revision=?,record_json=? WHERE tenant_id=? AND space_id=? AND project_id=? AND asset_id=? AND revision=? AND ${access.predicate("a")}`,
       )
       .run(
         asset.revision,
@@ -617,10 +700,19 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     }
   }
 
+  #read<T>(read: (access: CreativeProjectLegacyAccess) => T): T {
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      const result = read(access);
+      this.#assertOpen();
+      return result;
+    });
+  }
+
   #transaction<T>(
     body: () => T,
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
+    assertLegacy?: () => void,
   ): T {
     this.#assertCommitActive(authority);
     this.#assertOpen();
@@ -628,6 +720,7 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     try {
       const result = body();
       assertSqliteProjectRunCommit(this.#database, runQualification);
+      assertLegacy?.();
       this.#assertCommitActive(authority);
       this.#assertOpen();
       this.#database.exec("COMMIT");
