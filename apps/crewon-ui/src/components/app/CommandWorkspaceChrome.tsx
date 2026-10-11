@@ -205,12 +205,9 @@ export function CommandSidebar({
   onToggleSearch: () => void;
 }) {
   const modules = mergeCommandWorkspaceHostModules({ hostModule, hostModules });
-  const moduleActive = modules.some((module) => module.active);
   const contextCollapsed = collapsed ?? sidebarCollapsed;
-  const section = moduleActive
-    ? "resources"
-    : commandSidebarSection(activeView);
-  const hasContext = moduleActive || commandSidebarHasContext(activeView);
+  const section = commandSidebarSection(activeView);
+  const hasContext = commandSidebarHasContext(activeView);
   const account = useAgentPlatformAccount();
   const localManagement = useDesktopLocalManagementAccess();
   /*
@@ -446,7 +443,6 @@ export function CommandSidebar({
       <CommandNavigationRail
         activeView={activeView}
         collapsed={contextCollapsed}
-        hostModuleActive={moduleActive}
         locale={locale}
         taskAttentionCount={taskAttentionCount}
         onSwitchView={onSwitchView}

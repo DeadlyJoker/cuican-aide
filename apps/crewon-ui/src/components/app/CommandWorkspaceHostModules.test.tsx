@@ -35,6 +35,7 @@ const base: ComponentProps<typeof CommandWorkspace> = {
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
+let panelTarget: HTMLDivElement | null = null;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -48,6 +49,7 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+  panelTarget = null;
   document.body.classList.remove("modal-open");
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -57,10 +59,19 @@ async function render(props: Partial<ComponentProps<typeof CommandWorkspace>>) {
   if (!container) {
     container = document.createElement("div");
     document.body.append(container);
-    root = createRoot(container);
+    const workspace = document.createElement("div");
+    panelTarget = document.createElement("div");
+    container.append(workspace, panelTarget);
+    root = createRoot(workspace);
   }
   await act(async () =>
-    root!.render(<CommandWorkspace {...base} {...props} />),
+    root!.render(
+      <CommandWorkspace
+        {...base}
+        {...props}
+        hostModulePanelTarget={panelTarget}
+      />,
+    ),
   );
 }
 
@@ -75,6 +86,12 @@ function navigation(id: string) {
   return [...container!.querySelectorAll("[data-host-module-target]")].find(
     (element) => element.getAttribute("data-host-module-target") === id,
   )!;
+}
+
+async function openModule(id: string) {
+  if (!navigation(id))
+    await click(container!.querySelector('[data-nav-key="resources"]'));
+  await click(navigation(id));
 }
 
 function pane(id: string) {
@@ -152,7 +169,7 @@ describe("CommandWorkspace multiple host contributions", () => {
     await render(props);
     expect(container!.querySelector("[data-project-stage]")).not.toBeNull();
     const sidebar = container!.querySelector(".command-sidebar");
-    await click(container!.querySelector('[data-nav-key="command"]'));
+    await click(container!.querySelector('[data-action="new-task"]'));
     expect(container!.querySelector("[data-project-stage]")).toBeNull();
     expect(container!.querySelector(".home-title")?.textContent).toContain(
       "让 CrewON 完成你的工作",
@@ -186,7 +203,7 @@ describe("CommandWorkspace multiple host contributions", () => {
       hostModuleAvailability: available,
       selectedThreadId: "original-chat",
     });
-    await click(navigation(fixture.module.id));
+    await openModule(fixture.module.id);
     await click(pane(fixture.module.id).querySelector("button"));
     expect(pane(fixture.module.id).querySelector("output")?.textContent).toBe(
       "2",
@@ -205,7 +222,7 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(
       container!.querySelector<HTMLElement>('[data-shell-view="command"]')!
         .hidden,
-    ).toBe(true);
+    ).toBe(false);
     expect(fixture.activity.mock.calls.at(-1)).toEqual(["cleanup"]);
     await click(pane(fixture.module.id).querySelector("button"));
     expect(retry).toHaveBeenCalledTimes(1);
@@ -254,7 +271,7 @@ describe("CommandWorkspace multiple host contributions", () => {
         hostModuleAvailability: available,
         selectedThreadId: "original-chat",
       });
-      await click(navigation(fixture.module.id));
+      await openModule(fixture.module.id);
       await render({
         hostModules: [],
         hostModuleAvailability: { ...available, state: "unavailable" },
@@ -297,7 +314,7 @@ describe("CommandWorkspace multiple host contributions", () => {
       hostModules: [fixture.module],
       hostModuleAvailability: availability,
     });
-    await click(navigation(fixture.module.id));
+    await openModule(fixture.module.id);
     await render({
       hostModules: [],
       hostModuleAvailability: { ...availability, state: "unavailable" },
@@ -348,6 +365,7 @@ describe("CommandWorkspace multiple host contributions", () => {
   });
 
   it("keeps the legacy entry first and rejects duplicate route identities before rendering content", () => {
+    window.history.replaceState(null, "", "/#view-agents");
     const a = fixtureModule("example.drama", "main", "AI 短剧");
     const b = fixtureModule("example.drama", "assets", "专业资产");
     expect(
@@ -381,6 +399,7 @@ describe("CommandWorkspace multiple host contributions", () => {
     const a = fixtureModule("example.drama", "main/assets", "AI 短剧");
     const b = fixtureModule("example.drama/main", "assets", "专业资产");
     await render({ hostModules: [a.module, b.module] });
+    await click(container!.querySelector('[data-nav-key="resources"]'));
     const sidebar = container!.querySelector(".command-sidebar");
     const homepage = container!.querySelector<HTMLElement>(
       '[data-shell-view="command"]',
@@ -391,20 +410,20 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(a.module.id).not.toBe(b.module.id);
     expect(pane(a.module.id).hidden).toBe(true);
     expect(pane(b.module.id).hidden).toBe(true);
-    await click(navigation(a.module.id));
-    expect(homepage.hidden).toBe(true);
+    await openModule(a.module.id);
+    expect(homepage.hidden).toBe(false);
     expect(a.rendered.mock.calls.at(-1)).toEqual([{ active: true }]);
     expect(b.rendered.mock.calls.at(-1)).toEqual([{ active: false }]);
     await click(pane(a.module.id).querySelector("button"));
     const aContent = pane(a.module.id).querySelector("article");
-    await click(navigation(b.module.id));
+    await openModule(b.module.id);
     expect(pane(a.module.id).hidden).toBe(true);
     expect(pane(b.module.id).hidden).toBe(false);
     expect(a.rendered.mock.calls.at(-1)).toEqual([{ active: false }]);
     expect(b.rendered.mock.calls.at(-1)).toEqual([{ active: true }]);
     expect(navigation(a.module.id).hasAttribute("aria-current")).toBe(false);
     expect(navigation(b.module.id).getAttribute("aria-current")).toBe("page");
-    await click(navigation(a.module.id));
+    await openModule(a.module.id);
     expect(pane(a.module.id).querySelector("article")).toBe(aContent);
     expect(pane(a.module.id).querySelector("output")?.textContent).toBe("2");
     expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
@@ -417,12 +436,13 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(b.rendered.mock.calls.at(-1)).toEqual([{ active: false }]);
   });
 
-  it("preserves selection across catalog refresh and returns to the original view when the selected module disappears", async () => {
+  it("preserves panel selection across catalog refresh and keeps the Agent conversation when the module disappears", async () => {
     const a = fixtureModule("example.drama", "main", "AI 短剧");
     const b = fixtureModule("example.enterprise", "main", "企业能力");
     await render({ hostModules: [a.module, b.module] });
+    await click(container!.querySelector('[data-nav-key="resources"]'));
     await click(container!.querySelector('[data-nav-key="team"]'));
-    await click(navigation(a.module.id));
+    await openModule(a.module.id);
     expect(
       container!
         .querySelector('[data-nav-key="team"]')
@@ -447,11 +467,12 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(aPane.querySelector("output")?.textContent).toBe("2");
     await render({ hostModules: [b.module] });
     expect(
-      container!.querySelector<HTMLElement>('[data-shell-view="team"]')?.hidden,
+      container!.querySelector<HTMLElement>('[data-shell-view="command"]')
+        ?.hidden,
     ).toBe(false);
     expect(
       container!
-        .querySelector('[data-nav-key="team"]')
+        .querySelector('[data-nav-key="command"]')
         ?.getAttribute("aria-current"),
     ).toBe("page");
     expect(a.activity.mock.calls.at(-1)).toEqual(["cleanup"]);
@@ -459,11 +480,12 @@ describe("CommandWorkspace multiple host contributions", () => {
     expect(pane(a.module.id).hidden).toBe(true);
     expect(a.rendered.mock.calls.at(-1)).toEqual([{ active: false }]);
     expect(
-      container!.querySelector<HTMLElement>('[data-shell-view="team"]')?.hidden,
+      container!.querySelector<HTMLElement>('[data-shell-view="command"]')
+        ?.hidden,
     ).toBe(false);
   });
 
-  it("returns from a plugin to an already selected conversation without replacing the shell or plugin draft", async () => {
+  it("opens the already selected project conversation while keeping its right panel and module draft", async () => {
     window.history.replaceState(
       null,
       "",
@@ -502,20 +524,20 @@ describe("CommandWorkspace multiple host contributions", () => {
     const homepage = container!.querySelector<HTMLElement>(
       '[data-shell-view="command"]',
     )!;
-    await click(navigation(module.id));
+    await openModule(module.id);
     await click(pane(module.id).querySelector("article button"));
     const draft = pane(module.id).querySelector("article");
-    expect(homepage.hidden).toBe(true);
+    expect(homepage.hidden).toBe(false);
     await click(
       pane(module.id).querySelector("[data-open-project-conversation]"),
     );
     expect(selectThread).toHaveBeenCalledExactlyOnceWith(selectedThreadId);
     expect(homepage.hidden).toBe(false);
-    expect(pane(module.id).hidden).toBe(true);
+    expect(pane(module.id).hidden).toBe(false);
     expect(window.location.search).toBe("?sceneThread=thread-a&scene=office");
     expect(window.location.hash).toBe("#view-command");
     expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
-    await click(navigation(module.id));
+    await openModule(module.id);
     expect(pane(module.id).querySelector("article")).toBe(draft);
     expect(pane(module.id).querySelector("output")?.textContent).toBe("2");
   });
@@ -556,7 +578,7 @@ describe("CommandWorkspace multiple host contributions", () => {
       ...props,
       selectedThreadId: "thread-a",
     });
-    await click(navigation(a.module.id));
+    await openModule(a.module.id);
     a.rendered.mockClear();
     await render({
       ...props,
@@ -564,13 +586,13 @@ describe("CommandWorkspace multiple host contributions", () => {
     });
     expect(a.rendered.mock.calls[0]).toEqual([{ active: false }]);
     expect(pane(a.module.id).hidden).toBe(true);
-    await click(navigation(a.module.id));
+    await openModule(a.module.id);
     await click(
       container!.querySelector('[data-linked-thread-id="existing-thread"]'),
     );
     expect(onSelectLinkedThread.mock.calls.at(-1)).toEqual(["existing-thread"]);
     expect(a.rendered.mock.calls.at(-1)).toEqual([{ active: false }]);
-    await click(navigation(a.module.id));
+    await openModule(a.module.id);
     const nextScene = container!.querySelector('[data-scene-target="code"]');
     expect(nextScene).not.toBeNull();
     await act(async () =>
@@ -580,7 +602,7 @@ describe("CommandWorkspace multiple host contributions", () => {
     );
     expect(onSceneChange.mock.calls.at(-1)).toEqual(["code"]);
     expect(a.rendered.mock.calls.at(-1)).toEqual([{ active: false }]);
-    await click(navigation(a.module.id));
+    await openModule(a.module.id);
     await act(async () => {
       window.history.replaceState(null, "", "/#view-team");
       window.dispatchEvent(new HashChangeEvent("hashchange"));
@@ -595,27 +617,28 @@ describe("CommandWorkspace multiple host contributions", () => {
     const a = fixtureModule("example.drama", "main", "AI 短剧");
     const b = fixtureModule("example.enterprise", "main", "企业能力");
     await render({ hostModules: [a.module, b.module] });
+    await click(container!.querySelector('[data-nav-key="resources"]'));
     const commandWindow =
       container!.querySelector<HTMLElement>(".command-window")!;
     const sidebar = container!.querySelector(".command-sidebar")!;
     const collapse = sidebar.querySelector("[data-sidebar-collapse]");
     expect(collapse?.getAttribute("aria-label")).toBe("折叠侧栏");
-    expect(collapse?.getAttribute("aria-pressed")).toBe("false");
+    expect(collapse?.getAttribute("aria-expanded")).toBe("true");
     await click(collapse);
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(true);
     expect(collapse?.getAttribute("aria-label")).toBe("展开侧栏");
-    expect(collapse?.getAttribute("aria-pressed")).toBe("true");
-    await click(navigation(a.module.id));
-    await click(navigation(b.module.id));
+    expect(collapse?.getAttribute("aria-expanded")).toBe("false");
+    await openModule(a.module.id);
+    await openModule(b.module.id);
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(true);
     await click(container!.querySelector('[data-nav-key="team"]'));
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(true);
     expect(collapse?.getAttribute("aria-label")).toBe("展开侧栏");
-    expect(collapse?.getAttribute("aria-pressed")).toBe("true");
+    expect(collapse?.getAttribute("aria-expanded")).toBe("false");
     await click(collapse);
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(false);
     expect(collapse?.getAttribute("aria-label")).toBe("折叠侧栏");
-    expect(collapse?.getAttribute("aria-pressed")).toBe("false");
+    expect(collapse?.getAttribute("aria-expanded")).toBe("true");
     expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
     expect(container!.querySelectorAll(".command-sidebar")).toHaveLength(1);
   });

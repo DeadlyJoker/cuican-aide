@@ -39,6 +39,10 @@ import {
 import { CommandWorkbenchReview } from "./CommandWorkbenchReview";
 import type { RecordedReviewRequest } from "./commandWorkbenchTabs";
 import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
+import {
+  CommandWorkspacePluginPanelHeader,
+  type CommandWorkspacePluginPanelSelection,
+} from "./CommandWorkspacePluginPanel";
 
 type WorkbenchTab = BaseWorkbenchTab & {
   recordedChanges?: RecordedTaskChanges;
@@ -106,6 +110,9 @@ function persistWorkbenchWidth(width: number) {
 }
 
 export type CommandWorkspaceCapabilityDrawerProps = {
+  pluginPanel?: CommandWorkspacePluginPanelSelection | null;
+  pluginPanelTargetRef?: (target: HTMLDivElement | null) => void;
+  hideTrigger?: boolean;
   taskSnapshot?: TaskWorkbenchSnapshot | null;
   workbenchRequest?: WorkbenchOpenRequest | null;
   busyToolId: ToolId | null;
@@ -138,6 +145,9 @@ export type CommandWorkspaceCapabilityDrawerProps = {
 };
 
 export function CommandWorkspaceCapabilityDrawer({
+  pluginPanel = null,
+  pluginPanelTargetRef,
+  hideTrigger = false,
   taskSnapshot = null,
   workbenchRequest = null,
   busyToolId,
@@ -166,7 +176,7 @@ export function CommandWorkspaceCapabilityDrawer({
   terminalOutput,
   terminalProcessId,
 }: CommandWorkspaceCapabilityDrawerProps) {
-  const interactiveOpen = open && !interactionInactive;
+  const interactiveOpen = open && !interactionInactive && pluginPanel === null;
   const initialWorkbenchTabs = reconcileTaskWorkbenchTabs(
     initialTabs(panel),
     taskSnapshot?.scopeId ?? null,
@@ -619,7 +629,7 @@ export function CommandWorkspaceCapabilityDrawer({
 
   return (
     <>
-      {!open ? (
+      {!open && !hideTrigger ? (
         <button
           aria-label={locale === "zh" ? "打开工作台" : "Open workbench"}
           className="sidebar-tool command-workbench-trigger"
@@ -634,16 +644,18 @@ export function CommandWorkspaceCapabilityDrawer({
         aria-hidden={interactionInactive || undefined}
         aria-label={locale === "zh" ? "工作区工作台" : "Workspace workbench"}
         className="command-workbench"
-        data-empty={tabs.length === 0 ? "true" : undefined}
-        data-maximized={maximized ? "true" : undefined}
+        data-empty={!pluginPanel && tabs.length === 0 ? "true" : undefined}
+        data-maximized={maximized && !pluginPanel ? "true" : undefined}
         data-resizing={resizing ? "true" : undefined}
         hidden={!open}
         id={DEFAULT_COMMAND_WORKBENCH_ID}
         inert={interactionInactive || undefined}
-        style={maximized ? undefined : { width: workbenchWidth }}
+        style={
+          maximized && !pluginPanel ? undefined : { width: workbenchWidth }
+        }
         onKeyDown={handleWorkbenchKeyDown}
       >
-        {!maximized ? (
+        {!maximized || pluginPanel ? (
           <div
             aria-label={locale === "zh" ? "调整工作台宽度" : "Resize workbench"}
             aria-orientation="vertical"
@@ -661,7 +673,12 @@ export function CommandWorkspaceCapabilityDrawer({
             onPointerUp={finishResize}
           />
         ) : null}
-        {tabs.length > 0 ? (
+        {pluginPanel ? (
+          <CommandWorkspacePluginPanelHeader
+            selection={pluginPanel}
+            locale={locale}
+          />
+        ) : tabs.length > 0 ? (
           <header
             className="command-workbench-tabbar"
             data-desktop-drag-region=""
@@ -773,7 +790,10 @@ export function CommandWorkspaceCapabilityDrawer({
             </button>
           </header>
         )}
-        <div className="command-workbench-content">
+        <div
+          className="command-workbench-content"
+          hidden={pluginPanel !== null}
+        >
           {activeTab ? (
             tabs.map((tab) => (
               <div
@@ -792,11 +812,13 @@ export function CommandWorkspaceCapabilityDrawer({
                 ) : (
                   <WorkbenchSurface
                     taskSnapshot={taskSnapshot}
-                    active={open && activeTabId === tab.id}
+                    active={interactiveOpen && activeTabId === tab.id}
                     busyToolId={busyToolId}
                     commandValue={commandValue}
                     disabled={disabled}
-                    interactionInactive={interactionInactive}
+                    interactionInactive={
+                      interactionInactive || pluginPanel !== null
+                    }
                     locale={locale}
                     tab={tab}
                     onCommandChange={onCommandChange}
@@ -830,6 +852,13 @@ export function CommandWorkspaceCapabilityDrawer({
             />
           )}
         </div>
+        {pluginPanelTargetRef ? (
+          <div
+            ref={pluginPanelTargetRef}
+            className="command-workbench-content command-plugin-panel-target"
+            hidden={pluginPanel === null}
+          />
+        ) : null}
       </aside>
     </>
   );

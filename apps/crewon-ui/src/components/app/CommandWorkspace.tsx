@@ -47,14 +47,16 @@ import {
   type CommandWorkspaceAuthority,
 } from "./CommandWorkspaceChrome";
 import {
-  CommandWorkspaceHostModulePane,
-  CommandWorkspaceHostModuleUnavailablePane,
   mergeCommandWorkspaceHostModules,
   useCommandWorkspaceHostModules,
   type CommandWorkspaceHostModule,
   type CommandWorkspaceHostModuleAvailability,
   type CommandWorkspacePlatformSnapshotLoader,
 } from "./CommandWorkspaceHostModule";
+import {
+  CommandWorkspacePluginPanel,
+  type CommandWorkspacePluginPanelSelection,
+} from "./CommandWorkspacePluginPanel";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { useCommandPlatformSnapshot } from "./useCommandPlatformSnapshot";
 import { commandNewTaskDraftRoute } from "./commandNewTaskDraftRoute";
@@ -315,6 +317,10 @@ type CommandWorkspaceProps = {
   hostModules?: readonly CommandWorkspaceHostModule[];
   hostModuleAvailability?: CommandWorkspaceHostModuleAvailability;
   hostModuleRequest?: Readonly<{ id: string; requestKey: string }> | null;
+  hostModulePanelTarget?: HTMLElement | null;
+  onHostModulePanelSelectionChange?: (
+    selection: CommandWorkspacePluginPanelSelection | null,
+  ) => void;
   platformSnapshotLoader?: CommandWorkspacePlatformSnapshotLoader;
   backgroundRunActive?: boolean;
   threadCatalogNavigation?: ThreadCatalogNavigation;
@@ -853,6 +859,8 @@ export function CommandWorkspace({
   hostModules,
   hostModuleAvailability,
   hostModuleRequest,
+  hostModulePanelTarget = null,
+  onHostModulePanelSelectionChange,
   platformSnapshotLoader = readAgentPlatformSnapshot,
   teamProgress = null,
   panelHeaderTarget,
@@ -963,6 +971,8 @@ export function CommandWorkspace({
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
     shellViewFromHash(),
   );
+  const activeViewRef = useRef(activeView);
+  activeViewRef.current = activeView;
   const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse();
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [localSidebarSearchQuery, setLocalSidebarSearchQuery] = useState("");
@@ -995,6 +1005,15 @@ export function CommandWorkspace({
     ]),
   });
   useEffect(() => {
+    if (!hostModuleView.active || activeView === "command") return;
+    setActiveView("command");
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}#view-command`,
+    );
+  }, [hostModuleView.active, activeView]);
+  useEffect(() => {
     onSceneChange?.(scene);
   }, [onSceneChange, scene]);
   useEffect(() => {
@@ -1017,7 +1036,7 @@ export function CommandWorkspace({
   const { model, selectModel } = useCommandThreadModelSelection({
     threadId:
       activeView === "assist"
-        ? assistantThread?.id ?? null
+        ? (assistantThread?.id ?? null)
         : selectedThreadId,
     draft: activeView !== "assist" && newTaskDraft,
     modelOptions,
@@ -1174,9 +1193,14 @@ export function CommandWorkspace({
   }, []);
 
   useEffect(() => {
-    function syncRoute() {
+    function syncRoute(event: Event) {
+      const nextView = shellViewFromHash();
+      // An unchanged hash projection is not a navigation away from the panel.
+      // Popstate still withdraws it before a conversation route is adopted.
+      if (event.type === "hashchange" && nextView === activeViewRef.current)
+        return;
       hostModuleView.close();
-      setActiveView(shellViewFromHash());
+      setActiveView(nextView);
     }
     window.addEventListener("hashchange", syncRoute);
     window.addEventListener("popstate", syncRoute);
@@ -3109,8 +3133,7 @@ export function CommandWorkspace({
     activeView === "command" &&
     (Boolean(selectedThread) || pendingNewThread) &&
     !newTaskDraft;
-  const taskDetailAvailable =
-    !hostModuleView.active && showCommandThread && Boolean(selectedThread);
+  const taskDetailAvailable = showCommandThread && Boolean(selectedThread);
   useEffect(() => {
     onTaskDetailAvailabilityChange?.(taskDetailAvailable);
     return () => onTaskDetailAvailabilityChange?.(false);
@@ -3286,30 +3309,26 @@ export function CommandWorkspace({
         ? createPortal(
             <CommandPanelHeading
               title={
-                hostModuleView.active
-                  ? (modules.find(
-                      (module) => module.id === hostModuleView.selectedId,
-                    )?.label ?? (locale === "zh" ? "插件" : "Plugin"))
-                  : activeView === "command"
-                    ? showCommandThread && selectedThread
-                      ? sidebarThreadTitle(
-                          selectedThread,
-                          locale === "zh" ? "未命名会话" : "Untitled thread",
-                        )
-                      : locale === "zh"
-                        ? "新建任务"
-                        : "New task"
-                    : {
-                        assist: locale === "zh" ? "助手" : "Assistant",
-                        projects: locale === "zh" ? "任务" : "Tasks",
-                        agents: locale === "zh" ? "Agent" : "Agents",
-                        knowledge: locale === "zh" ? "知识库" : "Knowledge",
-                        schedule: locale === "zh" ? "日程" : "Schedule",
-                        team: locale === "zh" ? "Team" : "Teams",
-                      }[activeView]
+                activeView === "command"
+                  ? showCommandThread && selectedThread
+                    ? sidebarThreadTitle(
+                        selectedThread,
+                        locale === "zh" ? "未命名会话" : "Untitled thread",
+                      )
+                    : locale === "zh"
+                      ? "新建任务"
+                      : "New task"
+                  : {
+                      assist: locale === "zh" ? "助手" : "Assistant",
+                      projects: locale === "zh" ? "任务" : "Tasks",
+                      agents: locale === "zh" ? "Agent" : "Agents",
+                      knowledge: locale === "zh" ? "知识库" : "Knowledge",
+                      schedule: locale === "zh" ? "日程" : "Schedule",
+                      team: locale === "zh" ? "Team" : "Teams",
+                    }[activeView]
               }
               actions={
-                !hostModuleView.active && showCommandThread ? (
+                showCommandThread ? (
                   <>
                     <CommandPanelSceneControl
                       locale={locale}
@@ -3424,7 +3443,7 @@ export function CommandWorkspace({
           <section
             className={classNames(
               "shell-view command-home-view",
-              !hostModuleView.active && activeView === "command" && "active",
+              activeView === "command" && "active",
               showCommandThread && "has-command-thread",
             )}
             data-shell-view="command"
@@ -3432,7 +3451,7 @@ export function CommandWorkspace({
             data-shell-view-title-en="New task"
             data-od-id="shell-view-command"
             data-has-thread={showCommandThread ? "true" : "false"}
-            hidden={hostModuleView.active || activeView !== "command"}
+            hidden={activeView !== "command"}
           >
             {/*
              * The task bar is a sibling of the centered work column, not a child
@@ -3858,7 +3877,7 @@ export function CommandWorkspace({
                     })
                 : undefined
             }
-            active={!hostModuleView.active && activeView === "assist"}
+            active={activeView === "assist"}
             activeTurnId={assistantActiveTurnId}
             composer={
               <CommandComposer
@@ -4108,7 +4127,7 @@ export function CommandWorkspace({
             onStop={onStop}
           />
           <ProjectsView
-            active={!hostModuleView.active && activeView === "projects"}
+            active={activeView === "projects"}
             locale={locale}
             tasks={commandLinkedThreads}
             onNewTask={() => {
@@ -4121,7 +4140,7 @@ export function CommandWorkspace({
           />
           <AgentsView
             businessExtensionEntry={businessExtensionEntry}
-            active={!hostModuleView.active && activeView === "agents"}
+            active={activeView === "agents"}
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}
             platformState={platformState}
@@ -4144,14 +4163,14 @@ export function CommandWorkspace({
             onSaveCapability={onSaveCapability}
           />
           <KnowledgeCatalogView
-            active={!hostModuleView.active && activeView === "knowledge"}
+            active={activeView === "knowledge"}
             platformState={platformState}
             resourceStates={platformResourceStates}
             snapshot={platformSnapshot}
             onReload={reloadPlatformResources}
           />
           <AutomationView
-            active={!hostModuleView.active && activeView === "schedule"}
+            active={activeView === "schedule"}
             connected={automationControlConnected}
             controlConfigured={automationControlConfigured}
             createDraft={scheduleCreateDraft}
@@ -4164,7 +4183,7 @@ export function CommandWorkspace({
             onOpenThread={onSelectLinkedThread}
           />
           <TeamView
-            active={!hostModuleView.active && activeView === "team"}
+            active={activeView === "team"}
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
             teamMode={teamMode}
@@ -4363,22 +4382,18 @@ export function CommandWorkspace({
               onSubmit={(input) => void createWorkflowDefinition(input)}
             />
           ) : null}
-          {modules.map((module) => (
-            <CommandWorkspaceHostModulePane
-              key={module.id}
-              module={module}
-              active={hostModuleView.selectedId === module.id}
-            />
-          ))}
-          {hostModuleView.unavailableSelection && hostModuleAvailability ? (
-            <CommandWorkspaceHostModuleUnavailablePane
-              selection={hostModuleView.unavailableSelection}
-              locale={locale}
-              onRetry={hostModuleAvailability.retry}
-            />
-          ) : null}
         </section>
       </section>
+      <CommandWorkspacePluginPanel
+        modules={modules}
+        selectedId={hostModuleView.selectedId}
+        unavailableSelection={hostModuleView.unavailableSelection}
+        target={hostModulePanelTarget}
+        locale={locale}
+        onClose={hostModuleView.close}
+        onRetry={hostModuleAvailability?.retry}
+        onSelectionChange={onHostModulePanelSelectionChange}
+      />
     </section>
   );
 }

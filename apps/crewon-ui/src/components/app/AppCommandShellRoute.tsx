@@ -12,6 +12,7 @@ import {
 
 import { AppConfirmDialog } from "./AppConfirmDialog";
 import { CommandWorkspace } from "./CommandWorkspace";
+import type { CommandWorkspacePluginPanelSelection } from "./CommandWorkspacePluginPanel";
 import { CommandPanelHeading } from "./CommandPanelHeading";
 import {
   CommandWorkspaceCapabilityDrawer,
@@ -102,6 +103,10 @@ export function AppCommandShellRoute({
   ...commandWorkspaceProps
 }: AppCommandShellRouteProps) {
   const compactWeb = commandWorkspaceProps.platform === "web";
+  const [pluginPanel, setPluginPanel] =
+    useState<CommandWorkspacePluginPanelSelection | null>(null);
+  const [pluginPanelTarget, setPluginPanelTarget] =
+    useState<HTMLDivElement | null>(null);
   const [recordedReview, setRecordedReview] = useState<{
     sequence: number;
     threadId: string;
@@ -123,7 +128,8 @@ export function AppCommandShellRoute({
   const taskDetailAvailabilityCallbackRef = useRef(
     commandWorkspaceProps.onTaskDetailAvailabilityChange,
   );
-  capabilityOpenRef.current = !compactWeb && capabilityDrawer.open;
+  capabilityOpenRef.current =
+    pluginPanel !== null || (!compactWeb && capabilityDrawer.open);
   taskDetailAvailabilityCallbackRef.current =
     commandWorkspaceProps.onTaskDetailAvailabilityChange;
   const selectedThread = commandWorkspaceProps.selectedThread ?? null;
@@ -281,18 +287,29 @@ export function AppCommandShellRoute({
   );
   const openCapability = useCallback(() => {
     if (compactWeb) return;
+    pluginPanel?.close();
     setActiveOverlay("workbench");
     capabilityDrawer.onOpen();
     window.requestAnimationFrame(() => focusOverlay("workbench"));
-  }, [capabilityDrawer.onOpen, compactWeb, focusOverlay]);
+  }, [capabilityDrawer.onOpen, compactWeb, focusOverlay, pluginPanel]);
   const closeCapability = useCallback(() => {
+    if (pluginPanel) {
+      pluginPanel.close();
+      return;
+    }
     setActiveOverlay(taskDetailOpen ? "task-detail" : null);
     capabilityDrawer.onClose();
-  }, [capabilityDrawer.onClose, taskDetailOpen]);
+  }, [capabilityDrawer.onClose, pluginPanel, taskDetailOpen]);
   const closeCapabilityAndRestoreFocus = useCallback(() => {
     closeCapability();
     window.requestAnimationFrame(() => {
-      if (taskDetailOpen) {
+      if (pluginPanel) {
+        document
+          .querySelector<HTMLTextAreaElement>(
+            '[data-shell-view="command"] textarea',
+          )
+          ?.focus();
+      } else if (taskDetailOpen) {
         focusOverlay("task-detail");
       } else {
         document
@@ -300,7 +317,11 @@ export function AppCommandShellRoute({
           ?.focus();
       }
     });
-  }, [closeCapability, focusOverlay, taskDetailOpen]);
+  }, [closeCapability, focusOverlay, pluginPanel, taskDetailOpen]);
+
+  useEffect(() => {
+    if (pluginPanel) setActiveOverlay("workbench");
+  }, [pluginPanel]);
   const openReview = useCallback(() => {
     if (capabilityDrawer.disabled) return;
     openCapability();
@@ -409,7 +430,8 @@ export function AppCommandShellRoute({
       const target = resolveCommandShellEscapeTarget({
         activeOverlay,
         taskDetailOpen,
-        workbenchOpen: !compactWeb && capabilityDrawer.open,
+        workbenchOpen:
+          pluginPanel !== null || (!compactWeb && capabilityDrawer.open),
       });
       if (!target) return;
       event.preventDefault();
@@ -426,6 +448,7 @@ export function AppCommandShellRoute({
       closeCapabilityAndRestoreFocus,
       closeTaskDetail,
       compactWeb,
+      pluginPanel,
       taskDetailOpen,
     ],
   );
@@ -474,8 +497,11 @@ export function AppCommandShellRoute({
         className="command-shell-route"
         data-active-overlay={activeOverlay ?? "none"}
         data-capability-sidebar-open={
-          !compactWeb && capabilityDrawer.open ? "true" : "false"
+          pluginPanel || (!compactWeb && capabilityDrawer.open)
+            ? "true"
+            : "false"
         }
+        data-plugin-panel-open={pluginPanel ? "true" : undefined}
         data-task-detail-open={taskDetailOpen ? "true" : "false"}
         onFocusCapture={(event) => activateOverlayFromTarget(event.target)}
         onKeyDown={handleEscape}
@@ -504,6 +530,8 @@ export function AppCommandShellRoute({
           {...commandWorkspaceProps}
           panelHeaderTarget={panelHeaderTarget}
           panelHeaderActions={taskDetailTrigger}
+          hostModulePanelTarget={pluginPanelTarget}
+          onHostModulePanelSelectionChange={setPluginPanel}
           onTaskDetailAvailabilityChange={
             compactWeb ? undefined : handleTaskDetailAvailabilityChange
           }
@@ -584,10 +612,23 @@ export function AppCommandShellRoute({
             )}
           </button>
         ) : null}
-        {!compactWeb ? (
+        {!compactWeb ||
+        pluginPanel ||
+        commandWorkspaceProps.hostModule ||
+        commandWorkspaceProps.hostModules?.length ? (
           <CommandWorkspaceCapabilityDrawer
             {...capabilityDrawer}
-            interactionInactive={workbenchInactive}
+            open={
+              pluginPanel !== null || (!compactWeb && capabilityDrawer.open)
+            }
+            hideTrigger={compactWeb}
+            pluginPanel={
+              pluginPanel
+                ? { ...pluginPanel, close: closeCapabilityAndRestoreFocus }
+                : null
+            }
+            pluginPanelTargetRef={setPluginPanelTarget}
+            interactionInactive={pluginPanel === null && workbenchInactive}
             recordedReviewRequest={
               recordedReview &&
               recordedReview.threadId === selectedThread?.id &&

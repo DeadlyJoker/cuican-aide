@@ -224,13 +224,13 @@ describe("centered search catalog interactions", () => {
     expect(onQueryChange).toHaveBeenCalledExactlyOnceWith("");
     expect(onClose).toHaveBeenCalledTimes(1);
   });
-  it("preserves a selected plugin context across collapse and expanding from the global rail", async () => {
+  it("keeps the Agent workspace context while its plugin panel is selected and resources can still expand", async () => {
     const onToggle = vi.fn(),
       onSwitchView = vi.fn(),
       onOpen = vi.fn();
     const sidebar = (collapsed: boolean) => (
       <CommandSidebar
-        activeView="assist"
+        activeView="command"
         cwd=""
         workspaceAuthority="control"
         collapsed={collapsed}
@@ -253,7 +253,7 @@ describe("centered search catalog interactions", () => {
     );
     await act(async () => root.render(sidebar(false)));
     expect(container.querySelector("aside")?.dataset.sidebarSection).toBe(
-      "resources",
+      "work",
     );
     const context = container.querySelector<HTMLDivElement>(
       "#command-sidebar-context",
@@ -269,7 +269,7 @@ describe("centered search catalog interactions", () => {
     expect(context.hidden).toBe(true);
     expect(
       container
-        .querySelector('[data-nav-key="resources"]')
+        .querySelector('[data-nav-key="command"]')
         ?.getAttribute("aria-current"),
     ).toBe("page");
     await act(async () =>

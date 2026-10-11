@@ -7,8 +7,9 @@
   min-width: 0;
   overflow: hidden;
   box-sizing: border-box;
-  /* Older modules reserve a separate row for floating shell controls. */
-  padding-top: 44px;
+  /* The host right-hand panel owns its title and window controls. */
+  --crewon-plugin-header-inset-start: 0px;
+  --crewon-plugin-header-inset-end: 0px;
 }
 .content {
   flex: 1;
@@ -21,7 +22,7 @@
 .module:has([data-plugin-header-insets="inline"]) {
   padding-top: 0;
   --crewon-plugin-header-inset-start: 0px;
-  --crewon-plugin-header-inset-end: 48px;
+  --crewon-plugin-header-inset-end: 0px;
 }
 :global(.command-window.sidebar-collapsed)
   .module:has([data-plugin-header-insets="inline"]) {

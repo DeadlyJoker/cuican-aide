@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`plugin panels in the formal Agent shell > snapshots the quiet plugin header with only a title and a working close action 1`] = `"<header class="command-workbench-tabbar command-plugin-panel-header" data-desktop-drag-region=""><strong>项目产物</strong><button aria-label="关闭插件面板" class="command-workbench-close" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-panel-right" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M15 3v18"></path></svg></button></header>"`;
