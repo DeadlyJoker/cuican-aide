@@ -100,6 +100,96 @@ function mixedCatalogFixture() {
   return { ...f, selections, descriptors, errors, unsupported };
 }
 
+test("verified Node-only exclusion uses inventory authority without granting per-plugin UI access", async () => {
+  const f = uiFixture(undefined, async () => true);
+  f.state.beforeAuthorize = async () => {
+    const resource = f.state.authorizationResources.at(-1) as {
+      pluginId: string | null;
+    };
+    if (resource.pluginId !== null)
+      throw new ApplicationError(
+        "authorization",
+        "plugin_ui_authorization_denied",
+      );
+  };
+  assert.deepEqual(
+    await f.service.catalog(uiTestActor, { afterPluginId: null, limit: 4 }),
+    { plugins: [], next: null },
+  );
+  assert.equal(f.state.calls.includes("verify"), false);
+  await uiRejects(
+    () =>
+      f.service.openMount(uiTestActor, {
+        pluginId: uiTestSelection.pluginId,
+        contributionId: "workbench",
+        expectedSelectionRevision: uiTestSelection.revision,
+        expectedPackageDigest: uiTestPackage.packageDigest,
+      }),
+    "authorization",
+    "plugin_ui_authorization_denied",
+  );
+});
+
+test("inventory exclusion fences profile, selection and epoch and never swallows policy failures", async () => {
+  for (const change of [
+    "profile",
+    "epoch",
+    "selection",
+    "denied",
+    "invalid",
+  ] as const) {
+    const f = uiFixture(undefined, async () => {
+      if (change === "profile")
+        f.state.scope = { ...f.state.scope, profileId: "other-profile" };
+      if (change === "epoch") f.state.epoch = "epoch-b";
+      if (change === "selection")
+        f.state.selection = parsePluginSelection({
+          ...uiTestSelection,
+          revision: uiTestSelection.revision + 1,
+        });
+      if (change === "denied")
+        throw new ApplicationError(
+          "authorization",
+          "plugin_ui_catalog_inspection_denied",
+        );
+      return change === "invalid" ? ("true" as unknown as boolean) : true;
+    });
+    await uiRejects(
+      () => f.service.catalog(uiTestActor, { afterPluginId: null, limit: 4 }),
+      change === "selection"
+        ? "conflict"
+        : change === "invalid"
+          ? "internal"
+          : "authorization",
+      change === "profile"
+        ? "plugin_ui_profile_changed"
+        : change === "epoch"
+          ? "plugin_ui_authority_changed"
+          : change === "selection"
+            ? "plugin_ui_selection_changed"
+            : change === "invalid"
+              ? "plugin_ui_output_invalid"
+              : "plugin_ui_catalog_inspection_denied",
+    );
+  }
+  const f = uiFixture(undefined, async () => false);
+  f.state.beforeAuthorize = async () => {
+    const resource = f.state.authorizationResources.at(-1) as {
+      pluginId: string | null;
+    };
+    if (resource.pluginId !== null)
+      throw new ApplicationError(
+        "authorization",
+        "plugin_ui_authorization_denied",
+      );
+  };
+  await uiRejects(
+    () => f.service.catalog(uiTestActor, { afterPluginId: null, limit: 4 }),
+    "authorization",
+    "plugin_ui_authorization_denied",
+  );
+});
+
 test("catalog retains valid UI alongside enabled Node-only, isolated and settings-only packages", async () => {
   const f = mixedCatalogFixture();
   const result = await f.service.catalog(uiTestActor, {

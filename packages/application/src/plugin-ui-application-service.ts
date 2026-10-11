@@ -1,3 +1,4 @@
+import { uiCatalogSelectionPage } from "./plugin-ui-catalog-selection-page.ts";
 import {
   capturePluginUiApplicationLimits,
   type PluginUiApplicationLimits,
@@ -432,54 +433,7 @@ export class PluginUiApplicationService {
         scope,
         ...query,
       });
-      const page = uiOutput(() => {
-        const value = uiRecord(raw, ["selections", "next"]);
-        if (
-          !Array.isArray(value.selections) ||
-          Object.getPrototypeOf(value.selections) !== Array.prototype ||
-          value.selections.length > query.limit ||
-          Reflect.ownKeys(value.selections).length !==
-            value.selections.length + 1
-        )
-          throw new Error("plugin_ui_page_invalid");
-        const selections = Array.from(
-          { length: value.selections.length },
-          (_, index) => {
-            const item = Object.getOwnPropertyDescriptor(
-              value.selections,
-              String(index),
-            );
-            if (!item || !Object.hasOwn(item, "value") || !item.enumerable)
-              throw new Error("plugin_ui_page_invalid");
-            const parsed = uiSelection(
-              item.value,
-              scope,
-              uiOutput(() => {
-                const id = Object.getOwnPropertyDescriptor(
-                  item.value,
-                  "pluginId",
-                );
-                if (!id || !Object.hasOwn(id, "value"))
-                  throw new Error("plugin_ui_page_invalid");
-                return id.value;
-              }),
-            );
-            return parsed;
-          },
-        );
-        let previous = query.afterPluginId;
-        for (const selection of selections) {
-          if (previous !== null && selection.pluginId <= previous)
-            throw new Error("plugin_ui_page_order_invalid");
-          previous = selection.pluginId;
-        }
-        if (
-          value.next !== null &&
-          (selections.length !== query.limit || value.next !== previous)
-        )
-          throw new Error("plugin_ui_page_cursor_invalid");
-        return { selections, next: value.next as string | null };
-      });
+      const page = uiCatalogSelectionPage(raw, scope, query);
       const plugins: PluginUiCatalogItem[] = [];
       for (const selection of page.selections) {
         if (selection.state !== "enabled") continue;
@@ -497,6 +451,16 @@ export class PluginUiApplicationService {
           selection.revision,
           null,
         );
+        if (this.#dependencies.packages.isNodeOnly !== undefined) {
+          const excluded =
+            await this.#dependencies.packages.isNodeOnly(context);
+          if (typeof excluded !== "boolean")
+            throw new ApplicationError("internal", "plugin_ui_output_invalid");
+          if (excluded) {
+            await this.#fresh(context, "catalog", null, epoch, resource);
+            continue;
+          }
+        }
         const pluginEpoch = await this.#authorize(
           actor,
           scope,
@@ -671,14 +635,17 @@ export class PluginUiApplicationService {
     action: PluginUiAuthorizationAction,
     contributionId: string | null,
     epoch: string,
+    inventoryResource?: PluginUiAuthorizationResource,
   ): Promise<void> {
-    const resource = this.#resource(
-      context.scope,
-      context.selection.pluginId,
-      context.package.packageDigest,
-      context.selection.revision,
-      contributionId,
-    );
+    const resource =
+      inventoryResource ??
+      this.#resource(
+        context.scope,
+        context.selection.pluginId,
+        context.package.packageDigest,
+        context.selection.revision,
+        contributionId,
+      );
     const before = await this.#authorize(
       context.actor,
       context.scope,

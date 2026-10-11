@@ -34,6 +34,7 @@ export async function uiReaderFixture(
     mode?: "trustedModule" | "isolatedWeb";
     largeAsset?: boolean;
     noModule?: boolean;
+    nodeOnly?: boolean;
   }> = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), "crewon-plugin-ui-reader-"));
@@ -91,31 +92,36 @@ export async function uiReaderFixture(
       "Actual local bytes; no HTTP, generation or production authorization.",
     entrypoints: {
       node: "private/server.mjs",
-      ui: {
-        path: options.mode === "isolatedWeb" ? "ui/main.html" : "ui/main.mjs",
-        mode: options.mode ?? "trustedModule",
-      },
+      ui: options.nodeOnly
+        ? null
+        : {
+            path:
+              options.mode === "isolatedWeb" ? "ui/main.html" : "ui/main.mjs",
+            mode: options.mode ?? "trustedModule",
+          },
     },
     businessManifestPath: "private/business.json",
     requires: [],
     provides: [],
-    contributions: options.noModule
-      ? [
-          {
-            id: "preferences",
-            kind: "settings",
-            slot: "settings.section",
-            title: "Preferences",
-          },
-        ]
-      : [
-          {
-            id: "workbench",
-            kind: "module",
-            slot: "main.content",
-            title: "Workbench",
-          },
-        ],
+    contributions: options.nodeOnly
+      ? []
+      : options.noModule
+        ? [
+            {
+              id: "preferences",
+              kind: "settings",
+              slot: "settings.section",
+              title: "Preferences",
+            },
+          ]
+        : [
+            {
+              id: "workbench",
+              kind: "module",
+              slot: "main.content",
+              title: "Workbench",
+            },
+          ],
     files: [...files].map(([path, bytes]) => ({
       path,
       byteLength: bytes.length,

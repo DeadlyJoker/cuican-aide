@@ -1,3 +1,4 @@
+import { createDesktopPluginUiPackagePort } from "./desktop-plugin-ui-package-port.ts";
 import { createDesktopProjectFoundationPluginRuntime } from "./desktop-project-foundation-plugin-runtime.ts";
 import { pluginSecurityUiRequest } from "./plugin-security-validation.ts";
 import {
@@ -17,11 +18,8 @@ import {
   PluginUiApplicationService,
   type ApplicationClock,
   type ContentDigester,
-  type PluginUiPackageContext,
-  type PluginUiPackagePort,
 } from "@crewon/application";
 import {
-  LocalPluginUiPackageReader,
   createDeferredPluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
@@ -558,44 +556,12 @@ export async function createDesktopPluginRuntime(
       if (nativeControl !== undefined)
         assertDesktopNativePluginControlConfigCurrent(nativeControl);
     };
-    const reader = (context: PluginUiPackageContext) => {
-      available();
-      authority.assertScope(context.actor, context.scope);
-      return new LocalPluginUiPackageReader({
-        profile: context.scope,
-        installRoot: configuration.installRoot,
-        authorizePublication: async ({ package: pkg, descriptor }) => {
-          available();
-          authority.assertScope(context.actor, context.scope);
-          if (
-            registry.authorizeCandidate({
-              descriptor,
-              packageDigest: pkg.packageDigest,
-            }) !== "allow"
-          )
-            throw new ApplicationError(
-              "authorization",
-              "plugin_ui_publication_denied",
-            );
-          const publication = configuration.publications.find(
-            (item) =>
-              item.pluginId === descriptor.pluginId &&
-              item.publisherId === descriptor.publisherId &&
-              item.packageDigest === pkg.packageDigest,
-          );
-          if (!publication)
-            throw new ApplicationError(
-              "authorization",
-              "plugin_ui_publication_denied",
-            );
-          return publication.publicAssets;
-        },
-      });
-    };
-    const packages: PluginUiPackagePort = {
-      verify: (context) => reader(context).verify(context),
-      readAsset: (context) => reader(context).readAsset(context),
-    };
+    const packages = createDesktopPluginUiPackagePort({
+      configuration,
+      registry,
+      authority,
+      available,
+    });
     const dispatch = composeDesktopProjectPluginUiDispatch({
       foundations: foundationUi?.foundations,
       sourceUploads: foundationUi?.uploads,

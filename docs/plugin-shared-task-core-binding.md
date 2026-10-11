@@ -28,4 +28,4 @@ Node 24.19.0、真实文件型 SQLite、原生产构造函数及本地命名离�
 2. 当前业务执行 registration 仍拒绝 execution 之外的 mandatory 服务，不能删除这一限制冒充执行 Host 已实现依赖。本次消费者保持已有 optional 声明；它在 setup 中读取真实已启用 provider。适配必需服务与 Worker 的真实服务目录、恢复和执行，仍需完整接线与行为验证。
 3. 没有原 Native Profile owner 的 generic/Standalone Task Core 保持原兼容路径，不能接受 JSON 伪造共享 binding 或自动获得 Native 借用权。
 4. 正式产品的安装、启用、UI/Agent 任务、升级/回滚、停用、恢复、卸载和完整执行先在 Web 验收，再更新桌面。当前业务插件保持卸载，本增量不改变宿主 UI。
-5. 本次发现已启用的纯 Node provider 进入原 UI catalog 枚举时，因没有 UI publication 被整页拒绝。需修正实际已核验 Node-only 包的 UI 枚举过滤，不能给它补 UI 授权；上述直接 mount/action 与 authenticated configuration 测试不能替代这个缺口。
+   随后已修正纯 Node provider 缺少 UI publication 导致目录整页拒绝的问题：只排除真实核验的纯服务包，保留原 UI 权限，最终混合目录与任务回归 265/265、零跳过。范围及证据见[目录过滤](./plugin-node-catalog-exclusion.md)。它仍不能替代上述完整 Web 与 Worker 验收。

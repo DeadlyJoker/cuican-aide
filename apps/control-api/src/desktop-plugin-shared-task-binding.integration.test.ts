@@ -180,6 +180,23 @@ test(
       );
     const savedConfiguration = await readConfiguration();
     assert.equal(savedConfiguration?.revision, f.configuration.revision);
+    const catalog = await reopened.ui.catalog(actor, {
+      afterPluginId: null,
+      limit: 10,
+    });
+    assert.deepEqual(
+      catalog.plugins.map((item) => item.descriptor.pluginId),
+      [f.source.pluginId],
+    );
+    await assert.rejects(
+      reopened.ui.openMount(actor, {
+        pluginId: f.provider!.pluginId,
+        contributionId: "workbench",
+        expectedPackageDigest: f.provider!.packageDigest,
+        expectedSelectionRevision: 4,
+      }),
+      { code: "plugin_ui_authorization_denied" },
+    );
     const mount = await reopened.ui.openMount(actor, {
       pluginId: f.source.pluginId,
       contributionId: "workbench",

@@ -24,6 +24,8 @@ export type PluginUiVerifiedPackage = Readonly<{
   publicAssets: readonly string[];
 }>;
 export interface PluginUiPackagePort {
+  /** Optional inventory-only exclusion. Verifies installed bytes and source policy; grants no UI capability. */
+  isNodeOnly?(input: PluginUiPackageContext): Promise<boolean>;
   /** Derives the private directory from installed identity, verifies bytes and publisher policy. */
   verify(input: PluginUiPackageContext): Promise<PluginUiVerifiedPackage>;
   /** Reads only the lease's approved inventory path; rejects links, races, mismatched bytes and URLs. */

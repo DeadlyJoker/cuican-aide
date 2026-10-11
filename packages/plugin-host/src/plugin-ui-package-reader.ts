@@ -28,6 +28,7 @@ import {
   uiPackageAssetPath,
   uiPackageContext,
   uiPackageDescriptor,
+  uiPackageIdentity,
   uiPackageFailure,
   uiPackageMime,
   uiPackagePublicAssets,
@@ -42,6 +43,11 @@ export type LocalPluginUiPackageReaderDependencies = Readonly<{
     input: PluginUiPackageContext &
       Readonly<{ descriptor: PluginPackageDescriptor }>,
   ): Promise<readonly string[]>;
+  /** Inventory/source authorization only, separate from browser publication. */
+  authorizeCatalogInspection?(
+    input: PluginUiPackageContext &
+      Readonly<{ descriptor: PluginPackageDescriptor }>,
+  ): Promise<void>;
 }>;
 type Verified = Readonly<{
   directory: string;
@@ -55,6 +61,7 @@ export class LocalPluginUiPackageReader implements PluginUiPackagePort {
   readonly #profile: PluginProfileScope;
   readonly #installRoot: string;
   readonly #authorizePublication: LocalPluginUiPackageReaderDependencies["authorizePublication"];
+  readonly #authorizeCatalogInspection: LocalPluginUiPackageReaderDependencies["authorizeCatalogInspection"];
 
   constructor(input: LocalPluginUiPackageReaderDependencies) {
     this.#profile = parsePluginProfileScope(input.profile);
@@ -62,6 +69,32 @@ export class LocalPluginUiPackageReader implements PluginUiPackagePort {
     if (typeof input.authorizePublication !== "function")
       uiPackageFailure("internal", "plugin_ui_publication_policy_missing");
     this.#authorizePublication = input.authorizePublication;
+    this.#authorizeCatalogInspection = input.authorizeCatalogInspection;
+  }
+
+  async isNodeOnlyForCatalog(input: PluginUiPackageContext): Promise<boolean> {
+    const context = uiPackageContext(
+      uiPackageRecord(input, ["actor", "scope", "selection", "package"]),
+      this.#profile,
+    );
+    if (typeof this.#authorizeCatalogInspection !== "function")
+      uiPackageFailure("authorization", "plugin_ui_catalog_inspection_denied");
+    const before = await this.#verified(context, "inventory");
+    await this.#authorizeCatalogInspection(
+      Object.freeze({ ...context, descriptor: before.descriptor }),
+    );
+    await this.#verified(context, "inventory");
+    await assertDirectoryPins(before.pins, false);
+    await this.#authorizeCatalogInspection(
+      Object.freeze({ ...context, descriptor: before.descriptor }),
+    );
+    await this.#verified(context, "inventory");
+    await assertDirectoryPins(before.pins, false);
+    return (
+      before.descriptor.entrypoints.node !== null &&
+      before.descriptor.entrypoints.ui === null &&
+      !before.descriptor.contributions.some((item) => item.kind === "module")
+    );
   }
 
   async verify(input: PluginUiPackageContext) {
@@ -138,7 +171,10 @@ export class LocalPluginUiPackageReader implements PluginUiPackagePort {
     });
   }
 
-  async #verified(context: PluginUiPackageContext): Promise<Verified> {
+  async #verified(
+    context: PluginUiPackageContext,
+    purpose: "inventory" | "publication" = "publication",
+  ): Promise<Verified> {
     const root = await pinDirectory(this.#installRoot);
     if (
       (typeof process.getuid === "function" &&
@@ -160,7 +196,9 @@ export class LocalPluginUiPackageReader implements PluginUiPackagePort {
       verified.packageDigest !== context.package.packageDigest
     )
       uiPackageFailure("internal", "plugin_ui_installed_bytes_mismatch");
-    uiPackageDescriptor(context, verified.descriptor);
+    uiPackageIdentity(context, verified.descriptor);
+    if (purpose === "publication")
+      uiPackageDescriptor(context, verified.descriptor);
     await assertDirectoryPins([root, packages], false);
     return Object.freeze({
       directory,

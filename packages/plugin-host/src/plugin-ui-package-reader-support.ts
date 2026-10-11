@@ -84,7 +84,7 @@ export function uiPackageContext(
   return Object.freeze({ actor, scope, selection, package: pkg });
 }
 
-export function uiPackageDescriptor(
+export function uiPackageIdentity(
   context: PluginUiPackageContext,
   descriptor: PluginPackageDescriptor,
 ): void {
@@ -94,6 +94,13 @@ export function uiPackageDescriptor(
     descriptor.publisherId !== context.package.publisherId
   )
     uiPackageFailure("internal", "plugin_ui_installed_identity_mismatch");
+}
+
+export function uiPackageDescriptor(
+  context: PluginUiPackageContext,
+  descriptor: PluginPackageDescriptor,
+): void {
+  uiPackageIdentity(context, descriptor);
   if (descriptor.entrypoints.ui?.mode !== "trustedModule")
     uiPackageFailure("conflict", "plugin_ui_mode_unsupported");
   if (

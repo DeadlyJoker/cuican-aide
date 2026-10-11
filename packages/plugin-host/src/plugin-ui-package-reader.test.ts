@@ -9,11 +9,115 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
+import { ApplicationError } from "@crewon/application";
 import { LocalPluginUiPackageReader } from "./plugin-ui-package-reader.ts";
 import {
   UI_PUBLIC_FILES,
   uiReaderFixture,
 } from "./plugin-ui-package-reader.test-support.ts";
+
+test("Node-only inventory exclusion checks actual bytes and source without publishing or executing code", async (t) => {
+  const f = await uiReaderFixture(t, { nodeOnly: true });
+  assert.equal(
+    "isNodeOnly" in f.reader,
+    false,
+    "legacy reader injection must not silently opt into catalog inspection",
+  );
+  let calls = 0;
+  const reader = new LocalPluginUiPackageReader({
+    profile: f.context.scope,
+    installRoot: f.installRoot,
+    authorizePublication: async () => {
+      throw new Error("must_not_publish_node");
+    },
+    authorizeCatalogInspection: async () => {
+      calls++;
+    },
+  });
+  assert.equal(await reader.isNodeOnlyForCatalog(f.context), true);
+  assert.equal(calls, 2);
+  await assert.rejects(reader.verify(f.context), {
+    code: "plugin_ui_mode_unsupported",
+  });
+  await assert.rejects(f.reader.isNodeOnlyForCatalog(f.context), {
+    code: "plugin_ui_catalog_inspection_denied",
+  });
+  await assert.rejects(
+    reader.isNodeOnlyForCatalog({
+      ...f.context,
+      actor: { ...f.context.actor, tenantId: "foreign" },
+    }),
+  );
+  assert.equal(calls, 2);
+  await chmod(join(f.target, "private/server.mjs"), 0o600);
+  await writeFile(join(f.target, "private/server.mjs"), "tampered");
+  await assert.rejects(reader.isNodeOnlyForCatalog(f.context));
+  assert.equal(calls, 2);
+  await assert.rejects(access(f.marker));
+});
+
+test("UI packages are not excluded and revoked source policy rejects Node-only inspection", async (t) => {
+  for (const nodeOnly of [false, true]) {
+    const f = await uiReaderFixture(t, { nodeOnly });
+    let allowed = true;
+    let calls = 0;
+    const reader = new LocalPluginUiPackageReader({
+      profile: f.context.scope,
+      installRoot: f.installRoot,
+      authorizePublication: async () => {
+        throw new ApplicationError(
+          "authorization",
+          "plugin_ui_publication_denied",
+        );
+      },
+      authorizeCatalogInspection: async () => {
+        if (!allowed)
+          throw new ApplicationError(
+            "authorization",
+            "plugin_ui_catalog_inspection_denied",
+          );
+        calls++;
+        if (nodeOnly) allowed = false;
+      },
+    });
+    if (nodeOnly)
+      await assert.rejects(reader.isNodeOnlyForCatalog(f.context), {
+        code: "plugin_ui_catalog_inspection_denied",
+      });
+    else {
+      assert.equal(await reader.isNodeOnlyForCatalog(f.context), false);
+      await assert.rejects(reader.verify(f.context), {
+        code: "plugin_ui_publication_denied",
+      });
+    }
+    assert.equal(calls, nodeOnly ? 1 : 2);
+  }
+});
+
+test("a last asynchronous inventory policy cannot conceal changed installed Node bytes", async (t) => {
+  const f = await uiReaderFixture(t, { nodeOnly: true });
+  let calls = 0;
+  const reader = new LocalPluginUiPackageReader({
+    profile: f.context.scope,
+    installRoot: f.installRoot,
+    authorizePublication: async () => {
+      throw new Error("must_not_publish_node");
+    },
+    authorizeCatalogInspection: async () => {
+      calls++;
+      if (calls === 2) {
+        await chmod(join(f.target, "private/server.mjs"), 0o600);
+        await writeFile(
+          join(f.target, "private/server.mjs"),
+          "tampered during policy",
+        );
+      }
+    },
+  });
+  await assert.rejects(reader.isNodeOnlyForCatalog(f.context));
+  assert.equal(calls, 2);
+  await assert.rejects(access(f.marker));
+});
 
 test("actual installed UI entry, dependency chunk, CSS, image and font bytes remain readable after developer source deletion", async (t) => {
   const f = await uiReaderFixture(t);

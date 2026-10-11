@@ -104,7 +104,10 @@ export function uiDeferred() {
 }
 
 /** Explicit trusted in-memory fixture; this is not a production policy, directory or Run adapter. */
-export function uiFixture(limits?: PluginUiApplicationLimits) {
+export function uiFixture(
+  limits?: PluginUiApplicationLimits,
+  catalogInspection?: (input: PluginUiPackageContext) => Promise<boolean>,
+) {
   const state = {
     scope: uiTestScope,
     selection: uiTestSelection as PluginSelection | null,
@@ -187,6 +190,7 @@ export function uiFixture(limits?: PluginUiApplicationLimits) {
       },
     },
     packages: {
+      ...(catalogInspection ? { isNodeOnly: catalogInspection } : {}),
       async verify(input) {
         state.calls.push("verify");
         state.contexts.push(input);
