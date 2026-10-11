@@ -6,7 +6,10 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ControlApiClient } from "@crewon/control-client";
+import {
+  ControlApiClientError,
+  type ControlApiClient,
+} from "@crewon/control-client";
 import type { PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import type { CommandWorkspaceHostModule } from "../../components/app/CommandWorkspaceHostModule";
 import { createControlPluginUiHost } from "../plugins/controlPluginUiHost";
@@ -363,6 +366,7 @@ export function useInstalledPluginModules({
     const controller = new AbortController();
     const generation = catalogGeneration.current;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let notConfigured = false;
     const refresh = async () => {
       try {
         const catalog = await readControlPluginUiCatalog({
@@ -397,10 +401,22 @@ export function useInstalledPluginModules({
           catalogGeneration.current === generation
         ) {
           setSnapshot(null);
-          onDiagnostic(error);
+          // Only an authenticated, explicit host configuration response can
+          // pause discovery. Missing routes and actual failures remain retryable.
+          notConfigured =
+            error instanceof ControlApiClientError &&
+            error.status === 404 &&
+            error.category === "notFound" &&
+            error.code === "plugin_ui_not_configured";
+          if (!notConfigured) onDiagnostic(error);
         }
       } finally {
-        if (!controller.signal.aborted && current.current === scope)
+        if (
+          !notConfigured &&
+          !controller.signal.aborted &&
+          current.current === scope &&
+          catalogGeneration.current === generation
+        )
           timer = setTimeout(() => void refresh(), CATALOG_REFRESH_INTERVAL_MS);
       }
     };

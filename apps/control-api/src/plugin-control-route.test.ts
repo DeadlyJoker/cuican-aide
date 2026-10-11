@@ -14,6 +14,12 @@ import {
   StaticTrustedBffRequestVerifier,
 } from "./production-security-adapters.ts";
 import { ControlApiIdentityError } from "./control-api-ports.ts";
+import { errorResponse } from "./control-api-errors.ts";
+import { StandaloneIdentity } from "./standalone-adapters.ts";
+import {
+  ControlApiClient,
+  ControlApiClientError,
+} from "@crewon/control-client";
 
 type Fixture = Awaited<ReturnType<typeof createPluginControlRouteFixture>>;
 type Package = Awaited<ReturnType<Fixture["createPackage"]>>;
@@ -564,7 +570,7 @@ test("production identity rejects injected actors and obtains HTTP scope only fr
   );
 });
 
-test("unconfigured plugin services publish no installation or UI routes", async (t) => {
+test("unconfigured plugin services publish no installation or UI mount routes", async (t) => {
   const app = Fastify();
   t.after(() => app.close());
   let identities = 0;
@@ -579,7 +585,6 @@ test("unconfigured plugin services publish no installation or UI routes", async 
   for (const url of [
     "/packages",
     "/selections",
-    "/ui/catalog",
     "/ui/mounts/" + "r".repeat(40),
   ])
     assert.equal(
@@ -587,4 +592,100 @@ test("unconfigured plugin services publish no installation or UI routes", async 
       404,
     );
   assert.equal(identities, 0);
+});
+
+test("an unconfigured UI directory publishes its explicit marker only after existing identity and strict query validation", async (t) => {
+  const app = Fastify();
+  t.after(() => app.close());
+  app.setErrorHandler((error, request, reply) => {
+    const mapped = errorResponse(error, request.id);
+    void reply.code(mapped.statusCode).send(mapped.body);
+  });
+  registerPluginControlRoutes(app, {
+    identity: new StandaloneIdentity({
+      actor: pluginRouteActor,
+      sessionToken: pluginRouteCredentials.sessionToken,
+      csrfToken: pluginRouteCredentials.csrfToken,
+      allowedOrigins: [pluginRouteCredentials.origin],
+    }),
+  });
+  const catalog = `${prefix}/ui/catalog`;
+  for (const [headers, remoteAddress, expected] of [
+    [{}, "127.0.0.1", 401],
+    [
+      { ...pluginRouteHeaders, authorization: "Bearer invalid-test-session" },
+      "127.0.0.1",
+      401,
+    ],
+    [
+      { ...pluginRouteHeaders, origin: "https://foreign.example.test" },
+      "127.0.0.1",
+      403,
+    ],
+    [pluginRouteHeaders, "192.0.2.1", 403],
+  ] as const) {
+    const denied = await app.inject({
+      method: "GET",
+      url: catalog,
+      headers,
+      remoteAddress,
+    });
+    assert.equal(denied.statusCode, expected);
+    assert.notEqual(denied.json().error.code, "plugin_ui_not_configured");
+  }
+  const valid = await app.inject({
+    method: "GET",
+    url: `${catalog}?limit=20`,
+    headers: pluginRouteHeaders,
+  });
+  assert.equal(valid.statusCode, 404);
+  assert.equal(valid.json().error.category, "notFound");
+  assert.equal(valid.json().error.code, "plugin_ui_not_configured");
+  assert.equal(typeof valid.json().error.requestId, "string");
+  assert.equal(valid.headers["cache-control"], "no-store");
+  assert.equal(valid.headers["x-content-type-options"], "nosniff");
+  assert.equal(Object.hasOwn(valid.json(), "plugins"), false);
+  assert.equal(
+    (
+      await app.inject({
+        method: "GET",
+        url: `${catalog}?profileId=foreign`,
+        headers: pluginRouteHeaders,
+      })
+    ).statusCode,
+    400,
+  );
+
+  // The existing unchanged client still receives its ordinary typed 404 error;
+  // neither success DTOs nor HTTP/session authority are replaced by this marker.
+  const client = new ControlApiClient({
+    baseUrl: pluginRouteCredentials.origin,
+    accessToken: pluginRouteCredentials.sessionToken,
+    origin: pluginRouteCredentials.origin,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      const headers: Record<string, string> = {};
+      new Headers(init?.headers).forEach((value, name) => {
+        headers[name] = value;
+      });
+      const response = await app.inject({
+        method: "GET",
+        url: url.pathname + url.search,
+        headers,
+        remoteAddress: "127.0.0.1",
+      });
+      return new Response(response.body, {
+        status: response.statusCode,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  await assert.rejects(
+    client.plugins.uiCatalog(),
+    (error) =>
+      error instanceof ControlApiClientError &&
+      error.status === 404 &&
+      error.category === "notFound" &&
+      error.code === "plugin_ui_not_configured",
+  );
 });

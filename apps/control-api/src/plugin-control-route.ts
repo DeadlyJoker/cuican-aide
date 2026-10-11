@@ -140,6 +140,19 @@ export function registerPluginControlRoutes(
       identity: dependencies.identity,
       service: dependencies.pluginUi,
     });
+  else {
+    // Keep the existing 404/ErrorResponse contract while distinguishing absent
+    // configuration from an unknown route or an unavailable configured owner.
+    app.get<{ Querystring: unknown }>(
+      "/api/v1/plugins/ui/catalog",
+      async (request, reply) => {
+        pluginHeaders(reply);
+        await dependencies.identity.resolveActor(requestContext(request));
+        parsePluginSelectionListQuery(request.query);
+        throw new ApplicationError("notFound", "plugin_ui_not_configured");
+      },
+    );
+  }
   if (dependencies.pluginUi != null)
     registerPluginUiRecoveryRoutes(app, {
       identity: dependencies.identity,

@@ -358,6 +358,178 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect(wire.fetch.mock.calls).toHaveLength(calls);
   });
 
+  it("stops automatic polling only for an explicitly unconfigured authenticated directory and allows manual recovery", async () => {
+    let configured = false;
+    const wire = controlUiClient(() =>
+      configured
+        ? controlUiResponse({ plugins: [item("example.a")], next: null })
+        : controlUiResponse(
+            {
+              error: {
+                category: "notFound",
+                code: "plugin_ui_not_configured",
+                requestId: "test-unconfigured",
+              },
+            },
+            404,
+          ),
+    );
+    await render(wire.client);
+    expect(state.hostModules).toEqual([]);
+    expect(state.hostModuleAvailability.state).toBe("unavailable");
+    const owner = state.hostModuleAvailability.ownerKey;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await settle();
+    expect(wire.fetch).toHaveBeenCalledTimes(1);
+    expect(state.getDiagnostics()).toEqual([]);
+    configured = true;
+    await act(async () => state.hostModuleAvailability.retry());
+    await settle();
+    expect(state.hostModules).toHaveLength(1);
+    expect(state.hostModuleAvailability.ownerKey).toBe(owner);
+    await refresh();
+    expect(wire.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("rechecks an explicitly unconfigured directory on an installation or configuration change hint", async () => {
+    let configured = false;
+    const wire = controlUiClient(() =>
+      configured
+        ? controlUiResponse({ plugins: [item("example.a")], next: null })
+        : controlUiResponse(
+            {
+              error: {
+                category: "notFound",
+                code: "plugin_ui_not_configured",
+                requestId: "test-unconfigured",
+              },
+            },
+            404,
+          ),
+    );
+    await render(wire.client);
+    await refresh();
+    expect(wire.fetch).toHaveBeenCalledTimes(1);
+    configured = true;
+    await act(async () => notifyInstalledPluginSelectionChanged());
+    await settle();
+    expect(wire.fetch).toHaveBeenCalledTimes(2);
+    expect(state.hostModules).toHaveLength(1);
+    await refresh();
+    expect(wire.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    [404, "notFound", "route_not_found"],
+    [404, "notFound", "plugin_ui_selection_unavailable"],
+    [404, "authorization", "plugin_ui_not_configured"],
+    [503, "notFound", "plugin_ui_not_configured"],
+    [503, "providerUnavailable", "plugin_ui_not_configured"],
+  ])(
+    "continues retrying unresolved directory errors %s/%s/%s, including an old server's generic 404",
+    async (status, category, code) => {
+      const wire = controlUiClient(() =>
+        controlUiResponse(
+          { error: { category, code, requestId: "test-unknown" } },
+          status,
+        ),
+      );
+      await render(wire.client);
+      await refresh();
+      expect(wire.fetch).toHaveBeenCalledTimes(2);
+      expect(state.hostModules).toEqual([]);
+      expect(state.hostModuleAvailability.state).toBe("unavailable");
+      expect(state.getDiagnostics()).toHaveLength(2);
+    },
+  );
+
+  it("does not trust a malformed unconfigured marker as host configuration", async () => {
+    const wire = controlUiClient(() =>
+      controlUiResponse(
+        { error: { category: "notFound", code: "plugin_ui_not_configured" } },
+        404,
+      ),
+    );
+    await render(wire.client);
+    await refresh();
+    expect(wire.fetch).toHaveBeenCalledTimes(2);
+    expect(state.hostModuleAvailability.state).toBe("unavailable");
+    expect(state.getDiagnostics()).toHaveLength(2);
+  });
+
+  it("keeps polling a configured zero-plugin directory and discovers a later installation", async () => {
+    let installed = false;
+    const wire = controlUiClient(() =>
+      controlUiResponse({
+        plugins: installed ? [item("example.a")] : [],
+        next: null,
+      }),
+    );
+    await render(wire.client);
+    expect(state.hostModules).toEqual([]);
+    expect(state.hostModuleAvailability.state).toBe("available");
+    installed = true;
+    await refresh();
+    expect(wire.fetch).toHaveBeenCalledTimes(2);
+    expect(state.hostModules).toHaveLength(1);
+  });
+
+  it("does not carry an unconfigured account's stopped polling into a new session", async () => {
+    let configured = false;
+    const wire = controlUiClient(() =>
+      configured
+        ? controlUiResponse({ plugins: [item("example.a")], next: null })
+        : controlUiResponse(
+            {
+              error: {
+                category: "notFound",
+                code: "plugin_ui_not_configured",
+                requestId: "test-unconfigured",
+              },
+            },
+            404,
+          ),
+    );
+    await render(wire.client);
+    configured = true;
+    await render(wire.client, { sessionKey: "replacement-account-key" });
+    expect(wire.fetch).toHaveBeenCalledTimes(2);
+    expect(state.hostModules).toHaveLength(1);
+    await refresh();
+    expect(wire.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("discards a stale unconfigured reply rather than stopping the replacement account's directory", async () => {
+    const oldReply = deferred<Response>();
+    const old = controlUiClient(() => oldReply.promise);
+    await render(old.client);
+    const current = controlUiClient(() =>
+      controlUiResponse({ plugins: [item("example.a")], next: null }),
+    );
+    await render(current.client, { sessionKey: "replacement-account-key" });
+    await act(async () =>
+      oldReply.resolve(
+        controlUiResponse(
+          {
+            error: {
+              category: "notFound",
+              code: "plugin_ui_not_configured",
+              requestId: "test-unconfigured",
+            },
+          },
+          404,
+        ),
+      ),
+    );
+    await settle();
+    await refresh();
+    expect(current.fetch).toHaveBeenCalledTimes(2);
+    expect(state.hostModules).toHaveLength(1);
+    expect(state.getDiagnostics()).toEqual([]);
+  });
+
   it("withdraws immediately on a session event and discards an old response even if bootstrap has not replaced the client", async () => {
     const pending = deferred<Response>();
     let calls = 0;
