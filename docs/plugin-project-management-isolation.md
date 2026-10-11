@@ -16,6 +16,8 @@
 
 当前 workspace namespace 拒绝已有对话并保护工作空间与 binding，但不证明 metadata 由该插件首次创建。没有对话的旧项目仍可能有该 namespace。不能据此收编旧项目或宣称项目列表、brief、text、asset、历史结果均已隔离。
 
+源码 `154d7f4b7` 已完成原库的 metadata owner 存储基础：显式 caller-owned 迁移、严格完整性检查、八字段记录与真实 stored principal 外键、不可变归属及 SQLite 替换写入保护。迁移不回填 legacy，模块没有 writer/adopt/upsert 或公开资格入口，也没有生产自动迁移。它只为下述原创建交易和绑定管理视图准备数据约束，不能证明现有 CRUD、产物与 replay 已隔离，更不能充当旧项目接管凭据。
+
 metadata 与产物的若干 UI receipt 也缺少 profile、plugin 范围。同账号不同插件使用同一个外部幂等 key，可能命中旧 receipt；只检查写入或只过滤显示都不够。两个原创建入口都要覆盖：`CreativeProjectApplicationService.createProject` 和 `ProjectFoundationApplicationService.createProject`，后者也创建同一份 metadata 与 brief。
 
 ## 按顺序实施
@@ -47,6 +49,8 @@ metadata 归属明确后，原 Native allocator 创建目录并非激活追加�
 中央对话继续走原 admission、Run、Tool 和流式路径。插件工具通过实际 Host 资格访问上述绑定视图；普通聊天不自动得到项目写权限。右栏只显示有意义的项目阶段与产物，复用中央 composer、模型和资源能力。
 
 用最小验收插件在 Web 覆盖真实安装、授权、项目创建、对话执行、产物读写、跨归属拒绝与恢复。通过后再核对桌面候选和正式包。业务插件仍保持卸载。
+
+上述第 1 步的存储基础和第 3 步的独立 Native 分配/私有 transport 已有源码与专项证据；新创建原交易、完整管理方法 fence、Main/Control 产品接线和第 4 步真实 Web 闭环仍未完成。具体证据及交付范围见[整体状态](./plugin-foundation-status-20261011.md)。
 
 ## 最小验收范围
 

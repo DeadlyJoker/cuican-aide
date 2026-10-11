@@ -6,6 +6,8 @@
 
 下述 F2/F3 的实际状态 owner、自动实例协调、插件右栏与项目 namespace 是当前权威源码工作区的后续增量。它们已有各自的源码、临时数据库和组件验证；未进入上述 `0.1.70` 正式 App。独立源码 Web 预览也不能替代正式包或真实插件全生命周期验收。
 
+源码 `52009d93a` 另解除了一处已复现的 F1 等待：已确定的 HTTP/协议错误不再等待响应体取消 promise，错误内容超过原 64 KiB 上限后也按原 null 分类立即交付。原 HTTP 分类、Retry-After、采样预算、取消和私有记账优先级保留；POST 400/404/429 未超上限的诊断内容读取仍等待原 EOF/idle，历史外部断流也未定因。真实适配器与 Kernel 专项、完整回归通过，但这一增量尚未更新 Web 或桌面，见[错误与清理分离](./model-http-error-cleanup.md)。
+
 本次 `0.1.70` 更新先通过真实 Web UI 的本机 HTTP 400 故障注入，再恢复实际网关，顺序完成 `gpt-6.1-sol` 和 `gpt-6-astra` 两次调用。故障注入证明明确拒绝不会因错误内容挂起被改成可重试超时；真实网关成功样本各一次调用、零重试。桌面随后用原 admin、原工作空间和会话完成真实 `gpt-6.1-sol` 短回复，7.504 秒、首段 5.884 秒、一次调用、零重试。正常退出重开后原账号、旧 40 行产物、新回复和模型选择恢复，同一 Run 未重新生成。本轮未重复桌面长输出或并行测试。证据与范围见[HTTP 拒绝及 Web/桌面验收](./model-http-rejection-retry.md)。首次外部断流仍未定因，不能用本次成功将其销账。
 
 上一版 `0.1.69` 正式 App 验收中，原 admin 登录、工作/任务/助理/日程/资源入口、既有工作空间、会话和历史回复均可见，没有短剧、Krea2 或出行插件入口。真实桌面新会话先用 `gpt-6-astra` 完成 40 行，再在同一会话切换 `gpt-6.1-sol` 完成短回复，两次均一次调用、零重试、唯一最终消息。正常退出重开后，原账号、同一会话、两份产物与 `gpt-6.1-sol` 选择恢复，模型调用仍各一次，没有重新生成。其独立[候选](../output/plugin-foundation/gateway-root-cause-20261011/candidate-0.1.69-verification.json)与[安装](../output/plugin-foundation/gateway-root-cause-20261011/installed-0.1.69-verification.json)证据保留。没有据此宣称工作空间全部操作、设置、所有模型或异常网络已验收。
@@ -76,7 +78,11 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 
 插件项目仍使用同一套宿主 Workspace/Thread 能力。新增[持久 namespace 与事务隔离](./plugin-project-workspace-isolation.md)按真实账号、profile、插件、发布者与项目绑定不透明 workspaceId，原普通 create/fork 和项目 binding 写入使用同事务 fence；归属不随包升级变动，也不能收养旧会话占用的空间。后续已堵住空/普通 workspace、关联已有会话及第二个已安装插件冒领同一项目的绕行；同账号/profile/project 预留锁与 workspace 锁共同保护首次 namespace 创建和所有 binding 写入，历史不重新归属。[原 Native 分配器](./plugin-project-workspace-native-allocation.md)已能创建可信项目目录并向原 v2 registry 非激活追加，保持当前文件读取与活动 workspace，支持稳定 ID、实际进程 CAS、排他 lease 和明确恢复。两部分尚未产品接线，中央 Agent/Node provisioning、旧 CreativeProject 查询的插件范围和文件面板仍缺失。不能仅凭 namespace 或 Native registered 宣称 SQL 已提交、中央会话已绑定、全部项目查询已隔离或用户已经拥有执行权限。
 
-后续只读审计确认，旧 metadata 与产物的 principal 范围、两条项目创建路径及 UI receipt 仍有插件隔离缺口。workspace namespace 不能充当 metadata 创建归属证明。按[同一套项目管理的隔离接线](./plugin-project-management-isolation.md)先建立新项目的明确归属与完整读写/replay fence，再接原目录分配和 Conversation；旧项目不收编，公开 v0 形状不变。这是已确定的实施顺序，尚未实现或发布该新项目协议。
+后续只读审计确认，旧 metadata 与产物的 principal 范围、两条项目创建路径及 UI receipt 仍有插件隔离缺口。workspace namespace 不能充当 metadata 创建归属证明。按[同一套项目管理的隔离接线](./plugin-project-management-isolation.md)先建立新项目的明确归属与完整读写/replay fence，再接原目录分配和 Conversation；旧项目不收编，公开 v0 形状不变。这是已确定的实施顺序，尚未接线或发布新项目创建和管理协议。
+
+源码 `154d7f4b7` 已补齐原库的 metadata owner 存储基础，复用现有 SQL migration/inspection 基础和 domain 八字段解析：独立 sidecar 的唯一占用键对齐真实 tenant/space/project，外键核对原 stored principal，JSON 与列逐字段一致，owner/marker 不可变，部分 schema、shadow 与未知版本拒绝。新增 SQLite duplicate-insert fence 阻止默认 recursive_triggers=0 下的 REPLACE 绕过；保留名称被无关索引占用时也不会误判为完全缺席。迁移使用原 caller-owned 连接和事务，不回填旧 metadata、brief 或 receipt。模块没有 writer/adoption、公开导出或生产自动迁移，尚未保护所有旧 CRUD/产物/replay；原创建交易和绑定管理视图仍需接线。
+
+源码 `6246494ee` 增加[私有 Native 分配桥](./plugin-project-workspace-native-bridge.md)，继续调用同一个原 allocator 和 registry。真实 Native policy/owner、指定 IPC 子进程、epoch/generation 和一次性有界票据共同约束空目录分配，撤回及断开后停止，原活动工作空间保持；不接受 caller owner、路径或恢复动作。实际 Node IPC 测试子进程已验证，但生产 Main/Control 尚未启动该桥，也未把票据当作项目 metadata、SQL 或 Agent 授权。这一步只完成私有 transport，不能宣称项目创建闭环。
 
 本轮源码验证使用 Node 24.19.0，证据分别限定为：
 
@@ -86,6 +92,9 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 - **Namespace/原 Store 联合组：** 最终限定八文件 276/276、20 suites、零失败、零跳过，包含真实 SQLite 与 PostgreSQL Run/Thread conformance、Conversation/schema、namespace 与实际等锁回归。任务自有 PG 18.6 已停止并删除，没有连接原数据库或改变产品服务；这些证据覆盖此前条件跳过的相关路径，不表示 CI 已配置 PG。
 - **Native 分配专项：** 原实际文件与配置六文件 93/93、零跳过，新 allocator 47/47；Electron noemit、boundary、format 通过。覆盖真子进程 CAS/排他、活动读取并行、SIGKILL 恢复、registry 缺失及替换/链接 lease 保留。Native 到 SQL/中央 Agent 尚未接通，不能当成完整项目执行验收。
 - **Native 原图执行专项：** Worker 联合组 138 项、137 通过、1 项 PG 条件跳过，聚焦组 11/11；Control 与 Contracts 筛选组 26/26，三者类型检查及 boundary 通过。覆盖真实 Native 声明、原图 A→B、同 epoch 恢复、旧 epoch 观察、owner 撤回以及最终 provider actor await 后 Native pin 失效。独立只读复核通过；root 另复跑 authority 六项。组间重叠，未部署或调用外部模型。
+- **错误清理专项：** Node 24 的真实 DirectResponsesTransport 与 Kernel 17/17、Responses 全包 296/296、Kernel 全包 62/62；root 独立复跑两个全包通过。覆盖永久 pending cancel、原重试次数和 Retry-After、取消与记账优先级、reader lock 及异步拒绝。这是本地原生 Response/ReadableStream 的协议行为证据，未使用外部模型或产品 Web，不能据此定位网关/渠道或声明部署完成。
+- **Native 私有桥专项：** Node 24 的五文件 148/148（新 bridge 46/46）、零跳过；root 另选原业务激活/可选插件/bootstrap 的五文件兼容组 93/93，Electron 类型检查通过。独立只读复核无必须修项。覆盖真实进程、IPC、Native 原发行者及目录/registry，测试清理等待真实进程退出和自有管道关闭；组间重叠，不相加，不是生产 Control 或 Web 产品验收。
+- **Metadata 归属存储专项：** Node 24 新模块 43/43、原 CreativeProject/Foundation/WorkspaceNamespace 三文件 91/91，实际 SQLite 与自有 PG 18.6、零跳过。root 另独立复跑新模块与原 CreativeProject 两文件 69/69 及 Store types，通过；组间重叠。独立复核的两个 SQLite 必须修项均先有失败负例，再修复通过；PG 原连接事务边界只读复核通过。任务自有 PG 已停止并删除，不接原产品数据库。这些是约束与兼容证据，原 SQL insert 是明确的 constraint fixture，不能当成真实 Host 新项目授权或产品隔离闭环。
 
 这些筛选组包含已有回归，UI 窄组也与完整筛选重叠；它们与本页历史的 70/70、38/38、3/3 等记录不能相加为整仓测试数。临时 SQLite、组件测试、源码预览和正式 `0.1.70` 的历史 Web/桌面模型证据仍分别记账，不能互相替代。
 
