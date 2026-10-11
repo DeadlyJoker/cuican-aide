@@ -1,3 +1,9 @@
+import { captureSqliteCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import {
+  assertSqliteTextPlanProject,
+  assertSqliteTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
+import { commitOriginalSqliteProjectMigration } from "./original-project-migration.ts";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import {
   assertCreativeProjectCommitActive,
@@ -52,7 +58,11 @@ export class SqliteProjectTextUiIntentJournalStore
     this.#assertOpen = input.assertOpen.bind(input);
   }
   async migrate(): Promise<void> {
-    this.#transaction(() => migrateSqliteTextIntent(this.#db));
+    commitOriginalSqliteProjectMigration({
+      database: this.#db,
+      assertOpen: this.#assertOpen,
+      migrate: () => migrateSqliteTextIntent(this.#db),
+    });
   }
   async stage(
     input: IntentInput<"stage">,
@@ -268,12 +278,20 @@ export class SqliteProjectTextUiIntentJournalStore
     return next;
   }
   #receipt(record: ProjectTextUiIntent) {
-    return this.#get(
+    assertSqliteTextPlanProject(
+      this.#db,
+      record.scope.actor,
+      record.scope.projectId,
+    );
+    const row = this.#get(
       `SELECT * FROM project_text_mutation_receipts WHERE ${textIntentReceiptFilter}`,
       textIntentReceiptValues(textIntentIdentity(record)),
     );
+    assertSqliteTextPlanReceiptProject(this.#db, row);
+    return row;
   }
   #project(scope: IntentInput<"stage">["scope"]) {
+    assertSqliteTextPlanProject(this.#db, scope.actor, scope.projectId);
     const row = this.#get(
       `SELECT * FROM creative_projects WHERE ${textIntentProjectFilter}`,
       textIntentProjectValues(scope),
@@ -299,14 +317,27 @@ export class SqliteProjectTextUiIntentJournalStore
   }
   #get(sql: string, values: SQLInputValue[] = []) {
     this.#assertOpen();
-    return this.#db.prepare(sql).get(...values);
+    const row = this.#db.prepare(sql).get(...values);
+    if (row?.project_id !== undefined)
+      assertSqliteTextPlanReceiptProject(this.#db, row);
+    return row;
   }
-  #transaction<T>(work: () => T, active?: () => void): T {
+  #transaction<
+    T extends ProjectTextUiIntent | null | { intent: ProjectTextUiIntent },
+  >(work: () => T, active?: () => void): T {
     this.#assertOpen();
     active?.();
     this.#db.exec("BEGIN IMMEDIATE");
     try {
+      captureSqliteCreativeProjectLegacyAccess(this.#db);
       const result = work();
+      const intent = journalResultIntent(result);
+      if (intent)
+        assertSqliteTextPlanProject(
+          this.#db,
+          intent.scope.actor,
+          intent.scope.projectId,
+        );
       active?.();
       this.#assertOpen();
       this.#db.exec("COMMIT");
@@ -320,4 +351,12 @@ export class SqliteProjectTextUiIntentJournalStore
       throw error;
     }
   }
+}
+
+function journalResultIntent(
+  result: ProjectTextUiIntent | null | { intent: ProjectTextUiIntent },
+): ProjectTextUiIntent | null {
+  if (result === null) return null;
+  if ("scope" in result) return result;
+  return result.intent;
 }

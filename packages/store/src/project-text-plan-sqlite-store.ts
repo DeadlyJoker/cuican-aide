@@ -1,3 +1,10 @@
+import { captureSqliteCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
+import { commitOriginalSqliteProjectMigration } from "./original-project-migration.ts";
+import {
+  assertSqliteTextPlanProject,
+  assertSqliteTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
 import { assertPlanOutlineInputsCurrent } from "./project-text-plan-outline-source.ts";
 import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
@@ -57,7 +64,7 @@ import {
 import { assertSqliteProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
 import {
   loadSqlitePlanAdmission,
-  sqliteRequiredPlanDigest,
+  readSqliteRequiredPlanDigest,
 } from "./project-text-plan-markers.ts";
 import {
   capturePlanObservation,
@@ -75,13 +82,19 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     this.#open = input.assertOpen.bind(input);
   }
   async migrate() {
-    this.#transaction(() => migrateSqlitePlans(this.#db));
+    commitOriginalSqliteProjectMigration({
+      database: this.#db,
+      assertOpen: this.#open,
+      migrate: () => migrateSqlitePlans(this.#db),
+    });
   }
   async loadPlan(input: Parameters<ProjectTextPlanStore["loadPlan"]>[0]) {
     const { v, o } = planRead(input, ["actor", "profileId", "planId"]),
       id = projectTextOpaqueId(v.planId);
-    this.#ready();
-    return this.#plan(o, id);
+    return this.#read(() => {
+      this.#ready();
+      return this.#plan(o, id);
+    });
   }
   async loadRevision(
     input: Parameters<ProjectTextPlanStore["loadRevision"]>[0],
@@ -94,9 +107,11 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
       ]),
       id = projectTextOpaqueId(v.planId),
       revision = creativeProjectRevision(v.planRevision);
-    this.#ready();
-    const p = this.#plan(o, id);
-    return p === null ? null : this.#revision(p, revision);
+    return this.#read(() => {
+      this.#ready();
+      const p = this.#plan(o, id);
+      return p === null ? null : this.#revision(p, revision);
+    });
   }
   async loadStep(input: Parameters<ProjectTextPlanStore["loadStep"]>[0]) {
     const { v, o } = planRead(input, [
@@ -107,17 +122,19 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
       ]),
       id = projectTextOpaqueId(v.planId),
       stepId = projectTextOpaqueId(v.stepId);
-    this.#ready();
-    const p = this.#plan(o, id);
-    return p === null
-      ? null
-      : decodePlanStep(
-          this.#get(
-            "SELECT * FROM project_text_plan_steps WHERE tenant_id=? AND space_id=? AND plan_id=? AND step_id=?",
-            [...planScope(p), stepId],
-          ),
-          p,
-        );
+    return this.#read(() => {
+      this.#ready();
+      const p = this.#plan(o, id);
+      return p === null
+        ? null
+        : decodePlanStep(
+            this.#get(
+              "SELECT * FROM project_text_plan_steps WHERE tenant_id=? AND space_id=? AND plan_id=? AND step_id=?",
+              [...planScope(p), stepId],
+            ),
+            p,
+          );
+    });
   }
   async listSteps(input: Parameters<ProjectTextPlanStore["listSteps"]>[0]) {
     const { v, o } = planRead(input, [
@@ -128,9 +145,11 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
       ]),
       id = projectTextOpaqueId(v.planId),
       revision = creativeProjectRevision(v.planRevision);
-    this.#ready();
-    const p = this.#plan(o, id);
-    return p === null ? Object.freeze([]) : this.#steps(p, revision);
+    return this.#read(() => {
+      this.#ready();
+      const p = this.#plan(o, id);
+      return p === null ? Object.freeze([]) : this.#steps(p, revision);
+    });
   }
   async listPlans(input: Parameters<ProjectTextPlanStore["listPlans"]>[0]) {
     const { v, o } = planRead(input, [
@@ -145,20 +164,25 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
         v.afterPlanId === null ? null : projectTextOpaqueId(v.afterPlanId),
       limit = creativeProjectRevision(v.limit);
     if (limit > 16) planStoreFail("project_text_plan_limit_invalid");
-    this.#ready();
-    const rows = this.#all(
-        `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND project_id=? ${after === null ? "" : "AND plan_id COLLATE BINARY>?"} ORDER BY plan_id COLLATE BINARY LIMIT ?`,
-        [
-          ...planOwnerValues(o),
-          projectId,
-          ...(after === null ? [] : [after]),
-          limit + 1,
-        ],
-      ),
-      plans = Object.freeze(rows.slice(0, limit).map((r) => decodePlan(r, o)!));
-    return Object.freeze({
-      plans,
-      nextPlanId: rows.length > limit ? plans.at(-1)!.planId : null,
+    return this.#read(() => {
+      this.#ready();
+      assertSqliteTextPlanProject(this.#db, o.actor, projectId);
+      const rows = this.#all(
+          `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND project_id=? ${after === null ? "" : "AND plan_id COLLATE BINARY>?"} ORDER BY plan_id COLLATE BINARY LIMIT ?`,
+          [
+            ...planOwnerValues(o),
+            projectId,
+            ...(after === null ? [] : [after]),
+            limit + 1,
+          ],
+        ),
+        plans = Object.freeze(
+          rows.slice(0, limit).map((r) => decodePlan(r, o)!),
+        );
+      return Object.freeze({
+        plans,
+        nextPlanId: rows.length > limit ? plans.at(-1)!.planId : null,
+      });
     });
   }
   async loadMutationReceipt(
@@ -167,8 +191,10 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     const { v, o } = planRead(input, ["actor", "profileId", "receipt"]),
       r = planReceipt(v.receipt);
     planEqual(o.actor, r.actor);
-    this.#ready();
-    return this.#receipt(o, r);
+    return this.#read(() => {
+      this.#ready();
+      return this.#receipt(o, r);
+    });
   }
   async commitControl(
     input: Parameters<ProjectTextPlanStore["commitControl"]>[0],
@@ -190,6 +216,7 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     return this.#transaction(
       () => {
         this.#ready();
+        assertSqliteTextPlanProject(this.#db, p.plan.owner, p.plan.projectId);
         assertSqliteProjectTextUiCommit(this.#db, {
           ...p.q,
           installation: p.q.binding.currentInstallation,
@@ -412,30 +439,38 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
         v.afterPlanId === null ? null : projectTextOpaqueId(v.afterPlanId),
       limit = creativeProjectRevision(v.limit);
     if (limit > 16) planStoreFail("project_text_plan_limit_invalid");
-    this.#ready();
-    const rows = this.#all(
-        `SELECT * FROM project_text_plans WHERE tenant_id=? AND space_id=? AND profile_id=? ${after === null ? "" : "AND plan_id COLLATE BINARY>?"} ORDER BY plan_id COLLATE BINARY LIMIT ?`,
-        [tenant, space, profile, ...(after === null ? [] : [after]), limit + 1],
-      ),
-      checked = rows.slice(0, limit).map((r) => decodePlan(r)!);
-    return Object.freeze({
-      locators: Object.freeze(
-        checked
-          .filter(
-            (p) =>
-              p.state === "ready" ||
-              p.state === "running" ||
-              p.state === "waitingSelection",
-          )
-          .map((p) =>
-            Object.freeze({
-              actor: p.owner,
-              profileId: p.profileId,
-              planId: p.planId,
-            }),
-          ),
-      ),
-      nextPlanId: rows.length > limit ? checked.at(-1)!.planId : null,
+    return this.#read(() => {
+      this.#ready();
+      const rows = this.#all(
+          `SELECT * FROM project_text_plans p WHERE tenant_id=? AND space_id=? AND profile_id=? AND ${captureSqliteCreativeProjectLegacyAccess(this.#db).predicate("p")} ${after === null ? "" : "AND plan_id COLLATE BINARY>?"} ORDER BY plan_id COLLATE BINARY LIMIT ?`,
+          [
+            tenant,
+            space,
+            profile,
+            ...(after === null ? [] : [after]),
+            limit + 1,
+          ],
+        ),
+        checked = rows.slice(0, limit).map((r) => decodePlan(r)!);
+      return Object.freeze({
+        locators: Object.freeze(
+          checked
+            .filter(
+              (p) =>
+                p.state === "ready" ||
+                p.state === "running" ||
+                p.state === "waitingSelection",
+            )
+            .map((p) =>
+              Object.freeze({
+                actor: p.owner,
+                profileId: p.profileId,
+                planId: p.planId,
+              }),
+            ),
+        ),
+        nextPlanId: rows.length > limit ? checked.at(-1)!.planId : null,
+      });
     });
   }
   async readRequiredPlanDigest(
@@ -443,22 +478,26 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
   ) {
     const v = projectTextRecord(input, ["tenantId", "spaceId", "runId"]);
     this.#open();
-    return sqliteRequiredPlanDigest(this.#db, {
-      tenantId: projectTextOpaqueId(v.tenantId),
-      spaceId: projectTextOpaqueId(v.spaceId),
-      runId: projectTextOpaqueId(v.runId),
-    });
+    return this.#read(() =>
+      readSqliteRequiredPlanDigest(this.#db, {
+        tenantId: projectTextOpaqueId(v.tenantId),
+        spaceId: projectTextOpaqueId(v.spaceId),
+        runId: projectTextOpaqueId(v.runId),
+      }),
+    );
   }
   async loadRunAdmission(
     input: Parameters<ProjectTextPlanStore["loadRunAdmission"]>[0],
   ) {
     const v = projectTextRecord(input, ["tenantId", "spaceId", "runId"]);
     this.#open();
-    return loadSqlitePlanAdmission(this.#db, {
-      tenantId: projectTextOpaqueId(v.tenantId),
-      spaceId: projectTextOpaqueId(v.spaceId),
-      runId: projectTextOpaqueId(v.runId),
-    });
+    return this.#read(() =>
+      loadSqlitePlanAdmission(this.#db, {
+        tenantId: projectTextOpaqueId(v.tenantId),
+        spaceId: projectTextOpaqueId(v.spaceId),
+        runId: projectTextOpaqueId(v.runId),
+      }),
+    );
   }
   #checkRows(p: PlanControlPrepared, newRevision: boolean) {
     const qs = planControlQueries(p),
@@ -480,13 +519,14 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     );
   }
   #plan(o: ProjectTextPlanOwner, id: string) {
-    return decodePlan(
-      this.#get(
-        `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND plan_id=?`,
-        [...planOwnerValues(o), id],
-      ),
-      o,
+    const row = this.#get(
+      `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND plan_id=?`,
+      [...planOwnerValues(o), id],
     );
+    assertSqliteTextPlanReceiptProject(this.#db, row);
+    const plan = decodePlan(row, o);
+    if (plan) assertSqliteTextPlanProject(this.#db, plan.owner, plan.projectId);
+    return plan;
   }
   #revision(p: ProjectTextPlan, r: number) {
     return decodePlanRevision(
@@ -505,16 +545,29 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     return Object.freeze(rows.map((row) => decodePlanStep(row, p)!));
   }
   #receipt(o: ProjectTextPlanOwner, r: ReturnType<typeof planReceipt>) {
-    return decodePlanReceipt(
-      this.#get(
-        `SELECT * FROM project_text_plan_receipts WHERE ${planOwnerWhere} AND idempotency_key=?`,
-        [...planOwnerValues(o), r.idempotencyKey],
-      ),
-      o,
-      r,
+    const row = this.#get(
+      `SELECT * FROM project_text_plan_receipts WHERE ${planOwnerWhere} AND idempotency_key=?`,
+      [...planOwnerValues(o), r.idempotencyKey],
     );
+    if (row !== undefined) {
+      const parent = this.#plan(o, String(row.plan_id));
+      if (parent === null) planStoreFail();
+    }
+    const result = decodePlanReceipt(row, o, r);
+    if (result) {
+      assertSqliteTextPlanProject(
+        this.#db,
+        result.plan.owner,
+        result.plan.projectId,
+      );
+      const parent = this.#plan(o, result.plan.planId);
+      if (parent === null || parent.projectId !== result.plan.projectId)
+        planStoreFail();
+    }
+    return result;
   }
   #writePlan(p: ProjectTextPlan, old: ProjectTextPlan | null) {
+    assertSqliteTextPlanProject(this.#db, p.owner, p.projectId);
     if (old === null)
       this.#db
         .prepare(
@@ -560,6 +613,10 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     )
       planStoreFail("project_text_plan_step_revision_conflict");
   }
+  #read<T>(read: () => T): T {
+    this.#open();
+    return readSqliteLegacyCreativeProject(this.#db, read);
+  }
   #ready() {
     this.#open();
     assertSqlitePlanSchema(this.#db);
@@ -570,7 +627,7 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
   #all(sql: string, values: readonly SQLInputValue[] = []) {
     return this.#db.prepare(sql).all(...values);
   }
-  #transaction<T>(
+  #transaction<T extends { plan: ProjectTextPlan }>(
     work: () => T,
     active?: () => void,
     checkDownstream?: () => void,
@@ -578,8 +635,14 @@ export class SqliteProjectTextPlanStore implements ProjectTextPlanStore {
     this.#open();
     this.#db.exec("BEGIN IMMEDIATE");
     try {
+      captureSqliteCreativeProjectLegacyAccess(this.#db);
       const result = work();
       checkDownstream?.();
+      assertSqliteTextPlanProject(
+        this.#db,
+        result.plan.owner,
+        result.plan.projectId,
+      );
       active?.();
       this.#open();
       this.#db.exec("COMMIT");

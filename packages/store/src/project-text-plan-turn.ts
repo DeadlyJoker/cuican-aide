@@ -1,3 +1,8 @@
+import {
+  assertSqliteTextPlanProject,
+  assertPostgresTextPlanProject,
+} from "./project-text-plan-legacy-access.ts";
+import { lockPostgresCreativeProjectLegacySchema } from "./creative-project-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import {
@@ -225,6 +230,7 @@ export function beginSqlitePlanTurn(
   replay: boolean,
 ): PlanCheckpoint | null {
   if (p === null) return null;
+  assertSqliteTextPlanProject(db, p.admission.actor, p.admission.projectId);
   assertSqlitePlanSchema(db);
   const qs = queries(p, ""),
     read = (q: { sql: string; values: readonly (string | number)[] } | null) =>
@@ -276,6 +282,13 @@ export async function beginPostgresPlanTurn(
   replay: boolean,
 ): Promise<PlanCheckpoint | null> {
   if (p === null) return null;
+  await lockPostgresCreativeProjectLegacySchema(c, schema);
+  await assertPostgresTextPlanProject(
+    c,
+    schema,
+    p.admission.actor,
+    p.admission.projectId,
+  );
   await assertPostgresPlanSchema(c, schema);
   const a = p.admission;
   await advisoryLock(

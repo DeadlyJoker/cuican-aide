@@ -1,3 +1,7 @@
+import {
+  assertSqliteTextPlanProject,
+  assertPostgresTextPlanProject,
+} from "./project-text-plan-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type { ProjectTextPlan, ProjectTextPlanStep } from "@crewon/domain";
@@ -14,6 +18,8 @@ export function writeSqlitePlanCheckpoint(
   before: PlanCheckpoint,
   next: PlanCheckpoint,
 ): void {
+  assertSqliteTextPlanProject(db, before.plan.owner, before.plan.projectId);
+  assertSqliteTextPlanProject(db, next.plan.owner, next.plan.projectId);
   if (
     before.plan.contentDigest !== next.plan.contentDigest &&
     db
@@ -55,6 +61,18 @@ export async function writePostgresPlanCheckpoint(
   before: PlanCheckpoint,
   next: PlanCheckpoint,
 ): Promise<void> {
+  await assertPostgresTextPlanProject(
+    c,
+    schema,
+    before.plan.owner,
+    before.plan.projectId,
+  );
+  await assertPostgresTextPlanProject(
+    c,
+    schema,
+    next.plan.owner,
+    next.plan.projectId,
+  );
   const p = `${creativeProjectSchemaName(schema)}.`;
   if (
     before.plan.contentDigest !== next.plan.contentDigest &&

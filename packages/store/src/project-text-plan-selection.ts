@@ -1,4 +1,8 @@
 import {
+  assertSqliteTextPlanReceiptProject,
+  assertPostgresTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
+import {
   assertSqlitePlanResultFacts,
   assertPostgresPlanResultFacts,
 } from "./project-text-plan-result-facts.ts";
@@ -218,8 +222,13 @@ export function beginSqlitePlanSelection(
       runId: q.admission.runId,
     }),
     qs = queries(q, ""),
-    read = (v: { sql: string; values: readonly (string | number)[] }) =>
-      db.prepare(v.sql.replaceAll(/\$[1-6]/gu, "?")).get(...v.values);
+    read = (v: { sql: string; values: readonly (string | number)[] }) => {
+      const row = db
+        .prepare(v.sql.replaceAll(/\$[1-6]/gu, "?"))
+        .get(...v.values);
+      if (v === qs.receipt) assertSqliteTextPlanReceiptProject(db, row);
+      return row;
+    };
   planEqual(
     decodeConversation(
       db
@@ -288,13 +297,17 @@ export async function beginPostgresPlanSelection(
     read = async (
       v: { sql: string; values: readonly (string | number)[] },
       lock = false,
-    ) =>
-      (
+    ) => {
+      const row = (
         await c.query<Record<string, unknown>>(
           v.sql + (lock ? " FOR UPDATE" : ""),
           [...v.values],
         )
       ).rows[0];
+      if (v === qs.receipt)
+        await assertPostgresTextPlanReceiptProject(c, schema, row);
+      return row;
+    };
   planEqual(
     decodeConversation(
       (

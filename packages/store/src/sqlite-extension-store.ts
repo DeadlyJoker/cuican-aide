@@ -1,3 +1,4 @@
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 import {
   admitSqliteRunComposition,
   readSqliteRunComposition,
@@ -520,14 +521,21 @@ export class SqliteExtensionStore implements ExtensionStore {
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
   ) {
     this.#host.assertOpen();
-    const value = this.#receipt(input, "task", input.receipt);
-    return value === null
-      ? null
-      : this.#verifyCreditReceipt(
-          parseExtensionTaskReceipt(value, input, input.receipt),
-        );
+    return readSqliteLegacyCreativeProject(this.#db, () => {
+      const value = this.#receipt(input, "task", input.receipt);
+      if (value === null) return null;
+      const result = this.#verifyCreditReceipt(
+        parseExtensionTaskReceipt(value, input, input.receipt),
+      );
+      loadSqlitePlanAdmission(this.#db, {
+        tenantId: result.binding.tenantId,
+        runId: result.binding.runId,
+      });
+      loadSqliteMediaInputStage(this.#db, result.binding);
+      loadSqliteAssetStage(this.#db, result.binding);
+      return result;
+    });
   }
-
   async commitExtensionRun(input: CommitExtensionRunInput) {
     const binding = validateExtensionRunCommit(input);
     return this.#transaction(() => {
@@ -560,37 +568,38 @@ export class SqliteExtensionStore implements ExtensionStore {
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
   ) {
     this.#host.assertOpen();
-    const value = this.#receipt(input, "task", input.receipt);
-    if (value === null) return null;
-    const result = this.#verifyCreditReceipt(
-      parseExtensionTurnReceipt(value, input, input.receipt),
-    );
-    const projectTextPlanAdmission = loadSqlitePlanAdmission(this.#db, {
-      tenantId: result.binding.tenantId,
-      runId: result.binding.runId,
+    return readSqliteLegacyCreativeProject(this.#db, () => {
+      const value = this.#receipt(input, "task", input.receipt);
+      if (value === null) return null;
+      const result = this.#verifyCreditReceipt(
+        parseExtensionTurnReceipt(value, input, input.receipt),
+      );
+      const projectTextPlanAdmission = loadSqlitePlanAdmission(this.#db, {
+        tenantId: result.binding.tenantId,
+        runId: result.binding.runId,
+      });
+      const projectMediaInputStageAdmission = loadSqliteMediaInputStage(
+        this.#db,
+        result.binding,
+      );
+      const projectAssetStageAdmission = loadSqliteAssetStage(
+        this.#db,
+        result.binding,
+      );
+      return {
+        ...result,
+        ...(projectTextPlanAdmission === null
+          ? {}
+          : { projectTextPlanAdmission }),
+        ...(projectMediaInputStageAdmission === null
+          ? {}
+          : { projectMediaInputStageAdmission }),
+        ...(projectAssetStageAdmission === null
+          ? {}
+          : { projectAssetStageAdmission }),
+      };
     });
-    const projectMediaInputStageAdmission = loadSqliteMediaInputStage(
-      this.#db,
-      result.binding,
-    );
-    const projectAssetStageAdmission = loadSqliteAssetStage(
-      this.#db,
-      result.binding,
-    );
-    return {
-      ...result,
-      ...(projectTextPlanAdmission === null
-        ? {}
-        : { projectTextPlanAdmission }),
-      ...(projectMediaInputStageAdmission === null
-        ? {}
-        : { projectMediaInputStageAdmission }),
-      ...(projectAssetStageAdmission === null
-        ? {}
-        : { projectAssetStageAdmission }),
-    };
   }
-
   async commitExtensionTurn(
     input: CommitExtensionTurnInput,
     options?: ProjectGenerationCommitOptions,

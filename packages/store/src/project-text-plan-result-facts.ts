@@ -1,3 +1,9 @@
+import {
+  assertSqliteTextPlanProject,
+  assertPostgresTextPlanProject,
+  assertSqliteTextPlanReceiptProject,
+  assertPostgresTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type {
@@ -98,12 +104,15 @@ export function assertSqlitePlanResultFacts(
   plan: ProjectTextPlan,
   step: ProjectTextPlanStep,
 ): void {
+  assertSqliteTextPlanProject(db, plan.owner, plan.projectId);
   if (step.result === null) return;
-  const q = query(plan, step, "");
+  const q = query(plan, step, ""),
+    row = db.prepare(q.sql.replaceAll(/\$[1-6]/gu, "?")).get(...q.values);
+  assertSqliteTextPlanReceiptProject(db, row);
   facts(
     plan,
     step,
-    db.prepare(q.sql.replaceAll(/\$[1-6]/gu, "?")).get(...q.values),
+    row,
     loadSqliteToolExecutionReceipt(db, {
       tenantId: plan.owner.tenantId,
       runId: step.result.runId,
@@ -117,12 +126,15 @@ export async function assertPostgresPlanResultFacts(
   plan: ProjectTextPlan,
   step: ProjectTextPlanStep,
 ): Promise<void> {
+  await assertPostgresTextPlanProject(c, schema, plan.owner, plan.projectId);
   if (step.result === null) return;
-  const q = query(plan, step, `${creativeProjectSchemaName(schema)}.`);
+  const q = query(plan, step, `${creativeProjectSchemaName(schema)}.`),
+    row = (await c.query(q.sql, q.values)).rows[0];
+  await assertPostgresTextPlanReceiptProject(c, schema, row);
   facts(
     plan,
     step,
-    (await c.query(q.sql, q.values)).rows[0],
+    row,
     await loadPostgresToolExecutionReceipt(
       c,
       creativeProjectSchemaName(schema),

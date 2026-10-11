@@ -1,3 +1,7 @@
+import {
+  assertSqliteTextPlanReceiptProject,
+  assertPostgresTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
 import { assertPlanOutlineInputsCurrent } from "./project-text-plan-outline-source.ts";
 import {
   captureSqliteProjectFoundationDownstream,
@@ -180,7 +184,13 @@ export function assertSqlitePlanContinuation(
     read = (x: { sql: string; values: readonly (string | number)[] } | null) =>
       x === null
         ? undefined
-        : db.prepare(x.sql.replaceAll(/\$[1-5]/gu, "?")).get(...x.values);
+        : (() => {
+            const row = db
+              .prepare(x.sql.replaceAll(/\$[1-5]/gu, "?"))
+              .get(...x.values);
+            if (x === q.selected) assertSqliteTextPlanReceiptProject(db, row);
+            return row;
+          })();
   const outlineSource = checked(plan, step, {
     project: read(q.project),
     brief: read(q.brief),
@@ -208,8 +218,13 @@ export async function assertPostgresPlanContinuation(
   const q = queries(plan, step, `${creativeProjectSchemaName(schema)}.`),
     read = async (
       x: { sql: string; values: readonly (string | number)[] } | null,
-    ) =>
-      x === null ? undefined : (await c.query(x.sql, [...x.values])).rows[0];
+    ) => {
+      if (x === null) return undefined;
+      const row = (await c.query(x.sql, [...x.values])).rows[0];
+      if (x === q.selected)
+        await assertPostgresTextPlanReceiptProject(c, schema, row);
+      return row;
+    };
   const outlineSource = checked(plan, step, {
     project: await read(q.project),
     brief: await read(q.brief),

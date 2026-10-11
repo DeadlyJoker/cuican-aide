@@ -1,3 +1,11 @@
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import {
+  assertSqliteTextPlanProject,
+  assertPostgresTextPlanProject,
+} from "./project-text-plan-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type {
@@ -72,6 +80,7 @@ export function observeSqlitePlanManualSelection(
   result: StoredProjectTextMutationResult,
   qualification?: ProjectTextUiCommitTransactionAuthority,
 ): void {
+  assertSqliteTextPlanProject(db, actor, result.artifact.projectId);
   if (
     result.kind !== "select-revision" ||
     result.contentRevision === null ||
@@ -80,7 +89,7 @@ export function observeSqlitePlanManualSelection(
     return;
   const rows = db
     .prepare(
-      "SELECT p.*,s.record_json AS step_json,s.step_id FROM project_text_plans p JOIN project_text_plan_steps s ON s.tenant_id=p.tenant_id AND s.space_id=p.space_id AND s.plan_id=p.plan_id AND s.step_id=p.active_step_id WHERE p.tenant_id=? AND p.space_id=? AND p.principal_id=? AND p.actor_id=? AND p.project_id=? AND p.state IN ('waitingSelection','paused','running') AND json_extract(s.record_json,'$.result.artifactId')=? AND json_extract(s.record_json,'$.result.contentRevision')=? LIMIT 2",
+      `SELECT p.*,s.record_json AS step_json,s.step_id FROM project_text_plans p JOIN project_text_plan_steps s ON s.tenant_id=p.tenant_id AND s.space_id=p.space_id AND s.plan_id=p.plan_id AND s.step_id=p.active_step_id WHERE p.tenant_id=? AND p.space_id=? AND p.principal_id=? AND p.actor_id=? AND p.project_id=? AND p.state IN ('waitingSelection','paused','running') AND json_extract(s.record_json,'$.result.artifactId')=? AND json_extract(s.record_json,'$.result.contentRevision')=? AND ${captureSqliteCreativeProjectLegacyAccess(db).predicate("p")} LIMIT 2`,
     )
     .all(
       actor.tenantId,
@@ -134,6 +143,12 @@ export async function observePostgresPlanManualSelection(
   result: StoredProjectTextMutationResult,
   qualification?: ProjectTextUiCommitTransactionAuthority,
 ): Promise<void> {
+  await assertPostgresTextPlanProject(
+    c,
+    schema,
+    actor,
+    result.artifact.projectId,
+  );
   if (
     result.kind !== "select-revision" ||
     result.contentRevision === null ||
@@ -144,7 +159,7 @@ export async function observePostgresPlanManualSelection(
   // The original text writer already owns the project lock, before any mutable plan/step lock.
   const rows = (
     await c.query(
-      `SELECT p.plan_id FROM ${p}project_text_plans p JOIN ${p}project_text_plan_steps s ON s.tenant_id=p.tenant_id AND s.space_id=p.space_id AND s.plan_id=p.plan_id AND s.step_id=p.active_step_id WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.principal_id=$3 AND p.actor_id=$4 AND p.project_id=$5 AND p.state IN ('waitingSelection','paused','running') AND s.record_json->'result'->>'artifactId'=$6 AND s.record_json->'result'->>'contentRevision'=$7 LIMIT 2`,
+      `SELECT p.plan_id FROM ${p}project_text_plans p JOIN ${p}project_text_plan_steps s ON s.tenant_id=p.tenant_id AND s.space_id=p.space_id AND s.plan_id=p.plan_id AND s.step_id=p.active_step_id WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.principal_id=$3 AND p.actor_id=$4 AND p.project_id=$5 AND p.state IN ('waitingSelection','paused','running') AND s.record_json->'result'->>'artifactId'=$6 AND s.record_json->'result'->>'contentRevision'=$7 AND ${(await capturePostgresCreativeProjectLegacyAccess(c, schema)).predicate("p")} LIMIT 2`,
       [
         actor.tenantId,
         actor.spaceId,

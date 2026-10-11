@@ -1,3 +1,4 @@
+import { readPostgresTextPlan } from "./project-text-plan-legacy-access.ts";
 import {
   admitPostgresRunComposition,
   readPostgresRunComposition,
@@ -530,52 +531,54 @@ export class PostgresExtensionStore implements ExtensionStore {
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
   ) {
     this.#host.assertOpen();
-    const value = await this.#receipt(this.#pool, input, "task", input.receipt);
-    if (value === null) return null;
-    const result = parseExtensionTaskReceipt(value, input, input.receipt);
-    await readPostgresRunComposition(
-      this.#pool,
-      this.#schemaName,
-      result.binding,
-    );
-    await this.#assertCreditLink(this.#pool, result.creditAdmission);
-    await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
-    const client = await this.#pool.connect();
-    try {
-      this.#host.assertOpen();
-      const projectTextPlanAdmission = await loadPostgresPlanAdmission(
-        client,
-        this.#schemaName,
-        { tenantId: result.binding.tenantId, runId: result.binding.runId },
-      );
-      this.#host.assertOpen();
-      const projectMediaInputStageAdmission = await loadPostgresMediaInputStage(
-        client,
-        this.#schemaName,
-        result.binding,
-      );
-      const projectAssetStageAdmission = await loadPostgresAssetStage(
-        client,
-        this.#schemaName,
-        result.binding,
-      );
-      return {
-        ...result,
-        ...(projectTextPlanAdmission === null
-          ? {}
-          : { projectTextPlanAdmission }),
-        ...(projectMediaInputStageAdmission === null
-          ? {}
-          : { projectMediaInputStageAdmission }),
-        ...(projectAssetStageAdmission === null
-          ? {}
-          : { projectAssetStageAdmission }),
-      };
-    } finally {
-      client.release();
-    }
+    return readPostgresTextPlan({
+      pool: this.#pool,
+      schema: this.#schemaName,
+      assertOpen: () => this.#host.assertOpen(),
+      read: async (client) => {
+        const value = await this.#receipt(client, input, "task", input.receipt);
+        if (value === null) return null;
+        const result = parseExtensionTaskReceipt(value, input, input.receipt);
+        await readPostgresRunComposition(
+          client,
+          this.#schemaName,
+          result.binding,
+        );
+        await this.#assertCreditLink(client, result.creditAdmission);
+        await verifyPostgresUnmeteredReceipt(client, this.#schemaName, result);
+        this.#host.assertOpen();
+        const projectTextPlanAdmission = await loadPostgresPlanAdmission(
+          client,
+          this.#schemaName,
+          { tenantId: result.binding.tenantId, runId: result.binding.runId },
+        );
+        this.#host.assertOpen();
+        const projectMediaInputStageAdmission =
+          await loadPostgresMediaInputStage(
+            client,
+            this.#schemaName,
+            result.binding,
+          );
+        const projectAssetStageAdmission = await loadPostgresAssetStage(
+          client,
+          this.#schemaName,
+          result.binding,
+        );
+        return {
+          ...result,
+          ...(projectTextPlanAdmission === null
+            ? {}
+            : { projectTextPlanAdmission }),
+          ...(projectMediaInputStageAdmission === null
+            ? {}
+            : { projectMediaInputStageAdmission }),
+          ...(projectAssetStageAdmission === null
+            ? {}
+            : { projectAssetStageAdmission }),
+        };
+      },
+    });
   }
-
   async commitExtensionRun(input: CommitExtensionRunInput) {
     const binding = validateExtensionRunCommit(input);
     return this.#transaction(binding, async (client) => {
@@ -627,52 +630,54 @@ export class PostgresExtensionStore implements ExtensionStore {
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
   ) {
     this.#host.assertOpen();
-    const value = await this.#receipt(this.#pool, input, "task", input.receipt);
-    if (value === null) return null;
-    const result = parseExtensionTurnReceipt(value, input, input.receipt);
-    await readPostgresRunComposition(
-      this.#pool,
-      this.#schemaName,
-      result.binding,
-    );
-    await this.#assertCreditLink(this.#pool, result.creditAdmission);
-    await verifyPostgresUnmeteredReceipt(this.#pool, this.#schemaName, result);
-    const client = await this.#pool.connect();
-    try {
-      this.#host.assertOpen();
-      const projectTextPlanAdmission = await loadPostgresPlanAdmission(
-        client,
-        this.#schemaName,
-        { tenantId: result.binding.tenantId, runId: result.binding.runId },
-      );
-      this.#host.assertOpen();
-      const projectMediaInputStageAdmission = await loadPostgresMediaInputStage(
-        client,
-        this.#schemaName,
-        result.binding,
-      );
-      const projectAssetStageAdmission = await loadPostgresAssetStage(
-        client,
-        this.#schemaName,
-        result.binding,
-      );
-      return {
-        ...result,
-        ...(projectTextPlanAdmission === null
-          ? {}
-          : { projectTextPlanAdmission }),
-        ...(projectMediaInputStageAdmission === null
-          ? {}
-          : { projectMediaInputStageAdmission }),
-        ...(projectAssetStageAdmission === null
-          ? {}
-          : { projectAssetStageAdmission }),
-      };
-    } finally {
-      client.release();
-    }
+    return readPostgresTextPlan({
+      pool: this.#pool,
+      schema: this.#schemaName,
+      assertOpen: () => this.#host.assertOpen(),
+      read: async (client) => {
+        const value = await this.#receipt(client, input, "task", input.receipt);
+        if (value === null) return null;
+        const result = parseExtensionTurnReceipt(value, input, input.receipt);
+        await readPostgresRunComposition(
+          client,
+          this.#schemaName,
+          result.binding,
+        );
+        await this.#assertCreditLink(client, result.creditAdmission);
+        await verifyPostgresUnmeteredReceipt(client, this.#schemaName, result);
+        this.#host.assertOpen();
+        const projectTextPlanAdmission = await loadPostgresPlanAdmission(
+          client,
+          this.#schemaName,
+          { tenantId: result.binding.tenantId, runId: result.binding.runId },
+        );
+        this.#host.assertOpen();
+        const projectMediaInputStageAdmission =
+          await loadPostgresMediaInputStage(
+            client,
+            this.#schemaName,
+            result.binding,
+          );
+        const projectAssetStageAdmission = await loadPostgresAssetStage(
+          client,
+          this.#schemaName,
+          result.binding,
+        );
+        return {
+          ...result,
+          ...(projectTextPlanAdmission === null
+            ? {}
+            : { projectTextPlanAdmission }),
+          ...(projectMediaInputStageAdmission === null
+            ? {}
+            : { projectMediaInputStageAdmission }),
+          ...(projectAssetStageAdmission === null
+            ? {}
+            : { projectAssetStageAdmission }),
+        };
+      },
+    });
   }
-
   async loadExtensionCreditAdmission(input: ExtensionRunLocator) {
     this.#host.assertOpen();
     const admission = await this.#creditAdmission(this.#pool, input);
@@ -931,7 +936,7 @@ export class PostgresExtensionStore implements ExtensionStore {
     this.#host.assertOpen();
     const client = await this.#pool.connect();
     try {
-      await client.query("BEGIN");
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
         JSON.stringify([
           "extension",

@@ -1,3 +1,11 @@
+import { capturePostgresCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import { commitOriginalProjectMigration } from "./original-project-migration.ts";
+import {
+  assertPostgresTextPlanReceiptProject,
+  assertPostgresTextPlanProject,
+  readPostgresTextPlan,
+  transactPostgresTextPlan,
+} from "./project-text-plan-legacy-access.ts";
 import { assertPlanOutlineInputsCurrent } from "./project-text-plan-outline-source.ts";
 import { assertPluginTaskModelSelectionPlan } from "@crewon/application";
 import {
@@ -57,7 +65,7 @@ import {
 import { assertPostgresProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
 import {
   loadPostgresPlanAdmission,
-  postgresRequiredPlanDigest,
+  readPostgresRequiredPlanDigest,
 } from "./project-text-plan-markers.ts";
 import {
   capturePlanObservation,
@@ -78,12 +86,16 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     this.#open = input.assertOpen.bind(input);
   }
   async migrate() {
-    await this.#transaction(async (c) => {
-      await advisoryLock(
-        c,
-        JSON.stringify(["project-text-plan-schema", this.#schema]),
-      );
-      await migratePostgresPlans(c, this.#schema);
+    await commitOriginalProjectMigration({
+      pool: this.#pool,
+      assertOpen: this.#open,
+      migrate: async (c) => {
+        await advisoryLock(
+          c,
+          JSON.stringify(["project-text-plan-schema", this.#schema]),
+        );
+        await migratePostgresPlans(c, this.#schema);
+      },
     });
   }
   async loadPlan(input: Parameters<ProjectTextPlanStore["loadPlan"]>[0]) {
@@ -158,6 +170,7 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
       limit = creativeProjectRevision(v.limit);
     if (limit > 16) planStoreFail("project_text_plan_limit_invalid");
     return this.#read(async (c) => {
+      await assertPostgresTextPlanProject(c, this.#schema, o.actor, projectId);
       const rows = await this.#all(
           c,
           `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND project_id=? ${after === null ? "" : 'AND plan_id COLLATE "C">?'} ORDER BY plan_id COLLATE "C" LIMIT ?`,
@@ -204,6 +217,12 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     return this.#transaction(
       async (c) => {
         await this.#ready(c);
+        await assertPostgresTextPlanProject(
+          c,
+          this.#schema,
+          p.plan.owner,
+          p.plan.projectId,
+        );
         await assertPostgresProjectTextUiCommit(c, this.#schema, {
           ...p.q,
           installation: p.q.binding.currentInstallation,
@@ -470,7 +489,7 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     return this.#read(async (c) => {
       const rows = await this.#all(
           c,
-          `SELECT * FROM project_text_plans WHERE tenant_id=? AND space_id=? AND profile_id=? ${after === null ? "" : 'AND plan_id COLLATE "C">?'} ORDER BY plan_id COLLATE "C" LIMIT ?`,
+          `SELECT * FROM project_text_plans p WHERE tenant_id=? AND space_id=? AND profile_id=? AND ${(await capturePostgresCreativeProjectLegacyAccess(c, this.#schema)).predicate("p")} ${after === null ? "" : 'AND plan_id COLLATE "C">?'} ORDER BY plan_id COLLATE "C" LIMIT ?`,
           [
             tenant,
             space,
@@ -510,9 +529,12 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
         spaceId: projectTextOpaqueId(v.spaceId),
         runId: projectTextOpaqueId(v.runId),
       };
-    return this.#transaction((c) =>
-      postgresRequiredPlanDigest(c, this.#schema, locator),
-    );
+    return readPostgresTextPlan({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#open,
+      read: (c) => readPostgresRequiredPlanDigest(c, this.#schema, locator),
+    });
   }
   async loadRunAdmission(
     input: Parameters<ProjectTextPlanStore["loadRunAdmission"]>[0],
@@ -523,9 +545,12 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
         spaceId: projectTextOpaqueId(v.spaceId),
         runId: projectTextOpaqueId(v.runId),
       };
-    return this.#transaction((c) =>
-      loadPostgresPlanAdmission(c, this.#schema, locator),
-    );
+    return readPostgresTextPlan({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#open,
+      read: (c) => loadPostgresPlanAdmission(c, this.#schema, locator),
+    });
   }
   async #checkRows(
     c: PoolClient,
@@ -557,14 +582,21 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     id: string,
     lock = false,
   ) {
-    return decodePlan(
-      await this.#get(
-        c,
-        `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND plan_id=? ${lock ? "FOR UPDATE" : ""}`,
-        [...planOwnerValues(o), id],
-      ),
-      o,
+    const row = await this.#get(
+      c,
+      `SELECT * FROM project_text_plans WHERE ${planOwnerWhere} AND plan_id=? ${lock ? "FOR UPDATE" : ""}`,
+      [...planOwnerValues(o), id],
     );
+    await assertPostgresTextPlanReceiptProject(c, this.#schema, row);
+    const plan = decodePlan(row, o);
+    if (plan)
+      await assertPostgresTextPlanProject(
+        c,
+        this.#schema,
+        plan.owner,
+        plan.projectId,
+      );
+    return plan;
   }
   async #revision(c: PoolClient, p: ProjectTextPlan, r: number) {
     return decodePlanRevision(
@@ -589,21 +621,35 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     o: ProjectTextPlanOwner,
     r: ReturnType<typeof planReceipt>,
   ) {
-    return decodePlanReceipt(
-      await this.#get(
-        c,
-        `SELECT * FROM project_text_plan_receipts WHERE ${planOwnerWhere} AND idempotency_key=?`,
-        [...planOwnerValues(o), r.idempotencyKey],
-      ),
-      o,
-      r,
+    const row = await this.#get(
+      c,
+      `SELECT * FROM project_text_plan_receipts WHERE ${planOwnerWhere} AND idempotency_key=?`,
+      [...planOwnerValues(o), r.idempotencyKey],
     );
+    if (row !== undefined) {
+      const parent = await this.#plan(c, o, String(row.plan_id));
+      if (parent === null) planStoreFail();
+    }
+    const result = decodePlanReceipt(row, o, r);
+    if (result) {
+      await assertPostgresTextPlanProject(
+        c,
+        this.#schema,
+        result.plan.owner,
+        result.plan.projectId,
+      );
+      const parent = await this.#plan(c, o, result.plan.planId);
+      if (parent === null || parent.projectId !== result.plan.projectId)
+        planStoreFail();
+    }
+    return result;
   }
   async #writePlan(
     c: PoolClient,
     p: ProjectTextPlan,
     old: ProjectTextPlan | null,
   ) {
+    await assertPostgresTextPlanProject(c, this.#schema, p.owner, p.projectId);
     if (old === null)
       await this.#query(
         c,
@@ -683,9 +729,14 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
     );
   }
   async #read<T>(work: (c: PoolClient) => Promise<T>) {
-    return this.#transaction(async (c) => {
-      await this.#ready(c);
-      return work(c);
+    return readPostgresTextPlan({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#open,
+      read: async (c) => {
+        await this.#ready(c);
+        return work(c);
+      },
     });
   }
   #query(c: PoolClient, sql: string, values: readonly unknown[] = []) {
@@ -705,32 +756,18 @@ export class PostgresProjectTextPlanStore implements ProjectTextPlanStore {
   async #all(c: PoolClient, sql: string, values: readonly unknown[] = []) {
     return (await this.#query(c, sql, values)).rows;
   }
-  async #transaction<T>(
+  async #transaction<T extends { plan: ProjectTextPlan }>(
     work: (c: PoolClient) => Promise<T>,
     q?: ProjectTextPlanCommitAuthority,
-    checkDownstream?: (client: PoolClient) => Promise<void>,
+    checkDownstream?: (c: PoolClient) => Promise<void>,
   ): Promise<T> {
-    this.#open();
-    const c = await this.#pool.connect();
-    try {
-      this.#open();
-      await c.query("BEGIN");
-      try {
-        const result = await work(c);
-        await q?.assertTransactionCurrent();
-        await checkDownstream?.(c);
-        q?.assertActive();
-        this.#open();
-        await c.query("COMMIT");
-        return result;
-      } catch (error) {
-        try {
-          await c.query("ROLLBACK");
-        } catch {}
-        throw error;
-      }
-    } finally {
-      c.release();
-    }
+    return transactPostgresTextPlan({
+      pool: this.#pool,
+      schema: this.#schema,
+      assertOpen: this.#open,
+      work,
+      authority: q,
+      checkDownstream,
+    });
   }
 }

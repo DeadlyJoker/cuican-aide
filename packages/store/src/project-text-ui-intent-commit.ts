@@ -1,3 +1,14 @@
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
+import {
+  assertSqliteTextPlanProject,
+  assertPostgresTextPlanProject,
+  assertSqliteTextPlanReceiptProject,
+  assertPostgresTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type { ProjectTextUiCommitTransactionAuthority } from "@crewon/application";
@@ -41,32 +52,34 @@ export function beginSqliteTextIntentCommit(
   q: ProjectTextUiCommitTransactionAuthority | undefined,
   identity: TextIdentity,
 ): ProjectTextUiIntent | null {
+  captureSqliteCreativeProjectLegacyAccess(db);
   if (!assertSqliteTextIntentSchema(db, true)) {
     if (q?.intentRef !== undefined) fail();
     return null;
   }
-  return qualified(
-    decodeTextIntent(
-      db
-        .prepare(
-          `SELECT * FROM project_text_ui_intents WHERE ${textIntentReceiptFilter}`,
-        )
-        .get(...textIntentReceiptValues(identity)),
-    ),
-    q,
-    identity,
-  );
+  const row = db
+    .prepare(
+      `SELECT * FROM project_text_ui_intents WHERE ${textIntentReceiptFilter}`,
+    )
+    .get(...textIntentReceiptValues(identity));
+  assertSqliteTextPlanReceiptProject(db, row);
+  const record = decodeTextIntent(row);
+  if (record)
+    assertSqliteTextPlanProject(db, record.scope.actor, record.scope.projectId);
+  return qualified(record, q, identity);
 }
 export function finishSqliteTextIntentCommit(
   db: DatabaseSync,
   record: ProjectTextUiIntent | null,
 ): void {
   if (record === null) return;
+  assertSqliteTextPlanProject(db, record.scope.actor, record.scope.projectId);
   const row = db
     .prepare(
       `SELECT * FROM project_text_mutation_receipts WHERE ${textIntentReceiptFilter}`,
     )
     .get(...textIntentReceiptValues(textIntentIdentity(record)));
+  assertSqliteTextPlanReceiptProject(db, row);
   const next = acceptedTextIntent(record, row);
   if (next === record) return;
   const result = db
@@ -89,6 +102,8 @@ export async function beginPostgresTextIntentCommit(
   q: ProjectTextUiCommitTransactionAuthority | undefined,
   identity: TextIdentity,
 ): Promise<ProjectTextUiIntent | null> {
+  await lockPostgresCreativeProjectLegacySchema(client, schema);
+  await capturePostgresCreativeProjectLegacyAccess(client, schema);
   if (!(await assertPostgresTextIntentSchema(client, schema, true))) {
     if (q?.intentRef !== undefined) fail();
     return null;
@@ -102,18 +117,24 @@ export async function beginPostgresTextIntentCommit(
     ]),
   ]);
   // Read immutable identity before acquiring its scope lock; re-read mutable state after the lock.
-  const first = decodeTextIntent(
-    (
-      await client.query(
-        `SELECT * FROM ${p}project_text_ui_intents WHERE ${pgFilter()}`,
-        textIntentReceiptValues(identity),
-      )
-    ).rows[0],
-  );
+  const firstRow = (
+    await client.query(
+      `SELECT * FROM ${p}project_text_ui_intents WHERE ${pgFilter()}`,
+      textIntentReceiptValues(identity),
+    )
+  ).rows[0];
+  await assertPostgresTextPlanReceiptProject(client, schema, firstRow);
+  const first = decodeTextIntent(firstRow);
   if (first === null) {
     if (q?.intentRef !== undefined) fail();
     return null;
   }
+  await assertPostgresTextPlanProject(
+    client,
+    schema,
+    first.scope.actor,
+    first.scope.projectId,
+  );
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
     JSON.stringify([
       "project-text-ui-intent",
@@ -140,6 +161,12 @@ export async function finishPostgresTextIntentCommit(
   record: ProjectTextUiIntent | null,
 ): Promise<void> {
   if (record === null) return;
+  await assertPostgresTextPlanProject(
+    client,
+    schema,
+    record.scope.actor,
+    record.scope.projectId,
+  );
   const p = `${creativeProjectSchemaName(schema)}.`;
   const row = (
     await client.query(
@@ -147,6 +174,7 @@ export async function finishPostgresTextIntentCommit(
       textIntentReceiptValues(textIntentIdentity(record)),
     )
   ).rows[0];
+  await assertPostgresTextPlanReceiptProject(client, schema, row);
   const next = acceptedTextIntent(record, row);
   if (next === record) return;
   const result = await client.query(

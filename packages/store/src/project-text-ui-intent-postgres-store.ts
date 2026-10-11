@@ -1,3 +1,12 @@
+import {
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
+import {
+  assertPostgresTextPlanProject,
+  assertPostgresTextPlanReceiptProject,
+} from "./project-text-plan-legacy-access.ts";
+import { commitOriginalProjectMigration } from "./original-project-migration.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertCreativeProjectCommitActive,
@@ -57,9 +66,11 @@ export class PostgresProjectTextUiIntentJournalStore
     this.#assertOpen = input.assertOpen.bind(input);
   }
   async migrate(): Promise<void> {
-    await this.#transaction((client) =>
-      migratePostgresTextIntent(client, this.#schema),
-    );
+    await commitOriginalProjectMigration({
+      pool: this.#pool,
+      assertOpen: this.#assertOpen,
+      migrate: (client) => migratePostgresTextIntent(client, this.#schema),
+    });
   }
   async stage(
     input: IntentInput<"stage">,
@@ -302,13 +313,27 @@ export class PostgresProjectTextUiIntentJournalStore
     return next;
   }
   async #receipt(client: PoolClient, record: ProjectTextUiIntent) {
-    return this.#get(
+    await assertPostgresTextPlanProject(
+      client,
+      this.#schema,
+      record.scope.actor,
+      record.scope.projectId,
+    );
+    const row = await this.#get(
       client,
       `SELECT * FROM project_text_mutation_receipts WHERE ${textIntentReceiptFilter}`,
       textIntentReceiptValues(textIntentIdentity(record)),
     );
+    await assertPostgresTextPlanReceiptProject(client, this.#schema, row);
+    return row;
   }
   async #project(client: PoolClient, scope: IntentInput<"stage">["scope"]) {
+    await assertPostgresTextPlanProject(
+      client,
+      this.#schema,
+      scope.actor,
+      scope.projectId,
+    );
     const row = await this.#get(
       client,
       `SELECT * FROM creative_projects WHERE ${textIntentProjectFilter}`,
@@ -381,10 +406,15 @@ export class PostgresProjectTextUiIntentJournalStore
       statement,
       values,
     );
+    for (const row of result.rows)
+      if (row.project_id !== undefined)
+        await assertPostgresTextPlanReceiptProject(client, this.#schema, row);
     this.#assertOpen();
     return result;
   }
-  async #transaction<T>(
+  async #transaction<
+    T extends ProjectTextUiIntent | null | { intent: ProjectTextUiIntent },
+  >(
     work: (client: PoolClient) => Promise<T>,
     active?: () => void,
     current?: () => Promise<void>,
@@ -393,8 +423,18 @@ export class PostgresProjectTextUiIntentJournalStore
     active?.();
     const client = await this.#pool.connect();
     try {
-      await client.query("BEGIN");
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
+      await capturePostgresCreativeProjectLegacyAccess(client, this.#schema);
       const result = await work(client);
+      const intent = journalResultIntent(result);
+      if (intent)
+        await assertPostgresTextPlanProject(
+          client,
+          this.#schema,
+          intent.scope.actor,
+          intent.scope.projectId,
+        );
       await current?.();
       active?.();
       this.#assertOpen();
@@ -411,4 +451,12 @@ export class PostgresProjectTextUiIntentJournalStore
       client.release();
     }
   }
+}
+
+function journalResultIntent(
+  result: ProjectTextUiIntent | null | { intent: ProjectTextUiIntent },
+): ProjectTextUiIntent | null {
+  if (result === null) return null;
+  if ("scope" in result) return result;
+  return result.intent;
 }
