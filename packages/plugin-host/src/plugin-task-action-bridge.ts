@@ -38,6 +38,7 @@ import {
   type PluginNodeLease,
 } from "./plugin-node-host.ts";
 import { PluginCompositionCoordinator } from "./plugin-composition-coordinator.ts";
+import { pluginNodeLeaseIdentity } from "./plugin-node-lease-authority.ts";
 import {
   bridgeAction,
   bridgeFailure,
@@ -80,6 +81,7 @@ type ActionLeaseAccess = Readonly<{
     invocation: Invocation,
   ): (() => PluginNodeLease) | Promise<() => PluginNodeLease>;
   assertCurrent?(invocation: Invocation): Promise<void>;
+  releaseLease?(lease: PluginNodeLease): void;
 }>;
 
 /** Host-only bridge. Plugins receive a per-instance task port and an ephemeral invocation reference. */
@@ -141,6 +143,86 @@ export class PluginTaskActionBridge {
           authorizeBorrow: (identity) =>
             this.#authorizeBorrow(invocation, identity),
         }),
+    };
+    return Object.freeze({
+      invoke: (context: PluginUiActionContext) => this.#invoke(access, context),
+    });
+  }
+
+  /** Borrow the original profile's live instance, including its physical cleanup join. */
+  actionsFromBorrower(
+    input: Readonly<{
+      borrow(
+        context: PluginUiActionContext,
+        authorizeBorrow: (identity: PluginIdentity) => "allow" | "deny",
+      ): Readonly<{ lease: PluginNodeLease; release(): void }>;
+    }>,
+  ): PluginUiActionPort {
+    const fields = bridgeFields(input, ["borrow"]);
+    if (typeof fields.borrow !== "function")
+      bridgeFailure("plugin_action_borrower_invalid");
+    const borrow = fields.borrow.bind(input) as typeof input.borrow;
+    const releases = new WeakMap<PluginNodeLease, () => void>();
+    const release = (lease: PluginNodeLease) => {
+      const cleanup = releases.get(lease);
+      if (!cleanup) bridgeFailure("plugin_action_borrower_invalid");
+      releases.delete(lease);
+      cleanup();
+    };
+    const acquire = (invocation: Invocation): PluginNodeLease => {
+      this.#available(invocation);
+      const handle = borrow(invocation.context, (identity) =>
+        this.#authorizeBorrow(invocation, identity),
+      );
+      const releaseField =
+        handle && typeof handle === "object"
+          ? Object.getOwnPropertyDescriptor(handle, "release")
+          : undefined;
+      if (
+        !releaseField ||
+        !Object.hasOwn(releaseField, "value") ||
+        typeof releaseField.value !== "function"
+      )
+        bridgeFailure("plugin_action_borrower_invalid");
+      const cleanup = releaseField.value.bind(handle) as () => void;
+      try {
+        const captured = bridgeFields(handle, ["lease", "release"]);
+        const lease = captured.lease as PluginNodeLease;
+        const identity = pluginNodeLeaseIdentity(lease);
+        if (
+          lease.identity !== identity ||
+          releases.has(lease) ||
+          this.#authorizeBorrow(invocation, identity) !== "allow"
+        )
+          bridgeFailure("plugin_action_borrower_invalid");
+        releases.set(lease, cleanup);
+        return lease;
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+    };
+    const access: ActionLeaseAccess = {
+      prepareLease: (invocation) => {
+        invocation.assertInstanceCurrentSync = () => {
+          const current = acquire(invocation);
+          try {
+            if (
+              invocation.instance !== null &&
+              current.identity !== invocation.instance
+            )
+              bridgeFailure("plugin_action_composition_instance_changed");
+          } finally {
+            release(current);
+          }
+        };
+        return () => acquire(invocation);
+      },
+      assertCurrent: async (invocation) => {
+        if (invocation.instance !== null)
+          invocation.assertInstanceCurrentSync?.();
+      },
+      releaseLease: release,
     };
     return Object.freeze({
       invoke: (context: PluginUiActionContext) => this.#invoke(access, context),
@@ -484,7 +566,10 @@ export class PluginTaskActionBridge {
     } finally {
       invocation.open = false;
       this.#invocations.delete(ref);
-      lease?.release();
+      if (lease) {
+        if (access.releaseLease) access.releaseLease(lease);
+        else lease.release();
+      }
     }
   }
 }

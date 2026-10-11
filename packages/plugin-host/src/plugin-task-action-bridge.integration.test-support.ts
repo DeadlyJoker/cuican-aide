@@ -101,6 +101,7 @@ export async function taskActionFixture(
     queryTasks?: boolean;
     nodeServiceCatalog?: "versioned";
     composition?: true;
+    profileBorrower?: true;
     backend?: "sqlite" | "postgres";
   }> = {},
 ) {
@@ -152,6 +153,14 @@ export async function taskActionFixture(
     queryGate: null as Promise<void> | null,
     queryEntered: null as (() => void) | null,
     compositionDigestOverride: undefined as string | null | undefined,
+    borrowMode: "original" as
+      | "original"
+      | "copied"
+      | "released"
+      | "extra"
+      | "accessor",
+    physicalBorrows: 0,
+    physicalReleases: 0,
   };
   const tasksFor = (storage: typeof f.first) =>
     new ExtensionTaskApplicationService({
@@ -295,6 +304,7 @@ export async function taskActionFixture(
         profile,
       })
     : null;
+  let currentNodeDigest: string | null = null;
   const synchronize = async () => {
     assert.ok(coordinator);
     const publication = await publishInstalledPluginComposition({
@@ -315,6 +325,7 @@ export async function taskActionFixture(
       },
     });
     assert.deepEqual(result.failures, []);
+    currentNodeDigest = publication.lock.lockDigest;
     return publication.lock;
   };
   t.after(async () => {
@@ -451,16 +462,63 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
     profiles,
     authorization,
     packages,
-    actions: coordinator
-      ? bridge.actionsFromComposition({
-          coordinator,
-          currentLock: async () =>
-            state.compositionDigestOverride === undefined
-              ? ((await compositions.loadCurrent({ scope: profile }))
-                  ?.lockDigest ?? null)
-              : state.compositionDigestOverride,
-        })
-      : bridge.actions(nodeHost!),
+    actions:
+      coordinator && options.profileBorrower
+        ? bridge.actionsFromBorrower({
+            borrow(context, authorizeBorrow) {
+              assert.ok(currentNodeDigest);
+              const actual = coordinator.acquireScopedCurrent({
+                scope: {
+                  ...context.scope,
+                  authorityEpoch: context.authorityEpoch,
+                },
+                lockDigest: currentNodeDigest,
+                pluginId: context.package.pluginId,
+                authorizeBorrow,
+              });
+              state.physicalBorrows++;
+              if (state.borrowMode === "released") actual.release();
+              let released = false;
+              const handle = {
+                lease:
+                  state.borrowMode === "copied"
+                    ? Object.freeze({ ...actual })
+                    : actual,
+                release() {
+                  assert.equal(
+                    released,
+                    false,
+                    "physical handle released twice",
+                  );
+                  released = true;
+                  actual.release();
+                  state.physicalReleases++;
+                },
+              };
+              if (state.borrowMode === "accessor")
+                Object.defineProperty(handle, "lease", {
+                  enumerable: true,
+                  get() {
+                    throw new Error("borrow_handle_getter_must_not_run");
+                  },
+                });
+              return Object.freeze(
+                state.borrowMode === "extra"
+                  ? { ...handle, unexpected: true }
+                  : handle,
+              );
+            },
+          })
+        : coordinator
+          ? bridge.actionsFromComposition({
+              coordinator,
+              currentLock: async () =>
+                state.compositionDigestOverride === undefined
+                  ? ((await compositions.loadCurrent({ scope: profile }))
+                      ?.lockDigest ?? null)
+                  : state.compositionDigestOverride,
+            })
+          : bridge.actions(nodeHost!),
     committedTasks: authority,
     clock: { now: () => state.now },
     ids: { nextId: () => randomBytes(32).toString("base64url") },

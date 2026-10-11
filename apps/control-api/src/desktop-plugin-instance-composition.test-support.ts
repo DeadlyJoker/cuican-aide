@@ -40,7 +40,12 @@ const digester = {
     `sha256:${createHash("sha256").update(body).digest("hex")}`,
 };
 const dependency = { service: "test.instance-source", apiVersion: "1" };
-type Gate = { setupWait?: Promise<void>; setupEntered?(): void };
+type Gate = {
+  setupWait?: Promise<void>;
+  setupEntered?(): void;
+  readWait?: Promise<void>;
+  readEntered?(): void;
+};
 type Probe = {
   counts: Record<string, number>;
   events: string[];
@@ -51,7 +56,7 @@ type Probe = {
 };
 type Spec = {
   id: string;
-  kind: "provider" | "consumer" | "independent" | "ui";
+  kind: "provider" | "consumer" | "independent" | "ui" | "actionConsumer";
   pluginId?: string;
   version?: string;
 };
@@ -109,8 +114,8 @@ export async function fixture(
     const setup =
       spec.kind === "provider"
         ? `const generation=++probe.providerGeneration;ctx.services.provide('test.instance-source','1',{generation,version:${JSON.stringify(version)}});`
-        : spec.kind === "consumer"
-          ? `const provider=ctx.services.get('test.instance-source','1');probe.consumers.push({generation:provider.generation,version:provider.version,provider});`
+        : spec.kind === "consumer" || spec.kind === "actionConsumer"
+          ? `const provider=ctx.services.get('test.instance-source','1');probe.consumers.push({generation:provider.generation,version:provider.version,provider});${spec.kind === "actionConsumer" ? `ctx.services.provide(${JSON.stringify(pluginId)},'1',{actions:[{contributionId:'workbench',action:'read',kind:'read'}],async invoke(){probe.gates[id]?.readEntered?.();if(probe.gates[id]?.readWait)await probe.gates[id].readWait;return {generation:provider.generation,version:provider.version};}});` : ""}`
           : "";
     const code =
       spec.kind === "ui"
@@ -118,6 +123,12 @@ export async function fixture(
         : `export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(pluginId)},async setup(ctx){const probe=globalThis[${JSON.stringify(key)}];const id=${JSON.stringify(spec.id)};const count=probe.counts[id]=(probe.counts[id]??0)+1;probe.events.push(id+':setup:'+count);const port=ctx.services.get('crewon.execution','1');probe.ports[id]=port;port.register({create(){throw new Error('instance_test_must_not_execute_a_Run');}});${setup}probe.gates[id]?.setupEntered?.();if(probe.gates[id]?.setupWait)await probe.gates[id].setupWait;return {dispose(){probe.events.push(id+':dispose:'+count);}};}};`;
     const bytes = Buffer.from(code);
     const entry = spec.kind === "ui" ? "ui.mjs" : "node.mjs";
+    const ui =
+      spec.kind === "actionConsumer"
+        ? Buffer.from(
+            "export default {apiVersion:'crewon.plugin-ui.v1',mount(){return {update(){},dispose(){}};}};",
+          )
+        : null;
     const descriptor: PluginPackageDescriptor = {
       schemaVersion: "crewon.plugin-package.v1",
       hostApi: "crewon.plugin-host.v1",
@@ -129,7 +140,10 @@ export async function fixture(
         "No Worker invocation, provider request or task approval is implied.",
       entrypoints: {
         node: spec.kind === "ui" ? null : entry,
-        ui: spec.kind === "ui" ? { path: entry, mode: "trustedModule" } : null,
+        ui:
+          spec.kind === "ui" || spec.kind === "actionConsumer"
+            ? { path: "ui.mjs", mode: "trustedModule" }
+            : null,
       },
       businessManifestPath: null,
       requires:
@@ -137,13 +151,18 @@ export async function fixture(
           ? []
           : [
               { service: "crewon.execution", apiVersion: "1", optional: false },
-              ...(spec.kind === "consumer"
+              ...(spec.kind === "consumer" || spec.kind === "actionConsumer"
                 ? [{ ...dependency, optional: false }]
                 : []),
             ],
-      provides: spec.kind === "provider" ? [dependency] : [],
+      provides:
+        spec.kind === "provider"
+          ? [dependency]
+          : spec.kind === "actionConsumer"
+            ? [{ service: pluginId, apiVersion: "1" }]
+            : [],
       contributions:
-        spec.kind === "ui"
+        spec.kind === "ui" || spec.kind === "actionConsumer"
           ? [
               {
                 id: "workbench",
@@ -159,8 +178,18 @@ export async function fixture(
           byteLength: bytes.length,
           sha256: createHash("sha256").update(bytes).digest("hex"),
         },
+        ...(ui
+          ? [
+              {
+                path: "ui.mjs",
+                byteLength: ui.length,
+                sha256: createHash("sha256").update(ui).digest("hex"),
+              },
+            ]
+          : []),
       ],
     };
+    if (ui) await writeFile(join(directory, "ui.mjs"), ui);
     await writeFile(join(directory, entry), bytes);
     await writeFile(
       join(directory, "crewon.plugin.json"),
@@ -188,7 +217,9 @@ export async function fixture(
     installRoot: files.installRoot,
     sources: sources.map(({ kind: _kind, ...source }) => source),
     publications: sources
-      .filter((source) => source.kind === "ui")
+      .filter(
+        (source) => source.kind === "ui" || source.kind === "actionConsumer",
+      )
       .map((source) => ({
         pluginId: source.pluginId,
         publisherId: source.publisherId,
