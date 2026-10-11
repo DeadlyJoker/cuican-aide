@@ -4,6 +4,8 @@
 
 基础建设审计基线为 `53debe063`；下述本轮模型与会话修复在其后提交。正式 `/Applications/CrewON.app` 已更新为 `0.1.70`。它保留已核验 `0.1.69` 的生产闭包，仅同步 `8b7da48ed` 的 HTTP 拒绝分类修复与 UI 包版本；本轮新增插件目录库和可选状态路由未进入正式候选。22 个受审查源文件、21 个前端/宿主产物、八个运行时文件及 1818 个生产闭包文件均核验，五个已发行 Native 宿主源逐字保持；正式 ASAR 和运行时与候选一致。详见[候选核验](../output/plugin-foundation/gateway-root-cause-20261011/candidate-0.1.70-verification.json)、[正式安装核验](../output/plugin-foundation/gateway-root-cause-20261011/installed-0.1.70-verification.json)。当前正式 profile 有效业务插件为 0，历史包、任务和产物保留。这些已发行的基础文件并非干净 Git HEAD，候选身份按实际文件与摘要记录，不能只用源码 SHA 冒充完整构建身份，也不能把源码、临时数据库验收、真实 Web 与正式桌面四种证据互相替代。
 
+下述 F2/F3 的实际状态 owner、自动实例协调、插件右栏与项目 namespace 是当前权威源码工作区的后续增量。它们已有各自的源码、临时数据库和组件验证；未进入上述 `0.1.70` 正式 App。独立源码 Web 预览也不能替代正式包或真实插件全生命周期验收。
+
 本次 `0.1.70` 更新先通过真实 Web UI 的本机 HTTP 400 故障注入，再恢复实际网关，顺序完成 `gpt-6.1-sol` 和 `gpt-6-astra` 两次调用。故障注入证明明确拒绝不会因错误内容挂起被改成可重试超时；真实网关成功样本各一次调用、零重试。桌面随后用原 admin、原工作空间和会话完成真实 `gpt-6.1-sol` 短回复，7.504 秒、首段 5.884 秒、一次调用、零重试。正常退出重开后原账号、旧 40 行产物、新回复和模型选择恢复，同一 Run 未重新生成。本轮未重复桌面长输出或并行测试。证据与范围见[HTTP 拒绝及 Web/桌面验收](./model-http-rejection-retry.md)。首次外部断流仍未定因，不能用本次成功将其销账。
 
 上一版 `0.1.69` 正式 App 验收中，原 admin 登录、工作/任务/助理/日程/资源入口、既有工作空间、会话和历史回复均可见，没有短剧、Krea2 或出行插件入口。真实桌面新会话先用 `gpt-6-astra` 完成 40 行，再在同一会话切换 `gpt-6.1-sol` 完成短回复，两次均一次调用、零重试、唯一最终消息。正常退出重开后，原账号、同一会话、两份产物与 `gpt-6.1-sol` 选择恢复，模型调用仍各一次，没有重新生成。其独立[候选](../output/plugin-foundation/gateway-root-cause-20261011/candidate-0.1.69-verification.json)与[安装](../output/plugin-foundation/gateway-root-cause-20261011/installed-0.1.69-verification.json)证据保留。没有据此宣称工作空间全部操作、设置、所有模型或异常网络已验收。
@@ -24,8 +26,8 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 | ----------------------- | ---------------------------------------------------------------------------------------------------- |
 | F0 卸载与基础基线       | 当前正式 profile 已卸载业务插件，历史保留；正式冷启动、原账号和真实聊天已验收，其他基础行为待补齐    |
 | F1 基础聊天与启动可靠性 | 新默认 Standard 已通过真实 Web 并行、输出中刷新与继续发送；历史外部首次断流仍未定因                  |
-| F2 公开能力与配置装配   | 安装 Profile 源码已绑定真实 execution 注册目录；状态投影已有，产品状态路由尚未绑定                   |
-| F3 资源与依赖协调       | 安装与组合可共享实例，Task Core 可显式读取同一 Store 的原图；正式自动协调与 Native 执行配置尚未接通  |
+| F2 公开能力与配置装配   | 源码状态 owner 已绑定原 Profile 队列和实际身份，standalone withPlugins 路由已接；正式包尚未同步      |
+| F3 资源与依赖协调       | 源码 Profile 自动协调复用唯一 NodeHost，原图与授权保留；Native Task Core/Worker 执行配置尚未接通     |
 | F4 独立开发协议与工具   | tools/SDK tarball、仓外初始化/编译/校验及最小服务模板已有实证；完整开发场景与兼容验收未完成          |
 | F5 可插拔闭环           | 独立模板的真实 SQLite 生命周期及测试模型组合路径已验收；正式产品、真实外部恢复和分布式路径未全部验收 |
 
@@ -44,16 +46,16 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 ### F2：公开能力契约与配置装配
 
 - **完成证据：** [公开 SDK](../packages/plugin-sdk/src/sdk-types.ts)已有声明式服务/API 版本访问、可选服务、资源、Node/UI 入口与主题输入；宿主强制身份、声明和版本检查。Native 基础身份独立于插件文件，原严格批准解析未放宽。真实安装选择提交后已有组合元数据同步，元数据发布失败不会伪装成选择回滚，见[协调核心与元数据同步](./plugin-composition-coordinator.md)。本轮 `2fd79e6ce` 提交了[真实 Node 服务目录库与核心身份适配器](./plugin-node-host-services.md)：同一不可变目录提供实现、元数据和协调注册项；`crewon.execution` v1 与 `crewon.tasks` v1/v2 只接受真实实现所有者，保留原租约、调用身份与每次授权。覆盖真实安装后的 ESM setup、租约清理、SQLite 任务回执及授权撤回，使用临时 profile。`8d51e4e60` 提交了[可选组合状态协议与路由](./plugin-composition-status-protocol.md)：严格 DTO 分开元数据发布与实际 Node 状态，沿原身份入口鉴权，分页至多 50 项、响应至多 64 KiB，不返回凭据或内部异常；OpenAPI 和生成类型同步，覆盖状态约束、分页、无 owner 的 404、身份与故障边界。两项是已实现的库与可选传输能力，不是正式产品接通的证据。
-- **本次源码接线：** [安装 Profile](../apps/control-api/src/desktop-plugin-installation-profile.ts)现在由[专用 owner](../apps/control-api/src/desktop-plugin-execution-service-owner.ts)持有实际 execution Registry，NodeHost 实现与元数据发布共用一次捕获的服务目录。关闭或失去所有权同步撤销注册；没有全局 tasks 服务，也没有据此批准业务任务。新增实际 Application/SQLite 集成 9 项，与相关既有安装、配置、激活及 Native 任务回归共 70/70。新增[纯状态投影](../apps/control-api/src/desktop-plugin-composition-status-owner.ts)的真实 SQLite/Node 专项 6/6：精确 accepting 实例才为 ready；cold、UI-only 与 retained 为 unobserved；停用后的实际 cleanupFailed 如实呈现。这些只在源码与临时测试数据库验证，未进入 `0.1.70` 正式包。
-- **缺口：** 实际实例的 `PluginCompositionStatusControlService` 尚未绑定原 Profile 队列、当前 actor/epoch 和 SQLite claim；生产默认 `GET /api/v1/plugins/composition/status` 仍为 `404 route_not_found`。`compositionState` 仍是内部元数据观察，`published` 不表示服务就绪；UI 可用不能冒充 Node 服务实现。原组合 v1 历史任务查询的拒绝条件未解除，新的状态协议也不授予任务执行权限。F3 的自动实例协调与正式执行装配、F5 的产品闭环尚未接通，不能由目录或状态投影测试替代。
-- **放行条件：** 将已有目录与身份适配器绑定真实 profile 的宿主所有者，给 NodeHost、元数据发布和协调器提供同一组服务身份、实现修订及当前批准；服务获取与每次调用继续执行原授权。服务契约与消费规则可独立验证，损坏业务配置只撤回其贡献。以实际实例 owner 接入已有状态路由，读取前后核验 actor、scope、选择修订和当前权威，按真实生命周期返回就绪、等待依赖与清理失败，不从元数据推断可用。正式接通后覆盖服务消费、批准撤回、配置失败和跨账号拒绝；原组合任务查询仍需 F3 的正式执行装配和独立兼容验收后才开放。
+- **本次源码接线：** [安装 Profile](../apps/control-api/src/desktop-plugin-installation-profile.ts)由[专用 owner](../apps/control-api/src/desktop-plugin-execution-service-owner.ts)持有实际 execution Registry，NodeHost 实现与元数据发布共用一次捕获的服务目录。关闭或失去所有权同步撤销注册；没有全局 tasks 服务，也没有据此批准业务任务。此前实际 Application/SQLite 集成与相关回归 70/70、[纯状态投影](../apps/control-api/src/desktop-plugin-composition-status-owner.ts)专项 6/6 的证据保留。后续源码已把 `PluginCompositionStatusControlService` 绑定原 Profile 操作队列、当前 actor/epoch、真实 SQLite claim 与生命周期；[standalone 装配](../apps/control-api/src/standalone-composition.ts)仅在 `withPlugins` 准备出实际 owner 后接入 `GET /api/v1/plugins/composition/status`，未配置时仍返回 `404 route_not_found`。状态读取沿原身份入口授权，不运行 setup、不协调实例、不复活冷启动代码；只有精确的当前 accepting 实例才为 ready，cold、UI-only 与 retained 仍为 unobserved，清理失败如实呈现。实际路由、身份、撤权、分页和 owner 丢失的行为见[状态集成测试](../apps/control-api/src/desktop-plugin-composition-status.integration.test.ts)。这些未进入 `0.1.70` 正式包。
+- **缺口：** 状态 owner 的源码绑定已完成，正式包尚未包含这次接线。`compositionState` 仍是内部元数据观察，`published` 不表示服务就绪；UI 可用不能冒充 Node 服务实现。原组合 v1 历史任务查询的拒绝条件未解除，状态协议不授予任务执行权限。F3 的 Native Task Core/Worker 原图执行配置、F5 的正式产品闭环仍未接通，不能由状态路由或临时数据库测试替代。
+- **放行条件：** 基于已绑定的同一宿主 owner、服务目录、实现身份和当前批准，完成 F3 正式任务执行适配；服务获取与每次调用继续执行原授权。Web 验收通过后再核验候选和正式包，覆盖服务消费、批准撤回、配置失败、跨账号拒绝及实际就绪/清理状态。原组合任务查询仍需正式执行装配和独立兼容验收后才开放。
 
 ### F3：实例资源、依赖协调与原任务组合
 
 - **完成证据：** [运行期资源](./plugin-runtime-resources-protocol.md)、[依赖规划](./plugin-dependency-reconciliation-design.md)、[协调核心](./plugin-composition-coordinator.md)、[组合锁与原 Run 引用](./plugin-run-composition-binding.md)、[跨包执行](./plugin-execution-composition.md)均已有实现。它们保留旧借用及原依赖，受影响实例先撤权再清理，原任务恢复逐节点重新授权；不会按今天的 head 替换旧 Run。
-- **本次源码能力：** [组合协调器](../packages/plugin-host/src/plugin-composition-coordinator.ts)可以创建唯一安装 adapter，共享它拥有的 NodeHost；顺序的实际 Application 安装/组合准备复用已接受实例，显式撤下提供者再升级后可恢复消费者，保留旧租约与原热升级 guard。关闭检查也覆盖安装及不调用 Node prepare 的路径。相关 PluginHost 全包 394/394、类型检查通过。它尚未绑定正式 Profile；全操作串行和关闭等待仍由实际 Profile 队列承担，UI-only 必须保持原存储图、另行区分 Node 观察，不能当作 Node 激活失败。 [Task Core](../apps/control-api/src/installed-plugin-task-runtime-core.ts)新增可选严格 `compositionPolicy`，从同一实际 Store 读取组合，读前后核对当前 owner/scope/epoch；历史锁保留原 epoch，省略 policy 仍为 v0。Core/Native/desktop/read 专项 38/38，Application 原组合专项 3/3。没有自动迁移、发布或重新签发旧收据。
-- **缺口：** 生产安装选择目前仍只触发元数据同步，没有调用实例协调器。Task Core 的可选 policy 尚未由真实 Native owner 配置，[Native Worker 装配](../apps/runtime-worker/src/plugins/installed-plugin-native-worker-composition.ts)也未提供 `compositionExecution`。通用 [Worker 显式入口](../apps/runtime-worker/src/plugins/installed-plugin-runtime-composition.ts)已有该能力；未配置时 [resolver](../apps/runtime-worker/src/plugins/installed-plugin-runtime-resolver.ts)严格拒绝 v1，不能静默忽略原依赖。查询和 Store 的 v1/source guards 保留，不能仅删除拒绝条件就开放历史任务。
-- **放行条件：** 先完成 F2 的宿主身份与批准适配，再在真实 profile 生命周期接入现有协调器及正式任务/Worker 配置。覆盖依赖升级/撤回/恢复、准备中撤权、清理失败、旧 Run 观察及冷恢复；新旧图各用原实例，失败不伪报就绪。
+- **本次源码能力：** [组合协调器](../packages/plugin-host/src/plugin-composition-coordinator.ts)可以创建唯一安装 adapter，共享它拥有的 NodeHost；此前相关 PluginHost 全包 394/394、类型检查证据保留。当前[实际 Profile](../apps/control-api/src/desktop-plugin-installation-profile.ts)已由原操作队列串行持有协调器及唯一安装 adapter，[实例 owner](../apps/control-api/src/desktop-plugin-instance-composition-owner.ts)在真实选择提交后自动协调受影响实例，复用已接受实例，不重复 setup。撤下提供者先同步撤权再等待元数据与清理，消费者恢复使用当前真实提供者；有 accepting 消费者的热升级仍明确拒绝，需先停用再升级。准备与发布前校验实际 Store head、选择、scope/epoch、批准、准备身份与提供者对象；关闭等待未完成准备和队列，丢失 Native 权威或 SQLite claim 即撤权。完整原存储图保留 UI-only 节点，Node 观察使用私有投影，不把 UI-only 当激活失败；读状态、读图或重放旧回执不会恢复代码。实际路径覆盖见[实例协调集成测试](../apps/control-api/src/desktop-plugin-instance-composition.integration.test.ts)。[Task Core](../apps/control-api/src/installed-plugin-task-runtime-core.ts)的可选严格 `compositionPolicy` 从同一实际 Store 读取原图，读前后核对 owner/scope/epoch；历史锁保留原 epoch，省略 policy 仍为 v0。此前 Core/Native/desktop/read 专项 38/38、Application 原组合专项 3/3 证据保留，没有自动迁移、发布或重新签发旧收据。
+- **缺口：** Profile 自动协调的源码接线已完成，正式 `0.1.70` 尚未包含它。Task Core 的可选 policy 尚未由真实 Native owner 配置，[Native Worker 装配](../apps/runtime-worker/src/plugins/installed-plugin-native-worker-composition.ts)也未提供 `compositionExecution`。通用 [Worker 显式入口](../apps/runtime-worker/src/plugins/installed-plugin-runtime-composition.ts)已有该能力；未配置时 [resolver](../apps/runtime-worker/src/plugins/installed-plugin-runtime-resolver.ts)严格拒绝 v1，不能静默忽略原依赖。查询和 Store 的 v1/source guards 保留，不能仅删除拒绝条件就开放历史任务。
+- **放行条件：** 复用现有 Profile/Coordinator 的唯一真实 owner，绑定 Native Task Core policy 和 Worker 原图执行配置，使用实际 runtime identity、版本、批准与 epoch；不另造 setup 或猜固定实现修订。覆盖依赖升级/撤回/恢复、准备中撤权、清理失败、旧 Run 观察及冷恢复；新旧图各用原实例，失败不伪报就绪。
 
 ### F4：仓外独立开发与分发
 
@@ -64,15 +66,30 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 ### F5：正式产品的可插拔闭环
 
 - **完成证据：** [独立模板生命周期测试](../packages/plugin-tools/test/installed-template-lifecycle.mjs)使用真实 tarball、仓外包、原 Application/Store/Host 路径，完成 SQLite 安装、启用、升级、回滚、停用、再启用、卸载及数据库重开；旧包和借用保留。另有原 Application 任务签发、Worker 测试模型流及原图冷装配证据，见[执行装配](./plugin-execution-composition.md)。这些已实现能力不再列作“尚无实现”。
-- **缺口：** 生命周期数据库与身份是临时测试环境，模型 transport 是测试适配器；不能算用户正式 App 的安装/授权/UI、真实外部模型恢复、组合查询或 PostgreSQL 分布式管理验收。本轮 F2 状态查询已有可选协议实现，但正式 owner 尚未绑定，F5 产品闭环仍未接通。既有环境条件跳过项也不算通过。
+- **缺口：** 生命周期数据库与身份是临时测试环境，模型 transport 是测试适配器；不能算用户正式 App 的安装/授权/UI、真实外部模型恢复、组合查询或 PostgreSQL 分布式管理验收。F2 状态 owner 和 F3 Profile 自动协调已在源码绑定，正式 `0.1.70` 尚未包含；Native Task Core/Worker、项目工作空间产品接线与正式安装闭环仍缺失，F5 不能判定交付。既有环境条件跳过项也不算通过。
 - **放行条件：** 在正式产品入口以最小验收插件完成全生命周期，核验登录、当前批准、就绪状态、调用、取消、升级后的原任务恢复、失败回滚和冷启动；涉及分布式路径时使用真实 PostgreSQL 验证事务与并发。通过后才恢复业务插件，不重提状态未知的 ComfyUI 操作。
+
+## 本轮源码的页面与项目工作空间边界
+
+插件页面现在复用 `AppCommandShellRoute` 唯一的右侧 `CommandWorkspaceCapabilityDrawer`，保留中间原 Agent 会话、输入草稿、模型、资源、权限、发送/停止与流式能力。宿主通过 portal 调整展示位置，不给插件账号、导航、HTTP client 或全局主题权限，原挂载授权与清理路径保留。关闭插件恢复先前工具状态；正常宽度由原 grid 动态分配，小窗上下排列，短窗口允许外层滚动而不裁剪插件底部。空目录不恢复业务入口。组件/样式覆盖与限制见[右栏宿主边界](./plugin-panel-host-boundary.md)。这项源码完成不等于正式 App 已交付，也不等于真实业务插件已验收。
+
+插件项目仍使用同一套宿主 Workspace/Thread 能力。新增[持久 namespace 与事务隔离](./plugin-project-workspace-isolation.md)按真实账号、profile、插件、发布者与项目绑定不透明 workspaceId，原普通 create/fork 和项目 binding 写入使用同事务 fence；归属不随包升级变动，也不能收养旧会话占用的空间。当前已实现持久归属与 Store 拒绝跨归属写入；原 Native workspace allocator/registry、中央 Agent/Node provisioning、旧 CreativeProject 查询的插件范围和文件面板尚未接通。不能仅凭 namespace 存在宣称目录已创建、中央会话已绑定、全部项目查询已隔离或用户已经拥有执行权限。
+
+本轮源码验证使用 Node 24.19.0，证据分别限定为：
+
+- **Control 专项：** 100 项通过，4 项 PostgreSQL 条件跳过；覆盖实际 owner 状态路由、Profile 自动实例协调及相关原路径，不能当成真实 PG 验收。
+- **原 Native 任务与激活专项：** 16/16 通过，原批准、保留版本与任务回执路径保持；未因此开放组合 v1 执行。
+- **UI 专项：** 9 文件、60/60 通过，`tsc -b --noEmit` 和生产构建通过；完整 CommandWorkspace 筛选为 182/186，同 4 个历史快照失败未触碰（登录/注册两项、未同步终态回复一项、旧空间树一项）。未宣称整个 UI 回归通过。
+- **Namespace/原 Store 联合组：** 五文件 201 项测试中 185 项通过、16 项条件跳过，包含 Domain、新 namespace SQLite、原 Conversation、Run/Thread 测试；16 条为 namespace PG 10（包括 INSERT 后撤权和 epoch 变化的两个负例）、原 Conversation PG 5、无 PG 数据库时的 conformance placeholder 1，placeholder 不表示完整 PG conformance 已运行。
+
+这些筛选组包含已有回归，UI 窄组也与完整筛选重叠；它们与本页历史的 70/70、38/38、3/3 等记录不能相加为整仓测试数。临时 SQLite、组件测试、源码预览和正式 `0.1.70` 的历史 Web/桌面模型证据仍分别记账，不能互相替代。
 
 ## 下一步的实施顺序
 
 1. 继续 F1 的基础故障定位与正式包行为验收，稳定账号、模型、会话和流式恢复。
-2. 验证安装 Profile 源码新增 execution 服务所有者与实际批准，继续保持 UI port 与 Node 实现的边界；Web 放行前不带入正式包。
-3. 将现有协调器接入安装 profile 的真实选择生命周期，再绑定实际实例状态 owner，启用已有状态查询路由并验证当前身份、依赖、就绪与清理失败。
-4. 接通正式任务签发与 Worker 原图执行，覆盖原任务恢复和每次授权；公开诊断只反映真实观察，确保用户理解“保存了什么、现在能做什么”。
+2. 以已完成的 Profile 服务 owner、实际状态路由和自动协调为基础，复核原权威、撤权与清理；继续保持 UI port 与 Node 实现的边界，不将状态读取变为隐式激活。
+3. 接通真实 Native Task Core policy 与 Worker 原图执行，保留旧 Run/借用、当前授权和查询 source guards；再将原宿主 Workspace allocator、中央 Agent/Node 与持久 namespace 接通，按实际插件/项目归属隔离文件、会话及项目查询。
+4. 先在 Web 验收原 Agent 会话、插件右栏、任务执行、工作空间隔离和失败恢复，再核验桌面候选及正式包；公开诊断只反映真实观察，确保用户理解“保存了什么、现在能做什么”。
 5. 用最小插件完成正式产品与必要分布式验收，再恢复业务插件建设。
 
 本轮另修复了模型与基础接线缺口：合法终态的用量在非法尾部导致失败时保留为私有记账证据，不释放公共完成、不保存成功答案、不重发模型；未配置插件 UI 的宿主通过原已鉴权错误协议明确返回 `plugin_ui_not_configured`，前端仅对此停止自动轮询，普通失败仍可重试；网关的显式请求格式配置不再被覆盖，保存、恢复、版本编译、多模型绑定及桌面历史材料校验共用真实配置字段。未显式配置的普通 Responses 请求默认 Standard，不再仅凭第三方域名推断 Lite；显式与历史 Lite 保留。Standard 请求与网关响应兼容分离，空终态输出使用已校验的流内容，非空冲突、缺终态与非法尾部仍拒绝。顺序多消息的完成事件按各自索引校验，仍保留既有 Kernel 的顺序输出合同，未增加交错输出支持。未增加 storage、GET 恢复或 WebSocket 能力。
