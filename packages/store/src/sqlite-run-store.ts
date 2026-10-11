@@ -5,13 +5,14 @@ import { SqliteProjectAssetStore } from "./project-asset-sqlite-store.ts";
 import { SqliteProjectAssetStageStore } from "./project-asset-stage-store.ts";
 import { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
-import { SqlitePluginProjectWorkspaceStore } from "./sqlite-plugin-project-workspace-store.ts";
+import { sqliteProjectWorkspacePorts } from "./sqlite-project-workspace-ports.ts";
 import {
   assertSqlitePluginProjectWorkspaceThread,
   type ProjectWorkspaceThreadQualification,
 } from "./plugin-project-workspace-thread-fence.ts";
 import type {
   PluginProjectWorkspaceReadStore,
+  PluginProjectWorkspaceNativeRegistrationStore,
   PluginUiActionContext,
   RecordPluginProjectWorkspaceNamespaceInput,
 } from "@crewon/application";
@@ -864,28 +865,29 @@ export class SqliteRunStore implements DomainStore {
     });
   }
 
-  /** Read-only namespace view. Construction never migrates or creates directories. */
+  #projectWorkspacePorts() {
+    return sqliteProjectWorkspacePorts({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
+  }
+  /** Read-only namespace view; construction performs no migration or allocation. */
   pluginProjectWorkspaceNamespaces(): PluginProjectWorkspaceReadStore {
     this.#assertOpen();
-    return new SqlitePluginProjectWorkspaceStore({
-      database: this.#database,
-      assertOpen: () => this.#assertOpen(),
-    }).readonlyView();
+    return this.#projectWorkspacePorts().reads;
+  }
+  pluginProjectWorkspaceNativeRegistrationStore(): PluginProjectWorkspaceNativeRegistrationStore {
+    this.#assertOpen();
+    return this.#projectWorkspacePorts().nativeRegistration;
   }
   async migratePluginProjectWorkspaceNamespaces(): Promise<void> {
-    await new SqlitePluginProjectWorkspaceStore({
-      database: this.#database,
-      assertOpen: () => this.#assertOpen(),
-    }).migrate();
+    await this.#projectWorkspacePorts().migrate();
   }
   recordPluginProjectWorkspaceNamespaceFromPluginUi(
     context: PluginUiActionContext,
     input: RecordPluginProjectWorkspaceNamespaceInput,
   ) {
-    return new SqlitePluginProjectWorkspaceStore({
-      database: this.#database,
-      assertOpen: () => this.#assertOpen(),
-    }).recordFromPluginUi(context, input);
+    return this.#projectWorkspacePorts().recordFromPluginUi(context, input);
   }
 
   /** Independent journal; construction does not migrate or grant text write authority. */

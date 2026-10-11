@@ -77,7 +77,7 @@ process.on("message", async value => {
     catch(error){process.send({kind:"fixture.fake-result", error:error.code ?? error.message});}
   } else if(value?.kind === "fixture.cleanup") {
     await client.close();
-    f.close();
+    await f.close();
     process.send({kind:"fixture.cleaned"});
   }
 });

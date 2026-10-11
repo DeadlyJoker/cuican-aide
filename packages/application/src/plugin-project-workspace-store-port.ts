@@ -3,6 +3,15 @@ import type {
   PluginProjectWorkspaceOwner,
   PluginProjectWorkspaceOwnerScope,
 } from "@crewon/domain";
+import type { PluginProjectWorkspaceNativeObservation } from "./plugin-project-workspace-native-observation.ts";
+
+/** Host-only original registration port. A plain namespace/response DTO is not an observation grant. */
+export interface PluginProjectWorkspaceNativeRegistrationStore {
+  recordFromNativeObservation(
+    reference: PluginProjectWorkspaceNativeObservation,
+    input: Readonly<{ createdAt: string }>,
+  ): Promise<RecordPluginProjectWorkspaceNamespaceResult>;
+}
 
 /** Host-only namespace reads; contains no filesystem root and grants no execution. */
 export interface PluginProjectWorkspaceReadStore {

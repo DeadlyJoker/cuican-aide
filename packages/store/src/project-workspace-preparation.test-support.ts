@@ -1,4 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { randomUUID } from "node:crypto";
 import {
   PluginUiApplicationService,
@@ -21,8 +25,6 @@ import {
   uiTestBytes,
   uiTestAt,
 } from "../../application/src/plugin-ui.test-support.ts";
-import { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
-import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
 import { migrateSqlitePluginProjectMetadataOwners } from "./plugin-project-metadata-owner-schema.ts";
 import { pluginProjectMetadataOwnerColumns } from "./plugin-project-metadata-owner-records.ts";
 import {
@@ -30,10 +32,8 @@ import {
   selectionRecipe,
 } from "./plugin-installation-store.test-support.ts";
 import { creationRecipe } from "./creative-project-store.test-support.ts";
-import { configureAndMigrateSqlite } from "./sqlite-schema.ts";
-import { SqlitePluginProjectWorkspaceStore } from "./sqlite-plugin-project-workspace-store.ts";
 
-/** Original SQLite and genuine UI. Identity/package discovery/Host policy and initial owner record are named fixtures. No Thread/Run/namespace ports. */
+/** Original SQLite and genuine UI. Identity/package discovery/Host policy and initial owner record are named fixtures. Host policy and owner record are fixtures; workspace registration uses the original Parent Store facade. */
 export async function workspacePreparationUiFixture(
   input: Readonly<{
     actor: ActorContext;
@@ -42,24 +42,20 @@ export async function workspacePreparationUiFixture(
   }>,
 ) {
   const { actor, profileId, packageIdentity: identity } = input;
-  const database = new DatabaseSync(":memory:");
+  const directory = mkdtempSync(
+    join(tmpdir(), "crewon-native-workspace-registration-"),
+  );
+  const path = join(directory, "original.sqlite");
+  const parent = new SqliteRunStore(path);
+  const database = new DatabaseSync(path);
   database.exec("PRAGMA foreign_keys=ON");
-  configureAndMigrateSqlite(database);
-  const projects = new SqliteCreativeProjectStore({
-    database,
-    assertOpen() {},
-  });
-  const installations = new SqlitePluginInstallationStore({
-    database,
-    assertOpen() {},
-  });
+  const projects = parent.creativeProjectStore();
+  const installations = parent.pluginInstallationStore();
   await projects.migrate();
   await installations.migrate();
-  const namespaces = new SqlitePluginProjectWorkspaceStore({
-    database,
-    assertOpen() {},
-  });
-  await namespaces.migrate();
+  await parent.migratePluginProjectWorkspaceNamespaces();
+  const namespaces = parent.pluginProjectWorkspaceNamespaces();
+  const registration = parent.pluginProjectWorkspaceNativeRegistrationStore();
   const scope = { tenantId: actor.tenantId, spaceId: actor.spaceId, profileId };
   const installed = await installations.recordInstalledPackage(
     installationRecipe("scoped-native-install", { actor, scope, ...identity }),
@@ -209,7 +205,7 @@ export async function workspacePreparationUiFixture(
     mutateRegistrationFixture(mode: string) {
       if (mode === "sqlArchive")
         database.exec(
-          "CREATE TEMP TRIGGER fixture_namespace_archive AFTER INSERT ON plugin_project_workspace_namespaces BEGIN UPDATE creative_projects SET state='archived', record_json=json_set(record_json,'$.state','archived') WHERE project_id='scoped-native-project'; END",
+          "CREATE TRIGGER fixture_namespace_archive AFTER INSERT ON plugin_project_workspace_namespaces BEGIN UPDATE creative_projects SET state='archived', record_json=json_set(record_json,'$.state','archived') WHERE project_id='scoped-native-project'; END",
         );
       if (mode === "archive")
         database
@@ -236,7 +232,7 @@ export async function workspacePreparationUiFixture(
     recordObservation: (
       reference: PluginProjectWorkspaceNativeObservation,
       createdAt = uiTestAt,
-    ) => namespaces.recordFromNativeObservation(reference, { createdAt }),
+    ) => registration.recordFromNativeObservation(reference, { createdAt }),
     async invoke() {
       return service.invoke(actor, {
         mountRef: lease.mountRef,
@@ -249,8 +245,10 @@ export async function workspacePreparationUiFixture(
         },
       });
     },
-    close() {
+    async close() {
       database.close();
+      await parent.close();
+      rmSync(directory, { recursive: true });
     },
   };
 }

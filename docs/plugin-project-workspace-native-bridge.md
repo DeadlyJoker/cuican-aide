@@ -60,7 +60,9 @@ Control 的 `observeForProject` 现将已核验、属于同一 owner 的 registe
 
 实际 child 的真实 UI → 原项目读取 → 实际 Native 分配 → 原 SQLite namespace 交易已通过一次提交、回放、复制引用拒绝和调用结束后拒绝。归档、部分 schema、独立策略撤回与最后 Host await 后撤权均不登记；显式 SQL trigger fixture 在 namespace INSERT 后改变项目状态，提交末端拒绝并一起回滚 namespace 和状态改变。Native 目录/registry 已提交的部分保留，当前活动目录不变，没有伪造跨进程整体回滚。初始 metadata owner、包发现及 Host 策略仍是命名 fixture，不是实际 installed HTTP 首次创建或正式项目入口。
 
-该入口尚未加入产品 Parent Store facade、Main/Control bootstrap 或 Conversation 原交易，也没有 PostgreSQL Native 登记 adapter。实际 Thread、中央 Agent 与 Web/桌面完整体验仍未验收。
+该入口现已加入原 `SqliteRunStore.pluginProjectWorkspaceNativeRegistrationStore()`，沿用同一 Parent 连接与生命周期。原 namespace 读取、显式迁移、旧 UI 登记和新 Native 登记由聚焦的 `sqlite-project-workspace-ports.ts` 委派同一个 Store 实现；读取视图与新登记视图分别冻结，构造不迁移、不创建目录或签发观察资格。原读取和旧登记的关闭/授权检查顺序保留。
+
+实际 Native scoped 集成现也通过原 Parent facade 登记；项目与安装读取沿用 Parent Store，专属文件数据库的第二连接只供显式 owner fixture、状态观察与负例 trigger 使用。触发器在专属数据库内可被真实 Parent 交易观察，namespace INSERT 后归档仍被提交末端拒绝并回滚。Parent 构造专项证明无 namespace 表时获取读/登记视图不建表，复制观察拒绝，关闭后无法再取新视图。当前联合 **86 passed、0 failed、14 skipped（PostgreSQL）**，包含 Native **62 passed**、原 SQLite namespace **23 passed** 与新 Parent **1 passed**；类型、边界与格式检查通过。本轮未运行 PostgreSQL。没有 Main/Control 产品 bootstrap、Conversation 原交易或 PostgreSQL Native adapter；实际 Thread、中央 Agent 与 Web/桌面完整体验仍未验收。
 
 新旧 Native scoped/client/bridge 专项 **62 passed**；原 namespace、metadata fence 及 owned Conversation UI 的 SQLite/PostgreSQL 兼容专项 **50 passed**，联合 **112 passed、0 failed、0 skipped**。PostgreSQL 18.6 专属测试实例随后停止清理，验证的是原兼容入口，不代表新 Native 登记已支持 PostgreSQL。Application/Store/Control/Electron 类型检查、边界与格式检查通过；正式 App 未更新。
 
