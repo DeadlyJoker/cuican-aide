@@ -107,6 +107,8 @@ export function capturePluginProjectConversationReadScope(
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation,
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations,
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation,
+      PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource,
+      PROJECT_CONVERSATIONS_METHOD_ACTIONS.setState,
     ].includes(request.action as never) ||
     snapshot.pin.action !== request.action ||
     extensionCanonicalJson({ ...snapshot.pin, action: "project.execute" }) !==

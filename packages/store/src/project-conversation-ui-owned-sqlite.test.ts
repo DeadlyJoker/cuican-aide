@@ -50,12 +50,27 @@ async function fixture(
     taskCount: 0,
     context: null as PluginUiActionContext | null,
     beforeDispatch: null as (() => Promise<void> | void) | null,
+    beforeBindingCommit: null as (() => Promise<void> | void) | null,
+    afterHostTransactionCurrent: null as (() => Promise<void> | void) | null,
   };
   const scopes: PluginProjectReadScope[] = [];
   const projects = f.parent.creativeProjectStore();
   assert.ok(projects instanceof SqliteCreativeProjectStore);
   const app = new ProjectConversationApplicationService({
-    conversations: f.store,
+    conversations: {
+      version: f.store.version,
+      migrate: f.store.migrate.bind(f.store),
+      hasThreadBinding: f.store.hasThreadBinding.bind(f.store),
+      loadBinding: f.store.loadBinding.bind(f.store),
+      listBindings: f.store.listBindings.bind(f.store),
+      loadMutationReceipt: f.store.loadMutationReceipt.bind(f.store),
+      readRequiredStageDigest: f.store.readRequiredStageDigest.bind(f.store),
+      loadStageAdmission: f.store.loadStageAdmission.bind(f.store),
+      async commitBinding(...args: Parameters<typeof f.store.commitBinding>) {
+        await state.beforeBindingCommit?.();
+        return f.store.commitBinding(args[0], args[1]);
+      },
+    },
     threads: {
       async prepareCreateThread(actor, command) {
         state.threadPreparations++;
@@ -186,6 +201,7 @@ async function fixture(
           async assertTransactionCurrent() {
             authority.assertActive();
             await f.authority.assertTransactionCurrent();
+            await state.afterHostTransactionCurrent?.();
           },
         });
         await state.beforeDispatch?.();
@@ -262,6 +278,194 @@ test("genuine UI prepares a protected project through the original SQL view, cre
       () => qualifyPluginProjectReadScope({ ...source }),
       /unavailable/u,
     );
+  }
+});
+
+test("protected UI uses original binding management for revoke, restore, source refresh and replay without creating another Thread", async (t) => {
+  const f = await fixture(t);
+  const created = (await f.invoke(
+    actions.createConversation,
+    f.createInput,
+  )) as {
+    binding: { threadId: string; revision: number };
+  };
+  const initialIds = f.state.idCount;
+  const initialPreparations = f.state.threadPreparations;
+  const revoke = {
+    projectId: f.createInput.projectId,
+    threadId: created.binding.threadId,
+    expectedBindingRevision: created.binding.revision,
+    state: "revoked",
+    idempotencyKey: "change-binding",
+  };
+  const revoked = (await f.invoke(actions.setState, revoke)) as {
+    disposition: string;
+    binding: { threadId: string; revision: number; state: string };
+  };
+  assert.equal(revoked.binding.state, "revoked");
+  assert.equal(revoked.binding.revision, 2);
+  const replay = (await f.invoke(actions.setState, revoke)) as typeof revoked;
+  assert.equal(replay.disposition, "replayed");
+  assert.deepEqual(replay.binding, revoked.binding);
+  await assert.rejects(
+    f.invoke(actions.setState, { ...revoke, state: "active" }),
+    /conflict/,
+  );
+  const restore = {
+    ...revoke,
+    state: "active",
+    expectedBindingRevision: 2,
+    idempotencyKey: "restore-binding",
+  };
+  const restored = (await f.invoke(
+    actions.setState,
+    restore,
+  )) as typeof revoked;
+  assert.equal(restored.binding.state, "active");
+  assert.equal(restored.binding.revision, 3);
+  const refresh = {
+    projectId: revoke.projectId,
+    threadId: revoke.threadId,
+    expectedBindingRevision: 3,
+    idempotencyKey: "change-binding",
+  };
+  // Equal external key across two original methods is scoped to the real action, not a different manager.
+  const refreshed = (await f.invoke(
+    actions.refreshSource,
+    refresh,
+  )) as typeof revoked;
+  assert.equal(refreshed.binding.revision, 4);
+  const refreshReplay = (await f.invoke(
+    actions.refreshSource,
+    refresh,
+  )) as typeof revoked;
+  assert.equal(refreshReplay.disposition, "replayed");
+  assert.deepEqual(refreshReplay.binding, refreshed.binding);
+  const cold = await f.second.parent.projectConversationStore().loadBinding({
+    ...f.owner,
+    threadId: revoke.threadId,
+  });
+  assert.equal(cold!.revision, 4);
+  assert.equal(cold!.workspaceId, "workspace-isolated");
+  assert.equal(f.state.idCount, initialIds);
+  assert.equal(f.state.threadPreparations, initialPreparations);
+  assert.equal(f.state.taskCount, 0);
+});
+
+test("protected binding mutations and replay retain independent project policy, current Host identity and revision checks", async (t) => {
+  const f = await fixture(t);
+  const created = (await f.invoke(
+    actions.createConversation,
+    f.createInput,
+  )) as { binding: { threadId: string; revision: number } };
+  const request = {
+    projectId: f.createInput.projectId,
+    threadId: created.binding.threadId,
+    expectedBindingRevision: 1,
+    state: "revoked",
+    idempotencyKey: "protected-revoke",
+  };
+  f.state.policyAllowed = false;
+  await assert.rejects(
+    f.invoke(actions.setState, request),
+    /creative_project_access_denied/,
+  );
+  f.state.policyAllowed = true;
+  f.state.pinDrift = true;
+  await assert.rejects(
+    f.invoke(actions.setState, request),
+    /plugin_project_read_scope_unavailable/,
+  );
+  f.state.pinDrift = false;
+  await assert.rejects(
+    f.invoke(actions.setState, { ...request, expectedBindingRevision: 7 }),
+    /project_conversation_revision_conflict/,
+  );
+  assert.equal(
+    (await f.store.loadBinding({ ...f.owner, threadId: request.threadId }))!
+      .revision,
+    1,
+  );
+  await f.invoke(actions.setState, request);
+  f.state.policyAllowed = false;
+  await assert.rejects(
+    f.invoke(actions.setState, request),
+    /creative_project_access_denied/,
+  );
+  f.state.policyAllowed = true;
+  f.state.hostActive = false;
+  await assert.rejects(
+    f.invoke(actions.refreshSource, {
+      projectId: request.projectId,
+      threadId: request.threadId,
+      expectedBindingRevision: 2,
+      idempotencyKey: "closed-source",
+    }),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.cause instanceof Error &&
+      error.cause.message === "named_host_closed",
+  );
+  assert.equal(
+    (await f.store.loadBinding({ ...f.owner, threadId: request.threadId }))!
+      .revision,
+    2,
+  );
+  assert.equal(f.state.taskCount, 0);
+});
+
+test("withdrawal after the last Host transaction await prevents protected binding changes and their receipt", async (t) => {
+  for (const method of ["setState", "refreshSource"] as const) {
+    const f = await fixture(t);
+    const created = (await f.invoke(
+      actions.createConversation,
+      f.createInput,
+    )) as { binding: { threadId: string } };
+    const beforeDb = new DatabaseSync(f.databasePath);
+    const threadCount = Number(
+      beforeDb.prepare("SELECT COUNT(*) AS n FROM threads").get()!.n,
+    );
+    beforeDb.close();
+    f.state.beforeBindingCommit = () => {
+      f.state.afterHostTransactionCurrent = () => {
+        f.state.policyAllowed = false;
+      };
+    };
+    const request = {
+      projectId: f.createInput.projectId,
+      threadId: created.binding.threadId,
+      expectedBindingRevision: 1,
+      idempotencyKey: "withdraw-binding-change",
+      ...(method === "setState" ? { state: "revoked" } : {}),
+    };
+    await assert.rejects(
+      f.invoke(actions[method], request),
+      /creative_project_access_denied/,
+    );
+    const binding = await f.store.loadBinding({
+      ...f.owner,
+      threadId: request.threadId,
+    });
+    assert.equal(binding!.revision, 1);
+    assert.equal(binding!.state, "active");
+    const db = new DatabaseSync(f.databasePath);
+    try {
+      assert.equal(
+        Number(
+          db
+            .prepare("SELECT COUNT(*) AS n FROM project_conversation_receipts")
+            .get()!.n,
+        ),
+        1,
+      );
+      assert.equal(
+        Number(db.prepare("SELECT COUNT(*) AS n FROM threads").get()!.n),
+        threadCount,
+      );
+    } finally {
+      db.close();
+    }
+    assert.equal(f.state.taskCount, 0);
   }
 });
 
@@ -364,6 +568,31 @@ test("genuine UI isolates equal external creation keys by project and rejects ch
       error instanceof ApplicationError &&
       error.code === "project_conversation_idempotency_conflict",
   );
+  for (const [input, binding] of [
+    [f.createInput, first.binding],
+    [secondInput, second.binding],
+  ] as const) {
+    const revoke = {
+      projectId: input.projectId,
+      threadId: binding.threadId,
+      expectedBindingRevision: 1,
+      state: "revoked",
+      idempotencyKey: "shared-project-mutation-key",
+    };
+    const changed = (await f.invoke(actions.setState, revoke)) as {
+      disposition: string;
+      binding: { threadId: string; revision: number };
+    };
+    assert.equal(changed.disposition, "committed");
+    assert.equal(changed.binding.threadId, binding.threadId);
+    assert.equal(changed.binding.revision, 2);
+    const replayed = (await f.invoke(
+      actions.setState,
+      revoke,
+    )) as typeof changed;
+    assert.equal(replayed.disposition, "replayed");
+    assert.deepEqual(replayed.binding, changed.binding);
+  }
   assert.equal(f.state.idCount, ids);
   assert.equal(f.state.threadPreparations, threadPreparations);
   assert.equal(f.state.taskCount, 0);

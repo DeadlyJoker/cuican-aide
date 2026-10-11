@@ -286,6 +286,45 @@ test(
     });
     assert.equal(opened.statusCode, 200, opened.body);
     assert.deepEqual(opened.json().output.binding, binding);
+    const revokeInput = {
+      projectId,
+      threadId: binding.threadId,
+      expectedBindingRevision: 1,
+      state: "revoked",
+      idempotencyKey: "owned-binding-change",
+    };
+    const revoked = await invoke("setState", revokeInput);
+    assert.equal(revoked.statusCode, 200, revoked.body);
+    assert.equal(revoked.json().output.binding.state, "revoked");
+    assert.equal(revoked.json().output.binding.revision, 2);
+    const restored = await invoke("setState", {
+      ...revokeInput,
+      expectedBindingRevision: 2,
+      state: "active",
+      idempotencyKey: "owned-binding-restore",
+    });
+    assert.equal(restored.statusCode, 200, restored.body);
+    const refreshInput = {
+      projectId,
+      threadId: binding.threadId,
+      expectedBindingRevision: 3,
+      idempotencyKey: "owned-binding-change",
+    };
+    const refreshed = await invoke("refreshSource", refreshInput);
+    assert.equal(refreshed.statusCode, 200, refreshed.body);
+    assert.equal(refreshed.json().output.binding.revision, 4);
+    for (const method of ["setState", "refreshSource"]) {
+      const denied = await h.request(
+        "POST",
+        `/api/v1/plugins/ui/mounts/${otherLease.mountRef}/actions`,
+        {
+          action: `crewon.project-conversations.v1.${method}`,
+          input: method === "setState" ? revokeInput : refreshInput,
+        },
+      );
+      assert.equal(denied.statusCode, 404, denied.body);
+      assert.equal(denied.json().error.code, "creative_project_not_found");
+    }
     assert.equal(await readFile(source.marker, "utf8"), importedAfterPreflight);
     await runtime.app.close();
     runtimes.delete(runtime);
@@ -303,6 +342,20 @@ test(
     assert.equal(cold.statusCode, 200, cold.body);
     assert.equal(cold.json().output.disposition, "replayed");
     assert.deepEqual(cold.json().output.binding, binding);
+    const coldRefresh = await invoke("refreshSource", refreshInput);
+    assert.equal(coldRefresh.statusCode, 200, coldRefresh.body);
+    assert.equal(coldRefresh.json().output.disposition, "replayed");
+    assert.deepEqual(
+      coldRefresh.json().output.binding,
+      refreshed.json().output.binding,
+    );
+    const coldRevoke = await invoke("setState", revokeInput);
+    assert.equal(coldRevoke.statusCode, 200, coldRevoke.body);
+    assert.equal(coldRevoke.json().output.disposition, "replayed");
+    assert.deepEqual(
+      coldRevoke.json().output.binding,
+      revoked.json().output.binding,
+    );
     assert.equal(
       await readFile(source.marker, "utf8"),
       importedAfterColdPreflight,
@@ -315,6 +368,14 @@ test(
     const legacy = await invoke("createConversation", input);
     assert.notEqual(legacy.statusCode, 200, legacy.body);
     assert.equal(legacy.json().error.code, "creative_project_not_found");
+    for (const [method, body] of [
+      ["setState", revokeInput],
+      ["refreshSource", refreshInput],
+    ] as const) {
+      const denied = await invoke(method, body);
+      assert.notEqual(denied.statusCode, 200, denied.body);
+      assert.equal(denied.json().error.code, "creative_project_not_found");
+    }
     assert.equal(
       await readFile(source.marker, "utf8"),
       importedAfterLegacyPreflight,
@@ -353,7 +414,7 @@ test(
             .prepare("SELECT COUNT(*) n FROM project_conversation_receipts")
             .get()!.n,
         ),
-        1,
+        4,
       );
       assert.equal(
         Number(

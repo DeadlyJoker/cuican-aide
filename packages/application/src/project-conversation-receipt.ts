@@ -27,11 +27,18 @@ export function projectConversationReceipt(
     pluginId: q.installation.pluginId,
     publisherId: q.installation.publisherId,
   };
+  const expectedAction =
+    kind === "create"
+      ? PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation
+      : kind === "refresh-source"
+        ? PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource
+        : kind === "set-state"
+          ? PROJECT_CONVERSATIONS_METHOD_ACTIONS.setState
+          : null;
   if (
-    kind !== "create" ||
+    expectedAction === null ||
     source.purpose !== "read" ||
-    source.request.action !==
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation ||
+    source.request.action !== expectedAction ||
     extensionCanonicalJson(source.scope) !==
       extensionCanonicalJson(expectedScope) ||
     extensionCanonicalJson(source.request.input) !==

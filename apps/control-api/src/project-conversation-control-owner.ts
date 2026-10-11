@@ -407,6 +407,8 @@ export class ProjectConversationControlOwner {
         actions.createConversation,
         actions.listConversations,
         actions.openConversation,
+        actions.refreshSource,
+        actions.setState,
       ].includes(request.action as never)
     )
       return service.metadataFromPluginUi(context, authority);

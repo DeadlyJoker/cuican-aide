@@ -46,7 +46,11 @@
 
 Native HTTP 专项现已升级为真实受保护项目首次创建：原配置解析、bootstrap、安装、启用、真实 mount 和原 Application/SQLite 保存 project、initial brief、owner 与 receipt，不再人工插入 metadata owner。两个真实安装插件使用同一个外部创建 key 得到不同项目，列表仅返回各自项目，跨插件详情拒绝，更改创建内容仍报原幂等冲突，原项目与会话在重开后同键重放。切回旧 Conversation 配置仍拒绝 protected 项目；数据库保留两个独立 owned metadata 项目、一个 legacy 项目、一个原 Thread/binding/Conversation receipt、零 Run。安装和启动预检允许加载原 Node 包，metadata 操作没有额外 Node 加载。namespace 的 workspaceId 仍是独立测试库中的显式 fixture，尚未创建真实 Native 目录。Web 浏览器交互、真实 Native 分配、实际 Agent 执行和正式桌面仍未验收。新合同、配置、原 Control/Native 和 SQLite owned 创建/读写联合回归 **80 passed、0 failed、0 skipped**；Contracts/Control typecheck、架构边界和格式检查通过。
 
-getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、Native 目录与项目/对话的完整产品绑定和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
+原 `setState` 与 `refreshSource` 现也通过同一 `projectOwnership` 配置接入真实 UI 资格和原绑定读取视图，继续调用原 Conversation Store、版本 CAS 和提交事务，未增加第二套会话管理器。真实 UI 输入只指定已有项目、会话、预期版本和外部 key，Host 来源不能借用读取资格启动 Run。撤销、恢复与来源刷新分别使用实际 action 的稳定回执范围，同项目重试回放，两个项目或两个方法使用相同外部 key 不冲突；旧入口及旧回执不改写。独立项目 write 策略在原 Host 最后一次异步事务检查后再检查，撤权时新 binding 和 receipt 均不落库。为保持原编排文件有界，原变更配方提取到内部 `project-conversation-binding-change.ts`，legacy 与 qualified 调用共用这份配方。
+
+新增真实 installed HTTP 撤销、恢复、当前来源刷新、冷重开回放和跨插件拒绝，保存一个原 Thread、一个 binding、四个原操作回执、零 Run，切回 legacy 配置后三个受保护写入口仍拒绝。UI/Application/SQLite 专项还覆盖同键跨项目及跨方法隔离、版本冲突、回放时项目策略拒绝、关闭 Host、最后 Host 事务 await 后撤权且不提交新记录。namespace 仍是显式持久 fixture，没有 Native 目录分配。上述专项与原 Native 关联/升级、Application Stage 和 SQLite/PostgreSQL Conversation 回归联合 **34 passed、0 failed、0 skipped**；Application/Store/Control 类型检查、边界与格式检查通过。PostgreSQL 18.6 测试实例随后停止清理；新 protected UI 模式仍仅有 SQLite adapter，原 legacy 升级测试不能替代受保护项目跨版本升级或正式 Web/桌面验收。
+
+getBinding、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、Native 目录与项目/对话的完整产品绑定和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
 
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 

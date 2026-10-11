@@ -42,6 +42,7 @@ import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import { projectConversationPublicBinding } from "./project-conversation-projection.ts";
 import { ownedConversationProjectWriteAuthority } from "./project-conversation-project-authority.ts";
 import { readConversationProject } from "./project-conversation-project-reader.ts";
+import { changeProjectConversationBinding } from "./project-conversation-binding-change.ts";
 import { conversationUiProjectReader } from "./project-conversation-ui-project-reader.ts";
 import type { ProjectTextStore } from "./project-text-store-port.ts";
 import type { ExtensionTaskApplicationService } from "./extension-task-application-service.ts";
@@ -118,6 +119,22 @@ export class ProjectConversationApplicationService {
           view.request.input,
           authority,
           view.projects,
+        );
+      case PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource:
+        return this.#change(
+          "refreshSource",
+          context.actor,
+          view.request.input,
+          authority,
+          { store: view.projects, readScope: view.scope },
+        );
+      case PROJECT_CONVERSATIONS_METHOD_ACTIONS.setState:
+        return this.#change(
+          "setState",
+          context.actor,
+          view.request.input,
+          authority,
+          { store: view.projects, readScope: view.scope },
         );
       default:
         throw new ApplicationError(
@@ -452,66 +469,28 @@ export class ProjectConversationApplicationService {
     actor: ActorContext,
     input: ProjectConversationsRequests[M],
     authority: ProjectConversationCommitAuthority,
+    projects: Readonly<{
+      store: Pick<CreativeProjectStore, "loadProject">;
+      readScope?: PluginProjectReadScope;
+    }> = { store: this.#d.projects },
   ): Promise<ProjectConversationsResponses[M]> {
     return this.#call(async () => {
-      const request = this.#input(method, input),
-        q = await this.#authority(actor, authority);
-      await this.#project(q, request.projectId, "creativeProject:write");
-      const kind = method === "refreshSource" ? "refresh-source" : "set-state",
-        receipt = this.#receipt(kind, request, q),
-        previous = await this.#d.conversations.loadMutationReceipt({
-          actor: q.actor,
-          profileId: q.installation.profileId,
-          receipt,
-        });
-      if (previous !== null) {
-        await q.assertCurrent();
-        q.assertActive();
-        return this.#mutation(method, request, previous);
-      }
-      const b = await this.#binding(
-        q,
-        request.projectId,
-        request.threadId,
-        false,
-      );
-      await this.#thread(q, b);
-      if (b.revision !== request.expectedBindingRevision)
-        throw new ApplicationError(
-          "conflict",
-          "project_conversation_revision_conflict",
-        );
-      if (
-        b.currentInstallation.pluginId !== q.installation.pluginId ||
-        b.currentInstallation.publisherId !== q.installation.publisherId
-      )
-        throw new ApplicationError(
-          "authorization",
-          "project_conversation_source_mismatch",
-        );
-      const { schemaVersion: _schema, contentDigest: _digest, ...body } = b;
-      const binding = createProjectConversationBinding(
-        {
-          ...body,
-          revision: b.revision + 1,
-          updatedAt: this.#d.clock.now(),
-          currentInstallation:
-            method === "refreshSource" ? q.installation : b.currentInstallation,
-          state:
-            method === "setState"
-              ? (request as ProjectConversationsRequests["setState"]).state
-              : b.state,
-        },
-        this.#d.digester,
-      );
-      return this.#mutation(
+      const request = this.#input(method, input);
+      const q = await this.#authority(actor, authority);
+      const result = await changeProjectConversationBinding({
         method,
         request,
-        await this.#d.conversations.commitBinding(
-          { kind, binding, expectedRevision: b.revision, receipt },
-          { authority: q },
-        ),
-      );
+        authority: q,
+        dependencies: this.#d,
+        projects: projects.store,
+        ...(projects.readScope === undefined
+          ? {}
+          : { readScope: projects.readScope }),
+        loadBinding: (current, projectId, threadId) =>
+          this.#binding(current, projectId, threadId, false),
+        assertThread: (current, binding) => this.#thread(current, binding),
+      });
+      return this.#mutation(method, request, result);
     });
   }
   async startStage(
