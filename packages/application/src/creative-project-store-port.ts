@@ -1,3 +1,7 @@
+import type {
+  PluginProjectReadScope,
+  PluginProjectReadMethod,
+} from "./plugin-project-read-scope.ts";
 import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-commit-authority.ts";
 import type { ProjectOutlineUiCommitTransactionAuthority } from "./project-outline-ui-commit-authority.ts";
 import type { ProjectOutlineRunCommitTransactionAuthority } from "./project-outline-run-commit-authority.ts";
@@ -131,6 +135,15 @@ export interface OwnedCreativeProjectCreationStore {
     input: OwnedCreativeProjectCreationInput,
     options?: CreativeProjectCommitOptions,
   ): Promise<CreateCreativeProjectResult>;
+}
+
+/** A view of the same original read manager; no writes, receipt access or migration authority. */
+export type CreativeProjectReadStore = Pick<
+  CreativeProjectStore,
+  PluginProjectReadMethod
+>;
+export interface PluginProjectReadStoreBinding {
+  bindProjectReads(scope: PluginProjectReadScope): CreativeProjectReadStore;
 }
 
 export interface CreativeProjectStore {

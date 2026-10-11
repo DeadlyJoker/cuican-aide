@@ -8,7 +8,7 @@
 
 新项目、initial brief、八字段 metadata owner 和范围回执在原交易一并写入。身份已被 legacy 或其他 principal 占用时拒绝，不能按作者或名称接管。sidecar 必须已由 caller 显式完整迁移，缺失或部分 schema 不触发迁移、修补或 legacy 回退。
 
-回放读取相同内部 key，保留原请求内容摘要的冲突检查，并核对实际 metadata、完整 sidecar 归属、原创建审计事实和原 brief。回执或可计算的 key 本身不授予访问。普通项目读取继续过滤受保护项目；本次没有开放其他 CRUD 或产物入口。
+回放读取相同内部 key，保留原请求内容摘要的冲突检查，并核对实际 metadata、完整 sidecar 归属、原创建审计事实和原 brief。回执或可计算的 key 本身不授予访问。普通项目读取继续过滤受保护项目；后续已接通原 SQLite 的只读绑定视图，详见[隔离读取](./plugin-project-owned-reads.md)；修改、产物写入及其他入口仍未开放。
 
 实际 SQLite 测试由原 Application、PluginUI、安装 Store 和项目 Store 完成创建及重放，覆盖两插件同外部 key、事务失败回滚、确认 COMMIT 后 Host 关闭仍交付原结果、legacy 身份占用、独立项目策略拒绝、最后 Host await 内撤权、真实安装撤权、schema 缺失/不完整和原 SQL 拒绝创建审计事实修改且回放保持原值。包发现与 UI 策略使用明确的内存 fixture，未证明 Native 发行、真实包 ESM、Web 或正式桌面已接通。创建回执插入故障只作用于测试数据库的命名触发器。
 

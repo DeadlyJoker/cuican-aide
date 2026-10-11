@@ -354,3 +354,11 @@ export {
   deriveQualifiedPluginProjectCreationReceipt,
   type PluginProjectCreationScope,
 } from "./plugin-project-creation-scope.ts";
+
+export {
+  qualifyPluginProjectReadScope,
+  PLUGIN_PROJECT_READ_METHODS,
+  type PluginProjectReadScope,
+  type PluginProjectReadOptions,
+  type PluginProjectReadMethod,
+} from "./plugin-project-read-scope.ts";

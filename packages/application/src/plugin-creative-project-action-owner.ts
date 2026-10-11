@@ -1,4 +1,8 @@
 import {
+  capturePluginProjectReadScope,
+  type PluginProjectReadOptions,
+} from "./plugin-project-read-scope.ts";
+import {
   MAX_CREATIVE_PROJECT_RESPONSE_BYTES,
   formatCreativeProjectCursor,
   parseCreativeProjectListQuery,
@@ -254,6 +258,11 @@ export class PluginCreativeProjectActionOwner {
           request.action === "crewon.creative-projects.v1.createProject"
           ? capturePluginProjectCreationScope(invocation)
           : undefined,
+        this.#ownsCreatedProjects && request.action.match(/\.(get|list)/u)
+          ? Object.freeze({
+              readScope: capturePluginProjectReadScope(invocation, authority),
+            })
+          : undefined,
       );
       if (dispatched.kind === "read") await authority.assertCurrent();
       // A mutation Service returns only after confirmed COMMIT (or a checked durable replay).
@@ -354,6 +363,7 @@ export class PluginCreativeProjectActionOwner {
     request: CreativeProjectUiActionRequest,
     authority: CreativeProjectCommitAuthority,
     creationScope?: PluginProjectCreationScope,
+    readOptions?: PluginProjectReadOptions,
   ): Promise<DispatchResult> {
     const actor = context.actor;
     const options = Object.freeze({
@@ -444,7 +454,11 @@ export class PluginCreativeProjectActionOwner {
           kind: "read",
           output: {
             project: creativeActionProject(
-              await this.#projects.getProject(actor, request.input),
+              await this.#projects.getProject(
+                actor,
+                request.input,
+                readOptions,
+              ),
             ),
           },
         };
@@ -453,7 +467,7 @@ export class PluginCreativeProjectActionOwner {
           kind: "read",
           output: {
             brief: creativeActionBrief(
-              await this.#projects.getBrief(actor, request.input),
+              await this.#projects.getBrief(actor, request.input, readOptions),
             ),
           },
         };
@@ -462,7 +476,11 @@ export class PluginCreativeProjectActionOwner {
           kind: "read",
           output: {
             asset: creativeActionAsset(
-              await this.#projects.getConceptAsset(actor, request.input),
+              await this.#projects.getConceptAsset(
+                actor,
+                request.input,
+                readOptions,
+              ),
             ),
           },
         };
@@ -471,7 +489,11 @@ export class PluginCreativeProjectActionOwner {
           kind: "read",
           output: {
             assetRevision: creativeActionRevision(
-              await this.#projects.getConceptRevision(actor, request.input),
+              await this.#projects.getConceptRevision(
+                actor,
+                request.input,
+                readOptions,
+              ),
             ),
           },
         };
@@ -482,7 +504,11 @@ export class PluginCreativeProjectActionOwner {
           ...(input.cursor === null ? {} : { cursor: input.cursor }),
           limit: String(input.limit),
         });
-        const page = await this.#projects.listProjects(actor, query);
+        const page = await this.#projects.listProjects(
+          actor,
+          query,
+          readOptions,
+        );
         return {
           kind: "read",
           output: creativeActionPage({
@@ -508,10 +534,14 @@ export class PluginCreativeProjectActionOwner {
           limit: request.input.query.limit!,
         };
         const items = (
-          await this.#projects.listBriefs(actor, {
-            projectId: request.input.projectId,
-            ...query,
-          })
+          await this.#projects.listBriefs(
+            actor,
+            {
+              projectId: request.input.projectId,
+              ...query,
+            },
+            readOptions,
+          )
         ).map(creativeActionBrief);
         return {
           kind: "read",
@@ -533,10 +563,14 @@ export class PluginCreativeProjectActionOwner {
           limit: request.input.query.limit!,
         };
         const items = (
-          await this.#projects.listConceptAssets(actor, {
-            projectId: request.input.projectId,
-            ...query,
-          })
+          await this.#projects.listConceptAssets(
+            actor,
+            {
+              projectId: request.input.projectId,
+              ...query,
+            },
+            readOptions,
+          )
         ).map(creativeActionAsset);
         return {
           kind: "read",
@@ -558,11 +592,15 @@ export class PluginCreativeProjectActionOwner {
           limit: request.input.query.limit!,
         };
         const items = (
-          await this.#projects.listConceptRevisions(actor, {
-            projectId: request.input.projectId,
-            assetId: request.input.assetId,
-            ...query,
-          })
+          await this.#projects.listConceptRevisions(
+            actor,
+            {
+              projectId: request.input.projectId,
+              assetId: request.input.assetId,
+              ...query,
+            },
+            readOptions,
+          )
         ).map(creativeActionRevision);
         return {
           kind: "read",

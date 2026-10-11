@@ -132,7 +132,9 @@ for (const backend of ["sqlite", "postgres"] as const) {
           release = deferred();
         const original = f.projects.loadProject.bind(f.projects);
         let first = true;
-        f.projects.loadProject = async (input) => {
+        f.projects.loadProject = async (
+          input: Parameters<typeof original>[0],
+        ) => {
           const value = await original(input);
           if (first) {
             first = false;

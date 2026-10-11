@@ -1,3 +1,5 @@
+原 SQLite 的只读绑定视图已接通原项目、brief、素材与版本读取，保留独立项目策略、实际安装和 Host 生命周期核验，列表在分页前隔离。[实现与证据边界](./plugin-project-owned-reads.md)。受保护写入、其他后端和正式界面仍未完成。
+
 # CrewON 基础能力与插件体系当前状态
 
 2026-10-12 创建交易增量：原 CreativeProject Application/SQLite 已有显式 opt-in 的受保护创建及范围回放，复用原数据库与写入器，项目/brief/owner/receipt 同事务提交；独立策略与原来源、安装和撤权核验保留。Foundation、PostgreSQL 及完整管理视图尚未实现，生产 Control 配置未启用，未更新 Web/桌面。详见[当前 SQLite 创建范围](./plugin-project-owned-creation.md)。

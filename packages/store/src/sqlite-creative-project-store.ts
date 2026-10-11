@@ -1,4 +1,16 @@
 import {
+  listSqliteCreativeProjects,
+  listSqliteCreativeBriefs,
+  listSqliteCreativeAssets,
+  listSqliteCreativeRevisions,
+} from "./creative-project-sqlite-lists.ts";
+import {
+  bindSqliteCreativeProjectReadView,
+  readSqliteOwnedCreativeProject,
+  type PluginProjectReadCall,
+} from "./plugin-project-owned-read-sqlite.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
+import {
   beginSqlitePlanResult,
   finishSqlitePlanResult,
 } from "./project-text-plan-tool.ts";
@@ -92,179 +104,127 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     this.#transaction(() => migrateSqliteCreativeProjects(this.#database));
   }
 
-  async loadProject(input: Input<"loadProject">) {
+  bindProjectReads(scope: PluginProjectReadScope) {
+    return bindSqliteCreativeProjectReadView(this, scope);
+  }
+
+  async loadProject(
+    input: Input<"loadProject">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const query = creativeReadInput("loadProject", input);
-    return this.#read((access) =>
-      this.#project(query.owner, query.projectId, access),
+    return this.#read(
+      (access) => this.#project(query.owner, query.projectId, access),
+      scope === undefined ? undefined : { scope, method: "loadProject", query },
     );
   }
 
-  async listProjects(input: Input<"listProjects">) {
+  async listProjects(
+    input: Input<"listProjects">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const query = creativeReadInput("listProjects", input);
-    return this.#read((access) => {
-      const conditions = [projectFilter, access.predicate("p")];
-      const values: (string | number)[] = [...creativeOwnerValues(query.owner)];
-      if (query.state !== "all") {
-        conditions.push("p.state=?");
-        values.push(query.state);
-      }
-      if (query.after !== null) {
-        conditions.push(
-          "(p.updated_at<? OR (p.updated_at=? AND p.project_id COLLATE BINARY < ? COLLATE BINARY))",
-        );
-        values.push(
-          query.after.updatedAt,
-          query.after.updatedAt,
-          query.after.projectId,
-        );
-      }
-      const rows = this.#database
-        .prepare(
-          `SELECT p.* FROM creative_projects p WHERE ${conditions.join(" AND ")} ORDER BY p.updated_at DESC,p.project_id COLLATE BINARY DESC LIMIT ?`,
-        )
-        .all(...values, query.limit + 1);
-      const projects = rows.map((row) => {
-        const project = decodeCreativeProject(row, query.owner);
-        if (project === null)
-          throw new Error("creative_project_record_invalid");
-        return project;
-      });
-      const page = Object.freeze(projects.slice(0, query.limit));
-      const last = page.at(-1);
-      return Object.freeze({
-        projects: page,
-        next:
-          projects.length > query.limit && last !== undefined
-            ? Object.freeze({
-                updatedAt: last.updatedAt,
-                projectId: last.projectId,
-              })
-            : null,
-      });
-    });
+    return this.#read(
+      (access) => listSqliteCreativeProjects(this.#database, query, access),
+      scope === undefined
+        ? undefined
+        : { scope, method: "listProjects", query },
+    );
   }
 
-  async loadBrief(input: Input<"loadBrief">) {
+  async loadBrief(input: Input<"loadBrief">, scope?: PluginProjectReadScope) {
     this.#assertOpen();
     const query = creativeReadInput("loadBrief", input);
-    return this.#read((access) =>
-      this.#brief(query.owner, query.projectId, query.briefRevision, access),
+    return this.#read(
+      (access) =>
+        this.#brief(query.owner, query.projectId, query.briefRevision, access),
+      scope === undefined ? undefined : { scope, method: "loadBrief", query },
     );
   }
 
-  async listBriefs(input: Input<"listBriefs">) {
+  async listBriefs(input: Input<"listBriefs">, scope?: PluginProjectReadScope) {
     this.#assertOpen();
     const query = creativeReadInput("listBriefs", input);
-    return this.#read((access) => {
-      const rows = this.#database
-        .prepare(
-          `SELECT c.*,p.owner_principal_id FROM creative_project_briefs c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.brief_revision>? ORDER BY c.brief_revision ASC LIMIT ?`,
-        )
-        .all(
-          ...creativeOwnerValues(query.owner),
-          query.projectId,
-          query.afterBriefRevision,
-          query.limit,
-        );
-      return Object.freeze(
-        rows.map((row) =>
-          requiredRecord(
-            decodeCreativeBrief(row, query.owner, query.projectId),
-          ),
-        ),
-      );
-    });
-  }
-
-  async loadConceptAsset(input: Input<"loadConceptAsset">) {
-    this.#assertOpen();
-    const query = creativeReadInput("loadConceptAsset", input);
-    return this.#read((access) =>
-      this.#asset(query.owner, query.projectId, query.assetId, access),
+    return this.#read(
+      (access) => listSqliteCreativeBriefs(this.#database, query, access),
+      scope === undefined ? undefined : { scope, method: "listBriefs", query },
     );
   }
 
-  async listConceptAssets(input: Input<"listConceptAssets">) {
+  async loadConceptAsset(
+    input: Input<"loadConceptAsset">,
+    scope?: PluginProjectReadScope,
+  ) {
+    this.#assertOpen();
+    const query = creativeReadInput("loadConceptAsset", input);
+    return this.#read(
+      (access) =>
+        this.#asset(query.owner, query.projectId, query.assetId, access),
+      scope === undefined
+        ? undefined
+        : { scope, method: "loadConceptAsset", query },
+    );
+  }
+
+  async listConceptAssets(
+    input: Input<"listConceptAssets">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const query = creativeReadInput("listConceptAssets", input);
-    return this.#read((access) => {
-      const after =
-        query.afterAssetId === null
-          ? ""
-          : " AND c.asset_id COLLATE BINARY > ? COLLATE BINARY";
-      const values: (string | number)[] = [
-        ...creativeOwnerValues(query.owner),
-        query.projectId,
-      ];
-      if (query.afterAssetId !== null) values.push(query.afterAssetId);
-      const rows = this.#database
-        .prepare(
-          `SELECT c.*,p.owner_principal_id FROM creative_concept_assets c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=?${after} ORDER BY c.asset_id COLLATE BINARY ASC LIMIT ?`,
-        )
-        .all(...values, query.limit);
-      return Object.freeze(
-        rows.map((row) =>
-          requiredRecord(
-            decodeCreativeAsset(row, query.owner, query.projectId),
-          ),
-        ),
-      );
-    });
+    return this.#read(
+      (access) => listSqliteCreativeAssets(this.#database, query, access),
+      scope === undefined
+        ? undefined
+        : { scope, method: "listConceptAssets", query },
+    );
   }
 
-  async loadConceptRevision(input: Input<"loadConceptRevision">) {
+  async loadConceptRevision(
+    input: Input<"loadConceptRevision">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const query = creativeReadInput("loadConceptRevision", input);
-    return this.#read((access) => {
-      const row = this.#database
-        .prepare(
-          `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.asset_id=? AND c.asset_revision=?`,
-        )
-        .get(
-          ...creativeOwnerValues(query.owner),
+    return this.#read(
+      (access) => {
+        const row = this.#database
+          .prepare(
+            `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.asset_id=? AND c.asset_revision=?`,
+          )
+          .get(
+            ...creativeOwnerValues(query.owner),
+            query.projectId,
+            query.assetId,
+            query.assetRevision,
+          );
+        return decodeCreativeRevision(
+          row,
+          query.owner,
           query.projectId,
           query.assetId,
-          query.assetRevision,
         );
-      return decodeCreativeRevision(
-        row,
-        query.owner,
-        query.projectId,
-        query.assetId,
-      );
-    });
+      },
+      scope === undefined
+        ? undefined
+        : { scope, method: "loadConceptRevision", query },
+    );
   }
 
-  async listConceptRevisions(input: Input<"listConceptRevisions">) {
+  async listConceptRevisions(
+    input: Input<"listConceptRevisions">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const query = creativeReadInput("listConceptRevisions", input);
-    return this.#read((access) => {
-      const rows = this.#database
-        .prepare(
-          `SELECT c.*,p.owner_principal_id FROM creative_concept_revisions c ${childJoin} WHERE ${projectFilter} AND ${access.predicate("p")} AND c.project_id=? AND c.asset_id=? AND c.asset_revision>? ORDER BY c.asset_revision ASC LIMIT ?`,
-        )
-        .all(
-          ...creativeOwnerValues(query.owner),
-          query.projectId,
-          query.assetId,
-          query.afterAssetRevision,
-          query.limit,
-        );
-      return Object.freeze(
-        rows.map((row) =>
-          requiredRecord(
-            decodeCreativeRevision(
-              row,
-              query.owner,
-              query.projectId,
-              query.assetId,
-            ),
-          ),
-        ),
-      );
-    });
+    return this.#read(
+      (access) => listSqliteCreativeRevisions(this.#database, query, access),
+      scope === undefined
+        ? undefined
+        : { scope, method: "listConceptRevisions", query },
+    );
   }
 
   async loadMutationReceipt(
@@ -741,7 +701,17 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     }
   }
 
-  #read<T>(read: (access: CreativeProjectLegacyAccess) => T): T {
+  #read<T>(
+    read: (access: CreativeProjectLegacyAccess) => T,
+    call?: PluginProjectReadCall,
+  ): T | Promise<T> {
+    if (call !== undefined)
+      return readSqliteOwnedCreativeProject(
+        this.#database,
+        call,
+        read,
+        this.#assertOpen,
+      );
     return readSqliteLegacyCreativeProject(this.#database, (access) => {
       const result = read(access);
       this.#assertOpen();

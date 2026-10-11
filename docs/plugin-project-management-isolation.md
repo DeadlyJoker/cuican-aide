@@ -28,6 +28,8 @@
 
 ## 已核实的缺口
 
+原 CreativeProject 的可选 SQLite 只读绑定视图已接通八个原读取方法，完整归属在分页前过滤，保留原独立项目策略和宿主生命周期检查。详见[实现与证据边界](./plugin-project-owned-reads.md)。生产尚未启用，完整修改、Foundation/PostgreSQL 和 Web/桌面仍未完成。
+
 后续已实现原 CreativeProject 的可选 SQLite 受保护创建与回放：项目、initial brief、完整 owner 和范围回执在同一个原交易提交，保留独立项目策略和实际安装核验。默认与生产配置未启用；Foundation、PostgreSQL、完整 CRUD 和真实 Web/桌面仍未接通。[当前实现及边界](./plugin-project-owned-creation.md)。下文保留此前基础阶段和未完成项，不能据此把两入口都视为已完成。
 
 后续 Worker 已支持可信部署注入原 Core 的真实端口，原 Native 组合测试在同进程实际共享 Core 时通过；保留缺少实现的拒绝对照与跨实例调用引用负例。正式 Control/Worker 跨进程接线仍未完成，不能将同进程回归当作生产验收。详见[实际端口接线](./plugin-worker-shared-host-services.md)。
