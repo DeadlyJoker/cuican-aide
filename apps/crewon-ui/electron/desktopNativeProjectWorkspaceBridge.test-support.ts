@@ -32,6 +32,7 @@ process.send({kind:"fixture.ready"});
 `;
 export async function nativeProjectWorkspaceBridgeFixture(
   approvalRequirement: "none" | "perAction" = "none",
+  controlProgram = program,
 ) {
   const f = desktopPluginBootstrapFixture();
   f.writeApproval();
@@ -69,7 +70,7 @@ export async function nativeProjectWorkspaceBridgeFixture(
   async function spawnControl() {
     const child = spawn(
       process.execPath,
-      ["--input-type=module", "-e", program],
+      ["--input-type=module", "-e", controlProgram],
       {
         stdio: ["ignore", "pipe", "pipe", "ipc"],
         windowsHide: true,
@@ -178,7 +179,7 @@ export async function nativeProjectWorkspaceBridgeFixture(
   };
 }
 
-function waitMessage(
+export function waitMessage(
   child: ChildProcess,
   accept: (value: any) => boolean,
 ): Promise<any> {

@@ -1,18 +1,25 @@
 import { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
+import {
+  DESKTOP_PROJECT_WORKSPACE_REQUEST_SCHEMA as REQUEST_SCHEMA,
+  DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA as RESPONSE_SCHEMA,
+  DESKTOP_PROJECT_WORKSPACE_TICKET_SCHEMA as TICKET_SCHEMA,
+  type DesktopNativePluginPackageIdentity,
+  type DesktopNativeProjectWorkspaceTicket,
+  type DesktopNativeProjectWorkspaceRequest,
+  type DesktopNativeProjectWorkspaceResponse,
+} from "@crewon/contracts/plugins";
+export type {
+  DesktopNativeProjectWorkspaceTicket,
+  DesktopNativeProjectWorkspaceRequest,
+  DesktopNativeProjectWorkspaceResponse,
+} from "@crewon/contracts/plugins";
 import { parsePluginProjectWorkspaceOwner } from "@crewon/domain";
 import { captureDesktopNativePluginAuthorityOwner } from "./desktopNativePluginAuthority.ts";
 import { LocalWorkspaceAuthority } from "./localWorkspaceRegistry.ts";
-import {
-  LocalWorkspaceProjectAllocator,
-  type LocalWorkspaceProjectAllocationStatus,
-} from "./localWorkspaceProjectAllocator.ts";
+import { LocalWorkspaceProjectAllocator } from "./localWorkspaceProjectAllocator.ts";
 import { exactRecord } from "./localWorkspaceProjectAllocationJournal.ts";
 
-const REQUEST_SCHEMA = "crewon.desktop-native-project-workspace-request.v1";
-const RESPONSE_SCHEMA = "crewon.desktop-native-project-workspace-response.v1";
-const TICKET_SCHEMA = "crewon.desktop-native-project-workspace-ticket.v1";
 const MAX_TICKETS = 16;
 const MAX_PENDING_REQUESTS = 4;
 const children = new WeakMap<
@@ -20,32 +27,10 @@ const children = new WeakMap<
   DesktopNativeProjectWorkspaceBridge
 >();
 
-export type DesktopNativeProjectWorkspaceTicket = Readonly<{
-  schemaVersion: typeof TICKET_SCHEMA;
-  ticketId: string;
-  expiresAt: string;
-}>;
-export type DesktopNativeProjectWorkspaceRequest = Readonly<{
-  schemaVersion: typeof REQUEST_SCHEMA;
-  requestId: string;
-  ticketId: string;
-}>;
-type FailureCode =
-  | "request_invalid"
-  | "ticket_unavailable"
-  | "deadline_exceeded"
-  | "allocation_unavailable";
-export type DesktopNativeProjectWorkspaceResponse = Readonly<{
-  schemaVersion: typeof RESPONSE_SCHEMA;
-  requestId: string;
-}> &
-  (
-    | Readonly<{
-        outcome: "observed";
-        allocation: LocalWorkspaceProjectAllocationStatus;
-      }>
-    | Readonly<{ outcome: "unavailable"; reasonCode: FailureCode }>
-  );
+type FailureCode = Extract<
+  DesktopNativeProjectWorkspaceResponse,
+  { outcome: "unavailable" }
+>["reasonCode"];
 type Preparation = Readonly<{
   projectId: string;
   packageIdentity: DesktopNativePluginPackageIdentity;

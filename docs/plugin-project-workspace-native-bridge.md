@@ -22,9 +22,17 @@ prepare、消费及发布末端复核真实 Native pin / scope / epoch、原工�
 
 Native 文件提交和授权撤回不构成跨进程原子事务：授权可能在真实目录/registry 提交后失效。这时拒绝发布有效观察，保留真实 journal 和目录，不伪造回滚，也不使 consumed ticket 可重用。`registered` 只表示 Native 目录/registry 观察，不能证明 SQL namespace、metadata ownership、Thread / project binding、用户操作权限或 Agent 可用。
 
-响应与 send callback 有期限；`send()` 返回 false 只是背压，callback error / 超时撤回本桥。已交给 Node IPC 的字节无法在不关闭共享 child 的条件下撤销；未来 Control adapter 必须核对原活跃请求、票据关联和 deadline，且 SQL 提交仍需原事务资格，不能把迟到 Native 状态当作 grant。
+响应与 send callback 有期限；`send()` 返回 false 只是背压，callback error / 超时撤回本桥。已交给 Node IPC 的字节无法在不关闭共享 child 的条件下撤销；Control adapter 必须核对原活跃请求、票据关联和 deadline，且 SQL 提交仍需原事务资格，不能把迟到 Native 状态当作 grant。
 
 `close()` 撤回本桥、等待其有界请求/发送处理，移除自身 handlers；不会杀死/断开 Control、撤回共享 Native authority 或删除其他 owner 的文件和监听器。真实 child 与 Native authority 的物理退出/清理由原 supervisor 管理，本模块不接管它们。
+
+## 原 Control 请求端
+
+`apps/control-api/src/desktop-native-project-workspace-client.ts` 现提供配套的私有请求端，仅使用实际 Control 子进程的 `process.channel` / `process.send`，不接受 caller peer、账号、owner、projectId、路径或 workspaceId。同一模块在实际进程中只有一个活动请求端；票据必须先由 Main prepare。Main 与 Control 使用 contracts 中同一份 wire 类型和严格快照解析，原 schema 与字段不变，没有新增 renderer、HTTP 或 plugin SDK 分配接口。
+
+请求端一次发送、最多四个等待请求或发送处理，不排重试队列。票据过期或 caller signal 已撤回时不发送；响应只匹配原随机 requestId。其他协议与未知关联不触碰等待中的请求；已知关联的扩展字段、普通工作空间 ID、非法状态、getter 或其他畸形值拒绝，未收到响应或 send 失败有界退出。超时、caller abort、请求端撤回和实际 parent disconnect 都不会重发请求，也不会把迟到响应交给业务调用。close 移除自己的监听器、等待有界 send callback 处理，不断开进程或删除已经提交的目录。Control abort/超时不能撤销 Main 已开始的文件分配，后续业务必须重新核对资格与真实状态，不能声称文件回滚。
+
+新专项的 child 实际加载上述 Control 源码，通过 Node IPC 调用原 Main bridge 和原 allocator，覆盖真实目录、活动空间保持、一次性票据、明确同 owner 重放、超时、坏响应、并发上限、撤回、实际断连和自身监听器清理。与原 Main bridge 联合 **52 passed、0 failed、0 skipped**；新 portable wire 两项测试通过，合计 **54 passed**。Contracts、Control 和 Electron 类型检查、架构边界及格式检查通过。这里的 ticket 来源仍是受信 Main 测试调用，没有接入实际 Host 项目授权，尚不能证明 namespace、会话、Agent 或 Web 产品闭环。
 
 ## 兼容性与验收范围
 
@@ -41,4 +49,4 @@ pnpm crewon:boundary:check
 pnpm format
 ```
 
-尚未完成：Main 实际启动桥与 Control child fd、真实 Host 项目请求/receipt → Main prepare、显式新 metadata ownership、SQL namespace + Thread/binding 同连接提交，以及中央 Agent provisioning。当前测试不能据此宣称产品项目创建闭环或插件 ready。
+尚未完成：Main 实际启动桥与 Control child fd、真实 Host 项目请求/receipt → Main prepare、Native 观察 → 原 SQL namespace 登记 → 原 Thread/binding，以及中央 Agent provisioning。受保护 metadata 首次创建已有真实 installed HTTP 证据，见[项目管理隔离](./plugin-project-management-isolation.md)，不代表这里的目录链路已接入它。namespace 登记和 Conversation SQL 目前为独立事务，不能声称整体原子提交。当前测试不能据此宣称产品项目创建闭环或插件 ready。
