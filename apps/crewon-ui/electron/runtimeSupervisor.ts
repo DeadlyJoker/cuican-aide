@@ -1397,6 +1397,10 @@ export async function terminateRuntimeChild(
   }
 }
 
+// The Standard request default changes compiled model identity. Allocate new
+// versions while keeping previously published Lite assets immutable.
+export const DESKTOP_RUNTIME_CONTRACT = "crewon.electron-typescript-runtime.v3";
+
 export function desktopRuntimeFingerprint(input: {
   providerId: string;
   endpoint: string;
@@ -1416,7 +1420,7 @@ export function desktopRuntimeFingerprint(input: {
     .update(
       JSON.stringify({
         ...input,
-        runtimeContract: "crewon.electron-typescript-runtime.v2",
+        runtimeContract: DESKTOP_RUNTIME_CONTRACT,
       }),
     )
     .digest("hex");
