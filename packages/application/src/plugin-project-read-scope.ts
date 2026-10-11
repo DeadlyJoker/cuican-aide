@@ -15,6 +15,12 @@ import { ApplicationError } from "./application-error.ts";
 import type { PluginUiActionContext } from "./plugin-ui-ports.ts";
 import { capturePluginUiInvocationCommitAuthority } from "./plugin-ui-invocation-authority.ts";
 import { committedTaskContext } from "./plugin-ui-committed-task-support.ts";
+import { captureProjectConversationAuthority } from "./project-conversation-authority.ts";
+import type { ProjectConversationCommitAuthority } from "./project-conversation-store-port.ts";
+import {
+  parseProjectConversationsActionRequest,
+  PROJECT_CONVERSATIONS_METHOD_ACTIONS,
+} from "@crewon/contracts/project-conversations";
 
 export const PLUGIN_PROJECT_READ_METHODS = [
   "loadProject",
@@ -75,12 +81,79 @@ type Qualified = Readonly<{
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
   snapshot: ReturnType<typeof committedTaskContext>;
-  request: ReturnType<typeof parseCreativeProjectUiActionRequest>;
+  request:
+    | ReturnType<typeof parseCreativeProjectUiActionRequest>
+    | ReturnType<typeof parseProjectConversationsActionRequest>;
   methods: readonly string[];
   assertCurrent(): Promise<void>;
   assertActive(): void;
 }>;
 const references = new WeakMap<object, Qualified>();
+
+/** Private original Conversation preparation reader. It grants neither a mutation scope nor a Run/Tool capability. */
+export function capturePluginProjectConversationReadScope(
+  context: PluginUiActionContext,
+  hostAuthority: ProjectConversationCommitAuthority,
+): PluginProjectReadScope {
+  const live = capturePluginUiInvocationCommitAuthority(context);
+  const host = captureProjectConversationAuthority(hostAuthority);
+  const snapshot = committedTaskContext(context);
+  const request = parseProjectConversationsActionRequest({
+    action: context.action,
+    input: context.input,
+  });
+  if (
+    ![
+      PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation,
+      PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations,
+      PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation,
+    ].includes(request.action as never) ||
+    snapshot.pin.action !== request.action ||
+    extensionCanonicalJson({ ...snapshot.pin, action: "project.execute" }) !==
+      extensionCanonicalJson(host.pin) ||
+    extensionCanonicalJson(snapshot.context.selection) !==
+      extensionCanonicalJson(host.selection) ||
+    extensionCanonicalJson(snapshot.context.package) !==
+      extensionCanonicalJson(host.package)
+  )
+    unavailable();
+  const active = () => {
+    live.assertActive();
+    host.assertActive();
+    if (committedTaskContext(context).fingerprint !== snapshot.fingerprint)
+      unavailable();
+  };
+  active();
+  const pin = snapshot.pin;
+  const source: Qualified = Object.freeze({
+    purpose: "read",
+    scope: parsePluginProjectWorkspaceOwnerScope({
+      tenantId: pin.tenantId,
+      spaceId: pin.spaceId,
+      principalId: pin.principalId,
+      actorId: pin.actorId,
+      profileId: pin.profileId,
+      pluginId: pin.pluginId,
+      publisherId: pin.publisherId,
+    }),
+    snapshot,
+    request,
+    methods: Object.freeze(["loadProject"]),
+    assertActive: active,
+    assertCurrent: async () => {
+      active();
+      await host.assertCurrent();
+      await host.assertTransactionCurrent();
+      await live.assertCurrent();
+      active();
+    },
+  });
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
+  references.set(ref, source);
+  return ref;
+}
 
 /** Private issuer. The exact registered UI call is required before reading its fields. */
 export function capturePluginProjectReadScope(

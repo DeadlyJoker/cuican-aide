@@ -50,6 +50,7 @@ import type { InstalledPluginTaskActionOwnerDependencies } from "./installed-plu
 
 export type ProjectConversationControlDependencies = Readonly<{
   service: ProjectConversationApplicationService;
+  projectOwnership?: "plugin-project-v1";
   conversations: ProjectConversationStore;
   configuration: ProjectConversationConfiguration;
   installations: Pick<PluginInstallationStore, "loadSelection" | "loadPackage">;
@@ -80,6 +81,11 @@ export class ProjectConversationControlOwner {
   constructor(input: ProjectConversationControlDependencies) {
     if (!(input.service instanceof ProjectConversationApplicationService))
       throw new Error("project_conversation_service_required");
+    if (
+      input.projectOwnership !== undefined &&
+      input.projectOwnership !== "plugin-project-v1"
+    )
+      throw new Error("project_conversation_project_ownership_invalid");
     this.#input = Object.freeze({
       ...input,
       configuration: Object.freeze({
@@ -335,11 +341,21 @@ export class ProjectConversationControlOwner {
         request.action === associationActions.attach
         ? parseProjectConversationAssociationResponse(
             request,
-            await this.#dispatch(context.actor, request, actualAuthority),
+            await this.#dispatch(
+              context.actor,
+              request,
+              actualAuthority,
+              context,
+            ),
           )
         : parseProjectConversationsActionResponse(
             request,
-            await this.#dispatch(context.actor, request, actualAuthority),
+            await this.#dispatch(
+              context.actor,
+              request,
+              actualAuthority,
+              context,
+            ),
           ),
     );
     if (
@@ -381,8 +397,19 @@ export class ProjectConversationControlOwner {
       | ProjectConversationsUiActionRequest
       | ProjectConversationAssociationRequest,
     authority: ProjectConversationCommitAuthority,
+    context?: PluginUiActionContext,
   ) {
     const service = this.#input.service;
+    if (
+      context !== undefined &&
+      this.#input.projectOwnership === "plugin-project-v1" &&
+      [
+        actions.createConversation,
+        actions.listConversations,
+        actions.openConversation,
+      ].includes(request.action as never)
+    )
+      return service.metadataFromPluginUi(context, authority);
     switch (request.action) {
       case associationActions.inspect:
       case associationActions.attach:

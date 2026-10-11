@@ -28,7 +28,13 @@
 
 后续已将同一 metadata 检查接到原 Conversation 写事务：protected 项目必须具有匹配完整归属和 workspaceId 的 namespace，缺失 namespace schema/记录或使用 null/其他 workspace 均拒绝。原安装、Host 授权、Thread 资格、receipt、重放与事务末端检查保持；legacy 分支没有被转换成新项目授权。SQLite/PostgreSQL 真实事务验证匹配项目继续提交原 Thread、binding 与 receipt，冷 Store 保留工作空间，分别变更 actor/profile/plugin/publisher 时拒绝且不留下 Thread 或 receipt。新增专项及原 namespace、Conversation 回归联合 **49 passed、0 failed、0 skipped**；metadata 记录在这个 Conversation 专项中由命名持久 fixture 提供，不能当成生产接管权限或 PostgreSQL qualified 创建证据。
 
-产品接线仍有明确前置条件：原 `ProjectConversationApplicationService.#project` 使用 legacy `loadProject`，目前不能准备 protected 项目的页面操作。下一步需要从真实 UI/Control 调用签发有界读取来源，复用同一 Store 的绑定读取视图；不得仅将 caller 的安装字段当成读取许可，或放宽 legacy reader 来绕过隔离。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与 Web/正式桌面仍未验收。
+原三参 Conversation 调用仍使用 legacy 项目读取。新增显式 `metadataFromPluginUi` 路径只支持 createConversation、listConversations、openConversation：先核对真实注册 UI 调用和原独立 Conversation Host pin/selection/package，再签发有界的原 `loadProject` 读取视图。UI 没有 CreativeProject transaction 时不伪造它；原 `project.execute` Host pin 也不改写，来源仅匹配双方完整身份、安装快照和当前生命周期，不授予项目创建、Run 或 Tool 权限。原项目 read/write 策略和 Conversation 写事务继续分别检查。缺少绑定读取能力的 Store 明确拒绝；普通入口不回退读取 protected 项目。Control 的内部 `projectOwnership` 为显式选择，默认生产配置尚未开启。
+
+这个 UI 创建入口的内部回执键使用七字段稳定归属、已有 projectId、实际入口和外部 key 的版本化摘要，原请求摘要及当前安装检查不变。两项目相同外部 key 不再冲突，同项目重试不分配新 ID，更改内容仍由原 Store 拒绝。旧普通入口和 Run 回执不改写；稳定键不意味着跨安装版本可无条件回放，原升级/refreshSource 规则仍需保留并接通。
+
+新增真实 PluginUI/Application/SQLite 专项 **7 passed、0 failed、0 skipped**：创建、打开、列表、重放、冷 Thread 读取、同外部键项目隔离、改变内容冲突、独立项目策略、跨插件、复制/过期来源、Host pin 漂移与关闭、拒绝 stage 借用读取资格及缺少读取端口时拒绝 fallback。新增入口在原 Host 最后一次异步检查之后重新检查独立项目 write 策略；准备 Thread 后撤权时，Thread、binding 与 receipt 均不落库。包验证与 Host callback、持久 metadata 在该专项中使用命名 fixture，任务端口明确禁止调用；这些证据不证明真实 Native 分配或模型执行。最新会话、关联、模型选择和 Store 联合回归 **26 passed、0 failed、20 skipped（PostgreSQL）**；此前包含其他项目专项的联合回归 **59 passed、15 skipped（PostgreSQL）**，原 Native 回归 **4 passed、1 skipped（PostgreSQL production）**；本轮未运行 PostgreSQL 新读取模式。Application/Store/Control typecheck、架构边界与文档格式检查通过。
+
+getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、完整 Native/Control 产品配置和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
 
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 

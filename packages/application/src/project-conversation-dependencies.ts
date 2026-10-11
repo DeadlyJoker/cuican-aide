@@ -22,6 +22,7 @@ export function captureProjectConversationDependencies(
     "crewon.project-conversation-binding.v1"
   )
     fail();
+  const binding = optionalMethod(d.projects, "bindProjectReads");
   return Object.freeze({
     conversations: Object.freeze({
       version: "crewon.project-conversation-binding.v1",
@@ -44,6 +45,7 @@ export function captureProjectConversationDependencies(
       loadThreadInSpace: method(d.threadStore, "loadThreadInSpace"),
     }),
     projects: Object.freeze({
+      ...(binding === undefined ? {} : { bindProjectReads: binding }),
       loadProject: method(d.projects, "loadProject"),
       loadBrief: method(d.projects, "loadBrief"),
     }),
@@ -79,6 +81,27 @@ function method<T extends object, K extends keyof T>(input: T, key: K): T[K] {
     return d.value.bind(input) as T[K];
   }
   return fail();
+}
+function optionalMethod<T extends object, K extends keyof T>(
+  input: T,
+  key: K,
+): T[K] | undefined {
+  if (input === null || typeof input !== "object") fail();
+  for (
+    let owner: object | null = input, depth = 0;
+    owner !== null && depth < 16;
+    owner = Object.getPrototypeOf(owner), depth++
+  ) {
+    const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+    if (descriptor === undefined) continue;
+    if (
+      !Object.hasOwn(descriptor, "value") ||
+      typeof descriptor.value !== "function"
+    )
+      fail();
+    return descriptor.value.bind(input) as T[K];
+  }
+  return undefined;
 }
 function fail(): never {
   throw new ApplicationError("internal", "project_conversation_config_invalid");

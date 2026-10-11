@@ -20,7 +20,6 @@ import {
   extensionCanonicalJson,
   parseProjectConversationBinding,
   parseProjectStageRunAdmission,
-  validateCreativeProject,
   parseProjectBriefRevision,
   parseProjectTextArtifact,
   type ProjectConversationBinding,
@@ -33,7 +32,17 @@ import type {
 } from "./project-conversation-store-port.ts";
 import type { ThreadApplicationService } from "./thread-application-service.ts";
 import type { ThreadStore } from "./thread-store-port.ts";
-import type { CreativeProjectStore } from "./creative-project-store-port.ts";
+import type {
+  CreativeProjectStore,
+  PluginProjectReadStoreBinding,
+} from "./creative-project-store-port.ts";
+import type { PluginUiActionContext } from "./plugin-ui-ports.ts";
+import { projectConversationReceipt } from "./project-conversation-receipt.ts";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
+import { projectConversationPublicBinding } from "./project-conversation-projection.ts";
+import { ownedConversationProjectWriteAuthority } from "./project-conversation-project-authority.ts";
+import { readConversationProject } from "./project-conversation-project-reader.ts";
+import { conversationUiProjectReader } from "./project-conversation-ui-project-reader.ts";
 import type { ProjectTextStore } from "./project-text-store-port.ts";
 import type { ExtensionTaskApplicationService } from "./extension-task-application-service.ts";
 import type { CreativeProjectAuthorizationPort } from "./creative-project-authorization-port.ts";
@@ -53,7 +62,8 @@ export type ProjectConversationApplicationDependencies = Readonly<{
   conversations: ProjectConversationStore;
   threads: Pick<ThreadApplicationService, "prepareCreateThread">;
   threadStore: Pick<ThreadStore, "loadThreadInSpace">;
-  projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief">;
+  projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief"> &
+    Partial<PluginProjectReadStoreBinding>;
   texts: Pick<
     ProjectTextStore,
     "loadOutline" | "loadRevision" | "loadOutlineSourceRevision"
@@ -76,6 +86,45 @@ export class ProjectConversationApplicationService {
   readonly #d: ProjectConversationApplicationDependencies;
   constructor(d: ProjectConversationApplicationDependencies) {
     this.#d = captureProjectConversationDependencies(d);
+  }
+  /** Explicit Host opt-in, using only the genuine original UI invocation and its independent Conversation authority. */
+  async metadataFromPluginUi(
+    context: PluginUiActionContext,
+    authority: ProjectConversationCommitAuthority,
+  ) {
+    const view = conversationUiProjectReader({
+      context,
+      authority,
+      projects: this.#d.projects,
+    });
+    switch (view.request.action) {
+      case PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations:
+        return this.#listConversations(
+          context.actor,
+          view.request.input,
+          authority,
+          view.projects,
+        );
+      case PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation:
+        return this.#createConversation(
+          context.actor,
+          view.request.input,
+          authority,
+          { store: view.projects, readScope: view.scope },
+        );
+      case PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation:
+        return this.#openConversation(
+          context.actor,
+          view.request.input,
+          authority,
+          view.projects,
+        );
+      default:
+        throw new ApplicationError(
+          "authorization",
+          "plugin_project_read_method_mismatch",
+        );
+    }
   }
   /** Association adds project metadata only; it never rewrites a Thread or starts a Run. */
   async associateConversation(
@@ -219,10 +268,23 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationsRequests["listConversations"],
     authority: ProjectConversationCommitAuthority,
   ): Promise<ProjectConversationsResponses["listConversations"]> {
+    return this.#listConversations(actor, input, authority, this.#d.projects);
+  }
+  async #listConversations(
+    actor: ActorContext,
+    input: ProjectConversationsRequests["listConversations"],
+    authority: ProjectConversationCommitAuthority,
+    projects: Pick<CreativeProjectStore, "loadProject">,
+  ) {
     return this.#call(async () => {
       const request = this.#input("listConversations", input),
         q = await this.#authority(actor, authority);
-      await this.#project(q, request.projectId, "creativeProject:read");
+      await this.#project(
+        q,
+        request.projectId,
+        "creativeProject:read",
+        projects,
+      );
       const page = await this.#d.conversations.listBindings({
         actor: q.actor,
         profileId: q.installation.profileId,
@@ -256,11 +318,45 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationsRequests["createConversation"],
     authority: ProjectConversationCommitAuthority,
   ): Promise<ProjectConversationsResponses["createConversation"]> {
+    return this.#createConversation(actor, input, authority, {
+      store: this.#d.projects,
+    });
+  }
+  async #createConversation(
+    actor: ActorContext,
+    input: ProjectConversationsRequests["createConversation"],
+    authority: ProjectConversationCommitAuthority,
+    projects: Readonly<{
+      store: Pick<CreativeProjectStore, "loadProject">;
+      readScope?: PluginProjectReadScope;
+    }>,
+  ) {
     return this.#call(async () => {
       const request = this.#input("createConversation", input),
-        q = await this.#authority(actor, authority);
-      await this.#project(q, request.projectId, "creativeProject:write");
-      const receipt = this.#receipt("create", request, q),
+        captured = await this.#authority(actor, authority),
+        q =
+          projects.readScope === undefined
+            ? captured
+            : ownedConversationProjectWriteAuthority({
+                authority: captured,
+                projectId: request.projectId,
+                authorization: this.#d.authorization,
+              });
+      await this.#project(
+        q,
+        request.projectId,
+        "creativeProject:write",
+        projects.store,
+      );
+      const receipt = projectConversationReceipt({
+          kind: "create",
+          input: request,
+          authority: q,
+          digester: this.#d.digester,
+          ...(projects.readScope === undefined
+            ? {}
+            : { readScope: projects.readScope }),
+        }),
         previous = await this.#d.conversations.loadMutationReceipt({
           actor: q.actor,
           profileId: q.installation.profileId,
@@ -316,11 +412,19 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationsRequests["openConversation"],
     authority: ProjectConversationCommitAuthority,
   ): Promise<ProjectConversationsResponses["openConversation"]> {
+    return this.#openConversation(actor, input, authority, this.#d.projects);
+  }
+  async #openConversation(
+    actor: ActorContext,
+    input: ProjectConversationsRequests["openConversation"],
+    authority: ProjectConversationCommitAuthority,
+    projects: Pick<CreativeProjectStore, "loadProject">,
+  ) {
     return this.#call(async () => {
       const request = this.#input("openConversation", input),
         q = await this.#authority(actor, authority),
         b = await this.#binding(q, request.projectId, request.threadId);
-      await this.#project(q, b.projectId, "creativeProject:read");
+      await this.#project(q, b.projectId, "creativeProject:read", projects);
       await this.#thread(q, b);
       await q.assertCurrent();
       q.assertActive();
@@ -562,49 +666,19 @@ export class ProjectConversationApplicationService {
     q.assertActive();
     return q;
   }
-  async #project(
+  #project(
     q: ProjectConversationCommitAuthority,
     projectId: string,
     action: "creativeProject:read" | "creativeProject:write",
+    projects: Pick<CreativeProjectStore, "loadProject"> = this.#d.projects,
   ) {
-    if (
-      (
-        await this.#d.authorization.authorize({
-          actor: q.actor,
-          action,
-          resource: {
-            kind: "creativeProject",
-            tenantId: q.actor.tenantId,
-            spaceId: q.actor.spaceId,
-            projectId,
-          },
-        })
-      ).outcome !== "allow"
-    )
-      throw new ApplicationError(
-        "authorization",
-        "creative_project_access_denied",
-      );
-    const raw = await this.#d.projects.loadProject({
-      owner: creativeOwner(q.actor),
+    return readConversationProject({
+      authority: q,
       projectId,
+      action,
+      projects,
+      authorization: this.#d.authorization,
     });
-    if (raw === null)
-      throw new ApplicationError("notFound", "creative_project_not_found");
-    const p = validateCreativeProject(raw);
-    if (
-      p.tenantId !== q.actor.tenantId ||
-      p.spaceId !== q.actor.spaceId ||
-      p.ownerPrincipalId !== q.actor.principalId ||
-      p.projectId !== projectId
-    )
-      throw new ApplicationError(
-        "authorization",
-        "creative_project_access_denied",
-      );
-    if (p.state !== "active" && action === "creativeProject:write")
-      throw new ApplicationError("conflict", "creative_project_archived");
-    return p;
   }
   async #binding(
     q: ProjectConversationCommitAuthority,
@@ -659,19 +733,12 @@ export class ProjectConversationApplicationService {
     input: Readonly<{ idempotencyKey: string }>,
     q: ProjectConversationCommitAuthority,
   ) {
-    return {
-      actor: q.actor,
-      idempotencyKey: `project-conversation:${this.#d.digester.sha256(extensionCanonicalJson([q.actor, q.installation.profileId, input.idempotencyKey])).slice(7)}`,
-      requestDigest: this.#d.digester.sha256(
-        extensionCanonicalJson({
-          version: "crewon.project-conversation-command.v1",
-          kind,
-          actor: q.actor,
-          installation: q.installation,
-          input,
-        }),
-      ),
-    };
+    return projectConversationReceipt({
+      kind,
+      input,
+      authority: q,
+      digester: this.#d.digester,
+    });
   }
   #input<M extends ProjectConversationsUiMethod>(
     method: M,
@@ -701,25 +768,7 @@ export class ProjectConversationApplicationService {
     ) as ProjectConversationsResponses[M];
   }
   #public(raw: ProjectConversationBinding): PublicProjectConversationBinding {
-    const b = parseProjectConversationBinding(raw, this.#d.digester),
-      i = b.currentInstallation;
-    return {
-      bindingId: b.bindingId,
-      projectId: b.projectId,
-      threadId: b.threadId,
-      workspaceId: b.workspaceId,
-      revision: b.revision,
-      state: b.state,
-      source: {
-        pluginId: i.pluginId,
-        publisherId: i.publisherId,
-        version: i.version,
-        packageDigest: i.packageDigest,
-        selectionRevision: i.selectionRevision,
-      },
-      createdAt: b.createdAt,
-      updatedAt: b.updatedAt,
-    };
+    return projectConversationPublicBinding(raw, this.#d.digester);
   }
   #mutation<M extends "createConversation" | "refreshSource" | "setState">(
     method: M,
