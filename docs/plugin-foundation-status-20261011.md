@@ -24,8 +24,8 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 | ----------------------- | ---------------------------------------------------------------------------------------------------- |
 | F0 卸载与基础基线       | 当前正式 profile 已卸载业务插件，历史保留；正式冷启动、原账号和真实聊天已验收，其他基础行为待补齐    |
 | F1 基础聊天与启动可靠性 | 新默认 Standard 已通过真实 Web 并行、输出中刷新与继续发送；历史外部首次断流仍未定因                  |
-| F2 公开能力与配置装配   | SDK、严格配置、真实 Node 服务目录库与可选状态协议/路由已有；正式 profile 的目录和状态 owner 尚未绑定 |
-| F3 资源与依赖协调       | 资源、组合锁、协调和原图执行核心已有；正式宿主自动实例协调与执行配置尚未接通                         |
+| F2 公开能力与配置装配   | 安装 Profile 源码已绑定真实 execution 注册目录；状态投影已有，产品状态路由尚未绑定                   |
+| F3 资源与依赖协调       | 安装与组合可共享实例，Task Core 可显式读取同一 Store 的原图；正式自动协调与 Native 执行配置尚未接通  |
 | F4 独立开发协议与工具   | tools/SDK tarball、仓外初始化/编译/校验及最小服务模板已有实证；完整开发场景与兼容验收未完成          |
 | F5 可插拔闭环           | 独立模板的真实 SQLite 生命周期及测试模型组合路径已验收；正式产品、真实外部恢复和分布式路径未全部验收 |
 
@@ -44,13 +44,15 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 ### F2：公开能力契约与配置装配
 
 - **完成证据：** [公开 SDK](../packages/plugin-sdk/src/sdk-types.ts)已有声明式服务/API 版本访问、可选服务、资源、Node/UI 入口与主题输入；宿主强制身份、声明和版本检查。Native 基础身份独立于插件文件，原严格批准解析未放宽。真实安装选择提交后已有组合元数据同步，元数据发布失败不会伪装成选择回滚，见[协调核心与元数据同步](./plugin-composition-coordinator.md)。本轮 `2fd79e6ce` 提交了[真实 Node 服务目录库与核心身份适配器](./plugin-node-host-services.md)：同一不可变目录提供实现、元数据和协调注册项；`crewon.execution` v1 与 `crewon.tasks` v1/v2 只接受真实实现所有者，保留原租约、调用身份与每次授权。覆盖真实安装后的 ESM setup、租约清理、SQLite 任务回执及授权撤回，使用临时 profile。`8d51e4e60` 提交了[可选组合状态协议与路由](./plugin-composition-status-protocol.md)：严格 DTO 分开元数据发布与实际 Node 状态，沿原身份入口鉴权，分页至多 50 项、响应至多 64 KiB，不返回凭据或内部异常；OpenAPI 和生成类型同步，覆盖状态约束、分页、无 owner 的 404、身份与故障边界。两项是已实现的库与可选传输能力，不是正式产品接通的证据。
-- **缺口：** [正式安装 profile](../apps/control-api/src/desktop-plugin-installation-profile.ts)的 NodeHost 服务集合仍为空，[元数据 owner](../apps/control-api/src/desktop-plugin-composition-metadata-owner.ts)也声明空宿主 Node 服务，尚未绑定本轮目录与真实服务批准。正式 profile 也未绑定实际实例的 `PluginCompositionStatusControlService` owner；生产默认 `GET /api/v1/plugins/composition/status` 仍为 `404 route_not_found`。`compositionState` 仍是内部元数据观察，`published` 不表示服务就绪；UI 可用不能冒充 Node 服务实现。原组合 v1 历史任务查询的拒绝条件未解除，新的状态协议也不授予任务执行权限。F3 的自动实例协调与正式执行装配、F5 的产品闭环尚未接通，不能由目录库或可选路由测试替代。
+- **本次源码接线：** [安装 Profile](../apps/control-api/src/desktop-plugin-installation-profile.ts)现在由[专用 owner](../apps/control-api/src/desktop-plugin-execution-service-owner.ts)持有实际 execution Registry，NodeHost 实现与元数据发布共用一次捕获的服务目录。关闭或失去所有权同步撤销注册；没有全局 tasks 服务，也没有据此批准业务任务。新增实际 Application/SQLite 集成 9 项，与相关既有安装、配置、激活及 Native 任务回归共 70/70。新增[纯状态投影](../apps/control-api/src/desktop-plugin-composition-status-owner.ts)的真实 SQLite/Node 专项 6/6：精确 accepting 实例才为 ready；cold、UI-only 与 retained 为 unobserved；停用后的实际 cleanupFailed 如实呈现。这些只在源码与临时测试数据库验证，未进入 `0.1.70` 正式包。
+- **缺口：** 实际实例的 `PluginCompositionStatusControlService` 尚未绑定原 Profile 队列、当前 actor/epoch 和 SQLite claim；生产默认 `GET /api/v1/plugins/composition/status` 仍为 `404 route_not_found`。`compositionState` 仍是内部元数据观察，`published` 不表示服务就绪；UI 可用不能冒充 Node 服务实现。原组合 v1 历史任务查询的拒绝条件未解除，新的状态协议也不授予任务执行权限。F3 的自动实例协调与正式执行装配、F5 的产品闭环尚未接通，不能由目录或状态投影测试替代。
 - **放行条件：** 将已有目录与身份适配器绑定真实 profile 的宿主所有者，给 NodeHost、元数据发布和协调器提供同一组服务身份、实现修订及当前批准；服务获取与每次调用继续执行原授权。服务契约与消费规则可独立验证，损坏业务配置只撤回其贡献。以实际实例 owner 接入已有状态路由，读取前后核验 actor、scope、选择修订和当前权威，按真实生命周期返回就绪、等待依赖与清理失败，不从元数据推断可用。正式接通后覆盖服务消费、批准撤回、配置失败和跨账号拒绝；原组合任务查询仍需 F3 的正式执行装配和独立兼容验收后才开放。
 
 ### F3：实例资源、依赖协调与原任务组合
 
 - **完成证据：** [运行期资源](./plugin-runtime-resources-protocol.md)、[依赖规划](./plugin-dependency-reconciliation-design.md)、[协调核心](./plugin-composition-coordinator.md)、[组合锁与原 Run 引用](./plugin-run-composition-binding.md)、[跨包执行](./plugin-execution-composition.md)均已有实现。它们保留旧借用及原依赖，受影响实例先撤权再清理，原任务恢复逐节点重新授权；不会按今天的 head 替换旧 Run。
-- **缺口：** 生产安装选择目前只触发元数据同步，没有调用实例协调器。正式 [Control 任务运行装配](../apps/control-api/src/installed-plugin-task-runtime-core.ts)未配置 `pluginCompositions`，[Native Worker 装配](../apps/runtime-worker/src/plugins/installed-plugin-native-worker-composition.ts)未提供 `compositionExecution`。通用 [Worker 显式入口](../apps/runtime-worker/src/plugins/installed-plugin-runtime-composition.ts)已有该能力；未配置时 [resolver](../apps/runtime-worker/src/plugins/installed-plugin-runtime-resolver.ts)严格拒绝 v1，不能静默忽略原依赖。本轮 F2 目录库和可选状态路由没有改动这些生产接线。
+- **本次源码能力：** [组合协调器](../packages/plugin-host/src/plugin-composition-coordinator.ts)可以创建唯一安装 adapter，共享它拥有的 NodeHost；顺序的实际 Application 安装/组合准备复用已接受实例，显式撤下提供者再升级后可恢复消费者，保留旧租约与原热升级 guard。关闭检查也覆盖安装及不调用 Node prepare 的路径。相关 PluginHost 全包 394/394、类型检查通过。它尚未绑定正式 Profile；全操作串行和关闭等待仍由实际 Profile 队列承担，UI-only 必须保持原存储图、另行区分 Node 观察，不能当作 Node 激活失败。 [Task Core](../apps/control-api/src/installed-plugin-task-runtime-core.ts)新增可选严格 `compositionPolicy`，从同一实际 Store 读取组合，读前后核对当前 owner/scope/epoch；历史锁保留原 epoch，省略 policy 仍为 v0。Core/Native/desktop/read 专项 38/38，Application 原组合专项 3/3。没有自动迁移、发布或重新签发旧收据。
+- **缺口：** 生产安装选择目前仍只触发元数据同步，没有调用实例协调器。Task Core 的可选 policy 尚未由真实 Native owner 配置，[Native Worker 装配](../apps/runtime-worker/src/plugins/installed-plugin-native-worker-composition.ts)也未提供 `compositionExecution`。通用 [Worker 显式入口](../apps/runtime-worker/src/plugins/installed-plugin-runtime-composition.ts)已有该能力；未配置时 [resolver](../apps/runtime-worker/src/plugins/installed-plugin-runtime-resolver.ts)严格拒绝 v1，不能静默忽略原依赖。查询和 Store 的 v1/source guards 保留，不能仅删除拒绝条件就开放历史任务。
 - **放行条件：** 先完成 F2 的宿主身份与批准适配，再在真实 profile 生命周期接入现有协调器及正式任务/Worker 配置。覆盖依赖升级/撤回/恢复、准备中撤权、清理失败、旧 Run 观察及冷恢复；新旧图各用原实例，失败不伪报就绪。
 
 ### F4：仓外独立开发与分发
@@ -68,7 +70,7 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 ## 下一步的实施顺序
 
 1. 继续 F1 的基础故障定位与正式包行为验收，稳定账号、模型、会话和流式恢复。
-2. 将已实现的 Node 服务目录与核心身份适配器绑定正式 profile 的真实服务所有者和批准，不将 UI port 同名服务当作 Node 实现。
+2. 验证安装 Profile 源码新增 execution 服务所有者与实际批准，继续保持 UI port 与 Node 实现的边界；Web 放行前不带入正式包。
 3. 将现有协调器接入安装 profile 的真实选择生命周期，再绑定实际实例状态 owner，启用已有状态查询路由并验证当前身份、依赖、就绪与清理失败。
 4. 接通正式任务签发与 Worker 原图执行，覆盖原任务恢复和每次授权；公开诊断只反映真实观察，确保用户理解“保存了什么、现在能做什么”。
 5. 用最小插件完成正式产品与必要分布式验收，再恢复业务插件建设。
