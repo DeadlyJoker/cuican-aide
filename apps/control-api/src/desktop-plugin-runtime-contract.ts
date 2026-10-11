@@ -14,11 +14,13 @@ import type { InstalledProjectMediaResultRuntime } from "./installed-project-med
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
+import type { DesktopPluginWorkerRunSource } from "./desktop-plugin-worker-run-source.ts";
 
 export type DesktopPluginRuntime = Readonly<{
   /** Trusted in-process deployment wiring only; not exposed by HTTP or UI props. */
   taskHostServices?: DesktopPluginTaskServiceBinding["catalog"]["registrations"];
   assertTaskHostServicesOwner?: DesktopPluginTaskServiceBinding["assertWorkerOwner"];
+  workerRunSource?: DesktopPluginWorkerRunSource;
   installation: PluginInstallationControlService;
   compositionState: DesktopPluginInstallationRuntime["compositionState"];
   compositionStatus: DesktopPluginInstallationRuntime["compositionStatus"];

@@ -30,6 +30,14 @@ Worker 从已核验的持久 Run admission 和 scope 生成 actor/principal、te
 
 现有 `/private/v1/installed-plugins` 连接提供 catalog、configuration、readiness、candidate preparation 及原查询预检，属于 Control 到 Worker 的元数据请求。其协议没有反向任务执行或实际实例发行操作。不能因为连接已认证，就用这个 metadata 通道接受任务或把 actor/profile DTO 当成调用授权。后续反向接线须先从原 Store 核验 Run/原锁归属、绑定实际 Worker 生命周期和实例，再进入同一个管理器；UI 引用的跨实例负例仍必须成立。本次没有新增反向监听端口或开放 Task RPC。
 
+## 原记录资格来源
+
+`DesktopPluginWorkerRunSource` 仅由持有实际 Task Core binding 的原 Control runtime 构造，借用同一个 SQLite Store，读取已提交 admission、回执、Run、查询来源操作和原组合锁。原 Worker 的回执/Run/组合校验移至 Application 共享，Worker 原入口保留别名和原错误语义；查询操作通过原 Store 的 `externalOperationStore()` 读取。来源从原 admission 得到账号、principal、profile、插件和 publisher，不接受调用方填写归属。
+
+来源只签发 Host 内部的不可序列化记录引用，最多保留 64 个、有效期 30 秒，同时最多允许 64 个未完成读取。每次验证重新读取原记录并复核 live owner；复制/JSON 引用、来源关闭、取消、过期或记录变化均不能取得有效结果。关闭同步撤回引用并等待自己的未完成读取，不关闭借用的共享 Store，也不创建 Run。
+
+这项资格只证明原存储记录及来源归属，不是 Node、Task、当前 Run-read 或 Tool 授权，不能直接暴露为插件 RPC。真实 Worker 实例发行、publisher/plugin/project 范围、每次调用权限和跨进程生命周期仍须在正式 transport 接线中核验。Native SQLite 正例覆盖生成与查询共同读取原锁、旧引用在重开后无效、取消和关闭不发布记录、并发与保留数量上限；移出的原 Worker 回执/Run/组合路径共同回归 54/54、零跳过。Application、Control、Worker 类型和边界检查另行核验；这不是 Web/桌面产品闭环验收。
+
 插件项目归属的新创建交易、统一产物权限、工作空间和中央 Agent 的产品接线仍按[同一套管理能力的隔离方案](./plugin-project-management-isolation.md)继续。本次不更新 Web 或正式桌面，也不将这些专项测试称为完整基础建设验收。
 
 本轮专项证据位于 `output/plugin-foundation/shared-host-services-20261012/`：Worker 13 个文件 78/78、Control/Host 5 个文件 27/27，零跳过。Worker 组包含实际 SQLite/PostgreSQL 的原查询 host、组合查询 resolver 和执行生命周期；自有 PostgreSQL 仅用于测试。本次没有修改 schema 或产物存储，不能用这些检查证明所有项目访问已隔离。

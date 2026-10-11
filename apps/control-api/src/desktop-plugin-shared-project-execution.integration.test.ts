@@ -156,6 +156,24 @@ test(
     assert.equal(probe.setups, 1);
     assert.equal(probe.invokes, 4);
     assert.equal(f.facts().runs, 2);
+    const workerSource = f.actual.workerRunSource;
+    assert.ok(workerSource);
+    const workerSignal = new AbortController().signal;
+    const generationProof = await workerSource.capture(
+      first.runId,
+      workerSignal,
+    );
+    const generationSnapshot = await workerSource.verify(
+      generationProof,
+      workerSignal,
+    );
+    const queryProof = await workerSource.capture(queried.runId, workerSignal);
+    const querySnapshot = await workerSource.verify(queryProof, workerSignal);
+    assert.equal(generationSnapshot.query, null);
+    assert.ok(querySnapshot.query);
+    assert.equal(querySnapshot.query.source.runId, first.runId);
+    assert.deepEqual(querySnapshot.composition, generationSnapshot.composition);
+    assert.equal(f.facts().runs, 2);
     const reopened = await f.reopen();
     const mount = await reopened.ui.openMount(actor, {
       pluginId: f.source.pluginId,

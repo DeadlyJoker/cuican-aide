@@ -1,5 +1,7 @@
 # CrewON 基础能力与插件体系当前状态
 
+2026-10-12 原记录来源接线：Control 借用原 Task Core/SQLite，从已提交的生成或查询记录核验账号/profile、回执、来源操作及原组合锁；与 Worker 共用原校验器，不复制管理器。Host 内部引用有生命周期、数量和并发边界，不能序列化为 Node/Task 授权。专项 54/54、零跳过，正式跨进程实例发行及项目权限接线仍未完成，未更新 Web/桌面。详见[原记录资格来源](./plugin-worker-shared-host-services.md#原记录资格来源)。
+
 2026-10-12 后续隔离接线：原共享任务端口新增真实来源 owner 核验。Worker 使用持久 Run 的账号/profile 范围，在原图准备、最后异步检查、发布和缓存借用复核同一 Core 来源；来源撤回或 scope 不匹配拒绝。仍复用原管理器，没有将 metadata 私有 peer 改为 Task RPC，正式跨进程接线仍未完成。范围见[来源归属核验](./plugin-worker-shared-host-services.md)。
 
 2026-10-12 最新接线：可信同进程部署可将原 Task Core 的实际服务端口接入 Worker，原 Native 组合执行、恢复及观察通过；仍有效的 UI 引用不能在 Worker 实例兑换，来源关闭后端口立即撤回。缺少实现的对照保持拒绝，没有删除原锁或复制任务管理器。专项 Worker 78/78、Control/Host 27/27、零跳过，含实际 PostgreSQL；不是整个 Worker/UI 验收。正式 Control/Worker 跨进程发行、完整项目归属接线和 Web/桌面闭环尚未完成。详见[实际共享服务与交付边界](./plugin-worker-shared-host-services.md)。下文保留此前失败和阶段证据。

@@ -39,6 +39,7 @@ import {
   type DesktopPluginInstallationRuntime,
 } from "./desktop-plugin-installation-runtime.ts";
 import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
+import { DesktopPluginWorkerRunSource } from "./desktop-plugin-worker-run-source.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
@@ -607,6 +608,17 @@ export async function createDesktopPluginRuntime(
     const ownedInstallation = installation;
     const ownedConfiguration = configurationRuntime;
     const ownedActivation = activation;
+    const workerRunSource =
+      taskBinding === undefined || taskRuntime === undefined
+        ? undefined
+        : new DesktopPluginWorkerRunSource({
+            binding: taskBinding,
+            store: dependencies.store,
+            actor: configuration.actor,
+            scope: configuration.scope,
+            clock: dependencies.clock,
+            digester: dependencies.digester,
+          });
     return Object.freeze({
       installation: ownedInstallation.service,
       compositionState: ownedInstallation.compositionState,
@@ -621,6 +633,7 @@ export async function createDesktopPluginRuntime(
           }),
       ui,
       configuration: ownedConfiguration,
+      ...(workerRunSource === undefined ? {} : { workerRunSource }),
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),
       ...(taskRuntime !== undefined && "mediaGenerations" in taskRuntime
         ? { projectMediaGenerations: taskRuntime.mediaGenerations }
@@ -639,12 +652,14 @@ export async function createDesktopPluginRuntime(
       close: () => {
         if (closing !== null) return closing;
         closed = true;
+        const sourceClose = workerRunSource?.close();
         deferredServices?.close();
         taskBinding?.close();
         authority.withdraw();
         return (closing = closeAll([
           () => conversations?.close(),
           () => taskRuntime?.close(),
+          () => sourceClose,
           () => Promise.allSettled([...physical]),
           () => recovery?.close(),
           () => foundationUi?.close(),

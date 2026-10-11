@@ -334,3 +334,12 @@ export * from "./project-source-upload-foundation-adapter.ts";
 export * from "./plugin-project-foundation-action-owner.ts";
 export * from "./project-source-upload-plugin-commit-authority.ts";
 export * from "./plugin-project-source-upload-action-owner.ts";
+
+export {
+  assertPluginTaskRunReceipt,
+  assertPluginTaskRunSnapshot,
+} from "./plugin-task-run-storage-proof.ts";
+
+export { readPluginTaskRunComposition } from "./plugin-task-run-composition-proof.ts";
+// Storage validation only; the caller must independently qualify its live subject and permissions.
+export { loadPluginQuerySourceProof as readPluginQuerySourceStorageProof } from "./plugin-query-source.ts";
