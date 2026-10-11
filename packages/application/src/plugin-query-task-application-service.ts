@@ -10,6 +10,7 @@ import {
   type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { pluginTaskCommitOptions } from "./plugin-task-commit-authority.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import {
   authorizeExtension,
@@ -368,7 +369,12 @@ export class PluginQueryTaskApplicationService {
                 ? { projectHistoricalQuery: project.sidecar }
                 : { projectQuery: project.sidecar }),
           },
-          project?.commitOptions,
+          pluginTaskCommitOptions(
+            authority,
+            actor,
+            pin,
+            project?.commitOptions,
+          ),
         );
       const result =
         project === null

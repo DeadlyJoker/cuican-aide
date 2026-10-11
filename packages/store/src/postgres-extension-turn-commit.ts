@@ -1,3 +1,5 @@
+import { assertPluginTaskCommitActive } from "@crewon/application";
+import { capturePluginTaskCommitAuthorityOption } from "./plugin-task-commit-authority-option.ts";
 import {
   lockPostgresRunComposition,
   readPostgresRunComposition,
@@ -172,6 +174,8 @@ export async function commitPostgresExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ) {
+  const invocation = capturePluginTaskCommitAuthorityOption(options);
+  options = invocation.options;
   const selectedModel = capturePluginTaskModelSelectionOption(options);
   options = selectedModel.options;
   const media = captureProjectMediaGenerationTurn(
@@ -786,6 +790,11 @@ export async function commitPostgresExtensionTurn(
         assertCreativeProjectCommitActive(prepared?.authority);
         assertCreativeProjectCommitActive(projectQuery?.authority);
         assertCreativeProjectCommitActive(historicalQuery?.authority);
+        assertPluginTaskCommitActive(
+          invocation.authority,
+          binding,
+          pluginAdmission ?? pluginQuery,
+        );
       },
     },
   );

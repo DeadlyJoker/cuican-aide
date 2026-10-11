@@ -34,15 +34,67 @@ export interface PluginTaskCommitAuthorityPort {
       pin: PluginTaskAdmissionPin;
     }>,
   ): Promise<void>;
+  /** Optional negative fence. Must be synchronous and safe while the original Store transaction is held. */
+  assertActive?(
+    input: Readonly<{ actor: ActorContext; pin: PluginTaskAdmissionPin }>,
+  ): void;
 }
 
 export function capturePluginTaskCommitAuthority(
   input: PluginTaskCommitAuthorityPort | undefined,
 ): PluginTaskCommitAuthorityPort | null {
   if (input === undefined) return null;
-  if (typeof input.assertCurrent !== "function")
+  const current = pluginTaskAuthorityMethod(input, "assertCurrent");
+  const active = pluginTaskAuthorityMethod(input, "assertActive");
+  if (
+    typeof current !== "function" ||
+    (active !== undefined && typeof active !== "function")
+  )
     throw new ApplicationError("conflict", "plugin_task_authority_unavailable");
-  return Object.freeze({ assertCurrent: input.assertCurrent.bind(input) });
+  return Object.freeze({
+    async assertCurrent(
+      provided: Parameters<PluginTaskCommitAuthorityPort["assertCurrent"]>[0],
+    ) {
+      if ((await current.call(input, provided)) !== undefined)
+        throw new ApplicationError(
+          "conflict",
+          "plugin_task_authority_unavailable",
+        );
+    },
+    ...(active === undefined
+      ? {}
+      : {
+          assertActive(
+            provided: Parameters<
+              NonNullable<PluginTaskCommitAuthorityPort["assertActive"]>
+            >[0],
+          ) {
+            const result: unknown = active.call(input, provided);
+            if (result instanceof Promise) void result.catch(() => {});
+            if (result !== undefined)
+              throw new ApplicationError(
+                "conflict",
+                "plugin_task_authority_unavailable",
+              );
+          },
+        }),
+  });
+}
+function pluginTaskAuthorityMethod(input: object, name: string): unknown {
+  let owner: object | null = input;
+  while (owner !== null && owner !== Object.prototype) {
+    const field = Object.getOwnPropertyDescriptor(owner, name);
+    if (field !== undefined) {
+      if (!("value" in field))
+        throw new ApplicationError(
+          "conflict",
+          "plugin_task_authority_unavailable",
+        );
+      return field.value;
+    }
+    owner = Object.getPrototypeOf(owner);
+  }
+  return undefined;
 }
 
 export function checkedPluginTaskPin(input: unknown): PluginTaskAdmissionPin {

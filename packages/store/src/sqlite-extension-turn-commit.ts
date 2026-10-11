@@ -1,4 +1,6 @@
 import { assertProjectStageTurnCurrent } from "./project-stage-turn-current.ts";
+import { assertPluginTaskCommitActive } from "@crewon/application";
+import { capturePluginTaskCommitAuthorityOption } from "./plugin-task-commit-authority-option.ts";
 import {
   capturePluginTaskModelSelectionOption,
   assertPluginTaskModelSelectionTurn,
@@ -198,6 +200,8 @@ export async function commitSqliteExtensionTurn(
   input: CommitExtensionTurnInput,
   options?: ProjectGenerationCommitOptions,
 ): Promise<CommitExtensionTurnResult> {
+  const invocation = capturePluginTaskCommitAuthorityOption(options);
+  options = invocation.options;
   const selectedModel = capturePluginTaskModelSelectionOption(options);
   options = selectedModel.options;
   const media = captureProjectMediaGenerationTurn(
@@ -658,6 +662,11 @@ export async function commitSqliteExtensionTurn(
           host.database,
           stage?.admission ?? null,
           foundationRun,
+        );
+        assertPluginTaskCommitActive(
+          invocation.authority,
+          binding,
+          pluginAdmission ?? pluginQuery,
         );
       },
     },

@@ -1,4 +1,5 @@
 import { prepareExtensionTaskModel } from "./extension-task-model-selection.ts";
+import { pluginTaskCommitOptions } from "./plugin-task-commit-authority.ts";
 import { prepareExtensionTaskComposition } from "./extension-task-composition.ts";
 import {
   assertExtensionContentStages,
@@ -728,19 +729,25 @@ export async function createExtensionTaskTurn(
     if (generation !== null) await generation.assertDispatchCurrent();
     if (media !== null) await media.assertDispatchCurrent();
     await assertExtensionContentStages(request);
+    const invocationOptions = pluginTaskCommitOptions(
+      commitAuthority,
+      actor,
+      pin,
+      commitOptions,
+    );
     const result = await (pin === null
       ? context.dependencies.extensions.commitExtensionTurn(commitInput)
       : generation === null
         ? commitPluginTask(
             context.dependencies.extensions,
             commitInput,
-            commitOptions,
+            invocationOptions,
           )
         : commitProjectGenerationTask(() =>
             commitPluginTask(
               context.dependencies.extensions,
               commitInput,
-              commitOptions,
+              invocationOptions,
             ),
           ));
     assertExtensionTaskCreditPrincipal(
