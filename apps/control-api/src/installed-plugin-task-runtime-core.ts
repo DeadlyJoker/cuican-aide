@@ -48,6 +48,10 @@ import {
   type InstalledProjectMediaInputConfiguration,
 } from "./installed-project-media-input-configuration.ts";
 import { InstalledProjectMediaInputRuntime } from "./installed-project-media-input-runtime.ts";
+import {
+  createInstalledPluginTaskCompositionReader,
+  type InstalledPluginTaskCompositionPolicy,
+} from "./installed-plugin-task-composition-policy.ts";
 
 export type InstalledPluginTaskRuntimeCore = Readonly<{
   owner: InstalledPluginTaskActionOwner;
@@ -80,6 +84,7 @@ export type InstalledPluginTaskRuntimeCoreInput = Readonly<{
   creditQuotes?: ExtensionCreditQuotePort;
   unmeteredTasks?: PluginTaskUnmeteredAuthorityPort;
   modelSelection?: import("@crewon/application").PluginTaskModelSelectionPort;
+  compositionPolicy?: InstalledPluginTaskCompositionPolicy;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
   digester: ContentDigester;
@@ -231,6 +236,9 @@ export async function createInstalledPluginTaskRuntimeCore(
     ...(Object.hasOwn(provided, "creditQuotes") ? ["creditQuotes"] : []),
     ...(Object.hasOwn(provided, "unmeteredTasks") ? ["unmeteredTasks"] : []),
     ...(Object.hasOwn(provided, "modelSelection") ? ["modelSelection"] : []),
+    ...(Object.hasOwn(provided, "compositionPolicy")
+      ? ["compositionPolicy"]
+      : []),
     "clock",
     "ids",
     "digester",
@@ -466,6 +474,12 @@ export async function createInstalledPluginTaskRuntimeCore(
   let projectQueries: InstalledPluginProjectQueryOwner | undefined;
   let historicalQueries: InstalledPluginProjectHistoricalQueryOwner | undefined;
   try {
+    const pluginCompositions = createInstalledPluginTaskCompositionReader({
+      store: input.store,
+      policy: input.compositionPolicy,
+      digester,
+      assertActive: active,
+    });
     // Migrate this actual adapter: project readiness flags belong to its instance, not another borrowed adapter.
     const ledger = input.store.pluginInstallationStore();
     await ledger.migrate();
@@ -533,6 +547,7 @@ export async function createInstalledPluginTaskRuntimeCore(
       clock,
       ids,
       digester,
+      ...(pluginCompositions === undefined ? {} : { pluginCompositions }),
       ...(creditQuotes === undefined ? {} : { creditQuotes }),
       ...(unmeteredTasks === undefined ? {} : { unmeteredTasks }),
       ...(input.modelSelection === undefined

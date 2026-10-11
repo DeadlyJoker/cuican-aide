@@ -9,7 +9,10 @@ import {
   type CommitExtensionTurnResult,
   type PluginUiJsonValue,
 } from "@crewon/application";
-import { extensionCanonicalJson } from "@crewon/domain";
+import {
+  extensionCanonicalJson,
+  type PluginProfileScope,
+} from "@crewon/domain";
 import { LocalPluginUiPackageReader } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
 import { extensionStoreDigester } from "../../../packages/store/src/extension-store-records.ts";
@@ -18,6 +21,7 @@ import type { ControlApiRequestContext } from "./control-api-ports.ts";
 import { InstalledPluginConfigurationMetadata } from "./installed-plugin-configuration-metadata.ts";
 import { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import { createInstalledPluginTaskRuntimeCore } from "./installed-plugin-task-runtime-core.ts";
+import type { InstalledPluginTaskCompositionPolicy } from "./installed-plugin-task-composition-policy.ts";
 import {
   actor,
   commandInput,
@@ -43,7 +47,13 @@ export type CoreFixtureMode = "task" | "generation" | "query";
  * this never grants Native Main opt-in, supplier execution or real funding. */
 export async function taskRuntimeCoreFixture(
   t: TestContext,
-  options: Readonly<{ mode?: CoreFixtureMode; metadataOnly?: boolean }> = {},
+  options: Readonly<{
+    mode?: CoreFixtureMode;
+    metadataOnly?: boolean;
+    compositionPolicy?(
+      scope: PluginProfileScope,
+    ): InstalledPluginTaskCompositionPolicy;
+  }> = {},
 ) {
   const cleanup: (() => unknown | Promise<unknown>)[] = [];
   let core:
@@ -248,6 +258,9 @@ export async function taskRuntimeCoreFixture(
       clock: storage.dependencies.clock,
       ids: { nextId: () => randomUUID() },
       digester: extensionStoreDigester,
+      ...(options.compositionPolicy === undefined
+        ? {}
+        : { compositionPolicy: options.compositionPolicy(storage.profile) }),
       ...(creativeProjects === undefined ? {} : { creativeProjects }),
     };
   // Observe only the original actual paid transaction, including its physical result after COMMIT.
