@@ -36,6 +36,7 @@ export async function createDesktopExtensionHistoricalFixture(input: {
   instructions?: string;
   modelCatalog?: boolean;
   credentialRequired?: boolean;
+  requestProfile?: "standard" | "responsesLite";
   complete?: boolean;
   mutate?: (
     documents: Map<ExtensionRecoveryInputFile, unknown>,
@@ -59,7 +60,7 @@ export async function createDesktopExtensionHistoricalFixture(input: {
       credentialRequired: input.credentialRequired ?? true,
       maxOutputTokens: null,
       storeResponses: false,
-      requestProfile: "responsesLite",
+      requestProfile: input.requestProfile ?? "responsesLite",
       idleTimeoutMs: 60000,
       sequencePolicy: "whenPresent",
       identityPolicy: "terminalAuthoritative",
@@ -106,7 +107,10 @@ export async function createDesktopExtensionHistoricalFixture(input: {
     instructions: bootstrap.agent.instructions,
     model: {
       adapterName: "direct-responses",
-      adapterVersion: "1+responses-lite",
+      adapterVersion:
+        bootstrap.model.requestProfile === "responsesLite"
+          ? "1+responses-lite"
+          : "1",
       modelId: bootstrap.model.modelId,
       contextWindowTokens: bootstrap.agent.contextWindowTokens,
       autoCompactAtTokens: bootstrap.agent.autoCompactAtTokens,
@@ -187,7 +191,7 @@ export async function createDesktopExtensionHistoricalFixture(input: {
       ? "CREWON_MODEL_API_KEY"
       : null,
     storeResponses: false,
-    requestProfile: "responsesLite" as const,
+    requestProfile: bootstrap.model.requestProfile,
     idleTimeoutMs: 60000,
     sequencePolicy: "whenPresent" as const,
   };

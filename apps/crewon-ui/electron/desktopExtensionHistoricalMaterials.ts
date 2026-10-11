@@ -164,14 +164,8 @@ function verifyMaterials(
       binding.provider.endpoint !== bootstrap.model.endpoint ||
       binding.provider.storeResponses !== false ||
       binding.provider.idleTimeoutMs !== bootstrap.model.idleTimeoutMs ||
-      binding.provider.requestProfile !==
-        (bootstrap.model.identityPolicy === "strict"
-          ? "standard"
-          : "responsesLite") ||
-      binding.provider.sequencePolicy !==
-        (bootstrap.model.identityPolicy === "strict"
-          ? "required"
-          : "whenPresent")
+      binding.provider.requestProfile !== bootstrap.model.requestProfile ||
+      binding.provider.sequencePolicy !== bootstrap.model.sequencePolicy
     )
       invalid();
   }
