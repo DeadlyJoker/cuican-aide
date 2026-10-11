@@ -437,3 +437,76 @@ test("text recovery is a separate opt-in pinned to an existing exact text UI pub
       parseDesktopProjectHistoryConfiguration(invalid, options),
     );
 });
+
+test("Native conversation ownership is explicit detached approval and cannot leak into other grants", () => {
+  const input = {
+    version: DESKTOP_PROJECT_HISTORY_VERSION,
+    conversations: {
+      publications: [{ ...source }],
+      projectOwnership: "plugin-project-v1",
+    },
+  };
+  const parsed = parseDesktopProjectHistoryConfiguration(input, options);
+  assert.equal(parsed.conversations!.projectOwnership, "plugin-project-v1");
+  input.conversations.publications[0]!.pluginId = "changed";
+  assert.equal(
+    parsed.conversations!.publications[0]!.pluginId,
+    source.pluginId,
+  );
+  for (const projectOwnership of [
+    undefined,
+    null,
+    true,
+    "legacy",
+    "plugin-project-v2",
+    {},
+  ])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(
+        {
+          version: DESKTOP_PROJECT_HISTORY_VERSION,
+          conversations: { ...grant, projectOwnership },
+        },
+        options,
+      ),
+    );
+  for (const field of ["pluginUi", "textUi", "textPlans"])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(
+        {
+          version: DESKTOP_PROJECT_HISTORY_VERSION,
+          [field]: { ...grant, projectOwnership: "plugin-project-v1" },
+        },
+        options,
+      ),
+    );
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        version: DESKTOP_PROJECT_HISTORY_VERSION,
+        conversations: {
+          publications: [{ ...source, pluginId: "unapproved" }],
+          projectOwnership: "plugin-project-v1",
+        },
+      },
+      options,
+    ),
+  );
+  let reads = 0;
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        version: DESKTOP_PROJECT_HISTORY_VERSION,
+        conversations: {
+          ...grant,
+          get projectOwnership() {
+            reads++;
+            return "plugin-project-v1";
+          },
+        },
+      },
+      options,
+    ),
+  );
+  assert.equal(reads, 0);
+});

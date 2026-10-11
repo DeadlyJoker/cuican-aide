@@ -80,6 +80,7 @@ import {
 } from "./project-text-recovery-composition.ts";
 import {
   prepareProjectConversations,
+  captureProjectConversationConfiguration,
   type PreparedProjectConversations,
   type ProjectConversationConfiguration,
 } from "./project-conversation-composition.ts";
@@ -281,7 +282,7 @@ export function captureCreativeProjectCompositionConfig(
       !conversationField.enumerable)
   )
     throw new Error("creative_project_configuration_invalid");
-  const conversations = captureCreativeProjectPluginUiConfig(
+  const conversations = captureProjectConversationConfiguration(
     conversationField?.value,
   );
   const mediaField = fields.mediaInputStages;

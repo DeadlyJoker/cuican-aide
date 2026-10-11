@@ -405,3 +405,20 @@ test("execution approvals retain independent text UI declarations without changi
     valid,
   );
 });
+
+test("Native v3 preserves the independent owned Conversation mode without issuing execution mappings", () => {
+  const parsed = parseDesktopProjectExecutionConfiguration(
+    {
+      version: DESKTOP_PROJECT_EXECUTION_VERSION,
+      textArtifacts: { version: "crewon.project-text.v1" },
+      conversations: {
+        publications: [source],
+        projectOwnership: "plugin-project-v1",
+      },
+    },
+    options,
+  );
+  assert.equal(parsed.conversations!.projectOwnership, "plugin-project-v1");
+  assert.equal(Object.hasOwn(parsed, "pluginGenerations"), false);
+  assert.equal(Object.hasOwn(parsed, "pluginQueries"), false);
+});

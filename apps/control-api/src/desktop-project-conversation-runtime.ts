@@ -172,6 +172,9 @@ export function createDesktopProjectConversationRuntime(
       });
       owner = new ProjectConversationControlOwner({
         service,
+        ...(foundation.configuration.projectOwnership === undefined
+          ? {}
+          : { projectOwnership: foundation.configuration.projectOwnership }),
         conversations: foundation.store,
         configuration: foundation.configuration,
         installations: input.store.pluginInstallationStore(),

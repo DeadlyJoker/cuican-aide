@@ -36,7 +36,11 @@
 
 后续补充实际 `ProjectConversationControlOwner` 专项：真实本地包清单、业务 manifest 与安装行进入原请求 owner、UI 注册、Control 资格签发及原 Application/SQLite 事务，验证创建、打开、列表、同键重放，以及身份撤回、策略撤回、包字节摘要变化和 Control 关闭后拒绝。包恢复后重放仍返回原 binding。该专项与原 Native 创建、关联及升级回归联合 **5 passed、0 failed、0 skipped**，Control typecheck 通过。身份和策略仍为命名本地 fixture，metadata 归属也是显式持久 fixture；包复制只准备测试安装目录，没有绕过生产安装权限的新 API。该专项不是 HTTP、Native 目录分配、受保护 metadata 创建或模型执行的完整证明，默认产品配置仍未启用新读取模式。
 
-getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、完整 Native/Control 产品配置和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
+原可信部署配置的 `conversations.projectOwnership: "plugin-project-v1"` 现已增量接入 Desktop v2/v3 合同、原 CreativeProject composition 及 Desktop/production Conversation composer，保持不填该项的旧序列化与旧入口行为。该项仅选择已有三个 UI metadata 方法的原绑定读取视图，不开放项目创建、接管、目录分配或 Run/Tool。未知/显式 undefined/继承/getter 配置拒绝；批准的准确包和独立策略仍保留。后端缺少原 `bindProjectReads` 时在准备 Conversation 服务、启动其安装/Conversation 迁移前拒绝；PostgreSQL 目前属于不支持的新模式，旧部署可继续使用原路径。没有自动迁移 metadata owner 或 namespace。
+
+新增实际 Native HTTP 专项走原配置解析、bootstrap、安装、启用、真实 mount、Control 和原 Application/SQLite：缺少 owner schema 时明确拒绝，完整命名持久 metadata/namespace fixture 下创建、列表、打开及重开同键重放成功；切回旧配置仍拒绝 protected 项目，保留一个原 Thread/binding/receipt、零 Run。安装和启动预检允许加载原 Node 包，但这些 metadata 操作没有额外 Node 加载。fixture 在独立测试库显式提供归属和 workspaceId，未创建真实 Native 目录，也不证明受保护项目产品创建闭环。Web 浏览器交互、实际 Agent 执行和正式桌面仍未验收。 新部署配置、合同及原 Control/Native 联合回归 **46 passed、0 failed、0 skipped**；Contracts/Control typecheck、架构边界和格式检查通过。
+
+getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、Native 目录与受保护项目创建的完整产品接线和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
 
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 

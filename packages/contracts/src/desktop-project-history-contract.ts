@@ -33,7 +33,8 @@ export type DesktopProjectHistoryConfiguration = Readonly<{
   assetRecovery?: Publications;
   assetStages?: Publications &
     Readonly<{ version: "crewon.project-asset-stages.v1" }>;
-  conversations?: Publications;
+  conversations?: Publications &
+    Readonly<{ projectOwnership?: "plugin-project-v1" }>;
   textPlans?: Publications;
   planningDrafts?: Publications;
   generationReads?: Readonly<{ version: "crewon.project-generation-read.v1" }>;
@@ -123,7 +124,10 @@ export function parseDesktopProjectHistoryConfiguration(
     const pluginUi = publications(value.pluginUi, approved);
     const textUi = publications(value.textUi, approved);
     const textRecovery = publications(value.textRecovery, approved);
-    const conversations = publications(value.conversations, approved);
+    const conversations = conversationPublications(
+      value.conversations,
+      approved,
+    );
     const textPlans = publications(value.textPlans, approved);
     const planningDrafts = publications(value.planningDrafts, approved);
     if (
@@ -313,6 +317,33 @@ function publications(
   )
     invalid();
   return Object.freeze({ publications: Object.freeze(items) });
+}
+/** Select the original bound view explicitly; every publication and ordinary grant remains independently checked. */
+function conversationPublications(
+  input: unknown,
+  approved: readonly Readonly<{ pluginId: string; packageDigest: string }>[],
+): DesktopProjectHistoryConfiguration["conversations"] {
+  if (input === undefined) return undefined;
+  const value = pluginControlRecord(
+    input,
+    ["publications", "projectOwnership"],
+    { optional: ["projectOwnership"] },
+  );
+  if (
+    Object.hasOwn(value, "projectOwnership") &&
+    value.projectOwnership !== "plugin-project-v1"
+  )
+    invalid();
+  const original = publications(
+    { publications: value.publications },
+    approved,
+  )!;
+  return Object.freeze({
+    ...original,
+    ...(value.projectOwnership === undefined
+      ? {}
+      : { projectOwnership: "plugin-project-v1" as const }),
+  });
 }
 function selections(
   input: unknown,
