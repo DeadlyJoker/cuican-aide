@@ -55,6 +55,7 @@ import {
   type RuntimeExtensionDependencies,
 } from "./extensions/extension-runtime-config.ts";
 import { registerRuntimeExtensionMaterializations } from "./extensions/extension-runtime-proof.ts";
+import { responsesCompatibilityProfile } from "./responses-runtime-configuration.ts";
 
 const MAX_CONFIG_BYTES = 1024 * 1024;
 
@@ -444,6 +445,12 @@ function directResponsesTransport(
     requestProfile: provider.requestProfile,
     idleTimeoutMs: provider.idleTimeoutMs,
     sequencePolicy: provider.sequencePolicy,
+    // Match explicit portable Standard response compatibility; other binding cases retain their policy.
+    ...(provider.requestProfile === "standard" &&
+    provider.sequencePolicy === "whenPresent" &&
+    responsesCompatibilityProfile(undefined, provider.endpoint) !== null
+      ? { identityPolicy: "terminalAuthoritative" as const }
+      : {}),
   };
   return new DirectResponsesTransport(config, {
     identity: {

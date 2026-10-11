@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { AgentKernelError } from "@crewon/agent-kernel";
 import type { RuntimeBootstrapInputs } from "@crewon/contracts";
 import { InMemoryToolBroker } from "@crewon/tool-broker";
 import {
@@ -255,17 +256,19 @@ test("explicit gateway Standard survives capture, replay, release compilation an
         { type: "response.created", response: { id: "response-profile" } },
         { type: "response.output_text.delta", delta: "answer" },
         {
+          type: "response.output_item.done",
+          item: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: "answer" }],
+          },
+        },
+        {
           type: "response.completed",
           response: {
             id: "response-profile",
             status: "completed",
-            output: [
-              {
-                type: "message",
-                role: "assistant",
-                content: [{ type: "output_text", text: "answer" }],
-              },
-            ],
+            output: [],
           },
         },
       ]
@@ -281,6 +284,7 @@ test("explicit gateway Standard survives capture, replay, release compilation an
       config: after.runtimeBindings,
       environment: replay,
     }).bindSharedToolRuntime(new InMemoryToolBroker([]));
+    const samplingFailures: { agentVersionId: string; code: string }[] = [];
     for (const version of after.versions) {
       const runtime = await factory.create({ tenantId: "tenant-1", version });
       try {
@@ -290,25 +294,48 @@ test("explicit gateway Standard survives capture, replay, release compilation an
           modelId: version.model.modelId,
         });
         const events = [];
-        for await (const event of runtime.kernel.runSegment(
-          {
-            schemaVersion: "crewon.agent-segment.v0",
-            purpose: "agent",
-            runId: `run-${version.agentVersionId}`,
-            segmentId: "segment-profile",
-            attempt: 1,
+        try {
+          for await (const event of runtime.kernel.runSegment(
+            {
+              schemaVersion: "crewon.agent-segment.v0",
+              purpose: "agent",
+              runId: `run-${version.agentVersionId}`,
+              segmentId: "segment-profile",
+              attempt: 1,
+              agentVersionId: version.agentVersionId,
+              policySnapshotId: version.policySnapshotId,
+              collaborationMode: "default",
+              allowedTools: null,
+              history: [{ type: "message", role: "user", content: "hello" }],
+              continuation: { kind: "manual" },
+              budget: { maxOutputBytes: 8192 },
+            },
+            new AbortController().signal,
+          ))
+            events.push(event);
+        } catch (error) {
+          assert.ok(error instanceof AgentKernelError);
+          samplingFailures.push({
             agentVersionId: version.agentVersionId,
-            policySnapshotId: version.policySnapshotId,
-            collaborationMode: "default",
-            allowedTools: null,
-            history: [{ type: "message", role: "user", content: "hello" }],
-            continuation: { kind: "manual" },
-            budget: { maxOutputBytes: 8192 },
-          },
-          new AbortController().signal,
-        ))
-          events.push(event);
-        assert.equal(events.at(-1)?.type, "segment.completed");
+            code: error.code,
+          });
+        }
+        if (
+          samplingFailures.at(-1)?.agentVersionId !== version.agentVersionId
+        ) {
+          assert.equal(events.at(-1)?.type, "segment.completed");
+          assert.deepEqual(events.at(-1)?.data, { output: "answer" });
+          assert.equal(
+            events.filter((event) => event.type === "segment.completed").length,
+            1,
+          );
+          assert.deepEqual(
+            events.flatMap((event) =>
+              event.type === "model.output.delta" ? [event.data.delta] : [],
+            ),
+            ["answer"],
+          );
+        }
         assert.equal(
           events.filter((event) => event.type === "model.sampling.retry")
             .length,
@@ -319,6 +346,7 @@ test("explicit gateway Standard survives capture, replay, release compilation an
       }
     }
     assert.deepEqual(methods, ["POST", "POST", "POST", "POST"]);
+    assert.deepEqual(samplingFailures, []);
   } finally {
     globalThis.fetch = originalFetch;
   }
