@@ -2,6 +2,11 @@ import {
   sqliteRequiredStageDigest,
   sqliteThreadBindingMarker,
 } from "./project-conversation-markers.ts";
+import {
+  assertSqlitePluginProjectWorkspaceBinding,
+  qualifyProjectWorkspaceConversationThread,
+  type ProjectWorkspaceThreadQualification,
+} from "./plugin-project-workspace-thread-fence.ts";
 import { loadSqliteStageIfAvailable } from "./project-stage-run-store-support.ts";
 import type { DatabaseSync, SQLInputValue } from "node:sqlite";
 import type {
@@ -44,7 +49,10 @@ export class SqliteProjectConversationStore
   readonly version = "crewon.project-conversation-binding.v1" as const;
   readonly #db: DatabaseSync;
   readonly #open: () => void;
-  readonly #thread: (input: CommitThreadInput) => CommitThreadResult;
+  readonly #thread: (
+    input: CommitThreadInput,
+    qualification: ProjectWorkspaceThreadQualification,
+  ) => CommitThreadResult;
   readonly #loadThread: (
     tenantId: string,
     threadId: string,
@@ -52,7 +60,10 @@ export class SqliteProjectConversationStore
   constructor(input: {
     database: DatabaseSync;
     assertOpen(): void;
-    commitThreadWithin(input: CommitThreadInput): CommitThreadResult;
+    commitThreadWithin(
+      input: CommitThreadInput,
+      qualification: ProjectWorkspaceThreadQualification,
+    ): CommitThreadResult;
     loadThreadWithin(tenantId: string, threadId: string): ThreadState | null;
   }) {
     this.#db = input.database;
@@ -183,6 +194,7 @@ export class SqliteProjectConversationStore
       () => {
         assertSqliteConversationSchema(this.#db);
         assertSqliteProjectTextUiCommit(this.#db, p.q);
+        assertSqlitePluginProjectWorkspaceBinding(this.#db, p.binding);
         const previousReceipt = decodeConversationReceipt(
           this.#get(
             `SELECT * FROM project_conversation_receipts WHERE ${ownerWhere} AND idempotency_key=?`,
@@ -218,7 +230,10 @@ export class SqliteProjectConversationStore
           p.expectedRevision,
         );
         if (p.thread !== undefined) {
-          const created = this.#thread(p.thread);
+          const created = this.#thread(
+            p.thread,
+            qualifyProjectWorkspaceConversationThread(p.binding),
+          );
           if (created.state.threadId !== p.binding.threadId) conversationFail();
         }
         this.#assertThread(p.binding, p.existingThread?.expectedRevision);

@@ -1,4 +1,14 @@
 import { PostgresOfficeThreadStore } from "./postgres-office-thread-store.ts";
+import { PostgresPluginProjectWorkspaceStore } from "./postgres-plugin-project-workspace-store.ts";
+import {
+  assertPostgresPluginProjectWorkspaceThread,
+  type ProjectWorkspaceThreadQualification,
+} from "./plugin-project-workspace-thread-fence.ts";
+import type {
+  PluginProjectWorkspaceReadStore,
+  PluginUiActionContext,
+  RecordPluginProjectWorkspaceNamespaceInput,
+} from "@crewon/application";
 import { assertOfficeThreadReplay, officeThreadLockKey } from "./office-thread-binding.ts";
 import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
 import type { BindOfficeThreadInput, OfficeThreadLocator } from "@crewon/application";
@@ -392,14 +402,47 @@ export class PostgresThreadStore
     }
   }
 
+  pluginProjectWorkspaceNamespaces(): PluginProjectWorkspaceReadStore {
+    this.assertOpen();
+    return new PostgresPluginProjectWorkspaceStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    }).readonlyView();
+  }
+  async migratePluginProjectWorkspaceNamespaces(): Promise<void> {
+    await new PostgresPluginProjectWorkspaceStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    }).migrate();
+  }
+  recordPluginProjectWorkspaceNamespaceFromPluginUi(
+    context: PluginUiActionContext,
+    input: RecordPluginProjectWorkspaceNamespaceInput,
+  ) {
+    return new PostgresPluginProjectWorkspaceStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    }).recordFromPluginUi(context, input);
+  }
+
   /** Original Thread commit on the caller's transaction; never borrows, begins or settles it. */
   async commitThreadWithin(
     client: PoolClient,
     input: CommitThreadInput,
+    qualification?: ProjectWorkspaceThreadQualification,
   ): Promise<CommitThreadResult> {
     this.assertOpen();
     const threadId = validateThreadCommitInput(input);
     await this.#lockCommit(client, input, threadId);
+    await assertPostgresPluginProjectWorkspaceThread(
+      client,
+      this.schema,
+      input,
+      qualification,
+    );
     const prior = await this.#loadReceipt(client, input);
     if (prior !== null) {
       const result = decodePostgresThreadReceipt(prior);
@@ -407,6 +450,13 @@ export class PostgresThreadStore
         tenantId: prior.tenant_id,
         threadId: prior.thread_id,
       });
+      await assertPostgresPluginProjectWorkspaceThread(
+        client,
+        this.schema,
+        input,
+        qualification,
+        result.state,
+      );
       if (input.officeBinding)
         assertOfficeThreadReplay(
           input.officeBinding,

@@ -5,6 +5,16 @@ import { SqliteProjectAssetStore } from "./project-asset-sqlite-store.ts";
 import { SqliteProjectAssetStageStore } from "./project-asset-stage-store.ts";
 import { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
+import { SqlitePluginProjectWorkspaceStore } from "./sqlite-plugin-project-workspace-store.ts";
+import {
+  assertSqlitePluginProjectWorkspaceThread,
+  type ProjectWorkspaceThreadQualification,
+} from "./plugin-project-workspace-thread-fence.ts";
+import type {
+  PluginProjectWorkspaceReadStore,
+  PluginUiActionContext,
+  RecordPluginProjectWorkspaceNamespaceInput,
+} from "@crewon/application";
 import { SqliteProjectFoundationRunStore } from "./project-foundation-run-store.ts";
 import { assertSqliteOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
@@ -844,11 +854,38 @@ export class SqliteRunStore implements DomainStore {
     return new SqliteProjectConversationStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
-      commitThreadWithin: (input) =>
-        this.#commitThread(input, { withinTransaction: true }),
+      commitThreadWithin: (input, qualification) =>
+        this.#commitThread(input, {
+          withinTransaction: true,
+          projectWorkspaceQualification: qualification,
+        }),
       loadThreadWithin: (tenantId, threadId) =>
         this.#loadThread({ tenantId, threadId }),
     });
+  }
+
+  /** Read-only namespace view. Construction never migrates or creates directories. */
+  pluginProjectWorkspaceNamespaces(): PluginProjectWorkspaceReadStore {
+    this.#assertOpen();
+    return new SqlitePluginProjectWorkspaceStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    }).readonlyView();
+  }
+  async migratePluginProjectWorkspaceNamespaces(): Promise<void> {
+    await new SqlitePluginProjectWorkspaceStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    }).migrate();
+  }
+  recordPluginProjectWorkspaceNamespaceFromPluginUi(
+    context: PluginUiActionContext,
+    input: RecordPluginProjectWorkspaceNamespaceInput,
+  ) {
+    return new SqlitePluginProjectWorkspaceStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    }).recordFromPluginUi(context, input);
   }
 
   /** Independent journal; construction does not migrate or grant text write authority. */
@@ -2253,7 +2290,10 @@ export class SqliteRunStore implements DomainStore {
 
   #commitThread(
     input: CommitThreadInput,
-    options: { withinTransaction?: boolean } = {},
+    options: {
+      withinTransaction?: boolean;
+      projectWorkspaceQualification?: ProjectWorkspaceThreadQualification;
+    } = {},
   ): CommitThreadResult {
     this.#assertOpen();
     const threadId = validateThreadCommitInput(input);
@@ -2261,6 +2301,11 @@ export class SqliteRunStore implements DomainStore {
 
     try {
       if (!options.withinTransaction) this.#database.exec("BEGIN IMMEDIATE");
+      assertSqlitePluginProjectWorkspaceThread(
+        this.#database,
+        input,
+        options.projectWorkspaceQualification,
+      );
       const prior = this.#loadThreadReceipt(
         input.idempotency.scope,
         input.idempotency.key,
@@ -2284,6 +2329,12 @@ export class SqliteRunStore implements DomainStore {
           tenantId: prior.tenant_id,
           threadId: prior.thread_id,
         });
+        assertSqlitePluginProjectWorkspaceThread(
+          this.#database,
+          input,
+          options.projectWorkspaceQualification,
+          normalized.state,
+        );
         if (input.officeBinding)
           assertOfficeThreadReplay(
             input.officeBinding,

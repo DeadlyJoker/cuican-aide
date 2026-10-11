@@ -348,8 +348,8 @@ export class PostgresDomainStore
       pool: this.pool,
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
-      commitThreadWithin: (client, input) =>
-        this.commitThreadWithin(client, input),
+      commitThreadWithin: (client, input, qualification) =>
+        this.commitThreadWithin(client, input, qualification),
       loadThreadWithin: (client, tenantId, threadId) =>
         this.loadThreadWithin(client, { tenantId, threadId }, true),
     });

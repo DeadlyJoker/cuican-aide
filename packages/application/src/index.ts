@@ -73,6 +73,8 @@ export * from "./workspace-delivery-store-port.ts";
 export * from "./workspace-operation-store-port.ts";
 export * from "./workspace-read-file-application-service.ts";
 export * from "./workspace-read-file-store-port.ts";
+export * from "./plugin-project-workspace-store-port.ts";
+export { capturePluginProjectWorkspaceUiWrite } from "./plugin-project-workspace-ui-authority.ts";
 export * from "./workflow-version-application-service.ts";
 export * from "./workflow-version-store-port.ts";
 export * from "./workflow-execution-store-port.ts";

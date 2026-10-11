@@ -1,4 +1,9 @@
 import {
+  assertPostgresPluginProjectWorkspaceBinding,
+  qualifyProjectWorkspaceConversationThread,
+  type ProjectWorkspaceThreadQualification,
+} from "./plugin-project-workspace-thread-fence.ts";
+import {
   postgresRequiredStageDigest,
   postgresThreadBindingMarker,
 } from "./project-conversation-markers.ts";
@@ -50,6 +55,7 @@ export class PostgresProjectConversationStore
   readonly #thread: (
     client: PoolClient,
     input: CommitThreadInput,
+    qualification: ProjectWorkspaceThreadQualification,
   ) => Promise<CommitThreadResult>;
   readonly #loadThread: (
     client: PoolClient,
@@ -63,6 +69,7 @@ export class PostgresProjectConversationStore
     commitThreadWithin(
       client: PoolClient,
       input: CommitThreadInput,
+      qualification: ProjectWorkspaceThreadQualification,
     ): Promise<CommitThreadResult>;
     loadThreadWithin(
       client: PoolClient,
@@ -233,6 +240,12 @@ export class PostgresProjectConversationStore
           c,
           threadLockKey(o.actor.tenantId, p.binding.threadId),
         );
+        // Keep the original Thread/idempotency lock order used by ordinary creation.
+        await assertPostgresPluginProjectWorkspaceBinding(
+          c,
+          this.#schema,
+          p.binding,
+        );
         const previousReceipt = decodeConversationReceipt(
           await this.#get(
             c,
@@ -270,7 +283,11 @@ export class PostgresProjectConversationStore
           p.expectedRevision,
         );
         if (p.thread !== undefined) {
-          const created = await this.#thread(c, p.thread);
+          const created = await this.#thread(
+            c,
+            p.thread,
+            qualifyProjectWorkspaceConversationThread(p.binding),
+          );
           if (created.state.threadId !== p.binding.threadId) conversationFail();
         }
         await this.#assertThread(
