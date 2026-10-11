@@ -15,6 +15,8 @@ const CONFIG_LIMITS = new Map([
   ["provider-credentials.json", 512 * 1024],
   ["agent-platform-credentials.json", 256 * 1024],
   ["desktop-workspace.json", 128 * 1024],
+  ["desktop-plugin-project-workspaces.json", 128 * 1024],
+  ["desktop-plugin-project-allocation-lock.json", 1024],
   ["desktop-model-catalog-cache.json", 32 * 1024],
 ]);
 const PENDING_SUFFIX = ".pending-v1";
@@ -27,11 +29,15 @@ const PENDING_SUFFIX = ".pending-v1";
 export function writeDesktopConfigAtomically(
   path: string,
   contents: string,
+  options?: Readonly<{ beforeRename(): void }>,
 ): void {
   const limit = CONFIG_LIMITS.get(basename(path));
   if (limit === undefined) throw new Error("desktop_config_target_invalid");
   if (Buffer.byteLength(contents) > limit) {
     throw new Error("desktop_config_too_large");
+  }
+  if (basename(path) === "desktop-plugin-project-workspaces.json") {
+    assertPrivateConfigTarget(path);
   }
   const temporary = `${path}${PENDING_SUFFIX}`;
   // EEXIST leaves an existing file, symlink, or other writer untouched.
@@ -42,6 +48,11 @@ export function writeDesktopConfigAtomically(
     fsyncSync(descriptor);
     closeSync(descriptor);
     closed = true;
+    // The fixed wx staging slot remains occupied during the native owner's persisted-byte CAS.
+    options?.beforeRename();
+    if (basename(path) === "desktop-plugin-project-workspaces.json") {
+      assertPrivateConfigTarget(path);
+    }
     renameSync(temporary, path);
   } catch (error) {
     if (!closed) {
@@ -63,6 +74,20 @@ export function writeDesktopConfigAtomically(
       }
     }
     throw error;
+  }
+}
+
+function assertPrivateConfigTarget(path: string): void {
+  try {
+    const metadata = lstatSync(path);
+    if (
+      !metadata.isFile() ||
+      metadata.nlink !== 1 ||
+      (metadata.mode & 0o077) !== 0
+    )
+      throw new Error("desktop_config_target_invalid");
+  } catch (error) {
+    if (!hasCode(error, "ENOENT")) throw error;
   }
 }
 

@@ -1,4 +1,8 @@
 import { writeDesktopConfigAtomically } from "./desktopConfigFile.ts";
+import {
+  consumeLocalWorkspaceProjectRegistration,
+  type LocalWorkspaceProjectRegistration,
+} from "./localWorkspaceProjectRegistration.ts";
 import { randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -10,7 +14,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 const SCHEMA_VERSION = "crewon.desktop-workspace-authority.v2";
 const MAX_WORKSPACES = 100;
@@ -33,13 +37,16 @@ type WorkspaceRootSnapshot = Readonly<{
 export class LocalWorkspaceAuthority {
   readonly #path: string;
   #state: WorkspaceState;
+  #persistedBytes: string;
+  #activeGeneration: number;
 
   constructor(dataDirectory: string, fallbackRoot?: string) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
     this.#path = join(dataDirectory, "desktop-workspace.json");
-    const { state, persist } = this.#read(fallbackRoot);
-    if (persist) this.#write(state);
+    const { state, persist, bytes } = this.#read(fallbackRoot);
+    this.#persistedBytes = persist ? this.#write(state, bytes) : bytes!;
     this.#state = state;
+    this.#activeGeneration = state.revision;
   }
 
   status() {
@@ -72,12 +79,12 @@ export class LocalWorkspaceAuthority {
   }
 
   captureRoot(): WorkspaceRootSnapshot {
-    return { revision: this.#state.revision, root: this.root() };
+    return { revision: this.#activeGeneration, root: this.root() };
   }
 
   assertRootCurrent(snapshot: WorkspaceRootSnapshot): void {
     if (
-      this.#state.revision !== snapshot.revision ||
+      this.#activeGeneration !== snapshot.revision ||
       this.root() !== snapshot.root
     ) {
       throw new Error("desktop_sandbox_workspace_changed");
@@ -126,10 +133,62 @@ export class LocalWorkspaceAuthority {
     return this.#commit({ ...this.#state, activeWorkspaceId: null });
   }
 
-  #commit(state: WorkspaceState) {
+  /** Actual Native instance brand and private storage root; never exposed by the renderer bridge. */
+  projectAllocationDataDirectory(): string {
+    this.#assertPersistedCurrent();
+    return requireDirectory(dirname(this.#path));
+  }
+
+  /** Inspection is also fenced against another real authority's persisted mutation. */
+  inspectProjectAllocation(
+    workspaceId: string,
+    root: string,
+  ): "registered" | "absent" {
+    this.#assertPersistedCurrent();
+    const byId = this.#state.workspaces.find(
+      (entry) => entry.workspaceId === workspaceId,
+    );
+    const byRoot = this.#state.workspaces.find((entry) => entry.root === root);
+    if (byId === undefined && byRoot === undefined) return "absent";
+    if (byId?.root !== root || byRoot?.workspaceId !== workspaceId)
+      throw new Error("desktop_workspace_allocation_conflict");
+    if (this.root(workspaceId) !== root)
+      throw new Error("desktop_workspace_path_changed");
+    return "registered";
+  }
+
+  /** Appends to the original v2 registry without activating or invalidating the current root lease. */
+  registerProjectAllocation(token: LocalWorkspaceProjectRegistration) {
+    const entry = consumeLocalWorkspaceProjectRegistration(this, token);
+    if (
+      !WORKSPACE_ID.test(entry.workspaceId) ||
+      requireDirectory(entry.root) !== entry.root
+    )
+      throw new Error("desktop_workspace_path_invalid");
+    if (
+      this.inspectProjectAllocation(entry.workspaceId, entry.root) ===
+      "registered"
+    )
+      return { outcome: "replayed", snapshot: this.status() } as const;
+    if (
+      this.#state.workspaces.length >= MAX_WORKSPACES ||
+      this.#state.revision === Number.MAX_SAFE_INTEGER
+    )
+      throw new Error("desktop_workspace_limit_reached");
+    return this.#commit(
+      { ...this.#state, workspaces: [...this.#state.workspaces, entry] },
+      "preserveActive",
+    );
+  }
+
+  #commit(
+    state: WorkspaceState,
+    binding: "replaceActive" | "preserveActive" = "replaceActive",
+  ) {
     const next = { ...state, revision: this.#state.revision + 1 };
-    this.#write(next);
+    this.#persistedBytes = this.#write(next, this.#persistedBytes);
     this.#state = next;
+    if (binding === "replaceActive") this.#activeGeneration = next.revision;
     return { outcome: "committed", snapshot: this.status() } as const;
   }
 
@@ -147,7 +206,11 @@ export class LocalWorkspaceAuthority {
       throw new Error("desktop_workspace_authority_conflict");
   }
 
-  #read(fallbackRoot?: string): { state: WorkspaceState; persist: boolean } {
+  #read(fallbackRoot?: string): {
+    state: WorkspaceState;
+    persist: boolean;
+    bytes: string | null;
+  } {
     if (!existsSync(this.#path)) {
       const entry = fallbackRoot
         ? {
@@ -157,6 +220,7 @@ export class LocalWorkspaceAuthority {
         : null;
       return {
         persist: true,
+        bytes: null,
         state: {
           schemaVersion: SCHEMA_VERSION,
           revision: 0,
@@ -165,9 +229,10 @@ export class LocalWorkspaceAuthority {
         },
       };
     }
-    let value: unknown;
+    let value: unknown, bytes: string;
     try {
-      value = JSON.parse(readRegistry(this.#path));
+      bytes = readRegistry(this.#path);
+      value = JSON.parse(bytes);
     } catch {
       return invalidRegistry();
     }
@@ -190,6 +255,7 @@ export class LocalWorkspaceAuthority {
             };
       return {
         persist: true,
+        bytes,
         state: {
           schemaVersion: SCHEMA_VERSION,
           revision: Number(value.revision),
@@ -231,6 +297,7 @@ export class LocalWorkspaceAuthority {
       return invalidRegistry();
     return {
       persist: false,
+      bytes,
       state: {
         schemaVersion: SCHEMA_VERSION,
         revision: Number(value.revision),
@@ -240,11 +307,26 @@ export class LocalWorkspaceAuthority {
     };
   }
 
-  #write(state: WorkspaceState): void {
+  #write(state: WorkspaceState, previous: string | null): string {
     const serialized = `${JSON.stringify(state)}\n`;
     if (Buffer.byteLength(serialized) > MAX_REGISTRY_BYTES)
       throw new Error("desktop_workspace_limit_reached");
-    writeDesktopConfigAtomically(this.#path, serialized);
+    writeDesktopConfigAtomically(this.#path, serialized, {
+      beforeRename: () => {
+        const actual = existsSync(this.#path) ? readRegistry(this.#path) : null;
+        if (actual !== previous)
+          throw new Error("desktop_workspace_authority_conflict");
+      },
+    });
+    return serialized;
+  }
+
+  #assertPersistedCurrent(): void {
+    if (
+      !existsSync(this.#path) ||
+      readRegistry(this.#path) !== this.#persistedBytes
+    )
+      throw new Error("desktop_workspace_authority_conflict");
   }
 }
 
