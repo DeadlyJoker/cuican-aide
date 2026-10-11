@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { Client } from "pg";
-import type { PluginUiActionContext } from "@crewon/application";
+import {
+  ThreadApplicationService,
+  type PluginUiActionContext,
+} from "@crewon/application";
 import { createProjectConversationBinding } from "@crewon/domain";
 import { workspaceNamespaceFixture } from "./plugin-project-workspace.test-support.ts";
 import {
@@ -11,6 +14,62 @@ import {
   selectionRecipe,
 } from "./plugin-installation-store.test-support.ts";
 import { PLUGIN_PROJECT_WORKSPACE_TABLE as table } from "./plugin-project-workspace-schema.ts";
+import { unmeteredFixture } from "./plugin-task-unmetered.test-support.ts";
+import { hasSqliteConversationSchema } from "./project-conversation-schema.ts";
+import { extensionStoreDigester } from "./extension-store-records.ts";
+import { timestamp } from "./extension-store.test-support.ts";
+
+test("sqlite: unmigrated Conversation schema remains absent after namespace opt-in and ordinary Thread creation", async (t) => {
+  const f = await unmeteredFixture(t, "sqlite");
+  const observer = new DatabaseSync(f.databasePath);
+  try {
+    const catalog = () => ({
+      tables: observer
+        .prepare(
+          "SELECT name FROM main.sqlite_schema WHERE name IN ('project_conversation_schema_version','project_conversation_bindings','project_conversation_receipts','project_stage_run_admissions') ORDER BY name",
+        )
+        .all(),
+      markers: observer
+        .prepare("PRAGMA main.table_xinfo(threads)")
+        .all()
+        .filter((column) => column.name === "project_conversation_binding_id"),
+    });
+    const before = catalog();
+    assert.deepEqual(before, { tables: [], markers: [] });
+    await f.first.parent.migratePluginProjectWorkspaceNamespaces();
+    assert.equal(hasSqliteConversationSchema(observer), false);
+    const threads = new ThreadApplicationService({
+      store: f.first.parent,
+      authorization: {
+        async authorize() {
+          return { outcome: "allow" as const };
+        },
+      },
+      clock: { now: () => timestamp },
+      ids: { nextId: () => randomUUID() },
+      digester: extensionStoreDigester,
+    });
+    const created = await threads.createThread(f.actor, {
+      kind: "thread.create",
+      title: "Original ordinary conversation",
+      workspaceId: null,
+      idempotencyKey: randomUUID(),
+    });
+    assert.equal(created.disposition, "committed");
+    assert.equal(created.state.workspaceId, null);
+    assert.deepEqual(
+      await f.first.parent.loadThread({
+        tenantId: f.actor.tenantId,
+        threadId: created.state.threadId,
+      }),
+      created.state,
+    );
+    assert.equal(hasSqliteConversationSchema(observer), false);
+    assert.deepEqual(catalog(), before);
+  } finally {
+    observer.close();
+  }
+});
 
 for (const backend of ["sqlite", "postgres"] as const) {
   const options = {
@@ -192,6 +251,220 @@ for (const backend of ["sqlite", "postgres"] as const) {
         throughHistorySequence: 0,
       });
       assert.equal(fork.state.workspaceId, "workspace-normal");
+    },
+  );
+
+  test(
+    `${backend}: owned project cannot bypass its workspace through null, ordinary or existing conversation binding`,
+    options,
+    async (t) => {
+      const f = await workspaceNamespaceFixture(t, backend);
+      await f.parent.migratePluginProjectWorkspaceNamespaces();
+      await (await f.mounted()).write();
+      for (const workspaceId of [null, "workspace-original"]) {
+        const p = await f.prepare(randomUUID(), workspaceId);
+        await assert.rejects(
+          f.store.commitBinding(p, { authority: f.authority }),
+          /plugin_project_workspace_scope_conflict/u,
+        );
+        assert.equal(
+          await f.parent.loadThread({
+            tenantId: f.actor.tenantId,
+            threadId: p.binding.threadId,
+          }),
+          null,
+        );
+        assert.equal(
+          await f.store.loadMutationReceipt({ ...f.owner, receipt: p.receipt }),
+          null,
+        );
+        await f.parent.commitThread(p.thread);
+        const { thread: _thread, ...attach } = p;
+        await assert.rejects(
+          f.store.commitBinding(
+            { ...attach, existingThread: { expectedRevision: 1 } },
+            { authority: f.authority },
+          ),
+          /plugin_project_workspace_scope_conflict/u,
+        );
+        assert.equal(
+          (await f.parent.loadThread({
+            tenantId: f.actor.tenantId,
+            threadId: p.binding.threadId,
+          }))!.workspaceId,
+          workspaceId,
+        );
+      }
+      assert.equal(await f.count("project_conversation_bindings"), 0);
+      assert.equal(await f.count("project_conversation_receipts"), 0);
+      const valid = await f.prepare(randomUUID(), "workspace-isolated");
+      assert.equal(
+        (await f.store.commitBinding(valid, { authority: f.authority }))
+          .disposition,
+        "committed",
+      );
+    },
+  );
+
+  test(
+    `${backend}: another genuinely installed plugin cannot claim the original namespaced project or bind its conversation`,
+    options,
+    async (t) => {
+      const f = await workspaceNamespaceFixture(t, backend);
+      await f.parent.migratePluginProjectWorkspaceNamespaces();
+      await (await f.mounted()).write();
+      const otherPackage = await f.installs.recordInstalledPackage(
+        installationRecipe(randomUUID(), {
+          actor: f.actor,
+          scope: {
+            tenantId: f.actor.tenantId,
+            spaceId: f.actor.spaceId,
+            profileId: f.installation.profileId,
+          },
+          pluginId: "other.project-plugin",
+          publisherId: "other.publisher",
+        }),
+      );
+      const otherSelection = await f.installs.commitSelection(
+        selectionRecipe(otherPackage.selection, randomUUID(), {
+          actor: f.actor,
+        }),
+      );
+      const otherMount = await f.mounted({
+        pluginId: otherPackage.package.pluginId,
+      });
+      await assert.rejects(
+        otherMount.write(
+          f.namespaceRecipe(f.reference.projectId, "workspace-other-plugin"),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.ok(error.cause instanceof Error);
+          assert.equal(
+            error.cause.message,
+            "plugin_project_workspace_namespace_conflict",
+          );
+          return true;
+        },
+      );
+      const installation = {
+        ...f.installation,
+        pluginId: otherPackage.package.pluginId,
+        publisherId: otherPackage.package.publisherId,
+        version: otherPackage.package.version,
+        packageDigest: otherPackage.package.packageDigest,
+        selectionRevision: otherSelection.selection.revision,
+      };
+      const authority = {
+        ...f.authority,
+        installation,
+        selection: otherSelection.selection,
+        package: otherPackage.package,
+        pin: { ...f.authority.pin, ...installation },
+      };
+      for (const workspaceId of [
+        null,
+        "workspace-original",
+        "workspace-isolated",
+      ]) {
+        const p = await f.prepare(randomUUID(), workspaceId);
+        const {
+          schemaVersion: _schema,
+          contentDigest: _digest,
+          ...body
+        } = p.binding;
+        const binding = createProjectConversationBinding(
+          { ...body, currentInstallation: installation },
+          f.digester,
+        );
+        await assert.rejects(
+          f.store.commitBinding({ ...p, binding }, { authority }),
+          /plugin_project_workspace_scope_conflict/u,
+        );
+        assert.equal(
+          await f.parent.loadThread({
+            tenantId: f.actor.tenantId,
+            threadId: binding.threadId,
+          }),
+          null,
+        );
+        assert.equal(
+          await f.store.loadMutationReceipt({ ...f.owner, receipt: p.receipt }),
+          null,
+        );
+      }
+      assert.equal(await f.count(table), 1);
+      assert.equal(await f.count("project_conversation_bindings"), 0);
+      const valid = await f.prepare(randomUUID(), "workspace-isolated");
+      assert.equal(
+        (await f.store.commitBinding(valid, { authority: f.authority }))
+          .disposition,
+        "committed",
+      );
+    },
+  );
+
+  test(
+    `${backend}: namespace cannot claim a project with existing ordinary or revoked conversation history`,
+    options,
+    async (t) => {
+      for (const workspaceId of [null, "workspace-original"]) {
+        const f = await workspaceNamespaceFixture(t, backend);
+        const p = await f.prepare(randomUUID(), workspaceId);
+        await f.store.commitBinding(p, { authority: f.authority });
+        if (workspaceId === null)
+          await f.store.commitBinding(f.mutate(p.binding, "set-state"), {
+            authority: f.authority,
+          });
+        await f.parent.migratePluginProjectWorkspaceNamespaces();
+        await assert.rejects((await f.mounted()).write(), (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message, "plugin_ui_unavailable");
+          assert.ok(error.cause instanceof Error);
+          assert.equal(
+            error.cause.message,
+            "plugin_project_workspace_existing_project_conflict",
+          );
+          return true;
+        });
+        assert.equal(await f.count(table), 0);
+        assert.equal(await f.count("project_conversation_bindings"), 1);
+        assert.equal(
+          (await f.parent.loadThread({
+            tenantId: f.actor.tenantId,
+            threadId: p.binding.threadId,
+          }))!.workspaceId,
+          workspaceId,
+        );
+      }
+    },
+  );
+
+  test(
+    `${backend}: missing conversation history with retained original markers cannot silently become a fresh namespace`,
+    options,
+    async (t) => {
+      const f = await workspaceNamespaceFixture(t, backend);
+      await f.parent.migratePluginProjectWorkspaceNamespaces();
+      for (const conversationTable of [
+        "project_stage_run_admissions",
+        "project_conversation_receipts",
+        "project_conversation_bindings",
+        "project_conversation_schema_version",
+      ])
+        await f.sql(
+          `DROP TABLE ${f.prefix}${conversationTable}${backend === "postgres" ? " CASCADE" : ""}`,
+        );
+      await assert.rejects((await f.mounted()).write(), (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.ok(error.cause instanceof Error);
+        assert.equal(
+          error.cause.message,
+          "project_conversation_schema_incomplete",
+        );
+        return true;
+      });
+      assert.equal(await f.count(table), 0);
     },
   );
 

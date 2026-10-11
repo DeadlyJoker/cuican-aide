@@ -14,6 +14,22 @@ export const namespaceColumns =
   "tenant_id,space_id,principal_id,actor_id,profile_id,plugin_id,publisher_id,project_id,workspace_id,created_at,record_json";
 export const namespaceOwnerWhere =
   "tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND plugin_id=? AND publisher_id=?";
+// The original project/conversation store has one account/profile/project identity.
+// Its first namespace claims that project; another plugin cannot reinterpret the same legacy project key.
+export const namespaceProjectWhere =
+  "tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND profile_id=? AND project_id=?";
+export function namespaceProjectValues(
+  owner: PluginProjectWorkspaceOwner,
+): [string, string, string, string, string, string] {
+  return [
+    owner.tenantId,
+    owner.spaceId,
+    owner.principalId,
+    owner.actorId,
+    owner.profileId,
+    owner.projectId,
+  ];
+}
 export function namespaceOwnerValues(
   o: PluginProjectWorkspaceOwner | PluginProjectWorkspaceOwnerScope,
 ): [string, string, string, string, string, string, string] {
@@ -109,4 +125,12 @@ export function assertNamespaceReplay(
 }
 export function pluginProjectWorkspaceLock(workspaceId: string): string {
   return `plugin-project-workspace:${workspaceId}`;
+}
+export function pluginProjectNamespaceLock(
+  owner: PluginProjectWorkspaceOwner,
+): string {
+  return JSON.stringify([
+    "plugin-project-namespace-project",
+    ...namespaceProjectValues(owner),
+  ]);
 }

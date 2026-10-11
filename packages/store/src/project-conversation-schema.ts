@@ -102,6 +102,50 @@ const originals = [
   "plugin_task_admission_schema_version",
   "plugin_task_admissions",
 ];
+/** Optional only when the whole original conversation subsystem is absent. Partial schemas fail closed. */
+export function hasSqliteConversationSchema(db: DatabaseSync): boolean {
+  const placeholders = tables.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT name FROM main.sqlite_schema WHERE name IN (${placeholders}) UNION ALL SELECT name FROM temp.sqlite_schema WHERE name IN (${placeholders})`,
+    )
+    .all(...tables, ...tables);
+  if (rows.length === 0) {
+    if (
+      db
+        .prepare("PRAGMA main.table_xinfo(threads)")
+        .all()
+        .some((column) => column.name === "project_conversation_binding_id")
+    )
+      fail();
+    return false;
+  }
+  assertSqliteConversationSchema(db);
+  return true;
+}
+export async function hasPostgresConversationSchema(
+  c: PoolClient,
+  schema: string,
+): Promise<boolean> {
+  const rows = (
+    await c.query(
+      "SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname=ANY($2::text[])",
+      [schema, tables],
+    )
+  ).rows;
+  if (rows.length === 0) {
+    const markers = (
+      await c.query(
+        "SELECT 1 FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid=a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$1 AND c.relname='threads' AND a.attname='project_conversation_binding_id' AND a.attnum>0 AND NOT a.attisdropped",
+        [schema],
+      )
+    ).rows;
+    if (markers.length !== 0) fail();
+    return false;
+  }
+  await assertPostgresConversationSchema(c, schema);
+  return true;
+}
 export function assertSqliteConversationSchema(db: DatabaseSync): void {
   sqliteTables(db, [...tables, ...originals]);
   version(

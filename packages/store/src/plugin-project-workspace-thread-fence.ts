@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import { RunStoreError, type CommitThreadInput } from "@crewon/application";
 import {
   normalizeThreadWorkspaceId,
+  parsePluginProjectWorkspaceOwner,
   type ProjectConversationBinding,
   type PluginProjectWorkspaceNamespace,
   type ThreadState,
@@ -15,6 +16,9 @@ import {
 } from "./plugin-project-workspace-schema.ts";
 import {
   decodeNamespace,
+  namespaceProjectValues,
+  namespaceProjectWhere,
+  pluginProjectNamespaceLock,
   pluginProjectWorkspaceLock,
 } from "./plugin-project-workspace-store-support.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
@@ -67,6 +71,15 @@ function assertBinding(
     i.spaceId !== o.spaceId
   )
     denied();
+}
+function projectOwner(b: ProjectConversationBinding) {
+  return parsePluginProjectWorkspaceOwner({
+    ...b.owner,
+    profileId: b.profileId,
+    pluginId: b.currentInstallation.pluginId,
+    publisherId: b.currentInstallation.publisherId,
+    projectId: b.projectId,
+  });
 }
 function assertCreation(
   namespace: PluginProjectWorkspaceNamespace,
@@ -148,8 +161,15 @@ export function assertSqlitePluginProjectWorkspaceBinding(
   db: DatabaseSync,
   b: ProjectConversationBinding,
 ): void {
-  if (b.workspaceId === null || !hasSqlitePluginProjectWorkspaceSchema(db))
-    return;
+  if (!hasSqlitePluginProjectWorkspaceSchema(db)) return;
+  const owner = projectOwner(b);
+  const projectRows = db
+    .prepare(`SELECT * FROM ${table} WHERE ${namespaceProjectWhere} LIMIT 2`)
+    .all(...namespaceProjectValues(owner));
+  if (projectRows.length > 1) denied();
+  const projectNamespace = decodeNamespace(projectRows[0]);
+  if (projectNamespace !== null) assertBinding(projectNamespace, b);
+  if (b.workspaceId === null) return;
   const namespace = decodeNamespace(
     db
       .prepare(`SELECT * FROM ${table} WHERE workspace_id=?`)
@@ -214,9 +234,23 @@ export async function assertPostgresPluginProjectWorkspaceBinding(
   schema: string,
   b: ProjectConversationBinding,
 ): Promise<void> {
-  if (b.workspaceId === null) return;
-  await advisoryLock(c, pluginProjectWorkspaceLock(b.workspaceId));
+  const owner = projectOwner(b);
+  // Namespace creation and all project bindings serialize even when no workspace was supplied.
+  await advisoryLock(c, pluginProjectNamespaceLock(owner));
+  if (b.workspaceId !== null)
+    await advisoryLock(c, pluginProjectWorkspaceLock(b.workspaceId));
   if (!(await hasPostgresPluginProjectWorkspaceSchema(c, schema))) return;
+  let parameter = 0;
+  const projectRows = (
+    await c.query<Record<string, unknown>>(
+      `SELECT * FROM ${pluginInstallationSchemaName(schema)}.${table} WHERE ${namespaceProjectWhere.replaceAll("?", () => `$${++parameter}`)} LIMIT 2`,
+      namespaceProjectValues(owner),
+    )
+  ).rows;
+  if (projectRows.length > 1) denied();
+  const projectNamespace = decodeNamespace(projectRows[0]);
+  if (projectNamespace !== null) assertBinding(projectNamespace, b);
+  if (b.workspaceId === null) return;
   const namespace = decodeNamespace(
     (
       await c.query(

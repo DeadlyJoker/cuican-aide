@@ -12,6 +12,7 @@ import {
   PLUGIN_PROJECT_WORKSPACE_TABLE as table,
 } from "./plugin-project-workspace-schema.ts";
 import { assertSqliteProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
+import { assertSqlitePluginProjectWorkspaceHistory } from "./plugin-project-workspace-history-fence.ts";
 import {
   assertNamespaceReplay,
   decodeNamespace,
@@ -20,6 +21,8 @@ import {
   namespaceLoad,
   namespaceOwnerValues,
   namespaceOwnerWhere,
+  namespaceProjectWhere,
+  namespaceProjectValues,
   namespaceValues,
 } from "./plugin-project-workspace-store-support.ts";
 
@@ -116,10 +119,16 @@ export class SqlitePluginProjectWorkspaceStore
         }
         if (
           this.#db
+            .prepare(
+              `SELECT 1 FROM ${table} WHERE ${namespaceProjectWhere} LIMIT 1`,
+            )
+            .get(...namespaceProjectValues(n.owner)) ||
+          this.#db
             .prepare(`SELECT workspace_id FROM ${table} WHERE workspace_id=?`)
             .get(n.workspaceId)
         )
           throw new Error("plugin_project_workspace_namespace_conflict");
+        assertSqlitePluginProjectWorkspaceHistory(this.#db, n.owner);
         if (
           this.#db
             .prepare(

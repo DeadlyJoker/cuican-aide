@@ -13,6 +13,7 @@ import {
   PLUGIN_PROJECT_WORKSPACE_TABLE,
 } from "./plugin-project-workspace-schema.ts";
 import { assertPostgresProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
+import { assertPostgresPluginProjectWorkspaceHistory } from "./plugin-project-workspace-history-fence.ts";
 import {
   assertNamespaceReplay,
   decodeNamespace,
@@ -21,8 +22,11 @@ import {
   namespaceLoad,
   namespaceOwnerValues,
   namespaceOwnerWhere,
+  namespaceProjectWhere,
+  namespaceProjectValues,
   namespaceValues,
   pluginProjectWorkspaceLock,
+  pluginProjectNamespaceLock,
 } from "./plugin-project-workspace-store-support.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
@@ -110,6 +114,7 @@ export class PostgresPluginProjectWorkspaceStore
     q.assertActive();
     return this.#transaction(
       async (c) => {
+        await advisoryLock(c, pluginProjectNamespaceLock(n.owner));
         await advisoryLock(c, pluginProjectWorkspaceLock(n.workspaceId));
         if (!(await hasPostgresPluginProjectWorkspaceSchema(c, this.#schema)))
           throw new Error("plugin_project_workspace_schema_missing");
@@ -135,12 +140,23 @@ export class PostgresPluginProjectWorkspaceStore
         }
         if (
           (
+            await c.query(
+              `SELECT 1 FROM ${table} WHERE ${parameters(namespaceProjectWhere)} LIMIT 1`,
+              namespaceProjectValues(n.owner),
+            )
+          ).rows.length ||
+          (
             await c.query(`SELECT 1 FROM ${table} WHERE workspace_id=$1`, [
               n.workspaceId,
             ])
           ).rows.length
         )
           throw new Error("plugin_project_workspace_namespace_conflict");
+        await assertPostgresPluginProjectWorkspaceHistory(
+          c,
+          this.#schema,
+          n.owner,
+        );
         if (
           (
             await c.query(

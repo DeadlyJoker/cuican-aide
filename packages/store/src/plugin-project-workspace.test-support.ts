@@ -46,14 +46,16 @@ export async function workspaceNamespaceFixture(
     workspaceId,
     createdAt: timestamp,
   });
-  async function mounted() {
+  async function mounted(
+    options: { pluginId: string } = { pluginId: f.installation.pluginId },
+  ) {
     const selection = (await f.installs.loadSelection({
       scope: {
         tenantId: f.actor.tenantId,
         spaceId: f.actor.spaceId,
         profileId: f.installation.profileId,
       },
-      pluginId: f.installation.pluginId,
+      pluginId: options.pluginId,
     }))!;
     const pkg = (await f.installs.loadPackage({
       scope: {
