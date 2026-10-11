@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./extension-recovery": "./src/extension-recovery-reader.ts"
+    "./extension-recovery": "./src/extension-recovery-reader.ts",
+    "./host-project-workspaces": "./src/native-project-workspace-state-reader.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",

@@ -19,6 +19,10 @@ import { captureDesktopNativePluginAuthorityOwner } from "./desktopNativePluginA
 import { LocalWorkspaceAuthority } from "./localWorkspaceRegistry.ts";
 import { LocalWorkspaceProjectAllocator } from "./localWorkspaceProjectAllocator.ts";
 import { exactRecord } from "./localWorkspaceProjectAllocationJournal.ts";
+import {
+  qualifyDesktopNativeProjectWorkspaceState,
+  type DesktopNativeProjectWorkspaceState,
+} from "./desktopNativeProjectWorkspaceState.ts";
 
 const MAX_TICKETS = 16;
 const MAX_PENDING_REQUESTS = 4;
@@ -43,6 +47,7 @@ type Ticket = Readonly<{
   owner: ReturnType<typeof parsePluginProjectWorkspaceOwner>;
   expiresAtMs: number;
   timer: ReturnType<typeof setTimeout>;
+  projectState?: ReturnType<typeof qualifyDesktopNativeProjectWorkspaceState>;
 }>;
 type CapturedRequest =
   | Readonly<{ kind: "valid"; request: DesktopNativeProjectWorkspaceRequest }>
@@ -120,8 +125,34 @@ export class DesktopNativeProjectWorkspaceBridge {
 
   /** Main-internal only: a future caller must separately qualify the real Host project operation. */
   prepare(input: Preparation): DesktopNativeProjectWorkspaceTicket {
+    return this.#prepare({ preparation: input });
+  }
+  /** Current persistent project/selection proof from this exact Main owner; Control's independent live UI qualification is still required. */
+  prepareForProject(
+    reference: DesktopNativeProjectWorkspaceState,
+  ): DesktopNativeProjectWorkspaceTicket {
     this.#assertCurrent();
-    const value = exactRecord(input, ["projectId", "packageIdentity"]),
+    const projectState = qualifyDesktopNativeProjectWorkspaceState(reference);
+    if (projectState.nativeAuthority !== this.#nativeOwner) unavailable();
+    return this.#prepare({
+      preparation: {
+        projectId: projectState.owner.projectId,
+        packageIdentity: projectState.packageIdentity,
+      },
+      projectState,
+    });
+  }
+  #prepare(
+    input: Readonly<{
+      preparation: Preparation;
+      projectState?: ReturnType<
+        typeof qualifyDesktopNativeProjectWorkspaceState
+      >;
+    }>,
+  ): DesktopNativeProjectWorkspaceTicket {
+    this.#assertCurrent();
+    const { preparation, projectState } = input;
+    const value = exactRecord(preparation, ["projectId", "packageIdentity"]),
       identity = exactRecord(value.packageIdentity, [
         "pluginId",
         "publisherId",
@@ -160,10 +191,12 @@ export class DesktopNativeProjectWorkspaceBridge {
         owner,
         expiresAtMs,
         timer,
+        ...(projectState === undefined ? {} : { projectState }),
       }),
     );
     try {
       this.#assertCurrent();
+      projectState?.assertCurrent();
       return Object.freeze({
         schemaVersion: TICKET_SCHEMA,
         ticketId,
@@ -295,6 +328,7 @@ export class DesktopNativeProjectWorkspaceBridge {
       if (Date.now() >= ticket.expiresAtMs)
         throw new Error("deadline_exceeded");
       reasonCode = "allocation_unavailable";
+      ticket.projectState?.assertCurrent();
       const allocation = new LocalWorkspaceProjectAllocator(
         this.#workspaces,
         ticket.owner,
@@ -305,6 +339,14 @@ export class DesktopNativeProjectWorkspaceBridge {
       // Native owner/profile/epoch/file pins and the actual child are rechecked immediately
       // before publishing. A prior Native commit does not compensate a revoked SQL grant.
       this.#assertCurrent();
+      if (ticket.projectState !== undefined) {
+        reasonCode = "allocation_unavailable";
+        ticket.projectState.assertCurrent();
+        if (Date.now() >= ticket.expiresAtMs) {
+          reasonCode = "deadline_exceeded";
+          throw new Error("deadline_exceeded");
+        }
+      }
       await this.#publish(
         Object.freeze({
           schemaVersion: RESPONSE_SCHEMA,

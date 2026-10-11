@@ -142,3 +142,7 @@ PostgreSQL protected 读取视图现已覆盖原八个项目读取方法，补�
 正式 RuntimeSupervisor 的 Control 子进程启动此前只有标准输入/输出管道，缺少 Native 客户端要求的 Node IPC。现在按真实 Control 入口路径添加私有 parent channel，保持其他子进程的原 stdio；没有绑定 Main 目录分配器、签发项目票据或增加 renderer IPC。两个真实 supervisor 启动路径（有/无 provider）能在 Control 构建并关闭原 Native workspace client，Worker/发行命令无此通道，退出清理与原基础回归 20/20、零跳过。Electron 类型、架构边界检查通过。这项传输接线不能证明项目授权或正式 App 已更新。
 
 另只读核对当前正式 desktop profile：原 plugin_profile_selections 有三条 uninstalled、零 enabled，未改写历史或账号。Mac 当前锁屏，因此本轮不以数据库状态代替正式页面验收。源码工作区仍有其他未提交启动改动，以上测试基于当前工作区；本次只提交 stdio 接线及对应测试，不打包或发布这些其他改动。
+
+Main 内部现在能从真实 Native authority 派生项目完整归属，通过只读连接调用原 metadata fence、项目解码器和 installation Store，核验 protected owner、active 状态及当前批准的包/selection revision。原数据库不迁移；路径、文件身份、Native owner/批准及短生命周期在复核时仍有效。Main 内部状态引用有私有成员资格，复制对象不能兑换；该持久事实资格不是 UI、Task 或 Node 权限。新 prepareForProject 只接受同一个 Main owner 的实际引用，发行票据、分配前、实际目录提交后均复核原状态；旧可信 Main prepare 仍保留为内部兼容原语，不能用于新的产品授权接线。
+
+与真实 ChildProcess 的原桥接/客户端/Scoped 调用回归合组 68/68、零跳过：匹配项目可分配且普通活动 workspace 不变；其他插件归属、票据后归档、同包停用再启用导致 revision 变化被拒绝。实际 registry 提交后归档时不发布成功，已提交目录保留，没有宣称与 SQL 原子回滚。原项目和安装写入器真实执行，初始 protected owner 为明确持久 fixture；本轮尚未把真实 Control UI/write 调用接到这个 Main 状态发行器，也未启用新的生产分配入口、更新 Web 或正式 App。
