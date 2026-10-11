@@ -26,6 +26,10 @@
 
 验证：新增 metadata/namespace 专项、原 namespace/会话边界和 SQLite 创建/内容专项联合 **67 passed、0 failed、0 skipped**，PostgreSQL 使用任务专属临时 18.6 实例；Store typecheck、架构边界与文档格式检查通过。测试实例随后停止并清理，未更新 Web 或正式 App。
 
+后续已将同一 metadata 检查接到原 Conversation 写事务：protected 项目必须具有匹配完整归属和 workspaceId 的 namespace，缺失 namespace schema/记录或使用 null/其他 workspace 均拒绝。原安装、Host 授权、Thread 资格、receipt、重放与事务末端检查保持；legacy 分支没有被转换成新项目授权。SQLite/PostgreSQL 真实事务验证匹配项目继续提交原 Thread、binding 与 receipt，冷 Store 保留工作空间，分别变更 actor/profile/plugin/publisher 时拒绝且不留下 Thread 或 receipt。新增专项及原 namespace、Conversation 回归联合 **49 passed、0 failed、0 skipped**；metadata 记录在这个 Conversation 专项中由命名持久 fixture 提供，不能当成生产接管权限或 PostgreSQL qualified 创建证据。
+
+产品接线仍有明确前置条件：原 `ProjectConversationApplicationService.#project` 使用 legacy `loadProject`，目前不能准备 protected 项目的页面操作。下一步需要从真实 UI/Control 调用签发有界读取来源，复用同一 Store 的绑定读取视图；不得仅将 caller 的安装字段当成读取许可，或放宽 legacy reader 来绕过隔离。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与 Web/正式桌面仍未验收。
+
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 
 2026-10-12 的接线曾在 Domain 的 `plugin_query_composition_unsupported` 处失败。现已补齐原组合锁继承、SQLite/PostgreSQL 实际源 Run 核验及 Worker 原依赖图恢复，Control 的 Native 项目测试通过生成、查询、重放和重开，未放宽普通生成校验。这个测试的 Worker 元数据预检使用离线 peer，不能证明真实 Worker 执行成功：当时真实 Native Worker 回归有三项失败，原因是原组合锁记录的共享任务服务尚未在 Worker 接线；后续同进程接线及正式跨进程缺口见下节。当前查询许可、原 operation、配置和目标继续独立验证；不得使用当前 head 重新解释历史，也不得把查询资格变成生成资格。范围与剩余交付项见[组合查询协议](./plugin-query-composition-inheritance.md)。本次仍未部署 Web 或桌面。

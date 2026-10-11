@@ -22,6 +22,10 @@ import {
   pluginProjectWorkspaceLock,
 } from "./plugin-project-workspace-store-support.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
+import {
+  assertSqlitePluginProjectWorkspaceMetadata,
+  assertPostgresPluginProjectWorkspaceMetadata,
+} from "./plugin-project-workspace-metadata-fence.ts";
 
 /** Internal transaction qualification. No public Thread input can construct or carry it. */
 export type ProjectWorkspaceThreadQualification = Readonly<
@@ -161,13 +165,18 @@ export function assertSqlitePluginProjectWorkspaceBinding(
   db: DatabaseSync,
   b: ProjectConversationBinding,
 ): void {
-  if (!hasSqlitePluginProjectWorkspaceSchema(db)) return;
   const owner = projectOwner(b);
+  const classification = assertSqlitePluginProjectWorkspaceMetadata(db, owner);
+  if (!hasSqlitePluginProjectWorkspaceSchema(db)) {
+    if (classification === "protected") denied();
+    return;
+  }
   const projectRows = db
     .prepare(`SELECT * FROM ${table} WHERE ${namespaceProjectWhere} LIMIT 2`)
     .all(...namespaceProjectValues(owner));
   if (projectRows.length > 1) denied();
   const projectNamespace = decodeNamespace(projectRows[0]);
+  if (classification === "protected" && projectNamespace === null) denied();
   if (projectNamespace !== null) assertBinding(projectNamespace, b);
   if (b.workspaceId === null) return;
   const namespace = decodeNamespace(
@@ -239,7 +248,15 @@ export async function assertPostgresPluginProjectWorkspaceBinding(
   await advisoryLock(c, pluginProjectNamespaceLock(owner));
   if (b.workspaceId !== null)
     await advisoryLock(c, pluginProjectWorkspaceLock(b.workspaceId));
-  if (!(await hasPostgresPluginProjectWorkspaceSchema(c, schema))) return;
+  const classification = await assertPostgresPluginProjectWorkspaceMetadata(
+    c,
+    schema,
+    owner,
+  );
+  if (!(await hasPostgresPluginProjectWorkspaceSchema(c, schema))) {
+    if (classification === "protected") denied();
+    return;
+  }
   let parameter = 0;
   const projectRows = (
     await c.query<Record<string, unknown>>(
@@ -249,6 +266,7 @@ export async function assertPostgresPluginProjectWorkspaceBinding(
   ).rows;
   if (projectRows.length > 1) denied();
   const projectNamespace = decodeNamespace(projectRows[0]);
+  if (classification === "protected" && projectNamespace === null) denied();
   if (projectNamespace !== null) assertBinding(projectNamespace, b);
   if (b.workspaceId === null) return;
   const namespace = decodeNamespace(

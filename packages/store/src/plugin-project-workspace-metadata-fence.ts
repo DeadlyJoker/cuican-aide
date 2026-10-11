@@ -12,9 +12,9 @@ import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
 function assertOwner(
   row: Record<string, unknown> | undefined,
   owner: PluginProjectWorkspaceOwner,
-): void {
+): "protected" | "legacy" {
   // Preserve the original legacy namespace path; absence never establishes metadata ownership.
-  if (row === undefined) return;
+  if (row === undefined) return "legacy";
   if (typeof row.stored_principal !== "string")
     throw new Error("plugin_project_workspace_metadata_owner_conflict");
   try {
@@ -25,15 +25,16 @@ function assertOwner(
   } catch {
     throw new Error("plugin_project_workspace_metadata_owner_conflict");
   }
+  return "protected";
 }
 
 /** Same namespace transaction: a protected project's immutable owner must match the live Host owner. */
 export function assertSqlitePluginProjectWorkspaceMetadata(
   db: DatabaseSync,
   owner: PluginProjectWorkspaceOwner,
-): void {
-  if (!hasSqlitePluginProjectMetadataOwnerSchema(db)) return;
-  assertOwner(
+): "protected" | "legacy" {
+  if (!hasSqlitePluginProjectMetadataOwnerSchema(db)) return "legacy";
+  return assertOwner(
     db
       .prepare(
         `SELECT o.*,p.owner_principal_id AS stored_principal FROM ${table} o LEFT JOIN creative_projects p ON p.tenant_id=o.tenant_id AND p.space_id=o.space_id AND p.project_id=o.project_id WHERE o.tenant_id=? AND o.space_id=? AND o.project_id=?`,
@@ -47,13 +48,13 @@ export async function assertPostgresPluginProjectWorkspaceMetadata(
   client: PoolClient,
   schema: string,
   owner: PluginProjectWorkspaceOwner,
-): Promise<void> {
+): Promise<"protected" | "legacy"> {
   if (!(await hasPostgresPluginProjectMetadataOwnerSchema(client, schema)))
-    return;
+    return "legacy";
   const prefix = `${pluginInstallationSchemaName(schema)}.`;
   const result = await client.query(
     `SELECT o.*,p.owner_principal_id AS stored_principal FROM ${prefix}${table} o LEFT JOIN ${prefix}creative_projects p ON p.tenant_id=o.tenant_id AND p.space_id=o.space_id AND p.project_id=o.project_id WHERE o.tenant_id=$1 AND o.space_id=$2 AND o.project_id=$3 FOR SHARE OF o`,
     [owner.tenantId, owner.spaceId, owner.projectId],
   );
-  assertOwner(result.rows[0], owner);
+  return assertOwner(result.rows[0], owner);
 }
