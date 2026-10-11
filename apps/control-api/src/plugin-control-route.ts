@@ -43,6 +43,10 @@ import type {
   ControlApiRequestContext,
 } from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
+import {
+  registerPluginCompositionStatusRoute,
+  type PluginCompositionStatusControlService,
+} from "./plugin-composition-status-route.ts";
 import { registerPluginUiRecoveryRoutes } from "./plugin-ui-recovery-route.ts";
 import { runPluginGenerationDiagnostics } from "./installed-plugin-invocation-diagnostics.ts";
 import { registerProjectSourceUploadPartRoute } from "./project-source-upload-part-route.ts";
@@ -52,6 +56,7 @@ export type PluginControlRouteDependencies = Readonly<{
   pluginInstallation?: PluginInstallationControlService | null;
   pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
+  pluginCompositionStatus?: PluginCompositionStatusControlService | null;
 }>;
 
 export type PluginInstallationControlService = Pick<
@@ -113,6 +118,11 @@ export function registerPluginControlRoutes(
   app: FastifyInstance,
   dependencies: PluginControlRouteDependencies,
 ): void {
+  if (dependencies.pluginCompositionStatus != null)
+    registerPluginCompositionStatusRoute(app, {
+      identity: dependencies.identity,
+      service: dependencies.pluginCompositionStatus,
+    });
   if (dependencies.pluginSources != null) {
     const sources = dependencies.pluginSources;
     app.get<{ Querystring: unknown }>(

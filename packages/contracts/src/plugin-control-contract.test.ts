@@ -520,14 +520,14 @@ test("public HTTP API stays separate from SDK entrypoints and OpenAPI generation
   const paths = Object.entries(api.paths).filter(([path]) =>
     path.startsWith("/api/v1/plugins"),
   );
-  assert.equal(paths.length, 12);
+  assert.equal(paths.length, 13);
   assert.equal(
     paths.reduce(
       (count, [, operations]) =>
         count + Object.keys(operations as object).length,
       0,
     ),
-    14,
+    15,
   );
   assert.equal(
     api.paths["/api/v1/plugins/sources"].get.operationId,

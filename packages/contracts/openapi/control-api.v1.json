@@ -6419,6 +6419,52 @@
           }
         }
       }
+    },
+    "/api/v1/plugins/composition/status": {
+      "get": {
+        "operationId": "listPluginCompositionStatus",
+        "description": "Optional authenticated read-only Node composition observation. The actual profile owner enforces tenant, actor and current authority. An unconfigured owner leaves this route unavailable. Published graph metadata does not imply Node readiness, UI availability or permission to invoke services.",
+        "parameters": [
+          {
+            "name": "afterPluginId",
+            "in": "query",
+            "required": false,
+            "schema": { "$ref": "#/components/schemas/PluginNamespaceId" }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            },
+            "description": "Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versioned bounded observation; at most 65536 encoded bytes and 50 selections per page. No private scope, credential, path, exception text or whole graph.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginCompositionStatusResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "413": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
     }
   },
   "components": {
@@ -14944,6 +14990,215 @@
             ]
           }
         }
+      },
+      "PluginCompositionMetadataStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["state"],
+            "additionalProperties": false,
+            "properties": { "state": { "type": "string", "const": "unobserved" } }
+          },
+          {
+            "type": "object",
+            "required": ["state", "lockDigest", "revision"],
+            "additionalProperties": false,
+            "properties": {
+              "state": { "type": "string", "const": "published" },
+              "lockDigest": { "$ref": "#/components/schemas/PluginPackageDigest" },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["state", "reasonCode"],
+            "additionalProperties": false,
+            "properties": {
+              "state": { "type": "string", "const": "failed" },
+              "reasonCode": {
+                "type": "string",
+                "enum": [
+                  "plugin_projection_pending",
+                  "plugin_composition_metadata_unavailable"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Metadata publication only; never evidence of an accepting Node instance."
+      },
+      "PluginCompositionNodeStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["state"],
+            "additionalProperties": false,
+            "properties": { "state": { "type": "string", "const": "inactive" } }
+          },
+          {
+            "type": "object",
+            "required": ["state"],
+            "additionalProperties": false,
+            "properties": { "state": { "type": "string", "const": "unobserved" } }
+          },
+          {
+            "type": "object",
+            "required": ["state"],
+            "additionalProperties": false,
+            "properties": { "state": { "type": "string", "const": "preparing" } }
+          },
+          {
+            "type": "object",
+            "required": ["state"],
+            "additionalProperties": false,
+            "properties": { "state": { "type": "string", "const": "ready" } }
+          },
+          {
+            "type": "object",
+            "required": ["state", "reasonCode"],
+            "additionalProperties": false,
+            "properties": {
+              "state": { "type": "string", "const": "waitingDependency" },
+              "reasonCode": {
+                "type": "string",
+                "const": "plugin_dependency_unavailable"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["state", "reasonCode"],
+            "additionalProperties": false,
+            "properties": {
+              "state": { "type": "string", "const": "failed" },
+              "reasonCode": {
+                "type": "string",
+                "enum": [
+                  "plugin_activation_failed",
+                  "plugin_cleanup_failed",
+                  "plugin_authority_unavailable",
+                  "plugin_composition_unavailable"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Observed current Node lifecycle, separate from UI availability and invocation authorization. Ready requires exact selected current instance accepting under the actual profile owner. Unknown evidence remains unobserved."
+      },
+      "PluginCompositionStatusEntry": {
+        "type": "object",
+        "required": ["selection", "node"],
+        "additionalProperties": false,
+        "properties": {
+          "selection": { "$ref": "#/components/schemas/PluginSelectionView" },
+          "node": { "$ref": "#/components/schemas/PluginCompositionNodeStatus" }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "selection": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/PluginSelectionView" },
+                  {
+                    "properties": {
+                      "state": { "type": "string", "const": "enabled" }
+                    }
+                  }
+                ]
+              },
+              "node": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/PluginCompositionNodeStatus" },
+                  {
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "unobserved",
+                          "preparing",
+                          "ready",
+                          "waitingDependency",
+                          "failed"
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "selection": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/PluginSelectionView" },
+                  {
+                    "properties": {
+                      "state": {
+                        "type": "string",
+                        "enum": ["disabled", "uninstalled"]
+                      }
+                    }
+                  }
+                ]
+              },
+              "node": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": ["state"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "state": { "type": "string", "const": "inactive" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["state", "reasonCode"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "state": { "type": "string", "const": "failed" },
+                      "reasonCode": {
+                        "type": "string",
+                        "const": "plugin_cleanup_failed"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "PluginCompositionStatusResponse": {
+        "type": "object",
+        "required": ["schemaVersion", "metadata", "plugins", "next"],
+        "additionalProperties": false,
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.plugin-composition-status.v1"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/PluginCompositionMetadataStatus"
+          },
+          "plugins": {
+            "type": "array",
+            "maxItems": 50,
+            "items": { "$ref": "#/components/schemas/PluginCompositionStatusEntry" }
+          },
+          "next": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/PluginNamespaceId" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "description": "Ordered original afterPluginId/limit paging, scope authorized by the actual owner. Status grants no service access."
       }
     }
   }

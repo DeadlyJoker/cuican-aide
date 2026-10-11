@@ -1566,6 +1566,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/plugins/composition/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Optional authenticated read-only Node composition observation. The actual profile owner enforces tenant, actor and current authority. An unconfigured owner leaves this route unavailable. Published graph metadata does not imply Node readiness, UI availability or permission to invoke services. */
+    get: operations["listPluginCompositionStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3806,6 +3823,105 @@ export interface components {
       contentRevision:
         | components["schemas"]["PublicProjectTextRevision"]
         | null;
+    };
+    /** @description Metadata publication only; never evidence of an accepting Node instance. */
+    PluginCompositionMetadataStatus:
+      | {
+          /** @constant */
+          state: "unobserved";
+        }
+      | {
+          /** @constant */
+          state: "published";
+          lockDigest: components["schemas"]["PluginPackageDigest"];
+          revision: number;
+        }
+      | {
+          /** @constant */
+          state: "failed";
+          /** @enum {string} */
+          reasonCode:
+            | "plugin_projection_pending"
+            | "plugin_composition_metadata_unavailable";
+        };
+    /** @description Observed current Node lifecycle, separate from UI availability and invocation authorization. Ready requires exact selected current instance accepting under the actual profile owner. Unknown evidence remains unobserved. */
+    PluginCompositionNodeStatus:
+      | {
+          /** @constant */
+          state: "inactive";
+        }
+      | {
+          /** @constant */
+          state: "unobserved";
+        }
+      | {
+          /** @constant */
+          state: "preparing";
+        }
+      | {
+          /** @constant */
+          state: "ready";
+        }
+      | {
+          /** @constant */
+          state: "waitingDependency";
+          /** @constant */
+          reasonCode: "plugin_dependency_unavailable";
+        }
+      | {
+          /** @constant */
+          state: "failed";
+          /** @enum {string} */
+          reasonCode:
+            | "plugin_activation_failed"
+            | "plugin_cleanup_failed"
+            | "plugin_authority_unavailable"
+            | "plugin_composition_unavailable";
+        };
+    PluginCompositionStatusEntry: {
+      selection: components["schemas"]["PluginSelectionView"];
+      node: components["schemas"]["PluginCompositionNodeStatus"];
+    } & (
+      | {
+          selection?: components["schemas"]["PluginSelectionView"] & {
+            /** @constant */
+            state?: "enabled";
+          };
+          node?: components["schemas"]["PluginCompositionNodeStatus"] & {
+            /** @enum {string} */
+            state?:
+              | "unobserved"
+              | "preparing"
+              | "ready"
+              | "waitingDependency"
+              | "failed";
+          };
+        }
+      | {
+          selection?: components["schemas"]["PluginSelectionView"] & {
+            /** @enum {string} */
+            state?: "disabled" | "uninstalled";
+          };
+          node?:
+            | {
+                /** @constant */
+                state: "inactive";
+              }
+            | {
+                /** @constant */
+                state: "failed";
+                /** @constant */
+                reasonCode: "plugin_cleanup_failed";
+              };
+        }
+    );
+    /** @description Ordered original afterPluginId/limit paging, scope authorized by the actual owner. Status grants no service access. */
+    PluginCompositionStatusResponse: {
+      /** @constant */
+      schemaVersion: "crewon.plugin-composition-status.v1";
+      metadata: components["schemas"]["PluginCompositionMetadataStatus"];
+      plugins: components["schemas"]["PluginCompositionStatusEntry"][];
+      next: components["schemas"]["PluginNamespaceId"] | null;
     };
   };
   responses: {
@@ -7649,6 +7765,38 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  listPluginCompositionStatus: {
+    parameters: {
+      query?: {
+        afterPluginId?: components["schemas"]["PluginNamespaceId"];
+        /** @description Canonical decimal query value, default 20, maximum 50. Duplicated or unknown query fields are rejected. */
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Versioned bounded observation; at most 65536 encoded bytes and 50 selections per page. No private scope, credential, path, exception text or whole graph. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PluginCompositionStatusResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
 }

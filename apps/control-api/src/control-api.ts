@@ -42,6 +42,7 @@ import {
   type PluginSourceControlService,
 } from "./plugin-control-route.ts";
 import type { ExtensionReadApplicationService } from "@crewon/application";
+import type { PluginCompositionStatusControlService } from "./plugin-composition-status-route.ts";
 import {
   registerPluginCreditReadRoutes,
   type PluginCreditReadControlService,
@@ -286,6 +287,7 @@ export type ControlApiDependencies = Readonly<{
   pluginInstallation?: PluginInstallationControlService | null;
   pluginSources?: PluginSourceControlService | null;
   pluginUi?: PluginUiControlService | null;
+  pluginCompositionStatus?: PluginCompositionStatusControlService | null;
   pluginCreditReads?: PluginCreditReadControlService | null;
   officeThreads?: OfficeThreadApplicationService | null;
   threads: ThreadApplicationService;
