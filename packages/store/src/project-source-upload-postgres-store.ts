@@ -92,15 +92,23 @@ export class PostgresProjectSourceUploadStore
       identity.actor,
     );
     return this.#io.read(
-      async (client) => {
+      async (client, access) => {
         const row = await this.#io.beginReceipt(client, identity);
         if (row === undefined) return null;
+        await access.assertUpload({
+          owner: identity.owner,
+          uploadId: String(row.upload_id),
+        });
         this.#io.assertReceipt(row, identity);
         return result(
-          await this.#io.requireState(client, {
-            owner: identity.owner,
-            uploadId: String(row.upload_id),
-          }),
+          await this.#io.requireState(
+            client,
+            {
+              owner: identity.owner,
+              uploadId: String(row.upload_id),
+            },
+            access,
+          ),
           "replayed",
         );
       },
@@ -122,7 +130,7 @@ export class PostgresProjectSourceUploadStore
     sourceUploadSame(initial.requestDigest, identity.receipt.requestDigest);
     sourceUploadSame(initial.createdByActorId, identity.actor.actorId);
     const state = sourceUploadInitialState(initial);
-    return this.#io.transaction(async (client) => {
+    return this.#io.transaction(async (client, access) => {
       await this.#io.requireSchema(client);
       sourceUploadSame(initial.storageRealmId, this.#io.storageRealmId);
       await this.#io.lock(client, [
@@ -133,13 +141,17 @@ export class PostgresProjectSourceUploadStore
       ]);
       const prior = await this.#io.beginReceipt(client, identity);
       if (prior !== undefined) {
+        await access.assertUpload({
+          owner: identity.owner,
+          uploadId: String(prior.upload_id),
+        });
         this.#io.assertReceipt(prior, identity);
         const scope = {
           owner: identity.owner,
           uploadId: String(prior.upload_id),
         };
         await this.#io.uploadLock(client, scope);
-        const actual = await this.#io.requireState(client, scope);
+        const actual = await this.#io.requireState(client, scope, access);
         for (const field of [
           "fileName",
           "format",
@@ -153,7 +165,7 @@ export class PostgresProjectSourceUploadStore
       }
       const scope = { owner: identity.owner, uploadId: initial.uploadId };
       await this.#io.uploadLock(client, scope);
-      if (await this.#io.state(client, scope))
+      if (await this.#io.state(client, scope, access))
         sourceUploadFailure("project_source_upload_id_conflict");
       await this.#io.query(
         client,
@@ -189,7 +201,10 @@ export class PostgresProjectSourceUploadStore
       scope.uploadId,
       readActions,
     );
-    return this.#io.read((client) => this.#io.state(client, scope), authority);
+    return this.#io.read(
+      (client, access) => this.#io.state(client, scope, access),
+      authority,
+    );
   }
 
   async writePart(input: Input<"writePart">, supplied: Authority) {
@@ -211,7 +226,7 @@ export class PostgresProjectSourceUploadStore
       command.actor,
     );
     const snapshot = await this.#io.read(
-      (client) => this.#io.requireState(client, command),
+      (client, access) => this.#io.requireState(client, command, access),
       authority,
     );
     const captured = sourceUploadCapturePart(snapshot, rawPart, rawBytes);
@@ -277,12 +292,14 @@ export class PostgresProjectSourceUploadStore
       ["projectSourceUpload:prepare"],
       command.actor,
     );
-    const snapshot = await this.#io.read(async (client) => {
-      const state = await this.#io.requireState(client, command);
+    const snapshot = await this.#io.read(async (client, access) => {
+      const state = await this.#io.requireState(client, command, access);
       return {
         state,
         raw:
-          state.sealed === null ? await this.#io.rawRows(client, state) : null,
+          state.sealed === null
+            ? await this.#io.rawRows(client, state, access)
+            : null,
       };
     }, authority);
     if (snapshot.raw !== null)
@@ -352,15 +369,15 @@ export class PostgresProjectSourceUploadStore
       scope.uploadId,
       ["projectSourceUpload:prepare"],
     );
-    const snapshot = await this.#io.read(async (client) => {
-      const state = await this.#io.requireState(client, scope);
+    const snapshot = await this.#io.read(async (client, access) => {
+      const state = await this.#io.requireState(client, scope, access);
       sourceUploadAssertClaim(state, claimId);
       if (state.sealed!.uploadDigest !== uploadDigest)
         sourceUploadFailure(
           "project_source_upload_ledger_mismatch",
           "internal",
         );
-      return { state, raw: await this.#io.rawRows(client, state) };
+      return { state, raw: await this.#io.rawRows(client, state, access) };
     }, authority);
     const bytes = sourceUploadRawSnapshot(snapshot.state, snapshot.raw);
     await assertSourceUploadCurrent(authority);
@@ -385,7 +402,7 @@ export class PostgresProjectSourceUploadStore
       command.actor,
     );
     const snapshot = await this.#io.read(
-      (client) => this.#io.requireState(client, command),
+      (client, access) => this.#io.requireState(client, command, access),
       authority,
     );
     if (snapshot.claim?.claimId !== claimId)
@@ -490,8 +507,8 @@ export class PostgresProjectSourceUploadStore
       scope.uploadId,
       ["projectSourceUpload:adopt"],
     );
-    const snapshot = await this.#io.read(async (client) => {
-      const state = await this.#io.state(client, scope);
+    const snapshot = await this.#io.read(async (client, access) => {
+      const state = await this.#io.state(client, scope, access);
       if (state === null) return null;
       if (state.initial.fileDigest !== fileDigest)
         sourceUploadFailure("project_source_upload_digest_mismatch");

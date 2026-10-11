@@ -1,3 +1,4 @@
+import { capturePostgresSourceUploadLegacyAccess } from "./project-source-upload-legacy-access.ts";
 import {
   assertPostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
@@ -65,6 +66,11 @@ export async function assertPostgresFoundationSourceAdoption(
   transaction.assertOpen();
   if (realm === false)
     foundationFailure("project_foundation_source_upload_schema_unavailable");
+  const access = await capturePostgresSourceUploadLegacyAccess(
+    transaction.client,
+    transaction.schema,
+  );
+  await access.assertUpload(scope);
   const rows = (table: string, suffix = "", extras: readonly unknown[] = []) =>
     query(
       transaction,
@@ -128,6 +134,7 @@ export async function assertPostgresFoundationSourceAdoption(
     )
   ).rows.map((row) => decodePostgresUploadChapter(row, scope));
   assertFoundationSourceAdoptionChapters(proof, chapters);
+  await access.assertCurrent();
 }
 
 /** Called only after the matching original project/source was inserted, in this same transaction. */
@@ -145,6 +152,14 @@ export async function insertPostgresFoundationSourceAssociation(
     foundationLegacyScope(proof.owner, proof.source.projectId),
   );
   const prefix = `${creativeProjectSchemaName(transaction.schema)}.`;
+  const access = await capturePostgresSourceUploadLegacyAccess(
+    transaction.client,
+    transaction.schema,
+  );
+  await access.assertUpload({
+    owner: proof.owner,
+    uploadId: proof.pointer.uploadId,
+  });
   await query(
     transaction,
     `INSERT INTO ${prefix}project_source_upload_associations
@@ -159,6 +174,7 @@ export async function insertPostgresFoundationSourceAssociation(
       sourceUploadJson(proof.association),
     ],
   );
+  await access.assertCurrent();
 }
 
 async function query(

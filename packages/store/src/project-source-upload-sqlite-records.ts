@@ -1,3 +1,7 @@
+import {
+  captureSqliteSourceUploadLegacyAccess,
+  type SqliteSourceUploadLegacyAccess,
+} from "./project-source-upload-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   captureSourceUploadInitial,
@@ -45,7 +49,11 @@ export function sqliteUploadState(
   database: DatabaseSync,
   q: ProjectSourceUploadRead,
   storageRealmId: string,
+  access: SqliteSourceUploadLegacyAccess = captureSqliteSourceUploadLegacyAccess(
+    database,
+  ),
 ): ProjectSourceUploadState | null {
+  access.assertUpload(q);
   const values = sourceUploadSqliteValues(q);
   const initialRow = database
     .prepare(
@@ -166,8 +174,12 @@ export function sqliteUploadPart(row: Row, state: ProjectSourceUploadState) {
 export function sqliteUploadRaw(
   database: DatabaseSync,
   state: ProjectSourceUploadState,
+  access: SqliteSourceUploadLegacyAccess = captureSqliteSourceUploadLegacyAccess(
+    database,
+  ),
 ) {
   const q = { owner: state.initial.owner, uploadId: state.initial.uploadId };
+  access.assertUpload(q);
   return database
     .prepare(
       `SELECT * FROM project_source_upload_part_payloads WHERE ${sourceUploadSqliteFilter} ORDER BY part_index LIMIT 307`,
@@ -190,9 +202,13 @@ export function sqliteUploadRaw(
 export function sqliteUploadParsed(
   database: DatabaseSync,
   state: ProjectSourceUploadState,
+  access: SqliteSourceUploadLegacyAccess = captureSqliteSourceUploadLegacyAccess(
+    database,
+  ),
 ) {
   const q = { owner: state.initial.owner, uploadId: state.initial.uploadId },
     values = sourceUploadSqliteValues(q);
+  access.assertUpload(q);
   if (state.prepared === null)
     sourceUploadFailure("project_source_upload_state_conflict");
   const chunks = database

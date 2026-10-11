@@ -1,3 +1,8 @@
+import {
+  assertPostgresSavedSourceUploadLegacyAccess,
+  foundationResultSavedSource,
+} from "./project-source-upload-legacy-access.ts";
+import { commitOriginalProjectMigration } from "./original-project-migration.ts";
 import { migratePostgresProjectFoundationRuns } from "./project-foundation-run-schema.ts";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -112,11 +117,18 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
   }
 
   async migrate(): Promise<void> {
-    await this.#transaction(async (client) => {
-      await this.#lock(client, ["project-foundation-migration", this.#schema]);
-      await migratePostgresProjectFoundations(client, this.#schema);
-      await migratePostgresProjectFoundationRuns(client, this.#schema);
-      this.#assertOpen();
+    await commitOriginalProjectMigration({
+      pool: this.#pool,
+      assertOpen: this.#assertOpen,
+      migrate: async (client) => {
+        await this.#lock(client, [
+          "project-foundation-migration",
+          this.#schema,
+        ]);
+        await migratePostgresProjectFoundations(client, this.#schema);
+        await migratePostgresProjectFoundationRuns(client, this.#schema);
+        this.#assertOpen();
+      },
     });
   }
 
@@ -557,6 +569,12 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     );
     const row = rows.rows[0];
     if (row === undefined) return null;
+    if (row !== undefined)
+      await assertPostgresSavedSourceUploadLegacyAccess(client, this.#schema, {
+        owner: scope.owner,
+        projectId: scope.projectId,
+        sourceRevision: revision,
+      });
     return decodePostgresFoundationSource(row, scope, revision);
   }
 
@@ -609,7 +627,16 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       ]);
       await access.assertProject(scope);
     }
-    return decodePostgresFoundationMutationReceipt(row, identity);
+    const result = decodePostgresFoundationMutationReceipt(row, identity);
+    const savedSource =
+      result == null ? null : foundationResultSavedSource(result);
+    if (savedSource !== null)
+      await assertPostgresSavedSourceUploadLegacyAccess(
+        client,
+        this.#schema,
+        savedSource,
+      );
+    return result;
   }
 
   #childSelect(

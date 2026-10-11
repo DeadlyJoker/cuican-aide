@@ -4,6 +4,10 @@ import {
   lockPostgresCreativeProjectLegacySchema,
 } from "./creative-project-legacy-access.ts";
 import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
+import {
+  assertPostgresSavedSourceUploadLegacyAccess,
+  assertSqliteSavedSourceUploadLegacyAccess,
+} from "./project-source-upload-legacy-access.ts";
 import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -102,10 +106,17 @@ export function loadSqliteFoundationRun(
       ),
     scope,
   );
-  if (admission !== null)
+  if (admission !== null) {
     access.assertProject(
       foundationLegacyScope(admission.actor, admission.projectId),
     );
+    if (admission.source !== null)
+      assertSqliteSavedSourceUploadLegacyAccess(db, {
+        owner: admission.actor,
+        projectId: admission.projectId,
+        sourceRevision: admission.source.revision,
+      });
+  }
   return admission;
 }
 export async function loadPostgresFoundationRun(
@@ -126,10 +137,17 @@ export async function loadPostgresFoundationRun(
     ).rows[0],
     scope,
   );
-  if (admission !== null)
+  if (admission !== null) {
     await access.assertProject(
       foundationLegacyScope(admission.actor, admission.projectId),
     );
+    if (admission.source !== null)
+      await assertPostgresSavedSourceUploadLegacyAccess(c, schema, {
+        owner: admission.actor,
+        projectId: admission.projectId,
+        sourceRevision: admission.source.revision,
+      });
+  }
   return admission;
 }
 export class SqliteProjectFoundationRunStore

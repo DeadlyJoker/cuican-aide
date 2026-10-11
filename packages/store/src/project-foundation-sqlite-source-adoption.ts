@@ -1,3 +1,4 @@
+import { captureSqliteSourceUploadLegacyAccess } from "./project-source-upload-legacy-access.ts";
 import { assertSqliteCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
 import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -35,9 +36,11 @@ export function admitSqliteFoundationSourceAdoption(
     foundationFailure("project_foundation_source_upload_schema_unavailable");
   sourceUploadSame(realm, proof.pointer.storageRealmId);
   const scope = { owner: proof.owner, uploadId: proof.pointer.uploadId };
+  const access = captureSqliteSourceUploadLegacyAccess(database);
+  access.assertUpload(scope);
   assertFoundationSourceAdoptionState(
     proof,
-    sqliteUploadState(database, scope, realm),
+    sqliteUploadState(database, scope, realm, access),
   );
   const values = sourceUploadSqliteValues(scope);
   const chunks = database
@@ -90,6 +93,8 @@ export function associateSqliteFoundationSource(
     database,
     foundationLegacyScope(proof.owner, proof.source.projectId),
   );
+  const access = captureSqliteSourceUploadLegacyAccess(database);
+  access.assertUpload({ owner: proof.owner, uploadId: proof.pointer.uploadId });
   database
     .prepare(
       `INSERT INTO project_source_upload_associations
@@ -106,4 +111,5 @@ export function associateSqliteFoundationSource(
       proof.source.digest,
       sourceUploadJson(proof.association),
     );
+  access.assertCurrent();
 }

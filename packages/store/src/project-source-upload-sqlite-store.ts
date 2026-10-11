@@ -1,3 +1,7 @@
+import {
+  captureSqliteSourceUploadLegacyAccess,
+  type SqliteSourceUploadLegacyAccess,
+} from "./project-source-upload-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   sourceUploadFields,
@@ -109,7 +113,11 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:begin"],
         q.actor,
       );
-    return this.#read(authority, () => this.#beginReceipt(q), true);
+    return this.#read(
+      authority,
+      (access) => this.#beginReceipt(q, access),
+      true,
+    );
   }
   async begin(
     input: Input<"begin">,
@@ -127,8 +135,8 @@ export class SqliteProjectSourceUploadStore
     sourceUploadSame(initial.owner, q.owner);
     sourceUploadSame(initial.requestDigest, q.receipt.requestDigest);
     sourceUploadSame(initial.createdByActorId, q.actor.actorId);
-    return this.#write(authority, () => {
-      const prior = this.#beginReceipt(q);
+    return this.#write(authority, (access) => {
+      const prior = this.#beginReceipt(q, access);
       if (prior) return prior;
       sourceUploadSame(initial.storageRealmId, this.storageRealmId);
       const state = sourceUploadInitialState(initial);
@@ -173,8 +181,8 @@ export class SqliteProjectSourceUploadStore
         "projectSourceUpload:cancel",
         "projectSourceUpload:adopt",
       ]);
-    return this.#read(authority, () =>
-      sqliteUploadState(this.#database, q, this.storageRealmId),
+    return this.#read(authority, (access) =>
+      sqliteUploadState(this.#database, q, this.storageRealmId, access),
     );
   }
   async writePart(
@@ -198,8 +206,8 @@ export class SqliteProjectSourceUploadStore
       ["projectSourceUpload:write"],
       q.actor,
     );
-    return this.#write(authority, () => {
-      const state = this.#state(q),
+    return this.#write(authority, (access) => {
+      const state = this.#state(q, access),
         part = sourceUploadCapturePart(state, rawPart, bytes).part,
         prior = state.parts.find((item) => item.index === part.index);
       if (prior) {
@@ -260,12 +268,14 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:prepare"],
         q.actor,
       );
-    const snapshot = await this.#read(authority, () => {
-      const state = this.#state(q);
+    const snapshot = await this.#read(authority, (access) => {
+      const state = this.#state(q, access);
       return {
         state,
         rows:
-          state.sealed === null ? sqliteUploadRaw(this.#database, state) : null,
+          state.sealed === null
+            ? sqliteUploadRaw(this.#database, state, access)
+            : null,
       };
     });
     if (snapshot.rows !== null)
@@ -274,8 +284,8 @@ export class SqliteProjectSourceUploadStore
       snapshot.state.initial,
       snapshot.state.parts,
     );
-    return this.#write(authority, () => {
-      const state = this.#state(q);
+    return this.#write(authority, (access) => {
+      const state = this.#state(q, access);
       if (state.sealed !== null) {
         sourceUploadAssertPhase(state, [
           "raw-sealed",
@@ -323,8 +333,8 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:prepare"],
         q.actor,
       );
-    return this.#write(authority, () => {
-      const state = this.#state(q);
+    return this.#write(authority, (access) => {
+      const state = this.#state(q, access);
       if (
         state.phase === "ready" ||
         (state.phase === "preparing" && state.claim!.expiresAt > q.at)
@@ -350,11 +360,11 @@ export class SqliteProjectSourceUploadStore
       authority = sourceUploadAuthority(grant, q.owner, q.uploadId, [
         "projectSourceUpload:prepare",
       ]);
-    const snapshot = await this.#read(authority, () => {
-      const state = this.#state(q);
+    const snapshot = await this.#read(authority, (access) => {
+      const state = this.#state(q, access);
       sourceUploadAssertClaim(state, claimId);
       sourceUploadSame(state.sealed!.uploadDigest, uploadDigest);
-      return { state, rows: sqliteUploadRaw(this.#database, state) };
+      return { state, rows: sqliteUploadRaw(this.#database, state, access) };
     });
     const bytes = sourceUploadRawSnapshot(snapshot.state, snapshot.rows);
     await assertSourceUploadCurrent(authority);
@@ -374,10 +384,12 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:prepare"],
         q.actor,
       );
-    const snapshot = await this.#read(authority, () => this.#state(q)),
+    const snapshot = await this.#read(authority, (access) =>
+        this.#state(q, access),
+      ),
       bundle = sourceUploadPreparedBundle(snapshot, parsed, q.at);
-    return this.#write(authority, () => {
-      const state = this.#state(q);
+    return this.#write(authority, (access) => {
+      const state = this.#state(q, access);
       if (state.phase === "ready") {
         if (state.claim!.claimId !== claimId)
           sourceUploadFailure("project_source_upload_claim_conflict");
@@ -456,8 +468,8 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:prepare"],
         q.actor,
       );
-    return this.#write(authority, () => {
-      const state = this.#state(q);
+    return this.#write(authority, (access) => {
+      const state = this.#state(q, access);
       if (
         state.phase === "rejected" &&
         state.claim!.claimId === claimId &&
@@ -486,8 +498,8 @@ export class SqliteProjectSourceUploadStore
         ["projectSourceUpload:cancel"],
         q.actor,
       );
-    return this.#write(authority, () => {
-      const state = this.#state(q);
+    return this.#write(authority, (access) => {
+      const state = this.#state(q, access);
       if (state.phase === "cancelled") return this.#result(state, "replayed");
       sourceUploadAssertPhase(state, ["receiving", "raw-sealed", "preparing"]);
       sourceUploadAssertRevision(state, q.expectedRevision, q.at);
@@ -505,13 +517,21 @@ export class SqliteProjectSourceUploadStore
       authority = sourceUploadAuthority(grant, q.owner, q.uploadId, [
         "projectSourceUpload:adopt",
       ]);
-    const snapshot = await this.#read(authority, () => {
-      const state = sqliteUploadState(this.#database, q, this.storageRealmId);
+    const snapshot = await this.#read(authority, (access) => {
+      const state = sqliteUploadState(
+        this.#database,
+        q,
+        this.storageRealmId,
+        access,
+      );
       if (state === null) return null;
       if (state.initial.fileDigest !== fileDigest)
         sourceUploadFailure("project_source_upload_digest_mismatch");
       sourceUploadAssertPhase(state, ["ready"]);
-      return { state, parsed: sqliteUploadParsed(this.#database, state) };
+      return {
+        state,
+        parsed: sqliteUploadParsed(this.#database, state, access),
+      };
     });
     if (snapshot === null) return null;
     const prepared = sourceUploadVerifyPrepared(
@@ -521,22 +541,34 @@ export class SqliteProjectSourceUploadStore
     await assertSourceUploadCurrent(authority);
     return prepared;
   }
-  #beginReceipt(q: ReturnType<typeof sourceUploadBeginIdentity>) {
+  #beginReceipt(
+    q: ReturnType<typeof sourceUploadBeginIdentity>,
+    access: SqliteSourceUploadLegacyAccess,
+  ) {
     const row = this.#database
       .prepare(
         "SELECT upload_id,request_digest FROM project_source_uploads WHERE tenant_id=? AND space_id=? AND owner_principal_id=? AND idempotency_key=?",
       )
       .get(...sourceUploadOwnerValues(q.owner), q.receipt.idempotencyKey);
     if (row === undefined) return null;
+    access.assertUpload({ owner: q.owner, uploadId: String(row.upload_id) });
     if (row.request_digest !== q.receipt.requestDigest)
       sourceUploadFailure("project_source_upload_idempotency_conflict");
     return this.#result(
-      this.#state({ owner: q.owner, uploadId: String(row.upload_id) }),
+      this.#state({ owner: q.owner, uploadId: String(row.upload_id) }, access),
       "replayed",
     );
   }
-  #state(q: ProjectSourceUploadRead): ProjectSourceUploadState {
-    const state = sqliteUploadState(this.#database, q, this.storageRealmId);
+  #state(
+    q: ProjectSourceUploadRead,
+    access: SqliteSourceUploadLegacyAccess,
+  ): ProjectSourceUploadState {
+    const state = sqliteUploadState(
+      this.#database,
+      q,
+      this.storageRealmId,
+      access,
+    );
     if (state === null)
       sourceUploadFailure("project_source_upload_not_found", "notFound");
     return state;
@@ -593,7 +625,7 @@ export class SqliteProjectSourceUploadStore
   }
   async #read<T>(
     authority: ProjectSourceUploadCommitAuthority,
-    work: () => T,
+    work: (access: SqliteSourceUploadLegacyAccess) => T,
     mutation = false,
   ): Promise<T> {
     qualifySourceUploadInstallation(
@@ -604,6 +636,7 @@ export class SqliteProjectSourceUploadStore
     await assertSourceUploadCurrent(authority);
     await assertProjectSourceUploadTransactionCurrent(authority);
     return this.#transaction("read", () => {
+      const access = captureSqliteSourceUploadLegacyAccess(this.#database);
       this.#schema();
       admitSqliteSourceUploadInstallation(
         this.#database,
@@ -612,14 +645,15 @@ export class SqliteProjectSourceUploadStore
         mutation,
       );
       assertSourceUploadActive(authority);
-      const result = work();
+      const result = work(access);
+      access.assertCurrent();
       assertSourceUploadActive(authority);
       return result;
     });
   }
   async #write<T>(
     authority: ProjectSourceUploadCommitAuthority,
-    work: () => T,
+    work: (access: SqliteSourceUploadLegacyAccess) => T,
   ): Promise<T> {
     qualifySourceUploadInstallation(
       authority,
@@ -629,6 +663,7 @@ export class SqliteProjectSourceUploadStore
     await assertSourceUploadCurrent(authority);
     await assertProjectSourceUploadTransactionCurrent(authority);
     return this.#transaction("write", () => {
+      const access = captureSqliteSourceUploadLegacyAccess(this.#database);
       this.#schema();
       admitSqliteSourceUploadInstallation(
         this.#database,
@@ -637,7 +672,8 @@ export class SqliteProjectSourceUploadStore
         true,
       );
       assertSourceUploadActive(authority);
-      const result = work();
+      const result = work(access);
+      access.assertCurrent();
       assertSourceUploadActive(authority);
       return result;
     });

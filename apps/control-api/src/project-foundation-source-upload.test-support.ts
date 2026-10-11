@@ -81,6 +81,7 @@ export async function sourceAdoptionFixture(
     allowAdopt: true,
     activeAdopt: true,
     sourceReads: 0,
+    afterSql: null as null | ((sql: string) => void),
     projectIds: 0,
     uploadIds: 0,
     parserCalls: 0,
@@ -89,6 +90,7 @@ export async function sourceAdoptionFixture(
     withdrawCreativeAfterAssociation: false,
     withdrawAdoptAfterAssociation: false,
     withdrawAdoptAfterWriteCommit: false,
+    afterPreparedRead: null as null | (() => Promise<void>),
     transformPrepared: null as
       | ((source: PreparedProjectSource) => PreparedProjectSource)
       | null,
@@ -163,6 +165,18 @@ export async function sourceAdoptionFixture(
       const prepare = database.prepare.bind(database);
       database.prepare = (sql) => {
         const statement = prepare(sql);
+        for (const method of ["get", "all", "run"] as const) {
+          const actual = statement[method];
+          Object.defineProperty(statement, method, {
+            configurable: true,
+            writable: true,
+            value(...parameters: unknown[]) {
+              const result = Reflect.apply(actual, statement, parameters);
+              state.afterSql?.(sql);
+              return result;
+            },
+          });
+        }
         if (/INSERT\s+INTO\s+project_source_upload_associations/iu.test(sql)) {
           const run = statement.run;
           statement.run = (...parameters) => {
@@ -195,7 +209,7 @@ export async function sourceAdoptionFixture(
         value: function (this: PoolClient, ...args: unknown[]) {
           const sql = args[0];
           if (typeof sql === "string" && sql.startsWith("BEGIN")) {
-            writeTransaction = sql === "BEGIN";
+            writeTransaction = !/READ ONLY/iu.test(sql);
             associated = false;
           }
           const writesAssociation =
@@ -210,8 +224,10 @@ export async function sourceAdoptionFixture(
             associated = false;
           }
           const result = Reflect.apply(query, this, args);
-          if (!writesAssociation && !commitsAssociation) return result;
+          if (result === undefined || typeof result.then !== "function")
+            return result;
           return Promise.prototype.then.call(result, (value: unknown) => {
+            if (typeof sql === "string") state.afterSql?.(sql);
             if (writesAssociation) {
               associated = true;
               afterAssociation();
@@ -298,6 +314,7 @@ export async function sourceAdoptionFixture(
       async loadPrepared(request) {
         state.sourceReads++;
         const source = await bridge.loadPrepared(request);
+        await state.afterPreparedRead?.();
         return source !== null && state.transformPrepared !== null
           ? state.transformPrepared(source)
           : source;
@@ -362,7 +379,25 @@ export async function sourceAdoptionFixture(
     }
     return result;
   }
-  return { first, open, close, state, authority, query, counts };
+  return {
+    first,
+    open,
+    close,
+    state,
+    authority,
+    query,
+    counts,
+    backend,
+    path,
+    schema,
+    prefix: backend === "postgres" ? `"${schema}".` : "",
+    get database() {
+      return database;
+    },
+    get pool() {
+      return pool;
+    },
+  };
 }
 
 export async function prepareOwnedUpload(

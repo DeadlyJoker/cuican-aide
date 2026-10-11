@@ -131,11 +131,8 @@ export async function sourceUploadFixture(
       Object.defineProperty(client, "query", {
         configurable: true,
         value: function (this: PoolClient, ...args: unknown[]) {
-          if (args[0] === "BEGIN") writeTransaction = true;
-          else if (
-            args[0] === "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"
-          )
-            writeTransaction = false;
+          if (typeof args[0] === "string" && args[0].startsWith("BEGIN"))
+            writeTransaction = !/READ ONLY/iu.test(args[0]);
           const committedWrite = args[0] === "COMMIT" && writeTransaction;
           if (args[0] === "COMMIT" || args[0] === "ROLLBACK")
             writeTransaction = false;

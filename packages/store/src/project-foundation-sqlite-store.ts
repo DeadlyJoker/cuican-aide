@@ -1,3 +1,8 @@
+import {
+  assertSqliteSavedSourceUploadLegacyAccess,
+  foundationResultSavedSource,
+} from "./project-source-upload-legacy-access.ts";
+import { commitOriginalSqliteProjectMigration } from "./original-project-migration.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   captureSqliteCreativeProjectLegacyAccess,
@@ -104,9 +109,13 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     this.#sourceAdmission = input.sourceAdmission;
   }
   async migrate(): Promise<void> {
-    this.#transaction(() => {
-      migrateSqliteProjectFoundations(this.#database);
-      migrateSqliteProjectFoundationRuns(this.#database);
+    commitOriginalSqliteProjectMigration({
+      database: this.#database,
+      assertOpen: this.#assertOpen,
+      migrate: () => {
+        migrateSqliteProjectFoundations(this.#database);
+        migrateSqliteProjectFoundationRuns(this.#database);
+      },
     });
   }
   async loadFoundation(input: Input<"loadFoundation">) {
@@ -528,6 +537,11 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       )
       .get(...creativeOwnerValues(owner), projectId, revision);
     if (row === undefined) return null;
+    assertSqliteSavedSourceUploadLegacyAccess(this.#database, {
+      owner,
+      projectId,
+      sourceRevision: revision,
+    });
     const source = parseProjectSource(JSON.parse(String(row.record_json)));
     foundationEqual(
       [
@@ -630,6 +644,9 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     );
     if (result.project.projectId !== row.project_id)
       foundationFailure("project_foundation_receipt_invalid");
+    const savedSource = foundationResultSavedSource(result);
+    if (savedSource !== null)
+      assertSqliteSavedSourceUploadLegacyAccess(this.#database, savedSource);
     return result;
   }
   #insertProject(project: CreativeProject) {
@@ -749,16 +766,23 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         "receipt-publication",
       );
       const result = work(access);
+      if (result != null) {
+        access.assertProject(
+          foundationLegacyScope(result.project, result.project.projectId),
+        );
+        const savedSource = foundationResultSavedSource(result);
+        if (savedSource !== null)
+          assertSqliteSavedSourceUploadLegacyAccess(
+            this.#database,
+            savedSource,
+          );
+      }
       assertProjectFoundationCommitActive(authority);
       assertSqliteFoundationRunCommit(
         this.#database,
         authority?.runTransaction,
         isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
       );
-      if (result != null)
-        access.assertProject(
-          foundationLegacyScope(result.project, result.project.projectId),
-        );
       assertProjectFoundationCommitActive(authority);
       this.#assertOpen();
       this.#database.exec("COMMIT");

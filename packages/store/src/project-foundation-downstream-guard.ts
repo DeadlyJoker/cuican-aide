@@ -1,4 +1,8 @@
 import {
+  assertSqliteSavedSourceUploadLegacyAccess,
+  assertPostgresSavedSourceUploadLegacyAccess,
+} from "./project-source-upload-legacy-access.ts";
+import {
   captureSqliteCreativeProjectLegacyAccess,
   capturePostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
@@ -180,6 +184,12 @@ export function captureSqliteProjectFoundationDownstream(
     scope,
   );
   if (foundation === null) return null;
+  if (foundation.source !== null)
+    assertSqliteSavedSourceUploadLegacyAccess(database, {
+      owner: scope.owner,
+      projectId: scope.projectId,
+      sourceRevision: foundation.source.revision,
+    });
   return checkedSnapshot(
     project,
     scope,
@@ -249,6 +259,12 @@ export async function capturePostgresProjectFoundationDownstream(
     );
     return null;
   }
+  if (foundation.source !== null)
+    await assertPostgresSavedSourceUploadLegacyAccess(client, schema, {
+      owner: scope.owner,
+      projectId: scope.projectId,
+      sourceRevision: foundation.source.revision,
+    });
   const snapshot = checkedSnapshot(
     project,
     scope,

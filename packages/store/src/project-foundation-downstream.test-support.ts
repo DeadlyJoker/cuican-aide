@@ -1,3 +1,4 @@
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 import { DatabaseSync } from "node:sqlite";
 import type { TestContext } from "node:test";
 import { Pool } from "pg";
@@ -39,7 +40,9 @@ export async function downstreamFixture(
   });
   async function capture(input: ProjectFoundationDownstreamLocator) {
     if (database !== null)
-      return captureSqliteProjectFoundationDownstream(database, input);
+      return readSqliteLegacyCreativeProject(database, () =>
+        captureSqliteProjectFoundationDownstream(database, input),
+      );
     const client = await pool!.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");
@@ -62,10 +65,12 @@ export async function downstreamFixture(
     expected: ProjectFoundationDownstreamSnapshot,
   ) {
     if (database !== null) {
-      assertSqliteProjectFoundationDownstreamUnchanged(
-        database,
-        input,
-        expected,
+      readSqliteLegacyCreativeProject(database, () =>
+        assertSqliteProjectFoundationDownstreamUnchanged(
+          database,
+          input,
+          expected,
+        ),
       );
       return;
     }

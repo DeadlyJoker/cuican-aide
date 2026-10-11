@@ -1,3 +1,8 @@
+import {
+  capturePostgresSourceUploadLegacyAccess,
+  type PostgresSourceUploadLegacyAccess,
+} from "./project-source-upload-legacy-access.ts";
+import { commitOriginalProjectMigration } from "./original-project-migration.ts";
 import type { Pool, PoolClient } from "pg";
 import type {
   ProjectSourceUploadCommitAuthority,
@@ -85,15 +90,20 @@ export class ProjectSourceUploadPostgresQueries {
     return this.#realm;
   }
   async migrate(): Promise<void> {
-    const realm = await this.transaction((client) =>
-      migratePostgresProjectSourceUploads(client, this.#schema),
-    );
+    const realm = await commitOriginalProjectMigration({
+      pool: this.#pool,
+      assertOpen: this.#assertOpen,
+      migrate: (client) =>
+        migratePostgresProjectSourceUploads(client, this.#schema),
+    });
     this.cacheRealm(realm);
   }
   async state(
     client: PoolClient,
     scope: Scope,
+    access: PostgresSourceUploadLegacyAccess,
   ): Promise<ProjectSourceUploadState | null> {
+    await access.assertUpload(scope);
     const initial = (
       await this.query(
         client,
@@ -167,17 +177,26 @@ export class ProjectSourceUploadPostgresQueries {
     }
     return state;
   }
-  async requireState(client: PoolClient, scope: Scope) {
-    const state = await this.state(client, scope);
+  async requireState(
+    client: PoolClient,
+    scope: Scope,
+    access: PostgresSourceUploadLegacyAccess,
+  ) {
+    const state = await this.state(client, scope, access);
     if (state === null)
       sourceUploadFailure("project_source_upload_not_found", "notFound");
     return state;
   }
-  async rawRows(client: PoolClient, state: ProjectSourceUploadState) {
+  async rawRows(
+    client: PoolClient,
+    state: ProjectSourceUploadState,
+    access: PostgresSourceUploadLegacyAccess,
+  ) {
     const scope = {
       owner: state.initial.owner,
       uploadId: state.initial.uploadId,
     };
+    await access.assertUpload(scope);
     const rows = (
       await this.query(
         client,
@@ -340,10 +359,10 @@ export class ProjectSourceUploadPostgresQueries {
     authority: Authority,
     body: (client: PoolClient, state: ProjectSourceUploadState) => Promise<T>,
   ): Promise<T> {
-    return this.transaction(async (client) => {
+    return this.transaction(async (client, access) => {
       await this.requireSchema(client);
       await this.uploadLock(client, command);
-      return body(client, await this.requireState(client, command));
+      return body(client, await this.requireState(client, command, access));
     }, authority);
   }
   async uploadLock(client: PoolClient, scope: Scope) {
@@ -394,7 +413,10 @@ export class ProjectSourceUploadPostgresQueries {
     return rows;
   }
   async read<T>(
-    body: (client: PoolClient) => Promise<T>,
+    body: (
+      client: PoolClient,
+      access: PostgresSourceUploadLegacyAccess,
+    ) => Promise<T>,
     authority: Authority,
     mutation = false,
   ): Promise<T> {
@@ -410,8 +432,12 @@ export class ProjectSourceUploadPostgresQueries {
       await this.query(
         client,
         qualification === undefined
-          ? "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"
-          : "BEGIN",
+          ? "BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY"
+          : "BEGIN ISOLATION LEVEL READ COMMITTED",
+      );
+      const access = await capturePostgresSourceUploadLegacyAccess(
+        client,
+        this.#schema,
       );
       await this.requireSchema(client);
       await admitPostgresSourceUploadInstallation(
@@ -421,7 +447,9 @@ export class ProjectSourceUploadPostgresQueries {
         this.#installationAdmission,
         mutation,
       );
-      const value = await body(client);
+      const value = await body(client, access);
+      await assertProjectSourceUploadTransactionCurrent(authority);
+      await access.assertCurrent();
       await assertProjectSourceUploadTransactionCurrent(authority);
       assertSourceUploadActive(authority);
       this.#assertOpen();
@@ -435,7 +463,10 @@ export class ProjectSourceUploadPostgresQueries {
     }
   }
   async transaction<T>(
-    body: (client: PoolClient) => Promise<T>,
+    body: (
+      client: PoolClient,
+      access: PostgresSourceUploadLegacyAccess,
+    ) => Promise<T>,
     authority?: Authority,
   ): Promise<T> {
     this.#assertOpen();
@@ -448,7 +479,11 @@ export class ProjectSourceUploadPostgresQueries {
     if (authority !== undefined) await assertSourceUploadCurrent(authority);
     const client = await this.#pool.connect();
     try {
-      await this.query(client, "BEGIN");
+      await this.query(client, "BEGIN ISOLATION LEVEL READ COMMITTED");
+      const access = await capturePostgresSourceUploadLegacyAccess(
+        client,
+        this.#schema,
+      );
       if (authority !== undefined)
         await admitPostgresSourceUploadInstallation(
           client,
@@ -457,7 +492,10 @@ export class ProjectSourceUploadPostgresQueries {
           this.#installationAdmission,
           true,
         );
-      const result = await body(client);
+      const result = await body(client, access);
+      if (authority !== undefined)
+        await assertProjectSourceUploadTransactionCurrent(authority);
+      await access.assertCurrent();
       if (authority !== undefined)
         await assertProjectSourceUploadTransactionCurrent(authority);
       if (authority !== undefined) assertSourceUploadActive(authority);

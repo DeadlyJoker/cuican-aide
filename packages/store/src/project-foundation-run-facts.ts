@@ -1,4 +1,8 @@
 import {
+  assertSqliteSavedSourceUploadLegacyAccess,
+  assertPostgresSavedSourceUploadLegacyAccess,
+} from "./project-source-upload-legacy-access.ts";
+import {
   captureSqliteCreativeProjectLegacyAccess,
   capturePostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
@@ -166,6 +170,12 @@ export function captureSqliteFoundationRunFacts(
       db.prepare(q.sql.replaceAll(/\$[1-5]/gu, "?")).get(...q.values),
     );
   }
+  if (step.value?.source != null)
+    assertSqliteSavedSourceUploadLegacyAccess(db, {
+      owner: stage.actor,
+      projectId: step.value.source.projectId,
+      sourceRevision: step.value.source.revision,
+    });
   return step.value;
 }
 export async function capturePostgresFoundationRunFacts(
@@ -199,6 +209,12 @@ export async function capturePostgresFoundationRunFacts(
   await access.assertProject(
     foundationLegacyScope(stage.actor, stage.projectId),
   );
+  if (step.value?.source != null)
+    await assertPostgresSavedSourceUploadLegacyAccess(c, schema, {
+      owner: stage.actor,
+      projectId: step.value.source.projectId,
+      sourceRevision: step.value.source.revision,
+    });
   return step.value;
 }
 export function assertFoundationRunFactsUnchanged(

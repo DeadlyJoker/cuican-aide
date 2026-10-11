@@ -1,3 +1,7 @@
+import {
+  assertPostgresSavedSourceUploadLegacyAccess,
+  foundationResultSavedSource,
+} from "./project-source-upload-legacy-access.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   assertProjectFoundationCommitActive,
@@ -104,6 +108,14 @@ export async function transactPostgresFoundationLegacy<
     if (result != null)
       await access.assertProject(
         foundationLegacyScope(result.project, result.project.projectId),
+      );
+    const savedSource =
+      result == null ? null : foundationResultSavedSource(result);
+    if (savedSource !== null)
+      await assertPostgresSavedSourceUploadLegacyAccess(
+        client,
+        context.schema,
+        savedSource,
       );
     // The final asynchronous SQL check must not weaken the original authorization fence.
     await assertProjectFoundationCommitTransactionCurrent(authority);
