@@ -1,6 +1,7 @@
 import {
   parsePluginProjectWorkspaceOwner,
   PLUGIN_PROJECT_WORKSPACE_OWNER_FIELDS,
+  pluginProjectWorkspaceIdentityInput,
   type PluginProjectWorkspaceOwner,
 } from "@crewon/domain";
 import { createHash } from "node:crypto";
@@ -47,10 +48,7 @@ const CAP = 128 * 1024;
 export function projectAllocationWorkspaceId(
   owner: PluginProjectWorkspaceOwner,
 ): string {
-  const values = PLUGIN_PROJECT_WORKSPACE_OWNER_FIELDS.map(
-    (field) => owner[field],
-  );
-  return `workspace-project-${createHash("sha256").update(JSON.stringify(values)).digest("hex")}`;
+  return `workspace-project-${createHash("sha256").update(pluginProjectWorkspaceIdentityInput(owner)).digest("hex")}`;
 }
 
 /** The journal describes Native allocation only. It makes no SQL binding or product readiness claim. */

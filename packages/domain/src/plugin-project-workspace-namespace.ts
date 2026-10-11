@@ -37,6 +37,16 @@ export const PLUGIN_PROJECT_WORKSPACE_OWNER_FIELDS = [
   "projectId",
 ] as const;
 
+/** Stable identity bytes only; this derivation grants no ownership or filesystem access. */
+export function pluginProjectWorkspaceIdentityInput(
+  input: PluginProjectWorkspaceOwner,
+): string {
+  const owner = parsePluginProjectWorkspaceOwner(input);
+  return JSON.stringify(
+    PLUGIN_PROJECT_WORKSPACE_OWNER_FIELDS.map((field) => owner[field]),
+  );
+}
+
 export function parsePluginProjectWorkspaceOwner(
   input: unknown,
 ): PluginProjectWorkspaceOwner {

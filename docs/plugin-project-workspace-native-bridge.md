@@ -12,6 +12,16 @@
 
 Control 子进程身份仅证明 transport。Node 插件可能在所属进程中运行，故 child 身份不能证明用户、插件项目或 Agent 动作授权。未来产品接线必须从原真实 Host 请求或 Run / Tool receipt 取得项目资格，不能让插件/renderer 调用 Main prepare，不能用已有 Worker peer token 代替这里的票据。
 
+## 原项目授权准备
+
+原 `ProjectConversationApplicationService.prepareWorkspaceFromPluginUi` 现提供内部准备入口：先核对真实 UI invocation 与独立 Conversation Host pin，再只允许原 `createConversation` 操作，从输入取得已有 projectId，经原 SQLite 绑定读取视图核验完整项目归属、原 principal、活动状态及独立 `creativeProject:write` 策略。没有 protected owner 的 legacy 项目、别人的项目、普通列表/读取、缺少 adapter 或部分 schema 均不能取得准备引用；不会自动迁移、接管旧项目或替代项目首次创建权限。
+
+返回的是进程内 opaque reference，复制或 JSON 往返失去资格。内部消费者通过 `qualifyPluginProjectWorkspacePreparation` 取得冻结的完整八字段 owner、当前准确包四字段和预期工作空间 ID，每次操作前仍须调用 `assertCurrent()` / `assertActive()`。current 检查再次读取原项目状态和归属，在原 Host 最后一次异步检查后再次检查项目 write 策略；UI 完成、Host 关闭、安装/epoch 漂移和撤权均使准备失效。此引用不能授权 namespace 写入、Thread 创建、Run、Tool 或访问已分配目录。
+
+工作空间 ID 与原 Native allocator 使用同一 Domain 身份字节配方，仍是原字段顺序的 JSON 数组经 SHA-256 后加 `workspace-project-` 前缀。原 Native ID 字节保持，版本与包摘要不加入稳定 owner。UI 若已指定 workspaceId，它必须匹配宿主派生的 ID；null 仅表示这次内部准备没有 caller 指定 ID，不改变原 createConversation 的 null workspace 校验或返回协议。新的准备入口目前未被产品 dispatcher、Main prepare 或 SQL writer 使用，不能当成已接通的项目创建体验。
+
+准备专项使用真实 UI 注册、原 Application 与 SQLite Store；Host callbacks、包发现及 protected metadata 为命名 fixture。覆盖完整归属、原策略、最后 Host await 后撤权、只读入口拒绝、legacy 拒绝、任意空间拒绝、缺少 reader、复制引用、调用结束与持久归档状态复核。归档状态用显式 SQL fixture 改变，不宣称新的归档管理入口。准备本身不分配 ID、Thread、Run、目录或 namespace。与 Domain 身份字节、新旧 Native allocator/bridge/client 和原 installed HTTP 兼容专项联合 **119 passed、0 failed、0 skipped**；Domain/Application/Store/Control/Electron 类型检查、架构边界及格式检查通过。本轮没有运行 PostgreSQL 新准备模式，也未部署 Web 或正式桌面。
+
 ## 分配、撤回与恢复
 
 消费只调用原 allocator 的 `provision()`：沿用原 registry、真实目录、全程排他 lease、字节 CAS 和 Native pending/registered/failed journal。不激活新目录，不更改主会话当前工作空间，原文件读取 lease 保持有效。

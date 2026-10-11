@@ -1,3 +1,4 @@
+import { projectConversationCall } from "./project-conversation-call.ts";
 import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { captureProjectConversationDependencies } from "./project-conversation-dependencies.ts";
 import {
@@ -43,6 +44,7 @@ import { projectConversationPublicBinding } from "./project-conversation-project
 import { ownedConversationProjectWriteAuthority } from "./project-conversation-project-authority.ts";
 import { readConversationProject } from "./project-conversation-project-reader.ts";
 import { changeProjectConversationBinding } from "./project-conversation-binding-change.ts";
+import { preparePluginProjectWorkspace } from "./plugin-project-workspace-preparation.ts";
 import { conversationUiProjectReader } from "./project-conversation-ui-project-reader.ts";
 import type { ProjectTextStore } from "./project-text-store-port.ts";
 import type { ExtensionTaskApplicationService } from "./extension-task-application-service.ts";
@@ -87,6 +89,20 @@ export class ProjectConversationApplicationService {
   readonly #d: ProjectConversationApplicationDependencies;
   constructor(d: ProjectConversationApplicationDependencies) {
     this.#d = captureProjectConversationDependencies(d);
+  }
+  /** Private Host preparation; it creates no directory, namespace, Thread or Run. */
+  prepareWorkspaceFromPluginUi(
+    context: PluginUiActionContext,
+    authority: ProjectConversationCommitAuthority,
+  ) {
+    return projectConversationCall(() =>
+      preparePluginProjectWorkspace({
+        context,
+        authority,
+        projects: this.#d.projects,
+        authorization: this.#d.authorization,
+      }),
+    );
   }
   /** Explicit Host opt-in, using only the genuine original UI invocation and its independent Conversation authority. */
   async metadataFromPluginUi(
@@ -149,7 +165,7 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationAssociationRequest,
     authority: ProjectConversationCommitAuthority,
   ) {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = parseProjectConversationAssociationRequest(input),
         q = await this.#authority(actor, authority);
       await this.#project(q, request.input.projectId, "creativeProject:write");
@@ -251,7 +267,7 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationsRequests["getBinding"],
     authority: ProjectConversationCommitAuthority,
   ): Promise<ProjectConversationsResponses["getBinding"]> {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = this.#input("getBinding", input),
         q = await this.#authority(actor, authority),
         b = await this.#d.conversations.loadBinding({
@@ -293,7 +309,7 @@ export class ProjectConversationApplicationService {
     authority: ProjectConversationCommitAuthority,
     projects: Pick<CreativeProjectStore, "loadProject">,
   ) {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = this.#input("listConversations", input),
         q = await this.#authority(actor, authority);
       await this.#project(
@@ -348,7 +364,7 @@ export class ProjectConversationApplicationService {
       readScope?: PluginProjectReadScope;
     }>,
   ) {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = this.#input("createConversation", input),
         captured = await this.#authority(actor, authority),
         q =
@@ -437,7 +453,7 @@ export class ProjectConversationApplicationService {
     authority: ProjectConversationCommitAuthority,
     projects: Pick<CreativeProjectStore, "loadProject">,
   ) {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = this.#input("openConversation", input),
         q = await this.#authority(actor, authority),
         b = await this.#binding(q, request.projectId, request.threadId);
@@ -474,7 +490,7 @@ export class ProjectConversationApplicationService {
       readScope?: PluginProjectReadScope;
     }> = { store: this.#d.projects },
   ): Promise<ProjectConversationsResponses[M]> {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = this.#input(method, input);
       const q = await this.#authority(actor, authority);
       const result = await changeProjectConversationBinding({
@@ -519,7 +535,7 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationsRequests["startStage"],
     authority: ProjectConversationCommitAuthority,
   ) {
-    return this.#call(async () => {
+    return projectConversationCall(async () => {
       const request = this.#input("startStage", input),
         q = await this.#authority(actor, authority),
         b = await this.#binding(q, request.projectId, request.threadId);
@@ -758,29 +774,5 @@ export class ProjectConversationApplicationService {
       disposition: m.disposition,
       binding: this.#public(m.binding),
     });
-  }
-  async #call<T>(run: () => Promise<T>): Promise<T> {
-    try {
-      return await run();
-    } catch (error) {
-      if (error instanceof ApplicationError) throw error;
-      const code =
-        error instanceof Error
-          ? error.message
-          : "project_conversation_service_unavailable";
-      throw new ApplicationError(
-        code.includes("not_found")
-          ? "notFound"
-          : code.includes("conflict") ||
-              code.includes("mismatch") ||
-              code === "project_outline_inputs_stale"
-            ? "conflict"
-            : code.includes("authority")
-              ? "authorization"
-              : "internal",
-        code,
-        { cause: error },
-      );
-    }
   }
 }

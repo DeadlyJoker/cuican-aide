@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   parsePluginProjectWorkspaceNamespace,
   parsePluginProjectWorkspaceOwnerScope,
+  pluginProjectWorkspaceIdentityInput,
 } from "./plugin-project-workspace-namespace.ts";
 
 const body = {
@@ -20,6 +21,33 @@ const body = {
   workspaceId: "workspace-opaque",
   createdAt: "2026-10-11T00:00:00.000Z",
 };
+test("workspace identity preserves original Native owner bytes in a fixed field order", () => {
+  const original = JSON.stringify([
+    "tenant-a",
+    "space-a",
+    "principal-a",
+    "actor-a",
+    "profile-a",
+    "example.project",
+    "example.publisher",
+    "project-a",
+  ]);
+  assert.equal(pluginProjectWorkspaceIdentityInput(body.owner), original);
+  const reversed = Object.fromEntries(
+    Object.entries(body.owner).reverse(),
+  ) as typeof body.owner;
+  assert.equal(pluginProjectWorkspaceIdentityInput(reversed), original);
+  for (const field of Object.keys(body.owner) as (keyof typeof body.owner)[]) {
+    const value = { ...body.owner, [field]: `other.${field.toLowerCase()}` };
+    assert.notEqual(pluginProjectWorkspaceIdentityInput(value), original);
+  }
+  assert.throws(() =>
+    pluginProjectWorkspaceIdentityInput({
+      ...body.owner,
+      root: "/tmp/other",
+    } as typeof body.owner),
+  );
+});
 test("namespace is a bounded, stable opaque ownership record independent of package selection", () => {
   const value = parsePluginProjectWorkspaceNamespace(body);
   assert.deepEqual(JSON.parse(JSON.stringify(value)), body);

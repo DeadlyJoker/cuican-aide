@@ -1,236 +1,15 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
-import { randomUUID } from "node:crypto";
+import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import {
   ApplicationError,
-  PluginUiApplicationService,
-  ProjectConversationApplicationService,
-  capturePluginUiInvocationCommitAuthority,
   qualifyPluginProjectReadScope,
-  type PluginUiActionContext,
-  type PluginProjectReadScope,
-  type ProjectConversationCommitAuthority,
+  qualifyPluginProjectWorkspacePreparation,
 } from "@crewon/application";
-import { parsePluginTaskAdmissionPin } from "@crewon/domain";
-import {
-  parsePluginPackageDescriptor,
-  parsePluginUiJsonValue,
-} from "@crewon/contracts/plugins";
 import { PROJECT_CONVERSATIONS_METHOD_ACTIONS as actions } from "@crewon/contracts/project-conversations";
-import {
-  uiTestDescriptor,
-  uiTestBytes,
-} from "../../application/src/plugin-ui.test-support.ts";
-import { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
-import { committedTaskContext } from "../../application/src/plugin-ui-committed-task-support.ts";
-import { ownedConversationSqlFixture } from "./project-conversation-owned.test-support.ts";
+import { ownedConversationUiFixture as fixture } from "./project-conversation-ui-owned.test-support.ts";
 import { creationRecipe } from "./creative-project-store.test-support.ts";
 import { pluginProjectMetadataOwnerColumns as columns } from "./plugin-project-metadata-owner-records.ts";
-
-async function fixture(
-  t: TestContext,
-  mismatch: "matching" | "pluginId" = "matching",
-  reader: "available" | "missing" = "available",
-) {
-  const f = await ownedConversationSqlFixture(t, "sqlite", mismatch);
-  if (mismatch === "matching") {
-    await f.parent.migratePluginProjectWorkspaceNamespaces();
-    await (await f.mounted()).write();
-  }
-  const state = {
-    policyAllowed: true,
-    uiAllowed: true,
-    hostActive: true,
-    pinDrift: false,
-    idCount: 0,
-    threadPreparations: 0,
-    preparedThreadId: null as string | null,
-    afterThreadPrepared: null as (() => void | Promise<void>) | null,
-    taskCount: 0,
-    context: null as PluginUiActionContext | null,
-    beforeDispatch: null as (() => Promise<void> | void) | null,
-    beforeBindingCommit: null as (() => Promise<void> | void) | null,
-    afterHostTransactionCurrent: null as (() => Promise<void> | void) | null,
-  };
-  const scopes: PluginProjectReadScope[] = [];
-  const projects = f.parent.creativeProjectStore();
-  assert.ok(projects instanceof SqliteCreativeProjectStore);
-  const app = new ProjectConversationApplicationService({
-    conversations: {
-      version: f.store.version,
-      migrate: f.store.migrate.bind(f.store),
-      hasThreadBinding: f.store.hasThreadBinding.bind(f.store),
-      loadBinding: f.store.loadBinding.bind(f.store),
-      listBindings: f.store.listBindings.bind(f.store),
-      loadMutationReceipt: f.store.loadMutationReceipt.bind(f.store),
-      readRequiredStageDigest: f.store.readRequiredStageDigest.bind(f.store),
-      loadStageAdmission: f.store.loadStageAdmission.bind(f.store),
-      async commitBinding(...args: Parameters<typeof f.store.commitBinding>) {
-        await state.beforeBindingCommit?.();
-        return f.store.commitBinding(args[0], args[1]);
-      },
-    },
-    threads: {
-      async prepareCreateThread(actor, command) {
-        state.threadPreparations++;
-        const prepared = await f.threads.prepareCreateThread(actor, command);
-        const event = prepared.events[0];
-        assert.equal(event?.type, "thread.created");
-        state.preparedThreadId = event!.identity.threadId;
-        await state.afterThreadPrepared?.();
-        return prepared;
-      },
-    },
-    threadStore: f.parent,
-    projects: {
-      loadProject: projects.loadProject.bind(projects),
-      loadBrief: projects.loadBrief.bind(projects),
-      ...(reader === "missing"
-        ? {}
-        : {
-            bindProjectReads(scope: PluginProjectReadScope) {
-              scopes.push(scope);
-              return projects.bindProjectReads(scope);
-            },
-          }),
-    },
-    texts: f.parent.projectTextStore(),
-    tasks: {
-      async createProjectConversationTurnFromHost() {
-        state.taskCount++;
-        throw new Error("named_no_run_in_metadata_test");
-      },
-    },
-    authorization: {
-      async authorize() {
-        return state.policyAllowed
-          ? { outcome: "allow" }
-          : { outcome: "deny", reasonCode: "named_project_policy_denied" };
-      },
-    },
-    ids: {
-      nextId() {
-        state.idCount++;
-        return randomUUID();
-      },
-    },
-    clock: { now: () => f.namespaceRecipe().createdAt },
-    digester: f.digester,
-  });
-  const scope = {
-    tenantId: f.actor.tenantId,
-    spaceId: f.actor.spaceId,
-    profileId: f.installation.profileId,
-  };
-  const selection = (await f.installs.loadSelection({
-    scope,
-    pluginId: f.installation.pluginId,
-  }))!;
-  const pkg = (await f.installs.loadPackage({
-    scope,
-    packageDigest: selection.selectedPackageDigest!,
-  }))!;
-  const descriptor = parsePluginPackageDescriptor({
-    ...uiTestDescriptor,
-    pluginId: pkg.pluginId,
-    publisherId: pkg.publisherId,
-    version: pkg.version,
-    requires: [
-      {
-        service: "crewon.project-conversations",
-        apiVersion: "1",
-        optional: false,
-      },
-    ],
-  });
-  const ui = new PluginUiApplicationService({
-    store: f.installs,
-    profiles: {
-      async resolve() {
-        return scope;
-      },
-    },
-    authorization: {
-      async authorize() {
-        return state.uiAllowed
-          ? { outcome: "allow", authorityEpoch: "owned-conversation-ui-epoch" }
-          : { outcome: "deny", reasonCode: "named_ui_denied" };
-      },
-    },
-    packages: {
-      async verify() {
-        return { descriptor, publicAssets: ["ui.mjs"] };
-      },
-      async readAsset() {
-        return {
-          bytes: uiTestBytes,
-          contentType: "text/javascript; charset=utf-8",
-        };
-      },
-    },
-    ids: { nextId: () => randomUUID().replaceAll("-", "").repeat(2) },
-    clock: { now: () => f.namespaceRecipe().createdAt },
-    actions: {
-      async invoke(context) {
-        state.context = context;
-        const live = capturePluginUiInvocationCommitAuthority(context);
-        const snapshot = committedTaskContext(context);
-        // Named Host fixture retains the independent original project.execute pin; the UI pin is not rewritten or published.
-        const authority: ProjectConversationCommitAuthority = Object.freeze({
-          ...f.authority,
-          pin: parsePluginTaskAdmissionPin({
-            ...snapshot.pin,
-            action: "project.execute",
-            authorityEpoch: state.pinDrift
-              ? "foreign-host-epoch"
-              : snapshot.pin.authorityEpoch,
-          }),
-          selection: snapshot.context.selection,
-          package: snapshot.context.package,
-          assertActive() {
-            live.assertActive();
-            f.authority.assertActive();
-            if (!state.hostActive) throw new Error("named_host_closed");
-          },
-          async assertCurrent() {
-            authority.assertActive();
-            await f.authority.assertCurrent();
-            await live.assertCurrent();
-          },
-          async assertTransactionCurrent() {
-            authority.assertActive();
-            await f.authority.assertTransactionCurrent();
-            await state.afterHostTransactionCurrent?.();
-          },
-        });
-        await state.beforeDispatch?.();
-        return parsePluginUiJsonValue(
-          await app.metadataFromPluginUi(context, authority),
-        );
-      },
-    },
-  });
-  const lease = await ui.openMount(f.actor, {
-    pluginId: pkg.pluginId,
-    contributionId: "workbench",
-    expectedSelectionRevision: selection.revision,
-    expectedPackageDigest: pkg.packageDigest,
-  });
-  const createInput = {
-    projectId: f.reference.projectId,
-    workspaceId: "workspace-isolated",
-    title: "项目讨论",
-    idempotencyKey: "owned-conversation-create",
-  };
-  const invoke = (action: string, input: unknown) =>
-    ui.invoke(f.actor, {
-      mountRef: lease.mountRef,
-      action,
-      input: input as never,
-    });
-  return { ...f, app, state, scopes, createInput, invoke };
-}
 
 test("genuine UI prepares a protected project through the original SQL view, creates/replays the original Thread and lists it without starting a Run", async (t) => {
   const f = await fixture(t);
@@ -279,6 +58,152 @@ test("genuine UI prepares a protected project through the original SQL view, cre
       /unavailable/u,
     );
   }
+});
+
+test("original protected project prepares a live Native owner from genuine UI and original Store without allocating a directory or another Thread", async (t) => {
+  const f = await fixture(t, "matching", "available", "nativeIdentity");
+  f.state.prepareWorkspace = true;
+  f.state.onWorkspacePrepared = async (ref) => {
+    const q = qualifyPluginProjectWorkspacePreparation(ref);
+    assert.deepEqual(q.owner, f.namespaceOwner());
+    assert.equal(q.expectedWorkspaceId, f.createInput.workspaceId);
+    assert.deepEqual(q.packageIdentity, {
+      pluginId: f.installation.pluginId,
+      publisherId: f.installation.publisherId,
+      version: f.installation.version,
+      packageDigest: f.installation.packageDigest,
+    });
+    assert.ok(Object.isFrozen(q.owner));
+    assert.ok(Object.isFrozen(q.packageIdentity));
+    assert.throws(
+      () => qualifyPluginProjectWorkspacePreparation({ ...ref }),
+      /preparation_unavailable/,
+    );
+    assert.equal(f.state.threadPreparations, 0);
+    assert.equal(f.state.idCount, 0);
+    await q.assertCurrent();
+  };
+  await f.invoke(actions.createConversation, f.createInput);
+  assert.equal(f.state.preparations.length, 1);
+  assert.throws(
+    () => qualifyPluginProjectWorkspacePreparation(f.state.preparations[0]!),
+    /unavailable/,
+  );
+  assert.equal(f.state.threadPreparations, 1);
+  assert.equal(f.state.taskCount, 0);
+});
+
+test("workspace preparation refuses borrowed methods, arbitrary workspaces, missing readers, foreign projects and write-policy withdrawal", async (t) => {
+  for (const condition of [
+    "method",
+    "workspace",
+    "reader",
+    "foreign",
+    "legacy",
+    "policy",
+    "lastAwait",
+  ] as const) {
+    const f = await fixture(
+      t,
+      condition === "foreign" ? "pluginId" : "matching",
+      condition === "reader" ? "missing" : "available",
+      "nativeIdentity",
+    );
+    f.state.prepareWorkspace = true;
+    let legacyProjectId: string | undefined;
+    if (condition === "legacy") {
+      legacyProjectId = "legacy-workspace-preparation-project";
+      await f.parent
+        .creativeProjectStore()
+        .commitProjectCreation(
+          creationRecipe(
+            legacyProjectId,
+            "legacy-workspace-preparation",
+            f.actor,
+          ),
+        );
+    }
+    if (condition === "policy") f.state.policyAllowed = false;
+    if (condition === "lastAwait")
+      f.state.afterHostTransactionCurrent = () => {
+        f.state.policyAllowed = false;
+      };
+    const action =
+      condition === "method"
+        ? actions.listConversations
+        : actions.createConversation;
+    const input =
+      condition === "method"
+        ? { projectId: f.createInput.projectId, afterThreadId: null, limit: 16 }
+        : condition === "workspace"
+          ? { ...f.createInput, workspaceId: "another-workspace" }
+          : condition === "legacy"
+            ? {
+                ...f.createInput,
+                projectId: legacyProjectId!,
+                workspaceId: null,
+              }
+            : f.createInput;
+    const expected =
+      condition === "method"
+        ? "plugin_project_workspace_preparation_method_mismatch"
+        : condition === "workspace"
+          ? "plugin_project_workspace_preparation_target_mismatch"
+          : condition === "reader"
+            ? "plugin_project_read_store_unavailable"
+            : condition === "foreign" || condition === "legacy"
+              ? "creative_project_not_found"
+              : "creative_project_access_denied";
+    await assert.rejects(
+      f.invoke(action, input),
+      (error) => error instanceof ApplicationError && error.code === expected,
+    );
+    assert.equal(f.state.preparations.length, 0);
+    assert.equal(f.state.idCount, 0);
+    assert.equal(f.state.threadPreparations, 0);
+    assert.equal(f.state.taskCount, 0);
+  }
+});
+
+test("a prepared Native owner rechecks project state, live Host, policy and UI identity rather than becoming a retained write grant", async (t) => {
+  const f = await fixture(t, "matching", "available", "nativeIdentity");
+  f.state.prepareWorkspace = true;
+  f.state.onWorkspacePrepared = async (ref) => {
+    const q = qualifyPluginProjectWorkspacePreparation(ref);
+    f.state.policyAllowed = false;
+    await assert.rejects(q.assertCurrent(), /creative_project_access_denied/);
+    f.state.policyAllowed = true;
+    f.state.hostActive = false;
+    assert.throws(q.assertActive, /named_host_closed/);
+    f.state.hostActive = true;
+    // Explicit persisted-state fixture exercises the original reader; it is not a production mutation shortcut.
+    const db = new DatabaseSync(f.databasePath);
+    try {
+      db.prepare(
+        "UPDATE creative_projects SET state='archived', record_json=json_set(record_json,'$.state','archived') WHERE project_id=?",
+      ).run(f.createInput.projectId);
+    } finally {
+      db.close();
+    }
+    await assert.rejects(q.assertCurrent(), /creative_project_archived/);
+    const restore = new DatabaseSync(f.databasePath);
+    try {
+      restore
+        .prepare(
+          "UPDATE creative_projects SET state='active', record_json=json_set(record_json,'$.state','active') WHERE project_id=?",
+        )
+        .run(f.createInput.projectId);
+    } finally {
+      restore.close();
+    }
+    await q.assertCurrent();
+  };
+  await f.invoke(actions.createConversation, f.createInput);
+  assert.throws(
+    () => qualifyPluginProjectWorkspacePreparation(f.state.preparations[0]!),
+    /unavailable/,
+  );
+  assert.equal(f.state.taskCount, 0);
 });
 
 test("protected UI uses original binding management for revoke, restore, source refresh and replay without creating another Thread", async (t) => {
