@@ -91,6 +91,7 @@ export async function createDesktopNativePluginTaskRuntime(
   let mediaResults: InstalledProjectMediaResultRuntime | undefined;
   try {
     const projectMediaInputs = authority.projectMediaInputConfiguration();
+    const compositionPolicy = authority.compositionPolicy();
     core = await createInstalledPluginTaskRuntimeCore({
       assertHistoricalTarget: (publication) => {
         assertDesktopNativeProjectHistoricalQueryPreparedTarget({
@@ -114,6 +115,7 @@ export async function createDesktopNativePluginTaskRuntime(
       clock: dependencies.clock,
       ids: createPluginTaskApplicationIds(),
       digester: dependencies.digester,
+      ...(compositionPolicy === undefined ? {} : { compositionPolicy }),
       ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
       ...(input.configuration.schemaVersion ===
         "crewon.desktop-plugin-bootstrap.v3" &&

@@ -10,6 +10,8 @@ import {
   type DesktopProjectHistoryConfiguration,
 } from "@crewon/contracts";
 import {
+  parseDesktopPluginCompositionConfiguration,
+  type DesktopPluginCompositionConfiguration,
   parseDesktopProjectExecutionConfiguration,
   type DesktopProjectExecutionConfiguration,
 } from "@crewon/contracts/plugins";
@@ -84,6 +86,12 @@ export class NativeAuthorityOwner {
     | DesktopProjectHistoryConfiguration
     | DesktopProjectExecutionConfiguration
     | undefined;
+  readonly composition:
+    | Readonly<{
+        declaration: DesktopPluginCompositionConfiguration;
+        authorityEpoch: string;
+      }>
+    | undefined;
   readonly #physical = new Set<Promise<unknown>>();
   #release: Readonly<{
     document: InstalledPluginReleaseDocument;
@@ -127,6 +135,20 @@ export class NativeAuthorityOwner {
         break;
       default:
         fail("project_configuration_binding_invalid");
+    }
+    if (Object.hasOwn(bootstrap, "pluginComposition")) {
+      if (
+        bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3" ||
+        typeof bootstrap.authorityEpoch !== "string" ||
+        !/^[A-Za-z0-9_-]{32,128}$/u.test(bootstrap.authorityEpoch)
+      )
+        fail("composition_configuration_binding_invalid");
+      this.composition = Object.freeze({
+        declaration: parseDesktopPluginCompositionConfiguration(
+          bootstrap.pluginComposition,
+        ),
+        authorityEpoch: bootstrap.authorityEpoch,
+      });
     }
     if (
       bootstrap.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3" &&

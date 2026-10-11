@@ -72,6 +72,7 @@ import {
 
 import type { InstalledPluginProjectOutlineToolsDependencies } from "./installed-plugin-project-outline-tools.ts";
 import type { PluginCompositionHostService } from "@crewon/contracts/plugins";
+import type { InstalledPluginCompositionAuthority } from "./installed-plugin-composition-authority.ts";
 import {
   captureInstalledPluginCompositionExecution,
   openInstalledPluginCompositionRuntime,
@@ -103,6 +104,8 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   /** Explicit host implementation versions; missing support keeps composed execution closed. */
   compositionExecution?: Readonly<{
     hostServiceMetadata: readonly PluginCompositionHostService[];
+    /** Actual live deployment authority. Absence preserves existing non-Native host contracts. */
+    assertCurrentAuthority?: InstalledPluginCompositionAuthority;
   }>;
   executionIo?: InstalledPluginExecutionIoDependencies;
   projectTools?: InstalledPluginProjectToolsDependencies;

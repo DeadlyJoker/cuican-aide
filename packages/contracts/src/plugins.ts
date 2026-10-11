@@ -130,3 +130,8 @@ export * from "./project-historical-queries.ts";
 export * from "./desktop-project-historical-query-contract.ts";
 export * from "./project-historical-query-host-context-contract.ts";
 export * from "./desktop-project-foundation-configuration.ts";
+export {
+  DESKTOP_PLUGIN_COMPOSITION_VERSION,
+  parseDesktopPluginCompositionConfiguration,
+  type DesktopPluginCompositionConfiguration,
+} from "./desktop-plugin-composition-configuration.ts";

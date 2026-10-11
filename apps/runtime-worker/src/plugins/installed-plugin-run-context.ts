@@ -57,6 +57,10 @@ import type { PluginCompositionLock } from "@crewon/contracts/plugins";
 import { readInstalledPluginRunSelection } from "./installed-plugin-run-selection.ts";
 import { authorizeInstalledPluginCompositionNode } from "./installed-plugin-composition-node-authority.ts";
 import { readInstalledPluginRunComposition } from "./installed-plugin-run-composition.ts";
+import {
+  assertInstalledPluginCompositionAuthority,
+  type InstalledPluginCompositionAuthority,
+} from "./installed-plugin-composition-authority.ts";
 
 import { InstalledPluginRunContextError } from "./installed-plugin-run-context-error.ts";
 export { InstalledPluginRunContextError } from "./installed-plugin-run-context-error.ts";
@@ -72,6 +76,8 @@ export type InstalledPluginRunContextDependencies = Readonly<{
   authorization: AuthorizationPort;
   /** Explicit original-lock reader; omission preserves rejection of composed Runs. No migration/write capability. */
   compositions?: Pick<PluginCompositionStore, "loadLock">;
+  /** Callback from the captured execution deployment; never accepted from a Run DTO. */
+  compositionAuthority?: InstalledPluginCompositionAuthority;
   operations?: Pick<ExternalOperationStore, "loadExternalOperation">;
   conversations?: Pick<
     ProjectConversationStore,
@@ -133,6 +139,9 @@ export class InstalledPluginRunContext {
       typeof dependencies.installations.loadSelection !== "function" ||
       typeof dependencies.authorization.authorize !== "function" ||
       typeof dependencies.resolveActor !== "function" ||
+      (dependencies.compositionAuthority !== undefined &&
+        (dependencies.compositions === undefined ||
+          typeof dependencies.compositionAuthority !== "function")) ||
       (dependencies.compositions !== undefined &&
         (dependencies.extensions.compositionBindingVersion !==
           "crewon.extension-run-binding.v1" ||
@@ -187,6 +196,11 @@ export class InstalledPluginRunContext {
       fail("installed_plugin_context_snapshot_invalid");
     const purpose = checkedPurpose(purposeInput);
     const signal = checkedSignal(signalInput);
+    assertInstalledPluginCompositionAuthority(
+      this.#dependencies.compositionAuthority,
+      previous.composition,
+      previous.query === null ? purpose : "observe",
+    );
     const current = await this.#read(
       previous.binding,
       previous.binding.target,
@@ -231,6 +245,20 @@ export class InstalledPluginRunContext {
     if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
     return saved.composition;
   }
+  /** Synchronous live owner fence for the actual captured graph after an asynchronous policy read. */
+  assertCompositionAuthorityCurrent(
+    snapshot: InstalledPluginRunSnapshot,
+    purposeInput: InstalledPluginRunPurpose,
+  ): void {
+    const saved = this.#snapshots.get(snapshot);
+    if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
+    const purpose = checkedPurpose(purposeInput);
+    assertInstalledPluginCompositionAuthority(
+      this.#dependencies.compositionAuthority,
+      saved.composition,
+      saved.query === null ? purpose : "observe",
+    );
+  }
   /** Current policy for one actual captured root/provider, never an arbitrary node DTO. */
   async assertCompositionNodeCurrent(
     snapshot: InstalledPluginRunSnapshot,
@@ -244,7 +272,7 @@ export class InstalledPluginRunContext {
       fail("installed_plugin_composition_missing");
     const purpose = checkedPurpose(purposeInput),
       signal = checkedSignal(signalInput);
-    return authorizeInstalledPluginCompositionNode({
+    const pkg = await authorizeInstalledPluginCompositionNode({
       lock: saved.composition,
       rootPluginId: saved.admission.pluginId,
       pluginId,
@@ -255,6 +283,8 @@ export class InstalledPluginRunContext {
       assertRun: () => this.assertCurrent(snapshot, purpose, signal),
       resolveActor: () => this.#actor(saved.admission, signal),
     });
+    this.assertCompositionAuthorityCurrent(snapshot, purpose);
+    return pkg;
   }
   verifiedProjectStage(
     snapshot: InstalledPluginRunSnapshot,
@@ -583,6 +613,11 @@ export class InstalledPluginRunContext {
   ) {
     const { admission, binding } = saved;
     if (saved.query !== null) purpose = "observe";
+    assertInstalledPluginCompositionAuthority(
+      this.#dependencies.compositionAuthority,
+      saved.composition,
+      purpose,
+    );
     const initial = await this.#activation(binding, purpose, signal);
     const selection = await this.#selection(
       saved.query ?? admission,
@@ -644,6 +679,11 @@ export class InstalledPluginRunContext {
     const currentActor = await this.#actor(admission, signal);
     if (extensionCanonicalJson(currentActor) !== extensionCanonicalJson(actor))
       fail("installed_plugin_execution_identity_unavailable");
+    assertInstalledPluginCompositionAuthority(
+      this.#dependencies.compositionAuthority,
+      saved.composition,
+      purpose,
+    );
   }
 
   #selection(

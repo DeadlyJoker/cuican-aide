@@ -317,7 +317,15 @@ export function composeInstalledPluginRuntimeResolver(input: {
     authorization: config.authorization,
     ...(config.compositionExecution === undefined
       ? {}
-      : { compositions: installations.compositionStore!() }),
+      : {
+          compositions: installations.compositionStore!(),
+          ...(config.compositionExecution.assertCurrentAuthority === undefined
+            ? {}
+            : {
+                compositionAuthority:
+                  config.compositionExecution.assertCurrentAuthority,
+              }),
+        }),
     operations,
     conversations: store.projectConversationStore(),
     foundationRuns: store.projectFoundationRunStore(),

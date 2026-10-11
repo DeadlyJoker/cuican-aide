@@ -20,6 +20,7 @@ import type {
   InstalledPluginRuntimePackageOwner,
 } from "./installed-plugin-runtime-resident.ts";
 import type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver.ts";
+import { captureInstalledPluginCompositionAuthority } from "./installed-plugin-composition-authority.ts";
 
 /** Capture explicit deployment versions before any asynchronous storage or package loading. */
 export function captureInstalledPluginCompositionExecution(
@@ -32,10 +33,13 @@ export function captureInstalledPluginCompositionExecution(
   if (
     !property?.enumerable ||
     !("value" in property) ||
-    Object.keys(input).length !== 1
+    Reflect.ownKeys(input).length !==
+      (Object.hasOwn(input, "assertCurrentAuthority") ? 2 : 1)
   )
     fail("installed_plugin_composition_configuration_invalid");
+  const authority = captureInstalledPluginCompositionAuthority(input);
   return Object.freeze({
+    ...(authority === undefined ? {} : { assertCurrentAuthority: authority }),
     hostServiceMetadata: createPluginCompositionLock(
       {
         schemaVersion: "crewon.plugin-composition-lock.v1",
@@ -149,6 +153,10 @@ export async function openInstalledPluginCompositionRuntime(
       },
       authorizePublication: ({ node, candidate }) => {
         input.assertOpen(input.signal);
+        contexts.assertCompositionAuthorityCurrent(
+          prepared.snapshot,
+          input.purpose,
+        );
         const original = candidates.get(node.pluginId);
         return published.has(node.pluginId) &&
           original &&
@@ -200,6 +208,7 @@ export async function openInstalledPluginCompositionRuntime(
       for (const [pluginId, selection] of selections)
         if ((await readSelection(pluginId)) !== selection)
           fail("installed_plugin_selection_changed");
+      contexts.assertCompositionAuthorityCurrent(prepared.snapshot, purpose);
     },
   };
 }

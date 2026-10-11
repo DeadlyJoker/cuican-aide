@@ -52,6 +52,10 @@ import type { InstalledPluginTaskActionOwnerDependencies } from "./installed-plu
 import { composeDesktopNativeProjectMediaInputConfiguration } from "./desktop-native-project-media-input-composition.ts";
 import type { InstalledProjectMediaInputConfiguration } from "./installed-project-media-input-configuration.ts";
 import { composeDesktopNativeProjectMediaGenerationConfiguration } from "./desktop-native-project-media-generation-composition.ts";
+import {
+  INSTALLED_PLUGIN_TASK_COMPOSITION_POLICY_SCHEMA,
+  type InstalledPluginTaskCompositionPolicy,
+} from "./installed-plugin-task-composition-policy.ts";
 
 export type DesktopNativePluginTaskBinding = Readonly<{
   configuration: DesktopPluginConfiguration;
@@ -108,6 +112,28 @@ export class DesktopNativePluginTaskAuthority {
   }
   get requests() {
     return this.#binding.installed.requests;
+  }
+  /** Issued by this same live Native owner; a DTO cannot lend profile or epoch authority. */
+  compositionPolicy(): InstalledPluginTaskCompositionPolicy | undefined {
+    const configuration = this.#binding.configuration;
+    if (
+      configuration.schemaVersion !== "crewon.desktop-plugin-bootstrap.v3" ||
+      configuration.pluginComposition === undefined
+    )
+      return undefined;
+    this.#owner(configuration.actor);
+    return Object.freeze({
+      schemaVersion: INSTALLED_PLUGIN_TASK_COMPOSITION_POLICY_SCHEMA,
+      scope: configuration.scope,
+      authorityEpoch: configuration.authorityEpoch,
+      assertCurrent: () => {
+        this.#owner(configuration.actor);
+        return Object.freeze({
+          ...configuration.scope,
+          authorityEpoch: configuration.authorityEpoch,
+        });
+      },
+    });
   }
   /** Only the original file-declared metadata purpose uses these private request/commit checks. */
   projectMediaInputConfiguration():

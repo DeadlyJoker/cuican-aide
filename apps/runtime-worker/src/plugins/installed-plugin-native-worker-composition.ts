@@ -25,6 +25,7 @@ import { createNativeProjectFoundationTools } from "./native-project-foundation-
 import { createNativeProjectOutlineTools } from "./native-project-outline-runtime.ts";
 import { createDesktopNativeNetworkDnsResolver } from "@crewon/media-runtime/desktop-native-network-dns";
 import type { NetworkDnsResolver } from "../network-egress.ts";
+import { PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE } from "@crewon/plugin-host";
 export function createInstalledPluginNativeWorkerAuthority(
   config: InstalledPluginNativeWorkerConfig,
 ): InstalledPluginWorkerAuthority {
@@ -150,6 +151,24 @@ function composeNativeWorkerAuthority(
         }),
     installedPluginExecution: Object.freeze({
       installRoot: config.installRoot,
+      ...(owner.composition === undefined
+        ? {}
+        : {
+            compositionExecution: Object.freeze({
+              // PluginExecutionComposition creates this actual registry. Per-Run
+              // project/media services have no declared implementation identity yet.
+              hostServiceMetadata: Object.freeze([
+                PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE,
+              ]),
+              assertCurrentAuthority: () => {
+                owner.current();
+                return Object.freeze({
+                  ...owner.files.authority.scope,
+                  authorityEpoch: owner.composition!.authorityEpoch,
+                });
+              },
+            }),
+          }),
       ...(projectMediaInputs === undefined ? {} : { projectMediaInputs }),
       ...(projectMedia === undefined ? {} : { projectMedia }),
       ...(projectFoundationTools === undefined

@@ -23,6 +23,8 @@ import {
   type DesktopProjectHistoryConfiguration,
 } from "@crewon/contracts";
 import {
+  parseDesktopPluginCompositionConfiguration,
+  type DesktopPluginCompositionConfiguration,
   parseDesktopProjectExecutionConfiguration,
   type DesktopProjectExecutionConfiguration,
   parseDesktopProjectFoundationToolsConfiguration,
@@ -74,6 +76,8 @@ export type DesktopPluginConfiguration = DesktopPluginConfigurationBase &
     | Readonly<{
         schemaVersion: "crewon.desktop-plugin-bootstrap.v3";
         projects: DesktopProjectExecutionConfiguration;
+        /** Explicit original-lock task and Worker execution opt-in. */
+        pluginComposition?: DesktopPluginCompositionConfiguration;
         /** Explicit new host capability; legacy project/history DTOs retain their exact shape. */
         projectFoundation?: ProjectFoundationStartupConfiguration;
         /** Independent Node declaration; the sibling Foundation UI grant does not imply it. */
@@ -113,6 +117,8 @@ export function parseDesktopPluginConfiguration(
       v3 && Object.hasOwn(input as object, "projectFoundationTools");
     const hasOutlineTools =
       v3 && Object.hasOwn(input as object, "projectOutlineTools");
+    const hasComposition =
+      v3 && Object.hasOwn(input as object, "pluginComposition");
     const value = pluginSecurityRecord(input, [
       "schemaVersion",
       "actor",
@@ -125,6 +131,7 @@ export function parseDesktopPluginConfiguration(
       ...(hasFoundation ? ["projectFoundation"] : []),
       ...(hasFoundationTools ? ["projectFoundationTools"] : []),
       ...(hasOutlineTools ? ["projectOutlineTools"] : []),
+      ...(hasComposition ? ["pluginComposition"] : []),
     ]);
     if (
       (!v2 &&
@@ -281,6 +288,13 @@ export function parseDesktopPluginConfiguration(
             schemaVersion: "crewon.desktop-plugin-bootstrap.v3" as const,
             ...common,
             projects: projects!,
+            ...(hasComposition
+              ? {
+                  pluginComposition: parseDesktopPluginCompositionConfiguration(
+                    value.pluginComposition,
+                  ),
+                }
+              : {}),
             ...(foundation === undefined
               ? {}
               : { projectFoundation: foundation }),
