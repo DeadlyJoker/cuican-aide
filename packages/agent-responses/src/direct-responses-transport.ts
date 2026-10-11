@@ -331,7 +331,9 @@ export class DirectResponsesTransport implements ModelTransportPort {
         onResponseIdentity: (id) => call?.responseIdentity(id),
         sequencePolicy: this.#sequencePolicy,
         identityPolicy: this.#identityPolicy,
+        // Portable response compatibility does not depend on request formatting.
         finalOutputPolicy:
+          this.#identityPolicy === "terminalAuthoritative" ||
           this.#requestProfile === "responsesLite"
             ? "streamAuthoritativeWhenEmpty"
             : "strict",
