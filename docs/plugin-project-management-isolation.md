@@ -56,6 +56,8 @@ qualified 列表在 SQL 的排序、游标和 LIMIT 前按完整 owner 过滤；
 
 新 UI qualified 路径使用稳定的内部 receipt 范围，保留用户输入的外部 key。旧 Run 的 Tool 派生 key 不改写；每次 replay 返回前也要核对真实 owner。原安装、Run、Tool、revision、取消及事务末端授权检查继续保留。
 
+创建回执的内部派生规则已实现为 Application 的 `derivePluginProjectCreationReceipt`：七字段稳定归属、原创建入口和外部 key 一同进入版本化摘要，输出不超过原 128 字符上限；请求内容摘要保持原值。因此两个插件或两个创建入口不会因相同外部 key 使用同一内部 key，同一范围内更改内容仍交由原 Store 报幂等冲突。新准备的 projectId 不加入键，否则服务端重试生成不同 ID 会失去回放身份。外部 key 在派生结果中保留；版本、包摘要和 epoch 不进入稳定范围，升级不会改键。这是数据派生，不是创建、接管或读取授权；当前尚未接入两个原创建事务，也未改写任何 legacy/Run receipt。后续须由真实 Host 资格提供范围，并在读取原回执后核对其实际 metadata owner，不能仅凭这个可计算的 key 放行。
+
 ### 3. 原工作空间与项目对话
 
 metadata 归属明确后，原 Native allocator 创建目录并非激活追加原 registry，保持当前 workspace 和活动读取。Main 与 Control 使用私有、真实子进程绑定的分配桥，不增加 renderer 分配 API；准备票据不接受 caller root、workspaceId 或 actor。

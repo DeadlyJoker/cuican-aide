@@ -343,3 +343,8 @@ export {
 export { readPluginTaskRunComposition } from "./plugin-task-run-composition-proof.ts";
 // Storage validation only; the caller must independently qualify its live subject and permissions.
 export { loadPluginQuerySourceProof as readPluginQuerySourceStorageProof } from "./plugin-query-source.ts";
+
+export {
+  derivePluginProjectCreationReceipt,
+  type PluginProjectCreationEntryPoint,
+} from "./plugin-project-creation-receipt.ts";
