@@ -74,6 +74,10 @@ Control 的 `observeForProject` 现将已核验、属于同一 owner 的 registe
 
 组合 Native 专项 **63 passed**，原 installed HTTP 创建/关联/升级 **5 passed**，联合 **68 passed、0 failed、0 skipped**。类型、边界与格式检查通过；此次初始化失败产生的 23 个专属 fixture 目录已核对并清理，初始化失败与 child 退出路径也增加清理。产品 dispatcher 和 Main/Control bootstrap 仍未调用这个组合入口，中央 Agent、PostgreSQL 新模式及正式 Web/桌面未验收。
 
+后续原 `ProjectConversationControlOwner` 已增加可信 `nativeWorkspace` 依赖，只有显式 `projectOwnership: "plugin-project-v1"` 模式可启用；实际 UI create 分派先由原 Control 发行独立权限并核对安装/包字节，再准备项目资格、检查 caller 的明确工作空间目标、取得 scoped Native 观察并调用原组合入口。原 Desktop Conversation composer 可接收后端函数 `nativeWorkspaceObserver`，登记端口始终由自己的原 Parent Store 提供，不能另接一个项目库。函数/对象/getter/继承校验保持 fail-closed；配置 JSON、插件声明、公开 UI 请求不能填写此依赖。未提供时保留原 metadata 分派，null 请求没有被改成隐式 Native 分配。
+
+实际 Control、真实安装包字节与真实 UI 注册专项确认有资格的 create 到达新增 observer；命名 unavailable observer、身份撤回或 UI 策略拒绝不留下 namespace、binding 或 Run。该新增观察端在专项中故意拒绝，不是实际 Native 成功的完整 Control 产品证据。新增捕获与 Control 专项连同原 installed HTTP 回归 **8 passed、0 failed、0 skipped**；Control 类型、边界和格式检查通过。正式 standalone bootstrap 还没有传入实际观察函数，Main 票据/包/资格发行器、中央 Agent 与真实 Web/桌面验收仍未接通；PostgreSQL 不支持新 Native 登记，未开放 fallback。
+
 原 Native policy / authority persisted DTO、workspace registry、allocation journal、HTTP / SDK / renderer contracts 均保持原 shape。唯一收紧是 Native authority 的内部 factory 要求同一真实 reader 发行的 policy，不能传结构替身、复制品、别的目录或别的 bootstrap。已核对全部生产/测试 factory callers；它们原本均使用同一真实 reader。
 
 测试使用实际 Node child IPC、真实 Native bootstrap / policy / authority producer、原工作空间 registry 和真实文件系统，覆盖一次消费、坏输入、大输入、其他协议、批准/perAction、结构替身、跨 child/generation、Native 撤回和 pin 变化、Native 提交后的拒绝发布、active workspace / file lease、原 registry stale-byte fence、失败不恢复、发送背压/错误/期限、请求超量和 close 的监听器/文件归属。

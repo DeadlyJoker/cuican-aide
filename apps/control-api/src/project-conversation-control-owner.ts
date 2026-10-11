@@ -43,6 +43,11 @@ import {
   type ProjectConversationAssociationRequest,
 } from "@crewon/contracts/project-conversation-association";
 import { join } from "node:path";
+import {
+  captureProjectConversationNativeProvisioning,
+  createNativeProvisionedProjectConversation,
+  type ProjectConversationNativeProvisioning,
+} from "./project-conversation-native-provisioning.ts";
 import type { ControlApiRequestContext } from "./control-api-ports.ts";
 import type { InstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
 import type { ProjectConversationConfiguration } from "./project-conversation-composition.ts";
@@ -51,6 +56,7 @@ import type { InstalledPluginTaskActionOwnerDependencies } from "./installed-plu
 export type ProjectConversationControlDependencies = Readonly<{
   service: ProjectConversationApplicationService;
   projectOwnership?: "plugin-project-v1";
+  nativeWorkspace?: ProjectConversationNativeProvisioning;
   conversations: ProjectConversationStore;
   configuration: ProjectConversationConfiguration;
   installations: Pick<PluginInstallationStore, "loadSelection" | "loadPackage">;
@@ -86,8 +92,24 @@ export class ProjectConversationControlOwner {
       input.projectOwnership !== "plugin-project-v1"
     )
       throw new Error("project_conversation_project_ownership_invalid");
+    const nativeDescriptor = Object.getOwnPropertyDescriptor(
+      input,
+      "nativeWorkspace",
+    );
+    if (
+      ("nativeWorkspace" in input && nativeDescriptor === undefined) ||
+      (nativeDescriptor !== undefined &&
+        (!nativeDescriptor.enumerable ||
+          !Object.hasOwn(nativeDescriptor, "value")))
+    )
+      throw new Error("project_conversation_native_provisioning_invalid");
+    const nativeWorkspace = captureProjectConversationNativeProvisioning(
+      nativeDescriptor?.value,
+      input.projectOwnership,
+    );
     this.#input = Object.freeze({
       ...input,
+      nativeWorkspace,
       configuration: Object.freeze({
         publications: Object.freeze(
           input.configuration.publications.map((entry) =>
@@ -400,6 +422,17 @@ export class ProjectConversationControlOwner {
     context?: PluginUiActionContext,
   ) {
     const service = this.#input.service;
+    if (
+      context !== undefined &&
+      request.action === actions.createConversation &&
+      this.#input.nativeWorkspace !== undefined
+    )
+      return createNativeProvisionedProjectConversation({
+        context,
+        authority,
+        service,
+        provisioning: this.#input.nativeWorkspace,
+      });
     if (
       context !== undefined &&
       this.#input.projectOwnership === "plugin-project-v1" &&
