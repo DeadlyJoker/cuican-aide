@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { issuePluginProjectWorkspaceNativeObservation } from "@crewon/application/host-project-workspaces";
 import {
   qualifyPluginProjectWorkspacePreparation,
+  type PluginProjectWorkspaceNativeObservation,
   type PluginProjectWorkspacePreparation,
 } from "@crewon/application";
 import {
@@ -170,6 +172,19 @@ export class DesktopNativeProjectWorkspaceClient {
     )
       throw failure("project_mismatch");
     return result;
+  }
+  async observeForProject(
+    input: Parameters<
+      DesktopNativeProjectWorkspaceClient["allocateForProject"]
+    >[0],
+  ): Promise<PluginProjectWorkspaceNativeObservation> {
+    const fields = allocationInput(input);
+    const response = await this.allocateForProject(fields);
+    return issuePluginProjectWorkspaceNativeObservation(
+      fields.preparation,
+      response,
+      () => this.#assertCurrent(),
+    );
   }
   withdraw(): void {
     this.#withdrawn = true;

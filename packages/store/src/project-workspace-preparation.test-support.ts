@@ -6,6 +6,7 @@ import {
   type ActorContext,
   type ProjectConversationCommitAuthority,
   type PluginProjectWorkspacePreparation,
+  type PluginProjectWorkspaceNativeObservation,
 } from "@crewon/application";
 import { parsePluginTaskAdmissionPin } from "@crewon/domain";
 import {
@@ -29,6 +30,8 @@ import {
   selectionRecipe,
 } from "./plugin-installation-store.test-support.ts";
 import { creationRecipe } from "./creative-project-store.test-support.ts";
+import { configureAndMigrateSqlite } from "./sqlite-schema.ts";
+import { SqlitePluginProjectWorkspaceStore } from "./sqlite-plugin-project-workspace-store.ts";
 
 /** Original SQLite and genuine UI. Identity/package discovery/Host policy and initial owner record are named fixtures. No Thread/Run/namespace ports. */
 export async function workspacePreparationUiFixture(
@@ -41,6 +44,7 @@ export async function workspacePreparationUiFixture(
   const { actor, profileId, packageIdentity: identity } = input;
   const database = new DatabaseSync(":memory:");
   database.exec("PRAGMA foreign_keys=ON");
+  configureAndMigrateSqlite(database);
   const projects = new SqliteCreativeProjectStore({
     database,
     assertOpen() {},
@@ -51,6 +55,11 @@ export async function workspacePreparationUiFixture(
   });
   await projects.migrate();
   await installations.migrate();
+  const namespaces = new SqlitePluginProjectWorkspaceStore({
+    database,
+    assertOpen() {},
+  });
+  await namespaces.migrate();
   const scope = { tenantId: actor.tenantId, spaceId: actor.spaceId, profileId };
   const installed = await installations.recordInstalledPackage(
     installationRecipe("scoped-native-install", { actor, scope, ...identity }),
@@ -108,6 +117,7 @@ export async function workspacePreparationUiFixture(
   });
   const state = {
     policyAllowed: true,
+    afterHostTransaction: null as (() => void | Promise<void>) | null,
     callback: null as
       | ((source: PluginProjectWorkspacePreparation) => Promise<unknown>)
       | null,
@@ -157,7 +167,10 @@ export async function workspacePreparationUiFixture(
           }),
           assertActive: () => live.assertActive(),
           assertCurrent: () => live.assertCurrent(),
-          assertTransactionCurrent: () => live.assertCurrent(),
+          assertTransactionCurrent: async () => {
+            await live.assertCurrent();
+            await state.afterHostTransaction?.();
+          },
         };
         const preparation = await preparePluginProjectWorkspace({
           context,
@@ -186,6 +199,44 @@ export async function workspacePreparationUiFixture(
   });
   return {
     state,
+    namespaces,
+    projectState: () =>
+      String(
+        database
+          .prepare("SELECT state FROM creative_projects WHERE project_id=?")
+          .get(projectId)!.state,
+      ),
+    mutateRegistrationFixture(mode: string) {
+      if (mode === "sqlArchive")
+        database.exec(
+          "CREATE TEMP TRIGGER fixture_namespace_archive AFTER INSERT ON plugin_project_workspace_namespaces BEGIN UPDATE creative_projects SET state='archived', record_json=json_set(record_json,'$.state','archived') WHERE project_id='scoped-native-project'; END",
+        );
+      if (mode === "archive")
+        database
+          .prepare(
+            "UPDATE creative_projects SET state='archived', record_json=json_set(record_json,'$.state','archived') WHERE project_id=?",
+          )
+          .run(projectId);
+      else if (mode === "schema")
+        database.exec("DROP TABLE plugin_project_workspace_schema_version");
+      else if (mode === "lastAwait")
+        state.afterHostTransaction = () => {
+          state.policyAllowed = false;
+        };
+      else if (mode === "policy") state.policyAllowed = false;
+    },
+    namespaceCount: () =>
+      Number(
+        database
+          .prepare(
+            "SELECT COUNT(*) AS n FROM plugin_project_workspace_namespaces",
+          )
+          .get()!.n,
+      ),
+    recordObservation: (
+      reference: PluginProjectWorkspaceNativeObservation,
+      createdAt = uiTestAt,
+    ) => namespaces.recordFromNativeObservation(reference, { createdAt }),
     async invoke() {
       return service.invoke(actor, {
         mountRef: lease.mountRef,

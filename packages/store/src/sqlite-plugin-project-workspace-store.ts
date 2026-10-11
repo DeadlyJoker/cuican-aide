@@ -1,11 +1,17 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
   capturePluginProjectWorkspaceUiWrite,
+  qualifyPluginProjectWorkspaceNativeObservation,
+  type PluginProjectWorkspaceNativeObservation,
   type PluginProjectWorkspaceReadStore,
   type PluginUiActionContext,
   type RecordPluginProjectWorkspaceNamespaceInput,
   type RecordPluginProjectWorkspaceNamespaceResult,
 } from "@crewon/application";
+import {
+  parsePluginProjectWorkspaceNamespace,
+  pluginInstallationRecord,
+} from "@crewon/domain";
 import {
   hasSqlitePluginProjectWorkspaceSchema,
   migrateSqlitePluginProjectWorkspaces,
@@ -102,8 +108,42 @@ export class SqlitePluginProjectWorkspaceStore
     context: PluginUiActionContext,
     input: RecordPluginProjectWorkspaceNamespaceInput,
   ): Promise<RecordPluginProjectWorkspaceNamespaceResult> {
-    const q = capturePluginProjectWorkspaceUiWrite(context, input),
-      n = q.namespace;
+    return this.#record(
+      capturePluginProjectWorkspaceUiWrite(context, input),
+      "original",
+    );
+  }
+  /** Trusted Native observation only; caller supplies no owner, project or workspace ID. */
+  async recordFromNativeObservation(
+    reference: PluginProjectWorkspaceNativeObservation,
+    input: Readonly<{ createdAt: string }>,
+  ): Promise<RecordPluginProjectWorkspaceNamespaceResult> {
+    const source = qualifyPluginProjectWorkspaceNativeObservation(reference);
+    const fields = pluginInstallationRecord(input, ["createdAt"]);
+    const namespace = parsePluginProjectWorkspaceNamespace({
+      schemaVersion: "crewon.plugin-project-workspace-namespace.v1",
+      owner: source.owner,
+      workspaceId: source.expectedWorkspaceId,
+      createdAt: fields.createdAt,
+    });
+    return this.#record(
+      {
+        namespace,
+        installation: source.commit.pin,
+        selection: source.commit.selection,
+        package: source.commit.package,
+        assertCurrent: source.assertCurrent,
+        assertTransactionCurrent: source.commit.assertTransactionCurrent,
+        assertActive: source.assertActive,
+      },
+      "protected",
+    );
+  }
+  async #record(
+    q: ReturnType<typeof capturePluginProjectWorkspaceUiWrite>,
+    mode: "original" | "protected",
+  ): Promise<RecordPluginProjectWorkspaceNamespaceResult> {
+    const n = q.namespace;
     await q.assertCurrent();
     await q.assertTransactionCurrent();
     q.assertActive();
@@ -113,7 +153,15 @@ export class SqlitePluginProjectWorkspaceStore
         if (!hasSqlitePluginProjectWorkspaceSchema(this.#db))
           throw new Error("plugin_project_workspace_schema_missing");
         assertSqliteProjectTextUiCommit(this.#db, q);
-        assertSqlitePluginProjectWorkspaceMetadata(this.#db, n.owner);
+        const metadata = assertSqlitePluginProjectWorkspaceMetadata(
+          this.#db,
+          n.owner,
+        );
+        if (mode === "protected") {
+          if (metadata !== "protected")
+            throw new Error("plugin_project_workspace_metadata_required");
+          this.#assertActiveProject(n.owner);
+        }
         const previous = decodeNamespace(
           this.#db
             .prepare(
@@ -123,7 +171,10 @@ export class SqlitePluginProjectWorkspaceStore
           n.owner,
         );
         if (previous !== null) {
-          assertNamespaceReplay(previous, n);
+          assertNamespaceReplay(
+            previous,
+            mode === "protected" ? { ...n, createdAt: previous.createdAt } : n,
+          );
           return Object.freeze({
             disposition: "replayed" as const,
             namespace: previous,
@@ -167,9 +218,28 @@ export class SqlitePluginProjectWorkspaceStore
       () => {
         q.assertActive();
         assertSqliteProjectTextUiCommit(this.#db, q);
+        if (mode === "protected") {
+          if (
+            assertSqlitePluginProjectWorkspaceMetadata(this.#db, n.owner) !==
+            "protected"
+          )
+            throw new Error("plugin_project_workspace_metadata_required");
+          this.#assertActiveProject(n.owner);
+        }
         q.assertActive();
       },
     );
+  }
+  #assertActiveProject(
+    owner: ReturnType<typeof parsePluginProjectWorkspaceNamespace>["owner"],
+  ): void {
+    const row = this.#db
+      .prepare(
+        "SELECT state FROM creative_projects WHERE tenant_id=? AND space_id=? AND project_id=? AND owner_principal_id=?",
+      )
+      .get(owner.tenantId, owner.spaceId, owner.projectId, owner.principalId);
+    if (row?.state !== "active")
+      throw new Error("plugin_project_workspace_project_inactive");
   }
   #transaction<T>(
     mode: "read" | "write",

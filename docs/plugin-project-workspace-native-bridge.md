@@ -52,6 +52,18 @@ Native 文件提交和授权撤回不构成跨进程原子事务：授权可能�
 
 ## 兼容性与验收范围
 
+### 原 SQLite 登记
+
+Control 的 `observeForProject` 现将已核验、属于同一 owner 的 registered Native 响应绑定到原活跃项目准备引用，生成五秒内有效的进程内观察引用。实际 client 关闭、parent 断连、UI 调用结束或项目资格失效时拒绝；复制 response/reference JSON 不能作为 Store 登记凭据。`@crewon/application/host-project-workspaces` 是明确的可信 backend 发行入口，未加入 plugin SDK、Host service 或 HTTP。发行函数依赖受信 Control 实现已检查真实 parent 响应，并不是对恶意同进程代码的安全沙箱；跨进程 Main 的准确包/资格发行器仍需接通。
+
+`SqlitePluginProjectWorkspaceStore.recordFromNativeObservation(reference, { createdAt })` 复用同一个原数据库和原 namespace 写配方，不接受 caller owner、projectId、workspaceId 或目录。提交和回放在原事务核对安装、完整 metadata owner、原 principal 及 active project；提交末端再次核对。缺失或部分 schema、legacy 项目、已有不同登记或原会话历史仍拒绝，不能接管旧项目。新的 replay 保留第一次登记的 createdAt，Host 后续时钟不会改写原记录；旧 `recordFromPluginUi` 的严格 recipe 与 legacy 行为保持。
+
+实际 child 的真实 UI → 原项目读取 → 实际 Native 分配 → 原 SQLite namespace 交易已通过一次提交、回放、复制引用拒绝和调用结束后拒绝。归档、部分 schema、独立策略撤回与最后 Host await 后撤权均不登记；显式 SQL trigger fixture 在 namespace INSERT 后改变项目状态，提交末端拒绝并一起回滚 namespace 和状态改变。Native 目录/registry 已提交的部分保留，当前活动目录不变，没有伪造跨进程整体回滚。初始 metadata owner、包发现及 Host 策略仍是命名 fixture，不是实际 installed HTTP 首次创建或正式项目入口。
+
+该入口尚未加入产品 Parent Store facade、Main/Control bootstrap 或 Conversation 原交易，也没有 PostgreSQL Native 登记 adapter。实际 Thread、中央 Agent 与 Web/桌面完整体验仍未验收。
+
+新旧 Native scoped/client/bridge 专项 **62 passed**；原 namespace、metadata fence 及 owned Conversation UI 的 SQLite/PostgreSQL 兼容专项 **50 passed**，联合 **112 passed、0 failed、0 skipped**。PostgreSQL 18.6 专属测试实例随后停止清理，验证的是原兼容入口，不代表新 Native 登记已支持 PostgreSQL。Application/Store/Control/Electron 类型检查、边界与格式检查通过；正式 App 未更新。
+
 原 Native policy / authority persisted DTO、workspace registry、allocation journal、HTTP / SDK / renderer contracts 均保持原 shape。唯一收紧是 Native authority 的内部 factory 要求同一真实 reader 发行的 policy，不能传结构替身、复制品、别的目录或别的 bootstrap。已核对全部生产/测试 factory callers；它们原本均使用同一真实 reader。
 
 测试使用实际 Node child IPC、真实 Native bootstrap / policy / authority producer、原工作空间 registry 和真实文件系统，覆盖一次消费、坏输入、大输入、其他协议、批准/perAction、结构替身、跨 child/generation、Native 撤回和 pin 变化、Native 提交后的拒绝发布、active workspace / file lease、原 registry stale-byte fence、失败不恢复、发送背压/错误/期限、请求超量和 close 的监听器/文件归属。

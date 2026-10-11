@@ -84,6 +84,10 @@ export {
   qualifyPluginProjectWorkspacePreparation,
   type PluginProjectWorkspacePreparation,
 } from "./plugin-project-workspace-preparation.ts";
+export {
+  qualifyPluginProjectWorkspaceNativeObservation,
+  type PluginProjectWorkspaceNativeObservation,
+} from "./plugin-project-workspace-native-observation.ts";
 export * from "./workflow-version-application-service.ts";
 export * from "./workflow-version-store-port.ts";
 export * from "./workflow-execution-store-port.ts";

@@ -34,6 +34,7 @@ const { qualifyPluginProjectWorkspacePreparation } = await import(${JSON.stringi
 const f = await workspacePreparationUiFixture({actor:${JSON.stringify(actor)}, profileId:${JSON.stringify(profileId)}, packageIdentity:${JSON.stringify(pkg)}});
 const client = new DesktopNativeProjectWorkspaceClient({signal:new AbortController().signal, deadlineMs:1000});
 let giveTicket;
+let lastObservation;
 
 process.on("message", async value => {
   if(value?.kind === "fixture.start") {
@@ -45,17 +46,32 @@ process.on("message", async value => {
       });
       const output=await client.allocateForProject({preparation, ticket});
       process.send({kind:"fixture.allocated", output});
+      if(value.register) {
+        // A fresh explicit Main ticket is needed; observation issuance consumes a real parent result, never this response JSON.
+        const next = await new Promise(resolve => {giveTicket=resolve;process.send({kind:"fixture.next-ticket"});});
+        const reference=await client.observeForProject({preparation,ticket:next});
+        lastObservation=reference;
+        if(value.failure) f.mutateRegistrationFixture(value.failure);
+        let copyRejected=false;
+        try{await f.recordObservation({...reference});}catch(error){copyRejected=error.code === "plugin_project_workspace_native_observation_unavailable";}
+        const recorded=await f.recordObservation(reference);
+        const replay=await f.recordObservation(reference,"2026-10-12T00:00:00.000Z");
+        return {recorded,replay,copyRejected};
+      }
       return output;
     };
     try {
       const output=await f.invoke();
-      process.send({kind:"fixture.completed", output});
+      process.send({kind:"fixture.completed", output, namespaceCount:f.namespaceCount(), projectState:f.projectState()});
     } catch(error) {
       process.send({kind:"fixture.completed", error:error.code ?? error.message, cause:error.cause?.message,
-        });
+        namespaceCount:f.namespaceCount(), projectState:f.projectState()});
     }
   } else if(value?.kind === "fixture.ticket") giveTicket?.(value.ticket);
   else if(value?.kind === "fixture.revoke") f.state.policyAllowed=false;
+  else if(value?.kind === "fixture.record-retained") {
+    try{await f.recordObservation(lastObservation);}catch(error){process.send({kind:"fixture.retained-result", error:error.code ?? error.message, namespaceCount:f.namespaceCount()});}
+  }
   else if(value?.kind === "fixture.fake") {
     try { await client.allocateForProject({preparation:{version:"crewon.plugin-project-workspace-preparation.v1"}, ticket:value.ticket}); }
     catch(error){process.send({kind:"fixture.fake-result", error:error.code ?? error.message});}
@@ -104,16 +120,110 @@ afterEach(async () => {
     }
   }
 });
-async function start(f: Fixture) {
+async function start(
+  f: Fixture,
+  options: Readonly<{ register?: boolean; failure?: string }> = {},
+) {
   const prepared = waitMessage(f.control, (v) => v.kind === "fixture.prepared");
   const completed = waitMessage(
     f.control,
     (v) => v.kind === "fixture.completed",
   );
-  f.control.send({ kind: "fixture.start" });
+  f.control.send({ kind: "fixture.start", ...options });
   return { preparation: await prepared, completed };
 }
 describe("genuine project preparation and actual Native allocation", () => {
+  for (const failure of [
+    "archive",
+    "schema",
+    "lastAwait",
+    "policy",
+    "sqlArchive",
+  ]) {
+    it(`refuses ${failure} during original namespace registration without deleting the actual Native allocation`, async () => {
+      const f = await fixture(),
+        bridge = f.bridge();
+      const { preparation, completed } = await start(f, {
+        register: true,
+        failure,
+      });
+      const next = waitMessage(
+        f.control,
+        (v) => v.kind === "fixture.next-ticket",
+      );
+      f.control.send({
+        kind: "fixture.ticket",
+        ticket: f.prepare(bridge, preparation.owner.projectId),
+      });
+      await next;
+      f.control.send({
+        kind: "fixture.ticket",
+        ticket: f.prepare(bridge, preparation.owner.projectId),
+      });
+      const result = await completed;
+      expect(result.error).toBeDefined();
+      expect(result.namespaceCount).toBe(0);
+      if (failure === "archive")
+        expect(result.error).toBe("creative_project_archived");
+      if (failure === "schema")
+        expect(result.cause ?? result.error).toMatch(/schema/);
+      if (failure === "lastAwait" || failure === "policy")
+        expect(result.error).toBe("creative_project_access_denied");
+      if (failure === "sqlArchive") {
+        expect(result.cause).toBe("plugin_project_workspace_project_inactive");
+        expect(result.projectState).toBe("active");
+      }
+      expect(
+        new LocalWorkspaceProjectAllocationJournal(f.dataDirectory).read().state
+          .allocations[0].phase,
+      ).toBe("registered");
+      expect(f.workspaces.root()).toBe(f.ordinary);
+    });
+  }
+  it("registers the actual Native observation in the original SQLite namespace transaction, replays and rejects copied or retained references", async () => {
+    const f = await fixture(),
+      bridge = f.bridge();
+    const { preparation, completed } = await start(f, { register: true });
+    const next = waitMessage(
+      f.control,
+      (v) => v.kind === "fixture.next-ticket",
+    );
+    f.control.send({
+      kind: "fixture.ticket",
+      ticket: f.prepare(bridge, preparation.owner.projectId),
+    });
+    await next;
+    f.control.send({
+      kind: "fixture.ticket",
+      ticket: f.prepare(bridge, preparation.owner.projectId),
+    });
+    const result = await completed;
+    expect(result.error).toBeUndefined();
+    expect(result.namespaceCount).toBe(1);
+    expect(result.output.copyRejected).toBe(true);
+    expect(result.output.recorded.disposition).toBe("committed");
+    expect(result.output.recorded.namespace.owner).toEqual(preparation.owner);
+    expect(result.output.recorded.namespace.workspaceId).toBe(
+      preparation.expectedWorkspaceId,
+    );
+    expect(result.output.replay.disposition).toBe("replayed");
+    expect(result.output.replay.namespace).toEqual(
+      result.output.recorded.namespace,
+    );
+    const retained = waitMessage(
+      f.control,
+      (v) => v.kind === "fixture.retained-result",
+    );
+    f.control.send({ kind: "fixture.record-retained" });
+    const rejected = await retained;
+    expect(rejected.error).toMatch(/unavailable/);
+    expect(rejected.namespaceCount).toBe(1);
+    expect(
+      new LocalWorkspaceProjectAllocationJournal(f.dataDirectory).read().state
+        .allocations,
+    ).toHaveLength(1);
+    expect(f.workspaces.root()).toBe(f.ordinary);
+  });
   it("uses the same full owner from the original project manager for an actual Native allocation", async () => {
     const f = await fixture();
     const bridge = f.bridge();
