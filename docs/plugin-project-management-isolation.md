@@ -50,7 +50,7 @@ metadata 归属明确后，原 Native allocator 创建目录并非激活追加�
 
 用最小验收插件在 Web 覆盖真实安装、授权、项目创建、对话执行、产物读写、跨归属拒绝与恢复。通过后再核对桌面候选和正式包。业务插件仍保持卸载。
 
-上述第 1 步的存储基础和第 3 步的独立 Native 分配/私有 transport 已有源码与专项证据。2026-10-12 已提交原 CreativeProject、Foundation 和公开 Asset Store 的普通入口负向隔离，复用同一数据库与事务，保护实际保存回执，并保留原最终授权与租约检查，详见[已接线范围与回归](./plugin-project-legacy-access.md)。新创建原交易、其他产物与关联入口、完整管理方法 fence、Main/Control 产品接线和第 4 步真实 Web 闭环仍未完成。具体交付范围见[整体状态](./plugin-foundation-status-20261011.md)。
+上述第 1 步的存储基础和第 3 步的独立 Native 分配/私有 transport 已有源码与专项证据。2026-10-12 已提交原 CreativeProject、Foundation、公开 Asset/Text v1 Store，以及 SourceUpload、保存来源与原 Foundation Run 冷恢复的普通入口负向隔离，复用同一数据库与事务，保护实际保存回执，并保留原最终授权与租约检查。原显式 DDL 迁移保持独立，不因不完整的可选 owner 被拦截或自动修复它，数据访问继续严格拒绝。详见[已接线范围与回归](./plugin-project-legacy-access.md)。新创建原交易、其他产物与关联入口、完整管理方法 fence、Main/Control 产品接线和第 4 步真实 Web 闭环仍未完成。具体交付范围见[整体状态](./plugin-foundation-status-20261011.md)。
 
 ## 最小验收范围
 

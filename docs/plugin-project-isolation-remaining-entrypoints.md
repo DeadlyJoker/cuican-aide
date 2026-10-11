@@ -2,7 +2,7 @@
 
 本清单来自 `7069425e7` 的只读代码映射，记录普通 CreativeProject 下游的真实读取、提交和回执回放入口，供后续分组实施。它不构成生产接线、Host grant、全量隔离或 Web／桌面验收证明。行号以该映射基线为参考，后续修改应以函数名定位。
 
-约束与总体状态参见 [插件项目管理隔离](plugin-project-management-isolation.md)。2026-10-12 已提交核心项目 Store、Foundation 和 Asset 公开 Store 的局部接线及真实两数据库回归，范围见[原管理入口隔离](plugin-project-legacy-access.md)；下面的共享生成器、独立 journal、关联读取和原 Turn 冷回放不能据此视为完成。不得把测试直接写入的 metadata fixture 当成真实 Host、SQL CRUD、UI 或 Agent 授权。
+约束与总体状态参见 [插件项目管理隔离](plugin-project-management-isolation.md)。2026-10-12 已提交核心项目 Store、Foundation、Asset 与 Text v1 公开 Store，以及 SourceUpload/保存来源/原 Foundation Run 冷恢复的局部接线及真实两数据库回归，范围见[原管理入口隔离](plugin-project-legacy-access.md)；下面尚未接线的共享生成器、独立 journal、其他关联读取和 Extension Turn 冷回放不能据此视为完成。不得把测试直接写入的 metadata fixture 当成真实 Host、SQL CRUD、UI 或 Agent 授权。
 
 ## 所有分组共用的规则
 
@@ -16,6 +16,8 @@
 - 防绕过的 marker 或存在性探测不能把 protected 数据过滤为 `false`／`null`，使普通 Run 意外获得许可；应保留实际存在或明确拒绝。
 
 ## 文本与结构化大纲
+
+2026-10-12：文本 v1 公开 Store 已在 `bb9081d8d` 接入原事务隔离和真实保存回执检查，最终 380/380 原库回归通过、零跳过。下述 v1 段保留为原入口映射；独立结构化 v2、计划和 UI journal 仍未完成，不能由 v1 的通过推断。范围见[原管理入口隔离](plugin-project-legacy-access.md)。
 
 实际 Store：
 
@@ -139,13 +141,15 @@ Media result source／load／save／publication／catalog 主要汇聚于 `media
 
 ## SourceUpload 与 source adoption
 
+2026-10-12：本节原普通入口的风险已在 `a7d8d2836` 接线；最后 Store 212/212、Control 56/56 真实两数据库回归通过、零跳过。还覆盖 Foundation 已复制来源、保存 source-only 指针、真实 Run admission/required digest 和冷恢复。下述保留为映射基线说明。它不覆盖其他未接线的 Extension/Media/Conversation 路径，亦不提供 protected 项目的正向访问资格，范围与生产关联集合不变量见[上传源隔离](plugin-project-source-upload-isolation.md)。
+
 实际公开 Store：`project-source-upload-sqlite-store.ts`、`project-source-upload-postgres-store.ts`。`load`、`loadBeginReceipt`、`begin` replay、`loadRawBytes`、`loadPrepared` 和 prepare／write／cancel 操作读写 preproject upload ledger，只按 tenant／space／principal／upload 授权。
 
 `project_source_upload_associations` 可以把同一 prepared upload 关联到多个项目。保护任一已关联项目后，普通 raw／prepared payload 读取和再次 adoption 不能只检查 destination。需要在同 owner／upload 的真实 association 集合上检查是否存在 protected 项目；未关联的 preproject upload 保持旧行为。
 
 最小读取汇聚点是 `project-source-upload-sqlite-records.ts` 的 `sqliteUploadState` 和 `project-source-upload-postgres-queries.ts` 的 `UploadQueries.state`。SQLite `load`／`loadPrepared` 直接调用前者，单改 Store 的 `#state` 会漏掉它们。实际 reader／writer 的原事务中，schema、association 检查、ledger 数据和末端 fence 必须使用同连接。
 
-借用原 Foundation 事务的 `admitSqliteFoundationSourceAdoption` 和 `assertPostgresFoundationSourceAdoption` 当前 destination guard 不能替代 source upload association 检查。PG helper已有与 upload writer 一致的 `project-source-upload` advisory xact lock，应在此原连接核对 source，并在关联插入后、原 COMMIT 前复核。
+映射基线中借用原 Foundation 事务的 `admitSqliteFoundationSourceAdoption` 和 `assertPostgresFoundationSourceAdoption` 的 destination guard 不能替代 source upload association 检查。PG helper 已有与 upload writer 一致的 `project-source-upload` advisory xact lock，需要在此原连接核对 source，并在关联插入后、原 COMMIT 前复核；本次接线已保留这些原锁与末端检查。
 
 保留原 storage realm、raw／prepared digest、immutable ledger、chunks／chapters 索引、parser revision 和独立 adoption PDP。它们都不自行授权访问 metadata protected 项目。
 

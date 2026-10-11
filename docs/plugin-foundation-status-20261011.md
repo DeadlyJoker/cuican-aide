@@ -84,6 +84,8 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 
 2026-10-12 源码增量 `41abbb1fe`、`743574a24`、`3de28fbdf` 已接线原 CreativeProject 元数据、Foundation 和公开 Asset Store 的普通入口隔离：分页在 SQL 内过滤，回放检查实际保存项目，SQLite 使用同一快照，PG 使用原同连接 READ COMMITTED 事务与迁移共享锁，新增等待后仍执行原最终授权和实际租约检查。旧项目和历史保持；未开放 owner writer、未自动迁移、未更新 Web 或桌面。各组真实两数据库回归及其他产物/关联入口的剩余范围见[原管理入口隔离](./plugin-project-legacy-access.md)，不能据此宣称全量插件项目闭环。
 
+同日 `bb9081d8d`、`a7d8d2836` 继续复用原 Text v1、SourceUpload、Foundation 和 Run，覆盖公开文本读写/保存回执、实际上传关联、来源复制与保存指针、Run facts/admission/required digest 及冷恢复。原显式 DDL 迁移使用原锁与验证器；部分 owner 不阻止独立迁移，也不被修复，数据访问仍拒绝。所有新增 SQL 均置于最后原完整 qualification 与真实物理租约检查之前。最终 Text/Core 380/380、来源 Store 212/212、Control 56/56，root 另复跑受影响 Asset 64/64，实际 SQLite 与自有 PG 18.6、零跳过；组间有重叠，不相加。Store/Control 类型、boundary 与格式检查通过。Control 是临时原库 mounted 协议集成，不能代替产品 Web；未部署、更新正式桌面、恢复业务插件或开放 protected owner writer。结构化 v2、计划/journal、共享 generator、其他关联与冷回放继续按[剩余清单](./plugin-project-isolation-remaining-entrypoints.md)实施。
+
 源码 `6246494ee` 增加[私有 Native 分配桥](./plugin-project-workspace-native-bridge.md)，继续调用同一个原 allocator 和 registry。真实 Native policy/owner、指定 IPC 子进程、epoch/generation 和一次性有界票据共同约束空目录分配，撤回及断开后停止，原活动工作空间保持；不接受 caller owner、路径或恢复动作。实际 Node IPC 测试子进程已验证，但生产 Main/Control 尚未启动该桥，也未把票据当作项目 metadata、SQL 或 Agent 授权。这一步只完成私有 transport，不能宣称项目创建闭环。
 
 本轮源码验证使用 Node 24.19.0，证据分别限定为：
