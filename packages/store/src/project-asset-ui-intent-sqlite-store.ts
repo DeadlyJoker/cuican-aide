@@ -1,3 +1,4 @@
+import { captureSqliteAssetLegacyExecution } from "./project-asset-legacy-instruction.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   assertProjectAssetCommitCurrent,
@@ -132,12 +133,18 @@ export class SqliteProjectAssetUiIntentJournalStore
     try {
       assertSqliteAssetIntentSchema(this.#db);
       assertSqliteProjectTextUiCommit(this.#db, q);
+      const legacy = captureSqliteAssetLegacyExecution(this.#db);
       let n = plan.next();
       while (!n.done) {
         this.#open();
         a.assertActive();
-        n = plan.next(this.#db.prepare(n.value.sql).all(...n.value.values));
+        n = plan.next(
+          "assetLegacyAccess" in n.value
+            ? legacy.execute(n.value)
+            : this.#db.prepare(n.value.sql).all(...n.value.values),
+        );
       }
+      legacy.assertCurrent();
       assertSqliteProjectTextUiCommit(this.#db, q);
       a.assertActive();
       this.#open();

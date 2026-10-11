@@ -15,7 +15,7 @@ import {
   assetProject,
   assetQuery,
   type AssetDialect,
-  type AssetSql,
+  type AssetInstruction,
   type AssetRows,
 } from "./project-asset-store-support.ts";
 import { loadProjectMediaGenerationContextPlan } from "./project-media-generation-read.ts";

@@ -1,3 +1,4 @@
+import { capturePostgresAssetLegacyExecution } from "./project-asset-legacy-instruction.ts";
 import { assertPostgresProjectMediaResultSchema } from "./project-media-result-schema.ts";
 import { assertPostgresProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import { assertPostgresProjectMediaInputRunQualification } from "./project-media-input-run-qualification.ts";
@@ -184,13 +185,16 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
     c: PoolClient,
     plan: ProjectMediaInputPlan<T>,
     a: ProjectMediaInputAuthority,
+    legacy: ReturnType<typeof capturePostgresAssetLegacyExecution>,
   ): Promise<T> {
     let next = plan.next();
     while (!next.done) {
       this.#open();
       assertProjectMediaInputActive(a);
       let rows: readonly Record<string, unknown>[];
-      if ("mediaResultSchema" in next.value) {
+      if ("assetLegacyAccess" in next.value) {
+        rows = await legacy.execute(next.value);
+      } else if ("mediaResultSchema" in next.value) {
         await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
         rows = [];
       } else if ("mediaOperationSchema" in next.value) {
@@ -222,7 +226,7 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
     this.#open();
     await assertProjectMediaInputCurrent(a, "before");
     return this.#client(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await assertPostgresProjectAssetSchema(c, this.#d.schema);
         await assertPostgresProjectMediaInputSchema(c, this.#d.schema);
@@ -231,7 +235,8 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
           this.#d.schema,
           a,
         );
-        const result = await this.#execute(c, plan, a);
+        const legacy = capturePostgresAssetLegacyExecution(c, this.#d.schema);
+        const result = await this.#execute(c, plan, a, legacy);
         await assertProjectMediaInputCurrent(a, "transaction");
         const record = qualify(result);
         if (record)
@@ -239,7 +244,10 @@ export class PostgresProjectMediaInputStore implements ProjectMediaInputStore {
             c,
             qualifyProjectMediaInputPlan(this.#d, record, a, this.#verifier),
             a,
+            legacy,
           );
+        await legacy.assertCurrent();
+        await assertProjectMediaInputCurrent(a, "transaction");
         this.#open();
         assertProjectMediaInputActive(a);
         await assertPostgresProjectMediaInputRunQualification(

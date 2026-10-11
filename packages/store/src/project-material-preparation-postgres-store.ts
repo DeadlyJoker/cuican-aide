@@ -1,3 +1,4 @@
+import { capturePostgresAssetLegacyExecution } from "./project-asset-legacy-instruction.ts";
 import { assertPostgresProjectMediaResultSchema } from "./project-media-result-schema.ts";
 import { assertPostgresProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import type { Pool, PoolClient } from "pg";
@@ -137,13 +138,16 @@ export class PostgresProjectMaterialPreparationStore
     c: PoolClient,
     plan: MaterialPreparationPlan<T>,
     a: ProjectMaterialPreparationCommitAuthority,
+    legacy: ReturnType<typeof capturePostgresAssetLegacyExecution>,
   ): Promise<T> {
     let next = plan.next();
     while (!next.done) {
       this.#open();
       assertProjectMaterialPreparationActive(a);
       let rows: readonly Record<string, unknown>[];
-      if ("mediaResultSchema" in next.value) {
+      if ("assetLegacyAccess" in next.value) {
+        rows = await legacy.execute(next.value);
+      } else if ("mediaResultSchema" in next.value) {
         await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
         rows = [];
       } else if ("mediaOperationSchema" in next.value) {
@@ -179,11 +183,12 @@ export class PostgresProjectMaterialPreparationStore
     this.#open();
     await assertProjectMaterialPreparationCurrent(a, "before");
     return this.#withClient(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await assertPostgresProjectAssetSchema(c, this.#d.schema);
         await assertPostgresMaterialPreparationSchema(c, this.#d.schema);
-        const result = await this.#execute(c, plan, a);
+        const legacy = capturePostgresAssetLegacyExecution(c, this.#d.schema);
+        const result = await this.#execute(c, plan, a, legacy);
         await assertProjectMaterialPreparationCurrent(a, "transaction");
         const current = state(result);
         if (current)
@@ -195,7 +200,10 @@ export class PostgresProjectMaterialPreparationStore
               this.#verifier,
             ),
             a,
+            legacy,
           );
+        await legacy.assertCurrent();
+        await assertProjectMaterialPreparationCurrent(a, "transaction");
         assertProjectMaterialPreparationActive(a);
         this.#open();
         await c.query("COMMIT");

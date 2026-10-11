@@ -1,3 +1,7 @@
+import {
+  captureSqliteAssetLegacyExecution,
+  capturePostgresAssetLegacyExecution,
+} from "./project-asset-legacy-instruction.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import {
@@ -255,8 +259,16 @@ export function assertSqliteMediaInputStageTurn(
     p,
     current,
   );
+  const legacy = captureSqliteAssetLegacyExecution(db);
   let n = plan.next();
-  while (!n.done) n = plan.next(db.prepare(n.value.sql).all(...n.value.values));
+  while (!n.done)
+    n = plan.next(
+      "assetLegacyAccess" in n.value
+        ? legacy.execute(n.value)
+        : db.prepare(n.value.sql).all(...n.value.values),
+    );
+  legacy.assertCurrent();
+  assertSqliteProjectTextUiCommit(db, p.authority);
 }
 export async function assertPostgresMediaInputStageTurn(
   c: PoolClient,
@@ -272,9 +284,16 @@ export async function assertPostgresMediaInputStageTurn(
     p,
     current,
   );
+  const legacy = capturePostgresAssetLegacyExecution(c, schema);
   let n = plan.next();
   while (!n.done)
-    n = plan.next((await c.query(n.value.sql, [...n.value.values])).rows);
+    n = plan.next(
+      "assetLegacyAccess" in n.value
+        ? await legacy.execute(n.value)
+        : (await c.query(n.value.sql, [...n.value.values])).rows,
+    );
+  await legacy.assertCurrent();
+  await assertPostgresProjectTextUiCommit(c, schema, p.authority);
 }
 export function assertMediaInputStageReplay(
   p: PreparedMediaInputStage | null,

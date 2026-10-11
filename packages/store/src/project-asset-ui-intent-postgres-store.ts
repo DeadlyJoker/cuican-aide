@@ -1,3 +1,4 @@
+import { capturePostgresAssetLegacyExecution } from "./project-asset-legacy-instruction.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   captureProjectGenerationImageResultVerifier,
@@ -141,16 +142,22 @@ export class PostgresProjectAssetUiIntentJournalStore
     await a.assertCurrent();
     a.assertActive();
     return this.#with(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await assertPostgresAssetIntentSchema(c, this.#d.schema);
         await assertPostgresProjectTextUiCommit(c, this.#d.schema, q);
+        const legacy = capturePostgresAssetLegacyExecution(c, this.#d.schema);
         let n = plan.next();
         while (!n.done) {
           this.#open();
           a.assertActive();
-          n = plan.next((await c.query(n.value.sql, [...n.value.values])).rows);
+          n = plan.next(
+            "assetLegacyAccess" in n.value
+              ? await legacy.execute(n.value)
+              : (await c.query(n.value.sql, [...n.value.values])).rows,
+          );
         }
+        await legacy.assertCurrent();
         await a.assertTransactionCurrent();
         await q.assertCurrent();
         await assertPostgresProjectTextUiCommit(c, this.#d.schema, q);

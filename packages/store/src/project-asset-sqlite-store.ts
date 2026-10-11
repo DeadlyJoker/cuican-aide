@@ -1,3 +1,4 @@
+import { executeSqliteAssetLegacyInstruction } from "./project-asset-legacy-instruction.ts";
 import type { CreativeProjectScope } from "@crewon/domain";
 import {
   assetLegacyProjectScope,
@@ -273,7 +274,9 @@ export class SqliteProjectAssetStore
       assertProjectAssetCommitActive(authority);
       const step = next.value;
       let rows: readonly Record<string, unknown>[];
-      if ("foundationDownstream" in step) {
+      if ("assetLegacyAccess" in step) {
+        rows = executeSqliteAssetLegacyInstruction(this.#db, step);
+      } else if ("foundationDownstream" in step) {
         const snapshot = captureSqliteProjectFoundationDownstream(
           this.#db,
           step.foundationDownstream,

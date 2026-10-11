@@ -1,3 +1,7 @@
+import {
+  captureSqliteAssetLegacyExecution,
+  capturePostgresAssetLegacyExecution,
+} from "./project-asset-legacy-instruction.ts";
 import { assertPostgresProjectMediaResultSchema } from "./project-media-result-schema.ts";
 import { assertPostgresProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import { assertPostgresProjectAssetSchema } from "./project-asset-schema.ts";
@@ -27,11 +31,14 @@ export function executeSqliteMediaGenerationPlan<T>(
     assertOpen();
     if (authority) assertProjectMediaGenerationActive(authority);
   };
+  const legacy = captureSqliteAssetLegacyExecution(db);
   let next = plan.next();
   while (!next.done) {
     active();
     let rows: readonly Record<string, unknown>[];
-    if ("mediaResultSchema" in next.value) {
+    if ("assetLegacyAccess" in next.value) {
+      rows = legacy.execute(next.value);
+    } else if ("mediaResultSchema" in next.value) {
       assertSqliteProjectMediaResultSchema(db);
       rows = [];
     } else if ("mediaOperationSchema" in next.value) {
@@ -47,6 +54,7 @@ export function executeSqliteMediaGenerationPlan<T>(
     active();
     next = plan.next(rows);
   }
+  legacy.assertCurrent();
   active();
   return next.value;
 }
@@ -61,11 +69,14 @@ export async function executePostgresMediaGenerationPlan<T>(
     assertOpen();
     if (authority) assertProjectMediaGenerationActive(authority);
   };
+  const legacy = capturePostgresAssetLegacyExecution(client, schema);
   let next = plan.next();
   while (!next.done) {
     active();
     let rows: readonly Record<string, unknown>[];
-    if ("mediaResultSchema" in next.value) {
+    if ("assetLegacyAccess" in next.value) {
+      rows = await legacy.execute(next.value);
+    } else if ("mediaResultSchema" in next.value) {
       await assertPostgresProjectMediaResultSchema(client, schema);
       rows = [];
     } else if ("mediaOperationSchema" in next.value) {
@@ -86,6 +97,7 @@ export async function executePostgresMediaGenerationPlan<T>(
     active();
     next = plan.next(rows);
   }
+  await legacy.assertCurrent();
   active();
   return next.value;
 }

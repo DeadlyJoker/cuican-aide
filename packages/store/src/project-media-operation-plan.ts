@@ -24,13 +24,13 @@ import {
   assetQuery,
   type AssetDialect,
   type AssetRows,
-  type AssetSql,
+  type AssetInstruction,
 } from "./project-asset-store-support.ts";
 import { mediaGenerationLinkValues } from "./project-media-generation-turn.ts";
 import { parseExternalOperation } from "./external-operation-record.ts";
 
 export type MediaOperationPlan<T> = Generator<
-  AssetSql | Readonly<{ mediaOperationSchema: true }>,
+  AssetInstruction | Readonly<{ mediaOperationSchema: true }>,
   T,
   AssetRows
 >;

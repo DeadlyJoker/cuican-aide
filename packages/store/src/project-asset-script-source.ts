@@ -14,6 +14,7 @@ import {
   assetJoin,
   assetOwnerValues,
   assetQuery,
+  assetLegacyProject,
   type AssetDialect,
   type AssetPlan,
 } from "./project-asset-store-support.ts";
@@ -35,6 +36,7 @@ export function* assertProjectAssetCurrentScriptSource(
       | "project_media_input_stage_sources_stale";
   }>,
 ): AssetPlan<void> {
+  yield* assetLegacyProject(owner, projectId);
   function stale(): never {
     return projectAssetFailure(options.failureCode);
   }

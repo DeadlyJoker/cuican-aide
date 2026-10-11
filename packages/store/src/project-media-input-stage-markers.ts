@@ -3,10 +3,16 @@ import type { PoolClient } from "pg";
 import {
   parseProjectMediaInputStageRunAdmission,
   projectAssetFailure,
+  validateCreativeProjectScope,
   type ProjectMediaInputStageRunAdmission,
 } from "@crewon/domain";
 import { creativeStoreDigester } from "./creative-project-store-records.ts";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
 import {
   assertSqliteMediaInputStageSchema,
   assertPostgresMediaInputStageSchema,
@@ -127,18 +133,20 @@ function checked(
   return actual;
 }
 export function loadSqliteMediaInputStage(db: DatabaseSync, l: Locator) {
-  const r = sqliteRequiredMediaInputStageDigest(db, l);
-  if (!assertSqliteMediaInputStageSchema(db, true)) return checked(r, null);
-  return checked(
-    r,
-    decodeMediaInputStage(
-      db
+  if (!db.isTransaction)
+    throw new Error("creative_project_legacy_transaction_required");
+  const access = captureSqliteCreativeProjectLegacyAccess(db);
+  const row = assertSqliteMediaInputStageSchema(db, true)
+    ? db
         .prepare(
-          "SELECT * FROM project_media_input_stage_run_admissions WHERE tenant_id=? AND run_id=?",
+          "SELECT *,json_extract(record_json,'$.projectId') AS legacy_project_id FROM project_media_input_stage_run_admissions WHERE tenant_id=? AND run_id=?",
         )
-        .get(l.tenantId, l.runId),
-      l,
-    ),
+        .get(l.tenantId, l.runId)
+    : undefined;
+  if (row) access.assertProject(stageLegacyScope(row));
+  return checked(
+    sqliteRequiredMediaInputStageDigest(db, l),
+    decodeMediaInputStage(row, l),
   );
 }
 export async function loadPostgresMediaInputStage(
@@ -146,19 +154,28 @@ export async function loadPostgresMediaInputStage(
   s: string,
   l: Locator,
 ) {
-  const r = await postgresRequiredMediaInputStageDigest(c, s, l);
-  if (!(await assertPostgresMediaInputStageSchema(c, s, true)))
-    return checked(r, null);
-  return checked(
-    r,
-    decodeMediaInputStage(
-      (
+  await lockPostgresCreativeProjectLegacySchema(c, s);
+  const access = await capturePostgresCreativeProjectLegacyAccess(c, s);
+  const row = (await assertPostgresMediaInputStageSchema(c, s, true))
+    ? (
         await c.query(
-          `SELECT * FROM ${creativeProjectSchemaName(s)}.project_media_input_stage_run_admissions WHERE tenant_id=$1 AND run_id=$2`,
+          `SELECT *,record_json->>'projectId' AS legacy_project_id FROM ${creativeProjectSchemaName(s)}.project_media_input_stage_run_admissions WHERE tenant_id=$1 AND run_id=$2`,
           [l.tenantId, l.runId],
         )
-      ).rows[0],
-      l,
-    ),
+      ).rows[0]
+    : undefined;
+  if (row) await access.assertProject(stageLegacyScope(row));
+  return checked(
+    await postgresRequiredMediaInputStageDigest(c, s, l),
+    decodeMediaInputStage(row, l),
   );
+}
+
+/** Actual saved SQL identity and saved project scalar; this is only a negative constraint. */
+function stageLegacyScope(row: Record<string, unknown>) {
+  return validateCreativeProjectScope({
+    tenantId: row.tenant_id,
+    spaceId: row.space_id,
+    projectId: row.legacy_project_id,
+  });
 }

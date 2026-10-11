@@ -5,6 +5,8 @@ import type {
   ProjectAssetStageRunLocator,
 } from "@crewon/application";
 import { projectAssetRecord, projectAssetId } from "@crewon/domain";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
+import { readPostgresLegacyCreativeProject } from "./creative-project-postgres-legacy-read.ts";
 import {
   loadSqliteAssetStage,
   loadPostgresAssetStage,
@@ -44,13 +46,18 @@ export class SqliteProjectAssetStageStore implements ProjectAssetStageStore {
   }
   async loadAssetStageAdmission(i: ProjectAssetStageRunLocator) {
     this.#open();
-    return loadSqliteAssetStage(this.#db, locator(i));
+    const l = locator(i);
+    return readSqliteLegacyCreativeProject(this.#db, () =>
+      loadSqliteAssetStage(this.#db, l),
+    );
   }
   async readRequiredAssetStageDigest(i: ProjectAssetStageRunLocator) {
     this.#open();
     const l = locator(i);
-    loadSqliteAssetStage(this.#db, l);
-    return sqliteRequiredAssetStageDigest(this.#db, l);
+    return readSqliteLegacyCreativeProject(this.#db, () => {
+      loadSqliteAssetStage(this.#db, l);
+      return sqliteRequiredAssetStageDigest(this.#db, l);
+    });
   }
 }
 export class PostgresProjectAssetStageStore implements ProjectAssetStageStore {
@@ -87,13 +94,19 @@ export class PostgresProjectAssetStageStore implements ProjectAssetStageStore {
   }
   async loadAssetStageAdmission(i: ProjectAssetStageRunLocator) {
     const l = locator(i);
-    return this.#with((c) => loadPostgresAssetStage(c, this.#schema, l));
+    return readPostgresLegacyCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#open },
+      (c) => loadPostgresAssetStage(c, this.#schema, l),
+    );
   }
   async readRequiredAssetStageDigest(i: ProjectAssetStageRunLocator) {
     const l = locator(i);
-    return this.#with(async (c) => {
-      await loadPostgresAssetStage(c, this.#schema, l);
-      return postgresRequiredAssetStageDigest(c, this.#schema, l);
-    });
+    return readPostgresLegacyCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#open },
+      async (c) => {
+        await loadPostgresAssetStage(c, this.#schema, l);
+        return postgresRequiredAssetStageDigest(c, this.#schema, l);
+      },
+    );
   }
 }

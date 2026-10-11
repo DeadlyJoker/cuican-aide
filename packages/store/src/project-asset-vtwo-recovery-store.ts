@@ -1,3 +1,7 @@
+import {
+  captureSqliteAssetLegacyExecution,
+  capturePostgresAssetLegacyExecution,
+} from "./project-asset-legacy-instruction.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -133,12 +137,18 @@ export class SqliteProjectAssetV2RecoveryStore extends RecoveryOperations {
         package: a.package,
       };
       assertSqliteProjectTextUiCommit(this.#db, installation);
+      const legacy = captureSqliteAssetLegacyExecution(this.#db);
       let n = plan.next();
       while (!n.done) {
         this.#open();
         a.assertActive();
-        n = plan.next(this.#db.prepare(n.value.sql).all(...n.value.values));
+        n = plan.next(
+          "assetLegacyAccess" in n.value
+            ? legacy.execute(n.value)
+            : this.#db.prepare(n.value.sql).all(...n.value.values),
+        );
       }
+      legacy.assertCurrent();
       assertSqliteProjectTextUiCommit(this.#db, installation);
       a.assertActive();
       this.#open();
@@ -184,7 +194,7 @@ export class PostgresProjectAssetV2RecoveryStore extends RecoveryOperations {
   }
   async migrate() {
     await this.#with(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await migratePostgresAssetVtwoRecovery(c, this.dialect.schema);
         await c.query("COMMIT");
@@ -202,7 +212,7 @@ export class PostgresProjectAssetV2RecoveryStore extends RecoveryOperations {
     await a.assertCurrent();
     a.assertActive();
     return this.#with(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await assertPostgresAssetVtwoRecoverySchema(c, this.dialect.schema);
         const installation = {
@@ -215,12 +225,21 @@ export class PostgresProjectAssetV2RecoveryStore extends RecoveryOperations {
           this.dialect.schema,
           installation,
         );
+        const legacy = capturePostgresAssetLegacyExecution(
+          c,
+          this.dialect.schema,
+        );
         let n = plan.next();
         while (!n.done) {
           this.#open();
           a.assertActive();
-          n = plan.next((await c.query(n.value.sql, [...n.value.values])).rows);
+          n = plan.next(
+            "assetLegacyAccess" in n.value
+              ? await legacy.execute(n.value)
+              : (await c.query(n.value.sql, [...n.value.values])).rows,
+          );
         }
+        await legacy.assertCurrent();
         await a.assertTransactionCurrent();
         await assertPostgresProjectTextUiCommit(
           c,

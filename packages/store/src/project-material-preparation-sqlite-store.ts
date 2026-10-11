@@ -1,3 +1,4 @@
+import { captureSqliteAssetLegacyExecution } from "./project-asset-legacy-instruction.ts";
 import { assertSqliteProjectMediaResultSchema } from "./project-media-result-schema.ts";
 import { assertSqliteProjectMediaOperationSchema } from "./project-media-operation-schema.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -124,13 +125,16 @@ export class SqliteProjectMaterialPreparationStore
   #execute<T>(
     plan: MaterialPreparationPlan<T>,
     a: ProjectMaterialPreparationCommitAuthority,
+    legacy: ReturnType<typeof captureSqliteAssetLegacyExecution>,
   ): T {
     let next = plan.next();
     while (!next.done) {
       this.#active();
       assertProjectMaterialPreparationActive(a);
       let rows: readonly Record<string, unknown>[];
-      if ("mediaResultSchema" in next.value) {
+      if ("assetLegacyAccess" in next.value) {
+        rows = legacy.execute(next.value);
+      } else if ("mediaResultSchema" in next.value) {
         assertSqliteProjectMediaResultSchema(this.#db);
         rows = [];
       } else if ("mediaOperationSchema" in next.value) {
@@ -163,13 +167,16 @@ export class SqliteProjectMaterialPreparationStore
     try {
       assertSqliteProjectAssetSchema(this.#db);
       assertSqliteMaterialPreparationSchema(this.#db);
-      const result = this.#execute(plan, a),
+      const legacy = captureSqliteAssetLegacyExecution(this.#db);
+      const result = this.#execute(plan, a, legacy),
         current = state(result);
       if (current)
         this.#execute(
           qualifyMaterialPreparation(this.#d, current.initial, this.#verifier),
           a,
+          legacy,
         );
+      legacy.assertCurrent();
       assertProjectMaterialPreparationActive(a);
       this.#open();
       this.#db.exec("COMMIT");

@@ -1,3 +1,7 @@
+import {
+  captureSqliteAssetLegacyExecution,
+  capturePostgresAssetLegacyExecution,
+} from "./project-asset-legacy-instruction.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type { MediaOperationPlan } from "./project-media-operation-plan.ts";
@@ -11,17 +15,21 @@ export function executeSqliteMediaOperationPlan<T>(
   plan: MediaOperationPlan<T>,
   assertOpen: () => void,
 ): T {
+  const legacy = captureSqliteAssetLegacyExecution(db);
   let next = plan.next();
   while (!next.done) {
     assertOpen();
     let rows: readonly Record<string, unknown>[];
-    if ("mediaOperationSchema" in next.value) {
+    if ("assetLegacyAccess" in next.value) {
+      rows = legacy.execute(next.value);
+    } else if ("mediaOperationSchema" in next.value) {
       assertSqliteProjectMediaOperationSchema(db);
       rows = [];
     } else rows = db.prepare(next.value.sql).all(...next.value.values);
     assertOpen();
     next = plan.next(rows);
   }
+  legacy.assertCurrent();
   assertOpen();
   return next.value;
 }
@@ -31,11 +39,14 @@ export async function executePostgresMediaOperationPlan<T>(
   plan: MediaOperationPlan<T>,
   assertOpen: () => void,
 ): Promise<T> {
+  const legacy = capturePostgresAssetLegacyExecution(client, schema);
   let next = plan.next();
   while (!next.done) {
     assertOpen();
     let rows: readonly Record<string, unknown>[];
-    if ("mediaOperationSchema" in next.value) {
+    if ("assetLegacyAccess" in next.value) {
+      rows = await legacy.execute(next.value);
+    } else if ("mediaOperationSchema" in next.value) {
       await assertPostgresProjectMediaOperationSchema(client, schema);
       rows = [];
     } else
@@ -43,6 +54,7 @@ export async function executePostgresMediaOperationPlan<T>(
     assertOpen();
     next = plan.next(rows);
   }
+  await legacy.assertCurrent();
   assertOpen();
   return next.value;
 }

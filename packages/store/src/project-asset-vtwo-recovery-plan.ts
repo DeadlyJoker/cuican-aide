@@ -31,14 +31,17 @@ import {
   assetOwner,
   assetProject,
   assetReceipt,
+  assetLegacySchema,
+  assetLegacyProject,
+  assetLegacyRow,
   type AssetDialect,
   type AssetPlan,
-  type AssetSql,
+  type AssetInstruction,
   type AssetRows,
 } from "./project-asset-store-support.ts";
 import { assetVtwoIntentTable as table } from "./project-asset-vtwo-recovery-schema.ts";
 export type AssetVtwoRecoveryPlan<T> = Generator<
-  AssetSql | Readonly<{ assetVtwoRecoverySchema: "optional" }>,
+  AssetInstruction | Readonly<{ assetVtwoRecoverySchema: "optional" }>,
   T,
   AssetRows
 >;
@@ -88,6 +91,11 @@ function decode(row: Record<string, unknown> | undefined) {
     fail();
   return r;
 }
+function* decodeLegacyRecovery(
+  row: Record<string, unknown> | undefined,
+): AssetPlan<ProjectAssetV2RecoveryRecord | null> {
+  return decode(yield* assetLegacyRow(row));
+}
 export function* assetVtwoReceiptLock(
   d: AssetDialect,
   i: Identity,
@@ -112,7 +120,7 @@ function* scopeLock(d: AssetDialect, s: ProjectAssetUiIntentScope) {
   ]);
 }
 function* byKey(d: AssetDialect, i: Identity) {
-  return decode(
+  return yield* decodeLegacyRecovery(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}${table} WHERE ${filter}`,
@@ -125,7 +133,8 @@ export function* assetVtwoById(
   s: ProjectAssetUiIntentScope,
   intentId: string,
 ) {
-  return decode(
+  yield* assetLegacySchema();
+  return yield* decodeLegacyRecovery(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}${table} WHERE intent_id=$1 AND scope_digest=$2`,
@@ -138,6 +147,14 @@ function* update(
   old: ProjectAssetV2RecoveryRecord,
   next: ProjectAssetV2RecoveryRecord,
 ) {
+  yield* assetLegacyProject(
+    old.scope.actor,
+    old.intent.request.input.projectId,
+  );
+  yield* assetLegacyProject(
+    next.scope.actor,
+    next.intent.request.input.projectId,
+  );
   if (same(old, next)) return;
   const rows = yield* assetQuery(
     d,
@@ -158,6 +175,7 @@ function* receipt(
   d: AssetDialect,
   r: ProjectAssetV2RecoveryRecord,
 ): AssetPlan<ProjectAssetV2Confirmed | null> {
+  yield* assetLegacyProject(r.scope.actor, r.intent.request.input.projectId);
   const i = assetV2OperationIdentity(r.scope.actor, r.intent.request);
   if (i.kind !== "adopt-media") {
     const result = yield* assetReceipt(d, i as ProjectAssetMutationIdentity);
@@ -177,7 +195,7 @@ function* receipt(
   );
   if (!rows.length) return null;
   if (rows.length !== 1) fail();
-  const row = rows[0]!,
+  const row = (yield* assetLegacyRow(rows[0]))!,
     v = parseProjectAssetMediaAdoptionReceipt(
       typeof row.record_json === "string"
         ? JSON.parse(row.record_json)
@@ -224,6 +242,7 @@ export function* stageAssetVtwoRecovery(
   a: ProjectAssetV2RecoveryAuthority,
   at: string,
 ): AssetPlan<ProjectAssetV2RecoveryRecord> {
+  yield* assetLegacySchema();
   if (a.request.action.startsWith("crewon.project-asset-recovery.")) fail();
   const next = newAssetV2RecoveryRecord(
       a.scope,
@@ -243,7 +262,7 @@ export function* stageAssetVtwoRecovery(
     yield* verifyTerminal(d, old);
     return old;
   }
-  const active = decode(
+  const active = yield* decodeLegacyRecovery(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}${table} WHERE scope_digest=$1 AND acknowledged=0`,
@@ -280,6 +299,7 @@ export function* beginAssetVtwoRecoveryCommit(
   scope: ProjectAssetUiIntentScope | undefined,
   request: ProjectAssetV2WriteRequest | undefined,
 ): AssetVtwoRecoveryPlan<ProjectAssetV2RecoveryRecord | null> {
+  yield* assetLegacySchema();
   const marker = yield { assetVtwoRecoverySchema: "optional" };
   if (marker.length !== 1 || typeof marker[0]?.available !== "boolean") fail();
   if (!marker[0]!.available) {
@@ -331,8 +351,9 @@ export function* pendingAssetVtwoRecovery(
   d: AssetDialect,
   s: ProjectAssetUiIntentScope,
 ): AssetPlan<ProjectAssetV2RecoveryRecord | null> {
+  yield* assetLegacySchema();
   yield* scopeLock(d, s);
-  const r = decode(
+  const r = yield* decodeLegacyRecovery(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}${table} WHERE scope_digest=$1 AND acknowledged=0`,

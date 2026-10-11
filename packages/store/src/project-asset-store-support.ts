@@ -15,6 +15,7 @@ import {
 import {
   extensionCanonicalJson,
   validateCreativeProjectActor,
+  validateCreativeProjectScope,
   projectAssetId,
   projectAssetKind,
   projectAssetRecord,
@@ -43,8 +44,10 @@ export type AssetSql = Readonly<{
   sql: string;
   values: readonly (string | number | null)[];
 }>;
+import type { AssetLegacyInstruction } from "./project-asset-legacy-instruction.ts";
+export type AssetInstruction = AssetSql | AssetLegacyInstruction;
 export type AssetRows = readonly Record<string, unknown>[];
-export type AssetPlan<T> = Generator<AssetSql, T, AssetRows>;
+export type AssetPlan<T> = Generator<AssetInstruction, T, AssetRows>;
 export type AssetDialect = Readonly<{
   postgres: boolean;
   schema: string;
@@ -105,6 +108,41 @@ export function* assetQuery(
     }),
     values: ordered,
   };
+}
+export function* assetLegacySchema(): AssetPlan<void> {
+  yield { assetLegacyAccess: { kind: "schema" } };
+}
+export function* assetLegacyProject(
+  owner: Readonly<{ tenantId: string; spaceId: string }>,
+  projectId: string,
+): AssetPlan<void> {
+  yield {
+    assetLegacyAccess: {
+      kind: "project",
+      scope: validateCreativeProjectScope({
+        tenantId: owner.tenantId,
+        spaceId: owner.spaceId,
+        projectId,
+      }),
+    },
+  };
+}
+/** Inspect saved SQL identity before any JSON decoding or retry conflict. */
+export function* assetLegacyRow(
+  row: Record<string, unknown> | undefined,
+): AssetPlan<Record<string, unknown> | undefined> {
+  if (row)
+    yield {
+      assetLegacyAccess: {
+        kind: "project",
+        scope: validateCreativeProjectScope({
+          tenantId: row.tenant_id as string,
+          spaceId: row.space_id as string,
+          projectId: row.project_id as string,
+        }),
+      },
+    };
+  return row;
 }
 export function* assetLock(
   d: AssetDialect,
@@ -207,6 +245,7 @@ export function* assetProject(
   owner: CreativeProjectOwnerScope,
   id: string,
 ) {
+  yield* assetLegacyProject(owner, id);
   const rows = yield* assetQuery(
     d,
     `SELECT p.* FROM ${d.prefix}creative_projects p WHERE ${assetFilter}`,
@@ -222,6 +261,7 @@ export function* assetHead(
   id: string,
   assetId: string,
 ) {
+  yield* assetLegacyProject(owner, id);
   const rows = yield* assetQuery(
     d,
     `SELECT c.* FROM ${d.prefix}project_assets c ${assetJoin(d)} WHERE ${assetFilter} AND c.asset_id=$5`,
@@ -236,6 +276,7 @@ export function* assetContent(
   assetId: string,
   n: number,
 ) {
+  yield* assetLegacyProject(owner, id);
   const rows = yield* assetQuery(
     d,
     `SELECT c.*,p.owner_principal_id FROM ${d.prefix}project_asset_revisions c ${assetJoin(d)} WHERE ${assetFilter} AND c.asset_id=$5 AND c.content_revision=$6`,
@@ -250,6 +291,7 @@ export function* assetReference(
   assetId: string,
   n: number,
 ) {
+  yield* assetLegacyProject(owner, id);
   const rows = yield* assetQuery(
     d,
     `SELECT c.*,p.owner_principal_id FROM ${d.prefix}project_asset_reference_revisions c ${assetJoin(d)} WHERE ${assetFilter} AND c.asset_id=$5 AND c.reference_revision=$6`,
@@ -263,6 +305,7 @@ export function* assetBrief(
   id: string,
   n: number,
 ) {
+  yield* assetLegacyProject(owner, id);
   const rows = yield* assetQuery(
     d,
     `SELECT c.*,p.owner_principal_id FROM ${d.prefix}creative_project_briefs c ${assetJoin(d)} WHERE ${assetFilter} AND c.brief_revision=$5`,
@@ -279,6 +322,7 @@ export function* assetScript(
   artifactId: string,
   n: number,
 ): AssetPlan<ProjectScriptRevision> {
+  yield* assetLegacyProject(owner, id);
   const rows = yield* assetQuery(
     d,
     `SELECT c.*,p.owner_principal_id FROM ${d.prefix}project_text_revisions c ${assetJoin(d)} WHERE ${assetFilter} AND c.artifact_id=$5 AND c.content_revision=$6`,
@@ -312,6 +356,7 @@ export function* assetSelectedScript(
   id: string,
   r: ProjectAssetRevision,
 ): AssetPlan<ProjectScriptRevision | null> {
+  yield* assetLegacyProject(owner, id);
   if (r.script === null) return null;
   const rows = yield* assetQuery(
     d,
@@ -428,6 +473,7 @@ export function* assetReceipt(
   d: AssetDialect,
   identity: ProjectAssetMutationIdentity,
 ): AssetPlan<ProjectAssetMutationResult | null> {
+  yield* assetLegacySchema();
   const a = identity.actor,
     rows = yield* assetQuery(
       d,
@@ -441,7 +487,7 @@ export function* assetReceipt(
         identity.receipt.idempotencyKey,
       ],
     );
-  const row = rows[0];
+  const row = yield* assetLegacyRow(rows[0]);
   if (!row) return null;
   const e = creativeStoreRecord(json(row.result_json), [
       "schemaVersion",

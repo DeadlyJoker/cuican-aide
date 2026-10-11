@@ -16,12 +16,12 @@ import {
   assetReference,
   assetOwner,
   type AssetDialect,
-  type AssetSql,
+  type AssetInstruction,
   type AssetRows,
 } from "./project-asset-store-support.ts";
 
 export type AssetReferenceProofPlan<T> = Generator<
-  | AssetSql
+  | AssetInstruction
   | Readonly<{ mediaOperationSchema: true }>
   | Readonly<{ mediaResultSchema: true }>,
   T,

@@ -5,6 +5,8 @@ import type {
   ProjectMediaInputStageRunLocator,
 } from "@crewon/application";
 import { projectAssetRecord, projectAssetId } from "@crewon/domain";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
+import { readPostgresLegacyCreativeProject } from "./creative-project-postgres-legacy-read.ts";
 import {
   loadSqliteMediaInputStage,
   loadPostgresMediaInputStage,
@@ -46,13 +48,18 @@ export class SqliteProjectMediaInputStageStore
   }
   async loadMediaInputStageAdmission(i: ProjectMediaInputStageRunLocator) {
     this.#open();
-    return loadSqliteMediaInputStage(this.#db, locator(i));
+    const l = locator(i);
+    return readSqliteLegacyCreativeProject(this.#db, () =>
+      loadSqliteMediaInputStage(this.#db, l),
+    );
   }
   async readRequiredMediaInputStageDigest(i: ProjectMediaInputStageRunLocator) {
     this.#open();
     const l = locator(i);
-    loadSqliteMediaInputStage(this.#db, l);
-    return sqliteRequiredMediaInputStageDigest(this.#db, l);
+    return readSqliteLegacyCreativeProject(this.#db, () => {
+      loadSqliteMediaInputStage(this.#db, l);
+      return sqliteRequiredMediaInputStageDigest(this.#db, l);
+    });
   }
 }
 export class PostgresProjectMediaInputStageStore
@@ -91,13 +98,19 @@ export class PostgresProjectMediaInputStageStore
   }
   async loadMediaInputStageAdmission(i: ProjectMediaInputStageRunLocator) {
     const l = locator(i);
-    return this.#with((c) => loadPostgresMediaInputStage(c, this.#schema, l));
+    return readPostgresLegacyCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#open },
+      (c) => loadPostgresMediaInputStage(c, this.#schema, l),
+    );
   }
   async readRequiredMediaInputStageDigest(i: ProjectMediaInputStageRunLocator) {
     const l = locator(i);
-    return this.#with(async (c) => {
-      await loadPostgresMediaInputStage(c, this.#schema, l);
-      return postgresRequiredMediaInputStageDigest(c, this.#schema, l);
-    });
+    return readPostgresLegacyCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#open },
+      async (c) => {
+        await loadPostgresMediaInputStage(c, this.#schema, l);
+        return postgresRequiredMediaInputStageDigest(c, this.#schema, l);
+      },
+    );
   }
 }

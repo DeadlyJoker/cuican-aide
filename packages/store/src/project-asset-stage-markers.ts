@@ -3,10 +3,16 @@ import type { PoolClient } from "pg";
 import {
   parseProjectAssetStageRunAdmission,
   projectAssetFailure,
+  validateCreativeProjectScope,
   type ProjectAssetStageRunAdmission,
 } from "@crewon/domain";
 import { creativeStoreDigester } from "./creative-project-store-records.ts";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
 import {
   assertSqliteAssetStageSchema,
   assertPostgresAssetStageSchema,
@@ -126,18 +132,20 @@ function checked(
   return actual;
 }
 export function loadSqliteAssetStage(db: DatabaseSync, l: Locator) {
-  const r = sqliteRequiredAssetStageDigest(db, l);
-  if (!assertSqliteAssetStageSchema(db, true)) return checked(r, null);
-  return checked(
-    r,
-    decodeAssetStage(
-      db
+  if (!db.isTransaction)
+    throw new Error("creative_project_legacy_transaction_required");
+  const access = captureSqliteCreativeProjectLegacyAccess(db);
+  const row = assertSqliteAssetStageSchema(db, true)
+    ? db
         .prepare(
-          "SELECT * FROM project_asset_stage_run_admissions WHERE tenant_id=? AND run_id=?",
+          "SELECT *,json_extract(record_json,'$.projectId') AS legacy_project_id FROM project_asset_stage_run_admissions WHERE tenant_id=? AND run_id=?",
         )
-        .get(l.tenantId, l.runId),
-      l,
-    ),
+        .get(l.tenantId, l.runId)
+    : undefined;
+  if (row) access.assertProject(stageLegacyScope(row));
+  return checked(
+    sqliteRequiredAssetStageDigest(db, l),
+    decodeAssetStage(row, l),
   );
 }
 export async function loadPostgresAssetStage(
@@ -145,19 +153,28 @@ export async function loadPostgresAssetStage(
   s: string,
   l: Locator,
 ) {
-  const r = await postgresRequiredAssetStageDigest(c, s, l);
-  if (!(await assertPostgresAssetStageSchema(c, s, true)))
-    return checked(r, null);
-  return checked(
-    r,
-    decodeAssetStage(
-      (
+  await lockPostgresCreativeProjectLegacySchema(c, s);
+  const access = await capturePostgresCreativeProjectLegacyAccess(c, s);
+  const row = (await assertPostgresAssetStageSchema(c, s, true))
+    ? (
         await c.query(
-          `SELECT * FROM ${creativeProjectSchemaName(s)}.project_asset_stage_run_admissions WHERE tenant_id=$1 AND run_id=$2`,
+          `SELECT *,record_json->>'projectId' AS legacy_project_id FROM ${creativeProjectSchemaName(s)}.project_asset_stage_run_admissions WHERE tenant_id=$1 AND run_id=$2`,
           [l.tenantId, l.runId],
         )
-      ).rows[0],
-      l,
-    ),
+      ).rows[0]
+    : undefined;
+  if (row) await access.assertProject(stageLegacyScope(row));
+  return checked(
+    await postgresRequiredAssetStageDigest(c, s, l),
+    decodeAssetStage(row, l),
   );
+}
+
+/** Actual saved SQL identity and saved project scalar; this is only a negative constraint. */
+function stageLegacyScope(row: Record<string, unknown>) {
+  return validateCreativeProjectScope({
+    tenantId: row.tenant_id,
+    spaceId: row.space_id,
+    projectId: row.legacy_project_id,
+  });
 }

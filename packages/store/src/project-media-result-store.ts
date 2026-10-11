@@ -1,4 +1,8 @@
 import {
+  captureSqliteAssetLegacyExecution,
+  capturePostgresAssetLegacyExecution,
+} from "./project-asset-legacy-instruction.ts";
+import {
   assertSqliteAssetVtwoRecoverySchema,
   assertPostgresAssetVtwoRecoverySchema,
 } from "./project-asset-vtwo-recovery-schema.ts";
@@ -213,12 +217,15 @@ export class SqliteProjectMediaResultStore
       if (purpose === "adoption")
         assertSqliteAssetMediaAdoptionSchema(this.#db);
       assertSqliteProjectTextUiCommit(this.#db, a.uiInstallation);
+      const legacy = captureSqliteAssetLegacyExecution(this.#db);
       let next = plan.next();
       while (!next.done) {
         this.#active();
         a.assertActive();
         let rows: readonly Record<string, unknown>[];
-        if ("assetVtwoRecoverySchema" in next.value) {
+        if ("assetLegacyAccess" in next.value) {
+          rows = legacy.execute(next.value);
+        } else if ("assetVtwoRecoverySchema" in next.value) {
           rows = [
             { available: assertSqliteAssetVtwoRecoverySchema(this.#db, true) },
           ];
@@ -240,6 +247,7 @@ export class SqliteProjectMediaResultStore
         a.assertActive();
         next = plan.next(rows);
       }
+      legacy.assertCurrent();
       // SQLite callbacks must be synchronous while this borrowed native connection is in a transaction.
       this.#active();
       a.assertActive();
@@ -347,7 +355,7 @@ export class PostgresProjectMediaResultStore
   }
   async migrateAssetAdoptions() {
     await this.#client(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await migratePostgresAssetMediaAdoptions(c, this.#d.schema);
         this.#open();
@@ -437,7 +445,7 @@ export class PostgresProjectMediaResultStore
   }
   async migrate() {
     await this.#client(async (c) => {
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
           JSON.stringify(["project-media-result-migration", this.#d.schema]),
@@ -483,7 +491,7 @@ export class PostgresProjectMediaResultStore
       if (purpose !== "adoption") await a.assertCurrent();
       this.#open();
       a.assertActive();
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       try {
         await assertPostgresProjectMediaResultSchema(c, this.#d.schema);
         if (purpose === "adoption")
@@ -493,12 +501,15 @@ export class PostgresProjectMediaResultStore
           this.#d.schema,
           a.uiInstallation,
         );
+        const legacy = capturePostgresAssetLegacyExecution(c, this.#d.schema);
         let next = plan.next();
         while (!next.done) {
           this.#open();
           a.assertActive();
           let rows: readonly Record<string, unknown>[];
-          if ("assetVtwoRecoverySchema" in next.value) {
+          if ("assetLegacyAccess" in next.value) {
+            rows = await legacy.execute(next.value);
+          } else if ("assetVtwoRecoverySchema" in next.value) {
             rows = [
               {
                 available: await assertPostgresAssetVtwoRecoverySchema(
@@ -530,13 +541,14 @@ export class PostgresProjectMediaResultStore
           a.assertActive();
           next = plan.next(rows);
         }
+        await legacy.assertCurrent();
+        if (a.assertTransactionCurrent) await a.assertTransactionCurrent();
+        else await a.assertCurrent();
         await assertPostgresProjectTextUiCommit(
           c,
           this.#d.schema,
           a.uiInstallation,
         );
-        if (a.assertTransactionCurrent) await a.assertTransactionCurrent();
-        else await a.assertCurrent();
         this.#open();
         a.assertActive();
         await c.query("COMMIT");

@@ -30,13 +30,13 @@ import {
   assetLock,
   assetProject,
   assetOwner,
-  type AssetSql,
+  type AssetInstruction,
   type AssetRows,
   type AssetDialect,
 } from "./project-asset-store-support.ts";
 
 export type MaterialPreparationInstruction =
-  | AssetSql
+  | AssetInstruction
   | Readonly<{ assetSchema: true }>
   | Readonly<{ mediaOperationSchema: true }>
   | Readonly<{ mediaResultSchema: true }>

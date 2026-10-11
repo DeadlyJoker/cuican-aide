@@ -123,7 +123,7 @@ export class PostgresProjectMediaGenerationArchive {
     const c = await this.#pool.connect();
     try {
       this.#open();
-      await c.query("BEGIN");
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       await assertPostgresProjectMediaGenerationSchema(c, this.#schema);
       const result = await executePostgresMediaGenerationPlan(
         c,

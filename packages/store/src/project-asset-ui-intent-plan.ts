@@ -21,6 +21,9 @@ import {
   assetOwner,
   assetProject,
   assetReceipt,
+  assetLegacySchema,
+  assetLegacyProject,
+  assetLegacyRow,
   type AssetDialect,
   type AssetPlan,
 } from "./project-asset-store-support.ts";
@@ -38,6 +41,11 @@ import {
   intentHash,
   fail,
 } from "./project-asset-ui-intent-support.ts";
+function* decodeLegacyAssetIntent(
+  row: Record<string, unknown> | undefined,
+): AssetPlan<ProjectAssetUiIntent | null> {
+  return decodeAssetIntent(yield* assetLegacyRow(row));
+}
 // UI authority comes from Application, not Domain. The alias below keeps all receipt checks strongly typed.
 type UiAuthority = NonNullable<ProjectAssetCommitAuthority["uiTransaction"]>;
 export function* assetIntentScopeLock(
@@ -51,7 +59,8 @@ export function* readAssetIntent(
   id: string,
   s: ProjectAssetUiIntentScope,
 ): AssetPlan<ProjectAssetUiIntent | null> {
-  return decodeAssetIntent(
+  yield* assetLegacySchema();
+  return yield* decodeLegacyAssetIntent(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}project_asset_ui_intents WHERE intent_id=$1 AND scope_digest=$2`,
@@ -64,6 +73,8 @@ export function* updateAssetIntent(
   old: ProjectAssetUiIntent,
   next: ProjectAssetUiIntent,
 ): AssetPlan<void> {
+  yield* assetLegacyProject(old.scope.actor, old.projectId);
+  yield* assetLegacyProject(next.scope.actor, next.projectId);
   if (extensionCanonicalJson(old) === extensionCanonicalJson(next)) return;
   const rows = yield* assetQuery(
     d,
@@ -86,6 +97,7 @@ export function* beginAssetIntentCommit(
   i: ProjectAssetMutationIdentity,
   phasePolicy: "write" | "observe-terminal" = "write",
 ): AssetPlan<ProjectAssetUiIntent | null> {
+  yield* assetLegacySchema();
   yield* assetLock(d, [
     "project-asset-receipt",
     d.schema,
@@ -95,13 +107,14 @@ export function* beginAssetIntentCommit(
     if (q?.intentRef) fail();
     const rows = yield* assetQuery(
       d,
-      `SELECT ui_intent_id FROM ${d.prefix}project_asset_mutation_receipts WHERE ${intentReceiptFilter}`,
+      `SELECT tenant_id,space_id,project_id,ui_intent_id FROM ${d.prefix}project_asset_mutation_receipts WHERE ${intentReceiptFilter}`,
       intentReceiptValues(i),
     );
+    yield* assetLegacyRow(rows[0]);
     if (rows[0]?.ui_intent_id != null) fail();
     return null;
   }
-  let r = decodeAssetIntent(
+  let r = yield* decodeLegacyAssetIntent(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}project_asset_ui_intents WHERE ${intentReceiptFilter}`,
@@ -113,7 +126,7 @@ export function* beginAssetIntentCommit(
     return null;
   }
   yield* assetIntentScopeLock(d, r.scope);
-  r = decodeAssetIntent(
+  r = yield* decodeLegacyAssetIntent(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}project_asset_ui_intents WHERE ${intentReceiptFilter}${d.postgres ? " FOR UPDATE" : ""}`,
@@ -132,11 +145,13 @@ export function* acceptAssetIntent(
   result: ProjectAssetMutationResult,
   at?: string,
 ): AssetPlan<ProjectAssetUiIntent> {
-  const row = (yield* assetQuery(
-    d,
-    `SELECT * FROM ${d.prefix}project_asset_mutation_receipts WHERE ${intentReceiptFilter}`,
-    intentReceiptValues(intentIdentity(r)),
-  ))[0];
+  const row = yield* assetLegacyRow(
+    (yield* assetQuery(
+      d,
+      `SELECT * FROM ${d.prefix}project_asset_mutation_receipts WHERE ${intentReceiptFilter}`,
+      intentReceiptValues(intentIdentity(r)),
+    ))[0],
+  );
   if (
     !row ||
     result.asset.projectId !== r.projectId ||
@@ -171,6 +186,7 @@ export function* stageAssetIntent(
   d: AssetDialect,
   p: ReturnType<typeof captureAssetIntentStage>,
 ): AssetPlan<ProjectAssetUiIntent> {
+  yield* assetLegacySchema();
   const r = p.record,
     i = p.identity;
   yield* assetLock(d, [
@@ -179,7 +195,7 @@ export function* stageAssetIntent(
     ...intentReceiptValues(i),
   ]);
   yield* assetIntentScopeLock(d, r.scope);
-  const original = decodeAssetIntent(
+  const original = yield* decodeLegacyAssetIntent(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}project_asset_ui_intents WHERE ${intentReceiptFilter}`,
@@ -195,7 +211,7 @@ export function* stageAssetIntent(
     }
     return original;
   }
-  const active = decodeAssetIntent(
+  const active = yield* decodeLegacyAssetIntent(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}project_asset_ui_intents WHERE scope_digest=$1 AND acknowledged=0`,
@@ -288,8 +304,9 @@ export function* pendingAssetIntent(
   d: AssetDialect,
   s: ProjectAssetUiIntentScope,
 ): AssetPlan<ProjectAssetUiIntent | null> {
+  yield* assetLegacySchema();
   yield* assetIntentScopeLock(d, s);
-  const r = decodeAssetIntent(
+  const r = yield* decodeLegacyAssetIntent(
     (yield* assetQuery(
       d,
       `SELECT * FROM ${d.prefix}project_asset_ui_intents WHERE scope_digest=$1 AND acknowledged=0`,

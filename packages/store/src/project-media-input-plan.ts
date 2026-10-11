@@ -37,11 +37,11 @@ import {
   assetQuery,
   type AssetDialect,
   type AssetRows,
-  type AssetSql,
+  type AssetInstruction,
   type AssetPlan,
 } from "./project-asset-store-support.ts";
 export type ProjectMediaInputPlan<T> = Generator<
-  | AssetSql
+  | AssetInstruction
   | Readonly<{ installation: ProjectMaterialPreparationTarget }>
   | Readonly<{ assetSchema: true }>
   | Readonly<{ mediaResultSchema: true }>
