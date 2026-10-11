@@ -1,3 +1,11 @@
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
+import { rollbackPostgres } from "./postgres-store-support.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { Pool, PoolClient } from "pg";
 import type {
@@ -82,8 +90,9 @@ export function loadSqliteFoundationRun(
   input: ProjectFoundationRunLocator,
 ) {
   const scope = foundationRunLocator(input);
+  const access = captureSqliteCreativeProjectLegacyAccess(db);
   if (!assertSqliteProjectFoundationRunSchema(db)) return null;
-  return decode(
+  const admission = decode(
     db
       .prepare(query("").replaceAll(/\$[1-3]/gu, "?"))
       .get(
@@ -93,6 +102,11 @@ export function loadSqliteFoundationRun(
       ),
     scope,
   );
+  if (admission !== null)
+    access.assertProject(
+      foundationLegacyScope(admission.actor, admission.projectId),
+    );
+  return admission;
 }
 export async function loadPostgresFoundationRun(
   c: PoolClient,
@@ -100,8 +114,10 @@ export async function loadPostgresFoundationRun(
   input: ProjectFoundationRunLocator,
 ) {
   const scope = foundationRunLocator(input);
+  await lockPostgresCreativeProjectLegacySchema(c, schema);
+  const access = await capturePostgresCreativeProjectLegacyAccess(c, schema);
   if (!(await assertPostgresProjectFoundationRunSchema(c, schema))) return null;
-  return decode(
+  const admission = decode(
     (
       await c.query(
         query(`${creativeProjectSchemaName(schema)}.`),
@@ -110,6 +126,11 @@ export async function loadPostgresFoundationRun(
     ).rows[0],
     scope,
   );
+  if (admission !== null)
+    await access.assertProject(
+      foundationLegacyScope(admission.actor, admission.projectId),
+    );
+  return admission;
 }
 export class SqliteProjectFoundationRunStore
   implements ProjectFoundationRunAdmissionStore
@@ -122,7 +143,9 @@ export class SqliteProjectFoundationRunStore
   }
   async loadFoundationRunAdmission(scope: ProjectFoundationRunLocator) {
     this.#assertOpen();
-    return loadSqliteFoundationRun(this.#database, scope);
+    return readSqliteLegacyCreativeProject(this.#database, () =>
+      loadSqliteFoundationRun(this.#database, scope),
+    );
   }
   async readRequiredFoundationDigest(scope: ProjectFoundationRunLocator) {
     return (
@@ -146,9 +169,14 @@ export class PostgresProjectFoundationRunStore
     this.#assertOpen();
     const c = await this.#pool.connect();
     try {
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");
       const result = await loadPostgresFoundationRun(c, this.#schema, scope);
       this.#assertOpen();
+      await c.query("COMMIT");
       return result;
+    } catch (error) {
+      await rollbackPostgres(c);
+      throw error;
     } finally {
       c.release();
     }

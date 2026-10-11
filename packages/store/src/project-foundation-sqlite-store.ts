@@ -1,4 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  type CreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
+import { insertSqliteFoundationSource } from "./project-foundation-sqlite-source-writer.ts";
 import { migrateSqliteProjectFoundationRuns } from "./project-foundation-run-schema.ts";
 import {
   qualifyFoundationRunMutation,
@@ -33,7 +40,6 @@ import {
   type ProjectFoundation,
   type ProjectProposal,
   type ProjectSource,
-  type ProjectSourceChapter,
   type ProjectSourceChunk,
 } from "@crewon/domain";
 import {
@@ -106,15 +112,21 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
   async loadFoundation(input: Input<"loadFoundation">) {
     this.#assertOpen();
     const q = foundationRead(input);
-    if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
-    return this.#foundation(q.owner, q.projectId);
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
+      return this.#foundation(q.owner, q.projectId, access);
+    });
   }
   async loadSource(input: Input<"loadSource">) {
     this.#assertOpen();
     const q = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(q.revision);
-    if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
-    return this.#source(q.owner, q.projectId, revision);
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
+      return this.#source(q.owner, q.projectId, revision, access);
+    });
   }
   async readSourcePage(input: Input<"readSourcePage">) {
     this.#assertOpen();
@@ -128,31 +140,34 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     const digest = creativeProjectDigest(q.digest);
     const startOffset = creativeProjectRevision(q.startOffset, { minimum: 0 });
     const limit = foundationLimit(q.limit, 1_024);
-    if (!assertSqliteProjectFoundationSchema(this.#database))
-      foundationFailure("project_foundation_source_not_found");
-    const source = this.#source(q.owner, q.projectId, revision);
-    if (source === null)
-      foundationFailure("project_foundation_source_not_found");
-    if (source.digest !== digest)
-      foundationFailure("project_foundation_source_digest_mismatch");
-    const end = Math.min(source.characterLength, startOffset + limit);
-    const rows = this.#database
-      .prepare(
-        `
-      SELECT c.* FROM project_source_chunks c ${join} WHERE ${filter}
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database))
+        foundationFailure("project_foundation_source_not_found");
+      const source = this.#source(q.owner, q.projectId, revision, access);
+      if (source === null)
+        foundationFailure("project_foundation_source_not_found");
+      if (source.digest !== digest)
+        foundationFailure("project_foundation_source_digest_mismatch");
+      const end = Math.min(source.characterLength, startOffset + limit);
+      const rows = this.#database
+        .prepare(
+          `
+      SELECT c.* FROM project_source_chunks c ${join} WHERE ${filter} AND ${access.predicate("p")}
       AND c.source_revision=? AND c.start_offset<? AND c.start_offset+c.character_length>?
       ORDER BY c.start_offset ASC LIMIT 1025
     `,
-      )
-      .all(
-        ...creativeOwnerValues(q.owner),
-        q.projectId,
-        revision,
-        end,
-        startOffset,
-      );
-    const chunks = rows.map((row) => this.#chunk(row));
-    return readProjectSourcePage({ source, chunks, startOffset, limit });
+        )
+        .all(
+          ...creativeOwnerValues(q.owner),
+          q.projectId,
+          revision,
+          end,
+          startOffset,
+        );
+      const chunks = rows.map((row) => this.#chunk(row));
+      return readProjectSourcePage({ source, chunks, startOffset, limit });
+    });
   }
   async listSourceChapters(input: Input<"listSourceChapters">) {
     this.#assertOpen();
@@ -169,73 +184,82 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         ? -1
         : creativeProjectRevision(q.afterStartOffset, { minimum: 0 });
     const limit = foundationLimit(q.limit);
-    if (!assertSqliteProjectFoundationSchema(this.#database))
-      foundationFailure("project_foundation_source_not_found");
-    const source = this.#source(q.owner, q.projectId, revision);
-    if (source === null)
-      foundationFailure("project_foundation_source_not_found");
-    if (source.digest !== digest)
-      foundationFailure("project_foundation_source_digest_mismatch");
-    const rows = this.#database
-      .prepare(
-        `SELECT c.* FROM project_source_chapters c ${join} WHERE ${filter} AND c.source_revision=? AND c.start_offset>? ORDER BY c.start_offset ASC LIMIT ?`,
-      )
-      .all(
-        ...creativeOwnerValues(q.owner),
-        q.projectId,
-        revision,
-        after,
-        limit + 1,
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database))
+        foundationFailure("project_foundation_source_not_found");
+      const source = this.#source(q.owner, q.projectId, revision, access);
+      if (source === null)
+        foundationFailure("project_foundation_source_not_found");
+      if (source.digest !== digest)
+        foundationFailure("project_foundation_source_digest_mismatch");
+      const rows = this.#database
+        .prepare(
+          `SELECT c.* FROM project_source_chapters c ${join} WHERE ${filter} AND ${access.predicate("p")} AND c.source_revision=? AND c.start_offset>? ORDER BY c.start_offset ASC LIMIT ?`,
+        )
+        .all(
+          ...creativeOwnerValues(q.owner),
+          q.projectId,
+          revision,
+          after,
+          limit + 1,
+        );
+      const chapters = Object.freeze(
+        rows.slice(0, limit).map((row) => {
+          const chapter = parseProjectSourceChapter(
+            JSON.parse(String(row.record_json)),
+          );
+          assertProjectSourceChapterIdentity(source, chapter);
+          foundationEqual(
+            [chapter.startOffset, chapter.endOffset, chapter.chapterId],
+            [row.start_offset, row.end_offset, row.chapter_id],
+          );
+          return chapter;
+        }),
       );
-    const chapters = Object.freeze(
-      rows.slice(0, limit).map((row) => {
-        const chapter = parseProjectSourceChapter(
-          JSON.parse(String(row.record_json)),
-        );
-        assertProjectSourceChapterIdentity(source, chapter);
-        foundationEqual(
-          [chapter.startOffset, chapter.endOffset, chapter.chapterId],
-          [row.start_offset, row.end_offset, row.chapter_id],
-        );
-        return chapter;
-      }),
-    );
-    return Object.freeze({
-      chapters,
-      nextStartOffset:
-        rows.length > limit ? chapters.at(-1)!.startOffset : null,
+      return Object.freeze({
+        chapters,
+        nextStartOffset:
+          rows.length > limit ? chapters.at(-1)!.startOffset : null,
+      });
     });
   }
   async loadProposal(input: Input<"loadProposal">) {
     this.#assertOpen();
     const q = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(q.revision);
-    if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
-    return this.#proposal(q.owner, q.projectId, revision);
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
+      return this.#proposal(q.owner, q.projectId, revision, access);
+    });
   }
   async listProposals(input: Input<"listProposals">) {
     this.#assertOpen();
     const q = foundationRead(input, ["afterRevision", "limit"]);
     const after = creativeProjectRevision(q.afterRevision, { minimum: 0 });
     const limit = foundationLimit(q.limit);
-    if (!assertSqliteProjectFoundationSchema(this.#database))
+    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database))
+        return Object.freeze({
+          proposals: Object.freeze([]),
+          nextRevision: null,
+        });
+      const rows = this.#database
+        .prepare(
+          `SELECT c.* FROM project_proposals c ${join} WHERE ${filter} AND ${access.predicate("p")} AND c.proposal_revision>? ORDER BY c.proposal_revision ASC LIMIT ?`,
+        )
+        .all(...creativeOwnerValues(q.owner), q.projectId, after, limit + 1);
+      const proposals = Object.freeze(
+        rows
+          .slice(0, limit)
+          .map((row) => this.#proposalRow(row, q.owner.principalId)),
+      );
       return Object.freeze({
-        proposals: Object.freeze([]),
-        nextRevision: null,
+        proposals,
+        nextRevision: rows.length > limit ? proposals.at(-1)!.revision : null,
       });
-    const rows = this.#database
-      .prepare(
-        `SELECT c.* FROM project_proposals c ${join} WHERE ${filter} AND c.proposal_revision>? ORDER BY c.proposal_revision ASC LIMIT ?`,
-      )
-      .all(...creativeOwnerValues(q.owner), q.projectId, after, limit + 1);
-    const proposals = Object.freeze(
-      rows
-        .slice(0, limit)
-        .map((row) => this.#proposalRow(row, q.owner.principalId)),
-    );
-    return Object.freeze({
-      proposals,
-      nextRevision: rows.length > limit ? proposals.at(-1)!.revision : null,
     });
   }
   async loadMutationReceipt(
@@ -252,9 +276,11 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       identity.kind,
     );
     await this.#externalCurrent(authority, qualification);
-    if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
     return this.#transaction(
-      () => this.#receipt(identity),
+      (access) =>
+        assertSqliteProjectFoundationSchema(this.#database)
+          ? this.#receipt(identity, access)
+          : null,
       authority,
       qualification,
     );
@@ -321,18 +347,21 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     );
     await this.#externalCurrent(authority, qualification);
     this.#assertOpen();
-    if (!assertSqliteProjectFoundationSchema(this.#database))
-      foundationFailure("project_foundation_schema_unconfigured");
     return this.#transaction(
-      () => {
-        const replay = this.#receipt(identity);
+      (access) => {
+        access.assertProject(
+          foundationLegacyScope(identity.owner, prepared.foundation.projectId),
+        );
+        if (!assertSqliteProjectFoundationSchema(this.#database))
+          foundationFailure("project_foundation_schema_unconfigured");
+        const replay = this.#receipt(identity, access);
         if (replay !== null) return replay;
         assertSqliteFoundationRunCommit(
           this.#database,
           authority?.runTransaction,
         );
         const projectId = prepared.foundation.projectId;
-        const project = this.#project(identity.owner, projectId);
+        const project = this.#project(identity.owner, projectId, access);
         // Creation cannot hide a conflicting identity belonging to a different owner.
         if (
           prepared.kind === "create-project" &&
@@ -344,10 +373,10 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
             undefined
         )
           foundationFailure("project_foundation_project_conflict");
-        const foundation = this.#foundation(identity.owner, projectId);
+        const foundation = this.#foundation(identity.owner, projectId, access);
         const latestProposalRow = this.#database
           .prepare(
-            `SELECT c.* FROM project_proposals c ${join} WHERE ${filter} ORDER BY c.proposal_revision DESC LIMIT 1`,
+            `SELECT c.* FROM project_proposals c ${join} WHERE ${filter} AND ${access.predicate("p")} ORDER BY c.proposal_revision DESC LIMIT 1`,
           )
           .get(...creativeOwnerValues(identity.owner), projectId);
         const latestProposal =
@@ -360,15 +389,15 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
                 identity.owner,
                 projectId,
                 prepared.proposal.revision,
+                access,
               )
             : null;
         const latestSourceRevision = Number(
           this.#database
             .prepare(
-              "SELECT COALESCE(MAX(source_revision),0) AS revision FROM project_sources WHERE tenant_id=? AND space_id=? AND project_id=?",
+              `SELECT COALESCE(MAX(c.source_revision),0) AS revision FROM project_sources c ${join} WHERE ${filter} AND ${access.predicate("p")}`,
             )
-            .get(identity.owner.tenantId, identity.owner.spaceId, projectId)
-            ?.revision,
+            .get(...creativeOwnerValues(identity.owner), projectId)?.revision,
         );
         const result = verifyFoundation(prepared, {
           project,
@@ -395,7 +424,8 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
           prepared.kind === "append-source"
         ) {
           if (prepared.source !== null)
-            this.#insertSource(
+            insertSqliteFoundationSource(
+              this.#database,
               prepared.source,
               prepared.chunks,
               prepared.chapters,
@@ -415,18 +445,24 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
   #project(
     owner: CreativeProjectOwnerScope,
     projectId: string,
+    access: CreativeProjectLegacyAccess,
   ): CreativeProject | null {
     const row = this.#database
-      .prepare(`SELECT p.* FROM creative_projects p WHERE ${filter}`)
+      .prepare(
+        `SELECT p.* FROM creative_projects p WHERE ${filter} AND ${access.predicate("p")}`,
+      )
       .get(...creativeOwnerValues(owner), projectId);
     return decodeCreativeProject(row, owner, projectId);
   }
   #foundation(
     owner: CreativeProjectOwnerScope,
     projectId: string,
+    access: CreativeProjectLegacyAccess,
   ): ProjectFoundation | null {
     const row = this.#database
-      .prepare(`SELECT c.* FROM project_foundations c ${join} WHERE ${filter}`)
+      .prepare(
+        `SELECT c.* FROM project_foundations c ${join} WHERE ${filter} AND ${access.predicate("p")}`,
+      )
       .get(...creativeOwnerValues(owner), projectId);
     if (row === undefined) return null;
     const foundation = validateProjectFoundation(
@@ -453,7 +489,12 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       ],
     );
     if (foundation.source !== null) {
-      const source = this.#source(owner, projectId, foundation.source.revision);
+      const source = this.#source(
+        owner,
+        projectId,
+        foundation.source.revision,
+        access,
+      );
       if (source === null || source.digest !== foundation.source.digest)
         foundationFailure("project_foundation_source_not_found");
     }
@@ -462,6 +503,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         owner,
         projectId,
         foundation.confirmedProposal.revision,
+        access,
       );
       if (
         proposal === null ||
@@ -478,10 +520,11 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     owner: CreativeProjectOwnerScope,
     projectId: string,
     revision: number,
+    access: CreativeProjectLegacyAccess,
   ): ProjectSource | null {
     const row = this.#database
       .prepare(
-        `SELECT c.* FROM project_sources c ${join} WHERE ${filter} AND c.source_revision=?`,
+        `SELECT c.* FROM project_sources c ${join} WHERE ${filter} AND ${access.predicate("p")} AND c.source_revision=?`,
       )
       .get(...creativeOwnerValues(owner), projectId, revision);
     if (row === undefined) return null;
@@ -530,10 +573,11 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     owner: CreativeProjectOwnerScope,
     projectId: string,
     revision: number,
+    access: CreativeProjectLegacyAccess,
   ): ProjectProposal | null {
     const row = this.#database
       .prepare(
-        `SELECT c.* FROM project_proposals c ${join} WHERE ${filter} AND c.proposal_revision=?`,
+        `SELECT c.* FROM project_proposals c ${join} WHERE ${filter} AND ${access.predicate("p")} AND c.proposal_revision=?`,
       )
       .get(...creativeOwnerValues(owner), projectId, revision);
     return row === undefined ? null : this.#proposalRow(row, owner.principalId);
@@ -562,6 +606,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
   }
   #receipt(
     identity: FoundationIdentity,
+    access: CreativeProjectLegacyAccess,
   ): ProjectFoundationMutationResult | null {
     const row = this.#database
       .prepare(
@@ -574,6 +619,9 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         identity.receipt.idempotencyKey,
       );
     if (row === undefined) return null;
+    access.assertProject(
+      foundationLegacyScope(identity.owner, String(row.project_id)),
+    );
     if (row.request_digest !== identity.receipt.requestDigest)
       foundationFailure("project_foundation_idempotency_conflict");
     const result = decodeFoundationReceipt(
@@ -645,53 +693,6 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     if (changed.changes !== 1)
       foundationFailure("project_foundation_revision_conflict");
   }
-  #insertSource(
-    source: ProjectSource,
-    chunks: readonly ProjectSourceChunk[],
-    chapters: readonly ProjectSourceChapter[],
-  ) {
-    this.#database
-      .prepare("INSERT INTO project_sources VALUES(?,?,?,?,?,?,?,?)")
-      .run(
-        source.tenantId,
-        source.spaceId,
-        source.projectId,
-        source.revision,
-        source.digest,
-        source.fileDigest,
-        source.characterLength,
-        foundationJson(source, 8_192),
-      );
-    const insertChunk = this.#database.prepare(
-      "INSERT INTO project_source_chunks VALUES(?,?,?,?,?,?,?,?,?)",
-    );
-    for (const chunk of chunks)
-      insertChunk.run(
-        chunk.tenantId,
-        chunk.spaceId,
-        chunk.projectId,
-        chunk.sourceRevision,
-        chunk.index,
-        chunk.startOffset,
-        projectSourceScalarLength(chunk.content),
-        chunk.content,
-        chunk.digest,
-      );
-    const insertChapter = this.#database.prepare(
-      "INSERT INTO project_source_chapters VALUES(?,?,?,?,?,?,?,?)",
-    );
-    for (const chapter of chapters)
-      insertChapter.run(
-        chapter.tenantId,
-        chapter.spaceId,
-        chapter.projectId,
-        chapter.sourceRevision,
-        chapter.chapterId,
-        chapter.startOffset,
-        chapter.endOffset,
-        foundationJson(chapter, 4_096),
-      );
-  }
   #insertProposal(proposal: ProjectProposal) {
     this.#database
       .prepare("INSERT INTO project_proposals VALUES(?,?,?,?,?,?)")
@@ -722,8 +723,8 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         foundationJson(result),
       );
   }
-  #transaction<T>(
-    work: () => T,
+  #transaction<T extends ProjectFoundationMutationResult | null | void>(
+    work: (access: CreativeProjectLegacyAccess) => T,
     authority?: ProjectFoundationCommitAuthority,
     qualification?: Qualification,
   ): T {
@@ -731,6 +732,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     assertProjectFoundationCommitActive(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
+      const access = captureSqliteCreativeProjectLegacyAccess(this.#database);
       if (qualification !== undefined) {
         assertSqlitePluginInstallationPinSchema(this.#database);
         const installation = admitSqlitePluginInstallationPin(
@@ -746,13 +748,17 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         authority?.runTransaction,
         "receipt-publication",
       );
-      const result = work();
+      const result = work(access);
       assertProjectFoundationCommitActive(authority);
       assertSqliteFoundationRunCommit(
         this.#database,
         authority?.runTransaction,
         isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
       );
+      if (result != null)
+        access.assertProject(
+          foundationLegacyScope(result.project, result.project.projectId),
+        );
       assertProjectFoundationCommitActive(authority);
       this.#assertOpen();
       this.#database.exec("COMMIT");

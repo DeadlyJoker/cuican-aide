@@ -1,3 +1,9 @@
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import {
@@ -40,6 +46,7 @@ function* facts(
   p: string,
   stage: ProjectStageRunAdmission,
   latest: boolean,
+  predicate: (alias: string) => string,
 ): Generator<Query, FoundationRunFacts | null, Row | undefined> {
   const owner = {
     tenantId: stage.actor.tenantId,
@@ -54,7 +61,7 @@ function* facts(
     owner.principalId,
   ];
   const projectRow = yield {
-    sql: `SELECT * FROM ${p}creative_projects WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND owner_principal_id=$4`,
+    sql: `SELECT p.* FROM ${p}creative_projects p WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.project_id=$3 AND p.owner_principal_id=$4 AND ${predicate("p")}`,
     values,
   };
   const project = decodeCreativeProject(projectRow, owner, stage.projectId);
@@ -82,7 +89,7 @@ function* facts(
     revisionColumn?: string,
     revision?: number,
   ): Query => ({
-    sql: `SELECT c.*,p.owner_principal_id FROM ${p}${table} c JOIN ${p}creative_projects p ON p.tenant_id=c.tenant_id AND p.space_id=c.space_id AND p.project_id=c.project_id WHERE c.tenant_id=$1 AND c.space_id=$2 AND c.project_id=$3 AND p.owner_principal_id=$4${revisionColumn ? ` AND c.${revisionColumn}=$5` : ""}`,
+    sql: `SELECT c.*,p.owner_principal_id FROM ${p}${table} c JOIN ${p}creative_projects p ON p.tenant_id=c.tenant_id AND p.space_id=c.space_id AND p.project_id=c.project_id WHERE c.tenant_id=$1 AND c.space_id=$2 AND c.project_id=$3 AND p.owner_principal_id=$4 AND ${predicate("p")}${revisionColumn ? ` AND c.${revisionColumn}=$5` : ""}`,
     values: revision === undefined ? values : [...values, revision],
   });
   const foundationRow = yield child("project_foundations");
@@ -148,8 +155,10 @@ export function captureSqliteFoundationRunFacts(
   stage: ProjectStageRunAdmission,
   latest = false,
 ): FoundationRunFacts | null {
+  const access = captureSqliteCreativeProjectLegacyAccess(db);
+  access.assertProject(foundationLegacyScope(stage.actor, stage.projectId));
   if (!assertSqliteProjectFoundationSchema(db)) return null;
-  const iterator = facts("", stage, latest);
+  const iterator = facts("", stage, latest, access.predicate);
   let step = iterator.next();
   while (!step.done) {
     const q = step.value;
@@ -165,17 +174,31 @@ export async function capturePostgresFoundationRunFacts(
   stage: ProjectStageRunAdmission,
   latest = false,
 ): Promise<FoundationRunFacts | null> {
-  if (!(await assertPostgresProjectFoundationSchema(c, schema))) return null;
+  await lockPostgresCreativeProjectLegacySchema(c, schema);
+  const access = await capturePostgresCreativeProjectLegacyAccess(c, schema);
+  await access.assertProject(
+    foundationLegacyScope(stage.actor, stage.projectId),
+  );
+  if (!(await assertPostgresProjectFoundationSchema(c, schema))) {
+    await access.assertProject(
+      foundationLegacyScope(stage.actor, stage.projectId),
+    );
+    return null;
+  }
   const iterator = facts(
     `${creativeProjectSchemaName(schema)}.`,
     stage,
     latest,
+    access.predicate,
   );
   let step = iterator.next();
   while (!step.done) {
     const q = step.value;
     step = iterator.next((await c.query(q.sql, [...q.values])).rows[0]);
   }
+  await access.assertProject(
+    foundationLegacyScope(stage.actor, stage.projectId),
+  );
   return step.value;
 }
 export function assertFoundationRunFactsUnchanged(

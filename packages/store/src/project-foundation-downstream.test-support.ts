@@ -42,11 +42,17 @@ export async function downstreamFixture(
       return captureSqliteProjectFoundationDownstream(database, input);
     const client = await pool!.connect();
     try {
-      return await capturePostgresProjectFoundationDownstream(
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");
+      const result = await capturePostgresProjectFoundationDownstream(
         client,
         f.schema,
         input,
       );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     } finally {
       client.release();
     }
@@ -65,12 +71,17 @@ export async function downstreamFixture(
     }
     const client = await pool!.connect();
     try {
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY");
       await assertPostgresProjectFoundationDownstreamUnchanged(
         client,
         f.schema,
         input,
         expected,
       );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     } finally {
       client.release();
     }

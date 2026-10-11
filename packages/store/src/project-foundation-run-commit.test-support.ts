@@ -24,6 +24,7 @@ import { creativeStoreDigester as digester } from "./creative-project-store-reco
 export async function foundationToolFixture(
   t: TestContext,
   backend: FoundationRunBackend,
+  options: Readonly<{ leaseDurationMs?: number }> = {},
 ) {
   const f = await foundationRunIssuedFixture(t, backend);
   const parent = f.parent,
@@ -35,7 +36,7 @@ export async function foundationToolFixture(
   const claim = await parent.claimNextWorkItem({
     ownerId: "foundation-native-worker",
     leaseId: randomUUID(),
-    leaseDurationMs: 300000,
+    leaseDurationMs: options.leaseDurationMs ?? 300000,
   });
   assert.ok(claim);
   assert.equal(claim.workItem.runId, f.locator.runId);

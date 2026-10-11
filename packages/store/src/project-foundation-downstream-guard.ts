@@ -1,3 +1,9 @@
+import {
+  captureSqliteCreativeProjectLegacyAccess,
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type { ActorContext } from "@crewon/application";
@@ -62,16 +68,21 @@ function locator(input: ProjectFoundationDownstreamLocator) {
   return { actor, owner, projectId };
 }
 
-function projectQuery(prefix: string) {
-  return `SELECT * FROM ${prefix}creative_projects WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND owner_principal_id=$4`;
+function projectQuery(prefix: string, predicate: string) {
+  return `SELECT p.* FROM ${prefix}creative_projects p WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.project_id=$3 AND p.owner_principal_id=$4 AND ${predicate}`;
 }
 
-function childQuery(prefix: string, table: Table, revision?: number) {
+function childQuery(
+  prefix: string,
+  predicate: string,
+  table: Table,
+  revision?: number,
+) {
   const revisionColumn =
     table === "project_sources" ? "source_revision" : "proposal_revision";
   return `SELECT c.*,p.owner_principal_id AS project_owner_principal_id FROM ${prefix}${table} c
     JOIN ${prefix}creative_projects p ON p.tenant_id=c.tenant_id AND p.space_id=c.space_id AND p.project_id=c.project_id
-    WHERE c.tenant_id=$1 AND c.space_id=$2 AND c.project_id=$3 AND p.owner_principal_id=$4${revision === undefined ? "" : ` AND c.${revisionColumn}=$5`}`;
+    WHERE c.tenant_id=$1 AND c.space_id=$2 AND c.project_id=$3 AND p.owner_principal_id=$4 AND ${predicate}${revision === undefined ? "" : ` AND c.${revisionColumn}=$5`}`;
 }
 
 function values(scope: ReturnType<typeof locator>, revision?: number) {
@@ -153,14 +164,19 @@ export function captureSqliteProjectFoundationDownstream(
   input: ProjectFoundationDownstreamLocator,
 ): ProjectFoundationDownstreamSnapshot {
   const scope = locator(input);
+  const access = captureSqliteCreativeProjectLegacyAccess(database);
+  access.assertProject(foundationLegacyScope(scope.owner, scope.projectId));
   const read = (sql: string, revision?: number) =>
     database
       .prepare(sql.replaceAll(/\$[1-5]/gu, "?"))
       .get(...values(scope, revision));
-  const project = actualProject(read(projectQuery("")), scope);
+  const project = actualProject(
+    read(projectQuery("", access.predicate("p"))),
+    scope,
+  );
   if (!assertSqliteProjectFoundationSchema(database)) return null;
   const foundation = actualFoundation(
-    read(childQuery("", "project_foundations")),
+    read(childQuery("", access.predicate("p"), "project_foundations")),
     scope,
   );
   if (foundation === null) return null;
@@ -171,7 +187,12 @@ export function captureSqliteProjectFoundationDownstream(
     foundation.source === null
       ? undefined
       : read(
-          childQuery("", "project_sources", foundation.source.revision),
+          childQuery(
+            "",
+            access.predicate("p"),
+            "project_sources",
+            foundation.source.revision,
+          ),
           foundation.source.revision,
         ),
     foundation.confirmedProposal === null
@@ -179,6 +200,7 @@ export function captureSqliteProjectFoundationDownstream(
       : read(
           childQuery(
             "",
+            access.predicate("p"),
             "project_proposals",
             foundation.confirmedProposal.revision,
           ),
@@ -194,25 +216,52 @@ export async function capturePostgresProjectFoundationDownstream(
   input: ProjectFoundationDownstreamLocator,
 ): Promise<ProjectFoundationDownstreamSnapshot> {
   const scope = locator(input);
+  await lockPostgresCreativeProjectLegacySchema(client, schema);
+  const access = await capturePostgresCreativeProjectLegacyAccess(
+    client,
+    schema,
+  );
+  await access.assertProject(
+    foundationLegacyScope(scope.owner, scope.projectId),
+  );
   const prefix = `${creativeProjectSchemaName(schema)}.`;
   const read = async (sql: string, revision?: number) =>
     (await client.query<Row>(sql, values(scope, revision))).rows[0];
-  const project = actualProject(await read(projectQuery(prefix)), scope);
-  if (!(await assertPostgresProjectFoundationSchema(client, schema)))
-    return null;
-  const foundation = actualFoundation(
-    await read(childQuery(prefix, "project_foundations")),
+  const project = actualProject(
+    await read(projectQuery(prefix, access.predicate("p"))),
     scope,
   );
-  if (foundation === null) return null;
-  return checkedSnapshot(
+  if (!(await assertPostgresProjectFoundationSchema(client, schema))) {
+    await access.assertProject(
+      foundationLegacyScope(scope.owner, scope.projectId),
+    );
+    return null;
+  }
+  const foundation = actualFoundation(
+    await read(
+      childQuery(prefix, access.predicate("p"), "project_foundations"),
+    ),
+    scope,
+  );
+  if (foundation === null) {
+    await access.assertProject(
+      foundationLegacyScope(scope.owner, scope.projectId),
+    );
+    return null;
+  }
+  const snapshot = checkedSnapshot(
     project,
     scope,
     foundation,
     foundation.source === null
       ? undefined
       : await read(
-          childQuery(prefix, "project_sources", foundation.source.revision),
+          childQuery(
+            prefix,
+            access.predicate("p"),
+            "project_sources",
+            foundation.source.revision,
+          ),
           foundation.source.revision,
         ),
     foundation.confirmedProposal === null
@@ -220,12 +269,17 @@ export async function capturePostgresProjectFoundationDownstream(
       : await read(
           childQuery(
             prefix,
+            access.predicate("p"),
             "project_proposals",
             foundation.confirmedProposal.revision,
           ),
           foundation.confirmedProposal.revision,
         ),
   );
+  await access.assertProject(
+    foundationLegacyScope(scope.owner, scope.projectId),
+  );
+  return snapshot;
 }
 
 function assertSnapshotUnchanged(

@@ -1,3 +1,8 @@
+import {
+  assertPostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+} from "./creative-project-legacy-access.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { PoolClient } from "pg";
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 import { foundationFailure } from "./project-foundation-store-support.ts";
@@ -34,6 +39,15 @@ export async function assertPostgresFoundationSourceAdoption(
   transaction: Transaction,
   proof: FoundationSourceAdoption,
 ): Promise<void> {
+  await lockPostgresCreativeProjectLegacySchema(
+    transaction.client,
+    transaction.schema,
+  );
+  await assertPostgresCreativeProjectLegacyAccess(
+    transaction.client,
+    transaction.schema,
+    foundationLegacyScope(proof.owner, proof.source.projectId),
+  );
   const prefix = `${creativeProjectSchemaName(transaction.schema)}.`;
   const scope = { owner: proof.owner, uploadId: proof.pointer.uploadId };
   const values = [...sourceUploadOwnerValues(scope.owner), scope.uploadId];
@@ -121,6 +135,15 @@ export async function insertPostgresFoundationSourceAssociation(
   transaction: Transaction,
   proof: FoundationSourceAdoption,
 ): Promise<void> {
+  await lockPostgresCreativeProjectLegacySchema(
+    transaction.client,
+    transaction.schema,
+  );
+  await assertPostgresCreativeProjectLegacyAccess(
+    transaction.client,
+    transaction.schema,
+    foundationLegacyScope(proof.owner, proof.source.projectId),
+  );
   const prefix = `${creativeProjectSchemaName(transaction.schema)}.`;
   await query(
     transaction,

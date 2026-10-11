@@ -1,3 +1,5 @@
+import { assertSqliteCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
 import { sourceUploadFields } from "@crewon/application";
 import {
@@ -24,6 +26,10 @@ export function admitSqliteFoundationSourceAdoption(
   database: DatabaseSync,
   proof: FoundationSourceAdoption,
 ): void {
+  assertSqliteCreativeProjectLegacyAccess(
+    database,
+    foundationLegacyScope(proof.owner, proof.source.projectId),
+  );
   const realm = assertSqliteProjectSourceUploadSchema(database);
   if (realm === false)
     foundationFailure("project_foundation_source_upload_schema_unavailable");
@@ -80,6 +86,10 @@ export function associateSqliteFoundationSource(
   database: DatabaseSync,
   proof: FoundationSourceAdoption,
 ): void {
+  assertSqliteCreativeProjectLegacyAccess(
+    database,
+    foundationLegacyScope(proof.owner, proof.source.projectId),
+  );
   database
     .prepare(
       `INSERT INTO project_source_upload_associations

@@ -3,11 +3,9 @@ import type { Pool, PoolClient } from "pg";
 import {
   qualifyFoundationRunMutation,
   assertPostgresFoundationRunCommit,
-  isFoundationReplay,
 } from "./project-foundation-run-qualification.ts";
 import {
   assertProjectFoundationCommitActive,
-  assertProjectFoundationCommitCurrent,
   assertProjectFoundationCommitTransactionCurrent,
   captureProjectFoundationCommitAuthority,
   qualifyProjectFoundationPluginCommit,
@@ -61,7 +59,13 @@ import {
   admitPostgresPluginInstallationPin,
   assertPostgresPluginInstallationPinSchema,
 } from "./plugin-installation-pin-store-support.ts";
-import { rollbackPostgres } from "./postgres-store-support.ts";
+import type { PostgresCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
+import {
+  readPostgresFoundationLegacy,
+  insertPostgresFoundationOriginalProject,
+  transactPostgresFoundationLegacy,
+} from "./project-foundation-postgres-operations.ts";
 import { ProjectFoundationPostgresSourceWriter } from "./project-foundation-postgres-source-writer.ts";
 import {
   prepareFoundationSourceAdoption,
@@ -118,13 +122,21 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
 
   async loadFoundation(input: Input<"loadFoundation">) {
     const query = foundationRead(input);
-    return this.#read((client) => this.#foundation(client, query), null);
+    return this.#read(
+      query,
+      (client, access) => this.#foundation(client, query, access),
+      null,
+    );
   }
 
   async loadSource(input: Input<"loadSource">) {
     const query = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(query.revision);
-    return this.#read((client) => this.#source(client, query, revision), null);
+    return this.#read(
+      query,
+      (client, access) => this.#source(client, query, revision, access),
+      null,
+    );
   }
 
   async listSourceChapters(input: Input<"listSourceChapters">) {
@@ -142,15 +154,16 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         : creativeProjectRevision(query.afterStartOffset, { minimum: 0 });
     const limit = foundationLimit(query.limit);
     return this.#read(
-      async (client) => {
-        const source = await this.#source(client, query, revision);
+      query,
+      async (client, access) => {
+        const source = await this.#source(client, query, revision, access);
         if (source === null)
           foundationFailure("project_foundation_source_not_found");
         if (source.digest !== digest)
           foundationFailure("project_foundation_source_digest_mismatch");
         const rows = await this.#query(
           client,
-          `${this.#childSelect("project_source_chapters", "c")}
+          `${this.#childSelect("project_source_chapters", "c", access)}
         WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
         AND p.project_id=$4 AND c.source_revision=$5 AND c.start_offset>$6
         ORDER BY c.start_offset LIMIT $7`,
@@ -193,8 +206,9 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     });
     const limit = foundationLimit(query.limit, 1_024);
     return this.#read(
-      async (client) => {
-        const source = await this.#source(client, query, revision);
+      query,
+      async (client, access) => {
+        const source = await this.#source(client, query, revision, access);
         if (source === null)
           foundationFailure("project_foundation_source_not_found");
         if (source.digest !== digest)
@@ -205,7 +219,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
           startOffset + Math.min(limit, source.characterLength - startOffset);
         const rows = await this.#query(
           client,
-          `${this.#childSelect("project_source_chunks", "c")}
+          `${this.#childSelect("project_source_chunks", "c", access)}
         WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
         AND p.project_id=$4 AND c.source_revision=$5
         AND c.start_offset<$6 AND c.start_offset+c.character_length>$7
@@ -231,7 +245,8 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     const query = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(query.revision);
     return this.#read(
-      (client) => this.#proposal(client, query, revision),
+      query,
+      (client, access) => this.#proposal(client, query, revision, access),
       null,
     );
   }
@@ -243,10 +258,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     });
     const limit = foundationLimit(query.limit);
     return this.#read(
-      async (client) => {
+      query,
+      async (client, access) => {
         const rows = await this.#query(
           client,
-          `${this.#childSelect("project_proposals", "q")}
+          `${this.#childSelect("project_proposals", "q", access)}
         WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
         AND p.project_id=$4 AND q.proposal_revision>$5
         ORDER BY q.proposal_revision LIMIT $6`,
@@ -287,11 +303,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       identity.actor,
       identity.kind,
     );
-    return this.#transaction(async (client) => {
+    return this.#transaction(async (client, access) => {
       if (!(await this.#schemaConfigured(client))) return null;
       await this.#receiptLock(client, identity);
       await this.#admitInstallation(client, identity, authority);
-      return this.#receipt(client, identity);
+      return this.#receipt(client, identity, access);
     }, authority);
   }
 
@@ -360,13 +376,16 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       identity.actor,
       identity.kind,
     );
-    return this.#transaction(async (client) => {
+    return this.#transaction(async (client, access) => {
       if (!(await this.#schemaConfigured(client)))
         foundationFailure("project_foundation_schema_unconfigured");
+      await access.assertProject(
+        foundationLegacyScope(identity.owner, prepared.foundation.projectId),
+      );
       // Serialize the canonical command before looking at a newly generated project identity.
       await this.#receiptLock(client, identity);
       await this.#admitInstallation(client, identity, authority);
-      const previous = await this.#receipt(client, identity);
+      const previous = await this.#receipt(client, identity, access);
       if (previous !== null) return previous;
       await assertPostgresFoundationRunCommit(
         client,
@@ -387,8 +406,8 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       ]);
       const projectRows = await this.#query(
         client,
-        `SELECT * FROM ${this.#prefix}creative_projects
-        WHERE tenant_id=$1 AND space_id=$2 AND owner_principal_id=$3 AND project_id=$4`,
+        `SELECT p.* FROM ${this.#prefix}creative_projects p
+        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3 AND p.project_id=$4 AND ${access.predicate("p")}`,
         [...creativeOwnerValues(scope.owner), scope.projectId],
       );
       const project = decodeCreativeProject(
@@ -396,10 +415,10 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         scope.owner,
         scope.projectId,
       );
-      const foundation = await this.#foundation(client, scope);
+      const foundation = await this.#foundation(client, scope, access);
       const proposalRows = await this.#query(
         client,
-        `${this.#childSelect("project_proposals", "q")}
+        `${this.#childSelect("project_proposals", "q", access)}
         WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3 AND p.project_id=$4
         ORDER BY q.proposal_revision DESC LIMIT 1`,
         [...creativeOwnerValues(scope.owner), scope.projectId],
@@ -410,11 +429,16 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
           : decodePostgresFoundationProposal(proposalRows.rows[0], scope);
       const confirmedProposal =
         prepared.kind === "confirm-proposal" && prepared.proposal !== null
-          ? await this.#proposal(client, scope, prepared.proposal.revision)
+          ? await this.#proposal(
+              client,
+              scope,
+              prepared.proposal.revision,
+              access,
+            )
           : null;
       const sourceRows = await this.#query(
         client,
-        `${this.#childSelect("project_sources", "s")}
+        `${this.#childSelect("project_sources", "s", access)}
         WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3 AND p.project_id=$4
         ORDER BY s.source_revision DESC LIMIT 1`,
         [...creativeOwnerValues(scope.owner), scope.projectId],
@@ -441,7 +465,10 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
           adoption,
         );
       if (prepared.kind === "create-project")
-        await this.#insertOriginalProject(client, result);
+        await insertPostgresFoundationOriginalProject(
+          { client, prefix: this.#prefix, assertOpen: this.#assertOpen },
+          result,
+        );
       if (prepared.kind !== "save-proposal")
         await this.#writeFoundation(client, result.foundation, prepared);
       if (prepared.kind !== "save-proposal" && prepared.source !== null)
@@ -475,10 +502,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
   async #foundation(
     client: PoolClient,
     scope: ReadScope,
+    access: PostgresCreativeProjectLegacyAccess,
   ): Promise<ProjectFoundation | null> {
     const rows = await this.#query(
       client,
-      `${this.#childSelect("project_foundations", "f")}
+      `${this.#childSelect("project_foundations", "f", access)}
       WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3 AND p.project_id=$4`,
       [...creativeOwnerValues(scope.owner), scope.projectId],
     );
@@ -490,6 +518,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         client,
         scope,
         foundation.source.revision,
+        access,
       );
       if (source === null || source.digest !== foundation.source.digest)
         foundationFailure("project_foundation_source_not_found");
@@ -499,6 +528,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         client,
         scope,
         foundation.confirmedProposal.revision,
+        access,
       );
       if (
         proposal === null ||
@@ -516,10 +546,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     client: PoolClient,
     scope: ReadScope,
     revision: number,
+    access: PostgresCreativeProjectLegacyAccess,
   ): Promise<ProjectSource | null> {
     const rows = await this.#query(
       client,
-      `${this.#childSelect("project_sources", "s")}
+      `${this.#childSelect("project_sources", "s", access)}
       WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
       AND p.project_id=$4 AND s.source_revision=$5`,
       [...creativeOwnerValues(scope.owner), scope.projectId, revision],
@@ -533,10 +564,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     client: PoolClient,
     scope: ReadScope,
     revision: number,
+    access: PostgresCreativeProjectLegacyAccess,
   ): Promise<ProjectProposal | null> {
     const rows = await this.#query(
       client,
-      `${this.#childSelect("project_proposals", "q")}
+      `${this.#childSelect("project_proposals", "q", access)}
       WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
       AND p.project_id=$4 AND q.proposal_revision=$5`,
       [...creativeOwnerValues(scope.owner), scope.projectId, revision],
@@ -546,7 +578,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     return decodePostgresFoundationProposal(row, scope, revision);
   }
 
-  async #receipt(client: PoolClient, identity: FoundationIdentity) {
+  async #receipt(
+    client: PoolClient,
+    identity: FoundationIdentity,
+    access: PostgresCreativeProjectLegacyAccess,
+  ) {
     const rows = await this.#query(
       client,
       `SELECT * FROM ${this.#prefix}project_foundation_mutation_receipts
@@ -558,7 +594,22 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         identity.receipt.idempotencyKey,
       ],
     );
-    return decodePostgresFoundationMutationReceipt(rows.rows[0], identity);
+    const row = rows.rows[0];
+    if (row !== undefined) {
+      const scope = foundationLegacyScope(
+        identity.owner,
+        String(row.project_id),
+      );
+      await this.#lock(client, [
+        "creative-project-project",
+        this.#schema,
+        scope.tenantId,
+        scope.spaceId,
+        scope.projectId,
+      ]);
+      await access.assertProject(scope);
+    }
+    return decodePostgresFoundationMutationReceipt(row, identity);
   }
 
   #childSelect(
@@ -569,49 +620,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       | "project_source_chapters"
       | "project_proposals",
     alias: string,
+    access: PostgresCreativeProjectLegacyAccess,
   ) {
     return `SELECT ${alias}.*,p.owner_principal_id FROM ${this.#prefix}${table} ${alias}
       JOIN ${this.#prefix}creative_projects p ON p.tenant_id=${alias}.tenant_id
-      AND p.space_id=${alias}.space_id AND p.project_id=${alias}.project_id`;
-  }
-
-  async #insertOriginalProject(
-    client: PoolClient,
-    result: ProjectFoundationMutationResult,
-  ) {
-    const project = result.project;
-    const brief = result.brief;
-    if (brief === null) foundationFailure("project_foundation_recipe_invalid");
-    await this.#query(
-      client,
-      `INSERT INTO ${this.#prefix}creative_projects
-      (tenant_id,space_id,project_id,owner_principal_id,revision,state,latest_brief_revision,updated_at,record_json)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [
-        project.tenantId,
-        project.spaceId,
-        project.projectId,
-        project.ownerPrincipalId,
-        project.revision,
-        project.state,
-        project.latestBriefRevision,
-        project.updatedAt,
-        foundationJson(project),
-      ],
-    );
-    await this.#query(
-      client,
-      `INSERT INTO ${this.#prefix}creative_project_briefs
-      (tenant_id,space_id,project_id,brief_revision,content_digest,record_json) VALUES($1,$2,$3,$4,$5,$6)`,
-      [
-        brief.tenantId,
-        brief.spaceId,
-        brief.projectId,
-        brief.briefRevision,
-        brief.contentDigest,
-        foundationJson(brief),
-      ],
-    );
+      AND p.space_id=${alias}.space_id AND p.project_id=${alias}.project_id AND ${access.predicate("p")}`;
   }
 
   async #writeFoundation(
@@ -730,20 +743,19 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
   }
 
   async #read<T>(
-    body: (client: PoolClient) => Promise<T>,
+    scope: ReadScope,
+    body: (
+      client: PoolClient,
+      access: PostgresCreativeProjectLegacyAccess,
+    ) => Promise<T>,
     absent: T | (() => never),
   ): Promise<T> {
-    this.#assertOpen();
-    const client = await this.#pool.connect();
-    try {
-      if (!(await this.#schemaConfigured(client)))
-        return typeof absent === "function"
-          ? (absent as () => never)()
-          : absent;
-      return await body(client);
-    } finally {
-      client.release();
-    }
+    return readPostgresFoundationLegacy(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      foundationLegacyScope(scope.owner, scope.projectId),
+      body,
+      absent,
+    );
   }
 
   async #schemaConfigured(client: PoolClient): Promise<boolean> {
@@ -756,36 +768,17 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     return configured;
   }
 
-  async #transaction<T>(
-    body: (client: PoolClient) => Promise<T>,
+  async #transaction<T extends ProjectFoundationMutationResult | null | void>(
+    body: (
+      client: PoolClient,
+      access: PostgresCreativeProjectLegacyAccess,
+    ) => Promise<T>,
     authority?: ProjectFoundationCommitAuthority,
   ): Promise<T> {
-    this.#assertOpen();
-    await assertProjectFoundationCommitCurrent(authority);
-    assertProjectFoundationCommitActive(authority);
-    this.#assertOpen();
-    const client = await this.#pool.connect();
-    try {
-      await this.#query(client, "BEGIN");
-      const result = await body(client);
-      await assertProjectFoundationCommitTransactionCurrent(authority);
-      assertProjectFoundationCommitActive(authority);
-      await assertPostgresFoundationRunCommit(
-        client,
-        this.#schema,
-        authority?.runTransaction,
-        isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
-      );
-      assertProjectFoundationCommitActive(authority);
-      this.#assertOpen();
-      // No post-COMMIT liveness/policy check may deny a confirmed successful transaction.
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await rollbackPostgres(client);
-      throw error;
-    } finally {
-      client.release();
-    }
+    return transactPostgresFoundationLegacy(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      body,
+      authority,
+    );
   }
 }
