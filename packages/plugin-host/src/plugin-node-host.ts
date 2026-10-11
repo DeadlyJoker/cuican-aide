@@ -298,6 +298,31 @@ export class PluginNodeHost {
     );
   }
 
+  /** Captured dependencies of the exact accepting instance; no values or admission are exposed. */
+  currentDependencyIdentities(
+    input: Readonly<{ pluginId: string; packageDigest: string }>,
+  ):
+    | readonly import("./plugin-node-preparation.ts").PluginNodeDependencyIdentity[]
+    | null {
+    const instance = this.#current.get(input.pluginId);
+    if (
+      this.#closed ||
+      instance?.phase !== "accepting" ||
+      instance.identity.packageDigest !== input.packageDigest
+    )
+      return null;
+    return Object.freeze(
+      [...instance.dependencies.values()].map(
+        ({ service, apiVersion, owner }) =>
+          Object.freeze({
+            service,
+            apiVersion,
+            provider: owner?.identity ?? null,
+          }),
+      ),
+    );
+  }
+
   /** Waits for cleanup that can run now. It never invents completion for borrowed instances. */
   async drain(): Promise<void> {
     await this.#queue;

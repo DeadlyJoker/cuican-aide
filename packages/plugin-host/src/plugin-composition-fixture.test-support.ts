@@ -121,6 +121,7 @@ export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(inp
       provides: descriptor.provides,
     };
     return {
+      directory,
       node,
       async records() {
         try {

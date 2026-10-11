@@ -51,6 +51,8 @@ export type LocalPluginInstallationHostDependencies = Readonly<{
   profile: PluginProfileScope;
   installRoot: string;
   nodeHost: PluginNodeHost;
+  /** Trusted owning-host lifetime; optional preserves standalone installation hosts. */
+  assertOpen?(): void;
   /** Explicit Host metadata availability; absent preserves legacy UI-only declarations. */
   hostUiServices?: PluginUiHostServiceAvailabilityPort;
   /** Host registry must enforce immutable source ownership; clients never supply a directory. */
@@ -111,6 +113,11 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
     ] as const)
       if (typeof dependencies[name] !== "function")
         throw new ApplicationError("internal", "plugin_host_policy_missing");
+    if (
+      dependencies.assertOpen !== undefined &&
+      typeof dependencies.assertOpen !== "function"
+    )
+      throw new ApplicationError("internal", "plugin_host_policy_missing");
     if (!(dependencies.nodeHost instanceof PluginNodeHost))
       throw new ApplicationError("internal", "plugin_node_host_missing");
   }
@@ -172,6 +179,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         );
       throw error;
     });
+    this.#assertOpen();
     return Object.freeze({
       pluginId: installed.descriptor.pluginId,
       version: installed.descriptor.version,
@@ -229,6 +237,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
           instance.phase === "accepting",
       )?.identity;
     try {
+      this.#assertOpen();
       const needsActivation = nextSelection.state === "enabled";
       const needsPackage =
         needsActivation ||
@@ -315,6 +324,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
           hostUiServices: this.#dependencies.hostUiServices,
         });
       }
+      this.#assertOpen();
     } catch (error) {
       try {
         await node?.abort();
@@ -340,6 +350,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         if (phase !== "prepared")
           throw new ApplicationError("conflict", "plugin_preparation_consumed");
         try {
+          this.#assertOpen();
           const checkPrevious = () => {
             const current = this.#dependencies.nodeHost
               .snapshot()
@@ -435,27 +446,38 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
   }
 
   /** Restore the original durable revision without installing sources or creating a selection receipt. */
-  prepareRecovery(
+  async prepareRecovery(
     input: PluginInstalledSelectionRecoveryInput,
     policy: PluginInstalledSelectionRecoveryPolicy,
   ): Promise<PluginPreparedSelection> {
-    return prepareInstalledSelectionRecovery(
+    this.#assertOpen();
+    const handle = await prepareInstalledSelectionRecovery(
       this.#recoveryCoordinator(),
       input,
       policy,
     );
+    try {
+      this.#assertOpen();
+      return handle;
+    } catch (error) {
+      await handle.abort();
+      throw error;
+    }
   }
 
   /** Provider-first startup restore, sharing this profile's selection publication coordinator. */
-  recoverSelections(
+  async recoverSelections(
     input: readonly PluginInstalledSelectionRecoveryInput[],
     policy: PluginInstalledSelectionRecoveryPolicy,
   ): Promise<readonly PluginSelection[]> {
-    return recoverInstalledSelections(
+    this.#assertOpen();
+    const result = await recoverInstalledSelections(
       this.#recoveryCoordinator(),
       input,
       policy,
     );
+    this.#assertOpen();
+    return result;
   }
 
   #recoveryCoordinator() {
@@ -495,6 +517,7 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
   }
 
   #authority(input: Readonly<Record<string, unknown>>): Authority {
+    this.#assertOpen();
     const scope = parsePluginProfileScope(input.scope);
     assertPluginProfileScope(this.#profile, scope);
     const value = record(input.actor, [
@@ -515,6 +538,10 @@ export class LocalPluginInstallationHost implements PluginInstallationHostPort {
         "plugin_profile_scope_mismatch",
       );
     return Object.freeze({ actor, scope });
+  }
+
+  #assertOpen(): void {
+    this.#dependencies.assertOpen?.();
   }
 }
 

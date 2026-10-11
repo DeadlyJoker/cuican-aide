@@ -17,6 +17,10 @@ import {
   type PluginNodeLease,
   type PluginNodePreparedActivation,
 } from "./plugin-node-host.ts";
+import {
+  LocalPluginInstallationHost,
+  type LocalPluginInstallationHostDependencies,
+} from "./plugin-installation-local-host.ts";
 
 const digester = {
   sha256: (body: string) =>
@@ -91,6 +95,7 @@ export class PluginCompositionCoordinator {
   #pending = 0;
   #generation = 0;
   #closed = false;
+  #installation: LocalPluginInstallationHost | null = null;
 
   constructor(
     input: Readonly<{
@@ -134,6 +139,106 @@ export class PluginCompositionCoordinator {
   synchronize(
     input: Readonly<{ lock: unknown; authority: PluginCompositionAuthority }>,
   ): Promise<PluginCompositionResult> {
+    if (this.#installation !== null)
+      return Promise.reject(
+        new PluginCompositionCoordinatorError(
+          "plugin_composition_installed_synchronization_required",
+        ),
+      );
+    return this.#synchronize(input, "isolated");
+  }
+
+  /** One Application installation adapter shares the owned host, never a second setup owner. */
+  createInstallationHost(
+    input: Omit<
+      LocalPluginInstallationHostDependencies,
+      "profile" | "installRoot" | "nodeHost" | "assertOpen"
+    >,
+  ): LocalPluginInstallationHost {
+    if (this.#closed) fail("plugin_composition_closed");
+    if (
+      this.#installation !== null ||
+      this.#requested !== null ||
+      this.#pending !== 0
+    )
+      fail("plugin_composition_installation_host_conflict");
+    for (const name of [
+      "resolveSource",
+      "authorizeInstallation",
+      "authorizeActivation",
+      "validateCompatibility",
+      "authorizeCommit",
+    ] as const)
+      if (typeof input[name] !== "function")
+        fail("plugin_composition_installation_policy_missing");
+    const policy = {
+      resolveSource: input.resolveSource.bind(input),
+      authorizeInstallation: input.authorizeInstallation.bind(input),
+      authorizeActivation: input.authorizeActivation.bind(input),
+      validateCompatibility: input.validateCompatibility.bind(input),
+      authorizeCommit: input.authorizeCommit.bind(input),
+    };
+    const assertOpen = () => {
+      if (this.#closed) fail("plugin_composition_closed");
+    };
+    const current = async <T>(work: () => Promise<T>): Promise<T> => {
+      assertOpen();
+      const result = await work();
+      assertOpen();
+      return result;
+    };
+    const { tenantId, spaceId, profileId } = this.#scope;
+    const local = new LocalPluginInstallationHost({
+      ...input,
+      profile: { tenantId, spaceId, profileId },
+      installRoot: this.#installRoot,
+      nodeHost: this.#host,
+      assertOpen,
+      // NodeHost closes Node admission. These fences also close package source,
+      // UI-only and recovery paths, which need not call NodeHost.prepare().
+      resolveSource: (value) => current(() => policy.resolveSource(value)),
+      authorizeInstallation: (value) =>
+        current(() => policy.authorizeInstallation(value)),
+      authorizeActivation: (value) =>
+        current(() => policy.authorizeActivation(value)),
+      validateCompatibility: (value) =>
+        current(() => policy.validateCompatibility(value)),
+      authorizeCommit: (value) => {
+        assertOpen();
+        const result = policy.authorizeCommit(value);
+        assertOpen();
+        return result;
+      },
+    });
+    this.#installation = local;
+    return local;
+  }
+
+  /** The actual profile must queue the whole selection/projection/sync operation and join it before close. */
+  synchronizeInstalled(
+    input: Readonly<{ lock: unknown; authority: PluginCompositionAuthority }>,
+  ): Promise<PluginCompositionResult> {
+    if (this.#installation === null)
+      return Promise.reject(
+        new PluginCompositionCoordinatorError(
+          "plugin_composition_installation_host_missing",
+        ),
+      );
+    return this.#synchronize(input, "installedSelection");
+  }
+
+  snapshot(): ReturnType<PluginNodeHost["snapshot"]> {
+    return this.#host.snapshot();
+  }
+
+  serviceIdentities(): ReturnType<PluginNodeHost["serviceIdentities"]> {
+    return this.#host.serviceIdentities();
+  }
+
+  #synchronize(
+    input: Readonly<{ lock: unknown; authority: PluginCompositionAuthority }>,
+    mode: "isolated" | "installedSelection",
+  ): Promise<PluginCompositionResult> {
     try {
       if (this.#closed) fail("plugin_composition_closed");
       const lock = parsePluginCompositionLock(input.lock, digester);
@@ -168,7 +273,7 @@ export class PluginCompositionCoordinator {
       this.#requested = lock;
       this.#pending++;
       const work = this.#queue
-        .then(() => this.#apply(lock, authority, generation))
+        .then(() => this.#apply(lock, authority, generation, mode))
         .finally(() => {
           this.#pending--;
         });
@@ -233,6 +338,7 @@ export class PluginCompositionCoordinator {
       this.#host.deactivate(entry.identity.pluginId);
     await this.#queue;
     await this.#host.close();
+    await this.#installation?.drain();
   }
   async drain(): Promise<void> {
     await this.#queue;
@@ -287,6 +393,7 @@ export class PluginCompositionCoordinator {
     lock: PluginCompositionLock,
     authority: PluginCompositionAuthority,
     generation: number,
+    mode: "isolated" | "installedSelection",
   ): Promise<PluginCompositionResult> {
     this.#check(generation);
     const plan = planPluginCompositionTransition(
@@ -295,13 +402,31 @@ export class PluginCompositionCoordinator {
       digester,
     );
     const affected = new Set(plan.affectedPluginIds);
+    // A selection adapter may have just published this exact instance on the
+    // same host. Retain it only when its actual captured dependencies match the
+    // new graph. The loop below still verifies bytes and both authority gates;
+    // this is not an unverified seed or an activation grant.
+    const retained = new Set<string>();
+    if (mode === "installedSelection")
+      for (const node of lock.nodes) {
+        const dependencies = this.#host.currentDependencyIdentities(node);
+        if (
+          dependencies !== null &&
+          this.#dependenciesMatch(lock, node, {
+            dependencyIdentities: dependencies,
+          })
+        )
+          retained.add(node.pluginId);
+      }
     for (const node of lock.nodes)
       if (!this.#accepting(node.pluginId, node.packageDigest))
         affected.add(node.pluginId);
     // The NodeHost withdraws transitive consumers synchronously even for a partial previous attempt.
-    for (const pluginId of plan.withdrawOrder) this.#host.deactivate(pluginId);
+    for (const pluginId of plan.withdrawOrder)
+      if (!retained.has(pluginId)) this.#host.deactivate(pluginId);
     for (const node of lock.nodes)
-      if (affected.has(node.pluginId)) this.#host.deactivate(node.pluginId);
+      if (affected.has(node.pluginId) && !retained.has(node.pluginId))
+        this.#host.deactivate(node.pluginId);
     this.#previous = lock;
     await this.#host.drain();
     this.#check(generation);
