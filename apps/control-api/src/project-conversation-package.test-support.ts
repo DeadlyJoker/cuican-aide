@@ -11,6 +11,8 @@ export async function conversationPackage(
     beforeCleanup?: () => Promise<void>;
     associationProtocol?: "1";
     version?: string;
+    pluginId?: string;
+    publisherId?: string;
     source?: Awaited<ReturnType<typeof productionSourceFixture>>;
   } = {},
 ) {
@@ -19,7 +21,10 @@ export async function conversationPackage(
     `conversation-${options.version ?? "1.0.0"}`,
     {
       ...(options.version ? { version: options.version } : {}),
-      pluginId: "test.conversation",
+      pluginId: options.pluginId ?? "test.conversation",
+      ...(options.publisherId === undefined
+        ? {}
+        : { publisherId: options.publisherId }),
       uiOnly: true,
       requires: [
         "crewon.creative-projects",
@@ -38,7 +43,7 @@ export async function conversationPackage(
     }),
   );
   const node = Buffer.from(
-    `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(source.marker)},'node-import\\n');export default {apiVersion:'crewon.plugin-host.v1',pluginId:'test.conversation',setup(){return {dispose(){}};}};`,
+    `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(source.marker)},'node-import\\n');export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(raw.pluginId)},setup(){return {dispose(){}};}};`,
   );
   const descriptor = {
     ...raw.descriptor,

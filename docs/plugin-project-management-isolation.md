@@ -34,6 +34,8 @@
 
 新增真实 PluginUI/Application/SQLite 专项 **7 passed、0 failed、0 skipped**：创建、打开、列表、重放、冷 Thread 读取、同外部键项目隔离、改变内容冲突、独立项目策略、跨插件、复制/过期来源、Host pin 漂移与关闭、拒绝 stage 借用读取资格及缺少读取端口时拒绝 fallback。新增入口在原 Host 最后一次异步检查之后重新检查独立项目 write 策略；准备 Thread 后撤权时，Thread、binding 与 receipt 均不落库。包验证与 Host callback、持久 metadata 在该专项中使用命名 fixture，任务端口明确禁止调用；这些证据不证明真实 Native 分配或模型执行。最新会话、关联、模型选择和 Store 联合回归 **26 passed、0 failed、20 skipped（PostgreSQL）**；此前包含其他项目专项的联合回归 **59 passed、15 skipped（PostgreSQL）**，原 Native 回归 **4 passed、1 skipped（PostgreSQL production）**；本轮未运行 PostgreSQL 新读取模式。Application/Store/Control typecheck、架构边界与文档格式检查通过。
 
+后续补充实际 `ProjectConversationControlOwner` 专项：真实本地包清单、业务 manifest 与安装行进入原请求 owner、UI 注册、Control 资格签发及原 Application/SQLite 事务，验证创建、打开、列表、同键重放，以及身份撤回、策略撤回、包字节摘要变化和 Control 关闭后拒绝。包恢复后重放仍返回原 binding。该专项与原 Native 创建、关联及升级回归联合 **5 passed、0 failed、0 skipped**，Control typecheck 通过。身份和策略仍为命名本地 fixture，metadata 归属也是显式持久 fixture；包复制只准备测试安装目录，没有绕过生产安装权限的新 API。该专项不是 HTTP、Native 目录分配、受保护 metadata 创建或模型执行的完整证明，默认产品配置仍未启用新读取模式。
+
 getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、完整 Native/Control 产品配置和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
 
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
