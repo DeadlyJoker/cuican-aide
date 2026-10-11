@@ -1,4 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import {
+  qualifyPluginProjectWorkspacePreparation,
+  type PluginProjectWorkspacePreparation,
+} from "@crewon/application";
+import { pluginProjectWorkspaceIdentityInput } from "@crewon/domain";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -50,7 +56,13 @@ test(
     const packages = [pkg, other.pkg];
     const allPublications = [...publications, ...other.publications];
     const databasePath = join(source.root, "owned-native.sqlite");
-    const open = async (owned = true) => {
+    let observed = 0;
+    const open = async (
+      options: Readonly<{
+        ownership?: "plugin-project-v1" | "legacy";
+        nativeObserver?: "unavailable";
+      }> = {},
+    ) => {
       const configuration = parseDesktopPluginConfiguration({
         schemaVersion: "crewon.desktop-plugin-bootstrap.v2",
         actor,
@@ -73,7 +85,9 @@ test(
           textArtifacts: { version: "crewon.project-text.v1" },
           conversations: {
             publications: allPublications,
-            ...(owned ? { projectOwnership: "plugin-project-v1" } : {}),
+            ...(options.ownership === "legacy"
+              ? {}
+              : { projectOwnership: "plugin-project-v1" }),
           },
         },
       });
@@ -89,6 +103,22 @@ test(
         ...projectPluginDisabledScans,
         desktopPlugins: configuration,
         ...composeDesktopProjectStartup({ configuration, actor }),
+        ...(options.nativeObserver === "unavailable"
+          ? {
+              desktopNativeProjectWorkspaceObserver: async (
+                preparation: PluginProjectWorkspacePreparation,
+              ) => {
+                const source =
+                  qualifyPluginProjectWorkspacePreparation(preparation);
+                await source.assertCurrent();
+                assert.equal(source.owner.pluginId, pkg.pluginId);
+                assert.equal(source.owner.publisherId, pkg.publisherId);
+                assert.equal(source.owner.actorId, actor.actorId);
+                observed++;
+                throw new Error("named_native_observer_unavailable");
+              },
+            }
+          : {}),
       });
       runtimes.add(r);
       return r;
@@ -362,7 +392,7 @@ test(
     );
     await runtime.app.close();
     runtimes.delete(runtime);
-    runtime = await open(false);
+    runtime = await open({ ownership: "legacy" });
     lease = await h.mount(pkg, 2);
     const importedAfterLegacyPreflight = await readFile(source.marker, "utf8");
     const legacy = await invoke("createConversation", input);
@@ -379,6 +409,43 @@ test(
     assert.equal(
       await readFile(source.marker, "utf8"),
       importedAfterLegacyPreflight,
+    );
+    await runtime.app.close();
+    runtimes.delete(runtime);
+    runtime = await open({ nativeObserver: "unavailable" });
+    lease = await h.mount(pkg, 2);
+    const workspaceId = `workspace-project-${createHash("sha256")
+      .update(
+        pluginProjectWorkspaceIdentityInput({
+          ...actor,
+          profileId,
+          pluginId: pkg.pluginId,
+          publisherId: pkg.publisherId,
+          projectId,
+        }),
+      )
+      .digest("hex")}`;
+    const unavailable = await invoke("createConversation", {
+      ...input,
+      workspaceId,
+      idempotencyKey: "owned-native-observer-unavailable",
+    });
+    assert.notEqual(unavailable.statusCode, 200, unavailable.body);
+    assert.equal(
+      observed,
+      1,
+      "Standalone forwards the genuine installed UI preparation",
+    );
+    const missingTarget = await invoke("createConversation", {
+      ...input,
+      workspaceId: null,
+      idempotencyKey: "owned-native-observer-missing-target",
+    });
+    assert.notEqual(missingTarget.statusCode, 200, missingTarget.body);
+    assert.equal(
+      observed,
+      1,
+      "missing target refuses before Native side effects",
     );
     const observer = new DatabaseSync(databasePath);
     try {

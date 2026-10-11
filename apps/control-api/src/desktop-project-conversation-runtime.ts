@@ -29,10 +29,11 @@ import {
   type DesktopNativePluginControlConfig,
 } from "./desktop-native-plugin-control-environment.ts";
 import { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
+import { captureProjectConversationNativeProvisioning } from "./project-conversation-native-provisioning.ts";
 import {
-  captureProjectConversationNativeProvisioning,
-  type ProjectConversationNativeProvisioning,
-} from "./project-conversation-native-provisioning.ts";
+  captureDesktopProjectWorkspaceObserver,
+  type DesktopProjectWorkspaceObserver,
+} from "./desktop-project-workspace-observer.ts";
 import { UuidV7ApplicationIdGenerator } from "./standalone-adapters.ts";
 import {
   createProjectTextPlanPluginUiRuntime,
@@ -50,7 +51,7 @@ export function createDesktopProjectConversationRuntime(
     installed: DesktopPluginConfigurationRuntime;
     registry: DesktopPluginSourceRegistry;
     nativeControl: DesktopNativePluginControlConfig | undefined;
-    nativeWorkspaceObserver?: ProjectConversationNativeProvisioning["observe"];
+    nativeWorkspaceObserver?: DesktopProjectWorkspaceObserver;
     tasks: () =>
       | DesktopNativePluginTaskRuntime
       | DesktopInstalledPluginTaskRuntime
@@ -61,27 +62,11 @@ export function createDesktopProjectConversationRuntime(
   }>,
 ) {
   const foundation = input.projects?.conversationFoundation;
-  const nativeDescriptor = Object.getOwnPropertyDescriptor(
+  const nativeObserver = captureDesktopProjectWorkspaceObserver(
     input,
     "nativeWorkspaceObserver",
+    foundation?.configuration.projectOwnership,
   );
-  if (
-    ("nativeWorkspaceObserver" in input && nativeDescriptor === undefined) ||
-    (nativeDescriptor !== undefined &&
-      (!nativeDescriptor.enumerable ||
-        !Object.hasOwn(nativeDescriptor, "value")))
-  )
-    throw new Error("project_conversation_native_provisioning_invalid");
-  const nativeObserver = nativeDescriptor?.value as
-    | ProjectConversationNativeProvisioning["observe"]
-    | undefined;
-  if (
-    nativeObserver !== undefined &&
-    (foundation === undefined ||
-      foundation.configuration.projectOwnership !== "plugin-project-v1" ||
-      typeof nativeObserver !== "function")
-  )
-    throw new Error("project_conversation_native_provisioning_invalid");
   if (foundation === undefined) return undefined;
   const nativeWorkspace =
     nativeObserver === undefined

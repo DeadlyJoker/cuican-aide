@@ -51,6 +51,10 @@ import {
   type DesktopNativePluginControlConfig,
 } from "./desktop-native-plugin-control-environment.ts";
 import { captureDesktopProjectRecoveryStartup } from "./desktop-project-startup.ts";
+import {
+  captureDesktopProjectWorkspaceObserver,
+  type DesktopProjectWorkspaceObserver,
+} from "./desktop-project-workspace-observer.ts";
 import { captureDesktopProjectCompositionConfig } from "./desktop-project-execution-startup.ts";
 import type { PluginUiRecoveryConfiguration } from "./plugin-ui-recovery-composition.ts";
 import {
@@ -240,6 +244,7 @@ export async function createStandaloneControlApiWithPlugins(
       desktopPluginTasks?: DesktopInstalledPluginTaskConfig;
       desktopNativePluginControl?: DesktopNativePluginControlConfig;
       desktopProjectMaterialStorage?: DesktopProjectMaterialStorage;
+      desktopNativeProjectWorkspaceObserver?: DesktopProjectWorkspaceObserver;
       uiRecovery?: PluginUiRecoveryConfiguration;
       extensionWorker?: ExtensionWorkerConfig;
     }>,
@@ -300,6 +305,11 @@ export async function createStandaloneControlApiWithPlugins(
     publications: configuration.publications,
     projects: capturedProjects,
   });
+  const nativeWorkspaceObserver = captureDesktopProjectWorkspaceObserver(
+    config,
+    "desktopNativeProjectWorkspaceObserver",
+    capturedProjects?.conversations?.projectOwnership,
+  );
   const pinned = pinExtensionCompositionConfig(config, {
     creativeProjects: capturedProjects,
   });
@@ -337,6 +347,9 @@ export async function createStandaloneControlApiWithPlugins(
         identity,
         clock: new SystemApplicationClock(),
         digester: new NodeSha256ContentDigester(),
+        ...(nativeWorkspaceObserver === undefined
+          ? {}
+          : { nativeWorkspaceObserver }),
         ...(projects === undefined ? {} : { creativeProjects: projects }),
         ...(projectMaterialStorage === undefined
           ? {}

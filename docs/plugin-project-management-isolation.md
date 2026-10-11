@@ -122,3 +122,5 @@ namespace 登记与原 Conversation 写入目前是独立事务；原 Conversati
 原 SQLite 的受保护改名、归档与恢复已增量接通，具体边界见[metadata 修改](./plugin-project-owned-metadata-mutations.md)。其他写入与生产交付尚未完成。
 
 原 CreativeProject 的 SQLite 内容与概念素材/版本写入已增量接通，仍复用原 Store、事务与独立 write 策略。[具体范围与证据](./plugin-project-owned-content-mutations.md)。其他产物服务、后端及正式产品闭环未完成。
+
+2026-10-12 补充：Standalone 启动组合可显式接收私有 Native 工作空间观察端，经过 Desktop 组合传给原 Conversation 服务；登记仍使用同一个 Parent SqliteRunStore。它是进程内依赖，不增加插件配置 JSON、SDK 或公开 HTTP 字段。缺省不启用；legacy 项目、继承字段、访问器和非函数在数据库获取前拒绝。安装包 HTTP 回归证明真实 UI 创建的 protected 项目准备资格能到达观察端，缺少目标或观察端失败不会新增 Thread、绑定、回执或 Run。此处观察端为明确不可用的测试依赖，尚不证明正式 Main 票据签发、真实目录分配或 Web/桌面闭环。

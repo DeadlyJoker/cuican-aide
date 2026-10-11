@@ -264,3 +264,33 @@ test("actual Standalone entry refuses a borrowed recovery grant before opening a
   );
   assert.equal(databaseRead, false);
 });
+
+test("actual Standalone entry refuses a Native observer on legacy projects before opening a database", async () => {
+  let databaseRead = false;
+  let observed = false;
+  const config = {
+    actor,
+    desktopPlugins: parseDesktopPluginConfiguration(base),
+    desktopNativeProjectWorkspaceObserver: async () => {
+      observed = true;
+      throw new Error("unexpected_observation");
+    },
+  };
+  Object.defineProperty(config, "databasePath", {
+    enumerable: true,
+    get() {
+      databaseRead = true;
+      throw new Error("unexpected_database_acquisition");
+    },
+  });
+  await assert.rejects(
+    createStandaloneControlApiWithPlugins(
+      config as unknown as Parameters<
+        typeof createStandaloneControlApiWithPlugins
+      >[0],
+    ),
+    /project_conversation_native_provisioning_invalid/u,
+  );
+  assert.equal(databaseRead, false);
+  assert.equal(observed, false);
+});

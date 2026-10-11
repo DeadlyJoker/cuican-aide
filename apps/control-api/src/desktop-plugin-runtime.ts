@@ -71,6 +71,10 @@ import {
   type DesktopInstalledPluginTaskRuntime,
 } from "./desktop-installed-plugin-task-runtime.ts";
 import { createDesktopProjectConversationRuntime } from "./desktop-project-conversation-runtime.ts";
+import {
+  captureDesktopProjectWorkspaceObserver,
+  type DesktopProjectWorkspaceObserver,
+} from "./desktop-project-workspace-observer.ts";
 import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
 
 import type { DesktopPluginRuntime } from "./desktop-plugin-runtime-contract.ts";
@@ -103,9 +107,16 @@ export async function createDesktopPluginRuntime(
     digester: ContentDigester;
     creativeProjects?: PreparedCreativeProjects;
     projectMaterialStorage?: DesktopProjectMaterialStorage;
+    nativeWorkspaceObserver?: DesktopProjectWorkspaceObserver;
     fetch?: typeof globalThis.fetch;
   }>,
 ): Promise<DesktopPluginRuntime> {
+  const nativeWorkspaceObserver = captureDesktopProjectWorkspaceObserver(
+    dependencies,
+    "nativeWorkspaceObserver",
+    dependencies.creativeProjects?.conversationFoundation?.configuration
+      .projectOwnership,
+  );
   if (!(dependencies.store instanceof SqliteRunStore))
     throw new Error("desktop_plugin_sqlite_store_required");
   if (!(dependencies.identity instanceof StandaloneIdentity))
@@ -495,6 +506,9 @@ export async function createDesktopPluginRuntime(
       tasks: () => taskRuntime,
       clock: dependencies.clock,
       digester: dependencies.digester,
+      ...(nativeWorkspaceObserver === undefined
+        ? {}
+        : { nativeWorkspaceObserver }),
       ...((recovery?.hostUiServices ?? businessHostUiServices)
         ? { fallback: recovery?.hostUiServices ?? businessHostUiServices }
         : {}),
